@@ -8,7 +8,6 @@
   "scripts": {
     "pretest": "pnpm --filter @open-design/platform build && pnpm --filter @open-design/sidecar build && pnpm --filter @open-design/standalone build && pnpm --filter @open-design/closure build",
     "test": "vitest run",
-    "pretypecheck": "pnpm --filter @open-design/standalone build",
     "typecheck": "tsc -p tsconfig.tests.json --noEmit"
   },
   "devDependencies": {

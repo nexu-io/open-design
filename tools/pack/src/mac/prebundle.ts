@@ -50,6 +50,12 @@ export const MAC_STANDALONE_PREBUNDLE_EXCLUDED_INTERNAL_PACKAGES = [
   "@open-design/web",
 ] as const;
 
+export const MAC_STANDALONE_PREBUNDLE_RESOLVER_PACKAGES = [
+  "@open-design/daemon",
+  "@open-design/launcher-proto",
+  "@open-design/sidecar-proto",
+] as const;
+
 export const MAC_PREBUNDLE_POLICIES = {
   packagedMain: {
     externals: ["@open-design/sidecar", "electron"],

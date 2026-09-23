@@ -118,8 +118,28 @@ function readUploadEnv(config: ToolPackConfig): SourcemapCliEnv | null {
   };
 }
 
+function sourcemapUploadEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const value = env.OD_WEB_SOURCEMAP_UPLOAD?.trim().toLowerCase();
+  if (value == null || value.length === 0 || value === "1" || value === "true") return true;
+  if (value === "0" || value === "false") return false;
+  throw new Error(`OD_WEB_SOURCEMAP_UPLOAD must be true/false or 1/0; got ${env.OD_WEB_SOURCEMAP_UPLOAD}`);
+}
+
 function log(line: string): void {
   process.stderr.write(`[web-sourcemaps] ${line}\n`);
+}
+
+async function runMeasured<T>(phase: string, task: () => Promise<T>): Promise<T> {
+  const startedAt = performance.now();
+  log(`phase:start phase=${phase}`);
+  try {
+    const result = await task();
+    log(`phase:done phase=${phase} durationMs=${Math.round(performance.now() - startedAt)}`);
+    return result;
+  } catch (error) {
+    log(`phase:failed phase=${phase} durationMs=${Math.round(performance.now() - startedAt)}`);
+    throw error;
+  }
 }
 
 async function runPnpm(
@@ -160,6 +180,7 @@ export async function processWebSourcemaps(
   const releaseVersion = options.releaseVersion ?? config.appVersion;
 
   if (uploadEnv != null) {
+    const uploadEnabled = sourcemapUploadEnabled();
     const cliEnv: NodeJS.ProcessEnv = {
       ...process.env,
       POSTHOG_CLI_API_KEY: uploadEnv.apiKey,
@@ -176,7 +197,7 @@ export async function processWebSourcemaps(
     // `//# chunkId=...` comment so it's safe to retry the build with the
     // same source if anything below fails.
     try {
-      await runPnpm(
+      await runMeasured("inject", async () => runPnpm(
         config,
         [
           "dlx",
@@ -188,32 +209,36 @@ export async function processWebSourcemaps(
           ...releaseArgs,
         ],
         cliEnv,
-      );
+      ));
     } catch (error) {
       log(`inject failed: ${(error as Error).message}; continuing to strip`);
     }
-    // upload is best-effort — `--no-fail` keeps non-zero exits inside the
-    // CLI from killing the release. If this fails the user simply sees
-    // unsymbolicated stacks in PostHog, which is no worse than today.
-    try {
-      const hostFlag = uploadEnv.host ? ["--host", uploadEnv.host] : [];
-      await runPnpm(
-        config,
-        [
-          "dlx",
-          `@posthog/cli@${POSTHOG_CLI_VERSION}`,
-          ...hostFlag,
-          "--no-fail",
-          "sourcemap",
-          "upload",
-          "--directory",
-          chunksDir,
-          ...releaseArgs,
-        ],
-        cliEnv,
-      );
-    } catch (error) {
-      log(`upload failed: ${(error as Error).message}; continuing to strip`);
+    if (uploadEnabled) {
+      // upload is best-effort — `--no-fail` keeps non-zero exits inside the
+      // CLI from killing the release. If this fails the user simply sees
+      // unsymbolicated stacks in PostHog, which is no worse than today.
+      try {
+        const hostFlag = uploadEnv.host ? ["--host", uploadEnv.host] : [];
+        await runMeasured("upload", async () => runPnpm(
+          config,
+          [
+            "dlx",
+            `@posthog/cli@${POSTHOG_CLI_VERSION}`,
+            ...hostFlag,
+            "--no-fail",
+            "sourcemap",
+            "upload",
+            "--directory",
+            chunksDir,
+            ...releaseArgs,
+          ],
+          cliEnv,
+        ));
+      } catch (error) {
+        log(`upload failed: ${(error as Error).message}; continuing to strip`);
+      }
+    } else {
+      log("upload disabled by OD_WEB_SOURCEMAP_UPLOAD; retaining inject + strip");
     }
   } else {
     log("POSTHOG_CLI_API_KEY/POSTHOG_CLI_PROJECT_ID missing; skipping upload");
@@ -224,6 +249,6 @@ export async function processWebSourcemaps(
   // delete is a no-op, and the explicit pass also catches files the CLI
   // skipped (anything that wasn't paired with a matching .js, or .map
   // files added by future tooling we haven't audited yet).
-  const stripped = await deleteMapFiles(chunksDir);
+  const stripped = await runMeasured("strip", async () => deleteMapFiles(chunksDir));
   log(`stripped ${stripped} .map file(s) before packaging`);
 }

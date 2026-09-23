@@ -65,18 +65,19 @@ jobs:
       - name: Checkout workflow helper
         uses: actions/checkout@v6.0.2
         with:
-          path: workflow-source
+          fetch-depth: 1
 
       - name: Checkout build ref for recovery check
         uses: actions/checkout@v6.0.2
         with:
           ref: ${{ steps.pick.outputs.ref }}
           path: build-source
+          fetch-depth: 1
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
+      - name: Prepare release tool
+        uses: ./.github/actions/setup-workspace
+        env:
+          OPEN_DESIGN_POSTINSTALL_TARGETS: '["tools/release"]'
 
       - name: Resolve foreign beta recovery
         id: recovery
@@ -84,7 +85,7 @@ jobs:
           BUILD_REF: ${{ steps.pick.outputs.ref }}
           OPEN_DESIGN_BETA_METADATA_URL: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}/beta/latest/metadata.json
           PACKAGED_PACKAGE_JSON_PATH: build-source/apps/packaged/package.json
-        run: node --experimental-strip-types workflow-source/.github/scripts/release/resolve-daily-beta-recovery.ts
+        run: pnpm exec tools-release recover-beta
 
   build:
     name: Build beta from main
@@ -92,8 +93,8 @@ jobs:
     uses: ./.github/workflows/release-beta.yml
     secrets: inherit
     with:
-      enable_mac_arm64: true
-      enable_win_x64: true
+      profile: publish
+      targets: all
       force: ${{ needs.resolve.outputs.force == 'true' }}
       promote: ${{ needs.resolve.outputs.promote == 'true' }}
       ref: ${{ needs.resolve.outputs.ref }}
@@ -127,11 +128,6 @@ jobs:
           fi
           echo "file=$file" >> "$GITHUB_OUTPUT"
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-
       - name: Post Feishu card
         env:
           # Daily and release-push streams share one Feishu bot; both post to
@@ -155,7 +151,7 @@ jobs:
           STREAM_LABEL: "每日定时"
           REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: node --experimental-strip-types tools/release/src/notifications/feishu.ts
+        run: python3 .github/scripts/feishu.py release
 
   notify_failure:
     name: Notify Feishu when daily beta fails
@@ -170,11 +166,6 @@ jobs:
         with:
           ref: main
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-
       - name: Post daily beta failure card
         env:
           FEISHU_WEBHOOK: ${{ secrets.FEISHU_RELEASE_WEBHOOK }}
@@ -188,4 +179,4 @@ jobs:
 
             独立的 prerelease Windows canary 不受该 metadata 门禁影响；请结合两个 workflow 判断是发布状态问题还是产品 smoke 问题。
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: node --experimental-strip-types tools/release/src/notifications/feishu-notice.ts
+        run: python3 .github/scripts/feishu.py notice

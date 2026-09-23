@@ -16,6 +16,22 @@ permissions:
   contents: read
 
 jobs:
+  # The store key is OS-scoped, not architecture-scoped. Seed common downloads
+  # once; Intel consumers may still fetch their architecture-specific packages.
+  seed-pnpm-macos:
+    name: '[cache] Seed macOS pnpm store'
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    runs-on: macos-14
+    timeout-minutes: 15
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v6.0.2
+
+      - name: Seed macOS pnpm cache
+        uses: ./.github/actions/setup-workspace
+        with:
+          save-pnpm-cache: 'true'
+
   seed-pnpm-windows:
     if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
     runs-on: windows-latest

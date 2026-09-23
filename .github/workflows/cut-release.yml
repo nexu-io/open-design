@@ -39,10 +39,6 @@ jobs:
           fetch-depth: 0
           token: ${{ steps.app.outputs.token }}
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-
       - name: Compute next version
         id: ver
         env:
@@ -142,8 +138,7 @@ jobs:
       # Post an immediate "branch cut" card so the team is notified the moment the
       # release branch exists, without waiting ~20-40 min for notify-release-feishu
       # to finish the prerelease build. The download card still follows from that
-      # build. feishu-notice.ts only imports node:crypto, so the setup-node above
-      # is all it needs.
+      # build. Notification uses Python stdlib and needs no workspace build.
       - name: Notify Feishu that the branch was cut
         if: steps.gate.outputs.ready == 'true'
         env:
@@ -158,4 +153,4 @@ jobs:
 
             Prerelease 打包已开始(约 20–40 分钟);完成后会再发一张带各平台下载链接的卡片。
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: node --experimental-strip-types tools/release/src/notifications/feishu-notice.ts
+        run: python3 .github/scripts/feishu.py notice

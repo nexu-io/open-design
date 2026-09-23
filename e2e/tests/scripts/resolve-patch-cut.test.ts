@@ -20,14 +20,14 @@ import { execFile } from "node:child_process";
 import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
 import { afterEach, describe, expect, it } from "vitest";
 
 const execFileAsync = promisify(execFile);
 const workspaceRoot = dirname(dirname(dirname(dirname(fileURLToPath(import.meta.url)))));
-const scriptPath = join(workspaceRoot, ".github", "scripts", "release", "resolve-patch-cut.ts");
+const scriptPath = join(workspaceRoot, "tools/release/src/metadata/patch-cut.ts");
 
 const scratch: string[] = [];
 afterEach(async () => {
@@ -112,7 +112,7 @@ async function run(
   let stderr = "";
   let status = 0;
   try {
-    const result = await execFileAsync("node", ["--experimental-strip-types", scriptPath, mode], {
+    const result = await execFileAsync("node", ["--input-type=module", "--eval", `import { patchCutCommand } from ${JSON.stringify(pathToFileURL(scriptPath).href)}; patchCutCommand(${JSON.stringify(mode)});`], {
       cwd: workspaceRoot,
       encoding: "utf8",
       env,
@@ -355,10 +355,10 @@ describe("cut-patch-release workflow wiring", () => {
     ]);
 
     expect(workflow).toContain(
-      "run: node --experimental-strip-types .github/scripts/release/resolve-patch-cut.ts resolve",
+      "run: pnpm exec tools-release patch-cut resolve",
     );
     expect(workflow).toContain(
-      "run: node --experimental-strip-types .github/scripts/release/resolve-patch-cut.ts gate",
+      "run: pnpm exec tools-release patch-cut gate",
     );
     expect(workflow).toContain("GATE_TAG: ${{ steps.ver.outputs.gate_tag }}");
     // The publish test itself stays gh's, not ours.

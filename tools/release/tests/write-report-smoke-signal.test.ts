@@ -23,6 +23,7 @@ type WriteReportRun = {
 async function runWriteReport(
   env: Record<string, string>,
   suiteStatus: string,
+  build?: Record<string, unknown>,
 ): Promise<WriteReportRun> {
   const root = await mkdtemp(join(tmpdir(), "od-write-report-"));
   const reportRoot = join(root, "release-report");
@@ -33,6 +34,8 @@ async function runWriteReport(
       `${JSON.stringify({ durationMs: 1234, exitCode: suiteStatus === "failed" ? 1 : 0, status: suiteStatus })}\n`,
       "utf8",
     );
+    const buildJsonPath = join(root, "build.json");
+    if (build != null) await writeFile(buildJsonPath, `${JSON.stringify(build)}\n`, "utf8");
     const result = await execFileAsync(
       process.execPath,
       [tsxCliPath, "tools/release/src/index.ts", "write-report"],
@@ -46,6 +49,7 @@ async function runWriteReport(
           RELEASE_TARGET: "mac_arm64",
           RELEASE_VERSION: "0.21.6-beta.7",
           REPORT_TITLE: "mac_arm64 beta build",
+          ...(build == null ? {} : { BUILD_JSON_PATH: buildJsonPath }),
           ...env,
         },
       },
@@ -97,5 +101,19 @@ describe("release report smoke signal", () => {
     expect(run.summary.startsWith("> [!CAUTION]")).toBe(true);
     expect(run.stdout).toContain("::error");
     expect(run.report.smoke).toEqual({ exempt: false, failed: true, outcome: "" });
+  }, 60_000);
+
+  it("surfaces the slowest detailed build segments and their output sizes", async () => {
+    const run = await runWriteReport({}, "success", {
+      segments: [
+        { durationMs: 1_200, phase: "portable-zip:7z:process", details: { outputBytes: 52_428_800 } },
+        { durationMs: 2_400, phase: "nsis:payload-base-7z:process", details: { outputBytes: 104_857_600 } },
+      ],
+      timings: [{ durationMs: 3_600, phase: "electron-builder" }],
+    });
+
+    expect(run.summary).toContain("| Slowest build segment | Duration | Output |");
+    expect(run.summary).toContain("| `nsis:payload-base-7z:process` | 2.4s | 100.0 MiB |");
+    expect(run.summary).toContain("| `portable-zip:7z:process` | 1.2s | 50.0 MiB |");
   }, 60_000);
 });

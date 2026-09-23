@@ -11,6 +11,7 @@ import {
   MAC_PREBUNDLE_COPIED_RUNTIME_DEPENDENCIES,
   MAC_PREBUNDLE_ESBUILD_TARGET,
   MAC_PREBUNDLE_POLICIES,
+  MAC_STANDALONE_PREBUNDLE_RESOLVER_PACKAGES,
   MAC_PREBUNDLE_RUNTIME_DEPENDENCIES,
   MAC_PREBUNDLED_DAEMON_CLI_RELATIVE_PATH,
   MAC_PREBUNDLED_DAEMON_SIDECAR_RELATIVE_PATH,
@@ -91,6 +92,11 @@ describe("mac standalone prebundle policy", () => {
       "node-pty",
     ]);
     expect(MAC_PREBUNDLE_POLICIES.webSidecar.externals).toEqual(["@open-design/sidecar"]);
+    expect(MAC_STANDALONE_PREBUNDLE_RESOLVER_PACKAGES).toEqual([
+      "@open-design/daemon",
+      "@open-design/launcher-proto",
+      "@open-design/sidecar-proto",
+    ]);
     expect(MAC_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER).toContain("createRequire");
     // Must match apps/daemon/package.json / the pnpm lockfile, or
     // electron-builder's collector drops the module from the shipped app and

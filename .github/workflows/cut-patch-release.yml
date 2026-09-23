@@ -65,16 +65,17 @@ jobs:
           fetch-depth: 0
           token: ${{ steps.app.outputs.token }}
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
+      - name: Prepare release tool
+        uses: ./.github/actions/setup-workspace
+        env:
+          OPEN_DESIGN_POSTINSTALL_TARGETS: '["tools/release"]'
 
       - name: Compute next patch version
         id: ver
         env:
           # Never interpolate the raw input into the script; pass via env and validate.
           INPUT_VERSION: ${{ inputs.version }}
-        run: node --experimental-strip-types .github/scripts/release/resolve-patch-cut.ts resolve
+        run: pnpm exec tools-release patch-cut resolve
 
       # Guard: the release this patch stacks on must already be a PUBLISHED stable
       # GitHub Release. release-stable publishes with
@@ -86,11 +87,10 @@ jobs:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           GATE_TAG: ${{ steps.ver.outputs.gate_tag }}
           FORCE: ${{ inputs.force }}
-        run: node --experimental-strip-types .github/scripts/release/resolve-patch-cut.ts gate
+        run: pnpm exec tools-release patch-cut gate
 
       # ---- Skip path: previous release not published yet -> no branch/release build; notify and stop ----
-      # feishu-notice.ts imports only node:crypto (no workspace deps), so the
-      # setup-node above is all it needs — no pnpm install, same as feishu.ts.
+      # Notification uses Python stdlib, independent of workspace dependencies.
       - name: Notify Feishu that the patch cut was skipped
         if: steps.guard.outputs.published != 'true'
         env:
@@ -103,7 +103,7 @@ jobs:
 
             待 v${{ steps.ver.outputs.gate_version }} promote 到 stable 后，可手动重新触发本工作流（或用 `force` 强制切分支）。
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: node --experimental-strip-types tools/release/src/notifications/feishu-notice.ts
+        run: python3 .github/scripts/feishu.py notice
 
       - name: Stop here when skipping
         if: steps.guard.outputs.published != 'true'
@@ -158,7 +158,7 @@ jobs:
       # Post an immediate "branch cut" card so the team is notified the moment the
       # patch branch exists, without waiting ~20-40 min for notify-release-feishu to
       # finish the prerelease build. The download card still follows from that build.
-      # feishu-notice.ts only imports node:crypto, so the setup-node above suffices.
+      # Notification requires no Node runtime or workspace build.
       - name: Notify Feishu that the branch was cut
         if: steps.guard.outputs.published == 'true'
         env:
@@ -173,4 +173,4 @@ jobs:
 
             Prerelease 打包已开始(约 20–40 分钟);完成后会再发一张带各平台下载链接的卡片。
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: node --experimental-strip-types tools/release/src/notifications/feishu-notice.ts
+        run: python3 .github/scripts/feishu.py notice

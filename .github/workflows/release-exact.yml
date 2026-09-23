@@ -537,6 +537,8 @@ jobs:
       - name: Create reusable scene handoff
         id: convergence_handoff
         continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: >-
           python3 .github/scripts/convergence.py
           --config .github/config/convergence-exact.json

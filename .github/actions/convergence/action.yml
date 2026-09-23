@@ -1,0 +1,112 @@
+name: Publish workload results
+description: Thin command adapter for trusted release-local or completed-job publication
+inputs:
+  config:
+    required: true
+    description: Workflow declaration
+  pending-artifact:
+    required: true
+    description: Frozen Plan artifact from this run
+  id:
+    required: true
+    description: Unique publication lane
+  products:
+    default: none
+    description: none or manifest
+  batches:
+    default: '[]'
+    description: Declared product batches
+  workloads:
+    default: '[]'
+    description: Declared test workloads
+  current-job:
+    default: ''
+    description: Current trusted job name; empty uses completed-job API evidence
+  step-results:
+    default: '{}'
+    description: Required step names mapped to runner outcomes, never conclusions
+  local-products-root:
+    default: ''
+    description: Current-run product directory; empty uses transported artifacts
+  local-product-pattern:
+    default: ''
+    description: Local file selection, matching the original transport contract
+  formal-release:
+    default: 'false'
+    description: Admit a release/vX.Y.Z prerelease or stable producer instead of the task-isolated beta producer
+outputs:
+  requests:
+    value: ${{ steps.publish.outputs.requests }}
+    description: Verified consumer requests
+  sources:
+    value: ${{ steps.publish.outputs.sources }}
+    description: Verified consumer sources
+runs:
+  using: composite
+  steps:
+    - name: '[collect] Frozen Plan'
+      id: plan
+      if: ${{ !cancelled() }}
+      uses: actions/download-artifact@v8
+      with:
+        name: ${{ inputs.pending-artifact }}
+        path: ${{ runner.temp }}/convergence/${{ inputs.id }}/plan
+    - name: '[validate] Workload execution evidence'
+      id: evidence
+      if: ${{ !cancelled() && steps.plan.outcome == 'success' }}
+      shell: bash
+      env:
+        CONFIG: ${{ inputs.config }}
+        LANE: ${{ inputs.id }}
+        PRODUCTS: ${{ inputs.products }}
+        BATCHES: ${{ inputs.batches }}
+        WORKLOADS: ${{ inputs.workloads }}
+        CURRENT_JOB: ${{ inputs.current-job }}
+        CONVERGENCE_STEP_RESULTS: ${{ inputs.step-results }}
+      run: >-
+        python3 .github/scripts/convergence.py --config "$CONFIG" handoff
+        --pending "$RUNNER_TEMP/convergence/$LANE/plan/pending-convergence.json"
+        --products-root "$RUNNER_TEMP/convergence/$LANE/references"
+        --products "$PRODUCTS" --batches "$BATCHES" --workloads "$WORKLOADS"
+        --handoff-root "$RUNNER_TEMP/convergence/$LANE/handoff" --id "$LANE"
+        --current-job "$CURRENT_JOB"
+    - name: '[validate] Publication admission'
+      id: trust
+      if: ${{ !cancelled() && steps.evidence.outcome == 'success' }}
+      shell: bash
+      env:
+        CONFIG: ${{ inputs.config }}
+        LANE: ${{ inputs.id }}
+        CURRENT_JOB: ${{ inputs.current-job }}
+        CONVERGENCE_STEP_RESULTS: ${{ inputs.step-results }}
+      run: >-
+        python3 .github/scripts/convergence.py --config "$CONFIG" admit
+        ${{ inputs.formal-release == 'true' && '--release-local' || '--isolated' }}
+        --handoff-root "$RUNNER_TEMP/convergence/$LANE/handoff" --current-job "$CURRENT_JOB"
+    - name: '[collect] Remote products'
+      id: products
+      if: ${{ !cancelled() && steps.trust.outcome == 'success' && inputs.local-products-root == '' && inputs.products == 'manifest' }}
+      shell: bash
+      env:
+        LANE: ${{ inputs.id }}
+        CANDIDATE: ${{ steps.trust.outputs.candidate }}
+      run: >-
+        python3 .github/scripts/convergence.py stage-products --candidate "$CANDIDATE"
+        --run-id "$GITHUB_RUN_ID" --output-dir "$RUNNER_TEMP/convergence/$LANE/products"
+    - name: '[cache] Publish immutable results'
+      id: publish
+      if: ${{ !cancelled() && steps.trust.outcome == 'success' && (steps.products.outcome == 'success' || steps.products.outcome == 'skipped') }}
+      shell: bash
+      env:
+        CONFIG: ${{ inputs.config }}
+        LANE: ${{ inputs.id }}
+        CANDIDATE: ${{ steps.trust.outputs.candidate }}
+        LOCAL_PRODUCTS: ${{ inputs.local-products-root }}
+        LOCAL_PATTERN: ${{ inputs.local-product-pattern }}
+      run: >-
+        python3 .github/scripts/convergence.py --config "$CONFIG" publish
+        ${{ inputs.formal-release == 'true' && '--release-local' || '--isolated' }}
+        --candidate "$CANDIDATE" --products-root "$RUNNER_TEMP/convergence/$LANE/products"
+        --local-products-root "$LOCAL_PRODUCTS" --local-product-pattern "$LOCAL_PATTERN"
+        --output-dir "$RUNNER_TEMP/convergence/$LANE/publication"
+        --pending "$RUNNER_TEMP/convergence/$LANE/plan/pending-convergence.json"

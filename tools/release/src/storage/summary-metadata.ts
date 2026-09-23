@@ -28,10 +28,27 @@ const metadata = (metadataPath.length > 0
   control?: { launcher?: { version?: { min?: string; url?: string } } };
   readyTargets?: string[];
   releaseState?: string;
-  r2?: { versionMetadataUrl?: string };
+  r2?: { reportUrl?: string; versionMetadataUrl?: string };
+  releaseTargets?: Record<string, {
+    artifacts?: Record<string, { name?: string; sha256Url?: string; size?: number; url?: string }>;
+    label?: string;
+    status?: string;
+  }>;
 };
 
 const launcherVersionMin = metadata.control?.launcher?.version?.min;
+const artifactRows = Object.entries(metadata.releaseTargets ?? {}).flatMap(([target, manifest]) => {
+  if (manifest.status !== "published") return [];
+  return Object.entries(manifest.artifacts ?? {}).flatMap(([kind, artifact]) => {
+    if (artifact.url == null || artifact.url.length === 0) return [];
+    const size = typeof artifact.size === "number"
+      ? `${(artifact.size / 1024 / 1024).toFixed(1)} MiB`
+      : "—";
+    const label = (value: string) => value.replaceAll("|", "\\|");
+    return [`| ${label(manifest.label ?? target)} | \`${label(artifact.name ?? kind)}\` | ${size} | [download](${artifact.url}) | ${artifact.sha256Url ? `[sha256](${artifact.sha256Url})` : "—"} |`];
+  });
+});
+const versionMetadataUrl = metadata.r2?.versionMetadataUrl ?? metadataUrl;
 writeText(summaryPath, [
   `## ${releaseChannel[0]?.toUpperCase() ?? ""}${releaseChannel.slice(1)} release metadata`,
   "",
@@ -41,7 +58,16 @@ writeText(summaryPath, [
   ...(launcherVersionMin == null
     ? []
     : [`- launcher version floor: \`${launcherVersionMin}\` (forces installer reinstall below this outer version)`]),
-  `- metadata: ${metadata.r2?.versionMetadataUrl ?? metadataUrl}`,
+  `- metadata: [metadata.json](${versionMetadataUrl})`,
+  ...(metadata.r2?.reportUrl == null ? [] : [`- build report: [report](${metadata.r2.reportUrl})`]),
+  ...(artifactRows.length === 0 ? [] : [
+    "",
+    "### Direct CDN artifacts",
+    "",
+    "| Target | Artifact | Size | CDN | Integrity |",
+    "| --- | --- | ---: | --- | --- |",
+    ...artifactRows,
+  ]),
 ].join("\n"));
 
 console.log(`wrote ${releaseChannel} release summary to ${summaryPath}`);

@@ -273,11 +273,6 @@ jobs:
         with:
           ref: main
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-
       - name: Post prerelease Windows canary failure
         env:
           FEISHU_WEBHOOK: ${{ secrets.FEISHU_RELEASE_WEBHOOK }}
@@ -291,4 +286,4 @@ jobs:
 
             该 smoke 是独立质量信号，不阻塞 release cut 或 prerelease 打包 / 发布。
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: node --experimental-strip-types tools/release/src/notifications/feishu-notice.ts
+        run: python3 .github/scripts/feishu.py notice

@@ -7,15 +7,16 @@ on:
         description: "Exact validated prerelease version to promote, for example 0.5.1-prerelease.3."
         required: true
         type: string
-      dry_run:
-        description: "Release mode. metadata stops after promotion metadata; prepublish runs build/smoke/report/plan without publishing; publish performs the stable release."
+      publish:
+        description: "Publish the validated stable build to R2 and GitHub Releases. OFF by default; unchecked runs the complete prepublish build, signing, notarization, and smoke path without public side effects."
         required: false
-        type: choice
-        options:
-          - metadata
-          - prepublish
-          - publish
-        default: metadata
+        type: boolean
+        default: false
+      metadata_only:
+        description: "Stop after validating promotion metadata. Ignored when publish is enabled."
+        required: false
+        type: boolean
+        default: false
       ref:
         description: "Stable release branch to build, for example release/v0.5.1. Empty builds the dispatch ref, which must also be release/vX.Y.Z."
         required: false
@@ -46,11 +47,16 @@ on:
         description: "Exact validated prerelease version to promote."
         required: true
         type: string
-      dry_run:
-        description: "Release mode: metadata, prepublish, or publish. The legacy false value is also accepted for callers."
+      publish:
+        description: "Publish to R2 and GitHub Releases. False runs the complete prepublish path."
         required: false
-        type: string
-        default: "metadata"
+        type: boolean
+        default: false
+      metadata_only:
+        description: "Stop after validating promotion metadata. Ignored when publish is true."
+        required: false
+        type: boolean
+        default: false
       ref:
         description: "Stable release branch to build. Empty builds the caller's ref, which must also be release/vX.Y.Z."
         required: false
@@ -105,9 +111,6 @@ on:
       win_url:
         description: "Windows x64 installer download URL."
         value: ${{ jobs.publish.outputs.win_url }}
-      linux_url:
-        description: "Linux x64 AppImage download URL (empty if linux disabled)."
-        value: ${{ jobs.publish.outputs.linux_url }}
 
 permissions:
   actions: write
@@ -115,10 +118,11 @@ permissions:
   packages: write
 
 concurrency:
-  group: open-design-release-stable-${{ inputs.dry_run }}
+  group: open-design-release-stable-${{ inputs.publish && 'publish' || inputs.metadata_only && 'metadata' || 'prepublish' }}
   cancel-in-progress: false
 
 env:
+  STABLE_SAVE_PNPM_CACHE: "false"
   # Workspace Team's four vela transports are gated in the packaged runtime on
   # BOTH a known AMR profile and a non-empty vela web origin
   # (workspaceTeamTransportEnv in apps/packaged/src/workspace-team.ts). Neither
@@ -167,18 +171,29 @@ env:
 
 jobs:
   metadata:
-    name: Prepare release metadata
+    name: "[prepare] Stable metadata and Plan"
     if: github.repository == 'nexu-io/open-design'
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
       GITHUB_REPOSITORY: ${{ github.repository }}
       OPEN_DESIGN_PRERELEASE_METADATA_URL: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}/prerelease/latest/metadata.json
-      OPEN_DESIGN_RELEASE_DRY_RUN: ${{ inputs.dry_run == 'publish' && 'false' || inputs.dry_run }}
+      OPEN_DESIGN_RELEASE_DRY_RUN: ${{ inputs.publish && 'false' || inputs.metadata_only && 'metadata' || 'prepublish' }}
       OPEN_DESIGN_RELEASE_CHANNEL: stable
       OPEN_DESIGN_RELEASES_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
       OPEN_DESIGN_STABLE_PRERELEASE_VERSION: ${{ inputs.prerelease_version }}
     outputs:
+      run: ${{ steps.plan.outputs.run }}
+      hit: ${{ steps.plan.outputs.hit }}
+      test_matrix: ${{ steps.plan.outputs.test_matrix }}
+      test_count: ${{ steps.plan.outputs.test_count }}
+      common_matrix: ${{ steps.plan.outputs.common_matrix }}
+      common_count: ${{ steps.plan.outputs.common_count }}
+      requests: ${{ steps.plan.outputs.requests }}
+      sources: ${{ steps.plan.outputs.sources }}
+      pending_artifact: stable-convergence-plan-${{ github.run_id }}-${{ github.run_attempt }}
+      contribution: ${{ steps.mode.outputs.contribution }}
+      contributions: ${{ steps.plan.outputs.contributions }}
       base_version: ${{ steps.stable.outputs.base_version }}
       branch: ${{ steps.stable.outputs.branch }}
       channel: ${{ steps.stable.outputs.channel }}
@@ -186,7 +201,6 @@ jobs:
       dry_run: ${{ steps.stable.outputs.dry_run }}
       dry_run_mode: ${{ steps.stable.outputs.dry_run_mode }}
       github_release_enabled: ${{ steps.stable.outputs.github_release_enabled }}
-      linux_namespace: ${{ steps.stable.outputs.linux_namespace }}
       mac_intel_namespace: ${{ steps.stable.outputs.mac_intel_namespace }}
       namespace: ${{ steps.stable.outputs.namespace }}
       publish_side_effects_enabled: ${{ steps.stable.outputs.publish_side_effects_enabled }}
@@ -205,27 +219,76 @@ jobs:
         uses: actions/checkout@v6.0.2
         with:
           ref: ${{ inputs.ref != '' && inputs.ref || github.ref }}
-          fetch-depth: 0
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v5
-        with:
-          version: 10.33.2
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+          fetch-depth: 1
 
       # Under workflow_call the runner's GITHUB_SHA/GITHUB_REF_NAME describe the
       # caller's ref (e.g. main for the scheduled daily build), not the ref we
       # actually checked out. Resolve the real built HEAD so the published
       # metadata.json records the branch we built, not the caller.
-      - name: Resolve built commit
-        run: echo "BUILT_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: Resolve built identity
+        id: identity
+        env:
+          BUILD_REF: ${{ inputs.ref != '' && inputs.ref || github.ref_name }}
+        run: |
+          set -euo pipefail
+          built_sha="$(git rev-parse HEAD)"
+          {
+            echo "branch=$BUILD_REF"
+            echo "commit=$built_sha"
+          } >> "$GITHUB_OUTPUT"
+          echo "BUILT_SHA=$built_sha" >> "$GITHUB_ENV"
+
+      - name: "[prepare] Distinct workflow control snapshot"
+        if: ${{ steps.identity.outputs.commit != github.sha && (!inputs.metadata_only || inputs.publish) }}
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ github.sha }}
+          path: plan-control
+          fetch-depth: 1
+
+      - name: "[resolve] Actual source runner profiles"
+        id: runners
+        if: ${{ !inputs.metadata_only || inputs.publish }}
+        env:
+          OD_CI_RUNNER_MODE: ${{ vars.OD_CI_RUNNER_MODE }}
+        run: python3 .github/scripts/runners.py
+
+      - name: "[resolve] Formal release result consumption"
+        id: mode
+        if: ${{ !inputs.metadata_only || inputs.publish }}
+        run: |
+          echo "contribution=true" >> "$GITHUB_OUTPUT"
+          echo "mode=enforce" >> "$GITHUB_OUTPUT"
+
+      - name: "[plan] Frozen stable workloads"
+        id: plan
+        if: ${{ !inputs.metadata_only || inputs.publish }}
+        env:
+          EXECUTION_INPUTS: ${{ toJSON(inputs) }}
+          RUNNER_PLAN: ${{ steps.runners.outputs.runs_on }}
+          CONTROL_ROOT: ${{ steps.identity.outputs.commit == github.sha && '.' || 'plan-control' }}
+          OD_WORKLOAD_RESULTS_BASE_URL: ${{ secrets.OD_WORKLOAD_RESULTS_BASE_URL }}
+        run: |
+          runners="$(jq -c '. + {source_javascript:["ubuntu-latest"],release_tests:["ubuntu-latest"],source_mac_arm64:["macos-14"],source_mac_x64:["macos-15-intel"],source_win_x64:["windows-latest"]}' <<< "$RUNNER_PLAN")"
+          python3 "$CONTROL_ROOT/.github/scripts/convergence.py" --root . --config "$CONTROL_ROOT/.github/config/convergence/release-stable.json" github-output \
+            --workflow release-stable --all-workloads --runner-plan-json "$runners" \
+            --execution-inputs-json "$EXECUTION_INPUTS" --mode enforce --pending "$RUNNER_TEMP/pending-convergence.json"
+
+      - name: "[retain] Frozen Plan witness"
+        if: ${{ !inputs.metadata_only || inputs.publish }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: stable-convergence-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/pending-convergence.json
+            ${{ runner.temp }}/requests
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Setup release control
+        uses: ./.github/actions/setup-workspace
+        with:
+          postinstall-intent: release-control
 
       # Capture the previously published prerelease commit BEFORE this run overwrites
       # prerelease/latest/metadata.json, so the notification can diff the changelog
@@ -269,110 +332,498 @@ jobs:
           RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
         run: pnpm exec tools-release check-storage
 
-  verify:
-    name: Verify build (typecheck + tests)
+  common:
+    name: "[build] Shared JavaScript"
+    outputs:
+      requests: ${{ steps.workload_results.outputs.requests }}
+      sources: ${{ steps.workload_results.outputs.sources }}
     needs: metadata
-    if: ${{ needs.metadata.outputs.run_prepublish_jobs == 'true' }}
-    runs-on: ubuntu-latest
+    if: ${{ needs.metadata.outputs.contribution == 'true' && needs.metadata.outputs.common_count != '0' }}
+    runs-on: ${{ fromJSON(needs.metadata.outputs.common_matrix).include[0].runner || 'ubuntu-latest' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
         with:
-          ref: ${{ inputs.ref }}
-          fetch-depth: 0
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v5
+          ref: ${{ needs.metadata.outputs.commit }}
+          fetch-depth: 1
+      - name: '[validate] Source references'
+        shell: bash
+        env:
+          OD_WORKLOAD_RESULTS_BASE_URL: ${{ secrets.OD_WORKLOAD_RESULTS_BASE_URL }}
+          SOURCE_REQUESTS: ${{ needs.metadata.outputs.requests }}
+        run: python3 .github/scripts/convergence.py resolve-references --batch source_javascript
+      - name: '[prepare] JavaScript build tools'
+        uses: ./.github/actions/setup-workspace
         with:
-          version: 10.33.2
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
+          postinstall-intent: shared-javascript
+          save-pnpm-cache: ${{ env.STABLE_SAVE_PNPM_CACHE }}
+      - name: '[build] Source packages'
+        id: source_packages
+        env:
+          SOURCE_OUTPUT: ${{ fromJSON(needs.metadata.outputs.requests).source_javascript.packages.retain && format('{0}/source-products/packages/product', runner.temp) || '' }}
+        run: >-
+          pnpm exec tools-pack workspace ${{ fromJSON(needs.metadata.outputs.requests).source_javascript.packages.operation == 'restore' && 'import' || 'build' }} packages
+          --url "$SOURCE_PACKAGES_URL" --sha256 "$SOURCE_PACKAGES_SHA256" --output "$SOURCE_OUTPUT"
+          --scratch "$RUNNER_TEMP/source-import" --json
+      - name: '[build] Source daemon'
+        id: source_daemon
+        env:
+          SOURCE_OUTPUT: ${{ fromJSON(needs.metadata.outputs.requests).source_javascript.daemon.retain && format('{0}/source-products/daemon/product', runner.temp) || '' }}
+        run: >-
+          pnpm exec tools-pack workspace ${{ fromJSON(needs.metadata.outputs.requests).source_javascript.daemon.operation == 'restore' && 'import' || 'build' }} daemon
+          --url "$SOURCE_DAEMON_URL" --sha256 "$SOURCE_DAEMON_SHA256" --output "$SOURCE_OUTPUT"
+          --scratch "$RUNNER_TEMP/source-import" --json
+      - name: '[build] Source shell'
+        id: source_shell
+        env:
+          SOURCE_OUTPUT: ${{ fromJSON(needs.metadata.outputs.requests).source_javascript.shell.retain && format('{0}/source-products/shell/product', runner.temp) || '' }}
+        run: >-
+          pnpm exec tools-pack workspace ${{ fromJSON(needs.metadata.outputs.requests).source_javascript.shell.operation == 'restore' && 'import' || 'build' }} shell
+          --url "$SOURCE_SHELL_URL" --sha256 "$SOURCE_SHELL_SHA256" --output "$SOURCE_OUTPUT"
+          --scratch "$RUNNER_TEMP/source-import" --json
+      - name: '[cache] Publish workload results'
+        id: workload_results
+        if: ${{ !cancelled() && needs.metadata.outputs.contribution == 'true' }}
+        uses: ./.github/actions/convergence
         with:
-          node-version: 24
+          config: .github/config/convergence/release-stable.json
+          pending-artifact: ${{ needs.metadata.outputs.pending_artifact }}
+          id: stable-common-results
+          products: manifest
+          batches: '["source_javascript"]'
+          formal-release: 'true'
+          current-job: '[build] Shared JavaScript'
+          step-results: |
+            {"[build] Source packages":"${{ steps.source_packages.outcome }}","[build] Source daemon":"${{ steps.source_daemon.outcome }}","[build] Source shell":"${{ steps.source_shell.outcome }}"}
+          local-products-root: ${{ runner.temp }}/source-products
+          local-product-pattern: '**/workspace.tar.gz'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CLOUDFLARE_R2_WORKLOAD_RESULTS_URL: ${{ secrets.CLOUDFLARE_R2_WORKLOAD_RESULTS_URL }}
+          CLOUDFLARE_R2_WORKLOAD_RESULTS_BUCKET: ${{ secrets.CLOUDFLARE_R2_WORKLOAD_RESULTS_BUCKET }}
+          OD_WORKLOAD_RESULTS_BASE_URL: ${{ secrets.OD_WORKLOAD_RESULTS_BASE_URL }}
+          CLOUDFLARE_R2_WORKLOAD_RESULTS_AK: ${{ secrets.CLOUDFLARE_R2_WORKLOAD_RESULTS_AK }}
+          CLOUDFLARE_R2_WORKLOAD_RESULTS_SK: ${{ secrets.CLOUDFLARE_R2_WORKLOAD_RESULTS_SK }}
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      # `scripts/postinstall.mjs` auto-builds `packages/*` and `tools/*`, but
-      # `apps/daemon` and `apps/desktop` are not in that list. On a fresh clone
-      # (every CI run), workspace typecheck fails because:
-      #   - packaged/runtime consumers resolve the daemon package export through
-      #     generated `apps/daemon/dist/*.d.ts`
-      #   - `apps/packaged/src/index.ts` dynamic-imports `@open-design/desktop/main`
-      #     which resolves to `apps/desktop/dist/main/index.d.ts`
-      # Build them explicitly here. Keeps the root `typecheck` script untouched.
-      - name: Build daemon and desktop (typecheck dependencies)
-        run: |
-          pnpm --filter @open-design/daemon build
-          pnpm --filter @open-design/desktop build
-
-      - name: Typecheck workspaces
-        run: pnpm -r --workspace-concurrency=4 --if-present run typecheck
-
-      - name: Check repository layout policies
-        run: pnpm guard
-
-      # Workspace tests are intentionally not gated here. apps/web's
-      # i18n content-coverage tests assert that every locale carries
-      # display metadata for every prompt template / skill / design
-      # system. Those tests fail on `main` as of this writing because
-      # PR #187 added two new prompt templates without translating
-      # their metadata into the 9 ship-ready locales — an i18n drift
-      # that's out of scope for the release infrastructure. Tracked as
-      # a follow-up; revisit once locale metadata is back in sync.
-
-  build_mac:
-    name: Build release mac arm64
-    needs: [metadata, verify]
-    if: ${{ needs.metadata.outputs.run_prepublish_jobs == 'true' }}
+  source_mac_arm64:
+    outputs:
+      requests: ${{ steps.workload_results.outputs.requests }}
+      sources: ${{ steps.workload_results.outputs.sources }}
+    name: "[build] mac_arm64 workload"
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && needs.metadata.result == 'success' && needs.metadata.outputs.contribution == 'true' && fromJSON(needs.metadata.outputs.requests).source_mac_arm64.web.operation == 'build' }}
     runs-on: macos-14
-    env:
-      GH_TOKEN: ${{ github.token }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
         with:
-          ref: ${{ inputs.ref }}
-          fetch-depth: 0
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v5
+          ref: ${{ needs.metadata.outputs.commit }}
+          fetch-depth: 1
+      - name: "[validate] Source references"
+        shell: bash
+        env:
+          OD_WORKLOAD_RESULTS_BASE_URL: ${{ secrets.OD_WORKLOAD_RESULTS_BASE_URL }}
+          SOURCE_REQUESTS: ${{ needs.metadata.outputs.requests }}
+          SHARED_SOURCES: ${{ toJSON(fromJSON(needs.metadata.outputs.common_count != '0' && needs.common.outputs.sources || needs.metadata.outputs.common_count == '0' && needs.metadata.outputs.sources || 'null').source_javascript) }}
+        run: python3 .github/scripts/convergence.py resolve-references --batch source_mac_arm64 ${{ (needs.metadata.outputs.contribution == 'true') && '--shared packages,daemon,shell' || '' }}
+      - name: "[prepare] Workspace source tools"
+        uses: ./.github/actions/setup-workspace
         with:
-          version: 10.33.2
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
+          save-pnpm-cache: ${{ env.STABLE_SAVE_PNPM_CACHE }}
+          postinstall-intent: source-web
+      - name: "[restore] Shared JavaScript"
+        shell: bash
+        run: pnpm --filter @open-design/tools-pack workspace:dev ${{ (needs.metadata.outputs.contribution == 'true') && 'import' || 'build' }} javascript --sources "$WORKSPACE_SOURCES" --scratch "$RUNNER_TEMP/shared-javascript" --json
+      - name: "[build] Source web"
+        id: source_web
+        shell: bash
+        env:
+          SOURCE_OUTPUT: ${{ runner.temp }}/source-products/web/product
+          OD_WEB_BUILD_ID: ${{ env.SOURCE_WEB_BUILD_ID }}
+        run: pnpm --filter @open-design/tools-pack workspace:dev build web --url "$SOURCE_WEB_URL" --sha256 "$SOURCE_WEB_SHA256" --output "$SOURCE_OUTPUT" --scratch "$RUNNER_TEMP/source-import" --web-output-mode standalone --json
+      - name: '[cache] Publish workload results'
+        id: workload_results
+        if: ${{ success() && needs.metadata.outputs.contribution == 'true' }}
+        uses: ./.github/actions/convergence
         with:
-          node-version: 24
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Inspect mac Electron framework symlinks
+          config: .github/config/convergence/release-stable.json
+          pending-artifact: ${{ needs.metadata.outputs.pending_artifact }}
+          id: stable-source-mac-arm64
+          products: manifest
+          batches: '["source_mac_arm64"]'
+          formal-release: 'true'
+          current-job: '[build] mac_arm64 workload'
+          step-results: |
+            {"[build] Source web":"${{ steps.source_web.outcome }}"}
+          local-products-root: ${{ runner.temp }}/source-products
+          local-product-pattern: '**/workspace.tar.gz'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CLOUDFLARE_R2_WORKLOAD_RESULTS_URL: ${{ secrets.CLOUDFLARE_R2_WORKLOAD_RESULTS_URL }}
+          CLOUDFLARE_R2_WORKLOAD_RESULTS_BUCKET: ${{ secrets.CLOUDFLARE_R2_WORKLOAD_RESULTS_BUCKET }}
+          OD_WORKLOAD_RESULTS_BASE_URL: ${{ secrets.OD_WORKLOAD_RESULTS_BASE_URL }}
+          CLOUDFLARE_R2_WORKLOAD_RESULTS_AK: ${{ secrets.CLOUDFLARE_R2_WORKLOAD_RESULTS_AK }}
+          CLOUDFLARE_R2_WORKLOAD_RESULTS_SK: ${{ secrets.CLOUDFLARE_R2_WORKLOAD_RESULTS_SK }}
+    needs:
+      - metadata
+      - common
+  source_mac_x64:
+    outputs:
+      requests: ${{ steps.workload_results.outputs.requests }}
+      sources: ${{ steps.workload_results.outputs.sources }}
+    name: "[build] mac_x64 workload"
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && needs.metadata.result == 'success' && needs.metadata.outputs.contribution == 'true' && (fromJSON(needs.metadata.outputs.requests).source_mac_x64.web.operation == 'build' || fromJSON(needs.metadata.outputs.requests).source_mac_x64.executor.operation == 'build' || fromJSON(needs.metadata.outputs.requests).source_mac_x64.runtime.operation == 'build') }}
+    runs-on: macos-15-intel
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ needs.metadata.outputs.commit }}
+          fetch-depth: 1
+      - name: Disable Spotlight indexing for mac_x64 workload
         run: |
           set -euo pipefail
-          electron_dist="$(node -e 'const path = require("node:path"); const { createRequire } = require("node:module"); const requireFromDesktop = createRequire(path.join(process.cwd(), "apps/desktop/package.json")); const electron = requireFromDesktop.resolve("electron"); process.stdout.write(path.join(path.dirname(electron), "dist"));')"
-          framework="$electron_dist/Electron.app/Contents/Frameworks/Electron Framework.framework"
-          missing_links=0
-          for link in \
-            "$framework/Electron Framework" \
-            "$framework/Helpers" \
-            "$framework/Libraries" \
-            "$framework/Resources" \
-            "$framework/Versions/Current"; do
-            if [ ! -L "$link" ]; then
-              echo "::warning::Expected Electron framework symlink, got non-symlink: $link"
-              missing_links=1
-            fi
-          done
-          if [ "$missing_links" -ne 0 ]; then
-            ls -la "$framework" >&2 || true
-            ls -la "$framework/Versions" >&2 || true
-            echo "Continuing into tools-pack because electron-builder is the source of truth for whether packaging actually works."
+          sudo mdutil -i off /
+          sudo mdutil -i off /System/Volumes/Data
+          mdutil -s / /System/Volumes/Data
+      - name: "[validate] Source references"
+        shell: bash
+        env:
+          OD_WORKLOAD_RESULTS_BASE_URL: ${{ secrets.OD_WORKLOAD_RESULTS_BASE_URL }}
+          SOURCE_REQUESTS: ${{ needs.metadata.outputs.requests }}
+          SHARED_SOURCES: ${{ toJSON(fromJSON(needs.metadata.outputs.common_count != '0' && needs.common.outputs.sources || needs.metadata.outputs.common_count == '0' && needs.metadata.outputs.sources || 'null').source_javascript) }}
+        run: python3 .github/scripts/convergence.py resolve-references --batch source_mac_x64 ${{ (needs.metadata.outputs.contribution == 'true') && '--shared packages,daemon,shell' || '' }}
+      - name: "[prepare] Workspace source tools"
+        uses: ./.github/actions/setup-workspace
+        with:
+          save-pnpm-cache: ${{ env.STABLE_SAVE_PNPM_CACHE }}
+          postinstall-intent: ${{ fromJSON(needs.metadata.outputs.requests).source_mac_x64.runtime.operation == 'build' && 'mac-runtime' || fromJSON(needs.metadata.outputs.requests).source_mac_x64.web.operation == 'build' && 'source-web' || 'release-executor' }}
+      - name: "[restore] Shared JavaScript"
+        shell: bash
+        run: pnpm --filter @open-design/tools-pack workspace:dev ${{ (needs.metadata.outputs.contribution == 'true') && 'import' || 'build' }} javascript --sources "$WORKSPACE_SOURCES" --scratch "$RUNNER_TEMP/shared-javascript" --json
+      - name: "[build] Source web"
+        id: source_web
+        if: ${{ fromJSON(needs.metadata.outputs.requests).source_mac_x64.web.operation == 'build' }}
+        shell: bash
+        env:
+          SOURCE_OUTPUT: ${{ runner.temp }}/source-products/web/product
+          OD_WEB_BUILD_ID: ${{ env.SOURCE_WEB_BUILD_ID }}
+        run: pnpm --filter @open-design/tools-pack workspace:dev build web --url "$SOURCE_WEB_URL" --sha256 "$SOURCE_WEB_SHA256" --output "$SOURCE_OUTPUT" --scratch "$RUNNER_TEMP/source-import" --web-output-mode standalone --json
+      - name: "[prepare] Platform product tools"
+        id: platform_product_tools
+        if: ${{ fromJSON(needs.metadata.outputs.requests).source_mac_x64.executor.operation == 'build' || fromJSON(needs.metadata.outputs.requests).source_mac_x64.runtime.operation == 'build' }}
+        shell: bash
+        run: pnpm --filter @open-design/tools-pack build
+      - name: "[build] Release executor"
+        id: release_executor
+        if: ${{ fromJSON(needs.metadata.outputs.requests).source_mac_x64.executor.operation == 'build' }}
+        shell: bash
+        env:
+          SOURCE_OUTPUT: ${{ runner.temp }}/source-products/executor/product/workspace.tar.gz
+        run: |
+          set -euo pipefail
+          pnpm --filter @open-design/tools-release build
+          pnpm --filter @open-design/tools-pack executor:dev export --output "$SOURCE_OUTPUT" --json
+      - name: "[build] mac_x64 runtime"
+        id: mac_x64_runtime
+        if: ${{ fromJSON(needs.metadata.outputs.requests).source_mac_x64.runtime.operation == 'build' }}
+        shell: bash
+        env:
+          SOURCE_OUTPUT: ${{ runner.temp }}/source-products/runtime/product/workspace.tar.gz
+        run: >-
+          pnpm exec tools-pack mac runtime-export
+          --dir "$RUNNER_TEMP/mac-runtime-export"
+          --namespace runtime-export
+          --output "$SOURCE_OUTPUT"
+          --json
+      - name: '[cache] Publish workload results'
+        id: workload_results
+        if: ${{ !cancelled() && needs.metadata.outputs.contribution == 'true' }}
+        uses: ./.github/actions/convergence
+        with:
+          config: .github/config/convergence/release-stable.json
+          pending-artifact: ${{ needs.metadata.outputs.pending_artifact }}
+          id: stable-source-mac-x64
+          products: manifest
+          batches: '["source_mac_x64"]'
+          formal-release: 'true'
+          current-job: '[build] mac_x64 workload'
+          step-results: |
+            {"[build] Source web":"${{ steps.source_web.outcome }}","[prepare] Platform product tools":"${{ steps.platform_product_tools.outcome }}","[build] Release executor":"${{ steps.release_executor.outcome }}","[build] mac_x64 runtime":"${{ steps.mac_x64_runtime.outcome }}"}
+          local-products-root: ${{ runner.temp }}/source-products
+          local-product-pattern: '**/workspace.tar.gz'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CLOUDFLARE_R2_WORKLOAD_RESULTS_URL: ${{ secrets.CLOUDFLARE_R2_WORKLOAD_RESULTS_URL }}
+          CLOUDFLARE_R2_WORKLOAD_RESULTS_BUCKET: ${{ secrets.CLOUDFLARE_R2_WORKLOAD_RESULTS_BUCKET }}
+          OD_WORKLOAD_RESULTS_BASE_URL: ${{ secrets.OD_WORKLOAD_RESULTS_BASE_URL }}
+          CLOUDFLARE_R2_WORKLOAD_RESULTS_AK: ${{ secrets.CLOUDFLARE_R2_WORKLOAD_RESULTS_AK }}
+          CLOUDFLARE_R2_WORKLOAD_RESULTS_SK: ${{ secrets.CLOUDFLARE_R2_WORKLOAD_RESULTS_SK }}
+    needs:
+      - metadata
+      - common
+  source_win_x64:
+    outputs:
+      requests: ${{ steps.workload_results.outputs.requests }}
+      sources: ${{ steps.workload_results.outputs.sources }}
+    name: "[build] win_x64 workload"
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && needs.metadata.result == 'success' && needs.metadata.outputs.contribution == 'true' && (fromJSON(needs.metadata.outputs.requests).source_win_x64.web.operation == 'build' || fromJSON(needs.metadata.outputs.requests).source_win_x64.executor.operation == 'build') }}
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ needs.metadata.outputs.commit }}
+          fetch-depth: 1
+      - name: "[validate] Source references"
+        shell: bash
+        env:
+          OD_WORKLOAD_RESULTS_BASE_URL: ${{ secrets.OD_WORKLOAD_RESULTS_BASE_URL }}
+          SOURCE_REQUESTS: ${{ needs.metadata.outputs.requests }}
+          SHARED_SOURCES: ${{ toJSON(fromJSON(needs.metadata.outputs.common_count != '0' && needs.common.outputs.sources || needs.metadata.outputs.common_count == '0' && needs.metadata.outputs.sources || 'null').source_javascript) }}
+        run: python3 .github/scripts/convergence.py resolve-references --batch source_win_x64 ${{ (needs.metadata.outputs.contribution == 'true') && '--shared packages,daemon,shell' || '' }}
+      - name: "[prepare] Workspace source tools"
+        uses: ./.github/actions/setup-workspace
+        with:
+          save-pnpm-cache: ${{ env.STABLE_SAVE_PNPM_CACHE }}
+          postinstall-intent: ${{ fromJSON(needs.metadata.outputs.requests).source_win_x64.web.operation == 'build' && 'source-web' || 'release-executor' }}
+      - name: "[restore] Shared JavaScript"
+        shell: bash
+        run: pnpm --filter @open-design/tools-pack workspace:dev ${{ (needs.metadata.outputs.contribution == 'true') && 'import' || 'build' }} javascript --sources "$WORKSPACE_SOURCES" --scratch "$RUNNER_TEMP/shared-javascript" --json
+      - name: "[build] Source web"
+        id: source_web
+        if: ${{ fromJSON(needs.metadata.outputs.requests).source_win_x64.web.operation == 'build' }}
+        shell: bash
+        env:
+          SOURCE_OUTPUT: ${{ runner.temp }}/source-products/web/product
+          OD_WEB_BUILD_ID: ${{ env.SOURCE_WEB_BUILD_ID }}
+        run: pnpm --filter @open-design/tools-pack workspace:dev build web --url "$SOURCE_WEB_URL" --sha256 "$SOURCE_WEB_SHA256" --output "$SOURCE_OUTPUT" --scratch "$RUNNER_TEMP/source-import" --web-output-mode standalone --json
+      - name: "[prepare] Platform product tools"
+        id: platform_product_tools
+        if: ${{ fromJSON(needs.metadata.outputs.requests).source_win_x64.executor.operation == 'build' }}
+        shell: pwsh
+        run: pnpm.cmd --filter @open-design/tools-pack build
+      - name: "[build] Release executor"
+        id: release_executor
+        if: ${{ fromJSON(needs.metadata.outputs.requests).source_win_x64.executor.operation == 'build' }}
+        shell: pwsh
+        env:
+          SOURCE_OUTPUT: ${{ runner.temp }}\source-products\executor\product\workspace.tar.gz
+        run: |
+          $ErrorActionPreference = "Stop"
+          pnpm.cmd --filter @open-design/tools-release build
+          if ($LASTEXITCODE -ne 0) { throw "tools-release build failed with exit code $LASTEXITCODE" }
+          pnpm.cmd --filter @open-design/tools-pack executor:dev export --output $env:SOURCE_OUTPUT --json
+          if ($LASTEXITCODE -ne 0) { throw "release executor export failed with exit code $LASTEXITCODE" }
+      - name: '[cache] Publish workload results'
+        id: workload_results
+        if: ${{ success() && needs.metadata.outputs.contribution == 'true' }}
+        uses: ./.github/actions/convergence
+        with:
+          config: .github/config/convergence/release-stable.json
+          pending-artifact: ${{ needs.metadata.outputs.pending_artifact }}
+          id: stable-source-win-x64
+          products: manifest
+          batches: '["source_win_x64"]'
+          formal-release: 'true'
+          current-job: '[build] win_x64 workload'
+          step-results: |
+            {"[build] Source web":"${{ steps.source_web.outcome }}","[build] Release executor":"${{ steps.release_executor.outcome }}"}
+          local-products-root: ${{ runner.temp }}/source-products
+          local-product-pattern: '**/workspace.tar.gz'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CLOUDFLARE_R2_WORKLOAD_RESULTS_URL: ${{ secrets.CLOUDFLARE_R2_WORKLOAD_RESULTS_URL }}
+          CLOUDFLARE_R2_WORKLOAD_RESULTS_BUCKET: ${{ secrets.CLOUDFLARE_R2_WORKLOAD_RESULTS_BUCKET }}
+          OD_WORKLOAD_RESULTS_BASE_URL: ${{ secrets.OD_WORKLOAD_RESULTS_BASE_URL }}
+          CLOUDFLARE_R2_WORKLOAD_RESULTS_AK: ${{ secrets.CLOUDFLARE_R2_WORKLOAD_RESULTS_AK }}
+          CLOUDFLARE_R2_WORKLOAD_RESULTS_SK: ${{ secrets.CLOUDFLARE_R2_WORKLOAD_RESULTS_SK }}
+    needs:
+      - metadata
+      - common
+  test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: ${{ matrix.timeout }}
+    needs: [metadata, common]
+    if: ${{ !cancelled() && needs.metadata.result == 'success' && !contains(needs.*.result, 'failure') && needs.metadata.outputs.run_prepublish_jobs == 'true' && needs.metadata.outputs.test_count != '0' }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.metadata.outputs.test_matrix) }}
+    env:
+      OD_WATCHER_TEST_DEBUG: ${{ matrix.debug || '' }}
+      TEST_KIND: ${{ matrix.kind }}
+      TEST_SHARD: ${{ matrix.shard || '' }}
+      TEST_GROUP: ${{ matrix.group || '' }}
+      TEST_SHARED: ${{ needs.metadata.outputs.contribution }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ needs.metadata.outputs.commit }}
+          fetch-depth: 1
+      - name: "[validate] Source references"
+        if: ${{ needs.metadata.outputs.contribution == 'true' }}
+        shell: bash
+        env:
+          OD_WORKLOAD_RESULTS_BASE_URL: ${{ secrets.OD_WORKLOAD_RESULTS_BASE_URL }}
+          SHARED_SOURCES: ${{ toJSON(fromJSON(needs.metadata.outputs.common_count != '0' && needs.common.outputs.sources || needs.metadata.outputs.common_count == '0' && needs.metadata.outputs.sources || 'null').source_javascript) }}
+        run: python3 .github/scripts/convergence.py resolve-references --shared packages,daemon,shell
+      - name: Configure CI parallelism
+        if: ${{ matrix.kind == 'ui' }}
+        uses: ./.github/actions/configure-ci-parallelism
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
+        with:
+          postinstall-intent: ${{ format('test-{0}', matrix.kind) }}
+          save-pnpm-cache: ${{ env.STABLE_SAVE_PNPM_CACHE }}
+          runner-labels: ${{ toJSON(matrix.runner) }}
+      - name: Setup Playwright
+        if: ${{ matrix.kind == 'e2e' || matrix.kind == 'ui' }}
+        uses: ./.github/actions/setup-playwright
+        with:
+          package-json-path: e2e/package.json
+          install-command: pnpm -C e2e exec playwright install --with-deps chromium
+          runner-labels: ${{ toJSON(matrix.runner) }}
+      - name: Allow Chromium user namespaces on GitHub Ubuntu
+        if: ${{ matrix.kind == 'e2e' }}
+        run: |
+          if sysctl kernel.apparmor_restrict_unprivileged_userns >/dev/null 2>&1; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           fi
+      - name: Prepare test dependencies
+        run: python3 .github/scripts/release/test_unit.py prepare
+      - name: Clean Playwright state
+        if: ${{ matrix.kind == 'ui' }}
+        run: pnpm -C e2e exec tsx scripts/playwright.ts clean
+      - name: Run test unit
+        run: python3 .github/scripts/release/test_unit.py run
+      - name: Preserve project-runtime domain artifact
+        if: ${{ success() && matrix.kind == 'ui' && matrix.group == 'project-runtime' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: functional-e2e-${{ github.run_id }}-p0-${{ matrix.group }}-domain
+          path: |
+            e2e/ui/reports/playwright-html-report
+            e2e/ui/reports/test-results
+            e2e/ui/reports/results.json
+            e2e/ui/test-results
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Run UI critical extras
+        if: ${{ matrix.extra == true }}
+        run: python3 .github/scripts/release/test_unit.py extra
+      - name: Upload Playwright debug artifact
+        if: ${{ always() && matrix.kind == 'ui' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: functional-e2e-${{ github.run_id }}-p0-${{ matrix.group }}
+          path: |
+            e2e/ui/reports/playwright-html-report
+            e2e/ui/reports/test-results
+            e2e/ui/reports/results.json
+            e2e/ui/test-results
+          if-no-files-found: ignore
+          retention-days: 7
 
-      - name: Prepare Apple signing certificate
+  cache_test:
+    name: "[cache] Completed test results"
+    needs: [metadata, test]
+    if: ${{ always() && !cancelled() && needs.metadata.result == 'success' && needs.metadata.outputs.run_prepublish_jobs == 'true' && needs.metadata.outputs.contribution == 'true' && needs.metadata.outputs.test_count != '0' && (needs.test.result == 'success' || needs.test.result == 'failure') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ needs.metadata.outputs.commit }}
+          fetch-depth: 1
+      - name: '[cache] Publish independently successful workloads'
+        uses: ./.github/actions/convergence
+        with:
+          config: .github/config/convergence/release-stable.json
+          pending-artifact: ${{ needs.metadata.outputs.pending_artifact }}
+          id: stable-test-results
+          products: none
+          formal-release: 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CLOUDFLARE_R2_WORKLOAD_RESULTS_URL: ${{ secrets.CLOUDFLARE_R2_WORKLOAD_RESULTS_URL }}
+          CLOUDFLARE_R2_WORKLOAD_RESULTS_BUCKET: ${{ secrets.CLOUDFLARE_R2_WORKLOAD_RESULTS_BUCKET }}
+          OD_WORKLOAD_RESULTS_BASE_URL: ${{ secrets.OD_WORKLOAD_RESULTS_BASE_URL }}
+          CLOUDFLARE_R2_WORKLOAD_RESULTS_AK: ${{ secrets.CLOUDFLARE_R2_WORKLOAD_RESULTS_AK }}
+          CLOUDFLARE_R2_WORKLOAD_RESULTS_SK: ${{ secrets.CLOUDFLARE_R2_WORKLOAD_RESULTS_SK }}
+  quality_gate:
+    name: Verify stable quality gate
+    needs: [metadata, test]
+    if: ${{ always() && !cancelled() && needs.metadata.outputs.run_prepublish_jobs == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require a cached or freshly successful verify result
+        env:
+          VERIFY_HIT: ${{ fromJSON(needs.metadata.outputs.hit).test_verify }}
+          VERIFY_JOB_RESULT: ${{ needs.test.result }}
+        run: |
+          set -euo pipefail
+          if [ "$VERIFY_HIT" = "true" ] || [ "$VERIFY_JOB_RESULT" = "success" ]; then
+            exit 0
+          fi
+          echo "stable verify workload was neither reused nor completed successfully (hit=$VERIFY_HIT job=$VERIFY_JOB_RESULT)" >&2
+          exit 1
+
+  build_mac:
+    outputs:
+      manifest_key: ${{ steps.mac_arm64_platform_outputs.outputs.platform_manifest_key }}
+      url: ${{ steps.mac_arm64_platform_outputs.outputs.dmg_url }}
+    name: Build stable mac arm64
+    needs:
+      - metadata
+      - common
+      - source_mac_arm64
+      - quality_gate
+    if: ${{ !cancelled() && needs.metadata.outputs.run_prepublish_jobs == 'true' && needs.metadata.result == 'success' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
+    runs-on: macos-14
+    defaults:
+      run:
+        shell: bash
+    env:
+      RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ needs.metadata.outputs.commit }}
+          fetch-depth: 1
+      - name: "[validate] Source references"
+        shell: bash
+        env:
+          OD_WORKLOAD_RESULTS_BASE_URL: ${{ secrets.OD_WORKLOAD_RESULTS_BASE_URL }}
+          SOURCE_REQUESTS: ${{ needs.source_mac_arm64.result == 'success' && needs.source_mac_arm64.outputs.requests || needs.source_mac_arm64.result == 'skipped' && needs.metadata.outputs.requests || 'null' }}
+          SHARED_SOURCES: ${{ toJSON(fromJSON(needs.metadata.outputs.common_count != '0' && needs.common.outputs.sources || needs.metadata.outputs.common_count == '0' && needs.metadata.outputs.sources || 'null').source_javascript) }}
+        run: python3 .github/scripts/convergence.py resolve-references --batch source_mac_arm64 ${{ (needs.metadata.outputs.contribution == 'true') && '--shared packages,daemon,shell' || '' }}
+      - name: "[prepare] Workspace source tools"
+        uses: ./.github/actions/setup-workspace
+        with:
+          save-pnpm-cache: ${{ env.STABLE_SAVE_PNPM_CACHE }}
+          cache-tools: 'true'
+          postinstall-intent: platform-build
+      - name: "[restore] Shared JavaScript"
+        shell: bash
+        run: pnpm exec tools-pack workspace ${{ (needs.metadata.outputs.contribution == 'true') && 'import' || 'build' }} javascript --sources "$WORKSPACE_SOURCES" --scratch "$RUNNER_TEMP/shared-javascript" --json
+      - name: "[build] Source web"
+        id: source_web
+        shell: bash
+        env:
+          SOURCE_OUTPUT: ""
+        run: pnpm exec tools-pack workspace ${{ (needs.metadata.outputs.contribution == 'true') && 'import' || 'build' }} web --url "$SOURCE_WEB_URL" --sha256 "$SOURCE_WEB_SHA256" --output "$SOURCE_OUTPUT" --scratch "$RUNNER_TEMP/source-import" --web-output-mode standalone --json
+      - name: Prepare mac_arm64 signing certificate
         env:
           APPLE_SIGNING_CERTIFICATE_BASE64: ${{ secrets.APPLE_SIGNING_CERTIFICATE_BASE64 }}
           APPLE_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_SIGNING_CERTIFICATE_PASSWORD }}
@@ -386,124 +837,39 @@ jobs:
             echo "CSC_LINK=$cert_path"
             echo "CSC_KEY_PASSWORD=$APPLE_SIGNING_CERTIFICATE_PASSWORD"
           } >> "$GITHUB_ENV"
-
-      - name: Build release mac artifacts
+      - name: Build stable mac_arm64
+        id: mac_arm64_tools_pack_build
         env:
+          ELECTRON_BUILDER_COMPRESSION_LEVEL: "1"
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          OD_WEB_SOURCEMAP_UPLOAD: "true"
         run: |
           set -euo pipefail
-          tools_pack_dir="$RUNNER_TEMP/tools-pack"
-          build_json_path="$RUNNER_TEMP/mac-tools-pack-build.json"
-          build_log_path="$RUNNER_TEMP/mac-tools-pack-build.log"
-          rm -rf "$tools_pack_dir"
-          : > "$build_log_path"
+          mkdir -p "$RUNNER_TEMP/release-build/mac_arm64"
+          rm -rf "$RUNNER_TEMP/tools-pack"
+          : > "$RUNNER_TEMP/release-build/mac_arm64/build.log"
           build_args=(
-            exec tools-pack mac build
-            --dir "$tools_pack_dir"
+            exec tools-pack mac package
+            --dir "$RUNNER_TEMP/tools-pack"
+            --cache-dir "$RUNNER_TEMP/tools-pack-cache"
             --namespace "${{ needs.metadata.outputs.namespace }}"
             --portable
             --app-version "${{ needs.metadata.outputs.release_version }}"
-            --mac-compression normal
-            --to all
-            --require-vela-cli
+            --build-json "$RUNNER_TEMP/release-build/mac_arm64/build.json"
+            --mac-compression "normal"
+            --to "all"
             --json
-            --signed
-            --notarize
+            --require-vela-cli
           )
-          if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$build_log_path" >&2))"; then
-            printf '%s\n' "$build_output" | tee "$build_json_path"
-          else
-            build_status=$?
-            printf '%s\n' "$build_output"
-            exit "$build_status"
-          fi
-
-      - name: Capture mac framework diagnostics
-        if: ${{ failure() }}
-        continue-on-error: true
-        run: |
-          set -euo pipefail
-          output="$RUNNER_TEMP/mac-framework-diagnostics.txt"
-          source_resolve_log="$RUNNER_TEMP/mac-framework-source-resolve.err"
-          source_framework="$(node -e 'const path = require("node:path"); const { createRequire } = require("node:module"); const requireFromDesktop = createRequire(path.join(process.cwd(), "apps/desktop/package.json")); const electron = requireFromDesktop.resolve("electron"); process.stdout.write(path.join(path.dirname(electron), "dist", "Electron.app", "Contents", "Frameworks", "Electron Framework.framework"));' 2>"$source_resolve_log" || true)"
-          app_name="Open Design.app"
-          if [ "${{ needs.metadata.outputs.channel }}" = "prerelease" ]; then
-            app_name="Open Design Prerelease.app"
-          fi
-          built_framework="$RUNNER_TEMP/tools-pack/out/mac/namespaces/${{ needs.metadata.outputs.namespace }}/builder/mac-arm64/$app_name/Contents/Frameworks/Electron Framework.framework"
-
-          dump_framework() {
-            local label="$1"
-            local framework="$2"
-            echo "## $label"
-            echo "path=$framework"
-            if [ ! -e "$framework" ] && [ ! -L "$framework" ]; then
-              echo "missing"
-              return 0
-            fi
-            echo "### top-level"
-            ls -la "$framework" || true
-            echo "### symlinks"
-            find "$framework" -maxdepth 4 -type l -print0 | while IFS= read -r -d '' link; do
-              printf '%s -> %s\n' "$link" "$(readlink "$link")"
-            done || true
-            echo "### selected stat"
-            for path in \
-              "$framework" \
-              "$framework/Electron Framework" \
-              "$framework/Versions" \
-              "$framework/Versions/Current" \
-              "$framework/Versions/Current/Electron Framework" \
-              "$framework/Versions/A" \
-              "$framework/Versions/A/Electron Framework" \
-              "$framework/Resources" \
-              "$framework/Versions/A/Resources/Info.plist"; do
-              if [ -e "$path" ] || [ -L "$path" ]; then
-                stat -f '%Sp %HT %N' "$path" || true
-              else
-                echo "missing: $path"
-              fi
-            done
-            echo "### plist"
-            plutil -p "$framework/Versions/A/Resources/Info.plist" 2>&1 || true
-            echo "### codesign display"
-            codesign --display --verbose=4 "$framework/Electron Framework" 2>&1 || true
-            codesign --display --verbose=4 "$framework/Versions/Current/Electron Framework" 2>&1 || true
-            codesign --display --verbose=4 "$framework/Versions/A/Electron Framework" 2>&1 || true
-            codesign --display --verbose=4 "$framework" 2>&1 || true
-          }
-
-          {
-            date -u
-            if [ -n "$source_framework" ]; then
-              dump_framework "source Electron Framework" "$source_framework"
-            else
-              echo "## source Electron Framework"
-              echo "resolve failed"
-              cat "$source_resolve_log" || true
-            fi
-            dump_framework "built Electron Framework" "$built_framework"
-          } > "$output"
-          cat "$output"
-
-      - name: Upload mac build diagnostics
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: open-design-stable-mac-build-diagnostics
-          path: |
-            ${{ runner.temp }}/mac-tools-pack-build.log
-            ${{ runner.temp }}/mac-tools-pack-build.json
-            ${{ runner.temp }}/mac-framework-diagnostics.txt
-          if-no-files-found: warn
-
+          build_args+=(--signed --notarize)
+          pnpm "${build_args[@]}" 2> >(tee -a "$RUNNER_TEMP/release-build/mac_arm64/build.log" >&2)
       - name: Smoke release mac packaged runtime
         working-directory: e2e
         env:
-          OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/mac-tools-pack-build.json
-          OD_PACKAGED_E2E_BUILD_LOG_PATH: ${{ runner.temp }}/mac-tools-pack-build.log
+          OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.json
+          OD_PACKAGED_E2E_BUILD_LOG_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.log
           OD_PACKAGED_E2E_MAC: "1"
           OD_PACKAGED_E2E_MAC_ONBOARDING_SMOKE: ${{ needs.metadata.outputs.channel == 'nightly' && '1' || '0' }}
           OD_PACKAGED_E2E_NAMESPACE: ${{ needs.metadata.outputs.namespace }}
@@ -523,29 +889,47 @@ jobs:
           path: ${{ runner.temp }}/release-report/mac
           if-no-files-found: warn
 
-      - name: Prepare mac release assets
-        id: assets
+      - name: Write mac_arm64 release report
+        id: report_mac_arm64
+        if: ${{ !cancelled() && steps.mac_arm64_tools_pack_build.outcome == 'success' }}
+        env:
+          BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.json
+          BUILD_LOG_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.log
+          RELEASE_BUILD_TARGET: all
+          RELEASE_CHANNEL: stable
+          RELEASE_NAMESPACE: ${{ needs.metadata.outputs.namespace }}
+          RELEASE_REPORT_DIR: ${{ runner.temp }}/release-report/mac
+          RELEASE_REPORT_JSON_PATH: ${{ runner.temp }}/release-report/mac/report.json
+          RELEASE_REPORT_SUMMARY_PATH: ${{ runner.temp }}/release-report/mac/summary.md
+          RELEASE_SMOKE_EXEMPT: "false"
+          RELEASE_SMOKE_MODE: core
+          RELEASE_TARGET: mac_arm64
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          REPORT_TITLE: mac_arm64 stable build
+        run: pnpm exec tools-release write-report
+      - name: Publish mac_arm64 report summary
+        if: ${{ !cancelled() && steps.report_mac_arm64.outcome == 'success' }}
+        run: cat "${{ runner.temp }}/release-report/mac/summary.md" >> "$GITHUB_STEP_SUMMARY"
+      - name: Prepare mac_arm64 assets
         env:
           RELEASE_ARTIFACT_MODE: all
           RELEASE_ASSET_SUFFIX: ""
-          RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets
-          RELEASE_BRANCH: ${{ needs.metadata.outputs.branch }}
-          RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
+          RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets/mac_arm64
+          RELEASE_CHANNEL: stable
           RELEASE_NAMESPACE: ${{ needs.metadata.outputs.namespace }}
-          RELEASE_NOTES: OpenDesign ${{ needs.metadata.outputs.release_version }}
+          RELEASE_NOTES: Open Design ${{ needs.metadata.outputs.release_version }}
           RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_TARGET: mac_arm64
           RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
           TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
-        run: bash tools/release/scripts/prepare-platform-assets.sh
-
-      - name: Publish mac platform
+        run: pnpm exec tools-release prepare-platform-assets
+      - name: Publish mac_arm64 platform
         env:
-          RELEASE_ARTIFACT_MODE: all
           RELEASE_ASSET_SUFFIX: ""
-          RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets
+          RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets/mac_arm64
+          RELEASE_ARTIFACT_MODE: all
           RELEASE_BRANCH: ${{ needs.metadata.outputs.branch }}
-          RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
+          RELEASE_CHANNEL: stable
           RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
           RELEASE_DRY_RUN_MODE: ${{ needs.metadata.outputs.dry_run_mode }}
           RELEASE_PUBLISH_SIDE_EFFECTS: ${{ needs.metadata.outputs.publish_side_effects_enabled }}
@@ -560,53 +944,99 @@ jobs:
           RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
           RELEASE_STORAGE_REGION: auto
           RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+          RELEASE_SUMMARY_PATH: ${{ runner.temp }}/release-platform-outputs/mac_arm64.md
           RELEASE_TARGET: mac_arm64
           RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
         run: pnpm exec tools-release publish-platform
-
-      - name: Upload mac publish manifest
+      - name: Read mac_arm64 platform outputs
+        id: mac_arm64_platform_outputs
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require("fs");
+            const outputs = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/release-platform-outputs/mac_arm64.json`, "utf8"));
+            for (const [key, value] of Object.entries(outputs)) core.setOutput(key, String(value));
+      - name: Upload mac stable publish manifest
         uses: actions/upload-artifact@v7
         with:
           name: open-design-release-mac-arm64-publish-manifest
           path: ${{ runner.temp }}/release-platform-manifests/mac_arm64.json
           if-no-files-found: error
           retention-days: 1
-
-      - name: Upload mac release bundle
+      - name: Upload mac stable release bundle
         uses: actions/upload-artifact@v7
         with:
           name: open-design-release-mac-release-assets
-          path: ${{ runner.temp }}/release-assets
+          path: ${{ runner.temp }}/release-assets/mac_arm64
           retention-days: 1
 
   build_mac_intel:
-    name: Build release mac intel x64
-    needs: [metadata, verify]
-    if: ${{ needs.metadata.outputs.run_prepublish_jobs == 'true' }}
+    outputs:
+      manifest_key: ${{ steps.mac_x64_platform_outputs.outputs.platform_manifest_key }}
+      url: ${{ steps.mac_x64_platform_outputs.outputs.dmg_url }}
+    name: Build stable mac intel x64
+    needs:
+      - metadata
+      - common
+      - source_mac_x64
+      - quality_gate
+    if: ${{ !cancelled() && needs.metadata.outputs.run_prepublish_jobs == 'true' && needs.metadata.result == 'success' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
     runs-on: macos-15-intel
+    defaults:
+      run:
+        shell: bash
     env:
-      GH_TOKEN: ${{ github.token }}
+      RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
+      OD_TOOLS_PACK_WORKSPACE_ROOT: ${{ github.workspace }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
         with:
-          ref: ${{ inputs.ref }}
-          fetch-depth: 0
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v5
-        with:
-          version: 10.33.2
-
+          ref: ${{ needs.metadata.outputs.commit }}
+          fetch-depth: 1
+      - name: Disable Spotlight indexing for mac_x64 build
+        run: |
+          set -euo pipefail
+          sudo mdutil -i off /
+          sudo mdutil -i off /System/Volumes/Data
+          mdutil -s / /System/Volumes/Data
+      - name: "[validate] Source references"
+        shell: bash
+        env:
+          OD_WORKLOAD_RESULTS_BASE_URL: ${{ secrets.OD_WORKLOAD_RESULTS_BASE_URL }}
+          SOURCE_REQUESTS: ${{ needs.source_mac_x64.result == 'success' && needs.source_mac_x64.outputs.requests || needs.source_mac_x64.result == 'skipped' && needs.metadata.outputs.requests || 'null' }}
+          SHARED_SOURCES: ${{ toJSON(fromJSON(needs.metadata.outputs.common_count != '0' && needs.common.outputs.sources || needs.metadata.outputs.common_count == '0' && needs.metadata.outputs.sources || 'null').source_javascript) }}
+        run: python3 .github/scripts/convergence.py resolve-references --batch source_mac_x64 ${{ (needs.metadata.outputs.contribution == 'true') && '--shared packages,daemon,shell' || '' }}
+      - name: "[restore] Release executor"
+        shell: bash
+        run: |
+          python3 .github/scripts/release/mac_diagnostics.py \
+            --output "$RUNNER_TEMP/release-build/mac_x64/restore-resources.jsonl" \
+            -- python3 .github/scripts/release/executor.py restore \
+            --url "$SOURCE_EXECUTOR_URL" --sha256 "$SOURCE_EXECUTOR_SHA256" \
+            --output "$RUNNER_TEMP/release-executor"
+      - name: "[restore] mac_x64 runtime"
+        shell: bash
+        run: >-
+          node "$RELEASE_EXECUTOR_ROOT/pack/dist/index.mjs" mac runtime-restore
+          --url "$SOURCE_RUNTIME_URL" --sha256 "$SOURCE_RUNTIME_SHA256"
+          --output "$RUNNER_TEMP/mac-runtime-product"
+          --json
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v6.4.0
         with:
-          node-version: 24
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Prepare Apple signing certificate
+          node-version: '24'
+          package-manager-cache: false
+      - name: "[restore] Shared JavaScript"
+        shell: bash
+        run: node "$RELEASE_EXECUTOR_ROOT/pack/dist/index.mjs" workspace import javascript --sources "$WORKSPACE_SOURCES" --scratch "$RUNNER_TEMP/shared-javascript" --json
+      - name: "[build] Source web"
+        id: source_web
+        shell: bash
+        env:
+          SOURCE_OUTPUT: ""
+        run: node "$RELEASE_EXECUTOR_ROOT/pack/dist/index.mjs" workspace import web --url "$SOURCE_WEB_URL" --sha256 "$SOURCE_WEB_SHA256" --output "$SOURCE_OUTPUT" --scratch "$RUNNER_TEMP/source-import" --web-output-mode standalone --json
+      - name: Prepare mac_x64 signing certificate
         env:
           APPLE_SIGNING_CERTIFICATE_BASE64: ${{ secrets.APPLE_SIGNING_CERTIFICATE_BASE64 }}
           APPLE_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_SIGNING_CERTIFICATE_PASSWORD }}
@@ -620,48 +1050,114 @@ jobs:
             echo "CSC_LINK=$cert_path"
             echo "CSC_KEY_PASSWORD=$APPLE_SIGNING_CERTIFICATE_PASSWORD"
           } >> "$GITHUB_ENV"
-
-      - name: Build release mac intel artifacts
+      - name: Build stable mac_x64
+        id: mac_x64_tools_pack_build
         env:
+          ELECTRON_BUILDER_COMPRESSION_LEVEL: "1"
+          DEBUG: electron-builder
+          DEBUG_DMG: "true"
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          OD_WEB_SOURCEMAP_UPLOAD: "false"
         run: |
           set -euo pipefail
-          pnpm exec tools-pack mac build \
-            --dir "$RUNNER_TEMP/tools-pack" \
-            --namespace "${{ needs.metadata.outputs.mac_intel_namespace }}" \
-            --portable \
-            --app-version "${{ needs.metadata.outputs.release_version }}" \
-            --mac-compression normal \
-            --to all \
-            --require-vela-cli \
-            --json \
-            --signed \
-            --notarize
+          SECONDS=0
+          trap 'printf "[timing] mac_x64 package: %ss\n" "$SECONDS"' EXIT
+          mkdir -p "$RUNNER_TEMP/release-build/mac_x64"
+          rm -rf "$RUNNER_TEMP/tools-pack"
+          : > "$RUNNER_TEMP/release-build/mac_x64/build.log"
+          build_args=(
+            "$RELEASE_EXECUTOR_ROOT/pack/dist/index.mjs" mac package
+            --dir "$RUNNER_TEMP/tools-pack"
+            --cache-dir "$RUNNER_TEMP/tools-pack-cache"
+            --namespace "${{ needs.metadata.outputs.mac_intel_namespace }}"
+            --portable
+            --app-version "${{ needs.metadata.outputs.release_version }}"
+            --build-json "$RUNNER_TEMP/release-build/mac_x64/build.json"
+            --mac-runtime-product "$RUNNER_TEMP/mac-runtime-product"
+            --mac-compression "normal"
+            --to "all"
+            --json
+            --require-vela-cli
+          )
+          build_args+=(--signed --notarize)
+          python3 .github/scripts/release/mac_diagnostics.py \
+            --output "$RUNNER_TEMP/release-build/mac_x64/runner-resources.jsonl" \
+            -- node "${build_args[@]}" \
+            2> >(tee -a "$RUNNER_TEMP/release-build/mac_x64/build.log" >&2)
+      - name: Verify stable mac_x64 signature and notarization
+        run: |
+          set -euo pipefail
+          build_json="$RUNNER_TEMP/release-build/mac_x64/build.json"
+          dmg_path="$(node -e 'const fs = require("node:fs"); const value = JSON.parse(fs.readFileSync(process.argv[1], "utf8")).dmgPath; if (typeof value !== "string" || value.length === 0) process.exit(1); process.stdout.write(value);' "$build_json")"
+          if [ ! -f "$dmg_path" ]; then
+            echo "stable mac_x64 DMG not found: $dmg_path" >&2
+            exit 1
+          fi
 
-      - name: Prepare mac intel release assets
-        id: assets
+          mount_point="$(mktemp -d "$RUNNER_TEMP/stable-mac-x64.XXXXXX")"
+          cleanup() {
+            hdiutil detach "$mount_point" >/dev/null 2>&1 || true
+            rmdir "$mount_point" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          hdiutil attach "$dmg_path" -nobrowse -readonly -mountpoint "$mount_point"
+          candidate_app="$mount_point/Open Design.app"
+          if [ ! -d "$candidate_app" ]; then
+            echo "stable app not found in DMG: $candidate_app" >&2
+            exit 1
+          fi
+          # The signature is checked on every signed build, because
+          # platforms.mac[Intel].signed == true is what the stable promotion
+          # gate reads. The stapled-ticket and Gatekeeper assessments only pass
+          # for a notarized build, so they follow mac_sign_mode rather than
+          # failing the job for doing exactly what it was asked to do.
+          codesign --verify --deep --strict "$candidate_app"
+          xcrun stapler validate "$candidate_app"
+          spctl --assess --type execute --verbose=4 "$candidate_app"
+
+      - name: Write mac_x64 release report
+        id: report_mac_x64
+        if: ${{ !cancelled() && steps.mac_x64_tools_pack_build.outcome == 'success' }}
+        env:
+          BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_x64/build.json
+          BUILD_LOG_PATH: ${{ runner.temp }}/release-build/mac_x64/build.log
+          RELEASE_BUILD_TARGET: all
+          RELEASE_CHANNEL: stable
+          RELEASE_NAMESPACE: ${{ needs.metadata.outputs.mac_intel_namespace }}
+          RELEASE_REPORT_DIR: ${{ runner.temp }}/release-report/mac_x64
+          RELEASE_REPORT_JSON_PATH: ${{ runner.temp }}/release-report/mac_x64/report.json
+          RELEASE_REPORT_SUMMARY_PATH: ${{ runner.temp }}/release-report/mac_x64/summary.md
+          RELEASE_SMOKE_EXEMPT: "true"
+          RELEASE_SMOKE_MODE: skip
+          RELEASE_TARGET: mac_x64
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          REPORT_TITLE: mac_x64 stable build
+        run: node "$RELEASE_EXECUTOR_ROOT/release/dist/index.mjs" write-report
+      - name: Publish mac_x64 report summary
+        if: ${{ !cancelled() && steps.report_mac_x64.outcome == 'success' }}
+        run: cat "${{ runner.temp }}/release-report/mac_x64/summary.md" >> "$GITHUB_STEP_SUMMARY"
+      - name: Prepare mac_x64 assets
         env:
           RELEASE_ARTIFACT_MODE: all
           RELEASE_ASSET_SUFFIX: ""
-          RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets
-          RELEASE_BRANCH: ${{ needs.metadata.outputs.branch }}
-          RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
+          RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets/mac_x64
+          RELEASE_CHANNEL: stable
           RELEASE_NAMESPACE: ${{ needs.metadata.outputs.mac_intel_namespace }}
           RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_TARGET: mac_x64
           RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
           TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
-        run: bash tools/release/scripts/prepare-platform-assets.sh
-
-      - name: Publish mac intel platform
+        run: node "$RELEASE_EXECUTOR_ROOT/release/dist/index.mjs" prepare-platform-assets
+      - name: Publish mac_x64 platform
         env:
-          RELEASE_ARTIFACT_MODE: all
           RELEASE_ASSET_SUFFIX: ""
-          RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets
+          RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets/mac_x64
+          RELEASE_ARTIFACT_MODE: all
           RELEASE_BRANCH: ${{ needs.metadata.outputs.branch }}
-          RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
+          RELEASE_CHANNEL: stable
           RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
           RELEASE_DRY_RUN_MODE: ${{ needs.metadata.outputs.dry_run_mode }}
           RELEASE_PUBLISH_SIDE_EFFECTS: ${{ needs.metadata.outputs.publish_side_effects_enabled }}
@@ -676,76 +1172,99 @@ jobs:
           RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
           RELEASE_TARGET: mac_x64
           RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
-        run: pnpm exec tools-release publish-platform
-
-      - name: Upload mac intel publish manifest
+        run: node "$RELEASE_EXECUTOR_ROOT/release/dist/index.mjs" publish-platform
+      - name: Read mac_x64 platform outputs
+        id: mac_x64_platform_outputs
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require("fs");
+            const outputs = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/release-platform-outputs/mac_x64.json`, "utf8"));
+            for (const [key, value] of Object.entries(outputs)) core.setOutput(key, String(value));
+      - name: Upload mac intel stable publish manifest
         uses: actions/upload-artifact@v7
         with:
           name: open-design-release-mac-x64-publish-manifest
           path: ${{ runner.temp }}/release-platform-manifests/mac_x64.json
           if-no-files-found: error
           retention-days: 1
-
-      - name: Upload mac intel release bundle
+      - name: Upload mac intel stable release bundle
         uses: actions/upload-artifact@v7
         with:
           name: open-design-release-mac-intel-release-assets
-          path: ${{ runner.temp }}/release-assets
+          path: ${{ runner.temp }}/release-assets/mac_x64
           retention-days: 1
 
   build_win:
-    name: Build release win x64
-    needs: [metadata, verify]
-    if: ${{ needs.metadata.outputs.run_prepublish_jobs == 'true' }}
+    outputs:
+      manifest_key: ${{ steps.win_x64_platform_outputs.outputs.platform_manifest_key }}
+      url: ${{ steps.win_x64_platform_outputs.outputs.installer_url }}
+    name: Build stable win x64
+    needs:
+      - metadata
+      - common
+      - source_win_x64
+      - quality_gate
+    if: ${{ !cancelled() && needs.metadata.outputs.run_prepublish_jobs == 'true' && needs.metadata.result == 'success' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
     runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
     env:
-      GH_TOKEN: ${{ github.token }}
+      RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
+      OD_TOOLS_PACK_WORKSPACE_ROOT: ${{ github.workspace }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
         with:
-          ref: ${{ inputs.ref }}
-          fetch-depth: 0
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v5
-        with:
-          version: 10.33.2
-
+          ref: ${{ needs.metadata.outputs.commit }}
+          fetch-depth: 1
+      - name: "[validate] Source references"
+        shell: bash
+        env:
+          OD_WORKLOAD_RESULTS_BASE_URL: ${{ secrets.OD_WORKLOAD_RESULTS_BASE_URL }}
+          SOURCE_REQUESTS: ${{ needs.source_win_x64.result == 'success' && needs.source_win_x64.outputs.requests || needs.source_win_x64.result == 'skipped' && needs.metadata.outputs.requests || 'null' }}
+          SHARED_SOURCES: ${{ toJSON(fromJSON(needs.metadata.outputs.common_count != '0' && needs.common.outputs.sources || needs.metadata.outputs.common_count == '0' && needs.metadata.outputs.sources || 'null').source_javascript) }}
+        run: python3 .github/scripts/convergence.py resolve-references --batch source_win_x64 ${{ (needs.metadata.outputs.contribution == 'true') && '--shared packages,daemon,shell' || '' }}
+      - name: "[restore] Release executor"
+        shell: pwsh
+        run: >-
+          python3 .github/scripts/release/executor.py restore
+          --url "$env:SOURCE_EXECUTOR_URL" --sha256 "$env:SOURCE_EXECUTOR_SHA256"
+          --output "$env:RUNNER_TEMP\release-executor"
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v6.4.0
         with:
-          node-version: 24
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-
-      - name: Compute Windows tools-pack cache key
-        id: win_tools_pack_cache_key
+          node-version: '24'
+          package-manager-cache: false
+      - name: "[prepare] Release executor pnpm shim"
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $pnpmScript = "$env:RELEASE_EXECUTOR_ROOT\pack\node_modules\pnpm\bin\pnpm.cjs"
+          if (-not (Test-Path -LiteralPath $pnpmScript)) { throw "release executor pnpm is missing: $pnpmScript" }
+          $shimDir = "$env:RUNNER_TEMP\release-executor-bin"
+          $shimPath = "$shimDir\pnpm.cmd"
+          New-Item -ItemType Directory -Force -Path $shimDir | Out-Null
+          [System.IO.File]::WriteAllText($shimPath, "@echo off`r`nnode `"%RELEASE_EXECUTOR_ROOT%\pack\node_modules\pnpm\bin\pnpm.cjs`" %*`r`n", [System.Text.Encoding]::ASCII)
+          $version = (& $shimPath --version | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0 -or $version -ne "10.33.2") { throw "release executor pnpm version mismatch: $version" }
+          $shimDir | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: "[prepare] Workspace package links"
+        shell: pwsh
+        run: >-
+          node "$env:RELEASE_EXECUTOR_ROOT\pack\node_modules\pnpm\bin\pnpm.cjs"
+          install --frozen-lockfile --prod --ignore-scripts --prefer-offline
+          --filter @open-design/packaged...
+      - name: "[restore] Shared JavaScript"
+        shell: pwsh
+        run: node "$env:RELEASE_EXECUTOR_ROOT\pack\dist\index.mjs" workspace ${{ (needs.metadata.outputs.contribution == 'true') && 'import' || 'build' }} javascript --sources "$env:WORKSPACE_SOURCES" --scratch "$env:RUNNER_TEMP\shared-javascript" --json
+      - name: "[build] Source web"
+        id: source_web
         shell: pwsh
         env:
-          WIN_TOOLS_PACK_ORIGIN_KEY: ${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/daemon/**', 'apps/web/**', 'apps/desktop/**', 'apps/packaged/**', 'packages/agui-adapter/**', 'packages/contracts/**', 'packages/plugin-runtime/**', 'packages/sidecar-proto/**', 'packages/sidecar/**', 'packages/platform/**', 'tools/pack/bin/**', 'tools/pack/package.json', 'tools/pack/resources/**', 'tools/pack/src/**', 'tools/pack/tsconfig.json', 'assets/community-pets/**', 'assets/frames/**', 'craft/**', 'design-systems/**', 'design-templates/**', 'plugins/_official/**', 'plugins/registry/**', 'prompt-templates/**', 'skills/**', '.github/workflows/release-stable.yml', '.github/scripts/release/cache/win.ps1') }}
-        run: |
-          if ([string]::IsNullOrWhiteSpace($env:WIN_TOOLS_PACK_ORIGIN_KEY)) {
-            throw "Windows tools-pack cache origin key is empty"
-          }
-          $prefix = "tools-pack-win-v7-stable-$env:RUNNER_OS-"
-          "origin=$env:WIN_TOOLS_PACK_ORIGIN_KEY" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          "prefix=$prefix" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          "key=$prefix$env:WIN_TOOLS_PACK_ORIGIN_KEY" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-
-      - name: Restore Windows tools-pack cache
-        id: win_tools_pack_cache_restore
-        uses: actions/cache/restore@v5
-        continue-on-error: true
-        with:
-          path: ${{ runner.temp }}/tools-pack-cache
-          key: ${{ steps.win_tools_pack_cache_key.outputs.key }}
-          restore-keys: |
-            ${{ steps.win_tools_pack_cache_key.outputs.prefix }}
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
+          SOURCE_OUTPUT: ""
+        run: node "$env:RELEASE_EXECUTOR_ROOT\pack\dist\index.mjs" workspace ${{ (needs.metadata.outputs.contribution == 'true') && 'import' || 'build' }} web --url "$env:SOURCE_WEB_URL" --sha256 "$env:SOURCE_WEB_SHA256" --output "$env:SOURCE_OUTPUT" --scratch "$env:RUNNER_TEMP\source-import" --web-output-mode standalone --json
       - name: Setup NSIS
         shell: pwsh
         run: |
@@ -753,70 +1272,28 @@ jobs:
             exit 0
           }
           choco install nsis -y --no-progress
-
-      - name: Build release windows artifacts
+      - name: Build stable win_x64
         id: win_tools_pack_build
         shell: pwsh
+        env:
+          OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL: ${{ inputs.win_x64_update_metadata_url }}
+          OD_PACKAGED_E2E_WIN_UPDATE_VERSION: ${{ inputs.win_x64_update_target_version }}
         run: |
           $ErrorActionPreference = "Stop"
-          $toolsPackDir = "${{ runner.temp }}/tools-pack"
-          $cacheDir = "${{ runner.temp }}/tools-pack-cache"
-          $buildJsonPath = Join-Path $env:RUNNER_TEMP "windows-tools-pack-build.json"
-          pnpm.cmd exec tools-pack win cleanup --dir $toolsPackDir --namespace "${{ needs.metadata.outputs.win_namespace }}" --json
-          $buildArgs = @(
-            "exec", "tools-pack", "win", "build",
-            "--dir", $toolsPackDir,
-            "--cache-dir", $cacheDir,
-            "--namespace", "${{ needs.metadata.outputs.win_namespace }}",
-            "--portable",
-            "--app-version", "${{ needs.metadata.outputs.release_version }}",
-            "--to", "all",
-            "--require-vela-cli",
-            "--json"
-          )
-          "cache_failed=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          try {
-            $buildOutput = pnpm @buildArgs
-            if ($LASTEXITCODE -ne 0) {
-              throw "Windows tools-pack cached build exited with code $LASTEXITCODE"
-            }
-          } catch {
-            Write-Warning "Windows tools-pack cached build failed; removing restored cache and retrying without cache."
-            "cache_failed=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-            Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $cacheDir
-            pnpm.cmd exec tools-pack win cleanup --dir $toolsPackDir --namespace "${{ needs.metadata.outputs.win_namespace }}" --json
-            $buildOutput = pnpm exec tools-pack win build `
-              --dir $toolsPackDir `
-              --cache-dir $cacheDir `
-              --namespace "${{ needs.metadata.outputs.win_namespace }}" `
-              --portable `
-              --app-version "${{ needs.metadata.outputs.release_version }}" `
-              --to all `
-              --require-vela-cli `
-              --json
-            if ($LASTEXITCODE -ne 0) {
-              throw "Windows tools-pack uncached fallback build exited with code $LASTEXITCODE"
-            }
-          }
-          $buildOutput | Set-Content -Path $buildJsonPath
-          $build = $buildOutput | ConvertFrom-Json
-          pnpm.cmd exec tools-pack win validate-payload --namespace "${{ needs.metadata.outputs.win_namespace }}" --payload-path $build.payloadPath --expected-version "${{ needs.metadata.outputs.release_version }}" --json
-          $buildOutput
-
-      - name: Delete failed Windows tools-pack cache
-        if: ${{ steps.win_tools_pack_build.outputs.cache_failed == 'true' && steps.win_tools_pack_cache_restore.outputs.cache-matched-key != '' }}
-        shell: pwsh
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $matchedKey = "${{ steps.win_tools_pack_cache_restore.outputs.cache-matched-key }}"
-          $caches = @(gh cache list --key $matchedKey --limit 100 --json id,key,ref | ConvertFrom-Json | Where-Object { $_.key -eq $matchedKey })
-          foreach ($cache in $caches) {
-            gh cache delete $cache.id
-          }
-          "deletedFailedCacheKey=$matchedKey count=$($caches.Count)"
-
+          New-Item -ItemType Directory -Force -Path "${{ runner.temp }}\release-build\win_x64" | Out-Null
+          node "$env:RELEASE_EXECUTOR_ROOT\pack\dist\index.mjs" win cleanup --dir "${{ runner.temp }}\tools-pack" --namespace "${{ needs.metadata.outputs.win_namespace }}" --json
+          if ($LASTEXITCODE -ne 0) { throw "tools-pack win cleanup failed with exit code $LASTEXITCODE" }
+          $buildArgs = @("$env:RELEASE_EXECUTOR_ROOT\pack\dist\index.mjs", "win", "package", "--dir", "${{ runner.temp }}\tools-pack", "--cache-dir", "${{ runner.temp }}\tools-pack-cache", "--namespace", "${{ needs.metadata.outputs.win_namespace }}", "--portable", "--app-version", "${{ needs.metadata.outputs.release_version }}", "--build-json", "${{ runner.temp }}\release-build\win_x64\build.json", "--to", "all", "--require-vela-cli", "--json")
+          node @buildArgs
+          if ($LASTEXITCODE -ne 0) { throw "tools-pack win build failed with exit code $LASTEXITCODE" }
+          $build = Get-Content -Raw "${{ runner.temp }}\release-build\win_x64\build.json" | ConvertFrom-Json
+          node "$env:RELEASE_EXECUTOR_ROOT\pack\dist\index.mjs" win validate-payload --namespace "${{ needs.metadata.outputs.win_namespace }}" --payload-path $build.payloadPath --expected-version "${{ needs.metadata.outputs.release_version }}" --json
+          if ($LASTEXITCODE -ne 0) { throw "tools-pack win validate-payload failed with exit code $LASTEXITCODE" }
+      - name: Prepare stable Windows smoke harness
+        uses: ./.github/actions/setup-workspace
+        with:
+          postinstall-intent: release-smoke
+          save-pnpm-cache: ${{ env.STABLE_SAVE_PNPM_CACHE }}
       - name: Build stable win_x64 update fixture
         if: ${{ inputs.win_x64_smoke_mode == 'full' && inputs.win_x64_update_metadata_url == '' && inputs.win_x64_update_target_version == '' }}
         shell: pwsh
@@ -836,7 +1313,7 @@ jobs:
         if: ${{ inputs.win_x64_smoke_mode != 'skip' }}
         working-directory: e2e
         env:
-          OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/windows-tools-pack-build.json
+          OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/win_x64/build.json
           OD_PACKAGED_E2E_WIN: "1"
           OD_PACKAGED_E2E_WIN_ONBOARDING_SMOKE: ${{ needs.metadata.outputs.channel == 'nightly' && '1' || '0' }}
           OD_PACKAGED_E2E_NAMESPACE: ${{ needs.metadata.outputs.win_namespace }}
@@ -863,56 +1340,44 @@ jobs:
           path: ${{ runner.temp }}/release-report/win
           if-no-files-found: warn
 
-      - name: Prune Windows tools-pack cache
-        shell: pwsh
-        continue-on-error: true
-        run: ./.github/scripts/release/cache/win.ps1
-
-      - name: Save Windows tools-pack cache
-        if: ${{ success() && (steps.win_tools_pack_cache_restore.outputs.cache-hit != 'true' || steps.win_tools_pack_build.outputs.cache_failed == 'true') }}
-        uses: actions/cache/save@v5
-        continue-on-error: true
-        with:
-          path: ${{ runner.temp }}/tools-pack-cache
-          key: ${{ steps.win_tools_pack_cache_key.outputs.key }}
-
-      - name: Retain recent Windows tools-pack caches
-        if: ${{ success() }}
-        shell: pwsh
-        continue-on-error: true
+      - name: Write win_x64 release report
+        id: report_win_x64
+        if: ${{ !cancelled() && steps.win_tools_pack_build.outcome == 'success' }}
         env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $prefix = "${{ steps.win_tools_pack_cache_key.outputs.prefix }}"
-          $keep = 1
-          $caches = @(gh cache list --key $prefix --sort created_at --order desc --limit 100 --json id,key,createdAt | ConvertFrom-Json)
-          $stale = @($caches | Select-Object -Skip $keep)
-          foreach ($cache in $stale) {
-            gh cache delete $cache.id
-          }
-          "actionsCachePrefix=$prefix kept=$([Math]::Min($caches.Count, $keep)) deleted=$($stale.Count)"
-
-      - name: Prepare windows release assets
+          BUILD_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\build.json
+          RELEASE_BUILD_TARGET: all
+          RELEASE_CHANNEL: stable
+          RELEASE_NAMESPACE: ${{ needs.metadata.outputs.win_namespace }}
+          RELEASE_REPORT_DIR: ${{ runner.temp }}\release-report\win
+          RELEASE_REPORT_JSON_PATH: ${{ runner.temp }}\release-report\win\report.json
+          RELEASE_REPORT_SUMMARY_PATH: ${{ runner.temp }}\release-report\win\summary.md
+          RELEASE_SMOKE_EXEMPT: ${{ inputs.win_x64_smoke_mode == 'skip' && 'true' || 'false' }}
+          RELEASE_SMOKE_MODE: ${{ inputs.win_x64_smoke_mode }}
+          RELEASE_TARGET: win_x64
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          REPORT_TITLE: win_x64 stable build
+        run: node "$env:RELEASE_EXECUTOR_ROOT\release\dist\index.mjs" write-report
+      - name: Publish win_x64 report summary
+        if: ${{ !cancelled() && steps.report_win_x64.outcome == 'success' }}
         shell: pwsh
-        run: |
-          tools\release\scripts\prepare-platform-assets.ps1 `
-            -ReleaseTarget win_x64 `
-            -ReleaseAssetsDir "${{ runner.temp }}\release-assets" `
-            -BuildJsonPath "${{ runner.temp }}\windows-tools-pack-build.json" `
-            -ReleaseNamespace "${{ needs.metadata.outputs.win_namespace }}" `
-            -ReleaseVersion "${{ needs.metadata.outputs.release_version }}" `
-            -ReleaseAssetSuffix "" `
-            -ReleaseChannel "${{ needs.metadata.outputs.channel }}" `
-            -ReleasePublicOrigin "${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}" `
-            -ReleaseNotes "OpenDesign ${{ needs.metadata.outputs.release_version }}" `
-            -IncludeZip $true
-
-      - name: Publish windows platform
+        run: Get-Content "${{ runner.temp }}\release-report\win\summary.md" | Add-Content $env:GITHUB_STEP_SUMMARY
+      - name: Prepare win_x64 assets
         env:
           RELEASE_ASSET_SUFFIX: ""
-          RELEASE_ASSETS_DIR: ${{ runner.temp }}\release-assets
+          RELEASE_ASSETS_DIR: ${{ runner.temp }}\release-assets\win_x64
+          RELEASE_BUILD_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\build.json
+          RELEASE_CHANNEL: stable
+          RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_TARGET: win_x64
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          WIN_INCLUDE_ZIP: "true"
+        run: node "$env:RELEASE_EXECUTOR_ROOT\release\dist\index.mjs" prepare-platform-assets
+      - name: Publish win_x64 platform
+        env:
+          RELEASE_ASSET_SUFFIX: ""
+          RELEASE_ASSETS_DIR: ${{ runner.temp }}\release-assets\win_x64
           RELEASE_BRANCH: ${{ needs.metadata.outputs.branch }}
-          RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
+          RELEASE_CHANNEL: stable
           RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
           RELEASE_DRY_RUN_MODE: ${{ needs.metadata.outputs.dry_run_mode }}
           RELEASE_PUBLISH_SIDE_EFFECTS: ${{ needs.metadata.outputs.publish_side_effects_enabled }}
@@ -920,6 +1385,7 @@ jobs:
           RELEASE_OUTPUTS_PATH: ${{ runner.temp }}\release-platform-outputs\win_x64.json
           RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_REPORT_DIR: ${{ runner.temp }}\release-report\win
+          WIN_INCLUDE_ZIP: "true"
           RELEASE_SIGNED: "false"
           RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
           RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
@@ -928,172 +1394,27 @@ jobs:
           RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
           RELEASE_TARGET: win_x64
           RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
-          WIN_INCLUDE_ZIP: "true"
-        run: pnpm exec tools-release publish-platform
-
-      - name: Upload windows publish manifest
+        run: node "$env:RELEASE_EXECUTOR_ROOT\release\dist\index.mjs" publish-platform
+      - name: Read win_x64 platform outputs
+        id: win_x64_platform_outputs
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require("fs");
+            const outputs = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/release-platform-outputs/win_x64.json`, "utf8"));
+            for (const [key, value] of Object.entries(outputs)) core.setOutput(key, String(value));
+      - name: Upload windows stable publish manifest
         uses: actions/upload-artifact@v7
         with:
           name: open-design-release-win-x64-publish-manifest
-          path: ${{ runner.temp }}\release-platform-manifests\win_x64.json
+          path: ${{ runner.temp }}/release-platform-manifests/win_x64.json
           if-no-files-found: error
           retention-days: 1
-
-      - name: Upload windows release bundle
+      - name: Upload windows stable release bundle
         uses: actions/upload-artifact@v7
         with:
           name: open-design-release-win-release-assets
-          path: ${{ runner.temp }}/release-assets
-          retention-days: 1
-
-  build_linux:
-    name: Build release linux x64
-    needs: [metadata, verify]
-    # Linux AppImage packaging is temporarily excluded from stable releases.
-    # Keep the job definition in place so the Linux lane can be re-enabled once
-    # the containerized pnpm bootstrap is fixed and reviewed.
-    if: ${{ needs.metadata.outputs.run_prepublish_jobs == 'true' && vars.ENABLE_STABLE_LINUX == 'true' }}
-    runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ github.token }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6.0.2
-        with:
-          ref: ${{ inputs.ref }}
-          fetch-depth: 0
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v5
-        with:
-          version: 10.33.2
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      # `--containerized` builds the AppImage inside the electronuserland/builder
-      # Docker image (glibc 2.27 baseline) so the resulting binary runs on older
-      # distros than ubuntu-latest's glibc 2.39. Docker is preinstalled on the
-      # GitHub-hosted ubuntu-latest runner, so no extra setup is required.
-      - name: Build release linux artifacts
-        run: |
-          set -euo pipefail
-          tools_pack_dir="$RUNNER_TEMP/tools-pack"
-          report_dir="$RUNNER_TEMP/release-report/linux"
-          build_json_path="$report_dir/tools-pack.json"
-          build_log_path="$report_dir/tools-pack.log"
-          rm -rf "$tools_pack_dir"
-          mkdir -p "$report_dir"
-          : > "$build_log_path"
-          build_args=(
-            exec tools-pack linux build
-            --dir "$tools_pack_dir"
-            --namespace "${{ needs.metadata.outputs.linux_namespace }}"
-            --portable
-            --app-version "${{ needs.metadata.outputs.release_version }}"
-            --to appimage
-            --containerized
-            --json
-          )
-          if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$build_log_path" >&2))"; then
-            printf '%s\n' "$build_output" | tee "$build_json_path"
-            node -e 'const fs = require("node:fs"); JSON.parse(fs.readFileSync(process.argv[1], "utf8"));' "$build_json_path"
-          else
-            build_status=$?
-            printf '%s\n' "$build_output" | tee "$build_json_path"
-            exit "$build_status"
-          fi
-
-      - name: Smoke release linux AppImage runtime
-        working-directory: e2e
-        env:
-          OD_PACKAGED_E2E_LINUX_APPIMAGE: "1"
-          OD_PACKAGED_E2E_NAMESPACE: ${{ needs.metadata.outputs.linux_namespace }}
-          OD_PACKAGED_E2E_SCREENSHOT_PATH: ${{ runner.temp }}/release-report/linux/screenshots/open-design-linux-smoke.png
-          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
-        run: |
-          set -euo pipefail
-          report_dir="$RUNNER_TEMP/release-report/linux"
-          mkdir -p "$report_dir/screenshots"
-          cat > "$report_dir/manifest.json" <<EOF
-          {
-            "channel": "${{ needs.metadata.outputs.channel }}",
-            "platform": "linux",
-            "releaseVersion": "${{ needs.metadata.outputs.release_version }}",
-            "spec": "specs/linux.spec.ts",
-            "namespace": "${{ needs.metadata.outputs.linux_namespace }}",
-            "screenshot": "screenshots/open-design-linux-smoke.png",
-            "githubRunId": "$GITHUB_RUN_ID",
-            "githubRunAttempt": "$GITHUB_RUN_ATTEMPT",
-            "commit": "$GITHUB_SHA"
-          }
-          EOF
-          sudo apt-get update 2>&1 | tee "$report_dir/apt-get-update.log"
-          sudo apt-get install -y xvfb 2>&1 | tee "$report_dir/apt-get-install-xvfb.log"
-          xvfb-run -a pnpm test specs/linux.spec.ts 2>&1 | tee "$report_dir/vitest.log"
-
-      - name: Upload linux e2e spec report
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: open-design-release-linux-e2e-report
-          path: ${{ runner.temp }}/release-report/linux
-          if-no-files-found: warn
-
-      - name: Prepare linux release assets
-        env:
-          RELEASE_ASSET_SUFFIX: ""
-          RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets
-          RELEASE_BRANCH: ${{ needs.metadata.outputs.branch }}
-          RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
-          RELEASE_NAMESPACE: ${{ needs.metadata.outputs.linux_namespace }}
-          RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
-          RELEASE_TARGET: linux_x64
-          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
-          TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
-        run: bash tools/release/scripts/prepare-platform-assets.sh
-
-      - name: Publish linux platform
-        env:
-          RELEASE_ASSET_SUFFIX: ""
-          RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets
-          RELEASE_BRANCH: ${{ needs.metadata.outputs.branch }}
-          RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
-          RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
-          RELEASE_DRY_RUN_MODE: ${{ needs.metadata.outputs.dry_run_mode }}
-          RELEASE_PUBLISH_SIDE_EFFECTS: ${{ needs.metadata.outputs.publish_side_effects_enabled }}
-          RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
-          RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-platform-outputs/linux_x64.json
-          RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
-          RELEASE_REPORT_DIR: ${{ runner.temp }}/release-report/linux
-          RELEASE_SIGNED: "false"
-          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
-          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
-          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
-          RELEASE_STORAGE_REGION: auto
-          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
-          RELEASE_TARGET: linux_x64
-          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
-        run: pnpm exec tools-release publish-platform
-
-      - name: Upload linux publish manifest
-        uses: actions/upload-artifact@v7
-        with:
-          name: open-design-release-linux-x64-publish-manifest
-          path: ${{ runner.temp }}/release-platform-manifests/linux_x64.json
-          if-no-files-found: error
-          retention-days: 1
-
-      - name: Upload linux release bundle
-        uses: actions/upload-artifact@v7
-        with:
-          name: open-design-release-linux-release-assets
-          path: ${{ runner.temp }}/release-assets
+          path: ${{ runner.temp }}/release-assets/win_x64
           retention-days: 1
 
   publish_docker_image:
@@ -1125,22 +1446,20 @@ jobs:
     name: Finalize ${{ needs.metadata.outputs.channel }} release plan
     needs:
       - metadata
-      - verify
+      - quality_gate
       - build_mac
       - build_mac_intel
       - build_win
-      - build_linux
     if: >-
       ${{
         always() &&
         !cancelled() &&
         needs.metadata.outputs.run_prepublish_jobs == 'true' &&
         needs.metadata.result == 'success' &&
-        needs.verify.result == 'success' &&
+        needs.quality_gate.result == 'success' &&
         needs.build_mac.result == 'success' &&
         needs.build_mac_intel.result == 'success' &&
-        needs.build_win.result == 'success' &&
-        (needs.build_linux.result == 'success' || needs.build_linux.result == 'skipped')
+        needs.build_win.result == 'success'
       }}
     runs-on: ubuntu-latest
     outputs:
@@ -1148,7 +1467,6 @@ jobs:
       mac_arm64_url: ${{ steps.outputs.outputs.mac_arm64_dmg_url }}
       mac_intel_url: ${{ steps.outputs.outputs.mac_x64_dmg_url }}
       win_url: ${{ steps.outputs.outputs.win_x64_installer_url }}
-      linux_url: ${{ steps.outputs.outputs.linux_x64_appImage_url }}
     env:
       GH_TOKEN: ${{ github.token }}
       # Record the real built commit in metadata.json. Under workflow_call the
@@ -1157,7 +1475,7 @@ jobs:
       GITHUB_SHA: ${{ needs.metadata.outputs.commit }}
       BASE_VERSION: ${{ needs.metadata.outputs.base_version }}
       BRANCH_NAME: ${{ needs.metadata.outputs.branch }}
-      ENABLE_LINUX: ${{ needs.build_linux.result == 'success' }}
+      ENABLE_LINUX: "false"
       ENABLE_MAC: "true"
       ENABLE_MAC_INTEL: "true"
       ENABLE_WIN: "true"
@@ -1175,21 +1493,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6.0.2
         with:
-          ref: ${{ inputs.ref }}
-          fetch-depth: 0
+          ref: ${{ needs.metadata.outputs.commit }}
+          fetch-depth: 1
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
+      - name: Setup release publisher
+        uses: ./.github/actions/setup-workspace
         with:
-          node-version: 24
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v5
-        with:
-          version: 10.33.2
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+          postinstall-intent: release-publish
+          save-pnpm-cache: ${{ env.STABLE_SAVE_PNPM_CACHE }}
 
       - name: Download mac publish manifest
         uses: actions/download-artifact@v8
@@ -1207,13 +1518,6 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: open-design-release-win-x64-publish-manifest
-          path: ${{ runner.temp }}/release-platform-manifests
-
-      - name: Download linux publish manifest
-        if: ${{ needs.build_linux.result == 'success' }}
-        uses: actions/download-artifact@v8
-        with:
-          name: open-design-release-linux-x64-publish-manifest
           path: ${{ runner.temp }}/release-platform-manifests
 
       - name: Pre-flight tag/release check
@@ -1247,20 +1551,6 @@ jobs:
           name: open-design-release-win-release-assets
           path: ${{ runner.temp }}/release-assets/win
 
-      - name: Download linux release bundle
-        if: ${{ needs.build_linux.result == 'success' }}
-        uses: actions/download-artifact@v8
-        with:
-          name: open-design-release-linux-release-assets
-          path: ${{ runner.temp }}/release-assets/linux
-
-      - name: Download linux e2e spec report
-        if: ${{ needs.build_linux.result == 'success' }}
-        uses: actions/download-artifact@v8
-        with:
-          name: open-design-release-linux-e2e-report
-          path: ${{ runner.temp }}/release-report/linux
-
       - name: Download mac e2e spec report
         uses: actions/download-artifact@v8
         with:
@@ -1269,11 +1559,7 @@ jobs:
 
       # The windows smoke uploads this artifact with `if-no-files-found: warn`,
       # so a skipped smoke leaves an empty report directory and publishes no
-      # artifact at all. Downloading it unconditionally then fails finalize —
-      # after all three platforms have already built, signed and notarized —
-      # which makes `win_x64_smoke_mode: skip` unusable on the stable lane even
-      # though the input offers it. Guard it the way the linux report is guarded
-      # by its own build result.
+      # artifact at all. Guard the download when smoke is explicitly skipped.
       - name: Download windows e2e spec report
         if: ${{ inputs.win_x64_smoke_mode != 'skip' }}
         uses: actions/download-artifact@v8
@@ -1283,7 +1569,7 @@ jobs:
 
       - name: Prepare stable GitHub Release asset plan
         env:
-          ENABLE_LINUX_X64: ${{ needs.build_linux.result == 'success' }}
+          ENABLE_LINUX_X64: "false"
           RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
           RELEASE_GITHUB_ASSETS_DIR: ${{ runner.temp }}/github-release-assets
           RELEASE_GITHUB_ASSETS_SOURCE_DIR: ${{ runner.temp }}/release-assets
@@ -1342,11 +1628,11 @@ jobs:
       - name: Prepare release metadata
         env:
           BASE_VERSION: ${{ needs.metadata.outputs.base_version }}
-          ENABLE_LINUX_X64: ${{ needs.build_linux.result == 'success' }}
+          ENABLE_LINUX_X64: "false"
           ENABLE_MAC_ARM64: "true"
           ENABLE_MAC_X64: "true"
           ENABLE_WIN_X64: "true"
-          LINUX_X64_RESULT: ${{ needs.build_linux.result }}
+          LINUX_X64_RESULT: skipped
           MAC_ARM64_RESULT: ${{ needs.build_mac.result }}
           MAC_X64_RESULT: ${{ needs.build_mac_intel.result }}
           RELEASE_ASSET_SUFFIX: ""
@@ -1390,11 +1676,11 @@ jobs:
 
       - name: Verify release metadata
         env:
-          ENABLE_LINUX_X64: ${{ needs.build_linux.result == 'success' }}
+          ENABLE_LINUX_X64: "false"
           ENABLE_MAC_ARM64: "true"
           ENABLE_MAC_X64: "true"
           ENABLE_WIN_X64: "true"
-          LINUX_X64_RESULT: ${{ needs.build_linux.result }}
+          LINUX_X64_RESULT: skipped
           MAC_ARM64_RESULT: ${{ needs.build_mac.result }}
           MAC_X64_RESULT: ${{ needs.build_mac_intel.result }}
           RELEASE_DRY_RUN_MODE: ${{ needs.metadata.outputs.dry_run_mode }}
@@ -1436,7 +1722,10 @@ jobs:
           cat "${{ runner.temp }}/release-metadata/summary.md" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Cleanup workflow artifacts
-        if: ${{ success() }}
+        if: ${{ success() && needs.metadata.outputs.publish_side_effects_enabled == 'true' }}
+        env:
+          ARTIFACT_CLEANUP_DESCRIPTION: stable publish manifests and GitHub Release staging bundles; Plan witnesses and diagnostic reports are retained
+          ARTIFACT_NAME_REGEX: "^(open-design-release-(mac-arm64|mac-x64|win-x64)-publish-manifest|open-design-release-(mac|mac-intel|win)-release-assets)$"
         run: bash .github/scripts/release/github/cleanup-artifacts.sh
 
   cleanup_partial_release_assets:
@@ -1446,7 +1735,6 @@ jobs:
       - build_mac
       - build_mac_intel
       - build_win
-      - build_linux
       - publish
     if: ${{ always() && needs.metadata.outputs.dry_run != 'true' && needs.publish.result != 'success' }}
     runs-on: ubuntu-latest
@@ -1456,7 +1744,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6.0.2
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ needs.metadata.outputs.commit }}
 
       - name: Delete unpublished release asset artifacts
         env:

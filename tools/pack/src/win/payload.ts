@@ -64,6 +64,25 @@ function logWinPayloadProgress(message: string, fields: Record<string, unknown> 
   process.stderr.write(`[tools-pack win] ${message}${suffix.length === 0 ? "" : ` ${suffix}`}\n`);
 }
 
+async function runPayloadSegment<T>(phase: string, task: () => Promise<T>, timings?: WinPackTiming[]): Promise<T> {
+  const startedAt = Date.now();
+  logWinPayloadProgress("segment:start", { phase });
+  try {
+    const result = await task();
+    logWinPayloadProgress("segment:done", { durationMs: Date.now() - startedAt, phase });
+    return result;
+  } catch (error) {
+    logWinPayloadProgress("segment:failed", {
+      durationMs: Date.now() - startedAt,
+      error: error instanceof Error ? error.message : String(error),
+      phase,
+    });
+    throw error;
+  } finally {
+    timings?.push({ durationMs: Date.now() - startedAt, phase });
+  }
+}
+
 export async function buildWinLauncherPayloadArchive(
   config: ToolPackConfig,
   paths: WinPaths,
@@ -91,24 +110,8 @@ export async function buildWinLauncherPayloadArchive(
     version: packagedVersion,
   });
 
-  const runSegment = async <T>(phase: string, task: () => Promise<T>): Promise<T> => {
-    const startedAt = Date.now();
-    logWinPayloadProgress("segment:start", { phase });
-    try {
-      const result = await task();
-      logWinPayloadProgress("segment:done", { durationMs: Date.now() - startedAt, phase });
-      return result;
-    } catch (error) {
-      logWinPayloadProgress("segment:failed", {
-        durationMs: Date.now() - startedAt,
-        error: error instanceof Error ? error.message : String(error),
-        phase,
-      });
-      throw error;
-    } finally {
-      timings.push({ durationMs: Date.now() - startedAt, phase });
-    }
-  };
+  const runSegment = <T>(phase: string, task: () => Promise<T>): Promise<T> =>
+    runPayloadSegment(phase, task, timings);
 
   async function pathExists(path: string): Promise<boolean> {
     try {
@@ -313,27 +316,29 @@ export async function validateWinLauncherPayloadArchive(input: {
 
   const extractRoot = await mkdtemp(join(tmpdir(), "od-win-payload-"));
   try {
-    await execFileAsync(winResources.sevenZipExe, ["x", payloadPath, `-o${extractRoot}`, "-y"], {
+    await runPayloadSegment("validate-payload:extract", () => execFileAsync(winResources.sevenZipExe, ["x", payloadPath, `-o${extractRoot}`, "-y"], {
       windowsHide: true,
-    });
-    const manifest = JSON.parse(await readFile(join(extractRoot, "manifest.json"), "utf8")) as WinLauncherPayloadManifest;
-    const expectedChannel = resolveToolPackLauncherChannel({
-      appVersion: input.expectedVersion,
-      namespace: input.namespace,
-    });
-    requirePayloadManifestValue(manifest.schemaVersion, "schemaVersion", LAUNCHER_SCHEMA_VERSION);
-    requirePayloadManifestValue(manifest.channel, "channel", expectedChannel);
-    requirePayloadManifestValue(manifest.namespace, "namespace", input.namespace);
-    requirePayloadManifestValue(manifest.version, "version", input.expectedVersion);
-    requirePayloadManifestValue(manifest.platform, "platform", "win32");
-    requirePayloadManifestValue(manifest.payloadRoot, "payloadRoot", "payload");
-    requirePayloadManifestValue(manifest.entry?.cwd, "entry.cwd", "payload");
-    requirePayloadManifestValue(manifest.entry?.executable, "entry.executable", "payload/Open Design.exe");
+    }));
+    return await runPayloadSegment("validate-payload:check", async () => {
+      const manifest = JSON.parse(await readFile(join(extractRoot, "manifest.json"), "utf8")) as WinLauncherPayloadManifest;
+      const expectedChannel = resolveToolPackLauncherChannel({
+        appVersion: input.expectedVersion,
+        namespace: input.namespace,
+      });
+      requirePayloadManifestValue(manifest.schemaVersion, "schemaVersion", LAUNCHER_SCHEMA_VERSION);
+      requirePayloadManifestValue(manifest.channel, "channel", expectedChannel);
+      requirePayloadManifestValue(manifest.namespace, "namespace", input.namespace);
+      requirePayloadManifestValue(manifest.version, "version", input.expectedVersion);
+      requirePayloadManifestValue(manifest.platform, "platform", "win32");
+      requirePayloadManifestValue(manifest.payloadRoot, "payloadRoot", "payload");
+      requirePayloadManifestValue(manifest.entry?.cwd, "entry.cwd", "payload");
+      requirePayloadManifestValue(manifest.entry?.executable, "entry.executable", "payload/Open Design.exe");
 
-    await stat(join(extractRoot, archiveRelativePath("payload/Open Design.exe")));
-    await stat(join(extractRoot, archiveRelativePath("payload/resources/open-design-config.json")));
-    return { manifest, payloadPath, valid: true };
+      await stat(join(extractRoot, archiveRelativePath("payload/Open Design.exe")));
+      await stat(join(extractRoot, archiveRelativePath("payload/resources/open-design-config.json")));
+      return { manifest, payloadPath, valid: true as const };
+    });
   } finally {
-    await rm(extractRoot, { force: true, recursive: true });
+    await runPayloadSegment("validate-payload:cleanup", () => rm(extractRoot, { force: true, recursive: true }));
   }
 }

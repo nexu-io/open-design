@@ -28,3 +28,5 @@ export { managedDownload } from "./managed-download.js";
 export { downloadCopyAndClear } from "./copy.js";
 export { inspectManagedDownload, removeManagedDownload } from "./remove.js";
 export { pruneManagedDownloads } from "./prune.js";
+export { archiveExecutable, createTarArchive, extractArchive, listArchive, readTarEntry } from "./archive.js";
+export type { ArchiveFormat } from "./archive.js";

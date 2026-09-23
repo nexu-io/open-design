@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -129,13 +130,19 @@ export async function packBundledDshRuntime({
   await rm(destination, { force: true, recursive: true });
   await mkdir(destination, { recursive: true });
 
+  const packageManagerEnv = { ...process.env };
+  packageManagerEnv.npm_execpath ||= join(
+    dirname(createRequire(import.meta.url).resolve("pnpm")),
+    "bin",
+    "pnpm.cjs",
+  );
   const invocation = createPackageManagerInvocation(
     ["-C", packageRoot, "pack", "--pack-destination", destination],
-    process.env,
+    packageManagerEnv,
   );
   await execFileAsync(invocation.command, invocation.args, {
     cwd: workspaceRoot,
-    env: process.env,
+    env: packageManagerEnv,
     windowsVerbatimArguments: invocation.windowsVerbatimArguments,
   });
 

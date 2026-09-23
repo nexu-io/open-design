@@ -8,6 +8,7 @@ import { winResources } from "../resources/index.js";
 import type { WinBuiltAppManifest, WinPackTiming, WinPaths } from "./types.js";
 
 const execFileAsync = promisify(execFile);
+export const WIN_PORTABLE_ZIP_COMPRESSION_LEVEL = 1;
 
 function logWinZipProgress(message: string, fields: Record<string, unknown> = {}): void {
   const suffix = Object.entries(fields)
@@ -103,7 +104,7 @@ export async function buildWinPortableZip(
     await runExecSegment(
       "portable-zip:7z:process",
       winResources.sevenZipExe,
-      ["a", "-tzip", "-mx=5", paths.setupZipPath, ".\\*"],
+      ["a", "-tzip", `-mx=${WIN_PORTABLE_ZIP_COMPRESSION_LEVEL}`, paths.setupZipPath, ".\\*"],
       {
         cwd: builtApp.unpackedRoot,
         outputPath: paths.setupZipPath,

@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 2,
+  "intents": {
+    "release-control": {
+      "installProfile": "release-tools",
+      "requestedTargets": ["tools/release"]
+    },
+    "shared-javascript": {
+      "installProfile": "workspace",
+      "requestedTargets": ["tools/pack"]
+    },
+    "source-web": {
+      "installProfile": "source-web",
+      "requestedTargets": ["packages/download"]
+    },
+    "release-executor": {
+      "installProfile": "release-executor",
+      "requestedTargets": ["packages/download"]
+    },
+    "mac-runtime": {
+      "installProfile": "mac-runtime",
+      "requestedTargets": ["packages/download"]
+    },
+    "platform-build": {
+      "installProfile": "workspace",
+      "requestedTargets": ["tools/dev", "tools/pack", "tools/release", "tools/serve"]
+    },
+    "workspace": {
+      "installProfile": "workspace",
+      "requestedTargets": "all"
+    },
+    "release-publish": {
+      "installProfile": "release-tools",
+      "requestedTargets": ["tools/release"]
+    },
+    "test-web": {
+      "installProfile": "workspace",
+      "requestedTargets": ["tools/pack"]
+    },
+    "test-e2e": {
+      "installProfile": "workspace",
+      "requestedTargets": ["tools/dev", "tools/pack", "tools/release", "tools/serve"]
+    },
+    "test-verify": {
+      "installProfile": "workspace",
+      "requestedTargets": ["tools/dev", "tools/pack", "tools/release", "tools/serve"]
+    },
+    "test-daemon": {
+      "installProfile": "workspace",
+      "requestedTargets": ["tools/pack"]
+    },
+    "test-ui": {
+      "installProfile": "workspace",
+      "requestedTargets": ["tools/dev", "tools/pack"]
+    },
+    "release-validation": {
+      "installProfile": "release-validation",
+      "requestedTargets": ["packages/contracts", "tools/dev", "tools/pack", "tools/release", "tools/serve"]
+    },
+    "release-smoke": {
+      "installProfile": "workspace",
+      "requestedTargets": ["tools/pack", "tools/serve"]
+    },
+    "ci-workspace-unit": {
+      "installProfile": "workspace",
+      "requestedTargets": "all"
+    },
+    "ci-windows-tools-pack": {
+      "installProfile": "workspace",
+      "requestedTargets": "all"
+    },
+    "ci-daemon": {
+      "installProfile": "workspace",
+      "requestedTargets": "all"
+    },
+    "ci-e2e": {
+      "installProfile": "workspace",
+      "requestedTargets": "all"
+    },
+    "ci-ui": {
+      "installProfile": "workspace",
+      "requestedTargets": "all"
+    },
+    "ci-web": {
+      "installProfile": "workspace",
+      "requestedTargets": "all"
+    }
+  }
+}

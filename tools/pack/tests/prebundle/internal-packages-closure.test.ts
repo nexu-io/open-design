@@ -21,10 +21,10 @@ function runtimeWorkspaceDeps(directory: string): string[] {
   return Object.keys(manifest.dependencies ?? {}).filter((dep) => dep.startsWith("@open-design/"));
 }
 
-// Each pack lane assembles its packaged app by `pnpm pack`-ing a subset of
-// INTERNAL_PACKAGES into tarballs, wiring them as `file:` dependencies, and
-// running an npm/pnpm install in the isolated app directory. `pnpm pack`
-// rewrites every `workspace:*` ref to a concrete version, so the install
+// Each pack lane assembles its packaged app from a subset of INTERNAL_PACKAGES
+// converted into tarballs, wired as `file:` dependencies, and installed in an
+// isolated app directory. The packer rewrites every `workspace:*` ref to a
+// concrete version without depending on a workspace install, so the install
 // resolves each tarball's runtime `@open-design/*` dependencies. Any such
 // dependency that is NOT also installed as a local tarball is fetched from the
 // public npm registry and 404s — these packages are workspace-only and never

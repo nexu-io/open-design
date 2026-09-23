@@ -1,5 +1,5 @@
 {
-  "schema": { "version": 1 },
+  "schema": { "version": 9 },
   "suites": {
     "convergence-control": [
       ".github/config/convergence-exact.json",
@@ -8,6 +8,7 @@
       ".github/scripts/lib/config.py",
       ".github/scripts/lib/github.py",
       ".github/scripts/lib/r2.py",
+      ".github/scripts/lib/workload_products.py",
       ".github/workflows/convergence-exact.atom.yml",
       ".github/workflows/release-exact.yml"
     ],
@@ -16,6 +17,7 @@
       "pnpm-lock.yaml",
       "pnpm-workspace.yaml",
       "scripts/postinstall.mjs",
+      "scripts/postinstall.config.json",
       "apps/closure/",
       "packages/download/",
       "packages/platform/",
@@ -29,6 +31,9 @@
       "policy": "terminal-scene-v1",
       "workloads": {
         "terminal_scene_darwin_arm64": {
+          "success": {
+            "Terminal scene (darwin-arm64)": ["Build release-neutral scene inputs", "Build Darwin Terminal scene", "Verify scene and prepare convergence product"]
+          },
           "inputs": ["suite://terminal-scene"],
           "runnerClass": "terminal_darwin_arm64",
           "products": "manifest",

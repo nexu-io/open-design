@@ -243,6 +243,30 @@ function stablePrereleaseMetadata(publicOrigin: string, baseVersion: string): Re
 }
 
 describe("tools-release local channel prepare validation", () => {
+  it("checks remote stable tag names without fetching history or weakening the version floor", async () => {
+    const local = await createHermeticTagRepoEnv([]);
+    const remote = await createHermeticTagRepoEnv(["open-design-v999.0.0"]);
+    const server = await startMetadataServer({
+      "beta/latest/metadata.json": countedMetadata("beta", "0.10.0-beta.2", 2),
+    });
+    try {
+      const env = { ...local, OPEN_DESIGN_STABLE_METADATA_URL: "", OPEN_DESIGN_RELEASE_FORCE: "",
+        RELEASE_FORCE: "", OPEN_DESIGN_BETA_METADATA_URL: `${server.origin}/beta/latest/metadata.json` };
+      await expect(runPrepare("beta", { ...env, OPEN_DESIGN_RELEASE_TAG_REMOTE: remote.GIT_DIR! }))
+        .rejects.toThrow("must be strictly greater than latest stable 999.0.0");
+      await expect(runPrepare("beta", { ...env, OPEN_DESIGN_RELEASE_TAG_REMOTE: join(remote.GIT_DIR!, "missing") }))
+        .rejects.toThrow();
+      const result = await runPrepare("beta", { ...env, OPEN_DESIGN_RELEASE_TAG_REMOTE: "" });
+      expect(result.outputs.release_version).toBe(`${await readPackagedVersion()}-beta.1`);
+      const tags = await execFileAsync("git", ["tag", "--list"], { env: { ...process.env, ...local } });
+      expect(tags.stdout).toBe(""); // No tag objects or history were fetched into the checkout.
+    } finally {
+      await server.close();
+      await rm(dirname(local.GIT_DIR!), { recursive: true, force: true });
+      await rm(dirname(remote.GIT_DIR!), { recursive: true, force: true });
+    }
+  });
+
   it("prepares beta, betas, preview, and prerelease from local metadata fixtures", async () => {
     const packagedVersion = await readPackagedVersion();
     const objects: Record<string, unknown> = {

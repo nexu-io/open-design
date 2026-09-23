@@ -1,17 +1,26 @@
 {
-  "schema": { "version": 1 },
+  "schema": { "version": 9 },
   "suites": {
+    "platform-source": [
+      "packages/platform/src/", "packages/platform/package.json",
+      "packages/platform/esbuild.config.mjs", "packages/platform/tsconfig.json",
+      "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml",
+      ".github/workflows/ci.yml", ".github/config/runners.json"
+    ],
     "convergence-control": [
       ".github/config/convergence.json",
+      ".github/config/postinstall.json",
       ".github/config/scopes.json",
       ".github/config/runners.json",
       ".github/scripts/convergence.py",
+      ".github/scripts/postinstall.py",
       ".github/scripts/scopes.py",
       ".github/scripts/runners.py",
       ".github/scripts/handoff.py",
       ".github/scripts/lib/config.py",
       ".github/scripts/lib/github.py",
       ".github/scripts/lib/r2.py",
+      ".github/scripts/lib/workload_products.py",
       ".github/actions/configure-ci-parallelism/",
       ".github/actions/setup-playwright/",
       ".github/actions/setup-workspace/",
@@ -23,8 +32,12 @@
       "pnpm-lock.yaml",
       "pnpm-workspace.yaml",
       "scripts/postinstall.mjs",
+      "scripts/postinstall.config.json",
+      ".github/config/postinstall.json",
+      ".github/scripts/postinstall.py",
       ".github/actions/configure-ci-parallelism/",
-      ".github/actions/setup-workspace/"
+      ".github/actions/setup-workspace/",
+      ".github/workflows/ci.yml"
     ],
     "workspace-core": [
       "suite://workspace-install",
@@ -91,7 +104,9 @@
       "tools/dev/",
       "tools/pack/",
       "e2e/",
-      ".github/actions/setup-playwright/"
+      ".github/actions/setup-playwright/",
+      ".github/scripts/template.py",
+      ".github/templates/"
     ],
     "ui-runtime": [
       "suite://e2e-runtime",
@@ -107,8 +122,19 @@
   },
   "workflows": {
     "ci": {
-      "policy": "ci-v1",
+      "policy": "ci-v2",
       "workloads": {
+        "platform_build": {
+          "success": { "[build] packages/platform": ["[build] Platform public package"] },
+          "inputs": ["suite://platform-source"], "runnerClass": "workspace_unit",
+          "products": "manifest", "reusable": true
+        },
+        "platform_tests": {
+          "success": { "[test] packages/platform": ["[test] Platform behavior"] },
+          "inputs": ["suite://platform-source", "packages/platform/tests/", "packages/platform/tsconfig.tests.json"],
+          "runnerClass": "workspace_unit",
+          "products": "none", "reusable": true
+        },
         "static_gate": {
           "inputs": ["*"],
           "runnerClass": "control",
@@ -127,41 +153,89 @@
           "products": "none",
           "reusable": false
         },
-        "daemon_unit_tests": {
-          "inputs": ["*"],
-          "runnerClass": "workspace_unit",
-          "products": "none",
-          "reusable": true
+        "daemon_unit_1": {
+          "success": { "Daemon tests (1/4)": ["Run daemon test shard"] },
+          "inputs": ["suite://daemon"], "runnerClass": "workspace_unit",
+          "products": "none", "reusable": true
+        },
+        "daemon_unit_2": {
+          "success": { "Daemon tests (2/4)": ["Run daemon test shard"] },
+          "inputs": ["suite://daemon"], "runnerClass": "workspace_unit",
+          "products": "none", "reusable": true
+        },
+        "daemon_unit_3": {
+          "success": { "Daemon tests (3/4)": ["Run daemon test shard"] },
+          "inputs": ["suite://daemon"], "runnerClass": "workspace_unit",
+          "products": "none", "reusable": true
+        },
+        "daemon_unit_4": {
+          "success": { "Daemon tests (4/4)": ["Run daemon test shard"] },
+          "inputs": ["suite://daemon"], "runnerClass": "workspace_unit",
+          "products": "none", "reusable": true
         },
         "windows_tools_pack_payload_tests": {
+          "success": { "Windows tools-pack payload tests": ["Windows launcher payload archive tests"] },
           "inputs": ["suite://windows-launcher-payload"],
           "runnerClass": "windows_tools",
           "products": "none",
           "reusable": true
         },
-        "web_workspace_tests": {
-          "inputs": ["suite://web"],
-          "runnerClass": "js_hot",
-          "products": "none",
-          "reusable": true
+        "web_workspace_1": {
+          "success": { "Web workspace tests (1/2)": ["Prebuild web sidecar declarations", "Web workspace tests"] },
+          "inputs": ["suite://web"], "runnerClass": "js_hot",
+          "products": "none", "reusable": true
+        },
+        "web_workspace_2": {
+          "success": { "Web workspace tests (2/2)": ["Prebuild web sidecar declarations", "Web workspace tests"] },
+          "inputs": ["suite://web"], "runnerClass": "js_hot",
+          "products": "none", "reusable": true
         },
         "e2e_vitest": {
-          "inputs": ["*"],
+          "success": { "E2E Vitest": ["Prebuild workspace type declarations", "E2E Vitest"] },
+          "inputs": ["suite://e2e-runtime"],
           "runnerClass": "js_hot",
           "products": "none",
           "reusable": true
         },
         "playwright_critical": {
+          "success": {
+            "Playwright critical (a)": ["Prebuild workspace type declarations", "Playwright critical"],
+            "Playwright critical (b)": ["Prebuild workspace type declarations", "Playwright critical"]
+          },
           "inputs": ["suite://ui-runtime"],
           "runnerClass": "ui_hot",
           "products": "none",
           "reusable": true
         },
-        "ui_p0": {
-          "inputs": ["suite://ui-runtime"],
-          "runnerClass": "ui_p0",
-          "products": "manifest",
-          "reusable": false
+        "ui_p0_entry_settings": {
+          "success": { "UI P0 (entry-settings)": ["Prebuild workspace type declarations", "Run UI P0 domain"] },
+          "inputs": ["suite://ui-runtime"], "runnerClass": "ui_p0",
+          "products": "none", "reusable": true
+        },
+        "ui_p0_project_workspace": {
+          "success": { "UI P0 (project-workspace)": ["Prebuild workspace type declarations", "Run UI P0 domain"] },
+          "inputs": ["suite://ui-runtime"], "runnerClass": "ui_p0",
+          "products": "none", "reusable": true
+        },
+        "ui_p0_project_workspace_editor": {
+          "success": { "UI P0 (project-workspace-editor)": ["Prebuild workspace type declarations", "Run UI P0 domain"] },
+          "inputs": ["suite://ui-runtime"], "runnerClass": "ui_p0",
+          "products": "none", "reusable": true
+        },
+        "ui_p0_project_collab": {
+          "success": { "UI P0 (project-collab)": ["Prebuild workspace type declarations", "Run UI P0 domain"] },
+          "inputs": ["suite://ui-runtime"], "runnerClass": "ui_p0_heavy",
+          "products": "none", "reusable": true
+        },
+        "ui_p0_project_runtime": {
+          "success": { "UI P0 (project-runtime)": ["Prebuild workspace type declarations", "Run UI P0 domain", "Run UI critical extras"] },
+          "inputs": ["suite://ui-runtime"], "runnerClass": "ui_p0",
+          "products": "none", "reusable": true
+        },
+        "ui_p0_workspace_restoration": {
+          "success": { "UI P0 (workspace-restoration)": ["Prebuild workspace type declarations", "Run UI P0 domain"] },
+          "inputs": ["suite://ui-runtime"], "runnerClass": "ui_p0",
+          "products": "none", "reusable": true
         },
         "playwright_visual": {
           "inputs": ["suite://ui-runtime"],
@@ -169,6 +243,26 @@
           "products": "manifest",
           "reusable": false
         }
+      },
+      "matrices": {
+        "daemon": [
+          { "name": "Daemon tests (1/4)", "workload": "daemon_unit_1", "shard": 1 },
+          { "name": "Daemon tests (2/4)", "workload": "daemon_unit_2", "shard": 2 },
+          { "name": "Daemon tests (3/4)", "workload": "daemon_unit_3", "shard": 3 },
+          { "name": "Daemon tests (4/4)", "workload": "daemon_unit_4", "shard": 4 }
+        ],
+        "web": [
+          { "name": "Web workspace tests (1/2)", "workload": "web_workspace_1", "shard": 1 },
+          { "name": "Web workspace tests (2/2)", "workload": "web_workspace_2", "shard": 2 }
+        ],
+        "ui_p0": [
+          { "name": "UI P0 (entry-settings)", "workload": "ui_p0_entry_settings", "shard": "entry-settings" },
+          { "name": "UI P0 (project-workspace)", "workload": "ui_p0_project_workspace", "shard": "project-workspace" },
+          { "name": "UI P0 (project-workspace-editor)", "workload": "ui_p0_project_workspace_editor", "shard": "project-workspace-editor" },
+          { "name": "UI P0 (project-collab)", "workload": "ui_p0_project_collab", "shard": "project-collab" },
+          { "name": "UI P0 (project-runtime)", "workload": "ui_p0_project_runtime", "shard": "project-runtime" },
+          { "name": "UI P0 (workspace-restoration)", "workload": "ui_p0_workspace_restoration", "shard": "workspace-restoration" }
+        ]
       }
     }
   }

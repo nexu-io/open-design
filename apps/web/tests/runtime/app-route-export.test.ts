@@ -11,11 +11,32 @@ async function loadNextConfig() {
 }
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   delete process.env.OD_WEB_DIST_DIR;
   vi.resetModules();
 });
 
 describe('SPA shell export route', () => {
+  it('uses an injected build identity without generating another identity', async () => {
+    vi.stubEnv('OD_WEB_BUILD_ID', 'a'.repeat(64));
+    const first = await loadNextConfig();
+    const second = await loadNextConfig();
+    expect(await first.generateBuildId?.()).toBe('a'.repeat(64));
+    expect(await second.generateBuildId?.()).toBe('a'.repeat(64));
+    vi.stubEnv('OD_WEB_BUILD_ID', 'b'.repeat(64));
+    expect(await (await loadNextConfig()).generateBuildId?.()).toBe('b'.repeat(64));
+  });
+
+  it('preserves the default build identity when no override is supplied', async () => {
+    vi.stubEnv('OD_WEB_BUILD_ID', undefined);
+    expect((await loadNextConfig()).generateBuildId).toBeUndefined();
+  });
+
+  it.each(['', ' ', '../build', 'build\nother'])('rejects an invalid explicit build identity %j', async (value) => {
+    vi.stubEnv('OD_WEB_BUILD_ID', value);
+    await expect(loadNextConfig()).rejects.toThrow('OD_WEB_BUILD_ID');
+  });
+
   it('stays compatible with static export builds', async () => {
     const nextConfig = await loadNextConfig();
     expect(nextConfig.output).toBe('export');

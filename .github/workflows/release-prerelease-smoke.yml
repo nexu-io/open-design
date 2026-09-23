@@ -11,8 +11,8 @@ name: release-prerelease-smoke
 # So the smoke moved here and now starts from the R2 object: it reads the
 # published version metadata, downloads the DMG / setup.exe a user would get,
 # drops it at the one path `tools-pack <platform> install` reads, and runs the
-# same spec. `.github/scripts/release/smoke-artifacts.ts` owns both halves and
-# verifies the sha256 sidecar on the way in.
+# same spec. tools-release resolves the published reference; tools-pack stages
+# the checksum-verified installer into its own platform layout.
 #
 # Dispatched by release-prerelease.yml's `dispatch_smoke` job once `publish`
 # succeeds. Advisory by construction: nothing consumes the result as a gate, and
@@ -100,10 +100,10 @@ jobs:
           # code, so it runs the staging script that ships with this workflow
           # rather than the one at the built commit.
           fetch-depth: 1
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
+      - name: Prepare release tool
+        uses: ./.github/actions/setup-workspace
+        env:
+          OPEN_DESIGN_POSTINSTALL_TARGETS: '["tools/release"]'
       - name: Read published version metadata
         id: plan
         env:
@@ -112,7 +112,7 @@ jobs:
         # A platform that did not build is absent from the metadata, so the
         # per-platform jobs below are gated on what actually shipped rather than
         # on the flags the build was dispatched with.
-        run: node --experimental-strip-types .github/scripts/release/smoke-artifacts.ts plan
+        run: pnpm exec tools-release artifact plan
 
   mac_arm64:
     name: Smoke prerelease mac arm64
@@ -147,7 +147,10 @@ jobs:
           RELEASE_TARGET: mac_arm64
           TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
           VERSION_METADATA_URL: ${{ inputs.version_metadata_url }}
-        run: node --experimental-strip-types .github/scripts/release/smoke-artifacts.ts stage
+        shell: bash
+        run: |
+          pnpm exec tools-release artifact resolve --output "$RUNNER_TEMP/installer.json"
+          pnpm exec tools-pack stage-artifact "$RUNNER_TEMP/installer.json"
       - name: Smoke prerelease mac packaged runtime
         working-directory: e2e
         env:
@@ -222,7 +225,10 @@ jobs:
           RELEASE_TARGET: mac_x64
           TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
           VERSION_METADATA_URL: ${{ inputs.version_metadata_url }}
-        run: node --experimental-strip-types .github/scripts/release/smoke-artifacts.ts stage
+        shell: bash
+        run: |
+          pnpm exec tools-release artifact resolve --output "$RUNNER_TEMP/installer.json"
+          pnpm exec tools-pack stage-artifact "$RUNNER_TEMP/installer.json"
       - name: Smoke prerelease mac_x64 packaged runtime
         working-directory: e2e
         env:
@@ -296,7 +302,10 @@ jobs:
           RELEASE_TARGET: win_x64
           TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
           VERSION_METADATA_URL: ${{ inputs.version_metadata_url }}
-        run: node --experimental-strip-types .github/scripts/release/smoke-artifacts.ts stage
+        shell: bash
+        run: |
+          pnpm exec tools-release artifact resolve --output "$RUNNER_TEMP/installer.json"
+          pnpm exec tools-pack stage-artifact "$RUNNER_TEMP/installer.json"
       - name: Clear mark-of-the-web from the downloaded installer
         shell: pwsh
         # tools-pack launches the installer through CreateProcess, which does not

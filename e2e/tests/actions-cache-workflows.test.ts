@@ -45,11 +45,13 @@ describe("GitHub Actions cache workflows", () => {
     expect(setupPlaywrightStep).toContain("runner-labels:");
   });
 
-  it("[P1] keeps pnpm cache writes on explicit trusted main seed jobs", async () => {
+  it("[P1] leaves pnpm write authorization to callers and keeps persistence/hit guards", async () => {
     const action = await readFile(setupWorkspaceAction, "utf8");
 
     expect(action).toContain("save-pnpm-cache:");
     expect(action).toContain("default: 'false'");
+    expect(action).toContain("pnpm-store-cache-format:");
+    expect(action).toContain("default: 'native'");
     expect(action).toContain("uses: actions/cache/restore@v5");
     expect(action).toContain("uses: actions/cache/save@v5");
     expect(action).not.toContain("uses: actions/cache@v5");
@@ -85,16 +87,51 @@ describe("GitHub Actions cache workflows", () => {
       "- name: Install dependencies",
     );
     expect(restoreStep).toContain("restore-keys: |");
-    expect(restoreStep).toContain("pnpm-store-${{ runner.os }}-");
+    expect(restoreStep).toContain(
+      "pnpm-store-v2-${{ runner.os }}-${{ steps.postinstall-plan.outputs.install-profile || inputs.install-profile }}-",
+    );
+    expect(restoreStep).not.toContain("pnpm-store-${{ runner.os }}-");
 
     const saveStep = action.slice(action.indexOf("- name: Save pnpm store"));
     expect(saveStep).toContain("inputs.save-pnpm-cache == 'true'");
     expect(saveStep).toContain("steps.persistent-pnpm-store.outputs.enabled != 'true'");
     expect(saveStep).toContain("steps.pnpm-cache-restore.outputs.cache-hit != 'true'");
-    expect(saveStep).toContain("github.ref == 'refs/heads/main'");
-    expect(saveStep).toContain("github.event_name == 'push'");
-    expect(saveStep).toContain("github.event_name == 'workflow_dispatch'");
-    expect(saveStep).toContain("github.event_name == 'schedule'");
+    expect(saveStep).toContain(
+      "pnpm-store-v2-${{ runner.os }}-${{ steps.postinstall-plan.outputs.install-profile || inputs.install-profile }}-${{ hashFiles('pnpm-lock.yaml') }}",
+    );
+    expect(saveStep).not.toContain("github.ref");
+    expect(saveStep).not.toContain("github.event_name");
+    expect(action).not.toContain("feat/plan-foundation");
+  });
+
+  it("[P1] can cache only pnpm content files through the pinned 7-Zip layout", async () => {
+    const action = await readFile(setupWorkspaceAction, "utf8");
+    const archiveRestore = sectionBetween(
+      action,
+      "- name: Restore pnpm store archive",
+      "- name: Expand pnpm store archive",
+    );
+    const archiveSave = sectionBetween(
+      action,
+      "- name: Pack pnpm store archive",
+      "- name: Save pnpm store",
+    );
+
+    expect(action).toContain("native|7z-2603-mx1");
+    expect(action).toContain('if [ "$INSTALL_PROFILE" = "workspace" ]');
+    expect(action).toContain('echo "cache-format=$PNPM_STORE_CACHE_FORMAT"');
+    expect(action).toContain("steps.install-contract.outputs.cache-format == '7z-2603-mx1'");
+    expect(action).toContain("pnpm_store_archive.py bootstrap");
+    expect(action).toContain("steps.pnpm-store-archive.outputs.archive-path");
+    expect(action).toContain("pnpm_store_archive.py unpack");
+    expect(action).toContain("pnpm_store_archive.py pack");
+    expect(archiveRestore).toContain("pnpm-store-v3-7z${{ steps.pnpm-store-archive.outputs.version }}");
+    expect(archiveRestore).toContain("${{ runner.arch }}");
+    expect(archiveRestore).toContain("${{ steps.node.outputs.node-version }}");
+    expect(archiveRestore).toContain("${{ inputs.pnpm-version }}");
+    expect(action).toContain("steps.pnpm-archive-cache-restore.outputs.cache-matched-key != ''");
+    expect(archiveSave).toContain("steps.pnpm-archive-cache-restore.outputs.cache-hit != 'true'");
+    expect(action).toContain("- name: Save pnpm store archive");
   });
 
   it("[P1] seeds Windows and Linux from main and deletes only closed-PR BuildKit cache families", async () => {
@@ -144,7 +181,7 @@ describe("GitHub Actions cache workflows", () => {
     expect(workflow).toContain("push:");
     expect(workflow).toContain("- main");
     expect(setupStep).toContain("uses: ./.github/actions/setup-workspace");
-    expect(setupStep).toContain("save-pnpm-cache: 'true'");
+    expect(setupStep).toContain("save-pnpm-cache: ${{ github.ref == 'refs/heads/main' }}");
   });
 
 

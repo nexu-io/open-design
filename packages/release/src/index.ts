@@ -1,3 +1,5 @@
+export { parsePublishedInstaller, type PublishedInstaller } from "./artifact.js";
+
 export const EXACT_RELEASE_NAME_PATTERN = /^[a-z0-9]{1,12}$/;
 export const RESERVED_RELEASE_NAMES = Object.freeze(["local"] as const);
 

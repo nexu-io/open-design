@@ -8,6 +8,7 @@ import {
   collectWorkspaceTarballs,
   createWinPackagedAppCacheKey,
   ensureWinWorkspaceBuild,
+  materializeWinWorkspaceOutputs,
   prepareWinPackagedApp,
 } from "./app.js";
 import { PRODUCT_NAME } from "./constants.js";
@@ -59,6 +60,14 @@ async function writeLocalLatestYml(config: ToolPackConfig, paths: WinPaths): Pro
 }
 
 export async function packWin(config: ToolPackConfig): Promise<WinPackResult> {
+  return executeWinPackaging(config, "build");
+}
+
+export async function packageWin(config: ToolPackConfig): Promise<WinPackResult> {
+  return executeWinPackaging(config, "existing");
+}
+
+async function executeWinPackaging(config: ToolPackConfig, source: "build" | "existing"): Promise<WinPackResult> {
   const paths = resolveWinPaths(config);
   const cache = new ToolPackCache(config.roots.cacheRoot);
   const timings: WinPackTiming[] = [];
@@ -85,6 +94,9 @@ export async function packWin(config: ToolPackConfig): Promise<WinPackResult> {
     }
   };
 
+  const existingWorkspace = source === "existing"
+    ? await runPhase("workspace-inputs", async () => materializeWinWorkspaceOutputs(config))
+    : null;
   await runPhase("target-artifact-cleanup", async () => {
     if (!hasNsisTarget) {
       await rm(paths.setupPath, { force: true });
@@ -96,7 +108,8 @@ export async function packWin(config: ToolPackConfig): Promise<WinPackResult> {
       await rm(paths.setupZipPath, { force: true });
     }
   });
-  const workspaceBuildKey = await runPhase("workspace-build", async () => ensureWinWorkspaceBuild(config, cache));
+  const workspaceBuildKey = existingWorkspace
+    ?? await runPhase("workspace-build", async () => ensureWinWorkspaceBuild(config, cache));
   const resourceTree = await runPhase("resource-tree", async () =>
     prepareResourceTree(
       config,

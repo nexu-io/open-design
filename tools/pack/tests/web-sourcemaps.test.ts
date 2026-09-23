@@ -26,6 +26,7 @@ import { processWebSourcemaps } from "@/web-sourcemaps.js";
 let tempRoot: string;
 const SAVED_API_KEY = process.env.POSTHOG_CLI_API_KEY;
 const SAVED_PROJECT_ID = process.env.POSTHOG_CLI_PROJECT_ID;
+const SAVED_UPLOAD = process.env.OD_WEB_SOURCEMAP_UPLOAD;
 
 function restoreEnv(name: string, value: string | undefined): void {
   if (value == null) {
@@ -43,6 +44,7 @@ beforeEach(async () => {
   delete process.env.POSTHOG_CLI_PROJECT_ID;
   delete process.env.POSTHOG_PERSONAL_API_KEY;
   delete process.env.POSTHOG_PROJECT_ID;
+  delete process.env.OD_WEB_SOURCEMAP_UPLOAD;
 });
 
 afterEach(async () => {
@@ -51,6 +53,7 @@ afterEach(async () => {
   }
   restoreEnv("POSTHOG_CLI_API_KEY", SAVED_API_KEY);
   restoreEnv("POSTHOG_CLI_PROJECT_ID", SAVED_PROJECT_ID);
+  restoreEnv("OD_WEB_SOURCEMAP_UPLOAD", SAVED_UPLOAD);
 });
 
 function fakeConfig(workspaceRoot: string): ToolPackConfig {
@@ -106,6 +109,18 @@ async function setupChunksDir(rootDir: string, mapNames: string[]): Promise<stri
 }
 
 describe("processWebSourcemaps", () => {
+  it("rejects an invalid upload election before invoking the PostHog CLI", async () => {
+    await setupChunksDir(tempRoot, ["main.js.map"]);
+    const config = fakeConfig(tempRoot);
+    config.posthogCliApiKey = "phx_test";
+    config.posthogCliProjectId = "1";
+    process.env.OD_WEB_SOURCEMAP_UPLOAD = "sometimes";
+
+    await expect(processWebSourcemaps(config)).rejects.toThrow(
+      "OD_WEB_SOURCEMAP_UPLOAD must be true/false or 1/0",
+    );
+  });
+
   it("returns silently when the browser chunks directory does not exist", async () => {
     const config = fakeConfig(tempRoot);
     await expect(processWebSourcemaps(config)).resolves.toBeUndefined();

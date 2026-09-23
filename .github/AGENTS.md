@@ -39,7 +39,7 @@ Atomic capability layer:
 - `autofix.atom.yml` consumes `handoff-autofix-*` artifacts and applies same-repository patches.
 - `report.atom.yml` consumes `handoff-report-*` artifacts and handles advanced comments that need trusted materialization, such as dependency install, R2 access, artifact processing, or report generation before upsert.
 - `rerun.atom.yml` watches completed `ci` runs and requests one `gh run rerun --failed` when leaf jobs died to runner/spot cancel. Decision logic lives in `.github/scripts/rerun_infra_cancel.py`; it must not rerun ordinary assertion failures or stale heads.
-- `convergence.atom.yml` consumes successful `handoff-convergence-*` artifacts and is the sole trusted publisher of immutable reusable workload results.
+- `convergence.atom.yml` consumes successful `handoff-convergence-*` artifacts for low-privilege CI. Authorized release jobs use `.github/actions/convergence` to invoke the same handoff/admit/publish commands with local execution evidence and products.
 - `.github/scripts/handoff.py` owns artifact names, directory layout, discovery, and contract validation for `comment`, `autofix`, `report`, and `convergence` handoffs.
 
 Default rule: do not add a new domain-specific follow-on workflow such as `foo.comment.atom.yml`, `foo.autofix.atom.yml`, or `foo.report.atom.yml` until the flow has been tested against these existing atomic capabilities.
@@ -49,6 +49,10 @@ Default rule: do not add a new domain-specific follow-on workflow such as `foo.c
 - `.github/workflows/` contains GitHub Actions workflow entrypoints.
 - `.github/actions/` contains reusable composite actions for workflow setup steps.
 - `.github/scripts/` contains workflow-owned scripts and contracts that are not general repo developer commands.
+- `.github/templates/` contains non-executable `.md` and `.txt` delivery templates rendered by
+  `.github/scripts/template.py`. Keep shell, expressions, conditionals, and structured JSON out of
+  these templates; workflow or domain scripts must calculate every explicit parameter.
+- `.github/scripts/feishu.py` owns release notices, download cards, progressive cards, and fallback decisions. Its stdlib-only Python helpers under `lib/` consume workflow/publication observations; they must not import product tools, require npm installation, or authorize publication. Keep the application bot and fallback webhook credentials independent.
 - `.github/scripts/release/` contains release workflow implementation helpers. Keep release-only helpers there and CI handoff helpers at `.github/scripts/`.
 - Root `scripts/` remains for repo-level developer checks, product scripts, and guard/test logic. Do not move workflow-only handoff glue there just to make it look more general.
 
@@ -57,15 +61,121 @@ New workflow-owned helpers should usually live under `.github/scripts/`. Prefer 
 The planning control plane is deliberately Linux-only and stdlib-only. Runner classes,
 scope rules, and workload convergence declarations live in `.github/config/`; their Python
 entrypoints initialize metadata before workload runners start. A Windows job
-must never invoke these scripts. Keep runner placement, changed-file relevance,
+must never invoke their planning commands. The stdlib-only `convergence.py resolve-references`
+command is a cross-platform exception: it only validates received keys and assembles
+runner-local URLs, without Git access, identity calculation or cache decisions.
+Trusted release publication commands may also run on native runners: admission
+verifies the existing source snapshot through the same Python identity function;
+it does not make new scheduling or restore decisions. Product tools never calculate Plan identities.
+Keep runner placement, changed-file relevance,
 reusable-result convergence, and fine-grained commands inside a workload independent.
 
 `convergence.py` computes workload identities from declared Git inputs, the
-execution class, product mode, and the convergence control contract. Public
-result reads are credential-free and fail open to execution. Only a successful
-gate may produce a `handoff/convergence` candidate; only trusted
-`convergence.atom.yml` code may publish immutable results. `lib/r2.py` knows R2
+execution class, product mode, policy, and `schema.version`. Changes to hashing
+or declaration interpretation require a schema version bump. The control file
+set remains a trusted-writer admission boundary, not an implicit global cache
+input; execution-affecting configuration must be declared by workloads. Public
+result reads are credential-free. Only confirmed missing receipts select execution;
+enumerated transient transport failures retry once, then fail visibly. Invalid
+receipts and missing products behind a receipt must not trigger rebuilding. The convergence
+handoff contains only workloads whose declared jobs and execution steps succeeded
+in the producing attempt, even when an unrelated gate failed. Only trusted
+`convergence.atom.yml` code or explicitly authorized release runners may publish immutable results. `lib/r2.py` knows R2
 transport only and must not interpret workload policy or handoff schemas.
+
+Workloads prepared through workflow postinstall may declare `postinstallIntent`.
+The shared stdlib Python resolver projects that intent and the selected Git tree
+into one canonical Plan; the Plan digest, rather than the setup action's file
+identity, enters the workload identity. The Plan describes delivered workspace
+state only. Job IDs, concurrency, cache hits, cache formats, compression,
+storage, retries and timing are execution policy and must stay outside its
+digest. `postinstall.py` and `convergence.py` must use the same resolver, and
+receipts must bind the executed or restored closure to the canonical Plan.
+Change the Plan schema version when serialized fields acquire new delivery
+meaning that the serialized target state does not otherwise express.
+
+Manual CI may select existing workload IDs through `workloads`; the resulting
+check is explicitly selected validation, never a complete merge gate. Workload
+declarations stay in `convergence.json`, scheduling stays in `ci.yml`, and the
+validation job collects per-workload success without softening its gate. The
+trusted writer independently checks the attempt's job/step evidence and source
+tree and recalculates identities. Do not create stage-named
+workflow/config files for validation. The callable path in
+`convergence.atom.yml` publishes selected CI results only for a manual run on
+the repository default branch. PR and merge-queue runs retain the separate
+trusted `workflow_run` admission path.
+
+Product workloads may declare `batches` in their existing workflow configuration.
+Each entry binds one workload, a business execution request, and a product name.
+Python projects build/restore requests and verified artifact references; native
+executors do not parse pending Plan state or construct workload identities.
+Requests affect identity, while batch names and transport artifact names do not.
+Cross-job projections carry product keys and SHA-256, never the configured public
+origin or full URLs. Consumers resolve addresses into `GITHUB_ENV` before expensive
+setup; keep existing secret configuration unchanged. Cold consumers require the
+publisher's complete references, while hot consumers use the frozen Plan; missing
+publication output must not fall back to an incomplete cold Plan.
+One platform may retain multiple independently successful products in one artifact.
+The collector and trusted writer both check each workload's build and retention
+steps and its declared artifact subdirectory; only those selected products enter
+the immutable cache. Do not equate batch success with every member's success or
+introduce a composite action per cache identity. Source producers prepare
+dependencies through `setup-workspace`; package-manager stores and other
+machine-level downloads remain Actions-cache concerns. A native consumer must not
+repeat that workspace preparation merely to obtain source-derived packaging code.
+Model the platform/architecture executor as its own Plan product, restore it before
+business products, and invoke its declared pack/release entries against the
+checked-out source tree. The executor contains the exact Node tools, Electron
+runtime, platform binaries and built tool closure required by that host; it contains
+no signing material and no version-bound product state. A failed or invalid
+executor restore fails visibly and never falls back to an undeclared build.
+Platform migrations may land independently, but a migrated consumer must remove
+its default `cache-tools` workspace setup. Full diagnostic smoke modes may still
+prepare their separate test harness explicitly.
+
+Release graphs separate delivery, source validation, and reusable-result publication.
+Beta and prerelease declare their input suites and execution rows in
+`.github/config/convergence/release-beta.json` and
+`.github/config/convergence/release-prerelease.json`. Python projects per-workload test
+matrices; runner labels for reusable test rows come from their
+workload execution classes. Each row's command, preparation and parameters enter
+that workload's identity. Matrix grouping does not merge workload identities;
+all declared shard job names must be covered by the matching success proof.
+Do not add aggregate hot-run switches or new actions just to narrow cache inputs.
+Keep publication-only edits outside daemon/UI test inputs; repository topology
+tests and repository-wide validation may intentionally retain broader inputs.
+Native outputs are platform-named and emitted only by the owning platform job.
+Unpublished beta builds may retain GitHub artifacts but have no alternate R2 upload
+or receipt protocol. CDN installation validation requires published version metadata.
+Keep platform workload/cache/Electron chains and independent test/cache chains
+directly in the owning `release-beta.yml` or `release-prerelease.yml`, without
+additional wrapper workflows. A cold
+platform product must publish through the shared Python commands before its
+Electron consumer runs. Hot workloads skip build/publication, not Electron,
+when a platform is enabled. With `publish=false` and all platform inputs off,
+beta runs Plan-selected tests without requesting a native product; existing
+`publish=false` builds with enabled platforms remain unchanged. Consumers use
+frozen Plan references. Each test workload publishes only
+after its complete declared shard set succeeds, independently of other tests.
+Distribution may publish while tests run; downloaded-artifact validation joins
+the test and publication branches without making tests a CDN gate. Prerelease and
+stable have no Linux input, workload, output, metadata, or smoke row; preview keeps
+its optional Linux policy independently. Beta, prerelease, and stable prepare
+metadata and Plan in one root job, reusing the source checkout unless
+the workflow control SHA differs. Release build and single-job test results publish
+in place through the thin convergence action; product directories go directly to
+the same normalizer/publisher used by transported CI artifacts. Local assertions
+are accepted only for an explicitly authorized release checkout and an explicit
+steps success boundary, using step outcomes rather than continue-on-error conclusions.
+The current run/attempt/commit/runner evidence is still checked against GitHub.
+Multi-job workloads retain their all-shard join; no one shard can publish group success.
+CI keeps its separate trusted writer and does not accept local release assertions.
+Test cache publication does not gate beta publication. Stable consumes only explicitly
+shared prerelease recipes, retains its promotion and quality gates, and always rebuilds
+the stable-specific signed distribution layer. Its `publish` input defaults to false,
+which runs the complete prepublish path without public side effects. Prefer shallow checkouts; when beta needs
+the stable version floor, tools-release reads remote tag names explicitly instead
+of assuming a shallow checkout contains every tag or downloading full history.
 
 ## Handoff contract
 

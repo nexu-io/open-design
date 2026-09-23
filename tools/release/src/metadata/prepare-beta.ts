@@ -164,10 +164,15 @@ async function readPackagedVersion(): Promise<string> {
 }
 
 async function fetchGitTags(pattern: string): Promise<string[]> {
-  const { stdout } = await execFile("git", ["tag", "--list", pattern]);
+  // Hosted release preparation needs tag names, never their commit history.
+  // Local callers retain their existing local-tag behavior unless explicit.
+  const remote = process.env.OPEN_DESIGN_RELEASE_TAG_REMOTE;
+  const { stdout } = await execFile("git", remote
+    ? ["ls-remote", "--tags", "--refs", "--", remote, `refs/tags/${pattern}`]
+    : ["tag", "--list", pattern]);
   return stdout
     .split("\n")
-    .map((tag) => tag.trim())
+    .map((tag) => remote ? (tag.split("\t")[1] ?? "").replace(/^refs\/tags\//, "") : tag.trim())
     .filter((tag) => tag.length > 0);
 }
 

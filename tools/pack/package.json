@@ -3,16 +3,24 @@
   "version": "0.23.1",
   "private": true,
   "type": "module",
+  "files": [
+    "bin",
+    "dist",
+    "resources"
+  ],
   "bin": {
     "tools-pack": "./bin/tools-pack.mjs"
   },
   "scripts": {
     "build": "node ./esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly && node --experimental-strip-types ../../packages/metatool/src/cli.ts write .",
     "dev": "tsx ./src/index.ts",
+    "executor:dev": "tsx ./src/executor-cli.ts",
+    "workspace:dev": "tsx ./src/workspace-cli.ts",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "dependencies": {
+    "@open-design/download": "workspace:*",
     "@electron/notarize": "3.1.1",
     "@electron/rebuild": "4.0.4",
     "@open-design/launcher-proto": "workspace:*",
@@ -21,15 +29,19 @@
     "@open-design/sidecar": "workspace:*",
     "@open-design/sidecar-proto": "workspace:*",
     "cac": "6.7.14",
-    "electron-builder": "26.8.1",
+    "electron": "41.3.0",
+    "electron-builder": "26.15.3",
+    "esbuild": "0.28.0",
+    "pnpm": "10.33.2",
     "resedit": "1.7.2"
   },
   "optionalDependencies": {
-    "@powerformer/vela-cli": "0.1.3"
+    "@powerformer/vela-cli": "0.1.3",
+    "fsevents": "2.3.3"
   },
   "devDependencies": {
+    "@open-design/metatool": "workspace:*",
     "@types/node": "24.12.2",
-    "esbuild": "0.28.0",
     "tsx": "4.22.3",
     "typescript": "6.0.3",
     "vitest": "4.1.6"

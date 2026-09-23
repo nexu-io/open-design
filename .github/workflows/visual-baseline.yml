@@ -28,7 +28,7 @@ jobs:
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
         with:
-          save-pnpm-cache: 'true'
+          save-pnpm-cache: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Setup Playwright
         uses: ./.github/actions/setup-playwright

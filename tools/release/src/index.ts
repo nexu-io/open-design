@@ -2,6 +2,22 @@ import { cac } from "cac";
 
 const cli = cac("tools-release");
 
+cli.command("patch-cut <action>", "Resolve a patch cut or check its predecessor publication")
+  .action(async (action: string) => {
+    const { patchCutCommand } = await import("./metadata/patch-cut.ts");
+    patchCutCommand(action);
+  });
+
+cli.command("recover-beta", "Resolve recovery from a foreign branch's ahead beta publication")
+  .action(async () => { await import("./metadata/recover-beta.ts"); });
+
+cli.command("artifact <action>", "Plan published targets or resolve a checksum-verified installer reference")
+  .option("--output <path>", "Installer reference JSON destination")
+  .action(async (action: string, options: { output?: string }) => {
+    const { artifactCommand } = await import("./metadata/artifact.ts");
+    await artifactCommand(action, options);
+  });
+
 cli
   .command("prepare <channel>", "Prepare release metadata outputs for a lane")
   .action(async (channel: string) => {
@@ -37,9 +53,10 @@ cli
   });
 
 cli
-  .command("publish-dogfood", "Upload unpublished build artifacts to the dogfood prefix for manual distribution")
+  .command("prepare-platform-assets", "Stage versioned platform assets and updater metadata")
   .action(async () => {
-    await import("./storage/publish-dogfood.ts");
+    const { preparePlatformAssets } = await import("./storage/prepare-platform-assets.ts");
+    await preparePlatformAssets();
   });
 
 cli
@@ -128,12 +145,6 @@ cli
   .command("write-report", "Write a release report JSON and Markdown summary")
   .action(async () => {
     await import("./report/write-report.ts");
-  });
-
-cli
-  .command("notify feishu", "Send a Feishu release notification")
-  .action(async () => {
-    await import("./notifications/feishu.ts");
   });
 
 cli.help();

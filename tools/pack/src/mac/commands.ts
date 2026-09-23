@@ -1,4 +1,6 @@
 import { spawn, type SpawnOptionsWithoutStdio } from "node:child_process";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 
 import { createPackageManagerInvocation } from "@open-design/platform";
 
@@ -57,21 +59,38 @@ export async function runPnpm(
   args: string[],
   extraEnv: NodeJS.ProcessEnv = {},
 ): Promise<void> {
-  const invocation = createPackageManagerInvocation(args, process.env);
+  const env = { ...process.env, ...extraEnv };
+  env.npm_execpath ||= join(
+    dirname(createRequire(import.meta.url).resolve("pnpm")),
+    "bin",
+    "pnpm.cjs",
+  );
+  const invocation = createPackageManagerInvocation(args, env);
   await execFileAsync(invocation.command, invocation.args, {
     cwd: config.workspaceRoot,
-    env: { ...process.env, ...extraEnv },
+    env,
     windowsVerbatimArguments: invocation.windowsVerbatimArguments,
   });
 }
 
-export async function runNpmInstall(appRoot: string): Promise<void> {
-  await execFileAsync("npm", ["install", "--omit=dev", "--no-package-lock"], {
+export async function runNpmInstall(appRoot: string, packages: string[] = []): Promise<void> {
+  await execFileAsync("npm", ["install", "--omit=dev", "--no-package-lock", "--no-save", ...packages], {
     cwd: appRoot,
     env: process.env,
   });
 }
 
-export async function runEsbuild(config: ToolPackConfig, args: string[]): Promise<void> {
-  await runPnpm(config, ["--filter", "@open-design/packaged", "exec", "esbuild", ...args]);
+export async function runNpmPrune(appRoot: string): Promise<void> {
+  await execFileAsync("npm", ["prune", "--omit=dev", "--no-package-lock"], { cwd: appRoot, env: process.env });
+}
+
+export async function runEsbuild(config: ToolPackConfig, args: string[], extraEnv: NodeJS.ProcessEnv = {}): Promise<void> {
+  const esbuildCli = createRequire(import.meta.url).resolve("esbuild/bin/esbuild");
+  // esbuild may replace its JavaScript shim with the native executable during
+  // installation. Both forms implement the package bin contract, but only the
+  // shim can be interpreted by Node directly.
+  await execFileAsync(esbuildCli, args, {
+    cwd: config.workspaceRoot,
+    env: { ...process.env, ...extraEnv },
+  });
 }

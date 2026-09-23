@@ -1,8 +1,5 @@
-import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
-import { join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import path from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 import {
   OPEN_DESIGN_SIDECAR_CONTRACT,
@@ -10,28 +7,9 @@ import {
 } from "@open-design/sidecar-proto";
 import { resolveNamespace } from "@open-design/sidecar";
 import { releaseChannelFromVersion, releaseNamespace } from "@open-design/release";
+import { WORKSPACE_ROOT } from "../workspace-root.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-function resolveToolPackRoot(startDir: string): string {
-  let candidate = startDir;
-  while (true) {
-    const packageJsonPath = join(candidate, "package.json");
-    if (existsSync(packageJsonPath)) {
-      const require = createRequire(packageJsonPath);
-      const packageJson = require(packageJsonPath) as { name?: string };
-      if (packageJson.name === "@open-design/tools-pack") return candidate;
-    }
-
-    const parent = path.dirname(candidate);
-    if (parent === candidate) {
-      throw new Error(`could not locate @open-design/tools-pack package from ${startDir}`);
-    }
-    candidate = parent;
-  }
-}
-
-export const WORKSPACE_ROOT = resolve(resolveToolPackRoot(__dirname), "../..");
+export { WORKSPACE_ROOT } from "../workspace-root.js";
 
 export type ToolPackPlatform = "mac" | "win" | "linux";
 export type ToolPackBuildOutput = "all" | "app" | "appimage" | "dir" | "dmg" | "nsis" | "zip";
@@ -42,6 +20,8 @@ export type ToolPackVelaWebUrls = Partial<Record<ToolPackAmrProfile, string>>;
 
 export type ToolPackCliOptions = {
   appVersion?: string;
+  archive?: string;
+  buildJson?: string;
   cacheDir?: string;
   containerized?: boolean;
   dir?: string;
@@ -51,6 +31,7 @@ export type ToolPackCliOptions = {
   headless?: boolean;
   json?: boolean;
   macCompression?: string;
+  macRuntimeProduct?: string;
   notarize?: boolean;
   namespace?: string;
   path?: string;
@@ -68,6 +49,9 @@ export type ToolPackCliOptions = {
   statusPollIntervalMs?: string | number;
   to?: string;
   updateAction?: string;
+  output?: string;
+  url?: string;
+  sha256?: string;
 };
 
 export type ToolPackRoots = {
@@ -372,9 +356,15 @@ function resolveElectronVersion(workspaceRoot: string): string {
 }
 
 function resolveElectronDistPath(workspaceRoot: string): string {
-  const require = createRequire(join(workspaceRoot, "apps/desktop/package.json"));
-  const electronEntry = require.resolve("electron");
-  return join(path.dirname(electronEntry), "dist");
+  const workspaceRequire = createRequire(join(workspaceRoot, "apps/desktop/package.json"));
+  const toolRequire = createRequire(import.meta.url);
+  let electronEntry: string;
+  try {
+    electronEntry = workspaceRequire.resolve("electron");
+  } catch {
+    electronEntry = toolRequire.resolve("electron");
+  }
+  return join(dirname(electronEntry), "dist");
 }
 
 function resolveElectronBuilderCliPath(): string {

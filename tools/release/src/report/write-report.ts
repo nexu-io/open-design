@@ -105,6 +105,11 @@ function seconds(value: unknown): string {
   return `${(Number(value) / 1000).toFixed(1)}s`;
 }
 
+function mebibytes(value: unknown): string {
+  const bytes = numberOrNull(value);
+  return bytes == null ? "" : `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+}
+
 const releaseTarget = required("RELEASE_TARGET");
 const reportRoot = resolvePath(required("RELEASE_REPORT_DIR"));
 const reportJsonPath = resolvePath(required("RELEASE_REPORT_JSON_PATH"));
@@ -124,6 +129,11 @@ const smokeTimings = arrayOrEmpty(smokeSummary?.timings);
 const cacheReport = objectOrNull(build?.cacheReport);
 const cacheEntries = arrayOrEmpty(cacheReport?.entries ?? index?.cache);
 const buildSegments = arrayOrEmpty(build?.segments ?? index?.buildSegments);
+const slowestBuildSegments = buildSegments
+  .map((entry) => objectOrNull(entry))
+  .filter((entry): entry is JsonRecord => entry != null && numberOrNull(entry.durationMs) != null)
+  .sort((left, right) => Number(right.durationMs) - Number(left.durationMs))
+  .slice(0, 12);
 const totalDurationMs = numberOrNull(index?.durationMs) ?? numberOrNull(suiteResult?.durationMs) ?? null;
 
 const reportTitle = optional("REPORT_TITLE", `${releaseTarget} release report`);
@@ -213,6 +223,13 @@ if (buildTimings.length > 0) {
   lines.push("", "| Build phase | Duration |", "| --- | ---: |");
   for (const timing of buildTimings.map((entry) => objectOrNull(entry)).filter((entry): entry is JsonRecord => entry != null)) {
     lines.push(`| ${code(timing.phase)} | ${seconds(timing.durationMs)} |`);
+  }
+}
+if (slowestBuildSegments.length > 0) {
+  lines.push("", "| Slowest build segment | Duration | Output |", "| --- | ---: | ---: |");
+  for (const segment of slowestBuildSegments) {
+    const details = objectOrNull(segment.details);
+    lines.push(`| ${code(segment.phase)} | ${seconds(segment.durationMs)} | ${mebibytes(details?.outputBytes)} |`);
   }
 }
 if (cacheEntries.length > 0) {

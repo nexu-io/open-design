@@ -1,6 +1,7 @@
 import { finalizeRuntimeManifest } from "../resources/runtime-manifest.js";
 import { execFile } from "node:child_process";
 import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { dirname, join, relative } from "node:path";
 import { promisify } from "node:util";
 
@@ -32,7 +33,9 @@ import {
   shouldInstallInternalPackageForWinPrebundle,
   shouldUseWinStandalonePrebundle,
 } from "./prebundle.js";
-import { ensureWorkspaceBuildArtifacts } from "../workspace-build.js";
+import { createWorkspaceBuildCacheKey, ensureWorkspaceBuildArtifacts, workspaceBuildUnitResult } from "../workspace-build.js";
+import { WORKSPACE_BUILD_UNITS } from "../workspace/units.js";
+import { processWebSourcemaps } from "../web-sourcemaps.js";
 import {
   ELECTRON_BUILDER_BUILD_DEPENDENCIES_FROM_SOURCE,
   ELECTRON_REBUILD_MODE,
@@ -63,6 +66,8 @@ async function runPnpm(config: ToolPackConfig, args: string[], extraEnv: NodeJS.
 }
 
 async function runNpmInstall(appRoot: string): Promise<void> {
+  const startedAt = performance.now();
+  process.stderr.write("[tools-pack win] phase:start phase=runtime-dependencies\n");
   const invocation = createCommandInvocation({
     args: ["install", "--omit=dev", "--no-package-lock"],
     command: process.platform === "win32" ? "npm.cmd" : "npm",
@@ -72,13 +77,20 @@ async function runNpmInstall(appRoot: string): Promise<void> {
     env: process.env,
     windowsVerbatimArguments: invocation.windowsVerbatimArguments,
   });
+  process.stderr.write(`[tools-pack win] phase:done phase=runtime-dependencies durationMs=${Math.round(performance.now() - startedAt)}\n`);
 }
 
 async function runEsbuild(config: ToolPackConfig, args: string[]): Promise<void> {
-  await runPnpm(config, ["--filter", "@open-design/packaged", "exec", "esbuild", ...args]);
+  const esbuildCli = createRequire(import.meta.url).resolve("esbuild/bin/esbuild");
+  await execFileAsync(process.execPath, [esbuildCli, ...args], {
+    cwd: config.workspaceRoot,
+    env: process.env,
+  });
 }
 
 async function runElectronRebuild(config: ToolPackConfig, appRoot: string): Promise<void> {
+  const startedAt = performance.now();
+  process.stderr.write("[tools-pack win] phase:start phase=electron-abi\n");
   const foundModules = new Set<string>();
   const rebuildResult = rebuild({
     arch: "x64",
@@ -100,6 +112,7 @@ async function runElectronRebuild(config: ToolPackConfig, appRoot: string): Prom
   if (missingModules.length > 0) {
     throw new Error(`Electron ABI rebuild did not discover required native module(s): ${missingModules.join(", ")}`);
   }
+  process.stderr.write(`[tools-pack win] phase:done phase=electron-abi durationMs=${Math.round(performance.now() - startedAt)}\n`);
 }
 
 function nativeRebuildOutputPath(appRoot: string): string {
@@ -133,6 +146,14 @@ export async function ensureWinWorkspaceBuild(config: ToolPackConfig, cache: Too
     cache,
     async (args, extraEnv) => await runPnpm(config, args, extraEnv),
   );
+}
+
+/** Consume source outputs while retaining Windows' own downstream cache determinants. */
+export async function materializeWinWorkspaceOutputs(config: ToolPackConfig): Promise<string> {
+  for (const unit of WORKSPACE_BUILD_UNITS) await workspaceBuildUnitResult(config, unit);
+  const key = await createWorkspaceBuildCacheKey(config);
+  await processWebSourcemaps(config);
+  return key;
 }
 
 export async function createWorkspaceTarballsCacheKey(

@@ -151,7 +151,10 @@ import { spawn } from 'node:child_process';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const PORT = Number(process.env.GAP_PORT);
 const chrome = spawn(process.env.GAP_CHROME, [
-  '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
+  // Release validation can run inside a root-owned container. Chromium refuses
+  // to start there unless its process sandbox is disabled; this probe already
+  // runs against a throwaway profile and local file with no external input.
+  '--headless=new', '--no-sandbox', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
   '--hide-scrollbars', '--force-color-profile=srgb', '--window-size=1200,1000',
   '--remote-debugging-port=' + PORT, '--user-data-dir=' + process.env.GAP_PROFILE, 'about:blank',
 ], { stdio: 'ignore' });

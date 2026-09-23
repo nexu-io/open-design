@@ -16,11 +16,11 @@ name: notify-release-feishu
 # cut without an actual push. The normal manual path is to dispatch ON a
 # release/vX.Y.Z branch with `ref`/`release_version` empty — release-prerelease then
 # derives the version from the branch name exactly like the push trigger does.
-# Building from a non-release ref such as main is also possible but requires
-# `release_version` (e.g. 0.10.0, matching apps/packaged/package.json), because
-# the branch name carries no version; the resulting package is labelled
-# X.Y.Z-prerelease.N on that same version line. Either way the build's actual commit
-# (not the dispatch ref) anchors the changelog and the card.
+# A manual formal prerelease must still be dispatched on a release/vX.Y.Z branch,
+# because Plan result publication admits only trusted release branch runs. The
+# optional `ref` may select another source revision from that dispatch context;
+# when that ref does not carry a release version, `release_version` supplies it.
+# Either way the built commit anchors the changelog and the card.
 
 on:
   push:
@@ -29,12 +29,12 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: "Git ref (branch/tag/SHA) to build a prerelease from. Empty builds the ref this workflow is dispatched on. Dispatch on release/vX.Y.Z and leave empty for the normal path."
+        description: "Git ref (branch/tag/SHA) to build from. Empty builds the dispatch ref. Dispatch this formal workflow on release/vX.Y.Z; an override may select another source revision from that trusted release context."
         required: false
         type: string
         default: ""
       release_version:
-        description: "Base version (x.y.z) — ONLY needed to build from a non-release ref such as main, where the branch name carries no version. Must equal apps/packaged/package.json. Leave empty on a release/vX.Y.Z branch."
+        description: "Base version (x.y.z), needed only when the optional source ref does not encode release/vX.Y.Z. Must equal apps/packaged/package.json."
         required: false
         type: string
         default: ""
@@ -54,12 +54,12 @@ on:
         type: boolean
         default: true
       enable_smoke:
-        description: "Also run the packaged smoke suites (mac arm64, mac Intel, Windows). ON by default. They no longer run inside the build jobs: release-prerelease-smoke.yml re-downloads the published packages from R2 after they ship, so smoke costs this pipeline nothing."
+        description: "Also run downloaded-artifact smoke for mac arm64, mac Intel, and Windows after publish. ON by default; smoke affects the run result but does not delay CDN publication."
         required: false
         type: boolean
         default: true
       enable_tests:
-        description: "Also dispatch the code test suites (P0 Functional E2E, E2E Vitest, daemon shards, verify) into release-prerelease-tests.yml. ON by default; they gate nothing and run in a workflow of their own."
+        description: "Also run Plan-selected P0 Functional E2E, E2E Vitest, daemon shards, and verify jobs beside the builds. ON by default; they do not gate CDN publication."
         required: false
         type: boolean
         default: true
@@ -128,12 +128,11 @@ jobs:
       # instead: push short-circuits to a real `true`, and a dispatch forwards
       # the operator's own boolean.
       enable_mac_x64: ${{ github.event_name != 'workflow_dispatch' || inputs.enable_mac_x64 }}
-      # Same shape, same reason. Packaged smoke now runs in
-      # release-prerelease-smoke.yml against the artifacts re-downloaded from
-      # R2, so it costs the build nothing and defaults on.
+      # Same shape, same reason. Packaged smoke runs after publish against the
+      # artifacts re-downloaded from R2 and defaults on.
       enable_smoke: ${{ github.event_name != 'workflow_dispatch' || inputs.enable_smoke }}
-      # Same shape. The code suites run in release-prerelease-tests.yml and gate
-      # nothing; the switch exists only to skip them outright.
+      # Same shape. Plan-selected code suites run beside the builds and the
+      # switch exists only to skip them outright.
       enable_tests: ${{ github.event_name != 'workflow_dispatch' || inputs.enable_tests }}
       # Same failure mode as win_x64_smoke_mode above: a `workflow_call`
       # `default:` only applies to an OMITTED input, so the final arm must name

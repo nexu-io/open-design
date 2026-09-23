@@ -2,6 +2,7 @@ import { assertPackagedSidecarRuntime } from "../resources/runtime-manifest.js";
 import { execFile } from "node:child_process";
 import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { setTimeout as waitFor } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
@@ -61,7 +62,7 @@ import {
   resolveWinExecutableVersionTargets,
   rewriteWinExecutableVersion,
 } from "./version-resource.js";
-import { buildWinPortableZip } from "./zip.js";
+import { buildWinPortableZip, WIN_PORTABLE_ZIP_COMPRESSION_LEVEL } from "./zip.js";
 import type {
   ElectronBuilderDirCacheMetadata,
   WinBuiltAppManifest,
@@ -73,6 +74,37 @@ const execFileAsync = promisify(execFile);
 const WIN_ARCHIVE_CACHE_VERSION = 3;
 const WIN_ELECTRON_BUILDER_DIR_CACHE_VERSION = 9;
 const WIN_NSIS_BASE_PAYLOAD_INPUT_HASH_CACHE_VERSION = 2;
+const WIN_RCEDIT_COMMIT_RETRY_DELAY_MS = 5_000;
+
+type RceditCommitRetryActions = {
+  backoff: (delayMs: number) => Promise<void>;
+  cleanup: () => Promise<void>;
+  retry: () => Promise<void>;
+};
+
+function processErrorText(error: unknown): string {
+  if (error == null || typeof error !== "object") return String(error);
+  const processError = error as { message?: unknown; stderr?: unknown; stdout?: unknown };
+  return [processError.message, processError.stdout, processError.stderr]
+    .filter((value) => value != null)
+    .map((value) => String(value))
+    .join("\n");
+}
+
+export async function retryTransientRceditCommitFailure(
+  error: unknown,
+  actions: RceditCommitRetryActions,
+): Promise<boolean> {
+  const output = processErrorText(error);
+  if (!/\brcedit(?:-[\w]+)?(?:\.exe)?\b/i.test(output) || !/fatal error:\s*unable to commit changes/i.test(output)) {
+    return false;
+  }
+
+  await actions.backoff(WIN_RCEDIT_COMMIT_RETRY_DELAY_MS);
+  await actions.cleanup();
+  await actions.retry();
+  return true;
+}
 
 async function hashWinNsisInstallerImplementation(config: ToolPackConfig): Promise<string> {
   const sourceModulePath = join(config.workspaceRoot, "tools", "pack", "src", "win", "custom-installer.ts");
@@ -268,19 +300,39 @@ async function runElectronBuilderRaw(
     });
   };
 
+  const buildWithRceditCommitRetry = async (phase: string) => {
+    try {
+      await build(phase);
+    } catch (error) {
+      const retried = await retryTransientRceditCommitFailure(error, {
+        backoff: async (delayMs) => runSegment(
+          "electron-builder-raw:retry-rcedit-commit-backoff",
+          async () => waitFor(delayMs),
+          { delayMs },
+        ),
+        cleanup: async () => runSegment(
+          "electron-builder-raw:retry-rcedit-commit-cleanup",
+          async () => removeTree(paths.appBuilderOutputRoot),
+        ),
+        retry: async () => build(`${phase}-rcedit-retry`),
+      });
+      if (!retried) throw error;
+    }
+  };
+
   await runSegment("electron-builder-raw:ensure-nsis-persian-alias", async () => {
     await ensureNsisPersianLanguageAlias(config);
   });
   try {
-    await build("electron-builder-raw:process");
+    await buildWithRceditCommitRetry("electron-builder-raw:process");
   } catch (error) {
-    const output = `${(error as { stdout?: unknown }).stdout ?? ""}\n${(error as { stderr?: unknown }).stderr ?? ""}`;
+    const output = processErrorText(error);
     const retried = output.includes("Persian.nlf") && await runSegment(
       "electron-builder-raw:retry-ensure-nsis-persian-alias",
       async () => ensureNsisPersianLanguageAlias(config),
     );
     if (retried) {
-      await build("electron-builder-raw:process-retry");
+      await buildWithRceditCommitRetry("electron-builder-raw:process-retry");
       return segments;
     }
     throw error;
@@ -882,6 +934,7 @@ export async function runElectronBuilder(
           invalidate: async () => null,
           key: hashJson({
             archiveCacheVersion: WIN_ARCHIVE_CACHE_VERSION,
+            compressionLevel: WIN_PORTABLE_ZIP_COMPRESSION_LEVEL,
             namespace: config.namespace,
             packagedAppKey,
             packagedVersion,

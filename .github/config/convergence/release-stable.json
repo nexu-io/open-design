@@ -1,0 +1,620 @@
+{
+  "schema": {
+    "version": 9
+  },
+  "resources": {
+    "repository-validation": {
+      "paths": [
+        "*"
+      ],
+      "exclude": [
+        "apps/packaged/package.json"
+      ]
+    },
+    "packaged-execution": {
+      "json": "apps/packaged/package.json",
+      "omit": [
+        "version"
+      ]
+    },
+    "source-common": {
+      "paths": [
+        "package.json",
+        "pnpm-lock.yaml",
+        "pnpm-workspace.yaml",
+        "packages/",
+        "tools/pack/package.json",
+        "tools/pack/esbuild.config.mjs",
+        "tools/pack/bin/",
+        "tools/pack/src/*.ts",
+        "tools/pack/src/config/",
+        "tools/pack/src/workspace/",
+        "tools/pack/tsconfig.json",
+        ".github/actions/setup-workspace/"
+      ],
+      "exclude": [
+        "**/tests/**",
+        "**/*.test.ts",
+        "**/vitest.config.ts",
+        "**/tsconfig.tests.json"
+      ]
+    },
+    "source-daemon": {
+      "paths": [
+        "apps/daemon/"
+      ],
+      "exclude": [
+        "**/tests/**",
+        "**/*.test.ts",
+        "**/vitest.config.ts",
+        "**/tsconfig.tests.json"
+      ]
+    },
+    "daemon-runtime-dependencies": {
+      "json": "apps/daemon/package.json",
+      "omit": [
+        "version",
+        "scripts",
+        "devDependencies",
+        "bin",
+        "engines",
+        "exports",
+        "files",
+        "main",
+        "name",
+        "private",
+        "type",
+        "types"
+      ]
+    },
+    "source-postinstall": {
+      "paths": [
+        "scripts/postinstall.mjs",
+        "scripts/postinstall.config.json",
+        ".github/config/postinstall.json",
+        ".github/scripts/postinstall.py"
+      ],
+      "exclude": []
+    },
+    "source-web": {
+      "paths": [
+        "apps/web/"
+      ],
+      "exclude": [
+        "**/tests/**",
+        "**/*.test.ts",
+        "**/vitest.config.ts",
+        "**/tsconfig.tests.json"
+      ]
+    },
+    "web-tests": {
+      "paths": [
+        "apps/web/tests/",
+        "apps/web/vitest.config.ts"
+      ],
+      "exclude": []
+    },
+    "source-shell": {
+      "paths": [
+        "apps/desktop/",
+        "apps/packaged/"
+      ],
+      "exclude": [
+        "**/tests/**",
+        "**/*.test.ts",
+        "**/vitest.config.ts",
+        "**/tsconfig.tests.json",
+        "apps/packaged/package.json"
+      ]
+    },
+    "platform-executor": {
+      "paths": [
+        "package.json",
+        "pnpm-lock.yaml",
+        "pnpm-workspace.yaml",
+        "packages/download/",
+        "packages/launcher-proto/",
+        "packages/metatool/",
+        "packages/platform/",
+        "packages/release/",
+        "packages/sidecar/",
+        "packages/sidecar-proto/",
+        "tools/pack/",
+        "tools/release/",
+        ".github/actions/setup-workspace/"
+      ],
+      "exclude": [
+        "**/tests/**",
+        "**/*.test.ts",
+        "**/vitest.config.ts",
+        "**/tsconfig.tests.json"
+      ]
+    },
+    "platform-mac-runtime": {
+      "paths": [
+        "package.json",
+        "pnpm-lock.yaml",
+        "pnpm-workspace.yaml",
+        "tools/pack/",
+        ".github/actions/setup-workspace/"
+      ],
+      "exclude": [
+        "**/tests/**",
+        "**/*.test.ts",
+        "**/vitest.config.ts",
+        "**/tsconfig.tests.json"
+      ]
+    },
+    "daemon-dependencies": {
+      "paths": [
+        "packages/agui-adapter/",
+        "packages/contracts/",
+        "packages/diagnostics/",
+        "packages/launcher-proto/",
+        "packages/platform/",
+        "packages/plugin-runtime/",
+        "packages/registry-protocol/",
+        "packages/release/",
+        "packages/sidecar/",
+        "packages/sidecar-proto/"
+      ],
+      "exclude": [
+        "**/tests/**",
+        "**/vitest.config.ts",
+        "**/tsconfig.tests.json"
+      ]
+    },
+    "daemon-tests": {
+      "paths": [
+        "apps/daemon/"
+      ],
+      "exclude": []
+    },
+    "test-resources": {
+      "paths": [
+        "assets/",
+        "craft/",
+        "design-systems/",
+        "design-templates/",
+        "plugins/",
+        "prompt-templates/",
+        "skills/",
+        "mocks/"
+      ],
+      "exclude": []
+    },
+    "test-environment": {
+      "paths": [
+        "package.json",
+        "pnpm-lock.yaml",
+        "pnpm-workspace.yaml",
+        "scripts/postinstall.mjs",
+        "scripts/postinstall.config.json",
+        ".github/config/postinstall.json",
+        ".github/scripts/postinstall.py",
+        ".github/actions/setup-workspace/",
+        ".github/scripts/release/test_unit.py"
+      ],
+      "exclude": []
+    },
+    "ui-tests": {
+      "paths": [
+        "apps/web/",
+        "apps/desktop/",
+        "packages/",
+        "tools/dev/",
+        "e2e/package.json",
+        "e2e/tsconfig.json",
+        "e2e/playwright.config.ts",
+        "e2e/lib/",
+        "e2e/ui/",
+        "e2e/resources/",
+        "e2e/scripts/",
+        ".github/actions/setup-playwright/",
+        ".github/actions/configure-ci-parallelism/"
+      ],
+      "exclude": [
+        "apps/web/tests/**",
+        "apps/desktop/tests/**",
+        "packages/**/tests/**",
+        "**/tsconfig.tests.json",
+        "**/vitest.config.ts"
+      ]
+    }
+  },
+  "suites": {
+    "repository-validation": [
+      "resource://repository-validation",
+      "resource://packaged-execution"
+    ],
+    "convergence-control": [
+      ".github/config/convergence/release-stable.json",
+      ".github/config/postinstall.json",
+      ".github/scripts/convergence.py",
+      ".github/scripts/postinstall.py",
+      ".github/scripts/handoff.py",
+      ".github/scripts/lib/",
+      ".github/workflows/release-stable.yml",
+      ".github/actions/convergence/",
+      ".github/actions/setup-workspace/"
+    ],
+    "source-packages": [
+      "resource://source-common",
+      "resource://source-postinstall"
+    ],
+    "source-daemon": [
+      "resource://source-common",
+      "resource://source-postinstall",
+      "resource://source-daemon"
+    ],
+    "source-web": [
+      "resource://source-common",
+      "resource://source-postinstall",
+      "resource://source-web"
+    ],
+    "source-shell": [
+      "resource://source-common",
+      "resource://source-postinstall",
+      "resource://source-shell",
+      "resource://packaged-execution"
+    ],
+    "platform-executor": [
+      "resource://platform-executor"
+    ],
+    "daemon-tests": [
+      "resource://test-environment",
+      "resource://daemon-tests",
+      "resource://daemon-dependencies",
+      "resource://test-resources"
+    ],
+    "ui-tests": [
+      "resource://test-environment",
+      "resource://source-daemon",
+      "resource://daemon-dependencies",
+      "resource://test-resources",
+      "resource://ui-tests"
+    ],
+    "web-tests": [
+      "resource://test-environment",
+      "suite://source-web",
+      "resource://web-tests"
+    ]
+  },
+  "workflows": {
+    "release-stable": {
+      "policy": "stable-v1",
+      "workloads": {
+        "source_js_packages": {
+          "successBoundary": "steps",
+          "inputs": [
+            "suite://source-packages"
+          ],
+          "runnerClass": "source_javascript",
+          "products": "manifest",
+          "reusable": true,
+          "success": {
+            "[build] Shared JavaScript": [
+              "[build] Source packages"
+            ]
+          },
+          "recipe": "formal-source-js-packages-v1",
+          "trustedSources": [
+            {
+              "workflow": "release-prerelease",
+              "policy": "prerelease-v1",
+              "workload": "source_js_packages"
+            }
+          ]
+        },
+        "source_js_daemon": {
+          "successBoundary": "steps",
+          "inputs": [
+            "suite://source-daemon"
+          ],
+          "runnerClass": "source_javascript",
+          "products": "manifest",
+          "reusable": true,
+          "success": {
+            "[build] Shared JavaScript": [
+              "[build] Source daemon"
+            ]
+          },
+          "recipe": "formal-source-js-daemon-v1",
+          "trustedSources": [
+            {
+              "workflow": "release-prerelease",
+              "policy": "prerelease-v1",
+              "workload": "source_js_daemon"
+            }
+          ]
+        },
+        "source_js_shell": {
+          "successBoundary": "steps",
+          "inputs": [
+            "suite://source-shell"
+          ],
+          "runnerClass": "source_javascript",
+          "products": "manifest",
+          "reusable": true,
+          "success": {
+            "[build] Shared JavaScript": [
+              "[build] Source shell"
+            ]
+          },
+          "recipe": "formal-source-js-shell-v1",
+          "trustedSources": [
+            {
+              "workflow": "release-prerelease",
+              "policy": "prerelease-v1",
+              "workload": "source_js_shell"
+            }
+          ]
+        },
+        "source_mac_arm64_web": {
+          "successBoundary": "steps",
+          "inputs": [
+            "suite://source-web"
+          ],
+          "runnerClass": "source_mac_arm64",
+          "products": "manifest",
+          "reusable": true,
+          "success": {
+            "[build] mac_arm64 workload": [
+              "[build] Source web"
+            ]
+          },
+          "recipe": "formal-source-mac-arm64-web-v1",
+          "trustedSources": [
+            {
+              "workflow": "release-prerelease",
+              "policy": "prerelease-v1",
+              "workload": "source_mac_arm64_web"
+            }
+          ]
+        },
+        "source_mac_x64_web": {
+          "successBoundary": "steps",
+          "inputs": [
+            "suite://source-web"
+          ],
+          "runnerClass": "source_mac_x64",
+          "products": "manifest",
+          "reusable": true,
+          "success": {
+            "[build] mac_x64 workload": [
+              "[build] Source web"
+            ]
+          },
+          "recipe": "formal-source-mac-x64-web-v1",
+          "trustedSources": [
+            {
+              "workflow": "release-prerelease",
+              "policy": "prerelease-v1",
+              "workload": "source_mac_x64_web"
+            }
+          ]
+        },
+        "source_mac_x64_executor": {
+          "successBoundary": "steps",
+          "inputs": [
+            "suite://platform-executor"
+          ],
+          "runnerClass": "source_mac_x64",
+          "products": "manifest",
+          "reusable": true,
+          "success": {
+            "[build] mac_x64 workload": [
+              "[build] Release executor"
+            ]
+          },
+          "recipe": "formal-source-mac-x64-executor-v1",
+          "trustedSources": [
+            {
+              "workflow": "release-prerelease",
+              "policy": "prerelease-v1",
+              "workload": "source_mac_x64_executor"
+            }
+          ]
+        },
+        "source_mac_x64_runtime": {
+          "successBoundary": "steps",
+          "inputs": [
+            "suite://source-packages",
+            "resource://daemon-runtime-dependencies",
+            "resource://platform-mac-runtime"
+          ],
+          "runnerClass": "source_mac_x64",
+          "products": "manifest",
+          "reusable": true,
+          "success": {
+            "[build] mac_x64 workload": [
+              "[prepare] Platform product tools",
+              "[build] mac_x64 runtime"
+            ]
+          },
+          "recipe": "formal-source-mac-x64-runtime-v1",
+          "trustedSources": [
+            {
+              "workflow": "release-prerelease",
+              "policy": "prerelease-v1",
+              "workload": "source_mac_x64_runtime"
+            }
+          ]
+        },
+        "source_win_x64_web": {
+          "successBoundary": "steps",
+          "inputs": [
+            "suite://source-web"
+          ],
+          "runnerClass": "source_win_x64",
+          "products": "manifest",
+          "reusable": true,
+          "success": {
+            "[build] win_x64 workload": [
+              "[build] Source web"
+            ]
+          },
+          "recipe": "formal-source-win-x64-web-v1",
+          "trustedSources": [
+            {
+              "workflow": "release-prerelease",
+              "policy": "prerelease-v1",
+              "workload": "source_win_x64_web"
+            }
+          ]
+        },
+        "source_win_x64_executor": {
+          "successBoundary": "steps",
+          "inputs": [
+            "suite://platform-executor"
+          ],
+          "runnerClass": "source_win_x64",
+          "products": "manifest",
+          "reusable": true,
+          "success": {
+            "[build] win_x64 workload": [
+              "[build] Release executor"
+            ]
+          },
+          "recipe": "formal-source-win-x64-executor-v1",
+          "trustedSources": [
+            {
+              "workflow": "release-prerelease",
+              "policy": "prerelease-v1",
+              "workload": "source_win_x64_executor"
+            }
+          ]
+        },
+        "test_verify": {
+          "inputs": [
+            "suite://repository-validation"
+          ],
+          "runnerClass": "release_tests",
+          "products": "none",
+          "reusable": true,
+          "success": {
+            "[test] Verify build (typecheck + guard)": [
+              "Prepare test dependencies",
+              "Run test unit"
+            ]
+          },
+          "successBoundary": "steps",
+          "recipe": "formal-test-verify-v1",
+          "trustedSources": [
+            {
+              "workflow": "release-prerelease",
+              "policy": "prerelease-v1",
+              "workload": "test_verify"
+            }
+          ]
+        }
+      },
+      "batches": {
+        "source_mac_arm64": {
+          "artifact": "stable-source-mac_arm64",
+          "entries": {
+            "web": {
+              "workload": "source_mac_arm64_web",
+              "request": {
+                "unit": "web"
+              },
+              "product": "bundle"
+            }
+          }
+        },
+        "source_mac_x64": {
+          "artifact": "stable-source-mac_x64",
+          "entries": {
+            "web": {
+              "workload": "source_mac_x64_web",
+              "request": {
+                "unit": "web"
+              },
+              "product": "bundle"
+            },
+            "executor": {
+              "workload": "source_mac_x64_executor",
+              "request": {
+                "unit": "executor"
+              },
+              "product": "bundle"
+            },
+            "runtime": {
+              "workload": "source_mac_x64_runtime",
+              "request": {
+                "unit": "runtime"
+              },
+              "product": "bundle"
+            }
+          }
+        },
+        "source_win_x64": {
+          "artifact": "stable-source-win_x64",
+          "entries": {
+            "web": {
+              "workload": "source_win_x64_web",
+              "request": {
+                "unit": "web"
+              },
+              "product": "bundle"
+            },
+            "executor": {
+              "workload": "source_win_x64_executor",
+              "request": {
+                "unit": "executor"
+              },
+              "product": "bundle"
+            }
+          }
+        },
+        "source_javascript": {
+          "artifact": "stable-source-javascript",
+          "entries": {
+            "packages": {
+              "workload": "source_js_packages",
+              "request": {
+                "unit": "packages"
+              },
+              "product": "bundle"
+            },
+            "daemon": {
+              "workload": "source_js_daemon",
+              "request": {
+                "unit": "daemon"
+              },
+              "product": "bundle"
+            },
+            "shell": {
+              "workload": "source_js_shell",
+              "request": {
+                "unit": "shell"
+              },
+              "product": "bundle"
+            }
+          }
+        }
+      },
+      "matrices": {
+        "test": [
+          {
+            "workload": "test_verify",
+            "kind": "verify",
+            "name": "[test] Verify build (typecheck + guard)",
+            "timeout": 360
+          }
+        ],
+        "common": [
+          {
+            "name": "[build] Shared JavaScript",
+            "workloads": [
+              "source_js_packages",
+              "source_js_daemon",
+              "source_js_shell"
+            ],
+            "batch": "source_javascript"
+          }
+        ]
+      }
+    }
+  }
+}

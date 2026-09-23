@@ -19,6 +19,19 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function timed(phase, operation) {
+  const started = performance.now();
+  console.error(`[tools-pack notarize] phase:start phase=${phase}`);
+  try {
+    const result = await operation();
+    console.error(`[tools-pack notarize] phase:done phase=${phase} durationMs=${Math.round(performance.now() - started)}`);
+    return result;
+  } catch (error) {
+    console.error(`[tools-pack notarize] phase:failed phase=${phase} durationMs=${Math.round(performance.now() - started)}`);
+    throw error;
+  }
+}
+
 function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
@@ -45,6 +58,7 @@ function isTransientNotaryError(error) {
     "deadlineExceeded",
     "ECONNRESET",
     "ETIMEDOUT",
+    "NSURLErrorDomain Code=-1001",
     "ENOTFOUND",
     "EAI_AGAIN",
     "socket hang up",
@@ -109,17 +123,19 @@ async function notarizeApp(appPath, credentials) {
   const tempDir = await mkdtemp(path.join(tmpdir(), "open-design-notarize-"));
   try {
     const filePath = path.join(tempDir, `${path.parse(appPath).name}.zip`);
-    const zipResult = await run("ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", path.basename(appPath), filePath], {
-      cwd: path.dirname(appPath),
+    await timed("archive", async () => {
+      const zipResult = await run("ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", path.basename(appPath), filePath], {
+        cwd: path.dirname(appPath),
+      });
+      if (zipResult.code !== 0) {
+        throw new Error(`Failed to zip app for notarization:\n\n${zipResult.output.trim()}`);
+      }
     });
-    if (zipResult.code !== 0) {
-      throw new Error(`Failed to zip app for notarization:\n\n${zipResult.output.trim()}`);
-    }
 
-    await submitNotarization(filePath, credentials);
-    await stapleApp(appPath);
+    await timed("submit-and-wait", () => submitNotarization(filePath, credentials));
+    await timed("staple", () => stapleApp(appPath));
   } finally {
-    await rm(tempDir, { force: true, recursive: true });
+    await timed("cleanup", () => rm(tempDir, { force: true, recursive: true }));
   }
 }
 
@@ -127,6 +143,7 @@ module.exports = async function notarize(context) {
   if (context.electronPlatformName !== "darwin") {
     return;
   }
+  console.error("[tools-pack notarize] afterSign: signing completed; custom notarization begins");
 
   const keychainProfile = process.env.APPLE_NOTARY_KEYCHAIN_PROFILE;
   const keychain = process.env.APPLE_NOTARY_KEYCHAIN;

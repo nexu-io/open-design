@@ -2,6 +2,7 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "noEmit": true,
+    "paths": { "@/*": ["./src/*"] },
     "rootDir": "."
   },
   "include": ["src/**/*.ts", "tests/**/*.ts", "vitest.config.ts"]

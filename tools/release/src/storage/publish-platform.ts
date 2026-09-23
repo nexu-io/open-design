@@ -14,6 +14,7 @@ import {
 } from "./common.ts";
 import { assertCurrentVersionReservation, versionLockObjectKey } from "./beta-version-reservation.ts";
 import { putStorageObject } from "./s3-upload.ts";
+import { mapWithConcurrency } from "./concurrency.ts";
 import { releaseChannelDescriptor } from "@open-design/release";
 
 type AssetEntry = {
@@ -22,6 +23,13 @@ type AssetEntry = {
   sha256Url?: string;
   size: number;
   url: string;
+};
+
+type UploadTiming = {
+  bytes: number;
+  durationMs: number;
+  objectKey: string;
+  status: "failure" | "planned" | "success";
 };
 
 type TargetConfig = {
@@ -57,6 +65,7 @@ const versionLockKey = optional(
   countedReleaseChannel == null ? "" : versionLockObjectKey(releaseVersion, countedReleaseChannel),
 );
 const storage = publishSideEffectsEnabled || versionLockRequired ? storageConfigFromEnv() : null;
+const uploadTimings: UploadTiming[] = [];
 
 if (versionLockRequired) {
   if (countedReleaseChannel == null) {
@@ -115,18 +124,31 @@ function createReportZip(root: string, zipPath: string): void {
 }
 
 async function upload(path: string, objectKey: string, cacheControl: string): Promise<void> {
+  const startedAt = performance.now();
+  const bytes = statSync(path).size;
   if (!publishSideEffectsEnabled) {
     console.log(`[dry-run:${dryRunMode || "plan"}] would upload ${path} to ${objectKey}`);
+    uploadTimings.push({ bytes, durationMs: Math.round(performance.now() - startedAt), objectKey, status: "planned" });
     return;
   }
   if (storage == null) throw new Error("storage config is required to upload release assets");
-  await putStorageObject({
-    ...storage,
-    bodyPath: path,
-    cacheControl,
-    contentType: contentType(path),
-    objectKey,
-  });
+  try {
+    await putStorageObject({
+      ...storage,
+      bodyPath: path,
+      cacheControl,
+      contentType: contentType(path),
+      objectKey,
+    });
+    const timing = { bytes, durationMs: Math.round(performance.now() - startedAt), objectKey, status: "success" as const };
+    uploadTimings.push(timing);
+    console.log(JSON.stringify({ event: "release-upload", ...timing }));
+  } catch (error) {
+    const timing = { bytes, durationMs: Math.round(performance.now() - startedAt), objectKey, status: "failure" as const };
+    uploadTimings.push(timing);
+    console.log(JSON.stringify({ event: "release-upload", ...timing }));
+    throw error;
+  }
 }
 
 async function uploadReport(reportDirectory: string): Promise<Record<string, unknown> | null> {
@@ -135,10 +157,10 @@ async function uploadReport(reportDirectory: string): Promise<Record<string, unk
   if (files.length === 0) return null;
 
   const reportPrefix = `${versionPrefix}/report/${reportDirectory}`;
-  for (const file of files) {
+  await mapWithConcurrency(files, 2, async (file) => {
     const relativePath = normalizePath(relative(reportRoot, file));
     await upload(file, `${reportPrefix}/${relativePath}`, "public, max-age=31536000, immutable");
-  }
+  });
   if (reportZipPath.length > 0) {
     createReportZip(reportRoot, reportZipPath);
     await upload(reportZipPath, `${reportPrefix}/report.zip`, "public, max-age=31536000, immutable");
@@ -249,9 +271,11 @@ function targetConfig(): TargetConfig {
 }
 
 const config = targetConfig();
-for (const name of config.assetNames) {
+const uploadsStartedAt = performance.now();
+await mapWithConcurrency(config.assetNames, 2, async (name) => {
   await upload(join(releaseAssetsDir, name), `${versionPrefix}/${name}`, "public, max-age=31536000, immutable");
-}
+});
+console.log(JSON.stringify({ event: "release-assets-uploaded", concurrency: 2, count: config.assetNames.length, durationMs: Math.round(performance.now() - uploadsStartedAt) }));
 
 const report = config.reportDirectory == null ? null : await uploadReport(config.reportDirectory);
 const versionManifestUrl = publicUrl(publicOrigin, versionPrefix, `platforms/${target}.json`);
@@ -292,9 +316,11 @@ await upload(manifestPath, `${versionPrefix}/platforms/${target}.json`, "public,
 
 const outputs: Record<string, string> = {
   platform_latest_manifest_url: latestManifestUrl,
+  platform_manifest_key: `${versionPrefix}/platforms/${target}.json`,
   platform_manifest_path: manifestPath,
   platform_manifest_url: versionManifestUrl,
   release_target: target,
+  publish_timings_json: JSON.stringify(uploadTimings.slice().sort((left, right) => left.objectKey.localeCompare(right.objectKey))),
 };
 for (const [artifactName, artifact] of Object.entries(config.artifacts)) {
   outputs[`${artifactName}_url`] = artifact.url;

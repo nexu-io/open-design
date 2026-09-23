@@ -414,6 +414,10 @@ function resolveLinuxPaths(config: ToolPackConfig): LinuxPaths {
   };
 }
 
+export function publishedLinuxAppImagePath(config: ToolPackConfig): string {
+  return join(resolveLinuxPaths(config).appBuilderOutputRoot, `${APP_IMAGE_PRODUCT_NAME}-${sanitizeNamespace(config.namespace)}.AppImage`);
+}
+
 // --- Step 2: Runtime helpers ---
 
 async function runPnpm(

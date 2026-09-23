@@ -12,7 +12,8 @@ import {
   ELECTRON_REBUILD_NATIVE_MODULES,
   WEB_STANDALONE_RESOURCE_NAME,
 } from "./constants.js";
-import { PathSizeIndex, pathExists, sizeExistingFileBytes } from "./fs.js";
+import { PathSizeIndex } from "../metrics/path-size-index.js";
+import { pathExists, sizeExistingFileBytes } from "./fs.js";
 import type { WinBuiltAppManifest, WinPaths, WinSizeReport } from "./types.js";
 
 function isBetterSqlite3SourceResidue(path: string): boolean {

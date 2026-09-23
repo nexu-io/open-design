@@ -10,7 +10,7 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 - `pnpm tools-dev inspect desktop ...` inspects the desktop runtime through sidecar IPC.
 - `tools/pack` provides `@open-design/tools-pack` and the `tools-pack` bin. The active slice is packaged artifact build/install/start/stop/logs/uninstall/cleanup/list/reset plus beta release artifact preparation for mac and Windows lanes, plus a Linux AppImage lane with optional containerized builds.
 - `tools/serve` provides `@open-design/tools-serve` and the `tools-serve` bin. It owns local fixture services such as `tools-serve start updater`.
-- `tools/release` provides `@open-design/tools-release` and the `tools-release` bin. It owns release metadata, storage publishing, release reports, and notification-facing file/data contracts; artifact build, cache, installer, payload, and smoke work stays in `tools/pack`.
+- `tools/release` provides `@open-design/tools-release` and the `tools-release` bin. It owns release metadata, storage publishing, release reports, and notification-facing file/data contracts; notification delivery and orchestration belong to the stdlib-only `.github/scripts/feishu.py`, with no dependency on tools-release. Artifact build, cache, installer, payload, and smoke work stays in `tools/pack`.
 
 ## Retired tools
 

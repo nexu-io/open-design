@@ -60,6 +60,53 @@ The build-graph cache is almost entirely Windows-specific.
 
 `mac` and `linux` have `<platform>.workspace-build` only.
 
+The source executor is partitioned into `packages`, `daemon`, `web`, and `shell`
+units under `src/workspace/units.ts`. `tools-pack workspace build <unit>` executes
+only that unit; dependencies must already be built or restored by its caller.
+`workspace result <unit>` verifies required outputs, including declarations.
+Packages, daemon and shell emit a portable JavaScript output contract; Web
+emits a platform/arch and output-mode contract because standalone includes
+platform runtime dependencies. Neither computes a workflow identity or makes
+a skip decision. The ordinary local aggregate runs the same units in
+order and retains its existing whole-workspace cache (schema 13). Changing unit
+commands therefore changes the aggregate cache key; this is not yet per-unit
+workflow cache integration. Plan owns that external decision.
+
+The public package unit includes Standalone JavaScript and declarations. Consumers
+such as Closure and Terminal typecheck these completed outputs without rebuilding
+the shared dependency inside parallel typecheck hooks. Ordinary workspace install
+prepares Standalone through the existing postinstall build graph.
+
+`workspace export <unit> --output <directory>` exports generated leaves only;
+`workspace import <unit> --url <url> --sha256 <digest> --scratch <directory>`
+validates bytes and the complete output contract in staging before replacing
+those leaves. Replacement failures roll back. Import failures are errors, not
+permission to rebuild. The `javascript` group imports packages, daemon and
+shell from one JSON list of references, shared by native build and test jobs.
+The references contain business units and verified bytes only, never Plan
+keys, hit/miss decisions, receipts or retention policy.
+
+The Web source unit normalizes standalone peer links before returning. This
+belongs to producing a usable public build result, not to writing a local cache.
+Its JS/map pairs stay pristine: release-specific sourcemap injection/upload and
+map removal remain on the packaging materialization path. A restored public Web
+result must preserve those pairs until that path runs.
+
+On macOS, `tools-pack mac build` remains the complete local build with its
+workspace cache. `tools-pack mac package` instead consumes completed
+`packages/daemon/web/shell` outputs at their normal workspace locations, without
+calling source builders or acquiring the workspace cache. It checks output
+completeness before any packaging side effect, then runs release-specific
+sourcemap processing and the same native packaging stages as `build`.
+The caller must supply matching source/configuration outputs and pristine Web
+maps for each invocation. This is an execution boundary, not a cache-admission
+or freshness protocol: there is no new manifest, workflow identity, or key.
+Windows exposes the same `win package` execution boundary. It retains its own
+downstream tarball/resource/native caches and their existing local determinants,
+without acquiring the source workspace cache or receiving any external identity.
+Plan's key and artifact checksums are never combined with those local keys.
+The Linux/Docker paths are unchanged.
+
 ## Determinant rules
 
 **R1 — A node key must cover every input that determines the node's output.**

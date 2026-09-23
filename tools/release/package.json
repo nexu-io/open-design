@@ -3,6 +3,10 @@
   "version": "0.23.1",
   "private": true,
   "type": "module",
+  "files": [
+    "bin",
+    "dist"
+  ],
   "bin": {
     "tools-release": "./bin/tools-release.mjs"
   },
@@ -20,6 +24,7 @@
     "yaml": "2.9.0"
   },
   "devDependencies": {
+    "@open-design/metatool": "workspace:*",
     "@types/node": "24.12.2",
     "esbuild": "0.28.0",
     "tsx": "4.22.3",

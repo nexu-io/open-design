@@ -123,8 +123,9 @@ directionality is the central fail-closed property of active omission.
 Scope answers whether a workload is relevant to the changed-file context.
 Convergence answers whether the same workload identity already has a validated,
 reusable successful result. A workload identity includes its declared Git
-inputs, execution class, product mode, workflow policy, and convergence control
-contract. Once enforcement is enabled, the execution predicate is:
+inputs, execution class, product mode, workflow policy, declared success jobs
+and steps, and `schema.version`. Control source is a trusted admission boundary,
+not an implicit global hash input. Once enforcement is enabled, the execution predicate is:
 
 ```text
 scope_enabled && !reusable_result_hit
@@ -240,8 +241,76 @@ a `certain` decision.
 Convergence declarations live in `.github/config/convergence.json`. A workload
 composes Git paths or globs, `suite://<name>` reusable path groups, or `"*"` for
 the tracked tree, and declares an execution class, product mode, and explicit
-reuse opt-in. Cycles, dangling suites, unsafe paths, empty matches, schema
+reuse opt-in. Reusable workloads also declare `success`, mapping exact job
+display names (including every shard) to required execution step names. This
+contract participates in identity; hashing or declaration interpretation changes
+require a bump of the sole `schema.version`. Cycles, dangling suites, unsafe paths, empty matches, schema
 drift, and scope/convergence identity drift fail at the plan entrypoint.
+
+Schema 5 also supports named `resource://<name>` references. A file resource
+declares `paths` and `exclude` path lists; a JSON resource declares one literal
+`json` file and an `omit` list of top-level field names. JSON projection reads
+the Git blob, retains every undeclared/new field, and rejects missing omitted
+fields. The resource declaration itself participates in the digest. This is a
+generic control-plane operation, not a product-version exception. Admission
+still checks whole referenced files, including projected fields.
+
+Beta source validation declares the packaged manifest's `version` outside its
+execution projection: release numbering changes do not invalidate unrelated
+source tests, while scripts, dependencies and all other manifest fields do.
+Version-bound packaging/materialization and downloaded-artifact validation are
+separate work and remain executed. Changing a channel only affects identities
+whose configuration references it; there is no implicit global channel key.
+Product code and build tools do not interpret Plan identities or cache receipts.
+The beta declaration remains conservative for other source changes until paired
+execution evidence justifies narrower groups.
+
+The first native source-product integration groups packages/daemon/Web/shell
+outputs per platform and architecture, on the existing native runner. Its source
+projection excludes test directories/configuration and the packaged version;
+the four advisory test workloads retain their conservative validation closure.
+There is no cross-platform source product reuse, and changing one application
+source currently rebuilds the aggregate group. Finer application groups remain
+an optimization to validate, not an already-delivered skip claim.
+
+The source action owns its Node/pnpm setup, dependency cache and scoped tool
+installation as well as source execution. Its declaration is a source identity
+input; the release workflow's packaging/publication transport is not. Changes
+to source setup must stay in that action, not be injected by a caller before
+it. The workflow remains part of trusted-writer admission and validation inputs.
+Downloaded-installation jobs also scope postinstall to the packaging/release/
+dev/serve tools, the harness's direct `contracts` dependency, and their workspace
+dependencies. Metadata publication only prepares `tools/release`. They exercise the downloaded
+application rather than rebuilding a local application for validation.
+
+The native executor consumes the frozen decision without recomputing identities.
+It verifies the product checksum, restores generated leaf directories from a
+fresh staging tree, and calls ordinary `tools-pack workspace result` validation.
+Unavailable/corrupt products fall back to source execution without replacing the
+immutable hit. Cold results are retained before version-specific sourcemap
+processing, using a dereferenced tar payload inside the existing opaque product
+ZIP so executable permissions and pristine maps survive artifact transport.
+Only `convergence.atom.yml` publishes receipts/products. Native jobs call
+`tools-pack mac|win package`; their existing full-build failure fallback and
+tools-pack's internal native caches stay independent of Plan. Source receipts
+currently require their containing native job to succeed; a native failure may
+therefore forgo a source-cache contribution even after a successful source build.
+
+Beta's Mac `package` path does not consume the old tools-pack workspace cache,
+so its workflow no longer computes keys or restores/saves/prunes that GitHub
+cache. The normal local build cache and full-source fallback are unchanged.
+Windows retains its independent native-product cache transport; public source
+reuse is not a reason to discard useful native packaging results.
+
+Workflows remain isolated by default. A reusable workload may opt into a named
+`recipe` and list `trustedSources` as explicit `{workflow, policy, workload}`
+coordinates. Only then can an identical recipe digest be read from another
+producer's partition. Git inputs, execution class, product mode, schema version,
+and success coverage still have to match. Merely using the same recipe name is
+insufficient. Published receipts retain the original producer's provenance;
+consumers do not relabel or republish imported success. Trust configuration
+controls admission to reuse, not source identity. Initial workflow integrations
+must align actual execution contracts before enabling these declarations.
 
 Reuse is valid only for a workload with no products or a complete typed product
 manifest. A manifest is one JSON value even when the job has several products;
@@ -251,15 +320,85 @@ artifact produced by the workload. The trusted atom promotes its archive to an
 immutable, normalized, credential-free `url` source, records its SHA-256 in the
 manifest, and verifies that digest on reuse before the result becomes a hit. If
 that production cannot be modeled cleanly, the workload remains non-reusable.
+Repeated contribution compares the complete normalized result before issuing
+product writes. An existing identical successful result causes zero product
+PUTs; changed bytes under one identity fail before writes. Incomplete or racing
+first publication still uses immutable conditional writes, and a success receipt
+is written only after every product is available.
 
 CI reads immutable result receipts through the public base URL. A missing
 secret, 404, timeout, malformed receipt, product mismatch, or unavailable
-service is a miss and therefore executes the workload. A successful merge gate
-produces a typed convergence handoff; it does not write storage. The trusted
+service is a miss and therefore executes the workload. The validation job
+collects a typed convergence handoff even when an unrelated workload or policy
+fails; the required merge gate remains failed. Missing, failed, cancelled,
+skipped, or previous-attempt execution cannot contribute success. It does not
+write storage. The trusted
 `convergence.atom.yml` consumer checks the producing run and that its control
-plane matches the default branch before publishing to R2. `convergence.py`
+plane matches the default branch before publishing to R2. It independently
+checks every declared job and required step via the attempt-scoped GitHub API,
+authenticates the source tree (exact base/head merge parents for PRs), and
+recomputes identities without checking out or executing producer source.
+Moved or unavailable PR merge refs refuse admission; they do not grant reuse.
+`convergence.py`
 owns protocol validation and publication orchestration; `lib/r2.py` owns only
 signed R2 transport. Write credentials never enter the low-privilege CI run.
+
+Schema 6 adds an explicit `successBoundary`: the default `job` requires the
+whole job and all declared steps to succeed. `steps` permits a completed job
+whose unrelated tail failed, but every declared step must still succeed; an
+unfinished, cancelled or skipped job remains ineligible. Both the collector and
+trusted writer apply this contract, and the boundary participates in identity.
+Only the three beta source workloads currently opt into `steps`. Their required
+composite includes source construction and pristine-product retention, so a
+later native-package failure does not discard a completed source result. Source
+reference manifests are not success proofs: the collector may describe a cold
+candidate before filtering it through actual attempt-scoped execution evidence.
+The original CI and publication gates remain unchanged. Older schema results
+are not relabelled; this declaration change intentionally requires a cold seed.
+
+### Install-time execution scope
+
+The beta native source executor permits one fallback build only for enumerated
+cache-read failures: download timeout, HTTP 404/410, or SHA-256 mismatch. It
+cleans its download scratch before rebuilding from the frozen checkout; these
+failures occur before output replacement. Authorization, cancellation, unsafe
+paths, incompatible output contracts, local I/O and unknown errors fail closed.
+Restored-result consumer checks are outside the fallback catch. There is no
+download retry loop or immutable-product repair. A fallback is not a successful
+reuse: its reason, transferred bytes and restore/build duration are retained,
+including an incomplete report if the fallback build fails. Normal hot reuse
+must still perform zero source builds; degraded costs remain in the benefit
+accounting rather than being discarded.
+The consumer is invoked only after all restored leaves are installed. Previous
+leaves are retained during replacement and rolled back on an installation
+failure; if rollback fails, preserve the reported recovery directory and stop.
+This is a consumer gate and rollback contract, not a filesystem-wide atomic
+rename or a promise to recover automatically after a process kill.
+
+Local installation reads `scripts/postinstall.config.json`; its built-in
+development recipe remains the full default for `scripts/postinstall.mjs`.
+Workflow callers instead pass a named intent to `setup-workspace`. Before pnpm
+runs, `.github/scripts/postinstall.py` resolves that intent from
+`.github/config/postinstall.json`, expands the transitive workspace dependency
+closure, and writes a digest-bound plan. The postinstall consumer executes that
+exact plan and emits a receipt bound to its identifier and digest. The setup
+action rejects missing, foreign, failed, or closure-mismatched receipts, including
+cache restores that do not satisfy the frozen target set.
+
+Beta, prerelease, stable, and CI select named intents for control, source,
+platform, test, publication, smoke, and downloaded-artifact validation jobs.
+Test matrices retain execution identity and parameters; postinstall target lists
+come only from the workflow intent configuration. Partial source profiles also
+freeze their smaller install boundary. Full workspace intents keep vendor
+materialization and native-addon validation; partial source profiles omit those
+operations by contract. The CI workflow continues to expose
+`convergence.atom.yml` as its independently callable planning and evidence
+boundary.
+
+These intents are execution parameters rather than Plan hit flags or local cache
+invalidation mechanisms. Tools' bootstrap dependencies still compile, and only
+work actually avoided may count toward measured savings. Ordinary developer
+installs keep the local development recipe.
 
 ### Job graph and convergence
 
@@ -269,7 +408,7 @@ The current control flow is:
 runners -> plan -> workloads ---------> validate -> runtime summary
                 -> merge policy ------/
 
-successful validate -> typed handoff -> convergence.atom -> R2
+successful workload jobs/steps -> typed handoff -> trusted convergence.atom -> R2
 ```
 
 `merge_policy` is merge-group-only and runs in parallel with workloads. It does

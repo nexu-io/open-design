@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { createServer, type Server } from "node:http";
+import { createServer, type Server } from "node:https";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,7 +12,6 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const execFileAsync = promisify(execFile);
 const workspaceRoot = dirname(dirname(dirname(dirname(fileURLToPath(import.meta.url)))));
-const scriptPath = join(workspaceRoot, ".github", "scripts", "release", "smoke-artifacts.ts");
 
 const VERSION = "0.21.1-prerelease.3";
 const DMG_BYTES = Buffer.from("a fake but byte-stable dmg\n");
@@ -61,7 +60,13 @@ let workDir = "";
 let corruptDmg = false;
 
 beforeAll(async () => {
-  server = createServer((request, response) => {
+  workDir = await mkdtemp(join(tmpdir(), "od-smoke-artifacts-"));
+  const key = join(workDir, "fixture.key");
+  const cert = join(workDir, "fixture.crt");
+  await execFileAsync("openssl", ["req", "-x509", "-newkey", "rsa:2048", "-nodes",
+    "-keyout", key, "-out", cert, "-days", "1", "-subj", "/CN=localhost",
+    "-addext", "subjectAltName=IP:127.0.0.1,DNS:localhost"]);
+  server = createServer({ key: await readFile(key), cert: await readFile(cert) }, (request, response) => {
     const path = new URL(request.url ?? "/", "http://127.0.0.1").pathname;
     const send = (body: Buffer | string, contentType: string) => {
       response.setHeader("content-type", contentType);
@@ -104,8 +109,7 @@ beforeAll(async () => {
   });
   const address = server.address();
   if (address == null || typeof address === "string") throw new Error("fixture server did not bind");
-  origin = `http://127.0.0.1:${address.port}`;
-  workDir = await mkdtemp(join(tmpdir(), "od-smoke-artifacts-"));
+  origin = `https://127.0.0.1:${address.port}`;
 });
 
 afterAll(async () => {
@@ -114,14 +118,30 @@ afterAll(async () => {
 });
 
 async function run(mode: "plan" | "stage", env: Record<string, string>): Promise<{ stdout: string }> {
-  return execFileAsync(
-    process.execPath,
-    ["--experimental-strip-types", scriptPath, mode],
-    { cwd: workspaceRoot, env: { ...process.env, ...env } },
-  );
+  const options = { cwd: workspaceRoot, env: {
+    ...process.env, ...env, NODE_EXTRA_CA_CERTS: join(workDir, "fixture.crt"),
+  } };
+  if (mode === "plan") return execFileAsync("pnpm", ["exec", "tools-release", "artifact", "plan"], options);
+  const reference = `${env.BUILD_JSON_PATH}.reference.json`;
+  await execFileAsync("pnpm", ["exec", "tools-release", "artifact", "resolve", "--output", reference], options);
+  return execFileAsync("pnpm", ["exec", "tools-pack", "stage-artifact", reference], options);
 }
 
 describe("smoke-artifacts", () => {
+  it("checks version and channel when staging, not only when planning", async () => {
+    const env = {
+      BUILD_JSON_PATH: join(workDir, "wrong-channel.json"),
+      RELEASE_NAMESPACE: "release-beta",
+      RELEASE_TARGET: "mac_arm64",
+      TOOLS_PACK_DIR: join(workDir, "wrong-channel"),
+      VERSION_METADATA_URL: `${origin}/prerelease/versions/${VERSION}/metadata.json`,
+    };
+    await expect(run("stage", { ...env, EXPECTED_CHANNEL: "beta" })).rejects.toThrow(/does not match the expected channel/);
+    await expect(run("stage", { ...env, EXPECTED_VERSION: "0.22.1-beta.1" })).rejects.toThrow(/does not match the expected version/);
+    await expect(run("stage", { ...env, EXPECTED_COMMIT: "a".repeat(40) })).rejects.toThrow(/expected source commit/);
+    expect(existsSync(env.BUILD_JSON_PATH)).toBe(false);
+  });
+
   it("plans only the targets that actually published", async () => {
     const { stdout } = await run("plan", {
       EXPECTED_VERSION: VERSION,
@@ -143,7 +163,7 @@ describe("smoke-artifacts", () => {
         EXPECTED_VERSION: "0.21.1-prerelease.4",
         VERSION_METADATA_URL: `${origin}/prerelease/versions/${VERSION}/metadata.json`,
       }),
-    ).rejects.toThrow(/is for 0\.21\.1-prerelease\.3, not the dispatched 0\.21\.1-prerelease\.4/);
+    ).rejects.toThrow(/does not match the expected version/);
   });
 
   it("stages the mac dmg exactly where tools-pack mac install looks for it", async () => {
@@ -218,7 +238,8 @@ describe("smoke-artifacts", () => {
           TOOLS_PACK_DIR: join(workDir, "corrupt"),
           VERSION_METADATA_URL: `${origin}/prerelease/versions/${VERSION}/metadata.json`,
         }),
-      ).rejects.toThrow(/does not match published/);
+      ).rejects.toThrow(/checksum/i);
+      expect(existsSync(join(workDir, "corrupt", "out", "mac", "namespaces", "release-prerelease", "dmg", "Open Design-release-prerelease.dmg"))).toBe(false);
     } finally {
       corruptDmg = false;
     }
@@ -233,6 +254,6 @@ describe("smoke-artifacts", () => {
         TOOLS_PACK_DIR: join(workDir, "intel"),
         VERSION_METADATA_URL: `${origin}/prerelease/versions/${VERSION}/metadata.json`,
       }),
-    ).rejects.toThrow(/mac_x64 is not published/);
+    ).rejects.toThrow(/published target mac_x64 lacks an installer/);
   });
 });
