@@ -733,7 +733,9 @@ import {
 } from './routines.js';
 import { buildMcpInstallPayload } from './mcp-install-info.js';
 import { configureDiagnosticsEvidence } from './services/diagnostics-evidence.js';
-import { createDiagnosticsExportHandler } from './diagnostics-export.js';
+import { beginDaemonHealthSession } from './services/daemon-health.js';
+import { readSqlitePageStats } from './storage/db-inspect.js';
+import { createDiagnosticsExportHandler, resolveDaemonPreviousLogPath } from './diagnostics-export.js';
 import {
   CHAT_SCROLL_FORENSICS_PATH,
   chatScrollForensicsBodyParser,
@@ -3472,7 +3474,14 @@ export async function startServer({
     }
     next();
   });
+  // Heap/SQLite health: begun before the first SQLite open so a daemon that
+  // dies seconds into startup still leaves a checkpoint for the next boot.
+  const daemonHealth = beginDaemonHealthSession({
+    dataRoot: RUNTIME_DATA_DIR,
+    previousLogPath: resolveDaemonPreviousLogPath(runtime),
+  });
   const db = openDatabase(PROJECT_ROOT, { dataDir: RUNTIME_DATA_DIR });
+  daemonHealth?.setStorageProbe(() => readSqlitePageStats({ db, file: db.name }));
   const amrTerminalReportOutbox = createAmrTerminalReportOutboxStore(db);
   const amrTerminalReportDelivery = createAmrTerminalReportDeliveryService({
     store: amrTerminalReportOutbox,
@@ -17955,6 +17964,8 @@ export async function startServer({
     // work below.
     let messageEventPayloadHeal: MessageEventPayloadHealHandle | null = null;
     const cleanupDaemonBackgroundWork = () => {
+      daemonHealth?.markCleanShutdown();
+      daemonHealth?.stop();
       void messageEventPayloadHeal?.stop();
       stopEvidenceDelivery();
       clearTerminalTelemetryFallbackTimers();
@@ -18040,6 +18051,17 @@ export async function startServer({
         resolvedPort = boundPort;
         startAmrTerminalReportDeliveryAfterBind(amrTerminalReportDelivery, boundPort);
         messageEventPayloadHeal ??= startMessageEventPayloadHeal({ db });
+        // Only once listening: a startup-time fatal report would add lines to
+        // the log tail that packaged startup telemetry samples.
+        daemonHealth?.enableFatalReports();
+        daemonHealth?.setAppVersion(currentAppVersion());
+        daemonHealth?.attachSink(({ eventName, properties, insertId }) =>
+          analyticsService.captureSafety({
+            eventName,
+            appVersion: currentAppVersion(),
+            properties,
+            insertId,
+          }));
         // When binding to all interfaces report localhost for local callers;
         // when binding to a specific address (e.g. a Tailscale IP) report that
         // address so remote callers and the sidecar use the correct URL.

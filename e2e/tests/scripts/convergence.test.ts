@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -95,6 +95,60 @@ afterEach(() => {
 });
 
 describe("workload convergence", () => {
+  test("rejects restoring a miss instead of manufacturing successful output", () => {
+    const fixture = createRepository();
+    runPlan(fixture);
+    const result = spawnSync("python3", [
+      convergenceScript, "--root", fixture.root, "--config", fixture.configPath,
+      "restore", "--pending", fixture.pendingPath, "--workload", "a",
+      "--output-dir", path.join(fixture.root, "restored"),
+    ], { cwd: fixture.root, encoding: "utf8" });
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("restore requires a selected reusable-result hit");
+  });
+
+  test("keeps invalid result bindings fatal when product misses may fall back", () => {
+    const fixture = createRepository();
+    runPlan(fixture);
+    const pending = JSON.parse(readFileSync(fixture.pendingPath, "utf8")) as any;
+    const expected = pending.workloads.a;
+    expected.resultHit = true;
+    expected.result = {
+      schemaVersion: 1,
+      protocol: "nexu-workload-result-v1",
+      repositoryId: 42,
+      workflow: "ci",
+      policy: "test-v1",
+      workload: "b",
+      digest: expected.digest,
+      executionClass: expected.executionClass,
+      products: {},
+      validated: {
+        event: "pull_request", runId: 12, runAttempt: 1,
+        headSha: "a".repeat(40), baseSha: "b".repeat(40), treeSha: "c".repeat(40),
+        validatedAt: "2026-08-21T00:00:00Z",
+      },
+    };
+    writeFileSync(fixture.pendingPath, JSON.stringify(pending));
+
+    const result = spawnSync("python3", [
+      convergenceScript, "--root", fixture.root, "--config", fixture.configPath,
+      "restore", "--pending", fixture.pendingPath, "--workload", "a", "--allow-miss",
+      "--output-dir", path.join(fixture.root, "restored"),
+    ], { cwd: fixture.root, encoding: "utf8" });
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("workload result producer is not explicitly trusted");
+  });
+
+  test("checks complete product restoration and failed-set isolation without network", () => {
+    const fixture = createRepository();
+    const result = spawnSync("python3", [
+      convergenceScript, "--root", fixture.root, "--config", fixture.configPath, "validate",
+    ], { cwd: fixture.root, encoding: "utf8" });
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("convergence configuration is valid");
+  });
+
   test("keeps shadow coverage while calculating stable workload identities", () => {
     const fixture = createRepository();
     const first = runPlan(fixture);
@@ -103,6 +157,10 @@ describe("workload convergence", () => {
     expect(first.decision.hit).toEqual({ a: false, b: false });
     expect(workload(second.pending.workloads, "a").digest).toBe(workload(first.pending.workloads, "a").digest);
     expect(workload(second.pending.workloads, "b").digest).toBe(workload(first.pending.workloads, "b").digest);
+    expect(workload(first.pending.workloads, "a").digest)
+      .toBe("aa009c98463dae565677f5671bbe86e7f51922814a5facdd4952d476846cb20b");
+    expect(workload(first.pending.workloads, "b").digest)
+      .toBe("68d78e50ea5aa02be29dd00ad1f0396006600f05eb81f720e7f464ccafd7e54c");
   });
 
   test("composes suites without coupling unrelated workload inputs", () => {
@@ -128,6 +186,51 @@ describe("workload convergence", () => {
     const hosted = workload(hostedPlan, "a").digest;
     const arc = workload(arcPlan, "a").digest;
     expect(arc).not.toBe(hosted);
+  });
+
+  test("binds schema-v10 workloads to canonical postinstall delivery plans", () => {
+    const fixture = createRepository();
+    const config = JSON.parse(readFileSync(fixture.configPath, "utf8"));
+    config.schema.version = 10;
+    config.workflows.ci.workloads.a.postinstallIntent = "fixture";
+    config.workflows.ci.workloads.a.success = { "Fixture A": ["Run A"] };
+    config.workflows.ci.workloads.b.success = { "Fixture B": ["Run B"] };
+    writeFileSync(fixture.configPath, JSON.stringify(config));
+    mkdirSync(path.join(fixture.root, ".github/config"), { recursive: true });
+    mkdirSync(path.join(fixture.root, "scripts"), { recursive: true });
+    mkdirSync(path.join(fixture.root, "packages/release"), { recursive: true });
+    writeFileSync(path.join(fixture.root, ".github/config/postinstall.json"), JSON.stringify({
+      schemaVersion: 2,
+      targets: ["packages/release"],
+      intents: { fixture: { installProfile: "workspace", requestedTargets: ["packages/release"] } },
+    }));
+    writeFileSync(path.join(fixture.root, "packages/release/package.json"), JSON.stringify({
+      name: "@open-design/release",
+    }));
+    execFileSync("git", ["add", "."], { cwd: fixture.root });
+
+    const before = runPlan(fixture).pending.workloads;
+    expect((workload(before, "a") as any).postinstallPlan).toEqual({
+      intent: "fixture",
+      digest: expect.stringMatching(/^[0-9a-f]{64}$/),
+    });
+    expect((workload(before, "b") as any).postinstallPlan).toBeUndefined();
+
+    const planConfigPath = path.join(fixture.root, ".github/config/postinstall.json");
+    const planConfig = JSON.parse(readFileSync(planConfigPath, "utf8"));
+    planConfig.intents.fixture.installProfile = "source-web";
+    writeFileSync(planConfigPath, JSON.stringify(planConfig));
+    execFileSync("git", ["add", planConfigPath], { cwd: fixture.root });
+    const after = runPlan(fixture).pending.workloads;
+    expect(workload(after, "a").digest).not.toBe(workload(before, "a").digest);
+    expect(workload(after, "b").digest).toBe(workload(before, "b").digest);
+
+    config.schema.version = 1;
+    writeFileSync(fixture.configPath, JSON.stringify(config));
+    const stale = spawnSync("python3", [convergenceScript, "--root", fixture.root,
+      "--config", fixture.configPath, "validate"], { encoding: "utf8" });
+    expect(stale.status).toBe(2);
+    expect(stale.stderr).toContain("postinstallIntent requires convergence schema.version 10");
   });
 
   test("keeps broad test workloads on tracked-tree inputs until their closure is proven", () => {
@@ -225,7 +328,7 @@ describe("workload convergence", () => {
     const candidatePath = path.join(root, "candidate.json");
     writeFileSync(candidatePath, JSON.stringify(candidate({
       bundle: { type: "url", source: "https://results.example/bundle.zip", data: { sha256: "a".repeat(64) } },
-      report: { type: "url", source: "https://results.example/report.json" },
+      report: { type: "url", source: "https://results.example/report.json", data: { sha256: "b".repeat(64) } },
     })));
     execFileSync("python3", [
       convergenceScript, "prepare-publication", "--candidate", candidatePath,
@@ -242,5 +345,15 @@ describe("workload convergence", () => {
     ], { cwd: repoRoot, encoding: "utf8" });
     expect(rejected.status).toBe(2);
     expect(rejected.stderr).toContain("must be promoted to url before publication");
+
+    writeFileSync(candidatePath, JSON.stringify(candidate({
+      bundle: { type: "url", source: "https://results.example/bundle.zip" },
+    })));
+    const missingDigest = spawnSync("python3", [
+      convergenceScript, "prepare-publication", "--candidate", candidatePath,
+      "--output-dir", path.join(root, "missing-digest"),
+    ], { cwd: repoRoot, encoding: "utf8" });
+    expect(missingDigest.status).toBe(2);
+    expect(missingDigest.stderr).toContain("data.sha256 is required");
   });
 });
