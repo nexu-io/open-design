@@ -6767,6 +6767,7 @@
 .entry-top-right-account-pill {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 7px;
   /* The capsule holds the credits segment alone now — the avatar moved to the
      rail — so it no longer keeps the 3px right inset that used to hug the
