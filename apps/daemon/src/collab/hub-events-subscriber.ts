@@ -44,6 +44,7 @@ export interface HubReadyFrame {
 }
 
 const BILLING_REVISION_CLOCKS_CAPABILITY = 'billing-revision-clocks-v1';
+export const CODING_PLAN_USAGE_EVENTS_CAPABILITY = 'coding-plan-usage-events-v1';
 export const WORKSPACE_MEMBER_EVENTS_CAPABILITY =
   'workspace-member-events-v1';
 const WORKSPACE_EVENT_LISTENER_STATUS_CAPABILITY =
@@ -64,6 +65,7 @@ export interface HubWorkspaceEvent {
     | 'billing-changed'
     | 'billing-subscription-changed'
     | 'wallet-balance-changed'
+    | 'coding-plan-usage-changed'
     | 'project-metadata-changed'
     | 'project-content-changed'
     | 'team-resources-changed';
@@ -74,6 +76,7 @@ export interface HubWorkspaceEvent {
   memberId?: string;
   memberChange?: HubWorkspaceMemberChange;
   revision?: string;
+  eventId?: string;
   revisionClock?: WorkspaceBillingRevisionClock;
   projectId?: string;
   resourceId?: string;
@@ -109,6 +112,7 @@ const HUB_EVENT_TYPES = new Set<HubWorkspaceEvent['type']>([
   'billing-changed',
   'billing-subscription-changed',
   'wallet-balance-changed',
+  'coding-plan-usage-changed',
   'project-metadata-changed',
   'project-content-changed',
   'team-resources-changed',
@@ -164,6 +168,14 @@ export function parseHubWorkspaceEvent(data: string): HubWorkspaceEvent | null {
     if (typeof parsed.seq === 'number') event.seq = parsed.seq;
     if (typeof parsed.version === 'number') event.version = parsed.version;
     if (typeof parsed.at === 'string') event.at = parsed.at;
+    if (event.type === 'coding-plan-usage-changed') {
+      if (!event.workspaceId?.trim() || !event.workspaceMemberId?.trim() ||
+          typeof parsed.eventId !== 'string' || !/^\d+$/.test(parsed.eventId)) return null;
+      event.eventId = parsed.eventId;
+      // Quota cursors are independent of wallet/subscription revision clocks.
+      delete event.revision;
+      delete event.revisionClock;
+    }
     return event;
   } catch {
     return null;
@@ -372,6 +384,7 @@ export function startHubEventsSubscriber(options: HubEventsSubscriberOptions): H
   let wakeSleep: (() => void) | null = null;
   let endpointGeneration = 0;
   const handledSourceGapEpochs = new Set<string>();
+  const quotaCursors = new Map<string, bigint>();
 
   const setConnected = (next: boolean, identityKey?: string) => {
     if (isConnected === next) return;
@@ -447,7 +460,9 @@ export function startHubEventsSubscriber(options: HubEventsSubscriberOptions): H
     };
 
     try {
-      const response = await fetchImpl(endpoint.url, {
+      const endpointUrl = new URL(endpoint.url);
+      endpointUrl.searchParams.set('codingPlanUsageEvents', '1');
+      const response = await fetchImpl(endpointUrl.toString(), {
         headers: { ...endpoint.headers, accept: 'text/event-stream' },
         signal: abortController.signal,
       });
@@ -688,6 +703,18 @@ export function startHubEventsSubscriber(options: HubEventsSubscriberOptions): H
               actualWorkspaceId: event.workspaceId,
             });
             continue;
+          }
+          if (event.type === 'coding-plan-usage-changed') {
+            if (!verifiedCapabilities.includes(CODING_PLAN_USAGE_EVENTS_CAPABILITY)) {
+              options.onDrop?.({ reason: 'invalid-payload', eventName });
+              continue;
+            }
+            const key = `${endpoint.identityKey ?? ''}\0${event.workspaceId}\0${event.workspaceMemberId}`;
+            const cursor = BigInt(event.eventId!);
+            const previous = quotaCursors.get(key);
+            if (previous !== undefined && cursor <= previous) continue;
+            quotaCursors.set(key, cursor);
+            if (quotaCursors.size > 64) quotaCursors.delete(quotaCursors.keys().next().value!);
           }
           if (!revisionClocksEnabled && event.revisionClock) {
             const { revisionClock: _, ...legacyEvent } = event;

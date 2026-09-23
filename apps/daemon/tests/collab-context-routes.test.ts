@@ -1165,6 +1165,21 @@ describe('workspace billing routes', () => {
     });
   });
 
+  it.each([true, false])('reports upstream quota health separately from wallet freshness (%s)', async (healthy) => {
+    const quotaRealtimeHealthy = vi.fn(() => healthy);
+    const api = await startContextServer({
+      listWorkspaceDirectory: async () => teamDirectory('wm-1'),
+      fetchBilling: async () => null,
+      fetchWorkspaceBalance: async () => ({ workspaceId: 'wm-1', workspaceMemberId: 'member-1', balanceUsd: '0', billingScopeVersion: 2, expiresAt: null, updatedAt: null }),
+      fetchBillingPreflight: async () => null,
+      quotaRealtimeHealthy,
+    });
+    const result = await api.req('/api/workspace/billing?scope=workspace&workspaceId=wm-1&includePreflight=1');
+    expect(result.status).toBe(200);
+    expect(result.body.quotaRealtime).toEqual({ healthy });
+    expect(quotaRealtimeHealthy).toHaveBeenCalledWith('wm-1');
+  });
+
   it.each(['member-1', 'old-member'])('returns a preview only for the verified member (%s)', async (member) => {
     const fetchBillingPreflight = vi.fn(async () => ({
       schemaVersion: 1 as const, workspaceId: 'wm-1', workspaceMemberId: member,
@@ -1181,6 +1196,7 @@ describe('workspace billing routes', () => {
     const result = await api.req('/api/workspace/billing?scope=workspace&workspaceId=wm-1&includePreflight=1&modelId=model');
     expect(result.status).toBe(200);
     expect(fetchBillingPreflight).toHaveBeenCalledWith('wm-1', 'model');
+    expect(result.body.quotaRealtime).toEqual({ healthy: false });
     if (member === 'member-1') expect(result.body.preflight.funding).toBe('coding_plan');
     else expect(result.body.preflight).toBeNull();
   });

@@ -149,6 +149,8 @@ export interface RegisterCollabContextRoutesDeps {
   /** Injectable for tests; defaults to the vela billing CLI 收口. */
   fetchBilling?: () => Promise<WorkspaceBillingSummary | null>;
   fetchBillingPreflight?: (workspaceId: string, modelId: string | null) => Promise<WorkspaceBillingPreflight | null>;
+  /** Capability and gap-free upstream health for the currently verified identity. */
+  quotaRealtimeHealthy?: (workspaceId: string) => boolean;
   /** Injectable for tests; returns one backend-proven v2 workspace wallet. */
   fetchWorkspaceBalance?: (workspaceId: string) => Promise<WorkspaceWalletBalance | null>;
   /** Injectable for tests; returns the additive atomic plan+wallet projection. */
@@ -510,6 +512,9 @@ export function registerCollabContextRoutes(app: Express, deps: RegisterCollabCo
       const workspaceId = verified.context.workspaceId;
       const sse = createSseResponse(res);
       const sink: WorkspaceEventSink = (payload) => {
+        if (payload.type === 'coding-plan-usage-changed' &&
+            (payload.workspaceId !== workspaceId ||
+             payload.workspaceMemberId !== verified.context.workspaceMemberId)) return;
         const type =
           payload && typeof payload === 'object' && 'type' in payload
             ? String((payload as { type: unknown }).type)
@@ -1030,6 +1035,7 @@ export function registerCollabContextRoutes(app: Express, deps: RegisterCollabCo
         if (isVelaWorkspaceAuthorizationError(error)) return res.status(403).json({ error: 'workspace_not_authorized' });
         throw error;
       }
+      body.quotaRealtime = { healthy: deps.quotaRealtimeHealthy?.(requestedWorkspaceId) === true };
     }
     return res.json(body);
   });
