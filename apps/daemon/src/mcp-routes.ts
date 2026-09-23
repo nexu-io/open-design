@@ -1,10 +1,10 @@
 import type { Express } from 'express';
 import fs from 'node:fs';
-import { MCP_BOOTSTRAP_CONTRACT, SIDECAR_ENV } from '@open-design/sidecar-proto';
+import { SIDECAR_ENV } from '@open-design/sidecar-proto';
 import { buildMcpInstallPayload, type McpInstallPayload } from './mcp-install-info.js';
-import { installCodexMcp, probeCodexInstall, refreshExistingCodexMcp, uninstallCodexMcp } from './codex-cli.js';
+import { installCodexMcp, probeCodexInstall, refreshOwnedCodexMcp, uninstallCodexMcp } from './codex-cli.js';
 import { isManagedMcpBootstrapEnv } from './mcp-bootstrap.js';
-import { managedMcpRegistrationEnv } from './mcp-managed-registration.js';
+import { isCodexRegistrationOwnedBy, managedMcpRegistrationEnv } from './mcp-managed-registration.js';
 import { MCP_TEMPLATES, buildAcpMcpServers, buildClaudeMcpJson, isManagedProjectCwd, readMcpConfig, writeMcpConfig } from './mcp-config.js';
 import { beginAuth, exchangeCodeForToken, refreshAccessToken } from './mcp-oauth.js';
 import { clearToken, getToken, isTokenExpired, readAllTokens, setToken } from './mcp-tokens.js';
@@ -117,17 +117,19 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
   // and only need to track its argv. See apps/daemon/src/codex-cli.ts.
   const CODEX_MCP_NAME = 'open-design';
 
-  // Under a managed outer, keep its existing Codex registration pointed at the
-  // runtime that is running now. The discovery value is derived from the
-  // sidecar source/channel/namespace, so it also proves the globally named
-  // registration belongs to this install before we refresh it.
+  // Under a managed outer, keep this install's own Codex registration pointed
+  // at the runtime that is running now. Registrations name a versioned
+  // payload, and a payload version is only cleaned up after a newer one has
+  // started here, so refreshing on every start keeps them valid. The
+  // registration name is global, so a registration written by another install
+  // (another channel, a local build) is left exactly as it is. Never installs one.
   if (isManagedMcpBootstrapEnv(process.env)) {
     const timer = setTimeout(() => {
       const payload = computeInstallPayload();
       if (!payload.cliExists || !payload.nodeExists) return;
-      refreshExistingCodexMcp(
+      refreshOwnedCodexMcp(
         { name: CODEX_MCP_NAME, command: payload.command, args: payload.args, env: payload.env },
-        MCP_BOOTSTRAP_CONTRACT.DISCOVERY_ENV,
+        (existing) => isCodexRegistrationOwnedBy(existing, payload),
       )
         .then((outcome) => console.info('[mcp] codex registration refresh', { outcome }))
         .catch((err: unknown) => console.warn('[mcp] codex registration refresh failed', {

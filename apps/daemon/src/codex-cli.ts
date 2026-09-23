@@ -135,19 +135,44 @@ export async function installCodexMcp(spec: CodexInstallSpec): Promise<void> {
   }
 }
 
-export type CodexRegistrationRefresh = 'refreshed' | 'absent' | 'unavailable' | 'not-owned';
-
-interface CodexMcpGetOutput {
-  transport?: {
-    env?: Record<string, unknown>;
-  };
+export interface CodexMcpRegistration {
+  command: string;
+  args: string[];
+  env: Record<string, string>;
 }
 
-// Rewrites an existing registration only when its ownership marker proves it
-// belongs to this managed install. It never creates or takes over one.
-export async function refreshExistingCodexMcp(
+// Parses `codex mcp get <name> --json` for a stdio server; null for any other
+// transport or an unrecognized shape.
+export function parseCodexMcpRegistration(stdout: string): CodexMcpRegistration | null {
+  try {
+    const parsed = JSON.parse(stdout) as { transport?: { command?: unknown; args?: unknown; env?: unknown } };
+    const transport = parsed.transport;
+    if (transport == null || typeof transport.command !== 'string') return null;
+    const args = Array.isArray(transport.args) && transport.args.every((arg) => typeof arg === 'string')
+      ? transport.args as string[]
+      : [];
+    const env: Record<string, string> = {};
+    if (transport.env != null && typeof transport.env === 'object') {
+      for (const [key, value] of Object.entries(transport.env)) {
+        if (typeof value === 'string') env[key] = value;
+      }
+    }
+    return { command: transport.command, args, env };
+  } catch {
+    return null;
+  }
+}
+
+export type CodexRegistrationRefresh = 'refreshed' | 'absent' | 'unavailable' | 'foreign' | 'unreadable';
+
+// Rewrites an existing registration so it follows the runtime that is running
+// now, but only when `isOwned` proves the registration belongs to this
+// install: the registration name is global, so every other install's
+// registration must stay untouched. Never creates one: installing stays an
+// explicit user action.
+export async function refreshOwnedCodexMcp(
   spec: CodexInstallSpec,
-  ownershipEnvKey: string,
+  isOwned: (existing: CodexMcpRegistration) => boolean,
 ): Promise<CodexRegistrationRefresh> {
   let result: CodexRunnerResult;
   try {
@@ -157,17 +182,9 @@ export async function refreshExistingCodexMcp(
     throw err;
   }
   if (result.exitCode !== 0) return 'absent';
-
-  let existing: CodexMcpGetOutput;
-  try {
-    existing = JSON.parse(result.stdout) as CodexMcpGetOutput;
-  } catch {
-    return 'not-owned';
-  }
-  const expectedOwner = spec.env[ownershipEnvKey];
-  if (expectedOwner == null || existing.transport?.env?.[ownershipEnvKey] !== expectedOwner) {
-    return 'not-owned';
-  }
+  const existing = parseCodexMcpRegistration(result.stdout);
+  if (existing == null) return 'unreadable';
+  if (!isOwned(existing)) return 'foreign';
   await installCodexMcp(spec);
   return 'refreshed';
 }

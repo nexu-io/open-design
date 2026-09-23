@@ -8,7 +8,7 @@ import {
   createCodexCliInvocation,
   installCodexMcp,
   probeCodexInstall,
-  refreshExistingCodexMcp,
+  refreshOwnedCodexMcp,
   setCodexRunner,
   uninstallCodexMcp,
   type CodexRunner,
@@ -197,54 +197,50 @@ describe('codex-cli uninstall', () => {
   });
 });
 
-describe('refreshExistingCodexMcp', () => {
-  const ownershipEnvKey = 'OD_MCP_DISCOVERY';
+describe('refreshOwnedCodexMcp', () => {
   const spec = {
     name: 'open-design',
-    command: '/Applications/Open Design.app/Contents/MacOS/node',
-    args: ['/Applications/Open Design.app/cli.js', 'mcp'],
-    env: {
-      OD_MCP_BOOTSTRAP_ARGS: '["--headless","--od-mcp-managed"]',
-      [ownershipEnvKey]: '{"daemon":["/owned/daemon.sock"],"desktop":["/owned/desktop.sock"]}',
-    },
+    command: '/Applications/Open Design Prerelease.app/Contents/Frameworks/Helper',
+    args: ['/Applications/Open Design Prerelease.app/cli.js', 'mcp'],
+    env: { OD_MCP_BOOTSTRAP_ARGS: '["--headless","--od-mcp-managed"]' },
   };
+  const existingJson = JSON.stringify({
+    name: 'open-design',
+    enabled: true,
+    transport: { type: 'stdio', command: '/old/Helper', args: ['/old/cli.js', 'mcp'], env: { OD_DATA_DIR: '/data/prerelease' } },
+  });
 
-  it('rewrites a registration owned by the same managed install', async () => {
-    const runner = makeStubRunner(async (call) => call.args[1] === 'get'
-      ? {
-          exitCode: 0,
-          stdout: JSON.stringify({ transport: { env: { [ownershipEnvKey]: spec.env[ownershipEnvKey] } } }),
-          stderr: '',
-        }
-      : { exitCode: 0, stdout: '', stderr: '' });
+  it('rewrites a registration that belongs to this install', async () => {
+    const runner = makeStubRunner(async () => ({ exitCode: 0, stdout: existingJson, stderr: '' }));
     setCodexRunner(runner);
-    await expect(refreshExistingCodexMcp(spec, ownershipEnvKey)).resolves.toBe('refreshed');
+    const isOwned = vi.fn(() => true);
+    await expect(refreshOwnedCodexMcp(spec, isOwned)).resolves.toBe('refreshed');
+    expect(isOwned).toHaveBeenCalledWith({ command: '/old/Helper', args: ['/old/cli.js', 'mcp'], env: { OD_DATA_DIR: '/data/prerelease' } });
     expect(runner.calls.map((call) => call.args.slice(0, 3))).toEqual([
       ['mcp', 'get', 'open-design'],
       ['mcp', 'add', 'open-design'],
     ]);
   });
 
-  it('leaves an unrelated managed install registration byte-for-byte unchanged', async () => {
-    const original = JSON.stringify({
-      transport: {
-        command: '/Applications/Open Design Prerelease.app/Contents/MacOS/node',
-        args: ['/Applications/Open Design Prerelease.app/cli.js', 'mcp'],
-        env: { [ownershipEnvKey]: '{"daemon":["/other/daemon.sock"],"desktop":["/other/desktop.sock"]}' },
-      },
-    });
-    const runner = makeStubRunner(async () => ({ exitCode: 0, stdout: original, stderr: '' }));
+  it("leaves another install's registration untouched", async () => {
+    const runner = makeStubRunner(async () => ({ exitCode: 0, stdout: existingJson, stderr: '' }));
     setCodexRunner(runner);
+    await expect(refreshOwnedCodexMcp(spec, () => false)).resolves.toBe('foreign');
+    // Only the read ran: nothing was written.
+    expect(runner.calls.map((call) => call.args)).toEqual([['mcp', 'get', 'open-design', '--json']]);
+  });
 
-    await expect(refreshExistingCodexMcp(spec, ownershipEnvKey)).resolves.toBe('not-owned');
+  it('leaves a registration it cannot read untouched', async () => {
+    const runner = makeStubRunner(async () => ({ exitCode: 0, stdout: 'not json', stderr: '' }));
+    setCodexRunner(runner);
+    await expect(refreshOwnedCodexMcp(spec, () => true)).resolves.toBe('unreadable');
     expect(runner.calls).toHaveLength(1);
-    expect(runner.calls[0]?.args).toEqual(['mcp', 'get', 'open-design', '--json']);
   });
 
   it('never creates a registration the user has not installed', async () => {
     const runner = makeStubRunner(async () => ({ exitCode: 1, stdout: '', stderr: 'not found' }));
     setCodexRunner(runner);
-    await expect(refreshExistingCodexMcp(spec, ownershipEnvKey)).resolves.toBe('absent');
+    await expect(refreshOwnedCodexMcp(spec, () => true)).resolves.toBe('absent');
     expect(runner.calls).toHaveLength(1);
   });
 
@@ -254,6 +250,6 @@ describe('refreshExistingCodexMcp', () => {
         throw Object.assign(new Error('spawn codex ENOENT'), { code: 'ENOENT' });
       },
     });
-    await expect(refreshExistingCodexMcp(spec, ownershipEnvKey)).resolves.toBe('unavailable');
+    await expect(refreshOwnedCodexMcp(spec, () => true)).resolves.toBe('unavailable');
   });
 });
