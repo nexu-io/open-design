@@ -11014,7 +11014,7 @@ describe('FileViewer tweaks toolbar', () => {
     render(<FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()} liveHtml="<html><body /></html>" previewComments={comments} />);
     const unreadBadge = await screen.findByTestId('comment-unread-dot');
     expect(unreadBadge).toBeEmptyDOMElement();
-    expect(unreadBadge).toHaveStyle({ width: '7px', height: '7px', position: 'absolute' });
+    expect(unreadBadge).toHaveStyle({ width: '7px', height: '7px', position: 'absolute', background: 'var(--red)' });
     expect(screen.getByTestId('comment-panel-toggle').getAttribute('aria-label')).toBe('Comments (3)');
     fireEvent.click(screen.getByTestId('comment-panel-toggle'));
     await waitFor(() => expect(screen.queryByTestId('comment-unread-dot')).toBeNull());
@@ -11078,6 +11078,7 @@ describe('FileViewer tweaks toolbar', () => {
 
     await waitFor(() => expect(readRequests).toHaveBeenCalledTimes(1));
     expect(await screen.findByTestId('comment-rail-unread-dot')).toBeVisible();
+    expect(screen.getByTestId('comment-rail-unread-dot')).toHaveStyle({ background: 'var(--red)' });
     expect(screen.getByTestId('comment-side-collapsed-rail')).toContainElement(screen.getByTestId('comment-rail-unread-dot'));
     fireEvent.click(screen.getByTestId('comment-side-collapsed-rail'));
     expect(screen.queryByTestId('comment-rail-unread-dot')).toBeNull();

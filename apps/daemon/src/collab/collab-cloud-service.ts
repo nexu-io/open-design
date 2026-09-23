@@ -141,6 +141,8 @@ export interface CollabCloudServiceDeps {
     projectId: string;
     commentId: string;
     seq: number;
+    memberId: string;
+    authorKey?: string;
   }) => void;
   now?: () => number;
   retryDelayMs?: (attemptCount: number) => number;
@@ -529,6 +531,8 @@ export function createCollabCloudService(deps: CollabCloudServiceDeps): CollabCl
           projectId: record.projectId,
           commentId: record.commentId,
           seq: result.seq,
+          memberId: record.workspaceMemberId,
+          ...(result.authorKey ? { authorKey: result.authorKey } : {}),
         });
       }
     } catch (error) {

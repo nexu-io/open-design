@@ -46,6 +46,15 @@ describe('Vela CLI collaboration client inbound comments', () => {
   });
 });
 
+describe('Vela CLI collaboration client push receipt', () => {
+  it('preserves the server author key instead of deriving a local identity', async () => {
+    const authorKey = 'a'.repeat(64);
+    const client = createVelaCliCollabClient({ run: async () => JSON.stringify({ seq: 8, author: { authorKey } }) });
+    const receipt = await client.pushComment('workspace-1', 'project-1', { id: 'own' } as CollabCloudComment);
+    expect(receipt).toEqual({ seq: 8, authorKey });
+  });
+});
+
 describe('Vela CLI collaboration client failures', () => {
   it('rejects malformed pull output instead of treating it as an empty successful batch', async () => {
     const client = createVelaCliCollabClient({ run: async () => '{' });

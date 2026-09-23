@@ -403,6 +403,7 @@ export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | '
    * All optional and no-op off-team / when the collab cloud is unconfigured.
    */
   resolveAuthorMemberId?: (authorization: string | undefined) => Promise<string | undefined>;
+  resolveCurrentAuthorDisplayName?: () => string | null;
   resolveWorkspaceContext?: (
     req: Request,
     projectId: string,

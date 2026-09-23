@@ -552,6 +552,41 @@ describe('project comments — workspace mutation gate', () => {
     },
   );
 
+  it('persists a trustworthy author display name on local create instead of the membership id', async () => {
+    const base = await startServer({
+      resolveWorkspaceContext: async () => ({ ok: true, context: activeTeamContext() }),
+      resolveCurrentAuthorDisplayName: () => 'Alice Zhang',
+    });
+    const response = await fetch(`${base}/api/projects/${TEAM_PROJECT}/conversations/conv-team/comments`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...workspaceHeaders(OTHER_MEMBER_ID, 'member') },
+      body: JSON.stringify({ target: COMMENT_TARGET, note: 'Own comment',
+        authorDisplayName: 'Forged Name', authorKey: 'forged-key' }),
+    });
+    expect(response.status).toBe(200);
+    const { comment } = await response.json() as { comment: Record<string, unknown> };
+    expect(comment).toMatchObject({ authorMemberId: OTHER_MEMBER_ID, authorKind: 'member', authorDisplayName: 'Alice Zhang' });
+    expect(comment.authorKey).toBeUndefined();
+    const stored = listProjectPreviewComments(database!, TEAM_PROJECT)[0];
+    expect(stored).toMatchObject({ authorDisplayName: 'Alice Zhang', authorMemberId: OTHER_MEMBER_ID });
+  });
+
+  it('keeps the local author display empty when trusted profile name and email are absent', async () => {
+    const base = await startServer({
+      resolveWorkspaceContext: async () => ({ ok: true, context: activeTeamContext() }),
+      resolveCurrentAuthorDisplayName: () => null,
+    });
+    const response = await fetch(`${base}/api/projects/${TEAM_PROJECT}/conversations/conv-team/comments`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...workspaceHeaders(OTHER_MEMBER_ID, 'member') },
+      body: JSON.stringify({ target: COMMENT_TARGET, note: 'No profile', authorDisplayName: 'Forged' }),
+    });
+    expect(response.status).toBe(200);
+    const { comment } = await response.json() as { comment: Record<string, unknown> };
+    expect(comment.authorDisplayName).toBeUndefined();
+    expect(comment.authorMemberId).toBe(OTHER_MEMBER_ID);
+  });
+
   it('uses the verified project A scope after ambient identity moved to B', async () => {
     const projectContext = activeTeamContext();
     const pushedScopes: Array<{ workspaceId: string; workspaceMemberId: string }> = [];

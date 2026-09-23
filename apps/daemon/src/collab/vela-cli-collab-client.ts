@@ -145,14 +145,18 @@ export function createVelaCliCollabClient(options: VelaCliCollabClientOptions = 
       projectId: string,
       comment: CollabCloudComment,
     ): Promise<{ seq: number }> {
-      const payload = await runJson<{ seq?: unknown }>([
+      const payload = await runJson<{ seq?: unknown; authorKey?: unknown; author?: { authorKey?: unknown } }>([
         'comment',
         'push',
         projectId,
         '--comment-file',
         '-',
       ], _teamId, { input: JSON.stringify(comment) });
-      return { seq: typeof payload.seq === 'number' ? payload.seq : 0 };
+      const authorKey = payload.author?.authorKey ?? payload.authorKey;
+      return {
+        seq: typeof payload.seq === 'number' ? payload.seq : 0,
+        ...(typeof authorKey === 'string' && authorKey.trim() ? { authorKey: authorKey.trim() } : {}),
+      };
     },
 
     async pullComments(

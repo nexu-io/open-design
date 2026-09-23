@@ -783,6 +783,7 @@ import { ArtifactPublicationBlockedError } from './artifacts/publication-guard.j
 import {
   appendMessageStatusEvent,
   confirmPreviewCommentPinSeq,
+  confirmPreviewCommentAuthorKey,
   deleteConversation,
   deletePreviewComment,
   deleteProject as dbDeleteProject,
@@ -4566,8 +4567,9 @@ export async function startServer({
         mergeComment: ({ projectId, conversationId, comment }) =>
           mergeSyncedPreviewComment(db, projectId, conversationId, comment),
         onError: (error) => console.warn('[od] collab cloud sync error:', error),
-        onCommentPushed: ({ projectId, commentId, seq }) => {
+        onCommentPushed: ({ projectId, commentId, seq, memberId, authorKey }) => {
           confirmPreviewCommentPinSeq(db, projectId, commentId, seq);
+          if (authorKey) confirmPreviewCommentAuthorKey(db, projectId, commentId, memberId, authorKey);
         },
         // Collab realtime hop-2 (reference path): when the ~5s comment self-poll
         // merges any teammate change into local storage (a new comment, a
@@ -8972,6 +8974,10 @@ export async function startServer({
     // comment author / project owner, and push the comment lifecycle (create/edit,
     // status change, tombstone) to the cross-daemon relay.
     resolveWorkspaceContext: resolveProjectCommentWorkspaceContext,
+    resolveCurrentAuthorDisplayName: () => {
+      const user = readVelaControlApiContext(process.env, configuredAmrEnv())?.user;
+      return user?.name?.trim() || user?.email?.trim() || null;
+    },
     resolveReadWorkspaceContext: resolveProjectCommentReadWorkspaceContext,
     resolveFreshWorkspaceContext: resolveFreshProjectCommentWorkspaceContext,
     resolveProjectOwnerMemberId: async (projectId, context) => {
