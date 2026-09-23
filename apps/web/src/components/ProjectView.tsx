@@ -6621,25 +6621,13 @@ export function ProjectView({
         if (taskRunAdvanced) {
           findDetachedManualFileWrites(reattachConversationId, runId)?.dispose();
         }
-        const projectedTaskStatus: ChatMessage['runStatus'] =
-          physicalStatus.strategyTask?.terminal === true
-            ? physicalStatus.strategyTask.outcome === 'canceled'
-              ? 'canceled'
-              : physicalStatus.strategyTask.outcome === 'blocked'
-                ? 'failed'
-                : 'succeeded'
-            : 'running';
-        // A crash may persist the predecessor Run after the daemon has already
-        // advanced the logical task. Treat the daemon projection as the
-        // subscription truth: the predecessor's physical `succeeded` status
-        // is not the user task terminal state.
+        // A task may have advanced to production before this request Run was
+        // persisted. Read that physical Run: task `completed` does not say
+        // whether production succeeded, failed, or was canceled.
         const status = taskRunAdvanced
-          ? {
-              ...physicalStatus,
-              id: reattachRunId,
-              status: projectedTaskStatus,
-            }
+          ? await fetchChatRunStatus(reattachRunId, projectRunWorkspaceContext)
           : physicalStatus;
+        if (!status) continue;
         const projectedRunAlreadyHydrated = Boolean(
           taskRunAdvanced
           && messages.some(

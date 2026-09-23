@@ -116,6 +116,22 @@ describe('SSE end frame carries the daemon failure verdict', () => {
     globalThis.fetch = originalFetch;
   });
 
+  it.each(['auth_required', 'insufficient_balance'])(
+    'a completed orchestration keeps the physical %s failure', async (failureDetail) => {
+      const err = await failedRunEndingWith({
+        failureCategory: 'authentication', failureDetail, retryable: false,
+        strategyTask: {
+          taskExecutionId: 'task-verdict',
+          strategy: { id: 'od-next-strategy', version: '2.0.6',
+            packageHash: 'a'.repeat(64), snapshotId: 'snapshot-verdict' },
+          inputStage: 'request', outcome: 'completed', route: 'full_plan',
+          executionMode: null, activeRunId: 'run-verdict', terminal: true,
+        },
+      });
+      expect(err).toMatchObject({ failureDetail, retryable: false });
+    },
+  );
+
   it('档 1 · 后端命名且不可重试 → retryable:false / failureAction:"none" 到达 onError', async () => {
     const err = await failedRunEndingWith({
       failureCategory: 'process_exit',

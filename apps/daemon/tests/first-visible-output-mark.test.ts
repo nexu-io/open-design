@@ -34,8 +34,7 @@ import {
 // and "these bytes left the daemon" sit filters that can withhold output: the
 // `<od-title>` marker stripper, the fabricated-role-marker safety guard
 // (#3247), and — when the OD Next strategy is running the turn — the machine
-// protocol, which withholds any text that might still turn out to be a
-// reserved `<open-design-…>` block.
+// marker filter, which buffers unterminated lines and strips reserved blocks.
 //
 // These tests drive the REAL wiring (`startServer` + a fake opencode CLI) and
 // read the two fields off the real PostHog `run_finished` payload, because the
@@ -140,30 +139,15 @@ describe('first_visible_output is stamped at emission, not at first token', () =
     );
   }, TEST_BUDGET_MS);
 
-  // The OD Next machine protocol is a THIRD thing that can withhold visible
-  // bytes, and unlike the other two it can hold them past the end of the
-  // stream: text that might still turn out to be a reserved `<open-design-…>`
-  // block is only released when `finish()` proves it was prose, at child
-  // close. That release does not go through the daemon's ordinary emission
-  // choke point — it persists and broadcasts the tail directly — so the mark
-  // has to be applied there too. Without it the run reports no visible output
-  // at all and the analytics fallback collapses a real close-time wait back to
-  // `firstTokenAt`, which is precisely the dead-field failure this whole
-  // change exists to end.
+  // The continuation marker filter buffers an unterminated line until close.
+  // Its final tail bypasses the normal emission path, so that release must
+  // stamp first_visible_output too, rather than falling back to firstTokenAt.
   it('reports the close-time wait when the strategy releases the reply at finish', async () => {
     binDir = await mkdtemp(path.join(os.tmpdir(), 'od-fvo-strategy-'));
-    // Every visible byte of this reply is withheld until close. The machine
-    // block is suppressed by design (it is protocol, not prose) and the only
-    // remaining text is `<o` — a prefix of a reserved opening tag, which the
-    // protocol must hold because the next chunk could complete
-    // `<open-design-plan-contract`. The next chunk never comes, so `finish()`
-    // is what finally rules it out and releases it.
+    // A real text reply without a line terminator remains in the marker
+    // stream until finish(). No retired protocol block is required.
     const bin = await writeFakeOpencode(binDir, 'opencode-strategy-tail', `
-  emit({ type: 'text', part: { type: 'text', text: [
-    '<open-design-runtime-state>',
-    '{"schemaVersion":2}',
-    '</open-design-runtime-state>',
-  ].join('\\n') + '<o' } });
+  emit({ type: 'text', part: { type: 'text', text: 'A visible reply without a newline' } });
   setTimeout(finishTurn, ${WITHHOLD_MS});`);
 
     const timing = await runOnceAndReadTiming({
@@ -183,7 +167,7 @@ describe('first_visible_output is stamped at emission, not at first token', () =
     label: string;
     /**
      * Required, never inherited. `off` exercises the daemon's generic emission
-     * choke point; `active` additionally puts the OD Next machine protocol in
+     * choke point; `active` additionally puts the OD Next marker filter in
      * front of it, which is the only way the close-time release path exists at
      * all.
      */
@@ -225,17 +209,14 @@ describe('first_visible_output is stamped at emission, not at first token', () =
     if (options.strategyRollout === 'active') {
       expect(created.pluginId).toBe('od-next-strategy');
       expect(created.strategyTask).toBeDefined();
-      // The deliberately incomplete state still releases the withheld tail,
-      // and the strategy gate records the refusal on the task. The verdict
-      // stays on the task; the Run keeps the clean exit the process actually
-      // made.
+      // The withheld visible tail releases at close. No protocol schema is
+      // required, and the physical Run stays successful.
       expect(run).toMatchObject({
         status: 'succeeded',
         exitCode: 0,
         strategyTask: {
-          outcome: 'blocked',
+          outcome: 'completed',
           inputStage: 'request',
-          blockedContext: { reasonCodes: ['od_next_protocol_runtime_state_invalid_schema'] },
         },
       });
       expect((run as { errorCode?: string }).errorCode ?? null).toBeNull();

@@ -1409,7 +1409,9 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
       );
     }
-    // Reject a client-supplied conversationId that is missing a projectId or
+    // Legacy streaming chat also supports unpersisted conversations without pins.
+    // Preserve that path while rejecting mismatched existing ownership on both routes.
+    // For /api/runs, reject a client-supplied conversationId missing a projectId or
     // not owned by that projectId before plugin snapshot resolve (which links
     // the snapshot to the conversation and would FK-fail / 500) and before
     // omit-pin mint/seed (which would return 202 with an unpersisted
@@ -1417,10 +1419,12 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     if (typeof requestBody.conversationId === 'string' && requestBody.conversationId) {
       const requestConversation = getConversation(db, requestBody.conversationId);
       if (
-        !requestConversation ||
-        typeof requestBody.projectId !== 'string' ||
-        !requestBody.projectId ||
-        requestConversation.projectId !== requestBody.projectId
+        (!stream && (
+          !requestConversation || typeof requestBody.projectId !== 'string' || !requestBody.projectId
+        )) ||
+        (!requestConversation && (requestBody.assistantMessageId || requestBody.userMessageId)) ||
+        (requestConversation && typeof requestBody.projectId === 'string'
+          && requestBody.projectId && requestConversation.projectId !== requestBody.projectId)
       ) {
         return sendApiError(res, 404, 'CONVERSATION_NOT_FOUND', 'conversation not found for project');
       }
@@ -1434,6 +1438,19 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       );
       if (!authorization.ok) return;
       authorizedBoundMutation = authorization.authorizedBoundMutation;
+    }
+    // Keep enrichment's specific recovery response ahead of generic task handoff.
+    // Same-request retries still reach the idempotent claim below.
+    const enrichmentRun = activeRunBlockingDesignSystemEnrichment(design.runs, {
+      conversationId: requestBody.conversationId, analyticsHints: requestBody.analyticsHints,
+    });
+    if (enrichmentRun && !(typeof requestBody.clientRequestId === 'string'
+      && enrichmentRun.clientRequestId === requestBody.clientRequestId)) {
+      return sendApiError(res, 409, 'DESIGN_SYSTEM_ENRICHMENT_IN_PROGRESS',
+        'a design-system enrichment run is already active for this conversation', {
+          details: { kind: 'design_system_enrichment_in_progress', runId: enrichmentRun.id,
+            conversationId: enrichmentRun.conversationId ?? '' },
+        });
     }
     let previousStrategyTask: StrategyTaskExecutionRecord | null = null;
     try {
@@ -1547,7 +1564,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       const rolloutProject = toProjectRecord(getProject(db, requestBody.projectId));
       const snapshotConversationId =
         typeof requestBody.conversationId === 'string' && requestBody.conversationId
-          ? requestBody.conversationId
+          ? getConversation(db, requestBody.conversationId)?.id ?? null
           : getFirstProjectConversation(db, requestBody.projectId)?.id ?? null;
       const defaultPluginId = defaultScenarioPluginIdForProjectMetadata(
         toScenarioProjectMetadata(rolloutProject?.metadata),
@@ -1645,7 +1662,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         : odNextTaskTypeForProjectScenarioBinding(verifiedStrategyBinding ?? verifiedScenarioBinding);
       const routeApplicability = explicitUserPlugin
         ? 'explicit_user' as const
-        : rolloutTaskType
+        : rolloutTaskType && snapshotConversationId
           ? 'eligible' as const
           : 'not_applicable' as const;
       const rolloutMayObserve = routeApplicability === 'eligible'
@@ -2080,6 +2097,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     // earliest conversation so the run has a chat home.
     let conversationFallbackBound = false;
     if (
+      !stream &&
       typeof meta.projectId === 'string' &&
       meta.projectId &&
       (typeof meta.conversationId !== 'string' || !meta.conversationId)
@@ -2104,7 +2122,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     // Require a string projectId so omit-pin never seeds without owning-project
     // context. Must run before omit-pin mint/seed so a missing conversation
     // never yields a 202 with an assistantMessageId that was never persisted.
-    if (typeof meta.conversationId === 'string' && meta.conversationId) {
+    if (!stream && typeof meta.conversationId === 'string' && meta.conversationId) {
       if (
         !conversationSession ||
         typeof meta.projectId !== 'string' ||
@@ -2248,6 +2266,8 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     if (
       typeof meta.conversationId === 'string' &&
       meta.conversationId &&
+      conversationSession &&
+      typeof meta.projectId === 'string' && meta.projectId &&
       (clientUserMessageId || missingClientPin || conversationFallbackBound)
     ) {
       if (missingClientPin) {
