@@ -12,7 +12,7 @@
   background: #FFFFFF;
   box-shadow: 0 8px 28px #00000010, 0 2px 6px #00000006;
   font-size: 12px;
-  font-weight: 400;
+  font-weight: 500;
   color: #333333;
 }
 
@@ -197,7 +197,7 @@
   border-radius: 4px;
   color: #494949;
   font-size: 12px;
-  font-weight: 400;
+  font-weight: 500;
 }
 
 .panel :global(.chrome-access-options button > .share-menu-icon) {

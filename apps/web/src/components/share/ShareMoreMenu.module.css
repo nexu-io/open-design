@@ -17,7 +17,7 @@ button.item {
   box-sizing: border-box; display: flex; align-items: center; justify-content: flex-start;
   width: 100%; min-width: 0; height: 28px; padding: 0 8px; gap: 8px;
   border: 0; border-radius: 4px; background: transparent; color: #494949;
-  font-size: 12px; font-weight: 400; line-height: normal; white-space: nowrap;
+  font-size: 12px; font-weight: 500; line-height: normal; white-space: nowrap;
 }
 button.item:not(:disabled):hover, button.item:focus-visible { background: #F2F2F4; color: #1F1F1F; }
 button.item:disabled { opacity: 0.5; }
