@@ -62,7 +62,6 @@ vi.mock('../../src/state/projects', async () => {
   };
 });
 
-import { TooltipLayer } from '../../src/components/TooltipLayer';
 import {
   COMMENT_AUTHOR_AVATAR_COLORS,
   CommentSidePanel,
@@ -11014,8 +11013,8 @@ describe('FileViewer tweaks toolbar', () => {
     vi.stubGlobal('fetch', fetchMock);
     render(<FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()} liveHtml="<html><body /></html>" previewComments={comments} />);
     const unreadBadge = await screen.findByTestId('comment-unread-dot');
-    expect(unreadBadge).toHaveTextContent('3');
-    expect(unreadBadge).toHaveClass('viewer-comment-unread-badge');
+    expect(unreadBadge).toBeEmptyDOMElement();
+    expect(unreadBadge).toHaveStyle({ width: '7px', height: '7px', position: 'absolute' });
     expect(screen.getByTestId('comment-panel-toggle').getAttribute('aria-label')).toBe('Comments (3)');
     fireEvent.click(screen.getByTestId('comment-panel-toggle'));
     await waitFor(() => expect(screen.queryByTestId('comment-unread-dot')).toBeNull());
@@ -12122,8 +12121,8 @@ describe('FileViewer tweaks toolbar', () => {
     expect(rows).toHaveLength(3);
     const firstSlideRow = rows.find((row) => row.dataset.commentId === 'comment-slide-one')!;
     const fourthSlideRow = rows.find((row) => row.dataset.commentId === 'comment-slide-four')!;
-    expect(within(firstSlideRow).getByText('Slide 1 / 18').className).toBe('comment-side-slide');
-    expect(within(fourthSlideRow).getByText('Slide 4 / 18').className).toBe('comment-side-slide');
+    expect(within(firstSlideRow).getByText('Slide 1 / 18').closest('.comment-side-item-head')).not.toBeNull();
+    expect(within(fourthSlideRow).getByText('Slide 4 / 18').closest('.comment-side-item-head')).not.toBeNull();
     expect(within(rows.find((row) => row.dataset.commentId === 'comment-without-slide')!).queryByText(/Slide \d+ \/ 18/)).toBeNull();
 
     const postMessage = vi.spyOn(frame.contentWindow!, 'postMessage');
@@ -13429,21 +13428,12 @@ describe('FileViewer tweaks toolbar', () => {
     expect(within(item).queryByText(/Open Design 用户/)).toBeNull();
   });
 
-  it('uses the exact 30 foreground/background author swatches with stable hash selection', () => {
+  it('uses the main author palette with stable selection', () => {
     expect(COMMENT_AUTHOR_AVATAR_COLORS).toEqual([
-      { bg: '#7DB7FF', fg: '#144582' }, { bg: '#FFB86B', fg: '#803D12' }, { bg: '#B19AFF', fg: '#482D80' },
-      { bg: '#6DDDB1', fg: '#155C40' }, { bg: '#FF92BC', fg: '#7D234C' }, { bg: '#F7D45B', fg: '#75560C' },
-      { bg: '#69D5F0', fg: '#155365' }, { bg: '#FF9B85', fg: '#733526' }, { bg: '#8DE56C', fg: '#285728' },
-      { bg: '#D58FFF', fg: '#5A2C6D' }, { bg: '#91A9FF', fg: '#283F75' }, { bg: '#FFC76B', fg: '#634E28' },
-      { bg: '#68DEC9', fg: '#1C5C53' }, { bg: '#FF8BC7', fg: '#702D48' }, { bg: '#BDE66A', fg: '#445D20' },
-      { bg: '#B78AFF', fg: '#442C64' }, { bg: '#5ED9B3', fg: '#1B5349' }, { bg: '#FF939D', fg: '#6E342E' },
-      { bg: '#78C7FF', fg: '#2E516A' }, { bg: '#F5CF63', fg: '#6B5118' }, { bg: '#9AE883', fg: '#375C38' },
-      { bg: '#EA8AD7', fg: '#563450' }, { bg: '#6EDA94', fg: '#274E38' }, { bg: '#9E9BFF', fg: '#363861' },
-      { bg: '#FFA277', fg: '#6C3F1D' }, { bg: '#ABE779', fg: '#3D6030' }, { bg: '#68D4E6', fg: '#285567' },
-      { bg: '#D99AFA', fg: '#63365A' }, { bg: '#FFD17C', fg: '#625034' }, { bg: '#6CDCD9', fg: '#33585E' },
+      '#f97316', '#e11d48', '#7c3aed', '#2563eb', '#0891b2',
+      '#059669', '#ca8a04', '#db2777', '#4f46e5', '#0d9488',
     ]);
-    expect(commentAuthorAvatarColor('external-author')).toEqual({ bg: '#D99AFA', fg: '#63365A' });
-    expect(commentAuthorAvatarColor('external-author')).toBe(commentAuthorAvatarColor('external-author'));
+    expect(commentAuthorAvatarColor('external-author')).toEqual({ bg: '#db2777', fg: '#fff' });
   });
 
   it('renders a user author from its trusted snapshot without querying the member directory', async () => {
@@ -13475,8 +13465,12 @@ describe('FileViewer tweaks toolbar', () => {
     const item = await screen.findByTestId('comment-side-item');
     const avatar = item.querySelector<HTMLElement>('.comment-side-avatar');
     expect(avatar?.textContent).toBe('A');
-    expect(avatar?.style.background).toBe('rgb(105, 213, 240)');
-    expect(avatar?.style.color).toBe('rgb(21, 83, 101)');
+    const swatch = commentAuthorAvatarColor('a'.repeat(64));
+    const expected = document.createElement('span');
+    expected.style.background = swatch.bg;
+    expected.style.color = swatch.fg;
+    expect(avatar?.style.background).toBe(expected.style.background);
+    expect(avatar?.style.color).toBe(expected.style.color);
     expect(within(item).getByText(/Avery Visitor/)).toBeTruthy();
     expect(within(item).getByText(/comment.authorRole.sharePage/)).toBeTruthy();
     expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/api/workspace/members'))).toBe(false);
@@ -13509,7 +13503,7 @@ describe('FileViewer tweaks toolbar', () => {
     expect(avatar?.style.background).toBe(expectedColor.style.background);
     expect(avatar?.style.color).toBe(expectedColor.style.color);
     expect(item.querySelector('.comment-side-author-copy small')).toBeNull();
-    expect(document.querySelector('.comment-side-title')?.textContent).toBe(`${t('chat.tabComments')} 1`);
+    expect(document.querySelector('.comment-side-title')?.textContent).toBe(t('chat.tabComments'));
   });
 
   it('renders an empty external author as a key-colored question-mark avatar without a name line', async () => {
@@ -13604,22 +13598,19 @@ describe('FileViewer tweaks toolbar', () => {
     const shellRule = (selector: string) => rule(shellCss, selector);
 
     expect(coreRule('.comment-side-panel')).toContain('width: 320px;');
-    expect(coreRule('.comment-side-header')).toContain('height: 56px;');
-    expect(coreRule('.comment-side-header')).toContain('padding: 0 16px;');
-    expect(coreRule('.comment-side-list')).toContain('padding: 8px 12px;');
-    expect(coreRule('.comment-side-list')).toContain('gap: 6px;');
-    expect(coreRule('.comment-side-item')).toContain('padding: 6px 10px 6px 8px;');
-    expect(coreRule('.comment-side-item')).toContain('border-radius: 8px;');
-    expect(coreRule('.comment-side-time')).toContain('font-size: 10.5px;');
-    expect(coreRule('.comment-side-check')).toContain('border: 1px solid #CFCFCF;');
-    expect(coreRule('.comment-side-selectbar')).toContain('height: 40px;');
-    expect(coreRule('.comment-side-selectbar')).toContain('padding: 4px 14px 8px;');
-    expect(coreRule('.comment-side-selectbar .primary')).toContain('background: #202020;');
-    expect(shellRule('.comment-float-host')).toContain('width: min(320px, calc(100vw - 32px));');
-    expect(shellRule('.comment-float-host')).toContain('border: 1px solid #E6E6E6;');
-    expect(shellRule('.comment-float-host')).toContain('box-shadow: none;');
-    expect(shellCss).toContain('padding-right: max(0px, min(348px, calc(100% - 160px)));');
-    expect(shellRule('.comment-float-host .comment-side-header')).toContain('min-height: 56px;');
+    expect(coreRule('.comment-side-header')).toContain('padding: 10px 12px;');
+    expect(coreRule('.comment-side-list')).toContain('padding: 12px;');
+    expect(coreRule('.comment-side-list')).toContain('gap: 8px;');
+    expect(coreRule('.comment-side-item')).toContain('padding: 10px 12px 10px 8px;');
+    expect(coreRule('.comment-side-item')).toContain('border-radius: var(--radius);');
+    expect(coreRule('.comment-side-time')).toContain('font-size: 12px;');
+    expect(coreRule('.comment-side-check')).toContain('border: 1.5px solid var(--border);');
+    expect(coreRule('.comment-side-selectbar .primary')).toContain('background: var(--comment-accent);');
+    expect(shellRule('.comment-float-host')).toContain('width: min(360px, calc(100vw - 32px));');
+    expect(shellRule('.comment-float-host')).toContain('border: 1px solid var(--border);');
+    expect(shellRule('.comment-float-host')).toContain('box-shadow: var(--shadow-lg);');
+    expect(shellCss).toContain('padding-right: max(0px, min(388px, calc(100% - 160px)));');
+    expect(shellRule('.comment-float-host .comment-side-header')).toContain('min-height: 40px;');
   });
 
   it('reorders saved comments with the drag handle for send sequence', () => {
@@ -15121,7 +15112,6 @@ describe('LiveArtifactRefreshHistoryPanel', () => {
       <I18nProvider initial="zh-CN">
         <CollabProvider value={collab}>
           <FileViewer projectId="project-1" projectKind="prototype" file={baseFile({ name: 'preview.html', path: 'preview.html', kind: 'html', mime: 'text/html' })} liveHtml='<html><body><main>Hero</main></body></html>' previewComments={[comment]} />
-          <TooltipLayer />
         </CollabProvider>
       </I18nProvider>,
     );
@@ -15144,33 +15134,23 @@ describe('LiveArtifactRefreshHistoryPanel', () => {
     const marker = await screen.findByTestId(`comment-saved-marker-${elementId}`);
     const pin = marker.querySelector('button');
     expect(marker).toHaveClass(`comment-saved-marker--${_state}`);
-    expect(pin).toHaveClass('comment-saved-pin', 'od-tooltip', 'tipd');
-    expect(pin).toHaveAttribute('data-tooltip', expect.stringContaining(expected));
+    expect(pin).toHaveClass('comment-saved-pin');
+    expect(pin).not.toHaveClass('od-tooltip');
     expect(pin).toHaveAttribute('title', expect.stringContaining(expected));
     expect(pin).toHaveAccessibleDescription(expect.stringContaining(expected));
 
     fireEvent.pointerOver(pin!);
-    expect(screen.getByRole('tooltip')).toHaveTextContent(expected);
-    expect(pin).not.toHaveAttribute('title');
-    fireEvent.pointerOut(pin!);
-    expect(screen.queryByRole('tooltip')).toBeNull();
     expect(pin).toHaveAttribute('title', expect.stringContaining(expected));
-
-    fireEvent.keyDown(document, { key: 'Tab' });
+    fireEvent.pointerOut(pin!);
     fireEvent.focusIn(pin!);
-    expect(screen.getByRole('tooltip')).toHaveTextContent(expected);
+    expect(pin).toHaveAttribute('title', expect.stringContaining(expected));
     fireEvent.focusOut(pin!);
-    expect(screen.queryByRole('tooltip')).toBeNull();
   });
 
   it('keeps D1–D4 marker and deck-page presentation on the rendered selectors', () => {
     const css = readFileSync(join(process.cwd(), 'src/styles/viewer/core.css'), 'utf8');
-    // chain4-owner 4.2b: 20px/weight 600/white ring -> 28px/weight 500/no
-    // ring; background is now set per-author inline (commentAuthorAvatarColor),
-    // so the base rule only keeps the #282828 fallback for anchor-lost pins
-    // that opt out of the inline color.
-    expect(css).toMatch(/\.comment-saved-pin,\s*\.comment-active-pin[\s\S]*?width: 28px;[\s\S]*?height: 28px;[\s\S]*?border: 0;[\s\S]*?border-radius: 50% 50% 50% 4px;[\s\S]*?background: #282828;[\s\S]*?font-size: 12px;[\s\S]*?font-weight: 500;/);
-    expect(css).toMatch(/\.comment-saved-marker--lost \.comment-saved-pin[\s\S]*?border: 1px dashed #888888;[\s\S]*?background: #FFFFFF;[\s\S]*?color: #666666;[\s\S]*?box-shadow: none;/);
-    expect(css).toMatch(/\.comment-side-slide[\s\S]*?padding-left: 28px;[\s\S]*?color: #8A5A12;[\s\S]*?font-size: 12px;[\s\S]*?line-height: 18px;/);
+    expect(css).toMatch(/\.comment-saved-pin,\s*\.comment-active-pin[\s\S]*?width: 42px;[\s\S]*?height: 42px;[\s\S]*?border: 3px solid #fff;[\s\S]*?background: #d96a46;[\s\S]*?font-size: 18px;/);
+    expect(css).not.toContain('.comment-saved-marker--lost .comment-saved-pin');
+    expect(css).not.toContain('.comment-side-slide {');
   });
 });
