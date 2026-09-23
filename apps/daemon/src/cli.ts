@@ -2876,6 +2876,7 @@ function exitWithStructuredError({ code, message, data }) {
 //
 // Daemon error envelopes come in two shapes in practice:
 //   { error: { code, message, ... } }  — newer routes using sendApiError
+//   { error: '<code>', message, ... }   — workspace authority routes
 //   { error: '<message>' }             — older flat-string routes
 //                                         (e.g. POST /api/templates at
 //                                         routes/project/index.ts)
@@ -2894,7 +2895,9 @@ async function structuredHttpFailure(resp, fallbackCode = 'daemon-not-running') 
   }
   const errorObj =
     typeof parsed?.error === 'string'
-      ? { message: parsed.error }
+      ? typeof parsed.message === 'string'
+        ? { ...parsed, code: parsed.error }
+        : { message: parsed.error }
       : parsed?.error;
   const errCode = normalizeRecoverableErrorCode(errorObj?.code, errorObj?.message);
   if (errCode) {
