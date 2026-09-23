@@ -398,9 +398,13 @@ describe('useWorkspaceBilling explicit scope', () => {
     let member = context.workspaceMemberId;
     let generatedOffset = 0;
     let resetAt: string | null = null;
+    let runtimeManaged = false;
+    let quotaRealtimeHealthy = false;
     const billingCalls: string[] = [];
-    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      const interest = billingInterestResponse(input, init);
+      if (interest) return interest;
       if (url === '/api/workspace/directory') return workspaceDirectoryResponse(context);
       if (url.startsWith('/api/workspace/context')) return new Response(JSON.stringify({ context }));
       if (url.startsWith('/api/workspace/billing?')) {
@@ -408,6 +412,13 @@ describe('useWorkspaceBilling explicit scope', () => {
         if (fail) return new Response('', { status: 503 });
         return new Response(JSON.stringify({
           ...billingResponse('personal-a', '0'),
+          ...(runtimeManaged ? { workspaceRuntime: {
+            workspaceId: context.workspaceId, workspaceMemberId: context.workspaceMemberId,
+            status: 'fresh', revision: '1', observedAt: new Date().toISOString(),
+            hardExpiresAt: new Date(Date.now() + 600_000).toISOString(),
+            retryAt: null, errorCode: null, sourceGapDetected: false,
+          } } : {}),
+          quotaRealtime: { healthy: quotaRealtimeHealthy },
           preflight: {
             workspaceId: context.workspaceId, workspaceMemberId: member,
             generatedAt: new Date(Date.now() + generatedOffset).toISOString(), balanceUsd: '0',
@@ -425,8 +436,45 @@ describe('useWorkspaceBilling explicit scope', () => {
       member: (value: string) => { member = value; },
       generatedOffset: (value: number) => { generatedOffset = value; },
       reset: (value: string) => { resetAt = value; },
+      runtime: (healthy: boolean) => { runtimeManaged = true; quotaRealtimeHealthy = healthy; },
     };
   }
+
+  it('refreshes personal quota without wallet changes when the daemon only manages wallet freshness', async () => {
+    vi.useFakeTimers();
+    const fixture = personalQuotaFixture();
+    fixture.runtime(false);
+    const hook = renderHook(() => useWorkspaceBillingResponse({ context: fixture.context, revision: 0 }));
+    await vi.waitFor(() => expect(hook.result.current?.preflight?.codingPlan.windows[0]?.usedCredits).toBe('250'));
+    fixture.spend('500');
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+    expect(hook.result.current?.preflight?.codingPlan.windows[0]?.usedCredits).toBe('500');
+    expect(hook.result.current?.workspaceBalance?.balanceUsd).toBe('0');
+  });
+
+  it('uses member-scoped quota events while healthy and restores the safety floor after disconnect', async () => {
+    vi.useFakeTimers();
+    const fixture = personalQuotaFixture();
+    fixture.runtime(true);
+    const hook = renderHook(() => useWorkspaceBillingResponse({ context: fixture.context, revision: 0 }));
+    await vi.waitFor(() => expect(hook.result.current?.preflight).toBeTruthy());
+    const source = MockWorkspaceEventSource.instances[0]!;
+    await act(async () => { source.onopen?.(); });
+    const before = fixture.billingCalls.length;
+    fixture.spend('500');
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+    expect(fixture.billingCalls).toHaveLength(before);
+    const payload = { type: 'coding-plan-usage-changed', workspaceId: fixture.context.workspaceId,
+      workspaceMemberId: fixture.context.workspaceMemberId, eventId: '1' };
+    await act(async () => { source.dispatch(payload.type, { ...payload, workspaceMemberId: 'other' }); });
+    expect(fixture.billingCalls).toHaveLength(before);
+    await act(async () => { source.dispatch(payload.type, payload); });
+    expect(hook.result.current?.preflight?.codingPlan.windows[0]?.usedCredits).toBe('500');
+    fixture.spend('750');
+    await act(async () => { source.onerror?.(); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+    expect(hook.result.current?.preflight?.codingPlan.windows[0]?.usedCredits).toBe('750');
+  });
 
   it('shares personal quota with the existing cache and refreshes on scoped SSE without clearing it', async () => {
     const fixture = personalQuotaFixture();

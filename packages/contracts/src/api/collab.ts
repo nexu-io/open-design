@@ -912,6 +912,10 @@ export interface WorkspaceBillingSummary {
 export interface WorkspaceBillingResponse {
   /** Advisory funding/usage read. Absent on older CLIs; never infer exhausted. */
   preflight?: WorkspaceBillingPreflight | null;
+  /** Exact-workspace upstream supports quota events and its producer is healthy.
+   * Wallet runtime freshness alone does not cover Coding Plan consumption.
+   * Missing/false requires the client to keep quota fallback reads. */
+  quotaRealtime?: { healthy: boolean };
   /** Account-scoped metadata; independently nullable from workspace money. */
   summary: WorkspaceBillingSummary | null;
   /**
