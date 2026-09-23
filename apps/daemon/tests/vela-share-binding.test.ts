@@ -26,7 +26,8 @@ it.each([{}, { ...receipt, status: 'stopped' }, { ...receipt, verifiedVersion: 1
   await expect(resumeVelaShareVersion(input, run)).rejects.toThrow(/^PUBLIC_SHARE_BINDING_FAILED$/); expect(run).toHaveBeenCalledTimes(1);
   expect(run.mock.calls[0]![0].slice(0, 2)).toEqual(['share', 'resume']);
 });
-it.skipIf(!process.env.OD_TEST_VELA_BIN).each(['success', 'missing-proof', 'conflict', 'old-server', 'stopped'] as const)('real Go binding-only %s uses exactly one dedicated endpoint', async mode => {
+for (const operation of ['bind', 'resume'] as const) {
+it.skipIf(!process.env.OD_TEST_VELA_BIN).each(['success', 'missing-proof', 'conflict', 'old-server', 'stopped'] as const)(`real Go ${operation} %s uses exactly one dedicated endpoint`, async mode => {
   const binary = process.env.OD_TEST_VELA_BIN!; const root = await mkdtemp(path.join(tmpdir(), 'od-bind-cli-'));
   const calls: unknown[] = [];
   const server = createServer(async (req, res) => {
@@ -40,12 +41,14 @@ it.skipIf(!process.env.OD_TEST_VELA_BIN).each(['success', 'missing-proof', 'conf
     await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve)); const address = server.address();
     if (!address || typeof address === 'string') throw new Error('no listener');
     const session = { profile: 'test' as const, apiUrl: `http://127.0.0.1:${address.port}`, controlKey: 'synthetic', user: null, configMtimeMs: null };
-    const result = bindVelaShareVersion(input, args => runPinnedVelaCommand({ args, session, dataRoot: root, workspaceId: 'w', configuredEnv: { VELA_BIN: binary } }));
+    const complete = operation === 'resume' ? resumeVelaShareVersion : bindVelaShareVersion;
+    const result = complete(input, args => runPinnedVelaCommand({ args, session, dataRoot: root, workspaceId: 'w', configuredEnv: { VELA_BIN: binary } }));
     if (mode === 'success') await expect(result).resolves.toBeUndefined(); else await expect(result).rejects.toThrow(/^PUBLIC_SHARE_BINDING_FAILED$/);
-    expect(calls).toEqual([{ url: '/api/v1/collab/shares/complete', method: 'POST', workspace: 'w', body: { projectId: 'p', slug: 'stable', sourceFilePath: 'pages/local.html', expectedResourceId: 'r', expectedVersion: 2, expectedVersionId: 'immutable' } }]);
+    expect(calls).toEqual([{ url: operation === 'resume' ? '/api/v1/collab/shares/stable/resume' : '/api/v1/collab/shares/complete', method: 'POST', workspace: 'w', body: { projectId: 'p', slug: 'stable', sourceFilePath: 'pages/local.html', expectedResourceId: 'r', expectedVersion: 2, expectedVersionId: 'immutable' } }]);
     expect(await readdir(root)).toEqual([]);
   } finally {
     server.closeAllConnections(); if (server.listening) await new Promise<void>(resolve => server.close(() => resolve()));
     await rm(root, { recursive: true, force: true });
   }
 });
+}
