@@ -1482,9 +1482,11 @@ describe("ProductionCampaignModal device impressions", () => {
 			await vi.advanceTimersByTimeAsync(10);
 		});
 		expect(document.querySelector("opend-touchpoint")).not.toBeNull();
-		// Fake timers do not drive jsdom's animation frames, so record the
-		// impression the paint would have recorded.
-		localStorage.setItem(marker(), "1");
+		// The host is inserted before its asynchronous verify-and-mount finishes,
+		// and that work does not run on the fake clock. Wait for the impression
+		// the mounted presentation records itself, so the failing poll below
+		// cannot arrive while nothing is open yet.
+		await vi.waitFor(() => expect(localStorage.getItem(marker())).toBe("1"));
 		await act(async () => {
 			await vi.advanceTimersByTimeAsync(30_000);
 		});
