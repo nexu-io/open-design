@@ -1,4 +1,5 @@
 import { useExperienceError } from '../observability/use-experience-error';
+import { daemonErrorCodeProp, failureDetailProps } from '../analytics/failure-detail';
 import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent as ReactClipboardEvent, type CSSProperties, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import type { ArtifactExportFormat } from '../runtime/chat/artifact-export';
 import { boundedPublishProgress, ShareTab, type SharePublishFailureKey } from './share/ShareTab';
@@ -6800,8 +6801,10 @@ function ReactComponentViewer({
   const firePublishResult = (
     outcome: Pick<
       ArtifactPublishResultProps,
-      'action' | 'result' | 'error_code' | 'publish_duration_ms'
+      | 'action' | 'result' | 'error_code' | 'publish_duration_ms' | 'daemon_error_code'
+      | 'failed_stage' | 'failure_reason' | 'upstream_status' | 'upstream_error_code'
     >,
+    requestId?: string,
   ) => {
     // Read the live ref, not the captured prop: a request can start while this
     // viewer is active and settle after the user switches tabs.
@@ -6811,7 +6814,7 @@ function ReactComponentViewer({
       area: 'share_option_popover',
       ...outcome,
       ...publishTrackingIdentity(),
-    });
+    }, requestId ? { requestId } : undefined);
   };
 
   async function publishCurrentFilePublic() {
@@ -6821,16 +6824,22 @@ function ReactComponentViewer({
     const requestSeq = ++publicFileRequestSeqRef.current;
     firePublishFlowClick('publish_file');
     const publishStarted = performance.now();
+    const publishRequestId = analytics.newRequestId();
     setPublishingPublicFile(true);
     setPublishLinkFeedback(null);
     setPublishFailureKey(null);
     try {
-      const response = await publishProjectFilePublic(requestProjectId, requestFileName, workspaceContext);
+      const response = await publishProjectFilePublic(
+        requestProjectId,
+        requestFileName,
+        workspaceContext,
+        publishRequestId,
+      );
       firePublishResult({
         action: 'publish',
         result: 'success',
         publish_duration_ms: Math.round(performance.now() - publishStarted),
-      });
+      }, publishRequestId);
       const current = publicFileIdentityRef.current;
       if (
         publicFileRequestSeqRef.current !== requestSeq ||
@@ -6849,7 +6858,9 @@ function ReactComponentViewer({
         result: 'failed',
         error_code: publishErrorCode(error),
         publish_duration_ms: Math.round(performance.now() - publishStarted),
-      });
+        ...daemonErrorCodeProp(error),
+        ...failureDetailProps(error),
+      }, publishRequestId);
       if (publicFileRequestSeqRef.current === requestSeq) {
         if (recoveryPublication) {
           setPublishedFileUrl(recoveryPublication.url);
@@ -6873,16 +6884,23 @@ function ReactComponentViewer({
     const requestSlug = publishedFileSlug;
     const requestSeq = ++publicFileRequestSeqRef.current;
     const unpublishStarted = performance.now();
+    const unpublishRequestId = analytics.newRequestId();
     setPublishingPublicFile(true);
     setPublishLinkFeedback(null);
     setPublishFailureKey(null);
     try {
-      await unpublishProjectFilePublic(requestProjectId, requestFileName, requestSlug, workspaceContext);
+      await unpublishProjectFilePublic(
+        requestProjectId,
+        requestFileName,
+        requestSlug,
+        workspaceContext,
+        unpublishRequestId,
+      );
       firePublishResult({
         action: 'unpublish',
         result: 'success',
         publish_duration_ms: Math.round(performance.now() - unpublishStarted),
-      });
+      }, unpublishRequestId);
       const current = publicFileIdentityRef.current;
       if (
         publicFileRequestSeqRef.current !== requestSeq ||
@@ -6900,7 +6918,9 @@ function ReactComponentViewer({
         result: 'failed',
         error_code: publishErrorCode(error),
         publish_duration_ms: Math.round(performance.now() - unpublishStarted),
-      });
+        ...daemonErrorCodeProp(error),
+        ...failureDetailProps(error),
+      }, unpublishRequestId);
       if (publicFileRequestSeqRef.current === requestSeq) {
         setPublishLinkFeedback('failed');
         setPublishFailureKey(publicFilePublishFailureKey(error));
@@ -8278,8 +8298,10 @@ function HtmlViewer({
   const firePublishResult = (
     outcome: Pick<
       ArtifactPublishResultProps,
-      'action' | 'result' | 'error_code' | 'publish_duration_ms'
+      | 'action' | 'result' | 'error_code' | 'publish_duration_ms' | 'daemon_error_code'
+      | 'failed_stage' | 'failure_reason' | 'upstream_status' | 'upstream_error_code'
     >,
+    requestId?: string,
   ) => {
     // Read the live ref, not the captured prop: a publish/unpublish request can
     // start while this viewer is active and settle after the user switches tabs,
@@ -8290,7 +8312,7 @@ function HtmlViewer({
       area: 'share_option_popover',
       ...outcome,
       ...publishTrackingIdentity(),
-    });
+    }, requestId ? { requestId } : undefined);
   };
 
   async function publishCurrentFilePublic() {
@@ -8303,6 +8325,7 @@ function HtmlViewer({
     setPublishProgress(boundedPublishProgress(0, false));
     firePublishFlowClick('publish_file');
     const publishStarted = performance.now();
+    const publishRequestId = analytics.newRequestId();
     publicFileProgressTimerRef.current = window.setInterval(() => {
       if (publicFileRequestSeqRef.current !== requestSeq) return;
       setPublishProgress((previous) => Math.max(previous ?? 0,
@@ -8312,12 +8335,17 @@ function HtmlViewer({
     setPublishLinkFeedback(null);
     setPublishFailureKey(null);
     try {
-      const response = await publishProjectFilePublic(requestProjectId, requestFileName, workspaceContext);
+      const response = await publishProjectFilePublic(
+        requestProjectId,
+        requestFileName,
+        workspaceContext,
+        publishRequestId,
+      );
       firePublishResult({
         action: 'publish',
         result: 'success',
         publish_duration_ms: Math.round(performance.now() - publishStarted),
-      });
+      }, publishRequestId);
       const current = publicFileIdentityRef.current;
       if (
         publicFileRequestSeqRef.current !== requestSeq ||
@@ -8347,7 +8375,9 @@ function HtmlViewer({
         result: 'failed',
         error_code: publishErrorCode(error),
         publish_duration_ms: Math.round(performance.now() - publishStarted),
-      });
+        ...daemonErrorCodeProp(error),
+        ...failureDetailProps(error),
+      }, publishRequestId);
       if (publicFileRequestSeqRef.current === requestSeq) {
         clearPublicFileProgressTimers();
         setPublishProgress(null);
@@ -8380,16 +8410,23 @@ function HtmlViewer({
     clearPublicFileProgressTimers();
     setPublishProgress(null);
     const unpublishStarted = performance.now();
+    const unpublishRequestId = analytics.newRequestId();
     setPublishingPublicFile(true);
     setPublishLinkFeedback(null);
     setPublishFailureKey(null);
     try {
-      await unpublishProjectFilePublic(requestProjectId, requestFileName, requestSlug, workspaceContext);
+      await unpublishProjectFilePublic(
+        requestProjectId,
+        requestFileName,
+        requestSlug,
+        workspaceContext,
+        unpublishRequestId,
+      );
       firePublishResult({
         action: 'unpublish',
         result: 'success',
         publish_duration_ms: Math.round(performance.now() - unpublishStarted),
-      });
+      }, unpublishRequestId);
       const current = publicFileIdentityRef.current;
       if (
         publicFileRequestSeqRef.current !== requestSeq ||
@@ -8407,7 +8444,9 @@ function HtmlViewer({
         result: 'failed',
         error_code: publishErrorCode(error),
         publish_duration_ms: Math.round(performance.now() - unpublishStarted),
-      });
+        ...daemonErrorCodeProp(error),
+        ...failureDetailProps(error),
+      }, unpublishRequestId);
       if (publicFileRequestSeqRef.current === requestSeq) {
         // Stopping a link is not a clipboard operation. Keep the URL and copy
         // feedback independent while preserving actionable identity failures.
@@ -14601,6 +14640,7 @@ function HtmlViewer({
     // accepts the publish, failed on any hard error / missing config. This is
     // distinct from the share-popover "opened" signal (artifact_export_result).
     const deployStarted = performance.now();
+    const deployRequestId = analytics.newRequestId();
     const providerForTracking: TrackingDeployProvider =
       deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? 'cloudflare_pages' : 'vercel';
     const firstConfigure = !deployConfig?.configured;
@@ -14608,6 +14648,7 @@ function HtmlViewer({
     const fireDeployResult = (
       result: 'success' | 'failed' | 'cancelled',
       errorCode?: string,
+      error?: unknown,
     ) => {
       trackArtifactDeployResult(analytics.track, {
         page_name: 'artifact',
@@ -14622,7 +14663,8 @@ function HtmlViewer({
         deploy_duration_ms: Math.round(performance.now() - deployStarted),
         project_id: projectId,
         project_kind: projectKind,
-      });
+        ...failureDetailProps(error),
+      }, { requestId: deployRequestId });
     };
     try {
       const cloudflarePagesSelection = buildCloudflarePagesDeploySelection();
@@ -14663,6 +14705,7 @@ function HtmlViewer({
         cloudflarePagesSelection,
         deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? deployTarget : undefined,
         workspaceContext,
+        deployRequestId,
       );
       setDeploymentsByProvider((current) => ({
         ...current,
@@ -14698,6 +14741,7 @@ function HtmlViewer({
       fireDeployResult(
         'failed',
         tokenRequired ? 'CONFIG_REQUIRED' : deployErrorCode(err),
+        err,
       );
     } finally {
       setDeploying(false);

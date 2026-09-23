@@ -69,6 +69,8 @@ import {
   type PublicFilePublicationScope,
   type PublicFilePublicationStore,
 } from '../collab/public-file-publication-store.js';
+import { classifyVelaCommandFailure, logPublicFileFailure } from '../collab/public-file-failure.js';
+import { clientRequestIdFor } from '../http/client-request-id.js';
 import { isAbortedOperationError } from '../integrations/aborted-error.js';
 import { buildDeployFilePlan } from '../deploy.js';
 import { readProjectManifest } from '../project-locations.js';
@@ -1254,6 +1256,8 @@ export function registerCollabSyncRoutes(
   });
 
   app.post(/^\/api\/projects\/([^/]+)\/files\/(.+)\/publish-public$/u, publicFileMutationHandler(deps.publicFileMutations, async (req, res) => {
+    const startedAt = Date.now();
+    const requestId = clientRequestIdFor(req);
     // SAFETY: these RegExp routes expose numeric capture keys; Express types model named keys only.
     const params = req.params as unknown as { 0?: string; 1?: string };
     const projectId = String(params[0] ?? '');
@@ -1349,6 +1353,7 @@ export function registerCollabSyncRoutes(
     if (resumed) return res.json(sharePublishResponse(resumed, prepared.url));
     const resourceId = publicFileResourceIdFor(scope);
     const tempDir = await mkdtemp(path.join(os.tmpdir(), 'od-public-file-'));
+    let stage: 'push' | 'snapshot' | 'persist' = 'push';
     try {
       for (const file of sharePlan.files) {
         const targetFile = path.join(tempDir, file.file);
@@ -1376,6 +1381,7 @@ export function registerCollabSyncRoutes(
         '--json',
       ]);
       const versionId = parseVelaPushVersionId(pushOutput);
+      stage = 'snapshot';
       const result = await publishReservedVelaShareVersion({
         scope, resourceId, versionId, entryPath: sharePlan.entryPath,
         name: path.basename(filePath),
@@ -1384,13 +1390,18 @@ export function registerCollabSyncRoutes(
         url: prepared.url, slug: result.receipt.slug, fileName: filePath,
       };
       let outcome: ReturnType<typeof publisher.complete>;
+      stage = 'persist';
       try {
         outcome = publisher.complete({ scope, resourceId, publication, mapping: sharePlan.mapping, result });
       } catch {
         if (previousState?.projectId === projectId && !previousState.publications.some(item => item.slug === result.receipt.slug)) {
           try {
             await stopVelaShare(projectId, result.receipt.slug, prepared.run);
-            return res.status(502).json({ error: 'PUBLIC_FILE_PUBLISH_UNAVAILABLE' });
+            const failure = { stage, reason: 'internal' } as const;
+            logPublicFileFailure({
+              action: 'publish', errorCode: 'PUBLIC_FILE_PUBLISH_UNAVAILABLE', failure, requestId, startedAt,
+            });
+            return res.status(502).json({ error: 'PUBLIC_FILE_PUBLISH_UNAVAILABLE', failure });
           } catch { /* Remote publication may still be accessible: never hide it. */ }
         }
         return res.status(502).json({ error: {
@@ -1425,13 +1436,21 @@ export function registerCollabSyncRoutes(
       return res.json(response);
     } catch (error) {
       console.warn('[od] failed to publish public project file:', error);
-      return res.status(502).json({ error: 'PUBLIC_FILE_PUBLISH_UNAVAILABLE' });
+      const failure = stage === 'persist'
+        ? { stage, reason: 'internal' as const }
+        : classifyVelaCommandFailure(stage, error);
+      logPublicFileFailure({
+        action: 'publish', errorCode: 'PUBLIC_FILE_PUBLISH_UNAVAILABLE', failure, requestId, startedAt,
+      });
+      return res.status(502).json({ error: 'PUBLIC_FILE_PUBLISH_UNAVAILABLE', failure });
     } finally {
       await rm(tempDir, { recursive: true, force: true }).catch(() => {});
     }
   }));
 
   app.delete(/^\/api\/projects\/([^/]+)\/files\/(.+)\/publish-public$/u, publicFileMutationHandler(deps.publicFileMutations, async (req, res) => {
+    const startedAt = Date.now();
+    const requestId = clientRequestIdFor(req);
     // SAFETY: these RegExp routes expose numeric capture keys; Express types model named keys only.
     const params = req.params as unknown as { 0?: string; 1?: string };
     const projectId = String(params[0] ?? '');
@@ -1486,7 +1505,11 @@ export function registerCollabSyncRoutes(
       return res.json({ ok: true, slug, fileName: filePath });
     } catch (error) {
       console.warn('[od] failed to unpublish public project file:', error);
-      return res.status(502).json({ error: 'PUBLIC_FILE_UNPUBLISH_UNAVAILABLE' });
+      const failure = classifyVelaCommandFailure('redact', error);
+      logPublicFileFailure({
+        action: 'unpublish', errorCode: 'PUBLIC_FILE_UNPUBLISH_UNAVAILABLE', failure, requestId, startedAt,
+      });
+      return res.status(502).json({ error: 'PUBLIC_FILE_UNPUBLISH_UNAVAILABLE', failure });
     }
   }));
 

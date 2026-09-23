@@ -1219,8 +1219,9 @@ export function trackArtifactDeployResult(
 export function trackArtifactPublishResult(
   track: Track,
   props: ArtifactPublishResultProps,
+  options?: { requestId?: string },
 ): void {
-  send(track, 'artifact_publish_result', props);
+  send(track, 'artifact_publish_result', props, options);
 }
 
 export function trackFileVersionRestoreResult(

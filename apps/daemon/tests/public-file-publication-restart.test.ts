@@ -112,7 +112,7 @@ async function startDaemon(
   if (!address || typeof address === 'string') throw new Error('server did not bind');
   const baseUrl = `http://127.0.0.1:${address.port}`;
   return {
-    async request(method: string) {
+    async request(method: string, extraHeaders: Record<string, string> = {}) {
       const response = await fetch(
         `${baseUrl}/api/projects/project-1/files/index.html/publish-public`,
         {
@@ -121,6 +121,7 @@ async function startDaemon(
             'content-type': 'application/json',
             'x-od-workspace-id': context.workspaceId,
             'x-od-workspace-member-id': context.workspaceMemberId,
+            ...extraHeaders,
           },
           ...(method === 'DELETE'
             ? { body: JSON.stringify({ slug: fixtureShareSlug }) }
@@ -212,7 +213,10 @@ describe('public file publication restart lifecycle', () => {
 
     expect(publish).toEqual({
       status: 502,
-      body: { error: 'PUBLIC_FILE_PUBLISH_UNAVAILABLE' },
+      body: {
+        error: 'PUBLIC_FILE_PUBLISH_UNAVAILABLE',
+        failure: { stage: 'persist', reason: 'internal' },
+      },
     });
     expect(vela.runResourceCommand.mock.calls.map(([args]) => args[0])).toEqual(['push']);
     expect(cloudCommands.map(args => args.slice(0, 2))).toEqual([['resource', 'push'], ['share', 'publish'], ['share', 'stop']]);
@@ -361,5 +365,102 @@ describe('public file publication restart lifecycle', () => {
       resourceTeamId: 'team-1', ownerMemberId: 'member-1',
       projectId: 'project-1', filePath: 'index.html',
     })?.slug).toBe(fixtureShareSlug);
+  });
+});
+
+// The failure detail is purely additive: `error` and the HTTP status stay what
+// they always were, and the added `failure` object plus the structured log line
+// carry only closed tokens (never Vela's stderr text).
+describe('public file publication failure detail', () => {
+  function velaRejection(stderr: string): Error {
+    return Object.assign(new Error('Command failed: vela resource push'), { code: 1, stderr });
+  }
+
+  async function publishableProject() {
+    const projectDir = await mkdtemp(path.join(tmpdir(), 'od-public-failure-'));
+    tempDirs.push(projectDir);
+    await writeFile(path.join(projectDir, 'index.html'), '<h1>Public</h1>');
+    process.env.OD_RESOURCE_HUB_URL = 'https://hub.example.test';
+    return projectDir;
+  }
+
+  const memoryStore = (): PublicFilePublicationStore => ({
+    get: () => null,
+    getRevision: () => null,
+    deleteIfRevisionMatches: () => false,
+    set: () => {},
+    delete: () => {},
+  });
+
+  it('classifies a Vela API rejection during push and logs it with the client request id', async () => {
+    const projectDir = await publishableProject();
+    vela.runResourceCommand.mockRejectedValue(velaRejection(
+      'Error: API request failed with status 503: resource_hub_unavailable\n',
+    ));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const daemon = await startDaemon(projectDir, memoryStore());
+
+      const publish = await daemon.request('POST', { 'x-od-request-id': 'req-publish-0001' });
+
+      expect(publish).toEqual({
+        status: 502,
+        body: {
+          error: 'PUBLIC_FILE_PUBLISH_UNAVAILABLE',
+          failure: {
+            stage: 'push',
+            reason: 'upstream_http',
+            upstreamStatus: 503,
+            upstreamCode: 'resource_hub_unavailable',
+          },
+        },
+      });
+      const line = warn.mock.calls.find(([label]) => label === '[od] public file publication failure');
+      expect(line).toBeDefined();
+      const logged = JSON.parse(String(line![1])) as Record<string, unknown>;
+      expect(logged).toMatchObject({
+        action: 'publish',
+        errorCode: 'PUBLIC_FILE_PUBLISH_UNAVAILABLE',
+        stage: 'push',
+        reason: 'upstream_http',
+        upstreamStatus: 503,
+        upstreamCode: 'resource_hub_unavailable',
+        requestId: 'req-publish-0001',
+      });
+      expect(typeof logged.durationMs).toBe('number');
+      expect(String(line![1])).not.toContain('API request failed');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  // Unpublish is `vela share stop` on this flow; its failure keeps the
+  // existing `redact` stage token (the unpublish step) rather than a new one.
+  it('classifies an unpublish failure and ignores a malformed request id', async () => {
+    const projectDir = await publishableProject();
+    vela.runResourceCommand.mockResolvedValue(JSON.stringify({ id: 'version-1', version: 1 }));
+    const publicationStore = createSqlitePublicFilePublicationStore(
+      openDatabase(projectDir, { dataDir: projectDir }),
+    );
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const daemon = await startDaemon(projectDir, publicationStore, undefined, true);
+      expect((await daemon.request('POST')).status).toBe(200);
+
+      const unpublish = await daemon.request('DELETE', { 'x-od-request-id': 'has spaces / path' });
+
+      expect(unpublish).toEqual({
+        status: 502,
+        body: {
+          error: 'PUBLIC_FILE_UNPUBLISH_UNAVAILABLE',
+          failure: { stage: 'redact', reason: 'unknown' },
+        },
+      });
+      const line = warn.mock.calls.find(([label]) => label === '[od] public file publication failure');
+      expect(JSON.parse(String(line![1]))).not.toHaveProperty('requestId');
+      expect(String(line![1])).not.toContain('remote stop unavailable');
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
