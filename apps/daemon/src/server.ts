@@ -8771,14 +8771,11 @@ export async function startServer({
     publicFilePublicationStore,
     createVelaPublicFileStop({ configuredEnv: configuredAmrEnv, dataRoot: RUNTIME_DATA_DIR }),
   );
-  registerProjectRoutes(app, {
-    db,
-    publicFileMutations,
-    stopPublicFilesBeforeDelete: async (projectId) => {
+  const stopPublicFilesBeforeDelete = async (projectId: string, filePath?: string) => {
       const binding = getWorkspaceProjectByProjectId(db, projectId);
       if (!binding?.workspaceId || !binding.createdByWorkspaceMemberId) {
         // An orphaned publication cannot borrow the current user's identity.
-        const publication = db.prepare('SELECT 1 FROM public_file_publications WHERE project_id = ? LIMIT 1').get(projectId);
+        const publication = db.prepare('SELECT 1 FROM public_file_publications WHERE project_id = ? AND (? IS NULL OR file_path = ?) LIMIT 1').get(projectId, filePath ?? null, filePath ?? null);
         if (publication) throw new Error('PUBLIC_FILE_STOP_PENDING');
         return;
       }
@@ -8786,8 +8783,12 @@ export async function startServer({
         resourceTeamId: binding.workspaceId,
         ownerMemberId: binding.createdByWorkspaceMemberId,
         projectId,
-      });
-    },
+      }, filePath);
+  };
+  registerProjectRoutes(app, {
+    db,
+    publicFileMutations,
+    stopPublicFilesBeforeDelete,
     design,
     // Test seam for the POST /api/projects preparation deadline; production
     // keeps the route's 15s default when the variable is unset or invalid.
@@ -9338,6 +9339,8 @@ export async function startServer({
   });
   registerProjectFileRoutes(app, {
     db,
+    publicFileMutations,
+    stopPublicFilesBeforeDelete,
     http: httpDeps,
     paths: pathDeps,
     uploads: uploadDeps,

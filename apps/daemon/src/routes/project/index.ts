@@ -5802,6 +5802,8 @@ export function registerProjectArtifactRoutes(app: Express, ctx: RegisterProject
 }
 
 export interface RegisterProjectFileRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'uploads' | 'node' | 'projectStore' | 'projectFiles' | 'documents' | 'artifacts' | 'projectPreviewScopes'> {
+  publicFileMutations?: PublicFileMutations;
+  stopPublicFilesBeforeDelete?: (projectId: string, filePath?: string) => Promise<void>;
   verifyWorkspaceRequestAuthority?: VerifyWorkspaceRequestAuthority;
   authorizeProjectRequest?: AuthorizeProjectRequest;
   /** Startup-hydrated O(1) quarantine lookup for stale Team mirrors. */
@@ -7170,7 +7172,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     }
   });
 
-  app.delete(/^\/api\/projects\/([^/]+)\/raw\/(.+)$/u, async (req, res) => {
+  app.delete(/^\/api\/projects\/([^/]+)\/raw\/(.+)$/u, publicFileMutationHandler(ctx.publicFileMutations, async (req, res) => {
     try {
       const params = req.params as unknown as { 0?: string; 1?: string };
       const projectId = String(params[0] ?? '');
@@ -7190,6 +7192,8 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         project.id,
         'writeFiles',
       )) return;
+      const target = await resolveProjectFilePath(PROJECTS_DIR, projectId, rawSplat, project?.metadata);
+      await ctx.stopPublicFilesBeforeDelete?.(projectId, target.name);
       await deleteProjectFile(PROJECTS_DIR, projectId, rawSplat, project?.metadata);
       await markProjectFileVersionStoreDeleted(PROJECTS_DIR, projectId, rawSplat, project?.metadata);
       // Tombstone, not delete: an HTML card must be able to say "the current
@@ -7212,7 +7216,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         String(err),
       );
     }
-  });
+  }));
 
   app.get('/api/projects/:id/files/:name/preview', async (req, res) => {
     try {
@@ -7884,8 +7888,11 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     }
   });
 
-  app.delete('/api/projects/:id/files/:name', async (req, res) => {
+  app.delete('/api/projects/:id/files/:name', publicFileMutationHandler(ctx.publicFileMutations, async (req, res) => {
     try {
+      if (typeof req.params.id !== 'string' || typeof req.params.name !== 'string') {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'project and file path are required');
+      }
       if (rejectInternalVersionPath(res, req.params.name)) return;
       const delProject = getProject(db, req.params.id);
       if (!delProject) {
@@ -7901,6 +7908,8 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         delProject.id,
         'writeFiles',
       )) return;
+      const target = await resolveProjectFilePath(PROJECTS_DIR, req.params.id, req.params.name, delProject?.metadata);
+      await ctx.stopPublicFilesBeforeDelete?.(delProject.id, target.name);
       await deleteProjectFile(PROJECTS_DIR, req.params.id, req.params.name, delProject?.metadata);
       await markProjectFileVersionStoreDeleted(PROJECTS_DIR, req.params.id, req.params.name, delProject?.metadata);
       try {
@@ -7920,7 +7929,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         String(err),
       );
     }
-  });
+  }));
 
 }
 
@@ -8017,7 +8026,7 @@ export function registerProjectUploadRoutes(app: Express, ctx: RegisterProjectUp
         /** @type {import('@open-design/contracts').UploadProjectFilesResponse} */
         const body = { files: out };
         res.json(body);
-      } catch (err: any) {
+      } catch {
         sendApiError(res, 500, 'INTERNAL_ERROR', 'upload failed');
       }
     },
