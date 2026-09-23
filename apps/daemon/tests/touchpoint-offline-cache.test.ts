@@ -523,6 +523,40 @@ describe('offline schedule cache', () => {
     expect(after.replayOffline(MODAL, 'upstream_unreachable')).toBeNull();
   });
 
+  // What the anchor does NOT recover: time the daemon was not running. No
+  // in-process monotonic source spans a restart, so a rollback that straddles
+  // downtime still buys display time — bounded by the DOWNTIME, not by the size
+  // of the rollback. This pins that bound, because the difference between the
+  // two is the whole argument for whether the residual is tolerable.
+  it('over-displays by the downtime, not by the size of the rollback', () => {
+    vi.useFakeTimers({ toFake: ['Date', 'performance'] });
+    vi.setSystemTime(T0);
+    const before = createTouchpointContentCache(dataDir);
+    before.remember(MODAL, fullResponse(MODAL.placementKey, 'modal.js', MODAL_ENTRY));
+    expect(before.replayOffline(MODAL, 'upstream_unreachable')).not.toBeNull();
+
+    // One hour of downtime: real time passes with no instance alive to observe it.
+    vi.advanceTimersByTime(HOUR);
+    // ...and the clock is wound back a full day before the daemon comes back.
+    vi.setSystemTime(T0 + HOUR - 24 * HOUR);
+    const after = createTouchpointContentCache(dataDir);
+    expect(after.replayOffline(MODAL, 'upstream_unreachable')).not.toBeNull();
+
+    // `endsAt` is T0 + 24h. Real elapsed since the fetch is already 1h, so the
+    // activity truly ends after 23 more hours of uptime. Measure where it does.
+    vi.advanceTimersByTime(23 * HOUR - 60_000);
+    expect(after.replayOffline(MODAL, 'upstream_unreachable')).not.toBeNull();
+
+    // Still alive one minute past its real end — the unmeasured downtime.
+    vi.advanceTimersByTime(2 * 60_000);
+    expect(after.replayOffline(MODAL, 'upstream_unreachable')).not.toBeNull();
+
+    // And gone a minute after the downtime is repaid: 24h of uptime, not 24h
+    // past the rollback. The residual is one hour, the length of the downtime.
+    vi.advanceTimersByTime(HOUR);
+    expect(after.replayOffline(MODAL, 'upstream_unreachable')).toBeNull();
+  });
+
   // The device clock is an input, never the authority. Winding it back must not
   // buy display time — across a restart included, which is the case a purely
   // in-process monotonic reading cannot cover.
