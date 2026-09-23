@@ -8618,7 +8618,7 @@ async function runFiles(args) {
                                                Write content from stdin.
   od files upload <projectId> <localpath> [--as <relpath>]
                                                Upload a local file.
-  od files delete <projectId> <name>           Delete a project file.
+  od files delete <projectId> <name> [--json]  Delete a project file.
   od files diff   <projectId> <relpathA> [<relpathB> | --against -]
                                                Print a unified diff.
   od files versions <projectId> <relpath>      List saved HTML versions.
@@ -8746,7 +8746,7 @@ Common options:
       const positional = positionalArgs(rest, PROJECT_RESOURCE_STRING_FLAGS);
       const [id, name] = positional;
       if (!id || !name) {
-        console.error('Usage: od files delete <projectId> <name>');
+        console.error('Usage: od files delete <projectId> <name> [--json]');
         process.exit(2);
       }
       const resp = await fetch(
@@ -8754,6 +8754,10 @@ Common options:
         { method: 'DELETE', headers: workspaceHeaders },
       );
       if (!resp.ok) return structuredHttpFailure(resp);
+      if (flags.json) {
+        const data = await resp.json();
+        return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      }
       console.log(`[files] deleted ${name}`);
       return;
     }
