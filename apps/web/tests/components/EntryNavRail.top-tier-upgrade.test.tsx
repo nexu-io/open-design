@@ -182,9 +182,11 @@ describe('account menu billing card — 升级 at the top plan tier', () => {
     },
   );
 
-  // (3) The case a careless fix breaks: personal Max is NOT the top of the
-  // ladder — that user can still move onto a team plan.
-  it('keeps 升级 for a personal max owner', () => {
+  // (3) Design PR #8364 (ruling 2026-09-23, 「按设计稿」): personal Max shows
+  // 管理 too, pointed at the console's auto-recharge settings, even though the
+  // team ladder still sits above it.
+  it('offers 管理, not 升级, for a personal max owner', () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
     renderRail({
       context: context({
         workspaceType: 'personal',
@@ -193,7 +195,13 @@ describe('account menu billing card — 升级 at the top plan tier', () => {
       billing: billing({ membershipTier: 'max' }),
     });
 
-    expect(billingCard().getByRole('button', { name: '升级' })).toBeTruthy();
+    expect(billingCard().queryByRole('button', { name: '升级' })).toBeNull();
+    fireEvent.click(billingCard().getByRole('button', { name: '管理' }));
+    expect(open).toHaveBeenCalledWith(
+      expect.stringContaining('billing=auto-recharge'),
+      '_blank',
+      'noopener,noreferrer',
+    );
   });
 
   // (4) Every other personal tier keeps it too.

@@ -97,7 +97,7 @@ import {
   workspaceBillingSummaryForContext,
   workspaceIdentityCacheKey,
 } from '../collab/useWorkspaceContext';
-import { canUpgradeFromPlanTier, isTopPlanTier, resolvePlanLabelTier } from '../collab/team-plan';
+import { canUpgradeFromPlanTier, isMaxPlanTier, resolvePlanLabelTier } from '../collab/team-plan';
 import {
   AMR_CONSOLE_AUTO_RECHARGE_INTENT,
   amrAutoRechargeUrlForProfile,
@@ -1349,15 +1349,15 @@ export function EntryTopRightCluster({
   const upgradeTier = labelTier ?? (isFreePlan ? 'free' : null);
   const canUpgrade =
     Boolean(billingUpgradeUrl) && mayActOnBilling && canUpgradeFromPlanTier(upgradeTier);
-  // The design's Max panel puts 「管理」 where every other tier puts 「升级」.
-  // It is asked of `isTopPlanTier`, not of `!canUpgrade`: an UNKNOWN tier (a
+  // The design's Max panel puts 「管理」 where every other tier puts 「升级」
+  // (design PR #8364, product ruling 2026-09-23: 「按设计稿」 — personal Max
+  // included, superseding the earlier 「个人档位都是要显示可升级的」 ruling).
+  // It is asked of `isMaxPlanTier`, not of `!canUpgrade`: an UNKNOWN tier (a
   // billing read that has not landed) also fails the upgrade gate, and a card
   // that flashes 管理 before settling on 升级 is worse than one paint of
-  // nothing. That keeps 升级 on personal Max, which still has the whole team
-  // ladder above it — the standing owner ruling 「个人档位都是要显示可升级的,
-  // 最顶的就是团队 max」, pinned in EntryNavRail.top-tier-upgrade.test.tsx.
+  // nothing. 管理 wins over 升级 when both gates pass.
   const canManageTopTierBilling =
-    isTopPlanTier(labelTier) && Boolean(billingManageUrl && permissions?.canManageBilling);
+    isMaxPlanTier(labelTier) && Boolean(billingManageUrl) && mayActOnBilling;
   // The pill exists whenever billing has answered (it is the only way to the
   // billing card under it); what it SAYS follows the zero-balance ruling
   // above — a subscriber at $0.00 keeps the plan wordmark and drops the
@@ -1524,7 +1524,7 @@ export function EntryTopRightCluster({
                         {tierLabel}
                         {planTier ? <PlanWordmark tier={planTier} height={16} /> : null}
                       </span>
-                      {canUpgrade ? (
+                      {canUpgrade && !canManageTopTierBilling ? (
                         <button
                           type="button"
                           className="entry-nav-rail__menu-credits-upgrade"
