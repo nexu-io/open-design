@@ -1,4 +1,5 @@
 import type { ProjectFile, ProjectFileKind } from './files';
+import type { GenerationRequestLedger } from './request-ledger.js';
 import type { RunResultPackageResponse, RunWorkspace } from './workspaces.js';
 import type {
   PreviewCommentAttachment,
@@ -710,6 +711,8 @@ export interface ChatRunExecutionDiagnostics {
 
 export interface ChatRunStatusResponse {
   id: string;
+  /** Available on individual Run GET/CLI info. Missing values never imply zero cost. */
+  requestLedger?: GenerationRequestLedger;
   projectId: string | null;
   conversationId: string | null;
   assistantMessageId: string | null;
