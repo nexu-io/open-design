@@ -8,6 +8,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import subprocess
 from typing import Any
 
 from lib.postinstall_plan import (
@@ -179,8 +180,16 @@ def validate_command(args: argparse.Namespace) -> int:
             cache_tools="false", concurrency=1, config=args.config, intent=intent,
         )
         create_plan(namespace)
-    local = load_object(root / "scripts/postinstall.config.json", "postinstall local config")
-    targets = local.get("localDevelopment", {}).get("targets", [])
+    targets = config.get("targets", [])
+    describe_environment = {
+        key: value for key, value in os.environ.items()
+        if not key.startswith("OPEN_DESIGN_POSTINSTALL_")
+    }
+    described = json.loads(subprocess.check_output(
+        ["node", "scripts/postinstall.mjs", "describe"], cwd=root, env=describe_environment, text=True,
+    ))
+    if described != targets:
+        raise ValueError("postinstall workflow targets differ from consumer capabilities")
     print(canonical_json({"schemaVersion": SCHEMA_VERSION, "intents": sorted(intents), "targets": targets}))
     return 0
 
@@ -217,6 +226,6 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
-    except (OSError, ValueError, json.JSONDecodeError) as error:
+    except (OSError, ValueError, json.JSONDecodeError, subprocess.SubprocessError) as error:
         print(f"postinstall plan error: {error}", file=os.sys.stderr)
         raise SystemExit(2)

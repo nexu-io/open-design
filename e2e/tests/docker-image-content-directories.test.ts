@@ -23,13 +23,11 @@ function stageSections(content: string): { build: string; runtime: string } {
 }
 
 describe("deploy/Dockerfile content directories", () => {
-  it("copies the postinstall consumer and its local development configuration", async () => {
+  it("copies the self-contained postinstall consumer", async () => {
     const content = await readFile(dockerfile, "utf8");
     const { build } = stageSections(content);
 
-    expect(build).toMatch(
-      /^COPY scripts\/postinstall\.mjs scripts\/postinstall\.config\.json \.\/scripts\/$/m,
-    );
+    expect(build).toMatch(/^COPY scripts\/postinstall\.mjs \.\/scripts\/$/m);
   });
 
   it("copies every runtime-resolved content directory into both stages", async () => {

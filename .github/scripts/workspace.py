@@ -15,7 +15,7 @@ def describe(root: Path) -> dict:
     if not targets or any(not target.startswith(("tools/", "packages/")) for target in targets):
         raise ValueError("tool cache requires an explicit tools/packages build closure")
     controls = ["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "tsconfig.json",
-                "scripts/postinstall.mjs", "scripts/postinstall.config.json",
+                "scripts/postinstall.mjs",
                 ".github/scripts/postinstall.py", ".github/config/postinstall.json", ".github/scripts/workspace.py",
                 ".github/actions/setup-workspace/action.yml", "packages/metatool"]
     tracked = subprocess.check_output(
@@ -30,7 +30,7 @@ def describe(root: Path) -> dict:
         digest.update((root / name).read_bytes())
         digest.update(b"\0")
     manifests = ["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "scripts/postinstall.mjs",
-                 "scripts/postinstall.config.json", ".github/scripts/postinstall.py",
+                 ".github/scripts/postinstall.py",
                  ".github/config/postinstall.json", ".github/scripts/workspace.py",
                  ".github/actions/setup-workspace/action.yml"]
     manifests += sorted(path.relative_to(root).as_posix() for pattern in (

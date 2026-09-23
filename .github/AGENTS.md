@@ -14,6 +14,7 @@ Before changing GitHub automation, read the current versions of:
 - `.github/config/runners.json`, `.github/config/scopes.json`, and `.github/config/convergence.json`
 - `.github/scripts/runners.py`, `.github/scripts/scopes.py`, and `.github/scripts/convergence.py`
 - `.github/workflows/convergence.atom.yml` and `.github/scripts/lib/r2.py` when changing reusable workload results
+- `docs/ci/workload-products.md` when changing reusable workload product publication or restoration
 - `specs/current/ci.md` when changing scope rules, confidence tiers, or planner invariants
 - `e2e/tests/packaged-smoke-workflow.test.ts`
 - `scripts/approve-fork-pr-workflows.ts` and `e2e/tests/scripts/approve-fork-pr-workflows.test.ts` when touching fork PR approval behavior

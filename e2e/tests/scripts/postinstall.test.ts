@@ -10,7 +10,6 @@ import { describe, expect, it } from "vitest";
 const e2eRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 const workspaceRoot = dirname(e2eRoot);
 const postinstallPath = join(workspaceRoot, "scripts", "postinstall.mjs");
-const postinstallConfigPath = join(workspaceRoot, "scripts", "postinstall.config.json");
 const workflowPostinstallPath = join(workspaceRoot, ".github", "scripts", "postinstall.py");
 
 type JsonObject = Record<string, unknown>;
@@ -98,16 +97,16 @@ function workspaceDependencyNames(manifest: unknown, includeDevDependencies = fa
 }
 
 function postinstallBuildTargetList(): string[] {
-  const config = readJsonObject("scripts/postinstall.config.json");
-  const localDevelopment = config.localDevelopment;
-  if (typeof localDevelopment !== "object" || localDevelopment == null || Array.isArray(localDevelopment)) {
-    throw new Error("postinstall config requires localDevelopment");
-  }
-  const targets = (localDevelopment as JsonObject).targets;
+  const result = spawnSync(process.execPath, [postinstallPath, "describe"], {
+    cwd: workspaceRoot,
+    encoding: "utf8",
+  });
+  if (result.status !== 0) throw new Error(result.stderr);
+  const targets = JSON.parse(result.stdout) as unknown;
   if (!Array.isArray(targets) || targets.some((target) => typeof target !== "string")) {
-    throw new Error("postinstall localDevelopment requires string targets");
+    throw new Error("postinstall describe requires string targets");
   }
-  return targets as string[];
+  return targets;
 }
 
 function postinstallBuildTargets(): Set<string> {
@@ -139,7 +138,6 @@ function createSandbox(): string {
   const sandbox = mkdtempSync(join(tmpdir(), "od-postinstall-"));
   mkdirSync(join(sandbox, "scripts"), { recursive: true });
   writeFileSync(join(sandbox, "scripts", "postinstall.mjs"), readFileSync(postinstallPath));
-  writeFileSync(join(sandbox, "scripts", "postinstall.config.json"), readFileSync(postinstallConfigPath));
   return sandbox;
 }
 
@@ -261,7 +259,9 @@ describe("postinstall script contract", () => {
     const output = join(tmpdir(), `od-postinstall-plan-${process.pid}.json`);
     try {
       const validation = spawnSync("python3", [workflowPostinstallPath, "validate"], {
-        cwd: workspaceRoot, encoding: "utf8",
+        cwd: workspaceRoot,
+        encoding: "utf8",
+        env: { ...process.env, OPEN_DESIGN_POSTINSTALL_TARGETS: '["tools/pack"]' },
       });
       expect(validation.status, validation.stderr).toBe(0);
       const planned = spawnSync("python3", [
@@ -414,7 +414,7 @@ describe("postinstall script contract", () => {
         "package.json",
         "pnpm-lock.yaml",
         "pnpm-workspace.yaml",
-        "scripts/postinstall.config.json",
+        "scripts/postinstall.mjs",
         ".github/config/postinstall.json",
         ".github/scripts/postinstall.py",
         ".github/actions/setup-workspace/action.yml",

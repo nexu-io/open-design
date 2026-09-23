@@ -30,18 +30,14 @@ def canonical_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
 
 
-def _targets(load_json: JsonLoader) -> list[str]:
-    config = load_json("scripts/postinstall.config.json")
+def _targets(config: dict[str, Any]) -> list[str]:
     if config.get("schemaVersion") != PLAN_SCHEMA_VERSION:
-        raise ValueError("postinstall local config has an unsupported schemaVersion")
-    local = config.get("localDevelopment")
-    if not isinstance(local, dict):
-        raise ValueError("postinstall local config requires localDevelopment")
-    targets = local.get("targets")
+        raise ValueError("postinstall workflow config has an unsupported schemaVersion")
+    targets = config.get("targets")
     if not isinstance(targets, list) or not targets or any(not isinstance(item, str) or not item for item in targets):
-        raise ValueError("postinstall local config requires non-empty string targets")
+        raise ValueError("postinstall workflow config requires non-empty string targets")
     if len(set(targets)) != len(targets):
-        raise ValueError("postinstall local targets must be unique")
+        raise ValueError("postinstall workflow targets must be unique")
     return targets
 
 
@@ -104,7 +100,7 @@ def resolve_plan(intent: str, load_json: JsonLoader) -> dict[str, Any]:
     if install_profile not in INSTALL_PROFILES:
         raise ValueError(f"postinstall intent {intent} has an invalid install profile")
 
-    targets = _targets(load_json)
+    targets = _targets(workflow_config)
     requested_value = recipe["requestedTargets"]
     requested = list(targets) if requested_value == "all" else requested_value
     if not isinstance(requested, list) or any(not isinstance(item, str) or not item for item in requested):

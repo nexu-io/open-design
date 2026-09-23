@@ -13,19 +13,32 @@ if (!["all", "dependencies", "build", "describe"].includes(phase)) {
   throw new Error(`Unknown postinstall phase: ${phase}`);
 }
 
-const localConfig = JSON.parse(readFileSync(resolve(scriptDir, "postinstall.config.json"), "utf8"));
-if (
-  localConfig.schemaVersion !== 2 ||
-  !Array.isArray(localConfig.localDevelopment?.targets) ||
-  localConfig.localDevelopment.targets.length === 0 ||
-  localConfig.localDevelopment.targets.some((target) => typeof target !== "string" || target.length === 0) ||
-  new Set(localConfig.localDevelopment.targets).size !== localConfig.localDevelopment.targets.length ||
-  !Number.isInteger(localConfig.localDevelopment.concurrency) ||
-  localConfig.localDevelopment.concurrency < 1
-) {
-  throw new Error("Invalid scripts/postinstall.config.json");
-}
-const buildTargets = localConfig.localDevelopment.targets;
+const localDevelopment = Object.freeze({
+  concurrency: 1,
+  targets: Object.freeze([
+    "packages/release",
+    "packages/contracts",
+    "packages/standalone",
+    "packages/components",
+    "packages/platform",
+    "packages/download",
+    "packages/host",
+    "packages/registry-protocol",
+    "packages/agui-adapter",
+    "packages/plugin-runtime",
+    "packages/sidecar-proto",
+    "packages/launcher-proto",
+    "packages/sidecar",
+    "packages/diagnostics",
+    "packages/dsh-runtime",
+    "apps/daemon",
+    "tools/dev",
+    "tools/pack",
+    "tools/release",
+    "tools/serve",
+  ]),
+});
+const buildTargets = localDevelopment.targets;
 const externalPlanPath = process.env.OPEN_DESIGN_POSTINSTALL_PLAN_PATH?.trim() ?? "";
 const receiptPath = process.env.OPEN_DESIGN_POSTINSTALL_RECEIPT_PATH?.trim() ?? "";
 const planEntry = process.env.OPEN_DESIGN_POSTINSTALL_ENTRY?.trim() || phase;
@@ -329,7 +342,7 @@ function postinstallConcurrency() {
     return value;
   }
   const raw = process.env.OPEN_DESIGN_POSTINSTALL_CONCURRENCY;
-  if (raw == null || raw.trim() === "") return localConfig.localDevelopment.concurrency;
+  if (raw == null || raw.trim() === "") return localDevelopment.concurrency;
 
   const value = Number.parseInt(raw, 10);
   if (!Number.isFinite(value) || value < 1) {

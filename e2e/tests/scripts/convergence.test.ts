@@ -168,11 +168,8 @@ describe("workload convergence", () => {
     mkdirSync(path.join(fixture.root, "packages/release"), { recursive: true });
     writeFileSync(path.join(fixture.root, ".github/config/postinstall.json"), JSON.stringify({
       schemaVersion: 2,
+      targets: ["packages/release"],
       intents: { fixture: { installProfile: "workspace", requestedTargets: ["packages/release"] } },
-    }));
-    writeFileSync(path.join(fixture.root, "scripts/postinstall.config.json"), JSON.stringify({
-      schemaVersion: 2,
-      localDevelopment: { targets: ["packages/release"] },
     }));
     writeFileSync(path.join(fixture.root, "packages/release/package.json"), JSON.stringify({
       name: "@open-design/release",

@@ -1,4 +1,7 @@
-"""Restore opaque workload products as one verified, immutable local set."""
+"""Restore opaque workload products as one verified, immutable local set.
+
+See docs/ci/workload-products.md for the producer and consumer contract.
+"""
 from __future__ import annotations
 
 import hashlib
