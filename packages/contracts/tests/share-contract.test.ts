@@ -298,15 +298,10 @@ describe('share contract · public HTTP seam', () => {
     expect(url).toContain('/a%2Fb/comments');
   });
 
-  /**
-   * A published snapshot is immutable and re-publishing mints a new slug, so
-   * a share link addresses one version forever. P0 has no transport for an
-   * open page to discover a newer one, and that is a decision rather than an
-   * omission: discovery would let a live share URL start serving different
-   * bytes than the person who sent it saw.
-   */
-  it('records that snapshot discovery is deliberately absent in P0', () => {
-    expect(SHARE_SNAPSHOT_DISCOVERY_IN_P0).toBe(false);
+  /** A share page can discover a newer deployment without changing the bytes
+   * addressed by its original immutable snapshot URL. */
+  it('enables discovery of newly published snapshots in P0', () => {
+    expect(SHARE_SNAPSHOT_DISCOVERY_IN_P0).toBe(true);
   });
 });
 
