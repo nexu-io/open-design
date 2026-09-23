@@ -33,6 +33,7 @@ import { releaseChannelFromNamespace, releaseChannelFromVersion } from "@open-de
 import { join } from "node:path";
 import { app, dialog } from "electron";
 
+import { isAgentToolInvocation, runAgentToolInvocation } from "./agent-tool-invocation.js";
 import { readPackagedConfig } from "./config.js";
 import {
   claimPackagedDownloadAttribution,
@@ -101,6 +102,18 @@ function applyPackagedUpdaterEnv(updateMetadataUrl: string | null): void {
 async function main(): Promise<void> {
   const config = await readPackagedConfig();
   const headlessRequest = parsePackagedHeadlessRequest(process.argv.slice(1));
+
+  // Agent tool invocations of this binary (argv[1] = bundled daemon CLI entry)
+  // must execute as Node against the daemon, not boot the desktop into the
+  // single-instance gate. Re-spawn in Electron-as-Node mode (same pattern as
+  // the packaged sidecar spawn env) with inherited stdio and exit code.
+  if (isAgentToolInvocation(process.argv, { daemonCliEntry: config.daemonCliEntry })) {
+    await runAgentToolInvocation({
+      argv: process.argv.slice(1),
+      exit: (code) => app.exit(code),
+    });
+    return;
+  }
 
   // Must run BEFORE `app.whenReady()` below, because Chromium consumes
   // `--lang` at session bootstrap. Doing it here lets the packaged
