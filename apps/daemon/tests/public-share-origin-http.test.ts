@@ -58,7 +58,7 @@ for (const scenario of cases) it.each([false, true])(`${scenario.name}: HTTP pub
     const url = `http://127.0.0.1:${address.port}/api/projects/p/files/index.html/publish-public`;
     const response = await fetch(url, { method: 'POST' }); const body = await response.json(); assertJsonObject(body);
     if (scenario.failUpload) {
-      expect(response.status).toBe(502); expect(body).toEqual({ error: 'PUBLIC_FILE_PUBLISH_UNAVAILABLE' });
+      expect(response.status).toBe(502); expect(body).toEqual({ error: 'PUBLIC_FILE_PUBLISH_UNAVAILABLE', failure: { stage: 'push', reason: 'unknown' } });
       expect(store.getRevision(scope)).toBeNull(); expect(createShareBindingOutbox(db).list()).toEqual([]); return;
     }
     expect(response.status).toBe(200); expect(uploads).toBe(1);
