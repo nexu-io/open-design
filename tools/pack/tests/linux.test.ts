@@ -735,6 +735,90 @@ describe("renderLinuxAppImageAppRun", () => {
   });
 });
 
+describe("renderLinuxAppImageAppRun extract-and-run guard (#3759)", () => {
+  it("re-execs FUSE launches with APPIMAGE_EXTRACT_AND_RUN exported, before APPDIR resolution", () => {
+    const out = renderLinuxAppImageAppRun();
+    const guard = out.indexOf('if [ -z "$APPIMAGE_EXTRACT_AND_RUN" ]');
+
+    expect(guard).toBeGreaterThan(-1);
+    expect(out).toContain("*/.mount_*)");
+    // Exporting the variable is what stops the recursion: the AppImage runtime
+    // honours it but never sets it for AppRun.
+    expect(out.indexOf("export APPIMAGE_EXTRACT_AND_RUN=1")).toBeLessThan(out.indexOf('exec "$APPIMAGE" "$@"'));
+    expect(out).not.toContain('exec "$APPIMAGE" --appimage-extract-and-run');
+    expect(guard).toBeLessThan(out.indexOf('THIS="$0"'));
+    expect(guard).toBeLessThan(out.indexOf('if [ -z "$APPDIR" ]'));
+  });
+
+  async function runGuardFixture(options: { appDirName: string; extractAndRun?: string }) {
+    const root = await mkdtemp(join(tmpdir(), "od-linux-apprun-guard-"));
+    const appDir = join(root, options.appDirName);
+    const appRunPath = join(appDir, "AppRun");
+    const appImagePath = join(root, "Open Design.AppImage");
+    const reexecPath = join(root, "reexec.txt");
+    const electronPath = join(appDir, "Open Design");
+    const electronRanPath = join(root, "electron.txt");
+    try {
+      await mkdir(appDir, { recursive: true });
+      await writeFile(appRunPath, renderLinuxAppImageAppRun(), "utf8");
+      await chmod(appRunPath, 0o755);
+      // Stand-in for the AppImage runtime: records how AppRun re-invoked it.
+      await writeFile(
+        appImagePath,
+        `#!/bin/bash
+{
+  printf 'APPIMAGE_EXTRACT_AND_RUN=%s\\n' "\${APPIMAGE_EXTRACT_AND_RUN-unset}"
+  printf 'arg=%s\\n' "$@"
+} > ${JSON.stringify(reexecPath)}
+`,
+        "utf8",
+      );
+      await chmod(appImagePath, 0o755);
+      await writeFile(electronPath, `#!/bin/bash\nprintf 'ran\\n' > ${JSON.stringify(electronRanPath)}\n`, "utf8");
+      await chmod(electronPath, 0o755);
+
+      const env: NodeJS.ProcessEnv = { ...process.env, APPDIR: appDir, APPIMAGE: appImagePath };
+      delete env.APPIMAGE_EXTRACT_AND_RUN;
+      if (options.extractAndRun !== undefined) env.APPIMAGE_EXTRACT_AND_RUN = options.extractAndRun;
+      const child = spawn(appRunPath, ["--foo", "bar baz"], { env, stdio: "ignore" });
+      const exit = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolvePromise, reject) => {
+        child.once("error", reject);
+        child.once("exit", (code, signal) => resolvePromise({ code, signal }));
+      });
+      const read = async (path: string) => readFile(path, "utf8").catch(() => null);
+      return { exit, reexec: await read(reexecPath), electronRan: (await read(electronRanPath)) !== null };
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  }
+
+  linuxOnlyIt("re-execs a FUSE-mounted launch in extract-and-run mode with the original args", async () => {
+    const result = await runGuardFixture({ appDirName: ".mount_OpenDabc123" });
+
+    expect(result.exit).toEqual({ code: 0, signal: null });
+    expect(result.reexec).toBe("APPIMAGE_EXTRACT_AND_RUN=1\narg=--foo\narg=bar baz\n");
+    expect(result.electronRan).toBe(false);
+  });
+
+  linuxOnlyIt("does not re-exec once APPIMAGE_EXTRACT_AND_RUN is set (no recursion)", async () => {
+    const result = await runGuardFixture({ appDirName: ".mount_OpenDabc123", extractAndRun: "1" });
+
+    expect(result.exit).toEqual({ code: 0, signal: null });
+    expect(result.reexec).toBeNull();
+    expect(result.electronRan).toBe(true);
+  });
+
+  linuxOnlyIt("does not re-exec an explicit --appimage-extract-and-run launch", async () => {
+    // The runtime strips the flag and does not export the variable, so only the
+    // non-FUSE APPDIR distinguishes this path.
+    const result = await runGuardFixture({ appDirName: "appimage_extracted_0123456789abcdef" });
+
+    expect(result.exit).toEqual({ code: 0, signal: null });
+    expect(result.reexec).toBeNull();
+    expect(result.electronRan).toBe(true);
+  });
+});
+
 describe("createLinuxDesktopLaunchEnv", () => {
   it("strips ELECTRON_RUN_AS_NODE before spawning the Electron AppImage", () => {
     const config = makeConfig();
