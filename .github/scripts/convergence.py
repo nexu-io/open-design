@@ -712,6 +712,8 @@ def validate_products(value: Any, label: str, require_urls: bool) -> dict[str, A
             ):
                 raise ConfigError(f"{label}.{name}.data.sha256 must be a lowercase SHA-256 digest")
             normalized_entry["data"] = data
+        if require_urls and not DIGEST_RE.fullmatch(normalized_entry.get("data", {}).get("sha256", "")):
+            raise ConfigError(f"{label}.{name}.data.sha256 is required for a promoted URL product")
         normalized[name] = normalized_entry
     return normalized
 
@@ -1161,11 +1163,14 @@ def restore_command(args: argparse.Namespace, contract: ConvergenceContract) -> 
         raise ConfigError("restore requires a selected reusable-result hit")
     if args.output_dir.exists() or args.output_dir.is_symlink():
         raise ConfigError("product destination must not already exist")
+    # Receipt selection and binding are configuration facts. They must remain
+    # fail-fast even when the caller permits unavailable product bytes to fall
+    # back to workload execution.
+    result = validate_result(
+        expected.get("result"), repository_id=pending["repositoryId"],
+        workflow=workflow, identity=args.workload, expected=expected,
+    )
     try:
-        result = validate_result(
-            expected.get("result"), repository_id=pending["repositoryId"],
-            workflow=workflow, identity=args.workload, expected=expected,
-        )
         sizes = materialize_products(
             result["products"], args.output_dir,
             lambda url: public_read_request(url, accept="*/*"), timeout=args.timeout,
@@ -1870,6 +1875,19 @@ def self_check() -> None:
         hits, _, _ = resolve_results("https://results.example", 42, workflow, {"unit": product_expected}, 0.1)
         if hits != {"unit": True} or probe.call_count != 1:
             raise ConfigError("convergence self-check did not use metadata-only product availability")
+    missing_digest_receipt = json.loads(canonical_json(product_receipt))
+    missing_digest_receipt["products"]["bundle"].pop("data")
+    with (
+        patch.object(module, "fetch_result", return_value=missing_digest_receipt),
+        patch.object(module, "probe_product") as probe,
+    ):
+        try:
+            resolve_results("https://results.example", 42, workflow, {"unit": product_expected}, 0.1)
+        except ConfigError:
+            if probe.called:
+                raise ConfigError("convergence self-check probed a product before validating its digest")
+        else:
+            raise ConfigError("convergence self-check reported a hit without a product digest")
     with (
         patch.object(module, "fetch_result", return_value=product_receipt),
         patch.object(module, "probe_product", side_effect=TimeoutError()),

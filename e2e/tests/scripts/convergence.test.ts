@@ -107,6 +107,39 @@ describe("workload convergence", () => {
     expect(result.stderr).toContain("restore requires a selected reusable-result hit");
   });
 
+  test("keeps invalid result bindings fatal when product misses may fall back", () => {
+    const fixture = createRepository();
+    runPlan(fixture);
+    const pending = JSON.parse(readFileSync(fixture.pendingPath, "utf8")) as any;
+    const expected = pending.workloads.a;
+    expected.resultHit = true;
+    expected.result = {
+      schemaVersion: 1,
+      protocol: "nexu-workload-result-v1",
+      repositoryId: 42,
+      workflow: "ci",
+      policy: "test-v1",
+      workload: "b",
+      digest: expected.digest,
+      executionClass: expected.executionClass,
+      products: {},
+      validated: {
+        event: "pull_request", runId: 12, runAttempt: 1,
+        headSha: "a".repeat(40), baseSha: "b".repeat(40), treeSha: "c".repeat(40),
+        validatedAt: "2026-08-21T00:00:00Z",
+      },
+    };
+    writeFileSync(fixture.pendingPath, JSON.stringify(pending));
+
+    const result = spawnSync("python3", [
+      convergenceScript, "--root", fixture.root, "--config", fixture.configPath,
+      "restore", "--pending", fixture.pendingPath, "--workload", "a", "--allow-miss",
+      "--output-dir", path.join(fixture.root, "restored"),
+    ], { cwd: fixture.root, encoding: "utf8" });
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("workload result producer is not explicitly trusted");
+  });
+
   test("checks complete product restoration and failed-set isolation without network", () => {
     const fixture = createRepository();
     const result = spawnSync("python3", [
@@ -295,7 +328,7 @@ describe("workload convergence", () => {
     const candidatePath = path.join(root, "candidate.json");
     writeFileSync(candidatePath, JSON.stringify(candidate({
       bundle: { type: "url", source: "https://results.example/bundle.zip", data: { sha256: "a".repeat(64) } },
-      report: { type: "url", source: "https://results.example/report.json" },
+      report: { type: "url", source: "https://results.example/report.json", data: { sha256: "b".repeat(64) } },
     })));
     execFileSync("python3", [
       convergenceScript, "prepare-publication", "--candidate", candidatePath,
@@ -312,5 +345,15 @@ describe("workload convergence", () => {
     ], { cwd: repoRoot, encoding: "utf8" });
     expect(rejected.status).toBe(2);
     expect(rejected.stderr).toContain("must be promoted to url before publication");
+
+    writeFileSync(candidatePath, JSON.stringify(candidate({
+      bundle: { type: "url", source: "https://results.example/bundle.zip" },
+    })));
+    const missingDigest = spawnSync("python3", [
+      convergenceScript, "prepare-publication", "--candidate", candidatePath,
+      "--output-dir", path.join(root, "missing-digest"),
+    ], { cwd: repoRoot, encoding: "utf8" });
+    expect(missingDigest.status).toBe(2);
+    expect(missingDigest.stderr).toContain("data.sha256 is required");
   });
 });
