@@ -19,9 +19,13 @@ export class ProjectPublicFileStopPendingError extends Error {
  * this deletion attempt: an older response must never erase a newer witness.
  */
 export function createProjectPublicFileStop(store: StopQueuePublicFilePublicationStore, prepare: PreparePublicFileStop) {
-  return async (scope: Omit<PublicFilePublicationScope, 'filePath'>): Promise<void> => {
+  return async (scope: Omit<PublicFilePublicationScope, 'filePath'>, filePath?: string): Promise<void> => {
+    // File deletion shares the same identity, revision and durable retry rules,
+    // but must never revoke a sibling file's publication.
+    const selectedPublications = () => store.listByProject(scope)
+      .filter(file => filePath === undefined || file.filePath === filePath);
     let pending = false;
-    const targets = store.listByProject(scope).map((file) => {
+    const targets = selectedPublications().map((file) => {
       const key = { ...scope, filePath: file.filePath, slug: file.slug };
       return { key, revision: store.getRevision(key) };
     });
@@ -52,7 +56,7 @@ export function createProjectPublicFileStop(store: StopQueuePublicFilePublicatio
       if (store.deleteIfRevisionMatches(key, revision)) store.completeStop(key);
       else pending = true;
     }
-    const remaining = store.listByProject(scope);
+    const remaining = selectedPublications();
     if (pending || remaining.length > 0) {
       const retryable = store.listRetryableStops();
       const durableTasks = store.listStops();

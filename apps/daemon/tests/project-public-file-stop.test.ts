@@ -84,6 +84,31 @@ it('does not report an old generation queue as retrying for its replacement', as
   await expect(f.run(scope)).rejects.toMatchObject({ canContinueLocalDelete: false, shareResiduals: [{ filePath: 'index.html', slug: 'a', retrying: false }] });
 });
 
+it('stops only the selected file and leaves sibling publications active', async () => {
+  const f = setup();
+  f.store.set({ ...scope, filePath: 'a.html' }, publication('a'));
+  f.store.set({ ...scope, filePath: 'b.html' }, publication('b'));
+  await f.run(scope, 'a.html');
+  expect(f.stop).toHaveBeenCalledTimes(1);
+  expect(f.prepare.mock.calls[0]?.[0]).toMatchObject({ filePath: 'a.html', slug: 'a' });
+  expect(f.store.listByProject(scope).map(row => row.filePath)).toEqual(['b.html']);
+});
+it('reports and queues only the selected file when its stop fails', async () => {
+  const f = setup(); f.stop.mockRejectedValue(new Error('offline'));
+  for (const filePath of ['a.html', 'b.html']) f.store.set({ ...scope, filePath }, publication(filePath));
+  await expect(f.run(scope, 'a.html')).rejects.toMatchObject({ canContinueLocalDelete: true,
+    shareResiduals: [{ filePath: 'a.html', slug: 'a.html', retrying: true }] });
+  expect(f.stop).toHaveBeenCalledTimes(1);
+  expect(f.store.listStops().map(task => task.filePath)).toEqual(['a.html']);
+  expect(f.store.listByProject(scope)).toHaveLength(2);
+});
+it('does not stop siblings when the selected file has no publication', async () => {
+  const f = setup(); f.store.set({ ...scope, filePath: 'b.html' }, publication('b'));
+  await f.run(scope, 'missing.html');
+  expect(f.prepare).not.toHaveBeenCalled();
+  expect(f.store.listByProject(scope)).toHaveLength(1);
+});
+
 it('does nothing for a project without publications', async () => {
   const f = setup(); await f.run(scope); expect(f.prepare).not.toHaveBeenCalled();
 });
