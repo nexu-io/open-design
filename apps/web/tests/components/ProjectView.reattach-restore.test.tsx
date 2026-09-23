@@ -1103,9 +1103,11 @@ describe('ProjectView daemon reattach restore', () => {
     fetchDesignSystem.mockResolvedValue(null);
     getTemplate.mockResolvedValue(null);
     listActiveChatRuns.mockResolvedValue([]);
-    fetchChatRunStatus.mockResolvedValue({
-      id: 'run-request',
-      status: 'succeeded',
+    // The successor is a distinct physical Run. Its status must not be
+    // inferred from either the predecessor's success or the task projection.
+    fetchChatRunStatus.mockImplementation(async (runId: string) => ({
+      id: runId,
+      status: runId === 'run-production' ? 'running' : 'succeeded',
       createdAt: startedAt,
       updatedAt: startedAt + 1,
       exitCode: 0,
@@ -1126,12 +1128,13 @@ describe('ProjectView daemon reattach restore', () => {
         nextRunId: 'run-production',
         terminal: false,
       },
-    });
+    }));
     reattachDaemonRun.mockImplementation(async () => new Promise<void>(() => {}));
 
     renderProjectView();
 
     await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
+    expect(fetchChatRunStatus).toHaveBeenCalledWith('run-production', null);
     expect(reattachDaemonRun).toHaveBeenCalledWith(expect.objectContaining({
       runId: 'run-production',
       initialLastEventId: null,
