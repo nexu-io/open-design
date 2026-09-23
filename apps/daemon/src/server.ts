@@ -12853,32 +12853,11 @@ export async function startServer({
       { allowRetry = true } = {},
     ) => {
       lifecycle.mark('finalize_start');
-      // A clean child exit does not complete a production task rejected by the
-      // strategy gate: the user asked for a deliverable and none was written.
-      // Reconcile before persisting the message or publishing the Run terminal
-      // event, while retaining the actual process exit code.
-      //
-      // A task refused before production is a different turn. The agent read
-      // the request, decided not to plan a build for it — a greeting, an
-      // off-topic question, a request it could not act on — and answered in
-      // prose. That reply is the turn's outcome and the Run finished the way
-      // the process did; the task record still carries the blocked verdict and
-      // its reason codes for everything that reads them.
-      if (
-        status === 'succeeded'
-        && run.strategyTask?.outcome === 'blocked'
-        && run.strategyTask.inputStage === 'production'
-        && run.strategyTask.activeRunId === run.id
-      ) {
-        status = 'failed';
-        allowRetry = false;
-        const reasonCodes = run.strategyTask.blockedContext?.reasonCodes ?? [];
-        send('error', createSseErrorPayload(
-          'OD_NEXT_TASK_BLOCKED',
-          `The task could not complete${reasonCodes.length ? `: ${reasonCodes.join(', ')}` : '.'}`,
-          { retryable: false, details: { reasonCodes } },
-        ));
-      }
+      // The Run records how the process ended; the strategy task records its
+      // own verdict. A task blocked at any stage keeps a cleanly exited Run
+      // succeeded: the task projection on the terminal event carries the
+      // blocked outcome and its reason codes, and the client decides from
+      // those and the deliverable on disk what this turn produced.
       flushRunMessageEvents(run);
       // Persist the transport-level close mechanism before classifying this
       // attempt. Runtime fatal/stream signals are only known in the close

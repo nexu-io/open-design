@@ -1,6 +1,6 @@
 /** Finite, content-free stages of one persisted updater flow. */
 export const UPDATE_LIFECYCLE_STAGES = [
-  'install_requested', 'shutdown_started', 'shutdown_completed',
+  'install_requested', 'shutdown_started', 'renderer_quiesced', 'shutdown_completed',
   'cleanup_daemon', 'cleanup_web', 'predecessor_wait_started',
   'predecessor_wait_completed', 'desktop_ready',
 ] as const;

@@ -2246,18 +2246,63 @@ process.exit(127);
     const fixture = await createFixture('repair');
     await writeFile(`${fixture.logPath}.blocked-production`, '1');
     queueFixtureIds(fixture);
-    await postRun(started!.url, createRunRequest(fixture, 'Build the lesson deck.'));
+    await postRun(started!.url, createRunRequest(fixture, 'Build the lesson deck.'), {
+      'x-od-analytics-device-id': 'device-no-artifact-production',
+      'x-od-analytics-session-id': 'session-no-artifact-production',
+      'x-od-analytics-client-type': 'desktop',
+    });
     const task = await waitForTask(fixture.taskExecutionId, 'completed');
-    expect(task.runs).toHaveLength(2);
+    expect(task.runs.map((run) => run.inputStage)).toEqual(['request', 'production']);
     const terminal = await waitForRunTerminal(started!.url, task.latestRunId);
-    expect(terminal).toMatchObject({ status: 'succeeded', strategyTask: {
-      outcome: 'completed', terminal: true, deliverableValid: false,
-    } });
+    // A clean production exit completes the turn without claiming delivery.
+    // Missing artifacts must not restore contract blocking or a repair turn.
+    expect(terminal).toMatchObject({
+      status: 'succeeded',
+      exitCode: 0,
+      strategyTask: {
+        outcome: 'completed', terminal: true, inputStage: 'production',
+        deliverableValid: false, settlementReason: 'todo_unfinished',
+      },
+    });
     expect(terminal.errorCode ?? null).toBeNull();
-    const records = (await readFile(terminal.eventsLogPath, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
-    expect(records.filter(event => event.event === 'end')).toHaveLength(1);
-    expect(records.filter(event => event.event === 'error')).toHaveLength(0);
-  });
+    expect(terminal.error ?? null).toBeNull();
+    const records = (await readFile(terminal.eventsLogPath, 'utf8')).trim().split('\n')
+      .map((line) => JSON.parse(line));
+    expect(records.filter((event) => event.event === 'error')).toHaveLength(0);
+    expect(records.filter((event) => event.event === 'end')).toHaveLength(1);
+    const end = records.find((event) => event.event === 'end')?.data;
+    expect(end).toMatchObject({
+      status: 'succeeded',
+      code: 0,
+      artifactCount: 0,
+      strategyTask: {
+        outcome: 'completed', inputStage: 'production',
+        deliverableValid: false, settlementReason: 'todo_unfinished',
+      },
+    });
+    expect(end.strategyTask.blockedContext ?? null).toBeNull();
+    expect(records.find((event) => event.data?.type === 'runtime_close')?.data)
+      .toMatchObject({ rpc_close_reason: 'exit_0', status: 'succeeded', exit_code: 0 });
+    const response = await fetch(
+      `${started!.url}/api/projects/${fixture.projectId}/conversations/${fixture.conversationId}/messages`,
+    );
+    const { messages } = await response.json() as {
+      messages: Array<{ runId?: string; runStatus?: string }>;
+    };
+    expect(messages.find((message) => message.runId === task.latestRunId)?.runStatus).toBe('succeeded');
+    const [recovery] = await waitForRunAnalyticsRecoveries([task.latestRunId]);
+    expect(recovery?.properties).toMatchObject({
+      result: 'success',
+      od_next_settlement_reason: 'todo_unfinished',
+      rpc_close_reason: 'exit_0',
+    });
+    expect(recovery?.properties?.error_code).toBeUndefined();
+    expect(recovery?.properties?.od_next_blocked_reason_code).toBeUndefined();
+    for (const mapping of task.runs.slice(0, -1)) {
+      expect((await getRun(started!.url, mapping.runId)).status).toBe('succeeded');
+    }
+    expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(2);
+  }, 90_000);
 
   it("ends a refused planning turn as the agent's reply instead of a failed Run", async () => {
     const fixture = await createFixture('repair');

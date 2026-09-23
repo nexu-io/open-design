@@ -374,7 +374,7 @@ async function main(): Promise<void> {
   // Resolve the web sidecar address per request instead of freezing it here.
   // The restart supervisor may bind a fresh ephemeral port, while a temporary
   // lack of a target should surface as the protocol layer's structured 503.
-  registerOdProtocol(() => sidecars.currentWebUrl());
+  const odProtocol = registerOdProtocol(() => sidecars.currentWebUrl());
 
   const { runDesktopMain } = await import("@open-design/desktop/main");
   let desktopHandle: DesktopMainHandle | null = null;
@@ -407,6 +407,9 @@ async function main(): Promise<void> {
       } finally {
         await sidecars.close(record);
       }
+    },
+    quiesceRendererTransport() {
+      odProtocol.quiesce();
     },
     async discoverWebUrl() {
       return packagedEntryUrl();
