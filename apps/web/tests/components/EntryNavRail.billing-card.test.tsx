@@ -105,7 +105,7 @@ describe('account menu billing card — plan label (#146)', () => {
     const card = billingCard();
     expect(card.queryByText('团队版')).toBeNull();
     // `entry.billingTierFree` reads 免费 in zh-CN.
-    expect(card.getByText('免费')).toBeTruthy();
+    expect(card.getByText('免费版')).toBeTruthy();
   });
 
   it('labels a workspace that really holds a team subscription as 团队版', () => {
@@ -294,20 +294,36 @@ describe('account menu billing card — scoped USD balance (recvqgaMLxEdZX)', ()
 
     const card = billingCard();
     expect(card.getByText('钱包余额')).toBeTruthy();
-    expect(card.getByText('$9.99')).toBeTruthy();
+    // The design names the currency on this row (「US$9.99」, zh-CN).
+    expect(card.getByText('US$9.99')).toBeTruthy();
     expect(card.queryByText('999,330')).toBeNull();
     expect(card.queryByText('余额')).toBeNull();
     expect(card.queryByText(/积分/)).toBeNull();
   });
 
-  it('keeps a proven zero visible as $0.00', () => {
+  it('keeps a proven zero visible as US$0.00', () => {
     renderRail({
       context: context(),
       billing: billing({ totalAvailableCredits: 600_000 }),
       balanceUsd: '0',
     });
 
-    expect(billingCard().getByText('$0.00')).toBeTruthy();
+    expect(billingCard().getByText('US$0.00')).toBeTruthy();
+  });
+
+  // Design (PR #8364) + its electron-panel.png: the wallet row is text and a
+  // chevron. The battery glyph that used to lead the label is gone, so the row
+  // reads in the same size, weight and ink as the allowance row above it.
+  it('carries no leading glyph — only the label, the figure and one chevron', () => {
+    renderRail({
+      context: context(),
+      billing: billing({ totalAvailableCredits: 600_000 }),
+      balanceUsd: '12',
+    });
+
+    const row = billingCard().getByTestId('entry-nav-credits-row');
+    expect(row.querySelectorAll('svg')).toHaveLength(1);
+    expect(row.textContent).toBe('钱包余额US$12.00');
   });
 });
 

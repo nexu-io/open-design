@@ -5,12 +5,16 @@
 //
 // On Go / Plus / Pro / Max the eligible models can use Coding Plan windows before the wallet. A subscriber therefore
 // sits at $0.00 as a normal, healthy state — and the pill rendered it as a
-// permanent alarm next to their avatar. Product ruling: hide the money for a
-// subscribed plan whose balance is exactly zero. The pill itself stays (it
-// leads with the plan wordmark and is the only way to the billing card under
-// it); only the number goes. Free plans sell the upgrade on the pill instead
-// and keep the zero in the card (it is the number that explains why hosted
-// models are unavailable), and an overdrawn wallet keeps it on every plan.
+// permanent alarm next to their avatar. The original ruling hid the money only
+// for a subscribed plan whose balance was exactly zero.
+//
+// SUPERSEDED for the paid pill by the design (PR #8364,
+// `docs/ui-previews/plan-panels/`, and its `electron-panel.png`): the paid
+// capsule carries the plan WORDMARK ALONE at every balance. The money did not
+// move — it reads in the card the capsule opens, with the currency named
+// (「US$10.00」), which is where a number belongs next to an allowance. The
+// original ruling's goal (no permanent alarm beside the avatar) is strictly
+// better served. Free plans still sell the upgrade on the pill instead.
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { WorkspaceBillingSummary, WorkspaceCollabContext } from '@open-design/contracts';
@@ -111,18 +115,16 @@ describe('top-right credits pill', () => {
     expect(creditsPill()?.textContent?.trim()).toBe('');
   });
 
-  it('keeps the balance when a subscriber still has money', () => {
-    // Bare amount on the pill: the wordmark beside it names the plan, and the
-    // dollar sign only appears on the card's balance row.
+  it('keeps a funded balance in the CARD, with the pill still wordmark-only', () => {
     renderRail({ balanceUsd: '120' });
-    expect(creditsPill()?.textContent).toContain('120.00');
-    expect(creditsRow().textContent).toContain('$120.00');
+    expect(creditsPill()?.textContent ?? '').not.toMatch(/\d/);
+    expect(creditsRow().textContent).toContain('US$120.00');
   });
 
-  it('keeps an overdrawn balance visible on a subscribed plan', () => {
+  it('keeps an overdrawn balance visible in the card', () => {
     renderRail({ balanceUsd: '-1.25' });
-    expect(creditsPill()?.textContent).toContain('-1.25');
-    expect(creditsRow().textContent).toContain('-$1.25');
+    expect(creditsPill()?.textContent ?? '').not.toMatch(/\d/);
+    expect(creditsRow().textContent).toContain('-US$1.25');
   });
 
   it.each(['team_basic', 'team_plus', 'team_max_yearly'])(
@@ -134,9 +136,10 @@ describe('top-right credits pill', () => {
         billing: billing({ membershipTier: tier }),
         balanceUsd: '0',
       });
-      if (tier === 'team_basic') expect(creditsPill()?.textContent).toContain('0.00');
-      else expect(creditsPill()?.textContent).not.toContain('0.00');
-      expect(creditsRow().textContent).toContain('$0.00');
+      // The capsule is wordmark-only at every team tier now; the wallet row
+      // under it is where the zero reads.
+      expect(creditsPill()?.textContent ?? '').not.toMatch(/\d/);
+      expect(creditsRow().textContent).toContain('US$0.00');
     },
   );
 
@@ -149,7 +152,7 @@ describe('top-right credits pill', () => {
     // The free pill IS the upgrade CTA (per product): no balance on it.
     expect(creditsPill()?.textContent).toContain('升级');
     expect(creditsPill()?.textContent).not.toContain('0.00');
-    expect(creditsRow().textContent).toContain('$0.00');
+    expect(creditsRow().textContent).toContain('US$0.00');
   });
 
   it('keeps the pill and the zero balance while the plan is still unknown', () => {
@@ -163,6 +166,6 @@ describe('top-right credits pill', () => {
       balanceUsd: '0',
     });
     expect(creditsPill()?.textContent).toContain('升级');
-    expect(creditsRow().textContent).toContain('$0.00');
+    expect(creditsRow().textContent).toContain('US$0.00');
   });
 });

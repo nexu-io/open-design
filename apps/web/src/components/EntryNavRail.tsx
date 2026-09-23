@@ -56,7 +56,6 @@ import {
 } from '@open-design/contracts';
 import {
   fetchVelaLoginStatus,
-  formatVelaBalanceAmount,
   formatVelaBalanceUsd,
   velaLogout,
 } from '../providers/daemon';
@@ -98,8 +97,7 @@ import {
   workspaceBillingSummaryForContext,
   workspaceIdentityCacheKey,
 } from '../collab/useWorkspaceContext';
-import { canUpgradeFromPlanTier, resolvePlanLabelTier } from '../collab/team-plan';
-import { shouldShowCreditsBalance } from './entry-rail-account-state';
+import { canUpgradeFromPlanTier, isTopPlanTier, resolvePlanLabelTier } from '../collab/team-plan';
 import {
   AMR_CONSOLE_AUTO_RECHARGE_INTENT,
   amrAutoRechargeUrlForProfile,
@@ -776,6 +774,47 @@ export function teamConsoleUrl(
 }
 
 /**
+ * The billing card's wallet figure, always spelled 「US$10.00」 — in every
+ * locale, per design PR #8364 and the product ruling on 2026-09-23
+ * (「无论什么语言都显示美刀, 都用 US」).
+ *
+ * Deliberately not `formatVelaBalanceUsd`: that one writes a bare `$` and is
+ * shared with surfaces that already name the currency some other way. This row
+ * stands alone under an allowance measured in percent, so the currency is
+ * named. Not `Intl.NumberFormat` either: it names the currency only where the
+ * locale's own dollar is not the US one ("$10.00" in en), which is exactly the
+ * per-locale drift the ruling removes.
+ */
+function formatWalletBalance(raw: string | null | undefined): string | null {
+  if (raw == null || raw === '') return null;
+  const amount = Number(raw);
+  if (!Number.isFinite(amount)) return null;
+  // Sign before the currency, as `formatVelaBalanceUsd` does: "-US$1.25".
+  const sign = amount < 0 ? '-' : '';
+  return `${sign}US$${Math.abs(amount).toFixed(2)}`;
+}
+
+/**
+ * The already-resolved console URL, asked to open its auto-recharge settings
+ * on arrival.
+ *
+ * Deliberately NOT `teamConsoleUrl(base, 'auto-recharge')`: that builds a path
+ * from the workspace-SETTINGS URL, while the caller here holds a URL that is
+ * already the dashboard, so routing through it would append a second
+ * `/dashboard` segment. Only the intent has to be added.
+ */
+function autoRechargeConsoleUrl(base: string | null): string | null {
+  if (!base) return null;
+  try {
+    const url = new URL(base);
+    url.searchParams.set('billing', AMR_CONSOLE_AUTO_RECHARGE_INTENT);
+    return url.toString();
+  } catch {
+    return base;
+  }
+}
+
+/**
  * Shared destination for every generic 「升级」/「升级套餐」 affordance. Pricing
  * owns comparison; selecting a concrete card there is what hands checkout to
  * Cloud.
@@ -1025,7 +1064,7 @@ export function EntryTopRightCluster({
   priorityAnnouncementAmrProfile,
   priorityAnnouncementMetricsConsent,
 }: EntryTopRightClusterProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const analytics = useAnalytics();
   const workspaceDimensions = workspaceAnalyticsDimensions(context);
   const [chromeActionsHost, setChromeActionsHost] = useState<HTMLElement | null>(
@@ -1074,13 +1113,11 @@ export function EntryTopRightCluster({
       ? t('entry.billingTierTeam')
       : t('entry.billingTierFree');
   const balanceLabel = formatVelaBalanceUsd(balanceUsd);
-  const balanceAmount = formatVelaBalanceAmount(balanceUsd);
-  // A zero wallet is not an exhausted Coding Plan. Keep the compact badge
-  // quiet; show the actual pool and wallet separately in the billing panel.
-  const showCreditsBalance = shouldShowCreditsBalance({
-    tier: labelTier,
-    balanceUsd,
-  });
+  // The billing card's own wallet figure. The design writes it with the
+  // currency NAMED (「US$10.00」, zh-CN), which is what `Intl` produces for the
+  // reader's locale — `formatVelaBalanceUsd`'s bare `$` is kept for every
+  // other surface that already sits next to something naming the currency.
+  const walletBalanceLabel = formatWalletBalance(balanceUsd);
   // #5517: wordmark badge inside the menu's billing card. It names the plan
   // FAMILY, so a TEAM workspace draws the one `team` wordmark at every tier —
   // free through max — while the personal ladder keeps its per-tier glyph
@@ -1279,6 +1316,11 @@ export function EntryTopRightCluster({
   // campaign badge already build their plans links.
   const accountBillingUrl =
     billingConsoleUrl ?? amrConsoleUrlForWorkspace(undefined, context?.workspaceId);
+  // Where the card's 「管理」 goes for a tier with nothing left to buy: the same
+  // workspace-scoped console the wallet row opens, asked to open its
+  // auto-recharge settings on arrival. Topping up IS the action for a top-tier
+  // subscriber — see AMR_CONSOLE_AUTO_RECHARGE_INTENT.
+  const billingManageUrl = autoRechargeConsoleUrl(accountBillingUrl);
   // Product decision: plan comparison lives on public Pricing and payment
   // lives in Cloud. The client refreshes billing + context when focus returns
   // so a completed web upgrade syncs plan, credits, seats and gates.
@@ -1289,9 +1331,6 @@ export function EntryTopRightCluster({
   // 升级 that could only reopen the plan they already hold. It reads the tier
   // the card LABELS, so the button and the nameplate next to it can never
   // disagree.
-  const canUpgrade =
-    Boolean(billingUpgradeUrl && permissions?.canManageBilling)
-    && canUpgradeFromPlanTier(labelTier);
   // Whether the top-right pill sells the upgrade instead of reporting a
   // balance. It reads the same tier the wordmark draws, so the pill's green
   // ground and its badge can never disagree. `labelTier` alone is not enough:
@@ -1301,6 +1340,24 @@ export function EntryTopRightCluster({
   // test anyway for the case where B DOES say 'free' but the workspace is
   // team-typed, where the wordmark draws `team` instead.
   const isFreePlan = planTier === 'free' || (labelTier ?? '').trim().toLowerCase() === 'free';
+  // Design PR #8364: the Free card sells 升级 like every paid tier. A personal
+  // workspace needs no billing permission — its member IS the payer — and an
+  // account B reports without any plan is upgradeable as free once the card
+  // already labels it free, so the header button and the nameplate agree.
+  const mayActOnBilling =
+    context?.workspaceType === 'personal' || Boolean(permissions?.canManageBilling);
+  const upgradeTier = labelTier ?? (isFreePlan ? 'free' : null);
+  const canUpgrade =
+    Boolean(billingUpgradeUrl) && mayActOnBilling && canUpgradeFromPlanTier(upgradeTier);
+  // The design's Max panel puts 「管理」 where every other tier puts 「升级」.
+  // It is asked of `isTopPlanTier`, not of `!canUpgrade`: an UNKNOWN tier (a
+  // billing read that has not landed) also fails the upgrade gate, and a card
+  // that flashes 管理 before settling on 升级 is worse than one paint of
+  // nothing. That keeps 升级 on personal Max, which still has the whole team
+  // ladder above it — the standing owner ruling 「个人档位都是要显示可升级的,
+  // 最顶的就是团队 max」, pinned in EntryNavRail.top-tier-upgrade.test.tsx.
+  const canManageTopTierBilling =
+    isTopPlanTier(labelTier) && Boolean(billingManageUrl && permissions?.canManageBilling);
   // The pill exists whenever billing has answered (it is the only way to the
   // billing card under it); what it SAYS follows the zero-balance ruling
   // above — a subscriber at $0.00 keeps the plan wordmark and drops the
@@ -1433,12 +1490,17 @@ export function EntryTopRightCluster({
                           icon stays as the fallback for the rare tier string no
                           wordmark matches — without it the chip would be a
                           bare, unlabelled number. */}
+                      {/* The mark alone, at the design's 16px. The balance
+                          moved off the capsule entirely (design + its
+                          electron-panel.png): the number lives in the card the
+                          capsule opens. The battery glyph stays as the
+                          fallback for a tier string no wordmark matches —
+                          without it the capsule would be empty. */}
                       {planTier ? (
-                        <PlanWordmark tier={planTier} height={14} />
+                        <PlanWordmark tier={planTier} height={16} />
                       ) : (
-                        <RemixIcon name="battery-charge-line" size={13} />
+                        <RemixIcon name="battery-charge-line" size={16} />
                       )}
-                      {showCreditsBalance ? <>{' '}{balanceAmount ?? '—'}</> : null}
                     </>
                   )}
                 </button>
@@ -1460,7 +1522,7 @@ export function EntryTopRightCluster({
                     <div className="entry-nav-rail__menu-credits-head">
                       <span className="entry-nav-rail__menu-credits-plan">
                         {tierLabel}
-                        {planTier ? <PlanWordmark tier={planTier} height={11} /> : null}
+                        {planTier ? <PlanWordmark tier={planTier} height={16} /> : null}
                       </span>
                       {canUpgrade ? (
                         <button
@@ -1474,9 +1536,36 @@ export function EntryTopRightCluster({
                         >
                           {t('entry.creditsUpgrade')}
                         </button>
+                      ) : canManageTopTierBilling ? (
+                        <button
+                          type="button"
+                          className="entry-nav-rail__menu-credits-upgrade"
+                          onClick={() => {
+                            trackAccountAction('credits');
+                            setCreditsPanelOpen(false);
+                            if (billingManageUrl) {
+                              window.open(billingManageUrl, '_blank', 'noopener,noreferrer');
+                            }
+                          }}
+                        >
+                          {t('entry.creditsManage')}
+                        </button>
                       ) : null}
                     </div>
-                    <CodingPlanUsage context={context} />
+                    {/* The design's allowance row. Its 「已用 N% ›」 half is an
+                        entry of the same kind as the wallet row under it, so it
+                        lands on the same console the wallet row opens —
+                        PENDING PRODUCT: the design brief leaves this
+                        destination unnamed, and a usage-detail view may claim
+                        it later. */}
+                    <CodingPlanUsage
+                      context={context}
+                      usageUrl={accountBillingUrl}
+                      onUsageClick={() => {
+                        trackAccountAction('credits');
+                        setCreditsPanelOpen(false);
+                      }}
+                    />
                     {/* #62 (product ruling): clicking the balance jumps straight
                         to B's console dashboard for the usage detail — there is
                         NO intermediate credits popover in the client. */}
@@ -1492,11 +1581,14 @@ export function EntryTopRightCluster({
                         }
                       }}
                     >
+                      {/* Text alone: the design's wallet row carries no
+                          leading glyph, and reads in the same size, weight and
+                          ink as the allowance row above it. */}
                       <span className="entry-nav-rail__menu-credits-label">
-                        <RemixIcon name="battery-charge-line" size={14} /> {t('billing.wallet')}
+                        {t('billing.wallet')}
                       </span>
                       <span className="entry-nav-rail__menu-credits-value">
-                        {balanceLabel ?? '—'}
+                        <bdi>{walletBalanceLabel ?? '—'}</bdi>
                         <Icon name="chevron-right" size={14} />
                       </span>
                     </button>

@@ -125,6 +125,50 @@ describe('account menu billing card — 升级 at the top plan tier', () => {
     expect(card.queryByRole('button', { name: '升级' })).toBeNull();
   });
 
+  // Design (PR #8364): the top tier's head button says 管理, not 升级, and
+  // lands on the one billing action that tier still has — auto-recharge.
+  it('offers 管理 instead, pointed at the console’s auto-recharge settings', () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    renderRail({
+      context: context({ planId: 'team_max' } as Partial<WorkspaceCollabContext>),
+      billing: billing({ membershipTier: 'team_max' }),
+    });
+
+    fireEvent.click(billingCard().getByRole('button', { name: '管理' }));
+
+    expect(open).toHaveBeenCalledWith(
+      expect.stringContaining('billing=auto-recharge'),
+      '_blank',
+      'noopener,noreferrer',
+    );
+  });
+
+  // An unresolved tier also fails the upgrade gate. It must not flash 管理 on
+  // the way to 升级.
+  it('shows neither button while the tier is still unknown', () => {
+    renderRail({
+      context: context({ billingState: 'active', planId: null }),
+      billing: null,
+    });
+
+    const card = billingCard();
+    expect(card.queryByRole('button', { name: '管理' })).toBeNull();
+    expect(card.queryByRole('button', { name: '升级' })).toBeNull();
+  });
+
+  it('still hides 管理 from a team_max member without canManageBilling', () => {
+    renderRail({
+      context: context({
+        role: 'member',
+        planId: 'team_max',
+        permissions: MEMBER_PERMISSIONS,
+      } as unknown as Partial<WorkspaceCollabContext>),
+      billing: billing({ membershipTier: 'team_max' }),
+    });
+
+    expect(billingCard().queryByRole('button', { name: '管理' })).toBeNull();
+  });
+
   // (2) Team tiers below max can still change plan.
   it.each(['team_basic', 'team_plus', 'team_pro'])(
     'keeps 升级 for a %s owner',

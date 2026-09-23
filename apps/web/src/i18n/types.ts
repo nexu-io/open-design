@@ -31,19 +31,8 @@ export const LOCALE_LABEL: Record<Locale, string> = {
 // offending string instead of a generic object mismatch.
 export interface Dict {
   'billing.wallet': string;
-  'billing.codingPlan': string;
-  'billing.codingPlanUnavailable': string;
-  'billing.codingPlanWindowHours': string;
-  'billing.codingPlanWindowDays': string;
+  'billing.codingPlanWeeklyAllowance': string;
   'billing.codingPlanUsedPercent': string;
-  'billing.codingPlanRemainingAmount': string;
-  'billing.codingPlanExhausted': string;
-  'billing.codingPlanResetsInDays': string;
-  'billing.codingPlanResetsInHours': string;
-  'billing.codingPlanResetsInMinutes': string;
-  'billing.codingPlanReset': string;
-  'billing.codingPlanUnstarted': string;
-  'billing.codingPlanFallback': string;
   // Workspace invite acceptance (C lane)
   'invite.header.eyebrow': string;
   'invite.loading': string;
@@ -1188,6 +1177,7 @@ export interface Dict {
   'entry.creditsAriaWithBalance': string;
   'entry.creditsGrantTip': string;
   'entry.creditsUpgrade': string;
+  'entry.creditsManage': string;
   'entry.creditsOpening': string;
   'entry.creditsRemaining': string;
   'entry.credits': string;

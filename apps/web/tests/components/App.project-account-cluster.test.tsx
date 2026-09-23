@@ -341,13 +341,17 @@ describe('project route — floating account cluster', () => {
     // route has no rail — so it is deliberately absent rather than relocated.
     expect(screen.queryByTestId('entry-nav-account')).toBeNull();
 
-    // Balance still comes from THIS route's workspace, not the shell's. Asserted
-    // without a currency symbol: the pill leads with the plan wordmark and
-    // renders the bare amount beside it.
-    expect(
-      screen.getByTestId('entry-top-right-credits').textContent,
-    ).toContain('12.34');
-    expect(screen.getByTestId('entry-top-right-credits').textContent).not.toContain('98.76');
+    // Balance still comes from THIS route's workspace, not the shell's. Since
+    // design PR #8364 the pill carries only the plan wordmark, so the amount is
+    // read off the billing card the pill opens on hover.
+    fireEvent.pointerOver(credits.closest('.entry-top-right-credits-anchor') as HTMLElement);
+    const creditsCard = await waitFor(() => {
+      const el = document.querySelector('.entry-nav-rail__menu-credits');
+      if (!el) throw new Error('credits card not open');
+      return el;
+    });
+    expect(creditsCard.textContent).toContain('$12.34');
+    expect(creditsCard.textContent).not.toContain('98.76');
 
     fireEvent.click(screen.getByTestId('entry-top-right-credits'));
     expect(open).toHaveBeenCalledOnce();

@@ -113,6 +113,6 @@ describe('billing card plan label on the personal ladder (OPEND-3119)', () => {
     renderRail('max', 'zh-CN');
     const head = planHead();
     expect(head.text).not.toContain('专业版');
-    expect(head.text).toBe('Max');
+    expect(head.text).toBe('旗舰版');
   });
 });
