@@ -2,8 +2,10 @@ import type { Dict } from '../types';
 
 export const uk: Dict = {
   'billing.wallet': 'Баланс гаманця',
-  'billing.codingPlanWeeklyAllowance': 'Квота на 7 днів',
-  'billing.codingPlanUsedPercent': 'Використано {percent}%',
+  'billing.codingPlanDesignPlan': 'Design Plan',
+  'billing.codingPlanPeriodHours': '{count} год',
+  'billing.codingPlanPeriodDays': '{count} дн.',
+  'billing.codingPlanRemainingPercent': 'Залишилось {percent}%',
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

@@ -311,10 +311,7 @@ describe('account menu billing card — scoped USD balance (recvqgaMLxEdZX)', ()
     expect(billingCard().getByText('US$0.00')).toBeTruthy();
   });
 
-  // Design (PR #8364) + its electron-panel.png: the wallet row is text and a
-  // chevron. The battery glyph that used to lead the label is gone, so the row
-  // reads in the same size, weight and ink as the allowance row above it.
-  it('carries no leading glyph — only the label, the figure and one chevron', () => {
+  it('preserves the team wallet battery icon and chevron', () => {
     renderRail({
       context: context(),
       billing: billing({ totalAvailableCredits: 600_000 }),
@@ -322,8 +319,8 @@ describe('account menu billing card — scoped USD balance (recvqgaMLxEdZX)', ()
     });
 
     const row = billingCard().getByTestId('entry-nav-credits-row');
-    expect(row.querySelectorAll('svg')).toHaveLength(1);
-    expect(row.textContent).toBe('钱包余额US$12.00');
+    expect(row.querySelectorAll('svg')).toHaveLength(2);
+    expect(row.textContent?.trim()).toBe('钱包余额US$12.00');
   });
 });
 

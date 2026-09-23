@@ -6749,10 +6749,7 @@
   right: 0;
   /* The card's own width, not the pill's — the pill is as narrow as "升级" and
      the plan row inside needs room for the tier label plus its wordmark. */
-  /* The design's own minimum (ProPlanPreview.module.css): the card's padding
-     grew from 10px to the design's 16px, and 「7天额度免费用」 + 「已用 100% ›」
-     needs the inner width back. */
-  width: 256px;
+  width: 232px;
   /* 6px of visual gap, paid as PADDING rather than margin/offset so the strip
      between pill and panel is still inside the anchor and the pointer can
      cross it without arming the close timer. */
@@ -6764,9 +6761,7 @@
    floating panel. */
 .entry-top-right-credits-panel .entry-nav-rail__menu-credits {
   margin-bottom: 0;
-  /* index.html's literal. ProPlanPreview.module.css uses var(--shadow-lg);
-     the standalone HTML is the pixel authority (see the PR's conflict note). */
-  box-shadow: 0 16px 30px #00000020;
+  box-shadow: var(--shadow-lg);
 }
 
 .entry-top-right-account-pill {
@@ -7189,32 +7184,27 @@
 .entry-nav-rail__menu-credits {
   display: flex;
   flex-direction: column;
-  padding: 16px;
-  border-radius: 16px;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
   /* Inverted card: ink-black ground, white-tier text (颜色规范 #202020 /
      #fafafa 反白文字). */
   background: #202020;
   color: #fafafa;
   margin-bottom: 6px;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 18px;
 }
 .entry-nav-rail__menu-credits-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding: 0;
-  margin-bottom: 20px;
+  padding: 2px 0 6px;
 }
 .entry-nav-rail__menu-credits-plan {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 24px;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 700;
   color: #fafafa;
 }
 .entry-nav-rail__menu-credits-upgrade {
@@ -7223,63 +7213,36 @@
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  height: auto;
-  min-height: 22px;
-  padding: 3px 10px;
+  height: 22px;
+  padding: 0 10px;
   border-radius: var(--radius-pill);
   /* Light pill on the inverted black card (浅底深字 per 按钮规范). */
   background: #fafafa;
   color: #202020;
   font: inherit;
   font-size: 12px;
-  font-weight: 500;
-  line-height: 18px;
-  white-space: nowrap;
+  font-weight: 600;
+  line-height: 1;
 }
 /* :not(:disabled) lifts specificity above the global button:hover reset. */
 .entry-nav-rail__menu-credits-upgrade:hover:not(:disabled),
 .entry-nav-rail__menu-credits-upgrade:focus-visible {
-  /* Design `.upgrade:hover` — the pill tints toward the brand green rather
-     than merely brightening. */
-  background: #dfffd5;
+  background: #fff;
   color: #202020;
 }
 .entry-nav-rail__menu-credits-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 24px;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 18px;
+  min-height: 26px;
+  font-size: 13px;
   color: #fafafa;
-}
-/* The separator belongs to the PAIR, not to either row: the design draws it
-   only where an allowance block sits above the wallet row (its Free panel has
-   no rule at all). `CodingPlanUsage` renders nothing when there is no
-   allowance, so the adjacency IS the condition — no flag has to be threaded
-   through the card. The skeleton carries the same hook, so the rule does not
-   appear one frame after the reading lands. */
-[data-coding-plan-quota] + .entry-nav-rail__menu-credits-row {
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 0.5px solid rgba(250, 250, 250, 0.08);
-  /* The 24px floor is for a row standing ALONE (the design's Free panel). With
-     the separator above it the 12px inset already clears it, and on the row's
-     content-box the floor would stack on top of that inset and make the card
-     6px taller than the design. */
-  min-height: 0;
 }
 /* The 积分 row is a button (opens the credits panel) — reset the primitives
    button chrome so it reads as the same flat row as the static bonus line
    (#5517), not an inset pill. */
 button.entry-nav-rail__menu-credits-row {
   width: 100%;
-  /* The global primitive gives every bare <button> a 36px control height. This
-     row is not a control-sized button, it is a CARD ROW: the design sizes it
-     from its own text (18px) plus whatever inset the separator asks for, so the
-     floor has to come off here or the card stands 6px taller than the design. */
-  height: auto;
   border: 0;
   background: none;
   padding: 0;
@@ -7288,48 +7251,26 @@ button.entry-nav-rail__menu-credits-row {
   box-shadow: none;
   cursor: pointer;
 }
-/* No row-level hover fill: the design moves the CHEVRON and nothing else.
-   The explicit :hover override is required because primitives.css's
-   `button:hover:not(:disabled)` paints a fill at higher specificity. */
 button.entry-nav-rail__menu-credits-row:hover:not(:disabled) {
-  background: none;
+  background: color-mix(in srgb, #fafafa 8%, transparent);
   border-color: transparent;
 }
 button.entry-nav-rail__menu-credits-row:active:not(:disabled) {
   transform: none;
-}
-.entry-nav-rail__menu-credits-row .od-icon {
-  transition: transform 160ms ease-out;
-}
-.entry-nav-rail__menu-credits-row:hover .od-icon,
-.entry-nav-rail__menu-credits-row:focus-visible .od-icon {
-  transform: translateX(2px);
-}
-/* The design's own focus ring (index.html `a:focus-visible`). */
-.entry-nav-rail__menu-credits-row:focus-visible {
-  outline: 2px solid #83df62;
-  outline-offset: 4px;
-}
-@media (prefers-reduced-motion: reduce) {
-  .entry-nav-rail__menu-credits-row .od-icon {
-    transition: none;
-  }
 }
 .entry-nav-rail__menu-credits-label {
   display: inline-flex;
   align-items: center;
   gap: 8px;
 }
-/* The wallet row carries no leading glyph any more (design + electron-panel
-   .png): the label is text alone, so this only covers a future one. */
-.entry-nav-rail__menu-credits-label .od-icon { color: inherit; }
+.entry-nav-rail__menu-credits-label .od-icon { color: rgba(250, 250, 250, 0.72); }
 .entry-nav-rail__menu-credits-value {
   display: inline-flex;
   align-items: center;
   gap: 2px;
   font-variant-numeric: tabular-nums;
 }
-.entry-nav-rail__menu-credits-value .od-icon { color: inherit; flex-shrink: 0; }
+.entry-nav-rail__menu-credits-value .od-icon { color: rgba(250, 250, 250, 0.72); }
 .entry-nav-rail__menu-item {
   appearance: none;
   border: 0;

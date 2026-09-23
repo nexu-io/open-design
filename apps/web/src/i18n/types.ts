@@ -31,8 +31,13 @@ export const LOCALE_LABEL: Record<Locale, string> = {
 // offending string instead of a generic object mismatch.
 export interface Dict {
   'billing.wallet': string;
-  'billing.codingPlanWeeklyAllowance': string;
-  'billing.codingPlanUsedPercent': string;
+  /** The product name of the allowance pool; kept untranslated in every locale. */
+  'billing.codingPlanDesignPlan': string;
+  /** Period of a quota window, derived from its `durationSeconds`. */
+  'billing.codingPlanPeriodHours': string;
+  'billing.codingPlanPeriodDays': string;
+  /** The share of a window STILL AVAILABLE, the number the bar fills to. */
+  'billing.codingPlanRemainingPercent': string;
   // Workspace invite acceptance (C lane)
   'invite.header.eyebrow': string;
   'invite.loading': string;

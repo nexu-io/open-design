@@ -1,4 +1,5 @@
 import { CodingPlanUsage } from './CodingPlanUsage';
+import planCardStyles from './PersonalPlanCard.module.css';
 // Team-edition entry navigation rail (Lovart/Manus-style labeled column).
 //
 // Structure — faithfully ported from the design demo
@@ -1521,14 +1522,22 @@ export function EntryTopRightCluster({
                   id={creditsPanelId}
                   role="dialog"
                   aria-label={t('entry.credits')}
-                  className="entry-top-right-credits-panel"
+                  className={`entry-top-right-credits-panel ${planTier !== 'team' ? planCardStyles.panel : ''}`}
                   data-testid="entry-top-right-credits-panel"
                 >
-                  <div className="entry-nav-rail__menu-credits">
+                  <div
+                    className={`entry-nav-rail__menu-credits ${planTier !== 'team' ? planCardStyles.card : ''}`}
+                  >
                     <div className="entry-nav-rail__menu-credits-head">
-                      <span className="entry-nav-rail__menu-credits-plan">
-                        {tierLabel}
-                        {planTier ? <PlanWordmark tier={planTier} height={16} /> : null}
+                      <span
+                        className="entry-nav-rail__menu-credits-plan"
+                        role={planTier !== 'team' ? 'img' : undefined}
+                        aria-label={planTier !== 'team' ? planTier ?? tierLabel : undefined}
+                      >
+                        {planTier === 'team' ? tierLabel : null}
+                        {planTier ? (
+                          <PlanWordmark tier={planTier} height={planTier === 'team' ? 11 : 20} />
+                        ) : null}
                       </span>
                       {canUpgrade && !canManageTopTierBilling ? (
                         <button
@@ -1558,46 +1567,45 @@ export function EntryTopRightCluster({
                         </button>
                       ) : null}
                     </div>
-                    {/* The design's allowance row. Its 「已用 N% ›」 half is an
-                        entry of the same kind as the wallet row under it, so it
-                        lands on the same console the wallet row opens —
-                        PENDING PRODUCT: the design brief leaves this
-                        destination unnamed, and a usage-detail view may claim
-                        it later. */}
-                    <CodingPlanUsage
-                      context={context}
-                      usageUrl={accountBillingUrl}
-                      onUsageClick={() => {
-                        trackAccountAction('credits');
-                        setCreditsPanelOpen(false);
-                      }}
-                    />
-                    {/* #62 (product ruling): clicking the balance jumps straight
-                        to B's console dashboard for the usage detail — there is
-                        NO intermediate credits popover in the client. */}
-                    <button
-                      type="button"
-                      className="entry-nav-rail__menu-credits-row"
-                      data-testid="entry-nav-credits-row"
-                      onClick={() => {
-                        trackAccountAction('credits');
-                        setCreditsPanelOpen(false);
-                        if (walletRechargeUrl) {
-                          window.open(walletRechargeUrl, '_blank', 'noopener,noreferrer');
-                        }
-                      }}
-                    >
-                      {/* Text alone: the design's wallet row carries no
-                          leading glyph, and reads in the same size, weight and
-                          ink as the allowance row above it. */}
-                      <span className="entry-nav-rail__menu-credits-label">
-                        {t('billing.wallet')}
-                      </span>
-                      <span className="entry-nav-rail__menu-credits-value">
-                        <bdi>{walletBalanceLabel ?? '—'}</bdi>
-                        <Icon name="chevron-right" size={14} />
-                      </span>
-                    </button>
+                    {planTier !== 'team' ? (
+                      <CodingPlanUsage
+                        context={context}
+                        usageUrl={accountBillingUrl}
+                        onUsageClick={() => {
+                          trackAccountAction('credits');
+                          setCreditsPanelOpen(false);
+                        }}
+                        wallet={{
+                          balanceUsd,
+                          url: walletRechargeUrl,
+                          onClick: () => {
+                            trackAccountAction('credits');
+                            setCreditsPanelOpen(false);
+                          },
+                        }}
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        className="entry-nav-rail__menu-credits-row"
+                        data-testid="entry-nav-credits-row"
+                        onClick={() => {
+                          trackAccountAction('credits');
+                          setCreditsPanelOpen(false);
+                          if (walletRechargeUrl) {
+                            window.open(walletRechargeUrl, '_blank', 'noopener,noreferrer');
+                          }
+                        }}
+                      >
+                        <span className="entry-nav-rail__menu-credits-label">
+                          <RemixIcon name="battery-charge-line" size={14} /> {t('billing.wallet')}
+                        </span>
+                        <span className="entry-nav-rail__menu-credits-value">
+                          <bdi>{walletBalanceLabel ?? '—'}</bdi>
+                          <Icon name="chevron-right" size={14} />
+                        </span>
+                      </button>
+                    )}
                   </div>
                 </div>
               ) : null}

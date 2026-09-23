@@ -69,14 +69,18 @@ function planHead() {
   const head = document.querySelector('.entry-nav-rail__menu-credits-plan');
   if (!head) throw new Error('billing card plan head is not rendered');
   return {
+    el: head,
     text: head.textContent?.trim() ?? '',
     wordmarkWidth: head.querySelector('.plan-wordmark')?.getAttribute('viewBox') ?? null,
+    wordmarkHeight: head.querySelector('.plan-wordmark')?.getAttribute('height') ?? null,
   };
 }
 
 beforeEach(() => {
   resetWorkspaceDirectoryCache();
-  globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({}), { status: 200 })) as typeof fetch;
+  globalThis.fetch = vi.fn(
+    async () => new Response(JSON.stringify({}), { status: 200 }),
+  ) as typeof fetch;
 });
 
 afterEach(() => {
@@ -86,33 +90,12 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('billing card plan label on the personal ladder (OPEND-3119)', () => {
-  it('names a Max subscription Max, never Pro', () => {
-    renderRail('max');
+describe('personal billing card uses only its plan wordmark', () => {
+  it.each(['free', 'go', 'plus', 'pro', 'max'])('omits the redundant %s tier name', (tier) => {
+    renderRail(tier, 'zh-CN');
     const head = planHead();
-    expect(head.text).not.toMatch(/pro/i);
-    expect(head.text).toBe('Max');
-    // The wordmark beside it is the max glyph (114-wide viewBox), so label and
-    // badge agree.
-    expect(head.wordmarkWidth).toBe('0 0 114 49');
-  });
-
-  it('names a Plus subscription Plus, never Pro', () => {
-    renderRail('plus');
-    const head = planHead();
-    expect(head.text).not.toMatch(/pro/i);
-    expect(head.text).toBe('Plus');
-  });
-
-  it('keeps the Pro label for a Pro subscription', () => {
-    renderRail('pro');
-    expect(planHead().text).toBe('Pro');
-  });
-
-  it('does not fall back to 专业版 for Max in zh-CN', () => {
-    renderRail('max', 'zh-CN');
-    const head = planHead();
-    expect(head.text).not.toContain('专业版');
-    expect(head.text).toBe('旗舰版');
+    expect(head.text).toBe('');
+    expect(head.el.getAttribute('aria-label')).toBe(tier);
+    expect(head.wordmarkHeight).toBe('20');
   });
 });

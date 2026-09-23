@@ -1,25 +1,17 @@
-/* The Coding Plan allowance block, drawn 1:1 from the design in
-   `docs/ui-previews/plan-panels/index.html` (PR #8364).
-
-   This block does NOT live on the page ground — it is mounted inside the
-   inverted billing card (`.entry-nav-rail__menu-credits`), which paints its own
-   ink ground (#202020) and its own white-tier text (#fafafa). Page-level
-   text/fill tokens are authored for the page ground, so reading them here
-   paints near-black ink on near-black card. Type (12px / 500 / 18px) is
-   inherited from the card so the allowance row, the wallet row and the design
-   stay one typographic system — the design's own rule is 「钱包余额与额度文字统
-   一字号、字重、颜色」. The separator between this block and the wallet row is
-   the card's, keyed off `[data-coding-plan-quota]` in `entry-layout.css`, so a
-   card WITHOUT an allowance has no stray rule above its wallet row.
-
-   The literal design values (#ffffff24 track, #b1f38b fill, #ffffff20 bone) are
-   spelled out rather than tokenized: they are ink-ground values owned by this
-   one card, and the nearest page tokens do not carry them. */
+/* Personal billing card colors are independent of the surrounding page theme.
+   Typography is inherited from PersonalPlanCard. */
 .quota {
   display: block;
 }
 
-/* 「7天额度免费用」 left, 「已用 N% ›」 right. */
+/* One block per backend window (v2 `.quota-block`). The stack between them is
+   the block's own, so a single-window plan — Plus / Pro / Max — adds no stray
+   space above the wallet rule. */
+.block + .block {
+  margin-top: 14px;
+}
+
+/* 「Design Plan 7 天」 left, 「剩余 N% ›」 right. */
 .row {
   display: flex;
   align-items: center;
@@ -29,7 +21,10 @@
 }
 
 /* The card is narrow: when the label and the share cannot both fit, the LABEL
-   gives way (it is the repeated, guessable half) and the number stays whole. */
+   gives way (it is the repeated, guessable half) and the number stays whole.
+   v2 sets `.row > span { white-space: nowrap }`; the ellipsis is the overflow
+   guard for a locale whose product line runs longer than the box, and never
+   fires while the row fits. */
 .allowance {
   min-width: 0;
   overflow: hidden;
@@ -37,27 +32,39 @@
   white-space: nowrap;
 }
 
+/* The window's period, dimmed beside the allowance name it qualifies (v2
+   `.period`). `font: inherit` because <small> is drawn a step down by the UA
+   and the design keeps the whole row on one size. */
+.period {
+  margin-left: 4px;
+  color: #bdbdbd;
+  font: inherit;
+  white-space: nowrap;
+}
+
 /* The share is an entry, not a caption: same ink and weight as the label, with
-   the design's 2px between the number and its chevron. */
+   the design's 4px between the number and its chevron. */
 .entry {
   display: inline-flex;
   flex-shrink: 0;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
   border-radius: 4px;
   color: inherit;
   font-variant-numeric: tabular-nums;
   text-decoration: none;
 }
 
-.entry :global(.od-icon) {
+.arrow {
+  width: 14px;
+  height: 14px;
   flex-shrink: 0;
   color: inherit;
   transition: transform 160ms ease-out;
 }
 
-a.entry:hover :global(.od-icon),
-a.entry:focus-visible :global(.od-icon) {
+a.entry:hover .arrow,
+a.entry:focus-visible .arrow {
   transform: translateX(2px);
 }
 
@@ -81,7 +88,6 @@ a.entry:focus-visible {
   height: 100%;
   border-radius: inherit;
   background: #b1f38b;
-  transition: width 450ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 /* Loading: the design's bones, laid out in the loaded block's own slot (a 24px
@@ -120,8 +126,36 @@ a.entry:focus-visible {
     animation: none;
   }
 
-  .fill,
-  .entry :global(.od-icon) {
+  .arrow {
     transition: none;
   }
+}
+
+.wallet {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 24px;
+  box-sizing: content-box;
+  color: inherit;
+  text-decoration: none;
+}
+.walletWithQuota {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 0.5px solid #fafafa14;
+}
+.value {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.wallet:hover .arrow,
+.wallet:focus-visible .arrow {
+  transform: translateX(2px);
+}
+.wallet:focus-visible {
+  outline: 2px solid #83df62;
+  outline-offset: 4px;
 }

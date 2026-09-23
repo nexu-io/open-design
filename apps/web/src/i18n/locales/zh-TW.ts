@@ -2,8 +2,10 @@ import type { Dict } from "../types";
 
 export const zhTW: Dict = {
   'billing.wallet': '錢包餘額',
-  'billing.codingPlanWeeklyAllowance': '7天額度免費用',
-  'billing.codingPlanUsedPercent': '已用 {percent}%',
+  'billing.codingPlanDesignPlan': 'Design Plan',
+  'billing.codingPlanPeriodHours': '{count} 小時',
+  'billing.codingPlanPeriodDays': '{count} 天',
+  'billing.codingPlanRemainingPercent': '剩餘 {percent}%',
   'invite.header.eyebrow': "團隊邀請",
   'invite.loading': "正在載入邀請…",
   'invite.landing.title': "加入團隊",

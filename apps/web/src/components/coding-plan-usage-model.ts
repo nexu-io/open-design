@@ -1,74 +1,99 @@
 // The pure reading of a Coding Plan preflight, kept out of the component so
-// the one number the panel draws can be pinned in a spec without rendering
+// the numbers the panel draws can be pinned in a spec without rendering
 // anything.
 
 import type { WorkspaceBillingPreflight } from '@open-design/contracts';
+import type { Dict } from '../i18n/types';
 
 type CodingPlanWindow = WorkspaceBillingPreflight['codingPlan']['windows'][number];
 
-/**
- * The window the product surface is about.
- *
- * The daemon still ships every window the backend enforces (5 hours, 7 days,
- * 30 days), but the panel names exactly one allowance — 「7天额度免费用」 — so
- * the 7-day pool is the one it may draw. The others are enforcement detail the
- * design deliberately does not surface.
- */
-export const CODING_PLAN_WEEK_SECONDS = 604_800;
+const HOUR_SECONDS = 3_600;
+const DAY_SECONDS = 86_400;
 
 /** A whole, non-negative credit count as the backend writes it (a decimal string). */
 function creditCount(raw: string): bigint | null {
   return /^\d+$/.test(raw) ? BigInt(raw) : null;
 }
 
+/** The i18n key a period is named by, and the count that fills it. */
+export interface CodingPlanPeriodLabel {
+  key: Extract<
+    keyof Dict,
+    'billing.codingPlanPeriodHours' | 'billing.codingPlanPeriodDays'
+  >;
+  count: number;
+}
+
 /**
- * The window the panel draws: the 7-day one when the server sent it, the
- * LONGEST one otherwise.
+ * How a window's length is named: 「5 小时」 or 「7 天」.
  *
- * The fallback exists because the window set is the backend's to change. If a
- * future policy drops the 7-day pool, the longest remaining window is the
- * closest honest stand-in for an allowance measured in days — the alternative
- * is drawing a 5-hour pool under a label that says 7 days.
+ * Derived from `durationSeconds` rather than matched against a table of known
+ * policies, because the window set is the BACKEND'S to change — the design
+ * pairs Go with 5 小时 + 7 天 today, and a new pool must name itself without a
+ * client release.
+ *
+ * Null when the duration is not a whole number of either unit (90 minutes, 36
+ * hours). The design ships copy for exactly two units, so an inexact duration
+ * drops the period suffix rather than inventing 「1.5 天」 — the allowance name,
+ * the share and the bar still read.
  */
-function quotaWindow(windows: readonly CodingPlanWindow[]): CodingPlanWindow | null {
-  if (windows.length === 0) return null;
-  const week = windows.find((entry) => entry.durationSeconds === CODING_PLAN_WEEK_SECONDS);
-  if (week) return week;
-  return windows.reduce((longest, entry) =>
-    entry.durationSeconds > longest.durationSeconds ? entry : longest,
-  );
+export function codingPlanPeriodLabel(durationSeconds: number): CodingPlanPeriodLabel | null {
+  if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) return null;
+  if (durationSeconds % DAY_SECONDS === 0) {
+    return { key: 'billing.codingPlanPeriodDays', count: durationSeconds / DAY_SECONDS };
+  }
+  if (durationSeconds < DAY_SECONDS && durationSeconds % HOUR_SECONDS === 0) {
+    return { key: 'billing.codingPlanPeriodHours', count: durationSeconds / HOUR_SECONDS };
+  }
+  return null;
 }
 
 export interface CodingPlanQuotaView {
   policyId: string;
   durationSeconds: number;
-  /** Share of the pool ALREADY SPENT, a whole percent clamped to 0–100. */
-  usedPercent: number;
+  /** Share of the pool STILL AVAILABLE, a whole percent clamped to 0–100. */
+  remainingPercent: number;
+  /** What names this window's period, or null when no exact unit fits. */
+  periodLabel: CodingPlanPeriodLabel | null;
 }
 
 /**
- * What the quota row draws, or null when there is nothing drawable.
+ * Every window the panel draws, shortest period first.
  *
- * Null covers both "the server sent no windows" and "the chosen window's
- * numbers are not a readable share" (an unparseable count, a zero limit). The
- * design defines a normal state and a loading state and nothing else, so an
- * unreadable share is an ABSENCE — the card falls back to its wallet row —
- * rather than a bar drawn at a guessed zero.
+ * ONE BLOCK PER BACKEND WINDOW — the client no longer picks a single pool. The
+ * v2 design draws Go with two blocks (5 小时 over 7 天) and Plus/Pro/Max with
+ * one (7 天), and that difference is not a client rule: it is what each plan's
+ * preflight returns. Hard-coding "the 7-day one" made every other enforced
+ * pool invisible, which is how a Go subscriber could be stopped by a 5-hour
+ * limit the panel never mentioned.
+ *
+ * A window whose numbers are not a readable share (an unparseable count, a zero
+ * limit) is dropped on its own rather than taking the panel down with it: a
+ * readable 5-hour pool still draws beside a broken 7-day one. An empty result
+ * means the card falls back to its wallet row alone.
  */
 export function codingPlanQuotaView(
   windows: readonly CodingPlanWindow[],
-): CodingPlanQuotaView | null {
-  const entry = quotaWindow(windows);
-  if (!entry) return null;
-  const used = creditCount(entry.usedCredits);
-  const limit = creditCount(entry.limitCredits);
-  if (used === null || limit === null || limit === 0n) return null;
-  // Through BigInt: a plan pool is far past Number.MAX_SAFE_INTEGER, so the
-  // ratio has to be taken before it ever becomes a float.
-  const basisPoints = Number((used * 10_000n) / limit);
-  return {
-    policyId: entry.policyId,
-    durationSeconds: entry.durationSeconds,
-    usedPercent: Math.min(100, Math.max(0, Math.round(basisPoints / 100))),
-  };
+): CodingPlanQuotaView[] {
+  return windows
+    .map((entry): CodingPlanQuotaView | null => {
+      const used = creditCount(entry.usedCredits);
+      const limit = creditCount(entry.limitCredits);
+      if (used === null || limit === null || limit === 0n) return null;
+      // Through BigInt: a plan pool is far past Number.MAX_SAFE_INTEGER, so the
+      // ratio has to be taken before it ever becomes a float.
+      const basisPoints = Number((used * 10_000n) / limit);
+      const usedPercent = Math.min(100, Math.max(0, Math.round(basisPoints / 100)));
+      return {
+        policyId: entry.policyId,
+        durationSeconds: entry.durationSeconds,
+        // Taken from the rounded spent share rather than from `remainingCredits`
+        // so the number the row prints and the width the bar draws can never
+        // disagree by a rounding step.
+        remainingPercent: 100 - usedPercent,
+        periodLabel: codingPlanPeriodLabel(entry.durationSeconds),
+      };
+    })
+    .filter((view): view is CodingPlanQuotaView => view !== null)
+    .sort((left, right) => left.durationSeconds - right.durationSeconds);
 }

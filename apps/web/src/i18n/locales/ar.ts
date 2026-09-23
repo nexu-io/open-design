@@ -2,8 +2,10 @@ import type { Dict } from '../types';
 
 export const ar: Dict = {
   'billing.wallet': 'رصيد المحفظة',
-  'billing.codingPlanWeeklyAllowance': 'حصة 7 أيام',
-  'billing.codingPlanUsedPercent': 'مستخدَم {percent}%',
+  'billing.codingPlanDesignPlan': 'Design Plan',
+  'billing.codingPlanPeriodHours': '{count} ساعات',
+  'billing.codingPlanPeriodDays': '{count} أيام',
+  'billing.codingPlanRemainingPercent': 'متبقّي {percent}%',
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

@@ -2,8 +2,10 @@ import type { Dict } from '../types';
 
 export const esES: Dict = {
   'billing.wallet': 'Saldo del monedero',
-  'billing.codingPlanWeeklyAllowance': 'Cuota de 7 días',
-  'billing.codingPlanUsedPercent': '{percent} % usado',
+  'billing.codingPlanDesignPlan': 'Design Plan',
+  'billing.codingPlanPeriodHours': '{count} horas',
+  'billing.codingPlanPeriodDays': '{count} días',
+  'billing.codingPlanRemainingPercent': 'Queda {percent} %',
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

@@ -2,8 +2,10 @@ import type { Dict } from '../types';
 
 export const ja: Dict = {
   'billing.wallet': 'ウォレット残高',
-  'billing.codingPlanWeeklyAllowance': '7日間の利用枠',
-  'billing.codingPlanUsedPercent': '{percent}% 使用',
+  'billing.codingPlanDesignPlan': 'Design Plan',
+  'billing.codingPlanPeriodHours': '{count} 時間',
+  'billing.codingPlanPeriodDays': '{count} 日間',
+  'billing.codingPlanRemainingPercent': '残り {percent}%',
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

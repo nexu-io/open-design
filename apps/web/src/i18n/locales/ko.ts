@@ -2,8 +2,10 @@ import type { Dict } from '../types';
 
 export const ko: Dict = {
   'billing.wallet': '지갑 잔액',
-  'billing.codingPlanWeeklyAllowance': '7일 사용 한도',
-  'billing.codingPlanUsedPercent': '{percent}% 사용',
+  'billing.codingPlanDesignPlan': 'Design Plan',
+  'billing.codingPlanPeriodHours': '{count}시간',
+  'billing.codingPlanPeriodDays': '{count}일',
+  'billing.codingPlanRemainingPercent': '{percent}% 남음',
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

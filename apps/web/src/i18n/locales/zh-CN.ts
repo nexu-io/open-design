@@ -2,8 +2,10 @@ import type { Dict } from "../types";
 
 export const zhCN: Dict = {
   'billing.wallet': '钱包余额',
-  'billing.codingPlanWeeklyAllowance': '7天额度免费用',
-  'billing.codingPlanUsedPercent': '已用 {percent}%',
+  'billing.codingPlanDesignPlan': 'Design Plan',
+  'billing.codingPlanPeriodHours': '{count} 小时',
+  'billing.codingPlanPeriodDays': '{count} 天',
+  'billing.codingPlanRemainingPercent': '剩余 {percent}%',
   'invite.header.eyebrow': "团队邀请",
   'invite.loading': "正在加载邀请…",
   'invite.landing.title': "加入团队",
@@ -824,7 +826,7 @@ export const zhCN: Dict = {
   "entry.billingTierPro": "专业版",
   "entry.billingTierPlus": "标准版",
   "entry.billingTierMax": "旗舰版",
-  "entry.billingTierGo": "Go",
+  "entry.billingTierGo": "轻享版",
   "entry.billingFamilyCreator": "创作会员",
   "entry.creditsAria": "{tier} · 可用额度",
   "entry.creditsAriaWithBalance": "{tier} · 可用额度 {balance}",

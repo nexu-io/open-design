@@ -2,8 +2,10 @@ import type { Dict } from '../types';
 
 export const th: Dict = {
   'billing.wallet': 'ยอดเงินในกระเป๋าเงิน',
-  'billing.codingPlanWeeklyAllowance': 'โควตา 7 วัน',
-  'billing.codingPlanUsedPercent': 'ใช้ไปแล้ว {percent}%',
+  'billing.codingPlanDesignPlan': 'Design Plan',
+  'billing.codingPlanPeriodHours': '{count} ชั่วโมง',
+  'billing.codingPlanPeriodDays': '{count} วัน',
+  'billing.codingPlanRemainingPercent': 'เหลือ {percent}%',
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

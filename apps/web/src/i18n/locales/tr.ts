@@ -2,8 +2,10 @@ import type { Dict } from '../types';
 
 export const tr: Dict = {
   'billing.wallet': 'Cüzdan bakiyesi',
-  'billing.codingPlanWeeklyAllowance': '7 günlük kota',
-  'billing.codingPlanUsedPercent': '%{percent} kullanıldı',
+  'billing.codingPlanDesignPlan': 'Design Plan',
+  'billing.codingPlanPeriodHours': '{count} saat',
+  'billing.codingPlanPeriodDays': '{count} gün',
+  'billing.codingPlanRemainingPercent': '%{percent} kaldı',
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

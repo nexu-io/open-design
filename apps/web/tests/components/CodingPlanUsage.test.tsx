@@ -1,14 +1,16 @@
 // @vitest-environment jsdom
 //
 // The Coding Plan quota block inside the top-right billing card, rebuilt 1:1
-// against the design (PR #8364, `docs/ui-previews/plan-panels/`).
+// against the designer's v2 spec (`design-spec-v2.html`).
 //
-// What the design defines, and therefore all this block may draw:
-//  · ONE row — 「7天额度免费用」 on the left, 「已用 N% ›」 as an entry on the
-//    right — and a 5px progress track under it. Nothing else: no title, no
-//    window name, no remaining dollars, no reset time, no explainer;
+// What v2 defines, and therefore all this block may draw:
+//  · ONE BLOCK PER BACKEND WINDOW, shortest first — 「Design Plan <period>」 on
+//    the left, 「剩余 N% ›」 as an entry on the right, over a 5px track whose
+//    fill is the REMAINING share. Go draws two (5 小时 + 7 天), Plus/Pro/Max
+//    draw one (7 天), Free draws none;
+//  · nothing else: no title, no remaining dollars, no reset time, no explainer;
 //  · a skeleton while the read is in flight;
-//  · a spent pool is just 100% — no red, no 「已用完」. The exhausted state
+//  · a spent pool is just 剩余 0% — no red, no 「已用完」. The exhausted state
 //    stays with the existing in-conversation card;
 //  · everything else (no plan, an old CLI with no preflight, a TEAM
 //    workspace) draws NOTHING — the card falls back to its wallet row alone.
@@ -42,18 +44,20 @@ interface WindowInput {
   resetsAt?: string | null;
 }
 
-function preflight(options: {
-  member?: string;
-  eligible?: boolean;
-  tier?: 'go' | 'plus' | 'pro' | 'max' | null;
-  windows?: WindowInput[];
-  omit?: boolean;
-} = {}) {
+function preflight(
+  options: {
+    member?: string;
+    eligible?: boolean;
+    tier?: 'go' | 'plus' | 'pro' | 'max' | null;
+    windows?: WindowInput[];
+    omit?: boolean;
+  } = {},
+) {
   const {
     member = 'member',
     eligible = true,
     tier = 'pro',
-    windows = [{ durationSeconds: 18_000 }, { durationSeconds: 604_800 }],
+    windows = [{ durationSeconds: 604_800 }],
     omit = false,
   } = options;
   if (omit) {
@@ -103,6 +107,7 @@ function renderPanel(
     context?: WorkspaceCollabContext;
     usageUrl?: string | null;
     onUsageClick?: () => void;
+    wallet?: { balanceUsd: string; url: string; onClick?: () => void };
   } = {},
 ) {
   const {
@@ -110,10 +115,16 @@ function renderPanel(
     context = personal(),
     usageUrl = USAGE_URL,
     onUsageClick,
+    wallet,
   } = overrides;
   return render(
     <I18nProvider initial={locale}>
-      <CodingPlanUsage context={context} usageUrl={usageUrl} onUsageClick={onUsageClick} />
+      <CodingPlanUsage
+        context={context}
+        usageUrl={usageUrl}
+        onUsageClick={onUsageClick}
+        wallet={wallet}
+      />
     </I18nProvider>,
   );
 }
@@ -124,33 +135,35 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('Coding Plan quota block — the one row the design defines', () => {
-  it('draws the 7-day allowance, its used share and its track — and nothing else', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => response()));
+describe('Coding Plan quota block — the row v2 defines', () => {
+  it('draws the allowance, its period, its remaining share and its track — and nothing else', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => response()),
+    );
 
     renderPanel();
 
     const block = await screen.findByTestId('coding-plan-quota');
-    expect(within(block).getByText('7天额度免费用')).toBeTruthy();
-    expect(within(block).getByText('已用 25%')).toBeTruthy();
-    expect(within(block).getByRole('progressbar').getAttribute('aria-valuenow')).toBe('25');
+    expect(within(block).getByText('Design Plan')).toBeTruthy();
+    expect(within(block).getByText('7 天')).toBeTruthy();
+    expect(within(block).getByText('剩余 75%')).toBeTruthy();
+    expect(within(block).getByRole('progressbar').getAttribute('aria-valuenow')).toBe('75');
 
     // The improvised surface this replaces is gone, every line of it.
     expect(screen.queryByText('Coding Plan')).toBeNull();
     expect(screen.queryByText(/窗口/)).toBeNull();
-    expect(screen.queryByText(/剩余/)).toBeNull();
+    expect(screen.queryByText(/已用/)).toBeNull();
     expect(screen.queryByText(/重置/)).toBeNull();
     expect(screen.queryByText(/钱包/)).toBeNull();
   });
 
-  it('rounds the share to a whole percent and fills the track to match', async () => {
+  it('fills the track to the REMAINING share, not the spent one', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () =>
         response({
-          windows: [
-            { durationSeconds: 604_800, usedCredits: '355000', limitCredits: '1000000' },
-          ],
+          windows: [{ durationSeconds: 604_800, usedCredits: '355000', limitCredits: '1000000' }],
         }),
       ),
     );
@@ -158,15 +171,15 @@ describe('Coding Plan quota block — the one row the design defines', () => {
     renderPanel();
 
     const block = await screen.findByTestId('coding-plan-quota');
-    expect(within(block).getByText('已用 36%')).toBeTruthy();
-    expect(
-      (within(block).getByTestId('coding-plan-quota-fill') as HTMLElement).style.width,
-    ).toBe('36%');
+    expect(within(block).getByText('剩余 64%')).toBeTruthy();
+    expect((within(block).getByTestId('coding-plan-quota-fill') as HTMLElement).style.width).toBe(
+      '64%',
+    );
   });
 
-  // Product ruling: the panel has no exhausted state. A spent pool is a full
-  // bar at 100% — the same ink, no warning colour, no 「已用完」.
-  it('shows a spent pool as a plain, full 100% — no warning state', async () => {
+  // Product ruling: the panel has no exhausted state. A spent pool is an empty
+  // bar at 剩余 0% — the same ink, no warning colour, no 「已用完」.
+  it('shows a spent pool as a plain 剩余 0% — no warning state', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () =>
@@ -186,24 +199,27 @@ describe('Coding Plan quota block — the one row the design defines', () => {
     const { container } = renderPanel();
 
     const block = await screen.findByTestId('coding-plan-quota');
-    expect(within(block).getByText('已用 100%')).toBeTruthy();
-    expect(
-      (within(block).getByTestId('coding-plan-quota-fill') as HTMLElement).style.width,
-    ).toBe('100%');
+    expect(within(block).getByText('剩余 0%')).toBeTruthy();
+    expect((within(block).getByTestId('coding-plan-quota-fill') as HTMLElement).style.width).toBe(
+      '0%',
+    );
     expect(screen.queryByText('已用完')).toBeNull();
     expect(container.querySelector('[data-exhausted="true"]')).toBeNull();
   });
+});
 
-  // 产品口径: 只有 7 天窗口. The daemon still ships 5-hour / 30-day rows.
-  it('draws only the 7-day window when the server sent several', async () => {
+describe('Coding Plan quota block — one block per backend window', () => {
+  // The design's Go panel: 5 小时 above 7 天. The client does not pick a
+  // window any more, it renders the list the preflight returned.
+  it('draws the Go pair as two blocks, shortest period first', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () =>
         response({
+          tier: 'go',
           windows: [
-            { durationSeconds: 18_000, usedCredits: '900000', limitCredits: '1000000' },
-            { durationSeconds: 604_800, usedCredits: '100000', limitCredits: '1000000' },
-            { durationSeconds: 2_592_000, usedCredits: '500000', limitCredits: '1000000' },
+            { durationSeconds: 604_800, usedCredits: '240000', limitCredits: '1000000' },
+            { durationSeconds: 18_000, usedCredits: '180000', limitCredits: '1000000' },
           ],
         }),
       ),
@@ -212,18 +228,39 @@ describe('Coding Plan quota block — the one row the design defines', () => {
     renderPanel();
 
     const block = await screen.findByTestId('coding-plan-quota');
-    expect(within(block).getAllByRole('progressbar')).toHaveLength(1);
-    expect(within(block).getByText('已用 10%')).toBeTruthy();
+    const blocks = within(block).getAllByTestId('coding-plan-quota-block');
+    expect(blocks).toHaveLength(2);
+    expect(within(blocks[0]!).getByText('5 小时')).toBeTruthy();
+    expect(within(blocks[0]!).getByText('剩余 82%')).toBeTruthy();
+    expect(within(blocks[1]!).getByText('7 天')).toBeTruthy();
+    expect(within(blocks[1]!).getByText('剩余 76%')).toBeTruthy();
+    expect(within(block).getAllByRole('progressbar')).toHaveLength(2);
   });
 
-  it('falls back to the longest window when the server sent no 7-day one', async () => {
+  it('draws a single block for a plan with only a 7-day window', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => response({ windows: [{ durationSeconds: 604_800 }] })),
+    );
+
+    renderPanel();
+
+    const block = await screen.findByTestId('coding-plan-quota');
+    expect(within(block).getAllByTestId('coding-plan-quota-block')).toHaveLength(1);
+    expect(within(block).getByText('7 天')).toBeTruthy();
+  });
+
+  // The regression this replaces: the old model kept only the 7-day pool and
+  // threw the rest away, so a 30-day window the backend enforced was invisible.
+  it('no longer drops the windows that are not 7 days', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () =>
         response({
           windows: [
-            { durationSeconds: 18_000, usedCredits: '900000', limitCredits: '1000000' },
-            { durationSeconds: 2_592_000, usedCredits: '500000', limitCredits: '1000000' },
+            { durationSeconds: 18_000 },
+            { durationSeconds: 604_800 },
+            { durationSeconds: 2_592_000 },
           ],
         }),
       ),
@@ -231,23 +268,38 @@ describe('Coding Plan quota block — the one row the design defines', () => {
 
     renderPanel();
 
-    expect(within(await screen.findByTestId('coding-plan-quota')).getByText('已用 50%')).toBeTruthy();
+    const block = await screen.findByTestId('coding-plan-quota');
+    expect(within(block).getAllByTestId('coding-plan-quota-block')).toHaveLength(3);
+    expect(within(block).getByText('30 天')).toBeTruthy();
   });
 
-  it('names the allowance in English too', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => response()));
+  it('names the allowance, its periods and its share in English too', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        response({
+          tier: 'go',
+          windows: [{ durationSeconds: 18_000 }, { durationSeconds: 604_800 }],
+        }),
+      ),
+    );
 
     renderPanel({ locale: 'en' });
 
     const block = await screen.findByTestId('coding-plan-quota');
-    expect(within(block).getByText('7-day allowance')).toBeTruthy();
-    expect(within(block).getByText('25% used')).toBeTruthy();
+    expect(within(block).getAllByText('Design Plan')).toHaveLength(2);
+    expect(within(block).getByText('5 hours')).toBeTruthy();
+    expect(within(block).getByText('7 days')).toBeTruthy();
+    expect(within(block).getAllByText('75% left')).toHaveLength(2);
   });
 });
 
-describe('Coding Plan quota block — the used-share entry', () => {
+describe('Coding Plan quota block — the remaining-share entry', () => {
   it('links the share out to the billing console', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => response()));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => response()),
+    );
 
     renderPanel();
 
@@ -257,8 +309,28 @@ describe('Coding Plan quota block — the used-share entry', () => {
     expect(entry.getAttribute('rel')).toContain('noopener');
   });
 
+  it('gives every block its own entry', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        response({
+          tier: 'go',
+          windows: [{ durationSeconds: 18_000 }, { durationSeconds: 604_800 }],
+        }),
+      ),
+    );
+
+    renderPanel();
+
+    await screen.findByTestId('coding-plan-quota');
+    expect(screen.getAllByTestId('coding-plan-quota-entry')).toHaveLength(2);
+  });
+
   it('tells the card the entry was taken, so it can close and record it', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => response()));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => response()),
+    );
     const onUsageClick = vi.fn();
 
     renderPanel({ onUsageClick });
@@ -270,12 +342,15 @@ describe('Coding Plan quota block — the used-share entry', () => {
   // No destination is not a dead link: the share still reads, it just stops
   // being an entry.
   it('keeps the share as plain text when the card has no console URL', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => response()));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => response()),
+    );
 
     renderPanel({ usageUrl: null });
 
     const block = await screen.findByTestId('coding-plan-quota');
-    expect(within(block).getByText('已用 25%')).toBeTruthy();
+    expect(within(block).getByText('剩余 75%')).toBeTruthy();
     expect(screen.queryByTestId('coding-plan-quota-entry')).toBeNull();
   });
 });
@@ -302,6 +377,10 @@ describe('Coding Plan quota block — when it draws nothing at all', () => {
     { name: 'a member with no plan', options: { eligible: false, tier: null } },
     { name: 'a plan the backend reports without a tier', options: { eligible: true, tier: null } },
     { name: 'a plan whose windows are all empty', options: { windows: [] } },
+    {
+      name: 'a plan whose every window is unreadable',
+      options: { windows: [{ durationSeconds: 604_800, usedCredits: '0', limitCredits: '0' }] },
+    },
   ])('draws nothing for $name', async ({ options }) => {
     const fetcher = vi.fn(async () => response(options as Parameters<typeof preflight>[0]));
     vi.stubGlobal('fetch', fetcher);
@@ -316,12 +395,18 @@ describe('Coding Plan quota block — when it draws nothing at all', () => {
   // The old 「套餐用量暂不可用」 line is gone: a quota the client could not
   // read is an absence, not a sentence the user has to read past.
   it.each([
-    { name: 'an old CLI that answers billing without a preflight', make: () => response({ omit: true }) },
+    {
+      name: 'an old CLI that answers billing without a preflight',
+      make: () => response({ omit: true }),
+    },
     { name: 'a 503 from the daemon', make: () => new Response('', { status: 503 }) },
     { name: 'a transport failure', make: () => Promise.reject(new Error('offline')) },
     { name: 'another member’s pool', make: () => response({ member: 'other' }) },
   ])('draws nothing for $name', async ({ make }) => {
-    vi.stubGlobal('fetch', vi.fn(async () => make()));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => make()),
+    );
 
     const { container } = renderPanel();
 
@@ -333,7 +418,10 @@ describe('Coding Plan quota block — when it draws nothing at all', () => {
 
 describe('Coding Plan quota block — loading', () => {
   it('holds the design skeleton — two bones and a track — while the read is in flight', () => {
-    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => new Promise<Response>(() => {})),
+    );
 
     renderPanel();
 
@@ -369,7 +457,7 @@ describe('Coding Plan quota block — reading the quota', () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
-    expect(screen.getByText('已用 100%')).toBeTruthy();
+    expect(screen.getByText('剩余 0%')).toBeTruthy();
 
     fetcher.mockImplementation(async () =>
       response({
@@ -394,7 +482,7 @@ describe('Coding Plan quota block — reading the quota', () => {
       await vi.advanceTimersByTimeAsync(400);
     });
 
-    expect(screen.getByText('已用 0%')).toBeTruthy();
+    expect(screen.getByText('剩余 100%')).toBeTruthy();
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
@@ -421,5 +509,84 @@ describe('Coding Plan quota block — reading the quota', () => {
     });
 
     expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('personal billing snapshot', () => {
+  const wallet = {
+    balanceUsd: '99',
+    url: 'https://console.example.com/dashboard?billing=recharge',
+  };
+  it('holds both Go quota blocks and the wallet until the snapshot arrives', async () => {
+    let resolve!: (response: Response) => void;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        () =>
+          new Promise<Response>((done) => {
+            resolve = done;
+          }),
+      ),
+    );
+    renderPanel({ context: personal({ planId: 'go' }), wallet });
+    expect(screen.queryByText('US$99.00')).toBeNull();
+    expect(screen.getAllByTestId('coding-plan-skeleton-block')).toHaveLength(2);
+    expect(screen.getByTestId('coding-plan-wallet-skeleton')).toBeTruthy();
+    await act(async () =>
+      resolve(
+        response({
+          tier: 'go',
+          windows: [{ durationSeconds: 18000 }, { durationSeconds: 604800 }],
+        }),
+      ),
+    );
+    expect(screen.getByText('US$0.00')).toBeTruthy();
+    expect(screen.getAllByRole('progressbar')).toHaveLength(2);
+    expect(screen.queryByTestId('coding-plan-wallet-skeleton')).toBeNull();
+  });
+  it('keeps Free loading to the wallet alone', () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => new Promise<Response>(() => {})),
+    );
+    renderPanel({ context: personal({ planId: 'free' }), wallet });
+    expect(screen.queryAllByTestId('coding-plan-skeleton-block')).toHaveLength(0);
+    expect(screen.getByTestId('coding-plan-wallet-skeleton')).toBeTruthy();
+  });
+  it('falls back to the scoped wallet when preflight is unavailable', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => response({ omit: true })),
+    );
+    renderPanel({ wallet });
+    expect(await screen.findByText('US$99.00')).toBeTruthy();
+    expect(screen.queryByRole('progressbar')).toBeNull();
+  });
+});
+
+describe('billing snapshot isolation', () => {
+  it('drops a late response after the member changes', async () => {
+    let finishOld!: (value: Response) => void;
+    const fetcher = vi.fn()
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => { finishOld = resolve; }))
+      .mockImplementationOnce(async () => response({ member: 'new-member', windows: [{ durationSeconds: 604800, usedCredits: '1000000' }] }));
+    vi.stubGlobal('fetch', fetcher);
+    const { rerender } = renderPanel();
+    rerender(<I18nProvider initial="zh-CN"><CodingPlanUsage context={personal({ workspaceMemberId: 'new-member' })} /></I18nProvider>);
+    expect(await screen.findByText('剩余 0%')).toBeTruthy();
+    await act(async () => finishOld(response()));
+    expect(screen.queryByText('剩余 75%')).toBeNull();
+    expect(screen.getByText('剩余 0%')).toBeTruthy();
+    expect(fetcher.mock.calls[0]?.[1]?.signal.aborted).toBe(true);
+  });
+  it.each([-60001, -60000, 60000, 60001])('does not display a snapshot offset by %s milliseconds', async (offset) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-23T00:00:00Z'));
+    const body = preflight();
+    body.preflight!.generatedAt = new Date(Date.now() + offset).toISOString();
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(body))));
+    renderPanel();
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(screen.queryByRole('progressbar')).toBeNull();
   });
 });

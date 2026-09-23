@@ -2,8 +2,10 @@ import type { Dict } from '../types';
 
 export const ptBR: Dict = {
   'billing.wallet': 'Saldo da carteira',
-  'billing.codingPlanWeeklyAllowance': 'Cota de 7 dias',
-  'billing.codingPlanUsedPercent': '{percent}% usado',
+  'billing.codingPlanDesignPlan': 'Design Plan',
+  'billing.codingPlanPeriodHours': '{count} horas',
+  'billing.codingPlanPeriodDays': '{count} dias',
+  'billing.codingPlanRemainingPercent': 'Resta {percent}%',
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

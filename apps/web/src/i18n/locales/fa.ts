@@ -2,8 +2,10 @@ import type { Dict } from '../types';
 
 export const fa: Dict = {
   'billing.wallet': 'موجودی کیف پول',
-  'billing.codingPlanWeeklyAllowance': 'سهمیه ۷ روزه',
-  'billing.codingPlanUsedPercent': '{percent}% مصرف‌شده',
+  'billing.codingPlanDesignPlan': 'Design Plan',
+  'billing.codingPlanPeriodHours': '{count} ساعت',
+  'billing.codingPlanPeriodDays': '{count} روز',
+  'billing.codingPlanRemainingPercent': '{percent}% باقی‌مانده',
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

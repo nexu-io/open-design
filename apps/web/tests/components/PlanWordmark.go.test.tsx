@@ -5,8 +5,9 @@
 // and the billing pill drew the generic battery glyph — the one badge that is
 // supposed to name the plan said nothing about it.
 //
-// The vector wordmark has not been delivered yet, so the badge is a text
-// placeholder in the same shape/colour contract as the other tiers.
+// The designer delivered the Go vector in the v2 spec, so the text placeholder
+// is gone: Go is now a stroked wordmark on the same contract as the other
+// tiers (currentColor stroke, height-driven width, aria-hidden).
 
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -28,9 +29,26 @@ describe('Go plan badge', () => {
     expect(planBadgeTierForLabel('goodwill')).toBeNull();
   });
 
-  it('draws a Go badge instead of falling back to the generic glyph', () => {
-    render(<PlanWordmark tier="go" />);
+  it('draws the designer’s Go vector, not a text placeholder', () => {
+    const { container } = render(<PlanWordmark tier="go" height={20} />);
 
-    expect(screen.getByText('Go')).toBeTruthy();
+    const svg = container.querySelector('svg.plan-wordmark');
+    expect(svg?.getAttribute('viewBox')).toBe('0 0 88 49');
+    // Height-driven width, from the v2 spec's own 88×49 box.
+    expect(svg?.getAttribute('height')).toBe('20');
+    expect(svg?.getAttribute('width')).toBe('36');
+    expect(svg?.querySelectorAll('path')).toHaveLength(3);
+    expect(svg?.querySelector('text')).toBeNull();
+    expect(screen.queryByText('Go')).toBeNull();
+  });
+
+  // The Go glyph is the only one drawn with rounded ends — without the join
+  // the `G` bar and the tail read as cut-off stubs at 20px.
+  it('keeps the round line caps the vector was drawn with', () => {
+    const { container } = render(<PlanWordmark tier="go" />);
+
+    const svg = container.querySelector('svg.plan-wordmark');
+    expect(svg?.getAttribute('stroke-linecap')).toBe('round');
+    expect(svg?.getAttribute('stroke-linejoin')).toBe('round');
   });
 });
