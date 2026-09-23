@@ -1,5 +1,6 @@
 export * from './common.js';
 export * from './runtime/annotated-selector.js';
+export * from './comment-target-title.js';
 export * from './errors.js';
 export * from './settings-nav.js';
 export * from './tasks.js';

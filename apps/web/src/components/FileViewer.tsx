@@ -4,7 +4,6 @@ import { boundedPublishProgress, ShareTab, type SharePublishFailureKey } from '.
 import { useShareScopeKeyboard } from './share/useShareScopeKeyboard';
 import { AfterExportShareGuide } from './share/AfterExportShareGuide';
 import { CommentSyncBanner } from './share/CommentSyncBanner';
-import commentPanelStyles from './CommentSidePanel.module.css';
 import { useAfterExportShareGuide } from './share/useAfterExportShareGuide';
 import { useShareGuideAppUserId } from './share/useShareGuideAppUserId';
 import { useProjectShareHistory } from './share/useProjectShareHistory';
@@ -28,6 +27,7 @@ import {
 } from './comment-send-result';
 import {
   buildSocialSharePayload,
+  resolveCommentTargetTitle,
   hasUnreadComments,
   type ProjectCommentReadState,
   OPEN_DESIGN_GITHUB_REPO_URL,
@@ -4445,16 +4445,8 @@ function commentTargetIntersectsPreview(
 // swatch (hash of their id), so the same person reads consistently across cards
 // and sessions. The demo's orange circle lives here as the first entry.
 export const COMMENT_AUTHOR_AVATAR_COLORS = [
-  { bg: '#7DB7FF', fg: '#144582' }, { bg: '#FFB86B', fg: '#803D12' }, { bg: '#B19AFF', fg: '#482D80' },
-  { bg: '#6DDDB1', fg: '#155C40' }, { bg: '#FF92BC', fg: '#7D234C' }, { bg: '#F7D45B', fg: '#75560C' },
-  { bg: '#69D5F0', fg: '#155365' }, { bg: '#FF9B85', fg: '#733526' }, { bg: '#8DE56C', fg: '#285728' },
-  { bg: '#D58FFF', fg: '#5A2C6D' }, { bg: '#91A9FF', fg: '#283F75' }, { bg: '#FFC76B', fg: '#634E28' },
-  { bg: '#68DEC9', fg: '#1C5C53' }, { bg: '#FF8BC7', fg: '#702D48' }, { bg: '#BDE66A', fg: '#445D20' },
-  { bg: '#B78AFF', fg: '#442C64' }, { bg: '#5ED9B3', fg: '#1B5349' }, { bg: '#FF939D', fg: '#6E342E' },
-  { bg: '#78C7FF', fg: '#2E516A' }, { bg: '#F5CF63', fg: '#6B5118' }, { bg: '#9AE883', fg: '#375C38' },
-  { bg: '#EA8AD7', fg: '#563450' }, { bg: '#6EDA94', fg: '#274E38' }, { bg: '#9E9BFF', fg: '#363861' },
-  { bg: '#FFA277', fg: '#6C3F1D' }, { bg: '#ABE779', fg: '#3D6030' }, { bg: '#68D4E6', fg: '#285567' },
-  { bg: '#D99AFA', fg: '#63365A' }, { bg: '#FFD17C', fg: '#625034' }, { bg: '#6CDCD9', fg: '#33585E' },
+  '#f97316', '#e11d48', '#7c3aed', '#2563eb', '#0891b2',
+  '#059669', '#ca8a04', '#db2777', '#4f46e5', '#0d9488',
 ] as const;
 
 export function commentAuthorAvatarColor(seed: string) {
@@ -4462,17 +4454,7 @@ export function commentAuthorAvatarColor(seed: string) {
   for (let i = 0; i < seed.length; i += 1) {
     hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
   }
-  return COMMENT_AUTHOR_AVATAR_COLORS[hash % COMMENT_AUTHOR_AVATAR_COLORS.length] ?? COMMENT_AUTHOR_AVATAR_COLORS[0];
-}
-
-// Same author-key precedence as CommentAuthorIdentityContent's seed, minus the
-// directory-resolved member-id fallback (not available outside that component's
-// hook): canvas pins pick their color from this so a pin and its author's
-// sidebar avatar always match.
-function commentAuthorPinSeed(comment: PreviewComment): string {
-  return comment.authorKind === 'user'
-    ? (comment.authorKey ?? comment.authorAppUserId ?? '')
-    : (comment.authorKey ?? comment.authorMemberId ?? '');
+  return { bg: COMMENT_AUTHOR_AVATAR_COLORS[hash % COMMENT_AUTHOR_AVATAR_COLORS.length] ?? COMMENT_AUTHOR_AVATAR_COLORS[0], fg: '#fff' };
 }
 
 // First glyph of the display name (code-point aware so a CJK name shows its
@@ -4592,19 +4574,18 @@ function CommentAuthorIdentityContent({
 }
 
 function commentDisplayLabel(comment: PreviewComment, t: TranslateFn): string {
-  if (comment.elementId.startsWith('pin-')) return t('chat.comments.pin');
-  const label = String(comment.label || '').trim().toLowerCase();
-  const htmlHint = String(comment.htmlHint || '').trim().toLowerCase();
-  const elementId = String(comment.elementId || '').trim().toLowerCase();
-  const source = `${label} ${htmlHint} ${elementId}`;
-  if (/\b(?:img|picture|video|canvas|svg)\b/.test(source)) return t('chat.comments.targetImage');
-  if (/\b(?:button|input|textarea|select|label)\b/.test(source)) return t('chat.comments.targetControl');
-  if (/^<a\b/.test(htmlHint)) return t('chat.comments.targetLink');
-  if (/\b(?:h1|h2|h3|h4|h5|h6|p|span|strong|em|small|li|dt|dd)\b/.test(source)) return t('chat.comments.targetText');
-  if (/\b(?:section|main|header|footer|nav|article|aside)\b/.test(source)) return t('chat.comments.targetSection');
-  if (label.endsWith('.html') || elementId.startsWith('file-comment-')) return t('chat.comments.targetPage');
-  if (comment.text.trim()) return t('chat.comments.targetText');
-  return t('chat.comments.targetArea');
+  const title = resolveCommentTargetTitle(comment);
+  if (title.name) return title.name;
+  switch (title.kind) {
+    case 'pin': return t('chat.comments.pin');
+    case 'image': return t('chat.comments.targetImage');
+    case 'control': return t('chat.comments.targetControl');
+    case 'link': return t('chat.comments.targetLink');
+    case 'text': return t('chat.comments.targetText');
+    case 'section': return t('chat.comments.targetSection');
+    case 'page': return t('chat.comments.targetPage');
+    case 'area': return t('chat.comments.targetArea');
+  }
 }
 
 export function CommentSidePanel({
@@ -4801,7 +4782,7 @@ export function CommentSidePanel({
         <RemixIcon name="message-3-line" size={15} />
         <span>{commentsLabel}</span>
         {comments.length > 0 ? <strong>{comments.length}</strong> : null}
-        {hasUnread ? <span className={commentPanelStyles.unreadDot} data-testid="comment-rail-unread-dot" aria-hidden /> : null}
+        {hasUnread ? <span data-testid="comment-rail-unread-dot" aria-hidden style={{ position: 'absolute', top: 6, right: 8, width: 7, height: 7, borderRadius: '50%', background: 'var(--danger)', pointerEvents: 'none' }} /> : null}
       </button>
     );
   }
@@ -4822,7 +4803,7 @@ export function CommentSidePanel({
       <div className="comment-side-header">
         <div className="comment-side-title">
           <RemixIcon name="message-3-line" size={15} />
-          <span>{commentsLabel} <i>{comments.length}</i></span>
+          <span>{commentsLabel}</span>
         </div>
         <div className="comment-side-header-actions">
           {/* The header's right slot owns collapse; select all moved below
@@ -4914,6 +4895,11 @@ export function CommentSidePanel({
                   displayNumber={displayCommentNumber(comment, index)}
                   t={t}
                 />
+                {typeof comment.slideIndex === 'number' && deckSlideCount && deckSlideCount > 0 ? (
+                  <span className="comment-side-slide">
+                    {t('fileViewer.speakerNotesSlide', { current: comment.slideIndex + 1, total: deckSlideCount })}
+                  </span>
+                ) : null}
                 <span className="comment-side-time" title={formatAbsoluteDateTime(commentActivityAt(comment)) ?? undefined}>
                   {formatCommentTime(commentActivityAt(comment), t)}
                 </span>
@@ -4933,11 +4919,6 @@ export function CommentSidePanel({
                 ) : null}
               </div>
               <div className="comment-side-body">{comment.note}</div>
-              {typeof comment.slideIndex === 'number' && deckSlideCount && deckSlideCount > 0 ? (
-                <span className="comment-side-slide">
-                  {t('fileViewer.speakerNotesSlide', { current: comment.slideIndex + 1, total: deckSlideCount })}
-                </span>
-              ) : null}
               {projectId && comment.attachments && comment.attachments.length > 0 ? (
                 <div className="comment-side-attachments">
                   {comment.attachments.map((attachment) => {
@@ -6043,9 +6024,6 @@ function CommentPreviewOverlays({
         const tooltip = drifted
           ? `${markerNumber}. ${label} · ${anchorStateLabel(anchorState, t)}`
           : `${markerNumber}. ${label}: ${comment.note}`;
-        // 4.2b: the pin carries the same author color as that author's
-        // sidebar avatar (the lost-anchor variant overrides this below).
-        const pinColor = commentAuthorAvatarColor(commentAuthorPinSeed(comment));
         return (
           <div
             key={comment.id}
@@ -6063,10 +6041,7 @@ function CommentPreviewOverlays({
             <div className="comment-saved-outline" />
             <button
               type="button"
-              className="comment-saved-pin od-tooltip tipd"
-              style={anchorState === 'lost' ? undefined : { background: pinColor.bg, color: pinColor.fg }}
-              data-tooltip={tooltip}
-              data-tooltip-placement="top"
+              className="comment-saved-pin"
               onClick={(event) => {
                 event.stopPropagation();
                 onOpenCommentRef.current(comment, snapshot);
@@ -6110,15 +6085,7 @@ function CommentPreviewOverlays({
       {showActivePin && activeTarget ? (
         <div
           className="comment-active-pin"
-          style={{
-            ...activeCommentPinStyle(activeTarget, scale, overlayOffset),
-            ...(activeSavedComment
-              ? (() => {
-                  const pinColor = commentAuthorAvatarColor(commentAuthorPinSeed(activeSavedComment));
-                  return { background: pinColor.bg, color: pinColor.fg };
-                })()
-              : null),
-          }}
+          style={activeCommentPinStyle(activeTarget, scale, overlayOffset)}
           data-testid="comment-active-pin"
           aria-hidden="true"
         >
@@ -16944,7 +16911,7 @@ function HtmlViewer({
               >
                 <RemixIcon name="message-3-line" size={15} />
                 <span className="viewer-comment-count" aria-hidden>{visibleSideComments.length}</span>
-                {!commentPanelOpen && hasUnreadSideComments ? <span className="viewer-comment-unread-badge" data-testid="comment-unread-dot" aria-hidden>{visibleSideComments.length}</span> : null}
+                {!commentPanelOpen && hasUnreadSideComments ? <span data-testid="comment-unread-dot" aria-hidden style={{ background: 'var(--danger)', borderRadius: '50%', height: 7, width: 7, position: 'absolute', right: 2, top: 2 }} /> : null}
               </button>
               {source !== null && mode === 'preview' ? (
                 <div className="zoom-menu viewer-toolbar-zoom" ref={zoomMenuRef}>
