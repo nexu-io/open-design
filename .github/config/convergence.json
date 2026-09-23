@@ -104,7 +104,9 @@
       "tools/dev/",
       "tools/pack/",
       "e2e/",
-      ".github/actions/setup-playwright/"
+      ".github/actions/setup-playwright/",
+      ".github/scripts/template.py",
+      ".github/templates/"
     ],
     "ui-runtime": [
       "suite://e2e-runtime",

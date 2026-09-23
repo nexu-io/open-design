@@ -750,7 +750,7 @@ jobs:
             emit_ejection_notice() {
               local pr="$1"
               local blocking_label="$2"
-              local pr_json pr_head pr_base handoff_id handoff_root handoff_dir marker next_step
+              local pr_json pr_head pr_base handoff_id handoff_root handoff_dir marker template_path
               pr_json="$(gh api "repos/$REPO/pulls/$pr")"
               pr_head="$(jq -r '.head.sha' <<< "$pr_json")"
               pr_base="$(jq -r '.base.sha' <<< "$pr_json")"
@@ -758,16 +758,12 @@ jobs:
                 needs-validation)
                   handoff_id="needs-validation-pr-$pr"
                   marker="<!-- merge-queue-needs-validation -->"
-                  # Markdown code spans are intentional literal text.
-                  # shellcheck disable=SC2016
-                  next_step='To land this PR: complete the QA pass the label is tracking, remove the `needs-validation` label, then add the PR back to the merge queue.'
+                  template_path="merge-queue/needs-validation.md"
                   ;;
                 needs-maintainer-check)
                   handoff_id="needs-maintainer-check-pr-$pr"
                   marker="<!-- merge-queue-needs-maintainer-check -->"
-                  # Markdown code spans are intentional literal text.
-                  # shellcheck disable=SC2016
-                  next_step='To land this PR: have a maintainer complete the check, remove the `needs-maintainer-check` label, then add the PR back to the merge queue.'
+                  template_path="merge-queue/needs-maintainer-check.md"
                   ;;
                 *)
                   echo "Unsupported merge-blocking label: $blocking_label" >&2
@@ -777,14 +773,10 @@ jobs:
               handoff_root="$RUNNER_TEMP/handoff-comment-$handoff_id"
               handoff_dir="$(python3 .github/scripts/handoff.py dir comment "$handoff_id" --root "$handoff_root")"
               mkdir -p "$handoff_dir"
-              # Markdown code spans are intentionally literal in these single-quoted strings.
-              # shellcheck disable=SC2016
-              {
-                printf '%s\n' "$marker"
-                printf 'Ejected from the merge queue: this PR still carries the `%s` label.\n\n' "$blocking_label"
-                printf 'The merge queue gate ([run %s](%s/%s/actions/runs/%s)) blocked the queued group because of the label. That failure runs on the queue'"'"'s transient ref, so it never appears in this PR'"'"'s own checks — they stay green, and this notice is the only visible trace on the PR.\n\n' "$RUN_ID" "$GITHUB_SERVER_URL" "$REPO" "$RUN_ID"
-                printf '%s\n' "$next_step"
-              } > "$handoff_dir/body.md"
+              python3 .github/scripts/template.py "$template_path" \
+                --params-run-id "$RUN_ID" \
+                --params-run-url "$GITHUB_SERVER_URL/$REPO/actions/runs/$RUN_ID" \
+                --output "$handoff_dir/body.md"
               jq -n \
                 --arg kind "comment" \
                 --arg id "$handoff_id" \
@@ -1179,19 +1171,19 @@ jobs:
           handoff_dir="$(python3 .github/scripts/handoff.py dir comment "$handoff_id" --root "$handoff_root")"
           mkdir -p "$handoff_dir"
           run_url="$GITHUB_SERVER_URL/$REPO/actions/runs/$RUN_ID"
-          # Markdown code spans are intentionally literal in these single-quoted strings.
-          # shellcheck disable=SC2016
-          {
-            printf '%s\n' "$marker"
-            printf 'Ejected from the merge queue: CI failed on the queued merge of this PR.\n\n'
-            printf 'The merge queue gate ([run %s](%s)) failed for the group headed by this PR. That run executes on the queue'"'"'s transient ref, so the failure never shows up in this PR'"'"'s own checks — they stay green, the queue entry simply disappears, and this notice is the only visible trace on the PR.\n\n' "$RUN_ID" "$run_url"
-            printf 'Failed jobs:\n\n%s\n\n' "$failed_lines"
-            if [ -n "$excerpt" ]; then
-              printf 'Failure excerpt (best-effort, from the job logs):\n\n```text\n%s```\n\n' "$excerpt"
-            fi
-            printf 'The queued merge combines this PR with everything that landed on `main` after its last CI run%s. When this PR'"'"'s own checks are green, the failure is usually one of: a conflict with newer `main` (for example a test added or changed since this branch diverged), a PR ahead of it in the queue, or a flaky test.\n\n' "$group_note"
-            printf 'To land this PR: open the run above and check whether the failure is related to this change. If it is, merge or rebase onto the latest `main`, fix, push, and add the PR back to the merge queue. If it is unrelated, add the PR back to the merge queue.\n'
-          } > "$handoff_dir/body.md"
+          template_path="merge-queue/ci-failure.md"
+          template_args=(
+            --params-run-id "$RUN_ID"
+            --params-run-url "$run_url"
+            --params-failed-lines "$failed_lines"
+            --params-group-note "$group_note"
+          )
+          if [ -n "$excerpt" ]; then
+            template_path="merge-queue/ci-failure-with-excerpt.md"
+            template_args+=(--params-excerpt "$excerpt")
+          fi
+          python3 .github/scripts/template.py "$template_path" \
+            "${template_args[@]}" --output "$handoff_dir/body.md"
           jq -n \
             --arg kind "comment" \
             --arg id "$handoff_id" \

@@ -610,9 +610,10 @@ describe("packaged smoke workflow", () => {
   });
 
   it("[P2] surfaces a merge-queue needs-validation ejection as a PR comment handoff", async () => {
-    const [ciWorkflow, commentWorkflow] = await Promise.all([
+    const [ciWorkflow, commentWorkflow, needsValidationTemplate] = await Promise.all([
       readFile(ciWorkflowPath, "utf8"),
       readFile(commentWorkflowPath, "utf8"),
+      readFile(join(workspaceRoot, ".github/templates/merge-queue/needs-validation.md"), "utf8"),
     ]);
 
     const mergePolicy = sectionBetween(ciWorkflow, "  merge_policy:", "  validate:");
@@ -623,7 +624,8 @@ describe("packaged smoke workflow", () => {
     expect(mergePolicy).toContain("needs: [plan, runners]");
     expect(mergePolicy).toContain("if: ${{ github.event_name == 'merge_group' }}");
     expect(mergePolicy).toContain("fromJSON(needs.runners.outputs.runs_on).control");
-    expect(mergePolicy).toContain("<!-- merge-queue-needs-validation -->");
+    expect(mergePolicy).toContain("merge-queue/needs-validation.md");
+    expect(needsValidationTemplate).toContain("<!-- merge-queue-needs-validation -->");
     expect(mergePolicy).toContain("emit_ejection_notice");
     expect(mergePolicy).toContain(
       "if: ${{ failure() && steps.merge_blocking_label_gate.outputs.comment_created == 'true' }}",
@@ -659,7 +661,10 @@ describe("packaged smoke workflow", () => {
   });
 
   it("[P2] surfaces a merge-queue CI failure ejection as a PR comment handoff", async () => {
-    const ciWorkflow = await readFile(ciWorkflowPath, "utf8");
+    const [ciWorkflow, failureTemplate] = await Promise.all([
+      readFile(ciWorkflowPath, "utf8"),
+      readFile(join(workspaceRoot, ".github/templates/merge-queue/ci-failure.md"), "utf8"),
+    ]);
     const mergePolicy = sectionBetween(ciWorkflow, "  merge_policy:", "  validate:");
     const validate = sectionBetween(ciWorkflow, "  validate:", "  runtime_summary:");
 
@@ -672,7 +677,8 @@ describe("packaged smoke workflow", () => {
 
     // Producer: merge-group only, only after the gate has already failed, unable to change the
     // gate result, and uploaded on the failure path exactly like the label notice.
-    expect(validate).toContain("<!-- merge-queue-ci-failure -->");
+    expect(validate).toContain("merge-queue/ci-failure.md");
+    expect(failureTemplate).toContain("<!-- merge-queue-ci-failure -->");
     expect(validate).toContain("if: ${{ failure() && github.event_name == 'merge_group' }}");
     expect(validate).toContain("continue-on-error: true");
     expect(validate).toContain(
@@ -922,10 +928,11 @@ else { process.stderr.write("unexpected gh call: " + args + "\\n"); process.exit
   });
 
   it("[P1] routes configured contributors into an independent maintainer merge block", async () => {
-    const [routingWorkflow, ciWorkflow, inactivityWorkflow] = await Promise.all([
+    const [routingWorkflow, ciWorkflow, inactivityWorkflow, maintainerTemplate] = await Promise.all([
       readFile(contributorMaintainerCheckWorkflowPath, "utf8"),
       readFile(ciWorkflowPath, "utf8"),
       readFile(prAuthorInactivityWorkflowPath, "utf8"),
+      readFile(join(workspaceRoot, ".github/templates/merge-queue/needs-maintainer-check.md"), "utf8"),
     ]);
     const trigger = sectionBetween(routingWorkflow, "on:", "\npermissions:");
 
@@ -945,7 +952,8 @@ else { process.stderr.write("unexpected gh call: " + args + "\\n"); process.exit
 
     expect(ciWorkflow).toContain("Block merge while a merge-blocking label is present");
     expect(ciWorkflow).toContain("grep -qx 'needs-maintainer-check'");
-    expect(ciWorkflow).toContain("<!-- merge-queue-needs-maintainer-check -->");
+    expect(ciWorkflow).toContain("merge-queue/needs-maintainer-check.md");
+    expect(maintainerTemplate).toContain("<!-- merge-queue-needs-maintainer-check -->");
     expect(ciWorkflow).toContain("needs-maintainer-check-pr-$pr");
     expect(inactivityWorkflow).toContain("'needs-maintainer-check'");
   });

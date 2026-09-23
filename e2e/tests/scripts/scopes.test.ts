@@ -164,6 +164,8 @@ describe("workflow scope planner", () => {
       ".github/scripts/convergence.py",
       ".github/scripts/runners.py",
       ".github/scripts/handoff.py",
+      ".github/scripts/template.py",
+      ".github/templates/merge-queue/ci-failure.md",
       ".github/scripts/lib/config.py",
       ".github/scripts/lib/github.py",
       ".github/scripts/lib/r2.py",

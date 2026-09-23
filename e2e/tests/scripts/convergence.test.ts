@@ -1215,6 +1215,10 @@ print("snapshot and candidate binding passed")
       expect(config.workflows.ci.workloads[`web_workspace_${shard}`].inputs).toEqual(["suite://web"]);
     }
     expect(config.workflows.ci.workloads.e2e_vitest.inputs).toEqual(["suite://e2e-runtime"]);
+    expect(config.suites["e2e-runtime"]).toEqual(expect.arrayContaining([
+      ".github/scripts/template.py",
+      ".github/templates/",
+    ]));
     expect(config.workflows.ci.matrices.daemon).toEqual(
       [1, 2, 3, 4].map((shard) => ({
         name: `Daemon tests (${shard}/4)`, workload: `daemon_unit_${shard}`, shard,
