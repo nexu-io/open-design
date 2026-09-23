@@ -16,8 +16,17 @@ export async function pickHomeTemplate(id: string): Promise<void> {
     });
     return;
   }
-  fireEvent.click(homeTemplateTrigger());
-  const option = screen.getByTestId('home-hero-template-menu').querySelector(`[data-chip="${id}"]`);
-  expect(option, `creation type ${id} is available in the dropdown`).not.toBeNull();
-  fireEvent.click(option!);
+  // The first-visit default chip (原型) is seeded asynchronously once the
+  // plugin catalog resolves; the resulting `activeChipId` change closes any
+  // menu opened in the same window (TemplatePicker closes on active-chip
+  // change). Retry open+pick instead of assuming the first click's menu
+  // survives to the next line. A clean open+click is the success signal on
+  // purpose — catalogs without the chip's scenario plugin legitimately never
+  // bind, so a materialized binding must not be the termination condition.
+  await waitFor(() => {
+    fireEvent.click(homeTemplateTrigger());
+    const option = screen.queryByTestId('home-hero-template-menu')?.querySelector(`[data-chip="${id}"]`);
+    expect(option, `creation type ${id} is available in the dropdown`).not.toBeNull();
+    fireEvent.click(option!);
+  });
 }

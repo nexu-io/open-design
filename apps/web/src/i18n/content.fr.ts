@@ -269,7 +269,7 @@ export const FR_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   replicate: 'Exécuter des modèles ML par API. Canvas blanc propre, orienté code.',
   resend: 'API email. Thème dark minimaliste, accents monospace.',
   revolut: 'Banque digitale. Interface dark fine, cartes gradient, précision fintech.',
-  runwayml: 'Génération vidéo IA. UI dark cinématique, layout riche en médias.',
+  riso: 'Esthétique risographie ludique. Papier chaud, accent rose profond, structure bleu fédéral.',
   sanity: 'Headless CMS. Accent rouge, layout éditorial content-first.',
   sentry: 'Monitoring d’erreurs. Dashboard dark, riche en données, accent rose-violet.',
   shopify: 'Plateforme e-commerce. Dark-first et cinématique, accent vert néon, type ultralégère.',
@@ -280,7 +280,7 @@ export const FR_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   stripe: 'Infrastructure paiement. Gradients violets signature, élégance en weight 300.',
   supabase: 'Alternative Firebase open-source. Thème dark émeraude, code-first.',
   superhuman: 'Client email rapide. UI dark premium, keyboard-first, glow violet.',
-  tesla: 'Automobile électrique. Réduction radicale, photographie full-viewport, presque aucune UI.',
+  terracotta: 'Éditorial terre cuite cuit au soleil. Surfaces crème chaudes, encre serif, un accent terracotta.',
   theverge:
     'Média tech éditorial. Accents acid mint et ultraviolet, display Manuka, story tiles façon rave flyer.',
   'together-ai': 'Infrastructure IA open-source. Technique, design proche blueprint.',
