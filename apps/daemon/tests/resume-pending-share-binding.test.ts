@@ -5,6 +5,32 @@ import { createShareBindingOutbox } from '../src/collab/share-binding-outbox.js'
 import { resumePendingShareBinding } from '../src/collab/resume-pending-share-binding.js';
 import { sharePublishResponse } from '../src/collab/share-publish-response.js';
 
+it.each(['resume', 'resume-failed', 'other-slug'] as const)('explicit stopped publication retry uses guarded resume: %s', async mode => {
+  const db = new Database(':memory:');
+  try {
+    migratePublicFilePublications(db);
+    const store = createSqlitePublicFilePublicationStore(db);
+    const outbox = createShareBindingOutbox(db);
+    const scope = { resourceTeamId: 'w', ownerMemberId: 'author', projectId: 'p', filePath: 'index.html' };
+    const receipt = { filePath: scope.filePath, slug: '881e4899-53ed-4cd5-8dd3-25f3772f8ecd', version: 2, versionId: 'file-version-2', publishedAt: 1, entryPath: 'index.html' };
+    store.set(scope, { url: null, slug: receipt.slug, fileName: scope.filePath });
+    const before = store.getRevision(scope)!;
+    outbox.enqueue({ ...scope, resourceId: 'resource', publicationRevision: before.token, receipt });
+    let stopped = true;
+    const run = vi.fn(async (args: string[]) => {
+      if (args[1] !== 'resume' || mode === 'resume-failed') throw new Error('SHARE_BINDING_STOPPED');
+      stopped = false;
+      return JSON.stringify({ status: 'active', projectId: 'p', slug: receipt.slug, verifiedVersion: 2, verifiedVersionId: receipt.versionId });
+    });
+    const result = await resumePendingShareBinding(scope, store, outbox, run, mode === 'other-slug' ? 'other' : receipt.slug);
+    expect(run.mock.calls[0]![0]).toEqual(['share', mode === 'other-slug' ? 'bind' : 'resume', receipt.slug, '--project-id', 'p', '--source-file-path', scope.filePath, '--resource-id', 'resource', '--version', '2', '--version-id', receipt.versionId, '--json']);
+    expect(result?.status).toBe(mode === 'resume' ? 'published' : 'binding_pending');
+    expect(stopped).toBe(mode !== 'resume');
+    expect(outbox.list()).toHaveLength(mode === 'resume' ? 0 : 1);
+    expect(store.getRevision(scope)).toEqual(before);
+  } finally { db.close(); }
+});
+
 it.each(['bound', 'failed', 'stale', 'other-owner'])('binding-only retry preserves the immutable receipt and witness: %s', async mode => {
   const db = new Database(':memory:');
   try {

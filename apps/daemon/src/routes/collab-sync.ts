@@ -1350,11 +1350,14 @@ export function registerCollabSyncRoutes(
         return res.status(403).json({ error: 'WORKSPACE_PROJECT_PUBLISH_DENIED' });
       }
     }
-    const resumed = await resumePendingShareBinding(scope, publicFilePublicationStore, publisher.outbox, prepared.run);
-    if (resumed) return res.json(sharePublishResponse(resumed, prepared.url));
     // Absence must be observed remotely, not inferred from a lost local row.
     // Unknown or pre-existing aliases must never be auto-stopped on a local failure.
     const previousState = await deps.readProjectShareState?.(scope).catch(() => null);
+    const stoppedSlug = previousState?.projectId === projectId
+      ? previousState.publications.find(item => item.sourceFilePath === filePath && item.status === 'stopped')?.slug
+      : undefined;
+    const resumed = await resumePendingShareBinding(scope, publicFilePublicationStore, publisher.outbox, prepared.run, stoppedSlug);
+    if (resumed) return res.json(sharePublishResponse(resumed, prepared.url));
     const resourceId = publicFileResourceIdFor(projectId, filePath, principal);
     const tempDir = await mkdtemp(path.join(os.tmpdir(), 'od-public-file-'));
     try {
@@ -1406,6 +1409,11 @@ export function registerCollabSyncRoutes(
           message: `Publication metadata could not be saved; the public share may remain accessible${prepared.url ? ` at ${prepared.url}` : ''}. Use od project share stop to revoke it explicitly.`,
           data: { ...publication, receipt: result.receipt },
         } });
+      }
+      // Register/bind must never revive a stopped link. This foreground owner
+      // request alone carries explicit resume intent for the observed alias.
+      if (outcome.status === 'binding_pending' && stoppedSlug === outcome.receipt.slug) {
+        outcome = await resumePendingShareBinding(scope, publicFilePublicationStore, publisher.outbox, prepared.run, stoppedSlug) ?? outcome;
       }
       const response = sharePublishResponse(outcome, prepared.url);
       if (response.status === 'binding_pending' && response.binding.retrying) {

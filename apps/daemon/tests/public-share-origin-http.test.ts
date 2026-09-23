@@ -103,6 +103,53 @@ for (const scenario of cases) it.each([false, true])(`${scenario.name}: HTTP pub
   } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); runtime.dispose(); db.close(); await rm(root, { recursive: true, force: true }); }
 });
 
+it.each([false, true])('HTTP owner republish resumes stopped alias; initial resume failure=%s', async failResume => {
+  const root = await mkdtemp(join(tmpdir(), 'od-resume-http-'));
+  const db = new Database(':memory:');
+  migratePublicFilePublications(db); migrateCommentRelayOutbox(db);
+  const store = createSqlitePublicFilePublicationStore(db);
+  const context: WorkspaceCollabContext = {
+    workspaceId: 'w', workspaceMemberId: 'owner', workspaceType: 'personal', role: 'owner',
+    memberStatus: 'active', lifecycleState: 'active', billingState: 'active', planId: null, providerMode: 'platform_credits',
+    seatSummary: buildWorkspaceSeatSummary({ seatLimit: 1, usedSeats: 1 }), permissions: buildWorkspacePermissions({ role: 'owner', lifecycleState: 'active' }),
+  };
+  const runtime = createCollabRuntime({ workspaceContext: { current: async () => context } });
+  const options = { failResume, commands: [] as string[][] };
+  let uploads = 0;
+  const fixture = createPublicSharePublishingFixture(db, store, async () => JSON.stringify({ id: `version-${++uploads}`, version: uploads }), undefined, options);
+  const app = express(); app.use(express.json());
+  registerCollabSyncRoutes(app, { collab: runtime, publicFilePublicationStore: store, ...fixture,
+    verifyWorkspaceRequest: async () => context, resolveSharedProject: async projectId => ({ projectId, ownerMemberId: 'owner', sharedAt: new Date(1).toISOString() }), resolveProjectDir: () => root,
+  });
+  const server = createServer(app);
+  try {
+    await writeFile(join(root, 'index.html'), '<h1>Restore</h1>');
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address(); if (!address || typeof address === 'string') throw new Error('no listener');
+    const url = `http://127.0.0.1:${address.port}/api/projects/p/files/index.html/publish-public`;
+    expect(await (await fetch(url, { method: 'POST' })).json()).toMatchObject({ status: 'published' });
+    expect((await fetch(url, { method: 'DELETE', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ slug: fixtureShareSlug }) })).status).toBe(200);
+    const scope = { resourceTeamId: 'w', ownerMemberId: 'owner', projectId: 'p', filePath: 'index.html' };
+    expect((await fixture.readProjectShareState!(scope)).publications[0]?.status).toBe('stopped');
+    const start = options.commands.length;
+    const republished = await (await fetch(url, { method: 'POST' })).json();
+    assertJsonObject(republished);
+    expect(republished).toMatchObject({ status: failResume ? 'binding_pending' : 'published' });
+    expect(options.commands.slice(start).map(args => args.slice(0, 2))).toEqual([['resource', 'push'], ['share', 'publish'], ['share', 'resume']]);
+    const revision = store.getRevision(scope);
+    if (failResume) {
+      options.failResume = false;
+      const before = options.commands.length;
+      expect(await (await fetch(url, { method: 'POST' })).json()).toMatchObject({ status: 'published', receipt: republished.receipt });
+      expect(options.commands.slice(before).map(args => args.slice(0, 2))).toEqual([['share', 'resume']]);
+      expect(store.getRevision(scope)).toEqual(revision);
+    }
+    expect(uploads).toBe(2);
+    expect((await fixture.readProjectShareState!(scope)).publications[0]).toMatchObject({ status: 'active', slug: fixtureShareSlug });
+    expect(createShareBindingOutbox(db).list()).toEqual([]);
+  } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); runtime.dispose(); db.close(); await rm(root, { recursive: true, force: true }); }
+});
+
 it('migrates legacy required URL without losing revision, then retains a no-URL publication', () => {
   const db = new Database(':memory:');
   try {
