@@ -7180,6 +7180,8 @@ function printProjectShareHelp() {
   console.log(`Usage:
   od project share publish <id> --path <file> [--json]
                     Publish a project file using the same endpoint as the UI.
+  od project share resume <id> --path <file> [--json]
+                    Resume sharing through the same stable-alias lifecycle as the UI.
   od project share get <id> --path <file> [--json]
                     Read the current publication (null when not published).
   od project share status <id> [--path <file>] [--json]
@@ -7190,7 +7192,7 @@ function printProjectShareHelp() {
   od project share retry-stop <id> --path <file> --slug <slug> [--json]
                     Retry one persisted stop, including after project deletion.
 
-Only publish, get, status (an alias for get), stop, and retry-stop are supported by this command.
+Supported actions: publish, resume, get, status, stop, and retry-stop.
 
 Common options:
   --daemon-url <url>   OpenDesign daemon HTTP base.
@@ -7206,14 +7208,15 @@ async function runProjectShare(args) {
     process.exit(args.length === 0 ? 2 : 0);
   }
   const [requestedAction, ...rest] = args;
-  const action = requestedAction === 'status' ? 'get' : requestedAction;
+  // Resume intentionally uses the same owner-verified lifecycle endpoint as the UI.
+  const action = requestedAction === 'status' ? 'get' : requestedAction === 'resume' ? 'publish' : requestedAction;
   const stringFlags = new Set(['path', 'daemon-url', 'workspace', 'workspace-member',
     ...(['stop', 'retry-stop'].includes(action) ? ['slug'] : [])]);
   let flags;
   try {
     flags = parseFlags(rest, { string: stringFlags, boolean: new Set(['json']) });
   } catch {
-    console.error('Usage: od project share <publish|get|status|stop|retry-stop> <id> --path <file> [--json] (stop requires --slug <slug>). See --help for accepted flags.');
+    console.error('Usage: od project share <publish|resume|get|status|stop|retry-stop> <id> --path <file> [--json] (stop requires --slug <slug>). See --help for accepted flags.');
     process.exit(2);
   }
   const positional = positionalArgs(rest, stringFlags);
@@ -7224,7 +7227,7 @@ async function runProjectShare(args) {
     typeof flags[key] === 'string' && (!flags[key].trim() || flags[key].startsWith('--')));
   const slug = typeof flags.slug === 'string' ? flags.slug.trim() : '';
   if (!['publish', 'get', 'stop', 'retry-stop'].includes(action) || positional.length !== 1 || !id?.trim() || (!filePath && !projectStatus) || missingFlagValue || (['stop', 'retry-stop'].includes(action) && !slug)) {
-    console.error('Usage: od project share <publish|get|status|stop|retry-stop> <id> --path <file> [--json] (stop requires --slug <slug>)');
+    console.error('Usage: od project share <publish|resume|get|status|stop|retry-stop> <id> --path <file> [--json] (stop requires --slug <slug>)');
     process.exit(2);
   }
   // Validate before discovery; malformed invocations must not contact a daemon.
@@ -7283,6 +7286,8 @@ async function runProject(args) {
   od project delete <id>                  Delete a project.
   od project share publish <id> --path <file> [--json]
                     Publish a project file.
+  od project share resume <id> --path <file> [--json]
+                    Resume sharing through the same stable-alias lifecycle as the UI.
   od project share get <id> --path <file> [--json]
                     Read the current publication.
   od project share status <id> [--path <file>] [--json]
