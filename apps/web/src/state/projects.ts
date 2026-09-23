@@ -14,6 +14,7 @@ import {
   API_ERROR_CODES,
   isSameWorkspacePrincipal,
   type ApiErrorCode,
+  type ProjectDeleteShareResidual,
 } from '@open-design/contracts';
 import type {
   AppliedPluginSnapshot,
@@ -1141,6 +1142,7 @@ export async function patchProject(
 export async function deleteProject(
   id: string,
   workspaceContext?: WorkspaceCollabContext | null,
+  onShareResiduals?: (rows: ReadonlyArray<ProjectDeleteShareResidual>) => void,
 ): Promise<true> {
   try {
     const resp = await fetch(`/api/projects/${encodeURIComponent(id)}`, {
@@ -1182,6 +1184,15 @@ export async function deleteProject(
         return true;
       }
       throw new ProjectDeleteError(message, resp.status, code);
+    }
+    // This response is the only delivery of orphaned share information. Hand it
+    // to the app-level queue before cache cleanup/navigation can remove its origin.
+    const payload: unknown = await resp.json().catch(() => null);
+    if (payload && typeof payload === 'object' && 'shareResiduals' in payload && Array.isArray(payload.shareResiduals)) {
+      const rows = payload.shareResiduals.filter((row): row is ProjectDeleteShareResidual =>
+        row && typeof row === 'object' && typeof row.filePath === 'string'
+        && typeof row.slug === 'string' && typeof row.retrying === 'boolean');
+      if (rows.length) onShareResiduals?.(rows.map(row => Object.freeze({ ...row })));
     }
     // Drop per-project browser caches once the project is gone server-side so
     // they do not accumulate in localStorage for the lifetime of the profile.

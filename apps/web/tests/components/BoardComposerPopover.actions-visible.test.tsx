@@ -31,10 +31,12 @@ const target: PreviewCommentSnapshot = {
   selectionKind: 'element',
 };
 
-function renderPopover() {
+function renderPopover(docked = false, canEditComment = true) {
   return render(
     <BoardComposerPopover
       target={target}
+      docked={docked}
+      canEditComment={canEditComment}
       existing={null}
       draft="Tighten this heading"
       notes={[]}
@@ -55,6 +57,17 @@ function renderPopover() {
 }
 
 describe('BoardComposerPopover action row', () => {
+  it('exposes native readonly state without a client length cap', () => {
+    renderPopover(false, false);
+    const note = screen.getByTestId('comment-popover-input');
+    expect(note).toHaveAttribute('readonly');
+    expect(note).not.toHaveAttribute('maxlength');
+    expect(note).toHaveValue('Tighten this heading');
+  });
+  it('leaves docked cards on their existing host surface', () => {
+    renderPopover(true);
+    expect(screen.getByTestId('comment-popover').className).not.toContain('surface');
+  });
   it('renders the action row', () => {
     renderPopover();
     expect(screen.getByTestId('comment-add-send')).toBeTruthy();
@@ -81,5 +94,6 @@ describe('BoardComposerPopover action row', () => {
     // The host caps the card to the space left in the stage; the fix has to
     // survive that cap rather than depend on the card being tall enough.
     expect(popover.style.maxHeight).not.toBe('');
+    expect(popover.className).toContain('surface');
   });
 });

@@ -1,3 +1,240 @@
+/* Chain-1/5 shared shell: the export panel uses the same anchored host, so
+   apply the canvas geometry only while this ShareTab is actually mounted. */
+:global(.chrome-share-menu--unified .chrome-unified-popover):has(.panel) {
+  box-sizing: border-box;
+  width: 360px;
+  min-width: 0;
+  max-width: calc(100vw - 32px);
+  padding: 16px 20px;
+  gap: 12px;
+  border: 1px solid #00000008;
+  border-radius: 12px;
+  background: #FFFFFF;
+  box-shadow: 0 8px 28px #00000010, 0 2px 6px #00000006;
+  font-size: 12px;
+  font-weight: 400;
+  color: #333333;
+}
+
+/* S1/S4: the "链接访问" title row + static description line the panel was
+   missing (板 D-00 固定结构第二/三行). The help "?" tooltip keeps its prior
+   position, at the row's trailing edge. */
+.linkAccessHeading {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.linkAccessRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 28px;
+}
+
+.linkAccessLabel {
+  color: #333333;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.linkAccessDescription {
+  margin: 0;
+  color: #888888;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.linkAccessRowEnd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* D-00 固定结构第二行 .toggle: 32×19 / r999 / 关 #D6D6D6 / 开 #282828, 滑块 15×15 白.
+   This IS the publish/unpublish control — board S4 has no separate "stop
+   sharing" button. The existing chrome-publish-button--ghost text button
+   stays (see the evidence file: removing it isn't licensed by this board
+   alone), but both controls read and act on the same `filePublished` state
+   through the same two handlers, so they can never disagree. */
+.linkAccessToggle {
+  flex: none;
+  width: 32px;
+  height: 19px;
+  padding: 2px;
+  border: none;
+  border-radius: 999px;
+  background: #D6D6D6;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  transition: background-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.linkAccessToggle:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.linkAccessToggleOn {
+  background: #282828;
+  justify-content: flex-end;
+}
+
+.linkAccessToggleThumb {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  box-shadow: 0 1px 2px #00000026;
+}
+
+/* S1-T/S4-T: scope explanation stays readable without hover or focus. */
+.scopeHeading {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Canvas sections are 32px apart: the panel supplies 12px of that gap.
+   When public sharing is absent, scope is first and needs no extra offset. */
+.scopeHeading:not(:first-child) {
+  margin-block-start: 20px;
+}
+
+.scopeRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 28px;
+}
+
+.scopeDescription {
+  margin: 0;
+  color: #888888;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* S1-T/S4-T scope label: align to the panel, not a padded deployment row.
+   Only the scope heading has this help modifier inside ShareTab. */
+.panel :global(.share-menu-section-label--help) {
+  /* Allow narrow panels to wrap the heading instead of displacing the busy control. */
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: 0;
+  color: #333333;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.panel :global(.chrome-access-select) {
+  padding: 0;
+  flex-shrink: 0;
+}
+
+/* S1-T/S4-T: compact scope trigger; legacy viewer and option rows are untouched. */
+.panel :global(.chrome-access-trigger) {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: fit-content;
+  min-width: 88px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0 8px;
+  gap: 8px;
+  border: 0;
+  border-radius: 5px;
+  background: #F6F6F6;
+  color: #555555;
+  font-size: 12px;
+}
+
+/* Static scope icons are decorative; never hide the pending-request spinner. */
+.panel :global(.chrome-access-trigger > .share-menu-icon:not(:has(.icon-spin))) {
+  display: none;
+}
+
+.panel :global(.chrome-access-trigger > svg) {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+/* S1-T2: canvas minimum width; grow for translations within the panel. */
+.panel :global(.chrome-access-options) {
+  box-sizing: border-box;
+  width: max-content;
+  min-width: 168px;
+  inset-inline-start: auto;
+  inset-inline-end: 0;
+  max-width: 100%;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid #00000008;
+  border-radius: 8px;
+  background: #FFFFFF;
+  box-shadow: 0 6px 20px #00000012, 0 1px 4px #00000006;
+}
+
+/* S1-T2 option-row skin; retain existing listbox anchoring and permission gates. */
+.panel :global(.chrome-access-options button) {
+  box-sizing: border-box;
+  grid-template-columns: 13px minmax(0, 1fr);
+  height: 28px;
+  min-height: 28px;
+  padding: 0 8px;
+  gap: 8px;
+  border: 0;
+  border-radius: 4px;
+  color: #494949;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.panel :global(.chrome-access-options button > .share-menu-icon) {
+  display: none;
+}
+
+.panel :global(.chrome-access-options button > span:nth-child(2)) {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.panel :global(.chrome-access-options button > svg) {
+  grid-column: 1;
+  grid-row: 1;
+  width: 13px;
+  height: 13px;
+}
+
+.panel :global(.chrome-access-options button[aria-selected="true"]) {
+  background: #F2F2F4;
+  color: #1F1F1F;
+}
+
+.panel :global(.chrome-access-options button:hover:not(:disabled)) {
+  background: #F2F2F4;
+  color: #1F1F1F;
+}
+
+.panel:global(.chrome-unified-panel) {
+  padding: 0;
+  gap: 12px;
+}
+
 /* Publish/copy seam: outrank the shared Button base without changing stop/deploy. */
 button.copyButton {
   box-sizing: border-box;
@@ -28,12 +265,97 @@ button.copyButton:disabled {
   color: var(--text-faint);
 }
 
+/* Waiting is not an unavailable action: keep the canvas busy palette readable. */
+button.copyButton[aria-busy="true"]:disabled {
+  background: #5A5A5C;
+  color: #FFFFFF;
+  opacity: 1;
+}
+
 .copyButton > svg {
   flex-shrink: 0;
 }
 
 .copiedIcon {
   color: #82D994;
+}
+
+/* S2: native progress semantics under the existing disabled action, not a
+   second row. The upstream simulation still owns its value and lifetime. */
+.publishControl {
+  position: relative;
+  width: 100%;
+}
+
+.publishProgress {
+  position: absolute;
+  inset: 0;
+  appearance: none;
+  box-sizing: border-box;
+  width: 100%;
+  height: 32px;
+  margin: 0;
+  border: 0;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #6E6E70;
+  pointer-events: none;
+}
+
+.publishProgress::-webkit-progress-bar {
+  background: #6E6E70;
+}
+
+.publishProgress::-webkit-progress-value {
+  background: #29292B;
+}
+
+.publishProgress::-moz-progress-bar {
+  background: #29292B;
+}
+
+button.copyButton.publishingButton:disabled {
+  position: relative;
+  background: transparent;
+  color: #FFFFFF;
+  opacity: 1;
+  gap: 6px;
+}
+
+/* S2 help describes panel dismissal, not quitting the app. */
+p.publishHint {
+  margin: 0;
+  color: #999999;
+  font-size: 10.5px;
+  line-height: 17px;
+}
+
+/* S11 (◇): preserve the full selectable URL; only clipboard failure gets
+   this fallback treatment. Successful/idle links retain their existing skin. */
+.copyFallback:global(.chrome-publish-url) {
+  box-sizing: border-box;
+  width: 100%;
+  height: 32px;
+  padding: 0 9px;
+  border: 1px solid #E5E5E5;
+  border-radius: 6px;
+  background: #FFFFFF;
+  color: #666666;
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 30px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  user-select: text;
+  cursor: text;
+}
+
+.copyHint {
+  margin: 0;
+  color: #888888;
+  font-size: 12px;
+  line-height: 18px;
 }
 
 /* S7/S15 warning only; legacy renderer and deployment errors keep their styles. */

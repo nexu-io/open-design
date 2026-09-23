@@ -4,6 +4,7 @@ import { getProjectPreviewComment, getWorkspaceProjectByProjectId, isProjectComm
 import { previewCommentToCloud } from './collab-cloud-service.js';
 import { createCommentRelayOutboxStore } from './comment-relay-outbox.js';
 import { recordCommentRelayPublicationMapping } from './comment-relay-publication-mapping.js';
+import { recordPublishedCommentBackfill } from './published-comment-backfill-state.js';
 import { createSqlitePublicFilePublicationStore, type PublicFilePublicationScope, type PublicFilePublicationRevision } from './public-file-publication-store.js';
 
 export interface PublishedFileCommentBackfillInput {
@@ -44,6 +45,7 @@ export function enqueuePublishedFileComments(
   const ids = db.prepare(`SELECT id FROM preview_comments
     WHERE project_id = ? AND file_path = ? ORDER BY created_at, rowid`)
     .all(scope.projectId, scope.filePath) as Array<{ id: string }>;
+  const commentIds: string[] = [];
   let enqueued = 0;
   let skippedInbound = 0;
   for (const { id } of ids) {
@@ -64,7 +66,11 @@ export function enqueuePublishedFileComments(
       comment,
       publication: { ...publicationRevision, publicFilePath },
     });
+    commentIds.push(comment.id);
     enqueued += 1;
   }
+  // The queue writes above and this exact initial membership are one SQLite
+  // transaction: no published file can silently lack a backfill result.
+  recordPublishedCommentBackfill(db, { scope, publicationRevision, commentIds });
   return { enqueued, skippedInbound };
 }

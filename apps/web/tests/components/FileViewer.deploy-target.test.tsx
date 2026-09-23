@@ -100,8 +100,10 @@ async function openCloudflareDeployModal(file: ProjectFile) {
   );
 
   // Deploy providers live on the Share panel ("publish online" is sharing),
-  // so reaching a provider takes Share button -> menu item.
+  // so reaching a provider takes Share -> More sharing options -> provider.
   fireEvent.click(screen.getByRole('button', { name: /^share$/i }));
+  expect(screen.queryByRole('menuitem', { name: /Deploy to Cloudflare Pages/i })).toBeNull();
+  fireEvent.click(await screen.findByRole('button', { name: 'More sharing options' }));
   fireEvent.click(await screen.findByRole('menuitem', { name: /Deploy to Cloudflare Pages/i }));
 
   const providerSelect = await screen.findByRole('combobox', { name: /Provider/i });
@@ -127,6 +129,8 @@ describe('FileViewer deploy target selector', () => {
     render(<FileViewer projectId="project-1" projectKind="prototype" file={deployableHtmlFile()}
       liveHtml="<html><body>Hello</body></html>" />);
     fireEvent.click(screen.getByRole('button', { name: /^share$/i }));
+    expect(screen.queryByRole('menuitem', { name: label })).toBeNull();
+    fireEvent.click(await screen.findByRole('button', { name: 'More sharing options' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: label }));
     const select = await screen.findByRole('combobox', { name: /Provider/i });
     await waitFor(() => expect(select).toHaveValue(providerId));

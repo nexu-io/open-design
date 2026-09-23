@@ -21,8 +21,7 @@ function props(overrides: Partial<Props> = {}): Props {
     publishingPublicFile: false, publishProgress: null,
     unpublishCurrentFilePublic: vi.fn().mockResolvedValue(undefined), viewerOnlyDisabledTitle: 'read only',
     publishCurrentFilePublic: vi.fn().mockResolvedValue(undefined), publishFailureKey: null,
-    DEPLOY_PROVIDER_OPTIONS: [], streaming: false, openDeployModal: vi.fn().mockResolvedValue(undefined),
-    deployActionIconFor: () => 'pages-line', deployActionLabelFor: () => 'Deploy',
+    streaming: false,
     sharePageUrl: '', canCopyShareLink: false, shareUnavailableHint: '',
     copyShareLink: vi.fn().mockResolvedValue(true), copyShareLinkLabel: '',
     canOpenSharePage: false, shareLinkStatusHint: '', ...overrides,
@@ -31,6 +30,20 @@ function props(overrides: Partial<Props> = {}): Props {
 
 
 describe('S7 publish failure visual seam', () => {
+  it.each(['artifact-card', 'toolbar'] as const)('offers valid recovery from %s without adding deployment controls', (menuOrigin) => {
+    const input = props({ menuOrigin, filePublished: false, publishFailureKey: 'fileViewer.publishFileFailed', t: (key) => zhCN[key] });
+    const { rerender } = render(<ShareTab {...input} />);
+    expect(screen.getByRole('status')).toHaveTextContent('生成分享链接失败，请稍后重试。');
+    fireEvent.click(screen.getByRole('menuitem', { name: zhCN['preview.retry'] }));
+    expect(input.publishCurrentFilePublic).toHaveBeenCalledTimes(1);
+    rerender(<ShareTab {...input} publishingPublicFile publishFailureKey={null} publishProgress={0.4} />);
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.getByRole('progressbar')).toBeVisible();
+    rerender(<ShareTab {...input} filePublished publishFailureKey={null} />);
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: zhCN['preview.retry'] })).toBeNull();
+    expect(screen.getByRole('button', { name: zhCN['fileViewer.copyShareLink'] })).toBeEnabled();
+  });
   it.each(['fileViewer.publishFileFailed', 'fileViewer.publishFileTooLarge'] as const)('renders the canvas warning icon without changing %s copy or retry', (publishFailureKey) => {
     const input = props({ filePublished: false, publishFailureKey, t: (key) => zhCN[key] });
     render(<ShareTab {...input} />);
@@ -55,7 +68,7 @@ describe('S7 publish failure visual seam', () => {
   });
 
   it('keeps generic and size messages distinct, without attributing unknown failures to the network', () => {
-    expect(zhCN['fileViewer.publishFileFailed']).toBe('生成分享链接失败，请稍后重试，或改用下方的部署方式。');
+    expect(zhCN['fileViewer.publishFileFailed']).toBe('生成分享链接失败，请稍后重试。');
     expect(zhCN['fileViewer.publishFileTooLarge']).toBe('项目超过 20 MiB 分享上限。请减小 HTML 和引用资源的总大小后重试。');
   });
 

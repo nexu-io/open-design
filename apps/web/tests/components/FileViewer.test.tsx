@@ -253,22 +253,6 @@ function deferredResponse() {
   return { promise, resolve };
 }
 
-function srcDocActivationMessages(calls: readonly (readonly unknown[])[]) {
-  return calls
-    .map(([message]) => message)
-    .filter((message): message is {
-      type: 'od:srcdoc-transport-activate';
-      html: string;
-      generation: string;
-    } => {
-      if (typeof message !== 'object' || message === null) return false;
-      const data = message as { type?: unknown; html?: unknown; generation?: unknown };
-      return data.type === 'od:srcdoc-transport-activate'
-        && typeof data.html === 'string'
-        && typeof data.generation === 'string';
-    });
-}
-
 function testRect(left: number, top: number, width: number, height: number): DOMRect {
   return {
     x: left,
@@ -301,7 +285,6 @@ function installSandboxedPreviewWindow(frame: HTMLIFrameElement): Window {
 }
 
 function latestPreviewContentSizeRequest(source: Window) {
-  const postMessage = source.postMessage as ReturnType<typeof vi.fn>;
   const request = previewContentSizeRequests(source)
     .reverse()
     .find((data) => data.type === 'od:preview-content-size-request');
@@ -5366,7 +5349,7 @@ describe('FileViewer SVG artifacts', () => {
 
     // The module points at its HTML entry instead of rendering the React
     // runtime (which would throw "No React component export found").
-    const link = await screen.findByRole('button', { name: /backups\.html/ });
+    await screen.findByRole('button', { name: /backups\.html/ });
     expect(screen.queryByTestId('react-component-preview-frame')).toBeNull();
 
     // The toolbar still offers a way to read the raw code: clicking the Code
@@ -5959,6 +5942,7 @@ describe('FileViewer SVG artifacts', () => {
 
     await openUnifiedShareTab();
 
+    fireEvent.click(screen.getByRole('button', { name: 'More sharing options' }));
     expect(screen.getByRole('menuitem', { name: /Deploy to Vercel/i })).toBeTruthy();
     fireEvent.click(screen.getByRole('menuitem', { name: /Deploy to Cloudflare Pages/i }));
 
@@ -6025,6 +6009,7 @@ describe('FileViewer SVG artifacts', () => {
 
     const openDeployModal = async () => {
       await openUnifiedShareTab();
+      fireEvent.click(await screen.findByRole('button', { name: 'More sharing options' }));
       fireEvent.click(await screen.findByRole('menuitem', { name: /Deploy to Vercel/i }));
       return screen.findByRole('dialog');
     };
@@ -6200,6 +6185,7 @@ describe('FileViewer SVG artifacts', () => {
     );
 
     await openUnifiedShareTab();
+    fireEvent.click(await screen.findByRole('button', { name: 'More sharing options' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: /Deploy to Cloudflare Pages/i }));
 
     const providerSelect = await screen.findByRole('combobox', { name: /Provider/i });
@@ -6262,6 +6248,7 @@ describe('FileViewer SVG artifacts', () => {
     );
 
     await openUnifiedShareTab();
+    fireEvent.click(await screen.findByRole('button', { name: 'More sharing options' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: /Deploy to Cloudflare Pages/i }));
 
     const providerSelect = await screen.findByRole('combobox', { name: /Provider/i });
@@ -6388,6 +6375,7 @@ describe('FileViewer SVG artifacts', () => {
     );
 
     await openUnifiedShareTab();
+    fireEvent.click(await screen.findByRole('button', { name: 'More sharing options' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: /Deploy to Cloudflare Pages/i }));
 
     const zoneSelect = await screen.findByRole('combobox', { name: /Domain/i });
@@ -6758,10 +6746,11 @@ describe('FileViewer SVG artifacts', () => {
     // Share panel: actions that produce a shareable link. No file formats and
     // no save/template authoring controls.
     expect(await screen.findByRole('menu')).toBeTruthy();
-    expect(screen.getByText('Share project in workspace')).toBeTruthy();
+    expect(screen.getByText('Visibility in workspace')).toBeTruthy();
     expect(await screen.findByText('Generate and copy link')).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: /Generate and copy link/i })).toBeTruthy();
-    expect(screen.getByText('SHARE ON YOUR OWN HOSTING')).toBeTruthy();
+    expect(screen.queryByText('SHARE ON YOUR OWN HOSTING')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'More sharing options' }));
     expect(screen.getByRole('menuitem', { name: /Deploy to Vercel/i })).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: /Deploy to Cloudflare Pages/i })).toBeTruthy();
     // The "publish online first" guide row is gone — the publish button above
@@ -6844,6 +6833,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(await screen.findByText('Generate and copy link')).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: /Generate and copy link/i })).toBeTruthy();
     expect(screen.queryByText('Share project in workspace')).toBeNull();
+    expect(screen.queryByText('Visibility in workspace')).toBeNull();
     expect(screen.queryByText('SHARE ON YOUR OWN HOSTING')).toBeNull();
     expect(screen.queryByRole('menuitem', { name: /Deploy to Vercel/i })).toBeNull();
     expect(screen.queryByRole('menuitem', { name: /Save as template/i })).toBeNull();
@@ -6903,6 +6893,7 @@ describe('FileViewer SVG artifacts', () => {
     // workspace has no team to receive — see the dedicated test below
     // (recvq5bM78HWCE) for the card's own gating.
     expect(screen.queryByText('Share project in workspace')).toBeNull();
+    expect(screen.queryByText('Visibility in workspace')).toBeNull();
   });
 
   // recvq56lzckGtE: publishing a file from a real team workspace 403'd against
@@ -7039,9 +7030,10 @@ describe('FileViewer SVG artifacts', () => {
             return new Response(JSON.stringify({ context }), { status: 200 });
           }
           if (url.includes('publish-public')) {
-            if ((init?.method ?? 'GET').toUpperCase() !== 'GET') {
-              publishCalls.push(`${init?.method} ${url}`);
+            if ((init?.method ?? 'GET').toUpperCase() === 'GET') {
+              return Response.json({ publication: null });
             }
+            publishCalls.push(`${init?.method} ${url}`);
             return new Response(
               JSON.stringify({ url: 'https://pub.example/x', slug: 'x', fileName: 'index.html' }),
               { status: 200 },
@@ -7064,7 +7056,11 @@ describe('FileViewer SVG artifacts', () => {
       // Located by the explanation it carries, not by a testid the fix added —
       // so this spec still finds the pre-fix help (nested in the publish row)
       // and goes red on the behavior rather than on a missing hook.
-      const help = await screen.findByLabelText(/Only a single file can be shared for now/i);
+      // chain1-publish G4: the stale "only a single file / local assets not
+      // supported" sentence was deleted from this copy (contradicted the
+      // current multi-resource share); the help now reads its remaining,
+      // still-accurate sentence.
+      const help = await screen.findByLabelText(/Anyone with the link can view it online/i);
       // It is NOT inside the actionable publish row.
       expect(help.closest('[role="menuitem"]')).toBeNull();
 
@@ -7111,11 +7107,46 @@ describe('FileViewer SVG artifacts', () => {
     'ReactComponentViewer',
   );
 
-  // The publish "?" is not the only one — the workspace-access help beside it
-  // uses the same markup, so the focusability fix has to be panel-wide rather
-  // than a one-off on the row that happened to get reviewed. This case needs a
-  // TEAM workspace, since the access card is team-gated.
-  it('exposes the workspace-access help as a focusable control too', async () => {
+  it.each(['html', 'react-component'] as const)('supports scope keyboard navigation in the %s viewer without writing', async (kind) => {
+    const context = teamWorkspaceContext();
+    stubFetchWithWorkspaceContext(context);
+    const file = kind === 'html' ? publicPublishFile() : baseFile({
+      name: 'Widget.tsx', path: 'Widget.tsx', mime: 'text/plain', kind: 'code',
+      artifactManifest: {
+        version: 1, kind: 'react-component', title: 'Widget', entry: 'Widget.tsx',
+        renderer: 'react-component', exports: ['jsx'],
+      },
+    });
+    renderWithProjectWorkspace(
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
+        liveHtml="<html><body>Scope keyboard</body></html>" />,
+      context,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: /share/i }));
+    const menu = await screen.findByRole('menu');
+    const trigger = menu.querySelector<HTMLButtonElement>('.chrome-access-trigger')!;
+    expect(trigger).toBeEnabled();
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+    const options = await screen.findAllByRole('option');
+    expect(screen.getByRole('option', { selected: true })).toHaveFocus();
+    fireEvent.keyDown(document.activeElement!, { key: 'End' });
+    expect(options.at(-1)).toHaveFocus();
+    fireEvent.keyDown(document.activeElement!, { key: 'Home' });
+    expect(options[0]).toHaveFocus();
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(trigger).toHaveFocus();
+    expect(menu).toBeInTheDocument();
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    const writes = vi.mocked(fetch).mock.calls.filter(([, init]) =>
+      !['GET', 'HEAD'].includes((init?.method ?? 'GET').toUpperCase()));
+    expect(writes).toEqual([]);
+  });
+
+  // Scope help is persistent content in the HTML share panel. It remains
+  // team-gated; unlike provider tooltips it needs no focus or hover.
+  it('shows workspace-access help inline without a focus or hover prerequisite', async () => {
     const context = teamWorkspaceContext();
     stubFetchWithWorkspaceContext(context);
 
@@ -7129,13 +7160,11 @@ describe('FileViewer SVG artifacts', () => {
     fireEvent.click(await screen.findByRole('button', { name: /share/i }));
     expect(await screen.findByRole('menu')).toBeTruthy();
 
-    const help = await screen.findByTestId('workspace-access-help');
-    expect(help.tagName).toBe('BUTTON');
-    expect(help).toHaveProperty('type', 'button');
-    expect(help.getAttribute('data-tooltip-placement')).toBe('top');
-    expect(help.closest('[role="menuitem"]')).toBeNull();
-    help.focus();
-    expect(document.activeElement).toBe(help);
+    const description = await screen.findByText('Only you can access this project. Choose workspace members to share it with the team.');
+    expect(description.tagName).toBe('P');
+    expect(description).toBeVisible();
+    expect(description.closest('[role="menuitem"]')).toBeNull();
+    expect(screen.queryByTestId('workspace-access-help')).toBeNull();
   });
 
   // recvq5bM78HWCE: the "在工作空间中分享项目" card rendered for a personal
@@ -7163,6 +7192,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(await screen.findByRole('menu')).toBeTruthy();
     await screen.findByText('Generate and copy link');
     expect(screen.queryByText('Share project in workspace')).toBeNull();
+    expect(screen.queryByText('Visibility in workspace')).toBeNull();
   });
 
   // recvqgif6Xa7Wb: product ruled the "no team to share with yet" bridge card
@@ -7210,7 +7240,7 @@ describe('FileViewer SVG artifacts', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /share/i }));
     expect(await screen.findByRole('menu')).toBeTruthy();
-    expect(screen.getByText('Share project in workspace')).toBeTruthy();
+    expect(screen.getByText('Visibility in workspace')).toBeTruthy();
   });
 
   it('hides the public publish entry when there is no workspace at all', async () => {
@@ -7236,6 +7266,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.queryByText('Generate and copy link')).toBeNull();
     expect(screen.queryByRole('menuitem', { name: /Generate and copy link/i })).toBeNull();
     expect(screen.queryByText('Share project in workspace')).toBeNull();
+    expect(screen.queryByText('Visibility in workspace')).toBeNull();
     // recvqgif6Xa7Wb: the "no team to share with yet" bridge card that used to
     // fill this gap was product-ruled out entirely (never a designed surface —
     // see recvqae3pK5hyx/recvq6W8GX8NaH history). With neither card able to
@@ -8522,7 +8553,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.getByRole('menu')).toBeTruthy();
   });
 
-  it('shows social icons inline once a deployment link is live', async () => {
+  it('keeps deployment available from More sharing options before any link exists', async () => {
     const file = baseFile({
       name: 'index.html',
       path: 'index.html',
@@ -8540,69 +8571,6 @@ describe('FileViewer SVG artifacts', () => {
     vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
       const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
       if (url === '/api/projects/project-1/deployments') {
-        return new Response(JSON.stringify({
-          deployments: [
-            {
-              id: 'vercel-deploy',
-              projectId: 'project-1',
-              fileName: 'index.html',
-              providerId: 'vercel-self',
-              url: 'https://vercel.example',
-              deploymentCount: 1,
-              target: 'preview',
-              status: 'ready',
-              createdAt: 1,
-              updatedAt: 2,
-            },
-          ],
-        }), { status: 200 });
-      }
-      if (url === '/api/deploy/config?providerId=vercel-self') {
-        return new Response(JSON.stringify({
-          providerId: 'vercel-self',
-          configured: true,
-          tokenMask: 'saved-token',
-          teamId: '',
-          teamSlug: '',
-          target: 'preview',
-        }), { status: 200 });
-      }
-      return new Response(JSON.stringify({}), { status: 404 });
-    }));
-
-    render(
-      <FileViewer projectId="project-1" projectKind="prototype" file={file}
-        liveHtml="<html><body><h1>Hello</h1></body></html>"
-      />,
-    );
-
-    await openUnifiedShareTab();
-
-    // A ready deployment IS a clean link: social icons render inline in the
-    // share panel — no share-page ceremony, no modal detour.
-    expect(await screen.findByRole('link', { name: 'X' })).toBeTruthy();
-    expect(screen.queryByRole('dialog')).toBeNull();
-  });
-
-  it('hides social icons until any link exists', async () => {
-    const file = baseFile({
-      name: 'index.html',
-      path: 'index.html',
-      mime: 'text/html',
-      kind: 'html',
-      artifactManifest: {
-        version: 1,
-        kind: 'html',
-        title: 'Page',
-        entry: 'index.html',
-        renderer: 'html',
-        exports: ['html'],
-      },
-    });
-    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
-      const method = init?.method ?? 'GET';
-      if (url === '/api/projects/project-1/deployments') {
         return new Response(JSON.stringify({ deployments: [] }), { status: 200 });
       }
       if (url === '/api/deploy/config?providerId=vercel-self') {
@@ -8615,20 +8583,6 @@ describe('FileViewer SVG artifacts', () => {
           target: 'preview',
         }), { status: 200 });
       }
-      if (url === '/api/projects/project-1/deploy' && method === 'POST') {
-        return new Response(JSON.stringify({
-          id: 'vercel-deploy',
-          projectId: 'project-1',
-          fileName: 'index.html',
-          providerId: 'vercel-self',
-          url: 'https://vercel.example',
-          deploymentCount: 1,
-          target: 'preview',
-          status: 'ready',
-          createdAt: 1,
-          updatedAt: 2,
-        }), { status: 200 });
-      }
       return new Response(JSON.stringify({}), { status: 404 });
     }));
 
@@ -8640,14 +8594,12 @@ describe('FileViewer SVG artifacts', () => {
 
     await openUnifiedShareTab();
 
-    // No link yet (nothing published, nothing deployed): no social icons and
-    // no "deploy first" teaser row — the deploy rows below are the path.
+    // A first deployment remains reachable through the current overflow entry.
+    fireEvent.click(await screen.findByRole('button', { name: 'More sharing options' }));
     expect(await screen.findByRole('menuitem', { name: /Deploy to Vercel/i })).toBeTruthy();
-    expect(screen.queryByRole('link', { name: 'X' })).toBeNull();
-    expect(screen.queryByRole('menuitem', { name: /deploy then share/i })).toBeNull();
   });
 
-  it('hides social icons for protected deployments', async () => {
+  it('keeps deployment available from More sharing options for protected deployments', async () => {
     const file = baseFile({
       name: 'index.html',
       path: 'index.html',
@@ -8703,10 +8655,9 @@ describe('FileViewer SVG artifacts', () => {
 
     await openUnifiedShareTab();
 
-    // A protected deployment is NOT a clean link — recipients could not open
-    // it, so the panel offers no social icons until the link is public.
+    // A protected deployment must not remove the existing deployment action.
+    fireEvent.click(await screen.findByRole('button', { name: 'More sharing options' }));
     expect(await screen.findByRole('menuitem', { name: /Deploy to Vercel/i })).toBeTruthy();
-    expect(screen.queryByRole('link', { name: 'X' })).toBeNull();
   });
 
   it('renders unsafe SVG source as escaped text instead of executable markup', () => {
@@ -11102,6 +11053,7 @@ describe('FileViewer tweaks toolbar', () => {
     await waitFor(() => expect(readRequests).toHaveBeenCalledTimes(1));
     fireEvent.click(screen.getByRole('button', { name: /hide comments/i }));
     await screen.findByTestId('comment-side-collapsed-rail');
+    expect(screen.queryByTestId('comment-rail-unread-dot')).toBeNull();
 
     rerender(
       <CollabProvider value={projectWorkspaceCollabValue(workspace)}>
@@ -11126,7 +11078,10 @@ describe('FileViewer tweaks toolbar', () => {
     );
 
     await waitFor(() => expect(readRequests).toHaveBeenCalledTimes(1));
+    expect(await screen.findByTestId('comment-rail-unread-dot')).toBeVisible();
+    expect(screen.getByTestId('comment-side-collapsed-rail')).toContainElement(screen.getByTestId('comment-rail-unread-dot'));
     fireEvent.click(screen.getByTestId('comment-side-collapsed-rail'));
+    expect(screen.queryByTestId('comment-rail-unread-dot')).toBeNull();
     await waitFor(() => expect(readRequests).toHaveBeenCalledTimes(2));
   });
 
@@ -13526,6 +13481,36 @@ describe('FileViewer tweaks toolbar', () => {
     expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/api/workspace/members'))).toBe(false);
   });
 
+  it.each(['', '   ', undefined])('O4 shows a question-mark avatar and no author line for blank name %s', async (authorDisplayName) => {
+    const comment: PreviewComment = {
+      id: 'blank-author', projectId: 'project-1', conversationId: 'conversation-1',
+      filePath: 'preview.html', elementId: 'hero-copy', selector: '[data-od-id="hero-copy"]',
+      label: 'Hero copy', text: 'Hero copy', htmlHint: '<p data-od-id="hero-copy">',
+      position: { x: 16, y: 24, width: 320, height: 48 }, note: 'Feedback.', status: 'open',
+      authorKind: 'user', authorDisplayName, authorKey: 'blank-name-key',
+      createdAt: 10, updatedAt: 10,
+    };
+    render(
+      <CommentSidePanel
+        comments={[comment]} selectedIds={new Set()} activeCommentId={null} collapsed={false}
+        onCollapsedChange={() => {}} onToggleSelect={() => {}} onSelectAll={() => {}}
+        onClearSelection={() => {}} onReply={() => {}} onSendSelected={() => {}}
+        sending={false} t={t}
+      />,
+    );
+    const item = await screen.findByTestId('comment-side-item');
+    const avatar = item.querySelector<HTMLElement>('.comment-side-avatar');
+    expect(avatar?.textContent).toBe('?');
+    const expectedColor = document.createElement('span');
+    const swatch = commentAuthorAvatarColor('blank-name-key');
+    expectedColor.style.background = swatch.bg;
+    expectedColor.style.color = swatch.fg;
+    expect(avatar?.style.background).toBe(expectedColor.style.background);
+    expect(avatar?.style.color).toBe(expectedColor.style.color);
+    expect(item.querySelector('.comment-side-author-copy small')).toBeNull();
+    expect(document.querySelector('.comment-side-title')?.textContent).toBe(`${t('chat.tabComments')} 1`);
+  });
+
   it('renders an empty external author as a key-colored question-mark avatar without a name line', async () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL) => new Response(
       JSON.stringify({ members: [] }),
@@ -13588,9 +13573,12 @@ describe('FileViewer tweaks toolbar', () => {
         />,
       );
       const times = Array.from(document.querySelectorAll('.comment-side-time')).map((node) => node.textContent);
+      // O7: the hour bucket is keyed on calendar day, not <24h elapsed — the
+      // 23h-ago 'hours' comment crosses this fake clock's midnight, so it now
+      // reads "昨天" (common.yesterday) instead of "N 小时前".
       expect(times).toEqual([
         'common.justNow', 'common.minutesAgo', 'common.minutesAgo', 'common.hoursAgo',
-        'common.hoursAgo', 'common.minutesAgo', 'common.minutesAgo',
+        'common.yesterday', 'common.minutesAgo', 'common.minutesAgo',
       ]);
     } finally {
       vi.useRealTimers();
@@ -15176,7 +15164,11 @@ describe('LiveArtifactRefreshHistoryPanel', () => {
 
   it('keeps D1–D4 marker and deck-page presentation on the rendered selectors', () => {
     const css = readFileSync(join(process.cwd(), 'src/styles/viewer/core.css'), 'utf8');
-    expect(css).toMatch(/\.comment-saved-pin,\s*\.comment-active-pin[\s\S]*?width: 20px;[\s\S]*?height: 20px;[\s\S]*?border: 0;[\s\S]*?border-radius: 50% 50% 50% 4px;[\s\S]*?background: #282828;[\s\S]*?font-size: 10px;[\s\S]*?font-weight: 600;[\s\S]*?box-shadow: 0 0 0 2px #FFFFFF;/);
+    // chain4-owner 4.2b: 20px/weight 600/white ring -> 28px/weight 500/no
+    // ring; background is now set per-author inline (commentAuthorAvatarColor),
+    // so the base rule only keeps the #282828 fallback for anchor-lost pins
+    // that opt out of the inline color.
+    expect(css).toMatch(/\.comment-saved-pin,\s*\.comment-active-pin[\s\S]*?width: 28px;[\s\S]*?height: 28px;[\s\S]*?border: 0;[\s\S]*?border-radius: 50% 50% 50% 4px;[\s\S]*?background: #282828;[\s\S]*?font-size: 12px;[\s\S]*?font-weight: 500;/);
     expect(css).toMatch(/\.comment-saved-marker--lost \.comment-saved-pin[\s\S]*?border: 1px dashed #888888;[\s\S]*?background: #FFFFFF;[\s\S]*?color: #666666;[\s\S]*?box-shadow: none;/);
     expect(css).toMatch(/\.comment-side-slide[\s\S]*?padding-left: 28px;[\s\S]*?color: #8A5A12;[\s\S]*?font-size: 12px;[\s\S]*?line-height: 18px;/);
   });

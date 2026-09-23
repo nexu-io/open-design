@@ -7,6 +7,7 @@ import { closeDatabase, openDatabase, insertProject, insertConversation, upsertP
 import { createSqlitePublicFilePublicationStore, migratePublicFilePublications } from '../src/collab/public-file-publication-store.js';
 import { createCommentRelayOutboxStore, commentRelayLocalBindingMatches } from '../src/collab/comment-relay-outbox.js';
 import { enqueuePublishedFileComments } from '../src/collab/published-file-comment-backfill.js';
+import { readPublishedCommentBackfill } from '../src/collab/published-comment-backfill-state.js';
 import { createPublicFilePublicationRecorder } from '../src/collab/public-file-publication-recording.js';
 import { createShareFileMapping } from '../src/collab/share-file-mapping.js';
 import { sourcePathForCurrentPublication } from '../src/collab/comment-relay-publication-mapping.js';
@@ -133,6 +134,9 @@ it('includes all conversations of exactly one file, preserves ids/authors and ne
   expect(s.outbox.listDue(Date.now()).map(row => [row.comment.id, row.comment.memberId, row.comment.filePath, row.publication?.publicFilePath])).toEqual([
     ['a', 'original', s.scope.filePath, 'index.html'], ['b', 'original', s.scope.filePath, 'index.html'], ['legacy', '', s.scope.filePath, 'index.html'],
   ]);
+  expect(readPublishedCommentBackfill(s.db, { projectId: 'p', workspaceId: 'w', workspaceMemberId: 'owner', filePath: s.scope.filePath })).toMatchObject({
+    state: 'pending', filePath: s.scope.filePath, retryable: false,
+  });
   s.publish(); expect(s.outbox.count()).toBe(3);
 });
 it('requires publication transaction and exact current witness', () => {
@@ -256,4 +260,6 @@ it('records an empty published file mapping so later new comments need no republ
   expect(s.outbox.count()).toBe(0);
   expect(s.db.prepare('SELECT file_path, public_file_path FROM comment_relay_publication_mappings').all())
     .toEqual([{ file_path: s.scope.filePath, public_file_path: 'index.html' }]);
+  expect(readPublishedCommentBackfill(s.db, { projectId: 'p', workspaceId: 'w', workspaceMemberId: 'owner', filePath: s.scope.filePath }))
+    .toMatchObject({ state: 'succeeded', retryable: false });
 });

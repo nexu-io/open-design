@@ -1,4 +1,5 @@
-import { VELA_CLI_FAILURE_ENVELOPE_FIELDS } from '@open-design/contracts';
+import { VELA_CLI_FAILURE_ENVELOPE_FIELDS, type CommentBatchPushRequest, type CommentBatchPushResponse } from '@open-design/contracts';
+import { parseCommentBatchReceipt, validateCommentBatchRequest } from './comment-batch-receipt.js';
 import type {
   CollabCloudComment,
   CollabCloudMemberDirectoryEntry,
@@ -99,6 +100,23 @@ export function createVelaCliCollabClient(options: VelaCliCollabClientOptions = 
         _teamId,
       );
       return Array.isArray(payload.members) ? payload.members.map(toDirectoryEntry) : [];
+    },
+
+    async pushCommentBatch(workspaceId: string, projectId: string, request: CommentBatchPushRequest): Promise<CommentBatchPushResponse> {
+      if (!workspaceId.trim() || !projectId.trim()) throw new Error('explicit batch scope is required');
+      validateCommentBatchRequest(request);
+      // Snapshot before awaiting the process: correlation cannot follow caller mutation.
+      const captured: CommentBatchPushRequest = { comments: request.comments.map(item => ({ ...item })) };
+      const input = JSON.stringify(captured);
+      let stdout: string;
+      try {
+        stdout = await run(['comment', 'push-batch', projectId, '--comment-file', '-', '--mode', 'align', '--json'],
+          workspaceId.trim(), { input });
+      } catch (error) {
+        stdout = velaCommandStdout(error);
+        if (!stdout.trim()) throw error;
+      }
+      return parseCommentBatchReceipt(stdout, captured);
     },
 
     async pushComment(
@@ -319,7 +337,7 @@ const defaultRunVelaCollab: RunVelaCollab = (args, workspaceId, options) =>
       ...options,
       ...(args[0] === 'presence'
         ? { timeoutMs: PRESENCE_COMMAND_TIMEOUT_MS }
-        : args[0] === 'comment' && (args[1] === 'push' || args[1] === 'pull')
+        : args[0] === 'comment' && (args[1] === 'push' || args[1] === 'pull' || args[1] === 'push-batch')
           ? { timeoutMs: COMMENT_COMMAND_TIMEOUT_MS }
           : {}),
     },
