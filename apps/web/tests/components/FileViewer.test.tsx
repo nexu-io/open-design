@@ -13428,12 +13428,40 @@ describe('FileViewer tweaks toolbar', () => {
     expect(within(item).queryByText(/Open Design 用户/)).toBeNull();
   });
 
-  it('uses the main author palette with stable selection', () => {
+  it('uses the shared 30-color author palette with stable selection', () => {
     expect(COMMENT_AUTHOR_AVATAR_COLORS).toEqual([
-      '#f97316', '#e11d48', '#7c3aed', '#2563eb', '#0891b2',
-      '#059669', '#ca8a04', '#db2777', '#4f46e5', '#0d9488',
+      { bg: '#7DB7FF', fg: '#144582' },
+      { bg: '#FFB86B', fg: '#803D12' },
+      { bg: '#B19AFF', fg: '#482D80' },
+      { bg: '#6DDDB1', fg: '#155C40' },
+      { bg: '#FF92BC', fg: '#7D234C' },
+      { bg: '#F7D45B', fg: '#75560C' },
+      { bg: '#69D5F0', fg: '#155365' },
+      { bg: '#FF9B85', fg: '#733526' },
+      { bg: '#8DE56C', fg: '#285728' },
+      { bg: '#D58FFF', fg: '#5A2C6D' },
+      { bg: '#91A9FF', fg: '#283F75' },
+      { bg: '#FFC76B', fg: '#634E28' },
+      { bg: '#68DEC9', fg: '#1C5C53' },
+      { bg: '#FF8BC7', fg: '#702D48' },
+      { bg: '#BDE66A', fg: '#445D20' },
+      { bg: '#B78AFF', fg: '#442C64' },
+      { bg: '#5ED9B3', fg: '#1B5349' },
+      { bg: '#FF939D', fg: '#6E342E' },
+      { bg: '#78C7FF', fg: '#2E516A' },
+      { bg: '#F5CF63', fg: '#6B5118' },
+      { bg: '#9AE883', fg: '#375C38' },
+      { bg: '#EA8AD7', fg: '#563450' },
+      { bg: '#6EDA94', fg: '#274E38' },
+      { bg: '#9E9BFF', fg: '#363861' },
+      { bg: '#FFA277', fg: '#6C3F1D' },
+      { bg: '#ABE779', fg: '#3D6030' },
+      { bg: '#68D4E6', fg: '#285567' },
+      { bg: '#D99AFA', fg: '#63365A' },
+      { bg: '#FFD17C', fg: '#625034' },
+      { bg: '#6CDCD9', fg: '#33585E' },
     ]);
-    expect(commentAuthorAvatarColor('external-author')).toEqual({ bg: '#db2777', fg: '#fff' });
+    expect(commentAuthorAvatarColor('external-author')).toEqual({ bg: '#D99AFA', fg: '#63365A' });
   });
 
   it('renders a user author from its trusted snapshot without querying the member directory', async () => {
