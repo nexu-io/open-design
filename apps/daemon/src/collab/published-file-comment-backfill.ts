@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3';
 import type { PreviewComment } from '@open-design/contracts';
-import { getProjectPreviewComment, getWorkspaceProjectByProjectId, isProjectCommentAnchorConversationId } from '../db.js';
+import { ensureProjectCommentAnchorConversation, getProjectPreviewComment, getWorkspaceProjectByProjectId, isProjectCommentAnchorConversationId } from '../db.js';
 import { previewCommentToCloud } from './collab-cloud-service.js';
 import { createCommentRelayOutboxStore } from './comment-relay-outbox.js';
 import { recordCommentRelayPublicationMapping } from './comment-relay-publication-mapping.js';
@@ -39,6 +39,11 @@ export function enqueuePublishedFileComments(
   const current = createSqlitePublicFilePublicationStore(db).getRevision(scope);
   if (!current || !publicationRevision.token || current.token !== publicationRevision.token
     || current.slug !== publicationRevision.slug) throw new Error('Publication backfill witness is stale');
+  // Public comments need the same internal conversation FK as Team comments.
+  // Establish it atomically with the publication, never by borrowing a user chat.
+  if (!ensureProjectCommentAnchorConversation(db, scope.projectId)) {
+    throw new Error('Publication comment anchor unavailable');
+  }
   const outbox = createCommentRelayOutboxStore(db);
   recordCommentRelayPublicationMapping(db, scope, { ...publicationRevision, publicFilePath });
   // Filter in SQL, not by scanning every file and later deciding to disclose it.

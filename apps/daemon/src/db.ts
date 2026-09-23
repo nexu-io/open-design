@@ -4215,13 +4215,11 @@ export function ensureTeamProjectCommentConversations(
 }
 
 /**
- * Repair the comment-anchor invariant for historical active Team projects.
- *
- * Older databases can contain Team bindings created before pulled mirrors and
- * Team shares seeded a local conversation. Comments are project-scoped in the
- * collaboration protocol but still need a daemon-local conversation FK. Run
- * this once at startup instead of mutating the database from a comments GET.
- * Personal and deleted bindings intentionally keep their existing behavior.
+ * Every relay-eligible project needs the same internal conversation FK: all
+ * active Team projects and personal projects with a persisted public share.
+ * Repair historical data at startup, never as a side effect of comments GET.
+ * Only Team projects also need a public routing conversation; personal shares
+ * must not create or replace an ordinary chat just to receive web comments.
  */
 export function repairTeamProjectCommentAnchorConversations(
   db: SqliteDb,
@@ -4229,19 +4227,24 @@ export function repairTeamProjectCommentAnchorConversations(
 ): { checked: number; created: number } {
   const rows = db
     .prepare(
-      `SELECT project_id AS projectId
-         FROM workspace_projects
-        WHERE visibility = 'team'
-          AND resource_state != 'deleted'`,
+      `SELECT wp.project_id AS projectId, wp.visibility
+         FROM workspace_projects wp
+        WHERE wp.resource_state != 'deleted'
+          AND (wp.visibility = 'team'
+            OR (wp.visibility = 'personal' AND EXISTS (
+              SELECT 1 FROM public_file_publications p
+               WHERE p.project_id = wp.project_id
+            )))`,
     )
-    .all() as Array<{ projectId: string }>;
+    .all() as Array<{ projectId: string; visibility: 'team' | 'personal' }>;
 
   let created = 0;
   const repair = db.transaction(() => {
     for (const row of rows) {
-      if (ensureTeamProjectCommentConversations(db, row.projectId, now).anchorCreated) {
-        created += 1;
-      }
+      const anchorCreated = row.visibility === 'team'
+        ? ensureTeamProjectCommentConversations(db, row.projectId, now).anchorCreated
+        : ensureProjectCommentAnchorConversation(db, row.projectId, now)?.created === true;
+      if (anchorCreated) created += 1;
     }
   });
   repair();
