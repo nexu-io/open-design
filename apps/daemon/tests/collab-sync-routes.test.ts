@@ -320,7 +320,7 @@ async function publicShareFixture(options: {
     reservations: createShareAliasReservations(db, () => ids++ === 0 ? fixtureSlug : randomUUID()),
     outbox,
     complete: createSharePublicationCompletion(db, record, outbox, true),
-    ensureProject: async scope => ({ projectId: scope.projectId, ownerMemberId: scope.ownerMemberId, sharedAt: null }),
+    ensureProject: async scope => ({ projectId: scope.projectId, ownerMemberId: scope.ownerMemberId, sharedAt: '2026-01-01T00:00:00.000Z' }),
     prepare: async (scope, slug) => ({
       url: publicShareViewerUrl(scope.projectId, slug, { OD_VELA_WEB_URL: 'https://web.example.test' }),
       run: async args => {
@@ -1962,7 +1962,7 @@ describe('collab sync routes', () => {
         recordPublicFilePublication: createPublicFilePublicationRecorder(db, store, () => ({ enqueued: 0, skippedInbound: 0 })),
         sharePublishing: {
           reservations: createShareAliasReservations(db, () => receipt.slug), outbox,
-          ensureProject: async scope => ({ projectId: scope.projectId, ownerMemberId: scope.ownerMemberId, sharedAt: null }),
+          ensureProject: async scope => ({ projectId: scope.projectId, ownerMemberId: scope.ownerMemberId, sharedAt: '2026-01-01T00:00:00.000Z' }),
           complete: createSharePublicationCompletion(db, createPublicFilePublicationRecorder(db, store, () => ({ enqueued: 0, skippedInbound: 0 })), outbox, true),
           prepare: async (scope, slug) => ({
             url: publicShareViewerUrl(scope.projectId, slug, { OD_VELA_WEB_URL: 'https://web.example.test/cloud' }),
