@@ -1662,6 +1662,14 @@ export interface SharePublishLinkUnavailable {
   code: 'PUBLIC_SHARE_WEB_URL_UNAVAILABLE';
 }
 
+/** Confirmed cancellation from DELETE /api/projects/:id/files/:path/publish-public.
+ * The stable alias is stopped, not erased, and can be resumed by the owner. */
+export interface ShareUnpublishResponse {
+  ok: true;
+  slug: string;
+  fileName: string;
+}
+
 export type SharePublishResponse =
   | ({ status: 'published'; receipt: SharePublishReceipt; link?: never } & SharePublishedLink)
   | { status: 'published'; receipt: SharePublishReceipt; url?: never; link: SharePublishLinkUnavailable }
