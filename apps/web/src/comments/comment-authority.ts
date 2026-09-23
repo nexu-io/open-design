@@ -56,6 +56,11 @@ export function commentAuthoredByViewer(
   // the current viewer, including a read-only member annotating someone
   // else's shared project.
   if (!comment) return true;
+  // A share-page user is never a workspace member, even when its member id is
+  // absent. Keep that explicit identity separate from legacy rows, whose
+  // missing author data retains the historical fallback below.
+  if (comment.authorKind === 'user') return false;
+
   const authorId = comment.authorMemberId ?? null;
   // A legacy shared comment without an author is deliberately owner-only.
   // Treating it as "mine" for every member made the client advertise a
@@ -79,7 +84,7 @@ export function commentAuthoredByViewer(
  * flag needs a personal-project arm rather than deferring entirely to collab.
  */
 export function viewerIsProjectOwner(context: CommentAuthorityContext): boolean {
-  return context.isProjectOwner;
+  return !context.collabEnabled || context.isProjectOwner;
 }
 
 /** Only the author may edit their own note. */

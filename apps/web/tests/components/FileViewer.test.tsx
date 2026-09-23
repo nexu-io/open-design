@@ -62,13 +62,16 @@ vi.mock('../../src/state/projects', async () => {
   };
 });
 
+import { TooltipLayer } from '../../src/components/TooltipLayer';
 import {
+  COMMENT_AUTHOR_AVATAR_COLORS,
   CommentSidePanel,
   FileViewer,
   LiveArtifactViewer,
   LiveArtifactRefreshHistoryPanel,
   SvgViewer,
   applyInspectOverridesToSource,
+  commentAuthorAvatarColor,
   commentPreviewCanvasSize,
   computeReorderedSortKey,
   desktopPreviewAutoFitZoomPercent,
@@ -250,22 +253,6 @@ function deferredResponse() {
   return { promise, resolve };
 }
 
-function srcDocActivationMessages(calls: readonly (readonly unknown[])[]) {
-  return calls
-    .map(([message]) => message)
-    .filter((message): message is {
-      type: 'od:srcdoc-transport-activate';
-      html: string;
-      generation: string;
-    } => {
-      if (typeof message !== 'object' || message === null) return false;
-      const data = message as { type?: unknown; html?: unknown; generation?: unknown };
-      return data.type === 'od:srcdoc-transport-activate'
-        && typeof data.html === 'string'
-        && typeof data.generation === 'string';
-    });
-}
-
 function testRect(left: number, top: number, width: number, height: number): DOMRect {
   return {
     x: left,
@@ -298,7 +285,6 @@ function installSandboxedPreviewWindow(frame: HTMLIFrameElement): Window {
 }
 
 function latestPreviewContentSizeRequest(source: Window) {
-  const postMessage = source.postMessage as ReturnType<typeof vi.fn>;
   const request = previewContentSizeRequests(source)
     .reverse()
     .find((data) => data.type === 'od:preview-content-size-request');
@@ -5363,7 +5349,7 @@ describe('FileViewer SVG artifacts', () => {
 
     // The module points at its HTML entry instead of rendering the React
     // runtime (which would throw "No React component export found").
-    const link = await screen.findByRole('button', { name: /backups\.html/ });
+    await screen.findByRole('button', { name: /backups\.html/ });
     expect(screen.queryByTestId('react-component-preview-frame')).toBeNull();
 
     // The toolbar still offers a way to read the raw code: clicking the Code
@@ -5956,6 +5942,7 @@ describe('FileViewer SVG artifacts', () => {
 
     await openUnifiedShareTab();
 
+    fireEvent.click(screen.getByRole('button', { name: 'More sharing options' }));
     expect(screen.getByRole('menuitem', { name: /Deploy to Vercel/i })).toBeTruthy();
     fireEvent.click(screen.getByRole('menuitem', { name: /Deploy to Cloudflare Pages/i }));
 
@@ -6022,6 +6009,7 @@ describe('FileViewer SVG artifacts', () => {
 
     const openDeployModal = async () => {
       await openUnifiedShareTab();
+      fireEvent.click(await screen.findByRole('button', { name: 'More sharing options' }));
       fireEvent.click(await screen.findByRole('menuitem', { name: /Deploy to Vercel/i }));
       return screen.findByRole('dialog');
     };
@@ -6197,6 +6185,7 @@ describe('FileViewer SVG artifacts', () => {
     );
 
     await openUnifiedShareTab();
+    fireEvent.click(await screen.findByRole('button', { name: 'More sharing options' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: /Deploy to Cloudflare Pages/i }));
 
     const providerSelect = await screen.findByRole('combobox', { name: /Provider/i });
@@ -6259,6 +6248,7 @@ describe('FileViewer SVG artifacts', () => {
     );
 
     await openUnifiedShareTab();
+    fireEvent.click(await screen.findByRole('button', { name: 'More sharing options' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: /Deploy to Cloudflare Pages/i }));
 
     const providerSelect = await screen.findByRole('combobox', { name: /Provider/i });
@@ -6385,6 +6375,7 @@ describe('FileViewer SVG artifacts', () => {
     );
 
     await openUnifiedShareTab();
+    fireEvent.click(await screen.findByRole('button', { name: 'More sharing options' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: /Deploy to Cloudflare Pages/i }));
 
     const zoneSelect = await screen.findByRole('combobox', { name: /Domain/i });
@@ -6755,10 +6746,11 @@ describe('FileViewer SVG artifacts', () => {
     // Share panel: actions that produce a shareable link. No file formats and
     // no save/template authoring controls.
     expect(await screen.findByRole('menu')).toBeTruthy();
-    expect(screen.getByText('Share project in workspace')).toBeTruthy();
-    expect(await screen.findByText('Get a share link')).toBeTruthy();
-    expect(screen.getByRole('menuitem', { name: /Get a share link/i })).toBeTruthy();
-    expect(screen.getByText('SHARE ON YOUR OWN HOSTING')).toBeTruthy();
+    expect(screen.getByText('Visibility in workspace')).toBeTruthy();
+    expect(await screen.findByText('Generate and copy link')).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /Generate and copy link/i })).toBeTruthy();
+    expect(screen.queryByText('SHARE ON YOUR OWN HOSTING')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'More sharing options' }));
     expect(screen.getByRole('menuitem', { name: /Deploy to Vercel/i })).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: /Deploy to Cloudflare Pages/i })).toBeTruthy();
     // The "publish online first" guide row is gone — the publish button above
@@ -6838,9 +6830,10 @@ describe('FileViewer SVG artifacts', () => {
       context,
     );
 
-    expect(await screen.findByText('Get a share link')).toBeTruthy();
-    expect(screen.getByRole('menuitem', { name: /Get a share link/i })).toBeTruthy();
+    expect(await screen.findByText('Generate and copy link')).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /Generate and copy link/i })).toBeTruthy();
     expect(screen.queryByText('Share project in workspace')).toBeNull();
+    expect(screen.queryByText('Visibility in workspace')).toBeNull();
     expect(screen.queryByText('SHARE ON YOUR OWN HOSTING')).toBeNull();
     expect(screen.queryByRole('menuitem', { name: /Deploy to Vercel/i })).toBeNull();
     expect(screen.queryByRole('menuitem', { name: /Save as template/i })).toBeNull();
@@ -6894,12 +6887,13 @@ describe('FileViewer SVG artifacts', () => {
     expect(await screen.findByRole('menu')).toBeTruthy();
     // The single-file publish card — the thing the dogfood report said was
     // missing — is back for a personal workspace.
-    expect(await screen.findByText('Get a share link')).toBeTruthy();
-    expect(screen.getByRole('menuitem', { name: /Get a share link/i })).toBeTruthy();
+    expect(await screen.findByText('Generate and copy link')).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /Generate and copy link/i })).toBeTruthy();
     // "Share project in workspace" is TEAM project sharing, which a personal
     // workspace has no team to receive — see the dedicated test below
     // (recvq5bM78HWCE) for the card's own gating.
     expect(screen.queryByText('Share project in workspace')).toBeNull();
+    expect(screen.queryByText('Visibility in workspace')).toBeNull();
   });
 
   // recvq56lzckGtE: publishing a file from a real team workspace 403'd against
@@ -6939,7 +6933,7 @@ describe('FileViewer SVG artifacts', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /share/i }));
     expect(await screen.findByRole('menu')).toBeTruthy();
-    fireEvent.click(await screen.findByRole('menuitem', { name: /Get a share link/i }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Generate and copy link/i }));
 
     await waitFor(() => expect(calls.some((call) => call.url.includes('publish-public'))).toBe(true));
     const publishCall = calls.find((call) => call.url.includes('publish-public'));
@@ -7002,14 +6996,14 @@ describe('FileViewer SVG artifacts', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: /share/i }));
-    fireEvent.click(await screen.findByRole('menuitem', { name: /Get a share link/i }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Generate and copy link/i }));
 
     expect(await screen.findByText(publicUrl)).toBeTruthy();
     const stopSharing = screen.getByRole('button', { name: /Stop sharing/i });
     fireEvent.click(stopSharing);
 
     await waitFor(() => expect(unpublishBodies).toEqual([{ slug: 'manual-revoke-slug' }]));
-    expect(await screen.findByRole('menuitem', { name: /Get a share link/i })).toBeTruthy();
+    expect(await screen.findByRole('menuitem', { name: /Generate and copy link/i })).toBeTruthy();
   });
 
   // Reading the help must never publish. The publish row's trailing "?" carries
@@ -7036,9 +7030,10 @@ describe('FileViewer SVG artifacts', () => {
             return new Response(JSON.stringify({ context }), { status: 200 });
           }
           if (url.includes('publish-public')) {
-            if ((init?.method ?? 'GET').toUpperCase() !== 'GET') {
-              publishCalls.push(`${init?.method} ${url}`);
+            if ((init?.method ?? 'GET').toUpperCase() === 'GET') {
+              return Response.json({ publication: null });
             }
+            publishCalls.push(`${init?.method} ${url}`);
             return new Response(
               JSON.stringify({ url: 'https://pub.example/x', slug: 'x', fileName: 'index.html' }),
               { status: 200 },
@@ -7061,7 +7056,11 @@ describe('FileViewer SVG artifacts', () => {
       // Located by the explanation it carries, not by a testid the fix added —
       // so this spec still finds the pre-fix help (nested in the publish row)
       // and goes red on the behavior rather than on a missing hook.
-      const help = await screen.findByLabelText(/Only a single file can be shared for now/i);
+      // chain1-publish G4: the stale "only a single file / local assets not
+      // supported" sentence was deleted from this copy (contradicted the
+      // current multi-resource share); the help now reads its remaining,
+      // still-accurate sentence.
+      const help = await screen.findByLabelText(/Anyone with the link can view it online/i);
       // It is NOT inside the actionable publish row.
       expect(help.closest('[role="menuitem"]')).toBeNull();
 
@@ -7084,7 +7083,7 @@ describe('FileViewer SVG artifacts', () => {
       await waitFor(() => expect(screen.getByRole('menu')).toBeTruthy());
       expect(publishCalls).toEqual([]);
       // The publish row is still sitting there unactivated.
-      expect(screen.getByRole('menuitem', { name: /Get a share link/i })).toBeTruthy();
+      expect(screen.getByRole('menuitem', { name: label === 'HtmlViewer' ? /Generate and copy link/i : /Get a share link/i })).toBeTruthy();
     });
   }
 
@@ -7108,11 +7107,46 @@ describe('FileViewer SVG artifacts', () => {
     'ReactComponentViewer',
   );
 
-  // The publish "?" is not the only one — the workspace-access help beside it
-  // uses the same markup, so the focusability fix has to be panel-wide rather
-  // than a one-off on the row that happened to get reviewed. This case needs a
-  // TEAM workspace, since the access card is team-gated.
-  it('exposes the workspace-access help as a focusable control too', async () => {
+  it.each(['html', 'react-component'] as const)('supports scope keyboard navigation in the %s viewer without writing', async (kind) => {
+    const context = teamWorkspaceContext();
+    stubFetchWithWorkspaceContext(context);
+    const file = kind === 'html' ? publicPublishFile() : baseFile({
+      name: 'Widget.tsx', path: 'Widget.tsx', mime: 'text/plain', kind: 'code',
+      artifactManifest: {
+        version: 1, kind: 'react-component', title: 'Widget', entry: 'Widget.tsx',
+        renderer: 'react-component', exports: ['jsx'],
+      },
+    });
+    renderWithProjectWorkspace(
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
+        liveHtml="<html><body>Scope keyboard</body></html>" />,
+      context,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: /share/i }));
+    const menu = await screen.findByRole('menu');
+    const trigger = menu.querySelector<HTMLButtonElement>('.chrome-access-trigger')!;
+    expect(trigger).toBeEnabled();
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+    const options = await screen.findAllByRole('option');
+    expect(screen.getByRole('option', { selected: true })).toHaveFocus();
+    fireEvent.keyDown(document.activeElement!, { key: 'End' });
+    expect(options.at(-1)).toHaveFocus();
+    fireEvent.keyDown(document.activeElement!, { key: 'Home' });
+    expect(options[0]).toHaveFocus();
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(trigger).toHaveFocus();
+    expect(menu).toBeInTheDocument();
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    const writes = vi.mocked(fetch).mock.calls.filter(([, init]) =>
+      !['GET', 'HEAD'].includes((init?.method ?? 'GET').toUpperCase()));
+    expect(writes).toEqual([]);
+  });
+
+  // Scope help is persistent content in the HTML share panel. It remains
+  // team-gated; unlike provider tooltips it needs no focus or hover.
+  it('shows workspace-access help inline without a focus or hover prerequisite', async () => {
     const context = teamWorkspaceContext();
     stubFetchWithWorkspaceContext(context);
 
@@ -7126,13 +7160,11 @@ describe('FileViewer SVG artifacts', () => {
     fireEvent.click(await screen.findByRole('button', { name: /share/i }));
     expect(await screen.findByRole('menu')).toBeTruthy();
 
-    const help = await screen.findByTestId('workspace-access-help');
-    expect(help.tagName).toBe('BUTTON');
-    expect(help).toHaveProperty('type', 'button');
-    expect(help.getAttribute('data-tooltip-placement')).toBe('top');
-    expect(help.closest('[role="menuitem"]')).toBeNull();
-    help.focus();
-    expect(document.activeElement).toBe(help);
+    const description = await screen.findByText('Only you can access this project. Choose workspace members to share it with the team.');
+    expect(description.tagName).toBe('P');
+    expect(description).toBeVisible();
+    expect(description.closest('[role="menuitem"]')).toBeNull();
+    expect(screen.queryByTestId('workspace-access-help')).toBeNull();
   });
 
   // recvq5bM78HWCE: the "在工作空间中分享项目" card rendered for a personal
@@ -7158,8 +7190,9 @@ describe('FileViewer SVG artifacts', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /share/i }));
     expect(await screen.findByRole('menu')).toBeTruthy();
-    await screen.findByText('Get a share link');
+    await screen.findByText('Generate and copy link');
     expect(screen.queryByText('Share project in workspace')).toBeNull();
+    expect(screen.queryByText('Visibility in workspace')).toBeNull();
   });
 
   // recvqgif6Xa7Wb: product ruled the "no team to share with yet" bridge card
@@ -7185,7 +7218,7 @@ describe('FileViewer SVG artifacts', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /share/i }));
     expect(await screen.findByRole('menu')).toBeTruthy();
-    await screen.findByText('Get a share link');
+    await screen.findByText('Generate and copy link');
     expect(screen.queryByText('Nothing to share yet')).toBeNull();
     expect(screen.queryByText('No team to share with yet')).toBeNull();
     expect(screen.queryByRole('link', { name: /create team/i })).toBeNull();
@@ -7207,7 +7240,7 @@ describe('FileViewer SVG artifacts', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /share/i }));
     expect(await screen.findByRole('menu')).toBeTruthy();
-    expect(screen.getByText('Share project in workspace')).toBeTruthy();
+    expect(screen.getByText('Visibility in workspace')).toBeTruthy();
   });
 
   it('hides the public publish entry when there is no workspace at all', async () => {
@@ -7230,9 +7263,10 @@ describe('FileViewer SVG artifacts', () => {
     expect(await screen.findByRole('menu')).toBeTruthy();
     // Gone, not merely disabled — a signed-out caller has no id to publish
     // under and the daemon answers 409 WORKSPACE_IDENTITY_REQUIRED.
-    expect(screen.queryByText('Get a share link')).toBeNull();
-    expect(screen.queryByRole('menuitem', { name: /Get a share link/i })).toBeNull();
+    expect(screen.queryByText('Generate and copy link')).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /Generate and copy link/i })).toBeNull();
     expect(screen.queryByText('Share project in workspace')).toBeNull();
+    expect(screen.queryByText('Visibility in workspace')).toBeNull();
     // recvqgif6Xa7Wb: the "no team to share with yet" bridge card that used to
     // fill this gap was product-ruled out entirely (never a designed surface —
     // see recvqae3pK5hyx/recvq6W8GX8NaH history). With neither card able to
@@ -8519,7 +8553,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.getByRole('menu')).toBeTruthy();
   });
 
-  it('shows social icons inline once a deployment link is live', async () => {
+  it('keeps deployment available from More sharing options before any link exists', async () => {
     const file = baseFile({
       name: 'index.html',
       path: 'index.html',
@@ -8537,69 +8571,6 @@ describe('FileViewer SVG artifacts', () => {
     vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
       const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
       if (url === '/api/projects/project-1/deployments') {
-        return new Response(JSON.stringify({
-          deployments: [
-            {
-              id: 'vercel-deploy',
-              projectId: 'project-1',
-              fileName: 'index.html',
-              providerId: 'vercel-self',
-              url: 'https://vercel.example',
-              deploymentCount: 1,
-              target: 'preview',
-              status: 'ready',
-              createdAt: 1,
-              updatedAt: 2,
-            },
-          ],
-        }), { status: 200 });
-      }
-      if (url === '/api/deploy/config?providerId=vercel-self') {
-        return new Response(JSON.stringify({
-          providerId: 'vercel-self',
-          configured: true,
-          tokenMask: 'saved-token',
-          teamId: '',
-          teamSlug: '',
-          target: 'preview',
-        }), { status: 200 });
-      }
-      return new Response(JSON.stringify({}), { status: 404 });
-    }));
-
-    render(
-      <FileViewer projectId="project-1" projectKind="prototype" file={file}
-        liveHtml="<html><body><h1>Hello</h1></body></html>"
-      />,
-    );
-
-    await openUnifiedShareTab();
-
-    // A ready deployment IS a clean link: social icons render inline in the
-    // share panel — no share-page ceremony, no modal detour.
-    expect(await screen.findByRole('link', { name: 'X' })).toBeTruthy();
-    expect(screen.queryByRole('dialog')).toBeNull();
-  });
-
-  it('hides social icons until any link exists', async () => {
-    const file = baseFile({
-      name: 'index.html',
-      path: 'index.html',
-      mime: 'text/html',
-      kind: 'html',
-      artifactManifest: {
-        version: 1,
-        kind: 'html',
-        title: 'Page',
-        entry: 'index.html',
-        renderer: 'html',
-        exports: ['html'],
-      },
-    });
-    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
-      const method = init?.method ?? 'GET';
-      if (url === '/api/projects/project-1/deployments') {
         return new Response(JSON.stringify({ deployments: [] }), { status: 200 });
       }
       if (url === '/api/deploy/config?providerId=vercel-self') {
@@ -8612,20 +8583,6 @@ describe('FileViewer SVG artifacts', () => {
           target: 'preview',
         }), { status: 200 });
       }
-      if (url === '/api/projects/project-1/deploy' && method === 'POST') {
-        return new Response(JSON.stringify({
-          id: 'vercel-deploy',
-          projectId: 'project-1',
-          fileName: 'index.html',
-          providerId: 'vercel-self',
-          url: 'https://vercel.example',
-          deploymentCount: 1,
-          target: 'preview',
-          status: 'ready',
-          createdAt: 1,
-          updatedAt: 2,
-        }), { status: 200 });
-      }
       return new Response(JSON.stringify({}), { status: 404 });
     }));
 
@@ -8637,14 +8594,12 @@ describe('FileViewer SVG artifacts', () => {
 
     await openUnifiedShareTab();
 
-    // No link yet (nothing published, nothing deployed): no social icons and
-    // no "deploy first" teaser row — the deploy rows below are the path.
+    // A first deployment remains reachable through the current overflow entry.
+    fireEvent.click(await screen.findByRole('button', { name: 'More sharing options' }));
     expect(await screen.findByRole('menuitem', { name: /Deploy to Vercel/i })).toBeTruthy();
-    expect(screen.queryByRole('link', { name: 'X' })).toBeNull();
-    expect(screen.queryByRole('menuitem', { name: /deploy then share/i })).toBeNull();
   });
 
-  it('hides social icons for protected deployments', async () => {
+  it('keeps deployment available from More sharing options for protected deployments', async () => {
     const file = baseFile({
       name: 'index.html',
       path: 'index.html',
@@ -8700,10 +8655,9 @@ describe('FileViewer SVG artifacts', () => {
 
     await openUnifiedShareTab();
 
-    // A protected deployment is NOT a clean link — recipients could not open
-    // it, so the panel offers no social icons until the link is public.
+    // A protected deployment must not remove the existing deployment action.
+    fireEvent.click(await screen.findByRole('button', { name: 'More sharing options' }));
     expect(await screen.findByRole('menuitem', { name: /Deploy to Vercel/i })).toBeTruthy();
-    expect(screen.queryByRole('link', { name: 'X' })).toBeNull();
   });
 
   it('renders unsafe SVG source as escaped text instead of executable markup', () => {
@@ -10884,7 +10838,7 @@ describe('FileViewer tweaks toolbar', () => {
     expect(container.querySelector('.comment-preview-layer > .comment-side-panel')).toBeNull();
   });
 
-  it('closes a floating comment card in one action and restores focus for button and Escape dismissals', async () => {
+  it('closes a floating comment card on Escape and restores focus', async () => {
     const portalId = 'project-comments-float';
     render(
       <>
@@ -10902,26 +10856,40 @@ describe('FileViewer tweaks toolbar', () => {
     const trigger = screen.getByTestId('comment-panel-toggle');
     fireEvent.click(trigger);
 
-    const firstDismiss = await screen.findByRole('button', { name: /hide comments/i });
-    firstDismiss.focus();
-    fireEvent.click(firstDismiss);
+    const dismiss = await screen.findByRole('button', { name: /hide comments/i });
+    dismiss.focus();
+    fireEvent.keyDown(dismiss, { key: 'Escape' });
 
     await waitFor(() => {
       expect(screen.queryByTestId('comment-side-panel')).toBeNull();
       expect(document.activeElement).toBe(trigger);
     });
+  });
 
-    // The close path must also clear create/board mode: one click reopens the
-    // floating card instead of being consumed by a stale pressed state.
-    fireEvent.click(trigger);
-    const secondDismiss = await screen.findByRole('button', { name: /hide comments/i });
-    secondDismiss.focus();
-    fireEvent.keyDown(secondDismiss, { key: 'Escape' });
+  it('collapses a floating comment card to a reversible rail instead of closing it', async () => {
+    const portalId = 'project-comments-collapse-rail';
+    render(
+      <>
+        <div id={portalId} data-testid="comment-float-host" />
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={htmlPreviewFile()}
+          liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+          commentPortalId={portalId}
+        />
+      </>,
+    );
 
-    await waitFor(() => {
-      expect(screen.queryByTestId('comment-side-panel')).toBeNull();
-      expect(document.activeElement).toBe(trigger);
-    });
+    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+    fireEvent.click(await screen.findByRole('button', { name: /hide comments/i }));
+
+    const rail = await screen.findByTestId('comment-side-collapsed-rail');
+    expect(screen.getByTestId('comment-float-host')).toContainElement(rail);
+    expect(screen.queryByTestId('comment-side-panel')).toBeNull();
+
+    fireEvent.click(rail);
+    expect(await screen.findByTestId('comment-side-panel')).toBeTruthy();
   });
 
   it('keeps the comment popover open and restores focus when View all comments closes', async () => {
@@ -10963,6 +10931,13 @@ describe('FileViewer tweaks toolbar', () => {
     dismiss.focus();
     fireEvent.click(dismiss);
 
+    const rail = await screen.findByTestId('comment-side-collapsed-rail');
+    expect(screen.getByTestId('comment-popover')).toBeTruthy();
+    await waitFor(() => expect(document.activeElement).toBe(rail));
+
+    fireEvent.click(rail);
+    const reopened = await screen.findByTestId('comment-side-panel');
+    fireEvent.keyDown(reopened, { key: 'Escape' });
     await waitFor(() => {
       expect(screen.queryByTestId('comment-side-panel')).toBeNull();
       expect(screen.getByTestId('comment-popover')).toBeTruthy();
@@ -11019,6 +10994,107 @@ describe('FileViewer tweaks toolbar', () => {
       screen.getByTestId('manual-edit-mode-toggle').compareDocumentPosition(commentsButton) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+  });
+
+  it('keeps the unread dot independent from the open count and clears it only from authoritative read responses', async () => {
+    const comment = (id: string, createdAt: number, authorMemberId?: string): PreviewComment => ({
+      id, projectId: 'project-1', conversationId: 'conversation-1', filePath: 'preview.html',
+      elementId: id, selector: `[data-od-id="${id}"]`, label: id, text: '', htmlHint: '',
+      position: { x: 0, y: 0, width: 1, height: 1 }, note: id, status: 'open', createdAt, updatedAt: createdAt, authorMemberId,
+    });
+    const comments = [comment('one', 101), comment('two', 102), comment('three', 103)];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith('/comments/read')) {
+        return new Response(JSON.stringify(init?.method === 'PUT'
+          ? { projectId: 'project-1', lastReadAt: 103 }
+          : { projectId: 'project-1', lastReadAt: 100 }), { headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response('{}', { headers: { 'Content-Type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()} liveHtml="<html><body /></html>" previewComments={comments} />);
+    const unreadBadge = await screen.findByTestId('comment-unread-dot');
+    expect(unreadBadge).toHaveTextContent('3');
+    expect(unreadBadge).toHaveClass('viewer-comment-unread-badge');
+    expect(screen.getByTestId('comment-panel-toggle').getAttribute('aria-label')).toBe('Comments (3)');
+    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+    await waitFor(() => expect(screen.queryByTestId('comment-unread-dot')).toBeNull());
+    expect(screen.getByTestId('comment-panel-toggle').getAttribute('aria-label')).toBe('Comments (3)');
+  });
+
+  it('does not mark folded arrivals read until the floating rail is expanded', async () => {
+    const comment = (id: string, createdAt: number, overrides: Partial<PreviewComment> = {}): PreviewComment => ({
+      id, projectId: 'project-1', conversationId: 'conversation-1', filePath: 'preview.html',
+      elementId: id, selector: `[data-od-id="${id}"]`, label: id, text: '', htmlHint: '',
+      position: { x: 0, y: 0, width: 1, height: 1 }, note: id, status: 'open', createdAt, updatedAt: createdAt,
+      ...overrides,
+    });
+    const readRequests = vi.fn();
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (!String(input).endsWith('/comments/read')) return new Response('{}');
+      if (init?.method === 'PUT') readRequests();
+      return new Response(JSON.stringify({ projectId: 'project-1', lastReadAt: init?.method === 'PUT' ? 200 : 100 }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }));
+    const portalId = 'project-comments-read-rail';
+    const initial = [comment('backfill', 99)];
+    const workspace = teamWorkspaceContext();
+    const { rerender } = render(
+      <CollabProvider value={projectWorkspaceCollabValue(workspace)}>
+        <>
+          <div id={portalId} />
+          <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()} liveHtml="<html><body /></html>" previewComments={initial} commentPortalId={portalId} />
+        </>
+      </CollabProvider>,
+    );
+
+    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+    await waitFor(() => expect(readRequests).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole('button', { name: /hide comments/i }));
+    await screen.findByTestId('comment-side-collapsed-rail');
+    expect(screen.queryByTestId('comment-rail-unread-dot')).toBeNull();
+
+    rerender(
+      <CollabProvider value={projectWorkspaceCollabValue(workspace)}>
+        <>
+          <div id={portalId} />
+          <FileViewer
+            projectId="project-1"
+            projectKind="prototype"
+            file={htmlPreviewFile()}
+            liveHtml="<html><body /></html>"
+            commentPortalId={portalId}
+            previewComments={[
+              comment('external-new', 201),
+              comment('own', 300, { authorMemberId: 'wm-1' }),
+              comment('backfill', 99),
+              comment('other-file', 400, { filePath: 'other.html' }),
+              comment('sent', 500, { status: 'attached' }),
+            ]}
+          />
+        </>
+      </CollabProvider>,
+    );
+
+    await waitFor(() => expect(readRequests).toHaveBeenCalledTimes(1));
+    expect(await screen.findByTestId('comment-rail-unread-dot')).toBeVisible();
+    expect(screen.getByTestId('comment-side-collapsed-rail')).toContainElement(screen.getByTestId('comment-rail-unread-dot'));
+    fireEvent.click(screen.getByTestId('comment-side-collapsed-rail'));
+    expect(screen.queryByTestId('comment-rail-unread-dot')).toBeNull();
+    await waitFor(() => expect(readRequests).toHaveBeenCalledTimes(2));
+  });
+
+
+  it('does not light the dot for a trusted member self comment or timestamp boundary', async () => {
+    const own: PreviewComment = {
+      id: 'own', projectId: 'project-1', conversationId: 'conversation-1', filePath: 'preview.html', elementId: 'own', selector: '[data-od-id="own"]', label: 'own', text: '', htmlHint: '', position: { x: 0, y: 0, width: 1, height: 1 }, note: 'own', status: 'open', createdAt: 101, updatedAt: 101, authorMemberId: 'wm-1',
+    };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => String(input).endsWith('/comments/read')
+      ? new Response(JSON.stringify({ projectId: 'project-1', lastReadAt: 101 }), { headers: { 'Content-Type': 'application/json' } })
+      : new Response('{}', { headers: { 'Content-Type': 'application/json' } })));
+    renderWithProjectWorkspace(<FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()} liveHtml="<html><body /></html>" previewComments={[own, { ...own, id: 'boundary', authorMemberId: 'wm-other' }]} />, teamWorkspaceContext());
+    await waitFor(() => expect(screen.queryByTestId('comment-unread-dot')).toBeNull());
   });
 
   it('keeps comments and annotation picker mutually exclusive', () => {
@@ -11938,17 +12014,18 @@ describe('FileViewer tweaks toolbar', () => {
     expect(screen.queryByTestId('comment-saved-marker-hero')).toBeNull();
   });
 
-  it('keeps comment marker numbers global across deck slides', async () => {
+  it('isolates deck overlay pins by slide while retaining labeled cross-slide comments in the sidebar', async () => {
     const slideOneComment: PreviewComment = {
       id: 'comment-slide-one',
       projectId: 'project-1',
       conversationId: 'conversation-1',
       filePath: 'deck.html',
-      elementId: 'slide-one-title',
-      selector: '[data-od-id="slide-one-title"]',
+      // A reused selector/id across slides must not leak this pin onto slide four.
+      elementId: 'shared-title',
+      selector: '[data-od-id="shared-title"]',
       label: 'Slide one title',
       text: 'Slide one',
-      htmlHint: '<h1 data-od-id="slide-one-title">Slide one</h1>',
+      htmlHint: '<h1 data-od-id="shared-title">Slide one</h1>',
       position: { x: 8, y: 12, width: 120, height: 48 },
       note: 'First slide note',
       status: 'open',
@@ -11959,16 +12036,27 @@ describe('FileViewer tweaks toolbar', () => {
     const slideFourComment: PreviewComment = {
       ...slideOneComment,
       id: 'comment-slide-four',
-      elementId: 'slide-four-title',
-      selector: '[data-od-id="slide-four-title"]',
+      elementId: 'shared-title',
+      selector: '[data-od-id="shared-title"]',
       label: 'Slide four title',
       text: 'Slide four',
-      htmlHint: '<h1 data-od-id="slide-four-title">Slide four</h1>',
+      htmlHint: '<h1 data-od-id="shared-title">Slide four</h1>',
       position: { x: 24, y: 32, width: 140, height: 52 },
       note: 'Fourth slide note',
       createdAt: 20,
       updatedAt: 20,
       slideIndex: 3,
+    };
+    const legacyComment: PreviewComment = {
+      ...slideOneComment,
+      id: 'comment-without-slide',
+      elementId: 'legacy-title',
+      selector: '[data-od-id="legacy-title"]',
+      label: 'Legacy title',
+      note: 'Legacy slide-agnostic note',
+      createdAt: 30,
+      updatedAt: 30,
+      slideIndex: undefined,
     };
 
     render(
@@ -11991,7 +12079,7 @@ describe('FileViewer tweaks toolbar', () => {
         })}
         isDeck
         liveHtml={'<html><body><section class="slide">one</section><section class="slide">two</section></body></html>'}
-        previewComments={[slideOneComment, slideFourComment]}
+        previewComments={[slideOneComment, slideFourComment, legacyComment]}
       />,
     );
 
@@ -12006,21 +12094,46 @@ describe('FileViewer tweaks toolbar', () => {
       data: {
         type: 'od:comment-targets',
         targets: [{
-          elementId: 'slide-four-title',
-          selector: '[data-od-id="slide-four-title"]',
+          elementId: 'shared-title',
+          selector: '[data-od-id="shared-title"]',
           label: 'Slide four title',
           text: 'Slide four',
           position: { x: 24, y: 32, width: 140, height: 52 },
-          htmlHint: '<h1 data-od-id="slide-four-title">Slide four</h1>',
+          htmlHint: '<h1 data-od-id="shared-title">Slide four</h1>',
           slideIndex: 3,
+        }, {
+          elementId: 'legacy-title',
+          selector: '[data-od-id="legacy-title"]',
+          label: 'Legacy title',
+          text: 'Legacy slide-agnostic target',
+          position: { x: 12, y: 18, width: 100, height: 36 },
+          htmlHint: '<h1 data-od-id="legacy-title">Legacy</h1>',
         }],
       },
     }));
 
     await waitFor(() => {
-      expect(screen.getByTestId('comment-saved-marker-slide-four-title').textContent).toBe('2');
+      expect(screen.getByTestId('comment-saved-marker-shared-title').textContent).toBe('2');
     });
-    expect(screen.queryByTestId('comment-saved-marker-slide-one-title')).toBeNull();
+    // Null slideIndex retains its slide-agnostic legacy behavior.
+    expect(screen.getByTestId('comment-saved-marker-legacy-title').textContent).toBe('3');
+
+    const rows = screen.getAllByTestId('comment-side-item');
+    expect(rows).toHaveLength(3);
+    const firstSlideRow = rows.find((row) => row.dataset.commentId === 'comment-slide-one')!;
+    const fourthSlideRow = rows.find((row) => row.dataset.commentId === 'comment-slide-four')!;
+    expect(within(firstSlideRow).getByText('Slide 1 / 18').className).toBe('comment-side-slide');
+    expect(within(fourthSlideRow).getByText('Slide 4 / 18').className).toBe('comment-side-slide');
+    expect(within(rows.find((row) => row.dataset.commentId === 'comment-without-slide')!).queryByText(/Slide \d+ \/ 18/)).toBeNull();
+
+    const postMessage = vi.spyOn(frame.contentWindow!, 'postMessage');
+    postMessage.mockClear();
+    fireEvent.click(rows.find((row) => row.dataset.commentId === 'comment-slide-one')!);
+
+    // Cross-slide sidebar selection edits the comment, never the deck state.
+    expect(postMessage).not.toHaveBeenCalledWith({ type: 'od:slide', action: 'go', index: 0 }, '*');
+    expect(rows.find((row) => row.dataset.commentId === 'comment-slide-one')!.textContent).toContain('First slide note');
+    expect(screen.getByTestId('comment-saved-marker-shared-title').textContent).toBe('2');
   });
 
   it('orders side comments by creation time (newest first) while keeping activity timestamps', () => {
@@ -13010,6 +13123,83 @@ describe('FileViewer tweaks toolbar', () => {
     expect(screen.getByTestId('comment-side-selectbar').textContent).toContain('1 selected');
   });
 
+  it('keeps delivered external comments unhighlighted and sends them through the member send-to-chat path for a confirmed owner', async () => {
+    const comments: PreviewComment[] = [
+      {
+        id: 'external-comment', projectId: 'project-1', conversationId: 'conversation-1',
+        filePath: 'preview.html', elementId: 'external-anchor', selector: '[data-od-id="external-anchor"]',
+        label: 'External anchor', text: 'External target', htmlHint: '<p data-od-id="external-anchor">',
+        position: { x: 12, y: 24, width: 180, height: 40 }, note: 'External feedback.', status: 'open',
+        authorKind: 'user', authorAppUserId: 'share-user-1', authorDisplayName: 'Avery Visitor',
+        authorKey: 'share-user-key', createdAt: 10, updatedAt: 10,
+      },
+      {
+        id: 'member-comment', projectId: 'project-1', conversationId: 'conversation-1',
+        filePath: 'preview.html', elementId: 'member-anchor', selector: '[data-od-id="member-anchor"]',
+        label: 'Member anchor', text: 'Member target', htmlHint: '<p data-od-id="member-anchor">',
+        position: { x: 36, y: 48, width: 220, height: 52 }, note: 'Member feedback.', status: 'open',
+        authorKind: 'member', authorMemberId: 'member-2', authorDisplayName: 'Morgan Member',
+        authorKey: 'member-key', createdAt: 20, updatedAt: 20,
+      },
+    ];
+    const onSendBoardCommentAttachments = vi.fn().mockResolvedValue({
+      status: 'queued',
+      commentIds: comments.map((comment) => comment.id),
+    });
+    const ownerWorkspace = {
+      ...teamWorkspaceContext(),
+      role: 'owner' as const,
+      permissions: buildWorkspacePermissions({ role: 'owner', lifecycleState: 'active' }),
+    };
+    const ownerCollab: CollabContextValue = {
+      ...projectWorkspaceCollabValue(ownerWorkspace),
+      enabled: true,
+      member: { memberId: 'owner-member', name: 'Owner', role: 'owner' },
+      isOwner: true,
+      isEffectiveOwner: true,
+      writerAuthority: 'allowed',
+    };
+
+    render(
+      <CollabProvider value={ownerCollab}>
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={htmlPreviewFile()}
+          liveHtml='<html><body><p data-od-id="external-anchor">External target</p><p data-od-id="member-anchor">Member target</p></body></html>'
+          previewComments={comments}
+          onSendBoardCommentAttachments={onSendBoardCommentAttachments}
+        />
+      </CollabProvider>,
+    );
+
+    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+    const rows = await screen.findAllByTestId('comment-side-item');
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(row.className).not.toMatch(/highlight/i);
+    }
+
+    const selectButtons = screen.getAllByRole('button', { name: 'Select' });
+    expect(selectButtons).toHaveLength(2);
+    for (const button of selectButtons) fireEvent.click(button);
+    fireEvent.click(screen.getByTestId('comment-side-send-claude'));
+
+    await waitFor(() => expect(onSendBoardCommentAttachments).toHaveBeenCalledTimes(1));
+    expect(onSendBoardCommentAttachments.mock.calls[0]?.[0]).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'external-comment', comment: 'External feedback.', filePath: 'preview.html',
+        elementId: 'external-anchor', selector: '[data-od-id="external-anchor"]',
+        pagePosition: { x: 12, y: 24, width: 180, height: 40 },
+      }),
+      expect.objectContaining({
+        id: 'member-comment', comment: 'Member feedback.', filePath: 'preview.html',
+        elementId: 'member-anchor', selector: '[data-od-id="member-anchor"]',
+        pagePosition: { x: 36, y: 48, width: 220, height: 52 },
+      }),
+    ]));
+  });
+
   it('moves focus between comment side panel toggles when collapsing and expanding without a pre-focused click target', async () => {
     const onCollapseChange = vi.fn();
     const onSelectAll = vi.fn();
@@ -13180,9 +13370,10 @@ describe('FileViewer tweaks toolbar', () => {
       expect(item.querySelector('.comment-side-avatar')?.textContent).toBe('琼');
     });
     expect(within(item).getByText(/琼羽/)).toBeTruthy();
+    expect(within(item).getByText(/comment.authorRole.owner/)).toBeTruthy();
   });
 
-  it('leaves a comment by an unresolved other member on its id-only rendering', async () => {
+  it('renders an unresolved member from its trusted display-name snapshot', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
@@ -13208,6 +13399,7 @@ describe('FileViewer tweaks toolbar', () => {
       note: 'Tighten this headline.',
       status: 'open',
       authorMemberId: 'wm-someone-else',
+      authorDisplayName: 'Snapshot Member',
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
@@ -13231,8 +13423,166 @@ describe('FileViewer tweaks toolbar', () => {
     );
 
     const item = await screen.findByTestId('comment-side-item');
-    expect(item.querySelector('.comment-side-avatar')).toBeNull();
-    expect(within(item).queryByText(/琼羽/)).toBeNull();
+    expect(item.querySelector('.comment-side-avatar')?.textContent).toBe('S');
+    expect(within(item).getByText(/Snapshot Member/)).toBeTruthy();
+    expect(within(item).queryByText(/Open Design 用户/)).toBeNull();
+  });
+
+  it('uses the exact 30 foreground/background author swatches with stable hash selection', () => {
+    expect(COMMENT_AUTHOR_AVATAR_COLORS).toEqual([
+      { bg: '#7DB7FF', fg: '#144582' }, { bg: '#FFB86B', fg: '#803D12' }, { bg: '#B19AFF', fg: '#482D80' },
+      { bg: '#6DDDB1', fg: '#155C40' }, { bg: '#FF92BC', fg: '#7D234C' }, { bg: '#F7D45B', fg: '#75560C' },
+      { bg: '#69D5F0', fg: '#155365' }, { bg: '#FF9B85', fg: '#733526' }, { bg: '#8DE56C', fg: '#285728' },
+      { bg: '#D58FFF', fg: '#5A2C6D' }, { bg: '#91A9FF', fg: '#283F75' }, { bg: '#FFC76B', fg: '#634E28' },
+      { bg: '#68DEC9', fg: '#1C5C53' }, { bg: '#FF8BC7', fg: '#702D48' }, { bg: '#BDE66A', fg: '#445D20' },
+      { bg: '#B78AFF', fg: '#442C64' }, { bg: '#5ED9B3', fg: '#1B5349' }, { bg: '#FF939D', fg: '#6E342E' },
+      { bg: '#78C7FF', fg: '#2E516A' }, { bg: '#F5CF63', fg: '#6B5118' }, { bg: '#9AE883', fg: '#375C38' },
+      { bg: '#EA8AD7', fg: '#563450' }, { bg: '#6EDA94', fg: '#274E38' }, { bg: '#9E9BFF', fg: '#363861' },
+      { bg: '#FFA277', fg: '#6C3F1D' }, { bg: '#ABE779', fg: '#3D6030' }, { bg: '#68D4E6', fg: '#285567' },
+      { bg: '#D99AFA', fg: '#63365A' }, { bg: '#FFD17C', fg: '#625034' }, { bg: '#6CDCD9', fg: '#33585E' },
+    ]);
+    expect(commentAuthorAvatarColor('external-author')).toEqual({ bg: '#D99AFA', fg: '#63365A' });
+    expect(commentAuthorAvatarColor('external-author')).toBe(commentAuthorAvatarColor('external-author'));
+  });
+
+  it('renders a user author from its trusted snapshot without querying the member directory', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL) => new Response(
+      JSON.stringify({ members: [] }),
+      { status: 200 },
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+    const comment: PreviewComment = {
+      id: 'comment-user', projectId: 'project-1', conversationId: 'conversation-1',
+      filePath: 'preview.html', elementId: 'hero-copy', selector: '[data-od-id="hero-copy"]',
+      label: 'Hero copy', text: 'Hero copy', htmlHint: '<p data-od-id="hero-copy">',
+      position: { x: 16, y: 24, width: 320, height: 48 }, note: 'External feedback.', status: 'open',
+      authorKind: 'user', authorDisplayName: 'Avery Visitor', authorAppUserId: 'user-1',
+      authorKey: 'a'.repeat(64),
+      createdAt: Date.now(), updatedAt: Date.now(),
+    };
+
+    renderWithProjectWorkspace(
+      <CommentSidePanel
+        comments={[comment]} selectedIds={new Set()} activeCommentId={null} collapsed={false}
+        onCollapsedChange={() => {}} onToggleSelect={() => {}} onSelectAll={() => {}}
+        onClearSelection={() => {}} onReply={() => {}} onSendSelected={() => {}}
+        sending={false} t={t}
+      />,
+      teamWorkspaceContext(),
+    );
+
+    const item = await screen.findByTestId('comment-side-item');
+    const avatar = item.querySelector<HTMLElement>('.comment-side-avatar');
+    expect(avatar?.textContent).toBe('A');
+    expect(avatar?.style.background).toBe('rgb(105, 213, 240)');
+    expect(avatar?.style.color).toBe('rgb(21, 83, 101)');
+    expect(within(item).getByText(/Avery Visitor/)).toBeTruthy();
+    expect(within(item).getByText(/comment.authorRole.sharePage/)).toBeTruthy();
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/api/workspace/members'))).toBe(false);
+  });
+
+  it.each(['', '   ', undefined])('O4 shows a question-mark avatar and no author line for blank name %s', async (authorDisplayName) => {
+    const comment: PreviewComment = {
+      id: 'blank-author', projectId: 'project-1', conversationId: 'conversation-1',
+      filePath: 'preview.html', elementId: 'hero-copy', selector: '[data-od-id="hero-copy"]',
+      label: 'Hero copy', text: 'Hero copy', htmlHint: '<p data-od-id="hero-copy">',
+      position: { x: 16, y: 24, width: 320, height: 48 }, note: 'Feedback.', status: 'open',
+      authorKind: 'user', authorDisplayName, authorKey: 'blank-name-key',
+      createdAt: 10, updatedAt: 10,
+    };
+    render(
+      <CommentSidePanel
+        comments={[comment]} selectedIds={new Set()} activeCommentId={null} collapsed={false}
+        onCollapsedChange={() => {}} onToggleSelect={() => {}} onSelectAll={() => {}}
+        onClearSelection={() => {}} onReply={() => {}} onSendSelected={() => {}}
+        sending={false} t={t}
+      />,
+    );
+    const item = await screen.findByTestId('comment-side-item');
+    const avatar = item.querySelector<HTMLElement>('.comment-side-avatar');
+    expect(avatar?.textContent).toBe('?');
+    const expectedColor = document.createElement('span');
+    const swatch = commentAuthorAvatarColor('blank-name-key');
+    expectedColor.style.background = swatch.bg;
+    expectedColor.style.color = swatch.fg;
+    expect(avatar?.style.background).toBe(expectedColor.style.background);
+    expect(avatar?.style.color).toBe(expectedColor.style.color);
+    expect(item.querySelector('.comment-side-author-copy small')).toBeNull();
+    expect(document.querySelector('.comment-side-title')?.textContent).toBe(`${t('chat.tabComments')} 1`);
+  });
+
+  it('renders an empty external author as a key-colored question-mark avatar without a name line', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL) => new Response(
+      JSON.stringify({ members: [] }),
+      { status: 200 },
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+    const emptyNameComment = (id: string, authorDisplayName?: string): PreviewComment => ({
+      id, projectId: 'project-1', conversationId: 'conversation-1',
+      filePath: 'preview.html', elementId: id, selector: '[data-od-id="hero-copy"]',
+      label: 'Hero copy', text: 'Hero copy', htmlHint: '<p data-od-id="hero-copy">',
+      position: { x: 16, y: 24, width: 320, height: 48 }, note: 'External feedback.', status: 'open',
+      authorKind: 'user', authorDisplayName, authorAppUserId: 'user-1', authorKey: 'same-author-key',
+      createdAt: Date.now(), updatedAt: Date.now(),
+    });
+
+    renderWithProjectWorkspace(
+      <CommentSidePanel
+        comments={[
+          emptyNameComment('empty', ''), emptyNameComment('whitespace', '   '), emptyNameComment('missing'),
+        ]}
+        selectedIds={new Set()} activeCommentId={null} collapsed={false}
+        onCollapsedChange={() => {}} onToggleSelect={() => {}} onSelectAll={() => {}}
+        onClearSelection={() => {}} onReply={() => {}} onSendSelected={() => {}}
+        sending={false} t={t}
+      />,
+      teamWorkspaceContext(),
+    );
+
+    const items = await screen.findAllByTestId('comment-side-item');
+    const avatars = items.map((item) => item.querySelector<HTMLElement>('.comment-side-avatar'));
+    expect(avatars.map((avatar) => avatar?.textContent)).toEqual(['?', '?', '?']);
+    expect(avatars[0]?.style.background).toBe(avatars[1]?.style.background);
+    expect(avatars[1]?.style.background).toBe(avatars[2]?.style.background);
+    for (const item of items) expect(item.querySelector('.comment-side-author-copy small')).toBeNull();
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/api/workspace/members'))).toBe(false);
+  });
+
+  it('keeps relative comment-time boundaries stable across clock boundaries', () => {
+    vi.useFakeTimers();
+    try {
+      const now = new Date('2026-01-01T00:30:00.000Z');
+      vi.setSystemTime(now);
+      const commentAt = (id: string, elapsedMs: number): PreviewComment => ({
+        id, projectId: 'project-1', conversationId: 'conversation-1', filePath: 'preview.html',
+        elementId: id, selector: '[data-od-id="hero-copy"]', label: 'Hero copy', text: 'Hero copy',
+        htmlHint: '<p data-od-id="hero-copy">', position: { x: 0, y: 0, width: 1, height: 1 },
+        note: id, status: 'open', createdAt: now.getTime() - elapsedMs, updatedAt: now.getTime() - elapsedMs,
+      });
+      render(
+        <CommentSidePanel
+          comments={[
+            commentAt('seconds', 59_999), commentAt('minute', 60_000), commentAt('minutes', 59 * 60_000),
+            commentAt('hour', 60 * 60_000), commentAt('hours', 23 * 60 * 60_000),
+            commentAt('midnight', 59 * 60_000), commentAt('year', 59 * 60_000),
+          ]}
+          selectedIds={new Set()} activeCommentId={null} collapsed={false}
+          onCollapsedChange={() => {}} onToggleSelect={() => {}} onSelectAll={() => {}}
+          onClearSelection={() => {}} onReply={() => {}} onSendSelected={() => {}}
+          sending={false} t={t}
+        />,
+      );
+      const times = Array.from(document.querySelectorAll('.comment-side-time')).map((node) => node.textContent);
+      // O7: the hour bucket is keyed on calendar day, not <24h elapsed — the
+      // 23h-ago 'hours' comment crosses this fake clock's midnight, so it now
+      // reads "昨天" (common.yesterday) instead of "N 小时前".
+      expect(times).toEqual([
+        'common.justNow', 'common.minutesAgo', 'common.minutesAgo', 'common.hoursAgo',
+        'common.yesterday', 'common.minutesAgo', 'common.minutesAgo',
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('lets the inspect panel shrink inside narrow preview layouts', () => {
@@ -13240,6 +13590,35 @@ describe('FileViewer tweaks toolbar', () => {
     const rule = css.match(/\.inspect-panel\s*\{[^}]+\}/)?.[0] ?? '';
 
     expect(rule).toContain('width: min(296px, calc(100% - 28px));');
+  });
+
+  it('declares the authoritative shared comment-panel visual contract', () => {
+    const coreCss = readFileSync(join(process.cwd(), 'src/styles/viewer/core.css'), 'utf8');
+    const shellCss = readFileSync(join(process.cwd(), 'src/styles/shell.css'), 'utf8');
+    const rule = (css: string, selector: string) => {
+      const start = css.indexOf(`${selector} {`);
+      return start < 0 ? '' : css.slice(start, css.indexOf('}', start) + 1);
+    };
+    const coreRule = (selector: string) => rule(coreCss, selector);
+    const shellRule = (selector: string) => rule(shellCss, selector);
+
+    expect(coreRule('.comment-side-panel')).toContain('width: 320px;');
+    expect(coreRule('.comment-side-header')).toContain('height: 56px;');
+    expect(coreRule('.comment-side-header')).toContain('padding: 0 16px;');
+    expect(coreRule('.comment-side-list')).toContain('padding: 8px 12px;');
+    expect(coreRule('.comment-side-list')).toContain('gap: 6px;');
+    expect(coreRule('.comment-side-item')).toContain('padding: 6px 10px 6px 8px;');
+    expect(coreRule('.comment-side-item')).toContain('border-radius: 8px;');
+    expect(coreRule('.comment-side-time')).toContain('font-size: 10.5px;');
+    expect(coreRule('.comment-side-check')).toContain('border: 1px solid #CFCFCF;');
+    expect(coreRule('.comment-side-selectbar')).toContain('height: 40px;');
+    expect(coreRule('.comment-side-selectbar')).toContain('padding: 4px 14px 8px;');
+    expect(coreRule('.comment-side-selectbar .primary')).toContain('background: #202020;');
+    expect(shellRule('.comment-float-host')).toContain('width: min(320px, calc(100vw - 32px));');
+    expect(shellRule('.comment-float-host')).toContain('border: 1px solid #E6E6E6;');
+    expect(shellRule('.comment-float-host')).toContain('box-shadow: none;');
+    expect(shellCss).toContain('padding-right: max(0px, min(348px, calc(100% - 160px)));');
+    expect(shellRule('.comment-float-host .comment-side-header')).toContain('min-height: 56px;');
   });
 
   it('reorders saved comments with the drag handle for send sequence', () => {
@@ -14711,5 +15090,86 @@ describe('LiveArtifactRefreshHistoryPanel', () => {
     expect(markup).toContain('从未');
     expect(markup).not.toContain('Last refreshed');
     expect(markup).not.toContain('>Never<');
+  });
+
+  it.each([
+    ['reanchored', 'versioned', '基于旧版本', { anchoredVersion: 1 }, { elementId: 'versioned', selector: '[data-od-id="versioned"]' }],
+    ['stale', 'moved', '锚点可能已移动', {}, { elementId: 'moved-now', selector: '[data-od-id="moved"]' }],
+    ['lost', 'lost', '锚点已丢失', {}, null],
+  ] as const)('localizes the %s anchor tooltip at the rendered marker', async (_state, elementId, expected, extra, target) => {
+    const comment: PreviewComment = {
+      id: `comment-${elementId}`,
+      projectId: 'project-1',
+      conversationId: 'conversation-1',
+      filePath: 'preview.html',
+      elementId,
+      selector: '[data-od-id="moved"]',
+      label: 'Heading',
+      text: 'Heading',
+      htmlHint: '<h1>Heading</h1>',
+      position: { x: 24, y: 32, width: 18, height: 18 },
+      note: 'Original note',
+      status: 'open',
+      createdAt: 1,
+      updatedAt: 1,
+      ...extra,
+    };
+    const collab: CollabContextValue = { ...projectWorkspaceCollabValue(teamWorkspaceContext()), enabled: true, publishedVersion: 2 };
+
+    render(
+      <I18nProvider initial="zh-CN">
+        <CollabProvider value={collab}>
+          <FileViewer projectId="project-1" projectKind="prototype" file={baseFile({ name: 'preview.html', path: 'preview.html', kind: 'html', mime: 'text/html' })} liveHtml='<html><body><main>Hero</main></body></html>' previewComments={[comment]} />
+          <TooltipLayer />
+        </CollabProvider>
+      </I18nProvider>,
+    );
+    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+    if (target) {
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: {
+          type: 'od:comment-target',
+          ...target,
+          label: 'Heading',
+          text: 'Heading',
+          position: { x: 24, y: 32, width: 18, height: 18 },
+          htmlHint: '<h1>Heading</h1>',
+        },
+      }));
+    }
+
+    const marker = await screen.findByTestId(`comment-saved-marker-${elementId}`);
+    const pin = marker.querySelector('button');
+    expect(marker).toHaveClass(`comment-saved-marker--${_state}`);
+    expect(pin).toHaveClass('comment-saved-pin', 'od-tooltip', 'tipd');
+    expect(pin).toHaveAttribute('data-tooltip', expect.stringContaining(expected));
+    expect(pin).toHaveAttribute('title', expect.stringContaining(expected));
+    expect(pin).toHaveAccessibleDescription(expect.stringContaining(expected));
+
+    fireEvent.pointerOver(pin!);
+    expect(screen.getByRole('tooltip')).toHaveTextContent(expected);
+    expect(pin).not.toHaveAttribute('title');
+    fireEvent.pointerOut(pin!);
+    expect(screen.queryByRole('tooltip')).toBeNull();
+    expect(pin).toHaveAttribute('title', expect.stringContaining(expected));
+
+    fireEvent.keyDown(document, { key: 'Tab' });
+    fireEvent.focusIn(pin!);
+    expect(screen.getByRole('tooltip')).toHaveTextContent(expected);
+    fireEvent.focusOut(pin!);
+    expect(screen.queryByRole('tooltip')).toBeNull();
+  });
+
+  it('keeps D1–D4 marker and deck-page presentation on the rendered selectors', () => {
+    const css = readFileSync(join(process.cwd(), 'src/styles/viewer/core.css'), 'utf8');
+    // chain4-owner 4.2b: 20px/weight 600/white ring -> 28px/weight 500/no
+    // ring; background is now set per-author inline (commentAuthorAvatarColor),
+    // so the base rule only keeps the #282828 fallback for anchor-lost pins
+    // that opt out of the inline color.
+    expect(css).toMatch(/\.comment-saved-pin,\s*\.comment-active-pin[\s\S]*?width: 28px;[\s\S]*?height: 28px;[\s\S]*?border: 0;[\s\S]*?border-radius: 50% 50% 50% 4px;[\s\S]*?background: #282828;[\s\S]*?font-size: 12px;[\s\S]*?font-weight: 500;/);
+    expect(css).toMatch(/\.comment-saved-marker--lost \.comment-saved-pin[\s\S]*?border: 1px dashed #888888;[\s\S]*?background: #FFFFFF;[\s\S]*?color: #666666;[\s\S]*?box-shadow: none;/);
+    expect(css).toMatch(/\.comment-side-slide[\s\S]*?padding-left: 28px;[\s\S]*?color: #8A5A12;[\s\S]*?font-size: 12px;[\s\S]*?line-height: 18px;/);
   });
 });

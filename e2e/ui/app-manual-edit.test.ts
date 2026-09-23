@@ -27,6 +27,80 @@ test.beforeEach(async ({ page }) => {
   await applyStandardMocks(page);
 });
 
+test.use({ screenshot: 'off', video: 'off', trace: 'off' });
+test('B2 real export opens the history-gated share guide', async ({ page }, testInfo) => {
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'B2 export guide');
+  await seedHtmlArtifact(page, projectId, 'guide.html', '<!doctype html><html><head><title>B2 export</title></head><body><h1>B2 export fixture</h1></body></html>');
+  await page.route('**/api/integrations/vela/status*', route => route.fulfill({ json: {
+    loggedIn: true, profile: 'test', configPath: '', user: { id: 'b2-browser-account', email: 'fixture@example.invalid' },
+  } }));
+  await page.route(`**/api/projects/${projectId}/share-state`, route => route.fulfill({ json: {
+    projectId, bindingExists: false, hasEverShared: false, publications: [],
+  } }));
+  await page.goto(`/projects/${projectId}/files/guide.html`);
+  await openDesignFile(page, 'guide.html');
+  await expect(artifactPreview(page)).toBeVisible();
+  await page.getByRole('button', { name: 'Export', exact: true }).click();
+  const downloaded = page.waitForEvent('download').catch(() => null);
+  const exported = page.waitForResponse(response => response.url().endsWith(`/api/projects/${projectId}/export/html`) && response.request().method() === 'POST');
+  await page.getByRole('menuitem', { name: /Export as standalone HTML/i }).click();
+  const exportResponse = await exported;
+  expect(exportResponse.ok(), `export ${exportResponse.status()}: ${(await exportResponse.text()).slice(0, 1000)}`).toBe(true);
+  expect(await downloaded).not.toBeNull();
+  const guide = page.getByRole('region', { name: 'Try sharing', exact: true });
+  await expect(guide).toBeVisible();
+  await guide.hover();
+  await expect(guide).toHaveCSS('border-radius', '10px');
+  await expect(guide).not.toContainText('Awaiting');
+  const capture = testInfo.outputPath('b2-guide.png');
+  await page.screenshot({ path: capture });
+  await testInfo.attach('B2 real export entry', { path: capture, contentType: 'image/png' });
+  await guide.getByRole('button', { name: 'Try sharing', exact: true }).click();
+  await expect(guide).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Share', exact: true })).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByRole('menu').getByRole('heading', { name: 'Share', exact: true })).toBeVisible();
+});
+
+test.describe('K8 scoped comment sync banner', () => {
+  test('real preview entry reads sync state and clears the banner after login refresh', async ({ page }) => {
+    await routeMockAgents(page);
+    const projectId = await createEmptyProject(page, 'K8 sync banner');
+    await seedHtmlArtifact(page, projectId, 'sync.html', manualEditHtml());
+    // First prove production registration on the actual tools-dev daemon.
+    // A local project has no verified cloud scope, so the honest result is null.
+    const actual = await page.request.get(`/api/projects/${projectId}/comment-sync-state`);
+    expect(actual.status()).toBe(200);
+    expect(await actual.json()).toBeNull();
+    let sessionMissing = true;
+    let reads = 0;
+    // Controlled upstream states prove the running UI consumption path, not
+    // successful cloud authentication or real scoped outbox delivery.
+    await page.route(`**/api/projects/${projectId}/comment-sync-state`, async route => {
+      expect(route.request().method()).toBe('GET');
+      reads += 1;
+      await route.fulfill({ json: { pending: sessionMissing ? 1 : 0, lastError: 'COMMENT_SYNC_DELIVERY_FAILED', sessionMissing, shareStopped: null } });
+    });
+    await page.goto(`/projects/${projectId}/files/sync.html`);
+    await openDesignFile(page, 'sync.html');
+    await expect(artifactPreview(page)).toBeVisible();
+    await clickPreviewToolbarAction(page, 'comment-panel-toggle', /^Comments \(\d+\)$/);
+    const panel = page.getByTestId('comment-side-panel');
+    await expect(panel).toBeVisible();
+    const banner = panel.getByRole('status');
+    await expect(banner).toContainText('Comment sync is paused');
+    await expect(banner.getByRole('button', { name: 'Sign in', exact: true })).toBeEnabled();
+    await expect(page.getByTestId('board-mode-toggle')).toBeEnabled();
+    const beforeLogin = reads;
+    sessionMissing = false;
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('od:amr-login-status-change', { detail: { reason: 'login' } })));
+    await expect.poll(() => reads).toBeGreaterThan(beforeLogin);
+    await expect(banner).toHaveCount(0);
+    await expect(panel).toBeVisible();
+    await expect(page.getByTestId('board-mode-toggle')).toBeEnabled();
+  });
+});
+
 test('[P0] manual edit inspector previews and persists page and selected element styles', async ({ page }) => {
   await routeMockAgents(page);
   const projectId = await createEmptyProject(page, 'Manual edit smoke');
@@ -382,7 +456,7 @@ test('[P0] @critical preview toolbar keeps share, download, comment, and zoom ac
   // This local Personal fixture deliberately has neither a Team identity nor
   // an authenticated public-publish capability. Keep this toolbar smoke about
   // the stable action surface instead of requiring a workspace-specific card.
-  await expect(shareMenu.getByText(/Share project in workspace/i)).toHaveCount(0);
+  await expect(shareMenu.getByText(/Share project in workspace|Visibility in workspace/i)).toHaveCount(0);
   await expect(shareMenu.getByText(/Publish this file/i)).toHaveCount(0);
   await page.keyboard.press('Escape');
   await expect(shareMenu).toHaveCount(0);
@@ -622,6 +696,43 @@ test('[P1] HTML preview toolbar exposes comments, mark, and edit workflows', asy
   await expect(page.locator('.manual-edit-modal')).toContainText('Hero title');
   await expect(page.locator('.manual-edit-modal')).toContainText('Parameters');
   await expect(page.getByRole('button', { name: /^Save$/ })).toBeVisible();
+});
+
+test('[P1] comment selection falls back from an empty od-id to its screen label in Chromium', async ({ page }) => {
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'Empty annotated selector');
+  await seedHtmlArtifact(page, projectId, 'empty-annotated-selector.html', emptyOdIdScreenLabelHtml());
+  const conversationId = await latestConversationId(page, projectId);
+  await page.goto(`/projects/${projectId}/conversations/${conversationId}/files/empty-annotated-selector.html`);
+  await openDesignFile(page, 'empty-annotated-selector.html');
+
+  await clickPreviewToolbarAction(page, 'board-mode-toggle', /^Comment$/);
+  const frame = artifactPreviewFrame(page);
+  const target = frame.locator('[data-screen-label="Home"]');
+  await expect(target).toBeVisible();
+  expect(await target.evaluate((element) => (
+    document.querySelector('[data-screen-label="Home"]') === element
+  ))).toBe(true);
+
+  await target.click();
+  const popover = page.getByTestId('comment-popover');
+  await expect(popover).toBeVisible();
+  await popover.getByTestId('comment-popover-input').fill('Keep this screen label anchored');
+  const savedRequest = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return request.method() === 'POST' && url.pathname.endsWith(`/conversations/${conversationId}/comments`);
+  });
+  const savedResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return response.request().method() === 'POST' && url.pathname.endsWith(`/conversations/${conversationId}/comments`);
+  });
+  await popover.getByRole('button', { name: /^Comment$/ }).click();
+  expect((await savedResponse).ok()).toBe(true);
+  const body = (await savedRequest).postDataJSON() as { target?: { elementId?: string; selector?: string } };
+  expect(body.target).toMatchObject({
+    elementId: 'Home',
+    selector: '[data-screen-label="Home"]',
+  });
 });
 
 test('[P1] draw annotation composer floats near the selected mark and can be queued', async ({ page }) => {
@@ -1295,6 +1406,19 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function emptyOdIdScreenLabelHtml(): string {
+  return `<!doctype html>
+<html>
+  <body>
+    <main>
+      <section data-od-id="" data-screen-label="Home" style="width:320px;min-height:80px;padding:24px">
+        Empty id, Home screen label
+      </section>
+    </main>
+  </body>
+</html>`;
+}
+
 function manualEditHtml(): string {
   return `<!doctype html>
 <html>
@@ -1415,30 +1539,6 @@ function linkedMobilePageHtml(
       <h1>${heading}</h1>
       <a href="${href}">${linkLabel}</a>
     </main>
-  </body>
-</html>`;
-}
-
-function deckHtml(): string {
-  return `<!doctype html>
-<html>
-  <body>
-    <section class="slide" data-od-id="slide-1"><h1>Slide One</h1></section>
-    <section class="slide" data-od-id="slide-2" hidden><h1>Slide Two</h1></section>
-    <script>
-      let active = 0;
-      const slides = Array.from(document.querySelectorAll('.slide'));
-      function render() { slides.forEach((slide, index) => { slide.hidden = index !== active; }); }
-      window.addEventListener('message', (event) => {
-        if (!event.data || event.data.type !== 'od:slide') return;
-        if (event.data.action === 'next') active = Math.min(slides.length - 1, active + 1);
-        if (event.data.action === 'prev') active = Math.max(0, active - 1);
-        render();
-        window.parent.postMessage({ type: 'od:slide-state', active, count: slides.length }, '*');
-      });
-      render();
-      window.parent.postMessage({ type: 'od:slide-state', active, count: slides.length }, '*');
-    </script>
   </body>
 </html>`;
 }

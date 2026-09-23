@@ -1,0 +1,23 @@
+.root { position: relative; display: flex; }
+button.trigger {
+  box-sizing: border-box;
+  width: 20px; min-width: 0; height: 20px; padding: 3px;
+  border: 0; border-radius: 5px; background: transparent; color: #858585;
+  display: flex; align-items: center; justify-content: center;
+}
+.menu {
+  position: absolute; inset-inline-end: 0; top: calc(100% + 4px); z-index: 1;
+  box-sizing: border-box; width: 214px; padding: 4px;
+  display: flex; flex-direction: column; gap: 2px;
+  border: 1px solid #00000008; border-radius: 8px; background: #fff;
+  box-shadow: 0 6px 20px #00000012, 0 1px 4px #00000006;
+}
+.menu[hidden] { display: none; }
+button.item {
+  box-sizing: border-box; display: flex; align-items: center; justify-content: flex-start;
+  width: 100%; min-width: 0; height: 28px; padding: 0 8px; gap: 8px;
+  border: 0; border-radius: 4px; background: transparent; color: #494949;
+  font-size: 12px; font-weight: 400; line-height: normal; white-space: nowrap;
+}
+button.item:not(:disabled):hover, button.item:focus-visible { background: #F2F2F4; color: #1F1F1F; }
+button.item:disabled { opacity: 0.5; }

@@ -71,13 +71,23 @@ function htmlFile(): ProjectFile {
 }
 
 /** 分享面板挂上之后才发的那几个请求;不喂它们 `canShare` 永远为假,按钮压根不出现。 */
-function stubFetch() {
-  vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+function stubFetch(published = false) {
+  const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+    // Keep the production local social payload fallback instead of returning a malformed payload.
+    if (url.includes('/social-share')) return new Response('{}', { status: 503 });
+    if (url.includes('publish-public')) {
+      const publication = { url: 'https://open-design.ai/artifact/project-1/stable-slug', slug: 'stable-slug', fileName: 'index.html' };
+      if (init?.method === 'POST') return new Response(JSON.stringify(publication), { status: 200 });
+      if (init?.method === 'DELETE') return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      return new Response(JSON.stringify({ publication: published ? publication : null }), { status: 200 });
+    }
     if (url.includes('/deployments')) return new Response(JSON.stringify({ deployments: [] }), { status: 200 });
     if (url.includes('/deploy/config')) return new Response(JSON.stringify({ providerId: 'cloudflare-pages', configured: false }), { status: 200 });
     return new Response(JSON.stringify({}), { status: 200 });
-  }));
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  return fetchMock;
 }
 
 function teamContext(): WorkspaceCollabContext {
@@ -121,18 +131,41 @@ function collabValue(workspaceContext: WorkspaceCollabContext | null): CollabCon
   };
 }
 
-function renderViewer(workspaceContext: WorkspaceCollabContext | null) {
+function renderViewer(workspaceContext: WorkspaceCollabContext | null, options: { streaming?: boolean; viewerOnly?: boolean; shareRequest?: { nonce: number; anchorId: string } } = {}) {
   const viewer = (
+    <>
+    {options.shareRequest ? <button data-artifact-anchor={options.shareRequest.anchorId}>Card Share</button> : null}
     <FileViewer
       projectId="project-1"
       projectKind="prototype"
       file={htmlFile()}
       liveHtml="<html><body><h1>Hello</h1></body></html>"
+      streaming={options.streaming}
+      viewerOnly={options.viewerOnly}
+      shareRequest={options.shareRequest}
     />
+    </>
   );
   if (!workspaceContext) return render(viewer);
   return render(<CollabProvider value={collabValue(workspaceContext)}>{viewer}</CollabProvider>);
 }
+
+it('does not issue a stop request from a read-only published HTML share panel', async () => {
+  const request = stubFetch(true);
+  const context = teamContext();
+  const file = htmlFile();
+  function Host({ readOnly }: { readOnly: boolean }) {
+    return <CollabProvider value={collabValue(context)}><FileViewer projectId="project-1" projectKind="prototype" file={file} liveHtml="<html><body>Hello</body></html>" viewerOnly={readOnly} /></CollabProvider>;
+  }
+  const { rerender } = render(<Host readOnly={false} />);
+  fireEvent.click(toolbarAction('Share'));
+  await screen.findByRole('button', { name: 'Stop sharing' });
+  rerender(<Host readOnly />);
+  // The host already clears publication state on a permission change. Preserve
+  // that stricter policy; isolated ShareTab tests cover a retained read-only URL.
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Stop sharing' })).toBeNull());
+  expect(request.mock.calls.some(([, init]) => init?.method === 'DELETE')).toBe(false);
+});
 
 function toolbarAction(label: 'Share' | 'Export'): HTMLButtonElement {
   const node = document.querySelector<HTMLButtonElement>(
@@ -159,17 +192,27 @@ describe('Z11a · ShareTab 搬动前的 DOM 基线', () => {
   it('个人工作区:面板只有自有托管部署那一段,逐字节不变', async () => {
     const panel = await openSharePanel(null);
     expect(panel.innerHTML).toBe(baseline('share-panel.personal.html'));
+    expect(screen.getByRole('heading', { name: 'Share', level: 2 })).toBeVisible();
   });
 
   it('团队工作区:可见范围 + 发布两段也在,逐字节不变', async () => {
     const panel = await openSharePanel(teamContext());
     expect(panel.innerHTML).toBe(baseline('share-panel.team.html'));
+    expect(screen.getByRole('heading', { name: 'Share', level: 2 })).toBeVisible();
   });
 
   it('团队基线确实比个人基线多出那两段(否则上一条在裸奔)', () => {
     const personal = baseline('share-panel.personal.html');
     const team = baseline('share-panel.team.html');
-    expect(team.length).toBeGreaterThan(personal.length * 2);
+    // Removing the tooltip SVG changes byte ratios, not section ownership.
+    for (const marker of ['class="chrome-access-select"', 'Generate and copy link']) {
+      expect(team).toContain(marker);
+      expect(personal).not.toContain(marker);
+    }
+    for (const html of [personal, team]) {
+      expect(html).not.toContain('Deploy to Vercel');
+      expect(html).not.toContain('Deploy to Cloudflare Pages');
+    }
     expect(team).toContain('share-menu-section-label--help');
   });
 
@@ -200,6 +243,162 @@ describe('Z11a · ShareTab 搬动前的 DOM 基线', () => {
   });
 });
 
+describe('Shared share shell header', () => {
+  it.each([false, true])('puts workspace scope after the public action with deployment in the header, published=%s', async published => {
+    stubFetch(published);
+    renderViewer(teamContext());
+    fireEvent.click(toolbarAction('Share'));
+    const action = published
+      ? await screen.findByRole('button', { name: /copy share link/i })
+      : await screen.findByRole('menuitem', { name: /Generate and copy link/i });
+    const scope = screen.getByText('Visibility in workspace');
+    const trigger = document.querySelector('.chrome-access-trigger')!;
+    const chevron = trigger.querySelector(':scope > svg')!;
+    for (const [name, value] of Object.entries({ width: '12', height: '12', viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.5', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true', focusable: 'false' })) {
+      expect(chevron).toHaveAttribute(name, value);
+    }
+    expect(chevron.querySelector('path')).toHaveAttribute('d', 'm4 6 4 4 4-4');
+    const row = scope.parentElement!.parentElement!;
+    expect(trigger.parentElement!.parentElement).toBe(row);
+    expect(row.nextElementSibling).toHaveTextContent('Only you can access this project. Choose workspace members to share it with the team.');
+    fireEvent.click(screen.getByRole('button', { name: 'More sharing options' }));
+    const deploy = screen.getByRole('menuitem', { name: /Deploy to Vercel/i });
+    expect(action.compareDocumentPosition(scope) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(deploy.compareDocumentPosition(scope) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+  it.each([
+    ['toolbar', false], ['toolbar', true], ['artifact-card', false], ['artifact-card', true],
+  ] as const)('%s published=%s closes and reopens without changing publication', async (origin, published) => {
+    const fetchMock = stubFetch(published);
+    renderViewer(teamContext(), origin === 'artifact-card'
+      ? { shareRequest: { nonce: 701, anchorId: 'header-card' } } : {});
+    if (origin === 'toolbar') fireEvent.click(toolbarAction('Share'));
+    if (published) await screen.findByRole('button', { name: /stop sharing/i });
+    else await screen.findByRole('menuitem', { name: /Generate and copy link/i });
+    const heading = await screen.findByRole('heading', { name: 'Share', level: 2 });
+    expect(heading.parentElement?.nextElementSibling).toHaveClass('chrome-unified-panel--share');
+    const close = screen.getByRole('button', { name: 'Close' });
+    expect(close).toHaveAccessibleName('Close');
+    expect(close).toBeEnabled();
+    fireEvent.click(close);
+    expect(screen.queryByRole('heading', { name: 'Share' })).toBeNull();
+    expect(document.querySelector('.chrome-unified-panel--share')).toBeNull();
+    fireEvent.click(toolbarAction('Share'));
+    await screen.findByRole('heading', { name: 'Share' });
+    const publishRequests = fetchMock.mock.calls.filter(([input, init]) =>
+      String(input).includes('publish-public') && ['POST', 'DELETE'].includes(init?.method ?? 'GET'));
+    expect(publishRequests).toEqual([]);
+  });
+});
+
+describe('G4 · retired HTML publishing section label', () => {
+  it.each(['toolbar', 'artifact-card'] as const)('%s keeps publishing without the old label', async (origin) => {
+    const fetchMock = stubFetch();
+    renderViewer(teamContext(), origin === 'artifact-card'
+      ? { shareRequest: { nonce: 401, anchorId: 'g4-card' } } : {});
+    expect(toolbarAction('Share')).toBeEnabled();
+    if (origin === 'toolbar') fireEvent.click(toolbarAction('Share'));
+    const publish = await screen.findByRole('menuitem', { name: /Generate and copy link/i });
+    // Actual English rendering of fileViewer.shareMenuPublishViaOd, not a mocked t().
+    expect(screen.queryByText('QUICK SHARE · OPENDESIGN')).toBeNull();
+    expect(document.querySelectorAll('.chrome-unified-panel--share')).toHaveLength(1);
+    if (origin === 'artifact-card') {
+      expect(document.querySelector('[data-artifact-anchor="g4-card"]')).not.toBeNull();
+      expect(document.querySelector('.chrome-access-trigger')).toBeNull();
+    } else {
+      fireEvent.click(document.querySelector<HTMLButtonElement>('.chrome-access-trigger')!);
+      expect(screen.getAllByRole('option')).toHaveLength(2);
+      const selected = screen.getByRole('option', { name: 'Only me' });
+      expect(selected).toHaveAttribute('aria-selected', 'true');
+      const check = selected.querySelector(':scope > svg');
+      expect(check).not.toBeNull();
+      for (const [name, value] of Object.entries({ width: '13', height: '13', viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.8', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true', focusable: 'false' })) {
+        expect(check).toHaveAttribute(name, value);
+      }
+      expect(check?.querySelector('path')).toHaveAttribute('d', 'm3 8 3 3 7-7');
+      expect(screen.getByRole('option', { name: 'Workspace members' }).querySelector(':scope > svg')).toBeNull();
+    }
+    fireEvent.click(publish);
+    await screen.findByRole('button', { name: /stop sharing/i });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/projects/project-1/files/index.html/publish-public',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it.each(['toolbar', 'artifact-card'] as const)('%s hydrates the exact publication URL and keeps copy/stop usable', async (origin) => {
+    const fetchMock = stubFetch(true);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('navigator', { userAgent: navigator.userAgent, clipboard: { writeText } });
+    renderViewer(teamContext(), origin === 'artifact-card'
+      ? { shareRequest: { nonce: 402, anchorId: 'g4-published-card' } } : {});
+    if (origin === 'toolbar') fireEvent.click(toolbarAction('Share'));
+    const stop = await screen.findByRole('button', { name: /stop sharing/i });
+    const url = 'https://open-design.ai/artifact/project-1/stable-slug';
+    const panel = document.querySelector<HTMLElement>('.chrome-unified-panel--share')!;
+    expect(panel.querySelector('.chrome-publish-url')?.textContent).toBe(url);
+    expect(panel.querySelector('.chrome-publish-url')).toHaveAttribute('title', url);
+    expect(panel.querySelector('input')).toBeNull();
+    expect(screen.queryByText('QUICK SHARE · OPENDESIGN')).toBeNull();
+    expect(stop).toBeEnabled();
+    const copy = screen.getByRole('button', { name: /copy share link/i });
+    expect(copy).toBeEnabled();
+    fireEvent.click(copy);
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(url));
+    fireEvent.click(stop);
+    await screen.findByRole('menuitem', { name: /Generate and copy link/i });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/projects/project-1/files/index.html/publish-public',
+      expect.objectContaining({ method: 'DELETE', body: JSON.stringify({ slug: 'stable-slug' }) }),
+    );
+  });
+});
+
+describe('S12 · HTML share menu', () => {
+  it.each(['streaming', 'viewerOnly'] as const)('keeps provider actions disabled while %s', async (restriction) => {
+    stubFetch();
+    renderViewer(teamContext(), { [restriction]: true });
+    if (restriction === 'viewerOnly') {
+      expect(toolbarAction('Share')).toBeDisabled();
+      fireEvent.click(toolbarAction('Share'));
+      expect(screen.queryByRole('menuitem', { name: /Deploy to/i })).toBeNull();
+      return;
+    }
+    fireEvent.click(toolbarAction('Share'));
+    fireEvent.click(screen.getByRole('button', { name: 'More sharing options' }));
+    for (const name of [/Deploy to Vercel/i, /Deploy to Cloudflare Pages/i]) {
+      const provider = await screen.findByRole('menuitem', { name });
+      expect(provider).toBeDisabled();
+      expect(provider).toHaveAttribute('title');
+      fireEvent.click(provider);
+    }
+    expect(screen.queryByRole('combobox', { name: /Provider/i })).toBeNull();
+  });
+
+  it('keeps artifact-card Share limited to quick publishing', async () => {
+    stubFetch();
+    renderViewer(teamContext(), { shareRequest: { nonce: 123, anchorId: 's12-card' } });
+    await screen.findByRole('menuitem', { name: /Generate and copy link/i });
+    expect(screen.queryByRole('menuitem', { name: /Deploy to/i })).toBeNull();
+    expect(document.querySelector('.social-share-grid')).toBeNull();
+    expect(document.querySelector('.chrome-access-trigger')).toBeNull();
+  });
+
+  it('keeps deployment providers but excludes social sharing after publication', async () => {
+    stubFetch(true);
+    renderViewer(teamContext());
+    fireEvent.click(toolbarAction('Share'));
+    await screen.findByRole('button', { name: /stop sharing/i });
+    const panel = document.querySelector<HTMLElement>('.chrome-unified-panel--share')!;
+    expect(panel.querySelector('.chrome-publish-url')?.textContent).toBe('https://open-design.ai/artifact/project-1/stable-slug');
+    fireEvent.click(screen.getByRole('button', { name: 'More sharing options' }));
+    expect(screen.getByRole('menuitem', { name: /Deploy to Vercel/i })).toBeEnabled();
+    expect(screen.getByRole('menuitem', { name: /Deploy to Cloudflare Pages/i })).toBeEnabled();
+    expect(panel.querySelector('.social-share-grid')).toBeNull();
+    expect(panel.querySelectorAll('.social-share-button')).toHaveLength(0);
+  });
+});
+
 describe('Z11a · 基线守不住、但必须守住的几条', () => {
   it('分享与导出仍是同一块弹层的两个页签,不是两块弹层', async () => {
     await openSharePanel(null);
@@ -210,6 +409,7 @@ describe('Z11a · 基线守不住、但必须守住的几条', () => {
       expect(document.querySelector('.chrome-unified-panel--share'), '换页签后分享那一份还在').toBeNull(),
     );
     expect(document.querySelectorAll('.chrome-unified-popover'), '叠出了第二块弹层').toHaveLength(1);
+    expect(screen.queryByRole('heading', { name: 'Share' })).toBeNull();
   });
 
   it('面板挂在预览区容器内,不是 body 级 dialog(负向)', async () => {
@@ -224,6 +424,7 @@ describe('Z11a · 基线守不住、但必须守住的几条', () => {
 
   it('弹层里仍有可点的 menuitem 行(面板不是空壳)', async () => {
     await openSharePanel(null);
+    fireEvent.click(screen.getByRole('button', { name: 'More sharing options' }));
     expect(
       screen.queryAllByRole('menuitem').length,
       '分享面板里一行 menuitem 都没有,说明搬丢了内容',

@@ -201,7 +201,7 @@ describe('pin_seq cloud reconciliation (recvq5BVsolIxi)', () => {
       createdAt: 1000,
       updatedAt: 1000,
     };
-    expect(mergeSyncedPreviewComment(db, 'project-1', 'conversation-1', wire)).toBe(true);
+    expect(mergeSyncedPreviewComment(db, 'project-1', 'conversation-1', wire)).toBe('changed');
     const merged = getPreviewComment(db, 'project-1', 'conversation-1', 'comment-from-peer');
     expect(merged?.pinSeq).toBe(777);
 
@@ -213,7 +213,7 @@ describe('pin_seq cloud reconciliation (recvq5BVsolIxi)', () => {
         note: 'Edited note',
         updatedAt: 2000,
       }),
-    ).toBe(true);
+    ).toBe('changed');
     const edited = getPreviewComment(db, 'project-1', 'conversation-1', 'comment-from-peer');
     expect(edited?.pinSeq).toBe(777);
     expect(edited?.note).toBe('Edited note');
@@ -294,7 +294,7 @@ describe('pin_seq concurrency — two devices, no collision after confirmation (
       createdAt: commentB!.createdAt,
       updatedAt: commentB!.updatedAt,
     };
-    expect(mergeSyncedPreviewComment(deviceAAgain, 'project-1', 'conversation-1', pulled)).toBe(true);
+    expect(mergeSyncedPreviewComment(deviceAAgain, 'project-1', 'conversation-1', pulled)).toBe('changed');
     const mergedOnA = getPreviewComment(deviceAAgain, 'project-1', 'conversation-1', commentB!.id);
     expect(mergedOnA?.pinSeq).toBe(502);
     expect(mergedOnA?.pinSeq).not.toBe(confirmedA?.pinSeq);

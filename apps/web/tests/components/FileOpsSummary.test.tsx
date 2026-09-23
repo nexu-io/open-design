@@ -3,6 +3,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { CollabProvider, useProjectCollabContext } from '../../src/collab/collab-context';
 import { FileOpsSummary } from '../../src/components/FileOpsSummary';
 import type { FileOpEntry } from '../../src/runtime/file-ops';
 
@@ -292,6 +293,41 @@ describe('FileOpsSummary artifact cards', () => {
     );
   });
 
+  it('uses production collab authority to disable Share without removing its anchor', () => {
+    const onPublish = vi.fn();
+    function ReadonlyCard() {
+      const collab = useProjectCollabContext();
+      return <CollabProvider value={{ ...collab, viewerOnly: true }}>
+        <FileOpsSummary entries={[entry({ path: 'result.html' })]} projectId="proj-1" onPublish={onPublish} turnIsLive />
+      </CollabProvider>;
+    }
+    render(<ReadonlyCard />);
+    const share = screen.getByTestId('artifact-card-publish-result.html');
+    expect(share).toBeDisabled();
+    expect(share).toHaveAttribute('title', 'Shared project is read-only: you can comment, but cannot edit or export.');
+    expect(share.getAttribute('data-artifact-anchor')).toMatch(/^publish:[^:]+:result.html$/);
+    fireEvent.click(share);
+    expect(onPublish).not.toHaveBeenCalled();
+  });
+
+  it('keeps one stable Share anchor disabled until the generating turn ends', () => {
+    const onPublish = vi.fn();
+    const props = { entries: [entry({ path: 'result.html' })], projectId: 'proj-1', onPublish };
+    const view = render(<FileOpsSummary {...props} turnIsLive />);
+    const share = screen.getByTestId('artifact-card-publish-result.html');
+    const anchor = share.getAttribute('data-artifact-anchor');
+    expect(share).toBeDisabled();
+    expect(share).toHaveAttribute('title', 'Share after generation completes');
+    fireEvent.click(share);
+    expect(onPublish).not.toHaveBeenCalled();
+    view.rerender(<FileOpsSummary {...props} turnIsLive={false} />);
+    expect(screen.getAllByTestId('artifact-card-publish-result.html')).toHaveLength(1);
+    expect(share).toBeEnabled();
+    expect(share).toHaveAttribute('data-artifact-anchor', anchor);
+    fireEvent.click(share);
+    expect(onPublish).toHaveBeenCalledExactlyOnceWith('result.html', anchor);
+  });
+
   it('leaves a non-HTML artifact with export alone (grid 32)', () => {
     render(
       <FileOpsSummary
@@ -333,7 +369,7 @@ describe('FileOpsSummary artifact cards', () => {
     expect(card.querySelectorAll('.artifact-card-act')).toHaveLength(1);
   });
 
-  it('shows a still-writing artifact as a placeholder with no actions (D37)', () => {
+  it('keeps a disabled Share entry on a still-writing HTML placeholder (A27)', () => {
     render(
       <FileOpsSummary
         entries={[entry({ path: 'result.html', status: 'running' })]}
@@ -354,7 +390,10 @@ describe('FileOpsSummary artifact cards', () => {
     const card = screen.getByTestId('artifact-card-result.html');
     expect(card.className).toContain('is-pending');
     expect(card.querySelector('.artifact-card-mini')).toBeTruthy();
-    expect(card.querySelector('.artifact-card-acts')).toBeNull();
+    const share = screen.getByTestId('artifact-card-publish-result.html');
+    expect(share).toBeDisabled();
+    expect(share).toHaveAttribute('title', 'Share after generation completes');
+    expect(screen.queryByTestId('artifact-card-export-result.html')).toBeNull();
     expect(screen.queryByTestId('artifact-card-open-result.html')).toBeNull();
   });
 

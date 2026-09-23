@@ -67,6 +67,7 @@ import {
   resolveOptionalLocalWorkspaceRequestAuthority,
 } from '../src/collab/workspace-resource-mutation.js';
 import { createCollabCloudService } from '../src/collab/collab-cloud-service.js';
+import { resolveLocalProjectCommentWorkspaceContext } from '../src/collab/project-comment-workspace-context.js';
 import {
   commentRelayLocalBindingMatches,
   createCommentRelayOutboxStore,
@@ -204,79 +205,16 @@ function resolveCommentWorkspaceContext(
   db: ReturnType<typeof openDatabase>,
   req: unknown,
   projectId: string,
-):
-  | { ok: true; context: WorkspaceCollabContext | null }
-  | { ok: false; status: 400 | 401 | 403 | 503; code: string; message: string } {
-  const binding = getWorkspaceProjectByProjectId(db, projectId) as
-    | LocalBinding
-    | undefined;
-  if (!binding?.workspaceId) return { ok: true as const, context: null };
-  if (binding.resourceState === 'deleted') {
-    return {
-      ok: false as const,
-      status: 403 as const,
-      code: 'WORKSPACE_PROJECT_PERMISSION_DENIED',
-      message: 'workspace project read is not allowed',
-    };
-  }
-  const local = resolveOptionalLocalWorkspaceRequestAuthority(req);
-  if (!local.ok) return local as never;
-  if (!local.context) {
-    // 生产代码在这里会合成一个 context;本 fixture 的每个请求都带头,所以走到
-    // 这里说明 fixture 的前提被破坏了,宁可炸也不要静默换一条语义。
-    throw new Error('fixture invariant: every request must carry workspace headers');
-  }
-  if (
-    local.context.workspaceId !== binding.workspaceId
-    || (
-      binding.visibility !== 'team'
-      && binding.createdByWorkspaceMemberId
-      && local.context.workspaceMemberId !== binding.createdByWorkspaceMemberId
-    )
-  ) {
-    return {
-      ok: false as const,
-      status: 403 as const,
-      code: 'WORKSPACE_PROJECT_PERMISSION_DENIED',
-      message: 'workspace project access is not allowed',
-    };
-  }
-  // Transcribed VERBATIM from production, conditional spread included.
-  //
-  // Production writes `teamId: null` for a personal binding while the
-  // contract declares `teamId?: string`. It typechecks only because a spread
-  // is checked more loosely than a direct assignment — write
-  // `teamId: cond ? x : null` here instead and it goes red. So the spread is
-  // load-bearing for the transcription, not a stylistic leftover: changing
-  // it would make this fixture disagree with the code it exists to pin.
-  //
-  // The underlying divergence (production putting `null` in a `string |
-  // undefined` field) is recorded for lane ④ to resolve when this resolver
-  // is lifted out of `startServer` and becomes importable.
-  return {
-    ok: true as const,
-    context: {
-      ...local.context,
-      workspaceType: binding.visibility === 'team' ? 'team' : 'personal',
-      ...(binding.visibility === 'team'
-        ? { teamId: binding.workspaceId }
-        : { teamId: null }),
+) {
+  const binding = getWorkspaceProjectByProjectId(db, projectId) as LocalBinding | undefined;
+  return resolveLocalProjectCommentWorkspaceContext({
+    binding,
+    revoked: false,
+    local: resolveOptionalLocalWorkspaceRequestAuthority(req),
+    fallbackContext: () => {
+      throw new Error('fixture invariant: every request must carry workspace headers');
     },
-    // The ONE cast in this fixture, sitting exactly on the divergence it
-    // covers. Production writes `teamId: null` for a personal binding while
-    // `WorkspaceCollabContext` declares `teamId?: string`; that typechecks
-    // there only because the resolver lives inside `startServer`, unexported
-    // and unannotated, so nothing ever compares it to the declared type.
-    //
-    // Writing `undefined` here instead would make this fixture pin behaviour
-    // the code does not have — in the one file whose entire job is to pin
-    // behaviour the code DOES have. So the transcription stays verbatim and
-    // the mismatch is admitted here rather than smoothed away.
-    //
-    // A7: once this resolver is lifted out of `startServer` and becomes
-    // importable, delete the cast, import the real function, and settle
-    // whether `teamId: null` or `teamId?: string` is the truth.
-  } as { ok: true; context: WorkspaceCollabContext | null };
+  });
 }
 
 // ---------------------------------------------------------------------------

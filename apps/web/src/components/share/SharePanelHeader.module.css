@@ -1,0 +1,37 @@
+/* Chain-1/5 shared .head/.tool; only the sharing shell owns this header. */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 24px;
+}
+
+.tools { display: flex; align-items: center; gap: 4px; }
+
+.title {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+  line-height: 22px;
+  font-weight: 600;
+}
+
+button.close {
+  box-sizing: border-box;
+  flex: 0 0 20px;
+  width: 20px;
+  min-width: 0;
+  height: 20px;
+  padding: 3px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #858585;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

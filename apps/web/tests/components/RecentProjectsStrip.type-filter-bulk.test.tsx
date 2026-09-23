@@ -462,6 +462,28 @@ describe('RecentProjectsStrip bulk selection bar (#75)', () => {
     expect(container.querySelector('.recent-projects__bulkbar')).toBeNull();
   });
 
+  it('preserves the main no-share batch dialog DOM and cancel does not delete', () => {
+    // Production markup/copy verified byte-identical to main 8e372744dda5
+    // before recording; do not regenerate this baseline for share warnings.
+    const onDelete = vi.fn();
+    const { container } = renderGrid({
+      canManageProjectCollection: true,
+      collaborationEnabled: true,
+      onDelete,
+    });
+    const bar = enterSelectionMode(container, ['Deck project', 'Media project']);
+    fireEvent.click(within(bar).getByText('Delete selected'));
+    const dialog = screen.getByRole('alertdialog');
+    const titleId = dialog.getAttribute('aria-labelledby')!;
+    expect(dialog.outerHTML.replaceAll(titleId, 'delete-title')).toBe(
+      `<div class="_dialog_8e4a21 modal modal-confirm" role="alertdialog" aria-modal="true" aria-labelledby="delete-title"><h2 class="_title_8e4a21" id="delete-title">Delete project</h2><p class="_description_8e4a21">Delete 2 project(s)?</p><div class="_footer_8e4a21 row"><button type="button">Cancel</button><button type="button" class="primary danger">Delete selected</button></div></div>`,
+    );
+    expect(onDelete).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(onDelete).not.toHaveBeenCalled();
+  });
+
   it('confirms before deleting the whole selection', async () => {
     const onDelete = vi.fn((_id: string) => true);
     const { container } = renderGrid({

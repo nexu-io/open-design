@@ -590,6 +590,17 @@ function migrate(db: SqliteDb): void {
   if (!previewCommentAuthorCols.some((c: DbRow) => c.name === 'author_key')) {
     db.exec(`ALTER TABLE preview_comments ADD COLUMN author_key TEXT`);
   }
+  // Read markers are project-scoped; the viewer filters its current file.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS project_comment_read_state (
+      project_id TEXT NOT NULL,
+      viewer_scope TEXT NOT NULL,
+      last_read_at INTEGER NOT NULL,
+      PRIMARY KEY (project_id, viewer_scope),
+      FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+  `);
+
   const deploymentCols = db.prepare(`PRAGMA table_info(deployments)`).all() as DbRow[];
   if (!deploymentCols.some((c: DbRow) => c.name === 'status')) {
     db.exec(`ALTER TABLE deployments ADD COLUMN status TEXT NOT NULL DEFAULT 'ready'`);
@@ -3722,7 +3733,16 @@ const PREVIEW_COMMENT_STATUSES = new Set([
   'failed',
 ]);
 
-export function listPreviewComments(db: SqliteDb, projectId: string, conversationId: string) {
+/** Server-controlled read scope; never populated from a request body. */
+interface PreviewCommentReadOptions {
+  /** Include the same project's reserved inbound anchor, not other private chats. */
+  includeProjectAnchor?: boolean;
+}
+
+export function listPreviewComments(
+  db: SqliteDb, projectId: string, conversationId: string,
+  options: PreviewCommentReadOptions = {},
+) {
   return (db
     .prepare(
       `SELECT id, project_id AS projectId, conversation_id AS conversationId,
@@ -3739,10 +3759,11 @@ export function listPreviewComments(db: SqliteDb, projectId: string, conversatio
               pin_seq AS pinSeq, sort_key AS sortKey,
               note, status, created_at AS createdAt, updated_at AS updatedAt
          FROM preview_comments
-        WHERE project_id = ? AND conversation_id = ?
+        WHERE project_id = ? AND (conversation_id = ? OR conversation_id = ?)
         ORDER BY created_at ASC, rowid ASC`,
     )
-    .all(projectId, conversationId) as DbRow[])
+    .all(projectId, conversationId, options.includeProjectAnchor
+      ? getProjectCommentAnchorConversationId(db, projectId) : null) as DbRow[])
     .map(normalizePreviewComment);
 }
 
@@ -4194,13 +4215,11 @@ export function ensureTeamProjectCommentConversations(
 }
 
 /**
- * Repair the comment-anchor invariant for historical active Team projects.
- *
- * Older databases can contain Team bindings created before pulled mirrors and
- * Team shares seeded a local conversation. Comments are project-scoped in the
- * collaboration protocol but still need a daemon-local conversation FK. Run
- * this once at startup instead of mutating the database from a comments GET.
- * Personal and deleted bindings intentionally keep their existing behavior.
+ * Every relay-eligible project needs the same internal conversation FK: all
+ * active Team projects and personal projects with a persisted public share.
+ * Repair historical data at startup, never as a side effect of comments GET.
+ * Only Team projects also need a public routing conversation; personal shares
+ * must not create or replace an ordinary chat just to receive web comments.
  */
 export function repairTeamProjectCommentAnchorConversations(
   db: SqliteDb,
@@ -4208,19 +4227,24 @@ export function repairTeamProjectCommentAnchorConversations(
 ): { checked: number; created: number } {
   const rows = db
     .prepare(
-      `SELECT project_id AS projectId
-         FROM workspace_projects
-        WHERE visibility = 'team'
-          AND resource_state != 'deleted'`,
+      `SELECT wp.project_id AS projectId, wp.visibility
+         FROM workspace_projects wp
+        WHERE wp.resource_state != 'deleted'
+          AND (wp.visibility = 'team'
+            OR (wp.visibility = 'personal' AND EXISTS (
+              SELECT 1 FROM public_file_publications p
+               WHERE p.project_id = wp.project_id
+            )))`,
     )
-    .all() as Array<{ projectId: string }>;
+    .all() as Array<{ projectId: string; visibility: 'team' | 'personal' }>;
 
   let created = 0;
   const repair = db.transaction(() => {
     for (const row of rows) {
-      if (ensureTeamProjectCommentConversations(db, row.projectId, now).anchorCreated) {
-        created += 1;
-      }
+      const anchorCreated = row.visibility === 'team'
+        ? ensureTeamProjectCommentConversations(db, row.projectId, now).anchorCreated
+        : ensureProjectCommentAnchorConversation(db, row.projectId, now)?.created === true;
+      if (anchorCreated) created += 1;
     }
   });
   repair();
@@ -4286,6 +4310,18 @@ export function deleteSyncedPreviewComment(
   return result.changes > 0;
 }
 
+export type SyncedCommentMergeResult = 'changed' | 'unchanged';
+
+function syncedCommentLabel(incoming: unknown, stored: unknown, elementId: unknown): string {
+  const nonBlank = (value: unknown): string | undefined =>
+    typeof value === 'string' && value.trim() ? value.trim() : undefined;
+  const element = nonBlank(elementId);
+  // A label describes the target for display, not identity. Losing a real
+  // comment for a missing display string is worse than using a generic name.
+  return nonBlank(incoming) ?? nonBlank(stored)
+    ?? (element && !/^path-\d+(?:-\d+)*$/.test(element) ? element : 'Annotation');
+}
+
 /**
  * Merge one collab-cloud comment into local `preview_comments`. The cloud
  * comment's id is used verbatim as the local id (it is the author daemon's own
@@ -4304,16 +4340,17 @@ export function deleteSyncedPreviewComment(
  * getProjectCommentAnchorConversationId);
  * the cloud comment's own conversationId is not a valid FK here. It is only used
  * when inserting a new row — an in-place update keeps the row's existing
- * conversation. Returns true when local state changed (insert, update, or delete).
+ * conversation. Returns an explicit changed/unchanged acknowledgement. Failures
+ * throw so the caller cannot acknowledge a batch it did not persist.
  */
 export function mergeSyncedPreviewComment(
   db: SqliteDb,
   projectId: string,
   conversationId: string,
   comment: CollabCloudComment,
-): boolean {
+): SyncedCommentMergeResult {
   if (comment.deleted) {
-    return deleteSyncedPreviewComment(db, projectId, comment.id);
+    return deleteSyncedPreviewComment(db, projectId, comment.id) ? 'changed' : 'unchanged';
   }
   const now = Date.now();
   const slideIndex = Number.isFinite(comment.slideIndex)
@@ -4336,24 +4373,47 @@ export function mergeSyncedPreviewComment(
     ? Math.max(0, Math.round(comment.anchoredVersion as number))
     : null;
   const updatedAt = Number.isFinite(comment.updatedAt) ? (comment.updatedAt as number) : now;
+  const authorKind = comment.authorKind === 'member' || comment.authorKind === 'user'
+    ? comment.authorKind
+    : undefined;
+  const authorMemberId = authorKind === 'user'
+    ? null
+    : typeof comment.memberId === 'string' && comment.memberId.trim()
+      ? comment.memberId.trim()
+      : null;
+  const authorAppUserId = typeof comment.authorAppUserId === 'string'
+    ? comment.authorAppUserId
+    : undefined;
+  const authorDisplayName = typeof comment.authorDisplayName === 'string'
+    ? comment.authorDisplayName
+    : undefined;
+  const authorKey = typeof comment.authorKey === 'string' ? comment.authorKey : undefined;
   const existing = db
-    .prepare(`SELECT updated_at AS updatedAt FROM preview_comments WHERE id = ? AND project_id = ?`)
+    .prepare(`SELECT updated_at AS updatedAt, label FROM preview_comments WHERE id = ? AND project_id = ?`)
     .get(comment.id, projectId) as DbRow | undefined;
+  const label = syncedCommentLabel(comment.label, existing?.label, comment.elementId);
   if (existing) {
     // Last-writer-wins: only apply a strictly-newer edit. Keeps the existing
-    // row's conversation/created_at/author identity; refreshes mutable content,
-    // status, and drift-ladder anchor state.
-    if (updatedAt <= Number(existing.updatedAt ?? 0)) return false;
-    db.prepare(
+    // row's conversation/created_at, refreshes mutable content/status/anchor
+    // state, and updates author fields only when the incoming wire payload
+    // explicitly carries each trusted field. Legacy payloads cannot erase them.
+    if (updatedAt <= Number(existing.updatedAt ?? 0)) return 'unchanged';
+    const result = db.prepare(
       `UPDATE preview_comments SET
          selector = ?, label = ?, text = ?, position_json = ?, html_hint = ?,
          selection_kind = ?, member_count = ?, pod_members_json = ?, style_json = ?,
          attachments_json = ?, slide_index = ?, slide_key = ?, note = ?, status = ?,
-         anchor_state = ?, anchored_version = ?, last_good_position_json = ?, updated_at = ?
+         anchor_state = ?, anchored_version = ?, last_good_position_json = ?,
+         author_member_id = CASE WHEN ? THEN ? ELSE author_member_id END,
+         author_kind = CASE WHEN ? THEN ? ELSE author_kind END,
+         author_app_user_id = CASE WHEN ? THEN ? ELSE author_app_user_id END,
+         author_display_name = CASE WHEN ? THEN ? ELSE author_display_name END,
+         author_key = CASE WHEN ? THEN ? ELSE author_key END,
+         updated_at = ?
        WHERE id = ? AND project_id = ?`,
     ).run(
       comment.selector,
-      comment.label,
+      label,
       typeof comment.text === 'string' ? comment.text : '',
       JSON.stringify(comment.position ?? { x: 0, y: 0, width: 0, height: 0 }),
       typeof comment.htmlHint === 'string' ? comment.htmlHint : '',
@@ -4369,14 +4429,25 @@ export function mergeSyncedPreviewComment(
       anchorState,
       anchoredVersion,
       comment.lastGoodPosition ? JSON.stringify(comment.lastGoodPosition) : null,
+      authorKind !== undefined ? 1 : 0,
+      authorMemberId,
+      authorKind !== undefined ? 1 : 0,
+      authorKind ?? null,
+      authorAppUserId !== undefined ? 1 : 0,
+      authorAppUserId ?? null,
+      authorDisplayName !== undefined ? 1 : 0,
+      authorDisplayName ?? null,
+      authorKey !== undefined ? 1 : 0,
+      authorKey ?? null,
       updatedAt,
       comment.id,
       projectId,
     );
-    return true;
+    if (result.changes !== 1) throw new Error('Synced comment update was not persisted');
+    return 'changed';
   }
-  // New comment. INSERT OR IGNORE guards against a rare id collision without
-  // throwing.
+  // Same-project replay is handled above. All other insert failures, including
+  // an id owned by another project, must throw instead of acknowledging loss.
   //
   // pin_seq is taken straight from the wire's `seq` — the collab-cloud's own
   // globally-serialized push sequence for this project (see
@@ -4404,13 +4475,13 @@ export function mergeSyncedPreviewComment(
   }
   const result = db
     .prepare(
-      `INSERT OR IGNORE INTO preview_comments
+      `INSERT INTO preview_comments
          (id, project_id, conversation_id, file_path, element_id, selector, label,
           text, position_json, html_hint, selection_kind, member_count, pod_members_json,
           style_json, attachments_json, slide_index, slide_key, note, status, created_at, updated_at,
-          anchor_state, anchored_version, author_member_id, last_good_position_json,
-          pin_seq, pin_seq_confirmed, sort_key)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          anchor_state, anchored_version, author_member_id, author_kind, author_app_user_id,
+          author_display_name, author_key, last_good_position_json, pin_seq, pin_seq_confirmed, sort_key)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       comment.id,
@@ -4419,7 +4490,7 @@ export function mergeSyncedPreviewComment(
       comment.filePath,
       comment.elementId,
       comment.selector,
-      comment.label,
+      label,
       typeof comment.text === 'string' ? comment.text : '',
       JSON.stringify(comment.position ?? { x: 0, y: 0, width: 0, height: 0 }),
       typeof comment.htmlHint === 'string' ? comment.htmlHint : '',
@@ -4436,16 +4507,44 @@ export function mergeSyncedPreviewComment(
       updatedAt,
       anchorState,
       anchoredVersion,
-      typeof comment.memberId === 'string' ? comment.memberId : null,
+      authorMemberId,
+      authorKind ?? null,
+      authorAppUserId ?? null,
+      authorDisplayName ?? null,
+      authorKey ?? null,
       comment.lastGoodPosition ? JSON.stringify(comment.lastGoodPosition) : null,
       pinSeq,
       1,
       createdAt,
     );
-  return result.changes > 0;
+  if (result.changes !== 1) throw new Error('Synced comment insert was not persisted');
+  return 'changed';
 }
 
-export function getPreviewComment(db: SqliteDb, projectId: string, conversationId: string, id: string) {
+export function getProjectCommentReadState(
+  db: SqliteDb, projectId: string, viewerScope: string,
+): { projectId: string; lastReadAt?: number } {
+  const stored = db.prepare(`SELECT last_read_at AS lastReadAt FROM project_comment_read_state
+    WHERE project_id = ? AND viewer_scope = ?`).get(projectId, viewerScope) as DbRow | undefined;
+  const lastReadAt = stored?.lastReadAt;
+  return { projectId, ...(Number.isFinite(lastReadAt) ? { lastReadAt } : {}) };
+}
+
+/** Advance, never rewind, a trusted viewer's project-level read marker. */
+export function markProjectCommentsRead(
+  db: SqliteDb, projectId: string, viewerScope: string, readAt: number,
+): { projectId: string; lastReadAt?: number } {
+  db.prepare(`INSERT INTO project_comment_read_state (project_id, viewer_scope, last_read_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(project_id, viewer_scope) DO UPDATE SET
+      last_read_at = MAX(project_comment_read_state.last_read_at, excluded.last_read_at)`).run(projectId, viewerScope, readAt);
+  return getProjectCommentReadState(db, projectId, viewerScope);
+}
+
+export function getPreviewComment(
+  db: SqliteDb, projectId: string, conversationId: string, id: string,
+  options: PreviewCommentReadOptions = {},
+) {
   const row = db
     .prepare(
       `SELECT id, project_id AS projectId, conversation_id AS conversationId,
@@ -4462,9 +4561,10 @@ export function getPreviewComment(db: SqliteDb, projectId: string, conversationI
               pin_seq AS pinSeq, sort_key AS sortKey,
               note, status, created_at AS createdAt, updated_at AS updatedAt
          FROM preview_comments
-        WHERE id = ? AND project_id = ? AND conversation_id = ?`,
+         WHERE id = ? AND project_id = ? AND (conversation_id = ? OR conversation_id = ?)`,
     )
-    .get(id, projectId, conversationId) as DbRow | undefined;
+    .get(id, projectId, conversationId, options.includeProjectAnchor
+      ? getProjectCommentAnchorConversationId(db, projectId) : null) as DbRow | undefined;
   return row ? normalizePreviewComment(row) : null;
 }
 

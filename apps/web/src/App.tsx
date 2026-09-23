@@ -55,6 +55,8 @@ import {
   memoryToastSubscriptionMode,
 } from './components/MemoryToast';
 import { Toast } from './components/Toast';
+import { DeletedShareNotices } from './components/project-actions/DeletedShareNotices';
+import { useDeletedShareNotices } from './components/project-actions/useDeletedShareNotices';
 import { CenteredLoader } from './components/Loading';
 import { PetOverlay, type PetTaskCenter } from './components/pet/PetOverlay';
 import { buildPetTaskCenter } from './components/pet/taskCenter';
@@ -967,6 +969,7 @@ function AppInner() {
     accountGeneration: number;
   } | null>(null);
   workspaceContextRef.current = workspaceContext;
+  const deletedShares = useDeletedShareNotices(workspaceContext);
   workspaceContextStateRef.current = workspaceContextState;
   const listCurrentWorkspaceProjects = useCallback(
     (options?: { throwOnError?: boolean; workspaceView?: WorkspaceProjectListView }) => {
@@ -4121,7 +4124,7 @@ function AppInner() {
     // visible, because this call sent no workspace headers at all).
     const mutationContext = workspaceContextRef.current;
     const mutationAccountGeneration = currentWorkspaceAccountGeneration();
-    await deleteProjectApi(id, mutationContext);
+    await deleteProjectApi(id, mutationContext, deletedShares.capture(id, mutationContext, mutationAccountGeneration));
     if (mutationContext) {
       removeProjectFromDisplaySnapshots({
         accountGeneration: mutationAccountGeneration,
@@ -4137,7 +4140,7 @@ function AppInner() {
       navigate({ kind: 'home', view: 'home' });
     }
     return true;
-  }, [clearLocalProject, iframeKeepAlivePool, route]);
+  }, [clearLocalProject, iframeKeepAlivePool, route, deletedShares.capture]);
 
   const handleRenameProject = useCallback(async (id: string, name: string) => {
     const trimmed = name.trim();
@@ -5849,6 +5852,7 @@ function AppInner() {
             ),
         })}
       />
+      <DeletedShareNotices state={deletedShares} />
       {workingDirError ? (
         <Toast
           message={workingDirError}

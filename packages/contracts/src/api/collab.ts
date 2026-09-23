@@ -15,6 +15,25 @@ import type {
 // the sync trigger. Single source of truth for the daemon routes, the web
 // CollabClient, and the `od collab` CLI so no surface re-declares these shapes.
 
+export interface ProjectShareHistoryResponse {
+  projectId: string;
+  /** Includes stopped bindings; absence of a local link is irrelevant. */
+  bindingExists: boolean;
+  hasEverShared: boolean;
+  publications: Array<{ sourceFilePath: string; slug: string; status: 'active' | 'stopped' }>;
+}
+
+export interface PublicFileStopRetryRequest {
+  projectId: string;
+  /** Original project-relative file identity; the project may already be deleted. */
+  filePath: string;
+  slug: string;
+}
+
+export interface PublicFileStopRetryResponse extends PublicFileStopRetryRequest {
+  status: 'stopped';
+}
+
 export type CollabMemberRole = 'owner' | 'admin' | 'member';
 
 /** Public single-file snapshot returned by the daemon publish routes. */

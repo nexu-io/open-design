@@ -17,6 +17,9 @@
 // mock-call assertion the bug review explicitly ruled insufficient.
 
 import http from 'node:http';
+import { createSqlitePublicFilePublicationStore, createPublicFileStopStartup } from '../../src/collab/public-file-publication-store.js';
+import { createProjectPublicFileStop, ProjectPublicFileStopPendingError } from '../../src/collab/project-public-file-stop.js';
+import { createPublicFileMutations, type PublicFileMutations } from '../../src/collab/public-file-mutations.js';
 import express from 'express';
 import { afterEach, describe, expect, it } from 'vitest';
 import fs from 'node:fs';
@@ -113,6 +116,8 @@ function fakeHub() {
 
 async function startServer(
   hub: ReturnType<typeof fakeHub>,
+  stopPublicFilesBeforeDelete?: (projectId: string) => Promise<void>,
+  publicFileMutations?: PublicFileMutations,
 ) {
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-project-delete-unshare-'));
   projectsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-project-delete-unshare-dir-'));
@@ -127,6 +132,8 @@ async function startServer(
   app.use(express.json());
   registerProjectRoutes(app, {
     db,
+    stopPublicFilesBeforeDelete,
+    publicFileMutations,
     design: { runs: { list: () => [], cancel: async () => {} } },
     http: { sendApiError, createSseResponse: () => ({ send: () => {} }) },
     paths: { PROJECTS_DIR: projectsDir },
@@ -197,6 +204,94 @@ async function startServer(
   const port = typeof address === 'object' && address ? address.port : 0;
   return { baseUrl: `http://127.0.0.1:${port}`, db };
 }
+
+it('waits for in-flight public mutation before entering project deletion', async () => {
+  const gate = createPublicFileMutations();
+  let release!: () => void; const blocked = new Promise<void>(resolve => { release = resolve; });
+  const order: string[] = [];
+  const active = gate.run('locked-project', async () => { order.push('publish'); await blocked; order.push('published'); });
+  // Mark arrival explicitly so no sleep is needed to prove DELETE is queued.
+  let entered!: () => void; const arrival = new Promise<void>(resolve => { entered = resolve; });
+  const lock: PublicFileMutations = { run(id, operation) { entered(); return gate.run(id, operation); } };
+  const hub = fakeHub();
+  const { baseUrl, db } = await startServer(hub, async () => { order.push('stop'); }, lock);
+  insertProject(db, { id: 'locked-project', name: 'Locked', createdAt: 1, updatedAt: 1 });
+  ensureWorkspaceProject(db, { projectId: 'locked-project', workspaceId: WORKSPACE_ID, visibility: 'personal', createdByWorkspaceMemberId: OWNER_MEMBER_ID });
+  const request = fetch(`${baseUrl}/api/projects/locked-project`, { method: 'DELETE', headers: ownerHeaders() });
+  try {
+    const reached = await Promise.race([arrival.then(() => 'lock'), request.then(() => 'response')]);
+    expect(reached).toBe('lock');
+    expect(order).toEqual(['publish']); expect(getProject(db, 'locked-project')).toBeTruthy();
+  } finally { release(); await active; }
+  expect((await request).status).toBe(200);
+  expect(order).toEqual(['publish', 'published', 'stop']);
+});
+
+it.each([true, false])('runs public stop before catalog and local deletion, stop fails=%s', async (fails) => {
+  const hub = fakeHub();
+  let called = false;
+  const projectId = 'public-delete-order';
+  const principal: ResourceHubPrincipal = { teamId: WORKSPACE_ID, memberId: OWNER_MEMBER_ID, role: 'owner', lifecycleState: 'active' };
+  const { baseUrl, db } = await startServer(hub, async (id) => {
+    called = true;
+    expect(id).toBe(projectId);
+    expect(hub.catalog.has(hub.key(projectId, principal))).toBe(true);
+    expect(getProject(db, projectId)).toBeTruthy();
+    if (fails) throw new Error('PUBLIC_FILE_STOP_PENDING');
+  });
+  insertProject(db, { id: projectId, name: 'Public', createdAt: 1, updatedAt: 1 });
+  ensureWorkspaceProject(db, { projectId, workspaceId: WORKSPACE_ID, visibility: 'team', createdByWorkspaceMemberId: OWNER_MEMBER_ID, resourceState: 'active', syncState: 'synced' });
+  hub.catalog.set(hub.key(projectId, principal), {});
+  const response = await fetch(`${baseUrl}/api/projects/${projectId}`, { method: 'DELETE', headers: ownerHeaders() });
+  expect(called).toBe(true);
+  expect(response.status).toBe(fails ? 400 : 200);
+  expect(Boolean(getProject(db, projectId))).toBe(fails);
+  expect(hub.catalog.has(hub.key(projectId, principal))).toBe(fails);
+  expect(hub.catalogRemoveCalls).toHaveLength(fails ? 0 : 1);
+});
+
+it('deletes a personal project with durable per-file residuals and retries independently after deletion', async () => {
+  const hub = fakeHub(); const projectId = 'personal-residuals';
+  const scope = { resourceTeamId: WORKSPACE_ID, ownerMemberId: OWNER_MEMBER_ID, projectId };
+  const { baseUrl, db } = await startServer(hub, async () => {
+    await createProjectPublicFileStop(store, async () => ({ ...scope, stop: async () => { throw new Error('offline'); } }))(scope);
+  });
+  const store = createSqlitePublicFilePublicationStore(db);
+  insertProject(db, { id: projectId, name: 'Residuals', createdAt: 1, updatedAt: 1 });
+  ensureWorkspaceProject(db, { projectId, workspaceId: WORKSPACE_ID, visibility: 'personal', createdByWorkspaceMemberId: OWNER_MEMBER_ID });
+  for (const filePath of ['retry.html', 'terminal.html']) store.set({ ...scope, filePath }, { slug: filePath, url: `https://example.test/${filePath}`, fileName: filePath });
+  const terminal = { ...scope, filePath: 'terminal.html', slug: 'terminal.html' };
+  store.enqueueStop(terminal); for (let i = 0; i < 4; i++) store.recordStopFailure(terminal);
+  const response = await fetch(`${baseUrl}/api/projects/${projectId}`, { method: 'DELETE', headers: ownerHeaders() });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ ok: true, shareResiduals: [
+    { filePath: 'retry.html', slug: 'retry.html', retrying: true },
+    { filePath: 'terminal.html', slug: 'terminal.html', retrying: false },
+  ] });
+  expect(getProject(db, projectId)).toBeNull();
+  expect(store.listStops()).toHaveLength(2);
+  expect(hub.catalogRemoveCalls).toEqual([]);
+  const stopped: string[] = [];
+  if (!tempDir) throw new Error('missing test data root');
+  closeDatabase();
+  const reopened = createSqlitePublicFilePublicationStore(openDatabase(tempDir));
+  const startup = createPublicFileStopStartup(reopened, async key => ({ ...scope, stop: async () => { stopped.push(key.slug); } }));
+  expect(await startup()).toMatchObject({ stopped: 1, failed: 0 });
+  await startup(); expect(stopped).toEqual(['retry.html']);
+  expect(reopened.listStops()).toEqual([expect.objectContaining({ filePath: 'terminal.html', failureCount: 5 })]);
+});
+
+it.each(['personal', 'team'] as const)('does not bypass %s deletion safety with a typed residual alone', async visibility => {
+  const hub = fakeHub(); const projectId = `unsafe-${visibility}`;
+  const { baseUrl, db } = await startServer(hub, async () => {
+    throw new ProjectPublicFileStopPendingError([{ filePath: 'index.html', slug: 'stable', retrying: false }], visibility === 'team');
+  });
+  insertProject(db, { id: projectId, name: 'Unsafe', createdAt: 1, updatedAt: 1 });
+  ensureWorkspaceProject(db, { projectId, workspaceId: WORKSPACE_ID, visibility, createdByWorkspaceMemberId: OWNER_MEMBER_ID });
+  const response = await fetch(`${baseUrl}/api/projects/${projectId}`, { method: 'DELETE', headers: ownerHeaders() });
+  expect(response.status).toBe(400); expect(getProject(db, projectId)).toBeTruthy();
+  expect(hub.catalogRemoveCalls).toEqual([]);
+});
 
 describe('DELETE /api/projects/:id unshares a team-visible project from the hub first', () => {
   it('unpublishes and drops the catalog entry BEFORE the local delete, for a project the caller shared', async () => {

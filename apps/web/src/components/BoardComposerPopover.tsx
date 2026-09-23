@@ -8,6 +8,7 @@ import type { PreviewComment, PreviewCommentMember } from '../types';
 import { isImeComposing } from '../utils/imeComposing';
 
 import { Icon } from './Icon';
+import styles from './BoardComposerPopover.module.css';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
@@ -647,7 +648,7 @@ export function BoardComposerPopover({
   return (
     <div
       ref={popoverRef}
-      className={`comment-popover comment-popover-composer${docked ? ' comment-popover-docked' : ''}${dragging ? ' comment-popover-dragging' : ''}`}
+      className={`comment-popover comment-popover-composer${docked ? ' comment-popover-docked' : ` ${styles.surface}`}${dragging ? ' comment-popover-dragging' : ''}`}
       data-testid="comment-popover"
       role="dialog"
       aria-modal="false"
@@ -818,6 +819,13 @@ export function BoardComposerPopover({
                 }
               }}
             />
+            {/* OP2: explain WHY the textarea is read-only when it's specifically
+                a share-page (external) comment — team-member-vs-team-member
+                read-only (OP3) has no such reason line, board only asked for
+                this on the owner-reads-external-comment case. */}
+            {!canEditComment && existing?.authorKind === 'user' ? (
+              <p className="comment-popover-readonly-note">{t('comment.sharePageCommentReadOnly')}</p>
+            ) : null}
           </section>
         ) : null}
       </div>

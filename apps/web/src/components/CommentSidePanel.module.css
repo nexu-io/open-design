@@ -1,0 +1,12 @@
+/* R3: the collapsed rail shares the toolbar's authoritative unread predicate. */
+.unreadDot {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #E5484D;
+  box-shadow: 0 0 0 1.5px #FFFFFF;
+  pointer-events: none;
+}
