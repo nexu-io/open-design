@@ -1,3 +1,4 @@
+import { useExperienceError } from '../observability/use-experience-error';
 import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent as ReactClipboardEvent, type CSSProperties, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import type { ArtifactExportFormat } from '../runtime/chat/artifact-export';
 import { boundedPublishProgress, ShareTab, type SharePublishFailureKey } from './share/ShareTab';
@@ -2045,6 +2046,7 @@ export function LiveArtifactViewer({
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
+  useExperienceError(refreshError, 'live_artifact_refresh', projectId);
   const [refreshSuccess, setRefreshSuccess] = useState<string | null>(null);
   const [refreshEvents, setRefreshEvents] = useState<LiveArtifactRefreshEvent[]>([]);
   const [refreshHistory, setRefreshHistory] = useState<LiveArtifactRefreshLogEntry[]>([]);
@@ -3429,6 +3431,7 @@ function FileVersionManagerModal({
   const [loading, setLoading] = useState(true);
   const [loadingContent, setLoadingContent] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  useExperienceError(error, 'file_version_operation', projectId);
   const [restoring, setRestoring] = useState(false);
   const [search, setSearch] = useState('');
   const [confirmRestore, setConfirmRestore] = useState(false);
@@ -8078,6 +8081,7 @@ function HtmlViewer({
   }, [fileViewportKey]);
   const [templateDescription, setTemplateDescription] = useState('');
   const [templateSaveError, setTemplateSaveError] = useState<string | null>(null);
+  useExperienceError(templateSaveError, 'template_save', projectId);
   const [deployment, setDeployment] = useState<WebDeploymentInfo | null>(null);
   const [deploymentsByProvider, setDeploymentsByProvider] = useState<Partial<Record<WebDeployProviderId, WebDeploymentInfo>>>({});
   const deploymentsLoadSeqRef = useRef(0);
@@ -8092,6 +8096,7 @@ function HtmlViewer({
   const [deployPhase, setDeployPhase] = useState<'idle' | 'deploying' | 'preparing-link'>('idle');
   const [savingDeployConfig, setSavingDeployConfig] = useState(false);
   const [deployError, setDeployError] = useState<string | null>(null);
+  useExperienceError(deployError, 'artifact_deploy', projectId);
   const [deployResult, setDeployResult] = useState<WebDeployProjectFileResponse | null>(null);
   const [copiedDeployLink, setCopiedDeployLink] = useState<string | null>(null);
   const [deployProviderId, setDeployProviderId] = useState<WebDeployProviderId>(DEFAULT_DEPLOY_PROVIDER_ID);
@@ -9183,6 +9188,7 @@ function HtmlViewer({
   const [manualEditHistory, setManualEditHistory] = useState<ManualEditHistoryEntry[]>([]);
   const [manualEditUndone, setManualEditUndone] = useState<ManualEditHistoryEntry[]>([]);
   const [manualEditError, setManualEditError] = useState<string | null>(null);
+  useExperienceError(manualEditError, 'manual_edit', projectId);
   const [manualEditSaving, setManualEditSaving] = useState(false);
   const manualEditSavingRef = useRef(false);
   const manualEditPendingStyleRef = useRef<ManualEditPendingStyleSave | null>(null);
@@ -9339,6 +9345,7 @@ function HtmlViewer({
   const [savingInspect, setSavingInspect] = useState(false);
   const [inspectSavedAt, setInspectSavedAt] = useState<number | null>(null);
   const [inspectError, setInspectError] = useState<string | null>(null);
+  useExperienceError(inspectError, 'preview_inspect', projectId);
   const [queuedBoardNotes, setQueuedBoardNotes] = useState<string[]>([]);
   // Images attached to an element comment ("评论此元素"). Kept as raw Files
   // (uploaded on send) with object-URL thumbnails for preview/remove, mirroring
@@ -9366,6 +9373,7 @@ function HtmlViewer({
   const [imageExportContext, setImageExportContext] = useState<HtmlVersionExportContext | null>(null);
   const [imageExportFormat, setImageExportFormat] = useState<ImageExportFormat>('png');
   const [imageExportError, setImageExportError] = useState<string | null>(null);
+  useExperienceError(imageExportError, 'image_export', projectId);
   const [pptxExportModalOpen, setPptxExportModalOpen] = useState(false);
   // Ask the daemon whether it can render slides each time an export surface
   // opens, and let the answer live no longer than that surface. This is the
@@ -19101,6 +19109,7 @@ export function SvgViewer({
   const [source, setSource] = useState<string | null>(initialSource ?? null);
   const [loadingSource, setLoadingSource] = useState(false);
   const [sourceError, setSourceError] = useState(false);
+  useExperienceError(sourceError, 'file_source_load', projectId);
   const [reloadKey, setReloadKey] = useState(0);
   const url = appendResourceQuery(
     projectFileUrl(projectId, file.name, workspaceContext),

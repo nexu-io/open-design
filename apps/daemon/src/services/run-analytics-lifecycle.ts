@@ -991,6 +991,7 @@ export function createRunAnalyticsLifecycle(
             : undefined;
           const finishedProperties: Record<string, unknown> = {
               ...baseProps,
+              ...(run.diagnosticIncidentIds?.length ? { diagnostic_incident_ids: run.diagnosticIncidentIds } : {}),
               // The gate that refused an OD Next turn. `result` above comes
               // from the physical run status, and a refused turn normally exits
               // 0 — so without this the whole class counted as `success` while

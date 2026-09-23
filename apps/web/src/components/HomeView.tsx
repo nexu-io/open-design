@@ -3190,6 +3190,11 @@ export function HomeView({
         connectorOptions={connectors.filter((connector) => connector.status === 'connected')}
         pendingPluginId={pendingApplyId}
         pendingChipId={pendingChipId}
+        typeSelectionPending={
+          defaultTypePending
+          || Boolean(pendingChipRestore)
+          || Boolean(pendingPluginUseHandoff)
+        }
         submitDisabled={
           defaultTypePending ||
           Boolean(pendingChipRestore) ||
