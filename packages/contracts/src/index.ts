@@ -1,5 +1,6 @@
 export * from './common.js';
 export * from './errors.js';
+export * from './api/failure-detail.js';
 export * from './settings-nav.js';
 export * from './tasks.js';
 export * from './api/app-config.js';
