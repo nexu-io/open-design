@@ -1,13 +1,21 @@
 import { agentCapabilities } from './capabilities.js';
 import type { RuntimeAgentDef } from './types.js';
 
-export const OPENCODE_SKIP_PERMISSIONS_FLAG = '--dangerously-skip-permissions';
-export const OPENCODE_WORKSPACE_DIR_FLAG = '--dir';
+// OpenCode 1.x accepted `--dangerously-skip-permissions` and `--dir`.
+// OpenCode 2.x removed both: the non-interactive bypass is now `--auto`
+// (`run --help` on v2.0.8) and the directory positional belongs only to
+// the top-level command (`opencode [<directory>]`) — `run` has no such
+// positional and would parse a trailing path as a message body. Workspace
+// pinning therefore rides the spawn cwd alone (`agent-process.ts` passes
+// `cwd: effectiveCwd`), verified on v2.0.8: a run spawned with cwd
+// `/tmp/odgittest/sub` records exactly that directory in `session export`.
+export const OPENCODE_SKIP_PERMISSIONS_FLAG = '--auto';
 
 export const OPENCODE_PERMISSION_CAPABILITY = {
   helpArgs: ['run', '--help'],
   capabilityFlags: {
     [OPENCODE_SKIP_PERMISSIONS_FLAG]: 'skipPermissions',
+    '--pure': 'isolatedRun',
   },
 } satisfies Pick<RuntimeAgentDef, 'helpArgs' | 'capabilityFlags'>;
 
@@ -20,28 +28,19 @@ export function appendOpenCodePermissionBypass(args: string[], agentId: string):
 /**
  * Pin OpenCode's workspace to the resolved project directory.
  *
- * OpenCode does not treat its process cwd as the project: it walks up to the
- * nearest enclosing git root and adopts THAT as the worktree (verified with
- * `opencode debug scrap`, whose every registered project is a git root). A
- * managed project directory is not a git repository, and a development install
- * keeps the daemon data directory under the repository root — so OpenCode walks
- * past the project and adopts the whole Open Design checkout.
+ * No-op since OpenCode 2.x removed the only argv mechanism (`--dir`) that
+ * 1.x honored, and `run` has no directory positional — a trailing path is
+ * parsed as a message body. Every chat and connection-test spawn already
+ * passes the project directory as the child process cwd
+ * (`agent-process.ts` → `cwd: effectiveCwd`, `connectionTest.ts` →
+ * `cwd: tempDir`), and v2 resolves its session directory from it
+ * (verified on v2.0.8: cwd `/tmp/odgittest/sub` → `session export`
+ * records exactly that, even nested inside a git worktree).
  *
- * The consequences are all silent: the agent names the repository root as its
- * workspace and writes the deliverable there, the project directory stays
- * empty, `snapshotProjectArtifactsAsync(cwd)` sees nothing, and the Run reports
- * `no_artifact`. `permission.external_directory` cannot catch it either — once
- * the repository is the worktree, writing inside it is an in-project write.
- *
- * Sent unconditionally, matching the BYOK OpenCode definition that already
- * carried this workaround. Gating it on the `--help` capability probe would
- * turn a missing flag back into the silent data-loss bug; an OpenCode build
- * without `--dir` should fail loudly at spawn instead.
+ * Kept as a named helper so call sites stay declarative; reintroduce argv
+ * pinning here if a future CLI brings back an equivalent flag.
  */
 export function appendOpenCodeWorkspaceDir(
-  args: string[],
-  cwd: string | null | undefined,
-): void {
-  if (typeof cwd !== 'string' || cwd.length === 0) return;
-  args.push(OPENCODE_WORKSPACE_DIR_FLAG, cwd);
-}
+  _args: string[],
+  _cwd: string | null | undefined,
+): void {}

@@ -64,9 +64,11 @@ function parseVerboseModelMetadata(
 }
 
 /**
- * Parse `opencode models --verbose`, retaining each model's exact variant
- * names. Plain one-id-per-line output remains accepted as a compatibility
- * fallback, but only verbose metadata can advertise reasoning choices.
+ * Parse `opencode models`, retaining each model's exact variant
+ * names. Verbose one-object-per-model output remains accepted as a
+ * compatibility fallback (1.x `models --verbose`), but only verbose
+ * metadata can advertise reasoning choices. Plain `models` on 2.x prints
+ * one `provider/model` id per line.
  */
 export function parseOpenCodeModels(stdout: string): RuntimeModelOption[] | null {
   const lines = String(stdout || '').split('\n');
@@ -119,17 +121,19 @@ export const opencodeAgentDef = {
     // 15s matches the listModels budget the rest of the agent defs use
     // (devin, hermes, kiro, kilo, kimi, trae-cli, vibe, reasonix).
     listModels: {
-      args: ['models', '--verbose'],
+      args: ['models'],
       parse: parseOpenCodeModels,
       timeoutMs: 15_000,
     },
     fallbackModels: OPENCODE_FALLBACK_MODELS,
-    // OpenCode 1.18.x exposes provider/model-specific variants. Detection
-    // reads the exact live variant keys from `models --verbose`. The fallback
-    // keeps Sol/Terra/Luna model ids usable during a catalog outage but does
-    // not guess their variants. Unknown model/variant pairs omit `--variant`
-    // rather than inventing a provider capability or preventing the base
-    // model from running.
+    // OpenCode 1.x exposed provider/model-specific variants via
+    // `models --verbose` and accepted them as `--variant <name>`.
+    // OpenCode 2.x removed both the `--verbose` listing and the `--variant`
+    // flag: `-m` takes `provider/model#variant` (`run --help` on v2.0.8).
+    // `supportsOpenCodeVariant` still reads the exact live variant keys
+    // from verbose metadata when an older CLI is in play; unknown
+    // model/variant pairs omit the suffix rather than inventing a
+    // provider capability or preventing the base model from running.
     //
     // Prompt delivered via stdin (`opencode run` with no message argv) to
     // avoid Windows `spawn ENAMETOOLONG` while preserving OpenCode's
@@ -158,10 +162,10 @@ export const opencodeAgentDef = {
         args.push('-s', resumeSessionId);
       }
       if (options.model && options.model !== 'default') {
-        args.push('-m', options.model);
-      }
-      if (supportsOpenCodeVariant(options.model, options.reasoning)) {
-        args.push('--variant', options.reasoning);
+        const variant = supportsOpenCodeVariant(options.model, options.reasoning)
+          ? `#${options.reasoning}`
+          : '';
+        args.push('-m', `${options.model}${variant}`);
       }
       return args;
     },

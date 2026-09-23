@@ -282,12 +282,22 @@ the active-run staging implementation is in
 ### 5.6 OpenCode
 
 - OpenCode runs as `opencode run --format json` with the prompt on stdin.
-  Newer builds that advertise `--dangerously-skip-permissions` from
-  `opencode run --help` receive that flag; older builds keep the compatible
-  argv without it.
-- The adapter discovers models with `opencode models`, parses structured JSON
-  events, and captures OpenCode's `sessionID`. Follow-up turns continue the
-  native session with `-s <session-id>`.
+  The process is spawned with the project directory as cwd; `run` has no
+  directory positional (a trailing path would parse as a message body) and
+  OpenCode 2.x removed the 1.x `--dir` flag, so spawn cwd is the only
+  workspace pin.
+- Non-interactive runs receive `--auto` only when `opencode run --help`
+  advertises it (2.x). Builds without the flag get no bypass rather than an
+  unknown option; this keeps 1.x working without `--dangerously-skip-permissions`.
+- The adapter discovers models with `opencode models` (plain one-id-per-line
+  on 2.x; verbose metadata still accepted as a 1.x fallback for reasoning
+  variants). Model plus variant goes as `-m provider/model#variant` on 2.x;
+  the 1.x `--variant <name>` form is only used when that build advertises it.
+- The connection test passes `--pure` only when the installed CLI advertises
+  it (`isolatedRun !== false`); 2.x removed the flag and rejects it.
+  Follow-up turns continue the native session with `-s <session-id>`.
+- Child session evidence reads via `opencode session export <id> --sanitize`
+  (2.x; 1.x spelled it `opencode export --sanitize --pure`).
 - External MCP configuration is supplied per invocation through
   `OPENCODE_CONFIG_CONTENT`; selected skills still use the shared §4 path.
 
@@ -534,9 +544,9 @@ external-directory flags can widen a CLI's reach.
   Qoder and Trae use `--yolo`; Copilot uses `--allow-all-tools`; DeepSeek uses
   `--auto`. Other definitions have their own explicit headless posture (for
   example Amp's `--dangerously-allow-all`).
-- OpenCode receives `--dangerously-skip-permissions` only when its help probe
+- OpenCode receives `--auto` only when its help probe
   advertises that flag, so older compatible builds are not given an unknown
-  option.
+  option (1.x used `--dangerously-skip-permissions` under the same gate).
 - Codex defaults to `workspace-write` with network access on supported macOS
   and Linux hosts. Windows, WSL, or an explicit
   `OD_CODEX_SANDBOX=danger-full-access` operator override uses

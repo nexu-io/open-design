@@ -497,9 +497,8 @@ async function probeCapabilities(
     // arg parser: OpenCode writes its entire help to stderr and leaves stdout
     // empty, so a stdout-only scan silently resolved every one of its flags to
     // `false`. That made the whole capability mechanism dead for OpenCode —
-    // `--dangerously-skip-permissions` was never appended even on builds that
-    // support it, and `--dir` (which pins the workspace to the project so the
-    // agent stops adopting the enclosing git root) never applied either.
+    // `--auto` was never appended even on builds that support it, and
+    // `--pure` handling never applied either.
     const help = `${String(stdout)}\n${String(stderr)}`;
     const caps: RuntimeCapabilityMap = {};
     for (const [flag, key] of Object.entries(def.capabilityFlags)) {

@@ -83,12 +83,13 @@ test('opencode args pass model-supported variants without changing the default a
   const baseArgs = opencode.buildArgs(prompt, [], [], {});
   assert.equal(opencode.promptViaStdin, true);
   assert.equal(opencode.reasoningOptions, undefined);
-  assert.deepEqual(opencode.listModels?.args, ['models', '--verbose']);
+  assert.deepEqual(opencode.listModels?.args, ['models']);
   assert.equal(opencode.fallbackModels.find(
     (model) => model.id === 'openai/gpt-5.6-sol',
   )?.reasoningOptions, undefined);
   assert.deepEqual(opencode.helpArgs, ['run', '--help']);
-  assert.deepEqual(opencode.capabilityFlags?.['--dangerously-skip-permissions'], 'skipPermissions');
+  assert.deepEqual(opencode.capabilityFlags?.['--auto'], 'skipPermissions');
+  assert.deepEqual(opencode.capabilityFlags?.['--pure'], 'isolatedRun');
   assert.equal(baseArgs.includes('-'), false);
   assert.equal(baseArgs.includes(prompt), false);
   assert.deepEqual(baseArgs, [
@@ -124,7 +125,7 @@ test('opencode args pass model-supported variants without changing the default a
     '-m',
     'openai/gpt-5.6-sol',
   ]);
-  assert.equal(withModel.includes('--dangerously-skip-permissions'), false);
+  assert.equal(withModel.includes('--auto'), false);
   assert.equal(withModel.includes('--model'), false);
 });
 
@@ -160,6 +161,9 @@ test('opencode parses live verbose variant metadata and only forwards variants a
 
   rememberLiveModels('opencode', parsed ?? []);
   try {
+    // 2.x folds the variant into `-m provider/model#variant`: `--variant`
+    // no longer exists, so it must never appear in argv even when the
+    // variant catalog was probed from an older CLI.
     assert.deepEqual(opencode.buildArgs('', [], [], {
       model: 'openai/gpt-5.6-sol',
       reasoning: 'high',
@@ -168,9 +172,7 @@ test('opencode parses live verbose variant metadata and only forwards variants a
       '--format',
       'json',
       '-m',
-      'openai/gpt-5.6-sol',
-      '--variant',
-      'high',
+      'openai/gpt-5.6-sol#high',
     ]);
     assert.deepEqual(opencode.buildArgs('', [], [], {
       model: 'openai/gpt-5.6-terra',
@@ -180,9 +182,7 @@ test('opencode parses live verbose variant metadata and only forwards variants a
       '--format',
       'json',
       '-m',
-      'openai/gpt-5.6-terra',
-      '--variant',
-      'high',
+      'openai/gpt-5.6-terra#high',
     ]);
     assert.deepEqual(opencode.buildArgs('', [], [], {
       model: 'openai/gpt-5.6-luna',
@@ -192,9 +192,7 @@ test('opencode parses live verbose variant metadata and only forwards variants a
       '--format',
       'json',
       '-m',
-      'openai/gpt-5.6-luna',
-      '--variant',
-      'max',
+      'openai/gpt-5.6-luna#max',
     ]);
     assert.deepEqual(opencode.buildArgs('', [], [], {
       model: 'custom/reasoner',
@@ -204,9 +202,7 @@ test('opencode parses live verbose variant metadata and only forwards variants a
       '--format',
       'json',
       '-m',
-      'custom/reasoner',
-      '--variant',
-      'ultra',
+      'custom/reasoner#ultra',
     ]);
     assert.deepEqual(opencode.buildArgs('', [], [], {
       model: 'custom/plain',
@@ -223,7 +219,7 @@ test('opencode parses live verbose variant metadata and only forwards variants a
   }
 });
 
-test('opencode passes --dangerously-skip-permissions when the help probe finds it', () => {
+test('opencode passes --auto when the help probe finds it', () => {
   agentCapabilities.set('opencode', { skipPermissions: true });
   try {
     const args = opencode.buildArgs('design a dashboard', [], [], {});
@@ -231,27 +227,27 @@ test('opencode passes --dangerously-skip-permissions when the help probe finds i
       'run',
       '--format',
       'json',
-      '--dangerously-skip-permissions',
+      '--auto',
     ]);
   } finally {
     agentCapabilities.delete('opencode');
   }
 });
 
-test('opencode pins its workspace to the project cwd', () => {
-  // OpenCode resolves its project by walking up to the nearest enclosing git
-  // root, not by using its process cwd. A managed project directory is not a
-  // repository, so a development install (daemon data dir under the checkout)
-  // made OpenCode adopt the whole Open Design repository as the workspace: it
-  // wrote the deliverable at the repository root, the project stayed empty, and
-  // the Run reported `no_artifact`.
+test('opencode workspace pinning rides the spawn cwd (no argv flag)', () => {
+  // OpenCode 1.x pinned the project with `--dir <cwd>`. 2.x removed the
+  // flag and `run` has no directory positional, so buildArgs emits no cwd
+  // argv at all: the spawn cwd (project dir) is the only pin. Verified on
+  // v2.0.8 — a run spawned with cwd /tmp/odgittest/sub records exactly
+  // that in `session export`, even nested inside a git worktree.
   const args = opencode.buildArgs('design a dashboard', [], [], {}, { cwd: '/projects/p1' });
-  assert.deepEqual(args, ['run', '--format', 'json', '--dir', '/projects/p1']);
+  assert.deepEqual(args, ['run', '--format', 'json']);
 });
 
-test('opencode omits --dir for a run with no project directory', () => {
+test('opencode emits no cwd argv for a run with no project directory', () => {
   const args = opencode.buildArgs('design a dashboard', [], [], {}, {});
   assert.equal(args.includes('--dir'), false);
+  assert.deepEqual(args, ['run', '--format', 'json']);
 });
 
 // Copilot reads the prompt from stdin when `-p` is omitted entirely
