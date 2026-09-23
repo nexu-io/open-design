@@ -4810,7 +4810,7 @@ export function CommentSidePanel({
         <RemixIcon name="message-3-line" size={15} />
         <span>{commentsLabel}</span>
         {comments.length > 0 ? <strong>{comments.length}</strong> : null}
-        {hasUnread ? <span data-testid="comment-rail-unread-dot" aria-hidden style={{ position: 'absolute', top: 6, right: 8, width: 7, height: 7, borderRadius: '50%', background: 'var(--danger)', pointerEvents: 'none' }} /> : null}
+        {hasUnread ? <span data-testid="comment-rail-unread-dot" aria-hidden style={{ position: 'absolute', top: 6, right: 8, width: 7, height: 7, borderRadius: '50%', background: 'var(--red)', pointerEvents: 'none' }} /> : null}
       </button>
     );
   }
@@ -16939,7 +16939,7 @@ function HtmlViewer({
               >
                 <RemixIcon name="message-3-line" size={15} />
                 <span className="viewer-comment-count" aria-hidden>{visibleSideComments.length}</span>
-                {!commentPanelOpen && hasUnreadSideComments ? <span data-testid="comment-unread-dot" aria-hidden style={{ background: 'var(--danger)', borderRadius: '50%', height: 7, width: 7, position: 'absolute', right: 2, top: 2 }} /> : null}
+                {!commentPanelOpen && hasUnreadSideComments ? <span data-testid="comment-unread-dot" aria-hidden style={{ background: 'var(--red)', borderRadius: '50%', height: 7, width: 7, position: 'absolute', right: 2, top: 2 }} /> : null}
               </button>
               {source !== null && mode === 'preview' ? (
                 <div className="zoom-menu viewer-toolbar-zoom" ref={zoomMenuRef}>
