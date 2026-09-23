@@ -21,6 +21,7 @@ const EXPECTED_EXEMPTION_LABELS = [
   "needs-design-review",
   "needs-maintainer-check",
   "needs-product-direction",
+  "needs-product-review",
   "needs-validation",
   "stale-pr/blocked",
   "stale-pr/maintainer-assisted",
