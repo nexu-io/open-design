@@ -6712,7 +6712,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         'writeFiles',
       )) return;
       const target = await resolveProjectFilePath(PROJECTS_DIR, project.id, folderPath, project.metadata);
-      if (!target.name || !(await ctx.node.fs.stat(target.filePath)).isDirectory()) {
+      if (!target.name || !(await ctx.node.fs.promises.stat(target.filePath)).isDirectory()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'target must be a non-root folder');
       }
       await ctx.stopPublicFilesBeforeDelete?.(project.id, { folderPath: target.name });
@@ -7217,7 +7217,10 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         res,
         status,
         status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
-        String(err),
+        // Never expose filesystem error messages: they contain daemon-owned paths.
+        status === 404 ? 'file not found'
+          : err instanceof ProjectPublicFileStopPendingError ? 'PUBLIC_FILE_STOP_PENDING'
+          : 'file could not be deleted',
       );
     }
   }));
@@ -7930,7 +7933,10 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         res,
         status,
         status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
-        String(err),
+        // Never expose filesystem error messages: they contain daemon-owned paths.
+        status === 404 ? 'file not found'
+          : err instanceof ProjectPublicFileStopPendingError ? 'PUBLIC_FILE_STOP_PENDING'
+          : 'file could not be deleted',
       );
     }
   }));

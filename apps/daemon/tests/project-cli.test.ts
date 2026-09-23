@@ -37,7 +37,7 @@ afterEach(async () => {
   tempRoot = '';
 });
 
-async function startProjectStubServer(deleteResponse: unknown = { ok: true }, shareResponse?: unknown): Promise<StubServer> {
+async function startProjectStubServer(deleteResponse: unknown = { ok: true }, shareResponse?: unknown, shareStatus = 200): Promise<StubServer> {
   const requests: CapturedRequest[] = [];
   const server = http.createServer((req, res) => {
     let raw = '';
@@ -114,7 +114,7 @@ async function startProjectStubServer(deleteResponse: unknown = { ok: true }, sh
       }
       if (['POST', 'GET'].includes(captured.method)
         && captured.url === '/api/projects/project-1/files/nested%2Findex.html/publish-public') {
-        if (shareResponse !== undefined) { res.end(JSON.stringify(shareResponse)); return; }
+        if (shareResponse !== undefined) { res.statusCode = shareStatus; res.end(JSON.stringify(shareResponse)); return; }
         const publication = { url: 'https://example.invalid/returned-link', slug: 'returned-slug', fileName: 'nested/index.html' };
         res.end(JSON.stringify(captured.method === 'GET' ? { publication } : publication));
         return;
@@ -247,6 +247,17 @@ async function runCli(args: string[]): Promise<{ stdout: string; stderr: string;
 }
 
 describe('od project CLI', () => {
+  it.each([false, true])('resume reports missing workspace rather than an unavailable daemon; nested=%s', async nested => {
+    const code = 'WORKSPACE_CONTEXT_REQUIRED';
+    const message = 'an explicit workspace context is required';
+    stub = await startProjectStubServer(undefined, nested ? { error: { code, message } } : { error: code, message }, 400);
+    const result = await runCli(['project', 'share', 'resume', 'project-1', '--path', 'nested/index.html', '--daemon-url', stub.baseUrl, '--json']);
+    expect(result.code).toBe(1);
+    expect(result.stdout).toBe('');
+    expect(JSON.parse(result.stderr)).toEqual({ error: { code, message, data: {} } });
+    expect(stub.requests).toHaveLength(1);
+    expect(stub.requests[0]!.headers['x-od-workspace-id']).toBeUndefined();
+  });
   it.each([false, true])('files delete preserves the HTTP response or human output, json=%s', async json => {
     const body = { ok: true };
     stub = await startProjectStubServer(body);
