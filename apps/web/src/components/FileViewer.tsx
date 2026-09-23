@@ -28,6 +28,7 @@ import {
 } from './comment-send-result';
 import {
   buildSocialSharePayload,
+  resolveCommentTargetTitle,
   hasUnreadComments,
   type ProjectCommentReadState,
   OPEN_DESIGN_GITHUB_REPO_URL,
@@ -4592,19 +4593,18 @@ function CommentAuthorIdentityContent({
 }
 
 function commentDisplayLabel(comment: PreviewComment, t: TranslateFn): string {
-  if (comment.elementId.startsWith('pin-')) return t('chat.comments.pin');
-  const label = String(comment.label || '').trim().toLowerCase();
-  const htmlHint = String(comment.htmlHint || '').trim().toLowerCase();
-  const elementId = String(comment.elementId || '').trim().toLowerCase();
-  const source = `${label} ${htmlHint} ${elementId}`;
-  if (/\b(?:img|picture|video|canvas|svg)\b/.test(source)) return t('chat.comments.targetImage');
-  if (/\b(?:button|input|textarea|select|label)\b/.test(source)) return t('chat.comments.targetControl');
-  if (/^<a\b/.test(htmlHint)) return t('chat.comments.targetLink');
-  if (/\b(?:h1|h2|h3|h4|h5|h6|p|span|strong|em|small|li|dt|dd)\b/.test(source)) return t('chat.comments.targetText');
-  if (/\b(?:section|main|header|footer|nav|article|aside)\b/.test(source)) return t('chat.comments.targetSection');
-  if (label.endsWith('.html') || elementId.startsWith('file-comment-')) return t('chat.comments.targetPage');
-  if (comment.text.trim()) return t('chat.comments.targetText');
-  return t('chat.comments.targetArea');
+  const title = resolveCommentTargetTitle(comment);
+  if (title.name) return title.name;
+  switch (title.kind) {
+    case 'pin': return t('chat.comments.pin');
+    case 'image': return t('chat.comments.targetImage');
+    case 'control': return t('chat.comments.targetControl');
+    case 'link': return t('chat.comments.targetLink');
+    case 'text': return t('chat.comments.targetText');
+    case 'section': return t('chat.comments.targetSection');
+    case 'page': return t('chat.comments.targetPage');
+    case 'area': return t('chat.comments.targetArea');
+  }
 }
 
 export function CommentSidePanel({

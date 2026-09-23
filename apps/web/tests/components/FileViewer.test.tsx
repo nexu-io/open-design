@@ -13249,6 +13249,7 @@ describe('FileViewer tweaks toolbar', () => {
 
     expect(screen.getByTestId('comment-side-panel')).toBeTruthy();
     expect(screen.getByText('不要github，换成微信')).toBeTruthy();
+    expect(screen.getByText('1. GitHub')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Select all' }).hasAttribute('disabled')).toBe(true);
     expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
     fireEvent.click(screen.getByText('不要github，换成微信').closest('[data-testid="comment-side-item"]')!);
@@ -13885,7 +13886,7 @@ describe('FileViewer tweaks toolbar', () => {
       />,
     );
 
-    expect(screen.getByText('1. Text')).toBeTruthy();
+    expect(screen.getByText('1. Turn a brand brief into an editorial collage system.')).toBeTruthy();
     expect(screen.queryByText('Link')).toBeNull();
   });
 
