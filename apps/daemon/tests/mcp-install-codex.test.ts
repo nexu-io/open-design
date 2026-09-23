@@ -8,6 +8,7 @@ import {
   createCodexCliInvocation,
   installCodexMcp,
   probeCodexInstall,
+  refreshExistingCodexMcp,
   setCodexRunner,
   uninstallCodexMcp,
   type CodexRunner,
@@ -193,5 +194,40 @@ describe('codex-cli uninstall', () => {
     const runner = makeStubRunner(async () => ({ exitCode: 1, stdout: '', stderr: 'Error: not found\n' }));
     setCodexRunner(runner);
     await expect(uninstallCodexMcp('open-design')).rejects.toThrow(/not found/);
+  });
+});
+
+describe('refreshExistingCodexMcp', () => {
+  const spec = {
+    name: 'open-design',
+    command: '/Applications/Open Design.app/Contents/MacOS/node',
+    args: ['/Applications/Open Design.app/cli.js', 'mcp'],
+    env: { OD_MCP_BOOTSTRAP_ARGS: '["--headless","--od-mcp-managed"]' },
+  };
+
+  it('rewrites an existing registration', async () => {
+    const runner = makeStubRunner(async () => ({ exitCode: 0, stdout: '', stderr: '' }));
+    setCodexRunner(runner);
+    await expect(refreshExistingCodexMcp(spec)).resolves.toBe('refreshed');
+    expect(runner.calls.map((call) => call.args.slice(0, 3))).toEqual([
+      ['mcp', 'get', 'open-design'],
+      ['mcp', 'add', 'open-design'],
+    ]);
+  });
+
+  it('never creates a registration the user has not installed', async () => {
+    const runner = makeStubRunner(async () => ({ exitCode: 1, stdout: '', stderr: 'not found' }));
+    setCodexRunner(runner);
+    await expect(refreshExistingCodexMcp(spec)).resolves.toBe('absent');
+    expect(runner.calls).toHaveLength(1);
+  });
+
+  it('does nothing without a Codex CLI', async () => {
+    setCodexRunner({
+      async run() {
+        throw Object.assign(new Error('spawn codex ENOENT'), { code: 'ENOENT' });
+      },
+    });
+    await expect(refreshExistingCodexMcp(spec)).resolves.toBe('unavailable');
   });
 });

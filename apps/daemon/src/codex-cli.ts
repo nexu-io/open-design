@@ -135,6 +135,18 @@ export async function installCodexMcp(spec: CodexInstallSpec): Promise<void> {
   }
 }
 
+export type CodexRegistrationRefresh = 'refreshed' | 'absent' | 'unavailable';
+
+// Rewrites an existing registration so it follows the runtime that is running
+// now. It never creates one: installing stays an explicit user action.
+export async function refreshExistingCodexMcp(spec: CodexInstallSpec): Promise<CodexRegistrationRefresh> {
+  const status = await probeCodexInstall(spec.name);
+  if (!status.available) return 'unavailable';
+  if (!status.installed) return 'absent';
+  await installCodexMcp(spec);
+  return 'refreshed';
+}
+
 export async function uninstallCodexMcp(name: string): Promise<void> {
   const result = await activeRunner().run(['mcp', 'remove', name]);
   if (result.exitCode !== 0) {
