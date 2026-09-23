@@ -15,6 +15,7 @@ import {
 	requireCampaignAction,
 } from "./touchpoint-navigation";
 import {
+	TEST_MAX_AUTHORIZATION_MS,
 	type TouchpointLifecycleLoad,
 	resolveAuthorizationDeadline,
 	useTouchpointLifecycle,
@@ -629,7 +630,7 @@ export function TestCampaignModal({
 							serverTime,
 							validForMs: 0,
 						};
-					const deadline = resolveAuthorizationDeadline(decision, 60_000, true);
+					const deadline = resolveAuthorizationDeadline(decision, TEST_MAX_AUTHORIZATION_MS);
 					if (deadline === null) throw new Error("realtime_test_runtime_required");
 					return {
 						placementKey,

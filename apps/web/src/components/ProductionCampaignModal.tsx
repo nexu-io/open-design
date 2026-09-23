@@ -21,11 +21,15 @@ import {
 import {
 	emitProductionTouchpointLoadDiagnostic,
 	loadProductionTouchpointDecision,
+	productionTouchpointRecovery,
 } from "./production-touchpoint-loader";
 import {
 	resolveAuthorizationDeadline,
+	touchpointContentIdentity,
+	touchpointLeaseValue,
 	touchpointWithdrawsDisplay,
 	useTouchpointLifecycle,
+	type TouchpointLeaseValue,
 	type TouchpointLifecycleLoad,
 } from "./touchpoint-lifecycle";
 import {
@@ -36,7 +40,6 @@ import {
 import type { TestCampaignPlacement, TestDecision } from "./TestCampaignModal";
 import styles from "./TestCampaignModal.module.css";
 const PLACEMENT = "opend.home.campaign-modal";
-const MAX_LEASE_MS = 5 * 60_000;
 export const PRODUCTION_ACTION_TELEMETRY_TIMEOUT_MS = 3_000;
 const supportedCapabilities = new Set(["close", "static-action"]);
 
@@ -91,9 +94,15 @@ export function internalActionNavigationUrl(
 	}
 }
 
-/** Performs a server-validated click before the host consumes a static target. */
+/**
+ * Performs a server-validated click before the host consumes a static target.
+ *
+ * Takes the lease value, not the response DTO: how long authority lasts arrives
+ * as `expiresAt`, from the lease's own window, so the decision's own (possibly
+ * superseded) timing has no business being in scope here.
+ */
 export async function dispatchProductionCampaignAction(
-	decision: Decision,
+	decision: TouchpointLeaseValue<Decision>,
 	actionId: string,
 	generation: number,
 	currentGeneration: () => number,
@@ -201,7 +210,7 @@ function testSelectionKeyOf(
 	]);
 }
 /** Production v2 modal shares the Test adapter; it does not fall back to a frame when bytes or runtime identity fail. */
-type AuthorizedDecision = Decision & { sessionSubject: string };
+type AuthorizedDecision = TouchpointLeaseValue<Decision> & { sessionSubject: string };
 type OpenPresentation = Readonly<{
 	sessionSubject: string;
 	activityId: string;
@@ -282,7 +291,7 @@ export function ProductionCampaignModal({
 				return active ? { kind: "retain" } : { kind: "clear" };
 			}
 			const next = loaded.value as Decision;
-			const deadline = resolveAuthorizationDeadline(next, MAX_LEASE_MS);
+			const deadline = resolveAuthorizationDeadline(next);
 			const serverTime = Date.parse(next.serverTime);
 			if (!next.activityId || !next.touchpointDecisionId || !next.deploymentId || !next.content?.id || next.placementKey !== PLACEMENT || next.content?.placementKey !== PLACEMENT || deadline === null || !Number.isFinite(serverTime) || !supportsWebTouchpointCapabilities(next.content, next.requiredCapabilities, supportedCapabilities)) {
 				clearOpenPresentation();
@@ -325,7 +334,7 @@ export function ProductionCampaignModal({
 			// suppressed offer has to clear instead.
 			if (!continuesOpenPresentation && wasDisplayed(sessionSubject, next.activityId))
 				return openPresentation.current ? { kind: "retain" } : { kind: "clear" };
-			return { kind: "decision", value: { ...next, sessionSubject }, key: next.touchpointDecisionId + ":" + next.deploymentId + ":" + next.activityId + ":" + next.content.id, validForMs: deadline - serverTime };
+			return { kind: "decision", value: { ...touchpointLeaseValue(next), sessionSubject }, key: touchpointContentIdentity(next), validForMs: deadline - serverTime, offlineRecovery: productionTouchpointRecovery(loaded.offlineReplay) ?? undefined };
 		},
 		[clearOpenPresentation, locale, sessionSubject],
 	);
@@ -339,7 +348,7 @@ export function ProductionCampaignModal({
 		const diagnostic = emitProductionTouchpointLoadDiagnostic(error);
 		if (diagnostic) emitWebTouchpointDiagnostic(diagnostic);
 	}, [clearOpenPresentation]);
-	const lifecycle = useTouchpointLifecycle<AuthorizedDecision>({ enabled: productionEnabled, identity: productionEnabled ? JSON.stringify([sessionSubject, locale]) : null, load, onError });
+	const lifecycle = useTouchpointLifecycle<AuthorizedDecision>({ enabled: productionEnabled, identity: productionEnabled ? JSON.stringify([sessionSubject, locale]) : null, load, onError, offlineFallback: true });
 	const { current: decision, generation, clear, isCurrent } = lifecycle;
 	const closeProductionModal = useCallback(() => {
 		clearOpenPresentation();
@@ -349,19 +358,27 @@ export function ProductionCampaignModal({
 		if (!authenticated || !sessionSubject || openPresentation.current?.sessionSubject !== sessionSubject)
 			clearOpenPresentation();
 	}, [authenticated, clearOpenPresentation, sessionSubject]);
-	/**
-	 * A hidden page (screen sleep, an occluded window) withdraws the lease and
-	 * takes this modal down with it. That presentation is over, so it may not
-	 * continue into the refresh that follows on wake: the device impression
-	 * decides that new offer like any other.
+	/*
+	 * There is deliberately no visibility fence here.
+	 *
+	 * One existed, to release the open presentation whenever the page went
+	 * hidden. Its premise was that "a hidden page withdraws the lease and takes
+	 * this modal down with it", so the presentation was genuinely over and the
+	 * offer arriving on wake was a new one. OPEND-3363 removed that premise:
+	 * hiding now cancels only the request in flight and leaves both the lease
+	 * and this modal exactly as they were.
+	 *
+	 * Releasing the presentation anyway left the campaign on screen with nothing
+	 * recorded as presenting it, and the poll that follows on return read the
+	 * device impression, found no open presentation, and cleared the host — the
+	 * campaign vanished on a tab switch, which is the symptom both fixes were
+	 * written to remove.
+	 *
+	 * What the fence was protecting is still protected, by the presentation's own
+	 * deadline: it is anchored to the authorization that opened it, so a sleep
+	 * long enough to lapse the lease also lapses the presentation, and the offer
+	 * that arrives on wake is correctly read as a new one.
 	 */
-	useEffect(() => {
-		const fence = () => {
-			if (document.hidden) clearOpenPresentation();
-		};
-		document.addEventListener("visibilitychange", fence);
-		return () => document.removeEventListener("visibilitychange", fence);
-	}, [clearOpenPresentation]);
 	useEffect(() => {
 		ensureWebTouchpointElement();
 	}, []);
