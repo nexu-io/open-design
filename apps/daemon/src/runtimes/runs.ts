@@ -580,6 +580,7 @@ function durableRunState(run) {
       ? { strategyRolloutDecision: run.strategyRolloutDecision }
       : {}),
     agentId: run.agentId,
+    ...(Array.isArray(run.diagnosticIncidentIds) ? { diagnosticIncidentIds: run.diagnosticIncidentIds } : {}),
     ...(run.appVersionInfo ? { appVersionInfo: run.appVersionInfo } : {}),
     status: run.status,
     createdAt: run.createdAt,
@@ -740,6 +741,8 @@ export function createChatRunService({
   // outlives buffer truncation. Kept generic here: this service does not
   // interpret event semantics, it just hands each record to the observer.
   onEventEmitted = null,
+  // Internal evidence only; observer failure must never interrupt lifecycle work.
+  onDiagnosticLifecycle = null,
   // Optional synchronous hook invoked immediately before the single physical
   // terminal transition. The daemon uses this to converge durable logical
   // task state before the `end` event is persisted or published. Keeping the
@@ -757,6 +760,9 @@ export function createChatRunService({
   // use the atomic writer above; the result carries only a bounded error type.
   writeDurableState = atomicWriteJson,
 }) {
+  const observeDiagnosticLifecycle = (run, kind, at, errorType = undefined) => {
+    try { onDiagnosticLifecycle?.(run, kind, at, errorType); } catch { /* optional evidence only */ }
+  };
   const runs = new Map();
   const runIdsByClientRequestId = new Map();
   const runIdsByPluginWorkflowId = new Map();
@@ -1246,6 +1252,7 @@ export function createChatRunService({
         },
       });
     }
+    if (!result.ok) observeDiagnosticLifecycle(run, 'terminal_persistence_failure', Date.now(), result.errorType ?? 'unknown');
     return result;
   };
 
@@ -2452,6 +2459,7 @@ export function createChatRunService({
     run.cancelRequested = true;
     run.cancelOrigin = origin;
     run.updatedAt = Date.now();
+    if (origin === 'user_stop') observeDiagnosticLifecycle(run, 'user_cancel', run.updatedAt);
     clearPendingRetryRestart(run);
     if (!run.child) {
       closeRunStdin(run);
