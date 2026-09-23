@@ -386,7 +386,7 @@ export function TooltipLayer() {
   return createPortal(
     <div
       ref={tooltipRef}
-      className="od-tooltip-layer"
+      className={`od-tooltip-layer${state?.target.classList.contains('tipd') ? ' tipd' : ''}`}
       role="tooltip"
       /* 常驻挂载的代价在这里买单:不可见时整个从可访问性树里摘掉,
          否则读屏软件会一直念得到这枚气泡。 */

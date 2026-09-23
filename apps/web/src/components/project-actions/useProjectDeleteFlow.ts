@@ -9,6 +9,7 @@ import {
   workspaceAnalyticsDimensions,
 } from '../../analytics/workspace';
 import type { Project } from '../../types';
+import { useProjectShareHistory } from '../share/useProjectShareHistory';
 
 /** Return `false` (or reject) when the daemon refused or the request failed;
  *  anything else means the project is gone. */
@@ -34,6 +35,8 @@ export function useProjectDeleteFlow(input: {
   const [target, setTarget] = useState<Project | null>(null);
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
+  const history = useProjectShareHistory(target && workspaceContext ? target.id : undefined, workspaceContext, 'delete-confirmation');
+  const activeShareCount = history ? history.publications.filter(publication => publication.status === 'active').length : null;
 
   const request = useCallback((project: Project) => {
     setFailed(false);
@@ -102,5 +105,5 @@ export function useProjectDeleteFlow(input: {
     }
   }, [analytics.track, analyticsPage, onDelete, pending, target, workspaceContext]);
 
-  return { target, pending, failed, request, cancel, commit };
+  return { target, pending, failed, activeShareCount, request, cancel, commit };
 }

@@ -955,7 +955,20 @@ import {
 import { registerTeamResourceRoutes } from './routes/team-resources.js';
 import { registerTeamResourceShareRoutes } from './routes/team-resource-share.js';
 import { createCollabRuntime } from './collab/runtime.js';
-import { createSqlitePublicFilePublicationStore } from './collab/public-file-publication-store.js';
+import { createPublicFileStopStartup, createSqlitePublicFilePublicationStore } from './collab/public-file-publication-store.js';
+import { sourcePathForCurrentPublication } from './collab/comment-relay-publication-mapping.js';
+import { createPublicFilePublicationRecorder } from './collab/public-file-publication-recording.js';
+import { enqueuePublishedFileComments } from './collab/published-file-comment-backfill.js';
+import { createVelaPublicFileStop } from './collab/vela-public-file-stop.js';
+import { createShareContentFingerprints } from './collab/share-content-fingerprint.js';
+import { createShareBindingOutbox } from './collab/share-binding-outbox.js';
+import { createShareBindingStartup } from './collab/share-binding-startup.js';
+import { createVelaShareBindingPrepare } from './collab/vela-share-binding-prepare.js';
+import { cleanupAbandonedPinnedVelaSessions } from './collab/vela-pinned-command.js';
+import { createProjectPublicFileStop } from './collab/project-public-file-stop.js';
+import { createPublicFileMutations } from './collab/public-file-mutations.js';
+import { resolveLocalProjectCommentWorkspaceContext } from './collab/project-comment-workspace-context.js';
+import { commentRelayScope, personalCommentRelayFilePaths } from './collab/comment-relay-scope.js';
 import {
   createActiveWorkspaceSelectionStore,
 } from './collab/active-workspace-selection.js';
@@ -1055,6 +1068,16 @@ import {
   type RememberedTeamResourceScopeLease,
 } from './collab/remembered-team-resource-scopes.js';
 import { readVelaControlApiContext } from './integrations/vela.js';
+import { createCommentSyncStateService } from './collab/comment-sync-state.js';
+import { registerCommentSyncStateRoutes } from './routes/project/comments.js';
+import { createCommentAlignmentService, runVelaCommentAlignment } from './collab/comment-alignment.js';
+import { registerCommentAlignmentRoutes } from './routes/project/comments.js';
+import { createShareAliasReservations } from './collab/share-alias-reservation.js';
+import { createSharePublicationCompletion } from './collab/share-publication-completion.js';
+import { publicShareViewerUrl } from './collab/public-share-viewer-url.js';
+import { createVelaProjectShareState } from './collab/vela-project-share-state.js';
+import { registerPublicFileStopRetryRoutes } from './routes/public-file-stop-retry.js';
+import { runPinnedVelaCommand } from './collab/vela-pinned-command.js';
 import {
   fetchBillingCheckoutUrl,
   fetchVelaBillingCatalog,
@@ -4370,6 +4393,8 @@ export async function startServer({
   void backfillDesignSystemWorkspaceResources(db, USER_DESIGN_SYSTEMS_DIR).catch((error) => {
     console.warn('[od] design-system workspace-resource backfill failed:', error);
   });
+  const publicFilePublicationStore = createSqlitePublicFilePublicationStore(db);
+  const publicFileMutations = createPublicFileMutations();
   const collabCloudClient = velaCliCollabClient ?? createCollabCloudClientFromEnv();
   const resolveBoundProjectWorkspaceContext = async (
     projectId: string,
@@ -4393,7 +4418,6 @@ export async function startServer({
     const membership = directory.items.find(
       (item) =>
         item.workspaceId === workspaceId
-        && item.workspaceType === 'team'
         && item.memberStatus === 'active'
         && item.lifecycleState !== 'deleted',
     );
@@ -4419,13 +4443,66 @@ export async function startServer({
     ? createCollabCloudService({
         client: collabCloudClient,
         commentOutbox: createCommentRelayOutboxStore(db),
+        commentRelayScope: (projectId, filePath, context) => commentRelayScope({
+          binding: getWorkspaceProjectByProjectId(db, projectId),
+          context,
+          projectId,
+          filePath,
+          publications: publicFilePublicationStore,
+        }),
+        listPersonalCommentRelayFilePaths: (projectId, context) =>
+          personalCommentRelayFilePaths({
+            binding: getWorkspaceProjectByProjectId(db, projectId),
+            context,
+            projectId,
+            publications: publicFilePublicationStore,
+          }),
+        // Deliberately unguarded: if the query throws, the batch must fail and
+        // keep its cursor. Swallowing the error here would report "no such
+        // comment" and acknowledge a deletion we never applied.
+        // The server asserted which publication a comment belongs to; this turns
+        // that into the local file it was written against. Everything here is a
+        // gate, and each one is load-bearing:
+        //
+        // - the binding must be this workspace's, active, and created by the
+        //   member we are resolving for — a publication slug alone says which
+        //   share, not that this daemon's user may read into it;
+        // - a comment with no slug (written before the field existed) resolves
+        //   to null rather than to whatever is published now. That fallback is
+        //   exactly how a stopped share's late comment lands on a live one.
+        //
+        // Ambiguity throws out of `sourcePathForCurrentPublication`, which keeps
+        // the batch cursor so the batch can be retried rather than acknowledged.
+        resolvePublishedCommentSourcePath: ({ projectId, publicationSlug, publishedPath, context }) => {
+          if (!publicationSlug) return null;
+          const binding = getWorkspaceProjectByProjectId(db, projectId);
+          const ownerMemberId = binding?.createdByWorkspaceMemberId?.trim() || '';
+          if (
+            !binding
+            || !ownerMemberId
+            || binding.resourceState === 'deleted'
+            || binding.workspaceId?.trim() !== context.workspaceId?.trim()
+          ) return null;
+          return sourcePathForCurrentPublication(db, {
+            resourceTeamId: context.workspaceId,
+            ownerMemberId,
+            projectId,
+            slug: publicationSlug,
+            publishedPath,
+          });
+        },
+        resolveStoredCommentLocation: (projectId, commentId) => {
+          const stored = getProjectPreviewComment(db, projectId, commentId);
+          if (!stored) return { found: false };
+          return { found: true, filePath: stored.filePath?.trim() || null };
+        },
         resolveLocalProjectRelayBinding: (projectId) => {
           const binding = getWorkspaceProjectByProjectId(db, projectId);
           const workspaceId = binding?.workspaceId?.trim() ?? '';
           const ownerMemberId = binding?.createdByWorkspaceMemberId?.trim() || null;
           if (
             !workspaceId
-            || binding?.visibility !== 'team'
+            || (binding?.visibility !== 'team' && binding?.visibility !== 'personal')
             || binding?.resourceState === 'deleted'
           ) return null;
           return { workspaceId, ownerMemberId };
@@ -4436,16 +4513,16 @@ export async function startServer({
             getWorkspaceProjectByProjectId(db, record.projectId),
           ),
         resolveCommentRelayWorkspaceContext: async (queuedIdentity) => {
-          const context = await resolveAuthoritativeTeamWorkspaceContext(
-            queuedIdentity.workspaceId,
-            { fresh: true, backgroundFresh: true },
+          const context = await resolveBoundProjectWorkspaceContext(
+            queuedIdentity.projectId,
+            { fresh: true },
           );
-          const principal = contextToResourceHubPrincipal(context);
           if (
             !context
-            || !principal
-            || principal.memberId !== queuedIdentity.workspaceMemberId
-            || principal.teamId !== queuedIdentity.teamId
+            || context.workspaceMemberId !== queuedIdentity.workspaceMemberId
+            // Public-file publication scopes use the persisted workspace id as
+            // their resource-team id; relay scope independently proves it.
+            || context.workspaceId !== queuedIdentity.workspaceId
           ) return null;
           return context;
         },
@@ -5053,83 +5130,73 @@ export async function startServer({
     projectId,
     { fresh: false },
   );
-  const resolveLocalProjectCommentWorkspaceContext = async (
+  const resolveProjectLocalCommentWorkspaceContext = async (
     req: any,
     projectId: string,
   ) => {
     const binding = getWorkspaceProjectByProjectId(db, projectId);
-    if (revokedTeamProjectMirrors.has(projectId)) {
-      return {
-        ok: false as const,
-        status: 403 as const,
-        code: 'WORKSPACE_PROJECT_PERMISSION_DENIED',
-        message: 'workspace project read is not allowed',
-      };
-    }
-    if (!binding?.workspaceId) {
-      return { ok: true as const, context: null };
-    }
-    if (binding.resourceState === 'deleted') {
-      return {
-        ok: false as const,
-        status: 403 as const,
-        code: 'WORKSPACE_PROJECT_PERMISSION_DENIED',
-        message: 'workspace project read is not allowed',
-      };
-    }
-    const local = resolveOptionalLocalWorkspaceRequestAuthority(req);
-    if (!local.ok) return local;
-    if (local.context) {
-      if (
-        local.context.workspaceId !== binding.workspaceId
-        || (
-          binding.visibility !== 'team'
-          && binding.createdByWorkspaceMemberId
-          && local.context.workspaceMemberId
-            !== binding.createdByWorkspaceMemberId
-        )
-      ) {
-        return {
-          ok: false as const,
-          status: 403 as const,
-          code: 'WORKSPACE_PROJECT_PERMISSION_DENIED',
-          message: 'workspace project access is not allowed',
-        };
-      }
-      return {
-        ok: true as const,
-        context: {
-          ...local.context,
-          workspaceType: binding.visibility === 'team' ? 'team' : 'personal',
-          ...(binding.visibility === 'team'
-            ? { teamId: binding.workspaceId }
-            : { teamId: null }),
-        },
-      };
-    }
-    const persistedMemberId = binding.createdByWorkspaceMemberId?.trim()
-      || 'local-user';
-    return {
-      ok: true as const,
-      context: workspaceContextFromDirectoryItem({
-        workspaceId: binding.workspaceId,
-        workspaceName: binding.workspaceId,
-        workspaceType: binding.visibility === 'team' ? 'team' : 'personal',
+    const persistedMemberId = binding?.createdByWorkspaceMemberId?.trim() || 'local-user';
+    return resolveLocalProjectCommentWorkspaceContext({
+      binding,
+      revoked: revokedTeamProjectMirrors.has(projectId),
+      local: resolveOptionalLocalWorkspaceRequestAuthority(req),
+      fallbackContext: () => workspaceContextFromDirectoryItem({
+        workspaceId: binding?.workspaceId ?? '',
+        workspaceName: binding?.workspaceId ?? '',
+        workspaceType: binding?.visibility === 'team' ? 'team' : 'personal',
         workspaceMemberId: persistedMemberId,
         role: 'member',
         memberStatus: 'active',
         lifecycleState: 'active',
       }, configuredAmrEnv()),
-    };
+    });
   };
   const resolveProjectCommentWorkspaceContext = (
     req: any,
     projectId: string,
-  ) => resolveLocalProjectCommentWorkspaceContext(req, projectId);
+  ) => resolveProjectLocalCommentWorkspaceContext(req, projectId);
   const resolveProjectCommentReadWorkspaceContext = (
     req: any,
     projectId: string,
-  ) => resolveLocalProjectCommentWorkspaceContext(req, projectId);
+  ) => resolveProjectLocalCommentWorkspaceContext(req, projectId);
+  // Align is a read: it never resumes a share, re-enqueues an outbox, advances a
+  // cursor or writes a tombstone. The session is re-read after the comparison and
+  // a change between the two reads yields `unknown` rather than a result attributed
+  // to a session that is no longer the one that ran it.
+  const commentAlignment = createCommentAlignmentService({
+    db,
+    readCursor: (projectId, context) => collabCloud?.readMergedCommentCursor(projectId, context) ?? null,
+    compare: async (projectId, context, request) => {
+      const session = readVelaControlApiContext(process.env, configuredAmrEnv());
+      if (!session?.controlKey || !session.apiUrl) return { state: 'unknown', reason: 'unavailable' };
+      const result = await runVelaCommentAlignment({
+        projectId, workspaceId: context.workspaceId, request, session, dataRoot: RUNTIME_DATA_DIR,
+      });
+      const current = readVelaControlApiContext(process.env, configuredAmrEnv());
+      if (current?.controlKey !== session.controlKey || current?.apiUrl !== session.apiUrl) {
+        return { state: 'unknown', reason: 'unavailable' };
+      }
+      return result;
+    },
+  });
+
+  registerCommentSyncStateRoutes(app, {
+    db,
+    authorize: resolveProjectCommentReadWorkspaceContext,
+    service: createCommentSyncStateService(db, async scope => {
+      const session = readVelaControlApiContext(process.env, configuredAmrEnv());
+      if (!session?.controlKey) return false;
+      if (!session.apiUrl) return null;
+      const directory = await fetchVelaWorkspaceDirectory({ readSession: () => session });
+      const current = readVelaControlApiContext(process.env, configuredAmrEnv());
+      if (current?.controlKey !== session.controlKey || current?.apiUrl !== session.apiUrl) return null;
+      if (!directory.ok) return null;
+      return directory.items.some(item => item.workspaceId === scope.workspaceId
+        && item.workspaceMemberId === scope.workspaceMemberId
+        && item.memberStatus === 'active'
+        && item.lifecycleState !== 'deleted' && item.lifecycleState !== 'deleting');
+    }, { readAlign: scope => commentAlignment.read(scope) }),
+  });
   const resolveFreshProjectCommentWorkspaceContext = async (
     req: any,
     projectId: string,
@@ -5151,6 +5218,12 @@ export async function startServer({
     }
     return verifiedWorkspaceContextForRequest(req, projectId);
   };
+  // Registered after the fresh-context resolver it depends on: a route wired
+  // before its authorizer exists captures `undefined` and authorizes nothing.
+  registerCommentAlignmentRoutes(app, {
+    db, alignment: commentAlignment,
+    authorize: resolveFreshProjectCommentWorkspaceContext,
+  });
   const verifiedTeamMirrorScope = async (
     scope: TeamMirrorPullScope,
   ): Promise<boolean> => {
@@ -5184,9 +5257,86 @@ export async function startServer({
     _scope: TeamMirrorPullScope,
     _version: number,
   ): Promise<void> => {};
+  // The store is already bound earlier in this same scope (see the
+  // `createSqlitePublicFilePublicationStore` call above, next to the
+  // design-system backfill). Re-declaring it here is what a merge produced when
+  // two lanes each added their own binding in different hunks: git saw no
+  // conflict, and `tsc` did not object — only esbuild did, at transform time.
+  const shareBindingOutbox = createShareBindingOutbox(db);
+  const retryShareBindingsAtStartup = createShareBindingStartup(shareBindingOutbox, {
+    publications: publicFilePublicationStore,
+    mutations: publicFileMutations,
+    prepare: createVelaShareBindingPrepare({ configuredEnv: configuredAmrEnv, dataRoot: RUNTIME_DATA_DIR }),
+    // An outstanding stop intent wins over completion of the same publication.
+    isCurrent: task => !publicFilePublicationStore.listStops().some(stop =>
+      stop.resourceTeamId === task.resourceTeamId && stop.ownerMemberId === task.ownerMemberId
+      && stop.projectId === task.projectId && stop.filePath === task.receipt.filePath
+      && stop.slug === task.receipt.slug
+      && (!stop.publicationRevision || stop.publicationRevision === task.publicationRevision)),
+  });
+  registerPublicFileStopRetryRoutes(app, {
+    // No projectId: the original project may have been deleted already.
+    verify: req => verifiedWorkspaceContextForRequest(req),
+    store: publicFilePublicationStore,
+    prepare: createVelaPublicFileStop({ configuredEnv: configuredAmrEnv, dataRoot: RUNTIME_DATA_DIR }),
+    mutations: publicFileMutations,
+  });
+  const retryPublicFileStopsAtStartup = createPublicFileStopStartup(
+    publicFilePublicationStore,
+    createVelaPublicFileStop({ configuredEnv: configuredAmrEnv, dataRoot: RUNTIME_DATA_DIR }),
+    publicFileMutations,
+  );
+  const recordPublicFilePublication = createPublicFilePublicationRecorder(
+    db, publicFilePublicationStore, enqueuePublishedFileComments,
+  );
   const collabSyncRoutes = registerCollabSyncRoutes(app, {
     collab,
-    publicFilePublicationStore: createSqlitePublicFilePublicationStore(db),
+    publicFilePublicationStore,
+    // Recording a publication and queueing its existing comments for backfill
+    // is ONE transaction. Without this the route falls back to a bare
+    // `publicationStore.set`, which records the share and silently drops the
+    // backfill intent — the publish succeeds, and the comments the person
+    // already wrote never reach the share page.
+    //
+    // The recorder also refuses to proceed without a publication witness
+    // (slug + revision token read back after the write), so a half-written
+    // publication cannot enqueue work that later resolves against nothing.
+    recordPublicFilePublication,
+    sharePublishing: {
+      reservations: createShareAliasReservations(db),
+      outbox: shareBindingOutbox,
+      complete: createSharePublicationCompletion(db, recordPublicFilePublication, shareBindingOutbox, true),
+      prepare: async (scope, slug) => {
+        const identity = Object.freeze({ ...scope });
+        const configuredEnv = { ...configuredAmrEnv() };
+        const currentSession = readVelaControlApiContext(process.env, configuredEnv);
+        if (!currentSession?.controlKey || !currentSession.apiUrl) throw new Error('PUBLIC_SHARE_SESSION_UNAVAILABLE');
+        const session = Object.freeze({ ...currentSession });
+        const url = publicShareViewerUrl(identity.projectId, slug, process.env, configuredEnv);
+        const directory = await fetchVelaWorkspaceDirectory({ readSession: () => session });
+        if (!directory.ok || !directory.items.some(item => item.workspaceId === identity.resourceTeamId
+          && item.workspaceMemberId === identity.ownerMemberId && item.memberStatus === 'active'
+          && item.lifecycleState !== 'deleted' && item.lifecycleState !== 'deleting')) {
+          throw new Error('PUBLIC_SHARE_IDENTITY_UNAVAILABLE');
+        }
+        return { url, run: args => runPinnedVelaCommand({ args, session,
+          workspaceId: identity.resourceTeamId, dataRoot: RUNTIME_DATA_DIR, configuredEnv }) };
+      },
+      retry: () => {
+        // A fresh bounded pass can see tasks created after the startup pass.
+        void createShareBindingStartup(shareBindingOutbox, {
+          publications: publicFilePublicationStore, mutations: publicFileMutations,
+          prepare: createVelaShareBindingPrepare({ configuredEnv: configuredAmrEnv, dataRoot: RUNTIME_DATA_DIR }),
+          isCurrent: task => !publicFilePublicationStore.listStops().some(stop =>
+            stop.resourceTeamId === task.resourceTeamId && stop.ownerMemberId === task.ownerMemberId
+            && stop.projectId === task.projectId && stop.filePath === task.receipt.filePath
+            && stop.slug === task.receipt.slug),
+        })().catch(() => { console.warn('[od] share binding retry unavailable'); });
+      },
+    },
+    readProjectShareState: createVelaProjectShareState({ dataRoot: RUNTIME_DATA_DIR, configuredEnv: configuredAmrEnv }),
+    shareContentFingerprints: createShareContentFingerprints(db, publicFilePublicationStore),
+    publicFileMutations,
     verifyWorkspaceRequest: verifiedWorkspaceContextForRequest,
     verifyWorkspaceReadRequest: verifiedWorkspaceReadContextForRequest,
     verifyWorkspaceScope: verifiedTeamMirrorScope,
@@ -8600,8 +8750,27 @@ export async function startServer({
   });
   registerSocialShareRoutes(app, { http: httpDeps });
   const projectCreatePreparationTimeoutMs = projectCreatePreparationTimeoutMsFromEnv();
+  const stopProjectPublicFiles = createProjectPublicFileStop(
+    publicFilePublicationStore,
+    createVelaPublicFileStop({ configuredEnv: configuredAmrEnv, dataRoot: RUNTIME_DATA_DIR }),
+  );
   registerProjectRoutes(app, {
     db,
+    publicFileMutations,
+    stopPublicFilesBeforeDelete: async (projectId) => {
+      const binding = getWorkspaceProjectByProjectId(db, projectId);
+      if (!binding?.workspaceId || !binding.createdByWorkspaceMemberId) {
+        // An orphaned publication cannot borrow the current user's identity.
+        const publication = db.prepare('SELECT 1 FROM public_file_publications WHERE project_id = ? LIMIT 1').get(projectId);
+        if (publication) throw new Error('PUBLIC_FILE_STOP_PENDING');
+        return;
+      }
+      await stopProjectPublicFiles({
+        resourceTeamId: binding.workspaceId,
+        ownerMemberId: binding.createdByWorkspaceMemberId,
+        projectId,
+      });
+    },
     design,
     // Test seam for the POST /api/projects preparation deadline; production
     // keeps the route's 15s default when the variable is unset or invalid.
@@ -8724,6 +8893,13 @@ export async function startServer({
         workspaceMemberId: context.workspaceMemberId,
       });
     },
+    isCommentRelayEligible: (projectId, filePath, context) => Boolean(commentRelayScope({
+      binding: getWorkspaceProjectByProjectId(db, projectId),
+      context,
+      projectId,
+      filePath,
+      publications: publicFilePublicationStore,
+    })),
     isSharedProject: async (projectId, context) => {
       if (!context || context.workspaceType !== 'team') return false;
       return Boolean(
@@ -18038,6 +18214,25 @@ export async function startServer({
           return;
         }
         resolvedPort = boundPort;
+        void cleanupAbandonedPinnedVelaSessions(RUNTIME_DATA_DIR).then(({ failed }) => {
+          if (failed) console.warn('[od] private CLI session cleanup incomplete');
+        }).catch(() => { console.warn('[od] private CLI session cleanup unavailable'); });
+        void retryShareBindingsAtStartup().then(result => {
+          if (result.deferred || result.failed || result.persistenceFailures) {
+            console.warn(`[od] public share binding completion pending: ${JSON.stringify(result)}`);
+          }
+        }).catch(() => { console.warn('[od] public share binding completion unavailable'); });
+        void retryPublicFileStopsAtStartup().then((result) => {
+          if (result.deferred || result.failed || result.persistenceFailures) {
+            console.warn(
+              `[od] public share cleanup incomplete: ${JSON.stringify(result)}; queued links may remain public`,
+            );
+          }
+        }).catch(() => {
+          console.warn(
+            "[od] public share cleanup could not read its queue; queued links may remain public",
+          );
+        });
         startAmrTerminalReportDeliveryAfterBind(amrTerminalReportDelivery, boundPort);
         messageEventPayloadHeal ??= startMessageEventPayloadHeal({ db });
         // When binding to all interfaces report localhost for local callers;

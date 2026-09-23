@@ -22,7 +22,9 @@
  * resets, and the stale nonce reads as fresh」。分享/导出这两条只是没跟上。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { useState } from 'react';
+import { FileOpsSummary } from '../../src/components/FileOpsSummary';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import { FileViewer } from '../../src/components/FileViewer';
 import { resetConsumedActionRequestsForTests } from '../../src/runtime/action-request';
@@ -99,9 +101,9 @@ function viewerWithActionRequest({
 /*
  * `FileViewer` 并不给 `AnchoredMenuShell` 传 `testId`,所以线上那块菜单没有
  * `data-testid` —— 按 testid 查会**恒为 null**,那样每一条断言都会「绿」得毫无
- * 意义(第一版就是这么假绿的)。改认菜单里那一行只在展开时才存在的 `menuitem`。
+ * 意义(第一版就是这么假绿的)。认分享面板展开时的标题，不依赖权限门控或二级部署行。
  */
-const menu = () => screen.queryByRole('menuitem', { name: /Get a share link|Deploy to Cloudflare Pages/i });
+const menu = () => screen.queryByRole('heading', { name: 'Share', level: 2 });
 const exportMenu = () => screen.queryByRole('menuitem', { name: /Export as PDF/i });
 const anchoredMenu = () => document.querySelector('[data-anchored-menu]');
 
@@ -124,6 +126,40 @@ function mountActionAnchor(anchorId: string): void {
 }
 
 describe('产物卡 Share / Export 请求是可反复开关的入口', () => {
+  it('passes the real card anchor through the existing request to one Share panel after generation', async () => {
+    stubFetch();
+    function CardAndViewer({ live }: { live: boolean }) {
+      const [request, setRequest] = useState<{ nonce: number; anchorId: string } | null>(null);
+      return <>
+        <FileOpsSummary
+          projectId="project-1"
+          entries={[{ path: 'index.html', fullPath: '/repo/index.html', ops: ['write'], opCounts: { read: 0, write: 1, edit: 0, delete: 0 }, total: 1, status: 'done' }]}
+          turnIsLive={live}
+          onPublish={(name, anchorId) => {
+            expect(name).toBe('index.html');
+            setRequest({ nonce: Date.now(), anchorId });
+          }}
+        />
+        {viewerWithActionRequest({ shareRequest: request })}
+      </>;
+    }
+    const view = render(<CardAndViewer live />);
+    const share = screen.getByTestId('artifact-card-publish-index.html');
+    share.getBoundingClientRect = () => ({ x: 220, y: 300, left: 220, top: 300, right: 278, bottom: 328, width: 58, height: 28, toJSON: () => ({}) });
+    const anchor = share.getAttribute('data-artifact-anchor');
+    expect(share).toBeDisabled();
+    fireEvent.click(share);
+    expect(anchoredMenu()).toBeNull();
+    view.rerender(<CardAndViewer live={false} />);
+    expect(screen.getAllByTestId('artifact-card-publish-index.html')).toHaveLength(1);
+    expect(share).toHaveAttribute('data-artifact-anchor', anchor);
+    expect(share).toBeEnabled();
+    fireEvent.click(share);
+    await waitFor(() => expect(anchoredMenu()).not.toBeNull());
+    expect(document.querySelectorAll('[data-anchored-menu]')).toHaveLength(1);
+    expect(document.querySelectorAll('.chrome-unified-panel--share')).toHaveLength(1);
+  });
+
   it('Share 同一枚入口点第二次关闭，第三次可再打开', async () => {
     stubFetch();
     const anchorId = 'publish:index.html';

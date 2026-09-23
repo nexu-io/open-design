@@ -35,6 +35,8 @@ type DeployOptions = {
   hookScriptUrl?: string;
   providerId?: DeployProviderId;
   includeProjectFiles?: boolean;
+  /** Share URLs are mounted below a slug, unlike standalone deployment roots. */
+  assetUrlPolicy?: 'share-relative';
 };
 type CloudflarePagesDeploySelection = { zoneId: string; zoneName: string; domainPrefix: string; hostname: string };
 type CloudflareDnsRecord = JsonObject & { id?: string; type?: string; name?: string; content?: string; comment?: string };
@@ -249,7 +251,7 @@ export async function buildDeployFilePlan(projectsRoot: string, projectId: strin
   const html = entry.buffer.toString('utf8');
   const entryBase = path.posix.dirname(entryPath);
   const deployHtml = injectDeployHookScript(
-    rewriteEntryHtmlReferences(html, entryBase),
+    rewriteEntryHtmlReferences(html, entryBase, options.assetUrlPolicy ? { outputBase: '.' } : undefined),
     options.hookScriptUrl ?? process.env.OD_DEPLOY_HOOK_SCRIPT_URL,
   );
   const files = new Map<string, DeployFile>();
@@ -318,6 +320,11 @@ export async function buildDeployFilePlan(projectsRoot: string, projectId: strin
 
     if (/\.css$/i.test(safePath)) {
       const cssBase = path.posix.dirname(safePath);
+      if (options.assetUrlPolicy) {
+        files.get(safePath)!.data = Buffer.from(rewriteCssReferences(
+          projectFile.buffer.toString('utf8'), cssBase, { outputBase: cssBase },
+        ));
+      }
       for (const ref of extractCssReferences(projectFile.buffer.toString('utf8'))) {
         pending.push({ ref, base: cssBase });
       }
@@ -1244,15 +1251,17 @@ export function extractInlineCssReferences(html: string) {
 // the deploy root. Mirrors `rewriteHtmlReference` for HTML attributes.
 // Uses the same hardened character classes as `extractCssReferences` so
 // extract and rewrite see the same set of references.
-export function rewriteCssReferences(css: string, baseDir: string) {
+type ShareReferenceRewrite = { outputBase: string };
+
+export function rewriteCssReferences(css: string, baseDir: string, share?: ShareReferenceRewrite) {
   return String(css)
     .replace(CSS_URL_REGEX, (match, quote, value) => {
       if (!value) return match;
-      const rewritten = rewriteHtmlReference(value, baseDir);
+      const rewritten = rewriteHtmlReference(value, baseDir, share);
       return `url(${quote}${rewritten}${quote})`;
     })
     .replace(/(@import\s+)(['"])([^'"]*?)\2/gi, (_full, prefix, quote, value) => {
-      const rewritten = rewriteHtmlReference(value, baseDir);
+      const rewritten = rewriteHtmlReference(value, baseDir, share);
       return `${prefix}${quote}${rewritten}${quote}`;
     });
 }
@@ -1270,7 +1279,7 @@ export function resolveReferencedPath(raw: unknown, baseDir: string) {
   return path.posix.normalize(path.posix.join(baseDir || '.', withoutQuery));
 }
 
-export function rewriteEntryHtmlReferences(html: string, baseDir: string) {
+export function rewriteEntryHtmlReferences(html: string, baseDir: string, share?: ShareReferenceRewrite) {
   const source = String(html);
   // Compute raw-text ranges against the input first so the style-block
   // pre-pass can skip `<style>...</style>` text that lives inside a
@@ -1282,7 +1291,7 @@ export function rewriteEntryHtmlReferences(html: string, baseDir: string) {
     /(<style\b[^<>]*>)([\s\S]*?)(<\/style\s*>)/gi,
     (full, openTag, content, closeTag, offset) => {
       if (isOffsetInRanges(offset, inputRawTextRanges)) return full;
-      return `${openTag}${rewriteCssReferences(content, baseDir)}${closeTag}`;
+      return `${openTag}${rewriteCssReferences(content, baseDir, share)}${closeTag}`;
     },
   );
   // Re-derive raw-text ranges against the post-style HTML: rewriting can
@@ -1294,7 +1303,7 @@ export function rewriteEntryHtmlReferences(html: string, baseDir: string) {
     if (isOffsetInRanges(offset, rawTextRanges)) return tag;
     const tagName = String(rawName).toLowerCase();
     const attrs = parseHtmlAttributes(rawAttrs);
-    return `<${rawName}${rewriteHtmlAttributes(rawAttrs, tagName, attrs, baseDir)}>`;
+    return `<${rawName}${rewriteHtmlAttributes(rawAttrs, tagName, attrs, baseDir, share)}>`;
   });
 }
 
@@ -1527,14 +1536,36 @@ function escapeHtmlAttribute(value: unknown) {
     .replace(/>/g, '&gt;');
 }
 
-function rewriteSrcset(raw: string, baseDir: string) {
+function rewriteSrcset(raw: string, baseDir: string, share?: ShareReferenceRewrite) {
+  if (share) {
+    // A comma inside a data URL is not a candidate separator. Collect the URL
+    // token first, then its descriptors, retaining untouched separators verbatim.
+    let cursor = 0;
+    let copied = 0;
+    let result = '';
+    while (cursor < raw.length) {
+      while (cursor < raw.length && /[\s,]/.test(raw[cursor]!)) cursor++;
+      const start = cursor;
+      while (cursor < raw.length && !/\s/.test(raw[cursor]!)) cursor++;
+      let end = cursor;
+      while (end > start && raw[end - 1] === ',') end--;
+      if (end > start) {
+        result += raw.slice(copied, start) + rewriteHtmlReference(raw.slice(start, end), baseDir, share);
+        copied = end;
+      }
+      if (end === cursor) {
+        while (cursor < raw.length && raw[cursor] !== ',') cursor++;
+      }
+    }
+    return result + raw.slice(copied);
+  }
   return String(raw)
     .split(',')
     .map((part) => {
       const trimmed = part.trim();
       if (!trimmed) return part;
       const pieces = trimmed.split(/\s+/);
-      const nextUrl = rewriteHtmlReference(pieces[0] ?? '', baseDir);
+      const nextUrl = rewriteHtmlReference(pieces[0] ?? '', baseDir, share);
       return [nextUrl, ...pieces.slice(1)].join(' ');
     })
     .join(', ');
@@ -1594,11 +1625,11 @@ function parseHtmlAttributes(rawAttrs: string) {
   return attrs;
 }
 
-function rewriteHtmlAttributes(rawAttrs: string, tagName: string, attrs: Map<string, string>, baseDir: string) {
+function rewriteHtmlAttributes(rawAttrs: string, tagName: string, attrs: Map<string, string>, baseDir: string, share?: ShareReferenceRewrite) {
   const shouldRewriteHref = shouldCollectHref(tagName, attrs);
   return String(rawAttrs).replace(
     /([^\s"'<>/=]+)(\s*=\s*)("([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g,
-    (full, rawName, equals, rawValue, doubleQuoted, singleQuoted, unquoted) => {
+    (full, rawName, equals, _rawValue, doubleQuoted, singleQuoted, unquoted) => {
       const name = String(rawName).toLowerCase();
       if (
         name !== 'src' &&
@@ -1613,9 +1644,9 @@ function rewriteHtmlAttributes(rawAttrs: string, tagName: string, attrs: Map<str
 
       const value = doubleQuoted ?? singleQuoted ?? unquoted ?? '';
       let nextValue;
-      if (name === 'srcset') nextValue = rewriteSrcset(value, baseDir);
-      else if (name === 'style') nextValue = rewriteCssReferences(value, baseDir);
-      else nextValue = rewriteHtmlReference(value, baseDir);
+      if (name === 'srcset') nextValue = rewriteSrcset(value, baseDir, share);
+      else if (name === 'style') nextValue = rewriteCssReferences(value, baseDir, share);
+      else nextValue = rewriteHtmlReference(value, baseDir, share);
       if (doubleQuoted !== undefined) return `${rawName}${equals}"${nextValue}"`;
       if (singleQuoted !== undefined) return `${rawName}${equals}'${nextValue}'`;
       return `${rawName}${equals}${nextValue}`;
@@ -1638,13 +1669,18 @@ function shouldCollectHref(tagName: string, attrs: Map<string, string>) {
   ));
 }
 
-function rewriteHtmlReference(raw: string, baseDir: string) {
+function rewriteHtmlReference(raw: string, baseDir: string, share?: ShareReferenceRewrite) {
   if (typeof raw !== 'string') return raw;
   const trimmed = raw.trim();
-  if (!trimmed || trimmed.startsWith('/') || trimmed.startsWith('#')) return raw;
+  if (!trimmed || trimmed.startsWith('#') || (!share && trimmed.startsWith('/'))) return raw;
   const resolved = resolveReferencedPath(raw, baseDir);
   if (!resolved) return raw;
   const suffix = referenceSuffix(trimmed);
+  if (share) {
+    // Invalid package paths remain diagnostics, never normalize away escapes.
+    try { validateProjectPath(resolved); } catch { return raw; }
+    return `${path.posix.relative(share.outputBase, resolved)}${suffix}`;
+  }
   return `${resolved}${suffix}`;
 }
 

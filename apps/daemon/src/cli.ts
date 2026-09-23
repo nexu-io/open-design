@@ -320,6 +320,10 @@ const SHARE_STRING_FLAGS = new Set([
 const SHARE_BOOLEAN_FLAGS = new Set([
   'help', 'h', 'json',
 ]);
+const COMMENT_STRING_FLAGS = new Set([
+  'daemon-url', 'workspace', 'workspace-member', 'prompt', 'prompt-file', 'target', 'status', 'read-at', 'file',
+]);
+const COMMENT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 // Defined near the top because `runFigma` is reachable through the
 // top-of-file SUBCOMMAND_MAP dispatch during module evaluation; a `const`
 // further down would still be in TDZ when the handler reads it.
@@ -398,6 +402,7 @@ const SUBCOMMAND_MAP = {
   ui: runUi,
   marketplace: runMarketplace,
   share: runShare,
+  comment: runComment,
   brand: runBrand,
   brands: runBrand,
   project: runProject,
@@ -430,6 +435,183 @@ const SUBCOMMAND_MAP = {
   library: runLibrary,
   figma: runFigma,
 };
+
+function printCommentHelp() {
+  console.log(`Usage:
+  od comment list <projectId> <conversationId> [--json]
+  od comment create <projectId> <conversationId> --target <json> (--prompt <text> | --prompt-file <path|->) [--json]
+  od comment update <projectId> <conversationId> <commentId> --target <json> (--prompt <text> | --prompt-file <path|->) [--json]
+  od comment status <projectId> <conversationId> <commentId> --status <open|attached|applying|needs_review|resolved|failed> [--json]
+  od comment delete <projectId> <conversationId> <commentId> [--json]
+  od comment read <projectId> [--read-at <epoch-ms>] [--json]
+  od comment align <projectId> [--json]
+  od comment sync-state <projectId> [--file <path>] [--json]
+  od comment retry-backfill <projectId> --file <path> [--json]
+
+Manage comments through the same daemon HTTP API as the workspace UI.
+
+Options:
+  --file <path>               Exact locally published file for backfill status/retry.
+  --target <json>             PreviewCommentTarget JSON for create/update.
+  --prompt <text>             Comment body.
+  --prompt-file <path|->      Read the comment body from a file or stdin; mutually exclusive with --prompt.
+  --workspace <id>            Exact Workspace for bound project requests.
+  --workspace-member <id>     Exact caller membership for bound project requests.
+  --read-at <epoch-ms>        Mark comments read at this time (defaults to now; server clamps).
+  --daemon-url <url>          Override daemon URL.
+  --json                      Emit the daemon response as JSON.`);
+}
+
+function commentUsageError(message) {
+  console.error(message);
+  printCommentHelp();
+  process.exit(2);
+}
+
+function parseCommentTarget(raw) {
+  if (typeof raw !== 'string' || !raw.trim()) return null;
+  try {
+    const target = JSON.parse(raw);
+    if (!target || typeof target !== 'object' || Array.isArray(target)) return null;
+    const requiredStrings = ['filePath', 'elementId', 'selector', 'label', 'text', 'htmlHint'];
+    if (!requiredStrings.every((key) => typeof target[key] === 'string')) return null;
+    const position = target.position;
+    if (!position || typeof position !== 'object'
+      || !['x', 'y', 'width', 'height'].every((key) => Number.isFinite(position[key]))) return null;
+    return target;
+  } catch {
+    return null;
+  }
+}
+
+async function runComment(args) {
+  if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
+    printCommentHelp();
+    process.exit(args.length === 0 ? 2 : 0);
+  }
+  const sub = args[0];
+  const rest = args.slice(1);
+  let flags;
+  try {
+    flags = parseFlags(rest, { string: COMMENT_STRING_FLAGS, boolean: COMMENT_BOOLEAN_FLAGS });
+  } catch (error) {
+    commentUsageError(error.message);
+  }
+  const positional = positionalArgs(rest, COMMENT_STRING_FLAGS);
+  const [projectId, conversationId, commentId] = positional;
+  if (!['list', 'create', 'update', 'status', 'delete', 'read', 'align', 'sync-state', 'retry-backfill'].includes(sub)) {
+    commentUsageError(`unknown subcommand: od comment ${sub}`);
+  }
+  if (!projectId || (!['read', 'align', 'sync-state', 'retry-backfill'].includes(sub) && (!conversationId || ((sub === 'update' || sub === 'status' || sub === 'delete') && !commentId)))) {
+    commentUsageError(`od comment ${sub} requires projectId, conversationId${sub === 'update' || sub === 'status' || sub === 'delete' ? ', and commentId' : ''}`);
+  }
+  const workspaceHeaders = workspaceHeadersFromExplicitFlags(flags) ?? {};
+  const base = await cliDaemonBaseUrl(flags);
+  if (sub === 'sync-state' || sub === 'retry-backfill') {
+    if (sub === 'retry-backfill' && !flags.file?.trim()) commentUsageError('retry-backfill requires --file');
+    const query = flags.file === undefined ? '' : `?filePath=${encodeURIComponent(flags.file)}`;
+    let response;
+    try {
+      response = await fetch(`${base}/api/projects/${encodeURIComponent(projectId)}/comment-sync-state${query}`, {
+        method: sub === 'retry-backfill' ? 'POST' : 'GET', headers: workspaceHeaders,
+      });
+    } catch (error) {
+      surfaceFetchError(error, base);
+      process.exit(3);
+    }
+    if (!response.ok) return structuredHttpFailure(response, 'comment-sync-rejected');
+    const payload = await response.json();
+    process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+    return;
+  }
+  if (sub === 'align') {
+    let response;
+    try {
+      response = await fetch(`${base}/api/projects/${encodeURIComponent(projectId)}/comments/align`, {
+        method: 'POST', headers: workspaceHeaders,
+      });
+    } catch (error) {
+      surfaceFetchError(error, base);
+      process.exit(3);
+    }
+    if (!response.ok) return structuredHttpFailure(response, 'comment-align-rejected');
+    const payload = await response.json();
+    if (flags.json) return process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+    console.log(`[comment] align ${payload.state}${payload.reason ? ` (${payload.reason})` : ''}`);
+    return;
+  }
+  if (sub === 'read') {
+    const readAt = flags['read-at'] === undefined ? Date.now() : Number(flags['read-at']);
+    if (!Number.isFinite(readAt)) commentUsageError('--read-at must be a finite epoch milliseconds value');
+    let response;
+    try {
+      response = await fetch(`${base}/api/projects/${encodeURIComponent(projectId)}/comments/read`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json', ...workspaceHeaders },
+        body: JSON.stringify({ readAt }),
+      });
+    } catch (error) {
+      surfaceFetchError(error, base);
+      process.exit(3);
+    }
+    if (!response.ok) return structuredHttpFailure(response);
+    const payload = await response.json();
+    if (flags.json) return process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+    console.log(`[comment] read ${payload.projectId}`);
+    return;
+  }
+  const collectionPath = `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/comments`;
+  let path = collectionPath;
+  let method = 'GET';
+  let body;
+  if (sub === 'create' || sub === 'update') {
+    if (typeof flags.prompt === 'string' && typeof flags['prompt-file'] === 'string') {
+      commentUsageError('pass either --prompt or --prompt-file, not both');
+    }
+    const target = parseCommentTarget(flags.target);
+    if (!target) commentUsageError('--target must be valid PreviewCommentTarget JSON');
+    let note;
+    try {
+      note = await readPromptFromFlags(flags);
+    } catch (error) {
+      commentUsageError(`cannot read --prompt-file: ${error.message}`);
+    }
+    if (typeof note !== 'string' || !note.trim()) {
+      commentUsageError('create/update requires --prompt or --prompt-file');
+    }
+    method = 'POST';
+    body = { ...(sub === 'update' ? { id: commentId } : {}), target, note };
+  } else if (sub === 'status') {
+    if (typeof flags.status !== 'string' || !flags.status.trim()) {
+      commentUsageError('status requires --status');
+    }
+    method = 'PATCH';
+    path = `${collectionPath}/${encodeURIComponent(commentId)}`;
+    body = { status: flags.status };
+  } else if (sub === 'delete') {
+    method = 'DELETE';
+    path = `${collectionPath}/${encodeURIComponent(commentId)}`;
+  }
+  let response;
+  try {
+    response = await fetch(`${base}${path}`, {
+      method,
+      headers: body === undefined ? workspaceHeaders : { 'content-type': 'application/json', ...workspaceHeaders },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+  } catch (error) {
+    surfaceFetchError(error, base);
+    process.exit(3);
+  }
+  if (!response.ok) return structuredHttpFailure(response);
+  const payload = await response.json();
+  if (flags.json) return process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+  if (sub === 'list') {
+    for (const comment of payload.comments ?? []) console.log(`${comment.id}\t${comment.status}\t${comment.note}`);
+    return;
+  }
+  console.log(sub === 'delete' ? `[comment] deleted ${commentId}` : `[comment] ${sub}d ${payload.comment?.id ?? ''}`);
+}
 
 function printStrategyHelp() {
   console.log(`Usage:
@@ -1012,6 +1194,9 @@ function printRootHelp() {
   od share <open-design|url> [options]
       Build localized social-share targets for the OpenDesign repo or a
       deployed project URL. Use --json for scripted integrations.
+
+  od comment <list|create|update|status|delete> [args]
+      Manage project comments through the same daemon API as the workspace UI.
 
   od ui <list|show|respond|revoke|prefill> [args]
       Read and answer GenUI surfaces (form / choice / confirmation / oauth-prompt) headlessly.
@@ -6991,7 +7176,85 @@ async function postImportFolderToDaemon(base, body, baseDir, workspaceHeaders = 
   return postJsonToDaemon(base, '/api/import/folder', body, headers);
 }
 
+function printProjectShareHelp() {
+  console.log(`Usage:
+  od project share publish <id> --path <file> [--json]
+                    Publish a project file using the same endpoint as the UI.
+  od project share get <id> --path <file> [--json]
+                    Read the current publication (null when not published).
+  od project share status <id> [--path <file>] [--json]
+                    Project binding history, or file lifecycle with --path.
+  od project share stop <id> --path <file> --slug <slug> [--json]
+                    Stop the specified public snapshot (not resumable).
+
+  od project share retry-stop <id> --path <file> --slug <slug> [--json]
+                    Retry one persisted stop, including after project deletion.
+
+Only publish, get, status (an alias for get), stop, and retry-stop are supported by this command.
+
+Common options:
+  --daemon-url <url>   OpenDesign daemon HTTP base.
+  --workspace <id>     Exact Workspace for bound project requests.
+  --workspace-member <id>
+                       Exact caller membership for bound project requests.
+  --json               Emit the raw daemon JSON response.`);
+}
+
+async function runProjectShare(args) {
+  if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
+    printProjectShareHelp();
+    process.exit(args.length === 0 ? 2 : 0);
+  }
+  const [requestedAction, ...rest] = args;
+  const action = requestedAction === 'status' ? 'get' : requestedAction;
+  const stringFlags = new Set(['path', 'daemon-url', 'workspace', 'workspace-member',
+    ...(['stop', 'retry-stop'].includes(action) ? ['slug'] : [])]);
+  let flags;
+  try {
+    flags = parseFlags(rest, { string: stringFlags, boolean: new Set(['json']) });
+  } catch {
+    console.error('Usage: od project share <publish|get|status|stop|retry-stop> <id> --path <file> [--json] (stop requires --slug <slug>). See --help for accepted flags.');
+    process.exit(2);
+  }
+  const positional = positionalArgs(rest, stringFlags);
+  const id = positional[0];
+  const filePath = typeof flags.path === 'string' ? flags.path.trim() : '';
+  const projectStatus = requestedAction === 'status' && !filePath;
+  const missingFlagValue = [...stringFlags].some((key) =>
+    typeof flags[key] === 'string' && (!flags[key].trim() || flags[key].startsWith('--')));
+  const slug = typeof flags.slug === 'string' ? flags.slug.trim() : '';
+  if (!['publish', 'get', 'stop', 'retry-stop'].includes(action) || positional.length !== 1 || !id?.trim() || (!filePath && !projectStatus) || missingFlagValue || (['stop', 'retry-stop'].includes(action) && !slug)) {
+    console.error('Usage: od project share <publish|get|status|stop|retry-stop> <id> --path <file> [--json] (stop requires --slug <slug>)');
+    process.exit(2);
+  }
+  // Validate before discovery; malformed invocations must not contact a daemon.
+  const headers = workspaceHeadersFromExplicitFlags(flags) ?? {};
+  const base = (await projectDaemonUrl(flags)).replace(/\/$/, '');
+  let resp;
+  try {
+    resp = await fetch(
+      projectStatus ? `${base}/api/projects/${encodeURIComponent(id)}/share-state` : action === 'retry-stop' ? `${base}/api/public-file-stops/retry` : `${base}/api/projects/${encodeURIComponent(id)}/files/${encodeURIComponent(filePath)}/publish-public`,
+      action === 'retry-stop'
+        ? { method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify({ projectId: id, filePath, slug }) }
+        : action === 'stop'
+        ? { method: 'DELETE', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify({ slug }) }
+        : { method: action === 'publish' ? 'POST' : 'GET', headers },
+    );
+  } catch {
+    // Do not echo transport exceptions, which can contain URLs or credentials.
+    return exitWithStructuredError({ code: 'daemon-not-running', message: 'Failed to reach daemon.' });
+  }
+  if (!resp.ok) return structuredHttpFailure(resp);
+  const data = await resp.json();
+  if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+  if (projectStatus) return console.log(JSON.stringify(data, null, 2));
+  if (['stop', 'retry-stop'].includes(action)) return console.log('Sharing stopped.');
+  const publication = action === 'get' ? data.publication : data;
+  console.log(publication ? publication.url : 'Not published.');
+}
+
 async function runProject(args) {
+  if (args[0] === 'share') return runProjectShare(args.slice(1));
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
   od project create [--name "<title>"] [--skill <id>] [--design-system <id>]
@@ -7012,6 +7275,14 @@ async function runProject(args) {
                                           Restore the daemon-selected default
                                           scenario with a snapshot CAS guard.
   od project delete <id>                  Delete a project.
+  od project share publish <id> --path <file> [--json]
+                    Publish a project file.
+  od project share get <id> --path <file> [--json]
+                    Read the current publication.
+  od project share status <id> [--path <file>] [--json]
+                    Project binding history, or file lifecycle with --path.
+  od project share stop <id> --path <file> --slug <slug> [--json]
+                    Stop the specified public snapshot (not resumable).
   od project revoke-public-link <id> --path <file> --url <public-url>
                     Revoke a public file link whose local publication record
                     was lost during an older daemon restart or upgrade.
@@ -7360,7 +7631,15 @@ Common options:
         headers: workspaceHeaders,
       });
       if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
+      const data: import('@open-design/contracts').ProjectDeleteResponse = await resp.json();
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
       console.log(`[project] deleted ${id}`);
+      if (data.shareResiduals?.length) {
+        const lines = data.shareResiduals.map(item =>
+          `  ${JSON.stringify(item.filePath)} (${JSON.stringify(item.slug)}): ${item.retrying
+            ? 'stop queued for retry' : 'action required; no automatic retry'}`);
+        console.warn('[project] warning: public links may still be live:\n' + lines.join('\n'));
+      }
       return;
     }
     case 'editors': {

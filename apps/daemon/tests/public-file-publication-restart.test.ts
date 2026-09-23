@@ -15,6 +15,8 @@ import {
   type PublicFilePublicationStore,
 } from '../src/collab/public-file-publication-store.js';
 import { closeDatabase, openDatabase } from '../src/db.js';
+import { createShareContentFingerprints, type ShareContentFingerprints } from '../src/collab/share-content-fingerprint.js';
+import { buildDeployFilePlan } from '../src/deploy.js';
 
 const vela = vi.hoisted(() => ({
   runResourceCommand: vi.fn(),
@@ -78,6 +80,7 @@ afterEach(async () => {
 async function startDaemon(
   projectDir: string,
   publicationStore: PublicFilePublicationStore,
+  shareContentFingerprints?: ShareContentFingerprints,
 ) {
   const { registerCollabSyncRoutes } = await import('../src/routes/collab-sync.js');
   const app = express();
@@ -95,6 +98,7 @@ async function startDaemon(
     resolveSharedProject: async () => null,
     resolveProjectDir: () => projectDir,
     publicFilePublicationStore: publicationStore,
+    ...(shareContentFingerprints ? { shareContentFingerprints } : {}),
   });
   server = http.createServer(app);
   await new Promise<void>((resolve) => server!.listen(0, resolve));
@@ -135,6 +139,41 @@ async function startDaemon(
 }
 
 describe('public file publication restart lifecycle', () => {
+  it('persists the actual uploaded payload across restart rather than rereading edited source after upload', async () => {
+    const projectDir = await mkdtemp(path.join(tmpdir(), 'od-fingerprint-http-'));
+    tempDirs.push(projectDir);
+    await writeFile(path.join(projectDir, 'index.html'), '<link rel="stylesheet" href="style.css"><h1>Public</h1>');
+    await writeFile(path.join(projectDir, 'style.css'), 'body{color:red}');
+    const plan = () => buildDeployFilePlan(path.dirname(projectDir), path.basename(projectDir), 'index.html', { hookScriptUrl: '', assetUrlPolicy: 'share-relative' });
+    const uploaded = (await plan()).files;
+    process.env.OD_RESOURCE_HUB_URL = 'https://hub.example.test';
+    vela.runResourceCommand.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'push') {
+        await writeFile(path.join(projectDir, 'style.css'), 'body{color:blue}');
+        return JSON.stringify({ id: 'version-1', version: 1 });
+      }
+      if (args[0] === 'snapshot') return JSON.stringify({ slug: 'restart-safe-slug', name: 'index.html', kind: 'project', versionId: 'version-1', createdAt: new Date(1).toISOString() });
+      throw new Error('unexpected cloud operation');
+    });
+    let db = openDatabase(projectDir, { dataDir: projectDir });
+    let publications = createSqlitePublicFilePublicationStore(db);
+    let fingerprints = createShareContentFingerprints(db, publications);
+    const first = await startDaemon(projectDir, publications, fingerprints);
+    expect((await first.request('POST')).status).toBe(200);
+    await first.stop(); closeDatabase(); vi.resetModules();
+    db = openDatabase(projectDir, { dataDir: projectDir });
+    publications = createSqlitePublicFilePublicationStore(db);
+    fingerprints = createShareContentFingerprints(db, publications);
+    const scope = { resourceTeamId: 'team-1', ownerMemberId: 'member-1', projectId: 'project-1', filePath: 'index.html' };
+    expect(fingerprints.compare(scope, uploaded)).toBe('current');
+    expect(fingerprints.compare(scope, (await plan()).files)).toBe('outdated');
+    expect(fingerprints.compare({ ...scope, ownerMemberId: 'other' }, uploaded)).toBe('unknown');
+    await writeFile(path.join(projectDir, 'style.css'), 'body{color:red}');
+    expect(fingerprints.compare(scope, (await plan()).files)).toBe('current');
+    expect(publications.get(scope)?.slug).toBe('restart-safe-slug');
+    expect(vela.runResourceCommand.mock.calls.map(([args]) => args[0])).toEqual(['push', 'snapshot']);
+  });
+
   it('redacts a new snapshot when publication persistence fails', async () => {
     const projectDir = await mkdtemp(path.join(tmpdir(), 'od-public-persist-fail-'));
     tempDirs.push(projectDir);
@@ -149,10 +188,12 @@ describe('public file publication restart lifecycle', () => {
             versionId: 'version-1',
             createdAt: new Date(1).toISOString(),
           })
-        : JSON.stringify({ version: 1 }),
+        : JSON.stringify({ id: 'version-1', version: 1 }),
     );
     const publicationStore: PublicFilePublicationStore = {
       get: () => null,
+      getRevision: () => null,
+      deleteIfRevisionMatches: () => false,
       set: () => {
         throw new Error('sqlite disk full');
       },
@@ -200,10 +241,12 @@ describe('public file publication restart lifecycle', () => {
       if (args[0] === 'snapshot-redact') {
         throw new Error('resource hub unavailable');
       }
-      return JSON.stringify({ version: 1 });
+      return JSON.stringify({ id: 'version-1', version: 1 });
     });
     const publicationStore: PublicFilePublicationStore = {
       get: () => null,
+      getRevision: () => null,
+      deleteIfRevisionMatches: () => false,
       set: () => {
         throw new Error('sqlite disk full');
       },
@@ -246,7 +289,7 @@ describe('public file publication restart lifecycle', () => {
             versionId: 'version-1',
             createdAt: new Date(1).toISOString(),
           })
-        : JSON.stringify({ version: 1 }),
+        : JSON.stringify({ id: 'version-1', version: 1 }),
     );
     let publicationStore = createSqlitePublicFilePublicationStore(
       openDatabase(projectDir, { dataDir: projectDir }),
@@ -285,5 +328,31 @@ describe('public file publication restart lifecycle', () => {
       ],
       'team-1',
     );
+  });
+
+  it('keeps the local publication when remote stop fails', async () => {
+    const projectDir = await mkdtemp(path.join(tmpdir(), 'od-public-stop-fail-'));
+    tempDirs.push(projectDir);
+    await writeFile(path.join(projectDir, 'index.html'), '<h1>Public</h1>');
+    process.env.OD_RESOURCE_HUB_URL = 'https://hub.example.test';
+    vela.runResourceCommand.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'snapshot') return JSON.stringify({
+        slug: 'stop-failure-slug', name: 'index.html', kind: 'project',
+        versionId: 'version-1', createdAt: new Date(1).toISOString(),
+      });
+      if (args[0] === 'snapshot-redact') throw new Error('remote stop unavailable');
+      return JSON.stringify({ id: 'version-1', version: 1 });
+    });
+    const publicationStore = createSqlitePublicFilePublicationStore(
+      openDatabase(projectDir, { dataDir: projectDir }),
+    );
+    const daemon = await startDaemon(projectDir, publicationStore);
+
+    expect((await daemon.request('POST')).status).toBe(200);
+    expect((await daemon.request('DELETE')).status).toBe(502);
+    expect(publicationStore.get({
+      resourceTeamId: 'team-1', ownerMemberId: 'member-1',
+      projectId: 'project-1', filePath: 'index.html',
+    })?.slug).toBe('stop-failure-slug');
   });
 });

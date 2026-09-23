@@ -870,6 +870,7 @@ async function handleResourceCommand(input: {
 
 function handleCollabCommand(input: {
   args: string[];
+  stdin: string;
   identity: ClientIdentity;
   workspaceId: string;
   options: { clients: readonly ClientIdentity[] };
@@ -963,7 +964,19 @@ function handleCollabCommand(input: {
     });
   }
   if (domain === 'comment' && command === 'push' && projectId) {
-    const parsed = parseJsonFlag(input.args, '--comment-json');
+    let parsed: Record<string, unknown> | null;
+    if (input.args.includes('--comment-file')) {
+      if (flag(input.args, '--comment-file') !== '-') {
+        throw new Error('fake comment push requires --comment-file -');
+      }
+      const payload: unknown = JSON.parse(input.stdin);
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+        throw new Error('comment push requires a JSON object');
+      }
+      parsed = payload as Record<string, unknown>;
+    } else {
+      parsed = parseJsonFlag(input.args, '--comment-json');
+    }
     if (!parsed) throw new Error('comment push missing payload');
     const projectComments = input.comments.get(projectId) ?? [];
     const seq = projectComments.reduce(
@@ -1058,8 +1071,12 @@ function fakeVelaScript(): string {
   return `#!/usr/bin/env node
 const args = process.argv.slice(2);
 let stdin = '';
-const requestsFileIndex = args.indexOf('--requests-file');
-if (requestsFileIndex >= 0 && args[requestsFileIndex + 1] === '-') {
+const readsStdin = ['--requests-file', '--comment-file'].some((flag) => {
+  const index = args.indexOf(flag);
+  return index >= 0 && args[index + 1] === '-';
+});
+if (readsStdin) {
+  process.stdin.setEncoding('utf8');
   for await (const chunk of process.stdin) stdin += chunk;
 }
 const response = await fetch(new URL('/__e2e/command', process.env.VELA_API_URL), {

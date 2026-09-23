@@ -1,11 +1,23 @@
 import type { Express, Request, Response } from 'express';
-import { mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import type { ReadProjectShareState } from '../collab/vela-project-share-state.js';
+import { publishReservedVelaShareVersion } from '../collab/vela-share-publish.js';
+import type { createShareAliasReservations } from '../collab/share-alias-reservation.js';
+import type { createSharePublicationCompletion } from '../collab/share-publication-completion.js';
+import type { ShareBindingOutbox } from '../collab/share-binding-outbox.js';
+import type { runVelaCommand } from '../integrations/vela-command.js';
+import type { SharePublishResponse } from '@open-design/contracts';
+import type { RecordPublicFilePublication } from '../collab/public-file-publication-recording.js';
+import type { ShareContentFingerprints } from '../collab/share-content-fingerprint.js';
+import { createShareFileMapping, publishedPathForSource, type ShareFileMapping } from '../collab/share-file-mapping.js';
+import { publicFileMutationHandler } from './public-file-mutation-handler.js';
+import type { PublicFileMutations } from '../collab/public-file-mutations.js';
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {
-  PUBLIC_FILE_MANUAL_REVOKE_REQUIRED,
+  SHARE_MAX_TOTAL_BYTES,
+  type SharePlanSummary,
   workspaceContextHasWorkspaceIdentity,
-  type PublicFileManualRevokeRequiredResponse,
   type PublicProjectFilePublication,
   type ProjectContentTransferState,
   type ProjectMetadata,
@@ -47,16 +59,15 @@ import {
 import { isUnmaterializedSharedPlaceholder } from '../collab/shared-project-placeholder.js';
 import {
   isRetractedHubResourceError,
-  parseVelaResourceSnapshot,
-  runVelaResourceCommand,
+  parseVelaPushVersionId,
 } from '../collab/vela-cli-resource-adapter.js';
 import {
   createInMemoryPublicFilePublicationStore,
   type PublicFilePublicationScope,
   type PublicFilePublicationStore,
 } from '../collab/public-file-publication-store.js';
-import { readVelaControlApiContext } from '../integrations/vela.js';
 import { isAbortedOperationError } from '../integrations/aborted-error.js';
+import { buildDeployFilePlan } from '../deploy.js';
 import { readProjectManifest } from '../project-locations.js';
 import { redactSecrets } from '../redact.js';
 import { findRealElementRange, HTML_TAG_PATTERNS } from '@open-design/contracts/runtime/html-injection-points';
@@ -220,6 +231,17 @@ export interface RegisterCollabSyncRoutesDeps {
   resolveProjectDir?: (projectId: string) => string | Promise<string>;
   /** Durable publication metadata used to restore public links after restart. */
   publicFilePublicationStore?: PublicFilePublicationStore;
+  shareContentFingerprints?: ShareContentFingerprints;
+  readProjectShareState?: ReadProjectShareState;
+  recordPublicFilePublication?: RecordPublicFilePublication;
+  sharePublishing?: {
+    reservations: ReturnType<typeof createShareAliasReservations>;
+    outbox: ShareBindingOutbox;
+    complete: ReturnType<typeof createSharePublicationCompletion>;
+    prepare(scope: PublicFilePublicationScope, slug: string): Promise<{ run: typeof runVelaCommand; url: string }>;
+    retry(): void;
+  };
+  publicFileMutations?: PublicFileMutations;
   resolvePullDir?: (projectId: string) => string;
   /** Read the durable local materialization cursor for this exact team mirror. */
   readMaterializedVersion?: (
@@ -386,6 +408,41 @@ const PUBLIC_FILE_REF = 'published';
 
 const MAX_ERROR_LOG_FIELD_LENGTH = 2_048;
 
+/** Builds the share payload through the deploy planner without inheriting its hook. */
+async function buildSharePlan(
+  projectDir: string,
+  entryName: string,
+  metadata: unknown,
+): Promise<{ summary: SharePlanSummary; files: Awaited<ReturnType<typeof buildDeployFilePlan>>['files']; mapping: ShareFileMapping; entryPath: string }> {
+  const deployPlan = await buildDeployFilePlan(
+    path.dirname(projectDir),
+    path.basename(projectDir),
+    entryName,
+    { metadata, hookScriptUrl: '', assetUrlPolicy: 'share-relative' },
+  );
+  const mapping = createShareFileMapping(deployPlan.files);
+  const entryPath = publishedPathForSource(mapping, deployPlan.entryPath);
+  if (!entryPath) throw new Error('SHARE_ENTRY_MAPPING_UNAVAILABLE');
+  const totalBytes = deployPlan.files.reduce(
+    (total, file) => total + Buffer.from(file.data).byteLength,
+    0,
+  );
+  return {
+    files: deployPlan.files,
+    mapping,
+    entryPath,
+    summary: {
+      fileCount: deployPlan.files.length,
+      totalBytes,
+      exceedsSizeLimit: totalBytes > SHARE_MAX_TOTAL_BYTES,
+      exclusions: [
+        ...deployPlan.missing.map((path) => ({ path, reason: 'missing' as const })),
+        ...deployPlan.invalid.map((path) => ({ path, reason: 'invalid' as const })),
+      ],
+    },
+  };
+}
+
 function redactedErrorLogText(value: unknown): string {
   const text = value instanceof Error
     ? value.message || value.name
@@ -498,41 +555,20 @@ function writeLruEntry<K, V>(cache: Map<K, V>, key: K, value: V): void {
   }
 }
 
-function normalizePublicFilePath(raw: string): string | null {
-  if (raw.includes('\\')) return null;
-  let decoded: string;
-  try {
-    decoded = raw
-      .split('/')
-      .map((part) => decodeURIComponent(part))
-      .join('/');
-  } catch {
-    return null;
-  }
-  if (decoded.includes('\\')) return null;
-  const normalized = decoded.replace(/^\/+/, '').replace(/\/+/g, '/');
+/** Validate Express-decoded route params without interpreting literal percent escapes. */
+function normalizePublicFilePath(filePath: string): string | null {
+  // Express decodes each regexp capture once, including encoded separators.
+  // Reject unsafe segments rather than normalizing them into a different file.
   if (
-    !normalized ||
-    normalized.includes('\0') ||
-    normalized.split('/').some((part) => part === '' || part === '.' || part === '..')
+    !filePath ||
+    filePath.includes('\\') ||
+    filePath.includes('\0') ||
+    /^[A-Za-z]:/.test(filePath) ||
+    filePath.split('/').some((part) => part === '' || part === '.' || part === '..')
   ) {
     return null;
   }
-  return normalized;
-}
-
-async function resolvePublicSourceFile(projectDir: string, filePath: string): Promise<string> {
-  const [projectRoot, candidate] = await Promise.all([
-    realpath(projectDir),
-    realpath(path.join(projectDir, filePath)),
-  ]);
-  const relative = path.relative(projectRoot, candidate);
-  if (relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))) {
-    return candidate;
-  }
-  const error = new Error('public file path escapes project root') as NodeJS.ErrnoException;
-  error.code = 'EACCES';
-  throw error;
+  return filePath;
 }
 
 function publicFileResourceIdFor(
@@ -558,10 +594,6 @@ function publicFilePublicationScope(
     projectId,
     filePath,
   };
-}
-
-function encodePublicFileUrlPath(filePath: string): string {
-  return filePath.split('/').map((part) => encodeURIComponent(part)).join('/');
 }
 
 /**
@@ -618,15 +650,6 @@ function publicFilePrincipal(context: WorkspaceCollabContext | null): ResourceHu
     lifecycleState: context.lifecycleState,
     workspaceType: context.workspaceType,
   };
-}
-
-function publicResourceHubBaseUrl(): string | null {
-  return readVelaControlApiContext()?.apiUrl?.trim() || process.env.OD_RESOURCE_HUB_URL?.trim() || null;
-}
-
-function publicSnapshotFileUrl(baseUrl: string, slug: string, filePath: string): string {
-  const relative = `/api/v1/public/snapshots/${encodeURIComponent(slug)}/files/${encodePublicFileUrlPath(filePath)}`;
-  return new URL(relative, baseUrl).toString();
 }
 
 async function resolveSharedProjectForPublicFile(
@@ -1234,7 +1257,8 @@ export function registerCollabSyncRoutes(
     return res.json({ ok: true });
   });
 
-  app.post(/^\/api\/projects\/([^/]+)\/files\/(.+)\/publish-public$/u, async (req, res) => {
+  app.post(/^\/api\/projects\/([^/]+)\/files\/(.+)\/publish-public$/u, publicFileMutationHandler(deps.publicFileMutations, async (req, res) => {
+    // SAFETY: these RegExp routes expose numeric capture keys; Express types model named keys only.
     const params = req.params as unknown as { 0?: string; 1?: string };
     const projectId = String(params[0] ?? '');
     const filePath = normalizePublicFilePath(String(params[1] ?? ''));
@@ -1266,39 +1290,63 @@ export function registerCollabSyncRoutes(
     if (sharedProject?.ownerMemberId && sharedProject.ownerMemberId !== principal.memberId) {
       return res.status(403).json({ error: 'WORKSPACE_PROJECT_PUBLISH_DENIED' });
     }
-    const baseUrl = publicResourceHubBaseUrl();
-    if (!baseUrl) {
-      return res.status(502).json({ error: 'PUBLIC_FILE_URL_UNAVAILABLE' });
+    const publisher = deps.sharePublishing;
+    if (!publisher) return res.status(503).json({ error: 'PUBLIC_SHARE_PUBLISH_UNAVAILABLE' });
+    const scope = publicFilePublicationScope(projectId, filePath, principal);
+    let prepared: Awaited<ReturnType<typeof publisher.prepare>>;
+    try {
+      const reservation = publisher.reservations.reserve(scope);
+      prepared = await publisher.prepare(scope, reservation.slug);
+    } catch {
+      return res.status(502).json({ error: 'PUBLIC_SHARE_PREPARATION_UNAVAILABLE' });
     }
     if (!resolveProjectDir) {
       return res.status(500).json({ error: 'PROJECT_DIR_UNAVAILABLE' });
     }
 
     const projectDir = await resolveProjectDir(projectId);
-    let data: Buffer;
+    let sharePlan: Awaited<ReturnType<typeof buildSharePlan>>;
     try {
-      const sourceFile = await resolvePublicSourceFile(projectDir, filePath);
-      data = await readFile(sourceFile);
+      sharePlan = await buildSharePlan(
+        projectDir,
+        filePath,
+        projectStore?.get?.(projectId)?.metadata,
+      );
     } catch (error) {
       const code = (error as NodeJS.ErrnoException)?.code;
       return res.status(code === 'ENOENT' ? 404 : 400).json({
         error: code === 'ENOENT' ? 'FILE_NOT_FOUND' : 'FILE_UNAVAILABLE',
       });
     }
+    if (sharePlan.summary.exceedsSizeLimit) {
+      return res.status(413).json({
+        error: 'too_large',
+        plan: sharePlan.summary,
+        bytes: sharePlan.summary.totalBytes,
+        totalBytes: sharePlan.summary.totalBytes,
+        limit: SHARE_MAX_TOTAL_BYTES,
+      });
+    }
 
     const resourceId = publicFileResourceIdFor(projectId, filePath, principal);
     const tempDir = await mkdtemp(path.join(os.tmpdir(), 'od-public-file-'));
     try {
-      const targetFile = path.join(tempDir, filePath);
-      await mkdir(path.dirname(targetFile), { recursive: true });
-      await writeFile(targetFile, data);
+      for (const file of sharePlan.files) {
+        const targetFile = path.join(tempDir, file.file);
+        const relative = path.relative(tempDir, targetFile);
+        if (relative.startsWith('..') || path.isAbsolute(relative)) {
+          throw new Error('share plan file escapes staging directory');
+        }
+        await mkdir(path.dirname(targetFile), { recursive: true });
+        await writeFile(targetFile, file.data);
+      }
       const metadata = {
         source: 'open-design',
         projectId,
         fileName: filePath,
       };
-      await runVelaResourceCommand([
-        'push',
+      const pushOutput = await prepared.run([
+        'resource', 'push',
         PUBLIC_FILE_RESOURCE_KIND,
         resourceId,
         tempDir,
@@ -1307,68 +1355,48 @@ export function registerCollabSyncRoutes(
         '--metadata-json',
         JSON.stringify(metadata),
         '--json',
-      ], principal.teamId);
-      const snapshot = parseVelaResourceSnapshot(await runVelaResourceCommand([
-        'snapshot',
-        resourceId,
-        '--ref',
-        PUBLIC_FILE_REF,
-        '--name',
-        path.basename(filePath),
-        '--json',
-      ], principal.teamId));
-      if (!snapshot) {
-        return res.status(502).json({ error: 'PUBLIC_SNAPSHOT_UNAVAILABLE' });
-      }
+      ]);
+      const versionId = parseVelaPushVersionId(pushOutput);
+      const result = await publishReservedVelaShareVersion({
+        scope, resourceId, versionId, entryPath: sharePlan.entryPath,
+        name: path.basename(filePath),
+      }, publisher.reservations, prepared.run);
       const publication: PublicProjectFilePublication = {
-        url: publicSnapshotFileUrl(baseUrl, snapshot.slug, filePath),
-        slug: snapshot.slug,
-        fileName: filePath,
+        url: prepared.url, slug: result.receipt.slug, fileName: filePath,
       };
-      try {
-        publicFilePublicationStore.set(
-          publicFilePublicationScope(projectId, filePath, principal),
-          publication,
-        );
-      } catch (persistenceError) {
-        try {
-          await runVelaResourceCommand([
-            'snapshot-redact',
-            resourceId,
-            snapshot.slug,
-            '--json',
-          ], principal.teamId);
-        } catch (redactionError) {
-          console.warn(
-            '[od] failed to persist public project file publication; snapshot compensation also failed:',
-            { persistenceError, redactionError },
-          );
-          const recoveryResponse = {
-            error: {
-              code: PUBLIC_FILE_MANUAL_REVOKE_REQUIRED,
-              message:
-                `The public link remains active at ${publication.url}. `
-                + 'Run od project revoke-public-link with this project, file path, and URL.',
-              data: {
-                projectId,
-                ...publication,
-              },
-            },
-          } satisfies PublicFileManualRevokeRequiredResponse;
-          return res.status(502).json(recoveryResponse);
-        }
-        throw persistenceError;
+      const outcome = publisher.complete({ scope, resourceId, publication,
+        mapping: sharePlan.mapping, result });
+      const response: SharePublishResponse = outcome.status === 'published'
+        ? { status: 'published', receipt: outcome.receipt, url: prepared.url }
+        : { status: 'binding_pending', receipt: outcome.receipt, binding: outcome.binding };
+      if (response.status === 'binding_pending' && response.binding.retrying) {
+        try { publisher.retry(); }
+        catch { response.binding = { retrying: false, code: 'SHARE_BINDING_RETRY_UNAVAILABLE' }; }
       }
-      return res.json(publication);
+      // This evidence is advisory, unlike the publication itself. Failure must
+      // leave the confirmed link intact; reads without evidence say unknown.
+      if (deps.shareContentFingerprints) {
+        try {
+          const scope = publicFilePublicationScope(projectId, filePath, principal);
+          const revision = publicFilePublicationStore.getRevision(scope);
+          if (revision?.slug === publication.slug) {
+            deps.shareContentFingerprints.remember(scope, revision, sharePlan.files);
+          }
+        } catch {
+          console.warn('[od] public file content fingerprint unavailable');
+        }
+      }
+      return res.json(response);
     } catch (error) {
       console.warn('[od] failed to publish public project file:', error);
       return res.status(502).json({ error: 'PUBLIC_FILE_PUBLISH_UNAVAILABLE' });
     } finally {
       await rm(tempDir, { recursive: true, force: true }).catch(() => {});
     }
-  });
+  }));
 
-  app.delete(/^\/api\/projects\/([^/]+)\/files\/(.+)\/publish-public$/u, async (req, res) => {
+  app.delete(/^\/api\/projects\/([^/]+)\/files\/(.+)\/publish-public$/u, publicFileMutationHandler(deps.publicFileMutations, async (req, res) => {
+    // SAFETY: these RegExp routes expose numeric capture keys; Express types model named keys only.
     const params = req.params as unknown as { 0?: string; 1?: string };
     const projectId = String(params[0] ?? '');
     const filePath = normalizePublicFilePath(String(params[1] ?? ''));
@@ -1403,25 +1431,48 @@ export function registerCollabSyncRoutes(
     if (sharedProject?.ownerMemberId && sharedProject.ownerMemberId !== principal.memberId) {
       return res.status(403).json({ error: 'WORKSPACE_PROJECT_PUBLISH_DENIED' });
     }
-    const resourceId = publicFileResourceIdFor(projectId, filePath, principal);
+    const scope = publicFilePublicationScope(projectId, filePath, principal);
+    const revision = publicFilePublicationStore.getRevision(scope);
+    if (!revision || revision.slug !== slug) return res.status(404).json({ error: 'PUBLIC_SHARE_NOT_FOUND' });
+    if (!deps.sharePublishing) return res.status(503).json({ error: 'PUBLIC_SHARE_STOP_UNAVAILABLE' });
     try {
-      await runVelaResourceCommand([
-        'snapshot-redact',
-        resourceId,
-        slug,
-        '--json',
-      ], principal.teamId);
-      publicFilePublicationStore.delete(
-        publicFilePublicationScope(projectId, filePath, principal),
-      );
+      const prepared = await deps.sharePublishing.prepare(scope, slug);
+      const stopped: unknown = JSON.parse(await prepared.run([
+        'share', 'stop', slug, '--project-id', projectId, '--json',
+      ]));
+      if (!stopped || typeof stopped !== 'object' || !('status' in stopped) || stopped.status !== 'stopped'
+        || !('slug' in stopped) || stopped.slug !== slug || !('projectId' in stopped) || stopped.projectId !== projectId) {
+        throw new Error('PUBLIC_SHARE_STOP_UNCONFIRMED');
+      }
+      if (revision?.slug === slug) {
+        publicFilePublicationStore.deleteIfRevisionMatches(scope, revision);
+      }
       return res.json({ ok: true, slug, fileName: filePath });
     } catch (error) {
       console.warn('[od] failed to unpublish public project file:', error);
       return res.status(502).json({ error: 'PUBLIC_FILE_UNPUBLISH_UNAVAILABLE' });
     }
+  }));
+
+  app.get('/api/projects/:id/share-state', async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const projectId = String(req.params.id);
+    const verification = await verifiedWorkspaceContextForRequest(req, projectId);
+    if (!verification.ok) return sendWorkspaceVerificationFailure(res, verification);
+    const context = verification.context;
+    const principal = publicFilePrincipal(context);
+    if (!context || !principal) return res.status(409).json(workspaceIdentityRequiredBody());
+    if (!deps.readProjectShareState) return res.status(503).json({ error: 'SHARE_STATE_UNAVAILABLE' });
+    try {
+      return res.json(await deps.readProjectShareState({ projectId, resourceTeamId: principal.teamId, ownerMemberId: principal.memberId }));
+    } catch {
+      return res.status(503).json({ error: 'SHARE_STATE_UNAVAILABLE' });
+    }
   });
 
   app.get(/^\/api\/projects\/([^/]+)\/files\/(.+)\/publish-public$/u, async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    // SAFETY: these RegExp routes expose numeric capture keys; Express types model named keys only.
     const params = req.params as unknown as { 0?: string; 1?: string };
     const projectId = String(params[0] ?? '');
     const filePath = normalizePublicFilePath(String(params[1] ?? ''));
@@ -1453,11 +1504,35 @@ export function registerCollabSyncRoutes(
     if (sharedProject?.ownerMemberId && sharedProject.ownerMemberId !== principal.memberId) {
       return res.status(403).json({ error: 'WORKSPACE_PROJECT_PUBLISH_DENIED' });
     }
-    return res.json({
-      publication: publicFilePublicationStore.get(
-        publicFilePublicationScope(projectId, filePath, principal),
-      ),
-    });
+    const scope = publicFilePublicationScope(projectId, filePath, principal);
+    // Advisory freshness must use exactly the same planner as upload, including
+    // rewritten entry and dependencies. Unavailable bytes never mean no share.
+    let freshness: import('@open-design/contracts').ShareContentFreshness = 'unknown';
+    if (deps.shareContentFingerprints && resolveProjectDir) {
+      try {
+        const plan = await buildSharePlan(
+          await resolveProjectDir(projectId), filePath, projectStore?.get?.(projectId)?.metadata,
+        );
+        freshness = deps.shareContentFingerprints.compare(scope, plan.files);
+      } catch {
+        // Keep publication visibility independent from failed comparison.
+      }
+    }
+    if (!deps.readProjectShareState) return res.status(503).json({ error: 'SHARE_STATE_UNAVAILABLE' });
+    try {
+      const history = await deps.readProjectShareState(scope);
+      const remote = history.publications.find(item => item.sourceFilePath === filePath);
+      const local = publicFilePublicationStore.get(scope);
+      const response: import('@open-design/contracts').ProjectFilePublicShareResponse = {
+        publication: local && local.slug === remote?.slug ? local : null,
+        status: remote?.status ?? 'none',
+        freshness,
+      };
+      return res.json(response);
+    } catch {
+      // A failed lifecycle read must not erase the caller's previously known link.
+      return res.status(503).json({ error: 'SHARE_STATE_UNAVAILABLE' });
+    }
   });
 
   app.post('/api/projects/:id/collab/sync-intent', async (req, res) => {
