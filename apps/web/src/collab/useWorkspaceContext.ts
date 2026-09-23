@@ -1165,6 +1165,7 @@ function enforceWorkspaceBillingHardExpiry(
     ...response,
     workspaceBalance: null,
     workspaceSnapshot: null,
+    preflight: null,
   };
 }
 
@@ -1254,7 +1255,7 @@ export function useWorkspaceBillingResponse(
       : `workspace-billing:workspace:${workspaceId}:member:${workspaceMemberId}`;
   const billingUrl =
     billingScopeKey
-      ? `/api/workspace/billing?scope=workspace&workspaceId=${encodeURIComponent(workspaceId)}`
+      ? `/api/workspace/billing?scope=workspace&workspaceId=${encodeURIComponent(workspaceId)}${context?.workspaceType === 'personal' ? '&includePreflight=1' : ''}`
       : null;
   // The same workspace can be left and selected again while an earlier read is
   // still in flight. The context revision makes A→B→A a new request identity.
@@ -1352,6 +1353,13 @@ export function useWorkspaceBillingResponse(
         }
         const body = (await res.json()) as WorkspaceBillingResponse;
         return enforceWorkspaceBillingHardExpiry({
+          // Quota and wallet use the same last-good cache and invalidations as
+          // the account header. Hovering a presentation component never fetches.
+          ...(body.preflight?.workspaceId === workspaceId
+            && body.preflight.workspaceMemberId === workspaceMemberId
+            && Math.abs(Date.now() - Date.parse(body.preflight.generatedAt)) < 60_000
+            ? { preflight: body.preflight }
+            : {}),
           summary: body.summary ?? null,
           workspaceBalance: body.workspaceBalance ?? null,
           workspaceSnapshot: body.workspaceSnapshot ?? null,
@@ -1415,6 +1423,8 @@ export function useWorkspaceBillingResponse(
     billingRequestKey,
     billingScopeKey,
     billingUrl,
+    workspaceId,
+    workspaceMemberId,
   ]);
 
   useEffect(() => {
@@ -1491,6 +1501,23 @@ export function useWorkspaceBillingResponse(
     state?.response.workspaceRuntime?.hardExpiresAt,
     state?.response.workspaceRuntime?.revision,
   ]);
+
+  // A quota reset can happen without spending money. Revalidate once at the
+  // next server reset; the shared event collapses timers from other consumers.
+  useEffect(() => {
+    const preflight = state?.scopeKey === billingScopeKey ? state.response.preflight : null;
+    if (!preflight || !billingRequestKey) return;
+    const resets = preflight.codingPlan.windows
+      .map((window) => window.resetsAt ? Date.parse(window.resetsAt) : NaN)
+      .filter((at) => Number.isFinite(at) && at > Date.now());
+    if (!resets.length) return;
+    const timer = setTimeout(() => {
+      window.dispatchEvent(new CustomEvent(WORKSPACE_BILLING_RETRY_EVENT, {
+        detail: { requestKey: billingRequestKey, force: true },
+      }));
+    }, Math.min(Math.min(...resets) - Date.now() + 250, MAX_BROWSER_TIMER_DELAY_MS));
+    return () => clearTimeout(timer);
+  }, [billingRequestKey, billingScopeKey, state]);
 
   // Thin invalidations never carry authoritative money/plan data. Legacy
   // events stay broad; v2 events are rejected unless their explicit workspace

@@ -17,7 +17,7 @@ import { I18nProvider } from '../../src/i18n';
 
 const originalFetch = globalThis.fetch;
 
-function personalContext(planId: string): WorkspaceCollabContext {
+function personalContext(planId: string | null): WorkspaceCollabContext {
   return {
     workspaceId: 'ws-personal',
     workspaceType: 'personal',
@@ -46,7 +46,7 @@ function billing(membershipTier: string): WorkspaceBillingSummary {
   } as unknown as WorkspaceBillingSummary;
 }
 
-function renderRail(tier: string, locale: 'en' | 'zh-CN' = 'en') {
+function renderRail(tier: string, locale: 'en' | 'zh-CN' = 'en', contextPlanId: string | null = tier) {
   return render(
     <I18nProvider initial={locale}>
       <EntryNavRail
@@ -54,8 +54,9 @@ function renderRail(tier: string, locale: 'en' | 'zh-CN' = 'en') {
         onViewChange={() => {}}
         onNewProject={() => {}}
         open
-        context={personalContext(tier)}
+        context={personalContext(contextPlanId)}
         billing={billing(tier)}
+        billingResponse={null}
         balanceUsd="247.51"
       />
     </I18nProvider>,
@@ -97,5 +98,24 @@ describe('personal billing card uses only its plan wordmark', () => {
     expect(head.text).toBe('');
     expect(head.el.getAttribute('aria-label')).toBe(tier);
     expect(head.wordmarkHeight).toBe('20');
+  });
+});
+
+// The real workspace directory can omit planId while billing already identifies
+// the paid tier. Skeletons must agree with the wordmark in that state.
+describe('personal card loading with directory-only workspace context', () => {
+  it.each([
+    ['free', 0],
+    ['go', 2],
+    ['plus', 1],
+    ['pro', 1],
+    ['max', 1],
+  ] as const)('keeps the %s skeleton aligned with its billing tier', (tier, blocks) => {
+    globalThis.fetch = vi.fn(() => new Promise<Response>(() => {}));
+    renderRail(tier, 'zh-CN', null);
+    expect(planHead().el.getAttribute('aria-label')).toBe(tier);
+    expect(screen.queryAllByTestId('coding-plan-skeleton-block')).toHaveLength(blocks);
+    expect(screen.getByTestId('coding-plan-wallet-skeleton')).toBeTruthy();
+    expect(screen.queryByTestId('entry-nav-credits-row')).toBeNull();
   });
 });

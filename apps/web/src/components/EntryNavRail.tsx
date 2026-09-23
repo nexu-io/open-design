@@ -49,6 +49,7 @@ import {
   workspaceSeatCapacityState,
   type WorkspaceActiveResponse,
   type WorkspaceBillingSummary,
+  type WorkspaceBillingResponse,
   type WorkspaceCollabContext,
   type WorkspaceDirectoryItem,
   type WorkspaceDirectoryResponse,
@@ -259,6 +260,7 @@ interface Props {
   /** Account billing metadata (via the vela CLI 收口). Null → the billing
    *  chip falls back to the context plan-tier hint. */
   billing?: WorkspaceBillingSummary | null;
+  billingResponse?: WorkspaceBillingResponse | null;
   /** Explicitly scoped balance in USD for `context`. Team callers must pass
    *  only a backend-proven v2 workspace wallet, never account credits. */
   balanceUsd?: string | null;
@@ -1011,6 +1013,7 @@ interface EntryTopRightClusterProps {
   page: TrackingWorkspacePage;
   context: WorkspaceCollabContext | null;
   billing?: WorkspaceBillingSummary | null;
+  billingResponse?: WorkspaceBillingResponse | null;
   balanceUsd?: string | null;
   /** Extra content rendered LEFT of the credits pill (e.g. the DeepSeek
    *  campaign badge on Home). */
@@ -1054,6 +1057,7 @@ export function EntryTopRightCluster({
   page,
   context,
   billing,
+  billingResponse,
   balanceUsd,
   leadingSlot,
   updaterSlot,
@@ -1570,6 +1574,8 @@ export function EntryTopRightCluster({
                     {planTier !== 'team' ? (
                       <CodingPlanUsage
                         context={context}
+                        planTier={planTier}
+                        billing={billingResponse}
                         usageUrl={accountBillingUrl}
                         onUsageClick={() => {
                           trackAccountAction('credits');
@@ -1930,6 +1936,7 @@ export function WorkspaceTopRightAccountCluster({
       page="project"
       context={context}
       billing={billing}
+      billingResponse={billingResponse}
       balanceUsd={balanceUsd}
       // No CMS touchpoint here: every placement the app authorizes is a home
       // placement (`opend.home.*`), and a project workbench is not home. The
@@ -2072,6 +2079,7 @@ export function EntryNavRail({
   topRightSlot,
   context,
   billing,
+  billingResponse,
   balanceUsd,
   onOpenSettings,
   onSignedOut,
@@ -2836,6 +2844,7 @@ export function EntryNavRail({
         page={analyticsPage}
         context={context}
         billing={billing}
+        billingResponse={billingResponse}
         balanceUsd={balanceUsd}
         leadingSlot={topRightSlot}
         updaterSlot={updaterSlot}

@@ -1825,6 +1825,7 @@ export function EntryShell({
           ) : null}
           context={railWorkspaceContext}
           billing={workspaceBilling}
+          billingResponse={workspaceBillingResponse}
           balanceUsd={workspaceBalanceUsd}
           onOpenSettings={onOpenSettings}
           onInvite={() => changeView('members')}

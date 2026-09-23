@@ -391,6 +391,104 @@ describe('useWorkspaceBilling explicit scope', () => {
     resetWorkspaceBillingCache();
   });
 
+  function personalQuotaFixture() {
+    const context = { ...teamContext('personal-a'), workspaceType: 'personal' as const, planId: 'go' };
+    let spent = '250';
+    let fail = false;
+    let member = context.workspaceMemberId;
+    let generatedOffset = 0;
+    let resetAt: string | null = null;
+    const billingCalls: string[] = [];
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/workspace/directory') return workspaceDirectoryResponse(context);
+      if (url.startsWith('/api/workspace/context')) return new Response(JSON.stringify({ context }));
+      if (url.startsWith('/api/workspace/billing?')) {
+        billingCalls.push(url);
+        if (fail) return new Response('', { status: 503 });
+        return new Response(JSON.stringify({
+          ...billingResponse('personal-a', '0'),
+          preflight: {
+            workspaceId: context.workspaceId, workspaceMemberId: member,
+            generatedAt: new Date(Date.now() + generatedOffset).toISOString(), balanceUsd: '0',
+            codingPlan: { eligible: true, tier: 'go', windows: [{ policyId: 'week',
+              durationSeconds: 604800, usedCredits: spent, limitCredits: '1000', resetsAt: resetAt }] },
+          },
+        }));
+      }
+      return new Response('{}');
+    });
+    vi.stubGlobal('fetch', fetcher);
+    return { context, billingCalls,
+      spend: (value: string) => { spent = value; },
+      fail: () => { fail = true; },
+      member: (value: string) => { member = value; },
+      generatedOffset: (value: number) => { generatedOffset = value; },
+      reset: (value: string) => { resetAt = value; },
+    };
+  }
+
+  it('shares personal quota with the existing cache and refreshes on scoped SSE without clearing it', async () => {
+    const fixture = personalQuotaFixture();
+    const first = renderHook(() => useWorkspaceBillingResponse({ context: fixture.context, revision: 0 }));
+    await waitFor(() => expect(first.result.current?.preflight?.codingPlan.windows[0]?.usedCredits).toBe('250'));
+    expect(fixture.billingCalls).toHaveLength(1);
+    const cached = first.result.current;
+    const second = renderHook(() => useWorkspaceBillingResponse({ context: fixture.context, revision: 0 }));
+    expect(second.result.current?.preflight).toEqual(cached?.preflight);
+    await act(async () => {});
+    expect(fixture.billingCalls).toHaveLength(1);
+    fixture.spend('500');
+    act(() => {
+      MockWorkspaceEventSource.instances[0]!.dispatch('wallet-balance-changed', {
+        type: 'wallet-balance-changed', workspaceId: 'other', workspaceMemberId: fixture.context.workspaceMemberId, revision: 'wrong',
+      });
+    });
+    expect(fixture.billingCalls).toHaveLength(1);
+    act(() => {
+      MockWorkspaceEventSource.instances[0]!.dispatch('wallet-balance-changed', {
+        type: 'wallet-balance-changed', workspaceId: fixture.context.workspaceId,
+        workspaceMemberId: fixture.context.workspaceMemberId, revision: 'quota-new',
+      });
+      expect(first.result.current?.preflight?.codingPlan.windows[0]?.usedCredits).toBe('250');
+    });
+    await waitFor(() => expect(first.result.current?.preflight?.codingPlan.windows[0]?.usedCredits).toBe('500'));
+    expect(fixture.billingCalls).toHaveLength(2);
+    expect(second.result.current?.preflight?.codingPlan.windows[0]?.usedCredits).toBe('500');
+    fixture.fail();
+    act(() => {
+      MockWorkspaceEventSource.instances[0]!.dispatch('billing-changed', {
+        type: 'billing-changed', workspaceId: fixture.context.workspaceId, revision: 'quota-offline',
+      });
+    });
+    await act(async () => {});
+    expect(first.result.current?.preflight?.codingPlan.windows[0]?.usedCredits).toBe('500');
+  });
+
+  it.each(['member', 'stale', 'future'])('rejects an invalid personal quota snapshot: %s', async (reason) => {
+    const fixture = personalQuotaFixture();
+    if (reason === 'member') fixture.member('other');
+    else fixture.generatedOffset(reason === 'stale' ? -120000 : 120000);
+    const hook = renderHook(() => useWorkspaceBillingResponse({ context: fixture.context, revision: 0 }));
+    await waitFor(() => expect(hook.result.current).not.toBeNull());
+    expect(hook.result.current?.preflight).toBeUndefined();
+  });
+
+  it('refreshes the shared quota once at its server reset without a hover', async () => {
+    vi.useFakeTimers();
+    const fixture = personalQuotaFixture();
+    fixture.reset(new Date(Date.now() + 10000).toISOString());
+    const hook = renderHook(() => useWorkspaceBillingResponse({ context: fixture.context, revision: 0 }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(fixture.billingCalls).toHaveLength(1);
+    fixture.spend('0');
+    await act(async () => { await vi.advanceTimersByTimeAsync(10249); });
+    expect(fixture.billingCalls).toHaveLength(1);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(fixture.billingCalls).toHaveLength(2);
+    expect(hook.result.current?.preflight?.codingPlan.windows[0]?.usedCredits).toBe('0');
+  });
+
   it('does not request billing before an exact Workspace identity exists', async () => {
     const billingCalls: string[] = [];
     vi.stubGlobal(
@@ -1960,7 +2058,7 @@ describe('useWorkspaceBilling explicit scope', () => {
     await waitFor(() => expect(hook.result.current).not.toBeNull());
 
     expect(billingCalls).toEqual([
-      '/api/workspace/billing?scope=workspace&workspaceId=personal-a',
+      '/api/workspace/billing?scope=workspace&workspaceId=personal-a&includePreflight=1',
     ]);
   });
 });

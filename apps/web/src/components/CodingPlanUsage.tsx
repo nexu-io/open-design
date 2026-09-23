@@ -1,6 +1,4 @@
-import { useEffect, useState } from 'react';
 import type {
-  WorkspaceBillingPreflight,
   WorkspaceBillingResponse,
   WorkspaceCollabContext,
 } from '@open-design/contracts';
@@ -9,14 +7,8 @@ import { isTeamPlanTier } from '../collab/team-plan';
 import { useI18n } from '../i18n';
 import { codingPlanQuotaView } from './coding-plan-usage-model';
 import styles from './CodingPlanUsage.module.css';
+import type { PlanBadgeTier } from './PlanWordmark';
 
-// Longer delays overflow a signed 32-bit timer and fire immediately.
-const MAX_TIMEOUT_MS = 2_147_483_647;
-type Reading = { scope: string } & (
-  | { status: 'loading' }
-  | { status: 'ready'; preflight: WorkspaceBillingPreflight }
-  | { status: 'unavailable' }
-);
 interface WalletEntry {
   /** Explicitly scoped fallback for older CLIs without preflight. */
   balanceUsd: string | null | undefined;
@@ -49,11 +41,17 @@ export function CodingPlanUsage({
   usageUrl,
   onUsageClick,
   wallet,
+  planTier,
+  billing,
 }: {
   context: WorkspaceCollabContext | null;
+  /** Shared billing cache, refreshed by workspace SSE and its existing recovery path. */
+  billing?: WorkspaceBillingResponse | null;
   usageUrl?: string | null;
   onUsageClick?: () => void;
   wallet?: WalletEntry;
+  /** Same resolved tier as the card header; directory context may omit planId. */
+  planTier?: PlanBadgeTier | null;
 }) {
   const { t } = useI18n();
   const workspaceId = context?.workspaceId;
@@ -62,56 +60,12 @@ export function CodingPlanUsage({
   const personalScope = Boolean(
     context && context.workspaceType !== 'team' && !isTeamPlanTier(planId),
   );
-  const scope = JSON.stringify([workspaceId, memberId, planId, personalScope]);
-  const [reading, setReading] = useState<Reading>({ scope, status: 'loading' });
-  // Hide the old reading during the render that precedes the new scope's effect.
-  const state: Reading = reading.scope === scope ? reading : { scope, status: 'loading' };
-  useEffect(() => {
-    setReading({ scope, status: 'loading' });
-    if (!workspaceId || !memberId || !personalScope) return;
-    const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout>;
-    const billingUrl = `/api/workspace/billing?scope=workspace&workspaceId=${encodeURIComponent(workspaceId)}&includePreflight=1`;
-    async function refresh() {
-      let resetDelay: number | null = null;
-      try {
-        const response = await fetch(billingUrl, { cache: 'no-store', signal: controller.signal });
-        const body: WorkspaceBillingResponse | null = response.ok ? await response.json() : null;
-        const next = body?.preflight;
-        const valid =
-          next != null &&
-          next.workspaceId === workspaceId &&
-          next.workspaceMemberId === memberId &&
-          Math.abs(Date.now() - Date.parse(next.generatedAt)) < 60_000;
-        if (controller.signal.aborted) return;
-        setReading(
-          valid ? { scope, status: 'ready', preflight: next } : { scope, status: 'unavailable' },
-        );
-        if (valid) {
-          for (const window of next.codingPlan.windows) {
-            const untilReset = window.resetsAt ? Date.parse(window.resetsAt) - Date.now() : 0;
-            if (untilReset > 0) resetDelay = Math.min(resetDelay ?? Infinity, untilReset + 250);
-          }
-        }
-      } catch {
-        if (!controller.signal.aborted) setReading({ scope, status: 'unavailable' });
-      }
-      // Read on open and at the next reset only; consumption does not start a poll.
-      if (!controller.signal.aborted && resetDelay !== null)
-        timer = setTimeout(() => void refresh(), Math.min(resetDelay, MAX_TIMEOUT_MS));
-    }
-    void refresh();
-    return () => {
-      controller.abort();
-      clearTimeout(timer);
-    };
-  }, [scope, workspaceId, memberId, personalScope]);
-
   if (!workspaceId || !memberId || !personalScope) return null;
-  if (state.status === 'loading') {
+  if (billing === null) {
+    const loadingTier = planTier ?? planId;
     let blocks = 1;
-    if (planId === 'go') blocks = 2;
-    else if (!planId || planId === 'free') blocks = 0;
+    if (loadingTier === 'go') blocks = 2;
+    else if (!loadingTier || loadingTier === 'free') blocks = 0;
     return (
       <div
         role="status"
@@ -153,9 +107,17 @@ export function CodingPlanUsage({
       </div>
     );
   }
-  const preflight = state.status === 'ready' ? state.preflight : null;
+  const snapshot = billing?.preflight;
+  const preflight =
+    snapshot?.workspaceId === workspaceId && snapshot.workspaceMemberId === memberId
+      ? snapshot
+      : null;
   const plan = preflight?.codingPlan;
-  const views = plan?.eligible && plan.tier ? codingPlanQuotaView(plan.windows) : [];
+  const windows = plan?.windows.filter((window) =>
+    window.durationSeconds === 604_800
+      || (plan.tier === 'go' && window.durationSeconds === 18_000),
+  ) ?? [];
+  const views = plan?.eligible && plan.tier ? codingPlanQuotaView(windows) : [];
   const allowance = t('billing.codingPlanDesignPlan');
   const walletValue = walletLabel(preflight ? preflight.balanceUsd : wallet?.balanceUsd);
   const walletContent = (
