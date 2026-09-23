@@ -5299,6 +5299,13 @@ export async function startServer({
   const recordPublicFilePublication = createPublicFilePublicationRecorder(
     db, publicFilePublicationStore, enqueuePublishedFileComments,
   );
+  const resolveLocalProjectOwner = (projectId: string, workspaceId: string): string | null => {
+    const binding = getWorkspaceProjectByProjectId(db, projectId);
+    if (!binding || binding.workspaceId !== workspaceId || binding.resourceState !== 'active'
+      || binding.cloudTombstonedAt != null || !getProject(db, projectId)
+      || projectIsUnmaterializedSharedPlaceholder(projectId)) return null;
+    return typeof binding.createdByWorkspaceMemberId === 'string' ? binding.createdByWorkspaceMemberId : null;
+  };
   const collabSyncRoutes = registerCollabSyncRoutes(app, {
     collab,
     publicFilePublicationStore,
@@ -5312,13 +5319,7 @@ export async function startServer({
     // (slug + revision token read back after the write), so a half-written
     // publication cannot enqueue work that later resolves against nothing.
     recordPublicFilePublication,
-    resolveLocalPublicShareOwner: (projectId, workspaceId) => {
-      const binding = getWorkspaceProjectByProjectId(db, projectId);
-      if (!binding || binding.workspaceId !== workspaceId || binding.resourceState !== 'active'
-        || binding.cloudTombstonedAt != null || !getProject(db, projectId)
-        || projectIsUnmaterializedSharedPlaceholder(projectId)) return null;
-      return typeof binding.createdByWorkspaceMemberId === 'string' ? binding.createdByWorkspaceMemberId : null;
-    },
+    resolveLocalPublicShareOwner: resolveLocalProjectOwner,
     resolvePublicShareLink: (projectId, slug) => resolvePublicShareViewerUrl(projectId, slug, process.env, configuredAmrEnv()),
     sharePublishing: {
       ensureProject: (scope, principal, run) => ensurePublicShareProject({
@@ -5360,7 +5361,7 @@ export async function startServer({
         })().catch(() => { console.warn('[od] share binding retry unavailable'); });
       },
     },
-    readProjectShareState: createVelaProjectShareState({ dataRoot: RUNTIME_DATA_DIR, configuredEnv: configuredAmrEnv }),
+    readProjectShareState: createVelaProjectShareState({ dataRoot: RUNTIME_DATA_DIR, configuredEnv: configuredAmrEnv, resolveLocalProjectOwner }),
     shareContentFingerprints: createShareContentFingerprints(db, publicFilePublicationStore),
     publicFileMutations,
     verifyWorkspaceRequest: verifiedWorkspaceContextForRequest,

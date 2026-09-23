@@ -1,5 +1,6 @@
 import type { ProjectShareHistoryResponse } from '@open-design/contracts';
 import { hasEverShared } from '@open-design/contracts';
+import { projectResourceIdFor } from '../integrations/vela-team-projects.js';
 import type { PublicFilePublicationScope } from './public-file-publication-store.js';
 import { readVelaControlApiContext } from '../integrations/vela.js';
 import { fetchVelaWorkspaceDirectory } from './vela-workspace-context.js';
@@ -12,6 +13,8 @@ export function createVelaProjectShareState(options: {
   readSession?: typeof readVelaControlApiContext;
   fetchDirectory?: typeof fetchVelaWorkspaceDirectory;
   runCommand?: typeof runPinnedVelaCommand;
+  /** Persisted local authorship, never inferred from the current reader. */
+  resolveLocalProjectOwner?: (projectId: string, workspaceId: string) => string | null;
 }): ReadProjectShareState {
   return async scope => {
     const identity = Object.freeze({ ...scope });
@@ -23,6 +26,19 @@ export function createVelaProjectShareState(options: {
     if (!directory.ok || !directory.items.some(item => item.workspaceId === identity.resourceTeamId
       && item.workspaceMemberId === identity.ownerMemberId && item.memberStatus === 'active'
       && item.lifecycleState === 'active')) throw new Error('SHARE_STATE_UNAVAILABLE');
+    // A personal project can have no cloud catalog row until its first share.
+    // Register only proven local authorship, not content or sharing intent.
+    // Omitted sync/version/metadata fields preserve any existing cloud state.
+    const personalWorkspace = directory.items.find(item => item.workspaceId === identity.resourceTeamId
+      && item.workspaceMemberId === identity.ownerMemberId && item.workspaceType === 'personal');
+    if (personalWorkspace
+      && options.resolveLocalProjectOwner?.(identity.projectId, identity.resourceTeamId) === identity.ownerMemberId) {
+      await (options.runCommand ?? runPinnedVelaCommand)({
+        args: ['team-projects', 'upsert', identity.projectId, '--resource-id', projectResourceIdFor(identity.projectId,
+          { teamId: identity.resourceTeamId, memberId: identity.ownerMemberId, role: personalWorkspace.role, lifecycleState: personalWorkspace.lifecycleState })],
+        session, workspaceId: identity.resourceTeamId, dataRoot: options.dataRoot, configuredEnv,
+      });
+    }
     const output = await (options.runCommand ?? runPinnedVelaCommand)({
       args: ['share', 'project-status', identity.projectId, '--json'], session,
       workspaceId: identity.resourceTeamId, dataRoot: options.dataRoot, configuredEnv,
@@ -33,7 +49,9 @@ export function createVelaProjectShareState(options: {
 
 /** Missing/unauthorized/error replies never become an empty history. */
 export function parseProjectShareState(output: string, projectId: string): ProjectShareHistoryResponse {
-  const value: unknown = JSON.parse(output);
+  let value: unknown;
+  try { value = JSON.parse(output); }
+  catch { throw new Error('SHARE_STATE_INVALID'); }
   if (!value || typeof value !== 'object' || !('projectId' in value) || value.projectId !== projectId
     || !('bindingExists' in value) || typeof value.bindingExists !== 'boolean'
     || !('publications' in value) || !Array.isArray(value.publications)) throw new Error('SHARE_STATE_INVALID');

@@ -7,6 +7,7 @@ import type { ShareBindingOutbox } from '../collab/share-binding-outbox.js';
 import type { runVelaCommand } from '../integrations/vela-command.js';
 import { sharePublishResponse } from '../collab/share-publish-response.js';
 import { stopVelaShare } from '../collab/vela-share-stop.js';
+import { publicFileResourceIdFor } from '../collab/public-file-resource-id.js';
 import { resumePendingShareBinding } from '../collab/resume-pending-share-binding.js';
 import type { RecordPublicFilePublication } from '../collab/public-file-publication-recording.js';
 import type { ShareContentFingerprints } from '../collab/share-content-fingerprint.js';
@@ -576,18 +577,6 @@ function normalizePublicFilePath(filePath: string): string | null {
     return null;
   }
   return filePath;
-}
-
-function publicFileResourceIdFor(
-  projectId: string,
-  filePath: string,
-  principal: ResourceHubPrincipal,
-): string {
-  const scoped = Buffer.from(
-    JSON.stringify([principal.teamId, principal.memberId, projectId, filePath]),
-    'utf8',
-  ).toString('base64url');
-  return `project-file-${scoped}`;
 }
 
 function publicFilePublicationScope(
@@ -1358,7 +1347,7 @@ export function registerCollabSyncRoutes(
       : undefined;
     const resumed = await resumePendingShareBinding(scope, publicFilePublicationStore, publisher.outbox, prepared.run, stoppedSlug);
     if (resumed) return res.json(sharePublishResponse(resumed, prepared.url));
-    const resourceId = publicFileResourceIdFor(projectId, filePath, principal);
+    const resourceId = publicFileResourceIdFor(scope);
     const tempDir = await mkdtemp(path.join(os.tmpdir(), 'od-public-file-'));
     try {
       for (const file of sharePlan.files) {

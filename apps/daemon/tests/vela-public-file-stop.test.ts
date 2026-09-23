@@ -21,7 +21,7 @@ it.each([true, false])('uses real HTTP for directory verification and pinned CLI
     const address = server.address();
     if (!address || typeof address === 'string') throw new Error('missing HTTP listener');
     const captured = { ...session(), apiUrl: `http://127.0.0.1:${address.port}` };
-    const runCommand = vi.fn<typeof runPinnedVelaCommand>().mockResolvedValue(JSON.stringify({ status: 'stopped', slug: key.slug, projectId: key.projectId }));
+    const runCommand = vi.fn<typeof runPinnedVelaCommand>().mockResolvedValue(JSON.stringify(deletedReceipt));
     const prepare = createVelaPublicFileStop({ readSession: () => captured, dataRoot: tmpdir(), runCommand });
     const operation = await prepare(key);
     expect(requests).toHaveLength(1);
@@ -30,7 +30,7 @@ it.each([true, false])('uses real HTTP for directory verification and pinned CLI
     if (matches) {
       expect(operation).not.toBeNull(); await operation!.stop();
       expect(requests).toHaveLength(1);
-      expect(runCommand).toHaveBeenCalledWith(expect.objectContaining({ session: expect.objectContaining({ controlKey: 'fixture-key' }), workspaceId: 'workspace', args: ['share', 'stop', 'a/b', '--project-id', 'project', '--json'] }));
+      expect(runCommand).toHaveBeenCalledWith(expect.objectContaining({ session: expect.objectContaining({ controlKey: 'fixture-key' }), workspaceId: 'workspace', args: ['resource', 'remove', resourceId, '--json'] }));
     } else {
       expect(operation).toBeNull(); expect(requests).toHaveLength(1); expect(runCommand).not.toHaveBeenCalled();
     }
@@ -41,6 +41,8 @@ it.each([true, false])('uses real HTTP for directory verification and pinned CLI
 });
 
 const key = { resourceTeamId: 'workspace', ownerMemberId: 'member', projectId: 'project', filePath: 'index.html', slug: 'a/b' };
+const resourceId = 'project-file-' + Buffer.from(JSON.stringify(['workspace', 'member', 'project', 'index.html'])).toString('base64url');
+const deletedReceipt = { ok: true, resource: { id: resourceId, teamId: 'workspace', ownerMemberId: 'member', deletedAt: '2026-09-23T00:00:00Z' } };
 const member: WorkspaceDirectoryItem = { workspaceId: 'workspace', workspaceName: 'W', workspaceType: 'personal', workspaceMemberId: 'member', role: 'member', memberStatus: 'active', lifecycleState: 'active' };
 const session = (): VelaControlApiContext => ({ profile: 'test', apiUrl: 'https://api.example.test', controlKey: 'fixture-key', user: null, configMtimeMs: null });
 function fixture(items = [member]) {
@@ -48,7 +50,7 @@ function fixture(items = [member]) {
   const readSession = vi.fn(() => captured);
   const fetchDirectory = vi.fn<typeof fetchVelaWorkspaceDirectory>(async () => ({ ok: true, items }));
   const fetchImpl = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ status: 'stopped' })));
-  const runCommand = vi.fn<typeof runPinnedVelaCommand>().mockResolvedValue(JSON.stringify({ status: 'stopped', slug: key.slug, projectId: key.projectId }));
+  const runCommand = vi.fn<typeof runPinnedVelaCommand>().mockResolvedValue(JSON.stringify(deletedReceipt));
   return { captured, readSession, fetchDirectory, fetchImpl, runCommand, prepare: createVelaPublicFileStop({ readSession, fetchDirectory, fetch: fetchImpl, runCommand, dataRoot: tmpdir() }) };
 }
 it('prepares without stopping and uses the exact captured credentials after account mutation', async () => {
@@ -63,7 +65,7 @@ it('prepares without stopping and uses the exact captured credentials after acco
   await operation!.stop();
   expect(f.readSession).toHaveBeenCalledTimes(1);
   expect(f.fetchImpl).not.toHaveBeenCalled();
-  expect(f.runCommand).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ dataRoot: tmpdir(), session: expect.objectContaining({ controlKey: 'fixture-key', apiUrl: 'https://api.example.test' }), workspaceId: 'workspace', args: ['share', 'stop', 'a/b', '--project-id', 'project', '--json'] }));
+  expect(f.runCommand).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ dataRoot: tmpdir(), session: expect.objectContaining({ controlKey: 'fixture-key', apiUrl: 'https://api.example.test' }), workspaceId: 'workspace', args: ['resource', 'remove', resourceId, '--json'] }));
 });
 it.each([
   { ...member, workspaceMemberId: 'different' },
@@ -91,7 +93,17 @@ it('sanitizes rejected CLI stops without retry or direct HTTP fallback', async (
   expect(f.runCommand).toHaveBeenCalledTimes(1); expect(f.fetchImpl).not.toHaveBeenCalled();
 });
 
-it.each(['{}', '{', JSON.stringify({ status: 'active' }), JSON.stringify({ status: 'stopped', slug: 'wrong', projectId: key.projectId }), JSON.stringify({ status: 'stopped', slug: key.slug, projectId: 'wrong' })])('rejects unsuccessful stop receipts', async (response) => {
+it.each([
+  '{}', '{', JSON.stringify({ status: 'stopped', slug: key.slug, projectId: key.projectId }),
+  ...[
+    { ...deletedReceipt, ok: false },
+    { ...deletedReceipt, resource: { ...deletedReceipt.resource, id: 'other-resource' } },
+    { ...deletedReceipt, resource: { ...deletedReceipt.resource, teamId: 'other-workspace' } },
+    { ...deletedReceipt, resource: { ...deletedReceipt.resource, ownerMemberId: 'other-owner' } },
+    { ...deletedReceipt, resource: { ...deletedReceipt.resource, deletedAt: null } },
+    { ...deletedReceipt, resource: { ...deletedReceipt.resource, deletedAt: '' } },
+  ].map(value => JSON.stringify(value)),
+])('rejects unconfirmed or mismatched source deletion receipts', async (response) => {
   const f = fixture(); f.runCommand.mockResolvedValue(response);
   const operation = await f.prepare(key); expect(operation).not.toBeNull();
   await expect(operation!.stop()).rejects.toThrow('PUBLIC_FILE_STOP_FAILED');
