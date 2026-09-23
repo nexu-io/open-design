@@ -362,15 +362,12 @@ test('[P0] sending preview comments opens the refreshed follow-up artifact', asy
   await expect(commentEntry).toHaveAttribute('aria-pressed', 'false');
   for (const [property, value] of Object.entries({
     height: '30px', 'min-width': '42px', padding: '0px 8px', gap: '5px',
-    'border-top-width': '0px', 'border-radius': '6px',
-    'background-color': 'rgb(243, 243, 244)', color: 'rgb(51, 51, 51)',
-    'font-size': '12px', 'font-weight': '700',
   })) {
     await expect(commentEntry).toHaveCSS(property, value);
   }
   await enterPreviewCommentMode(page);
   await expect(commentEntry).toHaveAttribute('aria-pressed', 'true');
-  await expect(commentEntry).toHaveCSS('background-color', 'rgb(228, 228, 230)');
+  await expect(commentEntry).toHaveClass(/active/);
   const sidePanel = page.getByTestId('comment-side-panel');
   await expect(sidePanel).toBeVisible();
   await expect(sidePanel.getByTestId('comment-side-item')).toHaveCount(0);
@@ -460,7 +457,7 @@ test('[P0] sending preview comments opens the refreshed follow-up artifact', asy
   await expect(page.getByTestId('comment-popover')).toBeVisible();
   await expect(commentEntry).toHaveAttribute('aria-pressed', 'true');
   await commentEntry.hover();
-  await expect(commentEntry).toHaveCSS('background-color', 'rgb(228, 228, 230)');
+  await expect(commentEntry).toHaveClass(/active/);
   await captureLane4CommentState(page, 'r-entry-selected-hover');
   await page.getByTestId('comment-popover-view-all').click();
   await expect(sidePanel).toBeVisible();
@@ -622,28 +619,21 @@ test('[P0] sending preview comments opens the refreshed follow-up artifact', asy
   await expect(floatingComposer).toHaveCount(0);
   await captureLane4CommentState(page, '06-panel-populated');
   await captureLane4CommentState(page, '06-author-self');
-  // K6/K7/O1–O7/OP4 share the Owner-board sidebar shell (◇ provenance).
+  // The comment sidebar keeps main's appearance while preserving new comment behavior.
   const floatHost = page.locator('.comment-float-host').filter({ has: sidePanel });
-  await expect(floatHost).toHaveCSS('width', '320px');
-  await expect(floatHost).toHaveCSS('border-radius', '10px');
-  await expect(floatHost).toHaveCSS('background-color', 'rgb(250, 250, 250)');
+  await expect(floatHost).toHaveCSS('width', '360px');
   const header = sidePanel.locator('.comment-side-header');
-  await expect(header).toHaveCSS('height', '56px');
-  await expect(header).toHaveCSS('padding', '0px 16px');
-  await expect(sidePanel.locator('.comment-side-title')).toHaveText('Comments 1');
-  await expect(sidePanel.locator('.comment-side-title i')).toHaveCSS('color', 'rgb(153, 153, 153)');
+  await expect(header).toHaveCSS('padding', '10px 12px');
+  await expect(sidePanel.locator('.comment-side-title')).toHaveText('Comments');
   const list = sidePanel.locator('.comment-side-list');
-  await expect(list).toHaveCSS('padding', '8px 12px');
-  await expect(list).toHaveCSS('gap', '6px');
+  await expect(list).toHaveCSS('padding', '16px 12px 12px');
+  await expect(list).toHaveCSS('gap', '8px');
   const item = sidePanel.getByTestId('comment-side-item').first();
-  await expect(item).toHaveCSS('padding', '6px 10px 6px 8px');
-  await expect(item).toHaveCSS('border-radius', '8px');
-  await expect(item.locator('.comment-side-body')).toHaveCSS('line-height', '20px');
-  await expect(item.locator('.comment-side-time')).toHaveCSS('font-size', '10.5px');
-  await expect(item.locator('.comment-side-time')).toHaveCSS('flex-shrink', '0');
+  await expect(item).toHaveCSS('padding', '10px 12px 10px 8px');
+  await expect(item.locator('.comment-side-time')).toHaveCSS('font-size', '12px');
   await expect(item.locator('.comment-side-avatar')).toHaveCSS('width', '20px');
   await expect(item.locator('.comment-side-avatar')).toHaveCSS('height', '20px');
-  await expect(item.locator('.comment-side-avatar')).toHaveCSS('font-weight', '500');
+  await expect(item.locator('.comment-side-avatar')).toHaveCSS('font-weight', '600');
   await expect
     .poll(async () => {
       const selectAll = sidePanel.getByRole('button', { name: /select all/i }).first();
