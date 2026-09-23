@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 // Evaluation-only branch. The control and image arms pin separate commits;
 // this switch is the only behavioral difference between those commits.
-export const INCLUDE_REFERENCE_IMAGE = false;
+export const INCLUDE_REFERENCE_IMAGE = true;
 export const REFERENCE_IMAGE_SHA256 = '7a91ed25792ac22241a5cf943cdbb97868b41d8d43e48bfc6e24efd6f68731c5';
 export const REFERENCE_CASE_PROMPT = '为 UI/UX 设计师设计一个高级、编辑感强的个人作品集网站。首页包含个人定位、精选项目、能力、客户评价和联系入口；项目卡片可进入案例详情，详情页展示背景、问题、过程、设计系统和结果。使用强排版、充足留白和克制动效，并适配移动端。';
 export const REFERENCE_DIRECTION = '视觉方向：暖白配色、衬线标题、宽松留白与有序作品网格，营造高级、克制的编辑式作品集风格。功能与内容以原题要求为准。';
