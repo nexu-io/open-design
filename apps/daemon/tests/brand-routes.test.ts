@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import express from 'express';
 import http from 'node:http';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -131,6 +131,136 @@ describe('brand routes', () => {
       expect(response.status).toBe(403);
       expect(authorizeProjectRequest).toHaveBeenCalledTimes(1);
       expect(authorizeDesignSystemRead).not.toHaveBeenCalled();
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('denies brand deletion when the backing project write gate rejects', async () => {
+    writeBrandFixture('brand-delete-denied', {
+      projectId: 'project-delete-denied',
+      logoPrimary: 'logos/missing.svg',
+      status: 'extracting',
+    });
+    const authorizeProjectRequest = vi.fn(async (_req, res, projectId, options) => {
+      expect(projectId).toBe('project-delete-denied');
+      expect(options).toEqual({ mode: 'write', capability: 'delete' });
+      res.status(403).json({ error: 'WORKSPACE_PROJECT_PERMISSION_DENIED' });
+      return false;
+    });
+    const server = await startBrandServer({ authorizeProjectRequest });
+    try {
+      const response = await server.requestJson('/api/brands/brand-delete-denied', {
+        method: 'DELETE',
+      });
+      expect(response.status).toBe(403);
+      expect(authorizeProjectRequest).toHaveBeenCalledTimes(1);
+      // Denied before any mutation: the brand record is still on disk.
+      expect(
+        readFileSync(path.join(brandsRoot, 'brand-delete-denied', 'meta.json'), 'utf8'),
+      ).toContain('brand-delete-denied');
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('denies cancel-extraction before aborting a workspace-bound extraction', async () => {
+    writeBrandFixture('brand-cancel-denied', {
+      projectId: 'project-cancel-denied',
+      logoPrimary: 'logos/missing.svg',
+      status: 'extracting',
+    });
+    const authorizeProjectRequest = vi.fn(async (_req, res, projectId, options) => {
+      expect(projectId).toBe('project-cancel-denied');
+      expect(options).toEqual({ mode: 'write', capability: 'writeFiles' });
+      res.status(403).json({ error: 'WORKSPACE_PROJECT_PERMISSION_DENIED' });
+      return false;
+    });
+    const server = await startBrandServer({ authorizeProjectRequest });
+    try {
+      const response = await server.requestJson('/api/brands/brand-cancel-denied/cancel-extraction', {
+        method: 'POST',
+      });
+      expect(response.status).toBe(403);
+      expect(authorizeProjectRequest).toHaveBeenCalledTimes(1);
+      // The gate runs before the abort: extraction status is untouched.
+      const meta = JSON.parse(
+        readFileSync(path.join(brandsRoot, 'brand-cancel-denied', 'meta.json'), 'utf8'),
+      );
+      expect(meta.status).toBe('extracting');
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('denies preview/finalize on the meta-bound project even when the body omits projectId', async () => {
+    writeBrandFixture('brand-meta-bound', {
+      projectId: 'project-meta-bound',
+      logoPrimary: 'logos/missing.svg',
+      status: 'extracting',
+    });
+    const authorized: string[] = [];
+    const authorizeProjectRequest = vi.fn(async (_req, res, projectId, options) => {
+      authorized.push(projectId);
+      expect(projectId).toBe('project-meta-bound');
+      expect(options).toEqual({ mode: 'write', capability: 'writeFiles' });
+      res.status(403).json({ error: 'WORKSPACE_PROJECT_PERMISSION_DENIED' });
+      return false;
+    });
+    const server = await startBrandServer({ authorizeProjectRequest });
+    try {
+      // No projectId in the body — the store would fall back to
+      // meta.projectId, so the gate must resolve the same target.
+      for (const route of ['preview', 'finalize']) {
+        const response = await server.requestJson(`/api/brands/brand-meta-bound/${route}`, {
+          method: 'POST',
+          body: {},
+        });
+        expect(response.status).toBe(403);
+      }
+      expect(authorized).toEqual(['project-meta-bound', 'project-meta-bound']);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('denies extract-from-html for a workspace-bound brand', async () => {
+    writeBrandFixture('brand-html-denied', {
+      projectId: 'project-html-denied',
+      logoPrimary: 'logos/missing.svg',
+      status: 'extracting',
+    });
+    const authorizeProjectRequest = vi.fn(async (_req, res, projectId, options) => {
+      expect(projectId).toBe('project-html-denied');
+      expect(options).toEqual({ mode: 'write', capability: 'writeFiles' });
+      res.status(403).json({ error: 'WORKSPACE_PROJECT_PERMISSION_DENIED' });
+      return false;
+    });
+    const server = await startBrandServer({ authorizeProjectRequest });
+    try {
+      const response = await server.requestJson('/api/brands/brand-html-denied/extract-from-html', {
+        method: 'POST',
+        body: { html: validBrowserHtml() },
+      });
+      expect(response.status).toBe(403);
+      expect(authorizeProjectRequest).toHaveBeenCalledTimes(1);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('deletes a brand with no backing project without invoking the gate', async () => {
+    writeBrandFixture('brand-unbound', { logoPrimary: 'logos/missing.svg' });
+    const authorizeProjectRequest = vi.fn();
+    const server = await startBrandServer({ authorizeProjectRequest });
+    try {
+      const response = await server.requestJson('/api/brands/brand-unbound', {
+        method: 'DELETE',
+      });
+      expect(response.status).toBe(200);
+      expect(response.body.ok).toBe(true);
+      expect(authorizeProjectRequest).not.toHaveBeenCalled();
+      expect(existsSync(path.join(brandsRoot, 'brand-unbound'))).toBe(false);
     } finally {
       await server.close();
     }

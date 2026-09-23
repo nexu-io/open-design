@@ -65,8 +65,8 @@ async function start(service: string, options: CliOptions): Promise<void> {
   if (service === "collab-cloud") {
     // Default to the well-known collab-cloud port when the caller does not pin
     // one, so two daemons can share a URL without discovering a dynamic port.
-    const rawPort = options.port;
-    const port = rawPort != null && rawPort !== "0" ? parsePort(rawPort) : DEFAULT_COLLAB_CLOUD_PORT;
+    // An explicit --port 0 honors the shared "0 for dynamic" contract.
+    const port = options.port == null ? DEFAULT_COLLAB_CLOUD_PORT : parsePort(options.port);
     const server = await startCollabCloudFixtureServer({
       host: options.host,
       port,
@@ -137,7 +137,7 @@ cli
   .option("--payload-path <path>", "Serve launcher payload bytes from a real archive")
   .option("--platform <platform>", "Updater platform: mac|win", { default: "mac" })
   .option("--token <token>", "collab-cloud: shared bearer token clients must present")
-  .option("--port <port>", "Port to bind, 0 for dynamic", { default: "0" })
+  .option("--port <port>", "Port to bind, 0 for dynamic (collab-cloud defaults to 18096 when omitted)")
   .option("--version <version>", "Fixture update version", { default: "99.0.0" })
   .action((service: string, options: CliOptions) => {
     void start(service, options);

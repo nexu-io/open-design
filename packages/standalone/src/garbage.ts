@@ -2,7 +2,7 @@ import { readFile, readdir } from "node:fs/promises";
 import { basename, join } from "node:path";
 
 import { discardStandaloneStoreEntry } from "./blob.js";
-import type { GenerationRecord, GenerationState } from "./store.js";
+import { validateGenerationRecord, type GenerationState } from "./store.js";
 import { withStandaloneMaintenanceLock } from "./maintenance.js";
 
 export type StandaloneGarbageSweepResult = Readonly<{
@@ -38,10 +38,11 @@ async function liveStoreReferences(root: string): Promise<Readonly<{ blobs: Set<
         state.lastHealthy,
       ].filter((value): value is string => value != null));
       for (const id of ids) {
-        const generation = await readJson<GenerationRecord>(join(channelRoot, "generations", `${id}.json`));
-        if (generation.schemaVersion !== 4 || generation.id !== id || generation.channel !== channel.name) {
-          throw new Error(`invalid retained generation while sweeping: ${channel.name}/${id}`);
-        }
+        const generation = await readJson<unknown>(join(channelRoot, "generations", `${id}.json`))
+          .then((value) => validateGenerationRecord(value, { channel: channel.name, id, root }))
+          .catch((error) => {
+            throw new Error(`invalid retained generation while sweeping: ${channel.name}/${id}: ${error instanceof Error ? error.message : String(error)}`);
+          });
         for (const resource of Object.values(generation.resources)) {
           blobs.add(resource.blobSha256);
           if (resource.materialization.type === "zip") materializations.add(basename(resource.path));

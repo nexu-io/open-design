@@ -76,6 +76,37 @@ export type SidecarGenerationHandoffRequest = {
   env?: NodeJS.ProcessEnv;
 };
 
+/**
+ * Validate an inbound generation-handoff request. The supervisor re-spawns the
+ * next child verbatim from these fields on `exit`, so every field must be
+ * checked here — a truthy non-iterable `args` or non-string `cwd` would throw
+ * inside the exit listener and kill the durable supervisor.
+ */
+export function normalizeSupervisorHandoffRequest(request: unknown): SidecarGenerationHandoffRequest {
+  if (typeof request !== "object" || request == null || Array.isArray(request)) {
+    throw new Error("sidecar generation handoff request must be an object");
+  }
+  const value = request as Record<string, unknown>;
+  if (typeof value.command !== "string" || value.command.length === 0) {
+    throw new Error("sidecar generation handoff command must be a non-empty string");
+  }
+  if (value.args != null && (!Array.isArray(value.args) || !value.args.every((arg) => typeof arg === "string"))) {
+    throw new Error("sidecar generation handoff args must be an array of strings");
+  }
+  if (value.cwd != null && (typeof value.cwd !== "string" || value.cwd.length === 0)) {
+    throw new Error("sidecar generation handoff cwd must be a non-empty string");
+  }
+  if (
+    value.env != null &&
+    (typeof value.env !== "object" ||
+      Array.isArray(value.env) ||
+      !Object.values(value.env as Record<string, unknown>).every((v) => typeof v === "string"))
+  ) {
+    throw new Error("sidecar generation handoff env must be an object with string values");
+  }
+  return value as SidecarGenerationHandoffRequest;
+}
+
 type SupervisorHandoffEnvelope = {
   request: SidecarGenerationHandoffRequest;
   requestId: string;

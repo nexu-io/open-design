@@ -847,7 +847,15 @@ function normalizeDesktopEvalInput(input: unknown): DesktopEvalInput {
 function normalizeDesktopScreenshotInput(input: unknown): DesktopScreenshotInput {
   const value = assertObject(input, "desktop screenshot input");
   assertKnownKeys(value, ["path"], "desktop screenshot input");
-  return { path: normalizeNonEmptyString(value.path, "desktop screenshot path") };
+  const path = normalizeNonEmptyString(value.path, "desktop screenshot path");
+  // path is where desktop main writes the PNG; require an absolute path so a
+  // malformed request can't write relative to the desktop process cwd (same
+  // invariant as render-slides/render-frames outputDir). Accepts POSIX (`/…`),
+  // Windows drive (`C:\…` / `C:/…`), and UNC (`\\…`) absolutes.
+  if (!/^(\/|[A-Za-z]:[\\/]|\\\\)/.test(path)) {
+    throw new Error("desktop screenshot path must be an absolute path");
+  }
+  return { path };
 }
 
 function normalizeDesktopClickInput(input: unknown): DesktopClickInput {
@@ -956,6 +964,13 @@ function normalizeDesktopRenderSlidesInput(input: unknown): DesktopRenderSlidesI
       throw new Error("desktop render slides outputDir must be an absolute path");
     }
   }
+  const width = normalizeOptionalPositiveNumber(value.width, "desktop render slides width");
+  const height = normalizeOptionalPositiveNumber(value.height, "desktop render slides height");
+  // Same bound as render-frames: an oversized viewport can exhaust desktop
+  // memory rendering per-page buffers.
+  if ((width != null && width > 8192) || (height != null && height > 8192)) {
+    throw new Error("desktop render slides dimensions must not exceed 8192px");
+  }
   return {
     ...(value.baseHref == null ? {} : { baseHref: normalizeNonEmptyString(value.baseHref, "desktop render slides baseHref") }),
     ...(value.deck == null ? {} : { deck: value.deck }),
@@ -966,8 +981,8 @@ function normalizeDesktopRenderSlidesInput(input: unknown): DesktopRenderSlidesI
     ...(value.pageImageFormat == null ? {} : { pageImageFormat: value.pageImageFormat }),
     ...(value.stitch == null ? {} : { stitch: value.stitch }),
     ...(value.paginate == null ? {} : { paginate: value.paginate }),
-    ...(value.width == null ? {} : { width: normalizeOptionalPositiveNumber(value.width, "desktop render slides width") }),
-    ...(value.height == null ? {} : { height: normalizeOptionalPositiveNumber(value.height, "desktop render slides height") }),
+    ...(width == null ? {} : { width }),
+    ...(height == null ? {} : { height }),
   };
 }
 
@@ -1034,6 +1049,13 @@ function normalizeDesktopExportArtifactInput(input: unknown): DesktopExportArtif
   if (value.imageFormat != null && !DESKTOP_EXPORT_ARTIFACT_IMAGE_FORMATS.includes(value.imageFormat as DesktopExportArtifactImageFormat)) {
     throw new Error(`unsupported artifact export image format: ${String(value.imageFormat)}`);
   }
+  const width = normalizeOptionalPositiveNumber(value.width, "desktop artifact export width");
+  const height = normalizeOptionalPositiveNumber(value.height, "desktop artifact export height");
+  // Same bound as render-frames: an oversized viewport can exhaust desktop
+  // memory rendering the artifact buffer.
+  if ((width != null && width > 8192) || (height != null && height > 8192)) {
+    throw new Error("desktop artifact export dimensions must not exceed 8192px");
+  }
   return {
     ...(value.baseHref == null ? {} : { baseHref: normalizeNonEmptyString(value.baseHref, "desktop artifact export baseHref") }),
     ...(value.captureMode == null ? {} : { captureMode: value.captureMode as DesktopArtifactCaptureMode }),
@@ -1042,8 +1064,8 @@ function normalizeDesktopExportArtifactInput(input: unknown): DesktopExportArtif
     html: normalizeNonEmptyString(value.html, "desktop artifact export html"),
     ...(value.imageFormat == null ? {} : { imageFormat: value.imageFormat as DesktopExportArtifactImageFormat }),
     title: normalizeNonEmptyString(value.title, "desktop artifact export title"),
-    ...(value.width == null ? {} : { width: normalizeOptionalPositiveNumber(value.width, "desktop artifact export width")! }),
-    ...(value.height == null ? {} : { height: normalizeOptionalPositiveNumber(value.height, "desktop artifact export height")! }),
+    ...(width == null ? {} : { width }),
+    ...(height == null ? {} : { height }),
   };
 }
 

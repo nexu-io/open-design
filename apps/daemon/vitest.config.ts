@@ -9,5 +9,9 @@ export default defineConfig({
     include: ['tests/**/*.test.{ts,tsx,js,mjs,cjs}'],
     setupFiles: ['tests/setup.ts'],
     testTimeout: 20_000,
+    // 129 test files start a real daemon server in beforeEach/afterEach; a
+    // cold start (plugin seeding + migrations) exceeds the 10s default hook
+    // timeout on shared or loaded hosts, producing flake clusters.
+    hookTimeout: 60_000,
   },
 });

@@ -1228,7 +1228,6 @@ import {
   isLoopbackPeerAddress,
   requireLocalDaemonRequest,
 } from './http/local-daemon-request.js';
-import { renderOAuthResultPage } from './http/oauth-result-page.js';
 import { bearerTokenFromRequest, createToolRequestAuth } from './http/tool-request-auth.js';
 
 /**
@@ -11076,7 +11075,13 @@ export async function startServer({
         if (err instanceof SandboxImportedProjectError) {
           return failRun('BAD_REQUEST', err.message);
         }
-        cwd = null;
+        // A project run whose directory cannot be resolved must not silently
+        // demote to PROJECT_ROOT: the agent would work in the app's own
+        // install tree while artifact baselining and the file panel skip it.
+        return failRun(
+          'PROJECT_DIR_UNAVAILABLE',
+          `failed to resolve project directory: ${err && err.message ? err.message : err}`,
+        );
       }
       if (cwd) {
         try {
@@ -13177,8 +13182,14 @@ export async function startServer({
               await fs.promises.writeFile(
                 target,
                 JSON.stringify(claudeMcp, null, 2),
-                'utf8',
+                // Carries OAuth bearer tokens and user MCP env secrets; keep
+                // it owner-only like the daemon's other credential writes
+                // (runtimes/prompt-file.ts, runs.ts).
+                { encoding: 'utf8', mode: 0o600 },
               );
+              // mode only applies on creation; tighten files written by
+              // older versions too.
+              await fs.promises.chmod(target, 0o600);
             }
           } catch (err) {
             console.warn(

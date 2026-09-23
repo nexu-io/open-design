@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { promises as fsp } from 'node:fs';
 import path from 'node:path';
 import type {
@@ -300,7 +301,11 @@ async function writeUserAutomationTemplates(
 ): Promise<void> {
   const file = storePath(dataDir);
   await fsp.mkdir(path.dirname(file), { recursive: true });
-  await fsp.writeFile(file, JSON.stringify({ templates }, null, 2));
+  // Atomic write: this is the only copy of the user's automation templates —
+  // a torn write would corrupt the whole store.
+  const tmp = `${file}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`;
+  await fsp.writeFile(tmp, JSON.stringify({ templates }, null, 2));
+  await fsp.rename(tmp, file);
 }
 
 export async function listAllAutomationTemplates(dataDir: string): Promise<AutomationTemplate[]> {

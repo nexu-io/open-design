@@ -103,7 +103,7 @@ export function SkillDetailsModal({ skillId, summary, onClose, onUse }: Props) {
             className="plugin-details-modal__close"
             onClick={onClose}
             aria-label={t('common.close')}
-            title="Close (Esc)"
+            title={t('common.closeEsc')}
           >
             <Icon name="close" size={18} />
           </button>

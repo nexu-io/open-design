@@ -399,6 +399,13 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
   app.post('/api/brands/:id/continue-extraction', async (req: Request, res: Response) => {
     const id = String(req.params.id);
     try {
+      const detail = readBrandDetail(brandsRoot, id);
+      if (detail?.meta.projectId && deps.authorizeProjectRequest) {
+        if (!(await deps.authorizeProjectRequest(req, res, detail.meta.projectId, {
+          mode: 'write',
+          capability: 'writeFiles',
+        }))) return;
+      }
       await abortActiveProgrammaticBrandExtraction(id, {
         settleTimeoutMs: PROGRAMMATIC_ABORT_SETTLE_GRACE_MS,
       });
@@ -442,6 +449,12 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
       if (!detail) {
         res.status(404).json({ error: 'brand not found' });
         return;
+      }
+      if (detail.meta.projectId && deps.authorizeProjectRequest) {
+        if (!(await deps.authorizeProjectRequest(req, res, detail.meta.projectId, {
+          mode: 'write',
+          capability: 'writeFiles',
+        }))) return;
       }
       await abortActiveProgrammaticBrandExtraction(id, {
         settleTimeoutMs: PROGRAMMATIC_ABORT_SETTLE_GRACE_MS,
@@ -503,6 +516,17 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
         ? String(req.body.locale)
         : undefined;
     try {
+      // Preview writes rendered files into the backing project — same
+      // workspace gate as the other brand mutation routes. The store resolves
+      // `opts.projectId ?? meta.projectId ?? brandProjectId(id)`, so the gate
+      // must cover the meta fallback too, not only the body value.
+      const effectiveProjectId = projectId ?? readBrandDetail(brandsRoot, id)?.meta.projectId;
+      if (effectiveProjectId && deps.authorizeProjectRequest) {
+        if (!(await deps.authorizeProjectRequest(req, res, effectiveProjectId, {
+          mode: 'write',
+          capability: 'writeFiles',
+        }))) return;
+      }
       const renderOptions: Parameters<typeof renderBrandPreviewIntoProject>[0] = {
         id,
         brandsRoot,
@@ -534,6 +558,17 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
         ? String(req.body.locale)
         : undefined;
     try {
+      // Finalize registers a design system and marks the brand ready — same
+      // workspace gate as the other brand mutation routes. The store resolves
+      // `opts.projectId ?? meta.projectId ?? brandProjectId(id)`, so the gate
+      // must cover the meta fallback too, not only the body value.
+      const effectiveProjectId = projectId ?? readBrandDetail(brandsRoot, id)?.meta.projectId;
+      if (effectiveProjectId && deps.authorizeProjectRequest) {
+        if (!(await deps.authorizeProjectRequest(req, res, effectiveProjectId, {
+          mode: 'write',
+          capability: 'writeFiles',
+        }))) return;
+      }
       const finalizeOptions: Parameters<typeof finalizeBrand>[0] = {
         id,
         brandsRoot,
@@ -575,6 +610,12 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
       if (!meta) {
         res.status(404).json({ error: 'brand not found' });
         return;
+      }
+      if (meta.projectId && deps.authorizeProjectRequest) {
+        if (!(await deps.authorizeProjectRequest(req, res, meta.projectId, {
+          mode: 'write',
+          capability: 'writeFiles',
+        }))) return;
       }
       await abortActiveProgrammaticBrandExtraction(id, {
         settleTimeoutMs: PROGRAMMATIC_ABORT_SETTLE_GRACE_MS,
@@ -630,6 +671,15 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
     try {
       const id = String(req.params.id);
       const detail = readBrandDetail(brandsRoot, id);
+      // Workspace gate must run before any mutation — not only on the
+      // finalized path (designSystemId set). A still-extracting brand has a
+      // backing project but no design system yet.
+      if (detail?.meta.projectId && deps.authorizeProjectRequest) {
+        if (!(await deps.authorizeProjectRequest(req, res, detail.meta.projectId, {
+          mode: 'write',
+          capability: 'delete',
+        }))) return;
+      }
       if (detail?.meta.designSystemId && deps.deleteDesignSystemForRequest) {
         if (!(await deps.deleteDesignSystemForRequest(
           req,

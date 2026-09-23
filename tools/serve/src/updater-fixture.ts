@@ -11,6 +11,8 @@ import {
   type ReleaseChannel,
 } from "@open-design/release";
 
+import { fixtureServerOrigin } from "./server-origin.js";
+
 type UpdaterFixtureChannel = ReleaseChannel;
 
 export type UpdaterFixtureOptions = {
@@ -80,9 +82,7 @@ function close(server: Server): Promise<void> {
 }
 
 function serverOrigin(server: Server): string {
-  const address = server.address();
-  if (address == null || typeof address === "string") throw new Error("updater fixture did not listen on TCP");
-  return `http://127.0.0.1:${address.port}`;
+  return fixtureServerOrigin(server, "updater fixture");
 }
 
 type ParsedRange = { end: number; start: number } | "invalid" | "unsatisfiable" | null;

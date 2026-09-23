@@ -23,6 +23,13 @@ import type { JsonIpcHandler, JsonIpcServerHandle } from "./types.js";
 
 type UnixSocketIdentity = Readonly<{ dev: number; ino: number }>;
 
+/**
+ * Upper bound for one newline-delimited JSON frame. Render requests carry full
+ * HTML decks, so the cap is generous, but a peer that never sends a newline
+ * must not grow the receive buffer without limit.
+ */
+const JSON_IPC_MAX_FRAME_BYTES = 64 * 1024 * 1024;
+
 async function readUnixSocketIdentity(socketPath: string): Promise<UnixSocketIdentity | null> {
   if (isWindowsNamedPipePath(socketPath)) return null;
   const entry = await lstat(socketPath).catch(() => null);
@@ -183,6 +190,8 @@ export async function createJsonIpcServer({
     const decoder = new StringDecoder("utf8");
     const traceId = nextJsonIpcTraceId();
     const startedAt = process.hrtime.bigint();
+    let receivedBytes = 0;
+    let overLimit = false;
     traceJsonIpc("server.connection", { socketPath, traceId });
     socket.on("error", (error) => {
       traceJsonIpc("server.socket_error", {
@@ -206,11 +215,37 @@ export async function createJsonIpcServer({
         socketPath,
         traceId,
       });
-      buffer += decoder.write(chunk);
-      const newlineIndex = buffer.indexOf("\n");
-      if (newlineIndex < 0) return;
-      const frame = buffer.slice(0, newlineIndex);
-      buffer = buffer.slice(newlineIndex + 1);
+      if (overLimit) return;
+      receivedBytes += chunk.byteLength;
+      if (receivedBytes > JSON_IPC_MAX_FRAME_BYTES) {
+        overLimit = true;
+        traceJsonIpc("server.frame_too_large", {
+          durationMs: jsonIpcTraceDurationMs(startedAt),
+          frameBytes: receivedBytes,
+          socketPath,
+          traceId,
+        });
+        socket.end(
+          `${JSON.stringify({
+            ok: false,
+            error: { message: `IPC request frame exceeds ${JSON_IPC_MAX_FRAME_BYTES} byte limit` },
+          })}\n`,
+        );
+        return;
+      }
+      const decoded = decoder.write(chunk);
+      // Scan only the new chunk for the delimiter: 0x0A never appears inside a
+      // multibyte UTF-8 sequence, so a newline in `decoded` is always a frame
+      // boundary. Scanning the whole accumulated buffer per chunk would make
+      // large frames quadratic.
+      const newlineIndex = decoded.indexOf("\n");
+      if (newlineIndex < 0) {
+        buffer += decoded;
+        return;
+      }
+      const frame = buffer + decoded.slice(0, newlineIndex);
+      buffer = decoded.slice(newlineIndex + 1);
+      receivedBytes = Buffer.byteLength(buffer);
       let message: unknown;
       try {
         message = JSON.parse(frame);
@@ -305,6 +340,7 @@ export async function requestJsonIpc<T = any>(
     const startedAt = process.hrtime.bigint();
     let settled = false;
     let buffer = "";
+    let receivedBytes = 0;
     // See the server reader above: decode UTF-8 across chunk boundaries so a
     // multibyte character split across two `data` events is not corrupted.
     const decoder = new StringDecoder("utf8");
@@ -370,12 +406,48 @@ export async function requestJsonIpc<T = any>(
         socketPath,
         traceId,
       });
-      buffer += decoder.write(chunk);
-      const newlineIndex = buffer.indexOf("\n");
-      if (newlineIndex < 0) return;
+      receivedBytes += chunk.byteLength;
+      if (receivedBytes > JSON_IPC_MAX_FRAME_BYTES) {
+        traceJsonIpc("client.frame_too_large", {
+          durationMs: jsonIpcTraceDurationMs(startedAt),
+          frameBytes: receivedBytes,
+          message: messageSummary,
+          socketPath,
+          traceId,
+        });
+        socket.destroy();
+        settle(() =>
+          rejectRequest(new Error(`IPC response frame exceeds ${JSON_IPC_MAX_FRAME_BYTES} byte limit: ${socketPath}`)),
+        );
+        return;
+      }
+      const decoded = decoder.write(chunk);
+      // Same incremental delimiter scan as the server reader: 0x0A never
+      // appears inside a multibyte UTF-8 sequence.
+      const newlineIndex = decoded.indexOf("\n");
+      if (newlineIndex < 0) {
+        buffer += decoded;
+        return;
+      }
+      const frame = buffer + decoded.slice(0, newlineIndex);
       socket.end();
       settle(() => {
-        const response = JSON.parse(buffer.slice(0, newlineIndex)) as { error?: { message?: string }; ok: boolean; result?: T };
+        // A malformed reply frame must reject the request, never escape the
+        // `data` listener as an uncaughtException that kills the caller.
+        let response: { error?: { message?: string }; ok: boolean; result?: T };
+        try {
+          response = JSON.parse(frame) as typeof response;
+        } catch (error) {
+          traceJsonIpc("client.frame_parse_failed", {
+            durationMs: jsonIpcTraceDurationMs(startedAt),
+            error: errorMessage(error),
+            frameBytes: Buffer.byteLength(frame),
+            socketPath,
+            traceId,
+          });
+          rejectRequest(new Error(`IPC response frame is not valid JSON: ${errorMessage(error)}`));
+          return;
+        }
         if (!response.ok) {
           traceJsonIpc("client.response_error", {
             durationMs: jsonIpcTraceDurationMs(startedAt),

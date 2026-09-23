@@ -860,7 +860,7 @@ export function NewProjectPanel({
           type="button"
           className={`newproj-tabs-arrow left${tabScroll.left ? '' : ' hidden'}`}
           onClick={() => scrollTabs(-1)}
-          aria-label="Scroll project types left"
+          aria-label={t('newproj.scrollTypesLeft')}
           tabIndex={tabScroll.left ? 0 : -1}
         >
           <Icon name="chevron-left" size={16} strokeWidth={2} />
@@ -893,7 +893,7 @@ export function NewProjectPanel({
           type="button"
           className={`newproj-tabs-arrow right${tabScroll.right ? '' : ' hidden'}`}
           onClick={() => scrollTabs(1)}
-          aria-label="Scroll project types right"
+          aria-label={t('newproj.scrollTypesRight')}
           tabIndex={tabScroll.right ? 0 : -1}
         >
           <Icon name="chevron-right" size={16} strokeWidth={2} />

@@ -75,6 +75,11 @@ export const API_ERROR_CODES = [
   'AGENT_RUNTIME_DEF_INVALID',
   'PROJECT_NOT_FOUND',
   'PROJECT_MATERIALIZATION_PENDING',
+  // The daemon could not resolve the project's working directory before
+  // starting a run (imported workspace deleted, managed dir missing, or a
+  // storage failure). The run fails closed instead of executing the agent
+  // against the daemon install root.
+  'PROJECT_DIR_UNAVAILABLE',
   // Handoff (`POST /api/projects/:id/handoff`): the requested conversation
   // is not in the project, or has no messages to synthesize a handoff from.
   'CONVERSATION_NOT_FOUND',

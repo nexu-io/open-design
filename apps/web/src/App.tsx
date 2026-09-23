@@ -2203,11 +2203,18 @@ function AppInner() {
 
       const request = beginProjectListRequest(workspaceProjectViewRef.current);
       void listCurrentWorkspaceProjects({
+        throwOnError: true,
         workspaceView: workspaceProjectViewRef.current,
       }).then((list) => {
         if (cancelled) return;
         reconcileFetchedProjects(list, request);
         setProjectsLoading(false);
+      }).catch((error: unknown) => {
+        // A failed bootstrap read is not an empty list: reconciling it would
+        // wipe the restored snapshot. Keep last-good rows; the next refresh
+        // or scope change retries.
+        console.error('[projects] bootstrap list failed; keeping last-good rows', error);
+        if (!cancelled) setProjectsLoading(false);
       });
 
       void listTemplates().then((list) => {
@@ -2442,8 +2449,17 @@ function AppInner() {
 
   const refreshProjects = useCallback(async () => {
     const request = beginProjectListRequest(workspaceProjectView);
-    const list = await listCurrentWorkspaceProjects({ workspaceView: workspaceProjectView });
-    reconcileFetchedProjects(list, request);
+    try {
+      const list = await listCurrentWorkspaceProjects({
+        throwOnError: true,
+        workspaceView: workspaceProjectView,
+      });
+      reconcileFetchedProjects(list, request);
+    } catch (error) {
+      // A transport/5xx failure must not reconcile as an authoritative empty
+      // list — keep the last-good rows and let the next refresh retry.
+      console.error('[projects] refresh failed; keeping last-good list', error);
+    }
   }, [beginProjectListRequest, listCurrentWorkspaceProjects, reconcileFetchedProjects, workspaceProjectView]);
 
   const refreshProjectsStrict = useCallback(async () => {
@@ -3768,8 +3784,16 @@ function AppInner() {
       };
       setProjects((curr) => [stub, ...curr.filter((p) => p.id !== stub.id)]);
       const request = beginProjectListRequest(workspaceProjectView);
-      const list = await listCurrentWorkspaceProjects({ workspaceView: workspaceProjectView });
-      reconcileFetchedProjects(list, request);
+      try {
+        const list = await listCurrentWorkspaceProjects({
+          throwOnError: true,
+          workspaceView: workspaceProjectView,
+        });
+        reconcileFetchedProjects(list, request);
+      } catch (error: unknown) {
+        // Keep the optimistic stub; a failed refresh is not an empty list.
+        console.error('[projects] post-create refresh failed; keeping optimistic row', error);
+      }
     }
     navigate({
       kind: 'project',
@@ -4050,7 +4074,7 @@ function AppInner() {
         }
       }
       const request = beginProjectListRequest('all');
-      const list = await listCurrentWorkspaceProjects({ workspaceView: 'all' });
+      const list = await listCurrentWorkspaceProjects({ throwOnError: true, workspaceView: 'all' });
       if (!openingScopeIsCurrent()) return false;
       const reconciledList = catalogName
         ? list.map((candidate) =>

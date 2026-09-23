@@ -780,6 +780,87 @@ describe('App project list across a workspace switch', () => {
     expect(projectResourceRequests).toHaveLength(1);
   });
 
+  it('keeps the open project mounted when a manual refresh transport-fails', async () => {
+    // Uses the REAL listProjects (fetch stub returns 500 for the project list
+    // endpoint after bootstrap): without throwOnError the swallowed failure
+    // resolved `[]`, which reconcileFetchedProjects then applied as an
+    // authoritative empty list — dropping the open project exactly like the
+    // "no longer contains it" test above asserts for a real deletion.
+    const boundProjectA: Project = {
+      ...WORKSPACE_A_PROJECT,
+      workspaceId: 'ws-a',
+    };
+    const realProjects = await vi.importActual<typeof import('../../src/state/projects')>(
+      '../../src/state/projects',
+    );
+    let projectListUnavailable = false;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const pathname = new URL(String(input), 'http://d.local').pathname;
+        if (projectListUnavailable && /\/api\/(workspaces\/[^/]+\/)?projects(\?|\/|$)/.test(pathname)
+          && !pathname.endsWith('/workspace-scope')
+        ) {
+          return new Response(JSON.stringify({ error: 'unavailable' }), {
+            status: 500,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (pathname === `/api/projects/${boundProjectA.id}/workspace-scope`) {
+          return new Response(JSON.stringify({
+            scope: {
+              kind: 'team',
+              projectId: boundProjectA.id,
+              workspaceId: 'ws-a',
+              visibility: 'team',
+              context: workspaceContext('ws-a'),
+            },
+          }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (pathname === `/api/projects/${boundProjectA.id}`) {
+          return new Response(JSON.stringify({ project: boundProjectA }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        return new Response(JSON.stringify(
+          pathname.endsWith('/workspace/directory')
+            ? workspaceDirectoryFixture([workspaceContext('ws-a')])
+            : pathname.endsWith('/workspace/context')
+              ? workspaceContextPayload('ws-a')
+              : pathname === '/api/projects'
+                ? { projects: [boundProjectA] }
+                : {},
+        ), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }),
+    );
+    vi.mocked(listProjects).mockImplementation(realProjects.listProjects);
+    window.history.replaceState(null, '', `/projects/${boundProjectA.id}`);
+
+    render(<App />);
+    await waitFor(() => expect(screen.getByTestId('project-view')).toBeTruthy());
+
+    projectListUnavailable = true;
+    fireEvent.click(screen.getByTestId('project-refresh'));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Before the fix, the swallowed failure reconciled [] and the open project
+    // was dropped with a "missing project" alert — the exact assertions the
+    // deletion test above makes for a real removal.
+    expect(screen.getByTestId('project-view')).toBeTruthy();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
   it('bootstraps a fresh A deep link under ambient B without any headerless project-data read', async () => {
     const boundProjectA: Project = {
       ...WORKSPACE_A_PROJECT,

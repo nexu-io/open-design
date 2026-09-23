@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -56,6 +56,25 @@ describe('mcp-config storage', () => {
     const reread = await readMcpConfig(dataDir);
     expect(reread.servers[0]?.command).toBe('npx');
     expect(reread.servers[0]?.env?.GITHUB_PERSONAL_ACCESS_TOKEN).toBe('ghp_xxx');
+  });
+
+  it('writes the config file with mode 0600 on POSIX', async () => {
+    if (process.platform === 'win32') return; // mode bits are advisory on win32
+    await writeMcpConfig(dataDir, {
+      servers: [
+        {
+          id: 'github',
+          label: 'GitHub',
+          transport: 'stdio',
+          enabled: true,
+          command: 'npx',
+          args: ['-y', '@modelcontextprotocol/server-github'],
+          env: { GITHUB_PERSONAL_ACCESS_TOKEN: 'ghp_xxx' },
+        },
+      ],
+    });
+    const s = await stat(path.join(dataDir, 'mcp-config.json'));
+    expect(s.mode & 0o777).toBe(0o600);
   });
 
   it('persists and re-reads a valid SSE server with headers', async () => {

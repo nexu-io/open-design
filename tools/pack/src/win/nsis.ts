@@ -11,18 +11,37 @@ import type { WinPaths } from "./types.js";
 const execFileAsync = promisify(execFile);
 
 function escapeNsisString(value: string): string {
-  return value.replace(/"/g, '$\\"').replace(/\r?\n/g, "$\\r$\\n");
+  // Note: "$$" in a replace() replacement string means a literal "$" — the
+  // escape needs "$$$$" to emit the two-character `$$` sequence NSIS reads as
+  // an escaped dollar. (`$`→`$$` is what prevents `$TEMP`-style segments from
+  // being expanded at compile time.)
+  return value.replace(/\$/g, "$$$$").replace(/"/g, '$\\"').replace(/'/g, "$\\'").replace(/\r?\n/g, "$\\r$\\n");
+}
+
+const NSIS_APPDATA_TOKEN = "$APPDATA";
+
+// Interpolated path values must not leak a literal `$` into the generated
+// script: NSIS expands `$NAME` inside double-quoted strings at compile time,
+// so a path segment like `$TEMP` would silently retarget `RMDir /r`. The one
+// deliberate exception is a leading `$APPDATA` in portable builds — it must
+// stay expandable so the uninstaller resolves on the *user's* machine rather
+// than baking the build machine's profile path.
+function escapeNsisPathValue(value: string): string {
+  if (value.startsWith(`${NSIS_APPDATA_TOKEN}\\`)) {
+    return NSIS_APPDATA_TOKEN + escapeNsisString(value.slice(NSIS_APPDATA_TOKEN.length));
+  }
+  return escapeNsisString(value);
 }
 
 export async function writeNsisInclude(config: ToolPackConfig, paths: WinPaths): Promise<void> {
-  const localDataRoot = escapeNsisString(resolveWinUninstallLocalDataRoot(config));
+  const localDataRoot = escapeNsisPathValue(resolveWinUninstallLocalDataRoot(config));
   // Portable releases rely on Electron's normal userData root, which adds the
   // `namespaces/<namespace>` segment. Non-portable tools-pack installs already
   // receive a namespace root from their generated config.
   const runtimeNamespaceRoot = config.portable
     ? win32.join(resolveWinUninstallLocalDataRoot(config), "namespaces", config.namespace)
     : resolveWinUninstallLocalDataRoot(config);
-  const installerObservationRoot = escapeNsisString(
+  const installerObservationRoot = escapeNsisPathValue(
     win32.join(runtimeNamespaceRoot, "data", "observations", "installer"),
   );
   await mkdir(dirname(paths.nsisIncludePath), { recursive: true });

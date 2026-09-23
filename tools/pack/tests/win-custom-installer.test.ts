@@ -120,6 +120,23 @@ describe("buildCustomWinNsisInstaller logging", () => {
     }
   });
 
+  it("escapes apostrophes inside the single-quoted nsExec command literal", async () => {
+    const base = await mkdtemp(join(tmpdir(), "open-design-win-custom-installer-"));
+    // An apostrophe in a build root (e.g. `C:\Tools\D'Arcy`) must not
+    // terminate the single-quoted nsExec::ExecToLog literal mid-command.
+    const root = join(base, "d'arcy");
+    await mkdir(root, { recursive: true });
+    try {
+      const script = await generateInstallerScript(root, false);
+      const sync = nsisFunction(script, "SyncLauncherRuntime");
+
+      expect(sync).toContain("d$\\'arcy");
+      expect(sync).not.toContain("d'arcy");
+    } finally {
+      await rm(base, { force: true, recursive: true });
+    }
+  });
+
   it("retains tools-pack log readback for non-portable install and uninstall", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-win-custom-installer-"));
     try {

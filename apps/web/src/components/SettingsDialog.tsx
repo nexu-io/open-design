@@ -4343,7 +4343,7 @@ export function SettingsDialog({
           <aside
             id="settings-sidebar"
             className="settings-sidebar"
-            aria-label="Settings sections"
+            aria-label={t('settings.sectionsAria')}
             aria-hidden={settingsSidebarCollapsed ? true : undefined}
           >
             {pageMode ? (

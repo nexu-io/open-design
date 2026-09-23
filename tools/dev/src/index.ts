@@ -1064,7 +1064,7 @@ async function inspectDesktop(config: ToolDevConfig, target: string | undefined,
       return await invokeSidecar<DesktopEvalResult>(createConvergedAppStamp(config, APP_KEYS.DESKTOP), SIDECAR_MESSAGES.EVAL, { expression: options.expr }, { timeoutMs });
     case "screenshot":
       if (options.path == null) throw new Error("--path is required for desktop screenshot");
-      return await invokeSidecar<DesktopScreenshotResult>(createConvergedAppStamp(config, APP_KEYS.DESKTOP), SIDECAR_MESSAGES.SCREENSHOT, { path: options.path }, { timeoutMs });
+      return await invokeSidecar<DesktopScreenshotResult>(createConvergedAppStamp(config, APP_KEYS.DESKTOP), SIDECAR_MESSAGES.SCREENSHOT, { path: path.resolve(options.path) }, { timeoutMs });
     case "console":
       return await invokeSidecar<DesktopConsoleResult>(createConvergedAppStamp(config, APP_KEYS.DESKTOP), SIDECAR_MESSAGES.CONSOLE, undefined, { timeoutMs });
     case "update":

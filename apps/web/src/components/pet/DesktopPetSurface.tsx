@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { setHostPetVisible } from '@open-design/host';
+import type { ChatRunStatusResponse } from '@open-design/contracts';
 import { RUNS_CHANGED_EVENT, listProjectRuns } from '../../providers/daemon';
 import { loadConfig } from '../../state/config';
 import { listProjects } from '../../state/projects';
-import type { AppConfig } from '../../types';
+import type { AppConfig, Project } from '../../types';
 import { PetOverlay, type PetTaskCenter } from './PetOverlay';
 import { buildPetTaskCenter } from './taskCenter';
 
@@ -18,6 +19,13 @@ export function DesktopPetSurface() {
     running: [],
     queued: [],
     recent: [],
+  });
+  // Last-good inputs: a transport error is not an authoritative empty task
+  // center, so a failed read keeps the previous data instead of blanking
+  // the pet's task summary.
+  const lastGoodRef = useRef<{ projects: Project[]; runs: ChatRunStatusResponse[] }>({
+    projects: [],
+    runs: [],
   });
   const pet = config.pet?.enabled ? config.pet : undefined;
 
@@ -48,11 +56,21 @@ export function DesktopPetSurface() {
     let cancelled = false;
     const refresh = async () => {
       const [projects, runs] = await Promise.all([
-        listProjects(),
-        listProjectRuns(),
+        listProjects({ throwOnError: true }).catch((err: unknown) => {
+          console.error('[pet] project list refresh failed; keeping last-good', err);
+          return null;
+        }),
+        listProjectRuns(undefined, { throwOnError: true }).catch((err: unknown) => {
+          console.error('[pet] run list refresh failed; keeping last-good', err);
+          return null;
+        }),
       ]);
       if (cancelled) return;
-      setTaskCenter(buildPetTaskCenter(projects, runs));
+      lastGoodRef.current = {
+        projects: projects ?? lastGoodRef.current.projects,
+        runs: runs ?? lastGoodRef.current.runs,
+      };
+      setTaskCenter(buildPetTaskCenter(lastGoodRef.current.projects, lastGoodRef.current.runs));
     };
     const handleRunsChanged = () => {
       void refresh();

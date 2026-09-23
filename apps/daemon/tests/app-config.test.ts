@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import express from 'express';
@@ -364,6 +364,13 @@ describe('app-config', () => {
       await writeAppConfig(nested, { onboardingCompleted: true });
       const cfg = await readAppConfig(nested);
       expect(cfg.onboardingCompleted).toBe(true);
+    });
+
+    it('writes the config file with mode 0600 on POSIX', async () => {
+      if (process.platform === 'win32') return; // mode bits are advisory on win32
+      await writeAppConfig(dataDir, { onboardingCompleted: true });
+      const s = await stat(path.join(dataDir, 'app-config.json'));
+      expect(s.mode & 0o777).toBe(0o600);
     });
 
     it('only persists ALLOWED_KEYS, filtering unknown keys', async () => {

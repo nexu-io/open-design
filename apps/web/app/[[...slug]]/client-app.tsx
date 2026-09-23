@@ -3,6 +3,7 @@
 import dynamic from 'next/dynamic';
 
 import { installErrorHandlers } from '../../src/analytics/error-tracking';
+import { AppErrorBoundary } from '../../src/components/AppErrorBoundary';
 import { MatrixLoader } from '../../src/components/MatrixLoader';
 import { installWebObservability } from '../../src/observability/install';
 import { installChatScrollExperiments } from '../../src/runtime/chat-scroll-experiments';
@@ -54,5 +55,9 @@ const App = dynamic(() => import('../../src/App').then((m) => m.App), {
 });
 
 export function ClientApp() {
-  return <App />;
+  return (
+    <AppErrorBoundary>
+      <App />
+    </AppErrorBoundary>
+  );
 }

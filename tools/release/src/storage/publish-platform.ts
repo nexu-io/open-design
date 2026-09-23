@@ -14,7 +14,10 @@ import {
 } from "./common.ts";
 import { assertCurrentVersionReservation, versionLockObjectKey } from "./beta-version-reservation.ts";
 import { putStorageObject } from "./s3-upload.ts";
-import { releaseChannelDescriptor } from "@open-design/release";
+import {
+  parseReleaseVersion,
+  releaseChannelDescriptor,
+} from "@open-design/release";
 
 type AssetEntry = {
   contentType: string;
@@ -40,6 +43,7 @@ const target = requiredTarget();
 const releaseChannel = releaseChannelDescriptor(required("RELEASE_CHANNEL")).channel;
 const countedReleaseChannel = releaseChannel === "stable" ? null : releaseChannel;
 const releaseVersion = required("RELEASE_VERSION");
+parseReleaseVersion(releaseVersion, releaseChannel);
 const publicOrigin = required("RELEASE_PUBLIC_ORIGIN").replace(/\/+$/, "");
 const releaseAssetsDir = required("RELEASE_ASSETS_DIR");
 const manifestDir = required("RELEASE_MANIFEST_DIR");

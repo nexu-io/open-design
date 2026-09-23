@@ -33,7 +33,7 @@ cd open-design
 corepack enable           # selects the pinned pnpm from packageManager
 pnpm install
 pnpm tools-dev run web    # daemon + web foreground loop
-pnpm typecheck            # tsc -b --noEmit
+pnpm typecheck            # all workspace packages + scripts/ tsconfig
 pnpm --filter @open-design/web build  # web package build when needed
 ```
 

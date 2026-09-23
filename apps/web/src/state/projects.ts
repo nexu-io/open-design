@@ -979,12 +979,18 @@ export async function importClaudeDesignZip(
   });
   if (!resp.ok) {
     const payload = await resp.json().catch(() => null);
+    const error =
+      payload != null && typeof payload === 'object'
+        ? (payload as { error?: unknown }).error
+        : null;
     const message =
-      payload != null &&
-      typeof payload === 'object' &&
-      typeof (payload as { error?: unknown }).error === 'string'
-        ? (payload as { error: string }).error
-        : `Import failed (${resp.status})`;
+      typeof error === 'string'
+        ? error
+        : error != null &&
+            typeof error === 'object' &&
+            typeof (error as { message?: unknown }).message === 'string'
+          ? (error as { message: string }).message
+          : `Import failed (${resp.status})`;
     throw new Error(message);
   }
   return (await resp.json()) as {

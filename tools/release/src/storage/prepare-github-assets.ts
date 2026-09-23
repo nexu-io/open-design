@@ -1,10 +1,14 @@
 import { copyFileSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { optional, required, writeJson } from "./common.ts";
-import { releaseChannelDescriptor } from "@open-design/release";
+import {
+  parseReleaseVersion,
+  releaseChannelDescriptor,
+} from "@open-design/release";
 
 const releaseChannel = releaseChannelDescriptor(required("RELEASE_CHANNEL")).channel;
 const releaseVersion = required("RELEASE_VERSION");
+parseReleaseVersion(releaseVersion, releaseChannel);
 const sourceDir = required("RELEASE_GITHUB_ASSETS_SOURCE_DIR");
 const outputDir = required("RELEASE_GITHUB_ASSETS_DIR");
 const outputsPath = optional("RELEASE_OUTPUTS_PATH", join(dirname(outputDir), "github-assets-outputs.json"));

@@ -15,7 +15,7 @@
 // users can copy-paste between OpenDesign and other tools without
 // translation.
 
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { realpathSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
@@ -271,6 +271,16 @@ async function doWrite(dataDir: string, body: unknown): Promise<McpConfig> {
   const tmp = file + '.' + randomBytes(4).toString('hex') + '.tmp';
   await writeFile(tmp, JSON.stringify(next, null, 2), 'utf8');
   await rename(tmp, file);
+  // The config carries user-provided `env` / `headers` maps that can hold
+  // MCP secrets — same owner-only lockdown as the sibling token stores.
+  try {
+    await chmod(file, 0o600);
+  } catch (err: unknown) {
+    const e = err as { code?: string };
+    if (e.code !== 'ENOTSUP' && e.code !== 'EPERM') {
+      console.warn('[mcp-config] could not chmod 0600', file, e.code ?? 'unknown');
+    }
+  }
   return next;
 }
 

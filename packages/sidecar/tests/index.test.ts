@@ -1,9 +1,11 @@
 import { lstat, mkdtemp, rm } from "node:fs/promises";
+import { createServer as createNetServer } from "node:net";
 import { describe, expect, it, vi } from "vitest";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
 import { bootstrapSidecarRuntime, createSidecarLaunchEnv } from "../src/bootstrap.js";
+import { normalizeSupervisorHandoffRequest } from "../src/client.js";
 import { createJsonIpcServer, requestJsonIpc } from "../src/json-ipc.js";
 import { resolveAppIpcPath } from "../src/paths.js";
 import {
@@ -252,6 +254,73 @@ describe("generic sidecar JSON IPC", () => {
     } finally {
       await server.close();
       await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("rejects a malformed response frame instead of crashing the caller", async () => {
+    // Regression: the response `JSON.parse` ran unguarded inside the socket
+    // `data` listener, so a non-JSON reply escaped as an uncaughtException and
+    // killed the calling process instead of rejecting the request promise.
+    const root = await mkdtemp(join(tmpdir(), "open-design-sidecar-badframe-"));
+    const socketPath = testIpcPath(root);
+    const server = createNetServer((socket) => {
+      socket.on("data", () => socket.end("this is not json\n"));
+    });
+    await new Promise<void>((resolveListen) => server.listen(socketPath, resolveListen));
+    try {
+      await expect(requestJsonIpc(socketPath, { type: "status" })).rejects.toThrow(/not valid JSON/);
+    } finally {
+      await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("rejects request frames that exceed the receive cap", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-sidecar-bigframe-"));
+    const socketPath = testIpcPath(root);
+    const server = await createJsonIpcServer({
+      socketPath,
+      handler: async () => ({ reached: true }),
+    });
+    try {
+      // One byte over the 64 MiB cap after JSON stringification.
+      const big = { html: "x".repeat(64 * 1024 * 1024), type: "RENDER" };
+      await expect(requestJsonIpc(socketPath, big, { timeoutMs: 30_000 })).rejects.toThrow(/exceeds \d+ byte limit/);
+    } finally {
+      await server.close();
+      await rm(root, { force: true, recursive: true });
+    }
+  }, 30_000);
+});
+
+describe("normalizeSupervisorHandoffRequest", () => {
+  it("accepts a complete request and its minimal form", () => {
+    expect(
+      normalizeSupervisorHandoffRequest({
+        args: ["--import", "tsx", "entry.ts"],
+        command: "/bin/node",
+        cwd: "/work",
+        env: { KEEP: "1" },
+      }),
+    ).toEqual({ args: ["--import", "tsx", "entry.ts"], command: "/bin/node", cwd: "/work", env: { KEEP: "1" } });
+    expect(normalizeSupervisorHandoffRequest({ command: "/bin/node" })).toEqual({ command: "/bin/node" });
+  });
+
+  it("rejects malformed requests the supervisor would respawn verbatim", () => {
+    for (const bad of [
+      null,
+      "node",
+      [],
+      { command: "" },
+      { command: 42 },
+      { command: "node", args: "run" },
+      { command: "node", args: ["ok", 7] },
+      { command: "node", cwd: 7 },
+      { command: "node", cwd: "" },
+      { command: "node", env: [] },
+      { command: "node", env: "PATH" },
+    ]) {
+      expect(() => normalizeSupervisorHandoffRequest(bad)).toThrow();
     }
   });
 });

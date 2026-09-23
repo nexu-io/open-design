@@ -1808,6 +1808,10 @@ function scheduleWorkspaceBillingRetry(requestKey: string): void {
   const delay = schedule.backoff.nextDelay();
   schedule.timer = setTimeout(() => {
     schedule.timer = null;
+    // The entry-time window check does not cover a timer that outlives the
+    // document (jsdom teardown, SSR hydration boundary) — re-check here so
+    // a late fire is a no-op instead of an uncaught ReferenceError.
+    if (typeof window === 'undefined') return;
     // Dispatch unconditionally: listeners filter on their own active
     // requestKey, and an event nobody is mounted for is a no-op.
     window.dispatchEvent(
@@ -1885,6 +1889,9 @@ function scheduleWorkspaceContextRetry(requestKey: string): void {
   const delay = schedule.backoff.nextDelay();
   schedule.timer = setTimeout(() => {
     schedule.timer = null;
+    // See the billing scheduler above: a timer that outlives the document
+    // must be a no-op, not an uncaught ReferenceError.
+    if (typeof window === 'undefined') return;
     window.dispatchEvent(
       new CustomEvent(WORKSPACE_CONTEXT_RETRY_EVENT, { detail: { requestKey } }),
     );

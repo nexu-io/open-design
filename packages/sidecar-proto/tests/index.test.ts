@@ -379,6 +379,49 @@ describe("open-design sidecar contract", () => {
     }
   });
 
+  it("caps render-slides and artifact-export dimensions at 8192px like render-frames", () => {
+    // render-slides previously accepted any positive width/height; a huge
+    // viewport can exhaust desktop memory rendering per-page buffers.
+    for (const type of [SIDECAR_MESSAGES.RENDER_SLIDES, SIDECAR_MESSAGES.EXPORT_ARTIFACT] as const) {
+      const base = type === SIDECAR_MESSAGES.RENDER_SLIDES
+        ? { html: "<p>x</p>" }
+        : { deck: false, format: "image", html: "<p>x</p>", title: "Shot" };
+      expect(() =>
+        normalizeDesktopSidecarMessage({ input: { ...base, width: 8193 }, type }),
+      ).toThrow(/8192/);
+      expect(() =>
+        normalizeDesktopSidecarMessage({ input: { ...base, height: 8193 }, type }),
+      ).toThrow(/8192/);
+      // The boundary value still passes.
+      const accepted = normalizeDesktopSidecarMessage({
+        input: { ...base, height: 8192, width: 8192 },
+        type,
+      }) as { input: { height?: number; width?: number } };
+      expect(accepted.input.width).toBe(8192);
+      expect(accepted.input.height).toBe(8192);
+    }
+  });
+
+  it("requires an absolute desktop screenshot output path", () => {
+    expect(
+      normalizeDesktopSidecarMessage({
+        input: { path: "/tmp/open-design-shot.png" },
+        type: SIDECAR_MESSAGES.SCREENSHOT,
+      }),
+    ).toEqual({ input: { path: "/tmp/open-design-shot.png" }, type: "screenshot" });
+    expect(
+      normalizeDesktopSidecarMessage({
+        input: { path: "C:\\shots\\shot.png" },
+        type: SIDECAR_MESSAGES.SCREENSHOT,
+      }),
+    ).toEqual({ input: { path: "C:\\shots\\shot.png" }, type: "screenshot" });
+    for (const path of ["shots/shot.png", "../out.png", "./shot.png", "shot.png"]) {
+      expect(() =>
+        normalizeDesktopSidecarMessage({ input: { path }, type: SIDECAR_MESSAGES.SCREENSHOT }),
+      ).toThrow(/absolute path/);
+    }
+  });
+
   it("accepts PNG/JPEG artifact image export and rejects WebP up front", () => {
     // The off-screen Electron renderer (nativeImage) can only encode PNG/JPEG.
     for (const imageFormat of ["png", "jpeg"] as const) {

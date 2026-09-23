@@ -15,6 +15,16 @@ export function renderOAuthResultPage(opts: OAuthResultPageOptions): string {
   const payload = ok
     ? { type: 'mcp-oauth', ok: true, serverId: opts.serverId ?? null }
     : { type: 'mcp-oauth', ok: false, message: opts.message ?? null };
+  // Embedded into an inline <script>: JSON.stringify alone leaves `</script>`
+  // (and HTML comment delimiters) intact, which would let a reflected value
+  // break out of the script block. Escape the HTML-significant characters and
+  // U+2028/U+2029 as \uXXXX — identical JSON values, inert markup.
+  const payloadJson = JSON.stringify(payload)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -61,7 +71,7 @@ export function renderOAuthResultPage(opts: OAuthResultPageOptions): string {
   </div>
   <script>
     try {
-      var payload = ${JSON.stringify(payload)};
+      var payload = ${payloadJson};
       if (window.opener && !window.opener.closed) {
         window.opener.postMessage(payload, '*');
       }

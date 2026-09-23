@@ -1,7 +1,7 @@
 import { execFile, spawn } from "node:child_process";
 import { access, chmod, cp, mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { basename, dirname, join, posix } from "node:path";
+import { basename, dirname, join, posix, resolve } from "node:path";
 import { promisify } from "node:util";
 
 import {
@@ -1047,7 +1047,7 @@ export async function inspectPackedLinuxApp(
     ...(options.path == null
       ? {}
       : {
-          screenshot: await invokeSidecar<DesktopScreenshotResult>(stamp, SIDECAR_MESSAGES.SCREENSHOT, { path: options.path }, { timeoutMs: 10000 }),
+          screenshot: await invokeSidecar<DesktopScreenshotResult>(stamp, SIDECAR_MESSAGES.SCREENSHOT, { path: resolve(options.path) }, { timeoutMs: 10000 }),
         }),
     status,
   };

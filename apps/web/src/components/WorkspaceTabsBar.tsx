@@ -2398,7 +2398,7 @@ export function WorkspaceTabsBar({
   return (
     <header
       className={`app-chrome-header workspace-tabs-chrome${tabsDockEl ? ' is-docked' : ''}`}
-      aria-label="Workspace tabs"
+      aria-label={t('workspace.tabsChrome')}
     >
       <div className="app-chrome-traffic-space workspace-tabs-traffic" aria-hidden />
       {/* Docked mode: the chrome row keeps the brand-logo button plus the
@@ -2427,7 +2427,7 @@ export function WorkspaceTabsBar({
       <div
         className={`workspace-tabs-strip${tabsOverflowing ? ' is-overflowing' : ''}`}
         role="tablist"
-        aria-label="Open workspaces"
+        aria-label={t('workspace.tabsStrip')}
         ref={stripRef}
         onDragOver={handleStripDragOver}
         onDrop={handleStripDrop}

@@ -57,6 +57,7 @@ import {
 } from '../collab/public-file-publication-store.js';
 import { readVelaControlApiContext } from '../integrations/vela.js';
 import { isAbortedOperationError } from '../integrations/aborted-error.js';
+import { sendApiError } from '../http/api-errors.js';
 import { readProjectManifest } from '../project-locations.js';
 import { redactSecrets } from '../redact.js';
 import { findRealElementRange, HTML_TAG_PATTERNS } from '@open-design/contracts/runtime/html-injection-points';
@@ -1271,7 +1272,7 @@ export function registerCollabSyncRoutes(
       return res.status(502).json({ error: 'PUBLIC_FILE_URL_UNAVAILABLE' });
     }
     if (!resolveProjectDir) {
-      return res.status(500).json({ error: 'PROJECT_DIR_UNAVAILABLE' });
+      return sendApiError(res, 500, 'PROJECT_DIR_UNAVAILABLE', 'project directory resolver unavailable');
     }
 
     const projectDir = await resolveProjectDir(projectId);

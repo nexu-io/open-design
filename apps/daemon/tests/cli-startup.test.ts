@@ -583,7 +583,9 @@ describe('CLI startup boundaries', () => {
 function waitForStdoutLine(
   child: ChildProcessWithoutNullStreams,
   pattern: RegExp,
-  timeoutMs = 15_000,
+  // A cold `od daemon start` seeds the plugin registry and runs migrations;
+  // 15s is not enough headroom on a loaded or shared host.
+  timeoutMs = 60_000,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     let output = '';
@@ -634,7 +636,7 @@ async function findFreePort(): Promise<number> {
   return port;
 }
 
-async function waitFor(predicate: () => boolean, timeoutMs = 10_000): Promise<void> {
+async function waitFor(predicate: () => boolean, timeoutMs = 60_000): Promise<void> {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
     if (predicate()) return;
