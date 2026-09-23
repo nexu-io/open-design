@@ -1,6 +1,6 @@
 import type { Express } from 'express';
 import fs from 'node:fs';
-import { SIDECAR_ENV } from '@open-design/sidecar-proto';
+import { MCP_BOOTSTRAP_CONTRACT, SIDECAR_ENV } from '@open-design/sidecar-proto';
 import { buildMcpInstallPayload, type McpInstallPayload } from './mcp-install-info.js';
 import { installCodexMcp, probeCodexInstall, refreshExistingCodexMcp, uninstallCodexMcp } from './codex-cli.js';
 import { isManagedMcpBootstrapEnv } from './mcp-bootstrap.js';
@@ -117,15 +117,18 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
   // and only need to track its argv. See apps/daemon/src/codex-cli.ts.
   const CODEX_MCP_NAME = 'open-design';
 
-  // Under a managed outer, keep an existing Codex registration pointed at the
-  // runtime that is running now. Registrations name a versioned payload, and a
-  // payload version is only cleaned up after a newer one has started here, so
-  // refreshing on every start keeps them valid. Never installs one.
+  // Under a managed outer, keep its existing Codex registration pointed at the
+  // runtime that is running now. The discovery value is derived from the
+  // sidecar source/channel/namespace, so it also proves the globally named
+  // registration belongs to this install before we refresh it.
   if (isManagedMcpBootstrapEnv(process.env)) {
     const timer = setTimeout(() => {
       const payload = computeInstallPayload();
       if (!payload.cliExists || !payload.nodeExists) return;
-      refreshExistingCodexMcp({ name: CODEX_MCP_NAME, command: payload.command, args: payload.args, env: payload.env })
+      refreshExistingCodexMcp(
+        { name: CODEX_MCP_NAME, command: payload.command, args: payload.args, env: payload.env },
+        MCP_BOOTSTRAP_CONTRACT.DISCOVERY_ENV,
+      )
         .then((outcome) => console.info('[mcp] codex registration refresh', { outcome }))
         .catch((err: unknown) => console.warn('[mcp] codex registration refresh failed', {
           error: err instanceof Error ? err.message : String(err),

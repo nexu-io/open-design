@@ -198,27 +198,53 @@ describe('codex-cli uninstall', () => {
 });
 
 describe('refreshExistingCodexMcp', () => {
+  const ownershipEnvKey = 'OD_MCP_DISCOVERY';
   const spec = {
     name: 'open-design',
     command: '/Applications/Open Design.app/Contents/MacOS/node',
     args: ['/Applications/Open Design.app/cli.js', 'mcp'],
-    env: { OD_MCP_BOOTSTRAP_ARGS: '["--headless","--od-mcp-managed"]' },
+    env: {
+      OD_MCP_BOOTSTRAP_ARGS: '["--headless","--od-mcp-managed"]',
+      [ownershipEnvKey]: '{"daemon":["/owned/daemon.sock"],"desktop":["/owned/desktop.sock"]}',
+    },
   };
 
-  it('rewrites an existing registration', async () => {
-    const runner = makeStubRunner(async () => ({ exitCode: 0, stdout: '', stderr: '' }));
+  it('rewrites a registration owned by the same managed install', async () => {
+    const runner = makeStubRunner(async (call) => call.args[1] === 'get'
+      ? {
+          exitCode: 0,
+          stdout: JSON.stringify({ transport: { env: { [ownershipEnvKey]: spec.env[ownershipEnvKey] } } }),
+          stderr: '',
+        }
+      : { exitCode: 0, stdout: '', stderr: '' });
     setCodexRunner(runner);
-    await expect(refreshExistingCodexMcp(spec)).resolves.toBe('refreshed');
+    await expect(refreshExistingCodexMcp(spec, ownershipEnvKey)).resolves.toBe('refreshed');
     expect(runner.calls.map((call) => call.args.slice(0, 3))).toEqual([
       ['mcp', 'get', 'open-design'],
       ['mcp', 'add', 'open-design'],
     ]);
   });
 
+  it('leaves an unrelated managed install registration byte-for-byte unchanged', async () => {
+    const original = JSON.stringify({
+      transport: {
+        command: '/Applications/Open Design Prerelease.app/Contents/MacOS/node',
+        args: ['/Applications/Open Design Prerelease.app/cli.js', 'mcp'],
+        env: { [ownershipEnvKey]: '{"daemon":["/other/daemon.sock"],"desktop":["/other/desktop.sock"]}' },
+      },
+    });
+    const runner = makeStubRunner(async () => ({ exitCode: 0, stdout: original, stderr: '' }));
+    setCodexRunner(runner);
+
+    await expect(refreshExistingCodexMcp(spec, ownershipEnvKey)).resolves.toBe('not-owned');
+    expect(runner.calls).toHaveLength(1);
+    expect(runner.calls[0]?.args).toEqual(['mcp', 'get', 'open-design', '--json']);
+  });
+
   it('never creates a registration the user has not installed', async () => {
     const runner = makeStubRunner(async () => ({ exitCode: 1, stdout: '', stderr: 'not found' }));
     setCodexRunner(runner);
-    await expect(refreshExistingCodexMcp(spec)).resolves.toBe('absent');
+    await expect(refreshExistingCodexMcp(spec, ownershipEnvKey)).resolves.toBe('absent');
     expect(runner.calls).toHaveLength(1);
   });
 
@@ -228,6 +254,6 @@ describe('refreshExistingCodexMcp', () => {
         throw Object.assign(new Error('spawn codex ENOENT'), { code: 'ENOENT' });
       },
     });
-    await expect(refreshExistingCodexMcp(spec)).resolves.toBe('unavailable');
+    await expect(refreshExistingCodexMcp(spec, ownershipEnvKey)).resolves.toBe('unavailable');
   });
 });

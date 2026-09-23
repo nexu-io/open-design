@@ -135,14 +135,39 @@ export async function installCodexMcp(spec: CodexInstallSpec): Promise<void> {
   }
 }
 
-export type CodexRegistrationRefresh = 'refreshed' | 'absent' | 'unavailable';
+export type CodexRegistrationRefresh = 'refreshed' | 'absent' | 'unavailable' | 'not-owned';
 
-// Rewrites an existing registration so it follows the runtime that is running
-// now. It never creates one: installing stays an explicit user action.
-export async function refreshExistingCodexMcp(spec: CodexInstallSpec): Promise<CodexRegistrationRefresh> {
-  const status = await probeCodexInstall(spec.name);
-  if (!status.available) return 'unavailable';
-  if (!status.installed) return 'absent';
+interface CodexMcpGetOutput {
+  transport?: {
+    env?: Record<string, unknown>;
+  };
+}
+
+// Rewrites an existing registration only when its ownership marker proves it
+// belongs to this managed install. It never creates or takes over one.
+export async function refreshExistingCodexMcp(
+  spec: CodexInstallSpec,
+  ownershipEnvKey: string,
+): Promise<CodexRegistrationRefresh> {
+  let result: CodexRunnerResult;
+  try {
+    result = await activeRunner().run(['mcp', 'get', spec.name, '--json']);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException | undefined)?.code === 'ENOENT') return 'unavailable';
+    throw err;
+  }
+  if (result.exitCode !== 0) return 'absent';
+
+  let existing: CodexMcpGetOutput;
+  try {
+    existing = JSON.parse(result.stdout) as CodexMcpGetOutput;
+  } catch {
+    return 'not-owned';
+  }
+  const expectedOwner = spec.env[ownershipEnvKey];
+  if (expectedOwner == null || existing.transport?.env?.[ownershipEnvKey] !== expectedOwner) {
+    return 'not-owned';
+  }
   await installCodexMcp(spec);
   return 'refreshed';
 }
