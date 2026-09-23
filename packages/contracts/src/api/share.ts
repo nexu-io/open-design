@@ -1085,8 +1085,11 @@ export interface ProjectFilePublicShareResponse {
  * authored content, and a string forces both sides through an explicit parse
  * and schema check instead of receiving whatever object shape arrives.
  */
+/** Strict wire revision: reject v1; never silently negotiate down to it. */
+export const SHARE_VIEWER_BRIDGE_VERSION = 2 as const;
+
 export interface ShareViewerBridgeEnvelope {
-  version: 1;
+  version: typeof SHARE_VIEWER_BRIDGE_VERSION;
   type: ShareViewerBridgeMessageType;
   /** See {@link SHARE_BRIDGE_NONCE_IS_FRESHNESS_NOT_PERMISSION}. */
   nonce: string;
@@ -1105,11 +1108,37 @@ export const SHARE_VIEWER_BRIDGE_FRAME_TO_HOST = [
   'share:target',
   'share:pin',
   'share:located',
+  'share:geometry',
 ] as const;
 
 export type ShareViewerBridgeMessageType =
   | (typeof SHARE_VIEWER_BRIDGE_HOST_TO_FRAME)[number]
   | (typeof SHARE_VIEWER_BRIDGE_FRAME_TO_HOST)[number];
+
+/**
+ * CSS pixels relative to the iframe's OWN viewport, not the page or host.
+ * Exact six keys, all finite numbers. Signed positions allow offscreen
+ * elements; sizes are nonnegative. Positions, sizes and right/bottom edges
+ * are bounded by coordinateAbsMax; viewport dimensions are in (0, viewportMax].
+ * Host placement accounts for the iframe's real rect and scale, then clamps
+ * its own card to its viewport. Geometry is untrusted layout data, not authority.
+ */
+export interface ShareBridgeViewportRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  viewportWidth: number;
+  viewportHeight: number;
+}
+
+/** Exact keys; render label as text, never markup. No identity is transported. */
+export interface ShareBridgePinDisplay {
+  /** 1–3 ASCII letters/digits/question marks; normally the public pin number. */
+  label: string;
+  /** Integer index into the fixed shared 30-color palette, never a CSS value. */
+  colorIndex: number;
+}
 
 /** host → frame. Turns the comment affordance on or off in the frame. */
 export interface ShareBridgeInitPayload { enabled: boolean }
@@ -1123,7 +1152,7 @@ export interface ShareBridgeLocatePayload {
 }
 /** host → frame. The full pin set to draw; replaces whatever is drawn. */
 export interface ShareBridgePinsPayload {
-  items: ReadonlyArray<{ id: string; elementId: string; selector: string }>;
+  items: ReadonlyArray<{ id: string; elementId: string; selector: string; display?: ShareBridgePinDisplay }>;
 }
 
 /** frame → host. The frame has loaded and will accept the other three types. */
@@ -1133,11 +1162,36 @@ export interface ShareBridgeTargetPayload {
   elementId: string;
   selector: string;
   htmlHint: string;
+  /** Actual selected element bounds, not bounds of a pin or fabricated hit. */
+  rect: ShareBridgeViewportRect;
 }
-/** frame → host. A drawn pin was activated. */
-export interface ShareBridgePinPayload { id: string }
-/** frame → host. The answer to one `share:locate`. */
-export interface ShareBridgeLocatedPayload { id: string; found: boolean }
+/**
+ * frame → host. A drawn pin was activated. Rect is the DRAWN PIN's bounds.
+ * found describes the anchor, not whether the pin exists. For found=false,
+ * rect must pass isShareBridgeFallbackRect: a visible pin remains activatable.
+ */
+export interface ShareBridgePinPayload {
+  id: string;
+  found: boolean;
+  rect: ShareBridgeViewportRect;
+}
+/** frame → host. One locate answer; same anchor/fallback semantics as pin. */
+export interface ShareBridgeLocatedPayload extends ShareBridgePinPayload { }
+
+/**
+ * frame → host. Updates ONLY an already selected target or pin on scroll,
+ * resize or redraw; never selects, focuses, scrolls or submits by itself.
+ * Target removal invalidates its selection with found=false/rect=null.
+ * Pin removal from the supplied pin set REVOKES it instead of creating a
+ * geometry message. An unmatched anchor in that set still has a fallback pin.
+ * Each variant has EXACT keys; no htmlHint or display data on updates.
+ */
+export type ShareBridgeGeometryPayload =
+  | ({ kind: 'target'; elementId: string; selector: string } & (
+    | { found: true; rect: ShareBridgeViewportRect }
+    | { found: false; rect: null }
+  ))
+  | ({ kind: 'pin' } & ShareBridgePinPayload);
 
 /**
  * The nonce proves FRESHNESS, not permission.
@@ -1170,7 +1224,9 @@ export const SHARE_BRIDGE_NONCE_IS_FRESHNESS_NOT_PERMISSION = true;
  *   being viewed is the host's business, and the frame has no use for it.
  * - **No credentials, tokens or session material** of any kind.
  * - **No comment bodies** — the frame needs to know WHERE a comment is
- *   anchored, never what it says. Pins carry ids; text stays on the host.
+ *   anchored, never what it says. Pins carry comment ids and optional bounded
+ *   display tokens, never author ids, author keys, names, HTML or CSS. The host
+ *   resolves the palette index; the frame uses a fixed palette and textContent.
  *
  * A message that would need any of these is a message that belongs on the
  * host side of the boundary instead.
@@ -1202,6 +1258,12 @@ export const SHARE_BRIDGE_LIMITS = {
   elementIdMaxLength: 1000,
   selectorMaxLength: 2000,
   htmlHintMaxLength: 2000,
+  /** Bounds for positions, dimensions AND right/bottom edges in CSS pixels. */
+  coordinateAbsMax: 1_000_000,
+  /** Positive iframe viewport dimensions, in CSS pixels. */
+  viewportMax: 32_768,
+  pinLabelMaxLength: 3,
+  paletteSize: 30,
   /** Items in one `share:pins`. */
   pinsMaxItems: 200,
   /** Bytes of one serialized envelope. */
@@ -1210,7 +1272,57 @@ export const SHARE_BRIDGE_LIMITS = {
   messagesPerSecond: 20,
 } as const;
 
+/** Shared pure guards: consumers still check envelope, origin, nonce and gates. */
+function shareBridgeExactRecord(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const own = Object.keys(value);
+  return own.length === keys.length && keys.every(key => Object.prototype.hasOwnProperty.call(value, key));
+}
+
+export function isShareBridgeViewportRect(value: unknown): value is ShareBridgeViewportRect {
+  if (!shareBridgeExactRecord(value, ['left', 'top', 'width', 'height', 'viewportWidth', 'viewportHeight'])) return false;
+  const { left, top, width, height, viewportWidth, viewportHeight } = value;
+  if (typeof left !== 'number' || !Number.isFinite(left)
+    || typeof top !== 'number' || !Number.isFinite(top)
+    || typeof width !== 'number' || !Number.isFinite(width)
+    || typeof height !== 'number' || !Number.isFinite(height)
+    || typeof viewportWidth !== 'number' || !Number.isFinite(viewportWidth)
+    || typeof viewportHeight !== 'number' || !Number.isFinite(viewportHeight)) return false;
+  const max = SHARE_BRIDGE_LIMITS.coordinateAbsMax;
+  return Math.abs(left) <= max && Math.abs(top) <= max
+    && width >= 0 && width <= max && height >= 0 && height <= max
+    && Math.abs(left + width) <= max && Math.abs(top + height) <= max
+    && viewportWidth > 0 && viewportWidth <= SHARE_BRIDGE_LIMITS.viewportMax
+    && viewportHeight > 0 && viewportHeight <= SHARE_BRIDGE_LIMITS.viewportMax;
+}
+
+/** A missing anchor must not disappear or pretend to have been found. */
+export function isShareBridgeFallbackRect(value: unknown): value is ShareBridgeViewportRect {
+  return isShareBridgeViewportRect(value) && value.left >= 0 && value.top >= 0
+    && value.width > 0 && value.height > 0
+    && value.left + value.width <= value.viewportWidth
+    && value.top + value.height <= value.viewportHeight;
+}
+
+export function isShareBridgePinDisplay(value: unknown): value is ShareBridgePinDisplay {
+  return shareBridgeExactRecord(value, ['label', 'colorIndex'])
+    && typeof value.label === 'string' && value.label.length >= 1
+    && value.label.length <= SHARE_BRIDGE_LIMITS.pinLabelMaxLength
+    && !/[^A-Za-z0-9?]/.test(value.label)
+    && typeof value.colorIndex === 'number' && Number.isInteger(value.colorIndex)
+    && value.colorIndex >= 0 && value.colorIndex < SHARE_BRIDGE_LIMITS.paletteSize;
+}
+
 /**
+ * Fallback placement is local to the runtime and never persisted as an anchor:
+ * when no matched/usable anchor or prior visible pin position exists, allocate
+ * a deterministic viewport-clamped fallback region ordered by the supplied pin
+ * list, with pointer AND keyboard access to every missing pin (scroll/paging
+ * when necessary). Never claim found=true for that region. Recompute visible
+ * fallback bounds on resize/scroll; do not replay stale viewport coordinates.
+ * A hidden/zero-size viewport defers geometry until it can be measured.
+ * Do not silently discard an unmatched selector or an otherwise valid pin.
+ *
  * Ordering and revocation — the rules that make a stale message harmless.
  *
  * **Gates.** `share:ready` carrying the current nonce must arrive before the
@@ -1219,6 +1331,23 @@ export const SHARE_BRIDGE_LIMITS = {
  * for an id the host actually has in flight; a `share:pin` only for an id in
  * the set the host last drew. Each gate exists so that a message which is
  * merely late cannot be mistaken for one that is meaningful.
+ *
+ * **Geometry gates.** Require enabled + ready + current nonce/source. A pin
+ * update requires both membership in the current drawn set AND the currently
+ * selected id (selected by an accepted pin or successful locate exchange).
+ * A target update requires current selection mode AND an exact match of BOTH
+ * elementId and selector to the last accepted, still-selected target. Ignore
+ * unsolicited/late updates; a target invalidation clears the selection/card.
+ * Changing selection invalidates the previous geometry subscription. Leaving
+ * selection mode revokes target updates; clearing a selected pin revokes its
+ * updates. The host never treats geometry as a fresh click or locate response.
+ * Coalesce changed geometry and obey messagesPerSecond across ALL messages,
+ * not per type. No snapshot/metadata polling is introduced by geometry updates.
+ *
+ * **Strict schemas.** Envelopes and every payload/nested item use exact keys;
+ * display is the only optional pin-item key. Unknown/missing keys and v1 fail
+ * closed. A failed handshake must surface bridge unavailability, not a working
+ * comment affordance. JSON strings, byte limits and rate ceilings still apply.
  *
  * **Revocation.** A frame load, leaving the view, or any identity change
  * immediately drops the pending selection, the drawn pins and every in-flight
