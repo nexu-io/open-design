@@ -699,6 +699,7 @@ function proxyTouchpointRuntimeRequest(
       let size = 0;
       let failed = false;
       let streaming = false;
+      let answered = false;
       const forward = (chunk: Buffer): void => {
         if (!chunk.byteLength) return;
         if (!res.write(chunk)) {
@@ -728,22 +729,64 @@ function proxyTouchpointRuntimeRequest(
         size = 0;
         forward(buffered);
       };
+      /**
+       * What a status licenses is not a function of how big its body is.
+       *
+       * Degrading to streaming sends headers, and sending headers retires the
+       * status block in the `end` handler below. So a 410 that outgrew the
+       * buffer would never reclaim — the browser clears the screen while the
+       * stored package survives its own withdrawal, ready to replay the next
+       * time the daemon cannot reach the runtime — and an oversized 5xx would
+       * be forwarded instead of answered from cache, which is precisely the
+       * outage this route exists to survive.
+       *
+       * Neither decision needs the bytes. A body this size is by construction
+       * one no revocation receipt can be read out of, and
+       * `touchpointWithdrawalReclaims` already rules that an unreadable receipt
+       * is the whole deployment being withdrawn.
+       *
+       * Returns whether the response has been answered from cache, in which
+       * case the rest of the upstream body has no reader left.
+       */
+      const settleOversizedStatus = (): boolean => {
+        const status = upstreamRes.statusCode ?? 502;
+        if (status === 410 && contentKey && contentCache) {
+          contentCache.forgetWithdrawn(contentKey, null);
+          // The 410 itself still goes to the browser, exactly as upstream
+          // framed it. Deciding what to do with it is not this proxy's job.
+          return false;
+        }
+        return touchpointStatusIsTransient(status) && answerFromCache('upstream_unavailable');
+      };
       upstreamRes.on('error', () => {
+        if (answered) return;
         failed = true;
         if (res.headersSent) res.end();
         else if (!answerFromCache('upstream_unreachable'))
           res.status(502).json({ error: 'touchpoint_runtime_unavailable' });
       });
       upstreamRes.on('data', (chunk: Buffer) => {
+        if (answered) return;
         if (streaming) {
           forward(chunk);
           return;
         }
         chunks.push(chunk);
         size += chunk.length;
-        if (size > MAX_BUFFERED_DECISION_BYTES) degradeToStreaming();
+        if (size <= MAX_BUFFERED_DECISION_BYTES) return;
+        if (settleOversizedStatus()) {
+          // Answered from cache. Keeping the rest would put the daemon's memory
+          // back above the ceiling for a body nobody will read.
+          answered = true;
+          chunks.length = 0;
+          size = 0;
+          upstreamRes.destroy();
+          return;
+        }
+        degradeToStreaming();
       });
       upstreamRes.on('end', () => {
+        if (answered) return;
         if (streaming) {
           res.end();
           return;

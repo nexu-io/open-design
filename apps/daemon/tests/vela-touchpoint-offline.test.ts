@@ -114,7 +114,13 @@ const RECEIPT = {
   touchpointDecisionId: 'decision-1',
 } as const;
 
-type Reply = Readonly<{ status: number; body: unknown }>;
+type Reply = Readonly<{ status: number; body: unknown; padTo?: number }>;
+
+/**
+ * The proxy's own buffering ceiling, restated here so a test can stand a body
+ * on the far side of it. `vela.ts` derives it as `4 * MAX_CONTENT_BYTES`.
+ */
+const MAX_BUFFERED_DECISION_BYTES = 4 * 2 * 1024 * 1024;
 
 let dataDir: string;
 let upstream: Server | null;
@@ -145,7 +151,12 @@ beforeEach(async () => {
     upstreamCalls += 1;
     res.setHeader('content-type', 'application/json');
     res.statusCode = reply.status;
-    res.end(JSON.stringify(reply.body));
+    // `padTo` grows the body past the proxy's buffering ceiling while keeping it
+    // valid JSON, so the case under test is "too big to buffer", not "malformed".
+    const payload = reply.padTo
+      ? JSON.stringify({ ...(reply.body as Record<string, unknown>), pad: 'x'.repeat(reply.padTo) })
+      : JSON.stringify(reply.body);
+    res.end(payload);
   });
   upstreamPort = (await listen(upstream)).port;
   env = { VELA_CONTROL_KEY: 'ck-account-a', VELA_API_URL: `http://127.0.0.1:${upstreamPort}` };
@@ -331,6 +342,48 @@ describe('production touchpoint offline replay', () => {
 
     env.VELA_CONTROL_KEY = 'ck-account-a';
     expect((await decide()).body.offlineReplay?.reason).toBe('upstream_unreachable');
+  });
+
+  // A body that outgrows the proxy's buffer makes it give up assembly and become
+  // a pipe. Becoming a pipe sends headers, and sending headers retires the
+  // status block that decides what a 410 or a 5xx means. Neither decision needs
+  // the bytes, so neither may be cancelled by their number.
+  it('reclaims a withdrawn package even when the 410 is too big to buffer', async () => {
+    await decide();
+    expect(storedRecords()).toHaveLength(1);
+
+    reply = {
+      status: 410,
+      body: { error: 'production_runtime_withdrawn' },
+      padTo: MAX_BUFFERED_DECISION_BYTES + 1,
+    };
+    expect((await decide()).status).toBe(410);
+    // No receipt is readable out of a body this size, and an unreadable receipt
+    // is the whole deployment being withdrawn: the package must not survive it.
+    expect(storedRecords()).toHaveLength(0);
+
+    await cutTheWire();
+    const after = await decide();
+    expect(after.status).toBe(502);
+    expect(after.body.offlineReplay).toBeUndefined();
+  });
+
+  it('replays the cache for a 5xx that is too big to buffer', async () => {
+    await decide();
+    expect(storedRecords()).toHaveLength(1);
+
+    reply = {
+      status: 503,
+      body: { error: 'upstream_exploded' },
+      padTo: MAX_BUFFERED_DECISION_BYTES + 1,
+    };
+    const outage = await decide();
+    expect(outage.status).toBe(200);
+    expect(outage.offlineHeader).toBe('1');
+    expect(outage.body.offlineReplay?.reason).toBe('upstream_unavailable');
+    expect(outage.body.activityId).toBe('activity-1');
+    // The outage must not cost the package either.
+    expect(storedRecords()).toHaveLength(1);
   });
 
   it('is exactly today\'s daemon when it holds nothing', async () => {
