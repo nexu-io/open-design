@@ -16,7 +16,7 @@ import {
   clickPreviewToolbarAction,
   openAllProjectFiles,
 } from '@/playwright/workspace';
-import type { Dialog, Locator, Page, Request, Response } from '@playwright/test';
+import type { Locator, Page, Request, Response } from '@playwright/test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -45,7 +45,6 @@ const CRITICAL_SCENARIO_IDS = new Set([
   'file-mention',
   'deep-link-preview',
   'file-upload-send',
-  'conversation-delete-recovery',
 ]);
 const MERGE_EXTRA_SCENARIO_IDS = new Set([
   'prototype-basic',
@@ -53,7 +52,7 @@ const MERGE_EXTRA_SCENARIO_IDS = new Set([
   'file-mention',
   'deep-link-preview',
 ]);
-test.describe.configure({ timeout: 45_000 });
+test.describe.configure({ timeout: T.xlong + T.long });
 
 function artifactPreview(page: Page) {
   return page.locator(ACTIVE_ARTIFACT_PREVIEW_SELECTOR).first();
@@ -226,10 +225,6 @@ for (const entry of automatedUiScenarios().filter(
     }
     if (entry.flow === 'file-upload-send') {
       await runFileUploadSendFlow(page, entry);
-      return;
-    }
-    if (entry.flow === 'conversation-delete-recovery') {
-      await runConversationDeleteRecoveryFlow(page, entry);
       return;
     }
     if (entry.flow === 'question-form-single-selection') {
@@ -426,7 +421,6 @@ function scenarioPriority(entry: UiScenario): 'P0' | 'P1' | 'P2' {
     case 'live-artifact-project-routing':
     case 'conversation-persistence':
     case 'file-upload-send':
-    case 'conversation-delete-recovery':
     case 'comment-attachment-flow':
       return 'P0';
     case 'deep-link-preview':
@@ -606,7 +600,7 @@ async function sendPrompt(page: Page, prompt: string) {
   await expect(input).toHaveText(prompt, { timeout: T.short });
   await expect(sendButton).toBeEnabled({ timeout: T.medium });
   await Promise.all([
-    page.waitForResponse(isCreateRunResponse, { timeout: 5_000 }),
+    page.waitForResponse(isCreateRunResponse, { timeout: T.long }),
     sendButton.evaluate((button: HTMLButtonElement) => button.click()),
   ]);
 }
@@ -1741,7 +1735,7 @@ async function runFileUploadSendFlow(
   const { projectId } = await getCurrentProjectContext(page);
   const uploadResponse = page.waitForResponse(
     (resp: Response) => resp.url().includes('/upload') && resp.request().method() === 'POST',
-    { timeout: 5000 },
+    { timeout: T.long },
   );
   await page.getByTestId('chat-file-input').setInputFiles({
     name: 'reference.txt',
@@ -1756,50 +1750,4 @@ async function runFileUploadSendFlow(
   await expect(page.locator('.msg.user').getByText(entry.prompt, { exact: true })).toBeVisible();
   await expect(page.locator('.user-attachments').getByText('reference.txt', { exact: true })).toBeVisible();
   await expectScenarioProjectState(page, entry, projectId);
-}
-
-// Parked: the per-row delete button left the history dropdown with the
-// toolbar dock port (OPEND-3087, Demo #8113), so this flow has no UI entry.
-// Its scenario is registered with `automated: false` until a delete entry
-// point returns; the steps are kept so it can be re-enabled as-is.
-async function runConversationDeleteRecoveryFlow(
-  page: Page,
-  entry: UiScenario,
-) {
-  page.on('dialog', async (dialog: Dialog) => {
-    await dialog.accept();
-  });
-
-  await sendPrompt(page, entry.prompt);
-  await expect(
-    page.locator('.msg.user .user-text').filter({ hasText: entry.prompt }).first(),
-  ).toBeVisible();
-
-  await startNewConversation(page);
-  await expect(page.getByTestId('chat-composer-input')).toBeVisible();
-  await expect(page.getByTestId('chat-composer-input')).toHaveText('');
-
-  const nextPrompt = entry.secondaryPrompt!;
-  await sendPrompt(page, nextPrompt);
-  await expect(
-    page.locator('.msg.user .user-text').filter({ hasText: nextPrompt }).first(),
-  ).toBeVisible();
-
-  await page.getByTestId('conversation-history-trigger').click();
-  await expect(page.getByTestId('conversation-list')).toBeVisible();
-
-  const activeRow = page
-    .getByTestId('conversation-list')
-    .locator('.chat-conv-item.active')
-    .first();
-  await expect(activeRow).toBeVisible();
-  await activeRow.getByTestId(/conversation-delete-/).click();
-
-  await expect(
-    page.locator('.msg.user .user-text').filter({ hasText: entry.prompt }).first(),
-  ).toBeVisible();
-  await expect(page.locator('.msg.user .user-text').filter({ hasText: nextPrompt })).toHaveCount(0);
-
-  await page.getByTestId('conversation-history-trigger').click();
-  await expect(page.getByTestId('conversation-list').locator('.chat-conv-item')).toHaveCount(1);
 }

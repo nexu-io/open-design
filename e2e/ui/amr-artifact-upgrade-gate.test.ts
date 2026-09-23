@@ -50,7 +50,7 @@ const KIMI_ARTIFACT_RUN = [
 ].join('\n');
 
 test('[P1] Kimi artifact follow-ups bypass the AMR Free upgrade dialog', async ({ page }) => {
-  test.setTimeout(T.xlong);
+  test.setTimeout(T.xlong + T.long);
 
   await suppressWhatsNew(page);
   await routeAgents(page, [KIMI_AGENT]);

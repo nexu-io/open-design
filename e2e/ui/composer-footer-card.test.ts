@@ -69,7 +69,7 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test('[P1] composer footer sits inset inside the card with no toolbar divider', async ({ page }) => {
+test('[P1] composer footer controls sit inset inside the card', async ({ page }) => {
   await page.goto('/');
   await createProject(page, 'Composer footer card');
   await expect(page).toHaveURL(/\/projects\//);
@@ -83,7 +83,7 @@ test('[P1] composer footer sits inset inside the card with no toolbar divider', 
     };
     const shell = rect('.composer-shell');
     const send = rect('.composer-row .composer-send');
-    const plus = rect('.composer-row .icon-btn');
+    const plus = rect('.composer-row .plus-menu__trigger');
     const input = rect('.composer-input-wrap');
     const row = document.querySelector('.composer-row');
     const rowBorderTop = row ? getComputedStyle(row).borderTopWidth : null;
@@ -106,8 +106,7 @@ test('[P1] composer footer sits inset inside the card with no toolbar divider', 
   // Input field inset evenly from both sides.
   expect(Math.abs(m.inputLeftInset - m.inputRightInset), JSON.stringify(m)).toBeLessThanOrEqual(1);
   expect(m.inputLeftInset, JSON.stringify(m)).toBeGreaterThanOrEqual(5);
-  // No divider line above the toolbar — the white input field is the only
-  // separator now. On main this is "1px"; here it must be "0px".
+  // The footer remains visually continuous with the input card.
   expect(m.rowBorderTop, JSON.stringify(m)).toBe('0px');
 });
 

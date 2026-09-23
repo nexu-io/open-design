@@ -212,7 +212,7 @@ export async function mockAmrPersonalWorkspace(
 }
 
 export async function waitForLoadingToClear(page: Page) {
-  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long }).catch(() => {});
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.xlong });
 }
 
 export async function dismissPrivacyDialog(page: Page) {
@@ -225,7 +225,7 @@ export async function dismissPrivacyDialog(page: Page) {
     await privacySurface
       .getByRole('button', { name: /don['’]?t share|不分享|not now|i get it|got it/i })
       .click();
-    await expect(privacySurface).toBeHidden();
+    await expect(privacySurface).toBeHidden({ timeout: T.long });
   }
 }
 

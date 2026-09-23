@@ -8,8 +8,23 @@ import type { Locator, Page } from '@playwright/test';
 export async function openAllProjectFiles(page: Page): Promise<void> {
   const tab = page.getByTestId('design-files-tab');
   await expect(tab).toBeVisible();
-  await tab.click();
-  await expectAllProjectFilesActive(page);
+  let activeSince = 0;
+  await expect
+    .poll(async () => {
+      const active = await tab.getAttribute('aria-selected') === 'true';
+      if (!active) {
+        activeSince = 0;
+        await tab.click();
+        return 'activating';
+      }
+      activeSince ||= Date.now();
+      return Date.now() - activeSince >= 1_000 ? 'stable' : 'settling';
+    }, {
+      timeout: 10_000,
+      intervals: [100],
+      message: 'expected Design Files to remain active after workspace restoration settled',
+    })
+    .toBe('stable');
 }
 
 export async function expectAllProjectFilesActive(page: Page): Promise<void> {
@@ -22,18 +37,25 @@ export async function expectAllProjectFilesInactive(page: Page): Promise<void> {
 
 export async function clickDeckNextSlide(page: Page): Promise<void> {
   await revealDeckNavigation(page);
-  const button = page.locator('button[aria-label="Next slide"]:visible');
+  const button = activeFileViewer(page).getByRole('button', { name: 'Next slide' });
   await expect(button).toBeVisible();
   await expect(button).toBeEnabled();
-  await button.click();
+  // The deck HUD intentionally floats over the preview iframe. Playwright's
+  // hit-target check can therefore see the iframe even after the HUD is
+  // revealed; this helper's callers validate pagination state, not stacking.
+  await button.click({ force: true });
 }
 
 export async function clickDeckPreviousSlide(page: Page): Promise<void> {
   await revealDeckNavigation(page);
-  const button = page.locator('button[aria-label="Previous slide"]:visible');
+  const button = activeFileViewer(page).getByRole('button', { name: 'Previous slide' });
   await expect(button).toBeVisible();
   await expect(button).toBeEnabled();
-  await button.click();
+  await button.click({ force: true });
+}
+
+function activeFileViewer(page: Page): Locator {
+  return page.locator('[data-testid="retained-file-viewer"]:not([aria-hidden="true"])');
 }
 
 export async function openPreviewToolbarMoreMenu(page: Page): Promise<Locator> {

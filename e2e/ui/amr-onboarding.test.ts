@@ -18,6 +18,11 @@ import {
 } from '@/playwright/mock-factory';
 import { T } from '@/timeouts';
 
+// On a full two-worker run the onboarding shell competes with workspace-heavy
+// suites for the dev server. Keep the assertions strict, but give navigation
+// and state persistence enough wall-clock budget to settle under that load.
+test.describe.configure({ timeout: T.xlong + T.long });
+
 type OnboardingConfig = {
   mode: 'daemon' | 'api';
   apiKey: string;
@@ -1455,7 +1460,7 @@ async function gotoOnboarding(page: Page) {
   // heading is the stable marker that onboarding has rendered.
   await expect(
     page.getByRole('heading', { name: /Sign in to OpenDesign|登录 OpenDesign/i }),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: T.long });
 }
 
 // The landing's primary cloud button is the AMR/cloud sign-in trigger. Its

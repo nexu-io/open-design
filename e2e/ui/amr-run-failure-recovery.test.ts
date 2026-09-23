@@ -587,7 +587,7 @@ test('[P1] Settings AMR wallet fallback balance renders from the daemon wallet e
   expect(walletUrls.every((url) => new URL(url).searchParams.get('refresh') == null)).toBe(true);
 });
 
-test('[P1] Settings AMR upgrade opens the attributed plans URL for the active profile', async ({ page }) => {
+test('[P1] Settings AMR upgrade opens the attributed dashboard URL for the active profile', async ({ page }) => {
   await stubCatalogsEmpty(page);
   await stubRuntimeAgents(page);
   const profile = 'test';
@@ -630,8 +630,8 @@ test('[P1] Settings AMR upgrade opens the attributed plans URL for the active pr
 
   await expect.poll(() => openedUrl).toBeTruthy();
   const url = new URL(openedUrl);
-  expect(url.pathname).toBe('/pricing/');
-  expect(url.searchParams.get('billing')).toBeNull();
+  expect(url.pathname).toBe('/cloud/dashboard');
+  expect(url.searchParams.get('billing')).toBe('plan');
   expect(url.searchParams.get('od_origin')).toBe('open_design');
   expect(url.searchParams.get('od_entry_source')).toBe('settings_amr_upgrade');
   expect(url.searchParams.get('od_entry_id')).toBeTruthy();

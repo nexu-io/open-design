@@ -16,8 +16,17 @@ export async function pickHomeTemplate(id: string): Promise<void> {
     });
     return;
   }
-  fireEvent.click(homeTemplateTrigger());
-  const option = screen.getByTestId('home-hero-template-menu').querySelector(`[data-chip="${id}"]`);
+  // Template hydration can replace the picker immediately after it first
+  // becomes enabled. If that lands beside the click, the replacement's closed
+  // state wins; retry only while no menu is mounted so an already-open picker
+  // is never toggled closed again.
+  await waitFor(() => {
+    if (screen.queryByTestId('home-hero-template-menu')) return;
+    fireEvent.click(homeTemplateTrigger());
+    expect(screen.queryByTestId('home-hero-template-menu')).not.toBeNull();
+  }, { timeout: 2_500 });
+  const menu = screen.getByTestId('home-hero-template-menu');
+  const option = menu.querySelector(`[data-chip="${id}"]`);
   expect(option, `creation type ${id} is available in the dropdown`).not.toBeNull();
   fireEvent.click(option!);
 }

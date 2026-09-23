@@ -431,6 +431,12 @@ test('[P0] switching teams invalidates the shared-project catalog instead of reu
 test('[P0] account replacement never paints the previous account workspace or projects while the new scope loads', async ({
   page,
 }) => {
+  // The tools-dev daemon is worker-scoped, while this account-bound browser
+  // flow is test-scoped. Predecessor files can therefore leave real local
+  // projects behind. Remove them before installing this case's Workspace
+  // routes so the first account is established solely by its own authority
+  // fixture, exactly as it is in a fresh browser/runtime.
+  await clearLocalProjects(page);
   const accountA = {
     workspace: TEAM_OWNER,
     user: {
@@ -593,7 +599,6 @@ test('[P1] two windows for one account keep Personal and Team billing scopes iso
   context,
   page: personalPage,
 }) => {
-  test.fail(true, 'The #5517 account menu no longer exposes either Personal or Team credit balances.');
   const teamPage = await context.newPage();
   await applyStandardMocks(teamPage);
   let teamBalanceUsd = '19.00';
@@ -1983,26 +1988,24 @@ async function wireMultiWindowWorkspaceAuthority(
       return;
     }
     if (pathname === '/api/workspace/billing' && method === 'GET') {
-      if (url.searchParams.get('scope') === 'account') {
+      const selected = directory.find(
+        (candidate) =>
+          url.searchParams.get('scope') === 'workspace'
+          && candidate.workspaceId === url.searchParams.get('workspaceId'),
+      );
+      if (selected) {
+        const balanceUsd = selected.workspaceId === TEAM_OWNER.workspaceId
+          ? teamBalanceUsd()
+          : '7.00';
         await route.fulfill({
           json: {
-            summary: { membershipTier: 'free', balanceUsd: '7.00' },
-            workspaceBalance: null,
-          },
-        });
-        return;
-      }
-      if (
-        url.searchParams.get('scope') === 'workspace'
-        && url.searchParams.get('workspaceId') === TEAM_OWNER.workspaceId
-      ) {
-        await route.fulfill({
-          json: {
-            summary: null,
+            summary: selected.workspaceType === 'personal'
+              ? { membershipTier: 'free', balanceUsd }
+              : null,
             workspaceBalance: {
-              workspaceId: TEAM_OWNER.workspaceId,
-              workspaceMemberId: TEAM_OWNER.workspaceMemberId,
-              balanceUsd: teamBalanceUsd(),
+              workspaceId: selected.workspaceId,
+              workspaceMemberId: selected.workspaceMemberId,
+              balanceUsd,
               billingScopeVersion: 2,
               expiresAt: null,
               updatedAt: '2026-08-03T00:00:00.000Z',
@@ -2033,15 +2036,24 @@ async function gotoHome(page: Page): Promise<void> {
   await expect(page.getByTestId('workspace-switcher')).toBeAttached();
 }
 
+async function clearLocalProjects(page: Page): Promise<void> {
+  const response = await page.request.get('/api/projects');
+  expect(response.ok(), await response.text()).toBeTruthy();
+  const body = (await response.json()) as { projects?: Array<{ id: string }> };
+  for (const project of body.projects ?? []) {
+    const deleteResponse = await page.request.delete(`/api/projects/${project.id}`);
+    expect(deleteResponse.ok(), await deleteResponse.text()).toBeTruthy();
+  }
+}
+
 /**
  * Put the billing card on screen. It hangs under the top-right credits pill
  * (hover-opened) now, not inside the rail's account menu, so the rail state
  * does not matter here.
  */
 async function openAccountMenu(page: Page): Promise<void> {
-  // Bounded: a fixture with no billing answer must fail the assertion, not
-  // the test's own timeout (the two-windows spec is a `test.fail` that relies
-  // on an ordinary failure here).
+  // Keep a missing billing answer bounded to the shared medium timeout instead
+  // of letting the surrounding test consume its full timeout budget.
   await page.getByTestId('entry-top-right-credits').hover({ timeout: T.medium });
   await expect(page.getByTestId('entry-nav-credits-row')).toBeVisible({ timeout: 1_000 });
 }

@@ -13,7 +13,7 @@ import { pathToFileURL } from 'node:url';
 import { T } from '@/timeouts';
 
 const STORAGE_KEY = 'open-design:config';
-test.describe.configure({ timeout: T.xlong });
+test.describe.configure({ timeout: T.xlong + T.long });
 
 function artifactPreview(page: Page) {
   return page.locator(ACTIVE_ARTIFACT_PREVIEW_SELECTOR).first();
@@ -540,7 +540,7 @@ test('[P1] powered WebGL HTML artifacts open through the isolated preview route'
 });
 
 test('[P1] HTML preview toolbar exposes comments, mark, and edit workflows', async ({ page }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(120_000);
 
   await page.addInitScript(() => {
     class TestClipboardItem {
@@ -674,7 +674,7 @@ test('[P1] draw annotation composer floats near the selected mark and can be que
 });
 
 test('[P1] first-loop onboarding completes once after a successful artifact export', async ({ page }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(T.xlong * 3);
   const analyticsBodies: string[] = [];
   const analyticsConfig = {
     mode: 'daemon',
@@ -720,7 +720,12 @@ test('[P1] first-loop onboarding completes once after a successful artifact expo
 
   await routeMockAgents(page);
   const projectId = await createEmptyProject(page, 'First loop export smoke');
-  await seedHtmlArtifact(page, projectId, 'first-loop-export.html', manualEditHtml());
+  await seedHtmlArtifact(
+    page,
+    projectId,
+    'first-loop-export.html',
+    '<!doctype html><html><body><main><h1>First loop export</h1></main></body></html>',
+  );
   await page.addInitScript(
     ({ id }) => {
       window.sessionStorage.setItem(
@@ -742,13 +747,15 @@ test('[P1] first-loop onboarding completes once after a successful artifact expo
   await openDesignFile(page, 'first-loop-export.html');
 
   const shareMenu = await openShareExportMenu(page);
-  const [download] = await Promise.all([
-    page.waitForEvent('download'),
+  const [exportResponse] = await Promise.all([
+    page.waitForResponse((response) =>
+      response.url().endsWith(`/api/projects/${projectId}/export/html`),
+    ),
     shareMenu.getByRole('menuitem', { name: /Export as standalone HTML/ }).click(),
   ]);
-  expect(download.suggestedFilename()).toMatch(/first-loop-export.*\.html$/i);
+  expect(exportResponse.ok(), await exportResponse.text()).toBeTruthy();
 
-  await expect.poll(() => analyticsBodies.join('\n'), { timeout: 15_000 }).toContain('onboarding_completed');
+  await expect.poll(() => analyticsBodies.join('\n'), { timeout: T.xlong }).toContain('onboarding_completed');
   const raw = analyticsBodies.join('\n');
   expect(raw).toContain('home_recommendation');
   expect(raw).toContain('e2e-recommendation-card');
@@ -757,11 +764,14 @@ test('[P1] first-loop onboarding completes once after a successful artifact expo
   expect(raw).toContain('artifact_viewed');
   expect(raw).toContain('delivered');
 
-  await openShareExportMenu(page);
-  await Promise.all([
-    page.waitForEvent('download'),
-    shareMenu.getByRole('menuitem', { name: /Export as standalone HTML/ }).click(),
+  const reopenedShareMenu = await openShareExportMenu(page);
+  const [repeatExportResponse] = await Promise.all([
+    page.waitForResponse((response) =>
+      response.url().endsWith(`/api/projects/${projectId}/export/html`),
+    ),
+    reopenedShareMenu.getByRole('menuitem', { name: /Export as standalone HTML/ }).click(),
   ]);
+  expect(repeatExportResponse.ok(), await repeatExportResponse.text()).toBeTruthy();
   await expectStableCount(
     () => analyticsBodies.join('\n').match(/onboarding_completed/g)?.length ?? 0,
     1,
@@ -934,8 +944,8 @@ async function routeMockAgents(page: Page) {
 async function createEmptyProject(page: Page, name: string): Promise<string> {
   const projectId = await createProjectViaApi(page, name);
   await page.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
-  await waitForLoadingToClear(page).catch(() => {});
-  await expect(page.getByTestId('file-workspace')).toBeVisible();
+  await waitForLoadingToClear(page);
+  await expect(page.getByTestId('file-workspace')).toBeVisible({ timeout: T.long });
   return projectId;
 }
 
@@ -967,7 +977,7 @@ async function createProjectViaApi(page: Page, name: string): Promise<string> {
       designSystemId: null,
       metadata: { kind: 'prototype' },
     },
-    timeout: 15_000,
+    timeout: T.long,
   });
   expect(response.ok()).toBeTruthy();
   const body = (await response.json()) as { project?: { id?: string } };
@@ -1053,7 +1063,7 @@ async function sendPrompt(page: Page, prompt: string) {
   await expect(input).toHaveText(prompt, { timeout: T.short });
   await expect(sendButton).toBeEnabled({ timeout: T.short });
   await Promise.all([
-    page.waitForResponse(isCreateRunResponse, { timeout: 5_000 }),
+    page.waitForResponse(isCreateRunResponse, { timeout: T.long }),
     sendButton.evaluate((button: HTMLButtonElement) => button.click()),
   ]);
 }
@@ -1211,10 +1221,10 @@ async function seedDeckArtifact(
 
 async function openDesignFile(page: Page, fileName: string) {
   const preview = artifactPreview(page);
-  await waitForLoadingToClear(page).catch(() => {});
+  await waitForLoadingToClear(page);
   const activePath = new URL(page.url()).pathname;
   if (activePath.endsWith(`/files/${encodeURIComponent(fileName)}`)) {
-    await expect(preview).toBeVisible();
+    await expect(preview).toBeVisible({ timeout: T.long });
     return;
   }
   const filePattern = new RegExp(fileName.replace(/\./g, '\\.'), 'i');
@@ -1241,11 +1251,11 @@ async function openDesignFile(page: Page, fileName: string) {
     await expect(fileRow).toBeVisible();
     await fileRow.getByRole('button').first().click();
   }
-  await expect(preview).toBeVisible();
+  await expect(preview).toBeVisible({ timeout: T.long });
 }
 
 async function waitForLoadingToClear(page: Page) {
-  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.xlong });
 }
 
 async function expectFileSource(page: Page, projectId: string, fileName: string, snippets: string[]) {

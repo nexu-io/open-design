@@ -1,9 +1,9 @@
 import { expect, test } from '@/playwright/suite';
-import { openNewProjectModal } from '@/playwright/rail';
 import type { Locator, Page } from '@playwright/test';
 import { applyStandardMocks } from '@/playwright/mock-factory';
+import { T } from '@/timeouts';
 
-// Red spec for OPEND-321 (duplicated by OPEND-548): the split resize handle's extended hitbox
+// Regression for OPEND-321 (duplicated by OPEND-548): the split resize handle's extended hitbox
 // (`.split-resize-handle::before`) must never cross the handle's inline-start
 // edge, because the chat panel's scrollbar gutter sits flush against it. When
 // it does, clicks aimed at the scrollbar start a panel resize instead, and
@@ -26,10 +26,9 @@ test('[P1] chat scrollbar gutter edge belongs to the chat panel, not the resize 
   const box = await requireBoundingBox(chatLog);
   const y = box.y + box.height / 2;
 
-  // Red probe: 1px inside the chat-log edge that faces the handle. On main
-  // the handle's ::before overhangs 10px into the scroll edge, so this
-  // point hit-tests to the handle (red); after the fix it belongs to the
-  // chat panel (green).
+  // Probe 1px inside the chat-log edge that faces the handle. Before the fix,
+  // the handle's ::before overhung the scroll edge and this point hit-tested
+  // to the handle; it must now belong to the chat panel.
   const redProbe = await probeHit(page, box.x + box.width - 1, y);
   expect(redProbe.hitHandle, `expected chat panel at 1px probe, hit <${redProbe.tag} class="${redProbe.className}">`).toBe(false);
   expect(redProbe.insideChatLog).toBe(true);
@@ -112,9 +111,8 @@ test('[P1] RTL: chat scrollbar gutter is not covered by the resize handle', asyn
 
   // RTL: the chat panel is the grid's first column (visually right), the
   // handle sits at its LEFT edge, and the scrollbar renders on the chat-log's
-  // left edge. On main the physical `right: -10px` overhang covers the whole
-  // 8px gutter, so BOTH probes hit the handle (no green baseline for the
-  // control probe in RTL); after the logical-property fix both are green.
+  // left edge. The old physical `right: -10px` overhang covered the whole 8px
+  // gutter; the logical-property fix keeps both probes on the chat panel.
   for (const inset of [1, 3]) {
     const probe = await probeHit(page, box.x + inset, y);
     const diagnostic = `expected chat panel at ${inset}px probe, hit <${probe.tag} class="${probe.className}" cursor="${probe.cursor}">`;
@@ -160,7 +158,7 @@ async function readChatPanelWidth(handle: Locator): Promise<number> {
 
 async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await page.getByText('Loading OpenDesign…').waitFor({ state: 'detached', timeout: 10_000 }).catch(() => {});
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'detached', timeout: T.long }).catch(() => {});
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve OpenDesign' });
   if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
@@ -171,15 +169,27 @@ async function gotoEntryHome(page: Page) {
 }
 
 async function createProject(page: Page, projectName: string) {
-  await openNewProjectModal(page);
-  await page.getByTestId('new-project-tab-prototype').click();
-  await page.getByTestId('new-project-name').fill(projectName);
-  await page.getByTestId('create-project').click();
+  // This suite verifies split-panel geometry, not the projects index or the
+  // new-project modal. Create its fixture directly so an unrelated entry-shell
+  // loading delay cannot turn a hitbox regression run into a false failure.
+  const projectId = `split-hitbox-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const response = await page.request.post('/api/projects', {
+    data: {
+      id: projectId,
+      name: projectName,
+      skillId: null,
+      designSystemId: null,
+      pendingPrompt: null,
+      metadata: { kind: 'prototype' },
+    },
+  });
+  expect(response.ok(), `create project: ${await response.text()}`).toBeTruthy();
+  await page.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
 }
 
 async function expectWorkspaceReady(page: Page) {
   await expect(page).toHaveURL(/\/projects\//);
-  await expect(page.getByText('Loading OpenDesign…')).toHaveCount(0);
+  await expect(page.getByText('Loading OpenDesign…')).toHaveCount(0, { timeout: T.long });
   await expect(page.getByTestId('chat-composer')).toBeVisible();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
   await expect(page.getByTestId('file-workspace')).toBeVisible();

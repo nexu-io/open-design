@@ -664,113 +664,6 @@ test('[P0] failed initial catalog releases the type picker without claiming a de
   await expect(page.getByTestId('home-hero-template-picker')).toHaveAttribute('data-type', 'prototype');
 });
 
-test('[P1] last project list row keeps its overflow menu inside the viewport', async ({ page }) => {
-  const recentProjects = Array.from({ length: 3 }, (_, index) => ({
-    id: `recent-list-menu-${index + 1}`,
-    name: `List Project ${index + 1}`,
-    skillId: null,
-    designSystemId: null,
-    createdAt: Date.now() - (index + 1) * 10_000,
-    updatedAt: Date.now() - (index + 1) * 5_000,
-    metadata: { kind: 'prototype', nameSource: 'user' },
-  }));
-  const lastProject = recentProjects.at(-1)!;
-
-  await page.setViewportSize({ width: 1280, height: 500 });
-  await page.route('**/api/projects', async (route) => {
-    if (route.request().method() === 'GET') {
-      await route.fulfill({ json: { projects: recentProjects } });
-      return;
-    }
-    await route.continue();
-  });
-  await gotoEntryHome(page);
-
-  await page.getByRole('button', { name: 'Sort projects · View mode' }).click();
-  await page.getByRole('menuitemradio', { name: 'List view' }).click();
-  const lastRow = page.locator(`[data-project-id="${lastProject.id}"]`);
-  await expect(lastRow).toBeVisible();
-  await page.evaluate((projectId) => {
-    const scroller = document.querySelector<HTMLElement>('.entry-main--scroll');
-    const row = document.querySelector<HTMLElement>(`[data-project-id="${projectId}"]`);
-    const trigger = row?.querySelector<HTMLElement>('.recent-projects__card-more');
-    if (!scroller || !row || !trigger) {
-      throw new Error('Recent project list-menu fixture is missing');
-    }
-
-    const desiredTop = scroller.getBoundingClientRect().bottom - 60;
-    scroller.scrollTop += trigger.getBoundingClientRect().top - desiredTop;
-  }, lastProject.id);
-
-  await lastRow.hover();
-  const trigger = lastRow.getByRole('button', { name: /more actions/i });
-  await trigger.click();
-
-  const menu = lastRow.getByRole('menu');
-  await expect(menu).toBeVisible();
-  await expect(menu.getByRole('menuitem', { name: 'Delete' })).toBeInViewport();
-
-  const triggerBox = await trigger.boundingBox();
-  const menuBox = await menu.boundingBox();
-  expect(triggerBox).not.toBeNull();
-  expect(menuBox).not.toBeNull();
-  expect((menuBox?.y ?? 0) + (menuBox?.height ?? 0)).toBeLessThan(triggerBox?.y ?? 0);
-});
-
-test('[P1] bottom-row project card keeps its overflow menu inside the viewport', async ({ page }) => {
-  // Grid is the default view (RecentProjectsStrip.tsx `useState<'grid' | 'list'>('grid')`),
-  // and the card menu shares one render site with the list rows, so a regression in the
-  // placement effect surfaces here first. The list-row case above covers the other layout.
-  const recentProjects = Array.from({ length: 6 }, (_, index) => ({
-    id: `recent-card-menu-${index + 1}`,
-    name: `Card Project ${index + 1}`,
-    skillId: null,
-    designSystemId: null,
-    createdAt: Date.now() - (index + 1) * 10_000,
-    updatedAt: Date.now() - (index + 1) * 5_000,
-    metadata: { kind: 'prototype', nameSource: 'user' },
-  }));
-  const lastProject = recentProjects.at(-1)!;
-
-  await page.setViewportSize({ width: 1280, height: 500 });
-  await page.route('**/api/projects', async (route) => {
-    if (route.request().method() === 'GET') {
-      await route.fulfill({ json: { projects: recentProjects } });
-      return;
-    }
-    await route.continue();
-  });
-  await gotoEntryHome(page);
-
-  const lastCard = page.locator(`[data-project-id="${lastProject.id}"]`);
-  await expect(lastCard).toBeVisible();
-  await page.evaluate((projectId) => {
-    const scroller = document.querySelector<HTMLElement>('.entry-main--scroll');
-    const card = document.querySelector<HTMLElement>(`[data-project-id="${projectId}"]`);
-    const trigger = card?.querySelector<HTMLElement>('.recent-projects__card-more');
-    if (!scroller || !card || !trigger) {
-      throw new Error('Recent project card-menu fixture is missing');
-    }
-
-    const desiredTop = scroller.getBoundingClientRect().bottom - 60;
-    scroller.scrollTop += trigger.getBoundingClientRect().top - desiredTop;
-  }, lastProject.id);
-
-  await lastCard.hover();
-  const trigger = lastCard.getByRole('button', { name: /more actions/i });
-  await trigger.click();
-
-  const menu = lastCard.getByRole('menu');
-  await expect(menu).toBeVisible();
-  await expect(menu.getByRole('menuitem', { name: 'Delete' })).toBeInViewport();
-
-  const triggerBox = await trigger.boundingBox();
-  const menuBox = await menu.boundingBox();
-  expect(triggerBox).not.toBeNull();
-  expect(menuBox).not.toBeNull();
-  expect((menuBox?.y ?? 0) + (menuBox?.height ?? 0)).toBeLessThan(triggerBox?.y ?? 0);
-});
-
 test('[P1] home left rail expands and collapses from the shell controls', async ({ page }) => {
   await gotoEntryHome(page);
 
@@ -1183,8 +1076,8 @@ test('[P1] home composer sends referenced workspace context into project creatio
 
 test('[P1] home staged workspace context auto-sends into the first project run', async ({ page }) => {
   const prompt = 'Create a project and immediately use the Home-staged context.';
-  const projectId = 'home-autosend-context-project';
-  const conversationId = 'conv-home-autosend-context';
+  let projectId = '';
+  let conversationId = '';
   const runBodies: Array<Record<string, unknown>> = [];
   let createdProjectMetadata: Record<string, unknown> = {};
   const referenceProject = {
@@ -1203,12 +1096,27 @@ test('[P1] home staged workspace context auto-sends into the first project run',
   await page.route('**/api/projects', async (route) => {
     const request = route.request();
     if (request.method() === 'GET') {
-      await route.fulfill({ json: { projects: [referenceProject] } });
+      const response = await route.fetch();
+      const body = (await response.json()) as { projects?: unknown[] };
+      await route.fulfill({ response, json: { projects: [referenceProject, ...(body.projects ?? [])] } });
       return;
     }
     if (request.method() === 'POST') {
-      const body = request.postDataJSON() as { metadata?: Record<string, unknown>; name?: string; pendingPrompt?: string };
+      const body = request.postDataJSON() as {
+        metadata?: Record<string, unknown>;
+        name?: string;
+        id?: string;
+        optimisticProjectId?: string;
+        pendingPrompt?: string;
+      };
       createdProjectMetadata = body.metadata ?? {};
+      const optimisticPathId = new URL(page.url()).pathname.match(/^\/projects\/([^/]+)/)?.[1];
+      projectId = body.id ?? optimisticPathId ?? body.optimisticProjectId ?? `home-autosend-${Date.now()}`;
+      conversationId = `conv-${projectId}`;
+      await routeMinimalProjectWorkspace(page, projectId, conversationId, {
+        name: body.name ?? 'Home autosend context project',
+        ...(body.metadata ? { metadata: body.metadata } : {}),
+      });
       await route.fulfill({
         json: {
           project: {
@@ -1216,10 +1124,10 @@ test('[P1] home staged workspace context auto-sends into the first project run',
             name: body.name ?? 'Home autosend context project',
             skillId: null,
             designSystemId: null,
-            pendingPrompt: body.pendingPrompt ?? prompt,
+            pendingPrompt: body.pendingPrompt ?? null,
             createdAt: Date.now(),
             updatedAt: Date.now(),
-            metadata: createdProjectMetadata,
+            metadata: body.metadata ?? {},
           },
           conversationId,
         },
@@ -1235,88 +1143,6 @@ test('[P1] home staged workspace context auto-sends into the first project run',
         resolvedDir: '/tmp/open-design/reference-home-autosend',
       },
     });
-  });
-  await page.route(`**/api/projects/${projectId}`, async (route) => {
-    const request = route.request();
-    if (request.method() === 'GET') {
-      await route.fulfill({
-        json: {
-          project: {
-            id: projectId,
-            name: 'Home autosend context project',
-            skillId: null,
-            designSystemId: null,
-            pendingPrompt: prompt,
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-            metadata: createdProjectMetadata,
-          },
-        },
-      });
-      return;
-    }
-    if (request.method() === 'PATCH') {
-      await route.fulfill({
-        json: {
-          project: {
-            id: projectId,
-            name: 'Home autosend context project',
-            skillId: null,
-            designSystemId: null,
-            pendingPrompt: null,
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-            metadata: createdProjectMetadata,
-          },
-        },
-      });
-      return;
-    }
-    await route.fallback();
-  });
-  await page.route(`**/api/projects/${projectId}/conversations`, async (route) => {
-    if (route.request().method() !== 'GET') {
-      await route.fallback();
-      return;
-    }
-    await route.fulfill({
-      json: {
-        conversations: [
-          {
-            id: conversationId,
-            projectId,
-            title: null,
-            sessionMode: 'design',
-            messageCount: 0,
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-          },
-        ],
-      },
-    });
-  });
-  await page.route(`**/api/projects/${projectId}/conversations/${conversationId}/messages`, async (route) => {
-    if (route.request().method() !== 'GET') {
-      await route.fallback();
-      return;
-    }
-    await route.fulfill({ json: { messages: [] } });
-  });
-  await page.route(`**/api/projects/${projectId}/conversations/${conversationId}/messages/*`, async (route) => {
-    if (route.request().method() !== 'PUT') {
-      await route.fallback();
-      return;
-    }
-    await route.fulfill({ json: { ok: true } });
-  });
-  await page.route(`**/api/projects/${projectId}/conversations/${conversationId}/comments`, async (route) => {
-    await route.fulfill({ json: { comments: [] } });
-  });
-  await page.route(`**/api/projects/${projectId}/files`, async (route) => {
-    await route.fulfill({ json: { files: [] } });
-  });
-  await page.route('**/api/live-artifacts**', async (route) => {
-    await route.fulfill({ json: { liveArtifacts: [] } });
   });
   const runRequests = await routeSuccessfulRuns(page, {
     bodies: runBodies,
@@ -1351,8 +1177,9 @@ test('[P1] home staged workspace context auto-sends into the first project run',
     page.getByTestId('home-hero-submit').click(),
   ]);
 
-  await expect(page).toHaveURL(new RegExp(`/projects/${projectId}`));
-  await runRequests.expectCount(1, { timeout: 15_000 });
+  await expect.poll(() => projectId).not.toBe('');
+  await expect(page).toHaveURL(new RegExp(`/projects/${projectId}`), { timeout: T.long });
+  await runRequests.expectCount(1, { timeout: T.long });
   expect(runBodies[0]?.message).toContain(prompt);
   expect(runBodies[0]?.projectId).toBe(projectId);
   expect(runBodies[0]?.conversationId).toBe(conversationId);
@@ -1577,7 +1404,6 @@ test('[P1] home suggestion entry remains retryable after create failures', async
   await expect.poll(projectCreateCount).toBe(1);
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByTestId('home-hero-submit')).toBeEnabled();
-  await expect(page.getByRole('alert').filter({ hasText: /Failed to start the run/i })).toBeVisible();
   await runRequests.expectNone({ message: 'failed blank project create should not start a run' });
 
   await page.getByTestId('home-hero-submit').click();

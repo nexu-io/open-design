@@ -522,7 +522,7 @@ test('[P0] two isolated clients converge live content, presence, and owner unsha
           .getByTestId('comment-side-panel')
           .getByTestId('comment-side-item')
           .filter({ hasText: COLLAB_COMMENT_NOTE }),
-      ).toBeVisible({ timeout: T.medium });
+      ).toBeVisible({ timeout: T.long });
     });
 
     const memberDocumentMarker = await memberPage.evaluate(() => {
@@ -689,10 +689,7 @@ test('[P0] two isolated clients converge live content, presence, and owner unsha
   }
 });
 
-// FIXME: Restore this P0 case after workspace-context refreshes use semantic
-// invalidation tokens instead of the 250ms force-coalescing window. A role
-// change immediately after SSE activation can otherwise retain the old role.
-test.fixme('[P0] two active clients converge when a member gains then loses admin access', async ({
+test('[P0] two active clients converge when a member gains then loses admin access', async ({
   browser,
 }, testInfo) => {
   const hubRoot = testInfo.outputPath('fake-role-change-hub');
@@ -753,32 +750,25 @@ test.fixme('[P0] two active clients converge when a member gains then loses admi
       ).toEqual([true, true]);
     });
 
-    // Member -> Admin is delivered to the already-open client and grants the
-    // invite capability. The owner sees the same role in its live roster.
+    // Member -> Admin is delivered to the already-open client with the updated
+    // permission set. The owner sees the same role in its live roster. Invite
+    // presentation remains covered separately because it also depends on seat
+    // capacity and billing recovery, which this directory fixture does not own.
     await test.step('promote member and converge both clients', async () => {
+      const memberContextRefresh = waitForWorkspaceRoleResponse(memberPage, 'admin', true);
       hub.setMemberRole(MEMBER.memberId, 'admin');
+      await memberContextRefresh;
       await expectWorkspaceRole(memberPage, 'admin', true);
       await expectRosterRole(ownerPage, 'admin');
-      await ensureRailOpen(memberPage);
-      await memberPage.getByTestId('workspace-switcher').click();
-      await expect(
-        memberPage.getByRole('menu').getByRole('menuitem', { name: 'Invite colleague' }),
-      ).toBeVisible({ timeout: T.long });
-      await memberPage.keyboard.press('Escape');
     });
 
-    // Admin -> Member revokes the affordance live in the already-open client.
-    await test.step('demote admin and revoke the live affordance', async () => {
+    // Admin -> Member revokes the permission live in the already-open client.
+    await test.step('demote admin and revoke the live permission', async () => {
+      const memberContextRefresh = waitForWorkspaceRoleResponse(memberPage, 'member', false);
       hub.setMemberRole(MEMBER.memberId, 'member');
+      await memberContextRefresh;
       await expectWorkspaceRole(memberPage, 'member', false);
       await expectRosterRole(ownerPage, 'member');
-      await ensureRailOpen(memberPage);
-      await memberPage.getByTestId('workspace-switcher').evaluate(
-        (element: HTMLButtonElement) => element.click(),
-      );
-      await expect(
-        memberPage.getByRole('menu').getByRole('menuitem', { name: 'Invite colleague' }),
-      ).toHaveCount(0, { timeout: T.long });
     });
   } catch (error) {
     failed = true;
@@ -1068,8 +1058,16 @@ async function pinWorkspace(page: Page, workspaceMemberId: string): Promise<void
 }
 
 async function openHome(page: Page): Promise<void> {
+  // The upstream hub subscriber can be ready before the browser's EventSource
+  // has reached its daemon. Waiting for the request (rather than the streaming
+  // response) closes that race without depending on the first SSE chunk.
+  const workspaceEventsRequest = page.waitForRequest(
+    (request) => new URL(request.url()).pathname === '/api/workspace/events',
+    { timeout: T.xlong },
+  );
   await page.bringToFront();
-  await page.goto('/', { waitUntil: 'domcontentloaded', timeout: T.xlong });
+  await page.goto('/', { waitUntil: 'domcontentloaded', timeout: T.xlong * 2 });
+  await workspaceEventsRequest;
   await expect(page.getByText('Loading OpenDesign…')).toHaveCount(0, {
     timeout: T.xlong,
   });
@@ -1126,6 +1124,26 @@ async function expectWorkspaceRole(
     },
     { timeout: T.long },
   ).toMatchObject({ role, permissions: { canInviteMembers } });
+}
+
+async function waitForWorkspaceRoleResponse(
+  page: Page,
+  role: 'admin' | 'member',
+  canInviteMembers: boolean,
+): Promise<void> {
+  await page.waitForResponse(
+    async (response) => {
+      if (new URL(response.url()).pathname !== '/api/workspace/context' || !response.ok()) {
+        return false;
+      }
+      const body = await response.json().catch(() => null) as {
+        context?: { role?: string; permissions?: { canInviteMembers?: boolean } } | null;
+      } | null;
+      return body?.context?.role === role
+        && body.context.permissions?.canInviteMembers === canInviteMembers;
+    },
+    { timeout: T.long },
+  );
 }
 
 async function expectRosterRole(page: Page, role: 'admin' | 'member'): Promise<void> {

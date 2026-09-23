@@ -88,7 +88,7 @@ test('[P1] composer footer controls keep their size hierarchy on one baseline', 
     const row = document.querySelector('.composer-row');
     if (!row) return { error: 'no .composer-row' as const };
     const selectors = [
-      '.icon-btn',
+      '.plus-menu__trigger',
       '.avatar-agent-trigger',
       '.composer-send',
     ];
@@ -109,7 +109,7 @@ test('[P1] composer footer controls keep their size hierarchy on one baseline', 
   // list means a selector went stale and the height assertions below would be
   // measuring less than the whole toolbar.
   expect(controls.map((control) => control.sel)).toEqual([
-    '.icon-btn',
+    '.plus-menu__trigger',
     '.avatar-agent-trigger',
     '.composer-send',
   ]);
@@ -118,11 +118,9 @@ test('[P1] composer footer controls keep their size hierarchy on one baseline', 
   const spread = (xs: number[]) => Math.max(...xs) - Math.min(...xs);
 
   const send = controls.find((control) => control.sel === '.composer-send');
-  const utilityControls = controls.filter((control) => control.sel !== '.composer-send');
   expect(send?.height, `control heights: ${JSON.stringify(controls)}`).toBe(32);
-  for (const control of utilityControls) {
-    expect(control.height, `control heights: ${JSON.stringify(controls)}`).toBe(28);
-  }
+  expect(controls.find((control) => control.sel === '.plus-menu__trigger')?.height).toBe(36);
+  expect(controls.find((control) => control.sel === '.avatar-agent-trigger')?.height).toBe(28);
 
   // All controls share a vertical center so nothing rides high or low in the row.
   expect(spread(centers), `control centers: ${JSON.stringify(controls)}`).toBeLessThanOrEqual(1);

@@ -293,7 +293,7 @@ async function expectProjectFileToContain(
       const response = await page.request.get(`/api/projects/${projectId}/files/${fileName}`);
       if (!response.ok()) return '';
       return response.text();
-    }, { timeout: 15_000 })
+    }, { timeout: T.long })
     .toContain(expected);
 }
 
@@ -405,7 +405,7 @@ async function revealDesignFileRow(page: Page, fileName: string): Promise<Locato
 }
 
 async function waitForLoadingToClear(page: Page) {
-  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.xlong });
 }
 
 async function expectVisibleAcrossAnimationFrames(locator: Locator) {
@@ -498,7 +498,7 @@ async function runUploadedImageRendersInPreviewFlow(page: Page, entry: UiScenari
     // left the uploaded image broken even though its project raw URL was valid.
     '<!doctype html><html><body><main><h1>Image Preview</h1><img alt="Brand logo" src="/brand.png"></main></body></html>',
   );
-  await page.reload();
+  await page.reload({ waitUntil: 'domcontentloaded' });
   await expectWorkspaceReady(page);
   await openDesignFile(page, 'image-preview.html');
 
@@ -604,6 +604,7 @@ async function runDesignFilesDeleteFlow(page: Page) {
 }
 
 test('[P1] design files page keeps the current single-file menu actions', async ({ page }) => {
+  test.setTimeout(T.xlong + T.long);
   await routeMockAgents(page);
 
   await gotoEntryHome(page);
@@ -614,7 +615,7 @@ test('[P1] design files page keeps the current single-file menu actions', async 
 
   const { projectId } = await getCurrentProjectContext(page);
   await seedProjectFile(page, projectId, 'alpha.html', '<!doctype html><title>alpha</title><h1>alpha</h1>');
-  await page.reload();
+  await page.reload({ waitUntil: 'domcontentloaded' });
   await expectWorkspaceReady(page);
   await openAllProjectFiles(page);
 
@@ -655,7 +656,7 @@ test('[P1] design files new sketch creates a persisted sketch tab and restores i
   await expectProjectFileToContain(page, projectId, sketchName, '"type": "excalidraw"');
   await expectProjectFileToContain(page, projectId, sketchName, `"name": "${sketchName}"`);
 
-  await page.reload();
+  await page.reload({ waitUntil: 'domcontentloaded' });
   await expectWorkspaceReady(page);
   await expect(page.getByTestId('file-workspace').getByRole('tab', {
     name: new RegExp(escapeRegExp(sketchName), 'i'),

@@ -1,9 +1,11 @@
 // Reserve an extra minute beyond start + web/daemon warmup + stop budgets so
 // Playwright can finish fixture bookkeeping without cutting teardown short.
-// Budgets: 180s start + 120s web warmup + 60s daemon warmup + 30s stop + 60s
-// bookkeeping = 450s.
-export const PLAYWRIGHT_TOOLS_DEV_FIXTURE_TIMEOUT_MS = 450_000;
-export const PLAYWRIGHT_WEB_WARMUP_TIMEOUT_MS = 120_000;
+// Two local workers compile isolated Next runtimes concurrently. A replacement
+// worker starting while the surviving worker is exercising the app can take
+// more than three minutes on a loaded development machine. Budgets: 180s start
+// + 300s web warmup + 60s daemon warmup + 30s stop + 60s bookkeeping = 630s.
+export const PLAYWRIGHT_TOOLS_DEV_FIXTURE_TIMEOUT_MS = 630_000;
+export const PLAYWRIGHT_WEB_WARMUP_TIMEOUT_MS = 300_000;
 export const PLAYWRIGHT_DAEMON_WARMUP_TIMEOUT_MS = 60_000;
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;

@@ -1482,6 +1482,11 @@ describe("ProductionCampaignModal device impressions", () => {
 			await vi.advanceTimersByTimeAsync(10);
 		});
 		expect(document.querySelector("opend-touchpoint")).not.toBeNull();
+		await vi.waitFor(() =>
+			expect(
+				document.querySelector("opend-touchpoint")?.shadowRoot?.textContent,
+			).toContain("Verified campaign"),
+		);
 		// Fake timers do not drive jsdom's animation frames, so record the
 		// impression the paint would have recorded.
 		localStorage.setItem(marker(), "1");

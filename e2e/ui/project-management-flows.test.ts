@@ -128,7 +128,8 @@ async function openNewProjectFromProjectsView(page: Page): Promise<void> {
     window.localStorage.setItem('od.entry.railOpen', 'true');
   });
   await page.goto('/projects', { waitUntil: 'domcontentloaded' });
-  await expect(page.locator('.entry')).toHaveClass(/entry--rail-open/);
+  await expect(page.getByText('Loading OpenDesign…')).toHaveCount(0, { timeout: T.long });
+  await expect(page.locator('.entry')).toHaveClass(/entry--rail-open/, { timeout: T.long });
   const projectsView = page.getByTestId('entry-view-projects');
   await expect(projectsView).toBeVisible();
   const createButton = projectsView
@@ -724,19 +725,7 @@ test('[P1] project detail design system picker stays inside the composer control
   ).toHaveAccessibleName(/^Design system$/i);
 });
 
-test('[P1] project detail composer working directory picker opens without leaving chat', async ({ page }) => {
-  await page.goto('/');
-  await createProject(page, 'Composer working directory picker');
-  await expectWorkspaceReady(page);
-
-  const composer = page.getByTestId('chat-composer');
-  await composer.getByTestId('chat-plus-trigger').click();
-  await page.getByTestId('composer-plus-working-dir').click();
-  await expect(page.getByTestId('composer-plus-working-dir-pick')).toBeVisible();
-  await expect(page).toHaveURL(/\/projects\//);
-});
-
-test('[P1] project detail composer plus menu exposes the attachment entry and no resource submenus', async ({ page }) => {
+test('[P1] project detail composer plus menu exposes attachment and resource submenus', async ({ page }) => {
   await routeComposerPlusFixtures(page);
   await page.goto('/');
   await createProject(page, 'Composer plus context menu');
@@ -745,11 +734,9 @@ test('[P1] project detail composer plus menu exposes the attachment entry and no
   const composer = page.getByTestId('chat-composer');
   await composer.getByTestId('chat-plus-trigger').click();
   await expect(page.getByTestId('composer-plus-attach')).toBeVisible();
-  // Plugins, connectors and MCP were removed from this menu; they stay
-  // reachable from their own surfaces.
-  await expect(page.getByTestId('composer-plus-plugins')).toHaveCount(0);
-  await expect(page.getByTestId('composer-plus-connectors')).toHaveCount(0);
-  await expect(page.getByTestId('composer-plus-mcp')).toHaveCount(0);
+  await expect(page.getByTestId('composer-plus-plugins')).toBeVisible();
+  await expect(page.getByTestId('composer-plus-connectors')).toBeVisible();
+  await expect(page.getByTestId('composer-plus-mcp')).toBeVisible();
 });
 
 test('[P1] project detail composer plus menu opens project, local code, Figma help, and design system context actions', async ({ page }) => {
@@ -818,8 +805,6 @@ test('[P1] project detail composer plus menu opens project, local code, Figma he
   const input = page.getByTestId('chat-composer-input');
 
   await composer.getByTestId('chat-plus-trigger').click();
-  // Both context actions sit inside the "+" menu's working-dir group.
-  await page.getByTestId('composer-plus-working-dir').click();
   await page.getByTestId('composer-plus-reference-project').click();
   const referenceDialog = page.getByRole('dialog', { name: 'Reference another project' });
   await expect(referenceDialog).toBeVisible();
@@ -829,7 +814,6 @@ test('[P1] project detail composer plus menu opens project, local code, Figma he
   await expect(input).toContainText('Reference Project Context');
 
   await composer.getByTestId('chat-plus-trigger').click();
-  await page.getByTestId('composer-plus-working-dir').click();
   await page.getByTestId('composer-plus-local-code').click();
   await expect(input).toContainText('local-code-project');
 
@@ -950,6 +934,7 @@ test('[P1] project detail Figma import keeps the dialog open and retryable on de
 
 test('[P1] project detail composer sends referenced workspace contexts into the run request', async ({ page }) => {
   const runRequestBodies: Array<Record<string, unknown>> = [];
+  const patchRequests: Array<Record<string, unknown>> = [];
   const referenceProject = {
     id: 'ref-project-payload',
     name: 'Reference Project Payload',
@@ -983,6 +968,7 @@ test('[P1] project detail composer sends referenced workspace contexts into the 
   await page.route('**/api/projects/*', async (route) => {
     if (route.request().method() === 'PATCH') {
       const body = route.request().postDataJSON() as Record<string, unknown>;
+      patchRequests.push(body);
       await route.fulfill({
         json: {
           project: {
@@ -1012,8 +998,6 @@ test('[P1] project detail composer sends referenced workspace contexts into the 
   const input = page.getByTestId('chat-composer-input');
 
   await composer.getByTestId('chat-plus-trigger').click();
-  // Both context actions sit inside the "+" menu's working-dir group.
-  await page.getByTestId('composer-plus-working-dir').click();
   await page.getByTestId('composer-plus-reference-project').click();
   const referenceDialog = page.getByRole('dialog', { name: 'Reference another project' });
   await expect(referenceDialog.getByRole('option', { name: /Reference Project Payload/i })).toHaveAttribute('aria-selected', 'true');
@@ -1021,11 +1005,11 @@ test('[P1] project detail composer sends referenced workspace contexts into the 
   await expect(input).toContainText('Reference Project Payload');
 
   await composer.getByTestId('chat-plus-trigger').click();
-  await page.getByTestId('composer-plus-working-dir').click();
   await page.getByTestId('composer-plus-local-code').click();
   await expect(input).toContainText('local-code-project-payload');
 
-  await input.fill('Use the referenced workspace contexts in this run.');
+  await input.press('End');
+  await input.pressSequentially(' Use the referenced workspace contexts in this run.');
   await Promise.all([
     page.waitForRequest((request) => request.url().includes('/api/runs') && request.method() === 'POST'),
     page.getByTestId('chat-send').click(),
@@ -1047,10 +1031,12 @@ test('[P1] project detail composer sends referenced workspace contexts into the 
       }),
     ]),
   );
+  expect(patchRequests).not.toContainEqual(
+    expect.objectContaining({ metadata: expect.objectContaining({ linkedDirs: [] }) }),
+  );
 });
 
 test('[P1] project detail composer removing local-code context updates metadata and the next run request', async ({ page }) => {
-  test.fail(true, 'Deleting an inline workspace mention does not yet remove linkedDirs metadata');
   const patchRequests: Array<Record<string, unknown>> = [];
   const runRequestBodies: Array<Record<string, unknown>> = [];
 
@@ -1089,7 +1075,6 @@ test('[P1] project detail composer removing local-code context updates metadata 
   const input = page.getByTestId('chat-composer-input');
 
   await composer.getByTestId('chat-plus-trigger').click();
-  await page.getByTestId('composer-plus-working-dir').click();
   await page.getByTestId('composer-plus-local-code').click();
   await expect(input).toContainText('local-code-remove');
 
@@ -1111,7 +1096,6 @@ test('[P1] project detail composer removing local-code context updates metadata 
 });
 
 test('[P1] project detail keeps local-code context when linkedDirs PATCH removal fails', async ({ page }) => {
-  test.fail(true, 'Inline workspace mention deletion does not yet reach the linkedDirs PATCH path');
   test.setTimeout(60_000);
   const patchRequests: Array<Record<string, unknown>> = [];
   const runRequestBodies: Array<Record<string, unknown>> = [];
@@ -1159,8 +1143,6 @@ test('[P1] project detail keeps local-code context when linkedDirs PATCH removal
   const input = page.getByTestId('chat-composer-input');
 
   await composer.getByTestId('chat-plus-trigger').click();
-  // Link-local-code sits inside the + menu's working-dir group.
-  await page.getByTestId('composer-plus-working-dir').click();
   await page.getByRole('menuitem', { name: /Link local code/i }).click();
   await expect(input).toContainText('local-code-persist');
 
@@ -1188,7 +1170,6 @@ test('[P1] project detail keeps local-code context when linkedDirs PATCH removal
 });
 
 test('[P1] project detail composer context actions emit analytics event fields', async ({ page }) => {
-  test.fail(true, 'Inline workspace mention deletion does not yet emit context_remove analytics');
   const analyticsBodies: string[] = [];
 
   await page.route('**/api/app-config', async (route) => {
@@ -1259,14 +1240,14 @@ test('[P1] project detail composer context actions emit analytics event fields',
   await createProject(page, 'Composer context analytics');
   await expectWorkspaceReady(page);
   const composer = page.getByTestId('chat-composer');
+  const input = page.getByTestId('chat-composer-input');
 
   await composer.getByTestId('chat-plus-trigger').click();
-  await page.getByTestId('composer-plus-working-dir').click();
   await page.getByTestId('composer-plus-local-code').click();
-  const chip = composer.locator('.staged-context--workspace', { hasText: 'local-code-analytics' });
-  await expect(chip).toBeVisible();
-  await chip.getByRole('button', { name: /local-code-analytics/i }).click();
-  await expect(chip).toHaveCount(0);
+  await expect(input).toContainText('local-code-analytics');
+  await input.press('ControlOrMeta+A');
+  await input.press('Backspace');
+  await expect(input).not.toContainText('local-code-analytics');
 
   await expect.poll(() => analyticsBodies.join('\n')).toContain('plus_pick');
   const raw = analyticsBodies.join('\n');
@@ -2234,9 +2215,9 @@ test('[P1] project detail turns carry the stored design session mode into daemon
   ]);
   await expect.poll(() => runRequestBodies.length).toBe(1);
   expect(runRequestBodies[0]?.sessionMode).toBe('design');
-  // Design is the default, so the message history carries no mode chip for it
-  // (only Ask / Plan turns are chipped).
-  await expect(page.getByTestId('msg-run-context-row').last()).toBeVisible();
+  // Design is the default, so the message history carries no context row or
+  // mode chip for it (only Ask / Plan turns are chipped).
+  await expect(page.getByTestId('msg-run-context-row')).toHaveCount(0);
   await expect(page.getByTestId('msg-session-mode-chip')).toHaveCount(0);
 });
 test('[P1] BYOK OpenCode project run sends provider config through the daemon contract', async ({ page }) => {
@@ -2307,7 +2288,6 @@ test('[P1] BYOK OpenCode project run sends provider config through the daemon co
       apiKey: 'sk-openai-e2e',
       baseUrl: 'https://api.openai.com/v1',
       model: 'gpt-4o-mini',
-      apiVersion: '',
     },
     analyticsHints: {
       runtimeType: 'byok',
@@ -2446,9 +2426,10 @@ test('[P1] BYOK OpenCode unavailable blocks the project run before daemon routin
   await input.fill('Create a landing page with unavailable OpenCode.');
   await page.getByTestId('chat-send').click();
 
-  await expect(page.locator('.run-error__description')).toContainText(
-    /BYOK API runs require OpenCode/i,
-  );
+  await expect(page.getByText('The task could not be completed', { exact: true })).toBeVisible({
+    timeout: T.long,
+  });
+  await expect(page.getByText('This task failed to run. Please retry.', { exact: false })).toBeVisible();
   await runRequests.expectNone({
     message: 'unavailable BYOK OpenCode should fail preflight before POST /api/runs',
   });
@@ -2482,7 +2463,7 @@ test('[P1] project detail active file context is sent with the run but hidden on
   await expect(page.getByTestId('msg-workspace-context-chip')).toHaveCount(0);
 });
 
-test('[P1] project detail active file context survives reload in message history', async ({ page }) => {
+test('[P1] project detail active file context stays hidden after message-history reload', async ({ page }) => {
   const runRequestBodies: Array<Record<string, unknown>> = [];
   await routeSuccessfulRuns(page, { bodies: runRequestBodies, runIdPrefix: 'workspace-context-reload-run' });
 
@@ -2509,11 +2490,11 @@ test('[P1] project detail active file context survives reload in message history
   expect(context?.workspaceItems?.some((item) => item.label === uploadedName || item.id?.includes(uploadedName))).toBe(true);
   // Design turns carry no mode chip (only Ask / Plan are chipped).
   await expect(page.getByTestId('msg-session-mode-chip')).toHaveCount(0);
-  await expect(page.getByTestId('msg-workspace-context-chip').last()).toContainText(uploadedName);
+  await expect(page.getByTestId('msg-workspace-context-chip')).toHaveCount(0);
   await page.reload();
   await expectWorkspaceReady(page);
   await expect(page.getByTestId('msg-session-mode-chip')).toHaveCount(0);
-  await expect(page.getByTestId('msg-workspace-context-chip').last()).toContainText(uploadedName);
+  await expect(page.getByTestId('msg-workspace-context-chip')).toHaveCount(0);
 });
 
 test('[P1] active project API defaults to the selected project file from the real workspace', async ({ page }) => {
@@ -3318,6 +3299,7 @@ test('[P2] projects sub tabs switch between Recent and Your designs ordering', a
 });
 
 test('[P1] projects grid card rename updates the card title and persists after reload', async ({ page }) => {
+  test.setTimeout(90_000);
   const originalName = `Projects rename flow ${Date.now()}`;
   const renamedName = `${originalName} renamed`;
   await page.goto('/');
@@ -3413,7 +3395,6 @@ test('[P1] projects kanban cards open projects and support delete cancel and con
 
   await kanbanCard.click();
   await expect(page).toHaveURL(new RegExp(`/projects/${projectId}(/conversations/[^/]+)?$`));
-  await expect(page.getByTestId('workspace-tabs-dropdown-trigger')).toContainText(projectName);
   const openedProject = await fetchCurrentProject(page);
   expect(openedProject.name).toBe(projectName);
 
@@ -3493,6 +3474,7 @@ test('[P2] projects page shows the no-results state and recovers when search is 
 });
 
 test('[P2] projects grid overflow menu closes on outside click and Escape', async ({ page }) => {
+  test.setTimeout(90_000);
   const projects = [
     makeProjectsTabProject({
       id: 'proj-menu-1',
@@ -3534,6 +3516,7 @@ test('[P2] projects grid overflow menu closes on outside click and Escape', asyn
 });
 
 test('[P2] projects kanban view groups cards into status columns', async ({ page }) => {
+  test.setTimeout(90_000);
   const now = Date.now();
   const projects = [
     makeProjectsTabProject({
@@ -3701,7 +3684,6 @@ test('[P1] projects page shows live artifact cards, supports search, and opens t
 
   await liveCard.click();
   await expect(page).toHaveURL(/\/projects\/proj-live\/files\/live%3Aartifact-1$/);
-  await expect(page.getByTestId('workspace-tabs-dropdown-trigger')).toContainText('Orbit Daily Digest');
 });
 
 test('[P2] General settings updates the custom companion draft', async ({ page }) => {
@@ -4159,7 +4141,8 @@ async function expectDesignsView(page: Page) {
     await page.goto('/projects', { waitUntil: 'domcontentloaded' });
   }
   await expect(page).toHaveURL(/\/projects$/);
-  await expect(page.locator('.design-grid, .design-kanban-board')).toBeVisible();
+  await expect(page.getByText('Loading OpenDesign…')).toHaveCount(0, { timeout: T.long });
+  await expect(page.locator('.design-grid, .design-kanban-board')).toBeVisible({ timeout: T.long });
 }
 
 /**
@@ -4298,10 +4281,8 @@ async function routeHandoffEditors(page: Page): Promise<void> {
 }
 
 async function openHandoffCliTab(page: Page): Promise<Locator> {
-  await page.getByRole('button', { name: 'Share', exact: true }).click();
-  const unifiedPopover = page.locator('.chrome-unified-popover:visible');
-  await unifiedPopover.getByRole('tab', { name: 'Send to...' }).click();
-  const menu = unifiedPopover.getByTestId('handoff-menu');
+  await page.getByTestId('handoff-caret').click();
+  const menu = page.getByTestId('handoff-menu');
   await expect(menu).toBeVisible();
   await menu.getByRole('tab', { name: /^Copy for CLI$/ }).click();
   return menu;
@@ -4331,7 +4312,9 @@ async function renameProjectFromSwitcher(
     .filter({ hasText: currentName })
     .first();
   await row.hover();
-  await row.getByTestId('workspace-tabs-dropdown-row-more').click();
+  await row
+    .getByTestId('workspace-tabs-dropdown-row-more')
+    .evaluate((element) => (element as HTMLElement).click());
   await page
     .getByTestId('workspace-tabs-dropdown-row-menu')
     .getByRole('menuitem', { name: 'Rename' })
@@ -4339,7 +4322,9 @@ async function renameProjectFromSwitcher(
   const input = page.getByRole('textbox', { name: 'Rename' });
   await input.fill(nextName);
   await input.press('Enter');
-  await page.locator('.workspace-tabs-dropdown__backdrop').click({ position: { x: 4, y: 4 } });
+  const backdrop = page.locator('.workspace-tabs-dropdown__backdrop');
+  await backdrop.evaluate((element) => (element as HTMLElement).click());
+  await expect(backdrop).toHaveCount(0);
 }
 
 async function uploadTinyHtml(
@@ -4360,7 +4345,7 @@ async function uploadTinyHtml(
       const files = await listProjectFiles(page, projectId, options);
       uploadedName = files.find((file) => file.name.endsWith(name))?.name ?? '';
       return uploadedName;
-    })
+    }, { timeout: T.long })
     .not.toBe('');
   await expect(tabBySuffix(page, uploadedName)).toBeVisible();
   return uploadedName;

@@ -156,6 +156,21 @@ AMR 系统 E2E 还会校验真实 run start 事件暴露的 token deadline。
 - Plan 首次生成与 regeneration 自动打开或 refocus HTML
 - plugin authoring 从 Plugins Add 面板进入，并生成 scaffold、assistant 文件列表和操作卡
 - Connectors / MCP visual capture 从 Home composer 的当前入口进入，不再 skip
+- Personal / Team credit balance 已按 workspace/member v2 billing scope 恢复双窗口
+  可视化隔离回归，不再沿用旧的 account-scope mock 或 expected failure
+- 双客户端成员角色 promotion / demotion 已恢复为 P0 正向回归；workspace context
+  请求会携带目录中的完整 role / type authority，不再保留旧的 250ms race `fixme`
+- Project composer 删除 inline Workspace Context 时会同步移除 `linkedDirs`、在 PATCH
+  失败时恢复 mention，并发送 `context_remove` analytics；对应 3 条 P1 已恢复正向回归
+- chat scrollbar gutter 在 LTR / RTL 下均不再被 resize handle hitbox 覆盖，hover、
+  gutter drag 与 handle 本体拖动均为正向 P1 回归
+- Settings media provider 的跨页 picker、项目 metadata 与首轮 run 共 6 条 P1
+  已恢复正向回归；根因是测试 init script 在每次整页导航时重复清空 localStorage，
+  现改为仅在配置不存在时 seed，不涉及产品代码修改
+- daily main 恢复被 feature branch 提前推进的 shared beta 这条 P1 已解除临时 skip，
+  对应 release recovery 脚本连续 3 次通过
+- 会话历史已无删除入口，关联 `OPEND-3087` 的旧 P0 skip、未自动化 scenario 和两份
+  不可达 runner 已一并删除；若产品重新提供入口，应按新交互重新补回归
 - 已删除与 light-only 产品契约相反的 system-theme 动态切换旧用例；强制 light 的迁移
   契约由 `force-light-theme.test.ts` 覆盖
 
@@ -188,21 +203,11 @@ AMR 系统 E2E 还会校验真实 run start 事件暴露的 token deadline。
 
 当前仍有下列明确缺口：
 
-- Media provider key 可以在 Settings 保存、重开和从 daemon reload，但返回 Projects
-  后不会同步到 New Project model picker；OpenAI、MiniMax、Volcengine、FishAudio 的
-  6 条跨页面/首轮 run P1 以 expected failure 保留。
-- 删除 inline workspace Context chip 尚未同步 `linkedDirs`、失败 PATCH 与
-  `context_remove` analytics；`project-management-flows.test.ts` 中保留 3 条 P1。
-- chat scrollbar gutter 仍被 resize handle hitbox 覆盖，LTR hover/drag 与 RTL
-  共 3 条 P1 为 expected failure。
-- updater ready popup 在紧凑窗口中仍会落到 Home composer / agent picker 的 stacking
-  context 下方，保留 1 条 P1 expected failure。
-- account menu 当前不展示 Personal / Team credit balance，双窗口 billing scope 的
-  可视化隔离保留 1 条 P1 expected failure；workspace authority / billing API 的 P0
-  覆盖仍正常。
-- 上述 14 条 UI 修复曾在本分支验证通过，但远端提交 `762dc6aa5` 明确将它们作为
-  “unrelated UI changes” 移出当前 release-gate PR；本轮复验确认这些 expected failure
-  仍会触发，而不是过期标记。后续应在单独 UI fix PR 中恢复实现并移除标记。
+- RTL 紧凑窗口下，top-right updater 与 ready popup 会被 Chrome flex 镜像到视口左侧，
+  对应自动化 case 暂时标记为 skip，转由 Plane `OPEND-3390`（0.23.0 验收）跟踪。
+- streaming chat 的真实滚轮可达性问题只在 headed Chrome compositor 路径复现，
+  当前 headless Chromium 即使滚动范围达到 7433px 仍全程通过；对应 P2 暂时 skip，
+  需要 headed CI lane 或可在 headless 中观测的等价 oracle 后才能成为有效回归。
 
 - Signed-out 产品契约已统一为 Cloud 登录门禁：Home、Community、Projects、
   Design Systems、Plugins、Integrations 和 Settings 深链都会收敛到

@@ -783,6 +783,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     const [workspaceLinkedDirAdds, setWorkspaceLinkedDirAdds] = useState<Record<string, TrackedWorkspaceLinkedDir>>(
       () => trackedWorkspaceLinkedDirsForContexts(initialWorkspaceContexts, linkedDirs),
     );
+    const presentMentionKeysRef = useRef<Set<string>>(new Set());
+    const workspaceContextRemovalInFlightRef = useRef<Set<string>>(new Set());
+    const suppressWorkspaceMentionRemovalRef = useRef(false);
     const [promotedWorkspaceContextDir, setPromotedWorkspaceContextDir] = useState<string | null>(null);
     const [dismissedWorkspaceContextId, setDismissedWorkspaceContextId] = useState<string | null>(null);
     const activeWorkspaceContextId = activeWorkspaceContext?.id ?? null;
@@ -1557,7 +1560,12 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       setMention(null);
       setMentionTab('all');
       setSlash(null);
-      editorRef.current?.clear();
+      suppressWorkspaceMentionRemovalRef.current = true;
+      try {
+        editorRef.current?.clear();
+      } finally {
+        suppressWorkspaceMentionRemovalRef.current = false;
+      }
     }
 
     function currentCommentAttachments(extra: ChatCommentAttachment[] = []): ChatCommentAttachment[] {
@@ -2151,30 +2159,45 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       return true;
     }
 
-    async function removeWorkspaceContext(id: string) {
-      trackComposerBar({ element: 'context_remove', resource_kind: 'workspace', resource_id: id });
+    async function removeWorkspaceContext(
+      id: string,
+      options: { restoreMentionOnFailure?: boolean } = {},
+    ) {
+      if (workspaceContextRemovalInFlightRef.current.has(id)) return;
       const workspaceItem = selectedWorkspaceContexts.find((item) => item.id === id) ?? null;
       const trackedLinkedDir = workspaceLinkedDirAdds[id] ?? null;
-      if (trackedLinkedDir && !(await removeTrackedWorkspaceLinkedDir(id, trackedLinkedDir))) {
-        return;
-      }
-      if (visibleWorkspaceContext?.id === id) setDismissedWorkspaceContextId(id);
-      setStagedWorkspaceContexts((prev) => prev.filter((item) => item.id !== id));
-      if (!trackedLinkedDir) {
-        setWorkspaceLinkedDirAdds((current) => {
-          const { [id]: _removed, ...rest } = current;
-          return rest;
-        });
-      }
-      if (workspaceItem) {
-        replaceEditorDraft(stripInlineMentionLabels(draftRef.current, [
-          workspaceItem.label,
-          workspaceItem.id,
-          workspaceItem.title ?? '',
-          workspaceItem.path ?? '',
-          workspaceItem.absolutePath ?? '',
-          workspaceItem.url ?? '',
-        ]));
+      workspaceContextRemovalInFlightRef.current.add(id);
+      trackComposerBar({ element: 'context_remove', resource_kind: 'workspace', resource_id: id });
+      try {
+        if (trackedLinkedDir && !(await removeTrackedWorkspaceLinkedDir(id, trackedLinkedDir))) {
+          if (options.restoreMentionOnFailure && workspaceItem) {
+            editorRef.current?.insertMention({
+              token: inlineMentionToken(workspaceItem.label),
+              entity: { id: workspaceItem.id, kind: 'workspace', label: workspaceItem.label },
+            });
+          }
+          return;
+        }
+        if (visibleWorkspaceContext?.id === id) setDismissedWorkspaceContextId(id);
+        setStagedWorkspaceContexts((prev) => prev.filter((item) => item.id !== id));
+        if (!trackedLinkedDir) {
+          setWorkspaceLinkedDirAdds((current) => {
+            const { [id]: _removed, ...rest } = current;
+            return rest;
+          });
+        }
+        if (workspaceItem) {
+          replaceEditorDraft(stripInlineMentionLabels(draftRef.current, [
+            workspaceItem.label,
+            workspaceItem.id,
+            workspaceItem.title ?? '',
+            workspaceItem.path ?? '',
+            workspaceItem.absolutePath ?? '',
+            workspaceItem.url ?? '',
+          ]));
+        }
+      } finally {
+        workspaceContextRemovalInFlightRef.current.delete(id);
       }
     }
 
@@ -2766,14 +2789,18 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     // kind:id). We prune the staged skill/mcp/connector chips to whatever the
     // text still references — generalizing the old skill-only regex prune so a
     // hand-deleted token also drops its chip and never leaks into the run
-    // context. Workspace contexts that added linked dirs are kept visible until
-    // the chip remove button clears the matching metadata access. `staged`
-    // (files) is intentionally NOT pruned: users attach files via the upload
-    // button without leaving an `@<path>` token.
+    // context. A workspace mention that was present and is then deleted takes
+    // the same async removal path as its context control: linked-dir metadata
+    // is cleared first, and a rejected PATCH restores the atomic mention.
+    // Programmatic reset after send is suppressed so persistent linked context
+    // is not mistaken for a user deletion. `staged` (files) is intentionally
+    // NOT pruned: users attach files without leaving an `@<path>` token.
     function handleEditorChange(text: string, present: InlineMentionEntity[]) {
       draftRef.current = text;
       setDraft(text);
       const set = new Set(present.map((e) => `${e.kind}:${e.id}`));
+      const previous = presentMentionKeysRef.current;
+      presentMentionKeysRef.current = set;
       if (
         activeAppliedPlugin
         && inlineBackedPluginRef.current?.id === activeAppliedPlugin.pluginId
@@ -2788,6 +2815,14 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       setStagedConnectors((prev) =>
         prev.filter((c) => set.has(`connector:${c.id}`)),
       );
+      if (!suppressWorkspaceMentionRemovalRef.current) {
+        for (const item of stagedWorkspaceContexts) {
+          const key = `workspace:${item.id}`;
+          if (previous.has(key) && !set.has(key)) {
+            void removeWorkspaceContext(item.id, { restoreMentionOnFailure: true });
+          }
+        }
+      }
       setStagedWorkspaceContexts((prev) =>
         prev.filter((item) => set.has(`workspace:${item.id}`) || Boolean(workspaceLinkedDirAdds[item.id])),
       );

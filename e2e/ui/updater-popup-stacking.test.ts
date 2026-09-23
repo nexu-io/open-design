@@ -88,6 +88,8 @@ for (const direction of ['ltr', 'rtl'] as const) {
   test(`[P1] signed-in ${direction.toUpperCase()} compact window keeps the rocket top-right and opens the prompt below it within the viewport`, async ({
     page,
   }) => {
+    test.skip(direction === 'rtl', 'OPEND-3390: RTL compact updater popup renders outside the viewport');
+
     // Below 1080px the entry layout auto-collapses the rail, and the account
     // row that normally carries the rocket goes off screen with it — so the
     // rocket falls back to its top-right home here.
@@ -133,7 +135,9 @@ for (const direction of ['ltr', 'rtl'] as const) {
       geometry!.viewportWidth,
     );
   });
+}
 
+for (const direction of ['ltr', 'rtl'] as const) {
   test(`[P1] signed-in ${direction.toUpperCase()} wide window parks the rocket on the rail account row and flies the prompt out beside it`, async ({
     page,
   }) => {

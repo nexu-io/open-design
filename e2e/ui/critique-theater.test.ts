@@ -32,6 +32,7 @@
  */
 
 import { expect, test } from '@/playwright/suite';
+import { T } from '@/timeouts';
 import type { Page, Route } from '@playwright/test';
 import { routeAgents } from '@/playwright/mock-factory';
 
@@ -205,7 +206,7 @@ test.describe('Critique Theater e2e (Phase 11)', () => {
     const projectId = await seedProject(page, 'live-stage');
     await page.goto(`/projects/${projectId}`);
     await expect(page.getByRole('region', { name: 'Design Jury' })).toBeVisible({
-      timeout: 5_000,
+      timeout: T.medium,
     });
     for (const role of ['Designer', 'Critic', 'Brand', 'Accessibility', 'Copy']) {
       await expect(page.getByRole('group', { name: role })).toBeVisible();
@@ -221,7 +222,7 @@ test.describe('Critique Theater e2e (Phase 11)', () => {
     await stubProjectEvents(page, FULL_TRANSCRIPT);
     const projectId = await seedProject(page, 'shipped');
     await page.goto(`/projects/${projectId}`);
-    await expect(page.locator('.theater-collapsed-badge').getByText('Shipped', { exact: true })).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator('.theater-collapsed-badge').getByText('Shipped', { exact: true })).toBeVisible({ timeout: T.medium });
     await expect(page.getByText(/Shipped at round 1/)).toBeVisible();
     await expect(page.getByText(/composite 8\.6/)).toBeVisible();
   });
@@ -237,7 +238,7 @@ test.describe('Critique Theater e2e (Phase 11)', () => {
     await expect(interruptBtn).toBeVisible();
     await interruptBtn.focus();
     await page.keyboard.press('Escape');
-    await expect(page.locator('.theater-collapsed-badge').getByText('Interrupted', { exact: true })).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator('.theater-collapsed-badge').getByText('Interrupted', { exact: true })).toBeVisible({ timeout: T.medium });
     await expect(page.getByText(/Interrupted at round/)).toBeVisible();
   });
 

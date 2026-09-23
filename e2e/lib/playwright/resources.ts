@@ -36,7 +36,6 @@ export interface UiScenario {
     | 'design-files-upload'
     | 'design-files-delete'
     | 'design-files-tab-persistence'
-    | 'conversation-delete-recovery'
     | 'question-form-single-selection'
     | 'question-form-submit-persistence'
     | 'question-form-single-answer'

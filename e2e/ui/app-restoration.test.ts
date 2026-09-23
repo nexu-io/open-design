@@ -33,7 +33,7 @@ import {
 } from '@/playwright/mock-factory';
 
 const STORAGE_KEY = 'open-design:config';
-test.describe.configure({ timeout: process.env.CI ? 90_000 : 60_000 });
+test.describe.configure({ timeout: T.xlong + T.long });
 
 function artifactPreview(page: Page) {
   return page.locator(ACTIVE_ARTIFACT_PREVIEW_SELECTOR).first();
@@ -169,7 +169,7 @@ test('[P0] @critical workspace restores the last manually selected file tab afte
   await expect(page.getByText('workspace-artifact.html', { exact: true }).first()).toBeVisible();
 
   const uploadResponse = page.waitForResponse(isDesignFileUploadResponse, {
-    timeout: T.short,
+    timeout: T.long,
   });
   await page.getByTestId('design-files-upload-input').setInputFiles({
     name: 'manual-reference.png',
@@ -235,7 +235,7 @@ test('[P0] switching between projects restores each project workspace to its las
 
   const alphaPrimaryUpload = page.waitForResponse(
     (resp: Response) => resp.url().includes('/upload') && resp.request().method() === 'POST',
-    { timeout: 5000 },
+    { timeout: T.long },
   );
   await page.getByTestId('design-files-upload-input').setInputFiles({
     name: 'alpha-primary.png',
@@ -246,7 +246,7 @@ test('[P0] switching between projects restores each project workspace to its las
   await expect(tabBySuffix(page, 'alpha-primary.png')).toBeVisible();
   const alphaSecondaryUpload = page.waitForResponse(
     (resp: Response) => resp.url().includes('/upload') && resp.request().method() === 'POST',
-    { timeout: 5000 },
+    { timeout: T.long },
   );
   await page.getByTestId('design-files-upload-input').setInputFiles({
     name: 'alpha-secondary.png',
@@ -272,7 +272,7 @@ test('[P0] switching between projects restores each project workspace to its las
 
   const betaPrimaryUpload = page.waitForResponse(
     (resp: Response) => resp.url().includes('/upload') && resp.request().method() === 'POST',
-    { timeout: 5000 },
+    { timeout: T.long },
   );
   await page.getByTestId('design-files-upload-input').setInputFiles({
     name: 'beta-primary.png',
@@ -283,7 +283,7 @@ test('[P0] switching between projects restores each project workspace to its las
   await expect(tabBySuffix(page, 'beta-primary.png')).toBeVisible();
   const betaSecondaryUpload = page.waitForResponse(
     (resp: Response) => resp.url().includes('/upload') && resp.request().method() === 'POST',
-    { timeout: 5000 },
+    { timeout: T.long },
   );
   await page.getByTestId('design-files-upload-input').setInputFiles({
     name: 'beta-secondary.png',
@@ -365,7 +365,7 @@ test('[P0] returning from an uploaded design file route to the project root keep
   await expectWorkspaceReady(page);
 
   const uploadResponse = page.waitForResponse(isDesignFileUploadResponse, {
-    timeout: T.short,
+    timeout: T.long,
   });
   await page.getByTestId('design-files-upload-input').setInputFiles({
     name: 'root-design-reference.png',
@@ -598,7 +598,7 @@ test('[P0] @critical switching between conversations keeps staged attachments UI
 
   const firstUploadResponse = page.waitForResponse(
     (resp: Response) => resp.url().includes('/upload') && resp.request().method() === 'POST',
-    { timeout: 5000 },
+    { timeout: T.long },
   );
   await page.getByTestId('chat-file-input').setInputFiles({
     name: 'first-draft-attachment.txt',
@@ -617,7 +617,7 @@ test('[P0] @critical switching between conversations keeps staged attachments UI
 
   const secondUploadResponse = page.waitForResponse(
     (resp: Response) => resp.url().includes('/upload') && resp.request().method() === 'POST',
-    { timeout: 5000 },
+    { timeout: T.long },
   );
   await page.getByTestId('chat-file-input').setInputFiles({
     name: 'second-draft-attachment.txt',
@@ -681,7 +681,7 @@ test('[P0] @critical reloading an older conversation route keeps the composer av
 
   const uploadResponse = page.waitForResponse(
     (resp: Response) => resp.url().includes('/upload') && resp.request().method() === 'POST',
-    { timeout: 5000 },
+    { timeout: T.long },
   );
   await page.getByTestId('chat-file-input').setInputFiles({
     name: 'reload-staged-attachment.txt',
@@ -739,58 +739,6 @@ test('[P0] @critical reloading the project keeps the latest conversation selecte
   await expect(historyList.locator('.chat-conv-item')).toHaveCount(2);
 });
 
-// Parked (OPEND-3087, Demo #8113): the history dropdown no longer carries a
-// per-row delete button, so this flow has no UI entry point. The steps are kept
-// verbatim so it can be re-enabled once a delete entry point returns.
-test.skip('[P0] @critical deleting the active conversation selects the remaining conversation in history', async ({ page }) => {
-  page.on('dialog', async (dialog: Dialog) => {
-    await dialog.accept();
-  });
-
-  await routeMockAgents(page);
-
-  await routeSimpleSuccessfulRun(page, 'conversation-history-delete-run');
-
-  await gotoEntryHome(page);
-  await createPrototypeProject(page, 'Conversation history delete selection');
-  await expectWorkspaceReady(page);
-
-  const firstPrompt = 'Delete selection first conversation';
-  const secondPrompt = 'Delete selection second conversation';
-
-  await sendPrompt(page, firstPrompt);
-  await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt }).first()).toBeVisible();
-  const firstContext = await getCurrentProjectContext(page);
-
-  await startNewConversation(page);
-  await expect(page.getByTestId('chat-composer-input')).toBeVisible();
-  await expect(page.getByTestId('chat-composer-input')).toHaveText('');
-  await sendPrompt(page, secondPrompt);
-  await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt }).first()).toBeVisible();
-  const secondContext = await getCurrentProjectContext(page);
-  expect(secondContext.conversationId).not.toBe(firstContext.conversationId);
-
-  await page.getByTestId('conversation-history-trigger').click();
-  const historyList = page.getByTestId('conversation-list');
-  await expect(historyList).toBeVisible();
-  const activeRow = historyList.getByTestId(`conversation-item-${secondContext.conversationId}`);
-  await expect(activeRow).toHaveClass(/active/);
-  await activeRow.getByTestId(/conversation-delete-/).click();
-
-  await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt }).first()).toBeVisible();
-  await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt })).toHaveCount(0);
-  const restoredContext = await getCurrentProjectContext(page);
-  expect(restoredContext.conversationId).toBe(firstContext.conversationId);
-
-  const remainingConversations = await listConversationsFromApi(page, firstContext.projectId);
-  expect(remainingConversations.map((conversation) => conversation.id)).toEqual([firstContext.conversationId]);
-
-  await page.getByTestId('conversation-history-trigger').click();
-  await expect(historyList).toBeVisible();
-  await expect(historyList.locator('.chat-conv-item')).toHaveCount(1);
-  await expect(historyList.getByTestId(`conversation-item-${firstContext.conversationId}`)).toHaveClass(/active/);
-});
-
 test('[P0] returning from workspace surfaces keeps the older conversation reachable from history', async ({ page }) => {
   await routeMockAgents(page);
 
@@ -814,6 +762,9 @@ test('[P0] returning from workspace surfaces keeps the older conversation reacha
   await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt }).first()).toBeVisible();
   const secondContext = await getCurrentProjectContext(page);
 
+  const surfaceUploadResponse = page.waitForResponse(isDesignFileUploadResponse, {
+    timeout: T.long,
+  });
   await page.getByTestId('design-files-upload-input').setInputFiles({
     name: 'surface-restore.png',
     mimeType: 'image/png',
@@ -822,6 +773,8 @@ test('[P0] returning from workspace surfaces keeps the older conversation reacha
       'base64',
     ),
   });
+  const surfaceUpload = await surfaceUploadResponse;
+  expect(surfaceUpload.ok(), await surfaceUpload.text()).toBeTruthy();
   await expect(tabBySuffix(page, 'surface-restore.png')).toBeVisible();
 
   await page.getByTestId('conversation-history-trigger').click();
@@ -2120,7 +2073,7 @@ test('[P1] inline question form Skip — you decide sends structured skipped ans
   const skipAll = form.getByRole('button', { name: /Skip — you decide/i });
   await expect(skipAll).toBeEnabled();
   await Promise.all([
-    page.waitForResponse(isCreateRunResponse, { timeout: 5_000 }),
+    page.waitForResponse(isCreateRunResponse, { timeout: T.long }),
     skipAll.click(),
   ]);
 
@@ -2172,7 +2125,7 @@ test('[P1] inline question form submits selected answers into the next run reque
   const submitButton = form.getByRole('button', { name: 'Next' });
   await expect(submitButton).toBeEnabled();
   await Promise.all([
-    page.waitForResponse(isCreateRunResponse, { timeout: 5_000 }),
+    page.waitForResponse(isCreateRunResponse, { timeout: T.long }),
     submitButton.click(),
   ]);
 
@@ -2976,7 +2929,7 @@ async function runFileUploadSendFlow(
 ) {
   const uploadResponse = page.waitForResponse(
     (resp: Response) => resp.url().includes('/upload') && resp.request().method() === 'POST',
-    { timeout: 5000 },
+    { timeout: T.long },
   );
   await page.getByTestId('chat-file-input').setInputFiles({
     name: 'reference.txt',
@@ -3104,48 +3057,6 @@ async function runDesignFilesTabPersistenceFlow(
   await expect(restoredSecondTab).toBeVisible();
   await expect(restoredFirstTab).toHaveAttribute('aria-selected', 'true');
   await expect(restoredSecondTab).toHaveAttribute('aria-selected', 'false');
-}
-
-async function runConversationDeleteRecoveryFlow(
-  page: Page,
-  entry: UiScenario,
-) {
-  page.on('dialog', async (dialog: Dialog) => {
-    await dialog.accept();
-  });
-
-  await sendPrompt(page, entry.prompt);
-  await expect(
-    page.locator('.msg.user .user-text').filter({ hasText: entry.prompt }).first(),
-  ).toBeVisible();
-
-  await startNewConversation(page);
-  await expect(page.getByTestId('chat-composer-input')).toBeVisible();
-  await expect(page.getByTestId('chat-composer-input')).toHaveText('');
-
-  const nextPrompt = entry.secondaryPrompt!;
-  await sendPrompt(page, nextPrompt);
-  await expect(
-    page.locator('.msg.user .user-text').filter({ hasText: nextPrompt }).first(),
-  ).toBeVisible();
-
-  await page.getByTestId('conversation-history-trigger').click();
-  await expect(page.getByTestId('conversation-list')).toBeVisible();
-
-  const activeRow = page
-    .getByTestId('conversation-list')
-    .locator('.chat-conv-item.active')
-    .first();
-  await expect(activeRow).toBeVisible();
-  await activeRow.getByTestId(/conversation-delete-/).click();
-
-  await expect(
-    page.locator('.msg.user .user-text').filter({ hasText: entry.prompt }).first(),
-  ).toBeVisible();
-  await expect(page.locator('.msg.user .user-text').filter({ hasText: nextPrompt })).toHaveCount(0);
-
-  await page.getByTestId('conversation-history-trigger').click();
-  await expect(page.getByTestId('conversation-list').locator('.chat-conv-item')).toHaveCount(1);
 }
 
 function homeDesignCard(page: Page, name: string): Locator {

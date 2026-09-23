@@ -3,6 +3,7 @@ import { ensureRailOpen, openNewProjectModal as openNewProjectModalFromProjects 
 import { expectAllProjectFilesActive, expectAllProjectFilesInactive, openAllProjectFiles } from '@/playwright/workspace';
 import type { Locator, Page, Response } from '@playwright/test';
 import { applyStandardMocks, routeSuccessfulRuns, successfulRunEventBody } from '@/playwright/mock-factory';
+import { T } from '@/timeouts';
 
 const CHAT_PANEL_WIDTH_STORAGE_KEY = 'open-design.project.chatPanelWidth';
 
@@ -238,6 +239,7 @@ test('[P0] @critical project chat Enter sends while Shift+Enter inserts a newlin
 });
 
 test('[P1] quick switcher still activates another file after the project reloads', async ({ page }) => {
+  test.setTimeout(90_000);
   await gotoEntryHome(page);
   await createProject(page, 'Quick switcher after reload');
   await expectWorkspaceReady(page);
@@ -339,6 +341,7 @@ test('[P1] quick switcher leaves the Design Files panel and opens the selected f
 });
 
 test('[P1] quick switcher can switch from a design file tab back to a generated artifact tab', async ({ page }) => {
+  test.setTimeout(90_000);
   const artifact =
     '<artifact identifier="quick-switcher-artifact" type="text/html" title="Quick Switcher Artifact">' +
     '<!doctype html><html><body><main><h1>Quick Switcher Artifact</h1></main></body></html>' +
@@ -380,7 +383,7 @@ test('[P1] quick switcher can switch from a design file tab back to a generated 
 
   await expect(quickSwitcher).toBeHidden();
   await expect(artifactTab).toHaveAttribute('aria-selected', 'true');
-  await expect(fileTab).toHaveAttribute('aria-selected', 'false');
+  await expect(fileTab).not.toHaveAttribute('aria-selected', 'true');
   const current = new URL(page.url());
   const [, projects, projectId] = current.pathname.split('/');
   if (projects !== 'projects' || !projectId) throw new Error(`unexpected project route: ${current.pathname}`);
@@ -406,7 +409,7 @@ async function createProject(
 
 async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await page.getByText('Loading OpenDesign…').waitFor({ state: 'detached', timeout: 10_000 }).catch(() => {});
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'detached', timeout: T.long }).catch(() => {});
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve OpenDesign' });
   if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
@@ -441,7 +444,7 @@ async function expectProjectsView(page: Page) {
 
 async function expectWorkspaceReady(page: Page) {
   await expect(page).toHaveURL(/\/projects\//);
-  await expect(page.getByText('Loading OpenDesign…')).toHaveCount(0);
+  await expect(page.getByText('Loading OpenDesign…')).toHaveCount(0, { timeout: T.long });
   await expect(page.getByTestId('chat-composer')).toBeVisible();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
   await expect(page.getByTestId('file-workspace')).toBeVisible();
@@ -522,7 +525,7 @@ async function sendPrompt(page: Page, prompt: string) {
   await input.fill(prompt);
   await expect(input).toHaveText(prompt, { timeout: 1500 });
   await expect(sendButton).toBeEnabled({ timeout: 1500 });
-  const chatResponse = page.waitForResponse(isCreateRunResponse, { timeout: 2000 });
+  const chatResponse = page.waitForResponse(isCreateRunResponse, { timeout: T.medium });
   await sendButton.evaluate((button: HTMLButtonElement) => button.click());
   await chatResponse;
 }

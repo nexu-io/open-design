@@ -2606,7 +2606,7 @@ process.stdin.on("end", () => {
     }
   });
 
-  it.skip("[P1] lets the daily main build recover a shared beta advanced by a feature branch", async () => {
+  it("[P1] lets the daily main build recover a shared beta advanced by a feature branch", async () => {
     const packagedVersion = "1.2.3";
     const foreignAheadBaseVersion = "1.3.0";
     const objects: Record<string, unknown> = {

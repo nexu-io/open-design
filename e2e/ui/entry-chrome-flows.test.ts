@@ -1,6 +1,6 @@
 import { expect, test } from '@/playwright/suite';
 import { ensureRailOpen, openNewProjectModal } from '@/playwright/rail';
-import { settingsSurface } from '@/playwright/amr';
+import { openSettingsDialog, settingsSurface } from '@/playwright/amr';
 import { expectStableCount } from '@/playwright/assertions';
 import {
   HOME_TYPE_PRIMARY_CHIP_IDS,
@@ -463,11 +463,11 @@ test('[P1] entry top navigation matches the current home tab structure', async (
   await expect(page.locator('.entry-nav-rail__footer').getByTestId('entry-nav-plugins')).toHaveCount(0);
 
   await expect(page.getByTestId('home-hero-template-picker')).toBeVisible();
-  // Nothing is applied on a fresh Home: no plugin chip, no template-driven
-  // footer options or presets.
+  // Nothing is applied on a fresh Home: no plugin chip or template-driven
+  // footer options. Home now defaults to Prototype, so its presets are shown.
   await expect(page.getByTestId('home-hero-active-plugin')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-footer-options')).toHaveCount(0);
-  await expect(page.getByTestId('home-hero-plugin-presets')).toHaveCount(0);
+  await expect(page.getByTestId('home-hero-plugin-presets')).toBeVisible();
 });
 
 test('[P1] home view exposes the redesigned hero, rail recent projects, and the 项目 page', async ({ page }) => {
@@ -806,6 +806,7 @@ test('[P1] Settings About reads desktop updater status and runs a manual update 
           (window as unknown as { __odUpdaterCalls: string[] }).__odUpdaterCalls.push('check');
           return checkedStatus;
         },
+        'clear-cache': async () => idleStatus,
         download: async () => checkedStatus,
         install: async () => checkedStatus,
         quit: async () => ({ ok: true }),
@@ -830,10 +831,7 @@ test('[P1] Settings About reads desktop updater status and runs a manual update 
   });
 
   await gotoEntryHome(page);
-  await page.getByTestId('entry-settings-menu-trigger').click();
-  await page.getByTestId('entry-settings-open-details').click();
-  const dialog = page.getByRole('dialog');
-  await expect(dialog).toBeVisible();
+  const dialog = await openSettingsDialog(page);
 
   await dialog.getByRole('button', { name: /^About\b/i }).click();
   await expect(dialog.locator('.settings-about-version-num')).toContainText('0.13.4');
@@ -899,6 +897,7 @@ test('[P1] Settings About surfaces prerelease updater check failures with retry 
           (window as unknown as { __odUpdaterCalls: string[] }).__odUpdaterCalls.push('check');
           return failedStatus;
         },
+        'clear-cache': async () => idleStatus,
         download: async () => failedStatus,
         install: async () => failedStatus,
         quit: async () => ({ ok: true }),
@@ -923,10 +922,7 @@ test('[P1] Settings About surfaces prerelease updater check failures with retry 
   });
 
   await gotoEntryHome(page);
-  await page.getByTestId('entry-settings-menu-trigger').click();
-  await page.getByTestId('entry-settings-open-details').click();
-  const dialog = page.getByRole('dialog');
-  await expect(dialog).toBeVisible();
+  const dialog = await openSettingsDialog(page);
 
   await dialog.getByRole('button', { name: /^About\b/i }).click();
   await expect(dialog.locator('.settings-about-version-num')).toContainText('0.16.0-prerelease.1');
@@ -1015,10 +1011,7 @@ test('[P1] Settings BYOK connection failures emit a classified analytics error c
   });
 
   await gotoEntryHome(page);
-  await page.getByTestId('entry-settings-menu-trigger').click();
-  await page.getByTestId('entry-settings-open-details').click();
-  const dialog = page.getByRole('dialog');
-  await expect(dialog).toBeVisible();
+  const dialog = await openSettingsDialog(page);
 
   const connectionTest = dialog.locator('.settings-byok-connection-test');
   await expect(connectionTest).toBeVisible();
