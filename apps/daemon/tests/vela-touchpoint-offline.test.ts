@@ -16,6 +16,7 @@
 //     names a different activity.
 
 import { createHash } from 'node:crypto';
+import { gzipSync } from 'node:zlib';
 import express from 'express';
 import fs from 'node:fs';
 import { createServer, type Server } from 'node:http';
@@ -114,7 +115,7 @@ const RECEIPT = {
   touchpointDecisionId: 'decision-1',
 } as const;
 
-type Reply = Readonly<{ status: number; body: unknown; padTo?: number }>;
+type Reply = Readonly<{ status: number; body: unknown; padTo?: number; gzip?: boolean }>;
 
 /**
  * The proxy's own buffering ceiling, restated here so a test can stand a body
@@ -156,6 +157,13 @@ beforeEach(async () => {
     const payload = reply.padTo
       ? JSON.stringify({ ...(reply.body as Record<string, unknown>), pad: 'x'.repeat(reply.padTo) })
       : JSON.stringify(reply.body);
+    if (reply.gzip) {
+      // Small on the wire, oversized once expanded: this crosses the DECODE
+      // ceiling without ever crossing the buffering one.
+      res.setHeader('content-encoding', 'gzip');
+      res.end(gzipSync(Buffer.from(payload, 'utf8')));
+      return;
+    }
     res.end(payload);
   });
   upstreamPort = (await listen(upstream)).port;
@@ -366,6 +374,24 @@ describe('production touchpoint offline replay', () => {
     const after = await decide();
     expect(after.status).toBe(502);
     expect(after.body.offlineReplay).toBeUndefined();
+  });
+
+  // The same rule one ceiling further in. A body that fits the buffer but
+  // expands past the DECODE ceiling leaves `decoded` null, and the status block
+  // must still run: it precedes the unparseable-body bail-out, and that order is
+  // what this pins.
+  it('reclaims a withdrawn package whose 410 expands past the decode ceiling', async () => {
+    await decide();
+    expect(storedRecords()).toHaveLength(1);
+
+    reply = {
+      status: 410,
+      body: { error: 'production_runtime_withdrawn' },
+      padTo: MAX_BUFFERED_DECISION_BYTES + 1,
+      gzip: true,
+    };
+    expect((await decide()).status).toBe(410);
+    expect(storedRecords()).toHaveLength(0);
   });
 
   it('replays the cache for a 5xx that is too big to buffer', async () => {
