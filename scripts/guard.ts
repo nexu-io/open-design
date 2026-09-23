@@ -1,5 +1,7 @@
+import { execFile } from "node:child_process";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
+import { promisify } from "node:util";
 import { pathToFileURL } from "node:url";
 import ts from "typescript";
 
@@ -635,21 +637,83 @@ const e2eAllowedScripts = [
   "typecheck",
 ];
 
-async function collectRepositoryFiles(directory: string, skippedDirectoryNames = new Set<string>()): Promise<string[]> {
-  const entries = await readdir(directory, { withFileTypes: true });
-  const files: string[] = [];
+const execFileAsync = promisify(execFile);
 
-  for (const entry of entries) {
-    const fullPath = path.join(directory, entry.name);
-    if (entry.isDirectory()) {
-      if (skippedDirectoryNames.has(entry.name)) continue;
-      files.push(...(await collectRepositoryFiles(fullPath, skippedDirectoryNames)));
-      continue;
+/**
+ * Directories git is told to ignore, as repository-relative paths without a
+ * trailing slash. `--directory` collapses a fully ignored directory to one
+ * entry, so this stays small (tens of entries) and costs one git call.
+ *
+ * Resolved once per process and cached: every filesystem check asks for it.
+ */
+let ignoredRepositoryDirectoriesPromise: Promise<Set<string>> | undefined;
+
+export async function collectIgnoredRepositoryDirectories(root: string = repoRoot): Promise<Set<string>> {
+  try {
+    const { stdout } = await execFileAsync(
+      "git",
+      ["ls-files", "--directory", "--others", "--ignored", "--exclude-standard", "-z"],
+      { cwd: root, maxBuffer: 32 * 1024 * 1024 },
+    );
+    return new Set(
+      stdout
+        .split("\0")
+        .filter(Boolean)
+        .filter((entry) => entry.endsWith("/"))
+        .map((entry) => entry.slice(0, -1)),
+    );
+  } catch {
+    // Not a git checkout, or git is unavailable. Walking everything is the
+    // pre-existing behaviour and still correct, just slower.
+    return new Set();
+  }
+}
+
+/**
+ * Every file the repository owns under `directory`.
+ *
+ * Two things must hold, and both were once violated by the same walk:
+ *
+ * - A directory git ignores is not repository content. Local agent worktrees,
+ *   package stores and editor state live there, each capable of holding a full
+ *   second copy of the tree, and `.gitignore` already states the intent
+ *   ("must stay git-ignored so pnpm guard does not scan them") — it just had
+ *   no mechanism behind it.
+ * - The walk must not grow the call stack with the tree. Collecting into one
+ *   accumulator keeps it flat; the previous `files.push(...await recurse())`
+ *   spread threw `RangeError: Maximum call stack size exceeded` once a
+ *   subtree exceeded the argument limit.
+ */
+export async function collectRepositoryFiles(
+  directory: string,
+  skippedDirectoryNames = new Set<string>(),
+  ignoredDirectories?: Set<string>,
+): Promise<string[]> {
+  const ignored =
+    ignoredDirectories ??
+    (ignoredRepositoryDirectoriesPromise ??= collectIgnoredRepositoryDirectories());
+  const resolvedIgnored = await ignored;
+
+  const files: string[] = [];
+  const pending: string[] = [directory];
+
+  while (pending.length > 0) {
+    const current = pending.pop()!;
+    for (const entry of await readdir(current, { withFileTypes: true })) {
+      const fullPath = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        if (skippedDirectoryNames.has(entry.name)) continue;
+        if (resolvedIgnored.has(toRepositoryPath(fullPath))) continue;
+        pending.push(fullPath);
+        continue;
+      }
+      if (entry.isFile()) files.push(toRepositoryPath(fullPath));
     }
-    if (entry.isFile()) files.push(toRepositoryPath(fullPath));
   }
 
-  return files;
+  // The walk order is now a stack rather than directory-by-directory
+  // recursion, so sort to keep reported violations stable between runs.
+  return files.sort();
 }
 
 const productNeutralitySkippedDirectories = new Set([
