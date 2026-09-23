@@ -319,12 +319,14 @@ it('clipboard rejection preserves the successful publication and its existing co
   await publish();
   expect(screen.getByRole('button', { name: /stop sharing/i })).toBeTruthy();
   expect(screen.getByText(publication.url)).toBeTruthy();
-  expect(screen.getByRole('button', { name: /copy failed/i })).toBeTruthy();
+  expect(screen.getByText(/could not copy automatically.*manually copy/i).getAttribute('role')).toBe('status');
+  expect(screen.getByRole('button', { name: /copy share link/i })).toBeTruthy();
   expect(screen.queryByText(genericMessage)).toBeNull();
   expect(document.body.textContent).not.toContain(sensitive);
   expect(analytics.track.mock.calls.filter(([name, data]) =>
     name === 'artifact_publish_result' && data.result === 'failed')).toEqual([]);
   await tick(1800);
+  expect(screen.queryByText(/could not copy automatically/i)).toBeNull();
   expect(screen.getByRole('button', { name: /copy share link/i })).toBeTruthy();
 });
 

@@ -268,8 +268,8 @@ describe('od project CLI', () => {
     expect(stub.requests).toHaveLength(1);
   });
 
-  it.each(['publish', 'get'])('%s reports no-link success without printing undefined or declaring failure', async action => {
-    const body = { status: action === 'publish' ? 'published' : 'active', link: { status: 'unavailable', code: 'PUBLIC_SHARE_WEB_URL_UNAVAILABLE' }, ...(action === 'get' ? { publication: null, freshness: 'unknown' } : { receipt: { slug: 'stable', filePath: 'nested/index.html', versionId: 'v1', version: 1, publishedAt: 1, entryPath: 'index.html' } }) };
+  it.each(['publish', 'resume', 'get'])('%s reports no-link success without printing undefined or declaring failure', async action => {
+    const body = { status: action !== 'get' ? 'published' : 'active', link: { status: 'unavailable', code: 'PUBLIC_SHARE_WEB_URL_UNAVAILABLE' }, ...(action === 'get' ? { publication: null, freshness: 'unknown' } : { receipt: { slug: 'stable', filePath: 'nested/index.html', versionId: 'v1', version: 1, publishedAt: 1, entryPath: 'index.html' } }) };
     stub = await startProjectStubServer(undefined, body);
     const args = ['project', 'share', action, 'project-1', '--path', 'nested/index.html', '--daemon-url', stub.baseUrl];
     const result = await runCli(args);
@@ -293,7 +293,7 @@ describe('od project CLI', () => {
     expect(stub.requests).toHaveLength(1);
     expect(stub.requests[0]).toMatchObject({ method: 'GET', url: '/api/projects/project-1/share-state', headers: { 'x-od-workspace-id': 'ws-1', 'x-od-workspace-member-id': 'member-1' } });
   });
-  it.each(['publish', 'get', 'status', 'stop'])('share %s uses the existing file endpoint and emits raw JSON', async action => {
+  it.each(['publish', 'resume', 'get', 'status', 'stop'])('share %s uses the existing file endpoint and emits raw JSON', async action => {
     stub = await startProjectStubServer();
     const result = await runCli([
       'project', 'share', action, 'project-1', '--path', 'nested/index.html',
@@ -306,14 +306,31 @@ describe('od project CLI', () => {
     const publication = { url: 'https://example.invalid/returned-link', slug: 'returned-slug', fileName: 'nested/index.html' };
     expect(JSON.parse(result.stdout)).toEqual(action === 'stop'
       ? { ok: true, slug: 'legacy-public-slug', fileName: 'nested/index.html' }
-      : action === 'publish' ? publication : { publication });
+      : ['publish', 'resume'].includes(action) ? publication : { publication });
     expect(stub.requests).toHaveLength(1);
     expect(stub.requests[0]).toMatchObject({
-      method: action === 'stop' ? 'DELETE' : action === 'publish' ? 'POST' : 'GET',
+      method: action === 'stop' ? 'DELETE' : ['publish', 'resume'].includes(action) ? 'POST' : 'GET',
       url: '/api/projects/project-1/files/nested%2Findex.html/publish-public',
       headers: { 'x-od-workspace-id': 'ws-1', 'x-od-workspace-member-id': 'member-1' },
       body: action === 'stop' ? JSON.stringify({ slug: 'legacy-public-slug' }) : '',
     });
+  });
+  it('resume is documented and requires a file before making requests', async () => {
+    stub = await startProjectStubServer();
+    const help = await runCli(['project', 'share', '--help']);
+    expect(help.stdout).toContain('od project share resume <id> --path <file> [--json]');
+    const invalid = await runCli(['project', 'share', 'resume', 'project-1', '--daemon-url', stub.baseUrl, '--json']);
+    expect(invalid.code).toBe(2);
+    expect(stub.requests).toHaveLength(0);
+  });
+  it('resume preserves binding_pending rather than announcing publication success', async () => {
+    const body = { status: 'binding_pending', receipt: { slug: 'stable', filePath: 'nested/index.html', versionId: 'v1', version: 1, publishedAt: 1, entryPath: 'index.html' }, binding: { retrying: true } };
+    stub = await startProjectStubServer(undefined, body);
+    const args = ['project', 'share', 'resume', 'project-1', '--path', 'nested/index.html', '--daemon-url', stub.baseUrl];
+    const json = await runCli([...args, '--json']);
+    expect(json.code).toBe(0); expect(JSON.parse(json.stdout)).toEqual(body);
+    const human = await runCli(args);
+    expect(human.code).toBe(0); expect(human.stdout).toContain('binding pending');
   });
   it('documents exact workspace identity for bound project and file commands', async () => {
     const projectHelp = await runCli(['project', 'help']);

@@ -320,6 +320,7 @@ async function publicShareFixture(options: {
     reservations: createShareAliasReservations(db, () => ids++ === 0 ? fixtureSlug : randomUUID()),
     outbox,
     complete: createSharePublicationCompletion(db, record, outbox, true),
+    ensureProject: async scope => ({ projectId: scope.projectId, ownerMemberId: scope.ownerMemberId, sharedAt: null }),
     prepare: async (scope, slug) => ({
       url: publicShareViewerUrl(scope.projectId, slug, { OD_VELA_WEB_URL: 'https://web.example.test' }),
       run: async args => {
@@ -438,6 +439,9 @@ async function startSyncServer(
     readProjectShareState: async scope => ({ projectId: scope.projectId, bindingExists: false, hasEverShared: false, publications: [] }),
     verifyWorkspaceRequest,
     verifyWorkspaceScope,
+    // Local fixture ownership is pinned to the verified directory, not request headers.
+    resolveLocalPublicShareOwner: (_projectId, workspaceId) => workspaceId === authoritativeContext?.workspaceId
+      ? authoritativeContext.workspaceMemberId : null,
     resolveSharedProject: defaultResolveSharedProject,
     resolveSharedProjectOwner: defaultResolveSharedProjectOwner,
     ...(extraDeps?.resolveSharedProject && !extraDeps.resolveSharedProjectOwner
@@ -1936,7 +1940,7 @@ describe('collab sync routes', () => {
     } finally { db.close(); }
   });
 
-  it.each(['published', 'binding_pending'] as const)('22/23 real HTTP returns the Viewer entry only when bound; outcome=%s', async status => {
+  it.each(['published', 'binding_pending'] as const)('22/23 real HTTP separates the Viewer URL from binding readiness; outcome=%s', async status => {
     const dir = await mkdtemp(path.join(tmpdir(), 'od-share-entry-'));
     tempDirs.push(dir);
     await writeFile(path.join(dir, 'index.html'), '<h1>Public file</h1>');
@@ -1958,6 +1962,7 @@ describe('collab sync routes', () => {
         recordPublicFilePublication: createPublicFilePublicationRecorder(db, store, () => ({ enqueued: 0, skippedInbound: 0 })),
         sharePublishing: {
           reservations: createShareAliasReservations(db, () => receipt.slug), outbox,
+          ensureProject: async scope => ({ projectId: scope.projectId, ownerMemberId: scope.ownerMemberId, sharedAt: null }),
           complete: createSharePublicationCompletion(db, createPublicFilePublicationRecorder(db, store, () => ({ enqueued: 0, skippedInbound: 0 })), outbox, true),
           prepare: async (scope, slug) => ({
             url: publicShareViewerUrl(scope.projectId, slug, { OD_VELA_WEB_URL: 'https://web.example.test/cloud' }),
@@ -1973,7 +1978,7 @@ describe('collab sync routes', () => {
         expect.soft(new URL(response.body.url).origin).not.toBe('https://api.example.test');
         expect.soft(outbox.list()).toHaveLength(0);
       } else {
-        expect.soft(response.body).not.toHaveProperty('url');
+        expect.soft(response.body.url).toBe(`https://web.example.test/cloud/artifact/p1/${receipt.slug}`);
         expect.soft(response.body.binding?.retrying).toBe(true);
         expect.soft(outbox.list()).toHaveLength(1);
       }
@@ -2020,7 +2025,8 @@ describe('collab sync routes', () => {
       for (const command of commands) expect(command[1]).toBe(scope.resourceTeamId);
       const current = await api.json('/api/projects/p1/files/pages/local.html/publish-public');
       if (fail) {
-        expect(response.body.error).toBe('PUBLIC_FILE_PUBLISH_UNAVAILABLE');
+        expect(response.body.error).toMatchObject({ code: 'PUBLIC_FILE_MANUAL_REVOKE_REQUIRED', data: { slug: fixtureSlug, fileName: scope.filePath } });
+        expect(response.body.error.data.url).toBe(`https://web.example.test/artifact/p1/${fixtureSlug}`);
         expect(store.get(scope)).toBeNull(); expect(current.body.publication).toBeNull();
         expect(db.prepare('SELECT * FROM test_publish_intents').all()).toEqual([]);
         // Local storage failure must not revoke the already confirmed remote alias.

@@ -972,7 +972,7 @@ import { createShareBindingOutbox } from './collab/share-binding-outbox.js';
 import { createShareBindingStartup } from './collab/share-binding-startup.js';
 import { createVelaShareBindingPrepare } from './collab/vela-share-binding-prepare.js';
 import { cleanupAbandonedPinnedVelaSessions } from './collab/vela-pinned-command.js';
-import { createProjectPublicFileStop } from './collab/project-public-file-stop.js';
+import { createProjectPublicFileStop, matchesPublicFileDeleteTarget, type PublicFileDeleteTarget } from './collab/project-public-file-stop.js';
 import { createPublicFileMutations } from './collab/public-file-mutations.js';
 import { resolveLocalProjectCommentWorkspaceContext } from './collab/project-comment-workspace-context.js';
 import { commentRelayScope, personalCommentRelayFilePaths } from './collab/comment-relay-scope.js';
@@ -8841,11 +8841,11 @@ export async function startServer({
     publicFilePublicationStore,
     createVelaPublicFileStop({ configuredEnv: configuredAmrEnv, dataRoot: RUNTIME_DATA_DIR }),
   );
-  const stopPublicFilesBeforeDelete = async (projectId: string, filePath?: string) => {
+  const stopPublicFilesBeforeDelete = async (projectId: string, target?: PublicFileDeleteTarget) => {
       const binding = getWorkspaceProjectByProjectId(db, projectId);
       if (!binding?.workspaceId || !binding.createdByWorkspaceMemberId) {
         // An orphaned publication cannot borrow the current user's identity.
-        const publication = db.prepare('SELECT 1 FROM public_file_publications WHERE project_id = ? AND (? IS NULL OR file_path = ?) LIMIT 1').get(projectId, filePath ?? null, filePath ?? null);
+        const publication = (db.prepare('SELECT file_path FROM public_file_publications WHERE project_id = ?').all(projectId) as Array<{ file_path: string }>).some(row => matchesPublicFileDeleteTarget(row.file_path, target));
         if (publication) throw new Error('PUBLIC_FILE_STOP_PENDING');
         return;
       }
@@ -8853,7 +8853,7 @@ export async function startServer({
         resourceTeamId: binding.workspaceId,
         ownerMemberId: binding.createdByWorkspaceMemberId,
         projectId,
-      }, filePath);
+      }, target);
   };
   registerProjectRoutes(app, {
     db,
