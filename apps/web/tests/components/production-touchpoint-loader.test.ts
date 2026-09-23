@@ -29,4 +29,22 @@ describe("production touchpoint decision loader", () => {
 		vi.stubGlobal("fetch", vi.fn().mockRejectedValue(abort));
 		await expect(loadProductionTouchpointDecision("opend.home.account-badge", "en-US", new AbortController().signal)).rejects.toBe(abort);
 	});
+
+	it("opts into the server's empty-response contract and treats it the same as a 404", async () => {
+		const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ decision: null }), { status: 200 }));
+		vi.stubGlobal("fetch", fetchMock);
+		expect(await loadProductionTouchpointDecision("opend.home.account-badge", "en-US", new AbortController().signal)).toEqual({ kind: "no-decision" });
+		expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("emptyResponse=200"), expect.anything());
+	});
+
+	it("still treats a 404 as no-decision for servers that have not adopted emptyResponse", async () => {
+		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 404 })));
+		expect(await loadProductionTouchpointDecision("opend.home.account-badge", "en-US", new AbortController().signal)).toEqual({ kind: "no-decision" });
+	});
+
+	it("still returns a real decision object when the server has activity", async () => {
+		const decision = { activityId: "activity-1", contentVersionId: "version-1" };
+		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(decision), { status: 200 })));
+		expect(await loadProductionTouchpointDecision("opend.home.account-badge", "en-US", new AbortController().signal)).toEqual({ kind: "decision", value: decision });
+	});
 });

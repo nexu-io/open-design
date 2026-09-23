@@ -32,7 +32,7 @@ function receipt(value: unknown): ProductionRuntimeRevocationReceipt | null {
 export async function loadProductionTouchpointDecision(placementKey: string, locale: string, signal: AbortSignal, activeDecisionId?: string): Promise<ProductionTouchpointLoadResult> {
 	let response: Response;
 	try {
-		const query = new URLSearchParams({ placementKey, locale });
+		const query = new URLSearchParams({ placementKey, locale, emptyResponse: "200" });
 		if (activeDecisionId) query.set("activeDecisionId", activeDecisionId);
 		response = await fetch(`/api/touchpoints/production-runtime?${query}`, { cache: "no-store", signal });
 	} catch (error) {
@@ -55,6 +55,10 @@ export async function loadProductionTouchpointDecision(placementKey: string, loc
 	try {
 		const value: unknown = await response.json();
 		if (!value || typeof value !== "object") throw new ProductionTouchpointLoadError("invalid_dto");
+		// The server's opt-in "no activity" response (requested via
+		// emptyResponse=200) is a 200 with `{"decision": null}` instead of a 404,
+		// so old and new servers both resolve to the same no-decision outcome.
+		if ("decision" in value && (value as { decision: unknown }).decision === null) return { kind: "no-decision" };
 		return { kind: "decision", value };
 	} catch (error) {
 		if (error instanceof ProductionTouchpointLoadError) throw error;
