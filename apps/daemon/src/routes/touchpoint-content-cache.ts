@@ -216,6 +216,8 @@ export function createTouchpointContentCache(runtimeDataDir: string): Touchpoint
    */
   const bootWall = Date.now();
   const bootMonotonic = performance.now();
+  /** Per-key: the highest time this process adopted, and the monotonic reading it was adopted at. */
+  const marks = new Map<string, { wall: number; at: number }>();
   const nowEstimate = (): number =>
     Math.max(Date.now(), Math.round(bootWall + (performance.now() - bootMonotonic)));
 
@@ -259,6 +261,13 @@ export function createTouchpointContentCache(runtimeDataDir: string): Touchpoint
         typeof record.entryPath !== 'string' ||
         !DIGEST_PATTERN.test(record.entryDigest ?? '') ||
         typeof record.manifestHash !== 'string' ||
+        // `rebuild` dereferences this with `Object.entries`. A record that is
+        // valid JSON of the right version but structurally damaged here would
+        // otherwise throw from inside the proxy's upstream error handlers,
+        // where nothing catches it — turning a documented cache miss into a
+        // dead daemon. Everything this module reads unguarded is validated
+        // here, so a damaged record is a miss and never an exception.
+        !isRecord(record.envelope) ||
         !isRecord(record.clock) ||
         typeof record.clock.fetchedAt !== 'number' ||
         typeof record.clock.observedAt !== 'number' ||
@@ -414,7 +423,18 @@ export function createTouchpointContentCache(runtimeDataDir: string): Touchpoint
     if (!record) return null;
     const schedule = record.schedule ? touchpointScheduleOf(record.schedule) : null;
     if (!schedule) return null;
-    const now = Math.max(record.clock.observedAt, nowEstimate());
+    // The high-water mark alone cannot measure time while the wall clock sits
+    // BEHIND it: `max` pins `now` to the mark, `elapsed` stops growing, and an
+    // activity keeps its authority for as long as the clock stays wound back.
+    // Anchoring the mark to this process's monotonic reading is what makes the
+    // wait count. The anchor is per key and per process — a mark adopted for
+    // one placement is not evidence about another, and nothing survives a
+    // restart except the persisted mark itself.
+    const monotonicNow = performance.now();
+    const anchor = marks.get(assemblyFile(key));
+    const projected = anchor ? anchor.wall + (monotonicNow - anchor.at) : 0;
+    const now = Math.max(record.clock.observedAt, projected, nowEstimate());
+    marks.set(assemblyFile(key), { wall: now, at: monotonicNow });
     if (now > record.clock.observedAt) {
       try {
         writeFileAtomically(

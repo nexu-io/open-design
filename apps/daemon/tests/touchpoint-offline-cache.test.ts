@@ -159,6 +159,12 @@ const blobExists = (value: string) =>
   storedBlobs().some((file) => path.basename(file) === value.slice('sha256:'.length));
 const assemblyCount = () =>
   storedBlobs().filter((file) => file.includes(`${path.sep}assemblies${path.sep}`)).length;
+/** The one assembly record on disk, as parsed JSON. */
+const assemblyFileOnDisk = (): string => {
+  const files = storedBlobs().filter((file) => file.includes(`${path.sep}assemblies${path.sep}`));
+  expect(files).toHaveLength(1);
+  return files[0] as string;
+};
 
 describe('offline schedule cache', () => {
   it('persists the server schedule and activity identity, and replays them from a fresh instance', () => {
@@ -460,6 +466,61 @@ describe('offline schedule cache', () => {
     expect(replayed?.endsAt).toBe(iso(T0 + 2 * HOUR));
     vi.setSystemTime(T0 + 3 * HOUR);
     expect(cache.replayOffline(MODAL, 'upstream_unavailable')).toBeNull();
+  });
+
+  // A record can be valid JSON, carry the current version, and still be
+  // structurally damaged. Every field this module dereferences without a guard
+  // has to be rejected HERE, because the callers are the proxy's upstream
+  // `error`/5xx handlers: an exception thrown there is uncaught and takes the
+  // daemon with it, which is strictly worse than the cache miss it replaces.
+  it('treats a structurally damaged record as a miss, not an exception', () => {
+    const writer = createTouchpointContentCache(dataDir);
+    writer.remember(MODAL, fullResponse(MODAL.placementKey, 'modal.js', MODAL_ENTRY));
+    const held = writer.held(MODAL);
+    expect(held).not.toBeNull();
+
+    const file = assemblyFileOnDisk();
+    const record = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, unknown>;
+    // Valid JSON, right version, every scalar intact — only the envelope is gone.
+    record.envelope = null;
+    fs.writeFileSync(file, JSON.stringify(record));
+
+    vi.setSystemTime(T0 + 2 * HOUR);
+    const reader = createTouchpointContentCache(dataDir);
+    expect(() => reader.replayOffline(MODAL, 'upstream_unavailable')).not.toThrow();
+    expect(reader.replayOffline(MODAL, 'upstream_unavailable')).toBeNull();
+    expect(() =>
+      reader.reassemble(MODAL, held!, { placementKey: MODAL.placementKey, contentOmitted: true }),
+    ).not.toThrow();
+    expect(
+      reader.reassemble(MODAL, held!, { placementKey: MODAL.placementKey, contentOmitted: true }),
+    ).toBeNull();
+  });
+
+  // The high-water mark survives a restart, but on its own it cannot MEASURE
+  // anything while the wall clock sits behind it: `max` pins `now` to the mark
+  // and elapsed time stops accruing. `setSystemTime` moves only the wall clock
+  // here; `advanceTimersByTime` is what stands for real time passing.
+  it('counts real time that passes while the wall clock is wound back', () => {
+    vi.useFakeTimers({ toFake: ['Date', 'performance'] });
+    vi.setSystemTime(T0);
+    const before = createTouchpointContentCache(dataDir);
+    before.remember(MODAL, fullResponse(MODAL.placementKey, 'modal.js', MODAL_ENTRY));
+    expect(before.replayOffline(MODAL, 'upstream_unreachable')).not.toBeNull();
+
+    // The clock is wound back far enough that it stays behind the mark for the
+    // whole run below, then the daemon restarts with nothing in memory.
+    vi.setSystemTime(T0 - 48 * HOUR);
+    const after = createTouchpointContentCache(dataDir);
+    // Nothing has been measured yet, so this first read is still authorized.
+    expect(after.replayOffline(MODAL, 'upstream_unreachable')).not.toBeNull();
+
+    // Twenty-five real hours pass. The wall clock is still behind the mark the
+    // whole time, so only the monotonic reading can see them — and they are
+    // enough to carry the activity past its own `endsAt`.
+    vi.advanceTimersByTime(25 * HOUR);
+    expect(Date.now()).toBeLessThan(T0);
+    expect(after.replayOffline(MODAL, 'upstream_unreachable')).toBeNull();
   });
 
   // The device clock is an input, never the authority. Winding it back must not
