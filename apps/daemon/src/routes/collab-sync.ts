@@ -20,6 +20,7 @@ import path from 'node:path';
 import {
   SHARE_MAX_TOTAL_BYTES,
   type SharePlanSummary,
+  type ShareUnpublishResponse,
   workspaceContextHasWorkspaceIdentity,
   type ProjectContentTransferState,
   type ProjectMetadata,
@@ -1502,7 +1503,8 @@ export function registerCollabSyncRoutes(
       if (revision?.slug === slug) {
         publicFilePublicationStore.deleteIfRevisionMatches(scope, revision);
       }
-      return res.json({ ok: true, slug, fileName: filePath });
+      const response: ShareUnpublishResponse = { ok: true, slug, fileName: filePath };
+      return res.json(response);
     } catch (error) {
       console.warn('[od] failed to unpublish public project file:', error);
       const failure = classifyVelaCommandFailure('redact', error);

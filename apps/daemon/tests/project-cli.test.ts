@@ -54,6 +54,10 @@ async function startProjectStubServer(deleteResponse: unknown = { ok: true }, sh
       requests.push(captured);
 
       res.setHeader('content-type', 'application/json');
+      if (captured.method === 'DELETE' && captured.url === '/api/projects/project-1/files/nested%2Findex.html') {
+        res.end(JSON.stringify(deleteResponse));
+        return;
+      }
       if (captured.method === 'DELETE' && captured.url === '/api/projects/project-1') {
         res.end(JSON.stringify(deleteResponse));
         return;
@@ -243,6 +247,17 @@ async function runCli(args: string[]): Promise<{ stdout: string; stderr: string;
 }
 
 describe('od project CLI', () => {
+  it.each([false, true])('files delete preserves the HTTP response or human output, json=%s', async json => {
+    const body = { ok: true };
+    stub = await startProjectStubServer(body);
+    const result = await runCli(['files', 'delete', 'project-1', 'nested/index.html', '--workspace', 'ws-1', '--workspace-member', 'member-1', '--daemon-url', stub.baseUrl, ...(json ? ['--json'] : [])]);
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe('');
+    if (json) expect(JSON.parse(result.stdout)).toEqual(body);
+    else expect(result.stdout).toBe('[files] deleted nested/index.html\n');
+    expect(stub.requests).toHaveLength(1);
+    expect(stub.requests[0]).toMatchObject({ method: 'DELETE', url: '/api/projects/project-1/files/nested%2Findex.html', headers: { 'x-od-workspace-id': 'ws-1', 'x-od-workspace-member-id': 'member-1' } });
+  });
   it.each([false, true])('delete reports per-file residuals without extra requests, json=%s', async json => {
     const body = { ok: true, shareResiduals: [
       { filePath: 'a\n.html', slug: 'a', retrying: true },

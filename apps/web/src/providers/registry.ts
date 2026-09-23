@@ -3,6 +3,7 @@ import {
   workspaceContextHasTeamIdentity,
   type PublicFileManualRevokeRequiredData,
   type PublicProjectFilePublication,
+  type ShareUnpublishResponse,
 } from '@open-design/contracts';
 import { boundedRequestErrorCode } from '../analytics/workspace';
 import type {
@@ -2040,7 +2041,7 @@ export async function unpublishProjectFilePublic(
   slug: string,
   workspaceContext?: WorkspaceCollabContext | null,
   requestId?: string,
-): Promise<{ ok: true; slug: string; fileName: string }> {
+): Promise<ShareUnpublishResponse> {
   const resp = await fetch(
     `/api/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(fileName)}/publish-public`,
     {
@@ -2068,7 +2069,7 @@ export async function unpublishProjectFilePublic(
       daemonErrorCode: typeof payload?.error === 'object' ? payload.error.code : payload?.error,
     });
   }
-  return (await resp.json()) as { ok: true; slug: string; fileName: string };
+  return (await resp.json()) as ShareUnpublishResponse;
 }
 
 export async function checkDeploymentLink(
