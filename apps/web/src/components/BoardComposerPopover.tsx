@@ -8,7 +8,6 @@ import type { PreviewComment, PreviewCommentMember } from '../types';
 import { isImeComposing } from '../utils/imeComposing';
 
 import { Icon } from './Icon';
-import styles from './BoardComposerPopover.module.css';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
@@ -648,7 +647,7 @@ export function BoardComposerPopover({
   return (
     <div
       ref={popoverRef}
-      className={`comment-popover comment-popover-composer${docked ? ' comment-popover-docked' : ` ${styles.surface}`}${dragging ? ' comment-popover-dragging' : ''}`}
+      className={`comment-popover comment-popover-composer${docked ? ' comment-popover-docked' : ''}${dragging ? ' comment-popover-dragging' : ''}`}
       data-testid="comment-popover"
       role="dialog"
       aria-modal="false"

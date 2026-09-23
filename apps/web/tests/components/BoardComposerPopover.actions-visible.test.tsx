@@ -94,6 +94,7 @@ describe('BoardComposerPopover action row', () => {
     // The host caps the card to the space left in the stage; the fix has to
     // survive that cap rather than depend on the card being tall enough.
     expect(popover.style.maxHeight).not.toBe('');
-    expect(popover.className).toContain('surface');
+    expect(popover.classList.contains('comment-popover-composer')).toBe(true);
+    expect(popover.className).not.toContain('surface');
   });
 });
