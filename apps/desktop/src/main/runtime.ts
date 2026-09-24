@@ -782,6 +782,16 @@ export async function mintHomeWorkingDirToken(
   return { baseDir, ok: true, token: mint(deps.desktopAuthSecret, baseDir) };
 }
 
+// Frosted-glass window material: the desktop wallpaper blurs through the whole
+// window (NSVisualEffectView). 'active' keeps the blur when the window loses
+// focus instead of flattening to gray. Shared by the main window and the boot
+// splash so the splash-to-app hand-off never changes material.
+const MAC_WINDOW_MATERIAL = {
+  vibrancy: "under-window" as const,
+  visualEffectState: "active" as const,
+  backgroundColor: "#00000000",
+};
+
 const MAC_WINDOW_CHROME =
   process.platform === "darwin"
     ? ({
@@ -800,16 +810,20 @@ const MAC_WINDOW_CHROME =
         // actually renders. apps/web/tests/styles/top-chrome-height.test.ts
         // pins the 44 on the web side; window-chrome.test.ts pins this 16.
         trafficLightPosition: { x: 12, y: 16 },
-        // Frosted-glass window: the desktop wallpaper blurs through the whole
-        // window (NSVisualEffectView). The web shell keeps html/body
-        // transparent in desktop mode (see apps/web app-wash.css) so the
-        // vibrancy is actually visible; 'active' keeps the blur when the
-        // window loses focus instead of flattening to gray.
-        vibrancy: "under-window" as const,
-        visualEffectState: "active" as const,
-        backgroundColor: "#00000000",
+        // The web shell keeps html/body transparent in desktop mode (see
+        // apps/web app-wash.css) so the vibrancy is actually visible.
+        ...MAC_WINDOW_MATERIAL,
       })
     : {};
+
+// Splash ground. On macOS the splash wears the main window's glass plus the
+// same 20% white scrim the web shell paints over it (apps/web app-wash.css,
+// `--app-wash` for `data-host-platform='darwin'`), so the reveal swap reads as
+// one window. Windows/Linux have no native glass and keep the opaque gray.
+const SPLASH_WINDOW_MATERIAL =
+  process.platform === "darwin" ? MAC_WINDOW_MATERIAL : { backgroundColor: "#f2f4f5" };
+const SPLASH_PAGE_BACKGROUND =
+  process.platform === "darwin" ? "rgba(255, 255, 255, 0.2)" : "#f2f4f5";
 
 const MAC_WINDOW_CHROME_CSS = `
   .app-chrome-header {
@@ -952,7 +966,7 @@ function createPendingHtml(): string {
     <style>
       html,
       body {
-        background: #f2f4f5;
+        background: ${SPLASH_PAGE_BACKGROUND};
         height: 100%;
         margin: 0;
         overflow: hidden;
@@ -1522,7 +1536,7 @@ export function createSplashWindow(): SplashWindowHandle {
   const startedAt = Date.now();
   const splash = new BrowserWindow({
     autoHideMenuBar: true,
-    backgroundColor: "#f2f4f5",
+    ...SPLASH_WINDOW_MATERIAL,
     frame: false,
     height: 900,
     resizable: false,
