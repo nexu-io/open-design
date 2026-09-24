@@ -1,0 +1,89 @@
+{
+  "candidateId": "e11ff78c-9e72-401e-a064-e12291da08b0",
+  "projectId": "ca952ab1-ae9c-432f-8135-530048034aaf",
+  "runId": "e5e391a1-19a6-4f17-ac45-71ed8cbf6621",
+  "conversationId": "a94eea62-31ef-4a05-b030-bfe3a8704c35",
+  "provenance": {
+    "summary": "Detected from Content-Workflow/skripter/SKILL.md, Content-Workflow/skripter/assets/cheatsheet.md, Content-Workflow/skripter/references/scripting-monetization.md, Content-Workflow/skripter/references/documentary-scripting.md, Content-Workflow/skripter/references/reel-scripting.md, Content-Workflow/skripter/references/topic-ideation.md, Content-Workflow/instagram-hook-writer/references/techniques.md, Content-Workflow/instagram-hook-writer/SKILL.md, Illustrations/cap-theorem-video/CLAUDE.md, Illustrations/cap-theorem-video/AGENTS.md, Content-Workflow/storyteller/references/story-bank-and-delivery.md after a successful run.",
+    "detectedAt": 1782272248619
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "Content-Workflow/skripter/SKILL.md",
+      "label": "Content-Workflow/skripter/SKILL.md",
+      "size": 5542,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "Content-Workflow/skripter/assets/cheatsheet.md",
+      "label": "Content-Workflow/skripter/assets/cheatsheet.md",
+      "size": 3385,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "Content-Workflow/skripter/references/scripting-monetization.md",
+      "label": "Content-Workflow/skripter/references/scripting-monetization.md",
+      "size": 9733,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "Content-Workflow/skripter/references/documentary-scripting.md",
+      "label": "Content-Workflow/skripter/references/documentary-scripting.md",
+      "size": 11141,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "Content-Workflow/skripter/references/reel-scripting.md",
+      "label": "Content-Workflow/skripter/references/reel-scripting.md",
+      "size": 10093,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "Content-Workflow/skripter/references/topic-ideation.md",
+      "label": "Content-Workflow/skripter/references/topic-ideation.md",
+      "size": 8459,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "Content-Workflow/instagram-hook-writer/references/techniques.md",
+      "label": "Content-Workflow/instagram-hook-writer/references/techniques.md",
+      "size": 13489,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "Content-Workflow/instagram-hook-writer/SKILL.md",
+      "label": "Content-Workflow/instagram-hook-writer/SKILL.md",
+      "size": 8173,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "Illustrations/cap-theorem-video/CLAUDE.md",
+      "label": "Illustrations/cap-theorem-video/CLAUDE.md",
+      "size": 5565,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "Illustrations/cap-theorem-video/AGENTS.md",
+      "label": "Illustrations/cap-theorem-video/AGENTS.md",
+      "size": 5565,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "Content-Workflow/storyteller/references/story-bank-and-delivery.md",
+      "label": "Content-Workflow/storyteller/references/story-bank-and-delivery.md",
+      "size": 6595,
+      "copied": true
+    }
+  ]
+}
