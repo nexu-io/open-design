@@ -2395,8 +2395,8 @@ Stock search:
                             English queries that name the subject first (e.g.
                             "eyeglasses frame product"): providers match English
                             alt text and tags, and the command re-ranks 20
-                            candidates by how directly the alt names the subject,
-                            dropping people-led photos unless people were asked for.
+                            candidates by how many query words the alt contains,
+                            then by how early they appear.
   --slots-file <path|->     Read the slots array from a file or stdin instead.
   --out-dir <dir>           Project-relative output directory (default assets/stock).
   --timeout-ms <n>          Per-request timeout (default 12000).

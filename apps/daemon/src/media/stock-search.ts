@@ -75,29 +75,24 @@ type Candidate = {
 
 // Providers rank by keyword relevance only; a photo whose alt merely mentions
 // the subject ("an elderly woman reading, wearing glasses") can outrank one of
-// the subject itself. Re-rank the candidate pool by how directly the alt text
-// names the query subject, and demote people-led photos unless people were asked for.
-const PEOPLE = /\b(woman|women|man|men|person|people|girl|boy|lady|child|children|kid|elderly|senior|couple|family|portrait|model)\b/i;
-const PEOPLE_CJK = /(人|女|男|孩|老|客|员|家庭|模特)/;
+// the subject itself. Alt text usually names its main subject first, so rank
+// candidates by how many query words the alt contains, then by how early the
+// first one appears.
 const CJK = /[\u3400-\u9fff]/;
 
 /**
- * Higher is a more direct match; 0 rejects the candidate. Alt text and tags are
- * English, so CJK queries keep provider order and only drop people-led photos.
+ * Higher is a more direct match; 0 rejects the candidate. A query with no
+ * English words cannot be compared with English alt text, so every candidate
+ * scores 1 and provider order stands.
  */
 export function subjectScore(query: string, alt: string): number {
-  const text = alt.toLowerCase();
-  const lead = text.split(/[,.;]/)[0] ?? '';
-  const wantsPeople = PEOPLE.test(query) || PEOPLE_CJK.test(query);
-  const peopleLed = !wantsPeople && PEOPLE.test(lead);
-  if (CJK.test(query)) return peopleLed ? 0 : 1;
   const terms = query.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length > 2);
-  const hits = terms.filter((t) => text.includes(t)).length;
+  if (terms.length === 0) return 1;
+  const words = alt.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  const hits = terms.filter((t) => words.some((w) => w.includes(t))).length;
   if (hits === 0) return 0;
-  let score = hits * 2;
-  if (terms.some((t) => lead.includes(t))) score += 2;
-  if (peopleLed) score -= 3;
-  return Math.max(score, 0);
+  const first = words.findIndex((w) => terms.some((t) => w.includes(t)));
+  return hits * 10 + (10 - Math.min(first, 10));
 }
 
 function pickBest(query: string, candidates: Candidate[]): Candidate | null {

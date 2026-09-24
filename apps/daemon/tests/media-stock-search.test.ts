@@ -96,13 +96,15 @@ describe('od media stock-search', () => {
     expect(report.slots.map((s) => s.status)).toEqual(['ok', 'budget_exceeded']);
   });
 
-  it('scores subject-led alt text above incidental mentions and keeps people when asked for', () => {
+  it('ranks by query words matched, then by how early the subject appears in the alt', () => {
     expect(subjectScore('eyeglasses frame', 'Black eyeglasses frame on a table')).toBeGreaterThan(
       subjectScore('eyeglasses frame', 'Woman wearing eyeglasses reading'),
     );
-    expect(subjectScore('woman wearing eyeglasses', 'Woman wearing eyeglasses reading')).toBeGreaterThan(0);
+    expect(subjectScore('eyeglasses', 'Black eyeglasses on a pink background')).toBeGreaterThan(
+      subjectScore('eyeglasses', 'Elderly woman reading a book while wearing eyeglasses'),
+    );
     expect(subjectScore('eyeglasses frame', 'Sunset over the sea')).toBe(0);
-    expect(subjectScore('眼镜框', 'Elderly woman wearing glasses')).toBe(0);
+    expect(subjectScore('眼镜框', 'Elderly woman wearing glasses')).toBe(1);
     expect(imageSize(JPEG)).toEqual({ width: 1200, height: 800 });
   });
 });
