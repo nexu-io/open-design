@@ -982,9 +982,18 @@ function runsOnALocalAgent(agentId: string | null | undefined): boolean {
  * 而**不出**的约三十类里包括进程崩了(S19,每月 20,868 次,第二大桶)和没装
  * CLI(S01)。
  *
- * 这里只动**主按钮位**。每一类失败自己的标题 / 正文一个字都没改,阶梯算出来的
- * 那颗动作(换个模型 / 去设置 / 在终端登录 / 重试 …)也一颗都没删 —— 它们让出
- * 主位,退到次级(见 `ChatPane` 的 `errorActionVariant`)。
+ * 这个字段今天只回答一件事:**这一轮该不该拿到那颗 CTA**。卡上画几颗、画哪几颗,
+ * 自 OPEND-2807 起由 `ChatPane` 自己的两个开关决定 —— Cloud 的失败走
+ * `showCloudRetry`,第三颗是〔重试〕;BYOK / 本地 CLI 走 `showCloudSwitchCta`,
+ * 第三颗是这颗 CTA,且要求宿主真的接了 `onSwitchToAmrAndRetry` 或
+ * `onOpenAmrSettings`(接不住就只剩两颗,不画点了没反应的按钮)。
+ * 两颗常驻次级〔联系我们〕〔导出日志〕无条件在场,所以一张卡恒是三颗。
+ *
+ * ⚠️ 阶梯算出来的那组动作(换个模型 / 去设置 / 在终端登录 / 授权并重试 / 续跑)
+ * **已经整组离开卡面**,不是「退到次级」—— 后者是 OPEND-2772 当时的形态,已被推翻。
+ * `primaryActionForFailure` 仍然在算,但结果只喂标题 / 正文 / 交接判据,
+ * 不再决定任何一颗按钮。终局、三个例外与四条代价记在
+ * `specs/current/chat-panel-decisions-sheet.md` 的「OPEND-2807 报错卡终局」。
  */
 function withCloudSwitchCta(ui: RunFailureUi): RunFailureUi {
   return ui.cloudSwitchCta ? ui : { ...ui, cloudSwitchCta: true };
