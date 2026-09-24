@@ -319,6 +319,8 @@ interface PendingProjectCreation {
   projectId: string;
   name: string;
   prompt: string;
+  /** The design system the send picked, for the frame's palette accessory. */
+  designSystemId?: string | null;
   /**
    * `POST /api/projects` has answered and the row is persisted. Until then
    * the standalone pending frame is the whole surface and the real
@@ -3102,6 +3104,7 @@ function AppInner() {
           projectId: optimisticProjectId,
           name: optimisticProject.name,
           prompt: derivedPendingPrompt ?? '',
+          designSystemId: input.designSystemId ?? null,
           files: stagedFiles,
         });
         setProjects((current) => [
@@ -5434,6 +5437,12 @@ function AppInner() {
           prompt={pendingCreation.prompt}
           files={pendingCreation.files}
           agentId={config.agentId}
+          agentName={agents.find((agent) => agent.id === config.agentId)?.name ?? null}
+          config={config}
+          agents={agents}
+          daemonLive={daemonLive}
+          designSystems={designSystems}
+          designSystemId={pendingCreation.designSystemId ?? null}
         />
       </div>
     ) : null;

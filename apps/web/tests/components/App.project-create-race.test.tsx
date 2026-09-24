@@ -1318,7 +1318,7 @@ describe('App project creation routing', () => {
     expect(requestedProjectId).toBeTruthy();
     expect(window.location.pathname).toBe(`/projects/${requestedProjectId}`);
     expect(screen.getByText('Build the retained artifact prompt')).toBeTruthy();
-    expect(screen.getByText('Preparing...')).toBeTruthy();
+    expect(screen.getByText('Working')).toBeTruthy();
     expect(screen.queryByTestId('entry-home-surface')).toBeNull();
     expect(screen.queryByTestId('project-view')).toBeNull();
 
@@ -1357,7 +1357,7 @@ describe('App project creation routing', () => {
 
     await screen.findByTestId('project-creation-pending-view');
 
-    const attachmentRow = screen.getByTestId('pending-attachment-row');
+    const attachmentRow = screen.getByTestId('user-attachment-row');
     expect(attachmentRow.textContent).toContain('brief');
     expect(attachmentRow.textContent).toContain('.txt');
 
@@ -1513,12 +1513,12 @@ describe('App project creation routing', () => {
     // Synchronous on purpose: the optimistic hand-off is flushed inside the
     // click, so the frame exists before the create request can even settle.
     const pending = screen.getByTestId('project-creation-pending-view');
-    expect(pending.querySelector('[data-testid="pending-attachment-row"]')?.textContent)
+    expect(pending.querySelector('[data-testid="user-attachment-row"]')?.textContent)
       .toContain('brief.txt');
-    const composerShell = screen.getByTestId('pending-chat-composer-shell');
-    expect(composerShell.hasAttribute('inert')).toBe(true);
-    expect(composerShell.querySelector('[data-testid="chat-composer"]')).toBeTruthy();
-    expect((screen.getByTestId('chat-send') as HTMLButtonElement).disabled).toBe(true);
+    // The frame's chat column is the real ChatPane, inert as a whole.
+    const pendingChat = screen.getByTestId('project-creation-pending-chat');
+    expect(pendingChat.hasAttribute('inert')).toBe(true);
+    expect(pendingChat.querySelector('[data-testid="chat-composer"]')).toBeTruthy();
 
     creation.reject(new Error('Could not create project'));
     await screen.findByTestId('entry-home-surface');

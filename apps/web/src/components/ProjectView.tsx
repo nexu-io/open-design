@@ -363,7 +363,7 @@ import {
 } from './design-files/pluginFolderActions';
 import { SHARE_TO_COMMUNITY_PROMPT } from './share-to-community/shareToCommunityPrompt';
 import { CenteredLoader } from './Loading';
-import { ProjectCreationPendingChat } from './ProjectCreationPendingView';
+import { useCreationHandoffMessages } from './useCreationHandoffMessages';
 import {
   FALLBACK_MAX_CHAT_PANEL_WIDTH,
   MIN_CHAT_PANEL_WIDTH,
@@ -411,7 +411,11 @@ import {
   homeAttachmentUploadsFor,
   subscribeHomeAttachmentUploads,
 } from '../state/home-attachment-handoff';
-import { effectiveAgentModelChoice, effectiveAgentModelId } from './agentModelSelection';
+import {
+  effectiveAgentModelChoice,
+  effectiveAgentModelId,
+  selectedAssistantIdentity as resolveSelectedAssistantIdentity,
+} from './agentModelSelection';
 import { mediaExecutionPolicyForProjectMetadata } from '../media/execution-policy';
 import { mediaModelProviderId } from '../media/models';
 import { byokProviderRequiresApiKey } from '../utils/byokProvider';
@@ -5718,30 +5722,10 @@ export function ProjectView({
   // monogram; stamping the user's currently-selected design agent makes its
   // avatar and role name follow that selection (Claude by default), matching how
   // handleSend identifies a real turn.
-  const selectedAssistantIdentity = useMemo<{
-    agentId: string | undefined;
-    agentName: string | undefined;
-  }>(() => {
-    if (config.mode === 'daemon') {
-      const selectedAgent = config.agentId ? agentsById.get(config.agentId) : null;
-      const selectedAgentChoice = config.agentId
-        ? config.agentModels?.[config.agentId]
-        : undefined;
-      const effectiveChoice = effectiveAgentModelChoice(selectedAgent, selectedAgentChoice);
-      return {
-        agentId: config.agentId ?? undefined,
-        agentName: agentModelDisplayName(
-          config.agentId,
-          selectedAgent?.name,
-          effectiveChoice?.model,
-        ),
-      };
-    }
-    return {
-      agentId: apiProtocolAgentId(config.apiProtocol),
-      agentName: apiProtocolModelLabel(config.apiProtocol, config.model),
-    };
-  }, [config, agentsById]);
+  const selectedAssistantIdentity = useMemo(
+    () => resolveSelectedAssistantIdentity(config, agents),
+    [config, agents],
+  );
 
   // One-shot: when extraction is blocked by an anti-bot wall (or has stalled past
   // the timeout), drop the assist card into the conversation so the user can
@@ -13371,6 +13355,43 @@ export function ProjectView({
   // App owns the fallback deadline, so a send parked behind a gate dialog
   // cannot pin the card forever.
   const creationHandoffActive = creationHandoff !== null;
+  // Until the auto-sent turn is on screen the transcript is empty, but the
+  // turn's first frame is already known: ChatPane draws it from these two
+  // optimistic messages with its own components, so the real turn replaces
+  // it like for like (OPEND-3334). Any real message wins at once.
+  const creationHandoffMessages = useCreationHandoffMessages(
+    creationHandoff,
+    selectedAssistantIdentity,
+  );
+  const creationHandoffTurnShown = creationHandoffActive && messages.length === 0;
+  // The hand-off's pane mounts before the project's first conversation id
+  // resolves. That resolution is the same pane learning its id, not a
+  // conversation switch, so it must not re-key (and remount) the pane: the
+  // resolved id keeps the key the pane was mounted with. A later switch still
+  // re-keys as usual (OPEND-3334).
+  const [handoffPaneConversation, setHandoffPaneConversation] = useState<{
+    adopted: string | null;
+  } | null>(() => (creationHandoff !== null && !activeConversationId ? { adopted: null } : null));
+  if (handoffPaneConversation?.adopted === null && activeConversationId) {
+    setHandoffPaneConversation({ adopted: activeConversationId });
+  }
+  const handoffAdoptedConversationId = handoffPaneConversation
+    ? handoffPaneConversation.adopted ?? activeConversationId
+    : null;
+  const chatPaneConversationKey =
+    activeConversationId && activeConversationId === handoffAdoptedConversationId
+      ? 'conversation-unavailable'
+      : activeConversationId ?? 'conversation-unavailable';
+  // A project born from the Home send starts with no files, and the pending
+  // frame already drew the empty state. Keep drawing it (inert) until the
+  // first listing is accepted instead of flipping to "Loading…" in between;
+  // the authority gate itself is untouched, so no CTA acts before that read
+  // (Home attachments are still uploading then). An imported working folder
+  // may hold files, so it keeps the honest loading state.
+  const [emptyLookBeforeFirstListing] = useState(
+    () => creationHandoff !== null && !project.metadata?.baseDir,
+  );
+  const ignoreStopBeforeFirstRun = useCallback(() => undefined, []);
   const creationHandoffSettledRef = useRef(false);
   useEffect(() => {
     if (!creationHandoffActive || creationHandoffSettledRef.current) return;
@@ -13641,7 +13662,6 @@ export function ProjectView({
           className={[
             'split-chat-slot',
             chatSlotHidden ? 'split-chat-slot-hidden' : '',
-            creationHandoffActive ? 'split-chat-slot--creation-handoff' : '',
           ].filter(Boolean).join(' ')}
           aria-hidden={chatSlotHidden || undefined}
         >
@@ -13676,16 +13696,25 @@ export function ProjectView({
               </button>
             </div>
           ) : null}
-          {activeConversationId || conversationLoadError || emptyConversationReadOnlySettled ? (
+          {activeConversationId || conversationLoadError || emptyConversationReadOnlySettled || creationHandoffActive ? (
             <ChatPane
               historyPortalTarget={historyPortalTarget}
-              composerLayerHidden={creationHandoffActive}
               // The conversation id is part of the key so switching conversations
               // resets internal scroll/draft state inside ChatPane and ChatComposer.
-              key={`${project.id}:${activeConversationId ?? 'conversation-unavailable'}:${chatSeed?.id ?? 'ready'}`}
-              messages={messages}
-              streaming={currentConversationControlStreaming}
-              loading={currentConversationLoading}
+              key={`${project.id}:${chatPaneConversationKey}:${chatSeed?.id ?? 'ready'}`}
+              messages={creationHandoffTurnShown ? creationHandoffMessages : messages}
+              // The hand-off's first turn is already on screen (the pending
+              // frame drew it); neither this remount nor the real rows that
+              // replace the optimistic ones may fade it in again.
+              quietEntrance={creationHandoffActive}
+              // The optimistic turn is a running turn: the composer shows the
+              // same stop control the auto-sent turn will, so it does not swap
+              // at the hand-off. There is no run to stop yet.
+              streaming={currentConversationControlStreaming || creationHandoffTurnShown}
+              // The optimistic turn is the column's content while the first
+              // transcript loads; a skeleton under it would be a second
+              // loading form (OPEND-2170).
+              loading={currentConversationLoading && !creationHandoffTurnShown}
               // A read-only viewer of a team-shared project cannot drive artifact
               // changes through chat (comments go through the separate overlay).
               // Home's own prompt has not gone out yet — it is waiting for this
@@ -13762,7 +13791,7 @@ export function ProjectView({
               onConsumeAmrAuthRetryContinuation={onConsumeAmrAuthRetryContinuation}
               onDiscardAmrAuthRetryContinuation={onDiscardAmrAuthRetryContinuation}
               onResumeRun={handleResumeRun}
-              onStop={handleStop}
+              onStop={creationHandoffTurnShown ? ignoreStopBeforeFirstRun : handleStop}
               // 组件 22 · 重连 · S29:掉线时流水的最后一行。按当前会话过一道 ——
               // 后台重挂可能发生在别的会话上,那一行不该串进这一屏。
               reconnect={reconnectViewForConversation(reconnectView, activeConversationId)}
@@ -13908,7 +13937,9 @@ export function ProjectView({
               // The Home batch, drawn from the local bytes while it uploads.
               // Same tray, same cards, same "uploading" treatment the composer
               // already gives files picked from inside the project.
-              homeAttachmentUploads={homeAttachmentUploads}
+              // The optimistic turn already shows the staged files as the
+              // message's attachments; the tray would show them twice.
+              homeAttachmentUploads={creationHandoffTurnShown ? undefined : homeAttachmentUploads}
               onDismissHomeAttachmentUpload={(cardId) =>
                 dismissHomeAttachmentUpload(project.id, cardId)}
               chatLogTray={
@@ -13966,22 +13997,11 @@ export function ProjectView({
                 />
               )}
             />
-          ) : creationHandoffActive ? null : (
+          ) : (
             <div className="pane" data-testid="chat-pane-loading">
               <CenteredLoader />
             </div>
           )}
-          {creationHandoff ? (
-            /* The hand-off card stays the column's visible pane until the
-               first transcript settles; ChatPane above keeps its layout
-               hidden underneath (see `.split-chat-slot--creation-handoff`). */
-            <ProjectCreationPendingChat
-              projectName={project.name}
-              prompt={creationHandoff.prompt}
-              files={creationHandoff.files}
-              agentId={config.agentId}
-            />
-          ) : null}
         </div>
         {/* The comment panel is a floating card over the workspace in EVERY
             state (per product: 任何状态下评论卡片都在这个位置). It used to dock
@@ -14018,6 +14038,7 @@ export function ProjectView({
           viewerOnly={projectMutationReadOnly}
           materializationPending={projectCollab.materializationPending}
           filesAuthoritative={committedFilesGeneration > 0}
+          emptyLookBeforeFirstListing={emptyLookBeforeFirstListing}
           readonlyNotice={
             projectCollab.materializationPending
               ? t('designFiles.syncing')

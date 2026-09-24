@@ -202,6 +202,9 @@ interface Props {
   // Consecutive messages from the same assistant share one identity header.
   // ChatPane sets this false after the first item in a contiguous run.
   showRole?: boolean;
+  // Skip the `msg-enter` fade; fixed for the row's lifetime (see ChatPane's
+  // `quietEntrance`).
+  enterQuietly?: boolean;
   // True only for the most recent assistant message.
   isLast?: boolean;
   // True only for the most recent assistant message that actually ran a turn —
@@ -307,6 +310,7 @@ const ASSISTANT_MESSAGE_COMPARED_PROPS: Array<keyof Props> = [
   'activePluginActionPaths',
   'hiddenPluginActionPaths',
   'showRole',
+  'enterQuietly',
   'isLast',
   'isLastTurn',
   'errorCardOwnerId',
@@ -416,6 +420,7 @@ function AssistantMessageImpl({
   onShareToOpenDesign,
   shareToOpenDesignBusy = false,
   showRole = true,
+  enterQuietly = false,
   isLast,
   isLastTurn,
   errorCardOwnerId = null,
@@ -1131,11 +1136,22 @@ function AssistantMessageImpl({
    *
    * 复制、时间这些**照旧**:它们说的是这段内容本身,不是某一轮的结果。
    */
+  /*
+   * ── 运行中只有一句状态(OPEND-3334)──────────────────────────────────
+   *
+   * 这一轮有执行记录壳时,壳头已经是「这一轮唯一常驻的状态陈述」(见
+   * `ExecutionShell` 的停止档注释)。页脚在流式期间再画一遍
+   * 「Preparing… / Thinking / Working」就是同一件事说两遍,而且它是旧样式的
+   * 扫光行 —— 首页乐观帧就是照它手抄的,交接时两种样式并排就是那一次跳动。
+   * 所以壳在、还在跑,页脚的运行态不画;终态(勾 / 已取消 / 未完成 / 时间)照旧。
+   */
+  const turnHasExecutionShell = turnFlow.some((entry) => entry.kind === 'shell');
   const hideRunStatus =
     message.id === errorCardOwnerId
     || hasPendingQuestionForm
     || assistantMessageNeverHadARun(message)
-    || failedTurnIsAnnouncedByTheShell;
+    || failedTurnIsAnnouncedByTheShell
+    || (streaming && turnHasExecutionShell);
   // "Next step" is a delivery affordance, not a generic terminal-state card.
   // Keep it out of pure Q&A, failures/cancellations and incomplete Todo turns;
   // only a successful turn that actually produced something may surface it.
@@ -1295,7 +1311,8 @@ function AssistantMessageImpl({
   return (
     <div
       id={`assistant-message-${message.id}`}
-      className={`msg assistant${showRole ? '' : ' assistant-continuation'}`}
+      data-testid="assistant-message"
+      className={`msg assistant${showRole ? '' : ' assistant-continuation'}${enterQuietly ? ' msg--quiet-enter' : ''}`}
       /* 「接上一条,不再重复报名字」是状态,不是样式的私事 —— 给它自己的出口 */
       data-continuation={showRole ? 'false' : 'true'}
       data-assistant-message-id={message.id}
@@ -2037,17 +2054,30 @@ function isFeedbackEligible({
 
 // The agent name without the trailing model id — the role header shows the
 // brand logo + name only, so the `· model` suffix is dropped there.
-export function assistantRoleName(
-  message: ChatMessage,
-  t: TranslateFn
-): string {
-  const fromName = message.agentName?.trim();
+/**
+ * The role-row name for an agent that has no message yet — the optimistic
+ * creation frame (OPEND-3334). Same resolution as {@link assistantRoleName}
+ * minus the `starting` event fallback, so the frame and the first real turn
+ * print the same name for the same agent.
+ */
+export function assistantRoleNameForAgent(
+  agentName: string | null | undefined,
+  agentId: string | null | undefined,
+): string | null {
+  const fromName = agentName?.trim();
   if (fromName) {
     const base = fromName.split(" · ")[0]?.trim() || fromName;
     return exactAgentDisplayName(base) ?? base;
   }
-  const fromId = agentDisplayName(message.agentId);
-  if (fromId) return fromId;
+  return agentDisplayName(agentId) ?? null;
+}
+
+export function assistantRoleName(
+  message: ChatMessage,
+  t: TranslateFn
+): string {
+  const resolved = assistantRoleNameForAgent(message.agentName, message.agentId);
+  if (resolved) return resolved;
   const starting = message.events?.find(
     (e) => e.kind === "status" && e.label === "starting" && e.detail
   ) as Extract<AgentEvent, { kind: "status" }> | undefined;
@@ -2154,6 +2184,18 @@ export function AssistantFooter({
     !canceled &&
     !copyMarkdown &&
     !onFork &&
+    !onContinueRemaining
+  )
+    return null;
+  // A streaming turn whose status the execution shell already states has
+  // nothing left for this row to say (OPEND-3334): no empty row either.
+  if (
+    streaming &&
+    hideRunStatus &&
+    !forceVisible &&
+    !copyMarkdown &&
+    !onFork &&
+    !feedbackControls &&
     !onContinueRemaining
   )
     return null;

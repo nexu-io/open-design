@@ -541,6 +541,10 @@
    `<html>` 上;不设开关就没有这个属性,这条规则一个字都不生效。
    开关怎么开、开了会失去什么,见那个模块顶部的 docblock。 */
 :root[data-od-msg-enter-disabled] .msg { animation: none; }
+/* A row that was already on screen in another form (the Home hand-off's
+   optimistic first turn, OPEND-3334) must not fade in again. Set by ChatPane's
+   `quietEntrance`, fixed for the row's lifetime. */
+.msg.msg--quiet-enter { animation: none; }
 .msg.user {
   align-self: flex-end;
   display: flex;
@@ -1318,11 +1322,6 @@
      fully above the transcript. */
   contain: layout style;
   transform: translateZ(0);
-}
-/* OPEND-2170: the pane underneath the creation hand-off card is hidden; its
-   body-portaled composer layer has to follow (see ChatPane `composerLayerHidden`). */
-.chat-composer-fixed-layer[data-composer-layer-hidden] {
-  visibility: hidden;
 }
 body:has(.manual-edit-workspace) .chat-composer-fixed-layer {
   /* Manual edit elevates the workspace above a body-portaled survey. The

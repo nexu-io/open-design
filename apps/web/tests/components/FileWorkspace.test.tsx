@@ -4515,6 +4515,77 @@ describe('FileWorkspace empty-project generation contract', () => {
     expect(screen.getByTestId('design-files-loading')).toBeTruthy();
   });
 
+  // OPEND-3334. A project the Home send just created keeps the empty state its
+  // hand-off frame drew instead of detouring through "Loading…", but only as
+  // a picture: the authority gate still holds, so nothing in it can act before
+  // the first listing is accepted (Home attachments are still uploading then,
+  // or the read may fail).
+  it('draws an inert empty state, with no CTA on offer, before the first listing of a Home-created project', () => {
+    const { rerender } = render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        filesAuthoritative={false}
+        emptyLookBeforeFirstListing
+      />,
+    );
+
+    const standIn = screen.getByTestId('design-files-empty-unconfirmed');
+    expect(standIn.hasAttribute('inert')).toBe(true);
+    expect(standIn.getAttribute('aria-busy')).toBe('true');
+    expect(screen.queryByTestId('design-files-loading')).toBeNull();
+    expect(screen.queryByTestId('design-files-empty')).toBeNull();
+    expect(screen.queryByTestId('design-files-empty-new-sketch')).toBeNull();
+    expect(screen.queryByTestId('design-files-upload-trigger')).toBeNull();
+
+    // The staged Home attachment lands in the first accepted listing: files,
+    // not an empty-project offer.
+    rerender(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('brief.png')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        filesAuthoritative
+        emptyLookBeforeFirstListing
+      />,
+    );
+    expect(screen.queryByTestId('design-files-empty-unconfirmed')).toBeNull();
+    expect(screen.queryByTestId('design-files-empty')).toBeNull();
+  });
+
+  it('hands over to the live empty state once the first listing confirms the project is empty', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        filesAuthoritative
+        emptyLookBeforeFirstListing
+      />,
+    );
+
+    expect(screen.queryByTestId('design-files-empty-unconfirmed')).toBeNull();
+    const empty = screen.getByTestId('design-files-empty');
+    expect(empty.hasAttribute('inert')).toBe(false);
+    expect(screen.getByTestId('design-files-empty-new-sketch')).toBeTruthy();
+  });
+
   it('offers them once the list is known to be empty', () => {
     render(
       <FileWorkspace
