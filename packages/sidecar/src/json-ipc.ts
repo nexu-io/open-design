@@ -289,6 +289,24 @@ export async function createJsonIpcServer({
   };
 }
 
+export class JsonIpcTimeoutError extends Error {
+  readonly code = "IPC_REQUEST_TIMEOUT";
+  readonly socketPath: string;
+  readonly timeoutMs: number;
+
+  constructor(socketPath: string, timeoutMs: number) {
+    super(`IPC request timed out: ${socketPath}`);
+    this.name = "JsonIpcTimeoutError";
+    this.socketPath = socketPath;
+    this.timeoutMs = timeoutMs;
+  }
+}
+
+export function isJsonIpcTimeoutError(error: unknown): error is JsonIpcTimeoutError {
+  if (error instanceof JsonIpcTimeoutError) return true;
+  return error instanceof Error && (error as { code?: unknown }).code === "IPC_REQUEST_TIMEOUT";
+}
+
 /**
  * Send one newline-delimited JSON request over a unix socket / named pipe and
  * resolve with the server's `result`, rejecting on error response or timeout.
@@ -325,7 +343,7 @@ export async function requestJsonIpc<T = any>(
         traceId,
       });
       socket.destroy();
-      settle(() => rejectRequest(new Error(`IPC request timed out: ${socketPath}`)));
+      settle(() => rejectRequest(new JsonIpcTimeoutError(socketPath, timeoutMs)));
     }, timeoutMs);
 
     socket.on("connect", () => {
