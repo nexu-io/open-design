@@ -2009,6 +2009,13 @@ describe("ProductionCampaignModal device impressions", () => {
 		// because nothing can write it until the presentation is open.
 		vi.useFakeTimers({ toFake: [...IMPRESSION_TIMERS] });
 		vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+		let mounted!: () => void;
+		const mountedPromise = new Promise<void>((resolve) => { mounted = resolve; });
+		vi.spyOn(OpenDesignTouchpointElement.prototype, "mount")
+			.mockImplementation(async function (this: OpenDesignTouchpointElement) {
+				this.shadowRoot?.replaceChildren(document.createTextNode("Verified campaign"));
+				mounted();
+			});
 		let calls = 0;
 		const fetchMock = vi.fn(async () => {
 			calls += 1;
@@ -2020,6 +2027,9 @@ describe("ProductionCampaignModal device impressions", () => {
 		await act(async () => {
 			await vi.advanceTimersByTimeAsync(16);
 		});
+		// The element is inserted before asynchronous digest verification and
+		// mount finish. Wait for the presentation before advancing the poll clock.
+		await act(async () => { await mountedPromise; });
 		expect(document.querySelector("opend-touchpoint")).not.toBeNull();
 		await advanceToRecordedImpression();
 		await act(async () => {
