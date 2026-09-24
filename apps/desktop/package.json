@@ -16,6 +16,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest run -c vitest.config.ts",
+    "test:browser": "vitest run -c vitest.browser.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "dependencies": {
@@ -30,8 +31,10 @@
     "@open-design/sidecar-proto": "workspace:*"
   },
   "devDependencies": {
+    "@playwright/test": "1.60.0",
     "@types/node": "24.12.2",
     "electron": "41.3.0",
+    "jszip": "3.10.1",
     "typescript": "6.0.3",
     "vitest": "4.1.6"
   },
