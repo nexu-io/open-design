@@ -444,6 +444,163 @@ async function startServer(opts?: {
 }
 
 describe('POST /api/runs — workspace mutation gate', () => {
+  it.each(['/api/runs', '/api/chat'])(
+    'keeps project and local plugin gates off the remote Workspace directory through %s',
+    async (route) => {
+      const verifyWorkspaceRequestAuthority = vi.fn(async () => ({
+        ok: true,
+        context: workspaceContextFromDirectoryItem({
+          workspaceId: WORKSPACE_ID,
+          workspaceName: 'Team',
+          workspaceType: 'team',
+          workspaceMemberId: OWNER_MEMBER_ID,
+          role: 'owner',
+          memberStatus: 'active',
+          lifecycleState: 'active',
+        }),
+      }));
+      const baseUrl = await startServer({
+        verifyWorkspaceRequestAuthority,
+        authorizePluginWithWorkspaceAuthority: true,
+        seedImplicitScenarioPlugin: true,
+      });
+
+      const response = await fetch(`${baseUrl}${route}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...workspaceHeaders(OWNER_MEMBER_ID, 'owner'),
+        },
+        body: JSON.stringify({
+          projectId: TEAM_PROJECT,
+          agentId: 'claude',
+          pluginId: 'example-web-prototype',
+          message: 'authorize once',
+        }),
+      });
+
+      expect(response.status).toBe(202);
+      expect(verifyWorkspaceRequestAuthority).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['/api/runs', '/api/chat'])(
+    'keeps project-only run creation off the remote Workspace directory through %s',
+    async (route) => {
+      const verifyWorkspaceRequestAuthority = vi.fn(async () => ({
+        ok: true,
+        context: workspaceContextFromDirectoryItem({
+          workspaceId: WORKSPACE_ID,
+          workspaceName: 'Team',
+          workspaceType: 'team',
+          workspaceMemberId: OWNER_MEMBER_ID,
+          role: 'owner',
+          memberStatus: 'active',
+          lifecycleState: 'active',
+        }),
+      }));
+      const baseUrl = await startServer({
+        verifyWorkspaceRequestAuthority,
+        authorizePluginWithWorkspaceAuthority: true,
+      });
+
+      const response = await fetch(`${baseUrl}${route}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...workspaceHeaders(OWNER_MEMBER_ID, 'owner'),
+        },
+        body: JSON.stringify({
+          projectId: TEAM_PROJECT,
+          agentId: 'claude',
+          message: 'project-only authority',
+        }),
+      });
+
+      expect(response.status).toBe(202);
+      expect(verifyWorkspaceRequestAuthority).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['/api/runs', '/api/chat'])(
+    'continues local run creation when the remote Workspace directory is unavailable through %s',
+    async (route) => {
+      const verifyWorkspaceRequestAuthority = vi.fn(async () => ({
+        ok: false,
+        status: 503 as const,
+        code: 'WORKSPACE_AUTHORITY_UNAVAILABLE',
+        message: 'workspace membership authority is temporarily unavailable',
+        retryable: true as const,
+      }));
+      const baseUrl = await startServer({
+        verifyWorkspaceRequestAuthority,
+        authorizePluginWithWorkspaceAuthority: true,
+        seedImplicitScenarioPlugin: true,
+      });
+
+      const response = await fetch(`${baseUrl}${route}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...workspaceHeaders(OWNER_MEMBER_ID, 'owner'),
+        },
+        body: JSON.stringify({
+          projectId: TEAM_PROJECT,
+          agentId: 'claude',
+          pluginId: 'example-web-prototype',
+          message: 'must fail closed',
+        }),
+      });
+
+      expect(response.status).toBe(202);
+      expect(verifyWorkspaceRequestAuthority).not.toHaveBeenCalled();
+      expect(createdRunCount).toBe(1);
+    },
+  );
+
+  it.each(['/api/runs', '/api/chat'])(
+    'does not let stale remote membership state interrupt local run creation through %s',
+    async (route) => {
+      let memberStatus: 'active' | 'removed' = 'active';
+      const verifyWorkspaceRequestAuthority = vi.fn(async () => ({
+        ok: true,
+        context: workspaceContextFromDirectoryItem({
+          workspaceId: WORKSPACE_ID,
+          workspaceName: 'Team',
+          workspaceType: 'team',
+          workspaceMemberId: OWNER_MEMBER_ID,
+          role: 'owner',
+          memberStatus,
+          lifecycleState: 'active',
+        }),
+      }));
+      const baseUrl = await startServer({
+        verifyWorkspaceRequestAuthority,
+        authorizePluginWithWorkspaceAuthority: true,
+        seedImplicitScenarioPlugin: true,
+      });
+      const create = () => fetch(`${baseUrl}${route}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...workspaceHeaders(OWNER_MEMBER_ID, 'owner'),
+        },
+        body: JSON.stringify({
+          projectId: TEAM_PROJECT,
+          agentId: 'claude',
+          pluginId: 'example-web-prototype',
+          message: 'request-scoped membership',
+        }),
+      });
+
+      expect((await create()).status).toBe(202);
+      memberStatus = 'removed';
+      expect((await create()).status).toBe(202);
+      expect(verifyWorkspaceRequestAuthority).not.toHaveBeenCalled();
+    },
+  );
+
+
   it('authorizes concurrent local runs from persisted bindings without a remote witness', async () => {
     const pending: Array<{
       memberId: string;
