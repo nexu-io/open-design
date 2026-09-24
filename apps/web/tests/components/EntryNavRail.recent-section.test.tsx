@@ -252,6 +252,43 @@ describe('EntryNavRail 最近浏览过 section', () => {
     expect(runRequests()).toHaveLength(before);
   });
 
+  it.each([false, true])('retires old project polling when the workspace catalog changes (empty: %s)', async (empty) => {
+    vi.useFakeTimers();
+    const tree = (context: WorkspaceCollabContext, projects: Project[]) => (
+      <I18nProvider initial="en">
+        <EntryNavRail
+          view="home"
+          onViewChange={() => {}}
+          onNewProject={() => {}}
+          open
+          context={context}
+          recentProjects={projects}
+        />
+      </I18nProvider>
+    );
+    const { rerender } = render(tree(signedInContext, [project('p1', 1)]));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    const oldRequests = () => vi.mocked(fetch).mock.calls.filter(([url]) =>
+      String(url) === '/api/runs?projectId=p1');
+    expect(oldRequests()).toHaveLength(1);
+
+    rerender(tree(teamContext, empty ? [] : [project('p2', 2)]));
+    // A replacement catalog starts its current rows immediately, without
+    // waiting for IntersectionObserver to retire the previous visible IDs.
+    if (!empty) {
+      expect(vi.mocked(fetch).mock.calls.some(([url]) =>
+        String(url) === '/api/runs?projectId=p2')).toBe(true);
+    }
+    await act(async () => { await vi.advanceTimersByTimeAsync(12_000); });
+    expect(oldRequests()).toHaveLength(1);
+    if (empty) expect(screen.queryByTestId('entry-nav-recent-toggle')).toBeNull();
+
+    // Returning from an empty/replaced catalog must still restart polling.
+    rerender(tree(signedInContext, [project('p1', 1)]));
+    await act(async () => { await vi.advanceTimersByTimeAsync(4_000); });
+    expect(oldRequests().length).toBeGreaterThan(1);
+  });
+
   it('renders nothing without projects', () => {
     renderRail({ recentProjects: [] });
     expect(screen.queryByTestId('entry-nav-recent-toggle')).toBeNull();
