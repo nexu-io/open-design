@@ -3075,7 +3075,9 @@ export function createSseResponse(
 export type DesktopPdfExporter = (input: DesktopExportPdfInput) => Promise<DesktopExportPdfResult>;
 export type DesktopFrameRenderer = (input: DesktopRenderFramesInput) => Promise<DesktopRenderFramesResult>;
 export type DesktopSlideRenderer = (input: DesktopRenderSlidesInput) => Promise<DesktopRenderSlidesResult>;
-export type DesktopArtifactExporter = (input: DesktopExportArtifactInput) => Promise<DesktopExportArtifactResult>;
+export type DesktopArtifactExporter = ((input: DesktopExportArtifactInput) => Promise<DesktopExportArtifactResult>) & {
+  supportsFrozenResources?: () => Promise<boolean>;
+};
 
 // Loosely typed shape — we only access `namespace`, `base`, `mode`, and
 // `source` from the runtime context when building the diagnostics export.
