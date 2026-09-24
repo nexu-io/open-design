@@ -28,7 +28,12 @@ describe('plan continuation marker', () => {
     `Plan.\n\`\`\`xml\n${marker}\n\`\`\``,
     `Plan.\n> ${marker}`,
     `Plan.\n    ${marker}`,
-    `Example: ${marker}`,
+    `Example: \`${marker}\``,
+    `Plan.\n> Ready.${marker}`,
+    `Plan.\n    Ready.${marker}`,
+    `Plan.\nExample: \`unfinished code ${marker}`,
+    `Plan.\\${marker}`,
+    `Plan.\n"${marker}"`,
     `Plan.\n${marker}\nOne more question.`,
     `Plan.\n<od-production-ready key="${key}"`,
     marker,
@@ -37,6 +42,54 @@ describe('plan continuation marker', () => {
     for (const char of text) stream.push(char);
     expect(stream.finish().parsed.productionReady).toBe(false);
   });
+  it.each([
+    ['no newline', `计划已完成。${marker}`, '计划已完成。'],
+    ['inline after a code span', `创建 \`index.html\`。${marker}`, '创建 `index.html`。'],
+    ['spaces before marker', `计划已完成。 ${marker}\n`, '计划已完成。 \n'],
+    ['bare control line', `计划已完成。\nod-production-ready key="${key}"`, '计划已完成。\n'],
+    ['missing self-closing slash', `计划已完成。\n<od-production-ready key="${key}">`, '计划已完成。\n'],
+    ['missing closing quote and slash', `计划已完成。\n<od-production-ready key="${key}>`, '计划已完成。\n'],
+    ['inline non-self-closing tag', `计划已完成。<od-production-ready key="${key}">`, '计划已完成。'],
+  ])('accepts a terminal %s without leaking it at any chunk boundary', (_name, text, expected) => {
+    for (let split = 0; split <= text.length; split++) {
+      const stream = createOdNextRunProtocol(null, key);
+      const visible = stream.push(text.slice(0, split)) + stream.push(text.slice(split));
+      const result = stream.finish();
+      expect(result.parsed.productionReady).toBe(true);
+      expect(visible + result.visibleTail).toBe(expected);
+      expect(result.parsed.visibleText).toBe(expected);
+    }
+    const stream = createOdNextRunProtocol(null, key);
+    let visible = '';
+    for (const char of text) visible += stream.push(char);
+    const result = stream.finish();
+    expect(result.parsed.productionReady).toBe(true);
+    expect(visible + result.visibleTail).toBe(expected);
+  });
+  it.each([
+    `计划。<od-production-ready key="0000" />`,
+    `计划。\n<od-production-ready key="0000">`,
+    `计划。\n<od-production-ready key="${key}0>`,
+    `计划。${marker}还有一个问题。`,
+    `计划。\nod-production-ready key="0000"`,
+    `计划。\nod-production-ready key="${key}`, // Not a complete bare line.
+    `计划。\nod-production-ready key="${key}"\n还有一个问题。`,
+    `计划。\n> od-production-ready key="${key}"`,
+    `计划。\n\`\`\`\nod-production-ready key="${key}"\n\`\`\``,
+    `计划。\n说明：od-production-ready key="${key}"`,
+    `od-production-ready key="${key}"`, // A signal alone is not a plan.
+  ])('keeps relaxed syntax from authorizing a stale, quoted or non-terminal signal: %s', text => {
+    const stream = createOdNextRunProtocol(null, key);
+    for (const char of text) stream.push(char);
+    expect(stream.finish().parsed.productionReady).toBe(false);
+  });
+  it.each([`计划。${marker}`, `计划。\nod-production-ready key="${key}"`])(
+    'does not authorize relaxed syntax from raw stdout', text => {
+      const stream = createOdNextRunProtocol(null, key);
+      stream.push(text, false);
+      expect(stream.finish().parsed.productionReady).toBe(false);
+    },
+  );
   it('accepts duplicate current markers at the end, including fragmented streams', () => {
     const text = `Plan.\n${marker}\n${marker}\n`;
     for (let split = 0; split <= text.length; split++) {

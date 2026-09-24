@@ -1,4 +1,4 @@
-/** A control line from the assistant, never a substring of quoted prose or a tool result. */
+/** A terminal assistant control signal. Canonical output remains a self-closing line. */
 export class ProductionMarkerStream {
   private pending = '';
   private fence: string | null = null;
@@ -26,7 +26,7 @@ export class ProductionMarkerStream {
       this.pending = '';
     } else if (this.pending.length > 4096) {
       // Bound buffering even for a malformed, unterminated control line.
-      const reserved = /^ {0,3}<od-production-ready\b/i.test(this.pending);
+      const reserved = /^ {0,3}<?od-production-ready\b/i.test(this.pending);
       // A long code-fence opener still protects its subsequent lines.
       this.fence ??= /^ {0,3}(`{3,}|~{3,})/.exec(this.pending)?.[1] ?? null;
       this.discardingLine ||= reserved;
@@ -58,14 +58,36 @@ export class ProductionMarkerStream {
         && /^ {0,3}(?:`+|~+)\s*$/.test(line)) this.fence = null;
     }
     if (trimmed) this.lastWasMarker = false;
-    if (!inFence && !fence && /^ {0,3}<od-production-ready\b/i.test(line)) {
-      const match = /^ {0,3}<od-production-ready key="([a-f0-9]+)"\s*\/>\s*$/.exec(line);
-      if (this.lineTrusted && this.key && match?.[1] === this.key) {
+    if (!inFence && !fence && !/^(?: {4}|\t| {0,3}>)/.test(line)) {
+      // Accept observed formatting drift only: a tag glued to the last sentence,
+      // a missing slash/closing quote before `>`, or a bare standalone control line.
+      // A tag still needs `>`; never turn an unterminated streamed prefix into a signal.
+      const match = /<od-production-ready key="([a-f0-9]+)"?\s*\/?>\s*$/.exec(line)
+        ?? /^ {0,3}od-production-ready key="([a-f0-9]+)"\s*$/.exec(line);
+      const prefix = match ? line.slice(0, match.index) : '';
+      const escapes = /\\+$/.exec(prefix)?.[0].length ?? 0;
+      if (match && (escapes % 2 === 1 || insideInlineCode(prefix))) return line;
+      if (match && this.lineTrusted && this.key && match[1] === this.key) {
         this.matches++;
         this.lastWasMarker = true;
       }
-      return ''; // Invalid control lines are hidden too, but never authorize a continuation.
+      if (match) return prefix.trim() ? prefix + (/\r?\n$/.exec(line)?.[0] ?? '') : '';
+      // Preserve display-only cleanup of malformed control lines. They do not authorize production.
+      if (/^ {0,3}<?od-production-ready\b/i.test(line)) return '';
     }
     return line;
   }
+}
+
+/** Backtick runs of the same length delimit Markdown code spans. */
+function insideInlineCode(text: string): boolean {
+  let delimiter = 0;
+  for (const match of text.matchAll(/`+/g)) {
+    let escapes = 0;
+    for (let index = match.index - 1; index >= 0 && text[index] === '\\'; index--) escapes++;
+    if (!delimiter && escapes % 2 === 1) continue;
+    if (!delimiter) delimiter = match[0].length;
+    else if (delimiter === match[0].length) delimiter = 0;
+  }
+  return delimiter !== 0;
 }

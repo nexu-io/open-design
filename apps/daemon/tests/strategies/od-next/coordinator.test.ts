@@ -240,10 +240,16 @@ describe('OD Next planning coordinator', () => {
     stream.push(text); return stream.finish().parsed;
   }
 
-  it('marker protocol continues once without a Plan Contract, then settles without an entry', () => {
+  it.each([
+    `Build a landing page and a deck.\n${productionMarker}`,
+    `Build a landing page and a deck.${productionMarker}`,
+    'Build a landing page and a deck.\n<od-production-ready key="5e819e50c013db87">',
+    'Build a landing page and a deck.\n<od-production-ready key="5e819e50c013db87>',
+    'Build a landing page and a deck.\nod-production-ready key="5e819e50c013db87"',
+  ])('marker protocol continues once without a Plan Contract, then settles without an entry: %s', text => {
     const { task, service, physical } = markerHarness();
     const input = {
-      db, service, task, parsed: markerReply(`Build a landing page and a deck.\n${productionMarker}`),
+      db, service, task, parsed: markerReply(text),
       createMeta: (_stage: string, instruction: string) => ({ message: instruction }),
       completionEvidence: { physicalStatus: 'succeeded' as const, deliverableValid: false },
     };
