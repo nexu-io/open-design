@@ -4,17 +4,29 @@ import { readExpandedIndexCss } from '../helpers/read-expanded-css';
 
 const expandedIndexCss = readExpandedIndexCss();
 
-function cssBlock(css: string, selector: string): string {
+function cssBlocks(css: string, selector: string): string[] {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const match = new RegExp(`${escaped}\\s*\\{([^}]*)\\}`).exec(css);
-  if (!match) throw new Error(`Missing CSS block for ${selector}`);
-  return match[1] ?? '';
+  return Array.from(
+    css.matchAll(new RegExp(`${escaped}\\s*\\{([^}]*)\\}`, 'g')),
+    (match) => match[1] ?? '',
+  );
+}
+
+function cssBlock(css: string, selector: string): string {
+  const [block] = cssBlocks(css, selector);
+  if (block === undefined) throw new Error(`Missing CSS block for ${selector}`);
+  return block;
+}
+
+function optionalRuleValue(block: string, property: string): string | undefined {
+  const match = new RegExp(`(?:^|;)\\s*${property}:\\s*([^;]+);`).exec(block);
+  return match?.[1]?.trim();
 }
 
 function ruleValue(block: string, property: string): string {
-  const match = new RegExp(`(?:^|;)\\s*${property}:\\s*([^;]+);`).exec(block);
-  if (!match) throw new Error(`Missing CSS property ${property}`);
-  return match[1]!.trim();
+  const value = optionalRuleValue(block, property);
+  if (value === undefined) throw new Error(`Missing CSS property ${property}`);
+  return value;
 }
 
 describe('design system modal layering', () => {
@@ -41,5 +53,41 @@ describe('design system modal layering', () => {
     expect(ruleValue(stageHandle, 'position')).toBe('absolute');
     expect(ruleValue(collapseHandle, 'left')).toBe('0');
     expect(Number(ruleValue(collapseHandle, 'z-index'))).toBeGreaterThanOrEqual(5);
+  });
+
+  it('keeps stage handle positioning independent from button press feedback', () => {
+    const stageHandle = cssBlock(expandedIndexCss, '.ds-modal-stage-handle');
+    const expandHandles = cssBlocks(
+      expandedIndexCss,
+      '.ds-modal-stage-handle.is-expand',
+    );
+    const collapseHandles = cssBlocks(
+      expandedIndexCss,
+      '.ds-modal-stage-handle.is-collapse',
+    );
+
+    expect(ruleValue(stageHandle, 'translate')).toBe('0 -50%');
+    expect(optionalRuleValue(stageHandle, 'transform')).toBeUndefined();
+    expect(
+      expandHandles.map((block) => optionalRuleValue(block, 'translate')),
+    ).toContain('50% 0');
+    expect(
+      collapseHandles.map((block) => optionalRuleValue(block, 'translate')),
+    ).toContain('-50% 0');
+  });
+
+  it('keeps the fullscreen icon visible inside its fixed-size button', () => {
+    const fullscreenButton = cssBlock(
+      expandedIndexCss,
+      '.ds-modal-stage-fullscreen',
+    );
+    const fullscreenIcon = cssBlock(
+      expandedIndexCss,
+      '.ds-modal-stage-fullscreen .od-icon',
+    );
+
+    expect(ruleValue(fullscreenButton, 'padding')).toBe('0');
+    expect(ruleValue(fullscreenIcon, 'display')).toBe('block');
+    expect(optionalRuleValue(fullscreenIcon, 'fill')).toBeUndefined();
   });
 });
