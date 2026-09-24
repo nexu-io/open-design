@@ -1070,6 +1070,19 @@ export function foldStrategyTaskTurns(messages: ChatMessage[]): ChatMessage[] {
       folded.push({ ...message, events: stampRunSpan(message) });
       continue;
     }
+    // Run metadata arrives before its SSE boundary. Until the successor's
+    // done_key arrives, buildTurnBlocks only sees the predecessor's events:
+    // adopting the active status here would reopen that completed record and
+    // tick its clock again (OPEND-3463). Keep the pending Run as its own row;
+    // once its boundary arrives the normal fold can safely close the old Run.
+    // Terminal legacy history can still fold without protocol metadata.
+    if (
+      isActiveRunStatus(message.runStatus)
+      && !message.events?.some((event) => event.kind === 'done_key' && event.key.trim())
+    ) {
+      folded.push(message);
+      continue;
+    }
     const headIndex = turnHeadIndexByTask.get(taskId)!;
     const head = folded[headIndex]!;
     const headContent = head.content ?? '';

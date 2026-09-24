@@ -28,7 +28,7 @@ describe('foldStrategyTaskTurns', () => {
         content: 'PRODUCTION_TEXT',
         runId: 'run-production',
         runStatus: 'running',
-        events: [{ kind: 'status', label: 'building' }],
+        events: [{ kind: 'done_key', key: '2222222222222222' }, { kind: 'status', label: 'building' }],
         producedFiles: [{ name: 'index.html' } as ProjectFile],
         strategyTaskExecutionId: 'odnext_1',
         strategyTaskRunIndex: 1,
@@ -46,7 +46,7 @@ describe('foldStrategyTaskTurns', () => {
     expect(turn.content.indexOf('PLAN_TEXT')).toBeLessThan(turn.content.indexOf('PRODUCTION_TEXT'));
 
     // Events and files accumulate without loss or repetition.
-    expect(turn.events).toHaveLength(2);
+    expect(turn.events).toHaveLength(3);
     expect(turn.producedFiles?.map((f) => f.name)).toEqual(['plan.md', 'index.html']);
 
     // The turn tracks the latest Run: an intermediate Run finishing is not the
