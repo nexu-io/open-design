@@ -392,6 +392,7 @@ export const ar: Dict = {
   'settings.onboardingCloudAlternative': 'استخدم واجهة سطر أوامر محلية أو مفتاح API الخاص بك',
   'settings.onboardingCloudRights': 'جميع الحقوق محفوظة.',
   'settings.onboardingCloudOr': 'أو',
+  'settings.onboardingCloudCancel': 'إلغاء والعودة إلى OpenDesign',
   'settings.onboardingGateTooltipNoRuntime': 'الخطوات التالية تعمل بالذكاء الاصطناعي — اختر طريقة تشغيل للمتابعة.',
   'settings.onboardingGateTooltipAmr': 'الخطوات التالية تعمل بالذكاء الاصطناعي — سجّل الدخول إلى OpenDesign Cloud للمتابعة.',
   'settings.onboardingGateTooltipLocal': 'الخطوات التالية تعمل بالذكاء الاصطناعي — اختر CLI محليًا متاحًا للمتابعة.',

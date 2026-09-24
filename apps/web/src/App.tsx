@@ -469,6 +469,33 @@ export function resetExecutionConfigAfterSignOut(config: AppConfig): AppConfig {
   };
 }
 
+/**
+ * Revert an accidental Cloud-agent selection to a usable non-Cloud execution
+ * selection (issue #8370).
+ *
+ * The passive Cloud reauth gate is derived from config, so a cancel that only
+ * navigates bounces straight back. It also must not leave `agentId` as a
+ * signed-out `amr`, or the gate re-fires on the next render. Prefer an
+ * available local CLI agent; when there is none, clear the selection and let
+ * the empty-slot fallback resolve it. `onboardingCompleted` stays true so the
+ * revert cannot drop a returning user back into the first-run flow.
+ */
+export function revertCloudSelectionConfig(
+  config: AppConfig,
+  agents: readonly AgentInfo[],
+): AppConfig {
+  const fallbackAgent = agents.find(
+    (agent) => agent.available && agent.id !== AMR_AGENT_ID,
+  );
+  return {
+    ...config,
+    onboardingCompleted: true,
+    ...(fallbackAgent
+      ? { mode: 'daemon' as const, agentId: fallbackAgent.id }
+      : { agentId: null }),
+  };
+}
+
 type ProjectListRequest = {
   generation: number;
   mutationVersion: number;
@@ -2378,7 +2405,12 @@ function AppInner() {
     if (!daemonConfigLoaded || agentsLoading) return;
     if (config.onboardingCompleted !== true) return;
     if (config.agentId) return;
-    const firstAvailable = agents.find((a) => a.available);
+    // A signed-out Cloud agent is not a usable auto-pick: selecting it would
+    // immediately bounce the user into the passive reauth gate (issue #8370).
+    const cloudUnavailable = amrLoginStatus?.loggedIn === false;
+    const firstAvailable = agents.find(
+      (a) => a.available && (!cloudUnavailable || a.id !== AMR_AGENT_ID),
+    );
     if (!firstAvailable) return;
     setConfig((prev) => {
       if (prev.agentId) return prev;
@@ -2391,6 +2423,7 @@ function AppInner() {
     daemonConfigLoaded,
     agentsLoading,
     agents,
+    amrLoginStatus?.loggedIn,
     config.agentId,
     config.onboardingCompleted,
   ]);
@@ -5025,6 +5058,21 @@ function AppInner() {
     setConfig(next);
   }, []);
 
+  // Escape hatch for the passive Cloud reauth gate. Persists the reverted
+  // selection before leaving, so the gate does not re-derive and bounce the
+  // user straight back to onboarding on the next render.
+  const handleCancelCloudOnboarding = useCallback(() => {
+    const next = revertCloudSelectionConfig(
+      latestPersistedConfigRef.current,
+      agents,
+    );
+    latestPersistedConfigRef.current = next;
+    saveConfig(next);
+    void syncConfigToDaemon(next);
+    setConfig(next);
+    navigate({ kind: 'home', view: 'home' }, { replace: true });
+  }, [agents]);
+
   // Cmd+, (mac) / Ctrl+, (win/linux) opens Settings. Capture phase so we
   // beat the browser's default Preferences dialog. Platform-gated so
   // meta/ctrl don't conflict across OS.
@@ -5661,6 +5709,7 @@ function AppInner() {
         onPersistComposioKey={handleConfigPersistComposioKey}
         onOpenSettings={openSettings}
         onCompleteOnboarding={handleCompleteOnboarding}
+        onCancelCloudOnboarding={handleCancelCloudOnboarding}
         onSignedOut={handleActiveCloudSignOut}
         onAmrLoginStatusChange={handleAmrLoginStatusChange}
         artifactUpgradeSlot={

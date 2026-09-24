@@ -372,6 +372,7 @@ export const zhCN: Dict = {
   "settings.onboardingCloudAlternative": "使用本地 CLI 或自己的 API Key",
   "settings.onboardingCloudRights": "保留所有权利。",
   "settings.onboardingCloudOr": "或",
+  "settings.onboardingCloudCancel": "取消并返回 OpenDesign",
   "settings.onboardingGateTooltipNoRuntime":
     "后续流程由 AI 运行，请先选择一种运行方式。",
   "settings.onboardingGateTooltipAmr":

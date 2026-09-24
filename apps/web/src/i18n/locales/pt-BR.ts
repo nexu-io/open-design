@@ -392,6 +392,7 @@ export const ptBR: Dict = {
   'settings.onboardingCloudAlternative': 'Usar uma CLI local ou sua própria chave de API',
   'settings.onboardingCloudRights': 'Todos os direitos reservados.',
   'settings.onboardingCloudOr': 'ou',
+  'settings.onboardingCloudCancel': 'Cancelar e voltar ao OpenDesign',
   'settings.onboardingGateTooltipNoRuntime': 'As próximas etapas rodam em IA — escolha um runtime para continuar.',
   'settings.onboardingGateTooltipAmr': 'As próximas etapas rodam em IA — faça login no OpenDesign Cloud para continuar.',
   'settings.onboardingGateTooltipLocal': 'As próximas etapas rodam em IA — selecione uma CLI local disponível para continuar.',

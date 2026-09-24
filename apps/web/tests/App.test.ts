@@ -10,11 +10,13 @@ import {
   projectRouteSurfaceState,
   resolveDeepLinkedTeamSharedProject,
   resolveSettingsCloseConfig,
+  revertCloudSelectionConfig,
   shouldRouteToFirstRunOnboarding,
   shouldSyncMediaProvidersOnSave,
 } from '../src/App';
 import type { AppConfig, Project } from '../src/types';
 import type {
+  AgentInfo,
   WorkspaceCollabContext,
   WorkspaceProjectSummary,
 } from '@open-design/contracts';
@@ -79,6 +81,46 @@ describe('shouldRouteToFirstRunOnboarding', () => {
 
     expect(shouldRouteToFirstRunOnboarding(unfinished, '/projects/project-a')).toBe(false);
     expect(shouldRouteToFirstRunOnboarding(unfinished, '/')).toBe(true);
+  });
+});
+
+describe('revertCloudSelectionConfig', () => {
+  const agent = (overrides: Partial<AgentInfo>): AgentInfo => ({
+    id: 'claude-code',
+    name: 'Claude Code',
+    bin: 'claude',
+    available: true,
+    ...overrides,
+  });
+  const signedOutCloud = {
+    ...baseConfig,
+    mode: 'daemon' as const,
+    agentId: 'amr',
+    onboardingCompleted: true,
+  };
+
+  it('reverts a signed-out Cloud selection to an available local agent', () => {
+    const next = revertCloudSelectionConfig(signedOutCloud, [
+      agent({ id: 'amr' }),
+      agent({ id: 'claude-code' }),
+    ]);
+
+    expect(next.agentId).toBe('claude-code');
+    expect(next.mode).toBe('daemon');
+    expect(next.onboardingCompleted).toBe(true);
+  });
+
+  it('never leaves a signed-out Cloud agent as the reverted selection', () => {
+    const next = revertCloudSelectionConfig(signedOutCloud, [agent({ id: 'amr' })]);
+
+    expect(next.agentId).not.toBe('amr');
+    expect(next.agentId).toBeNull();
+  });
+
+  it('keeps onboardingCompleted true so the revert cannot re-open first-run', () => {
+    const next = revertCloudSelectionConfig(signedOutCloud, []);
+
+    expect(next.onboardingCompleted).toBe(true);
   });
 });
 

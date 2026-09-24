@@ -17,7 +17,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../src/App';
 import { navigate } from '../../src/router';
 import type { AppConfig } from '../../src/types';
-import { loadConfig, fetchDaemonConfig } from '../../src/state/config';
+import { loadConfig, fetchDaemonConfig, saveConfig, syncConfigToDaemon } from '../../src/state/config';
 import {
   daemonIsLive,
   fetchAgentsStream,
@@ -353,6 +353,58 @@ describe('CMS campaigns outside the home view', () => {
     const inProject = witnesses();
     expect(inProject.modals).toEqual([null, null]);
     expect(inProject.topRight).toEqual([null, null]);
+  });
+});
+
+describe('passive Cloud reauth cancel (end to end)', () => {
+  it('reverts the saved selection and returns home when a completed user cancels', async () => {
+    window.history.replaceState(null, '', '/');
+    // Returning user whose saved selection is the Cloud agent, signed out:
+    // the passive reauth gate takes over the whole app.
+    mockedLoadConfig.mockReturnValue({
+      ...firstRunConfig(),
+      agentId: 'amr',
+      onboardingCompleted: true,
+    });
+    mockedFetchDaemonConfig.mockResolvedValue({
+      agentId: 'amr',
+      onboardingCompleted: true,
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        const json = url.includes('/api/integrations/vela/status')
+          ? { loggedIn: false, profile: 'prod', user: null, configPath: '/x' }
+          : {};
+        return new Response(JSON.stringify(json), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }),
+    );
+
+    render(<App />);
+
+    const cancel = await screen.findByRole(
+      'button',
+      { name: /Cancel and return to OpenDesign/i },
+      { timeout: 10000 },
+    );
+    fireEvent.click(cancel);
+
+    // The route leaves the gate...
+    await waitFor(() => {
+      expect(window.location.pathname).toBe('/');
+    });
+    // ...and the revert is persisted, so the gate cannot re-derive from a
+    // signed-out `amr` and bounce the user straight back on the next render.
+    const lastSynced = vi.mocked(syncConfigToDaemon).mock.calls.at(-1)?.[0] as
+      | AppConfig
+      | undefined;
+    expect(lastSynced?.agentId).not.toBe('amr');
+    expect(lastSynced?.onboardingCompleted).toBe(true);
+    expect(vi.mocked(saveConfig)).toHaveBeenCalled();
   });
 });
 

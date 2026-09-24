@@ -392,6 +392,7 @@ export const ja: Dict = {
   'settings.onboardingCloudAlternative': 'ローカル CLI または自分の API キーを使う',
   'settings.onboardingCloudRights': 'All rights reserved.',
   'settings.onboardingCloudOr': 'または',
+  'settings.onboardingCloudCancel': 'キャンセルして OpenDesign に戻る',
   'settings.onboardingGateTooltipNoRuntime': 'この先のステップは AI で実行されます。続けるには実行方法を選んでください。',
   'settings.onboardingGateTooltipAmr': 'この先のステップは AI で実行されます。続けるには OpenDesign Cloud にサインインしてください。',
   'settings.onboardingGateTooltipLocal': 'この先のステップは AI で実行されます。続けるには利用可能なローカル CLI を選んでください。',
