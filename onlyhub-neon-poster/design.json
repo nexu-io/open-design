@@ -1,0 +1,40 @@
+{
+  "project": "OnlyHub ($HUB) Neon Poster",
+  "concept": "The internet keeps loading. The night keeps going.",
+  "format": "4:5 vertical poster",
+  "palette": {
+    "background": "#09070F",
+    "deepPurple": "#12091E",
+    "hotPink": "#FF2EAA",
+    "purple": "#9B4DFF",
+    "orangeAccent": "#FF7A18",
+    "text": "#F7F3FF"
+  },
+  "typography": {
+    "display": "Space Grotesk",
+    "mono": "DM Mono"
+  },
+  "copy": {
+    "eyebrow": "THE INTERNET KEEPS LOADING.",
+    "headline": "THE NIGHT KEEPS GOING.",
+    "token": "$HUB",
+    "tagline": "THE ONLY HUB THAT NEVER FINISHES LOADING."
+  },
+  "visualElements": [
+    "deep near-black nightclub environment",
+    "hot pink and purple neon halos",
+    "single orange accent",
+    "animated loading bar",
+    "loading bar transforming into a nightclub horizon",
+    "subtle technical grid",
+    "light film grain"
+  ],
+  "constraints": [
+    "$HUB must be legible without zooming",
+    "original composition",
+    "no rockets",
+    "no laser eyes",
+    "avoid generic crypto iconography",
+    "confident design, not all-caps body copy"
+  ]
+}
