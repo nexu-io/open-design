@@ -125,6 +125,7 @@ export interface AppConfigPrefs {
   customInstructions?: string | null;
   projectLocations?: ProjectLocationPrefs[];
   defaultProjectLocationId?: string | null;
+  zcodeAppPath?: string | null;
   // Whether this installation runs the OD Next design strategy. Absent and
   // null both mean "unconfigured", which resolves to `active` — OD Next is the
   // default route and this key is how an installation opts out of it.
@@ -160,6 +161,7 @@ const ALLOWED_KEYS: ReadonlySet<keyof AppConfigPrefs> = new Set([
   'customInstructions',
   'projectLocations',
   'defaultProjectLocationId',
+  'zcodeAppPath',
   'odNextStrategyMode',
   'recentLinkedDirs',
 ] as const);
@@ -648,6 +650,22 @@ function applyConfigValue(
   if (key === 'defaultProjectLocationId') {
     if (typeof value === 'string') {
       target[key] = normalizeLocationId(value, 'default');
+    } else if (value === null) {
+      target[key] = null;
+    } else {
+      delete target[key];
+    }
+    return;
+  }
+  if (key === 'zcodeAppPath') {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        target[key] = null;
+      } else {
+        const expanded = expandHomePrefix(trimmed);
+        target[key] = path.isAbsolute(expanded) ? path.normalize(expanded) : null;
+      }
     } else if (value === null) {
       target[key] = null;
     } else {

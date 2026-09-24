@@ -38,6 +38,7 @@ import {
   installSkill,
   isDeployProviderId,
   openFolderDialog,
+  openZcodeAppDialog,
   patchPreviewCommentSortKey,
   patchPreviewCommentStatus,
   updateDeployConfig,
@@ -797,6 +798,21 @@ describe('fetchAgentsStream', () => {
     expect(onAgent).toHaveBeenCalledWith(agent);
   });
 
+  it('passes a staged ZCode app path to the agents stream request', async () => {
+    const fetchMock = vi.fn(async () => agentStreamResponse('event: done\ndata: {}\n\n'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchAgentsStream({
+      onAgent: vi.fn(),
+      zcodeAppPath: '/Custom Apps/ZCode.app',
+    })).resolves.toEqual([]);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/agents?stream=1&zcodeAppPath=%2FCustom+Apps%2FZCode.app',
+      expect.any(Object),
+    );
+  });
+
   it('throws when the stream emits an error event', async () => {
     vi.stubGlobal(
       'fetch',
@@ -858,6 +874,53 @@ describe('fetchAppVersionInfo', () => {
     );
 
     await expect(fetchAppVersionInfo()).resolves.toBeNull();
+  });
+});
+
+describe('openZcodeAppDialog', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('distinguishes cancellation from a selected ZCode.app path', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ path: null }), { status: 200 })),
+    );
+    await expect(openZcodeAppDialog()).resolves.toEqual({ status: 'cancelled' });
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ path: '/Applications/ZCode.app' }), { status: 200 })),
+    );
+    await expect(openZcodeAppDialog()).resolves.toEqual({
+      status: 'selected',
+      path: '/Applications/ZCode.app',
+    });
+  });
+
+  it('surfaces unsupported hosts and picker failures without collapsing them to cancellation', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({
+        code: 'unsupported-platform',
+        error: 'ZCode.app selection is only supported on macOS',
+      }), { status: 501 })),
+    );
+    await expect(openZcodeAppDialog()).resolves.toEqual({
+      status: 'unsupported',
+      message: 'ZCode.app selection is only supported on macOS',
+    });
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ error: 'native dialog failed' }), { status: 500 })),
+    );
+    await expect(openZcodeAppDialog()).resolves.toEqual({
+      status: 'error',
+      message: 'native dialog failed',
+    });
   });
 });
 

@@ -22,6 +22,9 @@ function hardLinuxFolderDialogFailure(error: unknown, stderrText: string): strin
   return null;
 }
 
+const MACOS_ZCODE_APP_DIALOG_SCRIPT =
+  'POSIX path of (choose file with prompt "Select ZCode.app" of type {"app"})';
+
 const WINDOWS_FOLDER_DIALOG_SCRIPT = [
   'Add-Type -AssemblyName System.Windows.Forms;',
   '$owner = New-Object System.Windows.Forms.Form;',
@@ -48,12 +51,25 @@ export function buildWindowsFolderDialogCommand(): NativeFolderDialogCommand {
   };
 }
 
+export function buildMacZcodeAppDialogCommand(): NativeFolderDialogCommand {
+  return {
+    command: 'osascript',
+    args: ['-e', MACOS_ZCODE_APP_DIALOG_SCRIPT],
+  };
+}
+
+export function supportsNativeZcodeAppDialog(
+  platform: NodeJS.Platform = process.platform,
+): boolean {
+  return platform === 'darwin';
+}
+
 export function parseFolderDialogStdout(error: unknown, stdout: string): string | null {
   if (error) {
     return null;
   }
 
-  const selectedPath = stdout.trim();
+  const selectedPath = stdout.trim().replace(/\/$/, '');
   return selectedPath.length > 0 ? selectedPath : null;
 }
 
@@ -70,5 +86,32 @@ export function parseLinuxFolderDialogResult(error: unknown, stdout: string, std
   }
 
   const selectedPath = stdout.trim();
+  return selectedPath.length > 0 ? selectedPath : null;
+}
+
+function isAppleScriptUserCancel(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const candidate = error as {
+    code?: unknown;
+    message?: unknown;
+    stderr?: unknown;
+  };
+  if (candidate.code === 1) {
+    const detail = `${String(candidate.message ?? '')}\n${String(candidate.stderr ?? '')}`;
+    return /user canceled|用户已取消|ユーザによってキャンセル|cancelled|canceled/i.test(detail);
+  }
+  return false;
+}
+
+export function parseZcodeAppDialogStdout(error: unknown, stdout: string): string | null {
+  if (isAppleScriptUserCancel(error)) {
+    return null;
+  }
+  if (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`ZCode.app picker failed: ${message}`);
+  }
+
+  const selectedPath = stdout.trim().replace(/\/$/, '');
   return selectedPath.length > 0 ? selectedPath : null;
 }
