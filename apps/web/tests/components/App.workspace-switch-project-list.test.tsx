@@ -69,13 +69,19 @@ vi.mock('../../src/components/EntryView', () => ({
   EntryView: ({
     projects,
     projectsLoading,
+    projectsLoadFailed,
+    onProjectsRefresh,
   }: {
     projects: Project[];
     projectsLoading?: boolean;
+    projectsLoadFailed?: boolean;
+    onProjectsRefresh?: () => Promise<void>;
   }) => (
     <main>
       <div data-testid="entry-home-surface" />
       <div data-testid="entry-projects-loading">{String(Boolean(projectsLoading))}</div>
+      <div data-testid="entry-projects-failed">{String(Boolean(projectsLoadFailed))}</div>
+      <button onClick={() => void onProjectsRefresh?.().catch(() => {})}>Retry projects</button>
       {projects.map((project) => (
         <div key={project.id} data-testid={`entry-project-${project.id}`}>
           {project.name}
@@ -1097,4 +1103,30 @@ describe('App project list across a workspace switch', () => {
       },
     });
   });
+  it('keeps a rejected list distinct from an empty success and clears failure after retry', async () => {
+    vi.mocked(listProjects).mockRejectedValue(new Error('projects 403'));
+    render(<App />);
+    await waitFor(() => expect(screen.getByTestId('entry-projects-failed').textContent).toBe('true'));
+    expect(screen.queryByTestId(`entry-project-${WORKSPACE_A_PROJECT.id}`)).toBeNull();
+    vi.mocked(listProjects).mockResolvedValue([]);
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Retry projects' })));
+    expect(screen.getByTestId('entry-projects-failed').textContent).toBe('false');
+  });
+
+  it('does not let an older success clear a newer failed refresh', async () => {
+    vi.mocked(listProjects).mockResolvedValue([]);
+    render(<App />);
+    await waitFor(() => expect(screen.getByTestId('entry-projects-loading').textContent).toBe('false'));
+    const olderRead = deferred<Project[]>();
+    vi.mocked(listProjects).mockReturnValueOnce(olderRead.promise);
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Retry projects' })));
+    vi.mocked(listProjects).mockRejectedValueOnce(new Error('projects 403'));
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Retry projects' })));
+    expect(screen.getByTestId('entry-projects-failed').textContent).toBe('true');
+    await act(async () => olderRead.resolve([]));
+    expect(screen.getByTestId('entry-projects-failed').textContent).toBe('true');
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Retry projects' })));
+    expect(screen.getByTestId('entry-projects-failed').textContent).toBe('false');
+  });
+
 });

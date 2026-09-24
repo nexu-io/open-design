@@ -855,6 +855,7 @@ export const ptBR: Dict = {
   "entry.navDashboard": "Dashboard",
   "entry.blankDraftsTitle": "Start a private draft",
   "entry.blankDraftsDescription": "Create a project here first. It stays private until you move it into the team space.",
+  "entry.projectsLoadFailed": "Não foi possível carregar os projetos. Tente novamente.",
   "entry.blankAllProjectsTitle": "No team projects yet",
   "entry.blankAllProjectsDescription": "Projects shared to the team will appear here for everyone in the workspace.",
   "entry.blankCreate": "New project",
