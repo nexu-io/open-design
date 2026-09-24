@@ -12956,11 +12956,8 @@ export async function startServer({
       { allowRetry = true } = {},
     ) => {
       lifecycle.mark('finalize_start');
-      // The Run records how the process ended; the strategy task records its
-      // own verdict. A task blocked at any stage keeps a cleanly exited Run
-      // succeeded: the task projection on the terminal event carries the
-      // blocked outcome and its reason codes, and the client decides from
-      // those and the deliverable on disk what this turn produced.
+      // The Run records how the process ended; the strategy task records only
+      // orchestration.
       flushRunMessageEvents(run);
       // Persist the transport-level close mechanism before classifying this
       // attempt. Runtime fatal/stream signals are only known in the close

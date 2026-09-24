@@ -3668,7 +3668,6 @@ export const ar: Dict = {
   'questions.tabLabel': 'أسئلة',
   'questions.banner': 'هل تمانع أن أطرح عليك بضعة أسئلة سريعة؟',
   'questions.bannerAnswered': 'تمت الإجابة عن الأسئلة',
-  'questions.strategyBlockedNotice': "أوقفت بوابة جودة الاستراتيجية هذه المهمة، لذا لم يعد بالإمكان إرسال هذا النموذج. ابدأ طلبًا جديدًا للمتابعة.",
   'questions.continue': 'متابعة',
   'questions.generating': 'جارٍ إنشاء الأسئلة…',
   'questions.skipAll': "تخطٍ · القرار لك",

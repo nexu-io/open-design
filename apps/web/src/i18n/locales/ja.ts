@@ -3668,7 +3668,6 @@ export const ja: Dict = {
   'questions.tabLabel': '質問',
   'questions.banner': 'いくつか簡単な質問をしてもよろしいですか？',
   'questions.bannerAnswered': '質問に回答済み',
-  'questions.strategyBlockedNotice': "このタスクはストラテジーの品質ゲートによって停止されたため、このフォームは送信できなくなりました。続けるには新しいリクエストを開始してください。",
   'questions.continue': '続ける',
   'questions.generating': '質問を生成中…',
   'questions.skipAll': "スキップ · おまかせ",

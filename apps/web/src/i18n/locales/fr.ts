@@ -3668,7 +3668,6 @@ export const fr: Dict = {
   'questions.tabLabel': 'Questions',
   'questions.banner': 'Puis-je vous poser deux ou trois questions rapides ?',
   'questions.bannerAnswered': 'Questions traitées',
-  'questions.strategyBlockedNotice': "Cette tâche a été arrêtée par le contrôle qualité de la stratégie, ce formulaire ne peut donc plus être envoyé. Lancez une nouvelle demande pour continuer.",
   'questions.continue': 'Continuer',
   'questions.generating': 'Génération des questions…',
   'questions.skipAll': "Passer · à vous de voir",

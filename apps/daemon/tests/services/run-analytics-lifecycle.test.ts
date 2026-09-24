@@ -133,7 +133,6 @@ describe('run analytics lifecycle', () => {
     h.settle({ status: 'succeeded' });
     const finished = await settled(h, 'run_finished');
     expect(finished.properties).toMatchObject({ result: 'success', od_next_settlement_reason: 'ended', od_next_settlement_facts: { physicalStatus: 'succeeded', deliverableValid: false } });
-    expect(finished.properties.od_next_blocked_reason_code).toBeUndefined();
   });
 
   it('reports a physical failure even when orchestration has ended normally', async () => {
@@ -146,7 +145,6 @@ describe('run analytics lifecycle', () => {
     h.settle({ status: 'failed' });
     const finished = await settled(h, 'run_finished');
     expect(finished.properties).toMatchObject({ result: 'failed', od_next_settlement_reason: 'ended', od_next_settlement_facts: { physicalStatus: 'failed' } });
-    expect(finished.properties.od_next_blocked_reason_code).toBeUndefined();
   });
 
   it('reports a created run and pairs its finish under the same insert id', async () => {

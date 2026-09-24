@@ -3862,7 +3862,6 @@ export const zhTW: Dict = {
   "questions.tabLabel": "問題",
   "questions.banner": "方便問你幾個簡短的問題嗎？",
   "questions.bannerAnswered": "已回答這些問題",
-  "questions.strategyBlockedNotice": "該任務已被策略品質門攔下，此表單無法再提交。請重新發起一次請求以繼續。",
   "questions.continue": "繼續",
   "questions.generating": "正在產生問題…",
   "questions.skipAll": "跳過 · 你來判斷",

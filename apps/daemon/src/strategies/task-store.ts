@@ -49,7 +49,6 @@ type DbRow = Record<string, unknown>;
 const TASK_STORE_SCHEMA_VERSION = 1 as const;
 const TERMINAL_OUTCOMES = new Set<StrategyTaskOutcome>([
   'completed',
-  'blocked',
   'canceled',
 ]);
 
@@ -141,7 +140,6 @@ export interface StrategyTaskExecutionRecord {
   executionIntent?: StrategyExecutionIntentV2;
   intentResolution: StrategyIntentResolution | null;
   deliverableValid?: boolean;
-  blockedContext?: StrategyTaskBlockedContext;
   planContract?: OpenDesignPlanContractV2;
   planContractHash?: string;
   clarificationCount: 0 | 1;
@@ -173,16 +171,6 @@ export interface CreateStrategyTaskExecutionInput {
   createdAt?: number;
 }
 
-/**
- * Durable attribution for a blocked strategy task: the exact gate reason codes
- * plus the agent-visible text of the turn that was rejected. Every blocked
- * outcome must be diagnosable from the store alone, without live logs.
- */
-export interface StrategyTaskBlockedContext {
-  reasonCodes: string[];
-  visibleText: string | null;
-}
-
 export interface StrategyTaskTransitionState {
   route: StrategyRouteV2;
   inputStage: StrategyInputStageV2;
@@ -200,10 +188,6 @@ export interface CompareAndTransitionStrategyTaskInput {
     sourceRunId: string;
     finalText: string;
     coldStartText?: string;
-  };
-  blockedContext?: {
-    reasonCodes: readonly string[];
-    visibleText?: string | null;
   };
   updatedAt?: number;
   deliverableValid?: boolean;
@@ -502,9 +486,6 @@ export interface StrategyTaskTurnProjection {
    *  learn the verdict, and surfaces keyed off the agent's TodoWrite snapshot
    *  (the "continue remaining tasks" offer) would resurrect on every reload. */
   delivered: boolean;
-  /** Persisted task verdict, independent of the physical Run's status. */
-  blocked: boolean;
-  blockedText: string | null;
 }
 
 /**
@@ -541,8 +522,7 @@ export function strategyTaskTurnsForRunIds(
                r.task_execution_id AS taskExecutionId,
                r.task_run_index AS taskRunIndex,
                t.outcome AS outcome,
-               t.deliverable_valid AS deliverableValid,
-               t.blocked_visible_text AS blockedVisibleText
+               t.deliverable_valid AS deliverableValid
           FROM strategy_task_runs r
           -- LEFT so a mapping whose task row is gone still yields its turn
           -- position: losing that would un-fold an already-rendered Full Plan
@@ -563,12 +543,6 @@ export function strategyTaskTurnsForRunIds(
           taskExecutionId: row['taskExecutionId'],
           taskRunIndex: row['taskRunIndex'],
           delivered: row['outcome'] === 'completed' && row['deliverableValid'] === 1,
-          blocked: row['outcome'] === 'blocked',
-          blockedText: row['outcome'] === 'blocked'
-            && typeof row['blockedVisibleText'] === 'string'
-            && row['blockedVisibleText'].trim().length > 0
-            ? row['blockedVisibleText']
-            : null,
         });
       }
     }
@@ -669,21 +643,11 @@ export function compareAndTransitionStrategyTaskExecution(
       );
     }
 
-    if (input.blockedContext && next.outcome !== 'blocked') {
-      throw new InvalidStrategyTaskTransitionError(
-        'Blocked attribution is only valid when transitioning to blocked.',
-      );
-    }
-    const blockedContext = next.outcome === 'blocked'
-      ? normalizeBlockedContext(input.blockedContext)
-      : null;
-
     const result = db.prepare(`
       UPDATE strategy_task_executions
          SET revision = revision + 1,
              route = ?, input_stage = ?, outcome = ?, execution_mode = ?, execution_intent = ?,
              deliverable_valid = COALESCE(?, deliverable_valid),
-             blocked_reason_codes_json = ?, blocked_visible_text = ?,
              clarification_count = ?, plan_contract_repair_attempts = ?,
              latest_run_id = ?, updated_at = ?
        WHERE task_execution_id = ? AND revision = ?
@@ -694,8 +658,6 @@ export function compareAndTransitionStrategyTaskExecution(
       next.executionMode,
       next.executionIntent,
       input.deliverableValid === undefined ? (input.nextRun ? 0 : null) : Number(input.deliverableValid),
-      blockedContext ? JSON.stringify(blockedContext.reasonCodes) : null,
-      blockedContext ? blockedContext.visibleText : null,
       clarificationCount,
       repairAttempts,
       nextRunId,
@@ -782,7 +744,7 @@ export function cancelStrategyTaskExecution(
       UPDATE strategy_task_executions
          SET revision = revision + 1, outcome = 'canceled', updated_at = ?
        WHERE task_execution_id = ? AND revision = ?
-         AND outcome NOT IN ('completed', 'blocked', 'canceled')
+         AND outcome NOT IN ('completed', 'canceled')
     `).run(updatedAt, current.taskExecutionId, input.expectedRevision);
     if (result.changes !== 1) {
       throw new StrategyTaskTransitionConflictError(
@@ -822,8 +784,7 @@ export function reconcileStrategyTaskRunTerminal(
       }
       const result = db.prepare(`
         UPDATE strategy_task_executions
-           SET revision = revision + 1, outcome = ?, updated_at = ?, deliverable_valid = 0,
-               blocked_reason_codes_json = ?, blocked_visible_text = NULL
+           SET revision = revision + 1, outcome = ?, updated_at = ?, deliverable_valid = 0
          WHERE task_execution_id = ? AND revision = ?
            AND latest_run_id = ? AND outcome = 'running'
       `).run(
@@ -832,7 +793,6 @@ export function reconcileStrategyTaskRunTerminal(
           current.updatedAt,
           normalizeTimestamp(input.updatedAt ?? Date.now(), 'updatedAt'),
         ),
-        null,
         current.taskExecutionId,
         current.revision,
         input.runId,
@@ -926,11 +886,6 @@ function rowToTask(db: SqliteDb, row: DbRow): StrategyTaskExecutionRecord {
   const storedExecutionIntent = StrategyExecutionIntentV2Schema.parse(row['execution_intent'] ?? 'produce');
   const executionIntent = storedExecutionIntent;
   validateStoredState({ route, inputStage, outcome, executionMode, ...(executionIntent ? { executionIntent } : {}) });
-  const blockedContext = outcome === 'blocked' ? parseStoredBlockedContext(
-    row['blocked_reason_codes_json'],
-    row['blocked_visible_text'],
-    outcome,
-  ) : null;
   // Retired model contracts are historical data only. Never gate reading a
   // conversation on their schema, hash, or relationship to execution state.
   const plan = readHistoricalPlan(row['plan_contract_json'], row['plan_contract_hash']);
@@ -1107,7 +1062,6 @@ function rowToTask(db: SqliteDb, row: DbRow): StrategyTaskExecutionRecord {
     intentResolution,
     ...(typeof row['continued_from_task_execution_id'] === 'string' ? { continuedFromTaskExecutionId: row['continued_from_task_execution_id'] } : {}),
     ...(row['deliverable_valid'] == null ? {} : { deliverableValid: row['deliverable_valid'] === 1 }),
-    ...(blockedContext ? { blockedContext } : {}),
     ...(plan.contract ? { planContract: plan.contract } : {}),
     ...(plan.hash ? { planContractHash: plan.hash } : {}),
     clarificationCount,
@@ -1122,57 +1076,6 @@ function rowToTask(db: SqliteDb, row: DbRow): StrategyTaskExecutionRecord {
     frozenInputIdentity,
     createdAt,
     updatedAt,
-  };
-}
-
-function normalizeBlockedContext(
-  input: CompareAndTransitionStrategyTaskInput['blockedContext'],
-): StrategyTaskBlockedContext | null {
-  if (!input) return null;
-  const reasonCodes = [...new Set(
-    input.reasonCodes.filter((code) => typeof code === 'string' && code.length > 0),
-  )];
-  if (reasonCodes.length === 0) return null;
-  const visibleText = typeof input.visibleText === 'string' && input.visibleText.trim().length > 0
-    ? input.visibleText
-    : null;
-  return { reasonCodes, visibleText };
-}
-
-function parseStoredBlockedContext(
-  reasonCodesJson: unknown,
-  visibleText: unknown,
-  outcome: StrategyTaskOutcome,
-): StrategyTaskBlockedContext | null {
-  if (reasonCodesJson == null) return null;
-  if (outcome !== 'blocked') {
-    throw new InvalidStrategyTaskRecordError(
-      'Blocked attribution is only valid on blocked strategy tasks.',
-    );
-  }
-  const raw = requireStoredString(reasonCodesJson, 'blocked_reason_codes_json');
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    throw new InvalidStrategyTaskRecordError(
-      'Persisted blocked reason codes must be valid JSON.',
-    );
-  }
-  if (
-    !Array.isArray(parsed)
-    || parsed.length === 0
-    || !parsed.every((code) => typeof code === 'string' && code.length > 0)
-  ) {
-    throw new InvalidStrategyTaskRecordError(
-      'Persisted blocked reason codes must be a non-empty string array.',
-    );
-  }
-  return {
-    reasonCodes: parsed,
-    visibleText: visibleText == null
-      ? null
-      : requireStoredString(visibleText, 'blocked_visible_text'),
   };
 }
 
@@ -1639,7 +1542,7 @@ function validateStoredState(state: {
     if (
       state.inputStage !== 'request'
       || state.executionMode !== null
-      || !['running', 'completed', 'canceled', 'blocked'].includes(state.outcome)
+      || !['running', 'completed', 'canceled'].includes(state.outcome)
     ) {
       throw new InvalidStrategyTaskRecordError(
         'An unlocked route is valid only for an initial request before routing.',
@@ -1689,7 +1592,6 @@ function parseOutcome(value: unknown): StrategyTaskOutcome {
     || value === 'clarification_required'
     || value === 'plan_ready'
     || value === 'completed'
-    || value === 'blocked'
     || value === 'canceled'
   ) return value;
   throw new InvalidStrategyTaskRecordError('Stored strategy outcome is invalid.');

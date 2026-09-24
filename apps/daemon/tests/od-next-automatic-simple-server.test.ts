@@ -963,7 +963,7 @@ process.exit(127);
     expect(calls[2]!.stdin).toContain('<session_skills>');
   }, 45_000);
 
-  it.each(['plan_ready', 'clarification_required', 'blocked'] as const)(
+  it.each(['plan_ready', 'clarification_required'] as const)(
     'hands off historical %s through the current strategy and preserves exact retries after restart', async outcome => {
       const fixture = await createPublicRolloutFixture('marker-handoff', 'design');
       started = fixture.started; binDir = fixture.binDir;
@@ -2365,7 +2365,7 @@ process.exit(127);
 
   it('keeps a successful no-artifact production reply completed without claiming delivery', async () => {
     const fixture = await createFixture('repair');
-    await writeFile(`${fixture.logPath}.blocked-production`, '1');
+    await writeFile(`${fixture.logPath}.no-artifact-production`, '1');
     queueFixtureIds(fixture);
     await postRun(started!.url, createRunRequest(fixture, 'Build the lesson deck.'), {
       'x-od-analytics-device-id': 'device-no-artifact-production',
@@ -2376,7 +2376,7 @@ process.exit(127);
     expect(task.runs.map((run) => run.inputStage)).toEqual(['request', 'production']);
     const terminal = await waitForRunTerminal(started!.url, task.latestRunId);
     // A clean production exit completes the turn without claiming delivery.
-    // Missing artifacts must not restore contract blocking or a repair turn.
+    // Missing artifacts do not start a repair turn.
     expect(terminal).toMatchObject({
       status: 'succeeded',
       exitCode: 0,
@@ -2402,7 +2402,6 @@ process.exit(127);
         deliverableValid: false, settlementReason: 'ended', settlementFacts: { todoUnfinished: true, deliverableValid: false },
       },
     });
-    expect(end.strategyTask.blockedContext ?? null).toBeNull();
     expect(records.find((event) => event.data?.type === 'runtime_close')?.data)
       .toMatchObject({ rpc_close_reason: 'exit_0', status: 'succeeded', exit_code: 0 });
     const response = await fetch(
@@ -2419,7 +2418,6 @@ process.exit(127);
       rpc_close_reason: 'exit_0',
     });
     expect(recovery?.properties?.error_code).toBeUndefined();
-    expect(recovery?.properties?.od_next_blocked_reason_code).toBeUndefined();
     for (const mapping of task.runs.slice(0, -1)) {
       expect((await getRun(started!.url, mapping.runId)).status).toBe('succeeded');
     }
@@ -3153,7 +3151,7 @@ function finish() {
       fs.writeFileSync(path.join(process.cwd(), childFile), '<!doctype html><title>Taxonomy</title><a href="plant-science-landing.html">Home</a>' + (edited ? '<p>Updated taxonomy</p>' : ''));
     }
     text = '已交付 ' + childFile + '。';
-  } else if (stdin.includes('This is the production turn') && fs.existsSync(logPath + '.blocked-production')) {
+  } else if (stdin.includes('This is the production turn') && fs.existsSync(logPath + '.no-artifact-production')) {
     staleTodoList = true;
     text = 'Working on the lesson.';
   } else if (stdin.includes('This is the production turn')) {
@@ -3171,7 +3169,7 @@ function finish() {
   }
   console.log(JSON.stringify({ type: 'thread.started', thread_id: ${JSON.stringify(THREAD_ID)} }));
   console.log(JSON.stringify({ type: 'turn.started' }));
-  if (stdin.includes('This is the production turn') && fs.existsSync(logPath + '.blocked-production')) {
+  if (stdin.includes('This is the production turn') && fs.existsSync(logPath + '.no-artifact-production')) {
     // Replay the host-observed failure boundary: completed tools and progress text,
     // no deliverable or Runtime State, then a clean process exit.
     for (let i = 0; i < 2; i++) console.log(JSON.stringify({ type: 'item.completed', item: {

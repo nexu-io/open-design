@@ -3668,7 +3668,6 @@ export const fa: Dict = {
   'questions.tabLabel': 'پرسش‌ها',
   'questions.banner': 'اشکالی ندارد چند پرسش کوتاه بپرسم؟',
   'questions.bannerAnswered': 'به پرسش‌ها پاسخ داده شد',
-  'questions.strategyBlockedNotice': "این وظیفه توسط دروازه کیفیت راهبرد متوقف شده است، بنابراین این فرم دیگر قابل ارسال نیست. برای ادامه، درخواست تازه‌ای آغاز کنید.",
   'questions.continue': 'ادامه',
   'questions.generating': 'در حال تولید سؤالات…',
   'questions.skipAll': "رد کن · خودت تصمیم بگیر",

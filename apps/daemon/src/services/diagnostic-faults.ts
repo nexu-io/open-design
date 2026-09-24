@@ -5,7 +5,6 @@ import type { FaultEvidence } from './automatic-diagnostics.js';
 interface Run {
   id: string; agentId?: string; projectId?: string; conversationId?: string;
   retryAttemptCount?: number; manualResumeAttemptCount?: number; errorCode?: string;
-  strategyTask?: { outcome?: string };
   createdAt?: number; lastAgentActivityAt?: number; cancelOrigin?: string | null;
   terminalTrigger?: string | null; deliverableValid?: boolean;
   deliverableValidation?: unknown; stdinBackpressure?: boolean;
@@ -35,7 +34,6 @@ export function diagnosticFaultFromRun(run: Run, event: Event): FaultEvidence | 
   else if (event.event === 'agent' && data.type === 'diagnostic' && data.name === 'model_retry') kind = 'model_retry';
   else if (event.event === 'end' && data.status === 'canceled' && run.cancelOrigin === 'user_stop') kind = 'user_cancel';
   else if (event.event === 'end' && data.status === 'succeeded' && run.deliverableValid === false) kind = 'delivery_validation_failure';
-  else if (event.event === 'end' && run.strategyTask?.outcome === 'blocked') kind = 'logical_blocked';
   else if (event.event === 'end' && data.status === 'failed') kind = 'terminal_failure';
   else return null;
   if (kind === 'user_cancel') return diagnosticFaultFromLifecycle(run, kind, event.timestamp);

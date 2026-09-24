@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildWorkspacePermissions, buildWorkspaceSeatSummary, OD_NEXT_AGENT_DECLARED_BLOCK_REASON, type WorkspaceCollabContext } from '@open-design/contracts';
+import { buildWorkspacePermissions, buildWorkspaceSeatSummary, type WorkspaceCollabContext } from '@open-design/contracts';
 import { ProjectView } from '../../src/components/ProjectView';
 import { AssistantMessage } from '../../src/components/AssistantMessage';
 import { I18nProvider } from '../../src/i18n';
@@ -60,20 +60,18 @@ let releaseWrite: () => void;
 let writeGate: Promise<void>;
 let writeStarted: boolean;
 let messageWrites: ChatMessage[];
-let strategy: 'missing-state' | 'delivered' | 'agent-declared' | 'ordinary-delivery' | 'project-delivered';
+let strategy: 'missing-state' | 'delivered' | 'ordinary-delivery';
 
 function strategyTask() {
-  // The gate with no delivery proof refuses a production turn: the plan was
-  // frozen, the build ran, and nothing usable was written. The Run itself
-  // succeeded, and that is what recovery keeps: saving the inline file
-  // repairs delivery, and the verdict stays on the row for the diagnostics.
+  // A production turn that ended without a usable file: the plan was frozen,
+  // the build ran, and the task completed without delivery proof. The Run
+  // itself succeeded, and that is what recovery keeps: saving the inline file
+  // repairs delivery.
   const production = strategy === 'missing-state';
   return { activeRunId: `run-${project.id}`, executionMode: production ? 'simple' : null,
     inputStage: production ? 'production' : 'request', route: 'full_plan',
-    outcome: 'blocked', terminal: true, taskExecutionId: `task-${project.id}`,
-    strategy: { id: 'od-next-strategy', version: '2.0.4', packageHash: 'fixture', snapshotId: 'fixture' },
-    blockedContext: { reasonCodes: [strategy === 'agent-declared' ? OD_NEXT_AGENT_DECLARED_BLOCK_REASON : MISSING_STATE],
-      visibleText: strategy === 'agent-declared' ? 'The user has not supplied the required input.' : 'Fixture protocol gate explanation.' } };
+    outcome: 'completed', terminal: true, taskExecutionId: `task-${project.id}`,
+    strategy: { id: 'od-next-strategy', version: '2.0.4', packageHash: 'fixture', snapshotId: 'fixture' } };
 }
 
 beforeEach(() => {
@@ -108,7 +106,6 @@ beforeEach(() => {
     if (url.pathname === `/api/runs/run-${project.id}`) return Response.json({ runId: `run-${project.id}`,
       status: 'succeeded', createdAt: 1000, updatedAt: 2000, artifactCount: 0, artifactPaths: [],
       deliverableValid: strategy === 'delivered',
-      projectDeliverableValid: strategy === 'project-delivered',
       ...(strategy !== 'ordinary-delivery' ? { strategyTask: strategyTask() } : {}) });
     if (url.pathname === `/api/projects/${project.id}/files`) {
       if (method === 'POST') {
@@ -132,7 +129,7 @@ afterEach(() => { releaseWrite(); cleanup(); vi.unstubAllGlobals(); vi.restoreAl
 
 async function recover(kind: typeof strategy) {
   strategy = kind;
-  const blocked = kind !== 'ordinary-delivery';
+  const taskTurn = kind !== 'ordinary-delivery';
   // This is a recovery-input fixture, not a claim that all daemon message PUTs
   // preserve a client's status. Test actual outgoing PUT separately below.
   history = [{ id: `assistant-${project.id}`, role: 'assistant', content: ARTIFACT,
@@ -140,8 +137,7 @@ async function recover(kind: typeof strategy) {
     resultDeliveryState: 'delivery_failed', preTurnFileNames: [],
     events: [{ kind: 'thinking', text: 'Preparing the requested output.' }, { kind: 'text', text: ARTIFACT },
       ...(kind === 'missing-state' ? [{ kind: 'status' as const, label: 'error', code: MISSING_STATE }] : [])],
-    ...(blocked ? { strategyTaskBlocked: true, strategyTaskExecutionId: `task-${project.id}`,
-      strategyTaskBlockedText: strategyTask().blockedContext.visibleText } : {}) }];
+    ...(taskTurn ? { strategyTaskExecutionId: `task-${project.id}` } : {}) }];
   render(<I18nProvider initial="en"><ProjectView project={project}
     initialProjectDetail={{ project, resolvedDir: '/workspace/verdict-fixture' }}
     routeConversationId={`conv-${project.id}`} routeFileName={null} config={config} workspaceContextOverride={context}
@@ -162,18 +158,17 @@ async function recover(kind: typeof strategy) {
   return messageWrites.filter((message) => message.producedFiles?.some((file) => file.name === 'result.html')).at(-1)!;
 }
 
-describe('artifact recovery preserves the established strategy verdict contract (OPEND-3028)', () => {
+describe('artifact recovery settles the turn on the physical Run status (OPEND-3028)', () => {
   it('keeps the recovered turn on its physical success when the task has no delivery proof', async () => {
     const message = await recover('missing-state');
-    // The persisted row still carries the blocked verdict and the error event
-    // an earlier client wrote; the Run succeeded, so recovery settles the turn
-    // as succeeded instead of keeping it failed over the missing delivery proof.
-    expect(message.strategyTaskBlocked).toBe(true);
+    // The persisted row still carries the error event an earlier client wrote;
+    // the Run succeeded, so recovery settles the turn as succeeded instead of
+    // keeping it failed over the missing delivery proof.
     expect(message.events).toContainEqual({ kind: 'status', label: 'error', code: MISSING_STATE });
     expect(message.runStatus).toBe('succeeded');
   });
-  it.each(['delivered', 'agent-declared', 'ordinary-delivery', 'project-delivered'] as const)(
-    'retains successful recovery for the existing %s exception', async (kind) => {
+  it.each(['delivered', 'ordinary-delivery'] as const)(
+    'settles the %s recovery as succeeded', async (kind) => {
       const message = await recover(kind);
       expect(message.runStatus).toBe('succeeded');
       expect(message.resultDeliveryState).toBe('delivered');

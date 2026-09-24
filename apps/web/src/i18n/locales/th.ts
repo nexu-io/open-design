@@ -3668,7 +3668,6 @@ export const th: Dict = {
   'questions.tabLabel': 'คำถาม',
   'questions.banner': 'ขออนุญาตถามคำถามสั้น ๆ สองสามข้อได้ไหม',
   'questions.bannerAnswered': 'ตอบคำถามแล้ว',
-  'questions.strategyBlockedNotice': "งานนี้ถูกหยุดโดยด่านตรวจคุณภาพของกลยุทธ์ จึงไม่สามารถส่งฟอร์มนี้ได้อีก โปรดเริ่มคำขอใหม่เพื่อดำเนินการต่อ",
   'questions.continue': 'ดำเนินการต่อ',
   'questions.generating': 'กำลังสร้างคำถาม…',
   'questions.skipAll': "ข้าม · คุณตัดสินใจ",

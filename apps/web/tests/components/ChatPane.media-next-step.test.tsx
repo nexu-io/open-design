@@ -69,13 +69,8 @@ test.each(['failed', 'canceled', 'running'] as const)('does not promise successf
   expect(screen.queryByTestId('next-step-suggestions')).toBeNull();
 });
 
-test('does not add success actions when the physical run succeeded but its task was blocked', () => {
-  renderChat({ ...deliveredImage(), strategyTaskBlocked: true });
-  expect(screen.queryByTestId('next-step-suggestions')).toBeNull();
-});
-
-test('keeps existing agent suggestions unchanged when the host blocked the task', async () => {
-  const message = { ...deliveredImage(), strategyTaskBlocked: true };
+test('keeps existing agent suggestions unchanged', async () => {
+  const message = deliveredImage();
   const suggestion = '确认图片的授权来源';
   message.events?.push({ kind: 'next_steps', suggestions: [suggestion] });
   const onSend = vi.fn();
