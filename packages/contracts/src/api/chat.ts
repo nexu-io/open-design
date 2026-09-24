@@ -785,14 +785,15 @@ export interface ChatRunStatusResponse {
    *  (max_tokens). Lets every status surface (Pet task center, project pill, CLI
    *  --json) avoid reading an incomplete run as "Completed" (#1247 / #1060).
    *  Absent/false = finished, so older daemons stay "Completed" (backward-compat).
-   *  Judged by the canonical `todoSnapshotHasUnfinishedWork` predicate so it can
-   *  never diverge from the chat footer's `unfinishedTodosFromEvents`. */
+   *  Includes unresolved host-observed media failures. The chat footer consumes
+   *  this verdict directly when present. */
   endedWithUnfinishedWork?: boolean;
   /** Media generations this run dispatched that the DAEMON itself recorded as
    *  failed. Empty/absent means the host watched none fail — never that the
    *  agent said so. Present so a terminal turn can render the real failure card
    *  (with the task's own retryability verdict) instead of leaving the user with
-   *  a green check and an apology in prose. */
+   *  a green check and an apology in prose. Recovered entries remain as history;
+   *  only entries without recoveredByTaskId count as unresolved. */
   mediaTaskFailures?: RunMediaTaskFailure[];
   /** Authoritative artifact files created or modified by this run. Mirrors
    *  ChatSseEndPayload.artifactCount and run_finished.artifact_count. */
@@ -1397,6 +1398,9 @@ export interface ChatMessage {
    * already-delivered work (see continuableUnfinishedTodos).
    */
   strategyTaskDelivered?: boolean;
+  /** Daemon terminal completeness verdict. When present, outranks local todos
+   *  and strategy narration; absent preserves compatibility with older hosts. */
+  endedWithUnfinishedWork?: boolean;
   /** Analytics-only task lineage persisted with the message so retries,
    *  resumes and clarification answers survive reloads without splitting one
    *  user intent into unrelated failures. */

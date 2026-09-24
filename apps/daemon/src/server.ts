@@ -7876,6 +7876,7 @@ export async function startServer({
   const stopEvidenceDelivery = startEvidenceDelivery(RUNTIME_DATA_DIR);
   const strategyWriteEvidence = createStrategyRunWriteEvidenceRecorder(db);
   const codexThreadCleanupOwner = createCodexThreadCleanupOwner();
+  const finalizeAmrTerminalReport = createAmrTerminalReportFinalizer(amrTerminalReportOutbox);
   const design = {
     runs: createChatRunService({
       createSseResponse,
@@ -7918,7 +7919,16 @@ export async function startServer({
           : null;
         if (promptBudget) run.promptBudgetDiagnostics = promptBudget;
       },
-      onTerminal: createAmrTerminalReportFinalizer(amrTerminalReportOutbox),
+      onTerminal: (run, status, terminalAt) => {
+        try {
+          if (run.assistantMessageId) {
+            db.prepare(`UPDATE messages SET ended_with_unfinished_work = ? WHERE id = ? AND run_id = ?`)
+              .run(run.endedWithUnfinishedWork ? 1 : 0, run.assistantMessageId, run.id);
+          }
+        } finally {
+          finalizeAmrTerminalReport(run, status, terminalAt);
+        }
+      },
       beforeFinish: (run, status, _code, _signal, terminalAt) => {
         if (run.deliverableSyntaxValidation?.metrics) {
           run.deliverableSyntaxValidation = {

@@ -7220,6 +7220,9 @@ export function ProjectView({
           onArtifactPaths: (paths) => {
             authoritativeReattachArtifactPaths = paths;
           },
+          onRunCompleteness: (endedWithUnfinishedWork) => {
+            updateMessageById(message.id, (prev) => ({ ...prev, endedWithUnfinishedWork }), true);
+          },
           onStrategyTaskSettled: (strategyTask) => {
             const settledFields = strategySettledMessageFields(strategyTask);
             if (!settledFields) return;
@@ -7239,6 +7242,7 @@ export function ProjectView({
               (prev) => ({
                 ...prev,
                 runId: nextRunId,
+                endedWithUnfinishedWork: undefined,
                 runStatus: 'running',
                 lastRunEventId: undefined,
                 strategyTaskPrefixLength: replayedContent.length,
@@ -10275,6 +10279,10 @@ export function ProjectView({
             ? { taskExecutionId: meta.strategyTaskExecutionId }
             : {}),
           ...(runAnalyticsHints ? { analyticsHints: runAnalyticsHints } : {}),
+          onRunCompleteness: (endedWithUnfinishedWork) => {
+            latestAssistantMsg = { ...latestAssistantMsg, endedWithUnfinishedWork };
+            updateMessageById(assistantId, (prev) => ({ ...prev, endedWithUnfinishedWork }), true);
+          },
           onStrategyTaskSettled: (strategyTask) => {
             const settledFields = strategySettledMessageFields(strategyTask);
             if (!settledFields) return;
@@ -10304,6 +10312,7 @@ export function ProjectView({
             const pinnedAssistant = {
               ...latestAssistantMsg,
               runId,
+              endedWithUnfinishedWork: undefined,
               runStatus: 'queued' as const,
               taskAnalytics: resolvedTaskAnalytics,
               ...(strategyTaskExecutionId ? {
@@ -10329,6 +10338,7 @@ export function ProjectView({
             updateMessageById(assistantId, (prev) => ({
               ...prev,
               runId,
+              endedWithUnfinishedWork: undefined,
               runStatus: 'queued',
               taskAnalytics: resolvedTaskAnalytics,
               ...(strategyTaskExecutionId ? {
@@ -10544,6 +10554,7 @@ export function ProjectView({
             const pinnedAssistant = {
               ...latestAssistantMsg,
               runId,
+              endedWithUnfinishedWork: undefined,
               runStatus: 'queued' as const,
               taskAnalytics: resolvedTaskAnalytics,
               ...(strategyTaskExecutionId ? {
@@ -10565,6 +10576,7 @@ export function ProjectView({
             updateMessageById(assistantId, (prev) => ({
               ...prev,
               runId,
+              endedWithUnfinishedWork: undefined,
               runStatus: 'queued',
               taskAnalytics: resolvedTaskAnalytics,
               ...(strategyTaskExecutionId ? {

@@ -839,6 +839,7 @@ export function pinAssistantMessageOnRunCreate(
               events_json = CASE WHEN run_id = ? THEN events_json ELSE NULL END,
               content = CASE WHEN run_id = ? OR run_id IS NULL THEN content ELSE '' END,
               ended_at = NULL,
+              ended_with_unfinished_work = NULL,
               last_run_event_id = CASE WHEN run_id = ? THEN last_run_event_id ELSE NULL END,
               started_at = CASE
                 WHEN run_id = ? THEN started_at

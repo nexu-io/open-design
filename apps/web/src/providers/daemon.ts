@@ -590,6 +590,7 @@ export interface DaemonStreamOptions {
   onRunStatus?: (status: ChatRunStatus) => void;
   /** Authoritative project-relative artifacts created or modified by the run. */
   onArtifactPaths?: (paths: string[]) => void;
+  onRunCompleteness?: (unfinished: boolean) => void;
   onRunEventId?: (eventId: string) => void;
   /**
    * 这一轮**被谁取消了**,由 `POST /api/runs/:id/cancel` 的应答如实带回。
@@ -629,6 +630,7 @@ export interface DaemonReattachOptions {
   initialLastEventId?: string | null;
   onRunStatus?: (status: ChatRunStatus) => void;
   onArtifactPaths?: (paths: string[]) => void;
+  onRunCompleteness?: (unfinished: boolean) => void;
   onRunEventId?: (eventId: string) => void;
   /**
    * 这一轮**被谁取消了**,由 `POST /api/runs/:id/cancel` 的应答如实带回。
@@ -1063,6 +1065,7 @@ export async function streamViaDaemon({
   onRunCreated,
   onRunStatus,
   onArtifactPaths,
+  onRunCompleteness,
   onRunEventId,
   onCancelOrigin,
   analyticsHints,
@@ -1187,6 +1190,7 @@ export async function streamViaDaemon({
       initialLastEventId,
       onRunStatus: emitRunStatus,
       onArtifactPaths,
+      onRunCompleteness,
       onRunEventId,
       onCancelOrigin,
       projectId,
@@ -1798,6 +1802,7 @@ async function consumeDaemonPhysicalRun({
   initialLastEventId,
   onRunStatus,
   onArtifactPaths,
+  onRunCompleteness,
   onRunEventId,
   onCancelOrigin,
   projectId,
@@ -1821,6 +1826,7 @@ async function consumeDaemonPhysicalRun({
   let exitSignal: string | null = null;
   let endStatus: ChatRunStatus | null = null;
   let endStrategyTask: StrategyTaskProjectionV2 | undefined;
+  let endUnfinishedWork: boolean | undefined;
   let pendingStructuredError: Error | null = null;
   // Tracks whether the server explicitly declared `status: 'succeeded'` in
   // the SSE end payload (or via the fallback run-status fetch). Distinct
@@ -2190,6 +2196,7 @@ async function consumeDaemonPhysicalRun({
           }
 
           if (event.event === 'end') {
+            endUnfinishedWork = event.data.endedWithUnfinishedWork;
             exitCode = typeof event.data.code === 'number' ? event.data.code : null;
             exitSignal = typeof event.data.signal === 'string' ? event.data.signal : null;
             if (event.data.resumable === true) endResumable = true;
@@ -2214,6 +2221,7 @@ async function consumeDaemonPhysicalRun({
         const status = await fetchChatRunStatus(runId, workspaceContext).catch(() => null);
         if (status && isChatRunStatus(status.status) && status.status !== 'queued' && status.status !== 'running') {
           endStatus = status.status;
+          endUnfinishedWork = status.endedWithUnfinishedWork;
           exitCode = status.exitCode ?? null;
           exitSignal = status.signal ?? null;
           serverDeclaredSuccess = status.status === 'succeeded';
@@ -2260,6 +2268,7 @@ async function consumeDaemonPhysicalRun({
       const status = await fetchChatRunStatus(runId, workspaceContext);
       if (status && isChatRunStatus(status.status) && status.status !== 'queued' && status.status !== 'running') {
         endStatus = status.status;
+        endUnfinishedWork = status.endedWithUnfinishedWork;
         exitCode = status.exitCode ?? null;
         exitSignal = status.signal ?? null;
         // Fallback REST path: `status.status` is explicitly declared by the
@@ -2373,6 +2382,7 @@ async function consumeDaemonPhysicalRun({
       }
     }
 
+    if (typeof endUnfinishedWork === 'boolean') onRunCompleteness?.(endUnfinishedWork);
     onRunStatus?.(endStatus);
 
     if (endStatus === 'canceled') {

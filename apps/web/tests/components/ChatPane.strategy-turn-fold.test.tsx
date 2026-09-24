@@ -139,6 +139,16 @@ describe('foldStrategyTaskTurns settlement', () => {
     expect(folded[0]!.strategyTaskDelivered).toBe(true);
   });
 
+  it.each([true, false])('uses the final Run completeness %s, not its predecessor', (unfinished) => {
+    const folded = foldStrategyTaskTurns([
+      assistant({ id: 'plan', strategyTaskExecutionId: 'task', strategyTaskRunIndex: 0,
+        endedWithUnfinishedWork: !unfinished }),
+      assistant({ id: 'production', strategyTaskExecutionId: 'task', strategyTaskRunIndex: 1,
+        endedWithUnfinishedWork: unfinished, strategyTaskDelivered: true }),
+    ]);
+    expect(folded[0]!.endedWithUnfinishedWork).toBe(unfinished);
+  });
+
   it('leaves the turn unsettled while the task is still running', () => {
     const folded = foldStrategyTaskTurns([
       assistant({

@@ -69,6 +69,7 @@ const tempDirs: string[] = [];
 interface TurnPlan {
   /** 派发一次媒体生成。`prompt` 以 `fail` 开头时 provider 必定 400。 */
   media?: { prompt: string; output: string };
+  generations?: Array<{ prompt: string; output: string }>;
   /** 最后一次 TodoWrite 快照。 */
   todos?: Array<{ content: string; status: string }>;
   /** 发一枚**合法**的完成标记(key 从这一轮自己的提示词里读出来)。 */
@@ -100,12 +101,12 @@ process.stdin.on('error', () => {});
   const prompt = Buffer.concat(chunks).toString('utf8');
   const doneKey = (/<od-done key="([A-Za-z0-9_-]{4,64})"\\/>/.exec(prompt) || [])[1] || '';
   const emit = (o) => console.log(JSON.stringify(o));
-  const media = ${JSON.stringify(plan.media ?? null)};
+  const generations = ${JSON.stringify(plan.generations ?? (plan.media ? [plan.media] : []))};
   const todos = ${JSON.stringify(plan.todos ?? null)};
   emit({ type: 'step_start' });
 
   let narration = 'donekey=' + doneKey + '=donekey';
-  if (media) {
+  for (const media of generations) {
     const daemonUrl = process.env.OD_DAEMON_URL;
     const auth = {
       'content-type': 'application/json',
@@ -193,6 +194,7 @@ interface StoredMessage {
   role: string;
   runId?: string;
   runStatus?: string;
+  endedWithUnfinishedWork?: boolean;
 }
 
 interface RunTerminal {
@@ -205,6 +207,7 @@ interface RunTerminal {
     surface?: string;
     model?: string;
     failedAt: number;
+    recoveredByTaskId?: string;
     error: { message: string; status?: number; code?: string };
   }>;
   artifactCount?: number;
@@ -248,6 +251,7 @@ async function runTurn(plan: TurnPlan & { message?: string }): Promise<{
   terminal: RunTerminal;
   narration: string;
   projectId: string;
+  message: StoredMessage;
 }> {
   const { projectId, conversationId } = await createProject(`media terminal ${randomUUID()}`);
   const assistantMessageId = `assistant-${randomUUID()}`;
@@ -283,7 +287,7 @@ async function runTurn(plan: TurnPlan & { message?: string }): Promise<{
     (m) => Boolean(m?.runId && m?.runStatus && TERMINAL.has(m.runStatus)),
   );
   expect(message?.runId, 'the turn never reached a terminal run').toBeTruthy();
-  return { terminal: await readRun(message!.runId!), narration, projectId };
+  return { terminal: await readRun(message!.runId!), narration, projectId, message: message! };
 }
 
 describe('a media generation the host watched fail reaches its run terminal', () => {
@@ -355,6 +359,56 @@ describe('a media generation the host watched fail reaches its run terminal', ()
     }
     vi.unstubAllEnvs();
   });
+
+  it('completes when new media tasks recover both failed outputs in the same run', async () => {
+    const { terminal, narration, message } = await runTurn({
+      generations: [
+        { prompt: 'fail: roster', output: 'scene-team.png' },
+        { prompt: 'fail: icon', output: 'app-icon.png' },
+        { prompt: 'ok: revised roster', output: 'scene-team.png' },
+        { prompt: 'ok: revised icon', output: 'app-icon.png' },
+      ],
+      emitDoneMarker: true,
+      conclusion: 'Landing page and deck delivered.',
+    });
+    expect(narration.match(/mediastatus=failed=mediastatus/g)).toHaveLength(2);
+    expect(narration.match(/mediastatus=done=mediastatus/g)).toHaveLength(2);
+    expect(terminal.status).toBe('succeeded');
+    expect(terminal.endedWithUnfinishedWork).toBe(false);
+    expect(terminal.mediaTaskFailures).toHaveLength(2);
+    expect(terminal.mediaTaskFailures!.every((failure) => failure.recoveredByTaskId)).toBe(true);
+    expect(message.endedWithUnfinishedWork).toBe(false);
+  }, 90_000);
+
+  it('does not treat an older file at the target as recovery', async () => {
+    const { terminal } = await runTurn({
+      generations: [
+        { prompt: 'ok: original image', output: 'hero.png' },
+        { prompt: 'fail: requested replacement', output: 'hero.png' },
+      ],
+      emitDoneMarker: true,
+      conclusion: 'Done.',
+    });
+    expect(terminal.endedWithUnfinishedWork).toBe(true);
+    expect(terminal.mediaTaskFailures).toHaveLength(1);
+    expect(terminal.mediaTaskFailures![0]!.recoveredByTaskId).toBeUndefined();
+  }, 90_000);
+
+  it('keeps a missing image incomplete when only another output recovered', async () => {
+    const { terminal, message } = await runTurn({
+      generations: [
+        { prompt: 'fail: roster', output: 'scene-team.png' },
+        { prompt: 'fail: icon', output: 'app-icon.png' },
+        { prompt: 'ok: roster', output: 'scene-team.png' },
+        { prompt: 'ok: unrelated image', output: 'other.png' },
+      ],
+      emitDoneMarker: true,
+      conclusion: 'Done.',
+    });
+    expect(terminal.endedWithUnfinishedWork).toBe(true);
+    expect(terminal.mediaTaskFailures!.filter((failure) => !failure.recoveredByTaskId)).toHaveLength(1);
+    expect(message.endedWithUnfinishedWork).toBe(true);
+  }, 90_000);
 
   /**
    * 洞 1 —— 失败必须回流到 run。

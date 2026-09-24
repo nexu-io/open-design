@@ -15,6 +15,7 @@ function createDb(): Database.Database {
       events_json TEXT,
       run_id TEXT,
       run_status TEXT,
+      ended_with_unfinished_work INTEGER,
       last_run_event_id TEXT,
       session_mode TEXT,
       run_context_json TEXT,
@@ -37,6 +38,7 @@ function seedMessage(
     events?: unknown[];
     runId?: string;
     runStatus?: string;
+    endedWithUnfinishedWork?: number;
     lastRunEventId?: string | null;
     startedAt?: number;
     endedAt?: number | null;
@@ -45,8 +47,8 @@ function seedMessage(
   db.prepare(
     `INSERT INTO messages
        (id, conversation_id, role, content, events_json, run_id, run_status,
-        last_run_event_id, started_at, ended_at, position, created_at)
-     VALUES (?, ?, 'assistant', ?, ?, ?, ?, ?, ?, ?, 0, 0)`,
+        ended_with_unfinished_work, last_run_event_id, started_at, ended_at, position, created_at)
+     VALUES (?, ?, 'assistant', ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)`,
   ).run(
     row.id,
     row.conversationId,
@@ -54,6 +56,7 @@ function seedMessage(
     row.events ? JSON.stringify(row.events) : null,
     row.runId ?? null,
     row.runStatus ?? null,
+    row.endedWithUnfinishedWork ?? null,
     row.lastRunEventId ?? null,
     row.startedAt ?? null,
     row.endedAt ?? null,
@@ -65,6 +68,7 @@ function readMessage(db: Database.Database, id: string) {
     .prepare(
       `SELECT id, conversation_id AS conversationId, role, content,
               events_json AS eventsJson, run_id AS runId, run_status AS runStatus,
+              ended_with_unfinished_work AS endedWithUnfinishedWork,
               last_run_event_id AS lastRunEventId,
               started_at AS startedAt, ended_at AS endedAt
          FROM messages WHERE id = ?`,
@@ -73,7 +77,7 @@ function readMessage(db: Database.Database, id: string) {
 }
 
 describe('pinAssistantMessageOnRunCreate generation boundary (#6418)', () => {
-  it('resets run-owned fields when rebinding a message to a new run', () => {
+  it.each([0, 1])('resets run-owned fields when rebinding a message with verdict %i to a new run', (verdict) => {
     const db = createDb();
     db.prepare(`INSERT INTO conversations (id) VALUES ('conv-a')`).run();
     seedMessage(db, {
@@ -83,6 +87,7 @@ describe('pinAssistantMessageOnRunCreate generation boundary (#6418)', () => {
       events: [{ kind: 'text', text: 'old' }],
       runId: 'run-a',
       runStatus: 'failed',
+      endedWithUnfinishedWork: verdict,
       lastRunEventId: 'evt-5',
       startedAt: 100,
       endedAt: 200,
@@ -103,6 +108,7 @@ describe('pinAssistantMessageOnRunCreate generation boundary (#6418)', () => {
     expect(m.content).toBe('');
     expect(m.lastRunEventId).toBeNull();
     expect(m.endedAt).toBeNull();
+    expect(m.endedWithUnfinishedWork).toBeNull();
     expect(m.startedAt).toBe(300);
   });
 
