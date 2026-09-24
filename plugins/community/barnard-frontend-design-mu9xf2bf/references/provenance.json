@@ -1,0 +1,19 @@
+{
+  "candidateId": "0d1a515e-967c-4632-99c9-1a1a21414947",
+  "projectId": "a68f811e-396f-42a4-818a-fddddfa75d84",
+  "runId": "fe4dc8ff-cd28-48c0-a92c-aecdda638c49",
+  "conversationId": "5f08f262-1871-4367-b6a7-26eb7b38c6e1",
+  "provenance": {
+    "summary": "Detected from openREADME.md after a successful run.",
+    "detectedAt": 1789915339082
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "openREADME.md",
+      "label": "openREADME.md",
+      "size": 1990,
+      "copied": true
+    }
+  ]
+}

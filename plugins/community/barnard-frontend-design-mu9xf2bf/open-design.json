@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "barnard-frontend-design-mu9xf2bf",
+  "title": "Barnard frontend design",
+  "version": "0.1.0",
+  "description": "New, isolated destination for the requested Open Design frontend. The existing `frontend/` remains the product application.",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}
