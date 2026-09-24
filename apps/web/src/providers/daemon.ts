@@ -573,6 +573,8 @@ export interface DaemonStreamOptions {
   research?: ResearchOptions;
   context?: RunContextSelection;
   appliedPluginSnapshotId?: string | null;
+  pluginId?: string;
+  pluginInputs?: Record<string, unknown>;
   mediaExecution?: MediaExecutionPolicy;
   titleGeneration?: { enabled?: boolean };
   locale?: string;
@@ -1055,6 +1057,8 @@ export async function streamViaDaemon({
   research,
   context,
   appliedPluginSnapshotId,
+  pluginId,
+  pluginInputs,
   mediaExecution,
   titleGeneration,
   locale,
@@ -1100,7 +1104,11 @@ export async function streamViaDaemon({
     ...(byokProvider ? { byokProvider } : {}),
     ...(byokMediaDefaults ? { byokMediaDefaults } : {}),
     locale,
-    ...(appliedPluginSnapshotId ? { appliedPluginSnapshotId } : {}),
+    ...(appliedPluginSnapshotId
+      ? { appliedPluginSnapshotId }
+      : pluginId
+        ? { pluginId, ...(pluginInputs ? { pluginInputs } : {}) }
+        : {}),
     ...(context ? { context } : {}),
     ...(research ? { research } : {}),
     ...(mediaExecution ? { mediaExecution } : {}),
