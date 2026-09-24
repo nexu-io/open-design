@@ -1082,6 +1082,47 @@ export interface CollabCloudComment {
    * comment as it last existed and should not be re-materialized.
    */
   deleted?: boolean;
+  /**
+   * Which identity the author holds — see `ShareAuthorKind`. Absent means
+   * `member`, which is what every comment written before the share page
+   * existed is.
+   *
+   * ## Why this had to widen before anything else
+   *
+   * This interface is the WIRE between daemons of different versions. A daemon
+   * that does not know a field drops it on receive, and `mergeSyncedComment`'s
+   * update path does not rewrite authorship afterwards — so a comment that
+   * round-trips through an older daemon loses these fields permanently, with
+   * nothing to recover them from. Widening the wire first is what keeps that
+   * from happening; the fields can then be populated at leisure.
+   *
+   * All three are optional for the same reason: an older daemon sends none of
+   * them and must keep working.
+   */
+  authorKind?: 'member' | 'user';
+  /**
+   * The author's account id when `authorKind` is `user`. Carried alongside
+   * `memberId` rather than replacing it: `memberId` stays required so an older
+   * daemon still has something to render.
+   */
+  authorAppUserId?: string;
+  /**
+   * Server-stamped display name for the author.
+   *
+   * It travels WITH the comment on purpose. The alternative — resolving the
+   * name from the team member directory at render time — would mean the share
+   * page needs to read that directory, and the directory exposes real names
+   * and roles. Sending the name with the comment keeps the two as separate
+   * channels, so showing an author's name never requires opening the roster.
+   */
+  authorDisplayName?: string;
+  /**
+   * Avatar colour seed, keyed on the ACCOUNT rather than the membership so one
+   * person is one colour whether they commented from the client or the share
+   * page. Display only — never an identity assertion, and never the basis for
+   * deciding whether a comment belongs to the viewer.
+   */
+  authorKey?: string;
 }
 
 /** POST /teams/:teamId/projects/:projectId/comments request body. */
