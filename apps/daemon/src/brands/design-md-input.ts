@@ -1,6 +1,7 @@
-import type { Brand, BrandColor, BrandColorRole, BrandFontSpec } from '@open-design/contracts';
+import type { Brand, BrandColor, BrandColorRole, BrandFontSpec, BrandSeedOverrides } from '@open-design/contracts';
 
 import { luminance, normalizeHex, saturation } from './seed.js';
+import { derivedColorSuccess } from './engine/seed.js';
 import { validateBrand } from './validate.js';
 
 export interface BrandFromDesignMdInput {
@@ -13,6 +14,15 @@ export interface BrandFromDesignMdInput {
 interface DesignMdColor {
   key: string;
   hex: string;
+}
+
+interface CollectedColors {
+  /** Hex-deduped palette candidates feeding role resolution. */
+  candidates: DesignMdColor[];
+  /** Every labelled occurrence, retained independently of palette dedupe so
+   *  semantic labels sharing a hex with another role (Primary and Error both
+   *  #b30000) still reach the seed override channel. */
+  labelled: DesignMdColor[];
 }
 
 interface FontCandidate {
@@ -29,6 +39,8 @@ const DEFAULT_BACKGROUND = '#ffffff';
 const DEFAULT_FOREGROUND = '#111111';
 const DEFAULT_ACCENT = '#1677ff';
 const SANS_FALLBACKS = ['system-ui', '-apple-system', 'Segoe UI', 'Helvetica Neue', 'Arial', 'sans-serif'];
+const CSS_GENERIC_FAMILY_RE =
+  /\b(system-ui|ui-sans-serif|ui-serif|ui-monospace|ui-rounded|sans-serif|serif|monospace|cursive|fantasy)\b/i;
 
 export function sourceUrlForDesignMd(markdown: string, fallbackName = 'Design System'): string {
   const parsed = parseDesignMd(markdown);
@@ -53,7 +65,9 @@ export function brandFromDesignMd(input: BrandFromDesignMdInput): Brand | null {
   const overview = firstSection(parsed.body, ['overview', 'brand & style', 'brand and style']) ?? firstParagraph(parsed.body);
   const description = input.description?.trim() || scalarString(parsed.frontmatter.description) || overview || '';
   const tagline = firstSentence(overview || description);
-  const colors = resolveColors(collectColors(parsed));
+  const collectedColors = collectColors(parsed);
+  const colors = resolveColors(collectedColors.candidates);
+  const seedOverrides = semanticSeedOverrides(collectedColors.labelled, colors);
   const fonts = collectFonts(parsed.frontmatter, parsed.body);
   const display = fontSpec(
     fonts.find((font) => /display|heading|headline|h1|title/i.test(font.key))?.family ??
@@ -75,6 +89,7 @@ export function brandFromDesignMd(input: BrandFromDesignMdInput): Brand | null {
     tagline,
     description,
     sourceUrl: input.sourceUrl,
+    ...(seedOverrides ? { seed: seedOverrides } : {}),
     logo: {
       primary: null,
       alternates: [],
@@ -173,14 +188,17 @@ function scalarString(value: unknown): string | null {
   return trimmed ? trimmed : null;
 }
 
-function collectColors(parsed: ParsedDesignMd): DesignMdColor[] {
-  const out: DesignMdColor[] = [];
+function collectColors(parsed: ParsedDesignMd): CollectedColors {
+  const candidates: DesignMdColor[] = [];
+  const labelled: DesignMdColor[] = [];
   const seen = new Set<string>();
   const add = (key: string, raw: string) => {
     const hex = normalizeHex(raw);
-    if (!hex || seen.has(hex)) return;
+    if (!hex) return;
+    labelled.push({ key, hex });
+    if (seen.has(hex)) return;
     seen.add(hex);
-    out.push({ key, hex });
+    candidates.push({ key, hex });
   };
   collectHexValues(parsed.frontmatter, [], add);
   for (const line of parsed.body.split('\n')) {
@@ -190,7 +208,7 @@ function collectColors(parsed: ParsedDesignMd): DesignMdColor[] {
       add(key, hex);
     }
   }
-  return out;
+  return { candidates, labelled };
 }
 
 function collectHexValues(value: unknown, path: string[], add: (key: string, raw: string) => void): void {
@@ -249,6 +267,29 @@ function resolveColors(candidates: DesignMdColor[]): BrandColor[] {
   return picked;
 }
 
+function semanticSeedOverrides(
+  labelled: DesignMdColor[],
+  colors: BrandColor[],
+): BrandSeedOverrides | undefined {
+  const overrides: BrandSeedOverrides = {};
+  const warning = labelled.find((item) => /warning|caution/i.test(item.key));
+  if (warning) overrides.colorWarning = warning.hex;
+  const error = labelled.find((item) => /error|danger/i.test(item.key));
+  if (error) overrides.colorError = error.hex;
+  const success = labelled.find((item) => /success/i.test(item.key));
+  // Only override when the engine would not derive this exact value anyway:
+  // seedFromBrand maps accent-secondary onto success solely when it reads
+  // green, so a non-green authored Success would otherwise be lost to the
+  // Ant default.
+  if (success) {
+    const accentSecondaryHex = colors.find((c) => c.role === 'accent-secondary')?.hex;
+    if (derivedColorSuccess(accentSecondaryHex) !== success.hex) {
+      overrides.colorSuccess = success.hex;
+    }
+  }
+  return Object.keys(overrides).length > 0 ? overrides : undefined;
+}
+
 function collectFonts(frontmatter: Record<string, unknown>, body: string): FontCandidate[] {
   const out: FontCandidate[] = [];
   const seen = new Set<string>();
@@ -260,10 +301,18 @@ function collectFonts(frontmatter: Record<string, unknown>, body: string): FontC
   };
   collectFontValues(frontmatter.typography ?? frontmatter.fonts ?? frontmatter.type, [], add);
   for (const line of body.split('\n')) {
+    // Explicit declarations win: a line like `font-family: Inter, system-ui,
+    // sans-serif;` must resolve to Inter, never to the generic keyword that
+    // happens to appear later in the same stack.
     const familyMatch =
       /(?:font-family|fontFamily|family)\s*[:=-]\s*`?["']?([^`"',;()]+(?:\s+[^`"',;()]+){0,3})/i.exec(line) ??
       /\b([A-Z][A-Za-z0-9]+(?:Sans|Serif|Mono|Display|Text|Grotesk|Gothic|Humanist|Roman|UI)\b(?:\s+[A-Z][A-Za-z0-9]+)*)/.exec(line);
-    if (familyMatch?.[1]) add(line.slice(0, 48), familyMatch[1]);
+    if (familyMatch?.[1]) {
+      add(line.slice(0, 48), familyMatch[1]);
+      continue;
+    }
+    const genericFamily = CSS_GENERIC_FAMILY_RE.exec(line)?.[0];
+    if (genericFamily) add(line.slice(0, 48), genericFamily);
   }
   return out;
 }
