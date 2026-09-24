@@ -1,6 +1,14 @@
 import type { Dict } from '../types';
 
 export const uk: Dict = {
+  'entry.proPreview.previewLabel': "Тариф Pro · Локальний перегляд",
+  'entry.proPreview.quota': "Ліміт тарифу",
+  'entry.proPreview.week': "Ліміт на 7 днів",
+  'entry.proPreview.month': "Ліміт на 30 днів",
+  'entry.proPreview.used': "Використано {percent}",
+  'entry.proPreview.balance': "Баланс для оплати за використання",
+  'entry.proPreview.viewDetails': "Переглянути деталі",
+
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

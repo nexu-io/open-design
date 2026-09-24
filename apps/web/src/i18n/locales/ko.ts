@@ -1,6 +1,14 @@
 import type { Dict } from '../types';
 
 export const ko: Dict = {
+  'entry.proPreview.previewLabel': "Pro 요금제 · 로컬 미리보기",
+  'entry.proPreview.quota': "요금제 한도",
+  'entry.proPreview.week': "7일 한도",
+  'entry.proPreview.month': "30일 한도",
+  'entry.proPreview.used': "{percent} 사용",
+  'entry.proPreview.balance': "종량제 잔액",
+  'entry.proPreview.viewDetails': "자세히 보기",
+
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

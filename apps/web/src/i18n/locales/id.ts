@@ -1,6 +1,14 @@
 import type { Dict } from '../types';
 
 export const id: Dict = {
+  'entry.proPreview.previewLabel': "Paket Pro · Pratinjau lokal",
+  'entry.proPreview.quota': "Kuota paket",
+  'entry.proPreview.week': "Kuota 7 hari",
+  'entry.proPreview.month': "Kuota 30 hari",
+  'entry.proPreview.used': "{percent} terpakai",
+  'entry.proPreview.balance': "Saldo prabayar",
+  'entry.proPreview.viewDetails': "Lihat detail",
+
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

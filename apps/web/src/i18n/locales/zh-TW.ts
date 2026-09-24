@@ -1,6 +1,14 @@
 import type { Dict } from "../types";
 
 export const zhTW: Dict = {
+  'entry.proPreview.previewLabel': "Pro 方案 · 本機預覽",
+  'entry.proPreview.quota': "方案額度",
+  'entry.proPreview.week': "7 天額度",
+  'entry.proPreview.month': "30 天額度",
+  'entry.proPreview.used': "已用 {percent}",
+  'entry.proPreview.balance': "隨用隨付餘額",
+  'entry.proPreview.viewDetails': "查看詳情",
+
   'invite.header.eyebrow': "團隊邀請",
   'invite.loading': "正在載入邀請…",
   'invite.landing.title': "加入團隊",

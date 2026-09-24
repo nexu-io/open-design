@@ -30,6 +30,14 @@ export const LOCALE_LABEL: Record<Locale, string> = {
 // flat (not deeply nested) so missing-key TS errors point straight at the
 // offending string instead of a generic object mismatch.
 export interface Dict {
+  'entry.proPreview.previewLabel': string;
+  'entry.proPreview.quota': string;
+  'entry.proPreview.week': string;
+  'entry.proPreview.month': string;
+  'entry.proPreview.used': string;
+  'entry.proPreview.balance': string;
+  'entry.proPreview.viewDetails': string;
+
   // Workspace invite acceptance (C lane)
   'invite.header.eyebrow': string;
   'invite.loading': string;

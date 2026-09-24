@@ -1,6 +1,14 @@
 import type { Dict } from '../types';
 
 export const hu: Dict = {
+  'entry.proPreview.previewLabel': "Pro csomag · Helyi előnézet",
+  'entry.proPreview.quota': "Csomagkeret",
+  'entry.proPreview.week': "7 napos keret",
+  'entry.proPreview.month': "30 napos keret",
+  'entry.proPreview.used': "{percent} felhasználva",
+  'entry.proPreview.balance': "Használatalapú egyenleg",
+  'entry.proPreview.viewDetails': "Részletek megtekintése",
+
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

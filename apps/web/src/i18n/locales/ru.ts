@@ -1,6 +1,14 @@
 import type { Dict } from '../types';
 
 export const ru: Dict = {
+  'entry.proPreview.previewLabel': "Тариф Pro · Локальный предпросмотр",
+  'entry.proPreview.quota': "Лимит тарифа",
+  'entry.proPreview.week': "Лимит на 7 дней",
+  'entry.proPreview.month': "Лимит на 30 дней",
+  'entry.proPreview.used': "Использовано {percent}",
+  'entry.proPreview.balance': "Баланс для оплаты по факту",
+  'entry.proPreview.viewDetails': "Подробнее",
+
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

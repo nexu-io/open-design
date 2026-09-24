@@ -63,6 +63,7 @@ import { resetCloudSignInTipDismissal } from './CloudSignInTip';
 import { SignOutConfirmDialog } from './SignOutConfirmDialog';
 import { notifyAmrLoginStatusChanged } from './amrLoginPolling';
 import { Icon } from './Icon';
+import { ProPlanPreview } from './ProPlanPreview';
 import { GITHUB_STARS_FALLBACK_LABEL, formatStars, useGithubStars } from './useGithubStars';
 import { PlanWordmark, planBadgeTierForWorkspace } from './PlanWordmark';
 import { MarqueeLabel } from './MarqueeLabel';
@@ -1374,7 +1375,7 @@ export function EntryTopRightCluster({
               anchor around it owns the hover region for the billing panel
               below: the panel is a DOM child, so crossing from the pill into
               it never leaves the anchor and never arms the close. */}
-          {context && showCreditsPill ? (
+          {process.env.NODE_ENV === 'development' && process.env.NEXT_PUBLIC_PRO_PLAN_PREVIEW === '1' ? <ProPlanPreview /> : context && showCreditsPill ? (
             <div
               ref={creditsAnchorRef}
               className="entry-top-right-credits-anchor"

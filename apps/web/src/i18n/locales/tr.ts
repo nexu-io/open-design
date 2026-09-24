@@ -1,6 +1,14 @@
 import type { Dict } from '../types';
 
 export const tr: Dict = {
+  'entry.proPreview.previewLabel': "Pro planı · Yerel önizleme",
+  'entry.proPreview.quota': "Plan kotası",
+  'entry.proPreview.week': "7 günlük kota",
+  'entry.proPreview.month': "30 günlük kota",
+  'entry.proPreview.used': "{percent} kullanıldı",
+  'entry.proPreview.balance': "Kullandıkça öde bakiyesi",
+  'entry.proPreview.viewDetails': "Ayrıntıları görüntüle",
+
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

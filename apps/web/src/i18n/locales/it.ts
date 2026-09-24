@@ -1,6 +1,14 @@
 import type { Dict } from '../types';
 
 export const it: Dict = {
+  'entry.proPreview.previewLabel': "Piano Pro · Anteprima locale",
+  'entry.proPreview.quota': "Quota del piano",
+  'entry.proPreview.week': "Quota di 7 giorni",
+  'entry.proPreview.month': "Quota di 30 giorni",
+  'entry.proPreview.used': "{percent} utilizzato",
+  'entry.proPreview.balance': "Saldo a consumo",
+  'entry.proPreview.viewDetails': "Visualizza dettagli",
+
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

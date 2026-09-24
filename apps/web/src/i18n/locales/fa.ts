@@ -1,6 +1,14 @@
 import type { Dict } from '../types';
 
 export const fa: Dict = {
+  'entry.proPreview.previewLabel': "طرح Pro · پیش‌نمایش محلی",
+  'entry.proPreview.quota': "سهمیهٔ طرح",
+  'entry.proPreview.week': "سهمیهٔ ۷ روزه",
+  'entry.proPreview.month': "سهمیهٔ ۳۰ روزه",
+  'entry.proPreview.used': "{percent} مصرف شده",
+  'entry.proPreview.balance': "موجودی پرداخت به‌ازای مصرف",
+  'entry.proPreview.viewDetails': "مشاهده جزئیات",
+
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

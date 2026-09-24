@@ -1,6 +1,14 @@
 import type { Dict } from '../types';
 
 export const th: Dict = {
+  'entry.proPreview.previewLabel': "แพ็กเกจ Pro · ตัวอย่างในเครื่อง",
+  'entry.proPreview.quota': "โควตาแพ็กเกจ",
+  'entry.proPreview.week': "โควตา 7 วัน",
+  'entry.proPreview.month': "โควตา 30 วัน",
+  'entry.proPreview.used': "ใช้ไป {percent}",
+  'entry.proPreview.balance': "ยอดคงเหลือแบบจ่ายตามใช้",
+  'entry.proPreview.viewDetails': "ดูรายละเอียด",
+
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

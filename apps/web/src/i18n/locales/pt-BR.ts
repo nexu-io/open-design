@@ -1,6 +1,14 @@
 import type { Dict } from '../types';
 
 export const ptBR: Dict = {
+  'entry.proPreview.previewLabel': "Plano Pro · Prévia local",
+  'entry.proPreview.quota': "Cota do plano",
+  'entry.proPreview.week': "Cota de 7 dias",
+  'entry.proPreview.month': "Cota de 30 dias",
+  'entry.proPreview.used': "{percent} usado",
+  'entry.proPreview.balance': "Saldo pré-pago",
+  'entry.proPreview.viewDetails': "Ver detalhes",
+
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

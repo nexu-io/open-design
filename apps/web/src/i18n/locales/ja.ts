@@ -1,6 +1,14 @@
 import type { Dict } from '../types';
 
 export const ja: Dict = {
+  'entry.proPreview.previewLabel': "Pro プラン · ローカルプレビュー",
+  'entry.proPreview.quota': "プラン利用枠",
+  'entry.proPreview.week': "7日間の利用枠",
+  'entry.proPreview.month': "30日間の利用枠",
+  'entry.proPreview.used': "{percent} 使用済み",
+  'entry.proPreview.balance': "従量課金の残高",
+  'entry.proPreview.viewDetails': "詳細を見る",
+
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",
