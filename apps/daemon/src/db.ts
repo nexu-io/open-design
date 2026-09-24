@@ -48,7 +48,14 @@ import { migrateLibrary } from './library-store.js';
 import { migratePlugins } from './plugins/persistence.js';
 import { migrateProjectScenarioBindings } from './plugins/scenario-binding.js';
 import { emittedRenderableQuestionForm } from './question-form-detect.js';
+import {
+  RUN_EVENT_JSON_BUDGET_BYTES,
+  boundPersistedAgentEvent,
+  boundPersistedAgentEvents,
+  serializeRunEventsForStorage,
+} from './runtimes/run-event-payload-budget.js';
 import { migrateStrategyTaskStore } from './strategies/task-store.js';
+import { observeRead } from './services/daemon-health.js';
 
 type SqliteDb = Database.Database;
 type DbRow = Record<string, any>;
@@ -271,6 +278,14 @@ function migrate(db: SqliteDb): void {
 
     CREATE INDEX IF NOT EXISTS idx_message_event_batches_message
       ON message_event_batches(message_id, id);
+
+    -- One row per one-time data maintenance pass that has run to completion
+    -- (e.g. the heal of run events stored before the payload budget existed),
+    -- so a finished pass is not re-scanned on every daemon start.
+    CREATE TABLE IF NOT EXISTS daemon_maintenance_passes (
+      name TEXT PRIMARY KEY,
+      completed_at INTEGER NOT NULL
+    );
 
     CREATE TABLE IF NOT EXISTS preview_comments (
       id TEXT PRIMARY KEY,
@@ -1667,29 +1682,51 @@ export function deleteWorkspaceResourceByResourceId(
   ).run(resourceType, resourceId);
 }
 
+/**
+ * Each project's latest run status, for `GET /api/projects`.
+ *
+ * The latest run row per project is chosen in SQLite, so the listing never
+ * loads any run's event log just to order rows; only a winning `succeeded` row
+ * is then inspected, through {@link completenessEventsOfMessage}.
+ */
 export function listLatestProjectRunStatuses(db: SqliteDb) {
+  // Low-frequency, historically the largest read (full-history events before
+  // #8170): always leave an in-flight marker so an OOM inside it is attributable.
+  return observeRead('project_run_statuses', () => listLatestProjectRunStatusesUnobserved(db), {
+    mark: 'always',
+    rows: (result) => result.size,
+  });
+}
+
+function listLatestProjectRunStatusesUnobserved(db: SqliteDb) {
   const rows = db
     .prepare(
-      `SELECT c.project_id AS projectId,
-              m.run_id AS runId,
-              m.run_status AS status,
-              m.events_json AS eventsJson,
-              COALESCE(m.ended_at, m.started_at, m.created_at) AS updatedAt
-         FROM messages m
-         JOIN conversations c ON c.id = m.conversation_id
-        WHERE m.run_status IS NOT NULL
-        ORDER BY updatedAt DESC`,
+      `SELECT projectId, messageId, runId, status, updatedAt
+         FROM (
+           SELECT c.project_id AS projectId,
+                  m.id AS messageId,
+                  m.run_id AS runId,
+                  m.run_status AS status,
+                  COALESCE(m.ended_at, m.started_at, m.created_at) AS updatedAt,
+                  ROW_NUMBER() OVER (
+                    PARTITION BY c.project_id
+                    ORDER BY COALESCE(m.ended_at, m.started_at, m.created_at) DESC
+                  ) AS rn
+             FROM messages m
+             JOIN conversations c ON c.id = m.conversation_id
+            WHERE m.run_status IS NOT NULL
+         )
+        WHERE rn = 1`,
     )
     .all() as DbRow[];
   const latestByProject = new Map<string, DbRow>();
+  const completenessEvents = completenessEventsStatement(db);
   for (const row of rows) {
-    if (!latestByProject.has(row.projectId)) {
-      latestByProject.set(row.projectId, {
-        value: projectDisplayStatusForRunRow(row.status, row.eventsJson),
-        updatedAt: Number(row.updatedAt),
-        runId: row.runId ?? undefined,
-      });
-    }
+    latestByProject.set(row.projectId, {
+      value: projectDisplayStatusForRunRow(completenessEvents, row.status, String(row.messageId)),
+      updatedAt: Number(row.updatedAt),
+      runId: row.runId ?? undefined,
+    });
   }
   return latestByProject;
 }
@@ -1700,11 +1737,65 @@ export function listLatestProjectRunStatuses(db: SqliteDb) {
 // is not actually done (#1247 / #1060). Derived from the same events the chat
 // footer reads, so the two surfaces cannot disagree, and it survives reload
 // because the events were persisted per-event as the run streamed.
-function projectDisplayStatusForRunRow(status: unknown, eventsJson: unknown) {
+function projectDisplayStatusForRunRow(
+  completenessEvents: Database.Statement,
+  status: unknown,
+  messageId: string,
+) {
   const normalized = normalizeProjectRunStatus(status);
   if (normalized !== 'succeeded') return normalized;
-  const events = parseJsonOrUndef(eventsJson);
+  const events = completenessEventsOfMessage(completenessEvents, messageId);
   return eventsEndedWithUnfinishedWork(events) ? 'incomplete' : normalized;
+}
+
+/**
+ * The persisted events of one message that `eventsEndedWithUnfinishedWork`
+ * can read, in order — and nothing else.
+ *
+ * Invariant: that predicate's verdict depends only on `usage` (stop reason),
+ * `done_key`, `text` (done conclusion, question form) and TodoWrite-shaped
+ * `tool_use` events; every other event — raw lines, tool results, statuses,
+ * thinking — is skipped by it. So the verdict over this subset is the verdict
+ * over the whole log, and selecting the subset inside SQLite keeps a run's tool
+ * payloads out of JS entirely. The tool-name filter is a superset of
+ * `isTodoWriteToolName` (every name it accepts contains `todo` or is
+ * `update_plan`); the predicate itself still decides exactly.
+ */
+function completenessEventsStatement(db: SqliteDb): Database.Statement {
+  return db.prepare(
+    `SELECT event.value AS value
+       FROM messages AS m,
+            json_each(
+              CASE
+                WHEN json_valid(m.events_json) AND json_type(m.events_json) = 'array'
+                  THEN m.events_json
+                ELSE '[]'
+              END
+            ) AS event
+      WHERE m.id = ?
+        AND event.type = 'object'
+        AND (
+          json_extract(event.value, '$.kind') IN ('usage', 'done_key', 'text')
+          OR (
+            json_extract(event.value, '$.kind') = 'tool_use'
+            AND (
+              lower(json_extract(event.value, '$.name')) LIKE '%todo%'
+              OR lower(json_extract(event.value, '$.name')) = 'update_plan'
+            )
+          )
+        )
+      ORDER BY CAST(event.key AS INTEGER)`,
+  );
+}
+
+function completenessEventsOfMessage(statement: Database.Statement, messageId: string): unknown[] {
+  const rows = statement.all(messageId) as Array<{ value: string }>;
+  const events: unknown[] = [];
+  for (const row of rows) {
+    const event = parseJsonOrUndef(row.value);
+    if (event !== undefined) events.push(event);
+  }
+  return events;
 }
 
 export function listLatestConversationRunStatuses(db: SqliteDb) {
@@ -2794,7 +2885,62 @@ export function countMessages(db: SqliteDb, conversationId: string): number {
   return Number(row?.count ?? 0);
 }
 
+/**
+ * The `done_key` every OTHER assistant row of a conversation was recorded with
+ * — the Run identities `excludeMessageId` must never be allowed to absorb (see
+ * the PUT guard in `routes/project/conversations.ts`).
+ *
+ * Each physical Run mints exactly one key and emits it before any model output,
+ * so a row's FIRST well-formed `done_key` event is that row's Run identity;
+ * later keys in the same list are the damage the guard exists to stop, so only
+ * the first one counts and an already-damaged sibling cannot re-export the key
+ * it absorbed.
+ *
+ * Invariant: each sibling's key is read inside SQLite. This runs on every
+ * message PUT, and a sibling's event log can hold any amount of tool output, so
+ * no sibling event log is ever materialized or parsed in JS here.
+ */
+export function listSiblingRunDoneKeys(
+  db: SqliteDb,
+  conversationId: string,
+  excludeMessageId: string,
+): Set<string> {
+  const rows = db
+    .prepare(
+      `SELECT (
+          SELECT json_extract(event.value, '$.key')
+            FROM json_each(m.events_json) AS event
+           WHERE event.type = 'object'
+             AND json_extract(event.value, '$.kind') = 'done_key'
+             AND json_type(event.value, '$.key') = 'text'
+             AND json_extract(event.value, '$.key') <> ''
+           ORDER BY CAST(event.key AS INTEGER)
+           LIMIT 1
+        ) AS doneKey
+         FROM messages AS m
+        WHERE m.conversation_id = ?
+          AND m.role = 'assistant'
+          AND m.id <> ?
+          AND m.events_json IS NOT NULL
+          AND m.events_json LIKE '%"done_key"%'
+          AND json_valid(m.events_json)
+          AND json_type(m.events_json) = 'array'`,
+    )
+    .all(conversationId, excludeMessageId) as Array<{ doneKey: unknown }>;
+  const keys = new Set<string>();
+  for (const row of rows) {
+    if (typeof row.doneKey === 'string' && row.doneKey) keys.add(row.doneKey);
+  }
+  return keys;
+}
+
 export function listMessages(db: SqliteDb, conversationId: string) {
+  return observeRead('conversation_messages', () => listMessagesUnobserved(db, conversationId), {
+    rows: (result) => result.length,
+  });
+}
+
+function listMessagesUnobserved(db: SqliteDb, conversationId: string) {
   const messages = db
     .prepare(
       `SELECT id, role, content, agent_id AS agentId, agent_name AS agentName,
@@ -2819,18 +2965,31 @@ export function listMessages(db: SqliteDb, conversationId: string) {
          FROM messages
         WHERE conversation_id = ?
         ORDER BY position ASC`,
-    )
-    .all(conversationId) as DbRow[];
+    );
   const eventBatches = readConversationMessageEventBatches(db, conversationId);
   // One query for the whole conversation. A per-message lookup here would be a
   // straight N+1 on every transcript read.
   const artifactRefs = conversationChatArtifactRefs(db, conversationId);
-  return messages.map((message) => normalizeMessage(
-    db,
-    message,
-    eventBatches.get(String(message.id)) ?? [],
-    artifactRefs.get(String(message.id)) ?? [],
-  ));
+  // Rows are normalized one at a time, so only one row's stored event log is
+  // held at full size at once: rows written before the run-event payload
+  // budget can be MBs each, and normalizing bounds them (see
+  // `normalizeMessage`). Nothing below runs another statement while the
+  // iterator is open — batches and artifact refs were read above. Lightweight
+  // adapters that model only `all()` (see `hasMessageEventBatchStorage`) get
+  // the same rows in one step.
+  const rows = typeof messages.iterate === 'function'
+    ? (messages.iterate(conversationId) as Iterable<DbRow>)
+    : (messages.all(conversationId) as DbRow[]);
+  const normalized = [];
+  for (const message of rows) {
+    normalized.push(normalizeMessage(
+      db,
+      message,
+      eventBatches.get(String(message.id)) ?? [],
+      artifactRefs.get(String(message.id)) ?? [],
+    ));
+  }
+  return normalized;
 }
 
 function projectIdForConversation(db: SqliteDb, conversationId: string): string | null {
@@ -3019,7 +3178,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
     const nextEventsJson = preserveDaemonEventSnapshot
       ? existing.eventsJson ?? null
       : persistedEvents
-        ? JSON.stringify(persistedEvents)
+        ? serializeRunEventsForStorage(persistedEvents)
         : null;
     const nextContent = preserveDaemonEventSnapshot
       ? existing.content ?? ''
@@ -3117,7 +3276,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       m.runStatus ?? null,
       normalizeResultDeliveryStateForStorage(m.resultDeliveryState),
       m.lastRunEventId ?? null,
-      persistedEvents ? JSON.stringify(persistedEvents) : null,
+      persistedEvents ? serializeRunEventsForStorage(persistedEvents) : null,
       m.attachments ? JSON.stringify(m.attachments) : null,
       m.commentAttachments ? JSON.stringify(m.commentAttachments) : null,
       m.producedFiles ? JSON.stringify(m.producedFiles) : null,
@@ -3214,7 +3373,7 @@ export function appendMessageStatusEvent(db: SqliteDb, messageId: string, event:
     : { kind: 'status', label };
   const next = [...events, nextEvent];
   db.prepare(`UPDATE messages SET events_json = ? WHERE id = ?`)
-    .run(JSON.stringify(next), messageId);
+    .run(serializeRunEventsForStorage(next), messageId);
   return next;
 }
 
@@ -3425,14 +3584,14 @@ export function appendMessageAgentEvents(
       `UPDATE messages
           SET content = COALESCE(content, '') || ?, events_json = ?
         WHERE id = ?`,
-    ).run(textDelta, JSON.stringify(materializedEvents), messageId);
+    ).run(textDelta, serializeRunEventsForStorage(materializedEvents), messageId);
     return materializedEvents;
   }
   const inserted = db.prepare(
     `INSERT INTO message_event_batches (message_id, events_json, created_at)
      SELECT ?, ?, ?
       WHERE EXISTS (SELECT 1 FROM messages WHERE id = ?)`,
-  ).run(messageId, JSON.stringify(events), Date.now(), messageId);
+  ).run(messageId, serializeRunEventsForStorage(events), Date.now(), messageId);
   return inserted.changes > 0 ? events : null;
 }
 
@@ -3453,7 +3612,7 @@ export function finalizeMessageAgentEvents(
       `UPDATE messages
           SET content = COALESCE(content, '') || ?, events_json = ?
         WHERE id = ?`,
-    ).run(materialized.textDelta, JSON.stringify(materialized.events), messageId);
+    ).run(materialized.textDelta, serializeRunEventsForStorage(materialized.events), messageId);
     clearMessageAgentEventBatches(db, messageId);
     return materialized.events;
   })();
@@ -3523,7 +3682,7 @@ export function dropTrailingMessageAgentDeltas(
       ? content.slice(0, content.length - droppedText.length)
       : content;
   db.prepare(`UPDATE messages SET content = ?, events_json = ? WHERE id = ?`)
-    .run(nextContent, JSON.stringify(kept), messageId);
+    .run(nextContent, serializeRunEventsForStorage(kept), messageId);
   return dropped.length;
 }
 
@@ -4459,6 +4618,10 @@ type MessageEventMaintenanceJob =
   | {
       kind: 'finalize_batches';
       messageId: string;
+    }
+  | {
+      kind: 'heal_oversized_payloads';
+      messageId: string;
     };
 
 type MessageEventMaintenanceState = {
@@ -4512,8 +4675,10 @@ function scheduleNextMessageEventMaintenance(
       if (!db.open) return;
       if (job.kind === 'finalize_batches') {
         finalizeMessageAgentEvents(db, job.messageId);
+      } else if (job.kind === 'heal_oversized_payloads') {
+        healOversizedMessageEvents(db, job.messageId);
       } else {
-        const compactedJson = JSON.stringify(job.events);
+        const compactedJson = serializeRunEventsForStorage(job.events);
         if (compactedJson.length < job.expectedEventsJson.length) {
           const noPendingBatches = hasMessageEventBatchStorage(db)
             ? `AND NOT EXISTS (
@@ -4542,6 +4707,220 @@ function scheduleNextMessageEventMaintenance(
   immediate.unref?.();
 }
 
+// ---------- run event payload heal ----------
+//
+// I3 — rows written before the run-event payload budget existed are healed
+// once. The pass itself (scheduling, yielding, reporting) lives in
+// `storage/message-event-payload-heal.ts`; these are its row-level primitives.
+// Each call rewrites at most ONE row, inside its own transaction, streaming the
+// row's events out of SQLite one element at a time — a stored event log is
+// never materialized whole in JS, and a crash leaves every row either as it was
+// or fully healed.
+
+export type RunEventPayloadHealOutcome =
+  | { status: 'rewritten'; bytesBefore: number; bytesAfter: number }
+  | { status: 'unchanged' | 'missing' | 'active' | 'malformed' };
+
+function isActiveMessageRunStatus(value: unknown): boolean {
+  return value === 'queued' || value === 'running';
+}
+
+/**
+ * True when some stored event in `column` (a JSON array) is a record, is not
+ * `text`/`thinking`, and exceeds the per-event budget — the exact shape
+ * `boundPersistedAgentEvent` rewrites. Evaluated inside SQLite.
+ */
+function oversizedEventExistsSql(column: string): string {
+  return `EXISTS (
+            SELECT 1
+              FROM json_each(${column}) AS event
+             WHERE event.type = 'object'
+               AND octet_length(event.value) > ${RUN_EVENT_JSON_BUDGET_BYTES}
+               AND COALESCE(json_extract(event.value, '$.kind'), '') NOT IN ('text', 'thinking')
+          )`;
+}
+
+function healedEventsJson(
+  elements: Iterable<{ type: string; value: unknown }>,
+): { json: string; changed: boolean } {
+  const parts: string[] = [];
+  let changed = false;
+  for (const element of elements) {
+    let value: unknown;
+    switch (element.type) {
+      case 'object':
+      case 'array':
+        value = JSON.parse(String(element.value));
+        break;
+      case 'true':
+        value = true;
+        break;
+      case 'false':
+        value = false;
+        break;
+      case 'null':
+        value = null;
+        break;
+      default:
+        value = element.value;
+    }
+    const bounded = boundPersistedAgentEvent(value);
+    if (bounded !== value) changed = true;
+    parts.push(JSON.stringify(bounded) ?? 'null');
+  }
+  return { json: `[${parts.join(',')}]`, changed };
+}
+
+/** Messages whose stored event log is larger than one event's budget, by rowid. */
+export function listRunEventHealMessageCandidates(
+  db: SqliteDb,
+  afterRowid: number,
+  limit: number,
+): Array<{ rowid: number; id: string }> {
+  return db
+    .prepare(
+      `SELECT rowid AS rowid, id
+         FROM messages
+        WHERE rowid > ?
+          AND octet_length(events_json) > ?
+        ORDER BY rowid
+        LIMIT ?`,
+    )
+    .all(afterRowid, RUN_EVENT_JSON_BUDGET_BYTES, limit) as Array<{ rowid: number; id: string }>;
+}
+
+/** Event batches larger than one event's budget, by id. */
+export function listRunEventHealBatchCandidates(
+  db: SqliteDb,
+  afterId: number,
+  limit: number,
+): Array<{ id: number }> {
+  if (!hasMessageEventBatchStorage(db)) return [];
+  return db
+    .prepare(
+      `SELECT id
+         FROM message_event_batches
+        WHERE id > ?
+          AND octet_length(events_json) > ?
+        ORDER BY id
+        LIMIT ?`,
+    )
+    .all(afterId, RUN_EVENT_JSON_BUDGET_BYTES, limit) as Array<{ id: number }>;
+}
+
+/**
+ * Rewrite one message's stored events so every event fits the payload budget.
+ * Skips (`active`) a row whose run is still queued or running: its writer owns
+ * it. A row that is already bounded is left untouched (`unchanged`), so
+ * healing is idempotent.
+ */
+export function healOversizedMessageEvents(
+  db: SqliteDb,
+  messageId: string,
+): RunEventPayloadHealOutcome {
+  return db.transaction((): RunEventPayloadHealOutcome => {
+    const row = db
+      .prepare(
+        `SELECT run_status AS runStatus,
+                octet_length(events_json) AS bytes,
+                (json_valid(events_json) AND json_type(events_json) = 'array') AS isArray
+           FROM messages
+          WHERE id = ?`,
+      )
+      .get(messageId) as DbRow | undefined;
+    if (!row || row.bytes == null) return { status: 'missing' };
+    if (isActiveMessageRunStatus(row.runStatus)) return { status: 'active' };
+    if (Number(row.bytes) <= RUN_EVENT_JSON_BUDGET_BYTES) return { status: 'unchanged' };
+    if (row.isArray !== 1) return { status: 'malformed' };
+    const needsHeal = db
+      .prepare(`SELECT ${oversizedEventExistsSql('m.events_json')} AS needed FROM messages AS m WHERE m.id = ?`)
+      .get(messageId) as { needed: number } | undefined;
+    if (needsHeal?.needed !== 1) return { status: 'unchanged' };
+    const healed = healedEventsJson(
+      db
+        .prepare(
+          `SELECT event.type AS type, event.value AS value
+             FROM messages AS m, json_each(m.events_json) AS event
+            WHERE m.id = ?
+            ORDER BY CAST(event.key AS INTEGER)`,
+        )
+        .iterate(messageId) as Iterable<{ type: string; value: unknown }>,
+    );
+    if (!healed.changed) return { status: 'unchanged' };
+    db.prepare(`UPDATE messages SET events_json = ? WHERE id = ?`).run(healed.json, messageId);
+    return {
+      status: 'rewritten',
+      bytesBefore: Number(row.bytes),
+      bytesAfter: Buffer.byteLength(healed.json, 'utf8'),
+    };
+  }).immediate();
+}
+
+/** {@link healOversizedMessageEvents} for one `message_event_batches` row. */
+export function healOversizedMessageEventBatch(
+  db: SqliteDb,
+  batchId: number,
+): RunEventPayloadHealOutcome {
+  if (!hasMessageEventBatchStorage(db)) return { status: 'missing' };
+  return db.transaction((): RunEventPayloadHealOutcome => {
+    const row = db
+      .prepare(
+        `SELECT message.run_status AS runStatus,
+                octet_length(batch.events_json) AS bytes,
+                (json_valid(batch.events_json) AND json_type(batch.events_json) = 'array') AS isArray
+           FROM message_event_batches AS batch
+           LEFT JOIN messages AS message ON message.id = batch.message_id
+          WHERE batch.id = ?`,
+      )
+      .get(batchId) as DbRow | undefined;
+    if (!row || row.bytes == null) return { status: 'missing' };
+    if (isActiveMessageRunStatus(row.runStatus)) return { status: 'active' };
+    if (Number(row.bytes) <= RUN_EVENT_JSON_BUDGET_BYTES) return { status: 'unchanged' };
+    if (row.isArray !== 1) return { status: 'malformed' };
+    const needsHeal = db
+      .prepare(
+        `SELECT ${oversizedEventExistsSql('batch.events_json')} AS needed
+           FROM message_event_batches AS batch WHERE batch.id = ?`,
+      )
+      .get(batchId) as { needed: number } | undefined;
+    if (needsHeal?.needed !== 1) return { status: 'unchanged' };
+    const healed = healedEventsJson(
+      db
+        .prepare(
+          `SELECT event.type AS type, event.value AS value
+             FROM message_event_batches AS batch, json_each(batch.events_json) AS event
+            WHERE batch.id = ?
+            ORDER BY CAST(event.key AS INTEGER)`,
+        )
+        .iterate(batchId) as Iterable<{ type: string; value: unknown }>,
+    );
+    if (!healed.changed) return { status: 'unchanged' };
+    db.prepare(`UPDATE message_event_batches SET events_json = ? WHERE id = ?`).run(healed.json, batchId);
+    return {
+      status: 'rewritten',
+      bytesBefore: Number(row.bytes),
+      bytesAfter: Buffer.byteLength(healed.json, 'utf8'),
+    };
+  }).immediate();
+}
+
+export function hasCompletedDaemonMaintenancePass(db: SqliteDb, name: string): boolean {
+  return Boolean(
+    db.prepare(`SELECT 1 FROM daemon_maintenance_passes WHERE name = ?`).get(name),
+  );
+}
+
+export function recordCompletedDaemonMaintenancePass(
+  db: SqliteDb,
+  name: string,
+  completedAt = Date.now(),
+): void {
+  db.prepare(
+    `INSERT INTO daemon_maintenance_passes (name, completed_at) VALUES (?, ?)
+       ON CONFLICT(name) DO UPDATE SET completed_at = excluded.completed_at`,
+  ).run(name, completedAt);
+}
+
 function normalizeMessage(
   db: SqliteDb,
   row: DbRow,
@@ -4555,6 +4934,17 @@ function normalizeMessage(
     eventsJson,
     eventBatches,
   );
+  // I2: a loaded conversation never carries unbounded run-event payloads, even
+  // for rows written before the payload budget existed and not yet healed by
+  // the background pass. A row this small cannot hold an oversized event
+  // (each UTF-16 unit is at most 3 UTF-8 bytes), so only larger rows pay for
+  // the per-event check.
+  const mayHoldOversizedEvents =
+    materializedEvents.batchCount > 0
+    || (eventsJson !== null && eventsJson.length * 3 > RUN_EVENT_JSON_BUDGET_BYTES);
+  const boundedEvents = mayHoldOversizedEvents
+    ? (boundPersistedAgentEvents(materializedEvents.events) as DbRow[])
+    : materializedEvents.events;
   if (isTerminalMessageRunStatus(row.runStatus)) {
     if (materializedEvents.batchCount > 0) {
       // A terminal row with batches means the daemon stopped between its last
@@ -4575,14 +4965,21 @@ function normalizeMessage(
         expectedEventsJson: eventsJson,
         events: materializedEvents.events,
       });
+    } else if (boundedEvents !== materializedEvents.events) {
+      // The stored row predates the budget: rewrite it once, off the request
+      // path, so the next read does not pay for bounding it again.
+      scheduleMessageEventMaintenance(db, {
+        kind: 'heal_oversized_payloads',
+        messageId: String(row.id),
+      });
     }
   }
   const scrubProtocolTail = row.role === 'assistant'
     ? scrubDsmlToolProtocolTail
     : (text: string) => text;
   const visibleEvents = row.role === 'assistant'
-    ? scrubDsmlToolProtocolTailFromEvents(materializedEvents.events)
-    : materializedEvents.events;
+    ? scrubDsmlToolProtocolTailFromEvents(boundedEvents)
+    : boundedEvents;
   return {
     id: row.id,
     role: row.role,

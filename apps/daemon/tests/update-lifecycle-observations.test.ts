@@ -36,6 +36,21 @@ it('accepts legacy summaries without stages, then observes late desktop readines
   await observeUpdateLifecycleStages(options);
   expect(capture).toHaveBeenCalledTimes(1);
 });
+it('replays renderer quiescence as its own idempotent handoff stage', async () => {
+  const { options, capture, stage } = await fixture();
+  await stage('renderer_quiesced');
+  expect(await observeUpdateLifecycleStages(options)).toEqual({ queued: 1 });
+  expect(capture.mock.calls[0]?.[0]).toMatchObject({
+    eventName: 'update_lifecycle_observed',
+    insertId: 'update_lifecycle_observed:flow:renderer_quiesced',
+    properties: expect.objectContaining({
+      stage: 'renderer_quiesced',
+      outcome: 'completed',
+    }),
+  });
+  await observeUpdateLifecycleStages(options);
+  expect(capture).toHaveBeenCalledTimes(1);
+});
 it('retries a rejected enqueue with the same insert ID and does not conflate queue acknowledgement with ingestion', async () => {
   const { options, capture, stage, flow } = await fixture();
   await stage('shutdown_completed', { duration_ms: 32000, repeated_quit_count: 2 });

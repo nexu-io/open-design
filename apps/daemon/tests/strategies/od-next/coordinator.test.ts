@@ -3,12 +3,23 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { strategyPackageHashFromDigests } from '@open-design/plugin-runtime';
-import { StrategyTaskProjectionV2Schema } from '@open-design/contracts';
+import { composeOdNextStrategyBundleHeadV2, serializeOdNextPromptBundleV2, StrategyTaskProjectionV2Schema } from '@open-design/contracts';
 import type { AppliedPluginSnapshot, OpenDesignPlanContractV2 } from '@open-design/contracts';
 import type Database from 'better-sqlite3';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { closeDatabase, openDatabase } from '../../../src/db.js';
+import { closeDatabase, openDatabase, upsertMessage, getMessage } from '../../../src/db.js';
+import { validateRunDeliverable } from '../../../src/run-deliverable-validation.js';
+import { snapshotProjectArtifacts, diffRunArtifacts } from '../../../src/run-artifact-fs.js';
+import { createClaudeStreamHandler } from '../../../src/runtimes/claude-stream.js';
+import { createChatRunService } from '../../../src/runtimes/runs.js';
+import type { ChatRun } from '../../../src/runtimes/chat-run-records.js';
+import { recoverPlanningIntentResolution } from '../../../src/strategies/od-next/intent-resolution-recovery.js';
+import { createStrategyRunWriteEvidenceRecorder } from '../../../src/strategies/od-next/run-write-evidence.js';
+import { buildOdNextTaskConfigurationV1, createOdNextTaskInputSnapshot, removeOdNextTaskInputSnapshot, type OdNextTaskInputSnapshotDescriptor } from '../../../src/strategies/od-next/task-input-snapshot.js';
+import { reconcileDurableRunTerminals } from '../../../src/runtimes/run-terminal-reconciliation.js';
+import { captureIntentResolutionReply, startIntentResolution } from '../../../src/strategies/od-next/intent-resolution-store.js';
+import { createRunSideEffectLedger, foldEventIntoRunSideEffectLedger, runFilesWrittenForRun } from '../../../src/runtimes/run-lifecycle-analytics.js';
 import { createSnapshot } from '../../../src/plugins/snapshots.js';
 import {
   beginStrategyClarification,
@@ -29,11 +40,42 @@ import {
 import {
   createStrategyTaskExecution,
   getStrategyTaskExecution,
+  compareAndTransitionStrategyTaskExecution,
+  migrateStrategyTaskStore,
+  cancelStrategyTaskExecution,
 } from '../../../src/strategies/task-store.js';
 import {
   strategyTaskCreateIdentityFixture,
   strategyTaskTurnText,
 } from '../strategy-task-test-fixtures.js';
+
+
+// Real bundled strategy assets and the current contract renderer.
+// Provider replies below are controlled omissions, NOT a captured production session.
+function realRequestBundle(snapshot: AppliedPluginSnapshot, request: string) {
+  const strategy = snapshot.strategy!;
+  const assets = path.resolve(import.meta.dirname, "../../../../../plugins/_official/scenarios/od-next-strategy/assets");
+  const head = composeOdNextStrategyBundleHeadV2({
+    recipe: 'od-next-plan-build-v2', strategyId: 'od-next-strategy',
+    strategyVersion: strategy.version, snapshotId: snapshot.snapshotId,
+    packageHash: strategy.packageHash, taskProfileDigest: strategy.selectedTaskProfile.sha256,
+    taskProfileVersion: strategy.selectedTaskProfile.version, taskType: 'prototype',
+    executionProfile: 'filesystem',
+    coreStrategy: fs.readFileSync(path.join(assets, 'core-system-prompt.md'), 'utf8'),
+    generalOrchestration: fs.readFileSync(path.join(assets, 'general-orchestration.md'), 'utf8'),
+    taskSkill: fs.readFileSync(path.join(assets, 'task-profiles/prototype.md'), 'utf8'),
+    activeStages: [
+      { name: 'discovery', atoms: [{ name: 'discovery-question-form' }] },
+      { name: 'plan', atoms: [{ name: 'direction-picker' }, { name: 'todo-write' }] },
+      { name: 'generate', atoms: [{ name: 'file-write' }, { name: 'live-artifact' }] },
+    ],
+  });
+  return serializeOdNextPromptBundleV2({ ...head,
+    taskMetadata: { taskType: 'prototype', taskConfiguration: 'sessionMode: design' },
+    context: { recipeIdentity: { recipe: 'od-next-plan-build-v2', strategyId: 'od-next-strategy', strategyVersion: strategy.version, appliedSnapshot: snapshot.snapshotId, taskProfileVersion: strategy.selectedTaskProfile.version } },
+    userFirstPrompt: request,
+  });
+}
 
 const AGENT_ID = 'codex';
 
@@ -211,6 +253,7 @@ function runtimeState(input: {
 }) {
   return {
     schema: 'open-design.strategy-state/v2' as const,
+    executionIntent: 'produce' as const,
     route: input.route ?? 'full_plan',
     inputStage: input.inputStage ?? 'request',
     outcome: input.outcome,
@@ -249,6 +292,7 @@ describe('OD Next planning coordinator', () => {
   let tempDir: string;
   let db: Database.Database;
   let snapshot: AppliedPluginSnapshot;
+  const startupSnapshots: OdNextTaskInputSnapshotDescriptor[] = [];
 
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-next-coordinator-'));
@@ -274,8 +318,212 @@ describe('OD Next planning coordinator', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
+    for (const descriptor of startupSnapshots.splice(0)) removeOdNextTaskInputSnapshot(descriptor, path.join(tempDir, 'task-inputs'));
     closeDatabase();
     fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  function measuredNoWriteEvidence(writeDraft = false) {
+    const cwd = path.join(tempDir, 'readonly-provider-cwd');
+    fs.mkdirSync(cwd, { recursive: true });
+    const before = snapshotProjectArtifacts(cwd);
+    if (writeDraft) fs.writeFileSync(path.join(cwd, 'draft.html'), '<title>Unrequested first-turn draft</title>');
+    // Observe the real fixture filesystem, including the deliberately violating first turn.
+    const after = snapshotProjectArtifacts(cwd);
+    return { physicalStatus: 'succeeded' as const, deliverableValid: false,
+      filesWritten: diffRunArtifacts(before, after).filesWritten,
+      filesWrittenUnknown: false, filesWrittenSource: 'filesystem' as const };
+  }
+
+  it.each(['saved-plan-only', 'consumed-physical-running', 'no-reply', 'produce-without-context', 'cancel-wins', 'hydrate-before-reconcile', 'state-write-failure', 'state-write-failure-then-hydrate', 'source-wrote', 'source-unknown', 'source-parser-defect', 'missing-owner', 'wrong-owner', 'cancel-origin', 'consumed-produce-successor', 'consumed-provider-failed', 'consumed-user-canceled', 'first-wrote-three-runs', 'first-unknown-three-runs'] as const)(
+    'OPEND-2623 startup ordering: %s', async (window) => {
+      const runsLogDir = path.join(tempDir, 'runs');
+      const makeRuns = () => createChatRunService({
+        createSseResponse: () => ({ send: vi.fn(), end: vi.fn(), cleanup: vi.fn() }),
+        createSseErrorPayload: (code: string, message: string) => ({ error: { code, message } }),
+        runsLogDir,
+      } as unknown as Parameters<typeof createChatRunService>[0]);
+      const runs = makeRuns();
+      let source = runs.create({ projectId: 'project-1', conversationId: 'conversation-1', agentId: AGENT_ID });
+      const identity = strategyTaskCreateIdentityFixture();
+      const owner = createOdNextTaskInputSnapshot({
+        snapshotsRoot: path.join(tempDir, 'task-inputs'), taskExecutionId: 'startup-intent-task',
+        projectRoot: tempDir, uploadRoot: tempDir,
+        taskConfiguration: buildOdNextTaskConfigurationV1({ taskType: 'prototype', locale: 'en', selectedAgentId: AGENT_ID,
+          sessionMode: 'design', mediaExecution: { mode: 'enabled' } }),
+      });
+      startupSnapshots.push(owner);
+      Object.assign(source, { odNextTaskInputSnapshot: owner } satisfies Pick<ChatRun, 'odNextTaskInputSnapshot'>);
+      let task = createStrategyTaskExecution(db, {
+        taskExecutionId: 'startup-intent-task', projectId: 'project-1', conversationId: 'conversation-1',
+        snapshotId: snapshot.snapshotId, selectedAgentId: AGENT_ID, initialRunId: source.id,
+        ...identity, taskInputManifestSha256: owner.manifestSha256, promptBundleText: realRequestBundle(snapshot, 'Do not create or modify files.'), createdAt: 100,
+      });
+      if (window === 'first-wrote-three-runs' || window === 'first-unknown-three-runs') {
+        const question = '<question-form id="startup-question">{"questions":[{"id":"audience","type":"text","label":"Audience","required":true}]}</question-form>';
+        const requested = finalizeStrategyPlanningTurnRaw(db, {
+          taskExecutionId: task.taskExecutionId, runId: source.id, protocol: protocol(question), updatedAt: 105,
+          completionEvidence: { ...measuredNoWriteEvidence(window === 'first-wrote-three-runs'), filesWrittenUnknown: window === 'first-unknown-three-runs' },
+        });
+        expect(requested.action).toBe('awaiting_clarification');
+        const answerRun = runs.create({ projectId: 'project-1', conversationId: 'conversation-1', agentId: AGENT_ID });
+        Object.assign(answerRun, { odNextTaskInputSnapshot: owner } satisfies Pick<ChatRun, 'odNextTaskInputSnapshot'>);
+        const clarified = beginStrategyClarification(db, {
+          taskExecutionId: task.taskExecutionId, sourceRunId: source.id, nextRunId: answerRun.id,
+          answer: '[form answers — startup-question]\n- Audience: Investors', updatedAt: 108,
+        });
+        source.status = 'succeeded'; runs.persistState(source);
+        source = answerRun;
+        task = clarified.task;
+      }
+      const parsed = protocol([
+        'The original plan is available in chat.',
+        window === 'source-parser-defect'
+          ? `<open-design-plan-contract>\n\`\`\`json\n${JSON.stringify(planContract(snapshot))}\n\`\`\`\n</open-design-plan-contract>`
+          : block('open-design-plan-contract', planContract(snapshot)),
+        block('open-design-runtime-state', { ...runtimeState({ inputStage: task.inputStage, outcome: 'plan_ready', executionMode: 'simple' }), executionIntent: undefined }),
+      ].join('\n')).finish();
+      const created: ReturnType<typeof runs.create>[] = [];
+      const service = {
+        prepare: (input: Parameters<import('../../../src/services/internal-run-service.js').InternalRunCreationService<{ stage: string; instruction: string; taskRunIndex: number }, ReturnType<typeof runs.create>>['prepare']>[0]) => {
+          const run = runs.create({ projectId: 'project-1', conversationId: 'conversation-1', agentId: AGENT_ID });
+          created.push(run);
+          db.transaction(() => input.beforeClaimCommit?.(run)).immediate();
+          return { kind: 'ready' as const, run, creationKind: 'created' as const, resumed: false };
+        }, start: vi.fn((run: ReturnType<typeof runs.create>) => run),
+      };
+      const prepared = prepareAutomaticStrategyContinuation({
+        db, task, parsed, toolUseCount: 0, completionEvidence: { ...measuredNoWriteEvidence(window === 'source-wrote'), filesWrittenUnknown: window === 'source-unknown' }, service,
+        createMeta: (stage, instruction, taskRunIndex) => ({ stage, instruction, taskRunIndex }), updatedAt: 110,
+      });
+      expect(prepared.stage).toBe('intent_resolution');
+      source.status = 'succeeded'; runs.persistState(source);
+      const resolution = created[0]!;
+      Object.assign(resolution, { odNextTaskInputSnapshot: window === 'missing-owner' ? null
+        : window === 'wrong-owner' ? { ...owner, manifestSha256: '0'.repeat(64) } : owner,
+        cancelOrigin: window === 'cancel-origin' ? 'user_stop' : null,
+      } satisfies Pick<ChatRun, 'odNextTaskInputSnapshot' | 'cancelOrigin'>);
+      resolution.status = 'running'; runs.persistState(resolution);
+      upsertMessage(db, 'conversation-1', { id: 'startup-resolution-message', role: 'assistant', content: '', runId: resolution.id, runStatus: 'running', createdAt: 110 });
+      startIntentResolution(db, task.taskExecutionId, resolution.id);
+      const reply = protocol(block('open-design-runtime-state', {
+        ...runtimeState({ inputStage: task.inputStage, outcome: window === 'produce-without-context' || window === 'consumed-produce-successor' ? 'plan_ready' : 'completed', executionMode: 'simple' }),
+        executionIntent: window === 'produce-without-context' || window === 'consumed-produce-successor' ? 'produce' : 'plan_only',
+      })).finish();
+      // Same terminal evidence recorder used by the server, before durable reply capture.
+      createStrategyRunWriteEvidenceRecorder(db).finish({ id: resolution.id, artifactOutcome: measuredNoWriteEvidence() });
+      if (window !== 'no-reply') captureIntentResolutionReply(db, {
+        taskExecutionId: task.taskExecutionId, runId: resolution.id,
+        replyJson: JSON.stringify({ runId: resolution.id, parsed: reply, toolUseCount: 0, completionEvidence: measuredNoWriteEvidence() }),
+      });
+      if (window === 'consumed-physical-running' || window === 'consumed-produce-successor' || window === 'consumed-provider-failed' || window === 'consumed-user-canceled') {
+        const completed = prepareAutomaticStrategyContinuation({
+          db, task: getStrategyTaskExecution(db, task.taskExecutionId)!, parsed: reply,
+          toolUseCount: 0, completionEvidence: measuredNoWriteEvidence(), executionPreflight: executionPassed, service,
+          createMeta: (stage, instruction, taskRunIndex) => ({ stage, instruction, taskRunIndex }), updatedAt: 120,
+        });
+        expect(completed.result.action).toBe(window === 'consumed-produce-successor' ? 'plan_ready' : 'completed');
+        expect(JSON.parse(fs.readFileSync(resolution.statePath!, 'utf8')).status).toBe('running');
+      }
+      if (window === 'consumed-provider-failed') runs.fail(resolution, 'AGENT_EXECUTION_FAILED', 'Fixture provider failed.');
+      if (window === 'consumed-user-canceled') await runs.cancel(resolution, 'user_stop');
+      if (window === 'cancel-wins') {
+        const current = getStrategyTaskExecution(db, task.taskExecutionId)!;
+        cancelStrategyTaskExecution(db, { taskExecutionId: task.taskExecutionId, expectedRevision: current.revision, updatedAt: 130 });
+      }
+      closeDatabase(); db = openDatabase(tempDir, { dataDir: tempDir });
+      // Reproduce the production order: startup reads durable states directly.
+      // Calling get before that is separately observed as destructive hydration.
+      const restarted = makeRuns();
+      if (window === 'hydrate-before-reconcile') {
+        expect(restarted.get(resolution.id)?.status).toBe('failed');
+        expect(JSON.parse(fs.readFileSync(resolution.statePath!, 'utf8')).errorCode).toBe('DAEMON_RESTARTED');
+      }
+      const reconcile = () => reconcileDurableRunTerminals({
+        db, runsLogDir, appVersion: 'fixture', analytics: { capture: vi.fn(async () => undefined) },
+        recoverBeforeInterrupt: (state, states, now) => recoverPlanningIntentResolution(db, state, states, now),
+        reportLangfuse: vi.fn(async () => ({ langfuse_expected: false, langfuse_delivery_status: 'not_expected' as const })),
+      });
+      if (window === 'state-write-failure' || window === 'state-write-failure-then-hydrate') {
+        const rename = fs.renameSync;
+        const failure = vi.spyOn(fs, 'renameSync').mockImplementation((from, to) => {
+          if (to === resolution.statePath) throw new Error('fixture terminal state rename denied');
+          return rename(from, to);
+        });
+        await reconcile();
+        expect(getStrategyTaskExecution(db, task.taskExecutionId)).toMatchObject({ outcome: 'completed', intentResolution: { state: 'resolved' } });
+        expect(JSON.parse(fs.readFileSync(resolution.statePath!, 'utf8')).status).toBe('running');
+        expect(getMessage(db, 'startup-resolution-message')?.runStatus).toBe('running');
+        failure.mockRestore();
+        if (window === 'state-write-failure-then-hydrate') {
+          expect(restarted.get(resolution.id)?.status).toBe('failed');
+          expect(JSON.parse(fs.readFileSync(resolution.statePath!, 'utf8')).errorCode).toBe('DAEMON_RESTARTED');
+        }
+        closeDatabase(); db = openDatabase(tempDir, { dataDir: tempDir });
+      }
+      await reconcile();
+      const recovered = getStrategyTaskExecution(db, task.taskExecutionId)!;
+      const state = JSON.parse(fs.readFileSync(resolution.statePath!, 'utf8'));
+      expect(service.start).not.toHaveBeenCalled();
+      expect(created).toHaveLength(window === 'consumed-produce-successor' ? 2 : 1);
+      expect(recovered.runs.filter(run => run.purpose === 'intent_resolution')).toHaveLength(1);
+      if (window === 'saved-plan-only' || window === 'consumed-physical-running' || window === 'state-write-failure' || window === 'state-write-failure-then-hydrate') {
+        expect({ task: recovered.outcome, physical: state.status }).toEqual({ task: 'completed', physical: 'succeeded' });
+        const hydrated = makeRuns().get(resolution.id);
+        expect(hydrated?.status).toBe('succeeded');
+        expect(hydrated?.events).not.toEqual(expect.arrayContaining([
+          expect.objectContaining({ event: 'error', data: expect.objectContaining({ error: expect.objectContaining({ code: 'DAEMON_RESTARTED' }) }) }),
+        ]));
+        expect(hydrated?.events).not.toEqual(expect.arrayContaining([
+          expect.objectContaining({ event: 'end', data: expect.objectContaining({ status: 'failed' }) }),
+        ]));
+        expect(state.terminalRecoveryReason).not.toBe('daemon_restart');
+        expect(state.terminalTrigger).not.toBe('daemon_restart');
+      } else if (window === 'consumed-provider-failed' || window === 'consumed-user-canceled') {
+        expect(recovered.outcome).toBe('completed');
+        expect(state.status).toBe(window === 'consumed-user-canceled' ? 'canceled' : 'failed');
+        if (window === 'consumed-provider-failed') expect(state.errorCode).toBe('AGENT_EXECUTION_FAILED');
+      } else if (window === 'consumed-produce-successor') {
+        expect(state.status).toBe('succeeded');
+        expect(recovered.intentResolution?.state).toBe('resolved');
+        expect(recovered.outcome).toBe('blocked');
+        expect(JSON.parse(fs.readFileSync(created[1]!.statePath!, 'utf8'))).toMatchObject({ status: 'failed', errorCode: 'DAEMON_RESTARTED' });
+      } else if (window === 'source-wrote' || window === 'source-unknown' || window === 'source-parser-defect' || window === 'first-wrote-three-runs' || window === 'first-unknown-three-runs') {
+        expect({ task: recovered.outcome, physical: state.status }).toEqual({ task: 'blocked', physical: 'succeeded' });
+        expect(recovered.blockedContext?.reasonCodes).toContain(window === 'source-parser-defect'
+          ? 'od_next_protocol_plan_contract_invalid_json' : 'od_next_planning_files_changed');
+      } else {
+        expect(recovered.outcome).toBe(window === 'cancel-wins' ? 'canceled' : 'blocked');
+        expect(state).toMatchObject({ status: 'failed', errorCode: 'DAEMON_RESTARTED' });
+      }
+    },
+  );
+
+  it('keeps local restart interruption before pending network telemetry without treating the entire reconciliation promise as a startup barrier', async () => {
+    const runsLogDir = path.join(tempDir, 'runs');
+    const runs = createChatRunService({
+      createSseResponse: () => ({ send: vi.fn(), end: vi.fn(), cleanup: vi.fn() }),
+      createSseErrorPayload: (code: string, message: string) => ({ error: { code, message } }), runsLogDir,
+    } as unknown as Parameters<typeof createChatRunService>[0]);
+    const run = runs.create({ projectId: 'project-1', conversationId: 'conversation-1', agentId: AGENT_ID });
+    runs.setAnalyticsRecovery(run, { context: {}, properties: { run_id: run.id }, insertId: 'startup-network-boundary' });
+    run.status = 'running'; runs.persistState(run);
+    let release!: () => void;
+    let entered!: () => void;
+    const network = new Promise<void>(resolve => { release = resolve; });
+    const networkEntered = new Promise<void>(resolve => { entered = resolve; });
+    let settled = false;
+    const pending = reconcileDurableRunTerminals({
+      db, runsLogDir, appVersion: 'fixture',
+      analytics: { capture: async () => { entered(); await network; } },
+      reportLangfuse: vi.fn(async () => ({ langfuse_expected: false, langfuse_delivery_status: 'not_expected' as const })),
+    }).then(result => { settled = true; return result; });
+    try {
+      await networkEntered;
+      expect(JSON.parse(fs.readFileSync(run.statePath!, 'utf8'))).toMatchObject({ status: 'failed', errorCode: 'DAEMON_RESTARTED' });
+      expect(settled).toBe(false);
+    } finally { release(); await pending; }
   });
 
   it('routes a new request once and completes an eligible Direct Edit in its request Run', () => {
@@ -446,6 +694,65 @@ describe('OD Next planning coordinator', () => {
       },
     });
   });
+
+  it.each(['plan_only', 'produce'] as const)(
+    'preserves locked %s intent when a clarification reply still declares request/plan_ready',
+    (executionIntent) => {
+      prepareStrategyRequest(db, {
+        taskExecutionId: 'task-1', preference: 'full_plan', directEdit: directEligible,
+        intake: intakePassed, updatedAt: 110,
+      });
+      const question = '<question-form id="scope">{"questions":[{"id":"surface","label":"Surface?"}]}</question-form>';
+      const requested = finalizeStrategyPlanningTurn(db, {
+        taskExecutionId: 'task-1', runId: 'run-request', updatedAt: 120,
+        protocol: protocol(`${question}\n${block('open-design-runtime-state', {
+          ...runtimeState({ outcome: 'clarification_required' }), executionIntent,
+        })}`),
+        completionEvidence: measuredNoWriteEvidence(),
+      });
+      expect(requested).toMatchObject({
+        action: 'awaiting_clarification', task: { executionIntent },
+      });
+      const clarification = beginStrategyClarification(db, {
+        taskExecutionId: 'task-1', sourceRunId: 'run-request', nextRunId: 'run-clarification',
+        answer: 'Use the operator console.', updatedAt: 130,
+      });
+      expect(clarification.task).toMatchObject({ inputStage: 'clarification', executionIntent });
+      closeDatabase();
+      db = openDatabase(tempDir, { dataDir: tempDir });
+
+      const plan = planContract(snapshot);
+      if (executionIntent === 'plan_only') {
+        plan.taskProfile.constraints = ['Do not create or modify files'];
+        plan.decisionSummary.keyConstraints = [...plan.taskProfile.constraints];
+      }
+      const final = finalizeStrategyPlanningTurn(db, {
+        taskExecutionId: 'task-1', runId: 'run-clarification', updatedAt: 140,
+        protocol: protocol([
+          'The plan is ready for review; the project files have not been changed.',
+          block('open-design-plan-contract', plan),
+          // Older providers omit intent and copy the request-stage example.
+          // Neither omission may widen the intent already saved by the host.
+          block('open-design-runtime-state', {
+            ...runtimeState({ inputStage: 'request', outcome: 'plan_ready', executionMode: 'simple' }),
+            executionIntent: undefined,
+          }),
+        ].join('\n')),
+        executionPreflight: executionPassed,
+        completionEvidence: measuredNoWriteEvidence(),
+      });
+      const outcome = executionIntent === 'plan_only' ? 'completed' : 'plan_ready';
+      expect(final).toMatchObject({
+        action: outcome, reasonCodes: [], decisionSummary: plan.decisionSummary,
+        task: { inputStage: 'clarification', outcome, executionIntent, clarificationCount: 1, planContract: plan },
+      });
+      const persisted = getStrategyTaskExecution(db, 'task-1')!;
+      expect(persisted.runs.map(run => run.inputStage)).toEqual(['request', 'clarification']);
+      expect(StrategyTaskProjectionV2Schema.parse(projectStrategyTask(persisted)).terminal)
+        .toBe(executionIntent === 'plan_only');
+      expect(fs.readdirSync(path.join(tempDir, 'readonly-provider-cwd'))).toEqual([]);
+    },
+  );
 
   it('keeps the agent-declared attribution of a clarification block that names the request stage', () => {
     answerTheOneClarificationRound();
@@ -1074,8 +1381,15 @@ describe('OD Next planning coordinator', () => {
       taskExecutionId: 'task-1',
       activeRunId: 'run-production',
       nextRunId: 'run-production',
+      runMappings: [
+        { runId: 'run-request', taskRunIndex: 0 },
+        { runId: 'run-production', taskRunIndex: 1 },
+      ],
       terminal: false,
     });
+    expect(projectStrategyTask(production, 'run-production').runMappings).toEqual([
+      { runId: 'run-production', taskRunIndex: 1 },
+    ]);
 
     expect(() => beginAutomaticSimpleProduction(db, {
       task: planned.task,
@@ -1126,6 +1440,405 @@ describe('OD Next planning coordinator', () => {
       .toContain(`<od-done key="${hostProtocolMeta.doneKey}"/>`);
     expect(result.task.latestRunId).toBe('run-production');
     expect(result.projection.nextRunId).toBe('run-production');
+  });
+
+  it.each([
+    { sessionMode: 'plan', file: 'PRD.md', kind: 'other', request: 'Create PRD.md as an editable planning document.' },
+    { sessionMode: 'chat', file: 'index.html', kind: 'prototype', request: 'Change only the page title to Updated.' },
+  ] as const)('preserves $sessionMode mode file work explicitly requested by the user', async (sample) => {
+    const identity = strategyTaskCreateIdentityFixture();
+    const task = createStrategyTaskExecution(db, {
+      taskExecutionId: 'mode-file-task', projectId: 'project-1', conversationId: 'conversation-1',
+      snapshotId: snapshot.snapshotId, selectedAgentId: AGENT_ID, initialRunId: 'mode-file-run',
+      ...identity, promptBundleText: identity.promptBundleText.replace('冻结的用户请求。', sample.request),
+      sessionMode: sample.sessionMode, createdAt: 100,
+    });
+    const projectsRoot = path.join(tempDir, 'projects');
+    const projectRoot = path.join(projectsRoot, 'project-1');
+    fs.mkdirSync(projectRoot, { recursive: true });
+    const target = path.join(projectRoot, sample.file);
+    if (sample.sessionMode === 'chat') fs.writeFileSync(target, '<title>Original</title>');
+    const content = sample.sessionMode === 'plan' ? '# PRD\n\n## Requirements\nEditable plan.' : '<title>Updated</title>';
+    fs.writeFileSync(target, content);
+    const delivery = await validateRunDeliverable({
+      projectsRoot, projectId: 'project-1', projectMetadata: { kind: sample.kind, entryFile: sample.file },
+      runStatus: 'succeeded', artifactCount: 1, touchedPaths: [sample.file],
+    });
+    const result = finalizeStrategyPlanningTurn(db, {
+      taskExecutionId: task.taskExecutionId, runId: 'mode-file-run', updatedAt: 120,
+      protocol: protocol(`Updated ${sample.file}.\n${block('open-design-runtime-state', runtimeState({
+        route: 'direct_edit', outcome: 'completed', executionMode: 'simple',
+      }))}`),
+      completionEvidence: { physicalStatus: 'succeeded', deliverableValid: delivery.valid, filesWritten: 1 },
+      executionPreflight: executionPassed,
+    });
+    expect({ delivery: delivery.valid, action: result.action }).toEqual({ delivery: true, action: 'completed' });
+    expect(getStrategyTaskExecution(db, task.taskExecutionId)?.outcome).toBe('completed');
+    expect(fs.readFileSync(target, 'utf8')).toBe(content);
+  });
+
+  it('does not let an observed no-write violation disappear across a question form', () => {
+    const question = '<question-form id="discovery">{"questions":[{"id":"goal","label":"Goal?"}]}</question-form>';
+    const result = finalizeStrategyPlanningTurn(db, {
+      taskExecutionId: 'task-1', runId: 'run-request', updatedAt: 110,
+      protocol: protocol(`${question}\n${block('open-design-runtime-state', {
+        ...runtimeState({ outcome: 'clarification_required' }), executionIntent: 'plan_only',
+      })}`),
+      completionEvidence: { physicalStatus: 'succeeded', deliverableValid: false, filesWritten: 1 },
+    });
+    expect(result.action).toBe('blocked');
+    expect(result.reasonCodes).toContain('od_next_planning_files_changed');
+    expect(() => beginStrategyClarification(db, {
+      taskExecutionId: 'task-1', sourceRunId: 'run-request', nextRunId: 'run-answer', answer: 'Planning only', updatedAt: 120,
+    })).toThrow();
+  });
+
+  it.each(['observed-first-write', 'first-evidence-not-forwarded'] as const)(
+    'OPEND-2623: %s cannot become a clean plan-only result in a later run',
+    (firstEvidence) => {
+      const request = 'Ask the four required questions first. Do not create or modify files.';
+      const task = createStrategyTaskExecution(db, {
+        taskExecutionId: 'task-write-provenance', projectId: 'project-1', conversationId: 'conversation-1',
+        snapshotId: snapshot.snapshotId, selectedAgentId: AGENT_ID, initialRunId: 'write-request',
+        ...strategyTaskCreateIdentityFixture(), promptBundleText: realRequestBundle(snapshot, request), createdAt: 100,
+      });
+      const projectRoot = path.join(tempDir, 'project-write-evidence');
+      fs.mkdirSync(projectRoot);
+      const draft = path.join(projectRoot, 'draft.html');
+      const runEvidence: Array<{ runId: string; filesWritten: number; toolFilesWritten: number }> = [];
+      function observeTurn(runId: string, writeDraft: boolean) {
+        const before = snapshotProjectArtifacts(projectRoot);
+        const ledger = createRunSideEffectLedger();
+        const parserEvents: Parameters<typeof foldEventIntoRunSideEffectLedger>[1][] = [];
+        const parser = createClaudeStreamHandler((event) => {
+          const record = { event: 'agent', data: event };
+          parserEvents.push(record);
+          foldEventIntoRunSideEffectLedger(ledger, record);
+        });
+        const frames: unknown[] = [{ type: 'system', subtype: 'init', session_id: `${runId}-session`, model: 'fixture' }];
+        if (writeDraft) {
+          fs.writeFileSync(draft, '<!doctype html><title>Unrequested draft</title>');
+          frames.push({ type: 'assistant', message: { role: 'assistant', id: `${runId}-message`, stop_reason: 'tool_use', content: [
+            { type: 'tool_use', id: `${runId}-write`, name: 'Write', input: { file_path: draft, content: fs.readFileSync(draft, 'utf8') } },
+          ] } });
+          frames.push({ type: 'user', message: { role: 'user', content: [
+            { type: 'tool_result', tool_use_id: `${runId}-write`, content: 'File written.', is_error: false },
+          ] } });
+        }
+        frames.push({ type: 'result', subtype: 'success', stop_reason: 'end_turn', usage: { input_tokens: 0, output_tokens: 0 } });
+        for (const frame of frames) parser.feed(`${JSON.stringify(frame)}\n`);
+        parser.flush();
+        const diff = diffRunArtifacts(before, snapshotProjectArtifacts(projectRoot));
+        const observation = { runId, filesWritten: diff.filesWritten, toolFilesWritten: runFilesWrittenForRun({ sideEffectLedger: ledger }) };
+        runEvidence.push(observation);
+        if (writeDraft) {
+          expect(parserEvents.some(record => (record.data as { type?: string }).type === 'tool_result')).toBe(true);
+          expect(observation).toEqual({ runId, filesWritten: 1, toolFilesWritten: 1 });
+        } else expect(observation).toEqual({ runId, filesWritten: 0, toolFilesWritten: 0 });
+        return observation;
+      }
+      const initialEvidence = observeTurn('write-request', true);
+      const asked = finalizeStrategyPlanningTurn(db, {
+        taskExecutionId: task.taskExecutionId, runId: 'write-request', updatedAt: 110,
+        protocol: protocol('<question-form id="discovery">{"questions":[{"id":"goal","label":"Goal?"}]}</question-form>'),
+        // Current server omits this object for unresolved clarification_required.
+        // The stronger observed case supplies actual measured evidence and still loses it.
+        ...(firstEvidence === 'observed-first-write' ? { completionEvidence: {
+          physicalStatus: 'succeeded' as const, deliverableValid: false, filesWritten: initialEvidence.filesWritten,
+        } } : {}),
+      });
+      expect(asked.action).toBe('awaiting_clarification');
+      closeDatabase();
+      db = openDatabase(tempDir, { dataDir: tempDir });
+      const resumed = beginStrategyClarification(db, {
+        taskExecutionId: task.taskExecutionId, sourceRunId: 'write-request', nextRunId: 'write-answer',
+        answer: '[form answers — discovery]\n- Goal: Planning only; preserve the no-write request.', updatedAt: 120,
+      });
+      const answerEvidence = observeTurn('write-answer', false);
+      const plan = planContract(snapshot);
+      plan.taskProfile.constraints = ['Do not create or modify files'];
+      plan.decisionSummary.keyConstraints = [...plan.taskProfile.constraints];
+      const parsed = protocol([
+        'The requested planning answer is complete.',
+        block('open-design-plan-contract', plan),
+        block('open-design-runtime-state', { ...runtimeState({ inputStage: 'clarification', outcome: 'completed', executionMode: 'simple' }), executionIntent: 'plan_only' }),
+      ].join('\n')).finish();
+      expect(parsed.issues).toEqual([]);
+      let preparedCount = 0;
+      const completed = prepareAutomaticStrategyContinuation({
+        db, task: resumed.task, parsed,
+        completionEvidence: { physicalStatus: 'succeeded', deliverableValid: false, filesWritten: answerEvidence.filesWritten },
+        service: { prepare: () => { preparedCount += 1; throw new Error('Unexpected production preparation'); }, start: run => run },
+        createMeta: (stage, instruction, taskRunIndex) => ({ stage, instruction, taskRunIndex }), updatedAt: 130,
+      });
+      expect(preparedCount).toBe(0);
+      expect(fs.existsSync(draft)).toBe(true);
+      expect(completed.result.action).not.toBe('completed');
+    },
+  );
+
+  it.each([
+    { entry: 'missing-intent', providerIntent: undefined },
+    { entry: 'question-only', providerIntent: undefined },
+    { entry: 'explicit-plan-only', providerIntent: 'plan_only' },
+    { entry: 'first-written-three-runs', providerIntent: undefined },
+    { entry: 'first-unknown-three-runs', providerIntent: undefined },
+    { entry: 'consume-verdict-rollback', providerIntent: undefined },
+    { entry: 'resolved-produce', providerIntent: undefined },
+    { entry: 'resolved-produce-rollback', providerIntent: undefined },
+    { entry: 'source-parser-defect', providerIntent: undefined },
+  ] as const)(
+    'OPEND-2623 natural intent: $entry does not authorize production',
+    ({ entry, providerIntent }) => {
+      const sessionMode = 'design';
+      const produce = entry === 'resolved-produce' || entry === 'resolved-produce-rollback';
+      const request = produce ? 'Ask the four required questions, then build the requested HTML prototype.'
+        : 'Ask the four required questions first. Do not create or modify files.';
+      const identity = strategyTaskCreateIdentityFixture();
+      const initial = createStrategyTaskExecution(db, {
+        taskExecutionId: 'task-planning', projectId: 'project-1', conversationId: 'conversation-1',
+        snapshotId: snapshot.snapshotId, selectedAgentId: AGENT_ID, initialRunId: 'planning-request',
+        ...identity, promptBundleText: realRequestBundle(snapshot, request),
+        sessionMode, createdAt: 100,
+      });
+      expect(initial.promptBundle.text).toContain(request);
+      expect(initial.promptBundle.text).toContain('Resolve executionIntent from');
+      expect(initial.promptBundle.text).toContain('including an explicit no-write request');
+      const question = `<question-form id="discovery">${JSON.stringify({ questions: ['Audience', 'Goal', 'Scope', 'Constraints'].map(label => ({ id: label.toLowerCase(), type: 'text', label, required: true })) })}</question-form>`;
+      // The provider resolves this explicit no-write request, independently
+      // of the session mode. Mode alone does not forbid document/file work.
+      const intakeText = entry === 'question-only' ? question : `${question}\n${block('open-design-runtime-state', {
+        ...runtimeState({ outcome: 'clarification_required' }),
+        executionIntent: providerIntent,
+      })}`;
+      const intake = protocol(intakeText);
+      const requested = finalizeStrategyPlanningTurn(db, {
+        taskExecutionId: initial.taskExecutionId, runId: 'planning-request', protocol: intake, updatedAt: 120,
+        ...(entry === 'first-unknown-three-runs' ? {} : { completionEvidence: measuredNoWriteEvidence(entry === 'first-written-three-runs') }),
+      });
+      expect(requested.action).toBe('awaiting_clarification');
+      const clarification = beginStrategyClarification(db, {
+        taskExecutionId: initial.taskExecutionId, sourceRunId: 'planning-request', nextRunId: 'planning-answer',
+        answer: produce ? '[form answers — discovery]\n- Goal: Build the requested prototype'
+          : '[form answers — discovery]\n- Audience: Overseas seed funds\n- Goal: An investor pitch\n- Scope: Planning only\n- Constraints: Preserve the original no-write request', updatedAt: 130,
+      });
+      const plan = planContract(snapshot);
+      plan.taskProfile.constraints = produce ? ['Build the requested HTML prototype'] : ['Do not create or modify files'];
+      plan.decisionSummary.keyConstraints = [...plan.taskProfile.constraints];
+      const parsed = protocol([
+        'The plan is ready for review; the project files have not been changed.',
+        entry === 'source-parser-defect'
+          ? `<open-design-plan-contract>\n\`\`\`json\n${JSON.stringify(plan)}\n\`\`\`\n</open-design-plan-contract>`
+          : block('open-design-plan-contract', plan),
+        block('open-design-runtime-state', { ...runtimeState({
+          inputStage: 'clarification', outcome: 'plan_ready', executionMode: 'simple',
+        }), executionIntent: undefined }),
+      ].join('\n')).finish();
+      if (entry === 'source-parser-defect') expect(parsed.issues.map(issue => issue.code)).toEqual(['od_next_protocol_plan_contract_invalid_json']);
+      else expect(parsed.issues).toEqual([]);
+      let preparedCount = 0;
+      const preparedStages: string[] = [];
+      const service = { prepare: (input: Parameters<import('../../../src/services/internal-run-service.js').InternalRunCreationService<{ stage: string; instruction: string; taskRunIndex: number }, { id: string; status: string }>['prepare']>[0]) => {
+        preparedCount += 1;
+        preparedStages.push(input.meta.stage);
+        const run = { id: input.meta.stage === 'intent_resolution' ? 'intent-resolution-run' : 'unexpected-production', status: 'queued' };
+        db.transaction(() => input.beforeClaimCommit?.(run)).immediate();
+        return { kind: 'ready' as const, run, creationKind: 'created' as const, resumed: false };
+      }, start: (run: { id: string; status: string }) => run };
+      let transition = prepareAutomaticStrategyContinuation({
+        db, task: clarification.task, parsed, toolUseCount: 0, executionPreflight: executionPassed,
+        completionEvidence: measuredNoWriteEvidence(), service,
+        createMeta: (stage, instruction, taskRunIndex) => ({ stage, instruction, taskRunIndex }), updatedAt: 140,
+      });
+      if (providerIntent === undefined) {
+        expect(transition.stage).toBe('intent_resolution');
+        expect(transition.result.task.runs.at(-1)?.finalText.text).toContain(request);
+        startIntentResolution(db, initial.taskExecutionId, 'intent-resolution-run');
+        closeDatabase(); db = openDatabase(tempDir, { dataDir: tempDir });
+        const task = getStrategyTaskExecution(db, initial.taskExecutionId)!;
+        const reply = protocol(block('open-design-runtime-state', {
+          ...runtimeState({ inputStage: 'clarification', outcome: produce ? 'plan_ready' : 'completed', executionMode: 'simple' }),
+          executionIntent: produce ? 'produce' : 'plan_only',
+        })).finish();
+        if (entry === 'consume-verdict-rollback' || entry === 'resolved-produce-rollback') {
+          db.exec(produce
+            ? "CREATE TEMP TRIGGER reject_completed BEFORE INSERT ON strategy_task_runs WHEN NEW.input_stage = 'production' BEGIN SELECT RAISE(ABORT, 'fixture verdict write rejected'); END"
+            : "CREATE TEMP TRIGGER reject_completed BEFORE UPDATE ON strategy_task_executions WHEN NEW.outcome = 'completed' BEGIN SELECT RAISE(ABORT, 'fixture verdict write rejected'); END");
+          expect(() => prepareAutomaticStrategyContinuation({
+            db, task, parsed: reply, toolUseCount: 0, completionEvidence: measuredNoWriteEvidence(), executionPreflight: executionPassed, service,
+            createMeta: (stage, instruction, taskRunIndex) => ({ stage, instruction, taskRunIndex }), updatedAt: 150,
+          })).toThrow('fixture verdict write rejected');
+          const rolledBack = getStrategyTaskExecution(db, initial.taskExecutionId)!;
+          expect(rolledBack.intentResolution?.state).toBe('started');
+          expect(rolledBack.intentResolution?.replyJson).toBeTruthy();
+          expect(rolledBack.executionIntent).toBeUndefined();
+          expect(rolledBack.outcome).toBe('running');
+          db.exec('DROP TRIGGER reject_completed');
+          closeDatabase(); db = openDatabase(tempDir, { dataDir: tempDir });
+          expect(() => startIntentResolution(db, initial.taskExecutionId, task.latestRunId)).toThrow();
+        }
+        const persisted = getStrategyTaskExecution(db, initial.taskExecutionId)!;
+        const savedReply = persisted.intentResolution?.replyJson
+          ? JSON.parse(persisted.intentResolution.replyJson).parsed : reply;
+        transition = prepareAutomaticStrategyContinuation({
+          db, task: persisted, parsed: savedReply, toolUseCount: 0, completionEvidence: measuredNoWriteEvidence(), executionPreflight: executionPassed, service,
+          createMeta: (stage, instruction, taskRunIndex) => ({ stage, instruction, taskRunIndex }), updatedAt: 150,
+        });
+      }
+      expect(preparedStages.filter(stage => stage === 'production')).toHaveLength(entry === 'resolved-produce-rollback' ? 2 : produce ? 1 : 0);
+      expect(preparedStages).not.toContain('contract_repair');
+      const violation = entry === 'first-written-three-runs' || entry === 'first-unknown-three-runs';
+      const parserDefect = entry === 'source-parser-defect';
+      expect(transition.result.action).toBe(violation || parserDefect ? 'blocked' : produce ? 'plan_ready' : 'completed');
+      if (parserDefect) expect(transition.result.reasonCodes).toContain('od_next_protocol_plan_contract_invalid_json');
+      if (violation) expect(transition.result.reasonCodes).toContain('od_next_planning_files_changed');
+      expect(transition.result.visibleText).toContain('The plan is ready for review');
+      expect(transition.result.task.outcome).toBe(violation || parserDefect ? 'blocked' : produce ? 'running' : 'completed');
+      expect(transition.start).toBe(produce);
+      expect(preparedCount).toBe(entry === 'resolved-produce-rollback' ? 3 : produce ? 2 : providerIntent === undefined ? 1 : 0);
+      const reloaded = getStrategyTaskExecution(db, initial.taskExecutionId)!;
+      expect(reloaded.promptBundle.text).toBe(initial.promptBundle.text);
+      expect(reloaded.runs.map(run => run.inputStage)).toEqual(produce ? ['request', 'clarification', 'clarification', 'production'] : providerIntent === undefined ? ['request', 'clarification', 'clarification'] : ['request', 'clarification']);
+      expect(StrategyTaskProjectionV2Schema.parse(projectStrategyTask(reloaded)).terminal).toBe(!produce);
+    },
+  );
+
+  it.each(['design', 'chat', 'plan'] as const)(
+    'OPEND-2623: preserves a %s planning request through parsed intent and form continuation',
+    (sessionMode) => {
+      const request = 'Ask the four required questions first. Do not create or modify files.';
+      const identity = strategyTaskCreateIdentityFixture();
+      const initial = createStrategyTaskExecution(db, {
+        taskExecutionId: 'task-planning', projectId: 'project-1', conversationId: 'conversation-1',
+        snapshotId: snapshot.snapshotId, selectedAgentId: AGENT_ID, initialRunId: 'planning-request',
+        ...identity, promptBundleText: identity.promptBundleText.replace('冻结的用户请求。', request),
+        sessionMode, createdAt: 100,
+      });
+      expect(initial.promptBundle.text).toContain(request);
+      const question = `<question-form id="discovery">${JSON.stringify({ questions: ['Audience', 'Goal', 'Scope', 'Constraints'].map(label => ({ id: label.toLowerCase(), type: 'text', label, required: true })) })}</question-form>`;
+      // The provider resolves this explicit no-write request, independently
+      // of the session mode. Mode alone does not forbid document/file work.
+      const intake = protocol(`${question}\n${block('open-design-runtime-state', {
+        ...runtimeState({ outcome: 'clarification_required' }),
+        executionIntent: 'plan_only',
+      })}`);
+      const requested = finalizeStrategyPlanningTurn(db, {
+        taskExecutionId: initial.taskExecutionId, runId: 'planning-request', protocol: intake, updatedAt: 120,
+        completionEvidence: measuredNoWriteEvidence(),
+      });
+      expect(requested.action).toBe('awaiting_clarification');
+      const clarification = beginStrategyClarification(db, {
+        taskExecutionId: initial.taskExecutionId, sourceRunId: 'planning-request', nextRunId: 'planning-answer',
+        answer: '[form answers — discovery]\n- Audience: Overseas seed funds\n- Goal: An investor pitch\n- Scope: Planning only\n- Constraints: Preserve the original no-write request', updatedAt: 130,
+      });
+      const plan = planContract(snapshot);
+      plan.taskProfile.constraints = ['Do not create or modify files'];
+      plan.decisionSummary.keyConstraints = [...plan.taskProfile.constraints];
+      const parsed = protocol([
+        'The plan is ready for review; the project files have not been changed.',
+        block('open-design-plan-contract', plan),
+        block('open-design-runtime-state', { ...runtimeState({
+          inputStage: 'clarification', outcome: 'plan_ready', executionMode: 'simple',
+        }), executionIntent: undefined }),
+      ].join('\n')).finish();
+      expect(parsed.issues).toEqual([]);
+      let preparedCount = 0;
+      const transition = prepareAutomaticStrategyContinuation({
+        db, task: clarification.task, parsed, toolUseCount: 0, executionPreflight: executionPassed,
+        completionEvidence: { physicalStatus: 'succeeded', deliverableValid: false, filesWritten: 0 },
+        service: { prepare: (input) => {
+          preparedCount += 1;
+          const run = { id: 'unexpected-production', status: 'queued' };
+          db.transaction(() => input.beforeClaimCommit?.(run)).immediate();
+          return { kind: 'ready', run, creationKind: 'created', resumed: false };
+        }, start: (run) => run },
+        createMeta: (stage, instruction, taskRunIndex) => ({ stage, instruction, taskRunIndex }), updatedAt: 140,
+      });
+      expect(transition.result.action).toBe('completed');
+      expect(transition.result.task.outcome).toBe('completed');
+      expect(transition.start).toBe(false);
+      expect(preparedCount).toBe(0);
+      const reloaded = getStrategyTaskExecution(db, initial.taskExecutionId)!;
+      expect(reloaded.promptBundle.text).toBe(initial.promptBundle.text);
+      expect(reloaded.runs.map(run => run.inputStage)).toEqual(['request', 'clarification']);
+      expect(StrategyTaskProjectionV2Schema.parse(projectStrategyTask(reloaded)).terminal).toBe(true);
+    },
+  );
+
+  it.each([
+    { text: '', status: 'succeeded', filesWritten: 0, reason: 'od_next_planning_answer_missing' },
+    { text: 'Planning answer', status: 'failed', filesWritten: 0, reason: 'od_next_physical_run_not_succeeded' },
+    { text: 'Planning answer', status: 'canceled', filesWritten: 0, reason: 'od_next_physical_run_not_succeeded' },
+    { text: 'Planning answer', status: 'succeeded', filesWritten: 1, reason: 'od_next_planning_files_changed' },
+    { text: '<question-form id="still-waiting">{"questions":[{"id":"goal","label":"Goal?"}]}</question-form>', status: 'succeeded', filesWritten: 0, reason: 'od_next_clarification_form_unexpected' },
+  ] as const)('refuses a planning completion without its required evidence: $reason', (sample) => {
+    const result = finalizeStrategyPlanningTurn(db, {
+      taskExecutionId: 'task-1', runId: 'run-request', updatedAt: 110,
+      protocol: protocol(`${sample.text}\n${block('open-design-runtime-state', {
+        ...runtimeState({ outcome: 'completed' }), executionIntent: 'plan_only',
+      })}`),
+      completionEvidence: { physicalStatus: sample.status, deliverableValid: false, filesWritten: sample.filesWritten },
+    });
+    expect(result.action).toBe('blocked');
+    expect(result.reasonCodes).toContain(sample.reason);
+  });
+
+  it('accepts a visible planning answer as a successful request without requiring a deliverable', () => {
+    const result = finalizeStrategyPlanningTurn(db, {
+      taskExecutionId: 'task-1', runId: 'run-request', updatedAt: 110,
+      protocol: protocol(`A complete planning answer.\n${block('open-design-runtime-state', {
+        ...runtimeState({ outcome: 'completed' }), executionIntent: 'plan_only',
+      })}`),
+      completionEvidence: { physicalStatus: 'succeeded', deliverableValid: false, filesWritten: 0 },
+    });
+    expect(result.action).toBe('completed');
+    expect(result.task.inputStage).toBe('request');
+    expect(result.task.executionIntent).toBe('plan_only');
+    expect(StrategyTaskProjectionV2Schema.parse(projectStrategyTask(result.task)).terminal).toBe(true);
+  });
+
+  it('does not let a form answer widen the persisted planning intent or claim a production Run', () => {
+    const question = '<question-form id="discovery">{"questions":[{"id":"goal","label":"Goal?"}]}</question-form>';
+    const requested = finalizeStrategyPlanningTurn(db, {
+      taskExecutionId: 'task-1', runId: 'run-request', updatedAt: 110,
+      protocol: protocol(`${question}\n${block('open-design-runtime-state', {
+        ...runtimeState({ outcome: 'clarification_required' }), executionIntent: 'plan_only',
+      })}`),
+    });
+    expect(requested.action).toBe('awaiting_clarification');
+    const clarification = beginStrategyClarification(db, {
+      taskExecutionId: 'task-1', sourceRunId: 'run-request', nextRunId: 'run-answer',
+      answer: 'Discuss an investor pitch.', updatedAt: 120,
+    });
+    expect(clarification.task.runs.at(-1)?.finalText.text).toContain('executionIntent plan_only');
+    expect(() => compareAndTransitionStrategyTaskExecution(db, {
+      taskExecutionId: 'task-1', expectedRevision: clarification.task.revision,
+      to: { route: 'full_plan', inputStage: 'production', outcome: 'running', executionMode: 'simple', executionIntent: 'produce' },
+      updatedAt: 130,
+    })).toThrow();
+    const result = finalizeStrategyPlanningTurn(db, {
+      taskExecutionId: 'task-1', runId: 'run-answer', updatedAt: 130,
+      protocol: protocol(block('open-design-runtime-state', {
+        ...runtimeState({ inputStage: 'clarification', outcome: 'plan_ready', executionMode: 'simple' }),
+        executionIntent: 'produce',
+      })),
+    });
+    expect(result.action).toBe('blocked');
+    expect(result.reasonCodes).toContain('od_next_protocol_execution_intent_mismatch');
+    expect(result.task.executionIntent).toBe('plan_only');
+    expect(result.task.runs).toHaveLength(2);
+  });
+
+  it('migrates an older task store without changing its production intent', () => {
+    // This row predates both intent mechanisms, unlike a newly created unresolved task.
+    db.exec('DELETE FROM strategy_task_intent_resolution');
+    db.exec('ALTER TABLE strategy_task_executions DROP COLUMN intent_resolution_version');
+    const columns = db.prepare('PRAGMA table_info(strategy_task_executions)').all() as Array<{ name: string }>;
+    if (columns.some(column => column.name === 'execution_intent')) {
+      db.exec('ALTER TABLE strategy_task_executions DROP COLUMN execution_intent');
+    }
+    migrateStrategyTaskStore(db);
+    expect(getStrategyTaskExecution(db, 'task-1')?.executionIntent).toBe('produce');
   });
 
   it('accepts the parsed server result and claims simple Production in one transaction', () => {

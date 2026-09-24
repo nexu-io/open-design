@@ -155,6 +155,7 @@ export interface SseClient {
 
 export interface ChatRun {
   id: string;
+  diagnosticIncidentIds?: string[];
   projectId: string | null;
   conversationId: string | null;
   assistantMessageId: string | null;
@@ -247,6 +248,8 @@ export interface ChatRun {
     designSystemCreated: boolean;
     previewModuleCount: number;
     filesWritten?: number;
+    filesWrittenUnknown?: boolean;
+    filesWrittenSource?: 'filesystem' | 'tool_stream' | 'unknown';
     diff?: RunArtifactDiff;
   };
   artifactPaths?: string[];

@@ -26,6 +26,8 @@ import {
   removeOdNextRunInputProjection,
 } from '../../src/strategies/od-next/task-input-snapshot.js';
 
+import { freezeTraceObjectSources } from '../../src/trace-object-manifest.js';
+
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const roots: string[] = [];
 
@@ -458,6 +460,70 @@ describe('OD Next task-scoped input snapshots', () => {
     expect(readFileSync(canonical.attachmentPaths[1]!, 'utf8')).toBe('canonical text');
   });
 
+  it('leaves the access root writable and clears sandbox mount targets on teardown', () => {
+    const f = fixture();
+    writeFileSync(path.join(f.projectRoot, 'brief.txt'), 'canonical text');
+    const descriptor = createOdNextTaskInputSnapshot({
+      ...f,
+      taskExecutionId: 'odnext_teardown',
+      projectAttachments: ['brief.txt'],
+    });
+    const projectionsRoot = path.join(f.root, 'data', 'run-inputs');
+    const projection = createOdNextRunInputProjection({
+      descriptor,
+      snapshotsRoot: f.snapshotsRoot,
+      projectionsRoot,
+      runId: 'run-teardown',
+    });
+
+    // The projected inputs stay immutable one level down...
+    expect(statSync(projection.projectionDir).mode & 0o777).toBe(
+      process.platform === 'win32' ? statSync(projection.projectionDir).mode & 0o777 : 0o555,
+    );
+    // ...while the access root itself must stay owner-writable, because codex's
+    // Linux sandbox creates and then unlinks synthetic mount targets inside
+    // every writable root it is given. A read-only root made that teardown
+    // abort with `failed to remove synthetic bubblewrap mount target`.
+    if (process.platform !== 'win32') {
+      expect(statSync(projection.projectionAccessRoot).mode & 0o200).toBe(0o200);
+    }
+
+    // Simulate what the sandbox leaves behind next to the projection.
+    for (const target of ['.codex', '.agents', '.git']) {
+      mkdirSync(path.join(projection.projectionAccessRoot, target), { mode: 0o755 });
+    }
+
+    removeOdNextRunInputProjection(projection);
+    expect(existsSync(projection.projectionDir)).toBe(false);
+    expect(existsSync(projection.projectionAccessRoot)).toBe(false);
+  });
+
+  it('keeps the access root when a leftover entry still carries data', () => {
+    const f = fixture();
+    writeFileSync(path.join(f.projectRoot, 'brief.txt'), 'canonical text');
+    const descriptor = createOdNextTaskInputSnapshot({
+      ...f,
+      taskExecutionId: 'odnext_teardown_data',
+      projectAttachments: ['brief.txt'],
+    });
+    const projectionsRoot = path.join(f.root, 'data', 'run-inputs');
+    const projection = createOdNextRunInputProjection({
+      descriptor,
+      snapshotsRoot: f.snapshotsRoot,
+      projectionsRoot,
+      runId: 'run-teardown-data',
+    });
+
+    const survivor = path.join(projection.projectionAccessRoot, 'unexpected');
+    mkdirSync(survivor, { mode: 0o700 });
+    writeFileSync(path.join(survivor, 'keep.txt'), 'not ours to delete');
+
+    removeOdNextRunInputProjection(projection);
+    expect(existsSync(projection.projectionDir)).toBe(false);
+    expect(existsSync(projection.projectionAccessRoot)).toBe(true);
+    expect(readFileSync(path.join(survivor, 'keep.txt'), 'utf8')).toBe('not ours to delete');
+  });
+
   it('rejects an intermediate attachments-directory symlink even with identical bytes', () => {
     const f = fixture();
     writeFileSync(path.join(f.projectRoot, 'brief.txt'), 'identical frozen bytes');
@@ -574,4 +640,23 @@ describe('OD Next task-scoped input snapshots', () => {
     expect(() => loadOdNextTaskInputSnapshot(descriptor, f.snapshotsRoot))
       .toThrow(/manifest digest mismatch/);
   });
+});
+
+it('telemetry freezes validated task-input bytes after the original attachment changes', async () => {
+  const f = fixture();
+  writeFileSync(path.join(f.projectRoot, 'brief.txt'), 'frozen original');
+  const descriptor = createOdNextTaskInputSnapshot({ ...f, taskExecutionId: 'odnext_telemetry', projectAttachments: ['brief.txt'] });
+  writeFileSync(path.join(f.projectRoot, 'brief.txt'), 'later mutation');
+  const loaded = loadOdNextTaskInputSnapshot(descriptor, f.snapshotsRoot);
+  const options = { installationId: null, projectId: 'project', runId: 'run-a', projectsRoot: f.root,
+    prompt: '', prefs: { metrics: true, content: true, artifactManifest: true },
+    attachmentPaths: loaded.attachmentReferences, taskInputSnapshot: { descriptor, snapshotsRoot: f.snapshotsRoot },
+    runScopedIds: true, env: { OPEN_DESIGN_TELEMETRY_RELAY_URL: 'https://telemetry.open-design.ai/api/langfuse' } };
+  const sources = await freezeTraceObjectSources(options);
+  expect(sources[0]?.body?.toString()).toBe('frozen original');
+  const other = await freezeTraceObjectSources({ ...options, runId: 'run-b' });
+  expect(other[0]?.id).not.toBe(sources[0]?.id);
+  const invalid = await freezeTraceObjectSources({ ...options, taskInputSnapshot: { descriptor: { ...descriptor, manifestSha256: '0'.repeat(64) }, snapshotsRoot: f.snapshotsRoot } });
+  expect(invalid[0]?.body).toBeUndefined();
+  expect(invalid[0]?.reason).toBe('task_input_snapshot_invalid');
 });

@@ -12,6 +12,11 @@ import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { closeDatabase, openDatabase, upsertMessage } from '../../src/db.js';
+import { snapshotProjectArtifacts, diffRunArtifacts } from '../../src/run-artifact-fs.js';
+import { composeStrategyIntentResolution } from '../../src/strategies/od-next/intent-resolution.js';
+import { startIntentResolution, recordStrategyRunWriteEvidence } from '../../src/strategies/od-next/intent-resolution-store.js';
+import { OdNextMachineProtocolStream } from '../../src/strategies/od-next/protocol.js';
+import { prepareAutomaticStrategyContinuation } from '../../src/strategies/od-next/automatic-simple-production.js';
 import { createSnapshot } from '../../src/plugins/snapshots.js';
 import {
   createTaskObservationRolloutService,
@@ -32,6 +37,7 @@ import {
 import {
   compareAndTransitionStrategyTaskExecution,
   createStrategyTaskExecution,
+  claimStrategyExecutionIntentResolution,
   getStrategyTaskExecution,
   migrateStrategyTaskStore,
 } from '../../src/strategies/task-store.js';
@@ -682,6 +688,67 @@ describe('task observation rollout', () => {
     expect(serialized).not.toContain('private artifact body');
   });
 
+  it('exports both physical request spans after a real intent claim, completion and SQLite reopen', async () => {
+    const snapshotId = getStrategyTaskExecution(db, 'task-1')!.snapshotId;
+    const task = createStrategyTaskExecution(db, {
+      taskExecutionId: 'intent-task', projectId: 'project-1', conversationId: 'conversation-1',
+      snapshotId, selectedAgentId: 'codex', initialRunId: 'intent-source',
+      ...strategyTaskCreateIdentityFixture(), createdAt: 1_000,
+    });
+    const cwd = path.join(tempDir, 'provider-cwd'); fs.mkdirSync(cwd);
+    const diff = diffRunArtifacts(snapshotProjectArtifacts(cwd), snapshotProjectArtifacts(cwd));
+    const evidence = { physicalStatus: 'succeeded' as const, deliverableValid: false,
+      filesWritten: diff.filesWritten, filesWrittenUnknown: diff.filesWrittenUnknown === true,
+      filesWrittenSource: 'filesystem' as const };
+    const sourceProtocol = new OdNextMachineProtocolStream();
+    sourceProtocol.push(`The requested planning answer is complete.\n<open-design-plan-contract>\n${JSON.stringify(planContractFixture(snapshotId))}\n</open-design-plan-contract>\n<open-design-runtime-state>\n${JSON.stringify({ schema: 'open-design.strategy-state/v2', route: 'full_plan', inputStage: 'request', outcome: 'plan_ready', executionMode: 'simple', reasonCodes: [] })}\n</open-design-runtime-state>`);
+    const source = { runId: task.latestRunId, parsed: sourceProtocol.finish(), toolUseCount: 0, completionEvidence: evidence };
+    expect(source.parsed.issues).toEqual([]);
+    const { instruction, sourceResultJson } = composeStrategyIntentResolution(task, source);
+    recordStrategyRunWriteEvidence(db, { taskExecutionId: task.taskExecutionId, runId: task.latestRunId, filesWritten: evidence.filesWritten, unknown: evidence.filesWrittenUnknown, source: 'filesystem' });
+    const claimed = claimStrategyExecutionIntentResolution(db, {
+      taskExecutionId: task.taskExecutionId, expectedRevision: task.revision,
+      sourceRunId: task.latestRunId, nextRunId: 'intent-reply', sourceResultJson, finalText: instruction, updatedAt: 2_000,
+    });
+    startIntentResolution(db, task.taskExecutionId, 'intent-reply');
+    const reply = new OdNextMachineProtocolStream();
+    reply.push(`<open-design-runtime-state>\n${JSON.stringify({ schema: 'open-design.strategy-state/v2', route: 'full_plan', inputStage: 'request', outcome: 'completed', executionMode: 'simple', executionIntent: 'plan_only', reasonCodes: [] })}\n</open-design-runtime-state>`);
+    const completed = prepareAutomaticStrategyContinuation({
+      db, task: claimed, parsed: reply.finish(), toolUseCount: 0, completionEvidence: evidence,
+      service: { prepare: () => { throw new Error('No production on plan-only'); }, start: run => run },
+      createMeta: (stage, message, taskRunIndex) => ({ stage, message, taskRunIndex }), updatedAt: 3_000,
+    });
+    expect(completed.result.action).toBe('completed');
+    const runs = completed.result.task.runs.map(mapping => ({
+      ...syntheticRun(), id: mapping.runId, createdAt: 1_000 + mapping.taskRunIndex * 1_000,
+      updatedAt: 2_000 + mapping.taskRunIndex * 1_000,
+      promptTelemetry: bindOdNextExactSendPromptEvidence({
+        telemetry: buildPromptStackTelemetry({ composedPrompt: mapping.finalText.text,
+          sections: [{ kind: 'odNextExactFinalText', content: mapping.finalText.text }] }),
+        finalText: mapping.finalText.text, persisted: mapping.finalText, stage: mapping.inputStage,
+        ...(mapping.purpose ? { purpose: mapping.purpose } : {}),
+      }),
+    }));
+    const persistedTelemetry = path.join(tempDir, 'run-prompt-evidence.json');
+    fs.writeFileSync(persistedTelemetry, JSON.stringify(runs));
+    closeDatabase(); db = openDatabase(tempDir, { dataDir: tempDir });
+    const restored = JSON.parse(fs.readFileSync(persistedTelemetry, 'utf8')) as SyntheticRunLike[];
+    const fetchImpl = vi.fn<typeof fetch>(async () => acceptedResponse());
+    await expect(service({ mode: 'send', fetchImpl,
+      getRun: runId => restored.find(run => run.id === runId) ?? null,
+    }).finalizeForRun('intent-reply')).resolves.toMatchObject({ action: 'sent' });
+    expect(fetchImpl).toHaveBeenCalledOnce();
+    const batch = JSON.parse(String(fetchImpl.mock.calls[0]![1]!.body)).batch as Array<{
+      body: { id?: string; name?: string; input?: { kind?: string }; metadata?: { runId?: string; taskRunIndex?: number } };
+    }>;
+    const spans = batch.filter(event => event.body.name === 'strategy-stage:request');
+    expect(spans).toHaveLength(2);
+    expect(new Set(spans.map(span => span.body.id)).size).toBe(2);
+    expect(spans.map(span => span.body.input?.kind)).toEqual(['bundle', 'turn']);
+    expect(spans.map(span => span.body.metadata?.runId)).toEqual(['intent-source', 'intent-reply']);
+    expect(spans.map(span => span.body.metadata?.taskRunIndex)).toEqual([0, 1]);
+  });
+
   it('exports the mapped raw hostComposed identity and bounded exact-text payload', async () => {
     const mapping = getStrategyTaskExecution(db, 'task-1')!.runs[0]!;
     const promptTelemetry = bindOdNextExactSendPromptEvidence({
@@ -965,6 +1032,7 @@ describe('task observation rollout', () => {
       expectedRevision: task.revision,
       to: {
         route: 'full_plan',
+        executionIntent: 'produce',
         inputStage: 'clarification',
         outcome: 'running',
         executionMode: null,

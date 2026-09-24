@@ -655,7 +655,7 @@ export const OD_NEXT_EXACT_TEXT_DELIVERY_PATHS_V1 = [
   },
   {
     id: 'plain_stdin',
-    source: 'writePromptAndEndStdin(child.stdin, exactText)',
+    source: 'spawnAgentProcess({ stdin: { prompt: exactText } }) file-backed stdin',
     invariant: 'stdin bytes are exactText UTF-8',
   },
   {

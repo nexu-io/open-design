@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 
-// The composer keeps Plugins and Design Toolbox discoverable inside the "+"
-// menu. They must not regress into persistent quick pills above the input.
+// The composer keeps Plugins discoverable inside the "+" menu, next to the
+// Connectors and MCP submenus, and must not regress into persistent quick
+// pills above the input. The Design Toolbox is no longer a "+" row (OPEND-3085,
+// per the Demo); it stays reachable through the next-step card's imperative
+// `openDesignToolbox` handle only.
 
 if (typeof HTMLElement.prototype.scrollTo !== 'function') {
   HTMLElement.prototype.scrollTo = function () {};
@@ -17,7 +20,7 @@ afterEach(() => {
 });
 
 describe('composer resource discovery', () => {
-  it('keeps Plugins and Design Toolbox in the plus menu without persistent quick pills', () => {
+  it('keeps Plugins, Connectors, and MCP in the plus menu without persistent quick pills', () => {
     render(
       <ChatPane
         messages={[]}
@@ -39,7 +42,15 @@ describe('composer resource discovery', () => {
 
     fireEvent.click(screen.getByTestId('chat-plus-trigger'));
 
+    expect(screen.getByTestId('composer-plus-attach')).toBeTruthy();
+    expect(screen.getByTestId('composer-plus-reference-project')).toBeTruthy();
+    expect(screen.getByTestId('composer-plus-local-code')).toBeTruthy();
     expect(screen.getByTestId('composer-plus-plugins')).toBeTruthy();
-    expect(screen.getByRole('menuitem', { name: /Design Toolbox|设计百宝箱/i })).toBeTruthy();
+    expect(screen.getByTestId('composer-plus-figma')).toBeTruthy();
+    expect(screen.getByTestId('composer-plus-connectors')).toBeTruthy();
+    expect(screen.getByTestId('composer-plus-mcp')).toBeTruthy();
+    // Removed per the Demo: the working-directory group and the toolbox row.
+    expect(screen.queryByTestId('composer-plus-working-dir')).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /Design Toolbox|设计百宝箱/i })).toBeNull();
   });
 });

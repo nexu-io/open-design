@@ -128,16 +128,18 @@ function drawnTier(slot: Element | null | undefined): PlanBadgeTier | 'unrecogni
 }
 
 /**
- * The wordmark on the account nameplate, inside the menu's billing card.
+ * The wordmark on the account nameplate, inside the billing card.
  *
  * 320a36ac1 moved the account module into the floating top-right cluster and
- * reduced its trigger to a bare avatar circle — the nameplate (tier label +
- * wordmark) now renders only here, so this opens the menu to read it. The
- * subject of these cases is `planBadgeTierForWorkspace`'s answer, which is
- * unchanged; only the one surface that draws it moved.
+ * reduced its trigger to a bare avatar circle; the account then moved to the
+ * foot of the rail and the billing card to a hover panel under the top-right
+ * credits pill — the nameplate (tier label + wordmark) now renders only
+ * there, so this hovers the pill to read it. The subject of these cases is
+ * `planBadgeTierForWorkspace`'s answer, which is unchanged; only the one
+ * surface that draws it moved.
  */
 function nameplateTier() {
-  fireEvent.click(screen.getByTestId('entry-nav-account'));
+  fireEvent.pointerEnter(screen.getByTestId('entry-top-right-credits'));
   return drawnTier(document.querySelector('.entry-nav-rail__menu-credits'));
 }
 

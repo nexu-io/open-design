@@ -113,12 +113,14 @@ test('[P1] composer footer controls keep their size hierarchy on one baseline', 
     '.avatar-agent-trigger',
     '.composer-send',
   ]);
+
   const centers = controls.map((c) => c.center);
   const spread = (xs: number[]) => Math.max(...xs) - Math.min(...xs);
 
   const send = controls.find((control) => control.sel === '.composer-send');
   const utilityControls = controls.filter((control) => control.sel !== '.composer-send');
-  expect(send?.height, `control heights: ${JSON.stringify(controls)}`).toBe(32);  for (const control of utilityControls) {
+  expect(send?.height, `control heights: ${JSON.stringify(controls)}`).toBe(32);
+  for (const control of utilityControls) {
     expect(control.height, `control heights: ${JSON.stringify(controls)}`).toBe(28);
   }
 

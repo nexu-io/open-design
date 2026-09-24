@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import type { StrategyTaskProjectionV2 } from '@open-design/contracts';
+
 import { streamViaDaemon } from '../../src/providers/daemon';
 
 afterEach(() => {
@@ -39,10 +41,11 @@ function handlers() {
 function blockedEndFrame(input: {
   inputStage: 'request' | 'clarification' | 'production';
   reasonCodes?: string[];
+  physicalStatus?: 'succeeded' | 'failed';
 }): string {
   return `event: end\ndata: ${JSON.stringify({
     code: 0,
-    status: 'succeeded',
+    status: input.physicalStatus ?? 'succeeded',
     strategyTask: {
       taskExecutionId: 'task-1',
       strategy: {
@@ -69,23 +72,15 @@ function blockedEndFrame(input: {
   })}\n\n`;
 }
 
-/** An assistant text delta, so a turn under test can have actually replied. */
-function textFrame(text: string): string {
-  return `event: agent\ndata: ${JSON.stringify({ type: 'text_delta', delta: text })}\n\n`;
-}
-
-async function streamBlockedTurn(
-  frame: string,
-  runStatus: Record<string, unknown> = { deliverableValid: false },
-  reply = '已完成。交付物在项目根目录。',
-) {
+async function runBlockedTurn(frame: string) {
   const h = handlers();
-  const stream = reply ? `${textFrame(reply)}${frame}` : frame;
+  const onStrategyTaskSettled = vi.fn();
+  const onRunStatus = vi.fn();
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
     if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
-    if (url === '/api/runs/run-1/events') return sseResponse(stream);
-    if (url === '/api/runs/run-1') return jsonResponse(runStatus);
+    if (url === '/api/runs/run-1/events') return sseResponse(frame);
+    if (url === '/api/runs/run-1') return jsonResponse({ deliverableValid: false });
     throw new Error(`unexpected fetch ${url}`);
   }));
   await streamViaDaemon({
@@ -94,150 +89,122 @@ async function streamBlockedTurn(
     signal: new AbortController().signal,
     handlers: h,
     taskExecutionId: 'task-1',
+    onRunStatus,
+    onStrategyTaskSettled,
   });
-  return h;
+  expect(h.onError).not.toHaveBeenCalled();
+  expect(h.onDone).toHaveBeenCalledTimes(1);
+  expect(onRunStatus).toHaveBeenLastCalledWith('succeeded');
+  expect(onStrategyTaskSettled).toHaveBeenCalledTimes(1);
+  return onStrategyTaskSettled.mock.calls[0]![0] as StrategyTaskProjectionV2;
 }
 
-async function runBlockedTurn(frame: string) {
-  const h = await streamBlockedTurn(frame);
-  expect(h.onError).toHaveBeenCalledTimes(1);
-  return h.onError.mock.calls[0]![0] as Error & { code?: string };
-}
-
-describe('a blocked strategy task reaches the user with the daemon\'s own verdict', () => {
+describe('a blocked strategy task reaches the message as the daemon\'s own verdict', () => {
   // The turn the user sees is the one right after they answered a question
   // form: their answers went in, the agent answered, and the task still landed
   // terminal-`blocked` because the reply carried no Runtime State block. The
   // verdict is correct — at the clarification stage the contract admits only
   // `plan_ready` (which needs a Plan Contract the reply never had), `blocked`
-  // or `canceled`. What is NOT correct is handing that to the user as a
-  // sentence with no subject, no reason and nothing to look up.
-  it('carries the blocking reason code so the card and the diagnostics can name it', async () => {
-    const error = await runBlockedTurn(blockedEndFrame({
+  // or `canceled`. The Run itself succeeded, so the turn ends Done: the
+  // verdict is stamped on the message through the settled projection, where
+  // the diagnostics can name the reason, and no run error is raised over it.
+  //
+  // These frames stream no visible reply. That no longer changes the outcome:
+  // a succeeded Run stays Done whether or not the agent said anything.
+  it('carries the blocking reason code on the settled verdict so the diagnostics can name it', async () => {
+    const settled = await runBlockedTurn(blockedEndFrame({
       inputStage: 'clarification',
       reasonCodes: ['od_next_protocol_runtime_state_missing'],
     }));
 
-    // Read the property directly rather than asserting through
-    // `not.toHaveBeenCalledWith`: a partial-object matcher passes on an error
-    // that carries no code at all.
-    expect(error.code).toBe('od_next_protocol_runtime_state_missing');
+    expect(settled.outcome).toBe('blocked');
+    expect(settled.blockedContext?.reasonCodes).toEqual(['od_next_protocol_runtime_state_missing']);
   });
 
-  it('says what happened instead of restating that something did not continue', async () => {
-    const error = await runBlockedTurn(blockedEndFrame({
+  it('ends the turn Done instead of raising a run error over the verdict', async () => {
+    const settled = await runBlockedTurn(blockedEndFrame({
       inputStage: 'clarification',
       reasonCodes: ['od_next_protocol_runtime_state_missing'],
     }));
 
-    expect(error.message).not.toBe('The strategy task could not continue.');
-    expect(error.message).toContain('reply');
+    // `runBlockedTurn` already asserts no `onError`, one `onDone` and a final
+    // `succeeded` status; the settled projection is what the message keeps.
+    expect(settled.terminal).toBe(true);
+    expect(settled.inputStage).toBe('clarification');
   });
 
   it('keeps a verdict from a daemon that sent no blocked context', async () => {
     // Older daemons project a blocked task without `blockedContext`. The turn
-    // must still fail — just without a reason code to name.
-    const error = await runBlockedTurn(blockedEndFrame({ inputStage: 'production' }));
+    // still ends Done, and the verdict still lands — without a reason to name.
+    const settled = await runBlockedTurn(blockedEndFrame({ inputStage: 'production' }));
 
-    expect(error.code).toBeUndefined();
-    expect(error.message).not.toBe('The strategy task could not continue.');
+    expect(settled.outcome).toBe('blocked');
+    expect(settled.blockedContext).toBeUndefined();
   });
 });
 
-// The incident this split exists for: vela compacted mid-build and dropped the
-// run, the user typed "继续", the agent re-checked the 2.27 MB deck an earlier
-// turn had already written, correctly rewrote nothing, and the turn was refused
-// over its machine block. `deliverableValid` — "did THIS run write the entry" —
-// is `false` for that shape and always will be, so the carve-out that exists to
-// keep a delivered turn out of the failure branch could never fire, and a red
-// card landed under a finished deck the user could see rendered beside it.
-describe('a blocked turn the user still has the deliverable for', () => {
-  it('does not become a failure when the project holds the deliverable', async () => {
-    const h = await streamBlockedTurn(
-      blockedEndFrame({
-        inputStage: 'production',
-        reasonCodes: ['od_next_canonical_deliverable_invalid'],
-      }),
-      { deliverableValid: false, projectDeliverableValid: true },
-    );
-
+// The daemon's two delivery answers (did this run write the entry, does the
+// project hold one) used to decide whether a succeeded Run kept its success
+// beside a blocked task. They no longer take part: the Run's own result
+// decides, and only a Run that did not succeed raises the error.
+describe('delivery evidence during blocked run completion', () => {
+  it('keeps the success when the daemon answers neither delivery question', async () => {
+    const h = handlers();
+    const reply = 'The existing result is ready.';
+    const text = `event: agent\ndata: ${JSON.stringify({ type: 'text_delta', delta: reply })}\n\n`;
+    const end = blockedEndFrame({ inputStage: 'production',
+      reasonCodes: ['od_next_protocol_runtime_state_missing'] });
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
+      if (url === '/api/runs/run-1/events') return sseResponse(text + end);
+      // Older daemons can omit both fields; the outcome does not depend on them.
+      if (url === '/api/runs/run-1') return jsonResponse({});
+      throw new Error(`unexpected fetch ${url}`);
+    }));
+    await streamViaDaemon({ agentId: 'mock',
+      history: [{ id: 'request', role: 'user', content: 'Check the existing result.' }],
+      signal: new AbortController().signal, handlers: h, taskExecutionId: 'task-1' });
     expect(h.onError).not.toHaveBeenCalled();
+    expect(h.onDone).toHaveBeenCalledTimes(1);
+    expect(h.onDone).toHaveBeenCalledWith(reply);
   });
 
-  it('still fails when the project holds nothing either', async () => {
-    // The other half of the split has to keep working: an empty-handed turn is
-    // a real failure and must keep its card and its reason code.
-    const h = await streamBlockedTurn(
-      blockedEndFrame({
-        inputStage: 'production',
-        reasonCodes: ['od_next_canonical_deliverable_invalid'],
-      }),
-      { deliverableValid: false, projectDeliverableValid: false },
-    );
-
-    expect(h.onError).toHaveBeenCalledTimes(1);
-    const error = h.onError.mock.calls[0]![0] as Error & { code?: string };
-    expect(error.code).toBe('od_next_canonical_deliverable_invalid');
-  });
-
-  it('keeps honouring the run-scoped answer on its own', async () => {
-    // A run that did write the entry has obviously delivered; the stricter
-    // field must not stop counting just because a looser one arrived.
-    const h = await streamBlockedTurn(
-      blockedEndFrame({
-        inputStage: 'production',
-        reasonCodes: ['od_next_protocol_runtime_state_missing'],
-      }),
-      { deliverableValid: true },
-    );
-
-    expect(h.onError).not.toHaveBeenCalled();
-  });
-
-  it('still fails when the turn produced no reply at all', async () => {
-    // The false-success half of the same conflation (#7564): a blank OD Next
-    // response into a project that already holds a prototype. The earlier
-    // turn's file is real, but the user asked for something and got a newline —
-    // going silent there would swap one wrong answer for the other.
-    const h = await streamBlockedTurn(
-      blockedEndFrame({
-        inputStage: 'request',
-        reasonCodes: ['od_next_protocol_runtime_state_missing'],
-      }),
-      { deliverableValid: false, projectDeliverableValid: true },
-      '\n',
-    );
-
-    expect(h.onError).toHaveBeenCalledTimes(1);
-  });
-
-  it('keeps crediting a run that wrote the entry even with no prose', async () => {
-    // The stricter field is unchanged: an artifact this run produced is
-    // delivery whether or not the agent narrated it.
-    const h = await streamBlockedTurn(
-      blockedEndFrame({
-        inputStage: 'request',
-        reasonCodes: ['od_next_protocol_runtime_state_missing'],
-      }),
-      { deliverableValid: true },
-      '',
-    );
-
-    expect(h.onError).not.toHaveBeenCalled();
-  });
-
-  it('fails closed when the daemon answers neither question', async () => {
-    // A daemon too old to send either field, or a project scan that could not
-    // run, must leave the previous behaviour in place rather than silently
-    // swallowing a real failure.
-    const h = await streamBlockedTurn(
-      blockedEndFrame({
-        inputStage: 'production',
-        reasonCodes: ['od_next_protocol_runtime_state_missing'],
-      }),
-      {},
-    );
-
-    expect(h.onError).toHaveBeenCalledTimes(1);
+  it.each([
+    { name: 'keeps the success with project delivery and this run reply', reply: 'The existing result is ready.', projectValid: true, runValid: false, physicalStatus: 'succeeded', succeeds: true },
+    { name: 'keeps the success with project delivery and no reply', reply: '', projectValid: true, runValid: false, physicalStatus: 'succeeded', succeeds: true },
+    { name: 'keeps the success with project delivery and only whitespace', reply: '\n  ', projectValid: true, runValid: false, physicalStatus: 'succeeded', succeeds: true },
+    { name: 'keeps the success with a reply and neither delivery proof', reply: 'The existing result is ready.', projectValid: false, runValid: false, physicalStatus: 'succeeded', succeeds: true },
+    { name: 'keeps this run delivery without prose', reply: '', projectValid: false, runValid: true, physicalStatus: 'succeeded', succeeds: true },
+    { name: 'preserves physical failure despite project delivery and prose', reply: 'The existing result is ready.', projectValid: true, runValid: false, physicalStatus: 'failed', succeeds: false },
+  ] as const)('$name', async ({ reply, projectValid, runValid, physicalStatus, succeeds }) => {
+    const h = handlers();
+    const text = `event: agent\ndata: ${JSON.stringify({ type: 'text_delta', delta: reply })}\n\n`;
+    const end = blockedEndFrame({ inputStage: 'production', physicalStatus,
+      reasonCodes: ['od_next_protocol_runtime_state_missing'] });
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
+      if (url === '/api/runs/run-1/events') return sseResponse(text + end);
+      if (url === '/api/runs/run-1') return jsonResponse({
+        deliverableValid: runValid, projectDeliverableValid: projectValid,
+      });
+      throw new Error(`unexpected fetch ${url}`);
+    }));
+    await streamViaDaemon({ agentId: 'mock',
+      history: [
+        { id: 'earlier', role: 'assistant', content: 'A previous run already described the project.' },
+        { id: 'request', role: 'user', content: 'Check the existing result.' },
+      ],
+      signal: new AbortController().signal, handlers: h, taskExecutionId: 'task-1' });
+    if (succeeds) {
+      expect(h.onError).not.toHaveBeenCalled();
+      expect(h.onDone).toHaveBeenCalledTimes(1);
+      expect(h.onDone).toHaveBeenCalledWith(reply);
+    } else {
+      expect(h.onError).toHaveBeenCalledTimes(1);
+      expect(h.onDone).not.toHaveBeenCalled();
+      expect(h.onError.mock.calls[0]![0]).toMatchObject({ code: 'od_next_protocol_runtime_state_missing' });
+    }
   });
 });

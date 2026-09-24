@@ -51,24 +51,24 @@ describe('Reconnect · 自动重试读数', () => {
   });
 });
 
-describe('传输层那一行一个字没变', () => {
+describe('网络重连保留标题计数并展示 S29 正文', () => {
   it('不传 reason 时仍然是「正在恢复网络连接 N/5」', () => {
     render(<Reconnect attempt={2} max={5} />);
-    expect(row().textContent).toBe('正在恢复网络连接2/5');
+    expect(row().textContent).toBe('正在恢复网络连接2/5正在进行第 2/5 次连接尝试，请稍候。');
   });
 
   it('显式传 transport 也一样', () => {
     render(<Reconnect attempt={2} max={5} reason="transport" />);
-    expect(row().textContent).toBe('正在恢复网络连接2/5');
+    expect(row().textContent).toBe('正在恢复网络连接2/5正在进行第 2/5 次连接尝试，请稍候。');
   });
 
   it('agent 上游重连也说「正在恢复网络连接」并原位显示计数', () => {
     render(<Reconnect attempt={2} max={5} reason="agent-reconnect" />);
-    expect(row().textContent).toBe('正在恢复网络连接2/5');
+    expect(row().textContent).toBe('正在恢复网络连接2/5正在进行第 2/5 次连接尝试，请稍候。');
   });
 
   it('读数超过预算仍然夹到预算上', () => {
     render(<Reconnect attempt={7} max={5} reason="transport" />);
-    expect(row().textContent).toBe('正在恢复网络连接5/5');
+    expect(row().textContent).toBe('正在恢复网络连接5/5正在进行第 5/5 次连接尝试，请稍候。');
   });
 });

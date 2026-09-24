@@ -58,18 +58,47 @@ describe('DeepSeek V4 Flash workbench campaign entry', () => {
     expect(entryShellSource).toContain("deepSeekV4FlashCampaignAudience === 'unknown'");
   });
 
-  it('keeps the top-right campaign entry visible across entry tabs and project detail', () => {
+  it('keeps the built-in campaign entry visible across entry tabs and project detail', () => {
+    // The DeepSeek pill is product chrome and rides every surface. The CMS
+    // touchpoints beside it are home placements and are asserted separately
+    // below; that is why this slot may no longer open on `amrLoggedIn` alone.
     expect(entryShellSource).toMatch(
-      /topRightSlot=\{\s*topRightCampaignAudience \? \(/,
+      /topRightSlot=\{\s*topRightCampaignAudience\s*\|\|\s*\(homeCampaignHostsVisible && amrLoggedIn === true\)\s*\?\s*\(/,
+    );
+    expect(entryShellSource).toMatch(
+      /topRightSlot=\{[\s\S]*?\{\s*topRightCampaignAudience\s*\?\s*\([\s\S]*?<WorkbenchCampaignBadge[\s\S]*?audience=\{topRightCampaignAudience\}[\s\S]*?page="home"/,
     );
     expect(entryShellSource).not.toMatch(
       /topRightSlot=\{\s*view === 'home'/,
     );
+    expect(entryShellSource).not.toMatch(
+      /topRightSlot=\{\s*homeCampaignHostsVisible\s*&&/,
+    );
     expect(entryNavRailSource).toMatch(
-      /export function WorkspaceTopRightAccountCluster[\s\S]*?leadingSlot=\{campaignAudience \? \([\s\S]*?<WorkbenchCampaignBadge[\s\S]*?audience=\{campaignAudience\}[\s\S]*?page="project"/,
+      /export function WorkspaceTopRightAccountCluster[\s\S]*?leadingSlot=\{\s*campaignAudience\s*\?\s*\(/,
+    );
+    expect(entryNavRailSource).toMatch(
+      /export function WorkspaceTopRightAccountCluster[\s\S]*?leadingSlot=\{[\s\S]*?<WorkbenchCampaignBadge[\s\S]*?audience=\{campaignAudience\}[\s\S]*?page="project"/,
     );
     expect(appSource).toMatch(
       /<WorkspaceTopRightAccountCluster[\s\S]*?amrLoggedIn=\{amrLoginStatus\?\.loggedIn \?\? null\}[\s\S]*?metricsConsent=\{config\.telemetry\?\.metrics === true\}/,
+    );
+  });
+
+  it('keeps every CMS touchpoint host on the home view', () => {
+    // `opend.home.*` is the only placement family this app authorizes, so the
+    // account badge, the hover entry and the modals are home hosts. The
+    // workbench corner carries none of them.
+    expect(entryShellSource).toContain("const homeCampaignHostsVisible = view === 'home';");
+    expect(entryShellSource).toMatch(
+      /homeCampaignHostsVisible\s*&&\s*canRenderProductionCampaignBadge\(amrLoggedIn === true, amrAccountId\)\s*\?\s*<ProductionCampaignBadge authenticated sessionSubject=\{amrAccountId\}/,
+    );
+    expect(entryShellSource).toMatch(
+      /homeCampaignHostsVisible\s*\?\s*\(\s*<ProductionCampaignHover\s+authenticated=\{amrLoggedIn === true\}\s+sessionSubject=\{amrAccountId\}/,
+    );
+    expect(entryNavRailSource).not.toContain('ProductionCampaignBadge');
+    expect(appSource).toMatch(
+      /\{route\.kind === 'home' && route\.view === 'home' && \([\s\S]*?<TestCampaignModal[\s\S]*?<ProductionCampaignModal/,
     );
   });
 

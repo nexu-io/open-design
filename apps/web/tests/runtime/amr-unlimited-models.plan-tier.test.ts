@@ -12,14 +12,13 @@ describe('planUnlimitedTier', () => {
     expect(planUnlimitedTier(raw)).toBe(expected);
   });
 
-  it.each(['team_plus', 'team-pro', 'team_max_yearly', 'team_basic', 'team'])(
-    'refuses to read a personal tier out of the team id %s',
-    (raw) => {
-      expect(planUnlimitedTier(raw)).toBeNull();
+  it.each([['team_plus', 'plus'], ['team-pro', 'pro'], ['team_max_yearly', 'max']] as const)(
+    'reads the team seat tier %s for display only', (raw, expected) => {
+      expect(planUnlimitedTier(raw)).toBe(expected);
     },
   );
 
-  it.each([null, undefined, '', '   ', 'free'])(
+  it.each([null, undefined, '', '   ', 'free', 'team_basic', 'team'])(
     'answers null for %s, which carries no Coding Plan entitlement',
     (raw) => {
       expect(planUnlimitedTier(raw)).toBeNull();

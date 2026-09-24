@@ -3746,13 +3746,14 @@ describe('ProjectView conversation run isolation', () => {
     },
   );
 
-  it('routes workspace authorize recovery through AMR mode switching for structured auth failures', async () => {
+  it('requests persisted Cloud without arming a replay from the legacy workspace callback seam', async () => {
     conversationAMessages = [];
     fetchChatRunStatus.mockResolvedValue(null);
     const onModeChange = vi.fn();
     const onAgentChange = vi.fn();
     const onOpenAmrSettings = vi.fn();
     const onArmAmrAuthRetryContinuation = vi.fn();
+    const onSwitchToCloud = vi.fn().mockResolvedValue(undefined);
     streamViaDaemon.mockImplementation(
       async (options: {
         onRunCreated?: (runId: string) => void;
@@ -3791,6 +3792,7 @@ describe('ProjectView conversation run isolation', () => {
         onAgentChange,
         onOpenAmrSettings,
         onArmAmrAuthRetryContinuation,
+        onSwitchToCloud,
       },
     );
 
@@ -3802,32 +3804,25 @@ describe('ProjectView conversation run isolation', () => {
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.getByTestId('workspace-authorize')).toBeTruthy());
 
-    fireEvent.click(screen.getByTestId('workspace-authorize'));
-
-    expect(onModeChange).toHaveBeenCalledWith('daemon');
-    expect(onAgentChange).toHaveBeenCalledWith('amr');
-    expect(onOpenAmrSettings).toHaveBeenCalledTimes(1);
-    expect(onArmAmrAuthRetryContinuation).toHaveBeenCalledWith(expect.objectContaining({
-      projectId: project.id,
-      conversationId: 'conv-a',
-      assistantId: expect.any(String),
-      originMountId: expect.any(String),
-      workspaceIdentityKey: expect.any(String),
-    }));
-    expect(onArmAmrAuthRetryContinuation.mock.invocationCallOrder[0]).toBeLessThan(
-      onModeChange.mock.invocationCallOrder[0]!,
-    );
-    expect(onArmAmrAuthRetryContinuation.mock.invocationCallOrder[0]).toBeLessThan(
-      onOpenAmrSettings.mock.invocationCallOrder[0]!,
-    );
+    // This old FileWorkspace stub exposes the callback as a test seam, not
+    // a current product button. Real main/side card entry is verified by the
+    // OPEND-3205 actual-host suite; no Settings route or new run is permitted.
+    await act(async () => { fireEvent.click(screen.getByTestId('workspace-authorize')); });
+    expect(onSwitchToCloud).toHaveBeenCalledOnce();
+    expect(onModeChange).not.toHaveBeenCalled();
+    expect(onAgentChange).not.toHaveBeenCalled();
+    expect(onOpenAmrSettings).not.toHaveBeenCalled();
+    expect(onArmAmrAuthRetryContinuation).not.toHaveBeenCalled();
+    expect(streamViaDaemon).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId('streaming-state').textContent).toBe('idle');
   });
 
-  it('leaves retry ownership with the App continuation while Settings is open', async () => {
+  it('does not start another run after the legacy workspace callback selects Cloud', async () => {
     conversationAMessages = [];
     fetchChatRunStatus.mockResolvedValue(null);
     fetchVelaLoginStatus.mockResolvedValue({ loggedIn: true });
     const onArmAmrAuthRetryContinuation = vi.fn();
+    const onSwitchToCloud = vi.fn().mockResolvedValue(undefined);
     streamViaDaemon.mockImplementation(
       async (options: {
         onRunCreated?: (runId: string) => void;
@@ -3865,6 +3860,7 @@ describe('ProjectView conversation run isolation', () => {
       {
         onOpenAmrSettings: vi.fn(),
         onArmAmrAuthRetryContinuation,
+        onSwitchToCloud,
       },
     );
 
@@ -3876,10 +3872,10 @@ describe('ProjectView conversation run isolation', () => {
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.getByTestId('workspace-authorize')).toBeTruthy());
 
-    fireEvent.click(screen.getByTestId('workspace-authorize'));
+    await act(async () => { fireEvent.click(screen.getByTestId('workspace-authorize')); });
 
-    expect(onArmAmrAuthRetryContinuation).toHaveBeenCalledTimes(1);
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(onSwitchToCloud).toHaveBeenCalledOnce();
+    expect(onArmAmrAuthRetryContinuation).not.toHaveBeenCalled();
     expect(streamViaDaemon).toHaveBeenCalledTimes(1);
   });
 
@@ -4045,6 +4041,7 @@ function renderProjectView(
     onAgentChange?: (agentId: string) => void;
     onOpenSettings?: (section?: SettingsSection) => void;
     onOpenAmrSettings?: () => void;
+    onSwitchToCloud?: () => Promise<void>;
     onArmAmrAuthRetryContinuation?: (
       continuation: Omit<AmrAuthRetryContinuation, 'accountIdAtArm' | 'createdAtMs'>,
     ) => void;
@@ -4065,6 +4062,7 @@ function projectViewElement(
     onAgentChange?: (agentId: string) => void;
     onOpenSettings?: (section?: SettingsSection) => void;
     onOpenAmrSettings?: () => void;
+    onSwitchToCloud?: () => Promise<void>;
     onArmAmrAuthRetryContinuation?: (
       continuation: Omit<AmrAuthRetryContinuation, 'accountIdAtArm' | 'createdAtMs'>,
     ) => void;
@@ -4086,6 +4084,7 @@ function projectViewElement(
       onRefreshAgents={() => {}}
       onOpenSettings={handlers.onOpenSettings ?? (() => {})}
       onOpenAmrSettings={handlers.onOpenAmrSettings}
+      onSwitchToCloud={handlers.onSwitchToCloud}
       onArmAmrAuthRetryContinuation={handlers.onArmAmrAuthRetryContinuation}
       onBack={() => {}}
       onClearPendingPrompt={() => {}}

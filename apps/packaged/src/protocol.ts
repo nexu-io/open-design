@@ -24,6 +24,11 @@ type OdProtocolTarget = string | null;
  */
 type OdProtocolTargetResolver = () => OdProtocolTarget;
 
+export type OdProtocolControl = {
+  /** Stop forwarding renderer traffic before the current runtime retires. */
+  quiesce(): void;
+};
+
 protocol.registerSchemesAsPrivileged([
   {
     privileges: {
@@ -109,9 +114,11 @@ const OD_PROXY_RETRY_ATTEMPTS = 3;
 const OD_PROXY_RETRY_BACKOFF_MS = 150; // 150ms, 300ms — throw path only, ~450ms worst-case added
 
 type OdProxyRetryOptions = {
+  activeControllers?: Set<AbortController>;
   attempts?: number;
   backoffMs?: number;
   delay?: (ms: number) => Promise<void>;
+  isQuiesced?: () => boolean;
 };
 
 const defaultRetryDelay = (ms: number): Promise<void> =>
@@ -177,25 +184,38 @@ async function fetchOdTargetOnce(
   request: Request,
   target: string,
   fetchImpl: OdProtocolFetch,
+  options: OdProxyRetryOptions,
 ): Promise<Response> {
   const controller = new AbortController();
+  options.activeControllers?.add(controller);
+  const release = () => {
+    request.signal?.removeEventListener("abort", abortUpstream);
+    options.activeControllers?.delete(controller);
+  };
   const abortUpstream = () => controller.abort();
   if (request.signal != null) {
     if (request.signal.aborted) controller.abort();
     else request.signal.addEventListener("abort", abortUpstream, { once: true });
   }
-  const upstream = await fetchImpl(
-    new Request(target, {
-      method: request.method,
-      headers: request.headers,
-      body: request.body,
-      // @ts-expect-error -- duplex is required by undici/net.fetch for
-      // streaming request bodies and absent from the lib.dom Request typings.
-      duplex: "half",
-      signal: controller.signal,
-    }),
-  );
+  let upstream: Response;
+  try {
+    upstream = await fetchImpl(
+      new Request(target, {
+        method: request.method,
+        headers: request.headers,
+        body: request.body,
+        // @ts-expect-error -- duplex is required by undici/net.fetch for
+        // streaming request bodies and absent from the lib.dom Request typings.
+        duplex: "half",
+        signal: controller.signal,
+      }),
+    );
+  } catch (error) {
+    release();
+    throw error;
+  }
   if (upstream.body == null) {
+    release();
     return new Response(null, {
       status: upstream.status,
       statusText: upstream.statusText,
@@ -208,11 +228,13 @@ async function fetchOdTargetOnce(
       try {
         const { done, value } = await reader.read();
         if (done) {
+          release();
           streamController.close();
           return;
         }
         streamController.enqueue(value);
       } catch (error) {
+        release();
         streamController.error(error);
       }
     },
@@ -220,6 +242,7 @@ async function fetchOdTargetOnce(
       // Protocol consumer went away (renderer closed the EventSource, tab
       // navigated, fetch aborted) — release the upstream connection NOW.
       abortUpstream();
+      release();
       return reader.cancel().catch(() => undefined);
     },
   });
@@ -271,6 +294,23 @@ function buildClientCancelledResponse(target: string): Response {
 
 const OD_TARGET_UNAVAILABLE_STATUS = 503; // Service Unavailable
 
+function buildRuntimeRetiringResponse(request: Request): Response {
+  return new Response(
+    JSON.stringify({
+      error: "OD_PROTOCOL_RUNTIME_RETIRING",
+      message: "the packaged runtime is restarting",
+      requested: request.url,
+    }),
+    {
+      status: OD_TARGET_UNAVAILABLE_STATUS,
+      headers: {
+        "content-type": "application/json",
+        "access-control-allow-origin": "*",
+      },
+    },
+  );
+}
+
 /**
  * Answer for a request that has nowhere to go: the web sidecar reported no
  * address, or reported one that will not parse.
@@ -319,10 +359,14 @@ async function fetchOdTargetWithTransientRetry(
   const delay = options.delay ?? defaultRetryDelay;
   let lastError: unknown;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    if (options.isQuiesced?.()) {
+      throw new Error("packaged runtime is retiring");
+    }
     try {
-      return await fetchOdTargetOnce(request, target, fetchImpl);
+      return await fetchOdTargetOnce(request, target, fetchImpl, options);
     } catch (error) {
       lastError = error;
+      if (options.isQuiesced?.()) break;
       // Retrying a request the client abandoned can only fail again, and each
       // extra attempt is a misleading "proxy fetch failed" line in the log.
       if (isClientCancelled(request)) break;
@@ -408,6 +452,7 @@ export async function handleOdRequest(
   try {
     return await fetchOdTargetWithTransientRetry(request, target, fetchImpl, retryOptions);
   } catch (error) {
+    if (retryOptions.isQuiesced?.()) return buildRuntimeRetiringResponse(request);
     // A request the renderer cancelled is not a gateway failure — reporting it
     // as 502 both lies in the logs and hands error-shaped JSON to any consumer
     // that fails to check `res.ok`.
@@ -441,13 +486,14 @@ export function packagedEntryUrl(): string {
  * `net.fetch` regresses a broader streaming edge on a specific Electron/OS
  * combo.
  */
-function resolveOdProxyFetch(): OdProtocolFetch {
+function resolveOdProxyFetch(isQuiesced: () => boolean = () => false): OdProtocolFetch {
   if (process.env.OD_OD_PROXY_FETCH === "undici") return fetch;
   const undiciFetch = fetch;
   return async (request) => {
     try {
       return await net.fetch(request);
     } catch (error) {
+      if (isQuiesced()) throw error;
       if (!OD_PROXY_RETRYABLE_METHODS.has(request.method) || isClientCancelled(request)) {
         throw error;
       }
@@ -474,9 +520,25 @@ function resolveOdProxyFetch(): OdProtocolFetch {
  * See `OdProtocolTargetResolver` for why this takes a provider rather than the
  * address itself.
  */
-export function registerOdProtocol(resolveWebRuntimeUrl: OdProtocolTargetResolver): void {
-  const fetchImpl = resolveOdProxyFetch();
+export function registerOdProtocol(resolveWebRuntimeUrl: OdProtocolTargetResolver): OdProtocolControl {
+  let quiesced = false;
+  const activeControllers = new Set<AbortController>();
+  const fetchImpl = resolveOdProxyFetch(() => quiesced);
   protocol.handle(OD_SCHEME, async (request) => {
-    return await handleOdRequest(request, resolveWebRuntimeUrl(), fetchImpl);
+    // BrowserWindow.close() may be held by a renderer beforeunload guard. The
+    // transport barrier is therefore the authoritative boundary: once armed,
+    // no request can race sidecar retirement or dial the old localhost origin.
+    if (quiesced) return buildRuntimeRetiringResponse(request);
+    return await handleOdRequest(request, resolveWebRuntimeUrl(), fetchImpl, {
+      activeControllers,
+      isQuiesced: () => quiesced,
+    });
   });
+  return {
+    quiesce() {
+      quiesced = true;
+      for (const controller of activeControllers) controller.abort();
+      activeControllers.clear();
+    },
+  };
 }

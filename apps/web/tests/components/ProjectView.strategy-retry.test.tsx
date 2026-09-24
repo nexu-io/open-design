@@ -234,14 +234,14 @@ const conversation: Conversation = {
   updatedAt: 1,
 };
 
-/** 本地 CLI:不走 AMR 预检,门控那一层看得最干净。 */
-const localConfig: AppConfig = {
+/** G16:卡内手动 Retry 属于 Cloud，配置与两条物理运行的来源保持一致。 */
+const cloudConfig: AppConfig = {
   mode: 'daemon',
   apiProtocol: 'openai',
   apiKey: '',
   baseUrl: '',
   model: '',
-  agentId: 'agent-1',
+  agentId: 'amr',
   agentModels: {},
   skillId: null,
   designSystemId: null,
@@ -252,7 +252,7 @@ const agents = [
   { id: 'amr', name: 'OpenDesign Cloud', available: true, models: [] },
 ] as unknown as AgentInfo[];
 
-function renderProjectView(config: AppConfig = localConfig) {
+function renderProjectView(config: AppConfig = cloudConfig) {
   return render(
     <ProjectView
       project={project}
@@ -284,13 +284,13 @@ const originalUser: ChatMessage = {
 };
 const requestAssistant: ChatMessage = {
   id: 'request-assistant', role: 'assistant', createdAt: 2,
-  content: 'The plan is ready.', agentId: 'agent-1',
+  content: 'The plan is ready.', agentId: 'amr',
   runId: 'request-run', runStatus: 'succeeded',
   strategyTaskExecutionId: TASK_ID, strategyTaskRunIndex: 0,
 };
 const productionAssistant: ChatMessage = {
   id: 'production-assistant', role: 'assistant', createdAt: 3,
-  content: 'Production did not finish.', agentId: 'agent-1',
+  content: 'Production did not finish.', agentId: 'amr',
   runId: 'production-run', runStatus: 'failed',
   strategyTaskExecutionId: TASK_ID, strategyTaskRunIndex: 1,
   events: [{

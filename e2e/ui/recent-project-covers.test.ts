@@ -2,6 +2,7 @@ import { expect, test } from '@/playwright/suite';
 import {
   configureVisualPage,
   gotoVisualHome,
+  gotoVisualProjectsPage,
   type VisualProject,
   waitForVisualProjects,
 } from '@/playwright/visual';
@@ -20,7 +21,7 @@ const PROJECT: VisualProject = {
   status: { value: 'succeeded' },
 };
 
-test('[P1] renders a nested fixed-stage deck cover inside Recent projects', async ({ page }) => {
+test('[P1] renders a nested fixed-stage deck cover on the projects page', async ({ page }) => {
   test.setTimeout(T.xlong);
   const deckHtml = fixedStageDeckFixtureHtml();
   await configureVisualPage(page, { projects: [PROJECT] });
@@ -58,6 +59,8 @@ test('[P1] renders a nested fixed-stage deck cover inside Recent projects', asyn
 
   await gotoVisualHome(page);
   await waitForVisualProjects(page, [PROJECT]);
+  // The cards live on the 项目 page; Home only lists the rail rows (OPEND-3140).
+  await gotoVisualProjectsPage(page);
 
   const card = page.locator(`.recent-projects__card[data-project-id="${PROJECT_ID}"]`);
   const frame = card.locator('.recent-projects__deck-iframe').contentFrame();

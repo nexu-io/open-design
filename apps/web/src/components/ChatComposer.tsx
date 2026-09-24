@@ -490,10 +490,14 @@ export interface ChatComposerHandle {
   scheduleComposerPanelClose: () => void;
   /**
    * Open the composer "+" menu from outside, optionally landing on a specific
-   * flyout.
+   * flyout. `toolbox` is a legacy target from the removed toolbox row; it
+   * opens the bare menu.
    */
-  openPlusMenu: (submenu?: PlusMenuSubmenu) => void;
+  openPlusMenu: (submenu?: PlusMenuOpenTarget) => void;
 }
+
+/** Flyouts an external open request may land on; see `openPlusMenu`. */
+export type PlusMenuOpenTarget = PlusMenuSubmenu | 'toolbox';
 
 export interface ChatSendMeta {
   /** Stable identity for one confirmed user submission. Queueing and the
@@ -763,7 +767,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     // External "+"-menu open request — nonce-keyed so every request re-opens
     // even after the menu was dismissed.
     const [plusMenuOpenRequest, setPlusMenuOpenRequest] = useState<
-      { nonce: number; submenu?: PlusMenuSubmenu } | null
+      { nonce: number; submenu?: PlusMenuOpenTarget } | null
     >(null);
     const [stagedMcpServers, setStagedMcpServers] = useState<McpServerConfig[]>([]);
     const [stagedConnectors, setStagedConnectors] = useState<ConnectorDetail[]>([]);
@@ -1510,7 +1514,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         scheduleComposerPanelClose: () => {
           scheduleComposerPanelClose();
         },
-        openPlusMenu: (submenu?: PlusMenuSubmenu) => {
+        openPlusMenu: (submenu?: PlusMenuOpenTarget) => {
           setComposerEngaged(true);
           setPlusMenuOpenRequest((prev) => ({
             nonce: (prev?.nonce ?? 0) + 1,
@@ -2756,61 +2760,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       ]));
     }
 
-    // The WorkingDirPicker treats the project's working directory as a single
-    // primary folder, so selecting one replaces the primary `linkedDirs` entry
-    // while preserving staged workspace-context dirs. The folder is read-only
-    // awareness for the agent (→ `--add-dir`), not a Design Files import, and
-    // `baseDir` is never touched.
-    async function setWorkingDirFolder(dir: string) {
-      if (!projectId) return;
-      const base = projectMetadata ?? { kind: 'prototype' as const };
-      const metadata: ProjectMetadata = {
-        ...base,
-        linkedDirs: linkedDirsWithWorkspaceContext(dir),
-      };
-      const result = await patchProject(projectId, { metadata }, workspaceContext);
-      // The daemon rejects stale/inaccessible/system dirs with
-      // INVALID_LINKED_DIR (patchProject → null). Only commit the selection
-      // and promote it in recents when the project accepted it; otherwise
-      // surface the failure and leave recents untouched so a rejected path
-      // isn't re-promoted to the top of the menu.
-      if (!result?.metadata) {
-        onShowToast?.(t('homeWorkingDir.applyFailed'));
-        return;
-      }
-      onProjectMetadataChange?.(result);
-      const promotedDir = dir.trim();
-      setPromotedWorkspaceContextDir(
-        selectedWorkspaceContextDirs.includes(promotedDir) ? promotedDir : null,
-      );
-      setWorkspaceLinkedDirAdds((current) => {
-        const nextEntries = Object.entries(current).filter(([, tracked]) => (
-          tracked.dir !== promotedDir
-        ));
-        return nextEntries.length === Object.keys(current).length
-          ? current
-          : Object.fromEntries(nextEntries);
-      });
-      void rememberRecentDir(dir);
-    }
-    async function handlePickWorkingDir() {
-      const selected = await openFolderDialog();
-      if (selected) await setWorkingDirFolder(selected);
-    }
-    async function clearWorkingDir() {
-      if (!projectId) return;
-      const base = projectMetadata ?? { kind: 'prototype' as const };
-      const metadata: ProjectMetadata = {
-        ...base,
-        linkedDirs: linkedDirsWithWorkspaceContext(null),
-      };
-      const result = await patchProject(projectId, { metadata }, workspaceContext);
-      if (result?.metadata) {
-        setPromotedWorkspaceContextDir(null);
-        onProjectMetadataChange?.(result);
-      }
-    }
-
     // Lexical drives every text change through this callback. `present` is the
     // entity list the editor's text currently references (MentionNodes plus
     // plain `@token`s matched against composerMentionEntities, deduped by
@@ -3657,19 +3606,22 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             <ComposerPlusMenu
               workspaceContext={workspaceContext}
               triggerTestId="chat-plus-trigger"
-              // 聊天面板走稿子那枚描边加号;home hero 不传这个,保持共享 Icon
-              // 的实心 remix 字形(产品裁决 2026-09-03:不动全站)。
-              strokeGlyph
               placementPreference="up"
-              openRequest={plusMenuOpenRequest}
+              // The menu no longer carries a toolbox row (OPEND-3085, per the
+              // Demo): a legacy `toolbox` target opens the bare menu.
+              openRequest={plusMenuOpenRequest ? {
+                nonce: plusMenuOpenRequest.nonce,
+                submenu: plusMenuOpenRequest.submenu === 'toolbox'
+                  ? undefined
+                  : plusMenuOpenRequest.submenu,
+              } : null}
               onOpen={() => {
                 trackComposerBar({ element: 'plus_menu_open' });
                 setComposerEngaged(true);
               }}
               onSubmenuOpen={(submenu) => {
-                // The toolbox flyout tracks its own open (design_toolbox_open);
-                // the working-dir flyout carries actions, not a resource list.
-                if (submenu === 'toolbox' || submenu === 'workingDir') return;
+                // The working-dir flyout carries actions, not a resource list.
+                if (submenu === 'workingDir') return;
                 trackComposerBar({
                   element: 'plus_submenu_open',
                   resource_kind: PLUS_SUBMENU_RESOURCE_KIND[submenu],
@@ -3690,10 +3642,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 });
                 insertConnectorMention(connector);
               }}
-              onAddConnector={() => {
+              onAddConnector={onOpenConnectors ? () => {
                 trackComposerBar({ element: 'plus_add', resource_kind: 'connector' });
-                onOpenConnectors?.();
-              }}
+                onOpenConnectors();
+              } : undefined}
               plugins={pluginsForComposer}
               onPickPlugin={(record) => {
                 trackComposerBar({
@@ -3703,10 +3655,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 });
                 void insertPluginMention(record);
               }}
-              onAddPlugin={() => {
+              onAddPlugin={onBrowsePlugins ? () => {
                 trackComposerBar({ element: 'plus_add', resource_kind: 'plugin' });
-                onBrowsePlugins?.();
-              }}
+                onBrowsePlugins();
+              } : undefined}
               skills={skills}
               onPickSkill={(skill) => {
                 trackComposerBar({
@@ -3725,10 +3677,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 });
                 insertMcpMention(server);
               }}
-              onAddMcp={() => {
+              onAddMcp={onOpenMcpSettings ? () => {
                 trackComposerBar({ element: 'plus_add', resource_kind: 'mcp' });
-                onOpenMcpSettings?.();
-              }}
+                onOpenMcpSettings();
+              } : undefined}
               onAttachFiles={() => {
                 trackChatPanelClick(analytics.track, {
                   page_name: 'chat_panel',
@@ -3749,20 +3701,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               onLinkLocalCode={() => {
                 trackComposerBar({ element: 'plus_pick', resource_kind: 'workspace', resource_id: 'local-code' });
                 void handleLinkLocalCodeContext();
-              }}
-              workingDir={workingDir}
-              recentWorkingDirs={recentDirs}
-              onPickWorkingDir={() => {
-                trackComposerBar({ element: 'plus_pick', resource_kind: 'workspace', resource_id: 'working-dir' });
-                void handlePickWorkingDir();
-              }}
-              onSelectRecentWorkingDir={(dir) => {
-                trackComposerBar({ element: 'plus_pick', resource_kind: 'workspace', resource_id: 'working-dir-recent' });
-                void setWorkingDirFolder(dir);
-              }}
-              onClearWorkingDir={() => {
-                trackComposerBar({ element: 'plus_pick', resource_kind: 'workspace', resource_id: 'working-dir-clear' });
-                void clearWorkingDir();
               }}
               attachLoading={uploading}
               onSelectFromLibrary={() => {
@@ -3798,53 +3736,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 trackComposerBar({ element: 'design_system_open' });
                 openDesignSystemPicker();
               } : undefined}
-              // 插件 and 设计百宝箱 live inside the "+" menu (right below
-              // 工作目录) as hover-expand submenus. The toolbox flyout reuses
-              // the same DesignToolboxPanel the standalone popover renders.
-              toolboxLabel={t('chat.designToolbox.title')}
-              renderToolbox={(close) => (
-                <DesignToolboxPanel
-                  workspaceContext={workspaceContext}
-                  actions={DESIGN_TOOLBOX_ACTIONS}
-                  skills={skills}
-                  plugins={pluginsForComposer}
-                  mcpServers={enabledMcpServers}
-                  mcpTemplates={mcpTemplates}
-                  connectors={connectors}
-                  projectFiles={projectFiles}
-                  activeSkillIds={stagedSkills.map((skill) => skill.id)}
-                  activePluginId={activeAppliedPlugin?.pluginId ?? pinnedPluginId ?? null}
-                  activeMcpServerIds={stagedMcpServers.map((server) => server.id)}
-                  activeConnectorIds={stagedConnectors.map((connector) => connector.id)}
-                  activeFilePaths={staged.map((item) => item.path)}
-                  onOpened={() => trackDesignToolbox({ element: 'design_toolbox_open' })}
-                  onPickAction={(action) => {
-                    trackDesignToolbox({
-                      element: 'design_toolbox_action',
-                      toolbox_action_id: action.id,
-                    });
-                    applyDesignToolboxAction(action);
-                    close();
-                  }}
-                  onPickSkill={(skill) => {
-                    trackDesignToolbox({
-                      element: 'design_toolbox_resource',
-                      resource_kind: 'skill',
-                      resource_id: skill.id,
-                    });
-                    applyDesignToolboxSkill(skill);
-                    close();
-                  }}
-                  onPickResource={(resource) => {
-                    trackDesignToolbox({
-                      element: 'design_toolbox_resource',
-                      ...designToolboxResourceTracking(resource),
-                    });
-                    applyDesignToolboxResource(resource);
-                    close();
-                  }}
-                />
-              )}
             />
             {/* #5517: the design-system picker sits inline in the composer's
                 icon row (palette icon) instead of the staged-context bar. */}

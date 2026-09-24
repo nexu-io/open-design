@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { pickHomeTemplate } from '../helpers/home-template-picker';
 
 // First-run guidance trail (home-hero/firstRunGuide.ts).
 //
@@ -48,7 +49,6 @@ function renderHome(projects: unknown[] = []) {
         projects={projects as never}
         onSubmit={() => undefined}
         onOpenProject={() => undefined}
-        onViewAllProjects={() => undefined}
       />
     </I18nProvider>,
   );
@@ -59,16 +59,6 @@ afterEach(() => {
   cleanup();
   window.localStorage.clear();
 });
-
-// #5517 removed the inline template rail from Home, so beat 1 of the guide no
-// longer has a chip card to sheen; the stage still arms on mount and advances
-// when a template is picked from the composer footer's radial picker.
-async function pickHomeTemplate(id: string) {
-  const trigger = await screen.findByTestId('home-hero-template-trigger');
-  await waitFor(() => expect((trigger as HTMLButtonElement).disabled).toBe(false));
-  fireEvent.click(trigger);
-  fireEvent.click(await screen.findByTestId(`home-hero-template-wedge-${id}`));
-}
 
 describe('Home first-run guide trail', () => {
   it('arms beat 1 for a fresh user and advances when a template is picked', async () => {
@@ -100,7 +90,6 @@ describe('Home first-run guide trail', () => {
           projectsLoading
           onSubmit={() => undefined}
           onOpenProject={() => undefined}
-          onViewAllProjects={() => undefined}
         />
       </I18nProvider>,
     );
@@ -121,7 +110,6 @@ describe('Home first-run guide trail', () => {
           projectsLoading
           onSubmit={() => undefined}
           onOpenProject={() => undefined}
-          onViewAllProjects={() => undefined}
         />
       </I18nProvider>,
     );
@@ -140,7 +128,6 @@ describe('Home first-run guide trail', () => {
           projectsLoading={false}
           onSubmit={() => undefined}
           onOpenProject={() => undefined}
-          onViewAllProjects={() => undefined}
         />
       </I18nProvider>,
     );
@@ -183,6 +170,9 @@ describe('Home first-run guide trail', () => {
     }));
     renderHome([]);
 
+    // Home no longer seeds a default type; beat 1 is the pick itself, and beat
+    // 2 then lands on the first static prompt-example card under it.
+    await pickHomeTemplate('prototype');
     const exampleCards = await screen.findAllByTestId('home-hero-prompt-example');
     await waitFor(
       () => {

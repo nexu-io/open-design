@@ -1114,6 +1114,67 @@ describe('FileWorkspace upload input', () => {
     expect(screen.getByTestId('design-file-row-home.html')).toBeTruthy();
   });
 
+  // The workspace's `streaming` prop is the composer's "actions disabled"
+  // state: it is also true for a read-only viewer of a shared project with
+  // nothing running. The building preview must key off a real run, or that
+  // viewer sees their page under a cursor captioned "thinking".
+  it('keys the building preview off a run in flight, not the disabled-actions state', () => {
+    const baseProps: React.ComponentProps<typeof FileWorkspace> = {
+      projectId: 'project-a',
+      projectKind: 'prototype',
+      files: [workspaceFile('index.html')],
+      messages: [{ id: 'active-run', role: 'assistant', content: '', startedAt: 1699999999 }],
+      liveArtifacts: [],
+      onRefreshFiles: vi.fn(),
+      isDeck: false,
+      tabsState: { tabs: [], active: null },
+      onTabsStateChange: vi.fn(),
+    };
+
+    const { rerender } = render(<FileWorkspace {...baseProps} streaming />);
+    expect(screen.queryByTestId('design-files-building')).toBeNull();
+    expect(screen.getByTestId('design-file-row-index.html')).toBeTruthy();
+
+    rerender(<FileWorkspace {...baseProps} streaming runInFlight />);
+    expect(screen.getByTestId('design-files-building')).toBeTruthy();
+    expect(screen.queryByTestId('design-file-row-index.html')).toBeNull();
+  });
+
+  it('keeps an existing page in the grid until the current run writes HTML', () => {
+    const startedAt = 1_800_000_000_000;
+    const oldPage = { ...workspaceFile('index.html'), mtime: startedAt - 10_000 };
+    const props: React.ComponentProps<typeof FileWorkspace> = {
+      projectId: 'project-a', projectKind: 'prototype',
+      files: [oldPage], liveArtifacts: [], onRefreshFiles: vi.fn(), isDeck: false,
+      tabsState: { tabs: [], active: null }, onTabsStateChange: vi.fn(),
+      runInFlight: true,
+      messages: [{ id: 'run-1', role: 'assistant', content: '', startedAt, runStatus: 'running' }],
+    };
+    const { rerender } = render(<FileWorkspace {...props} />);
+    expect(screen.queryByTestId('design-files-building')).toBeNull();
+    expect(screen.queryByTestId('design-files-preview-toggle')).toBeNull();
+    expect(screen.getByTestId('design-file-row-index.html')).toBeTruthy();
+
+    rerender(<FileWorkspace {...props} files={[oldPage, {
+      ...workspaceFile('notes.md'), kind: 'text', mtime: startedAt + 100,
+    }]} />);
+    expect(screen.queryByTestId('design-files-building')).toBeNull();
+
+    const writtenPage = { ...oldPage, mtime: startedAt + 200 };
+    rerender(<FileWorkspace {...props} files={[writtenPage]} />);
+    expect(screen.getByTestId('design-files-building')).toBeTruthy();
+
+    rerender(<FileWorkspace {...props} files={[writtenPage]} messages={[
+      ...props.messages!, { id: 'next-user', role: 'user', content: 'Write notes' },
+    ]} />);
+    expect(screen.queryByTestId('design-files-building')).toBeNull();
+
+    rerender(<FileWorkspace {...props} files={[writtenPage]} messages={[
+      { id: 'run-2', role: 'assistant', content: '', startedAt: startedAt + 300, runStatus: 'running' },
+    ]} />);
+    expect(screen.queryByTestId('design-files-building')).toBeNull();
+  });
+
   it('drops the previous project folders when switching, before the new fetch resolves', async () => {
     const folder = (path: string): ProjectFolder => ({
       name: path.split('/').pop() ?? path,
@@ -3379,22 +3440,23 @@ describe('projectSplitClassName', () => {
     // custom properties — no more concatenated `gridTemplateColumns` string.
     expect(projectSplitStyle(false, 512, 'minmax(420px, 1fr)')).toEqual({
       '--project-chat-panel-width': '512px',
-      '--project-chat-handle-width': '8px',
+      '--project-chat-handle-width': '4px',
       '--project-workspace-panel-track': 'minmax(420px, 1fr)',
     });
     expect(projectSplitStyle(true, 512, 'minmax(420px, 1fr)')).toBeUndefined();
   });
 
   it('starts an uncustomized wide project at an equal chat/preview split', () => {
-    // 1600 total − the 8px handle = two 796px content columns. This must not
-    // regress to the old fixed 460px default or its former 720px ceiling.
-    expect(defaultChatPanelWidthForSplit(1600)).toBe(796);
+    // 1600 total − the 4px handle (Demo, OPEND-2553 S6) = two 798px content
+    // columns. This must not regress to the old fixed 460px default or its
+    // former 720px ceiling.
+    expect(defaultChatPanelWidthForSplit(1600)).toBe(798);
   });
 
   it('keeps the workspace minimum when the viewport is too narrow for 1:1', () => {
     // At this width an exact half would leave the preview below its existing
-    // 400px minimum, so the established drag boundary wins.
-    expect(defaultChatPanelWidthForSplit(760)).toBe(352);
+    // 400px minimum, so the established drag boundary wins (760 − 4 − 400).
+    expect(defaultChatPanelWidthForSplit(760)).toBe(356);
   });
 });
 

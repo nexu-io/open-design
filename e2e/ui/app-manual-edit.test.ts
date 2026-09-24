@@ -614,7 +614,7 @@ test('[P1] HTML preview toolbar exposes comments, mark, and edit workflows', asy
   const queuedStrip = page.getByTestId('chat-queued-send-strip');
   await expect(queuedStrip).toBeVisible();
   await expect(queuedStrip).toContainText('Mark this hero crop');
-  await expect(queuedStrip.getByTestId('chat-queued-send-index')).toHaveText('1');
+  await expect(queuedStrip.getByTestId('chat-queued-send-row')).toHaveCount(1);
 
   await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/);
   await expect(page.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
@@ -670,7 +670,7 @@ test('[P1] draw annotation composer floats near the selected mark and can be que
   const queuedStrip = page.getByTestId('chat-queued-send-strip');
   await expect(queuedStrip).toBeVisible();
   await expect(queuedStrip).toContainText('Float this note near the marked hero area');
-  await expect(queuedStrip.getByTestId('chat-queued-send-index')).toHaveText('1');
+  await expect(queuedStrip.getByTestId('chat-queued-send-row')).toHaveCount(1);
 });
 
 test('[P1] first-loop onboarding completes once after a successful artifact export', async ({ page }) => {

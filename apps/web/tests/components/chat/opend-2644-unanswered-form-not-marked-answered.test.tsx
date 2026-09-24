@@ -24,7 +24,7 @@
  * 逐个钉死。
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { AssistantMessage } from '../../../src/components/AssistantMessage';
 import { QuestionFormView } from '../../../src/components/QuestionForm';
 import { formatFormAnswers, type QuestionForm } from '../../../src/artifacts/question-form';
@@ -104,7 +104,7 @@ describe('OPEND-2644 未提交的问卷', () => {
     expect(screen.queryByText(en['qf.lockedSubmitted'])).toBeNull();
   });
 
-  it('用户答了别的话之后,它才收成「此前回合的表单」—— 锁住和答过仍是两档', () => {
+  it('用户答了别的话之后,未回答问卷折叠只读,仍不许宣称答过', () => {
     /*
      * 「锁住」的正确触发条件:这条消息之后用户**确实说过话**了
      * (`nextUserContent` 有值,且不是这张表的答案)。
@@ -122,7 +122,17 @@ describe('OPEND-2644 未提交的问卷', () => {
         onSubmitQuestionForm={() => true}
       />,
     );
-    expect(screen.getByText(en['qf.lockedPrev'])).toBeTruthy();
+    // OPEND-2947 已确认:只有用户实际继续对话,才进入未回答的折叠历史态。
+    const disclosure = screen.getByText('Defense brief', { exact: true }).closest('summary');
+    expect(disclosure).not.toBeNull();
+    const details = disclosure!.closest('details')!;
+    expect(details.open).toBe(false);
+    expect(screen.getByText(en['qf.unanswered'], { exact: true })).toBeVisible();
+    fireEvent.click(disclosure!);
+    expect(details.open).toBe(true);
+    for (const option of screen.getAllByRole('radio')) expect(option).toBeDisabled();
+    expect(screen.getByText(en['qf.unansweredContinued'], { exact: true })).toBeVisible();
+    expect(screen.queryByText(en['qf.lockedPrev'])).toBeNull();
     expect(screen.queryByText(en['qf.lockedSubmitted'])).toBeNull();
     // 锁住了,但仍旧不许说「已回答」—— 这正是本文件第一节那条判据的另一面
     expect(screen.queryByText(en['qf.answered'])).toBeNull();

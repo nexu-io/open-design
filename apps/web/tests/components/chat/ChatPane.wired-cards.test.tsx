@@ -13,7 +13,7 @@
 //   1. 报错卡三颗动作齐(〔联系支持〕〔导出日志〕+ 主动作),且前两颗**常驻** ——
 //      连 `cpu_unsupported` 这种今天一颗按钮都没有的失败也要有。
 //   2. 点〔联系支持〕开 `SupportDialog`(组件 19 · 第 80 格)。
-//   3. `AMR_MODEL_UNAVAILABLE` 给的是「换个模型」而**不是**重试(设计原则四)。
+//   3. OPEND-2807 / G16: Cloud 失败固定联系我们、导出日志、重试，模型不可用也不例外。
 //   4. 升级卡在**流水里**(最后一轮之后、输入框之前),两档由余额决定,且**不挡发送**。
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -89,6 +89,7 @@ function renderChat(opts: {
   error?: string | null;
   onRetry?: (m: ChatMessage) => void;
   onOpenSettings?: (section?: string) => void;
+  onSwitchModel?: () => void;
   amrBalanceCardUsd?: number | null;
   onSend?: (...args: unknown[]) => void;
 } = {}) {
@@ -105,6 +106,7 @@ function renderChat(opts: {
       onRetry={opts.onRetry ?? vi.fn()}
       amrBalanceCardUsd={opts.amrBalanceCardUsd ?? null}
       onOpenSettings={opts.onOpenSettings as never}
+      onSwitchModel={opts.onSwitchModel}
       conversations={[
         { projectId: 'project-1', id: 'conv-1', title: 'Current', createdAt: 1, updatedAt: 1 },
       ]}
@@ -153,7 +155,7 @@ describe('ChatPane — 报错卡的常驻动作', () => {
   // 产品裁决:「好多都应该得有导出日志这个按钮」→ 不挑场景。
   // `cpu_unsupported` 是今天**一颗按钮都没有**的那一档(R-023「无任何按钮」),
   // 恰好是这条裁决最想覆盖的场景。
-  it('连一个恢复动作都没有的失败(cpu_unsupported)也照样给这两颗', () => {
+  it('Cloud 的 cpu_unsupported 同样固定两颗次级和主重试', () => {
     renderChat({
       messages: [
         failedMessage({
@@ -165,8 +167,9 @@ describe('ChatPane — 报错卡的常驻动作', () => {
 
     expect(screen.getByTestId('chat-error-contact-support')).toBeTruthy();
     expect(screen.getByTestId('chat-error-export-logs')).toBeTruthy();
-    // 这一档不该有重试 —— 重试必然同样结果。
-    expect(screen.queryByTestId('chat-error-retry')).toBeNull();
+    // G16 按运行来源固定动作，不再按旧恢复阶梯移除重试。
+    expect(screen.getByTestId('chat-error-retry').dataset.runErrorAction).toBe('primary');
+    expect(screen.getByTestId('chat-run-error-card').querySelectorAll('button')).toHaveLength(3);
   });
 
   it('只有面板级错误、没有可重试轮次时，两颗常驻动作仍共用描边次级壳', () => {
@@ -212,23 +215,31 @@ describe('ChatPane — 报错卡的常驻动作', () => {
   });
 });
 
-describe('ChatPane — 模型不可用给「换个模型」而不是重试', () => {
-  it('AMR_MODEL_UNAVAILABLE 不给重试', () => {
+describe('ChatPane — Cloud 模型不可用也遵守 G16 固定动作', () => {
+  it('AMR_MODEL_UNAVAILABLE 显示固定三颗，不增加换模型或设置', () => {
     renderChat({ messages: [failedMessage({ code: 'AMR_MODEL_UNAVAILABLE' })] });
 
-    expect(screen.queryByRole('button', { name: 'promptTemplates.retry' })).toBeNull();
-    expect(screen.getByTestId('chat-error-switch-model')).toBeTruthy();
+    const actions = screen.getByTestId('chat-run-error-card').querySelectorAll('button');
+    expect(Array.from(actions, (button) => button.dataset.testid)).toEqual([
+      'chat-error-contact-support',
+      'chat-error-export-logs',
+      'chat-error-retry',
+    ]);
+    expect(screen.getByTestId('chat-error-retry').dataset.runErrorAction).toBe('primary');
+    expect(screen.queryByTestId('chat-error-switch-model')).toBeNull();
   });
 
-  it('点「换个模型」落到真实的模型切换面板(设置 · 执行)', () => {
+  it('点重试传回原失败消息，不打开模型选择或设置', () => {
     const onOpenSettings = vi.fn();
-    renderChat({
-      messages: [failedMessage({ code: 'AMR_MODEL_UNAVAILABLE' })],
-      onOpenSettings,
-    });
+    const onSwitchModel = vi.fn();
+    const onRetry = vi.fn();
+    const message = failedMessage({ code: 'AMR_MODEL_UNAVAILABLE' });
+    renderChat({ messages: [message], onOpenSettings, onSwitchModel, onRetry });
 
-    fireEvent.click(screen.getByTestId('chat-error-switch-model'));
-    expect(onOpenSettings).toHaveBeenCalledWith('execution');
+    fireEvent.click(screen.getByTestId('chat-error-retry'));
+    expect(onRetry).toHaveBeenCalledExactlyOnceWith(message, 'manual_retry');
+    expect(onOpenSettings).not.toHaveBeenCalled();
+    expect(onSwitchModel).not.toHaveBeenCalled();
   });
 });
 

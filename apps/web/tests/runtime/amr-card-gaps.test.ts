@@ -208,8 +208,8 @@ describe('AMR 自己的三张专属卡没被拆坏', () => {
   it('AMR_TIER_UPGRADE_REQUIRED:升级套餐 + 次级重试', () => {
     const ui = resolveRunFailureUi('AMR_TIER_UPGRADE_REQUIRED', null, 'amr');
     expect(ui.primaryAction).toBe('upgrade');
-    expect(ui.titleKey).toBe('chat.amrBalanceGate.title');
-    expect(ui.messageKey).toBe(null);
+    expect(ui.titleKey).toBe('chat.runError.title.tierUpgradeRequired');
+    expect(ui.messageKey).toBe('chat.runError.tierUpgradeRequiredMessage');
     expect(ui.secondaryRetry).toBe(true);
   });
 

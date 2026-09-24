@@ -46,12 +46,16 @@ describe('发送队列只显示纯文本', () => {
     for (const cls of [
       'chat-queued-send-row',
       'chat-queued-send-main',
-      'chat-queued-send-index',
       'chat-queued-send-actions',
     ]) {
       expect(chatPane, `${cls} 应仍在组件里`).toMatch(new RegExp(cls));
       expect(chatCss, `${cls} 应仍在样式表里`).toMatch(new RegExp(cls.replace(/-/g, '\\-')));
     }
+  });
+
+  it('序号那一格连同它的规则一起去掉了(K1,参照 #8165 提交 1)', () => {
+    expect(chatPane).not.toMatch(/chat-queued-send-index/);
+    expect(chatCss).not.toMatch(/chat-queued-send-index/);
   });
 
   it('携带能力本身没被动 —— 编辑取回仍要还原这些东西', () => {

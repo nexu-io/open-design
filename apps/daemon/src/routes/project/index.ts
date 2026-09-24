@@ -14,6 +14,10 @@ import {
   buildPreviewObservabilityBridge,
 } from '@open-design/contracts/runtime/preview-observability';
 import {
+  PREVIEW_BUILD_FOCUS_BRIDGE_MARKER,
+  buildPreviewBuildFocusBridge,
+} from '@open-design/contracts/runtime/preview-build-focus';
+import {
   buildPreviewFocusGuard,
   buildPreviewRedirectGuard,
   buildPreviewSandboxShim,
@@ -270,7 +274,69 @@ function sameLocalCatalogScopes(left: unknown, right: unknown): boolean {
   return JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
 }
 
+/**
+ * Upper bound for every asynchronous read POST /api/projects performs before
+ * its project/conversation transaction. The Web enters an optimistic project
+ * surface the moment it sends the request, so a stalled catalogue scan must
+ * turn into a definite 504 the client can roll back from rather than an
+ * open-ended wait; see `PROJECT_CREATE_PREPARATION_TIMEOUT` in contracts.
+ */
+export const DEFAULT_PROJECT_CREATE_PREPARATION_TIMEOUT_MS = 15_000;
+
+class ProjectCreatePreparationTimeoutError extends Error {
+  constructor(readonly stage: string) {
+    super(`Project preparation timed out while ${stage}. Please try again.`);
+    this.name = 'ProjectCreatePreparationTimeoutError';
+  }
+}
+
+/**
+ * Bound the read-only work that must finish before the project/conversation
+ * transaction starts. A rejected race never continues into that transaction,
+ * so a stalled local catalogue scan cannot leave the Web on an endless
+ * optimistic project route or create a half-initialized project later.
+ */
+async function awaitProjectCreatePreparation<T>(
+  promise: Promise<T>,
+  deadlineMs: number,
+  stage: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    const remainingMs = Math.max(0, deadlineMs - Date.now());
+    if (remainingMs === 0) {
+      throw new ProjectCreatePreparationTimeoutError(stage);
+    }
+    return await Promise.race([
+      promise,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(
+          () => reject(new ProjectCreatePreparationTimeoutError(stage)),
+          remainingMs,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function assertProjectCreatePreparationWithinDeadline(
+  deadlineMs: number,
+  stage: string,
+): void {
+  if (Date.now() >= deadlineMs) {
+    throw new ProjectCreatePreparationTimeoutError(stage);
+  }
+}
+
 export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry' | 'appConfig' | 'agents' | 'validation' | 'collabSync'> {
+  /**
+   * Request-wide deadline for the read-only preparation POST /api/projects
+   * runs before its transaction. Production keeps the 15s default; tests and
+   * the `OD_PROJECT_CREATE_PREPARATION_TIMEOUT_MS` env seam may shorten it.
+   */
+  projectCreatePreparationTimeoutMs?: number;
   pluginScope?: {
     loadRegistry: (options: {
       workspaceId?: string | null;
@@ -1440,6 +1506,13 @@ const URL_PREVIEW_SNAPSHOT_BRIDGE = `<script data-od-url-snapshot-bridge>
       copyComputedStyle(originals[i], clones[i]);
       syncElementState(originals[i], clones[i]);
     }
+  }
+  // Must run AFTER pruneHiddenSnapshotNodes: prune pairs originalRoot/cloneRoot
+  // querySelectorAll('*') lists by index, so removing clone nodes (scripts,
+  // links) before it shifts every later clone under the wrong original and the
+  // misdirected removals can delete the visible content (or the body itself),
+  // yielding a uniform "empty-render" frame.
+  function stripSnapshotResources(cloneRoot){
     var scripts = cloneRoot.querySelectorAll('script');
     for (var s = scripts.length - 1; s >= 0; s--) scripts[s].remove();
     var links = cloneRoot.querySelectorAll('link[rel~="stylesheet"], link[rel~="preload"], link[rel~="preconnect"]');
@@ -1450,6 +1523,29 @@ const URL_PREVIEW_SNAPSHOT_BRIDGE = `<script data-od-url-snapshot-bridge>
         .replace(/@import[^;]+;/gi, '')
         .replace(/@font-face\\s*\\{[^}]*\\}/gi, '');
     }
+    // HTML tolerates attribute names XML rejects (@click, :href, {shorthand}).
+    // One such attribute anywhere makes the whole foreignObject SVG unparseable,
+    // so drop any attribute whose name is not a valid XML Name.
+    var XML_NAME = /^[A-Za-z_][A-Za-z0-9_.-]*(?::[A-Za-z_][A-Za-z0-9_.-]*)?$/;
+    var all = cloneRoot.querySelectorAll('*');
+    for (var e = 0; e < all.length; e++) {
+      var attrs = all[e].attributes;
+      for (var a = attrs.length - 1; a >= 0; a--) {
+        if (!XML_NAME.test(attrs[a].name)) all[e].removeAttribute(attrs[a].name);
+      }
+    }
+  }
+  // innerHTML uses the HTML serializer, which emits void elements (<br>, <img>)
+  // without self-closing slashes — invalid XML, so the foreignObject SVG image
+  // fails to parse (img.onerror → 'snapshot image failed'). XMLSerializer emits
+  // well-formed XHTML instead.
+  function serializeSnapshotXhtml(node){
+    try {
+      var serializer = new XMLSerializer();
+      var out = '';
+      for (var i = 0; i < node.childNodes.length; i++) out += serializer.serializeToString(node.childNodes[i]);
+      return out;
+    } catch (_) { return node.innerHTML || ''; }
   }
   function pruneHiddenSnapshotNodes(originalRoot, cloneRoot){
     var originals = originalRoot.querySelectorAll('*');
@@ -1521,11 +1617,12 @@ const URL_PREVIEW_SNAPSHOT_BRIDGE = `<script data-od-url-snapshot-bridge>
     clone.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
     inlineSnapshotStyles(document.documentElement, clone);
     pruneHiddenSnapshotNodes(document.documentElement, clone);
+    stripSnapshotResources(clone);
     var scroll = scrollOffset();
     var cloneBody = clone.querySelector('body');
     var rootStyle = clone.getAttribute('style') || '';
     var bodyStyle = cloneBody ? cloneBody.getAttribute('style') || '' : '';
-    var bodyContent = cloneBody ? cloneBody.innerHTML : clone.innerHTML;
+    var bodyContent = serializeSnapshotXhtml(cloneBody || clone);
     var wrapperStyle = rootStyle + bodyStyle +
       'margin:0;position:relative;left:' + (-scroll.x) + 'px;top:' + (-scroll.y) + 'px;' +
       'width:' + docW + 'px;height:' + docH + 'px;overflow:visible;';
@@ -1588,6 +1685,12 @@ function wantsUrlPreviewObservabilityBridge(value: unknown): boolean {
   return previewBridgeTokens(value).some((token) => token === 'observability' || token === 'errors' || token === 'diagnostics');
 }
 
+/** The build-focus bridge: lets the host park a cursor on the part of the page
+ *  the agent is writing right now (see the contracts module for the protocol). */
+function wantsUrlPreviewBuildFocusBridge(value: unknown): boolean {
+  return previewBridgeTokens(value).some((token) => token === 'buildfocus' || token === 'build-focus');
+}
+
 function wantsUrlPreviewSandboxGuard(value: unknown): boolean {
   return previewBridgeTokens(value).some((token) => token === 'sandbox' || token === 'storage');
 }
@@ -1642,7 +1745,15 @@ function injectAfterHeadOpen(html: string, marker: string, injection: string): s
 
 function injectUrlPreviewBridge(
   html: string,
-  bridge: 'scroll' | 'selection' | 'snapshot' | 'observability' | 'sandbox' | 'focus' | 'redirect',
+  bridge:
+    | 'scroll'
+    | 'selection'
+    | 'snapshot'
+    | 'observability'
+    | 'buildfocus'
+    | 'sandbox'
+    | 'focus'
+    | 'redirect',
 ): string {
   if (bridge === 'sandbox') {
     return injectAfterHeadOpen(html, 'data-od-sandbox-shim', buildPreviewSandboxShim());
@@ -1666,6 +1777,15 @@ function injectUrlPreviewBridge(
       buildPreviewObservabilityBridge(),
     );
   }
+  if (bridge === 'buildfocus') {
+    // Before </body>, like the scroll bridge: it walks the rendered DOM, so it
+    // must not run before the document it measures exists.
+    return injectBeforeBodyClose(
+      html,
+      PREVIEW_BUILD_FOCUS_BRIDGE_MARKER,
+      buildPreviewBuildFocusBridge(),
+    );
+  }
   if (bridge === 'scroll') {
     return injectBeforeBodyClose(html, 'data-od-url-scroll-bridge', URL_PREVIEW_SCROLL_BRIDGE);
   }
@@ -1686,6 +1806,7 @@ function applyUrlPreviewBridgesToHtml(
       wantsUrlPreviewSelectionBridge(requestedBridge) ||
       wantsUrlPreviewSnapshotBridge(requestedBridge) ||
       wantsUrlPreviewObservabilityBridge(requestedBridge) ||
+      wantsUrlPreviewBuildFocusBridge(requestedBridge) ||
       wantsUrlPreviewSandboxGuard(requestedBridge) ||
       wantsUrlPreviewFocusGuard(requestedBridge) ||
       wantsUrlPreviewRedirectGuard(requestedBridge)
@@ -1714,6 +1835,9 @@ function applyUrlPreviewBridgesToHtml(
   }
   if (wantsUrlPreviewSandboxGuard(requestedBridge)) {
     html = injectUrlPreviewBridge(html, 'sandbox');
+  }
+  if (wantsUrlPreviewBuildFocusBridge(requestedBridge)) {
+    html = injectUrlPreviewBridge(html, 'buildfocus');
   }
   if (wantsUrlPreviewScrollBridge(requestedBridge)) {
     html = injectUrlPreviewBridge(html, 'scroll');
@@ -2045,6 +2169,12 @@ function buildDesignSystemCopyPendingPrompt(input: {
 
 export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDeps) {
   const { db, design } = ctx;
+  const projectCreatePreparationTimeoutMs =
+    typeof ctx.projectCreatePreparationTimeoutMs === 'number'
+    && Number.isFinite(ctx.projectCreatePreparationTimeoutMs)
+    && ctx.projectCreatePreparationTimeoutMs > 0
+      ? ctx.projectCreatePreparationTimeoutMs
+      : DEFAULT_PROJECT_CREATE_PREPARATION_TIMEOUT_MS;
   const projectTelemetry = ctx.telemetry;
   const { sendApiError, createSseResponse } = ctx.http;
   const { DESIGN_SYSTEMS_DIR, PROJECTS_DIR, SKILLS_DIR, BRANDS_DIR, USER_DESIGN_SYSTEMS_DIR } = ctx.paths;
@@ -3721,6 +3851,11 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
 
   app.post('/api/projects', async (req, res) => {
     try {
+      // One request-wide deadline covers every asynchronous read before the
+      // transaction. Resetting a full timeout for each stage would still let a
+      // sequence of merely slow reads outlive the Web's optimistic route.
+      const projectCreatePreparationDeadline =
+        Date.now() + projectCreatePreparationTimeoutMs;
       // Ordinary project creation is local. Capture any complete identity that
       // the Web already has for local attribution, but do not turn Workspace
       // directory availability into a Send dependency. Remote share/sync/move
@@ -3810,9 +3945,15 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       // snapshot while a Workspace switch is loading. Use the partition that
       // produced that exact selection for local lookup only. It does not bind
       // this local project to that Workspace or prove current membership.
-      const designSystemValidation = await validateProjectDesignSystemId(
-        designSystemId,
-        designSystemCatalogScope ?? creationWorkspaceScope,
+      const designSystemValidation = await awaitProjectCreatePreparation<
+        Awaited<ReturnType<typeof validateProjectDesignSystemId>>
+      >(
+        validateProjectDesignSystemId(
+          designSystemId,
+          designSystemCatalogScope ?? creationWorkspaceScope,
+        ),
+        projectCreatePreparationDeadline,
+        'validating the selected design system',
       );
       if (!designSystemValidation.ok) {
         return sendApiError(
@@ -3823,9 +3964,15 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         );
       }
       const normalizedDesignSystemId = designSystemValidation.id;
-      const skillValidation = await validateProjectSkillId(
-        skillId,
-        skillCatalogScope ?? creationWorkspaceScope,
+      const skillValidation = await awaitProjectCreatePreparation<
+        Awaited<ReturnType<typeof validateProjectSkillId>>
+      >(
+        validateProjectSkillId(
+          skillId,
+          skillCatalogScope ?? creationWorkspaceScope,
+        ),
+        projectCreatePreparationDeadline,
+        'validating the selected skill',
       );
       if (!skillValidation.ok) {
         return sendApiError(res, 400, skillValidation.code, skillValidation.message);
@@ -3844,10 +3991,14 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       // Home already reconciles staged selections against its current local
       // catalogue, and this project is local until a later share/sync/move.
       const selectedLocalPlugin = requestedPluginId && requestedPluginSource
-        ? await ctx.pluginScope?.getLocalPluginBySource?.(
-            requestedPluginId,
-            requestedPluginSource,
-          ) ?? null
+        ? await awaitProjectCreatePreparation(
+            ctx.pluginScope?.getLocalPluginBySource?.(
+              requestedPluginId,
+              requestedPluginSource,
+            ) ?? Promise.resolve(null),
+            projectCreatePreparationDeadline,
+            'resolving the selected plugin',
+          )
         : null;
       if (requestedPluginId) {
         // Once a source is supplied, never substitute a same-id Personal or
@@ -3856,16 +4007,29 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         const visiblePlugin = requestedPluginSource
           ? selectedLocalPlugin
           : ctx.pluginScope
-            ? await ctx.pluginScope.getPlugin(requestedPluginId, creationWorkspaceScope)
+            ? await awaitProjectCreatePreparation(
+                ctx.pluginScope.getPlugin(requestedPluginId, creationWorkspaceScope),
+                projectCreatePreparationDeadline,
+                'resolving the selected plugin',
+              )
             : getInstalledPlugin(db, requestedPluginId);
         if (!visiblePlugin) {
           return sendApiError(res, 404, 'PLUGIN_NOT_FOUND', 'plugin not found');
         }
       }
-      const selectedLocationId = await resolveCreateProjectLocationId(projectLocationId);
+      const selectedLocationId = await awaitProjectCreatePreparation(
+        resolveCreateProjectLocationId(projectLocationId),
+        projectCreatePreparationDeadline,
+        'resolving the project location',
+      );
       let externalProjectDir: string | null = null;
       if (selectedLocationId !== BUILT_IN_PROJECT_LOCATION_ID) {
-        const location = (await configuredProjectLocations()).find((loc: any) => loc.id === selectedLocationId);
+        const locations = await awaitProjectCreatePreparation(
+          configuredProjectLocations(),
+          projectCreatePreparationDeadline,
+          'reading project locations',
+        );
+        const location = locations.find((loc: any) => loc.id === selectedLocationId);
         if (!location || location.builtIn) {
           return sendApiError(res, 400, 'BAD_REQUEST', 'unknown project location');
         }
@@ -4024,10 +4188,14 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         // `/api/plugins/:id/apply-local` uses, then read the example's bytes
         // from the record's own path. The request body contributes an identity
         // claim only; it never contributes content.
-        const resolvedExample = await ctx.pluginScope?.getLocalPluginBySource?.(
-          examplePluginId,
-          exampleSource,
-        ) ?? null;
+        const resolvedExample = await awaitProjectCreatePreparation(
+          ctx.pluginScope?.getLocalPluginBySource?.(
+            examplePluginId,
+            exampleSource,
+          ) ?? Promise.resolve(null),
+          projectCreatePreparationDeadline,
+          'resolving the selected example',
+        );
         const resolvedExampleRecord = resolvedExample as
           { id?: unknown; source?: unknown; fsPath?: unknown } | null;
         if (
@@ -4043,8 +4211,10 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           exampleBinding = createProjectExampleBinding({
             pluginId: examplePluginId,
             pluginSource: exampleSource,
-            manifestSourceDigest: await digestExampleSkillManifest(
-              resolvedExampleRecord.fsPath,
+            manifestSourceDigest: await awaitProjectCreatePreparation(
+              digestExampleSkillManifest(resolvedExampleRecord.fsPath),
+              projectCreatePreparationDeadline,
+              'reading the selected example',
             ),
             boundAt: now,
           });
@@ -4100,6 +4270,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         }
       }
       let project;
+      let managedTemplateDirPrepared = false;
       const pluginResolutionState: {
         snapshot: ResolveSnapshotOk | null;
         failure: ResolveSnapshotError | null;
@@ -4117,10 +4288,14 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           });
         }
         const registry = resolveBody
-          ? await loadPluginRegistryView(
-              selectedLocalPlugin
-                ? localPluginRegistryScope(selectedLocalPlugin)
-                : creationWorkspaceScope,
+          ? await awaitProjectCreatePreparation(
+              loadPluginRegistryView(
+                selectedLocalPlugin
+                  ? localPluginRegistryScope(selectedLocalPlugin)
+                  : creationWorkspaceScope,
+              ),
+              projectCreatePreparationDeadline,
+              'loading plugin resources',
             )
           : null;
         let pluginForSnapshot = selectedLocalPlugin;
@@ -4130,16 +4305,81 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           // reconciliation tombstone cannot leave a project/conversation or
           // snapshot behind. This is local catalogue freshness only: do not
           // turn it into a remote membership or current-Workspace gate.
-          pluginForSnapshot = await ctx.pluginScope?.getLocalPluginBySource?.(
-            requestedPluginId,
-            requestedPluginSource,
-          ) ?? null;
+          pluginForSnapshot = await awaitProjectCreatePreparation(
+            ctx.pluginScope?.getLocalPluginBySource?.(
+              requestedPluginId,
+              requestedPluginSource,
+            ) ?? Promise.resolve(null),
+            projectCreatePreparationDeadline,
+            'confirming the selected plugin',
+          );
           if (!pluginForSnapshot) {
             if (externalProjectDir) {
               await rm(externalProjectDir, { recursive: true, force: true }).catch(() => {});
             }
             return sendApiError(res, 404, 'PLUGIN_NOT_FOUND', 'plugin not found');
           }
+        }
+        // Seed saved-template files before the atomic database commit. The
+        // first Chat turn must never race a project row whose initial files are
+        // still being copied. Managed directories are compensated below if a
+        // later deadline, disconnect, or transaction failure prevents commit.
+        if (
+          metadata
+          && typeof metadata === 'object'
+          && metadata.kind === 'template'
+          && typeof metadata.templateId === 'string'
+        ) {
+          const tpl = getTemplate(db, metadata.templateId);
+          if (tpl && Array.isArray(tpl.files) && tpl.files.length > 0) {
+            assertProjectCreatePreparationWithinDeadline(
+              projectCreatePreparationDeadline,
+              'preparing template files',
+            );
+            managedTemplateDirPrepared = externalProjectDir == null;
+            await ensureProject(PROJECTS_DIR, id, projectMetadata);
+            for (const f of tpl.files) {
+              if (
+                !f
+                || typeof f.name !== 'string'
+                || typeof f.content !== 'string'
+              ) {
+                continue;
+              }
+              try {
+                await writeProjectFile(
+                  PROJECTS_DIR,
+                  id,
+                  f.name,
+                  Buffer.from(f.content, 'utf8'),
+                  {},
+                  projectMetadata,
+                );
+              } catch {
+                // The template is also embedded in the agent prompt. Preserve
+                // the existing best-effort behavior for individual bad files.
+              }
+            }
+          }
+        }
+        // Filesystem preparation is not raced because those writes cannot be
+        // cancelled safely. If it was slow, stop here and let the catch below
+        // compensate the external directory before any SQLite row is written.
+        assertProjectCreatePreparationWithinDeadline(
+          projectCreatePreparationDeadline,
+          'finalizing project preparation',
+        );
+        // The Web proxy propagates an aborted optimistic create to this
+        // request. Never cross the persistence boundary after its caller has
+        // gone away, even if the final catalogue read happened to settle at
+        // the same moment as the disconnect.
+        if (req.aborted || res.destroyed) {
+          if (externalProjectDir) {
+            await rm(externalProjectDir, { recursive: true, force: true }).catch(() => {});
+          } else if (managedTemplateDirPrepared) {
+            await removeProjectDir(PROJECTS_DIR, id).catch(() => {});
+          }
+          return;
         }
         project = db.transaction(() => {
           let createdProject = insertProject(db, {
@@ -4214,11 +4454,13 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           return createdProject;
         })();
       } catch (err) {
-        // External directories cannot participate in SQLite's transaction.
-        // Treat their creation as a recoverable side effect and compensate on
-        // any manifest or database transaction failure.
+        // Filesystem preparation cannot participate in SQLite's transaction.
+        // Compensate external locations and managed template staging on any
+        // deadline, disconnect, or database transaction failure.
         if (externalProjectDir) {
           await rm(externalProjectDir, { recursive: true, force: true }).catch(() => {});
+        } else if (managedTemplateDirPrepared) {
+          await removeProjectDir(PROJECTS_DIR, id).catch(() => {});
         }
         if (pluginResolutionState.failure) {
           return res
@@ -4226,43 +4468,6 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             .json(pluginResolutionState.failure.body);
         }
         throw err;
-      }
-      // For "from template" projects, seed the chosen template's snapshot
-      // HTML into the new project folder so the agent can Read/edit files
-      // on disk (the system prompt also embeds them, but a real on-disk
-      // copy lets the agent treat them as the project's working state).
-      if (
-        metadata &&
-        typeof metadata === 'object' &&
-        metadata.kind === 'template' &&
-        typeof metadata.templateId === 'string'
-      ) {
-        const tpl = getTemplate(db, metadata.templateId);
-        if (tpl && Array.isArray(tpl.files) && tpl.files.length > 0) {
-          await ensureProject(PROJECTS_DIR, id, projectMetadata);
-          for (const f of tpl.files) {
-            if (
-              !f ||
-              typeof f.name !== 'string' ||
-              typeof f.content !== 'string'
-            ) {
-              continue;
-            }
-            try {
-              await writeProjectFile(
-                PROJECTS_DIR,
-                id,
-                f.name,
-                Buffer.from(f.content, 'utf8'),
-                {},
-                projectMetadata,
-              );
-            } catch {
-              // Skip individual file failures — the template snapshot is
-              // best-effort; the agent still has the embedded copy.
-            }
-          }
-        }
       }
       /** @type {import('@open-design/contracts').CreateProjectResponse} */
       const createdProject = pluginResolutionState.snapshot
@@ -4284,6 +4489,15 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       };
       res.json(body);
     } catch (err: any) {
+      if (err instanceof ProjectCreatePreparationTimeoutError) {
+        return sendApiError(
+          res,
+          504,
+          'PROJECT_CREATE_PREPARATION_TIMEOUT',
+          err.message,
+          { retryable: true, details: { stage: err.stage } },
+        );
+      }
       sendApiError(res, 400, 'BAD_REQUEST', String(err));
     }
   });

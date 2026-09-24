@@ -88,7 +88,7 @@ describe('下一步建议行的字重(OPEND-2558)', () => {
    */
   it('组件自己钉住,不靠全局按钮规则施舍', () => {
     const withoutGlobalWeight = GLOBAL_BUTTON_CSS.replace(
-      /(\n\s*)font-weight:\s*500;/,
+      /(\n\s*)font-weight:\s*600;/,
       '$1/* removed for this test */',
     );
     expect(withoutGlobalWeight).not.toBe(GLOBAL_BUTTON_CSS);

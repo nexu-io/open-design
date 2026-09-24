@@ -1,36 +1,8 @@
 // @vitest-environment jsdom
-//
-// 红测:BYOK 的 API key 填错了(daemon `failure_detail: invalid_api_key`),
-// 报错卡上一个字都没用上,渲染的是通用兜底。
-//
-// 实测链路(真机端到端抓到的,不是推测):
-//  1. 用户在「设置 → API 提供商」里填了一把错的 key,发起一轮 `byok-opencode`;
-//  2. daemon 判得**完全正确** —— `run-failure-classification.ts` 的 `authDetail`
-//     从上游那句 `API key is invalid.` 里认出这一格:
-//        errorCode        = AGENT_EXECUTION_FAILED
-//        failureCategory  = auth
-//        failureDetail    = invalid_api_key
-//        failureAction    = login     ← daemon 明说该去登录 / 改 key
-//        retryable        = false
-//  3. web 这一侧 `invalid_api_key` 在 `apps/web/src` 里出现 **0 次** —— 三张映射表
-//     一格都没有,于是整轮落到 `resolveRunFailureUi` 最后那两条兜底:标题
-//     `chat.runError.title.generic`(「任务执行失败」)、正文
-//     `chat.runError.fallbackMessage`(「这次没能顺利完成……把日志发给我们」),
-//     卡上唯一像出路的按钮是〔联系支持〕,而**没有任何**通往改 key 的入口。
-//
-// 也就是说:API key 填错了,我们让用户去联系客服。
-//
-// 目标文案不是新写的。产品《报错文案》文档 S05「自带 API key 没配好」那一格,
-// 「润色标题」=「模型设置不完整」,「润色正文」=「API key 配置错误，请重新填写后
-// 重试。」,按钮 =〔去设置〕—— 逐字落进 `chat.runError.title.apiKeyInvalid` /
-// `chat.runError.apiKeyInvalidMessage`,按钮复用现成的
-// `chat.runError.openSettingsCta` + `onOpenSettings('execution')`(和发送前那道
-// BYOK 闸门 `ProjectView.requiresByokPreflight` 落的是同一个地方)。
-//
-// 判据只看**渲染出来的文本**(标题行 + `data-testid="chat-run-error-description"`)
-// 和按钮的 `data-testid` / 点击行为 —— 不断言任何 CSS 类名
-// (`apps/web/src/components/chat/AGENTS.md` §5)。
-import { cleanup, fireEvent, render } from '@testing-library/react';
+// S05 BYOK invalid-key copy must remain distinct from local-CLI S02.
+// G16 replaces every card-local settings/terminal action with the fixed Cloud
+// handoff; it does not change failure classification or approved copy.
+import { cleanup, fireEvent, render, within } from '@testing-library/react';
 import { forwardRef } from 'react';
 import { readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -120,6 +92,7 @@ function failedMessage(options: FailedRunOptions): ChatMessage {
 }
 
 function renderChat(message: ChatMessage, onOpenSettings = vi.fn()) {
+  const onSwitchToAmrAndRetry = vi.fn();
   const rendered = render(
     <ChatPane
       messages={[message]}
@@ -133,6 +106,7 @@ function renderChat(message: ChatMessage, onOpenSettings = vi.fn()) {
       onStop={vi.fn()}
       onRetry={vi.fn()}
       onOpenSettings={onOpenSettings}
+      onSwitchToAmrAndRetry={onSwitchToAmrAndRetry}
       conversations={[
         { projectId: 'project-1', id: 'conv-1', title: 'Current', createdAt: 1, updatedAt: 1 },
       ]}
@@ -149,7 +123,7 @@ function renderChat(message: ChatMessage, onOpenSettings = vi.fn()) {
       }
     />,
   );
-  return { ...rendered, onOpenSettings };
+  return { ...rendered, onOpenSettings, onSwitchToAmrAndRetry };
 }
 
 const cardOf = (container: HTMLElement) =>
@@ -163,7 +137,7 @@ const titleOf = (container: HTMLElement) => cardOf(container)?.firstElementChild
 const openSettingsButtonOf = (container: HTMLElement) =>
   cardOf(container)?.querySelector('[data-testid="chat-error-open-settings"]') ?? null;
 
-describe('S05 · 自带 API key 没配好,卡上要有自己的文案和改 key 的入口', () => {
+describe('S05 · 自带 API key 错误保留专属文案，入口按 G16 固定', () => {
   it('标题不再是通用「任务执行失败」,而是 S05 的润色标题', () => {
     const { container } = renderChat(failedMessage({ failureDetail: 'invalid_api_key' }));
     const title = titleOf(container);
@@ -185,22 +159,20 @@ describe('S05 · 自带 API key 没配好,卡上要有自己的文案和改 key 
     expect(descriptionOf(container)!.textContent ?? '').not.toContain(RAW_INVALID_KEY);
   });
 
-  it('卡上有一颗〔去设置〕,文案走现成的 openSettingsCta', () => {
+  it('卡内固定为联系、导出日志和 Cloud，不再出现去设置', () => {
     const { container } = renderChat(failedMessage({ failureDetail: 'invalid_api_key' }));
-    const button = openSettingsButtonOf(container);
-    expect(button).toBeTruthy();
-    expect(button!.textContent).toContain('chat.runError.openSettingsCta');
+    expect(within(cardOf(container) as HTMLElement).getAllByRole('button').map((button) => button.textContent?.trim()))
+      .toEqual(['chat.runError.contactSupportCta', 'chat.runError.exportLogsCta', 'chat.amrCard.switchCta']);
+    expect(openSettingsButtonOf(container)).toBeNull();
   });
 
-  // 这一条才是「真正能解决问题的入口」:按钮要落到那一屏 BYOK 的 key 输入框上,
-  // 也就是发送前那道 BYOK 闸门(`ProjectView.requiresByokPreflight`)落的同一个
-  // `execution` 节 —— 不是新造的一条路。
-  it('点〔去设置〕落到 execution 这一节(BYOK key 输入框那一屏)', () => {
-    const { container, onOpenSettings } = renderChat(
+  it('点击 Cloud 将原失败消息交给宿主，不调用旧设置入口', () => {
+    const { container, onOpenSettings, onSwitchToAmrAndRetry } = renderChat(
       failedMessage({ failureDetail: 'invalid_api_key' }),
     );
-    fireEvent.click(openSettingsButtonOf(container)!);
-    expect(onOpenSettings).toHaveBeenCalledWith('execution');
+    fireEvent.click(within(cardOf(container) as HTMLElement).getByRole('button', { name: 'chat.amrCard.switchCta' }));
+    expect(onSwitchToAmrAndRetry).toHaveBeenCalledWith(expect.objectContaining({ id: 'msg-failed', agentId: 'byok-opencode' }));
+    expect(onOpenSettings).not.toHaveBeenCalled();
   });
 
   // daemon 对这一格的 code 有两种写法(ACP 的 AGENT_EXECUTION_FAILED,以及
@@ -220,26 +192,11 @@ describe('S05 · 自带 API key 没配好,卡上要有自己的文案和改 key 
   });
 });
 
-/**
- * 评审拦截(PR #7893,PerishCode):〔去设置〕只能给**那把 key 我们自己存着**的
- * 一档,别的 agent 报 key 错要留在它原本的终端认证路上。
- *
- * 为什么这条会成立:`authDetail()` 是从**任何** agent 拍平的 stderr 上读出来的
- * (`apps/daemon/src/run-failure-classification.ts`),所以本机 CLI 一样会报
- * `invalid_api_key` —— `claude` 那句 `Invalid API key · Please run /login` 同时命中
- * `AGENT_AUTH_FAILURE_RE`(→ code `AGENT_AUTH_REQUIRED`)和这条 detail。而本机
- * CLI 的登录态在用户自己的终端里:`opencode` / `kimi` / `qwen` 在设置页那一屏
- * **连一个 key 输入框都没有**,把人送过去等于送到一屏改不了那把 key 的界面,
- * 还顺手吃掉了它们本来该看到的 S02「{agent} 尚未登录」。
- *
- * 判据:`byokApiKeyIsEditableInSettings`(`apps/web/src/utils/byokProvider.ts`)——
- * `byok-opencode` 加 `API_PROTOCOL_AGENT_IDS` 那八个 `*-api`,也就是发送前那道
- * BYOK 闸门(`ProjectView.requiresByokPreflight`)管的同一档。
- *
- * 撤掉那道收窄(把 `apiKeyInvalidCardFor` 里的 `byokApiKeyIsEditableInSettings`
- * 判空去掉,或把这一格塞回 `DETAIL_FAILURE_UI`)之后,下面这两条本机 CLI 必红。
+/** The original review narrowed S05 to API keys managed by Open Design.
+ * Keep local CLI authentication failures in S02; fixed actions must not erase
+ * this distinction or send users to a settings page that cannot edit their key.
  */
-describe('评审拦截 · 〔去设置〕只给 key 能在设置里改的那一档', () => {
+describe('评审拦截 · S05 只给 Open Design 管理的 API key', () => {
   // 本机 CLI 那一档原本走的就是这张卡:code `AGENT_AUTH_REQUIRED` →
   // `resolveRunFailureUi` 末段那条码级分支 → S02。这里断言的是「保留原状」,
   // 不是新设计 —— 这两把 i18n key 在这个 PR 之前就在用。
@@ -283,25 +240,25 @@ describe('评审拦截 · 〔去设置〕只给 key 能在设置里改的那一�
   // (`ProjectView` 的 `apiProtocolAgentId(config.apiProtocol)`)。收窄不能把
   // 它们一起关在门外 —— 它们的 key 就填在设置页那一屏。
   it.each(['anthropic-api', 'openai-api', 'bedrock-api'])(
-    '%s 落 S05,并且〔去设置〕点下去到 execution 这一节',
+    '%s 保留 S05 文案，并把原失败交给固定 Cloud 入口',
     (agentId) => {
-      const { container, onOpenSettings } = renderChat(
+      const { container, onOpenSettings, onSwitchToAmrAndRetry } = renderChat(
         failedMessage({ agentId, failureDetail: 'invalid_api_key' }),
       );
       expect(titleOf(container)!.textContent).toContain(
         'chat.runError.title.apiKeyInvalid',
       );
-      const button = openSettingsButtonOf(container);
-      expect(button).toBeTruthy();
-      fireEvent.click(button!);
-      expect(onOpenSettings).toHaveBeenCalledWith('execution');
+      expect(openSettingsButtonOf(container)).toBeNull();
+      fireEvent.click(within(cardOf(container) as HTMLElement).getByRole('button', { name: 'chat.amrCard.switchCta' }));
+      expect(onSwitchToAmrAndRetry).toHaveBeenCalledWith(expect.objectContaining({ id: 'msg-failed', agentId }));
+      expect(onOpenSettings).not.toHaveBeenCalled();
     },
   );
 
   // Antigravity 的登录只能在终端里做,它在 `resolveRunFailureUi` 里排在这一格
   // **之前**,本来就抢不走。钉一条,免得日后有人把这一格往上挪。
-  it('antigravity 报 key 错仍走它自己的终端登录卡', () => {
-    const { container } = renderChat(
+  it('antigravity 保留 S02 文案，卡内入口改为 Cloud', () => {
+    const { container, onSwitchToAmrAndRetry } = renderChat(
       failedMessage({
         agentId: 'antigravity',
         failureDetail: 'invalid_api_key',
@@ -311,6 +268,8 @@ describe('评审拦截 · 〔去设置〕只给 key 能在设置里改的那一�
     );
     expect(titleOf(container)!.textContent).toContain(S02_TITLE);
     expect(openSettingsButtonOf(container)).toBeNull();
+    fireEvent.click(within(cardOf(container) as HTMLElement).getByRole('button', { name: 'chat.amrCard.switchCta' }));
+    expect(onSwitchToAmrAndRetry).toHaveBeenCalledWith(expect.objectContaining({ id: 'msg-failed', agentId: 'antigravity' }));
   });
 });
 

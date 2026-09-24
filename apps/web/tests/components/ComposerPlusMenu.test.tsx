@@ -372,10 +372,9 @@ describe('ComposerPlusMenu pick-row caret protection', () => {
     Object.defineProperty(window, 'innerHeight', { configurable: true, value: 520 });
 
     try {
-      renderMenu({
-        toolboxLabel: 'Design toolbox',
-        renderToolbox: () => <div>Toolbox content</div>,
-      });
+      // The MCP row is the lowest submenu, so it stands in for the row nearest
+      // the viewport bottom.
+      renderMenu();
       const trigger = screen.getByTestId('plus-trigger') as HTMLButtonElement;
       trigger.getBoundingClientRect = () =>
         ({
@@ -391,9 +390,9 @@ describe('ComposerPlusMenu pick-row caret protection', () => {
         }) as DOMRect;
 
       fireEvent.click(trigger);
-      const toolboxParent = screen.getByRole('menuitem', { name: /Design toolbox/i });
-      const toolboxRow = toolboxParent.closest('.plus-menu__submenu-row') as HTMLDivElement;
-      toolboxRow.getBoundingClientRect = () =>
+      const lowParent = screen.getByRole('menuitem', { name: /^MCP/i });
+      const lowRow = lowParent.closest('.plus-menu__submenu-row') as HTMLDivElement;
+      lowRow.getBoundingClientRect = () =>
         ({
           x: 24,
           y: 330,
@@ -406,13 +405,13 @@ describe('ComposerPlusMenu pick-row caret protection', () => {
           toJSON: () => ({}),
         }) as DOMRect;
 
-      fireEvent.click(toolboxParent);
+      fireEvent.click(lowParent);
 
       const menu = screen.getAllByRole('menu')[0];
       expect(menu).toBeDefined();
       expect(menu?.className).toContain('plus-menu__popup--flyout-y-up');
       expect(menu?.style.getPropertyValue('--plus-menu-flyout-max-height')).toBe('320px');
-      expect(screen.getByText('Toolbox content')).toBeTruthy();
+      expect(screen.getByText('Linear')).toBeTruthy();
     } finally {
       Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalInnerWidth });
       Object.defineProperty(window, 'innerHeight', { configurable: true, value: originalInnerHeight });
@@ -540,50 +539,6 @@ describe('ComposerPlusMenu pick-row caret protection', () => {
       Object.defineProperty(window, 'innerHeight', { configurable: true, value: originalInnerHeight });
     }
   });
-
-  it('keeps contained design toolbox flyouts within the popup width', () => {
-    const originalInnerWidth = window.innerWidth;
-    const originalInnerHeight = window.innerHeight;
-    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 360 });
-    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 420 });
-
-    try {
-      renderMenu({
-        toolboxLabel: 'Design toolbox',
-        renderToolbox: () => (
-          <div className="composer-design-toolbox-menu">Contained toolbox</div>
-        ),
-      });
-      const trigger = screen.getByTestId('plus-trigger') as HTMLButtonElement;
-      trigger.getBoundingClientRect = () =>
-        ({
-          x: 220,
-          y: 376,
-          top: 376,
-          left: 220,
-          right: 248,
-          bottom: 404,
-          width: 28,
-          height: 28,
-          toJSON: () => ({}),
-        }) as DOMRect;
-
-      fireEvent.click(trigger);
-      const menu = screen.getByRole('menu');
-      expect(menu.className).toContain('plus-menu__popup--flyout-contained');
-
-      fireEvent.click(screen.getByRole('menuitem', { name: /Design toolbox/i }));
-      expect(screen.getByText('Contained toolbox')).toBeTruthy();
-
-      const css = readFileSync(join(process.cwd(), 'src/styles/home/plus-menu.css'), 'utf8');
-      expect(css).toContain('.plus-menu__popup--flyout-contained .plus-menu__flyout .composer-design-toolbox-menu');
-      expect(css).toContain('width: 100%;');
-      expect(css).toContain('max-width: 100%;');
-    } finally {
-      Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalInnerWidth });
-      Object.defineProperty(window, 'innerHeight', { configurable: true, value: originalInnerHeight });
-    }
-  });
 });
 
 // Usability guard (user request): every module offered by the "+" menu must be
@@ -689,12 +644,5 @@ describe('ComposerPlusMenu module wiring', () => {
     openSubmenu(/^MCP/i);
     fireEvent.click(screen.getByRole('menuitem', { name: 'Add MCP server' }));
     expect(props.onAddMcp).toHaveBeenCalledTimes(1);
-  });
-
-  it('renders the Design toolbox submenu when a toolbox renderer is provided', () => {
-    renderMenu({ renderToolbox: () => <div>Toolbox contents</div> });
-    openMenu();
-    fireEvent.click(screen.getByRole('menuitem', { name: /Design toolbox/i }));
-    expect(screen.getByText('Toolbox contents')).toBeTruthy();
   });
 });

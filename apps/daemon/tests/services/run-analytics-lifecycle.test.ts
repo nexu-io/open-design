@@ -6,6 +6,7 @@
 // land as `cancelled`, not as a missing row, or the cancellation rate is
 // computed against a smaller denominator than the truth.
 
+import Database from 'better-sqlite3';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -29,7 +30,7 @@ function harness(finishCaptureResult: unknown = {
   status: 'queued',
   acknowledgement: 'local_buffer',
   errorType: null,
-}) {
+}, db: unknown = {}) {
   const captured: Captured[] = [];
   const recoveries: Array<{ runId: string; properties: Record<string, unknown>; insertId: string }> = [];
   const completed: string[] = [];
@@ -41,7 +42,7 @@ function harness(finishCaptureResult: unknown = {
   });
 
   const lifecycle = createRunAnalyticsLifecycle({
-    db: {} as never,
+    db: db as never,
     design: {
       runs: {
         wait: () => terminal as never,
@@ -508,6 +509,50 @@ describe('run analytics lifecycle', () => {
     expect(finished.properties.request_usage_input_tokens_sum).toBe(30);
     expect(finished.properties.request_usage_output_tokens_sum).toBe(20);
     expect(finished.properties.request_usage_reconciles_aggregate).toBe(true);
+  });
+});
+
+describe('run_finished storage observability', () => {
+  it('adds storage fields to the emitted run_finished only, never to the recovery snapshot', async () => {
+    const db = new Database(':memory:');
+    db.exec(`CREATE TABLE messages (id TEXT PRIMARY KEY, content TEXT NOT NULL DEFAULT '', events_json TEXT);`);
+    db.prepare(`INSERT INTO messages (id, content, events_json) VALUES ('assistant-1', 'done', '[]')`).run();
+    try {
+      const h = harness(undefined, db);
+      h.lifecycle.install({
+        run: fakeRun({ assistantMessageId: 'assistant-1' }),
+        body: { agentId: 'codex' },
+        requestAnalyticsContext: CONTEXT as never,
+      });
+      await settled(h, 'run_created');
+      h.settle({ status: 'succeeded' });
+      const finished = await settled(h, 'run_finished');
+      expect(finished.properties).toMatchObject({
+        storage_schema_version: 1,
+        storage_events_json_bytes: 2,
+        storage_content_bytes: 4,
+      });
+      const recovery = h.recoveries.at(-1)!.properties;
+      expect(Object.keys(recovery).filter((key) => key.startsWith('storage_'))).toEqual([]);
+      // Every recovery property reaches PostHog unchanged.
+      for (const [key, value] of Object.entries(recovery)) expect(finished.properties[key]).toEqual(value);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('emits exactly the pre-existing properties when storage cannot be measured', async () => {
+    const h = harness();
+    h.lifecycle.install({
+      run: fakeRun({ assistantMessageId: 'assistant-1' }),
+      body: { agentId: 'codex' },
+      requestAnalyticsContext: CONTEXT as never,
+    });
+    await settled(h, 'run_created');
+    h.settle({ status: 'succeeded' });
+    const finished = await settled(h, 'run_finished');
+    expect(Object.keys(finished.properties).filter((key) => key.startsWith('storage_'))).toEqual([]);
+    expect(finished.properties).toEqual(h.recoveries.at(-1)!.properties);
   });
 });
 

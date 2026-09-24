@@ -5,25 +5,43 @@ import { T } from '@/timeouts';
 /**
  * The entry nav rail is collapsed by default; its destinations
  * (`entry-nav-*`) only become interactable once the rail is expanded. The
- * expand affordance is the pinned Home tab's sidebar toggle in the workspace
- * tabs bar (#5517 removed the entry topbar) — it only renders on the Home
- * view; on any other entry view the pinned tab is a Home shortcut instead,
- * so this helper returns Home first when it needs to expand. Idempotent —
- * no-ops when the rail is already docked open.
+ * expand affordance is the rail toggle in the workspace tabs chrome row
+ * (`entry-rail-collapse`, beside the search button — #7635 moved the pair out
+ * of the rail and hid the pinned Home pill there; #5517 had already removed
+ * the entry topbar). It renders on every entry view, so no Home round-trip is
+ * needed. Idempotent — no-ops when the rail is already docked open.
  *
- * Both controls hang off the pinned entry tab while it is the ACTIVE
- * workspace tab (`WorkspaceTabsBar.tsx`: `isPinned && active`), so this only
- * works from an entry surface. Inside a project the pinned tab renders as a
- * plain Home tab button and neither testid exists — call it after returning
- * to the entry shell, not from a project workspace.
+ * The cluster only renders while the strip is undocked, i.e. on an entry
+ * surface (`WorkspaceTabsBar.tsx`: `!tabsDockEl && !settingsPageChrome`).
+ * Inside a project the strip lives in the chat column dock and the testid
+ * does not exist — call it after returning to the entry shell, not from a
+ * project workspace.
  */
+/**
+ * Close the release announcement if it is up. `WhatsNewPopup` is a shared
+ * `<Dialog>`, which mounts its scrim on <body> above every piece of chrome
+ * (#7635) — while it is open nothing behind it, the rail toggle included, can
+ * be clicked. Specs that apply the standard mocks never see it
+ * (`suppressWhatsNew`); the ones that drive a real daemon do, whenever the
+ * running build ships highlights. Idempotent — no-ops when there is none.
+ */
+export async function dismissWhatsNewPopup(page: Page): Promise<void> {
+  const popup = page.getByTestId('whats-new-popup');
+  await popup.waitFor({ state: 'visible', timeout: 1_000 }).catch(() => {});
+  if (await popup.isVisible().catch(() => false)) {
+    await popup.getByTestId('whats-new-dismiss').click();
+    await expect(popup).toBeHidden();
+  }
+}
+
 export async function ensureRailOpen(page: Page): Promise<void> {
+  await dismissWhatsNewPopup(page);
   const shell = page.locator('.entry');
   const alreadyOpen = await shell
     .evaluate((el) => el.classList.contains('entry--rail-open'))
     .catch(() => false);
   if (!alreadyOpen) {
-    const toggle = page.getByTestId('workspace-home-rail-toggle');
+    const toggle = page.getByTestId('entry-rail-collapse');
     if (!(await toggle.isVisible().catch(() => false))) {
       const homeNav = page.getByTestId('workspace-home-nav');
       if (await homeNav.isVisible().catch(() => false)) {
@@ -79,6 +97,16 @@ export async function ensureRailOpen(page: Page): Promise<void> {
  * wired but unreachable — the same gap `e2e/ui/entry-chrome-flows.test.ts`
  * documents. Drive the `/projects` route directly until an entry returns.
  */
+/**
+ * Opens 全部项目 from the rail and switches it to the 团队项目 tab (OPEND-3108).
+ * The former `entry-nav-all-projects` destination is this tab now; the rail
+ * has one project entry in every workspace.
+ */
+export async function openTeamProjectsTab(page: Page): Promise<void> {
+  await page.getByTestId('entry-nav-drafts').click();
+  await page.getByTestId('recent-projects-collection-teamProjects').click();
+}
+
 export async function openNewProjectModal(page: Page): Promise<void> {
   if (await page.getByTestId('new-project-panel').isVisible().catch(() => false)) return;
   // Chrome parity only, never a functional step: the rail carries no
@@ -92,6 +120,7 @@ export async function openNewProjectModal(page: Page): Promise<void> {
     await ensureRailOpen(page).catch(() => {});
   }
   await openProjectsEntryView(page);
+  await dismissWhatsNewPopup(page);
   const projectsView = page.getByTestId('entry-view-projects');
   await expect(projectsView).toBeVisible({ timeout: T.long });
   const createButton = projectsView

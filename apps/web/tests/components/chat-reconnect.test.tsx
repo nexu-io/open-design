@@ -27,8 +27,8 @@ const orb = () => row().querySelector('[data-orb]');
 describe('Reconnect · 82 重连中', () => {
   it('shows how many attempts in, out of the transport budget', () => {
     render(<Reconnect attempt={2} max={5} />);
-    // 设计稿 4354 的原文,计数紧跟在这句话后面(同一条扫光里)
-    expect(row().textContent).toBe('正在恢复网络连接2/5');
+    // 保留 next 标题计数，并补齐 S29 授权的当前连接尝试正文。
+    expect(row().textContent).toBe('正在恢复网络连接2/5正在进行第 2/5 次连接尝试，请稍候。');
     expect(orb()).not.toBeNull();
   });
 

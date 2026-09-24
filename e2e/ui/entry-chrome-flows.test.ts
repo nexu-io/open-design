@@ -2,7 +2,13 @@ import { expect, test } from '@/playwright/suite';
 import { ensureRailOpen, openNewProjectModal } from '@/playwright/rail';
 import { settingsSurface } from '@/playwright/amr';
 import { expectStableCount } from '@/playwright/assertions';
-import { openHomeTemplateMenu } from '@/playwright/home-hero';
+import {
+  HOME_TYPE_PRIMARY_CHIP_IDS,
+  HOME_TYPE_OTHER_CHIP_IDS,
+  homeTemplateTrigger,
+  openHomeTemplates,
+  pickHomeTemplate,
+} from '@/playwright/home-hero';
 import type {
   WorkspaceCollabContext,
   WorkspaceDirectoryItem,
@@ -76,7 +82,7 @@ test.beforeEach(async ({ page }) => {
   await applyStandardMocks(page);
 });
 
-test('[P0] @critical entry chrome exposes the primary home creation surface and settings entry', async ({ page }) => {
+test('[P0] @critical entry chrome exposes the primary home creation surface and settings entry', async ({ page }, testInfo) => {
   await page.route('**/api/projects', async (route) => {
     if (route.request().method() === 'GET') {
       await route.fulfill({ json: { projects: [] } });
@@ -87,12 +93,14 @@ test('[P0] @critical entry chrome exposes the primary home creation surface and 
 
   await gotoEntryHome(page);
   await expect(page.getByTestId('recent-projects-strip')).toHaveCount(0);
-  // The nav rail is collapsed by default — the pinned Home tab in the
-  // workspace tabs bar is the expand toggle (#5517: no entry topbar).
-  await expect(page.getByTestId('workspace-home-rail-toggle')).toBeVisible();
-  await page.getByTestId('workspace-home-rail-toggle').click();
-  await expect(page.locator('.entry-nav-rail')).toBeVisible();
+  // The nav rail is collapsed by default — the rail toggle beside the search
+  // button in the workspace tabs chrome is the expand control (#7635 moved
+  // the pair out of the rail; #5517: no entry topbar). Search is reachable
+  // before the rail opens.
   await expect(page.getByTestId('entry-nav-search')).toBeVisible();
+  await expect(page.getByTestId('entry-rail-collapse')).toBeVisible();
+  await page.getByTestId('entry-rail-collapse').click();
+  await expect(page.locator('.entry-nav-rail')).toBeVisible();
   await expect(page.locator('.entry-brand')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-input')).toBeVisible();
   await expect(page.getByTestId('home-hero-plus-trigger')).toBeVisible();
@@ -101,15 +109,15 @@ test('[P0] @critical entry chrome exposes the primary home creation surface and 
   await expect(page.getByTestId('home-hero-template-picker')).toBeVisible();
   await expect(page.getByTestId('home-hero-design-system-picker')).toBeVisible();
   await expect(page.getByTestId('working-dir-picker')).toBeVisible();
-  // #5517 deleted the inline scenario rail (the "Start from a template… / …or
-  // create a blank project" row and its cards); the composer footer's Template
-  // picker owns every project type now.
-  const templateMenu = await openHomeTemplateMenu(page);
-  for (const id of ['prototype', 'live-artifact', 'deck', 'image', 'video', 'hyperframes', 'audio']) {
-    await expect(templateMenu.getByTestId(`home-hero-template-wedge-${id}`)).toBeVisible();
+  await expect(page.getByTestId('home-hero-template-picker')).toHaveAttribute('data-type', 'prototype');
+  await testInfo.attach('home-default-prototype', { body: await page.screenshot(), contentType: 'image/png' });
+  const menu = await openHomeTemplates(page);
+  for (const id of [...HOME_TYPE_PRIMARY_CHIP_IDS, ...HOME_TYPE_OTHER_CHIP_IDS]) {
+    await expect(menu.locator(`[data-chip="${id}"]`)).toBeVisible();
   }
+  await testInfo.attach('home-type-dropdown', { body: await page.screenshot(), contentType: 'image/png' });
   await page.keyboard.press('Escape');
-  await expect(templateMenu).toHaveCount(0);
+  await expect(menu).toHaveCount(0);
 
   // The pet picker rail was removed; pet adoption now lives in
   // Settings → Pet exclusively. Make sure no rail leaks back into the
@@ -300,7 +308,7 @@ test('[P0] @critical home hero submit creates a project and lands on a usable wo
   expect(typeof projectBody.metadata?.kind).toBe('string');
 
   await expect(page).toHaveURL(/\/projects\//, { timeout: 15_000 });
-  await expect(page.getByTestId('project-title')).toBeVisible();
+  await expect(page.getByTestId('workspace-tabs-dropdown-trigger')).toBeVisible();
   await expect(page.getByTestId('chat-composer')).toBeVisible();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
   await expect(page.getByTestId('file-workspace')).toBeVisible();
@@ -424,12 +432,18 @@ test('[P1] entry top navigation matches the current home tab structure', async (
   await gotoEntryHome(page);
   await ensureRailOpen(page);
 
-  // The rail is header-free: no logo, no in-rail collapse control — the
-  // column starts at the search box, and folding lives in the pinned Home
-  // tab's toggle on the workspace tabs bar.
+  // The rail is header-free: no logo, no in-rail search row — the column
+  // starts at the workspace switcher / 首页, and both search and folding live
+  // in the chrome row's cluster beside the tabs (#7635).
   await expect(page.getByTestId('entry-nav-logo')).toHaveCount(0);
   await expect(page.getByTestId('entry-nav-collapse')).toHaveCount(0);
-  await expect(page.getByTestId('entry-nav-search')).toBeVisible();
+  await expect(page.locator('.entry-nav-rail').getByTestId('entry-nav-search')).toHaveCount(0);
+  await expect(page.locator('.workspace-tabs-rail-actions').getByTestId('entry-nav-search')).toBeVisible();
+  // OPEND-2685: the rail toggle is the cluster's FIRST control (right after
+  // the traffic-light space on macOS), the search second.
+  await expect(
+    page.locator('.workspace-tabs-rail-actions > [data-testid]').first(),
+  ).toHaveAttribute('data-testid', 'entry-rail-collapse');
   await expect(page.getByTestId('entry-nav-home')).toHaveAttribute('aria-current', 'page');
   await expect(page.getByTestId('entry-nav-community')).toBeVisible();
   await expect(page.locator('.entry-nav-rail__group').getByTestId('entry-nav-design-systems')).toBeVisible();
@@ -456,34 +470,40 @@ test('[P1] entry top navigation matches the current home tab structure', async (
   await expect(page.getByTestId('home-hero-plugin-presets')).toHaveCount(0);
 });
 
-test('[P1] home view exposes the redesigned hero, recent projects, and starters', async ({ page }) => {
+test('[P1] home view exposes the redesigned hero, rail recent projects, and the 项目 page', async ({ page }) => {
   await createProject(page, 'Home structure recent project');
   await gotoEntryHome(page);
 
   const home = page.getByTestId('entry-view-home');
-  await expect(page.getByTestId('recent-projects-strip')).toBeVisible();
+  // OPEND-3140: Home carries no recent-projects grid on the local branch
+  // either — the rail's 最近项目 section lists the catalogue.
+  await expect(page.getByTestId('recent-projects-strip')).toHaveCount(0);
+  await expect(home.locator('.recent-projects')).toHaveCount(0);
   await expect(home.getByTestId('home-hero-template-picker')).toBeVisible();
   await expect(page.getByTestId('home-hero')).toBeVisible();
   await expect(page.getByTestId('entry-nav-home')).toHaveAttribute('aria-current', 'page');
+  await ensureRailOpen(page);
+  await expect(
+    page.getByTestId('entry-nav-recent-item').filter({ hasText: 'Home structure recent project' }),
+  ).toBeVisible();
 
-  // NOTE: /projects currently has no UI entry. #5517 dropped the rail's
-  // Projects destination, and Home passes `heading` to RecentProjectsStrip,
-  // which flips it into the full-page-grid header that omits the
-  // `recent-projects-view-all` button — so `HomeView.onViewAllProjects` is
-  // wired but unreachable. Drive the route directly until an entry returns.
-  await page.goto('/projects', { waitUntil: 'domcontentloaded' });
-  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
-  await expect(page).toHaveURL(/\/projects$/);
-  await expect(page.getByTestId('entry-view-projects')).toBeVisible();
+  // The rail's 项目 item opens the browsable catalogue with its controls.
+  await page.getByTestId('entry-nav-drafts').click();
+  await expect(page).toHaveURL(/\/drafts$/);
+  await expect(page.getByTestId('recent-projects-strip')).toBeVisible();
+  await expect(
+    page.getByTestId('recent-projects-strip').getByText('Home structure recent project', { exact: true }),
+  ).toBeVisible();
 });
 
-test('[P0] @critical recent projects strip opens a project card from Home', async ({ page }) => {
+test('[P0] @critical the rail\'s recent projects open a project from Home', async ({ page }) => {
   const created = await createProject(page, 'Recent project entry point');
   await gotoEntryHome(page);
+  await ensureRailOpen(page);
 
-  const recentStrip = page.getByTestId('recent-projects-strip');
-  await expect(recentStrip).toBeVisible();
-  await recentStrip.locator(`[data-project-id="${created.project.id}"]`).click();
+  const row = page.getByTestId('entry-nav-recent-item').filter({ hasText: 'Recent project entry point' });
+  await expect(row).toBeVisible();
+  await row.click();
   await expect(page).toHaveURL(new RegExp(`/projects/${created.project.id}`));
 });
 
@@ -1139,13 +1159,14 @@ test('[P0] signed-out Local setup can navigate the surviving rail destinations',
   await expect(page.getByTestId('inline-model-switcher-popover')).toHaveCount(0);
 });
 
-test('[P0] @critical home composer delegates the default prototype scenario to daemon authority', async ({ page }) => {
+test('[P0] @critical home composer delegates the picked prototype scenario to daemon authority', async ({ page }) => {
   await gotoEntryHome(page);
 
   // The mode chip left the Home composer (2026-09-08, product) — Design is
   // still what this request routes as, it just is not stated on a control any
   // more. The routing itself is asserted from the request body below.
   await expect(page.getByTestId('composer-mode-trigger')).toHaveCount(0);
+  await pickHomeTemplate(page, 'prototype');
 
   const input = page.getByTestId('home-hero-input');
   const prompt =
@@ -1378,14 +1399,7 @@ test('[P0] @critical home hero attachment input stages files, enables submit, an
 
   const input = page.getByTestId('home-hero-file-input');
   const submit = page.getByTestId('home-hero-submit');
-  // Fresh Home locks submit until its default prototype route has resolved.
-  // Under the grouped CI pool that catalogue binding can outlive Playwright's
-  // default assertion timeout, so wait on the user-visible routed state before
-  // checking the attachment lifecycle rather than racing the seed effect.
-  await expect(page.getByTestId('home-hero-template-trigger')).toContainText(
-    /Prototype|原型/i,
-    { timeout: T.long },
-  );
+  await expect(homeTemplateTrigger(page)).toBeVisible({ timeout: T.long });
   await expect(submit).toBeEnabled({ timeout: T.long });
 
   await input.setInputFiles({
@@ -1470,7 +1484,7 @@ test('[P1] rail can be collapsed again on coarse-pointer / non-hover devices', a
   await gotoEntryHome(page);
   await ensureRailOpen(page);
 
-  const toggle = page.getByTestId('workspace-home-rail-toggle');
+  const toggle = page.getByTestId('entry-rail-collapse');
   await expect(toggle).toBeVisible();
   await toggle.click();
   await expect(page.locator('.entry')).not.toHaveClass(/entry--rail-open/);

@@ -392,6 +392,7 @@ describe('persisted strategy verdict in conversation history', () => {
       expectedRevision: task.revision,
       to: {
         route: 'full_plan', inputStage: 'production', outcome: 'running', executionMode: 'simple',
+        executionIntent: 'produce',
       },
       nextRun: {
         runId: productionRunId,

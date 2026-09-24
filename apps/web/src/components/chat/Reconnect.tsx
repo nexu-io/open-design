@@ -11,6 +11,8 @@
  *   83 · 最后一次  同上,只有计数走到 5/5 —— **不是独立形态**,不换任何样式
  *   84 · 重连失败  红 wifi-off + 「网络连接未能恢复」+「重新连接」按钮,自动重连到此为止
  *
+ * S29 的授权正文补在同一行的标题下方：重连中报当前尝试/预算，失败提示确认网络后再试。
+ *
  * 恢复后**整行消失,不留「已恢复」**(cmp-ops 原话)。所以 `attempt <= 0` 时返回 null,
  * 调用方可以直接把 `DaemonReconnectState` 铺进来,不必自己判要不要挂载。
  *
@@ -53,6 +55,8 @@ export interface ReconnectProps {
   reason?: ChatSelfHealReason;
   /** 次数用尽:停止自动重连,交回给人(22-3)。 */
   exhausted?: boolean;
+  /** 手动点击后的乐观反馈，尚不是传输层实际连接尝试。 */
+  manualRetry?: boolean;
   /** 「重新连接」按下去做什么。不传就不出那颗按钮。 */
   onReconnect?: () => void;
   /**
@@ -69,6 +73,7 @@ export function Reconnect({
   attempt,
   max,
   exhausted = false,
+  manualRetry = false,
   reason = 'transport',
   onReconnect,
   onShowDetail,
@@ -79,7 +84,12 @@ export function Reconnect({
     return (
       <div className={styles.row} data-testid="chat-reconnect">
         <WifiOffIcon />
-        <span className={styles.name}>{t('chat.edge.reconnectFailed')}</span>
+        <span className={styles.copy}>
+          <span className={styles.name}>{t('chat.edge.reconnectFailed')}</span>
+          {reason !== 'agent-retry'
+            ? <span className={styles.description}>{t('chat.edge.reconnectFailedDescription')}</span>
+            : null}
+        </span>
         {onReconnect
           ? (
             <Button variant="secondary" size="sm" onClick={onReconnect}>
@@ -112,11 +122,21 @@ export function Reconnect({
     <div className={styles.row} data-testid="chat-reconnect">
       {/* 不给标签:紧挨着的就是那句话,读屏念一遍就够 */}
       <Orb state="searching" box={24} className={styles.orb} />
-      <span className={styles.name}>
-        <span className={record.shimmer}>
-          {t(reason === 'agent-retry' ? 'chat.edge.retrying' : 'chat.edge.reconnecting')}
-          {showCount ? <span className={styles.count}>{shown}/{max}</span> : null}
+      <span className={styles.copy}>
+        <span className={styles.name}>
+          <span className={record.shimmer}>
+            {t(reason === 'agent-retry' ? 'chat.edge.retrying' : 'chat.edge.reconnecting')}
+            {showCount ? <span className={styles.count}>{shown}/{max}</span> : null}
+          </span>
         </span>
+        {/* S29 正文只报实际计数；手动乐观反馈、agent 重跑及 offline 哨兵不报尝试。 */}
+        {!manualRetry && reason !== 'agent-retry' && showCount
+          ? (
+            <span className={styles.description}>
+              {t('chat.edge.reconnectingDescription', { attempt: shown, max })}
+            </span>
+          )
+          : null}
       </span>
       {onShowDetail
         ? (

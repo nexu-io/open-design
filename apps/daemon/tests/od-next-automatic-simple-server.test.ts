@@ -2,7 +2,7 @@ import type { CollectCodexChildEvidenceInput, CodexChildEvidenceCollection } fro
 import type { CodexThreadCleanupResult } from '../src/agent-protocol/codex-app-server/thread-cleanup.js';
 import type { Server } from 'node:http';
 import { execFile } from 'node:child_process';
-import { chmod, cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -19,6 +19,7 @@ import {
   normalizeAgentObservationV1,
   OD_NEXT_PROMPT_STAGE_CONTRACT_V2,
   parseOdNextPromptBundleV2,
+  parseOdNextIntentResolutionTurnV1,
 } from '@open-design/contracts';
 
 const codexArchiveBoundary = vi.hoisted(() => ({
@@ -86,6 +87,9 @@ vi.mock('node:crypto', async (importOriginal) => {
 });
 
 import { closeDatabase, openDatabase } from '../src/db.js';
+import { AGENT_DEFS } from '../src/runtimes/registry.js';
+import { agentBinEnvKey } from '../src/runtimes/executables.js';
+import { execAgentFile } from '../src/runtimes/invocation.js';
 import { createSnapshot, linkSnapshotToProject } from '../src/plugins/snapshots.js';
 import {
   getInstalledPlugin,
@@ -114,6 +118,13 @@ type StartedServer = {
 // Each fixture owns its HTTP transport; daemon-internal fetch remains untouched.
 const fixtureHttpClients = new Map<string, { owner: StartedServer; dispatcher: Agent }>();
 const fixtureShutdowns = new WeakMap<StartedServer, Promise<void>>();
+const fixtureAgentBinEnvKeys = [...new Set([
+  ...AGENT_DEFS.map(def => agentBinEnvKey(def.id)).filter((key): key is string => key !== null),
+  'VELA_OPENCODE_BIN',
+])];
+let fixtureDetectionIsolation: Promise<{ root: string; home: string; bin: string }> | null = null;
+let previousDetectionEnv: Record<string, string | undefined> = {};
+
 function fetch(input: Parameters<typeof undiciFetch>[0], init?: Parameters<typeof undiciFetch>[1]) {
   const origin = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url).origin;
   const client = fixtureHttpClients.get(origin);
@@ -131,6 +142,7 @@ type RunStatus = {
   errorCode?: string | null;
   strategyTask?: {
     taskExecutionId: string;
+    runMappings?: Array<{ runId: string; taskRunIndex: number }>;
     inputStage: string;
     outcome: string;
     terminal: boolean;
@@ -213,6 +225,8 @@ describe('OD Next automatic production through the real server', () => {
   let previousCodexTransport: string | undefined;
 
   beforeEach(() => {
+    previousDetectionEnv = Object.fromEntries(['PATH', 'OD_AGENT_HOME', ...fixtureAgentBinEnvKeys]
+      .map(key => [key, process.env[key]]));
     previousCodexTransport = process.env.OD_CODEX_TRANSPORT;
     process.env.OD_CODEX_TRANSPORT = 'exec-json';
   });
@@ -224,12 +238,220 @@ describe('OD Next automatic production through the real server', () => {
     delete process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY;
     uuidControl.forced.length = 0;
     pendingAutomaticFixtureIdentity = null;
-    await stopServer(started);
-    started = null;
-    closeDatabase();
-    if (binDir) await rm(binDir, { recursive: true, force: true });
-    binDir = null;
+    try {
+      await stopServer(started);
+      started = null;
+      closeDatabase();
+      if (binDir) await rm(binDir, { recursive: true, force: true });
+      binDir = null;
+    } finally {
+      try {
+        const isolation = await fixtureDetectionIsolation;
+        if (isolation) await rm(isolation.root, { recursive: true, force: true });
+      } finally {
+        fixtureDetectionIsolation = null;
+        for (const [key, value] of Object.entries(previousDetectionEnv)) {
+          if (value === undefined) delete process.env[key];
+          else process.env[key] = value;
+        }
+      }
+    }
   });
+
+  it.each([
+    ['public', 'models'], ['public', 'auth'],
+    ['strategy', 'models'], ['strategy', 'auth'],
+  ] as const)('%s Codex fixture answers %s probes without stdin or a generation', async (kind, probe) => {
+    binDir = await mkdtemp(path.join(os.tmpdir(), 'od-next-codex-probes-'));
+    const template = await createStrategyTemplate();
+    const fixture = kind === 'public'
+      ? await writePublicRolloutCodex(binDir, 'probe-contract')
+      : await writeStrategyCodex(binDir, 'repair', planContract(template.snapshotId, template.strategy, 'repair'));
+    const def = AGENT_DEFS.find(agent => agent.id === 'codex')!;
+    const contract = probe === 'models' ? def.listModels! : def.authProbe!;
+    // Use the real probe launcher: stdin stays open, as it does during detection.
+    // The timeout is only a failure bound; successful probes exit on their own.
+    const { stdout } = await execAgentFile(fixture.bin, contract.args, {
+      cwd: binDir,
+      timeout: contract.timeoutMs,
+    });
+    if (probe === 'models') {
+      expect(def.listModels!.parse(String(stdout))).toContainEqual({ id: 'gpt-5.5', label: 'gpt-5.5' });
+    } else {
+      expect(stdout).toContain('Logged in using ChatGPT');
+    }
+    await expect(readFile(fixture.logPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('isolates host CLI probes while retaining real selected Codex detection and preflight', async () => {
+    const hostRoot = await mkdtemp(path.join(os.tmpdir(), 'od-next-controlled-host-'));
+    const hostBinDir = path.join(hostRoot, 'bin');
+    const hostHome = path.join(hostRoot, 'home');
+    const hostLog = path.join(hostRoot, 'host-probes.jsonl');
+    const selectedLog = path.join(hostRoot, 'selected-probes.jsonl');
+    const previous = { PATH: process.env.PATH, OD_AGENT_HOME: process.env.OD_AGENT_HOME,
+      AIDER_BIN: process.env.AIDER_BIN };
+    await mkdir(hostBinDir);
+    await mkdir(hostHome);
+    await writeFile(hostLog, '');
+    await writeFile(selectedLog, '');
+    await symlink(process.execPath, path.join(hostBinDir, 'node'));
+    const sentinel = path.join(hostBinDir, 'aider');
+    await writeFile(sentinel, `#!/usr/bin/env node
+const fs = require('node:fs');
+fs.appendFileSync(${JSON.stringify(hostLog)}, JSON.stringify(process.argv.slice(2)) + '\\n');
+console.log('aider 0.86.0');
+`, 'utf8');
+    await chmod(sentinel, 0o755);
+    // A controlled host candidate, not the developer's real CLI. Fixture
+    // isolation must fence both PATH discovery and inherited explicit overrides.
+    process.env.PATH = [hostBinDir, '/usr/bin', '/bin', '/usr/sbin', '/sbin'].join(path.delimiter);
+    process.env.OD_AGENT_HOME = hostHome;
+    process.env.AIDER_BIN = sentinel;
+    try {
+      const productionPreflight = vi.fn(() => EXECUTION_PREFLIGHT);
+      const fixture = await createFixture('repair', { preflightResolver: productionPreflight,
+        probeLogPath: selectedLog });
+      const selectedBin = path.join(path.dirname(fixture.logPath), 'codex-repair');
+      // Empty fixture-only API-key entries ensure the actual login-status
+      // probe is observed instead of relying on any inherited authenticated env.
+      const config = await fetch(`${started!.url}/api/app-config`, {
+        method: 'PUT', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ agentId: 'codex', agentCliEnv: { codex: {
+          CODEX_BIN: selectedBin, CODEX_HOME: path.dirname(selectedBin),
+          CODEX_API_KEY: '', OPENAI_API_KEY: '',
+        } } }),
+      });
+      expect(config.status).toBe(200);
+      const detected = await fetch(`${started!.url}/api/agents`);
+      expect(detected.status).toBe(200);
+      const available = await detected.json() as { agents: Array<{ id: string; available: boolean }> };
+      expect(available.agents.find(agent => agent.id === 'codex')?.available).toBe(true);
+      const probes = (await readFile(selectedLog, 'utf8')).trim().split('\n')
+        .filter(Boolean).map(line => JSON.parse(line) as string[]);
+      expect(probes).toContainEqual(['--version']);
+      // Codex declares listModels/authProbe but no helpArgs/capabilityFlags;
+      // probeCapabilities therefore returns without invoking --help.
+      expect(probes).toContainEqual(['debug', 'models']);
+      expect(probes).toContainEqual(['login', 'status']);
+
+      queueFixtureIds(fixture);
+      await postRun(started!.url, createRunRequest(fixture, 'Build the operator prototype.'));
+      const task = await waitForTask(fixture.taskExecutionId, 'completed');
+      await waitForRunTerminal(started!.url, task.latestRunId);
+      expect(productionPreflight).toHaveBeenCalled();
+      const invocations = await readProjectInvocations(fixture.logPath, fixture.projectId);
+      expect(invocations.some(call => call.stdin.includes('native continuation — production'))).toBe(true);
+
+      // A real non-invocable selected executable must still become unavailable.
+      // Exit 127 is the supported stale-wrapper signal, unlike generic exit 1.
+      await writeFile(selectedBin, `#!/usr/bin/env node
+require('node:fs').appendFileSync(${JSON.stringify(selectedLog)}, JSON.stringify(process.argv.slice(2)) + '\\n');
+process.exit(127);
+`, 'utf8');
+      const probeCount = (await readFile(selectedLog, 'utf8')).trim().split('\n').length;
+      const brokenResponse = await fetch(`${started!.url}/api/agents`);
+      expect(brokenResponse.status).toBe(200);
+      const broken = await brokenResponse.json() as { agents: Array<{ id: string; available: boolean }> };
+      expect(broken.agents.find(agent => agent.id === 'codex')?.available).toBe(false);
+      const afterFailure = (await readFile(selectedLog, 'utf8')).trim().split('\n')
+        .filter(Boolean).map(line => JSON.parse(line) as string[]);
+      expect(afterFailure.length).toBeGreaterThan(probeCount);
+      expect(afterFailure.slice(probeCount)).toContainEqual(['--version']);
+      // This is the expected red anchor on the unisolated fixture. All selected
+      // runtime assertions above must pass before this boundary can be green.
+      const hostProbes = (await readFile(hostLog, 'utf8')).trim().split('\n').filter(Boolean);
+      expect(hostProbes).toEqual([]);
+    } finally {
+      await stopServer(started);
+      started = null;
+      // Keep the probe-only evidence in the Vitest log before removing owned
+      // fixture files, including when a prerequisite assertion fails.
+      const probeEvidence = await Promise.all([selectedLog, hostLog].map(async file => {
+        try {
+          return (await readFile(file, 'utf8')).trim().split('\n').filter(Boolean)
+            .map(line => JSON.parse(line) as string[]);
+        } catch { return null; }
+      }));
+      console.info('[2623-probe-evidence]', JSON.stringify({
+        selected: probeEvidence[0], controlledHost: probeEvidence[1],
+      }));
+      for (const [key, value] of Object.entries(previous)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+      await rm(hostRoot, { recursive: true, force: true });
+    }
+  });
+
+  it.each(['intent-question', 'intent-request', 'intent-first-write', 'intent-fail'] as const)(
+    'OPEND-2623 real server: %s uses one native intent supplement and retains source ownership',
+    async (mode) => {
+      const productionPreflight = vi.fn(() => EXECUTION_PREFLIGHT);
+      const fixture = await createFixture(mode, { preflightResolver: productionPreflight });
+      const request = 'Ask the required questions first. Do not create or modify files. INTENT_SERVER_2623';
+      queueFixtureIds(fixture);
+      await postRun(started!.url, createRunRequest(fixture, request));
+      const hasQuestion = mode !== 'intent-request';
+      if (hasQuestion) {
+        const awaiting = await waitForTask(fixture.taskExecutionId, 'clarification_required');
+        expect(awaiting.executionIntent).toBeUndefined();
+        expect(awaiting.runs).toHaveLength(1);
+        await waitForRunTerminal(started!.url, awaiting.latestRunId);
+        const answer = '[form answers — intent-2623]\n- Audience: Investors\n- Constraints: Keep the original no-write request';
+        const response = await fetch(`${started!.url}/api/chat`, {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ ...createRunRequest(fixture, answer),
+            taskExecutionId: fixture.taskExecutionId,
+            userMessageId: `answer-user-${fixture.projectId}`,
+            assistantMessageId: `answer-assistant-${fixture.projectId}`,
+            clientRequestId: `answer-client-${fixture.projectId}` }),
+        });
+        const responseText = await response.text();
+        expect(response.status, responseText).toBe(200);
+        expect(response.headers.get('content-type')).toContain('text/event-stream');
+        expect(responseText).toContain('event: end');
+      }
+      const blocked = mode === 'intent-first-write' || mode === 'intent-fail';
+      const task = await waitForTask(fixture.taskExecutionId, blocked ? 'blocked' : 'completed');
+      for (const mapping of task.runs) await waitForRunTerminal(started!.url, mapping.runId);
+      const calls = await readProjectInvocations(fixture.logPath, fixture.projectId);
+      expect(calls).toHaveLength(hasQuestion ? 3 : 2);
+      expect(calls.filter(call => call.stdin.includes('native continuation — production'))).toHaveLength(0);
+      expect(task.runs.some(run => ['production', 'contract_repair'].includes(run.inputStage))).toBe(false);
+      expect(productionPreflight).not.toHaveBeenCalled();
+      const supplements = task.runs.filter(run => run.purpose === 'intent_resolution');
+      expect(supplements).toHaveLength(1);
+      const supplement = supplements[0]!;
+      const sent = calls.at(-1)!;
+      expect(sent.argv).toContain('resume');
+      expect(sent.argv).toContain(THREAD_ID);
+      const turn = parseOdNextIntentResolutionTurnV1(sent.stdin);
+      expect(turn.stage).toBe(hasQuestion ? 'clarification' : 'request');
+      expect(turn.taskExecutionId).toBe(task.taskExecutionId);
+      expect(turn.sourceRunId).toBe(task.runs.at(-2)!.runId);
+      expect(turn.payload).toContain(request);
+      expect(sent.stdin).toBe(supplement.finalText.text);
+      expect(task.intentResolution?.attempts).toBe(1);
+      if (mode === 'intent-first-write') {
+        expect(task.blockedContext?.reasonCodes).toContain('od_next_planning_files_changed');
+        expect(await readFile(path.join(calls[0]!.cwd, 'intent-draft.txt'), 'utf8')).toBe('Observed first-turn write.');
+        const evidence = database().prepare(
+          'SELECT run_id, files_written FROM strategy_task_run_write_evidence WHERE task_execution_id = ?',
+        ).all(task.taskExecutionId) as Array<{ run_id: string; files_written: number }>;
+        expect(evidence.find(row => row.run_id === task.initialRunId)?.files_written).toBeGreaterThan(0);
+        expect(evidence.filter(row => row.run_id !== task.initialRunId).every(row => row.files_written === 0)).toBe(true);
+      }
+      if (!blocked) {
+        expect(task.executionIntent).toBe('plan_only');
+        const historyResponse = await fetch(`${started!.url}/api/projects/${fixture.projectId}/conversations/${fixture.conversationId}/messages`);
+        expect(historyResponse.status).toBe(200);
+        const history = JSON.stringify(await historyResponse.json());
+        expect(history).toContain('INTENT_SOURCE_ANSWER_2623');
+        expect(history).not.toContain('open-design-runtime-state');
+      }
+    },
+  );
 
   it('keeps off/observe public POST behavior ordinary and idempotent with zero strategy tasks', async () => {
     const fixture = await createPublicRolloutFixture('inert');
@@ -260,7 +482,7 @@ describe('OD Next automatic production through the real server', () => {
     const replayed = await postRun(started!.url, body);
     expect(replayed).toMatchObject({ runId: created.runId, reused: true });
     expect(replayed.strategyTask).toBeUndefined();
-    expect((database().prepare('SELECT COUNT(*) AS count FROM strategy_task_executions').get() as { count: number }).count)
+    expect((database().prepare('SELECT COUNT(*) AS count FROM strategy_task_executions WHERE project_id = ?').get(fixture.projectId) as { count: number }).count)
       .toBe(0);
     const invocations = await readProjectInvocations(fixture.logPath, fixture.projectId);
     expect(invocations).toHaveLength(1);
@@ -1551,9 +1773,12 @@ describe('OD Next automatic production through the real server', () => {
     ]);
     const invocationCount = (await readProjectInvocations(fixture.logPath, fixture.projectId)).length;
 
-    database().prepare(
-      'DELETE FROM strategy_task_runs WHERE task_execution_id = ?',
-    ).run(deleted.taskExecutionId);
+    // Deliberately corrupt this task's mapping after removing its new evidence
+    // children. The test still exercises the real missing-mapping rejection.
+    database().transaction(() => {
+      database().prepare('DELETE FROM strategy_task_run_write_evidence WHERE task_execution_id = ?').run(deleted.taskExecutionId);
+      database().prepare('DELETE FROM strategy_task_runs WHERE task_execution_id = ?').run(deleted.taskExecutionId);
+    }).immediate();
     database().prepare(
       `UPDATE strategy_task_runs
           SET final_text = NULL, final_text_utf8_bytes = NULL, final_text_sha256 = NULL
@@ -1829,6 +2054,7 @@ describe('OD Next automatic production through the real server', () => {
 
     queueFixtureIds(fixture);
     const created = await postRun(started!.url, body);
+    expect(created.strategyTask?.runMappings).toEqual([{ runId: fixture.initialRunId, taskRunIndex: 0 }]);
     expect(created).toMatchObject({
       runId: fixture.initialRunId,
       taskExecutionId: fixture.taskExecutionId,
@@ -1917,6 +2143,18 @@ describe('OD Next automatic production through the real server', () => {
       outcome: 'completed',
       terminal: true,
     });
+    // These are the actual source end events, not a later GET projection.
+    // Every advertised handoff must already carry the successor's persisted
+    // identity when the web subscribes; mapping it later would miss live UI.
+    for (let index = 0; index < terminal.runs.length - 1; index += 1) {
+      const source = terminal.runs[index]!;
+      const successor = terminal.runs[index + 1]!;
+      expect(watchedEnds[index]?.data.strategyTask?.runMappings).toEqual(expect.arrayContaining([
+        { runId: source.runId, taskRunIndex: source.taskRunIndex },
+        { runId: successor.runId, taskRunIndex: successor.taskRunIndex },
+      ]));
+    }
+
 
     const invocations = await readProjectInvocations(fixture.logPath, fixture.projectId);
     expect(invocations).toHaveLength(3);
@@ -2203,55 +2441,109 @@ describe('OD Next automatic production through the real server', () => {
     expect(researchContract).not.toContain('## assistant');
   });
 
-  it('fails a blocked production exit before publishing its Run and message terminal status (OPEND-2953)', async () => {
+  it('keeps a blocked production turn on its clean process exit instead of a failed Run', async () => {
     const fixture = await createFixture('repair');
     await writeFile(`${fixture.logPath}.blocked-production`, '1');
     queueFixtureIds(fixture);
     await postRun(started!.url, createRunRequest(fixture, 'Build the lesson deck.'), {
-      'x-od-analytics-device-id': 'device-opend-2953',
-      'x-od-analytics-session-id': 'session-opend-2953',
+      'x-od-analytics-device-id': 'device-blocked-production',
+      'x-od-analytics-session-id': 'session-blocked-production',
       'x-od-analytics-client-type': 'desktop',
     });
     const task = await waitForTask(fixture.taskExecutionId, 'blocked');
     const terminal = await waitForRunTerminal(started!.url, task.latestRunId);
+    // The task records the blocked verdict and its reason codes; the physical
+    // Run finished the way the process did, so it stays succeeded with no
+    // error attached and no error frame on its stream.
     expect(terminal).toMatchObject({
-      status: 'failed',
+      status: 'succeeded',
       exitCode: 0,
-      errorCode: 'OD_NEXT_TASK_BLOCKED',
-      failureCategory: 'process_exit',
-      failureDetail: 'execution_failed',
-      retryable: false,
-      strategyTask: { outcome: 'blocked', terminal: true },
+      strategyTask: { outcome: 'blocked', terminal: true, inputStage: 'production' },
     });
-    expect(terminal.error).toContain('od_next_protocol_runtime_state_missing');
+    expect(terminal.errorCode ?? null).toBeNull();
+    expect(terminal.error ?? null).toBeNull();
     const records = (await readFile(terminal.eventsLogPath, 'utf8')).trim().split('\n')
       .map((line) => JSON.parse(line));
+    expect(records.filter((event) => event.event === 'error')).toHaveLength(0);
     expect(records.filter((event) => event.event === 'end')).toHaveLength(1);
-    expect(records.find((event) => event.event === 'end')?.data).toMatchObject({
-      status: 'failed', code: 0, artifactCount: 0,
+    const end = records.find((event) => event.event === 'end')?.data;
+    expect(end).toMatchObject({
+      status: 'succeeded',
+      code: 0,
+      artifactCount: 0,
+      strategyTask: { outcome: 'blocked', inputStage: 'production' },
     });
+    expect(end.strategyTask.blockedContext.reasonCodes)
+      .toContain('od_next_protocol_runtime_state_missing');
     expect(records.find((event) => event.data?.type === 'runtime_close')?.data)
-      .toMatchObject({ rpc_close_reason: 'exit_0', status: 'failed', exit_code: 0 });
+      .toMatchObject({ rpc_close_reason: 'exit_0', status: 'succeeded', exit_code: 0 });
     const response = await fetch(
       `${started!.url}/api/projects/${fixture.projectId}/conversations/${fixture.conversationId}/messages`,
     );
     const { messages } = await response.json() as {
       messages: Array<{ runId?: string; runStatus?: string }>;
     };
-    expect(messages.find((message) => message.runId === task.latestRunId)?.runStatus).toBe('failed');
+    expect(messages.find((message) => message.runId === task.latestRunId)?.runStatus).toBe('succeeded');
     const [recovery] = await waitForRunAnalyticsRecoveries([task.latestRunId]);
     expect(recovery?.properties).toMatchObject({
-      result: 'failed',
-      error_code: 'OD_NEXT_TASK_BLOCKED',
-      failure_stage: 'finalize',
-      failure_detail: 'execution_failed',
-      retryable: false,
+      result: 'success',
+      od_next_blocked_reason_code: 'od_next_canonical_deliverable_invalid',
       rpc_close_reason: 'exit_0',
     });
+    expect(recovery?.properties?.error_code).toBeUndefined();
     for (const mapping of task.runs.slice(0, -1)) {
       expect((await getRun(started!.url, mapping.runId)).status).toBe('succeeded');
     }
     expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(3);
+  }, 90_000);
+
+  it("ends a refused planning turn as the agent's reply instead of a failed Run", async () => {
+    const fixture = await createFixture('repair');
+    await writeFile(`${fixture.logPath}.refused-request`, '1');
+    queueFixtureIds(fixture);
+    await postRun(started!.url, createRunRequest(fixture, 'hello'), {
+      'x-od-analytics-device-id': 'device-refused-request',
+      'x-od-analytics-session-id': 'session-refused-request',
+      'x-od-analytics-client-type': 'desktop',
+    });
+    const task = await waitForTask(fixture.taskExecutionId, 'blocked');
+    expect(task.runs.map((run) => run.inputStage)).toEqual(['request']);
+    const terminal = await waitForRunTerminal(started!.url, task.latestRunId);
+    // The task records the refusal; the physical Run keeps its own clean exit.
+    expect(terminal).toMatchObject({
+      status: 'succeeded',
+      exitCode: 0,
+      strategyTask: { outcome: 'blocked', terminal: true, inputStage: 'request' },
+    });
+    expect(terminal.errorCode ?? null).toBeNull();
+    expect(terminal.error ?? null).toBeNull();
+    const records = (await readFile(terminal.eventsLogPath, 'utf8')).trim().split('\n')
+      .map((line) => JSON.parse(line));
+    expect(records.filter((event) => event.event === 'error')).toHaveLength(0);
+    expect(records.filter((event) => event.event === 'end')).toHaveLength(1);
+    expect(records.find((event) => event.event === 'end')?.data).toMatchObject({
+      status: 'succeeded', code: 0, strategyTask: { outcome: 'blocked', inputStage: 'request' },
+    });
+    expect(records.find((event) => event.data?.type === 'runtime_close')?.data)
+      .toMatchObject({ rpc_close_reason: 'exit_0', status: 'succeeded', exit_code: 0 });
+    const response = await fetch(
+      `${started!.url}/api/projects/${fixture.projectId}/conversations/${fixture.conversationId}/messages`,
+    );
+    const { messages } = await response.json() as {
+      messages: Array<{ runId?: string; runStatus?: string; content?: string }>;
+    };
+    expect(messages.find((message) => message.runId === task.latestRunId)).toMatchObject({
+      runStatus: 'succeeded',
+      content: expect.stringContaining('Tell me what you would like to design'),
+    });
+    const [recovery] = await waitForRunAnalyticsRecoveries([task.latestRunId]);
+    expect(recovery?.properties).toMatchObject({
+      result: 'success',
+      od_next_blocked_reason_code: 'od_next_canonical_deliverable_invalid',
+      rpc_close_reason: 'exit_0',
+    });
+    expect(recovery?.properties?.error_code).toBeUndefined();
+    expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(1);
   }, 90_000);
 
   it('blocks the durable task when the selected agent exits before publishing a session', async () => {
@@ -2702,18 +2994,22 @@ describe('OD Next automatic production through the real server', () => {
   );
 
   async function createFixture(
-    mode: 'repair' | 'direct' | 'complex',
+    mode: 'repair' | 'direct' | 'complex' | IntentServerMode,
     {
       selectedAgentId = 'codex',
       capability,
+      preflightResolver,
+      probeLogPath,
     }: {
       selectedAgentId?: string;
       capability?: OdNextRuntimeCapabilitySnapshotV1;
+      preflightResolver?: NonNullable<StartServerOptions['odNextExecutionPreflightResolver']>;
+      probeLogPath?: string;
     } = {},
   ) {
     const suffix = `${mode}-${Date.now()}-${++sequence}`;
     if (mode !== 'direct') {
-      const publicFixture = await createPublicRolloutFixture(`chain-${suffix}`, 'design');
+      const publicFixture = await createPublicRolloutFixture(`chain-${suffix}`, 'design', undefined, 'codex-cli 0.147.0', preflightResolver);
       started = publicFixture.started;
       binDir = publicFixture.binDir;
       process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
@@ -2726,10 +3022,10 @@ describe('OD Next automatic production through the real server', () => {
         .toString(16)
         .padStart(12, '0')}`;
       const taskExecutionId = `odnext_${taskOwnerUuid.replaceAll('-', '')}`;
-      const plan = planContract(template.snapshotId, template.strategy, mode, capability);
+      const plan = planContract(template.snapshotId, template.strategy, mode.startsWith('intent-') ? 'repair' : mode as 'repair' | 'complex', capability);
       const { bin, logPath } = selectedAgentId === 'claude'
         ? await writeStrategyClaude(binDir, plan)
-        : await writeStrategyCodex(binDir, mode, plan);
+        : await writeStrategyCodex(binDir, mode, plan, probeLogPath);
       const configResponse = await fetch(`${started.url}/api/app-config`, {
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
@@ -2821,10 +3117,10 @@ describe('OD Next automatic production through the real server', () => {
       process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
     }
 
-    const plan = planContract(snapshot.snapshotId, snapshot.strategy!, mode, capability);
+    const plan = planContract(snapshot.snapshotId, snapshot.strategy!, mode as 'repair' | 'direct' | 'complex', capability);
     const { bin, logPath } = selectedAgentId === 'claude'
       ? await writeStrategyClaude(binDir, plan)
-      : await writeStrategyCodex(binDir, mode, plan);
+      : await writeStrategyCodex(binDir, mode, plan, probeLogPath);
     const configResponse = await fetch(`${started.url}/api/app-config`, {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
@@ -2937,6 +3233,7 @@ async function createPublicRolloutFixture(
   conversationMode: 'design' | 'chat' | 'plan' = 'chat',
   pluginId?: string,
   agentCliVersion = 'codex-cli 0.147.0',
+  preflightResolver?: NonNullable<StartServerOptions['odNextExecutionPreflightResolver']>,
 ) {
   const suffix = `${label}-${Date.now()}`;
   const binDir = await mkdtemp(path.join(os.tmpdir(), `od-next-public-${label}-`));
@@ -2945,7 +3242,7 @@ async function createPublicRolloutFixture(
     label,
     agentCliVersion,
   );
-  const started = await startDaemon();
+  const started = await startDaemon(preflightResolver);
   const projectId = `od-next-public-${suffix}`;
   const projectResponse = await fetch(`${started.url}/api/projects`, {
     method: 'POST',
@@ -3087,6 +3384,9 @@ const argv = process.argv.slice(2);
 const logPath = ${JSON.stringify(logPath)};
 if (argv.includes('--version')) { console.log(${JSON.stringify(agentCliVersion)}); process.exit(0); }
 if (argv.includes('--help')) { console.log('Usage: codex exec'); process.exit(0); }
+// Metadata probes never consume a generation prompt on stdin.
+if (argv[0] === 'debug' && argv[1] === 'models') { console.log(JSON.stringify({ models: [{ id: 'gpt-5.5' }] })); process.exit(0); }
+if (argv[0] === 'login' && argv[1] === 'status') { console.log('Logged in using ChatGPT'); process.exit(0); }
 let stdin = '';
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', (chunk) => { stdin += chunk; });
@@ -3136,11 +3436,41 @@ async function readDurableRunState(runId: string): Promise<Record<string, unknow
   )) as Record<string, unknown>;
 }
 
+/**
+ * Reuse the ACP server fixtures' OD_AGENT_HOME + minimal PATH boundary.
+ * Detection and the selected CLI still run normally; only unrelated host
+ * executables are outside this test's discovery scope. Explicit *_BIN paths
+ * can bypass PATH, so the fixture also removes inherited executable overrides.
+ */
+async function isolateAgentDetection(): Promise<void> {
+  fixtureDetectionIsolation ??= (async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'od-next-agent-detection-'));
+    try {
+      const home = path.join(root, 'home');
+      const bin = path.join(root, 'bin');
+      await mkdir(home);
+      await mkdir(bin);
+      // Keep Node shebangs usable without exposing every CLI installed beside
+      // the host Node binary. Selected agent bins stay explicit in app config.
+      await symlink(process.execPath, path.join(bin, 'node'));
+      return { root, home, bin };
+    } catch (error) {
+      await rm(root, { recursive: true, force: true });
+      throw error;
+    }
+  })();
+  const isolation = await fixtureDetectionIsolation;
+  process.env.OD_AGENT_HOME = isolation.home;
+  process.env.PATH = [isolation.bin, '/usr/bin', '/bin', '/usr/sbin', '/sbin'].join(path.delimiter);
+  for (const key of fixtureAgentBinEnvKeys) delete process.env[key];
+}
+
 async function startDaemon(
   resolver: NonNullable<StartServerOptions['odNextExecutionPreflightResolver']> =
     () => EXECUTION_PREFLIGHT,
   complexResolver: StartServerOptions['odNextComplexProductionResolver'] = null,
 ): Promise<StartedServer> {
+  await isolateAgentDetection();
   const started = await startServer({
     port: 0,
     returnServer: true,
@@ -3331,6 +3661,7 @@ function runtimeState(input: {
     route: input.route ?? 'full_plan',
     inputStage: input.inputStage ?? 'request',
     outcome: input.outcome,
+    executionIntent: 'produce',
     executionMode: input.executionMode ?? 'simple',
     reasonCodes: [],
   };
@@ -3341,10 +3672,13 @@ function machineBlock(tag: string, value: unknown, fenced = false): string {
   return `<${tag}>\n${fenced ? `\`\`\`json\n${json}\n\`\`\`` : json}\n</${tag}>`;
 }
 
+type IntentServerMode = 'intent-question' | 'intent-request' | 'intent-first-write' | 'intent-fail';
+
 async function writeStrategyCodex(
   dir: string,
-  mode: 'repair' | 'direct' | 'complex',
+  mode: 'repair' | 'direct' | 'complex' | IntentServerMode,
   plan: OpenDesignPlanContractV2,
+  probeLogPath?: string,
 ): Promise<{ bin: string; logPath: string }> {
   const bin = path.join(dir, `codex-${mode}`);
   const logPath = path.join(dir, `codex-${mode}.jsonl`);
@@ -3379,14 +3713,27 @@ async function writeStrategyCodex(
     inputStage: 'production', outcome: 'completed', executionMode: 'complex',
   }));
 
+  const questionText = '<question-form id="intent-2623">{"questions":[{"id":"audience","type":"text","label":"Audience?","required":true}]}</question-form>';
+  const missingIntentPlan = (stage: 'request' | 'clarification') => [
+    'INTENT_SOURCE_ANSWER_2623: The requested plan is available in this response.',
+    machineBlock('open-design-plan-contract', plan),
+    machineBlock('open-design-runtime-state', {
+      schema: 'open-design.strategy-state/v2', route: 'full_plan', inputStage: stage,
+      outcome: 'plan_ready', executionMode: 'simple', reasonCodes: [],
+    }),
+  ].join('\n');
   await writeFile(bin, `#!/usr/bin/env node
 const fs = require('node:fs');
 const path = require('node:path');
 const argv = process.argv.slice(2);
 const logPath = ${JSON.stringify(logPath)};
 const mode = ${JSON.stringify(mode)};
+${probeLogPath ? `if (argv.includes('--version') || argv.includes('--help') || argv[0] === 'debug' && argv[1] === 'models' || argv[0] === 'login' && argv[1] === 'status') fs.appendFileSync(${JSON.stringify(probeLogPath)}, JSON.stringify(argv) + '\\n');` : ''}
 if (argv.includes('--version')) { console.log('codex-cli 0.147.0'); process.exit(0); }
 if (argv.includes('--help')) { console.log('Usage: codex exec [--sandbox MODE]'); process.exit(0); }
+// Answer probes before failure/generation handling, without waiting for stdin.
+if (argv[0] === 'debug' && argv[1] === 'models') { console.log(JSON.stringify({ models: [{ id: 'gpt-5.5' }] })); process.exit(0); }
+if (argv[0] === 'login' && argv[1] === 'status') { console.log('Logged in using ChatGPT'); process.exit(0); }
 if (fs.existsSync(logPath + '.fail-start')) {
   process.stderr.write('fixture: process exited before session start\\n');
   process.exit(1);
@@ -3411,7 +3758,26 @@ function finish() {
     process.exit(2);
   }
   let text;
-  if (fs.existsSync(logPath + '.linked-page')) {
+  if (mode.startsWith('intent-')) {
+    if (stdin.startsWith('<open_design_intent_resolution_turn ')) {
+      if (mode === 'intent-fail') { process.stderr.write('fixture intent supplement exited\\n'); process.exit(2); }
+      const stage = / stage="(request|clarification)"/.exec(stdin)?.[1];
+      if (!argv.includes('resume') || !stage) process.exit(9);
+      text = '<open-design-runtime-state>\\n' + JSON.stringify({
+        schema: 'open-design.strategy-state/v2', route: 'full_plan', inputStage: stage,
+        outcome: 'completed', executionMode: 'simple', executionIntent: 'plan_only', reasonCodes: [],
+      }) + '\\n</open-design-runtime-state>';
+    } else if (stdin.includes('native continuation — clarification')) {
+      text = ${JSON.stringify(missingIntentPlan('clarification'))};
+    } else if (!argv.includes('resume') && stdin.includes('INTENT_SERVER_2623')) {
+      text = mode === 'intent-request' ? ${JSON.stringify(missingIntentPlan('request'))} : ${JSON.stringify(questionText)};
+      if (mode === 'intent-first-write') {
+        const target = path.join(process.cwd(), 'intent-draft.txt');
+        fs.writeFileSync(target, 'Observed first-turn write.');
+        console.log(JSON.stringify({ type: 'item.completed', item: { id: 'first-write', type: 'file_change', changes: [{ path: target, kind: 'add' }], status: 'completed' } }));
+      }
+    } else { process.stderr.write('Unexpected intent fixture invocation\\n'); process.exit(9); }
+  } else if (fs.existsSync(logPath + '.linked-page')) {
     const childFile = fs.readFileSync(logPath + '.linked-page', 'utf8');
     const edited = fs.existsSync(logPath + '.linked-page-edit');
     if (edited || !fs.existsSync(path.join(process.cwd(), childFile))) {
@@ -3435,6 +3801,10 @@ function finish() {
     fs.writeFileSync(path.join(process.cwd(), 'index.html'), '<!doctype html><title>Production</title>');
     staleTodoList = true;
     text = ${JSON.stringify(production)};
+  } else if (!argv.includes('resume') && fs.existsSync(logPath + '.refused-request')) {
+    // A planning turn that declines the request: the agent answers in prose,
+    // writes nothing, emits no machine block, and exits cleanly.
+    text = 'Hello! Tell me what you would like to design and I will plan it.';
   } else {
     text = ${JSON.stringify(initialRepair)};
   }

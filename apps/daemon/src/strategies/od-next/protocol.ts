@@ -486,3 +486,26 @@ export function passThroughOrdinaryAssistantText(
 ): string {
   return boundary ? boundary.push(chunk) : chunk;
 }
+
+/**
+ * Physical-run emission boundary. A host-owned intent supplement still parses
+ * every byte for validation, but its answer belongs only to its durable reply.
+ * Ordinary runs retain both streamed text and the parser's close-time tail.
+ */
+export function createOdNextRunProtocol(mapping: { purpose?: 'intent_resolution' } | null) {
+  const protocol = new OdNextMachineProtocolStream();
+  const internalReply = mapping?.purpose === 'intent_resolution';
+  let visibleEmitted = 0;
+  return {
+    push(delta: string): string {
+      const visible = protocol.push(delta);
+      if (internalReply) return '';
+      visibleEmitted += visible.length;
+      return visible;
+    },
+    finish(): { parsed: OdNextMachineProtocolResult; visibleTail: string } {
+      const parsed = protocol.finish();
+      return { parsed, visibleTail: internalReply ? '' : parsed.visibleText.slice(visibleEmitted) };
+    },
+  };
+}

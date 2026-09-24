@@ -5,15 +5,18 @@
 // #5517 removed the entry topbar and parked the updater host in the rail
 // footer — bottom-left, detached from the identity it belongs to. A follow-up
 // moved it to a strip above the account row; product then placed it inline
-// inside the account capsule. OPEND-2154 separates it again: the rocket stays
-// immediately AFTER the credits/avatar capsule, but paints as its own control.
+// inside the account capsule. OPEND-2154 separated it again as its own
+// control after the capsule. With the account module now at the foot of the
+// rail (OPEND-2553 阶段二), the rocket rides that identity row: trigger →
+// message-centre bell → updater slot (per product: 升级提醒按钮跟在头像后边).
+// Signed-out shells, and the project route, keep it in the top-right cluster.
 //
 // These specs pin the DOM relationship rather than any pixel value: the rocket
-// lives in a slot that is the account capsule's immediately-following sibling,
-// outside the capsule. The cluster layout and the slot's zero-width-when-empty
-// behaviour are CSS facts (see
-// `.entry-nav-rail__account-updater` in styles/home/entry-layout.css) and are
-// verified in a real browser, not here — jsdom applies no stylesheets.
+// lives in a slot that is the last child of the account row, never inside the
+// trigger. The row layout and the slot's zero-width-when-empty behaviour are
+// CSS facts (see `.entry-nav-rail__account-updater` in
+// styles/home/entry-layout.css) and are verified in a real browser, not here —
+// jsdom applies no stylesheets.
 //
 // Being a sibling rather than a descendant of the trigger is load-bearing: a
 // button nested inside the account button would be invalid markup and would
@@ -144,7 +147,7 @@ async function renderWithDownloadedUpdate(context: WorkspaceCollabContext | null
   return view;
 }
 
-describe('standalone updater rocket placement in the top-right cluster', () => {
+describe('updater rocket placement after the account avatar', () => {
   it('shows the shared DeepSeek campaign badge on an unpaid project detail route', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-20T10:00:00.000Z'));
@@ -176,13 +179,16 @@ describe('standalone updater rocket placement in the top-right cluster', () => {
     );
 
     const slot = screen.getByTestId('entry-nav-account-updater');
-    const pill = document.querySelector('.entry-top-right-account-pill');
     expect(screen.getByTestId('project-updater-slot-content')).toBeTruthy();
-    expect(pill?.contains(slot)).toBe(false);
-    expect(pill?.nextElementSibling).toBe(slot);
+    // No rail on the project route → no account row to ride; the slot keeps
+    // its top-right home, outside any capsule, with no account module beside
+    // it (the menu has no second home).
+    expect(slot.closest('.entry-top-right-cluster')).not.toBeNull();
+    expect(slot.closest('.entry-top-right-account-pill')).toBeNull();
+    expect(screen.queryByTestId('entry-nav-account')).toBeNull();
   });
 
-  it('renders the rocket independently immediately after the account capsule', async () => {
+  it('renders the rocket at the end of the rail account row, after the avatar and bell', async () => {
     await renderWithDownloadedUpdate();
 
     const rocket = screen.getByTestId('entry-nav-updater');
@@ -193,21 +199,25 @@ describe('standalone updater rocket placement in the top-right cluster', () => {
     expect(slot, 'rocket must live in the updater slot').not.toBeNull();
     expect(slot?.contains(trigger)).toBe(false);
 
-    // AFTER the capsule: same top-right cluster, but outside the account
-    // container so the capsule material never wraps the update control.
+    // AFTER the avatar chip, in the same account container at the foot of the
+    // rail. The message-centre bell is a peer of the identity (it used to be
+    // a row behind the account menu), so the row reads trigger -> bell ->
+    // updater slot and nothing else may slip in.
     const account = trigger.closest('.entry-nav-rail__account');
-    const pill = trigger.closest('.entry-top-right-account-pill');
-    const cluster = trigger.closest('.entry-top-right-cluster');
-    expect(account?.contains(slot as Node)).toBe(false);
-    expect(pill?.contains(slot as Node)).toBe(false);
-    expect(cluster?.contains(slot as Node)).toBe(true);
-    expect(pill?.nextElementSibling).toBe(slot);
+    expect(account?.contains(slot as Node)).toBe(true);
+    expect(account?.closest('.entry-nav-rail__account-dock')).not.toBeNull();
+    expect(slot?.closest('.entry-top-right-cluster')).toBeNull();
+    const bell = screen.getByTestId('entry-nav-account-message-center');
+    expect(trigger.nextElementSibling).toBe(bell);
+    expect(bell.nextElementSibling).toBe(slot);
     expect(
       trigger.compareDocumentPosition(rocket) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
 
-    // The avatar chip itself still carries the account initial.
+    // The avatar chip itself still carries the account initial, and the row
+    // now names the identity beside it.
     expect(trigger.querySelector('.entry-nav-rail__account-avatar')?.textContent).toContain('X');
+    expect(trigger.querySelector('.entry-nav-rail__account-name')?.textContent).toBe('XINYU SHANG');
 
     // The rail footer is no longer the rocket's host.
     expect(rocket.closest('.entry-nav-rail__footer')).toBeNull();
@@ -225,11 +235,13 @@ describe('standalone updater rocket placement in the top-right cluster', () => {
     expect(trigger.contains(rocket)).toBe(false);
 
     fireEvent.click(trigger);
-    await waitFor(() => expect(screen.getByTestId('account-menu-message-center')).toBeTruthy());
+    // The message-centre row left this menu, so the menu itself is the proxy
+    // for "the trigger still opens".
+    await waitFor(() => expect(screen.getByRole('menu')).toBeTruthy());
     expect(trigger.getAttribute('aria-expanded')).toBe('true');
   });
 
-  it('leaves an empty standalone slot after the capsule while no update is in flight', async () => {
+  it('leaves an empty slot at the end of the account row while no update is in flight', async () => {
     restoreHost = installMockOpenDesignHost({
       host: { updater: { status: vi.fn(async () => idleStatus()) } },
     });
@@ -245,9 +257,29 @@ describe('standalone updater rocket placement in the top-right cluster', () => {
     expect(screen.getByTestId('entry-nav-account')).toBeTruthy();
     // The slot stays mounted but must hold NO element children, which is what
     // lets `:empty { display: none }` keep it from reserving width and
-    // shifting the cluster. A stray wrapper here would defeat that rule.
+    // shifting the row. A stray wrapper here would defeat that rule.
     const slot = screen.getByTestId('entry-nav-account-updater');
     expect(slot.children.length).toBe(0);
+    expect(slot.closest('.entry-nav-rail__account')).not.toBeNull();
+  });
+
+  it('falls back to the top-right cluster while a narrow window has auto-collapsed the rail', async () => {
+    // entry-layout.css zeroes the rail track below 1080px; the account row
+    // goes off screen with it, so the rocket must not be parked there.
+    const listeners = new Set<() => void>();
+    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+      matches: query === '(max-width: 1080px)',
+      media: query,
+      addEventListener: (_type: string, fn: () => void) => listeners.add(fn),
+      removeEventListener: (_type: string, fn: () => void) => listeners.delete(fn),
+    })));
+    await renderWithDownloadedUpdate();
+
+    const rocket = screen.getByTestId('entry-nav-updater');
+    expect(rocket.closest('.entry-top-right-cluster')).not.toBeNull();
+    expect(rocket.closest('.entry-nav-rail__account')).toBeNull();
+    // The account row itself stays in the rail — only the rocket moves.
+    expect(screen.getByTestId('entry-nav-account').closest('.entry-nav-rail__account-dock')).not.toBeNull();
   });
 
   it('keeps the signed-out rocket in the top-right cluster without an account capsule', async () => {

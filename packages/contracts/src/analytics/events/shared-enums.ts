@@ -324,6 +324,7 @@ export type TrackingRunFailureDetail =
   | 'provider_resource_not_found'
   | 'upstream_5xx'
   | 'upstream_client_error'
+  | 'region_not_supported'
   | 'stream_disconnected'
   | 'network_error'
   | 'provider_high_demand'
@@ -367,6 +368,7 @@ export type TrackingRunFailureDetail =
   | 'stream_error'
   | 'exit_nonzero'
   | 'fatal_rpc_error'
+  | 'continuation_incomplete'
   | 'execution_failed'
   | 'user_cancelled'
   | 'unknown';

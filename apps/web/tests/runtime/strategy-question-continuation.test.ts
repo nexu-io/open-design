@@ -4,6 +4,8 @@ import {
   resolveQuestionFormStrategyTaskExecutionId,
   strategyBlockedMessageFields,
   strategySettledMessageFields,
+  strategyTaskParkedOnSucceededRun,
+  strategyTaskRunIndex,
 } from '../../src/runtime/strategy-question-continuation';
 
 describe('question-form strategy continuation handle recovery', () => {
@@ -126,5 +128,79 @@ describe('strategySettledMessageFields', () => {
       blockedContext: undefined,
     }))).toBeNull();
     expect(strategySettledMessageFields(undefined)).toBeNull();
+  });
+});
+
+
+describe('daemon-owned task run positions', () => {
+  it('resolves source and successor independently from the same task projection', () => {
+    const projection = blockedProjection({ runMappings: [
+      { runId: 'source', taskRunIndex: 1 },
+      { runId: 'successor', taskRunIndex: 2 },
+    ] });
+    expect(strategyTaskRunIndex(projection, 'source')).toBe(1);
+    expect(strategyTaskRunIndex(projection, 'successor')).toBe(2);
+    expect(strategyTaskRunIndex(projection, 'different-run')).toBeUndefined();
+  });
+
+  it('keeps legacy, absent and ambiguous positions unknown', () => {
+    expect(strategyTaskRunIndex(undefined, 'run-1')).toBeUndefined();
+    expect(strategyTaskRunIndex(blockedProjection(), 'run-1')).toBeUndefined();
+    expect(strategyTaskRunIndex(blockedProjection({ runMappings: [
+      { runId: 'run-1', taskRunIndex: 0 }, { runId: 'run-1', taskRunIndex: 1 },
+    ] }), 'run-1')).toBeUndefined();
+    expect(strategyTaskRunIndex(blockedProjection({ runMappings: [
+      { runId: 'run-1', taskRunIndex: -1 },
+    ] }), 'run-1')).toBeUndefined();
+  });
+});
+
+describe('strategyTaskParkedOnSucceededRun', () => {
+  const parked = (overrides: Partial<StrategyTaskProjectionV2> = {}) => blockedProjection({
+    outcome: 'clarification_required',
+    terminal: false,
+    blockedContext: undefined,
+    ...overrides,
+  });
+
+  it.each(['clarification_required', 'plan_ready'] as const)(
+    'is true when a succeeded Run left its task waiting on the user (%s)',
+    (outcome) => {
+      expect(strategyTaskParkedOnSucceededRun(
+        { status: 'succeeded', strategyTask: parked({ outcome }) },
+        'run-1',
+      )).toBe(true);
+    },
+  );
+
+  it('is false while the task still runs, even on the same Run', () => {
+    expect(strategyTaskParkedOnSucceededRun(
+      { status: 'succeeded', strategyTask: parked({ outcome: 'running' }) },
+      'run-1',
+    )).toBe(false);
+  });
+
+  it('is false when the task has moved on to another Run', () => {
+    expect(strategyTaskParkedOnSucceededRun(
+      { status: 'succeeded', strategyTask: parked({ activeRunId: 'run-2' }) },
+      'run-1',
+    )).toBe(false);
+  });
+
+  it('is false while the Run itself has not succeeded', () => {
+    for (const status of ['queued', 'running', 'failed', 'canceled'] as const) {
+      expect(strategyTaskParkedOnSucceededRun(
+        { status, strategyTask: parked() },
+        'run-1',
+      )).toBe(false);
+    }
+  });
+
+  it('leaves terminal tasks and task-less Runs to their own checks', () => {
+    expect(strategyTaskParkedOnSucceededRun(
+      { status: 'succeeded', strategyTask: blockedProjection() },
+      'run-1',
+    )).toBe(false);
+    expect(strategyTaskParkedOnSucceededRun({ status: 'succeeded' }, 'run-1')).toBe(false);
   });
 });

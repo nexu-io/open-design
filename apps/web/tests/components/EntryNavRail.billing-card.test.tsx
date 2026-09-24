@@ -14,7 +14,7 @@
 // is the one number that matters — so the row was removed outright rather
 // than fixed to show a real value.
 
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import type { WorkspaceBillingSummary, WorkspaceCollabContext } from '@open-design/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -74,9 +74,12 @@ function renderRail(props: {
   );
 }
 
-/** Open the account menu and scope queries to its billing card. */
+/** Hover the top-right credits pill and scope queries to the billing card
+ *  that hangs under it. The card used to live inside the account menu; it now
+ *  hangs off the pill it describes (per product), so this is the gesture that
+ *  puts it on screen. */
 function billingCard() {
-  fireEvent.click(screen.getByTestId('entry-nav-account'));
+  fireEvent.pointerEnter(screen.getByTestId('entry-top-right-credits'));
   const el = document.querySelector('.entry-nav-rail__menu-credits');
   if (!el) throw new Error('billing card is not rendered');
   return within(el as HTMLElement);
@@ -92,6 +95,7 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
   resetWorkspaceDirectoryCache();
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 describe('account menu billing card — plan label (#146)', () => {
@@ -101,7 +105,7 @@ describe('account menu billing card — plan label (#146)', () => {
     const card = billingCard();
     expect(card.queryByText('团队版')).toBeNull();
     // `entry.billingTierFree` reads 免费 in zh-CN.
-    expect(card.getByText('免费')).toBeTruthy();
+    expect(card.getByText('免费版')).toBeTruthy();
   });
 
   it('labels a workspace that really holds a team subscription as 团队版', () => {
@@ -211,6 +215,30 @@ describe('account menu billing card — workspace-aware upgrade routing', () => 
 });
 
 describe('account menu billing card — 积分 row opens the web console (#62)', () => {
+  it.each(['paid pill', 'allowance row'] as const)(
+    'opens the workspace dashboard from the %s without a settings URL',
+    (action) => {
+      const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+      renderRail({
+        context: context({ billingState: 'active', planId: 'team_plus' }),
+        billing: billing({ membershipTier: 'team_plus', subscriptionStatus: 'active' }),
+      });
+
+      fireEvent.click(action === 'paid pill'
+        ? screen.getByTestId('entry-top-right-credits')
+        : billingCard().getByTestId('entry-nav-credits-row'));
+
+      expect(openSpy).toHaveBeenCalledTimes(1);
+      const [url, target, features] = openSpy.mock.calls[0]!;
+      const destination = new URL(String(url));
+      expect(destination.origin).toBe('https://open-design.ai');
+      expect(destination.pathname).toBe('/cloud/dashboard');
+      expect(destination.searchParams.get('workspaceId')).toBe('ws-new');
+      expect(target).toBe('_blank');
+      expect(features).toBe('noopener,noreferrer');
+    },
+  );
+
   // Product ruling: clicking 积分 must jump straight to B's console for the
   // usage detail — there is NO intermediate credits popover in the client
   // (the reference #5517 has no such panel either). The destination is the
@@ -265,20 +293,74 @@ describe('account menu billing card — scoped USD balance (recvqgaMLxEdZX)', ()
     });
 
     const card = billingCard();
-    expect(card.getByText('额度')).toBeTruthy();
-    expect(card.getByText('$9.99')).toBeTruthy();
+    expect(card.getByText('钱包余额')).toBeTruthy();
+    // The design names the currency on this row (「US$9.99」, zh-CN).
+    expect(card.getByText('US$9.99')).toBeTruthy();
     expect(card.queryByText('999,330')).toBeNull();
     expect(card.queryByText('余额')).toBeNull();
     expect(card.queryByText(/积分/)).toBeNull();
   });
 
-  it('keeps a proven zero visible as $0.00', () => {
+  it('keeps a proven zero visible as US$0.00', () => {
     renderRail({
       context: context(),
       billing: billing({ totalAvailableCredits: 600_000 }),
       balanceUsd: '0',
     });
 
-    expect(billingCard().getByText('$0.00')).toBeTruthy();
+    expect(billingCard().getByText('US$0.00')).toBeTruthy();
+  });
+
+  it('preserves the team wallet battery icon and chevron', () => {
+    renderRail({
+      context: context(),
+      billing: billing({ totalAvailableCredits: 600_000 }),
+      balanceUsd: '12',
+    });
+
+    const row = billingCard().getByTestId('entry-nav-credits-row');
+    expect(row.querySelectorAll('svg')).toHaveLength(2);
+    expect(row.textContent?.trim()).toBe('钱包余额US$12.00');
+  });
+});
+
+describe('billing card keyboard access', () => {
+  it('opens on focus and keeps both actions reachable across focus and pointer transitions', () => {
+    vi.useFakeTimers();
+    renderRail({
+      context: context({
+        billingState: 'active',
+        planId: 'team_plus',
+        permissions: {
+          ...context().permissions,
+          canManageBilling: true,
+        },
+        workspaceSettingsUrl: 'https://web.example.com/console/settings?workspaceId=ws-new',
+      }),
+      billing: billing({ membershipTier: 'team_plus', subscriptionStatus: 'active' }),
+    });
+    const pill = screen.getByTestId('entry-top-right-credits');
+    expect(screen.queryByTestId('entry-top-right-credits-panel')).toBeNull();
+    act(() => pill.focus());
+    const panel = screen.getByRole('dialog', { name: '额度' });
+    expect(pill.getAttribute('aria-expanded')).toBe('true');
+    expect(pill.getAttribute('aria-haspopup')).toBe('dialog');
+    expect(pill.getAttribute('aria-controls')).toBe(panel.id);
+
+    const upgrade = within(panel).getByRole('button', { name: '升级' });
+    const allowance = within(panel).getByTestId('entry-nav-credits-row');
+    act(() => upgrade.focus());
+    fireEvent.pointerLeave(pill.closest('.entry-top-right-credits-anchor')!);
+    act(() => vi.advanceTimersByTime(180));
+    expect(document.activeElement).toBe(upgrade);
+    expect(panel.isConnected).toBe(true);
+    act(() => allowance.focus());
+    expect(document.activeElement).toBe(allowance);
+    expect(panel.isConnected).toBe(true);
+
+    act(() => screen.getByTestId('entry-nav-account').focus());
+    act(() => vi.advanceTimersByTime(180));
+    expect(screen.queryByTestId('entry-top-right-credits-panel')).toBeNull();
+    expect(pill.getAttribute('aria-expanded')).toBe('false');
   });
 });

@@ -1183,9 +1183,14 @@
 .fold .body.stack .code {
   margin: 2px 11px 4px 33px;
   padding: 0;
-  border: var(--chat-stroke) solid var(--chat-border);
+  /* OPEND-3178 → 3177 (2026-09-16 design): like the thoughts window, the
+     nested command + output block sits DIRECTLY on the transparent pane —
+     no ground, no edge. The `$` prefix and the red `✗` still tell command,
+     output and error apart; the block's own padding keeps the terminal text
+     off the row's indent line. */
+  border: 0;
   border-radius: var(--chat-radius-lg);
-  background: var(--chat-bg-panel);
+  background: transparent;
   overflow: hidden;
 }
 /* 代码 / 终端块**不吃**上面那份行缩进:它自己靠外边距对齐(稿子
@@ -1473,8 +1478,17 @@
    * 半透明的后果不是「差一点点」,是这块灰底根本没有确定的颜色:它坐在什么上面就
    * 跟着变。陈列页里它坐 `--bg-panel`、会话里坐 `--bg`,同一块底在两处不是同一个色,
    * 而稿子给的恰恰是一个定值。
+   *
+   * OPEND-3178 (folded into OPEND-3177), design settled 2026-09-16 (the
+   * OPEND-3178 recording + `acceptance-3178-0.png`): the chat pane itself
+   * paints nothing now (OPEND-3090) and the thoughts body sits DIRECTLY on
+   * it — no ground at all. The draft's #fafafa, H1's frost and K1's opaque
+   * floating card (#8185) are all withdrawn; the floating card stays with the
+   * composer shell and the queued-send cards only. `transparent` is still a
+   * defined paint (unlike the tinted fill above); radius / padding stay so the
+   * two states keep the same box and the scrollbar gutter below still holds.
    */
-  background: var(--chat-bg-panel);
+  background: transparent;
   padding: var(--stream-pad);
 }
 /*
@@ -1627,9 +1641,14 @@
  * `.think`」当结论、留深色,前提是那一态没有自己的容器、就落在流水里;产品这一版
  * 两态共用一只灰底容器(见上面 `.stream, .thoughts > .body.stack`),同一只盒子里
  * 换墨色比换容器更突兀。
+ *
+ * OPEND-3178 → 3177(设计定稿 2026-09-16):窗子不再铺底、正文直接落在透明面板上,
+ * 稿子那档 `--stream-ink`(#a3a3a3)在面板底纹上读不清 —— 录屏里的思考正文与评论
+ * 「颜色使用的是 #494949」都是正文那一档,即 `--chat-text`(→ `--text`,亮色 #494949,
+ * 暗色随 token 翻)。两态同一枚,理由不变:同一只盒子里不换墨色。
  */
 .fold .thoughts > .body > * {
-  color: var(--chat-stream-ink);
+  color: var(--chat-text);
 }
 /*
  * markdown 小标题不再自己喊。
@@ -1653,7 +1672,7 @@
  */
 .stream > .think {
   padding: 0;
-  color: var(--chat-stream-ink);
+  color: var(--chat-text);
 }
 .stream > .think + .think { margin-top: 0.75em; }
 

@@ -1,19 +1,21 @@
 /* -------- Chat project header (single row) --------------------------
-   The former standalone chrome header row was removed. This single row
-   now carries: back button, design-system picker, editable project
-   title, and (right-aligned) the session-history trigger. position:
-   relative anchors the absolutely-positioned history popover. */
+   Rendered only for hosts with no tabs dock to portal the history control
+   into (side chat, design-system flow). On the project page the card has no
+   header row at all: the project name lives once, in the switcher docked
+   above the card (OPEND-3128 / OPEND-3258), and the history trigger portals
+   beside it. Where it does render, the row carries the back / collapse
+   button and the session-history trigger; position: relative anchors the
+   absolutely-positioned history popover. */
 .chat-project-header {
   display: flex;
   align-items: center;
   gap: 4px;
   padding: 8px 12px;
   border-bottom: none;
-  /* Sticky over the translucent chat pane: frosted glass masks messages
-     scrolling beneath (glass tokens are theme-aware). */
-  background: var(--glass-regular);
-  -webkit-backdrop-filter: var(--glass-backdrop);
-  backdrop-filter: var(--glass-backdrop);
+  /* Transparent: the transcript softens as it passes under this row via the
+     progressive blur edge mounted inside .chat-log-viewport (ChatScrollEdge),
+     so the header paints no glass tint or cap of its own. */
+  background: transparent;
   min-width: 0;
   height: 38px;
   position: sticky;
@@ -23,23 +25,6 @@
      so the header must clear both chat overlays or the rail's transparent
      20px hit zone steals clicks from the menu's trailing edge. */
   z-index: 9;
-}
-.chat-project-header::after {
-  content: '';
-  position: absolute;
-  top: 100%;
-  right: 0;
-  left: 0;
-  height: var(--spacing-18);
-  pointer-events: none;
-  /* Extend the regular glass material into the scroll area, then fade both
-     its tint and blur so messages pass under a soft edge instead of a hard
-     horizontal cutoff. */
-  background: linear-gradient(to bottom, var(--glass-regular), transparent);
-  -webkit-backdrop-filter: var(--glass-backdrop);
-  backdrop-filter: var(--glass-backdrop);
-  -webkit-mask-image: linear-gradient(to bottom, currentColor, transparent);
-  mask-image: linear-gradient(to bottom, currentColor, transparent);
 }
 .chat-project-back {
   width: 28px;
@@ -67,61 +52,6 @@
      uses flex:1, so this margin parks the picker + session button as a
      pair at the trailing edge. */
   margin-inline-start: auto;
-}
-.chat-project-header-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  flex: 1 1 auto;
-  overflow: hidden;
-}
-.chat-project-header-title .title {
-  color: var(--text-strong);
-  font-size: 13px;
-  line-height: 18px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  flex: 0 1 auto;
-  min-width: 0;
-  /* Editable inline rename: a calm padded chip rather than a hard outline
-     box, so the contentEditable focus ring reads as a field, not brackets.
-     No negative margin — the parent clips overflow, which would shave the
-     left edge of the focus ring. */
-  padding: 4px 8px;
-  border-radius: var(--radius-sm);
-  outline: none;
-  caret-color: var(--accent);
-  box-shadow: none;
-  transition: background 120ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-.chat-project-header-title .title:hover {
-  background: color-mix(in srgb, var(--text) 4%, transparent);
-}
-.chat-project-header-title .title.readonly {
-  cursor: default;
-  color: var(--text-strong);
-}
-.chat-project-header-title .title.readonly:hover {
-  background: transparent;
-}
-.chat-project-header-title .title:focus,
-.chat-project-header-title .title:focus-visible {
-  background: color-mix(in srgb, var(--text) 5%, transparent);
-  box-shadow: none;
-}
-.chat-project-header-title .meta {
-  color: var(--text-muted);
-  font-size: 12px;
-  line-height: 16px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
-  flex: 0 1 auto;
 }
 /* Right-aligned session-history trigger. Collapses the former
    name + history + new-session controls into one icon button; clicking
@@ -183,7 +113,7 @@
   padding: 8px 0;
   font-size: 13px;
   color: var(--text-muted);
-  font-weight: 500;
+  font-weight: 600;
 }
 .chat-header-tab:hover { color: var(--text); background: transparent; border-color: transparent; }
 .chat-header-tab.active {
@@ -382,26 +312,6 @@
 .chat-message-rail:hover,
 .chat-message-rail:focus-within {
   opacity: 1;
-}
-/* Picking a message retracts the module (component-managed): this loses to
-   neither the hover nor the focus rule above because it comes later at equal
-   specificity, and it clears on pointer leave. */
-.chat-message-rail.is-retracted,
-.chat-message-rail.is-retracted:hover,
-.chat-message-rail.is-retracted:focus-within {
-  opacity: 0;
-  /* 隐形的东西不该继续吃输入。退避态原本只改 `opacity`,于是点完跳转之后这条
-     20px 宽、整个 viewport 高的覆盖层看不见却照样命中 —— 悬停、点击都落在它
-     身上,底下的流水一概碰不到。
-     解除条件不靠 `mouseleave`(元素刚被设成 `none` 会不会补发一次,规范没要求),
-     由组件在 document 上按指针位置自己判,见 `ChatMessageRail` 的退避 effect。 */
-  pointer-events: none;
-}
-/* `.chat-message-rail__track` 自己写了 `pointer-events: auto`。这个属性虽然可继承,
-   但后代把自己重新打开是合法的 —— 只在 nav 上关掉不够,轨道那一格还会照吃。
-   短横(`__marker`)没有自己的声明,跟着轨道一起关。 */
-.chat-message-rail.is-retracted .chat-message-rail__track {
-  pointer-events: none;
 }
 .chat-message-rail__track {
   position: relative;
@@ -666,7 +576,7 @@
 .msg-time {
   color: var(--text-faint);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -1050,7 +960,7 @@
 }
 .msg-plugin-chip__title {
   color: var(--text);
-  font-weight: 500;
+  font-weight: 600;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1409,6 +1319,11 @@
   contain: layout style;
   transform: translateZ(0);
 }
+/* OPEND-2170: the pane underneath the creation hand-off card is hidden; its
+   body-portaled composer layer has to follow (see ChatPane `composerLayerHidden`). */
+.chat-composer-fixed-layer[data-composer-layer-hidden] {
+  visibility: hidden;
+}
 body:has(.manual-edit-workspace) .chat-composer-fixed-layer {
   /* Manual edit elevates the workspace above a body-portaled survey. The
      composer is portaled separately, so keep it one layer above that shell or
@@ -1421,11 +1336,6 @@ body:has(.manual-edit-workspace) .chat-composer-fixed-layer {
    clicks fall straight through to the transcript. */
 .chat-composer-fixed-layer [data-testid='composer-quick-pills'] {
   pointer-events: auto;
-}
-.chat-composer-fixed-layer .composer-shell {
-  background: var(--glass-regular);
-  -webkit-backdrop-filter: var(--glass-backdrop);
-  backdrop-filter: var(--glass-backdrop);
 }
 .composer-shell {
   container-type: inline-size;
@@ -1692,8 +1602,8 @@ body:has(.manual-edit-workspace) .chat-composer-fixed-layer {
 
    三层一起抬,少一层就会错位:真正写字的那层、Lexical 的静态占位符、
    以及盖在占位符原位上的打字机轮播 —— 它们是同一行字的三种状态。
-   (行内 @芯片的 19px 方盒不跟着变:它按 `vertical-align: middle` 居中,
-    高度不是从行高推出来的,见下面 `.composer-inline-mention` 那段注释。) */
+   (行内 @ 标签按 `vertical-align: middle` 居中,高度由文字和内边距决定,
+    见下面 `.composer-inline-mention` 那段注释。) */
 [data-chat-root] .composer-input-editor [contenteditable='true'],
 [data-chat-root] .composer-input-editor .composer-editable,
 [data-chat-root] .composer-input-placeholder,
@@ -1720,15 +1630,12 @@ body:has(.manual-edit-workspace) .chat-composer-fixed-layer {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  /* Dify recipe: fixed-px box + vertical-align:middle, NOT an em-relative
-     height with a magic baseline nudge. A 19px box centers cleanly in the
-     editor's 21.6px line (13.5px × 1.6) and stays put under zoom / font
-     scaling because none of these metrics are derived from the pill's own
-     reduced font-size. */
-  height: 19px;
+  /* Let the text and padding determine the height so the label stays visible
+     (OPEND-3085, per the Demo: an even 4px inset on every composer tag). */
+  height: auto;
   max-width: min(240px, 25vw);
   margin: 0 0.5px;
-  padding: 0 7px 0 6px;
+  padding: 4px;
   border: 1px solid color-mix(in srgb, var(--m-hue) 26%, var(--border));
   border-radius: var(--radius-sm);
   background: var(--m-tint);
@@ -1866,14 +1773,6 @@ body:has(.manual-edit-workspace) .chat-composer-fixed-layer {
 .composer-row > * {
   min-width: 0;
 }
-/* Below ~500px the row can't hold the mode name + a full model chip + run
-   button on one line, so the selected mode pill collapses to icon + clear;
-   above it (wide chat / full-width composer) the name shows again. */
-@container (max-width: 500px) {
-  .composer-row .composer-mode__label {
-    display: none;
-  }
-}
 .composer-row .inline-switcher {
   min-width: 0;
   flex: 0 1 auto;
@@ -1937,8 +1836,8 @@ body:has(.manual-edit-workspace) .chat-composer-fixed-layer {
   scrollbar-width: thin;
   animation: composer-toolbox-pop-in 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-/* Plugins variant of the standalone popover: sized like the "+" menu's
-   `.plus-menu__flyout--plugins` so the list + hover-preview pane fits. */
+/* Plugins variant of the standalone popover: wide enough that the
+   `.plus-menu__plugin-pane` list + hover-preview columns both fit. */
 .composer .composer-plugins-standalone-popup {
   width: 466px;
   max-width: calc(100vw - 24px);
@@ -2030,25 +1929,6 @@ body:has(.manual-edit-workspace) .chat-composer-fixed-layer {
 }
 .app .composer-row .session-mode-toggle__trigger {
   box-shadow: none;
-}
-/* #5517 composer mode picker: the project chat composer keeps every footer
-   control on one 28px baseline (our "one control system" fix), so the neutral
-   circular trigger and the selected green pill both drop from their default
-   32/34px to 28px here. Radius stays as authored (circle when neutral, pill
-   when selected). The home composer footer keeps the picker's larger native
-   sizing via its own `.home-hero__input-card` scope. */
-.app .composer-row .composer-mode__trigger,
-.chat-composer-fixed-layer .composer-row .composer-mode__trigger {
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
-  box-shadow: none;
-}
-.app .composer-row .composer-mode.is-selected .composer-mode__trigger,
-.chat-composer-fixed-layer .composer-row .composer-mode.is-selected .composer-mode__trigger {
-  width: auto;
-  height: 28px;
-  min-width: 0;
 }
 /* Chat composer model chip mirrors the home icon-only chip: just the agent
    mark, no chevron or box (see .inline-switcher__chip--icon in the home hero). */
@@ -2364,12 +2244,6 @@ body:has(.manual-edit-workspace) .chat-composer-fixed-layer {
    the button's hover tooltip. viewer/routines.css loads later and owns the
    shared geometry for both states; these are the base-layer values for hosts
    that rule doesn't reach. */
-/* Typography ladder stand-in for the project composer — same reason as the
-   block at the top of home/home-hero.css: the app-wide 600 default ships with
-   the entry refresh, and the composer inherits it locally until then. */
-.composer,
-:where(.composer) button {  font-weight: 600;
-}
 .composer-send.stop {
   width: 32px;
   min-width: 32px;
@@ -2469,38 +2343,6 @@ body:has(.manual-edit-workspace) .chat-composer-fixed-layer {
   margin: 0 8px;
 }
 
-.chat-queued-send-strip {
-  display: flex;
-  flex-direction: column;
-  align-self: auto;
-  width: calc(100% - (var(--chat-composer-inline-inset, 16px) * 2));
-  min-width: 0;
-  max-width: none;
-  gap: 3px;
-  box-sizing: border-box;
-  margin: 0 var(--chat-composer-inline-inset, 16px) 2px;
-  padding: 7px;
-  overflow: visible;
-  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
-  border-radius: var(--radius);
-  background: color-mix(in srgb, var(--bg-panel) 92%, var(--bg-subtle));
-  box-shadow:
-    0 10px 24px -18px rgba(0, 0, 0, 0.32),
-    0 1px 2px rgba(0, 0, 0, 0.05);
-}
-
-.chat-queued-send-list {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
-  max-height: min(31vh, 168px);
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding-right: 1px;
-  scrollbar-width: thin;
-}
-
 .chat-queued-send-header {
   display: flex;
   align-items: center;
@@ -2560,25 +2402,9 @@ body:has(.manual-edit-workspace) .chat-composer-fixed-layer {
   opacity: 0.45;
 }
 
-.chat-queued-send-row-drop-before::before,
-.chat-queued-send-row-drop-after::after {
-  content: '';
-  position: absolute;
-  left: 28px;
-  right: 8px;
-  height: 2px;
-  border-radius: var(--radius-pill);
-  background: var(--selected);
-  box-shadow: 0 0 0 2px var(--selected-soft);
-}
-
-.chat-queued-send-row-drop-before::before {
-  top: -2px;
-}
-
-.chat-queued-send-row-drop-after::after {
-  bottom: -2px;
-}
+/* The drag-reorder insertion bar moved off the row (OPEND-3203): the row's
+   `overflow: hidden` clipped a pseudo-element at `top: -2px`, so nothing but
+   its halo showed. `QueuedSendStack` now draws it between the cards. */
 
 .chat-queued-send-main {
   min-width: 0;
@@ -2786,6 +2612,12 @@ body:has(.manual-edit-workspace) .chat-composer-fixed-layer {
     background-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
     border-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
+/* All tags above the composer share the same inset, including context,
+   skill, file, comment and applied-plugin variants (OPEND-3085). */
+.composer-shell .staged-chip {
+  height: auto;
+  padding: 4px;
+}
 .staged-chip:hover {
   background: var(--bg-panel);
   border-color: var(--border-strong);
@@ -2960,11 +2792,15 @@ body:has(.manual-edit-workspace) .chat-composer-fixed-layer {
   background: transparent;
   border-color: transparent;
 }
-.staged-preview-trigger img {
+/* Videos ride the same thumbnail box as stills — a staged .mp4 shows its own
+   first frame here (per product: 视频类默认展示可打开预览). */
+.staged-preview-trigger img,
+.staged-preview-trigger video {
   flex: 0 0 12px;
   width: 12px;
   height: 12px;
   border-radius: 3px;
+  object-fit: cover;
 }
 /* Image attachments mirror the home composer's chips: a 36px thumbnail with
    no filename text (the name lives in the tooltip / preview modal). */
@@ -2978,7 +2814,8 @@ body:has(.manual-edit-workspace) .chat-composer-fixed-layer {
 .staged-chip--image-file .staged-preview-trigger {
   flex: 0 0 auto;
 }
-.staged-chip--image-file .staged-preview-trigger img {
+.staged-chip--image-file .staged-preview-trigger img,
+.staged-chip--image-file .staged-preview-trigger video {
   flex: 0 0 var(--spacing-36, 36px);
   width: var(--spacing-36, 36px);
   height: var(--spacing-36, 36px);
@@ -3001,7 +2838,7 @@ body:has(.manual-edit-workspace) .chat-composer-fixed-layer {
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: rgba(17, 24, 39, 0.75);
+  background: var(--scrim-tint);
   -webkit-backdrop-filter: var(--scrim-backdrop);
   backdrop-filter: var(--scrim-backdrop);
 }
@@ -3032,7 +2869,24 @@ body:has(.manual-edit-workspace) .chat-composer-fixed-layer {
   font-size: 13px;
   font-weight: 600;
 }
-.staged-preview-card > img {
+/* The close control is a circle (per product: 换成纯圆角). Left to the button
+   primitive it was a wide rounded rectangle — 36px tall, `0 16px` of padding
+   around a 14px glyph, and the small square radius. Pinning the width to the
+   height and dropping the padding is what turns the pill into a true circle;
+   `flex: 0 0 auto` keeps the long filename beside it from squashing it back
+   into an oval. */
+.staged-preview-head .icon-only {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: var(--radius-pill, 999px);
+}
+/* One box for both: a staged video opens in this same card as a player (the
+   home composer previews video now, not only stills), and it has to be bound
+   by the card exactly the way an image is. */
+.staged-preview-card > img,
+.staged-preview-card > video {
   display: block;
   max-width: 100%;
   max-height: min(70vh, 640px);
@@ -3708,90 +3562,24 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-att .msg-att-de
 }
 
 
-/* ── 队列 · 对齐设计稿组件 17 ────────────────────────────────────────
-   三处按稿子改:①不套框不铺底 —— 输入框自己已经是个有边的东西,队列再套一圈,
-   人得先分辨这两块是不是一回事;条与条之间留一道 1px 就够。
-   ②限的是**高度**不是条数:122px = 单行 34px + 1px 分隔,3.5 行,
-   露出的半行本身就是「下面还有」的提示。两行消息时可见条数不足三条半是对的。
-   ③顶对齐:两行消息时居中会让序号 / 手柄 / 按钮掉到文字块中间。 */
-.chat-queued-send-strip {
-  /* 稿子中无外框的 `.queue` 可以贴满容器;产品后来明确给队列
-     加了一圈淡边框,这个前提就变了:有形的外框必须与下方 composer
-     shell 的左右边界对齐。两者是 `.pane` 里的兄弟,所以队列用外距消化
-     composer 自己的水平 padding,宽度同步减去两侧;三处共用一个 token,
-     避免以后调整 composer 留白时又漂开。 */
-  width: calc(100% - (var(--chat-composer-inline-inset, 16px) * 2));
-  margin-inline: var(--chat-composer-inline-inset, 16px);
-  background: none;
-  padding: 0;
-  /* ── 外框:稿子「不套框」那半条被产品撤了(2026-08-27)────────────────
-     原话:「给我们消息队列加一个小边框吧,不然有点混在一起了,你边框淡一点」。
-     稿子当初撤框的理由(「输入框自己已经是个有边的东西,队列再套一圈,
-     人得先分辨这两块是不是一回事」)在真实场景里翻了过来:队列夹在流水和输入框
-     中间,三块同一个底色、中间一条边都没有,读起来是连着的一整片。
-
-     **只补一条线,不补底、不补阴影** —— 稿子「不铺底」那半条留着。
-     要的是分隔,不是强调;铺底会让队列变成第二张卡片,正是稿子担心的那件事。
-
-     色值 `--chat-border-soft`(#ededed)不是随手挑的淡:
-       · 它**就是队列自己行间分隔线**用的那一档(下面 `.q + .q` 的 `--border-soft`)。
-         外框和内线同一个重量,整条读成「一块列表」,而不是「一个框套着一个表」。
-       · 正下方输入框 `.composer-shell` 的边是 `--bg-fill-secondary`
-         = `rgba(0,0,0,0.06)`;`#ededed` 落在白底上约等于 `rgba(0,0,0,0.07)`,
-         两者几乎同重 —— 分得开,又不会把输入框的边压下去。
-       · 正上方那枚 PlanPill 用的是 `--chat-border`(#dbdbdb)。同一个值搬到
-         这条通栏矩形上就过重了(是输入框那条边的两倍多),产品要的是「淡一点」。
-
-     半径取 `--chat-radius`(8px):执行记录里带框的那一层(`record.module.css`
-     的 `.fold` boxed 态)就是这个值。输入框是 `--radius-lg`(12px),
-     比它收一档,队列读起来是从属的一条,不是并排的第二张卡。
-
-     ⚠️ `--chat-*` 只在 `[data-chat-root]` 子树里有定义(`chat/ChatRoot.module.css`)。
-     队列条挂在 `ChatPane` 的 `chatSeam('pane')` 之内,解析得到;
-     哪天它被搬到接缝之外,这三个 var 会**静默**解析成空串,整条 border 声明作废、
-     框直接不出现且不报错。钉子在
-     `tests/components/chat/queue-strip-border.test.tsx` 的「接缝」一节。 */
-  border: var(--chat-stroke) solid var(--chat-border-soft);
-  border-radius: var(--chat-radius);
-  /* 卡片时代那条投影(2337 行的 `0 10px 24px -18px` + `0 1px 2px`)一直**漏在这儿**:
-     按稿子撤框那一版只写了 `border: 0; background: none; padding: 0`,没把它一起撤,
-     于是队列至今顶着一道没有框的浮空阴影。补一条线的同时把它收掉 ——
-     一条淡线 + 一层投影是两种分隔手法叠用,读起来就不「淡」了。 */
-  box-shadow: none;
-  /* 行的悬停底色是方角的(`.q:hover`),不裁一刀就会从圆角外面探出一小块。
-     提示浮层走 body 上的 `.od-tooltip-layer`,拖放指示线本来就被
-     `.chat-queued-send-list` 的 `overflow-y: auto` 裁着 —— 这一刀不影响它们。 */
-  overflow: hidden;
-}
-/* 稿子 `.queue { max-height: 122px; overflow-y: auto }` —— **只有这两条**,
-   它是一个普通的**块**。我们这边是 `display: flex; flex-direction: column`(2356 行),
-   两处不一样都要还原:
-     ① 弹性列会给每条 `flex-shrink: 1`,超出 `max-height` 时**把行压扁**
-        —— 六条 35px 塞进 122px,每条被压成 20.3px,内距整个失效;
-        原来 `min-height: 36px` 挡住了这件事,一撤掉地板就现形。
-     ② 弹性列的 `gap: 3px` 又在 34 + 1 的行距上多加 3px。
-   块级布局两件事一起消失:条与条之间只剩 `.q` 自己的 `border-top`,
-   高度是内容加内距自己长出来的,超出部分交给 `overflow-y` 滚。 */
-.chat-queued-send-list {
-  display: block;
-  /* 稿子 `.queue` 没有内距:留给滚动条的那 1px 让每一行又窄 1px */
-  padding-right: 0;
-  max-height: 122px;
-  overflow-y: auto;
-}
 /* 稿子 `.queue .q { align-items: flex-start; gap: 8px; padding: 7px 10px;
    font-size: var(--t-mini); color: var(--text) }`。
    `display` 这里不重复写:整行的排版模型在上面 `.chat-queued-send-row` 那条里,
-   已经是稿子同一套 `flex`(把手 / 序号 / 动作 `flex: none`,正文 `flex: 1; min-width: 0`)。
+   已经是稿子同一套 `flex`(把手 / 动作 `flex: none`,正文 `flex: 1; min-width: 0`)。
    ⚠️ 这条注释原来写着「靠四列栅格排,换成 flex 会把它们掀了」—— 那是栅格时代的旧话,
-   和上面那条规则自相矛盾;换 flex 的那次改动没顺手把它改过来。 */
+   和上面那条规则自相矛盾;换 flex 的那次改动没顺手把它改过来。
+
+   K1(参照 #8165 提交 1):每条队列消息今天是一张独立的浮动卡(`QueuedSendStack`
+   的 `.banner` 给边框、圆角、底色),行内距不再按稿子的列表行 7/10 走,收成
+   `6px 4px`、间距 4px,卡叠起来才不显得空;序号那一格随之去掉 —— 卡片自身的
+   顺序就是队列顺序,出队重排后位置一目了然。 */
 .chat-queued-send-row {
   align-items: flex-start;
-  gap: 8px;
-  /* 稿子的 `.q` **没有** min-height:行高是内容加内距自己长出来的
-     (7 + 20 + 7 = 34)。卡片时代留下的 36px 地板会把每条顶高 2px。 */
+  gap: 4px;
+  /* 稿子的 `.q` **没有** min-height:行高是内容加内距自己长出来的。
+     卡片时代留下的 36px 地板会把每条顶高 2px。 */
   min-height: 0;
-  padding: 7px 10px;
+  padding: 6px 4px;
   border: 0;
   border-radius: 0;
   background: none;
@@ -3799,20 +3587,6 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-att .msg-att-de
 }
 .chat-queued-send-row + .chat-queued-send-row {
   border-top: 1px solid var(--border-soft, var(--border));
-}
-/* 稿子 `.queue .q .ix { flex: none; font-family: var(--mono);
-   font-size: var(--t-cap); color: var(--text-soft) }` —— 就这四条。
-   我们多写的 `min-width: 1.2em` 把序号从 7.5px 撑到 14.5px,后面正文整段右移;
-   多写的 `line-height: 20px` 又把行内盒从 18px 顶到 20px,行高跟着高 2px。
-   序号本来就 `flex: none`,`tabular-nums` 已经保证两位数不抖,预留宽度是多余的。 */
-.chat-queued-send-index {
-  flex: none;
-  min-width: 0;
-  font-family: var(--mono);
-  font-size: var(--font-size-12);
-  line-height: 1.5;
-  color: var(--text-soft);
-  font-variant-numeric: tabular-nums;
 }
 /* 稿子 `.queue .q .grip { flex: none; display: grid; place-items: center;
    width: 16px; height: 22px; margin-inline-start: -2px; margin-top: -2px;

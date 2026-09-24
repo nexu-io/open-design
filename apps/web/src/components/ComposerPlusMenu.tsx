@@ -21,7 +21,6 @@ import { ComposerPluginPreview } from './ComposerPluginPreview';
 import { localizePluginTitle } from './plugins-home/localization';
 import { resolveFlyoutSide } from './composer-flyout-placement';
 import { Icon, type IconName } from './Icon';
-import { ChatPlusIcon } from './chat/primitives/icons';
 
 const PLUS_MENU_MARGIN = 12;
 const PLUS_MENU_GAP = 8;
@@ -42,12 +41,11 @@ export type PlusMenuPlacementPreference = 'auto' | 'down' | 'up';
 type PlusMenuFlyoutPlacement = 'right' | 'left' | 'contained';
 type PlusMenuFlyoutVerticalPlacement = 'down' | 'up';
 type PlusMenuVerticalPlacement = 'down' | 'up';
-export type PlusMenuSubmenu = 'connectors' | 'plugins' | 'skills' | 'mcp' | 'toolbox' | 'workingDir';
+export type PlusMenuSubmenu = 'connectors' | 'plugins' | 'skills' | 'mcp' | 'workingDir';
 
 // Analytics mapping for the submenu flyouts: which resource list each
-// submenu carries. `toolbox` is intentionally absent — the project composer
-// tracks it separately as `design_toolbox_open`. `workingDir` is absent too:
-// its flyout carries actions, not an attachable resource list.
+// submenu carries. `workingDir` is intentionally absent because its flyout
+// carries actions, not an attachable resource list.
 export const PLUS_SUBMENU_RESOURCE_KIND = {
   connectors: 'connector',
   plugins: 'plugin',
@@ -165,27 +163,32 @@ function getFlyoutPlacement(
 
 export interface ComposerPlusMenuProps {
   workspaceContext?: WorkspaceCollabContext | null;
-  /** Connector context options shown under the "Connectors" submenu. */
-  connectors: ConnectorDetail[];
-  onPickConnector: (connector: ConnectorDetail) => void;
+  /**
+   * Connector context options shown under the "Connectors" submenu. The row
+   * renders only when `onPickConnector` is provided.
+   */
+  connectors?: ConnectorDetail[];
+  onPickConnector?: (connector: ConnectorDetail) => void;
   /** Opens the connector integration surface; omit to hide the add row. */
   onAddConnector?: () => void;
 
-  /** Installed plugin options shown under the "Plugins" submenu. */
-  plugins: InstalledPluginRecord[];
-  onPickPlugin: (plugin: InstalledPluginRecord) => void;
+  /**
+   * Installed plugin options shown under the "Plugins" submenu. The row
+   * renders only when `onPickPlugin` is provided.
+   */
+  plugins?: InstalledPluginRecord[];
+  onPickPlugin?: (plugin: InstalledPluginRecord) => void;
   /** Opens the plugin registry; omit to hide the add row. */
   onAddPlugin?: () => void;
-  /**
-   * Hide the whole Plugins submenu row. The project composer sets this: its
-   * 插件 quick pill above the input owns the plugins surface, so the row here
-   * would be a duplicate. Home keeps the row (it has no pills).
-   */
+  /** Hide the Plugins row when a caller provides a separate plugin picker. */
   hidePluginsRow?: boolean;
 
-  /** Enabled MCP servers shown under the "MCP" submenu. */
-  mcpServers: McpServerConfig[];
-  onPickMcp: (server: McpServerConfig) => void;
+  /**
+   * Enabled MCP servers shown under the "MCP" submenu. The row renders only
+   * when `onPickMcp` is provided.
+   */
+  mcpServers?: McpServerConfig[];
+  onPickMcp?: (server: McpServerConfig) => void;
   /** Opens MCP settings; omit to hide the add row. */
   onAddMcp?: () => void;
 
@@ -209,10 +212,12 @@ export interface ComposerPlusMenuProps {
   onLinkLocalCode?: () => void;
 
   /**
-   * Working-directory submenu (project composer only): mirrors the Home
-   * composer's WorkingDirPicker — pick a folder, re-pick a recent one, or
-   * clear the current binding. The whole row renders only when
-   * `onPickWorkingDir` is provided; Home keeps its own footer picker.
+   * Optional working-directory group: pick a folder, re-pick a recent one, or
+   * clear the current binding. The group renders (last, after a divider) only
+   * when `onPickWorkingDir` is provided, and then also hosts the
+   * reference-project / local-code actions; without it those actions sit
+   * directly under "Attach files". Neither composer passes it today — Home
+   * keeps its own working-directory row under the input.
    */
   workingDir?: string | null;
   recentWorkingDirs?: string[];
@@ -241,37 +246,16 @@ export interface ComposerPlusMenuProps {
    */
   onOpenDesignSystems?: () => void;
 
-  /**
-   * Optional "Design toolbox" row, rendered LAST. Only the project composer
-   * passes this; the home composer omits it. The returned node is shown in a
-   * right-side flyout reusing the same submenu styling.
-   */
-  renderToolbox?: (close: () => void) => ReactNode;
-  toolboxLabel?: string;
-
   /** Test id for the trigger button. */
   triggerTestId?: string;
-  /**
-   * 这颗触发键用聊天面板那一族的**描边**加号(稿
-   * `729fa43ce7:docs/design/chat-panel/src/body-scene.html:42`),而不是共享
-   * `Icon` 的实心 remix `add-line`。
-   *
-   * 为什么要一个开关而不是直接换掉:产品裁决 2026-09-03 是「**只让聊天面板走
-   * 描边版**」,明确不动全站。而这个组件是 home hero(`HomeHero.tsx`)和聊天
-   * 面板(`ChatComposer.tsx`)**共用**的同一个调用点 —— 直接换会连 home 一起
-   * 改掉,正是被否掉的那个范围。所以由调用方点名,只有 `ChatComposer` 传 true。
-   */
-  strokeGlyph?: boolean;
 
   /**
    * Optional visible label beside the trigger glyph. Given one, the trigger
    * stops being a lone disc and renders as a text control; left off, it stays
-   * the bare icon button both composers use today.
-   *
-   * 目前没有调用方传它:唯一传过的是 #7635 的首页改版,而 main 已在 #7843 把
-   * 那期整个 revert 掉,等 `feat/home-entry-refresh` 回来。属性留着而不是跟着
-   * 删,是因为触发键的 hover 气泡分支挂在它身上 —— 「不带标签才挂 od-tooltip」
-   * 是本组件自己的契约,判据在 `w73-composer-and-plan-ink.test.tsx`。
+   * the bare icon button both composers use today. No caller passes it at the
+   * moment; the prop stays because the trigger's hover bubble hangs on it
+   * (unlabeled triggers carry `od-tooltip`, labeled ones do not — see
+   * `w73-composer-and-plan-ink.test.tsx`).
    */
   triggerLabel?: string;
 
@@ -286,8 +270,7 @@ export interface ComposerPlusMenuProps {
   /**
    * Notified when a submenu flyout actually opens (the active submenu
    * changes; repeated hovers over the same open row don't re-fire). Callers
-   * use it for analytics; `toolbox` is reported too, and the project
-   * composer filters it out because its panel tracks its own open.
+   * use it for analytics and skip `workingDir`, which carries no resource list.
    */
   onSubmenuOpen?: (submenu: PlusMenuSubmenu) => void;
 
@@ -333,19 +316,19 @@ function mcpMatches(server: McpServerConfig, needle: string): boolean {
 /**
  * The composer "+" menu shared between the home hero and the project chat
  * composer. Owns its own open / submenu / search state; callers supply the
- * data lists and pick/add handlers. Pass `renderToolbox` to append the
- * project-only design-toolbox row.
+ * data lists and pick/add handlers, and a resource submenu appears only for
+ * callers that wire its pick handler.
  */
 export function ComposerPlusMenu({
   workspaceContext = null,
-  connectors,
+  connectors = [],
   onPickConnector,
   onAddConnector,
-  plugins,
+  plugins = [],
   onPickPlugin,
   onAddPlugin,
   hidePluginsRow,
-  mcpServers,
+  mcpServers = [],
   onPickMcp,
   onAddMcp,
   onAttachFiles,
@@ -359,10 +342,7 @@ export function ComposerPlusMenu({
   onClearWorkingDir,
   onSelectFromLibrary,
   onImportFigma,
-  renderToolbox,
-  toolboxLabel,
   triggerTestId,
-  strokeGlyph = false,
   triggerLabel,
   onOpen,
   onSubmenuOpen,
@@ -594,12 +574,54 @@ export function ComposerPlusMenu({
       } satisfies PlusMenuPopupStyle)
     : undefined;
 
+  // Reference-project / local-code answer the same question as the working
+  // directory (what may the agent read besides this thread), so they live in
+  // that group when a caller has one and sit directly under "Attach files"
+  // otherwise.
+  const contextActions = (
+    <>
+      {onReferenceProject ? (
+        <button
+          type="button"
+          role="menuitem"
+          className="plus-menu__item"
+          data-testid="composer-plus-reference-project"
+          onClick={() => {
+            close();
+            onReferenceProject();
+          }}
+        >
+          <Icon name="folder" size={15} className="plus-menu__item-icon" />
+          <span>{t('chat.plus.referenceProject')}</span>
+        </button>
+      ) : null}
+      {onLinkLocalCode ? (
+        <button
+          type="button"
+          role="menuitem"
+          className="plus-menu__item"
+          data-testid="composer-plus-local-code"
+          onClick={() => {
+            close();
+            onLinkLocalCode();
+          }}
+        >
+          <Icon name="folder" size={15} className="plus-menu__item-icon" />
+          <span>{t('chat.plus.linkLocalCode')}</span>
+        </button>
+      ) : null}
+    </>
+  );
+
   return (
     <div className="plus-menu" ref={rootRef}>
+      {/* The trigger owns its geometry through `.plus-menu__trigger` (a 36px
+          disc on both composers, see styles/home/plus-menu.css) instead of
+          borrowing the chat toolbar's generic `icon-btn` sizing. */}
       <button
         ref={triggerRef}
         type="button"
-        className={`icon-btn plus-menu__trigger${triggerLabel ? ' plus-menu__trigger--labeled' : ' od-tooltip'}${open ? ' is-active' : ''}`}
+        className={`plus-menu__trigger${triggerLabel ? ' plus-menu__trigger--labeled' : ' od-tooltip'}${open ? ' is-active' : ''}`}
         data-testid={triggerTestId}
         onClick={() => {
           if (open) {
@@ -618,29 +640,11 @@ export function ComposerPlusMenu({
         aria-haspopup="menu"
         aria-expanded={open}
       >
-        {/* 两条面向不同界面的分支,各归各的:
-            · 聊天面板(`strokeGlyph`)是稿子那枚**描边加号**;`od-icon` 是
-              `.plus-menu__trigger.is-active .od-icon` 挂 45° 旋转的钩子,
-              菜单打开时它读作一个关闭的 ×。
-            · 首页(不传 `strokeGlyph`)用共享 `Icon` 的实心加号。
-
-            这半边 2026-09-05 那次合并曾跟着 main 的 `2e4c1a753b`(#7635)改成
-            **回形针**;2026-09-07 main 把 #7635 整个 revert 掉了(#7843,等
-            `feat/home-entry-refresh` 整期回来),首页这一格随之回到实心加号 ——
-            首页归 main,本分支不在这里替它做决定。`triggerLabel` 仍然留着:它
-            是可选的,首页现在不传,但触发键「带标签就不挂 hover 气泡」这条分支
-            是本组件自己的契约(判据 `w73-composer-and-plan-ink.test.tsx`)。
-            聊天面板那一格不受影响,始终是描边加号。 */}
-        {strokeGlyph ? (
-          <ChatPlusIcon size={16} className="od-icon" />
-        ) : (
-          <>
-            <Icon name="plus" size={16} className="od-icon" />
-            {triggerLabel ? (
-              <span className="plus-menu__trigger-label">{triggerLabel}</span>
-            ) : null}
-          </>
-        )}
+        {/* One glyph on both composers: the shared Remix `add-line` plus. */}
+        <Icon name="plus" size={16} className="od-icon" />
+        {triggerLabel ? (
+          <span className="plus-menu__trigger-label">{triggerLabel}</span>
+        ) : null}
       </button>
       {open && typeof document !== 'undefined' ? createPortal(
         <div
@@ -660,106 +664,17 @@ export function ComposerPlusMenu({
               onAttachFiles();
             }}
           >
-            {/* 菜单**条目**上的这枚是共享 `Icon` 的实心加号,不是触发键那枚。
-                2026-09-07 合并 main 时 #7843 的 revert 想把它换回回形针
-                (`attach`);这里保留加号 —— 这个「+」菜单是聊天面板底栏那颗键
-                打开的同一份,判据 `w126-chat-stroke-icons.test.tsx` 点名钉住了
-                它,属于本次合并「聊天面板不许回退」的范围。 */}
+            {/* Paperclip on the row (spinner while an upload is in flight);
+                the trigger above is the only plus. */}
             <Icon
-              name={attachLoading ? 'spinner' : 'plus'}
+              name={attachLoading ? 'spinner' : 'attach'}
               size={15}
               className="plus-menu__item-icon"
             />
             <span>{t('chat.attachAria')}</span>
           </button>
-          {onReferenceProject ? (
-            <button
-              type="button"
-              role="menuitem"
-              className="plus-menu__item"
-              data-testid="composer-plus-reference-project"
-              onClick={() => {
-                close();
-                onReferenceProject();
-              }}
-            >
-              <Icon name="folder" size={15} className="plus-menu__item-icon" />
-              <span>{t('chat.plus.referenceProject')}</span>
-            </button>
-          ) : null}
-          {onLinkLocalCode ? (
-            <button
-              type="button"
-              role="menuitem"
-              className="plus-menu__item"
-              data-testid="composer-plus-local-code"
-              onClick={() => {
-                close();
-                onLinkLocalCode();
-              }}
-            >
-              <Icon name="folder" size={15} className="plus-menu__item-icon" />
-              <span>{t('chat.plus.linkLocalCode')}</span>
-            </button>
-          ) : null}
-          {onPickWorkingDir ? (
-            <PlusSubmenuRow
-              label={t('homeWorkingDir.triggerShort')}
-              icon="folder"
-              open={submenu === 'workingDir'}
-              testId="composer-plus-working-dir"
-              onOpen={(row) => openSubmenu('workingDir', row)}
-              onClose={scheduleCloseSubmenu}
-            >
-              <div className="plus-menu__list">
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="plus-menu__item"
-                  data-testid="composer-plus-working-dir-pick"
-                  onClick={() => {
-                    close();
-                    onPickWorkingDir();
-                  }}
-                >
-                  <Icon name="folder" size={15} className="plus-menu__item-icon" />
-                  <span>{workingDir ? t('homeWorkingDir.replace') : t('homeWorkingDir.pick')}</span>
-                </button>
-                {(recentWorkingDirs ?? []).map((dir) => (
-                  <button
-                    key={dir}
-                    type="button"
-                    role="menuitem"
-                    className="plus-menu__item"
-                    title={dir}
-                    onClick={() => {
-                      close();
-                      onSelectRecentWorkingDir?.(dir);
-                    }}
-                  >
-                    <Icon name="history" size={15} className="plus-menu__item-icon" />
-                    <span>{dirBasename(dir)}</span>
-                  </button>
-                ))}
-                {workingDir && onClearWorkingDir ? (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="plus-menu__item"
-                    data-testid="composer-plus-working-dir-clear"
-                    onClick={() => {
-                      close();
-                      onClearWorkingDir();
-                    }}
-                  >
-                    <Icon name="close" size={15} className="plus-menu__item-icon" />
-                    <span>{t('homeWorkingDir.clear')}</span>
-                  </button>
-                ) : null}
-              </div>
-            </PlusSubmenuRow>
-          ) : null}
-          {hidePluginsRow ? null : (
+          {!onPickWorkingDir ? contextActions : null}
+          {hidePluginsRow || !onPickPlugin ? null : (
           <PlusSubmenuRow
             label={t('entry.navPlugins')}
             icon="sparkles"
@@ -799,7 +714,7 @@ export function ComposerPlusMenu({
                         onFocus={() => setHoveredPluginId(plugin.id)}
                         onClick={() => {
                           close();
-                          onPickPlugin(plugin);
+                          onPickPlugin?.(plugin);
                         }}
                       >
                         <Icon name="sparkles" size={15} className="plus-menu__item-icon" />
@@ -836,17 +751,6 @@ export function ComposerPlusMenu({
             </div>
           </PlusSubmenuRow>
           )}
-          {renderToolbox ? (
-            <PlusSubmenuRow
-              label={toolboxLabel ?? t('chat.designToolbox.tooltip')}
-              icon="lightbulb"
-              open={submenu === 'toolbox'}
-              onOpen={(row) => openSubmenu('toolbox', row)}
-              onClose={scheduleCloseSubmenu}
-            >
-              {renderToolbox(close)}
-            </PlusSubmenuRow>
-          ) : null}
           {LIBRARY_UI_VISIBLE && onSelectFromLibrary ? (
             <button
               type="button"
@@ -877,6 +781,7 @@ export function ComposerPlusMenu({
               <span>{t('chat.importFigma')}</span>
             </button>
           ) : null}
+          {onPickConnector ? (
           <PlusSubmenuRow
             label={t('connectors.title')}
             icon="link"
@@ -927,6 +832,8 @@ export function ComposerPlusMenu({
               </>
             ) : null}
           </PlusSubmenuRow>
+          ) : null}
+          {onPickMcp ? (
           <PlusSubmenuRow
             label="MCP"
             icon="link"
@@ -984,6 +891,71 @@ export function ComposerPlusMenu({
               </>
             ) : null}
           </PlusSubmenuRow>
+          ) : null}
+          {onPickWorkingDir ? (
+            <div className="plus-menu__divider" role="separator" />
+          ) : null}
+          {onPickWorkingDir ? (
+            <PlusSubmenuRow
+              label={t('homeWorkingDir.triggerShort')}
+              icon="folder"
+              open={submenu === 'workingDir'}
+              testId="composer-plus-working-dir"
+              onOpen={(row) => openSubmenu('workingDir', row)}
+              onClose={scheduleCloseSubmenu}
+            >
+              <div className="plus-menu__list">
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="plus-menu__item"
+                  data-testid="composer-plus-working-dir-pick"
+                  onClick={() => {
+                    close();
+                    onPickWorkingDir();
+                  }}
+                >
+                  <Icon name="folder" size={15} className="plus-menu__item-icon" />
+                  <span>{workingDir ? t('homeWorkingDir.replace') : t('homeWorkingDir.pick')}</span>
+                </button>
+                {(recentWorkingDirs ?? []).map((dir) => (
+                  <button
+                    key={dir}
+                    type="button"
+                    role="menuitem"
+                    className="plus-menu__item"
+                    title={dir}
+                    onClick={() => {
+                      close();
+                      onSelectRecentWorkingDir?.(dir);
+                    }}
+                  >
+                    <Icon name="history" size={15} className="plus-menu__item-icon" />
+                    <span>{dirBasename(dir)}</span>
+                  </button>
+                ))}
+                {workingDir && onClearWorkingDir ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="plus-menu__item"
+                    data-testid="composer-plus-working-dir-clear"
+                    onClick={() => {
+                      close();
+                      onClearWorkingDir();
+                    }}
+                  >
+                    <Icon name="close" size={15} className="plus-menu__item-icon" />
+                    <span>{t('homeWorkingDir.clear')}</span>
+                  </button>
+                ) : null}
+                {onReferenceProject || onLinkLocalCode ? (
+                  <div className="plus-menu__divider" role="separator" />
+                ) : null}
+                {contextActions}
+              </div>
+            </PlusSubmenuRow>
+          ) : null}
         </div>,
         document.body,
       ) : null}
@@ -1006,7 +978,7 @@ function PlusSubmenuRow({
   open: boolean;
   onOpen: (row: HTMLDivElement | null) => void;
   onClose: () => void;
-  /** Extra class on the flyout, e.g. the wide plugins-preview variant. */
+  /** Extra class on the flyout for width/layout variants. */
   flyoutClassName?: string;
   testId?: string;
   children: ReactNode;

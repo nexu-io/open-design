@@ -11,27 +11,47 @@
 
 export const HOME_CHIP_INTENT_EVENT = 'od:home-chip-intent';
 
-let pendingChipId: string | null = null;
+/**
+ * Which composer an intent is for. There can be two on screen: Home's page
+ * composer and a docked one (the community view puts one at its foot), and an
+ * untargeted latch would be consumed by whichever happened to run its effect
+ * first — the community type tabs would sometimes bind Home's composer and
+ * leave the dock's alone. One slot per target, so neither can eat the other's.
+ */
+export type HomeChipIntentTarget = 'page' | 'dock';
 
-// Queue a Home composer chip to auto-select on the next Home render, then
-// notify any mounted HomeView. Safe to call before HomeView exists — the
-// pending id survives until consumed.
-export function requestHomeChip(chipId: string): void {
-  pendingChipId = chipId;
+const pendingChipIds: Record<HomeChipIntentTarget, string | null> = {
+  page: null,
+  dock: null,
+};
+
+// Queue a composer chip to auto-select on the next render of the targeted
+// composer, then notify any mounted HomeView. Safe to call before HomeView
+// exists — the pending id survives until consumed.
+export function requestHomeChip(
+  chipId: string,
+  target: HomeChipIntentTarget = 'page',
+): void {
+  pendingChipIds[target] = chipId;
   if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent(HOME_CHIP_INTENT_EVENT, { detail: { chipId } }));
+    window.dispatchEvent(
+      new CustomEvent(HOME_CHIP_INTENT_EVENT, { detail: { chipId, target } }),
+    );
   }
 }
 
-// Read and clear the pending chip id. Returns null when nothing is queued.
-export function consumePendingHomeChip(): string | null {
-  const chipId = pendingChipId;
-  pendingChipId = null;
+// Read and clear the pending chip id for one target. Returns null when nothing
+// is queued for it.
+export function consumePendingHomeChip(
+  target: HomeChipIntentTarget = 'page',
+): string | null {
+  const chipId = pendingChipIds[target];
+  pendingChipIds[target] = null;
   return chipId;
 }
 
 // Peek without consuming — lets a consumer bail early (e.g. plugins not yet
 // loaded) without dropping the pending intent.
-export function hasPendingHomeChip(): boolean {
-  return pendingChipId !== null;
+export function hasPendingHomeChip(target: HomeChipIntentTarget = 'page'): boolean {
+  return pendingChipIds[target] !== null;
 }

@@ -40,6 +40,7 @@ import {
   prepareStrategyRequest,
 } from '../src/strategies/od-next/coordinator.js';
 import { OdNextMachineProtocolStream } from '../src/strategies/od-next/protocol.js';
+import { diffRunArtifacts, snapshotProjectArtifacts } from '../src/run-artifact-fs.js';
 import {
   createStrategyTaskExecution,
   getStrategyTaskExecution,
@@ -117,8 +118,11 @@ function snapshotProjectId(snapshotId: string): string | null {
   return typeof row?.projectId === 'string' ? row.projectId : null;
 }
 
-function seedAwaitingClarificationTask() {
+function seedAwaitingClarificationTask(executionIntent?: 'produce' | 'plan_only') {
   const db = openDatabase(tempDir!);
+  const requestProjectDir = path.join(tempDir!, 'strategy-request-workspace');
+  fs.mkdirSync(requestProjectDir, { recursive: true });
+  const beforeRequest = snapshotProjectArtifacts(requestProjectDir);
   const now = Date.now();
   db.prepare(
     `INSERT INTO conversations (id, project_id, title, created_at, updated_at)
@@ -213,14 +217,24 @@ function seedAwaitingClarificationTask() {
       inputStage: 'request',
       outcome: 'clarification_required',
       executionMode: null,
+      ...(executionIntent ? { executionIntent } : {}),
       reasonCodes: [],
     }),
     '</open-design-runtime-state>',
   ].join('\n'));
+  const requestArtifacts = diffRunArtifacts(beforeRequest, snapshotProjectArtifacts(requestProjectDir));
+  expect(requestArtifacts.filesWritten).toBe(0);
+  expect(requestArtifacts.filesWrittenUnknown).toBeUndefined();
   finalizeStrategyPlanningTurn(db, {
     taskExecutionId: 'task-strategy-clarification',
     runId: 'run-strategy-request',
     protocol,
+    completionEvidence: {
+      physicalStatus: 'succeeded', deliverableValid: false,
+      filesWritten: requestArtifacts.filesWritten,
+      ...(requestArtifacts.filesWrittenUnknown ? { filesWrittenUnknown: true } : {}),
+      filesWrittenSource: 'filesystem',
+    },
   });
   return snapshot;
 }
@@ -564,6 +578,50 @@ async function startServer(opts?: {
 }
 
 describe('POST /api/runs — workspace mutation gate', () => {
+  it.each([
+    ['/api/runs', 'plan_only'], ['/api/chat', 'plan_only'],
+    ['/api/runs', 'produce'], ['/api/chat', 'produce'],
+  ] as const)('preserves %s clarification intent %s despite changed form mode', async (route, executionIntent) => {
+    const baseUrl = await startServer();
+    seedAwaitingClarificationTask(executionIntent);
+    const db = openDatabase(tempDir!);
+    const original = getStrategyTaskExecution(db, 'task-strategy-clarification')!;
+    const response = await fetch(`${baseUrl}${route}`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        taskExecutionId: original.taskExecutionId, projectId: PERSONAL_PROJECT,
+        conversationId: 'conversation-strategy', agentId: 'codex', sessionMode: 'design',
+        userMessageId: 'planning-user-answer', assistantMessageId: 'planning-assistant-answer',
+        clientRequestId: 'planning-client-answer', message: 'Desktop workspace', currentPrompt: 'Desktop workspace',
+      }),
+    });
+    const body = await response.json();
+    expect(response.status, JSON.stringify(body)).toBe(202);
+    const continued = getStrategyTaskExecution(db, original.taskExecutionId)!;
+    expect(continued.executionIntent).toBe(executionIntent);
+    expect(continued.promptBundle).toEqual(original.promptBundle);
+    expect(lastCreatedRun.odNextTaskInputSnapshot).toMatchObject({
+      taskExecutionId: original.taskExecutionId, manifestSha256: 'd'.repeat(64),
+    });
+    if (executionIntent === 'produce') {
+      expect(lastCreatedRun.message).not.toContain('task is locked to executionIntent plan_only');
+      return;
+    }
+    expect(lastCreatedRun.message).toContain('task is locked to executionIntent plan_only');
+    const protocol = new OdNextMachineProtocolStream();
+    protocol.push(`The planning answer is complete.\n<open-design-runtime-state>\n${JSON.stringify({
+      schema: 'open-design.strategy-state/v2', route: 'full_plan', inputStage: 'clarification',
+      outcome: 'completed', executionMode: null, executionIntent: 'plan_only', reasonCodes: [],
+    })}\n</open-design-runtime-state>`);
+    const finished = finalizeStrategyPlanningTurn(db, {
+      taskExecutionId: original.taskExecutionId, runId: continued.latestRunId, protocol,
+      completionEvidence: { physicalStatus: 'succeeded', deliverableValid: false, filesWritten: 0 },
+    });
+    expect(finished.action).toBe('completed');
+    expect(finished.task.runs.map(run => run.inputStage)).toEqual(['request', 'clarification']);
+    expect(createdRunCount).toBe(1);
+  });
+
   it.each(['/api/runs', '/api/chat'])(
     'carries the source Run harness decision into a clarification continuation through %s',
     async (route) => {

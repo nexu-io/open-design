@@ -146,12 +146,12 @@ describe('跑到一半余额不足:只有升级卡', () => {
    * 「别人」是升级卡 —— 它只在钱包读数**读得出确定数字**时才画得出来
    * (`ProjectView` 在失败之后补查一次)。读不出来的时候没有任何人在说话,
    * 这时还按下白卡,用户在一轮「钱不够」的失败之后**屏幕上什么都不剩**:
-   * 没有充值入口,也没有重试。那是这条 P0 路上唯一的自救口
+   * 没有失败说明,也没有恢复入口。那是这条 P0 路上的自救口
    * (`e2e/ui/amr-run-failure-recovery.test.ts:118`)。
    *
    * 所以交接只在接手方真的在场时成立;接不住就把白卡还回来。
    */
-  it('钱包读不出数字时把白卡还回来:充值入口和重试都必须还在', () => {
+  it('钱包读不出数字时把白卡还回来，并保留 Cloud 固定三颗动作', () => {
     const { container } = renderChat({
       messages: [failedMidRun({ code: 'AMR_INSUFFICIENT_BALANCE' })],
       // 补查落空:没有数字,所以升级卡画不出来。
@@ -161,9 +161,15 @@ describe('跑到一半余额不足:只有升级卡', () => {
 
     expect(screen.queryByTestId('chat-upgrade-card')).toBeNull();
     expect(genericErrorCard(container)).toBeTruthy();
-    // 主按钮是〔充值〕,次按钮是〔重试〕—— 充值落在带外,所以重试是手动的。
-    expect(screen.getByText('chat.amrError.rechargeCta')).toBeTruthy();
-    expect(screen.getByTestId('chat-error-retry')).toBeTruthy();
+    // G16 的固定三颗只约束白色报错卡；真实余额卡的交接守卫不变。
+    const actions = genericErrorCard(container)!.querySelectorAll('button');
+    expect(Array.from(actions, (button) => button.dataset.testid)).toEqual([
+      'chat-error-contact-support',
+      'chat-error-export-logs',
+      'chat-error-retry',
+    ]);
+    expect(screen.getByTestId('chat-error-retry').dataset.runErrorAction).toBe('primary');
+    expect(screen.queryByText('chat.amrError.rechargeCta')).toBeNull();
   });
 
   /*

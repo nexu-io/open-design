@@ -13,6 +13,7 @@ import { resetHtmlThumbnailSourceCache } from '../../src/components/html-thumbna
 import { resetProjectCoverSnapshots } from '../../src/lib/project-cover-cache';
 import { resetThumbnailLoadGateForTests } from '../../src/lib/thumbnail-load-gate';
 import { resetSharedCancellableGet } from '../../src/lib/shared-cancellable-get';
+import { resetProjectRunStatusStore } from '../../src/hooks/useProjectRunStatuses';
 
 beforeEach(() => {
   resetCoalescedGet();
@@ -29,4 +30,8 @@ beforeEach(() => {
   resetProjectCoverSnapshots();
   resetThumbnailLoadGateForTests();
   resetSharedCancellableGet();
+  // The project run-status feed is module-level so a remounting surface reads
+  // its last answer at once; clear it so one test's statuses (or spent ✓s)
+  // never seed the next.
+  resetProjectRunStatusStore();
 });

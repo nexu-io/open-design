@@ -232,7 +232,8 @@ vi.mock('../../src/components/FileWorkspace', async () => {
 vi.mock('../../src/components/Loading', () => ({
   CenteredLoader: () => <div data-testid="loader" />,
 }));
-vi.mock('../../src/components/ChatPane', () => ({
+vi.mock('../../src/components/ChatPane', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/components/ChatPane')>()),
   ChatPane: (props: {
     activeConversationId?: string | null;
     sendDisabled?: boolean;

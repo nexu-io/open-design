@@ -362,11 +362,11 @@
   }
 }
 .od-toast-message {
-  font-weight: 500;
+  font-weight: 600;
 }
 .od-toast.od-toast-browser-snapshot .od-toast-message {
   font-size: 13.5px;
-  font-weight: 650;
+  font-weight: 600;
 }
 .od-toast.od-toast-browser-snapshot.tone-success .od-toast-icon {
   display: none;
@@ -375,7 +375,7 @@
   margin-top: 4px;
   font-size: 12px;
   opacity: 0.85;
-  font-weight: 500;
+  font-weight: 600;
 }
 .od-toast-code {
   margin: 8px 0 0;
@@ -582,7 +582,7 @@
   border-radius: var(--radius);
   padding: 6px 12px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-muted);
   cursor: pointer;
   transition: all 120ms var(--ease-out);
@@ -777,7 +777,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-weight: 500;
+  font-weight: 600;
 }
 .routines-history-link:hover {
   background: var(--text);
@@ -830,7 +830,7 @@
   background: transparent;
   padding: 3px 12px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   border-radius: var(--radius-sm);
   color: var(--text-muted);
   cursor: pointer;
@@ -857,7 +857,7 @@
   background: var(--bg-panel);
   color: var(--text-muted);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   transition: border-color 140ms var(--ease-out), background 140ms var(--ease-out), color 140ms var(--ease-out);
 }
@@ -906,7 +906,7 @@
 .model-picker .ds-picker-popover { min-width: 320px; }
 .model-picker .ds-picker-list { padding: 6px; }
 .model-picker .ds-picker-item { padding: 8px 10px; }
-.model-picker .ds-picker-item-title { font-size: 13px; font-weight: 500; }
+.model-picker .ds-picker-item-title { font-size: 13px; font-weight: 600; }
 .model-picker .ds-picker-item-sub { font-size: 12px; }
 .model-picker .ds-picker-item .ds-picker-item-badge {
   font-size: 12px;
@@ -929,10 +929,11 @@
 /* Project page audit pass: one final rule set for the active project shell.
    Keep the outer panes flat; only controls and repeated items get radius. */
 .workspace-shell {
-  /* 52px tab-bar row: 10px above + 32px tab + 10px below, so the tabs get 10px
-     top/bottom breathing room and the row below (sidebar) keeps its own 10px
-     top margin — one consistent 10px rhythm around the strip. */
-  grid-template-rows: 52px minmax(0, 1fr);
+  /* 44px tab-bar row (OPEND-3111, design update): 6px above + 32px tab + 6px
+     below. The row below (sidebar) keeps its own 10px top margin. Keep in step
+     with `.workspace-shell .workspace-tabs-chrome.app-chrome-header` and the
+     desktop traffic-light offset (apps/desktop runtime.ts). */
+  grid-template-rows: 44px minmax(0, 1fr);
 }
 /* ── Project-route tab-strip dock (workspaceTabsDock.ts) ──────────────────
    On the project route the strip portals into .split-chat-tabs-dock at the
@@ -943,13 +944,14 @@
    (home / marketplace, workspace-focused mode) → the strip renders in the
    classic full-width chrome row again. */
 .split-chat-tabs-dock {
+  /* Containing block for the history dropdown docked in this row. */
+  position: relative;
   display: flex;
-  /* Top-aligned, not centered: the 36px dropdown hugs the row's top edge —
-     no headroom above it — leaving only the 4px below to the chat card. */
-  align-items: flex-start;
+  /* Match the preview toolbar centre, including its 1px pane border. */
+  align-items: center;
   gap: 8px;
-  height: 40px;
-  min-height: 40px;
+  height: 48px;
+  min-height: 48px;
   flex: 0 0 auto;
   min-width: 0;
 }
@@ -967,24 +969,25 @@
 .workspace-tabs-chrome:has(.workspace-tab.is-active:not(.is-pinned)) .workspace-tabs-glide {
   display: none;
 }
-/* Collapse-chat control, lifted from the chat card header into the dock row
-   (left of the white tab dropdown). */
+/* Collapse-chat control, lifted from the chat card header into the dock row.
+   Visual order is dropdown → history dock → collapse; the dropdown portals in
+   last, so `order` (dock 1, collapse 2) fixes the sequence. */
 .split-chat-collapse {
   appearance: none;
   cursor: pointer;
   display: grid;
   place-items: center;
   flex: 0 0 auto;
+  order: 2;
   width: 32px;
   height: 32px;
-  /* Dock is top-aligned; re-center this 32px button on the 36px dropdown. */
-  margin-top: 2px;
+  margin-top: 0;
   padding: 0;
   border: 0;
   border-radius: 10px;
-  /* White seat matching the dropdown beside it. */
-  background: #fff;
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 5%, transparent);
+  /* Transparent at rest; the hover seat below is the only fill. */
+  background: transparent;
+  box-shadow: none;
   color: var(--text);
   -webkit-app-region: no-drag;
 }
@@ -1014,7 +1017,8 @@
 .split-chat-tabs-dock .workspace-tabs-strip {
   display: none;
 }
-/* ── Docked tab dropdown: one pure-white select spanning the chat column ── */
+/* ── Docked tab dropdown: one select spanning the chat column; its menu is
+   a plain elevated action menu over the transparent pane (OPEND-3175) ── */
 .workspace-tabs-dropdown {
   position: relative;
   flex: 1 1 auto;
@@ -1032,12 +1036,15 @@
   padding: 0 10px 0 12px;
   border: 0;
   border-radius: 12px;
-  background: #fff;
+  /* Folder glyph + name + chevron sit straight on the transparent pane —
+     no white pill, no shadow (OPEND-3258, per the product recording on
+     OPEND-3178). Only the open menu below keeps an opaque surface. */
+  background: transparent;
   color: var(--text);
   font-family: inherit;
   font-size: 13px;
   text-align: left;
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 5%, transparent);
+  box-shadow: none;
 }
 
 .workspace-tabs-dropdown__icon {
@@ -1070,10 +1077,15 @@
   left: 0;
   right: 0;
   padding: 6px;
-  border: 1px solid var(--material-separator);
+  /* OPEND-3175: the same recipe as the switcher's action menu — plain `--bg`
+     ground, soft edge, md shadow — instead of H1's liquid glass. A popover
+     over the transparent pane covers the transcript; a frost let the un-blurred
+     text underneath read through it, and the pure-white literal it replaced
+     never followed the dark appearance. */
+  border: 1px solid var(--border-soft);
   border-radius: 12px;
-  background: #fff;
-  box-shadow: var(--shadow-lg);
+  background: var(--bg);
+  box-shadow: var(--shadow-md);
   /* Six 32px rows plus vertical padding and borders. Global border-box sizing
      means the border must be included or the sixth row is slightly clipped. */
   max-height: calc(6 * 32px + 2 * 6px + 2 * 1px);
@@ -1107,16 +1119,40 @@
   font-size: 13px;
   text-align: left;
 }
-.workspace-tabs-dropdown__row-main > svg:first-child {
-  flex: 0 0 auto;
+/* The leading slot. Fixed size and ALWAYS rendered, even when the row has no
+   glyph: that reserved box is what keeps every project name starting on the
+   same column once some rows carry a run-status indicator and others do not.
+   Explicit classes rather than the `svg:first-child` / `svg:last-child` pair
+   that used to paint these — the slot's content is now sometimes a nested
+   element and sometimes nothing, so position stopped identifying the glyph. */
+.workspace-tabs-dropdown__row-lead {
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: var(--text-muted);
 }
 .workspace-tabs-dropdown__row.is-active .workspace-tabs-dropdown__row-label {
   font-weight: 600;
 }
-.workspace-tabs-dropdown__row-main > svg:last-child:not(:first-child) {
+.workspace-tabs-dropdown__row-check {
   flex: 0 0 auto;
   color: var(--accent);
+}
+/* A completed, unread project's notice at the row's end (OPEND-3133) — the
+   same 6px #1F68FE disc the rail's 最近项目 rows carry
+   (`.entry-nav-rail__recent-unread`), so the two surfaces read alike. Sits
+   between the label and the active ✓, on the right edge via `margin-left:
+   auto`; the row's 8px gap keeps it clear of both. */
+.workspace-tabs-dropdown__row-unread {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  margin-left: auto;
+  border-radius: 50%;
+  background: #1F68FE;
 }
 .workspace-tabs-dropdown__row-label {
   flex: 1 1 auto;
@@ -1131,7 +1167,7 @@
      button) and undocked (the strip's pinned entry tab). Without it the icon
      jumped 10px left on every entry→project→entry trip. */
   margin-left: 10px;
-  width: 78px;
+  width: 64px;
   height: 32px;
   padding: 0;
   border: 0;
@@ -1145,9 +1181,17 @@
   flex: 0 0 auto;
   -webkit-app-region: no-drag;
 }
-.workspace-tabs-home-chrome:hover {
-  background: color-mix(in srgb, var(--bg-panel) 78%, transparent);
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 5%, transparent);
+/* Same fill the rail's selected nav row wears — `--text-strong` at 10% (per
+   product: 和首页的选择保持一致). It used to be a 78% wash of the opaque
+   `--bg-panel`, which on the translucent chrome row read as a pale plate
+   rather than a tint of the ink. Keep in step with
+   `.entry-nav-rail__btn.is-active` (home/entry-layout.css). The drop shadow
+   goes with it: a tint does not need a lift to read as hovered.
+   `:not(:disabled)` is load-bearing — see the note in home/entry-layout.css
+   beside the search/collapse pair: it is what lifts this past
+   primitives.css's `button:hover:not(:disabled)`. */
+.workspace-tabs-home-chrome:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text-strong) 10%, transparent);
 }
 .app .split-chat-slot {
   /* Column: the docked strip sits above the chat card. */
@@ -1158,12 +1202,14 @@
   min-height: 0;
 }
 .workspace-shell .workspace-tabs-chrome.app-chrome-header {
-  --workspace-tabs-chrome-height: 52px;
+  /* 44px per design (OPEND-3111): the 32px controls sit 6px in from each
+     edge. Same figure as the `.workspace-shell` grid row above. */
+  --workspace-tabs-chrome-height: 44px;
   /* Flush with the page below it — the bar shares the app surface. */
   --workspace-tab-bar-bg: var(--bg);
   --workspace-active-tab-border: color-mix(in srgb, var(--border-strong) 38%, transparent);
-  height: 52px;
-  min-height: 52px;
+  height: 44px;
+  min-height: 44px;
   padding: 0 8px 0 0;
   background: var(--workspace-tab-bar-bg);
   border-bottom: 0;
@@ -1231,12 +1277,15 @@
    tabs from showing through it. Declared before .is-active so an active Home
    tab still picks up the active highlight. */
 .workspace-shell .workspace-tab.is-pinned {
-  /* Single-icon pill (~half a project tab): the Home button on a project page,
-     or the sidebar toggle on the Home page. */
-  flex: 0 0 78px;
-  width: 78px;
-  min-width: 78px;
-  max-width: 78px;
+  /* Single-icon pill: the Home button on a project page, or the sidebar
+     toggle on the Home page. Width is not free — the pill starts at the
+     strip's 10px edge inset and centers its glyph, so 64px puts that glyph
+     on the same vertical axis as the rail's 首页 icon below it. Changing this
+     width or the edge inset breaks that column. */
+  flex: 0 0 64px;
+  width: 64px;
+  min-width: 64px;
+  max-width: 64px;
   grid-template-columns: minmax(0, 1fr);
   position: sticky;
   left: 0;
@@ -1252,6 +1301,18 @@
   justify-items: center;
   padding: 0;
 }
+/* …but the entry chrome row shows no pinned Home pill at all now (per
+   product: 顶部去掉 home icon，只有 chat 里才显示): Home is the rail's own 首页
+   item, expanding a collapsed rail is the toggle beside the search in
+   `.workspace-tabs-rail-actions`, and in chat the logo still renders as
+   .workspace-tabs-home-chrome (the strip is docked there, so this selector
+   does not reach it). The row stays in the DOM — it is the tab machinery's
+   measurement/drag anchor. Both selectors are needed: the second out-ranks the
+   `:has()` display rule directly above. */
+.workspace-shell .workspace-tabs-chrome .workspace-tab.is-pinned,
+.workspace-shell .workspace-tabs-chrome .workspace-tab.is-pinned:has(.workspace-tab__rail-toggle) {
+  display: none;
+}
 .workspace-shell .workspace-tab.is-pinned .workspace-tab__rail-toggle {
   /* Fill the whole pinned tab so the hover target is a full tab-sized box
      (matching the Home button / a normal tab hover) instead of a cramped 20px
@@ -1260,6 +1321,15 @@
   width: 100%;
   height: 100%;
   border-radius: 12px;
+}
+/* primitives.css rings every button in 1px of --blue at a 2px offset on
+   focus-visible. Around this corner pill that rectangle read as permanent
+   chrome rather than a focus state, so drop it and let the same soft fill the
+   pill already uses for hover carry keyboard focus instead. */
+.workspace-shell .workspace-tab.is-pinned .workspace-tab__rail-toggle:focus-visible,
+.workspace-shell .workspace-tab.is-pinned .workspace-tab__main:focus-visible {
+  outline: none;
+  background: var(--bg-fill-secondary);
 }
 .workspace-shell .workspace-tab.is-active {
   border-radius: 12px;
@@ -1412,7 +1482,7 @@
 }
 .workspace-shell .workspace-tab__label {
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
 }
 .workspace-shell .workspace-tab.is-active .workspace-tab__label {
   font-size: var(--font-size-13, 13px);
@@ -1488,7 +1558,7 @@
      giving a 10px tab-to-content spacing (was 18px). Bottom/left stay 8px; the
      slot's overflow:hidden (shell.css) clips the card's shadow cleanly at the
      slot edge. Right side is 0 so the gap to the workspace card is just the
-     8px resize-handle column (not 8+8+8=24px). */
+     4px resize-handle column (not 8+4+8=20px). */
   padding: 0 0 8px 8px;
   background: var(--veil-page, transparent);
 }
@@ -1497,15 +1567,30 @@
      fixed/portaled layer, so it isn't clipped and auto-follows the inset via
      composerPortalRect). */
   border: none;
-  border-radius: var(--radius-lg);
+  /* No corner radius on this card — on purpose, and not for looks.
+     The card is transparent (OPEND-3090 below), so a radius paints nothing;
+     what it DID do was turn the `.pane { overflow: hidden }` clip into a
+     rounded clip around `.chat-log`, and Chromium's compositor cannot
+     hit-test a scroller behind a rounded clip on its own: every wheel notch
+     on the transcript went `FindScrollTargetOnMainThread` → main-thread
+     reply → `ScrollTree::ScrollBy` (13/13 notches, real Chrome 152 CDP
+     trace, 2026-09-17), against 0/6 for a plain overflow div. While a run
+     streams, the main thread is busy re-rendering, the reply waits, the
+     wheel stalls, and the scroll-freeze probe reports `wheel_stall`. With
+     `border-radius: 0` (or a non-clipping pane) the same trace shows 0/13
+     main-thread hit tests. Guard:
+     `tests/components/chat/chat-log-ancestor-rounded-clip.test.ts`. */
+  border-radius: 0;
   box-shadow: none;
-  /* Pure-white frosted glass: a white tint over the regular blur so the chat
-     panel reads paper-white instead of showing the raw ground. Dark theme
-     falls back to the standard Regular material, and the degraded blocks
-     below flatten it to a solid surface. */
-  background: color-mix(in srgb, #fff 85%, transparent);
-  -webkit-backdrop-filter: var(--material-regular-backdrop);
-  backdrop-filter: var(--material-regular-backdrop);
+  /* Product decision (OPEND-3090, per the #8113 Demo): the card paints
+     nothing of its own, so the app wash / window vibrancy shows through the
+     chat column exactly as it does through the gutter around it. The earlier
+     85% white frost over the Regular blur is gone on purpose; do not bring it
+     back. Dark theme still falls back to the standard Regular material, and
+     the degraded blocks below flatten the card to a solid surface. */
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   overflow: hidden;
 }
 [data-theme='dark'] .app .split-chat-slot > .pane {
@@ -1528,8 +1613,8 @@
 }
 .app .split-resize-handle {
   --split-resize-gradient-surface: #fff;
-  width: 8px;
-  min-width: 8px;
+  width: var(--project-chat-handle-width, 4px);
+  min-width: 0;
   background: transparent;
 }
 
@@ -1719,7 +1804,7 @@
   font-size: 12px;
   line-height: 1.25;
   color: var(--text-muted);
-  font-weight: 500;
+  font-weight: 600;
 }
 .app .msg .role > span:first-child,
 .chat-skin .msg .role > span:first-child,
@@ -1748,7 +1833,7 @@
 .chat-skin .msg-time {
   font-size: 12px;
   color: var(--text-soft);
-  font-weight: 500;
+  font-weight: 600;
 }
 /*
  * 用户气泡的**旧皮肤**已删。
@@ -1803,7 +1888,7 @@
   gap: 8px;
   padding: 6px 14px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
 }
 /*
  * 这里原本还压着 `padding: 4px 0` 和 `gap: 6px` —— 旧皮肤自己那一档盒模型。
@@ -2236,7 +2321,7 @@
   color: var(--text);
   font-size: 24px;
   line-height: 1;
-  font-weight: 500;
+  font-weight: 600;
 }
 .app .chat-design-artifact-more-count,
 .chat-skin .chat-design-artifact-more-count {
@@ -2387,23 +2472,32 @@
 .chat-composer-fixed-layer .composer-shell {
   padding: 5px;
   gap: 8px;
-  border-color: var(--border-soft);
-  border-radius: var(--radius-xl);
-  background: color-mix(in srgb, var(--bg-subtle) 45%, var(--bg-panel));  box-shadow: none;
+  /* OPEND-3173 (container material only — the left/right pane grounds are
+     untouched, pending design): the shell is ONE opaque floating card, the
+     same `--chat-floating-card-*` family the queued-send cards stacked right
+     above it already read (#8165 commit 1). No frost and no shadow: once the
+     pane went transparent (OPEND-3090) a blurred or shadowed shell read as a
+     second material floating over the wash, while the queue cards did not.
+     Dark and reduced transparency follow the tokens; nothing here overrides
+     them per appearance. */
+  border-color: var(--chat-border-soft);
+  border-radius: var(--chat-radius-xl);
+  background: var(--chat-floating-card-bg);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: none;
 }
 
 [data-theme="dark"] .app .chat-log,
 [data-theme="dark"] .chat-skin .chat-log,
-[data-theme="dark"] .chat-composer-fixed-layer .composer,
-[data-theme="dark"] .chat-composer-fixed-layer .composer-shell {
+[data-theme="dark"] .chat-composer-fixed-layer .composer {
   background: var(--bg-panel);
 }
 
 @media (prefers-color-scheme: dark) {
   html:not([data-theme]) .app .chat-log,
   html:not([data-theme]) .chat-skin .chat-log,
-  html:not([data-theme]) .chat-composer-fixed-layer .composer,
-  html:not([data-theme]) .chat-composer-fixed-layer .composer-shell {
+  html:not([data-theme]) .chat-composer-fixed-layer .composer {
     background: var(--bg-panel);
   }
 }
@@ -2674,6 +2768,7 @@
 .chat-composer-fixed-layer .composer-send {
   --composer-send-bg: var(--send-ink);
   --composer-send-fg: var(--send-ground);
+
   position: relative;
   overflow: hidden;
   width: 32px;
@@ -2689,7 +2784,8 @@
 /* Hover stays `:not(.stop)`: only the SEND disc lifts toward its glyph colour.
    The executing button keeps its ground flat on hover — Group 2147224570.svg
    draws the hovered run state on the same #202020 — and swaps its glyph for
-   the stop square instead (chat.css). */.app .composer-send:not(.stop):hover:not(:disabled),
+   the stop square instead (chat.css). */
+.app .composer-send:not(.stop):hover:not(:disabled),
 .chat-skin .composer-send:not(.stop):hover:not(:disabled),
 .app .composer-send:not(.stop):active:not(:disabled),
 .chat-skin .composer-send:not(.stop):active:not(:disabled),
@@ -2705,7 +2801,8 @@
 .chat-skin .composer-send:not(.stop):disabled,
 .chat-composer-fixed-layer .composer-send:not(.stop):disabled {
   /* Idle (nothing typed) reads identical to the active state, as on Home — the
-     button never shifts colour when the user starts typing. */  opacity: 1;
+     button never shifts colour when the user starts typing. */
+  opacity: 1;
   background: var(--composer-send-bg);
   border-color: transparent;
   color: var(--composer-send-fg);
@@ -3196,7 +3293,7 @@
 }
 .app .df-row-name {
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-strong);
 }
 .app .df-row-name-wrap {
@@ -3641,7 +3738,7 @@
   color: var(--text-muted);
   font: inherit;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3888,7 +3985,7 @@
 }
 .project-ds-picker-option-title {
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-strong, var(--text));
   min-width: 0;
   overflow: hidden;
@@ -4102,7 +4199,7 @@
   position: fixed;
   inset: 0;
   z-index: 1800;
-  background: color-mix(in srgb, var(--text) 38%, transparent);
+  background: var(--scrim-tint);
   -webkit-backdrop-filter: var(--scrim-backdrop);
   backdrop-filter: var(--scrim-backdrop);
   display: flex;

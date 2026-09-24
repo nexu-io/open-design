@@ -450,8 +450,31 @@ describe("runWorkspaceBuild", () => {
 
       expect(calls.map((call) => call.args)).toEqual(WORKSPACE_BUILD_COMMANDS.map((command) => [...command.args]));
       expect(calls[1]?.env).toMatchObject({ OD_WEB_OUTPUT_MODE: "standalone" });
+      expect(calls[1]?.env?.NODE_OPTIONS).toContain("--max-old-space-size=4096");
       expect(await readFile(join(root, "apps/web/next-env.d.ts"), "utf8")).toBe("original\n");
     } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("raises the V8 heap ceiling for the closure build without dropping caller NODE_OPTIONS", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-workspace-runner-heap-"));
+    const config = createConfig(root, join(root, ".cache"));
+    const calls: Array<{ args: string[]; env?: NodeJS.ProcessEnv }> = [];
+    const previousNodeOptions = process.env.NODE_OPTIONS;
+    process.env.NODE_OPTIONS = "--enable-source-maps";
+
+    try {
+      await mkdir(join(root, "apps/web"), { recursive: true });
+      await runWorkspaceBuild(config, async (args, env) => {
+        calls.push({ args, env });
+      });
+
+      // Ours first, so a caller's own --max-old-space-size still wins (Node keeps the last one).
+      expect(calls[1]?.env?.NODE_OPTIONS).toBe("--max-old-space-size=4096 --enable-source-maps");
+    } finally {
+      if (previousNodeOptions == null) delete process.env.NODE_OPTIONS;
+      else process.env.NODE_OPTIONS = previousNodeOptions;
       await rm(root, { force: true, recursive: true });
     }
   });

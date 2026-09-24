@@ -16,18 +16,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render } from '@testing-library/react';
 import { I18nProvider } from '../../src/i18n';
 import { ProjectCreationPendingView } from '../../src/components/ProjectCreationPendingView';
-import type { Project } from '../../src/types';
 
 afterEach(cleanup);
 
-const PROJECT = {
-  id: 'p-2585',
-  name: '我上传了多少个文件',
-  skillId: null,
-  designSystemId: null,
-  createdAt: 1_756_000_000_000,
-  updatedAt: 1_756_000_000_000,
-} as unknown as Project;
+const PROJECT_NAME = '我上传了多少个文件';
 
 /** 视频里那一批:5 张图 + 1 个文档 */
 const STAGED = [
@@ -43,7 +35,7 @@ function renderPending() {
   return render(
     <I18nProvider initial="zh-CN">
       <ProjectCreationPendingView
-        project={PROJECT}
+        projectName={PROJECT_NAME}
         prompt="我上传了多少个文件"
         files={STAGED}
         agentId="claude"

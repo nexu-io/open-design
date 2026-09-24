@@ -35,7 +35,7 @@ describe('subChipsForChip', () => {
     expect(subChipsForChip(null, records)).toEqual([]);
   });
 
-  it('always exposes the fixed eight prototype scenes in product order', () => {
+  it('always exposes the fixed seven prototype scenes in product order', () => {
     const records = [
       prototypePlugin('p-dash', ['dashboard']),
       prototypePlugin('p-land', ['landing-page']),
@@ -49,7 +49,6 @@ describe('subChipsForChip', () => {
       'app-prototypes',
       'developer-tools',
       'brand-design',
-      'docs-reports',
     ]);
     const dash = result.find((s) => s.slug === 'business-dashboards');
     expect(dash?.label).toBe('Dashboards');
@@ -69,7 +68,7 @@ describe('subChipsForChip', () => {
   });
 
   it('keeps the fixed prototype hierarchy visible without installed plugins', () => {
-    expect(subChipsForChip('prototype', [])).toHaveLength(8);
+    expect(subChipsForChip('prototype', [])).toHaveLength(7);
   });
 
   it('keeps the Home prototype hierarchy independent from the dynamic plugin catalog', () => {
@@ -143,8 +142,10 @@ describe('prototypeSceneProjectMetadata', () => {
     const webClone = findChip('web-clone')!;
     expect(prototypeSceneProjectMetadata(webClone, prototypeSubChipForSlug('wireframe')))
       .toEqual({ kind: 'prototype', intent: 'web-clone', fidelity: 'wireframe' });
+    // Website clone stamps its own high-fidelity default, which a scene-less
+    // pick keeps verbatim.
     expect(prototypeSceneProjectMetadata(webClone, null))
-      .toEqual({ kind: 'prototype', intent: 'web-clone' });
+      .toEqual({ kind: 'prototype', intent: 'web-clone', fidelity: 'high-fidelity' });
   });
 });
 

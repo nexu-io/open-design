@@ -8,7 +8,6 @@ import {
   latestUserPromptFromHistory,
   reattachDaemonRun,
   sanitizePriorAssistantTurnForTranscript,
-  STRATEGY_TASK_BLOCKED_MESSAGE,
   streamViaDaemon,
   type DaemonReconnectState,
   type DaemonRunFinishedEventDetail,
@@ -2244,6 +2243,7 @@ describe('streamViaDaemon', () => {
       route: 'full_plan',
       executionMode: null,
       activeRunId: 'run-request',
+      runMappings: [{ runId: 'run-request', taskRunIndex: 0 }],
       terminal: false,
     };
     const productionProjection = {
@@ -2253,6 +2253,10 @@ describe('streamViaDaemon', () => {
       executionMode: 'simple',
       activeRunId: 'run-production',
       nextRunId: 'run-production',
+      runMappings: [
+        { runId: 'run-request', taskRunIndex: 0 },
+        { runId: 'run-production', taskRunIndex: 1 },
+      ],
     };
     const completedProjection = {
       ...productionProjection,
@@ -2330,10 +2334,13 @@ describe('streamViaDaemon', () => {
     expect(body.taskExecutionId).toBe('task-clarification');
   });
 
+  // A canceled task ends the turn as canceled whatever the process did. A
+  // blocked task does not override the physical result: the Run succeeded, so
+  // the turn ends Done and the verdict rides along on the task projection.
   it.each([
-    { outcome: 'blocked', physicalStatus: 'succeeded', expectedStatus: 'failed', expectsError: true },
+    { outcome: 'blocked', physicalStatus: 'succeeded', expectedStatus: 'succeeded', expectsError: false },
     { outcome: 'canceled', physicalStatus: 'failed', expectedStatus: 'canceled', expectsError: false },
-  ])('renders terminal task outcome $outcome instead of the physical Run status', async ({
+  ])('settles a terminal task outcome $outcome on the physical Run status $physicalStatus', async ({
     outcome,
     physicalStatus,
     expectedStatus,
@@ -2378,9 +2385,7 @@ describe('streamViaDaemon', () => {
 
     expect(onRunStatus).toHaveBeenLastCalledWith(expectedStatus);
     if (expectsError) {
-      expect(handlers.onError).toHaveBeenCalledWith(
-        expect.objectContaining({ message: STRATEGY_TASK_BLOCKED_MESSAGE }),
-      );
+      expect(handlers.onError).toHaveBeenCalledTimes(1);
       expect(handlers.onDone).not.toHaveBeenCalled();
     } else {
       expect(handlers.onError).not.toHaveBeenCalled();
@@ -2393,8 +2398,8 @@ describe('streamViaDaemon', () => {
   // chat and that reply is the turn's outcome. Raising a run error on top of it
   // restated the same sentence inside a red "task execution failed" card, so a
   // turn that had simply asked for more detail read as a crash. A machine gate
-  // that left no text still errors — pinned by the `it.each` above, whose
-  // projection carries no blockedContext.
+  // that left no text ends the same way now — the `it.each` above, whose
+  // projection carries no blockedContext, pins that a succeeded Run stays Done.
   it('leaves a blocked task to its own explanation instead of raising a run error', async () => {
     const handlers = createDaemonHandlers();
     const onRunStatus = vi.fn();
@@ -2441,19 +2446,85 @@ describe('streamViaDaemon', () => {
     expect(onRunStatus).toHaveBeenLastCalledWith('succeeded');
   });
 
-  // The other half of the same rule. A gate the agent did not ask for leaves
-  // the agent's ordinary reply sitting next to the verdict — "sure, three
-  // pages, here is the plan" — and that prose is not an account of the stop.
-  // Suppressing on text alone would hide a real protocol failure behind a
-  // cheerful sentence, so the reason code is what decides.
-  it('still raises a run error when a gate blocked the task the agent did not', async () => {
+  // A planning turn the gate refused is the agent's reply. The user said
+  // "hello", the agent answered and planned nothing, and the daemon recorded
+  // the missing machine block on the task — but the Run finished cleanly and
+  // the reply on screen is the whole outcome of the turn. Raising a run error
+  // over it put a red "task could not complete" card under a greeting.
+  it("leaves a refused planning turn to the agent's reply instead of raising a run error", async () => {
     const handlers = createDaemonHandlers();
+    const onRunStatus = vi.fn();
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-refused' });
+      if (url === '/api/runs/run-refused') {
+        return jsonResponse({ deliverableValid: false, projectDeliverableValid: false });
+      }
+      if (url === '/api/runs/run-refused/events') {
+        return sseResponse(`event: stdout\ndata: ${JSON.stringify({
+          chunk: '你好！告诉我你想做什么设计，我来帮你规划。',
+        })}\n\nevent: end\ndata: ${JSON.stringify({
+          code: 0,
+          status: 'succeeded',
+          strategyTask: {
+            taskExecutionId: 'task-refused',
+            strategy: {
+              id: 'od-next-strategy',
+              version: '2.0.0',
+              packageHash: 'a'.repeat(64),
+              snapshotId: 'snapshot-1',
+            },
+            inputStage: 'request',
+            outcome: 'blocked',
+            route: 'full_plan',
+            executionMode: null,
+            activeRunId: 'run-refused',
+            terminal: true,
+            blockedContext: {
+              reasonCodes: [
+                'od_next_canonical_deliverable_invalid',
+                'od_next_protocol_runtime_state_missing',
+              ],
+              visibleText: '你好！告诉我你想做什么设计，我来帮你规划。',
+            },
+          },
+        })}\n\n`);
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }));
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: '你好' }],
+      signal: new AbortController().signal,
+      handlers,
+      onRunStatus,
+    });
+
+    expect(handlers.onError).not.toHaveBeenCalled();
+    expect(handlers.onDone).toHaveBeenCalledTimes(1);
+    expect(onRunStatus).toHaveBeenLastCalledWith('succeeded');
+  });
+
+  // The same rule at production. The plan was frozen, the build ran, and a
+  // gate refused the turn because nothing usable was written. The Run still
+  // succeeded, so the turn ends Done with the agent's own words; the verdict
+  // and its reason code reach the message through the settled projection, not
+  // through a run error. The next message starts a new task.
+  it("keeps a production turn the gate blocked on the Run's own success", async () => {
+    const handlers = createDaemonHandlers();
+    const onStrategyTaskSettled = vi.fn();
+    const onRunStatus = vi.fn();
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url === '/api/runs') return jsonResponse({ runId: 'run-gated' });
-      if (url === '/api/runs/run-gated') return jsonResponse({ deliverableValid: false });
+      if (url === '/api/runs/run-gated') {
+        return jsonResponse({ deliverableValid: false, projectDeliverableValid: false });
+      }
       if (url === '/api/runs/run-gated/events') {
-        return sseResponse(`event: end\ndata: ${JSON.stringify({
+        return sseResponse(`event: stdout\ndata: ${JSON.stringify({
+          chunk: '好的，按你说的三页来做。计划如下：1) 首页 2) 列表 3) 详情。',
+        })}\n\nevent: end\ndata: ${JSON.stringify({
           code: 0,
           status: 'succeeded',
           strategyTask: {
@@ -2464,10 +2535,10 @@ describe('streamViaDaemon', () => {
               packageHash: 'a'.repeat(64),
               snapshotId: 'snapshot-1',
             },
-            inputStage: 'clarification',
+            inputStage: 'production',
             outcome: 'blocked',
             route: 'full_plan',
-            executionMode: null,
+            executionMode: 'simple',
             activeRunId: 'run-gated',
             terminal: true,
             blockedContext: {
@@ -2485,9 +2556,20 @@ describe('streamViaDaemon', () => {
       history: [{ id: '1', role: 'user', content: '深色，三页' }],
       signal: new AbortController().signal,
       handlers,
+      onRunStatus,
+      onStrategyTaskSettled,
     });
 
-    expect(handlers.onError).toHaveBeenCalledTimes(1);
+    expect(handlers.onError).not.toHaveBeenCalled();
+    expect(handlers.onDone).toHaveBeenCalledTimes(1);
+    expect(onRunStatus).toHaveBeenLastCalledWith('succeeded');
+    expect(onStrategyTaskSettled).toHaveBeenCalledWith(expect.objectContaining({
+      outcome: 'blocked',
+      inputStage: 'production',
+      blockedContext: expect.objectContaining({
+        reasonCodes: ['od_next_protocol_runtime_state_missing'],
+      }),
+    }));
   });
 
   it('reattaches to an existing daemon run after the last stored event id', async () => {

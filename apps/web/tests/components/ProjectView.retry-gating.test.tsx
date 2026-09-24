@@ -1,25 +1,11 @@
 // @vitest-environment jsdom
-//
-// 红测:报错卡上那颗〔重试〕的**宿主侧**契约 —— OPEND-2821 / 2758 / 2719。
-//
-// 三条单落在同一组门控上(`ProjectView` 的 `currentConversationActionDisabled`
-// 与它下游的 AMR 预检),所以钉在同一页里:
-//
-//   ① OPEND-2821 门控为真时,宿主必须**说出阻断原因**,而不是让 `handleRetry`
-//      静默 `return`。判据是宿主交给 `ChatPane` 的那份原因。
-//   ② OPEND-2758 点下重试之后,在服务端确认新 run 之前,宿主要一直宣告
-//      「这一轮正在重试」,好让报错卡留在屏幕上并进加载态。
-//   ③ OPEND-2758 ③ 新 run 没建成(预检拒绝 / POST 失败),宣告要撤回,
-//      原失败卡和它的动作跟着回来。
-//   ④ OPEND-2719 余额不足是**终局**,不是「等等再说」:这一发不许进待发送队列,
-//      不许起新任务,弹窗和卡照出,正文交还给输入框。
-//
-// 这一页把 `ChatPane` mock 掉(它自带半个应用),断言的是**宿主把什么交给了它**;
-// 「拿到这份数据之后卡真的怎么画」由 `ChatPane.retry-gating.test.tsx` 从真实
-// `ChatPane` 断言。两页靠同一组 prop 名接在一起(typecheck 保证)。
+// 宿主门控与真实错误卡生命周期。2026-09-14 用户明确：有效重试后旧卡撤下，
+// 由新结果接管；历史失败消息保留。pending 身份用于防重/归属，不再要求旧卡回归。
+// 旧门控/队列测试保留轻量 ChatPane stub；生命周期测试使用真实 ChatPane 与卡片。
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { forwardRef, type ComponentProps, type ReactNode } from 'react';
+import type { ChatPane as ChatPaneComponent } from '../../src/components/ChatPane';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ProjectView } from '../../src/components/ProjectView';
@@ -227,7 +213,25 @@ vi.mock('../../src/components/FileWorkspace', () => ({
   FileWorkspace: () => <div data-testid="file-workspace" />,
 }));
 
-vi.mock('../../src/components/ChatPane', () => ({
+
+const chatSurface = vi.hoisted(() => ({
+  real: false,
+  props: null as ComponentProps<typeof ChatPaneComponent> | null,
+}));
+
+vi.mock('../../src/components/AssistantMessage', () => ({
+  AssistantMessage: ({ message }: { message: ChatMessage }) => (
+    <output data-testid={`history-${message.id}`}>{JSON.stringify(message)}</output>
+  ),
+}));
+vi.mock('../../src/components/ChatComposer', () => ({
+  ChatComposer: forwardRef((_props, _ref) => <div data-testid="composer" />),
+}));
+
+vi.mock('../../src/components/ChatPane', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/components/ChatPane')>();
+  return {
+    ...actual,
   ChatPane: (props: {
     activeConversationId?: string | null;
     messages?: ChatMessage[];
@@ -256,6 +260,8 @@ vi.mock('../../src/components/ChatPane', () => ({
       formId?: string,
     ) => unknown;
   }) => {
+    chatSurface.props = props as unknown as ComponentProps<typeof ChatPaneComponent>;
+    if (chatSurface.real) return <actual.ChatPane {...chatSurface.props} />;
     const failed = [...(props.messages ?? [])]
       .reverse()
       .find((message) => message.role === 'assistant' && message.runStatus === 'failed');
@@ -356,7 +362,8 @@ vi.mock('../../src/components/ChatPane', () => ({
       </section>
     );
   },
-}));
+  };
+});
 
 const project: Project = {
   id: 'project-1',
@@ -466,6 +473,8 @@ async function waitForConversation() {
 let conversationMessages: ChatMessage[] = [];
 
 beforeEach(() => {
+  chatSurface.real = false;
+  chatSurface.props = null;
   sendOutcomes.length = 0;
   hostSendOutcomes.length = 0;
   window.localStorage.clear();
@@ -551,7 +560,7 @@ describe('OPEND-2821 门控为真时,宿主要说出原因而不是静默吞掉�
   });
 });
 
-describe('OPEND-2758 重试要等服务端确认,失败要把原卡还回来', () => {
+describe('重试请求归属在确认/拒绝时释放，失败历史始终保留', () => {
   it('点下重试后,新 run 未确认之前宿主一直宣告「正在重试」', async () => {
     // POST /api/runs 还没回来:`onRunCreated` 一直不调用。
     streamViaDaemon.mockImplementation(async () => new Promise<void>(() => {}));
@@ -600,7 +609,7 @@ describe('OPEND-2758 重试要等服务端确认,失败要把原卡还回来', (
    * 只断言最终为 `none` 的写法在 `main` 上是空绿的:那儿这份宣告从来就不存在,
    * 断言只是在赢一个从未发生的状态。
    */
-  it('新 run 没建成(POST 直接失败)→ 宣告撤回,失败卡回到原位', async () => {
+  it('新 run 没建成(POST 直接失败)→ 请求归属释放，失败历史仍保留', async () => {
     let failTheRun: (() => void) | null = null;
     streamViaDaemon.mockImplementation(
       async (options: { handlers: { onError: (error: Error) => void } }) => {
@@ -626,13 +635,13 @@ describe('OPEND-2758 重试要等服务端确认,失败要把原卡还回来', (
     await waitFor(() =>
       expect(screen.getByTestId('retry-pending-id').textContent).toBe('none'),
     );
-    // 原来那条失败助手消息还在流水里,报错卡有主可挂。
+    // 保留失败历史不等于继续展示旧错误卡；真实卡片断言见下面生命周期用例。
     expect(screen.getByTestId('assistant-summary').textContent).toContain(
       'assistant-failed|failed',
     );
   });
 
-  it('预检拒绝(余额不足)的重试 → 宣告撤回,原失败卡回到原位', async () => {
+  it('预检拒绝(余额不足)的重试 → 请求归属释放，失败历史仍保留', async () => {
     let settleGate: ((result: unknown) => void) | null = null;
     checkAmrBalanceGate.mockImplementation(
       () => new Promise((resolve) => {
@@ -904,5 +913,393 @@ describe('OPEND-2719:输入框认领不许落进队列', () => {
     expect(screen.getByTestId('queued-meta-keys').textContent).not.toContain(
       'composerOwnedDraft',
     );
+  });
+});
+
+/**
+ * These tests exercise the real ProjectView → ChatPane → RunErrorCard/UpgradeCard
+ * connection. Assistant content and the composer are leaf stubs; neither decides
+ * whether an error card survives retry or which surface owns the next failure.
+ */
+describe('2026-09-14 retry replaces the old error surface without erasing history', () => {
+  // G16: only Cloud failures expose manual Retry. Keep the earlier local-CLI
+  // callback/composer gate tests intact and use a Cloud-owned failed attempt
+  // for this real ChatPane group, including folded and busy-history cases.
+  let cloudFailedAssistant: ChatMessage;
+
+  beforeEach(() => {
+    cloudFailedAssistant = structuredClone({ ...failedAssistant, agentId: 'amr' });
+    conversationMessages = [userMessage, cloudFailedAssistant];
+  });
+
+  type RunOptions = Parameters<typeof import('../../src/providers/daemon').streamViaDaemon>[0];
+  type GateOutcome = Awaited<ReturnType<typeof import('../../src/runtime/amr-balance-gate').checkAmrBalanceGate>>;
+
+  function deferred<T>() {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((settle) => { resolve = settle; });
+    return { promise, resolve };
+  }
+
+  const insufficient = (): GateOutcome => ({
+    kind: 'hard',
+    reason: 'insufficient',
+    snapshot: {
+      status: 'available',
+      profile: 'prod',
+      user: { plan: 'free' },
+      balanceUsd: '0',
+      updatedAt: null,
+      fetchedAt: '2026-09-14T04:00:00.000Z',
+      stale: false,
+      source: 'vela_api',
+    },
+  });
+
+  async function renderRealChat(config = amrConfig) {
+    chatSurface.real = true;
+    // Run terminal callbacks refresh the transcript. Keep that read faithful
+    // to completed writes instead of restoring the seed fixture after success.
+    saveMessage.mockImplementation(async (_projectId: string, conversationId: string, message: ChatMessage) => {
+      if (conversationId !== 'conv-a') return;
+      const index = conversationMessages.findIndex((candidate) => candidate.id === message.id);
+      conversationMessages = index < 0
+        ? [...conversationMessages, message]
+        : conversationMessages.map((candidate) => candidate.id === message.id ? message : candidate);
+    });
+    const view = renderProjectView(config);
+    await waitFor(() => {
+      expect(chatSurface.props?.activeConversationId).toBe('conv-a');
+      expect((screen.getByTestId('chat-error-retry') as HTMLButtonElement).disabled).toBe(false);
+    });
+    return view;
+  }
+
+  function expectOriginalFailurePreserved() {
+    expect(chatSurface.props?.messages.find((message) => message.id === cloudFailedAssistant.id))
+      .toEqual(cloudFailedAssistant);
+  }
+
+  function captureRun() {
+    let options: RunOptions | undefined;
+    streamViaDaemon.mockImplementation((value: RunOptions) => {
+      options = value;
+      return new Promise<void>(() => {});
+    });
+    return () => {
+      expect(options).toBeDefined();
+      return options!;
+    };
+  }
+
+  it('accepting retry removes the old card before the replacement has a run id', async () => {
+    captureRun();
+    await renderRealChat();
+    fireEvent.click(screen.getByTestId('chat-error-retry'));
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+
+    expect(chatSurface.props?.messages.some((message) =>
+      message.role === 'assistant' && message.id !== cloudFailedAssistant.id && !message.runId,
+    )).toBe(true);
+    expect(screen.queryByTestId('chat-run-error-card')).toBeNull();
+    expectOriginalFailurePreserved();
+  });
+
+  it('an insufficient-balance rejection replaces the old failure card with the balance card', async () => {
+    const gate = deferred<GateOutcome>();
+    checkAmrBalanceGate.mockReturnValue(gate.promise);
+    await renderRealChat(amrConfig);
+    fireEvent.click(screen.getByTestId('chat-error-retry'));
+    await waitFor(() => expect(checkAmrBalanceGate).toHaveBeenCalledTimes(1));
+    // Settle the real preflight path before checking the screenshot's terminal
+    // state. An earlier pending-card failure must not hide this second defect.
+    await act(async () => gate.resolve(insufficient()));
+    await waitFor(() => expect(screen.getByTestId('chat-upgrade-card')).toBeTruthy());
+
+    expect(screen.queryByTestId('chat-run-error-card')).toBeNull();
+    expect(screen.getAllByTestId('chat-upgrade-card')).toHaveLength(1);
+    expect(streamViaDaemon).not.toHaveBeenCalled();
+    expect(chatSurface.props?.queuedItems ?? []).toHaveLength(0);
+    expectOriginalFailurePreserved();
+  });
+
+  it('a folded task retry replaces its visible head error after a rejected physical-tail retry', async () => {
+    const gate = deferred<GateOutcome>();
+    checkAmrBalanceGate.mockReturnValue(gate.promise);
+    const planning: ChatMessage = {
+      ...cloudFailedAssistant,
+      id: 'assistant-task-head',
+      runId: 'run-task-plan',
+      runStatus: 'succeeded',
+      content: 'Retained planning output.',
+      events: [],
+      strategyTaskExecutionId: 'task-folded-retry',
+      strategyTaskRunIndex: 0,
+      strategyTaskBlocked: true,
+      strategyTaskBlockedText: null,
+    };
+    const production: ChatMessage = {
+      ...cloudFailedAssistant,
+      id: 'assistant-task-tail',
+      runId: 'run-task-production',
+      content: 'Retained failed production output.',
+      createdAt: 3,
+      strategyTaskExecutionId: 'task-folded-retry',
+      strategyTaskRunIndex: 1,
+      strategyTaskBlocked: true,
+      strategyTaskBlockedText: null,
+    };
+    conversationMessages = [userMessage, planning, production];
+    // A persisted successful strategy predecessor probes its task projection on
+    // hydration. Returning null would simulate a missing daemon run and trigger
+    // the separate stale-run fallback before anyone clicks Retry.
+    fetchChatRunStatus.mockImplementation(async (runId: string) => {
+      const message = conversationMessages.find((candidate) => candidate.runId === runId);
+      if (!message) return null;
+      return {
+        id: runId,
+        projectId: project.id,
+        conversationId: conversation.id,
+        assistantMessageId: message.id,
+        agentId: message.agentId,
+        status: message.runStatus,
+        createdAt: message.createdAt,
+        updatedAt: message.createdAt,
+        strategyTask: {
+          taskExecutionId: 'task-folded-retry',
+          strategy: {
+            id: 'od-next-strategy', version: '2.0.0',
+            packageHash: 'b'.repeat(64), snapshotId: 'snapshot-folded-retry',
+          },
+          inputStage: 'production',
+          outcome: 'blocked',
+          route: 'full_plan',
+          executionMode: 'simple',
+          activeRunId: production.runId,
+          terminal: true,
+        },
+      };
+    });
+    const view = await renderRealChat(amrConfig);
+    expect(chatSurface.props?.messages).toEqual([userMessage, planning, production]);
+    // Actual ChatPane folds both runs into the first assistant's displayed ID.
+    expect(screen.getByTestId('history-assistant-task-head').textContent)
+      .toContain('Retained failed production output.');
+    fireEvent.click(screen.getByTestId('chat-error-retry'));
+    await waitFor(() => expect(checkAmrBalanceGate).toHaveBeenCalledTimes(1));
+    await act(async () => gate.resolve(insufficient()));
+    await waitFor(() => expect(screen.getByTestId('chat-upgrade-card')).toBeTruthy());
+
+    expect(screen.queryByTestId('chat-run-error-card')).toBeNull();
+    expect(streamViaDaemon).not.toHaveBeenCalled();
+    expect(chatSurface.props?.messages).toEqual([userMessage, planning, production]);
+    view.unmount();
+    renderProjectView(amrConfig);
+    await waitFor(() => expect(chatSurface.props?.messages).toEqual([userMessage, planning, production]));
+    expect(screen.queryByTestId('chat-run-error-card')).toBeNull();
+  });
+
+  it('a rejected retry remains consumed after remounting the same client conversation', async () => {
+    const gate = deferred<GateOutcome>();
+    checkAmrBalanceGate.mockReturnValue(gate.promise);
+    const view = await renderRealChat(amrConfig);
+    fireEvent.click(screen.getByTestId('chat-error-retry'));
+    await waitFor(() => expect(checkAmrBalanceGate).toHaveBeenCalledTimes(1));
+    await act(async () => gate.resolve(insufficient()));
+    await waitFor(() => expect(screen.getByTestId('chat-upgrade-card')).toBeTruthy());
+    view.unmount();
+    renderProjectView(amrConfig);
+    await waitFor(() => expect(chatSurface.props?.messages.some((message) =>
+      message.id === cloudFailedAssistant.id,
+    )).toBe(true));
+    expect(screen.queryByTestId('chat-run-error-card')).toBeNull();
+    expectOriginalFailurePreserved();
+  });
+
+  it('restricted session storage does not stop the accepted retry consuming its old card', async () => {
+    const gate = deferred<GateOutcome>();
+    checkAmrBalanceGate.mockReturnValue(gate.promise);
+    const storageWrite = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('storage disabled', 'SecurityError');
+    });
+    try {
+      await renderRealChat(amrConfig);
+      fireEvent.click(screen.getByTestId('chat-error-retry'));
+      await waitFor(() => expect(checkAmrBalanceGate).toHaveBeenCalledTimes(1));
+      await act(async () => gate.resolve(insufficient()));
+      await waitFor(() => expect(screen.getByTestId('chat-upgrade-card')).toBeTruthy());
+      expect(screen.queryByTestId('chat-run-error-card')).toBeNull();
+      expectOriginalFailurePreserved();
+    } finally {
+      storageWrite.mockRestore();
+    }
+  });
+
+  it('a confirmed replacement that succeeds leaves no error card and preserves the prior failure', async () => {
+    const getRun = captureRun();
+    await renderRealChat();
+    fireEvent.click(screen.getByTestId('chat-error-retry'));
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      getRun().onRunCreated?.('run-retry-success');
+    });
+    // Creation and terminal delivery are distinct transport callbacks. Let the
+    // run-id persistence finish before emitting its final status.
+    await waitFor(() => expect(conversationMessages.some((message) =>
+      message.runId === 'run-retry-success',
+    )).toBe(true));
+    const completedReport = 'The requested layout audit is complete. The heading hierarchy is consistent.';
+    await act(async () => {
+      getRun().handlers.onDelta(completedReport);
+    });
+    // This case covers an ordinary streamed response whose text is visible
+    // before completion. Wait for the real buffer's observable commit; a
+    // delta+end in one React turn is a separate finalization-race reproduction.
+    await waitFor(() => expect(chatSurface.props?.messages).toEqual(
+      expect.arrayContaining([expect.objectContaining({
+        runId: 'run-retry-success', content: completedReport,
+      })]),
+    ));
+    await act(async () => {
+      // daemon.ts:2330,2410 emits both callbacks for a successful response.
+      getRun().onRunStatus?.('succeeded');
+      getRun().handlers.onDone(completedReport);
+    });
+    const messageState = (message: ChatMessage) => ({
+      id: message.id,
+      runId: message.runId,
+      runStatus: message.runStatus,
+      content: message.content,
+      sessionMode: message.sessionMode,
+      events: message.events,
+    });
+    await waitFor(() => expect({
+      persisted: conversationMessages.map(messageState),
+      visible: chatSurface.props?.messages.map(messageState),
+      writes: saveMessage.mock.calls.slice(-8).map(([projectId, conversationId, message]) => ({
+        projectId,
+        conversationId,
+        message: messageState(message as ChatMessage),
+      })),
+      transport: {
+        projectId: getRun().projectId,
+        conversationId: getRun().conversationId,
+        assistantMessageId: getRun().assistantMessageId,
+        hasCreatedCallback: typeof getRun().onRunCreated,
+        hasStatusCallback: typeof getRun().onRunStatus,
+        hasDoneCallback: typeof getRun().handlers.onDone,
+      },
+    }).toMatchObject({
+      persisted: expect.arrayContaining([expect.objectContaining({
+        runId: 'run-retry-success', runStatus: 'succeeded', content: completedReport,
+      })]),
+    }));
+    await waitFor(() => expect(chatSurface.props?.messages.map(messageState)).toEqual(
+      expect.arrayContaining([expect.objectContaining({
+        runId: 'run-retry-success', runStatus: 'succeeded',
+      })]),
+    ));
+
+    expect(screen.queryByTestId('chat-run-error-card')).toBeNull();
+    expectOriginalFailurePreserved();
+  });
+
+  it('a second run failing with the same diagnostic still receives its own single recovery card', async () => {
+    const getRun = captureRun();
+    await renderRealChat();
+    fireEvent.click(screen.getByTestId('chat-error-retry'));
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      getRun().onRunCreated?.('run-retry-failed');
+      getRun().handlers.onError(Object.assign(new Error('upstream said no'), {
+        code: 'AGENT_EXECUTION_FAILED',
+      }));
+    });
+    await waitFor(() => expect(chatSurface.props?.messages.some((message) =>
+      message.runId === 'run-retry-failed' && message.runStatus === 'failed',
+    )).toBe(true));
+
+    expect(screen.getAllByTestId('chat-run-error-card')).toHaveLength(1);
+    expect((screen.getByTestId('chat-error-retry') as HTMLButtonElement).disabled).toBe(false);
+    expectOriginalFailurePreserved();
+  });
+
+  it('POST failure before run creation exposes the new send failure without reviving the old run card', async () => {
+    const getRun = captureRun();
+    await renderRealChat();
+    fireEvent.click(screen.getByTestId('chat-error-retry'));
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      getRun().handlers.onError(new Error('POST /api/runs failed'));
+    });
+    await waitFor(() => expect(chatSurface.props?.messages.find((message) =>
+      message.id === userMessage.id,
+    )?.sendFailed).toBe(true));
+
+    expect(screen.queryByTestId('chat-run-error-card')).toBeNull();
+    expect(chatSurface.props?.messages.filter((message) => message.role === 'assistant'))
+      .toHaveLength(1);
+    expectOriginalFailurePreserved();
+  });
+
+  it('an active run disables the real retry button and guards direct callback invocation', async () => {
+    conversationMessages = [strandedRunningAssistant, userMessage, cloudFailedAssistant];
+    fetchChatRunStatus.mockImplementation(() => new Promise(() => {}));
+    chatSurface.real = true;
+    renderProjectView(amrConfig);
+    await waitFor(() => expect(chatSurface.props?.recoveryActionsBlockedReason).toBe('conversation-busy'));
+    const retry = screen.getByTestId('chat-error-retry') as HTMLButtonElement;
+    expect(retry.disabled).toBe(true);
+
+    await act(async () => {
+      fireEvent.click(retry);
+      chatSurface.props?.onRetry?.(cloudFailedAssistant, 'manual_retry');
+    });
+    expect(streamViaDaemon).not.toHaveBeenCalled();
+    expect(checkAmrBalanceGate).not.toHaveBeenCalled();
+    expect(chatSurface.props?.queuedItems ?? []).toHaveLength(0);
+    expect(screen.getAllByTestId('chat-run-error-card')).toHaveLength(1);
+    expect(screen.queryByTestId('chat-error-actions-blocked')).toBeNull();
+  });
+
+  it('two invocations in the same render turn create one retry and no queued duplicate', async () => {
+    captureRun();
+    await renderRealChat();
+    const retry = chatSurface.props!.onRetry!;
+    // The callbacks intentionally share the pre-update closure; two separate
+    // fireEvent calls would flush React between them and miss this boundary.
+    await act(async () => {
+      retry(cloudFailedAssistant, 'manual_retry');
+      retry(cloudFailedAssistant, 'manual_retry');
+    });
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalled());
+    expect(streamViaDaemon).toHaveBeenCalledTimes(1);
+    expect(chatSurface.props?.queuedItems ?? []).toHaveLength(0);
+    expectOriginalFailurePreserved();
+  });
+
+  it('a late rejected retry from conversation A does not paint a balance card over conversation B', async () => {
+    const gate = deferred<GateOutcome>();
+    checkAmrBalanceGate.mockReturnValue(gate.promise);
+    const otherConversation = { ...conversation, id: 'conv-b', title: 'B' };
+    const otherMessage: ChatMessage = {
+      id: 'user-b', role: 'user', content: 'conversation B', createdAt: 10,
+    };
+    listConversations.mockResolvedValue([conversation, otherConversation]);
+    listMessages.mockImplementation(async (_projectId: string, id: string) =>
+      id === 'conv-b' ? [otherMessage] : conversationMessages,
+    );
+    await renderRealChat(amrConfig);
+    fireEvent.click(screen.getByTestId('chat-error-retry'));
+    await waitFor(() => expect(checkAmrBalanceGate).toHaveBeenCalledTimes(1));
+    await act(async () => { chatSurface.props?.onSelectConversation?.('conv-b'); });
+    await waitFor(() => expect(chatSurface.props?.messages.map((message) => message.id)).toEqual(['user-b']));
+    await act(async () => gate.resolve(insufficient()));
+
+    expect(chatSurface.props?.activeConversationId).toBe('conv-b');
+    expect(chatSurface.props?.messages).toEqual([otherMessage]);
+    expect(screen.queryByTestId('chat-run-error-card')).toBeNull();
+    expect(screen.queryByTestId('chat-upgrade-card')).toBeNull();
+    expect(streamViaDaemon).not.toHaveBeenCalled();
   });
 });
