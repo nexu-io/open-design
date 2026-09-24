@@ -7045,8 +7045,18 @@ export function ProjectView({
               lastRunEventId: undefined,
               strategyTaskPrefixLength: message.content.length,
               strategyTaskPrefixEventCount: message.events?.length ?? 0,
+              // The row now follows `reattachRunId`, so its logical task
+              // position is that Run's — spreading `prev` would leave the
+              // predecessor's index on it. Same exact-map rule as the live
+              // send path and the reattach hand-off: no daemon mapping, no
+              // position.
               ...(status.strategyTask?.taskExecutionId
-                ? { strategyTaskExecutionId: status.strategyTask.taskExecutionId }
+                ? {
+                  strategyTaskExecutionId: status.strategyTask.taskExecutionId,
+                  strategyTaskRunIndex: strategyTaskRunIndex(
+                    status.strategyTask, reattachRunId,
+                  ),
+                }
                 : {}),
             }),
             true,
