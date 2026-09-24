@@ -6767,6 +6767,7 @@
 .entry-top-right-account-pill {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 7px;
   /* The capsule holds the credits segment alone now — the avatar moved to the
      rail — so it no longer keeps the 3px right inset that used to hug the
@@ -6775,15 +6776,34 @@
      the vertical inset is 0 — a 24px credits segment plus the 1px borders
      already fits inside 28px, and any padding here would push the capsule
      taller than the chips beside it. */
-  /* Shared cluster row height — see .entry-deepseek-campaign-badge. */
-  min-height: 28px;
-  padding: 0 10px;
-  border: 1px solid var(--material-separator);
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--bg-elevated) 86%, transparent);
-  box-shadow: var(--shadow-xs);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  /* Design `.trigger` (docs/ui-previews/plan-panels/index.html). Literal
+     values rather than the cluster's material tokens: the capsule is the
+     design's own object and the standalone HTML is the pixel authority. Note
+     this makes it 2px taller than the GitHub chip beside it, which the
+     design's electron-panel.png draws matched — flagged in the PR. */
+  min-width: 62px;
+  min-height: 30px;
+  padding: 5px 13px;
+  border: 1px solid #d9d9d6;
+  border-radius: 30px;
+  background: #fafafa;
+  color: #666;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+/* Hover and expanded read the same: the capsule brightens and the mark goes
+   to full ink (design `.trigger:hover, .trigger[aria-expanded=true]`).
+   `:not(--upgrade)` is load-bearing: the free capsule paints its own green
+   CTA ground at a LOWER specificity than this pair, so without the exclusion
+   opening the panel would bleach the green pill white. */
+.entry-top-right-account-pill:not(.entry-top-right-account-pill--upgrade):hover,
+.entry-top-right-account-pill:not(.entry-top-right-account-pill--upgrade):has(
+    .entry-top-right-credits[aria-expanded='true']
+  ) {
+  background: #fff;
+  color: #202020;
 }
 /* Avatar-only trigger at the capsule's right end: a circle sized to the
    capsule's inner height — the name/email/plan all live in the hover menu. */
@@ -6814,22 +6834,27 @@
   align-items: center;
   gap: 5px;
   /* Chrome-free segment inside the shared capsule — the wrapper
-     (.entry-top-right-account-pill) owns the pill material. */
-  height: 24px;
+     (.entry-top-right-account-pill) owns the pill material, including its
+     30px design height. A fixed 24px here (plus the capsule's 5px insets and
+     1px border) forced the capsule to 36px instead. */
+  height: auto;
   padding: 0;
   border: 0;
   border-radius: var(--radius-pill);
   background: transparent;
   box-shadow: none;
   font-family: inherit;
-  font-size: var(--font-size-13);
+  font-size: 13px;
   font-weight: 600;
   line-height: 1;
-  color: var(--text-strong);
+  /* The capsule owns the ink (design `.triggerLogo` draws the mark at
+     brightness(0)/opacity .65, i.e. #666 on #fafafa, and full ink on hover);
+     the segment and its wordmark follow it rather than a page token. */
+  color: inherit;
   white-space: nowrap;
 }
 .entry-top-right-credits svg {
-  color: var(--text-soft);
+  color: inherit;
 }
 /* No hover fill on the credits segment — the shared capsule stays calm;
    the pointer cursor alone signals clickability. Needs an explicit :hover
@@ -7150,6 +7175,13 @@
 }
 /* Plan + credits block under the identity header (upgrade CTA on the plan
    row, then remaining/bonus credit rows), mirroring the reference card. */
+/* Panel box, 1:1 with the design (docs/ui-previews/plan-panels/index.html):
+   ink ground, 16px radius, 16px padding, and ONE typographic system —
+   12px / 500 / 18px — that the allowance row, the wallet row and the quota
+   block all inherit. The design's own rule: 「钱包余额与额度文字统一字号、字重、
+   颜色」. Row spacing is explicit per row rather than a column gap, because the
+   design spaces the head (20px), the track (6px) and the wallet separator
+   (14px + 12px) differently. */
 .entry-nav-rail__menu-credits {
   display: flex;
   flex-direction: column;
@@ -7159,6 +7191,7 @@
   /* Inverted card: ink-black ground, white-tier text (颜色规范 #202020 /
      #fafafa 反白文字). */
   background: #202020;
+  color: #fafafa;
   margin-bottom: 6px;
 }
 .entry-nav-rail__menu-credits-head {

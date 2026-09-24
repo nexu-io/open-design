@@ -1,0 +1,74 @@
+/* Designer v2, with the redundant tier label removed by product on Sep 23.
+   Scope every override to personal cards; team cards retain the existing UI. */
+.panel:global(.entry-top-right-credits-panel) {
+  width: min(312px, calc(100vw - 32px));
+}
+.card:global(.entry-nav-rail__menu-credits) {
+  display: block;
+  gap: normal;
+  padding: 16px;
+  border-radius: 16px;
+  margin-bottom: 0;
+  background: #202020;
+  color: #fafafa;
+  box-shadow: 0 16px 30px #00000020;
+  font-family:
+    Inter,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    'PingFang SC',
+    sans-serif;
+  font-synthesis: none;
+  -webkit-font-smoothing: auto;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+}
+.card :global(.entry-nav-rail__menu-credits-head) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0;
+  margin-bottom: 20px;
+  min-height: 24px;
+}
+.card :global(.entry-nav-rail__menu-credits-plan) {
+  display: flex;
+  align-items: center;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+}
+.card :global(.plan-wordmark) {
+  display: block;
+  height: 20px;
+  width: auto;
+  flex-shrink: 0;
+}
+.card :global(.entry-nav-rail__menu-credits-upgrade) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: normal;
+  height: auto;
+  min-height: 24px;
+  box-sizing: border-box;
+  padding: 3px 10px;
+  border: 0;
+  border-radius: 100px;
+  background: #fafafa;
+  color: #202020;
+  font: inherit;
+  white-space: nowrap;
+}
+.card :global(.entry-nav-rail__menu-credits-upgrade):hover:not(:disabled),
+.card :global(.entry-nav-rail__menu-credits-upgrade):focus-visible {
+  background: #dfffd5;
+  color: #202020;
+}
+.card :global(.entry-nav-rail__menu-credits-upgrade):focus-visible {
+  outline: 2px solid #83df62;
+  outline-offset: 4px;
+}

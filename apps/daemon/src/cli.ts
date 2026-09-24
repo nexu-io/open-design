@@ -259,6 +259,7 @@ const PROJECT_RESOURCE_STRING_FLAGS = new Set([
 ]);
 const PROJECT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'follow', 'thumbnail']);
 const WORKSPACE_STRING_FLAGS = new Set([
+  'model',
   'daemon-url', 'workspace', 'view', 'visibility', 'owner', 'project',
   'member', 'role', 'email', 'app-user', 'lifecycle-state',
   'member-status', 'can-share-projects', 'can-write-synced-files',
@@ -7506,7 +7507,7 @@ async function runWorkspace(args) {
   od workspace projects batch-delete --workspace <id> --member <id> --project <id> [--project <id> ...] [--json]
   od workspace projects batch-move --workspace <id> --member <id> --visibility personal|team --project <id> [--project <id> ...] [--json]
   od workspace members list --workspace <id> --member <id> [--json]
-  od workspace billing [--workspace-type personal|team --workspace <id>] [--json]
+  od workspace billing [--workspace-type personal|team --workspace <id>] [--model <id>] [--json]
 
 Common options:
   --daemon-url <url>   OpenDesign daemon HTTP base.
@@ -7586,16 +7587,17 @@ Common options:
     if (
       (workspaceType && workspaceType !== 'personal' && workspaceType !== 'team') ||
       (workspaceType && !workspaceId) ||
-      (!workspaceType && workspaceId)
+      (!workspaceType && workspaceId) ||
+      (flags.model && !workspaceId)
     ) {
       console.error(
-        'Usage: od workspace billing [--workspace-type personal|team --workspace <id>] [--json]',
+        'Usage: od workspace billing [--workspace-type personal|team --workspace <id>] [--model <id>] [--json]',
       );
       process.exit(2);
     }
     const billingPath =
       workspaceType
-        ? `/api/workspace/billing?scope=workspace&workspaceId=${encodeURIComponent(workspaceId)}`
+        ? `/api/workspace/billing?scope=workspace&workspaceId=${encodeURIComponent(workspaceId)}&includePreflight=1${typeof flags.model === 'string' ? `&modelId=${encodeURIComponent(flags.model)}` : ''}`
         : '/api/workspace/billing?scope=account';
     const data = await workspaceContextRequest(billingPath);
     if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
@@ -7614,6 +7616,12 @@ Common options:
       console.log(`Account credits:\t${summary.totalAvailableCredits}`);
       console.log(`  Account plan credits:\t${summary.subscriptionCredits}`);
       console.log(`  Account top-up credits:\t${summary.rechargeCredits}`);
+    }
+    if (data?.preflight) {
+      console.log(`Expected funding: ${data.preflight.funding} (gateway decides final admission)`);
+      for (const window of data.preflight.codingPlan.windows) {
+        console.log(`Coding Plan ${window.durationSeconds}s: ${window.remainingCredits}/${window.limitCredits} credits remaining; resets ${window.resetsAt ?? 'not started yet'}`);
+      }
     }
     const balanceUsd = workspaceBalance?.balanceUsd ?? summary?.balanceUsd;
     if (balanceUsd != null) {

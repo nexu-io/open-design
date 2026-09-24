@@ -17,7 +17,7 @@ import { I18nProvider } from '../../src/i18n';
 
 const originalFetch = globalThis.fetch;
 
-function personalContext(planId: string): WorkspaceCollabContext {
+function personalContext(planId: string | null): WorkspaceCollabContext {
   return {
     workspaceId: 'ws-personal',
     workspaceType: 'personal',
@@ -46,7 +46,7 @@ function billing(membershipTier: string): WorkspaceBillingSummary {
   } as unknown as WorkspaceBillingSummary;
 }
 
-function renderRail(tier: string, locale: 'en' | 'zh-CN' = 'en') {
+function renderRail(tier: string, locale: 'en' | 'zh-CN' = 'en', contextPlanId: string | null = tier) {
   return render(
     <I18nProvider initial={locale}>
       <EntryNavRail
@@ -54,8 +54,9 @@ function renderRail(tier: string, locale: 'en' | 'zh-CN' = 'en') {
         onViewChange={() => {}}
         onNewProject={() => {}}
         open
-        context={personalContext(tier)}
+        context={personalContext(contextPlanId)}
         billing={billing(tier)}
+        billingResponse={null}
         balanceUsd="247.51"
       />
     </I18nProvider>,
@@ -69,14 +70,18 @@ function planHead() {
   const head = document.querySelector('.entry-nav-rail__menu-credits-plan');
   if (!head) throw new Error('billing card plan head is not rendered');
   return {
+    el: head,
     text: head.textContent?.trim() ?? '',
     wordmarkWidth: head.querySelector('.plan-wordmark')?.getAttribute('viewBox') ?? null,
+    wordmarkHeight: head.querySelector('.plan-wordmark')?.getAttribute('height') ?? null,
   };
 }
 
 beforeEach(() => {
   resetWorkspaceDirectoryCache();
-  globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({}), { status: 200 })) as typeof fetch;
+  globalThis.fetch = vi.fn(
+    async () => new Response(JSON.stringify({}), { status: 200 }),
+  ) as typeof fetch;
 });
 
 afterEach(() => {
@@ -86,33 +91,31 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('billing card plan label on the personal ladder (OPEND-3119)', () => {
-  it('names a Max subscription Max, never Pro', () => {
-    renderRail('max');
+describe('personal billing card uses only its plan wordmark', () => {
+  it.each(['free', 'go', 'plus', 'pro', 'max'])('omits the redundant %s tier name', (tier) => {
+    renderRail(tier, 'zh-CN');
     const head = planHead();
-    expect(head.text).not.toMatch(/pro/i);
-    expect(head.text).toBe('Max');
-    // The wordmark beside it is the max glyph (114-wide viewBox), so label and
-    // badge agree.
-    expect(head.wordmarkWidth).toBe('0 0 114 49');
+    expect(head.text).toBe('');
+    expect(head.el.getAttribute('aria-label')).toBe(tier);
+    expect(head.wordmarkHeight).toBe('20');
   });
+});
 
-  it('names a Plus subscription Plus, never Pro', () => {
-    renderRail('plus');
-    const head = planHead();
-    expect(head.text).not.toMatch(/pro/i);
-    expect(head.text).toBe('Plus');
-  });
-
-  it('keeps the Pro label for a Pro subscription', () => {
-    renderRail('pro');
-    expect(planHead().text).toBe('Pro');
-  });
-
-  it('does not fall back to 专业版 for Max in zh-CN', () => {
-    renderRail('max', 'zh-CN');
-    const head = planHead();
-    expect(head.text).not.toContain('专业版');
-    expect(head.text).toBe('Max');
+// The real workspace directory can omit planId while billing already identifies
+// the paid tier. Skeletons must agree with the wordmark in that state.
+describe('personal card loading with directory-only workspace context', () => {
+  it.each([
+    ['free', 0],
+    ['go', 2],
+    ['plus', 1],
+    ['pro', 1],
+    ['max', 1],
+  ] as const)('keeps the %s skeleton aligned with its billing tier', (tier, blocks) => {
+    globalThis.fetch = vi.fn(() => new Promise<Response>(() => {}));
+    renderRail(tier, 'zh-CN', null);
+    expect(planHead().el.getAttribute('aria-label')).toBe(tier);
+    expect(screen.queryAllByTestId('coding-plan-skeleton-block')).toHaveLength(blocks);
+    expect(screen.getByTestId('coding-plan-wallet-skeleton')).toBeTruthy();
+    expect(screen.queryByTestId('entry-nav-credits-row')).toBeNull();
   });
 });

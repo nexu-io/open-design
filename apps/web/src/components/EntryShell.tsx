@@ -120,7 +120,6 @@ import {
 } from '../runtime/amr-balance-branch';
 import { installDeepSeekHarnessCompanion } from '../providers/agent-companion';
 import {
-  amrBalanceGateFromMemory,
   amrBalanceGateScopeForWorkspaceContext,
   checkAmrBalanceGate,
   retryUnavailableAmrBalanceGate,
@@ -246,6 +245,7 @@ import {
 } from './entryRailBridge';
 import { resolveByokModelPreference } from './byok/validation';
 import onboardingSourceStyles from './OnboardingModelSource.module.css';
+import onboardingWelcomeStyles from './OnboardingWelcome.module.css';
 
 // Persist the entry nav-rail open/collapsed state so it survives both a
 // home -> project -> home navigation (EntryShell unmounts on the project
@@ -1439,52 +1439,6 @@ export function EntryShell({
           config.agentModels?.amr,
         )
       : undefined;
-    // OPEND-3300 / 3309: a wallet this shell already knows is empty is
-    // answered HERE, on the click tick, before the project frame opens — the
-    // dialog lands on Home, no frame, no project, no request. The reading is
-    // the one the rail's 额度 pill shows for the exact scope the send would
-    // run in. One background confirmation re-reads the wallet; only a
-    // non-blocking answer (a recharge the projection had not seen) moves the
-    // send forward, and a dismiss in the meantime wins.
-    if (isAmrSend) {
-      const memoryWorkspaceState = workspaceContextStateRef.current;
-      const memoryWorkspaceContext = memoryWorkspaceState.failure === 'unsupported'
-        ? null
-        : workspaceResourceReadContext(memoryWorkspaceState);
-      const memoryVerdict = amrBalanceGateFromMemory(
-        workspaceBillingBalanceUsd(workspaceBillingResponse, memoryWorkspaceContext),
-        { updatedAt: workspaceBillingResponse?.workspaceBalance?.updatedAt ?? null },
-      );
-      if (memoryVerdict) {
-        const memoryScope = amrBalanceGateScopeForWorkspaceContext(memoryWorkspaceContext);
-        const blockedBranch = resolveAmrBalanceBranch({
-          context: memoryWorkspaceContext,
-          billing: workspaceBilling,
-        });
-        const decision = await new Promise<'retry' | 'dismiss'>((resolve) => {
-          onAmrBalanceGateBlockChange({
-            reason: memoryVerdict.reason,
-            dialog: amrBalanceBlockedDialog(blockedBranch),
-            upgradeIntent: amrBalanceDialogUpgradeIntent(blockedBranch),
-            snapshot: memoryVerdict.snapshot,
-            resolve,
-          });
-          void checkAmrBalanceGate(memoryScope, amrModelId)
-            .then((confirmed) => {
-              // Still empty, or unreadable: the in-memory answer stands and
-              // the dialog stays. Anything else proved the projection stale.
-              if (confirmed.kind !== 'hard' && confirmed.kind !== 'unavailable') {
-                resolve('retry');
-              }
-            })
-            .catch(() => undefined);
-        });
-        onAmrBalanceGateBlockChange(null);
-        if (decision === 'dismiss') return 'blocked' as const;
-        // 'retry': the wallet proved fundable (recharge landed, or the
-        // confirmation read positive). Fall through to the ordinary path.
-      }
-    }
     // OPEND-2614: the project frame opens on the click tick for EVERY agent,
     // before any admission check. Everything below runs behind that frame —
     // this shell is unmounted the moment the hand-off navigates, so nothing
@@ -1544,6 +1498,8 @@ export function EntryShell({
                   ? 'pricing'
                   : amrBalanceDialogUpgradeIntent(blockedBranch),
               snapshot: blocked.snapshot,
+              modelId: amrModelId,
+              fundingScope: gateScope,
               resolve,
             });
           });
@@ -1870,6 +1826,7 @@ export function EntryShell({
           ) : null}
           context={railWorkspaceContext}
           billing={workspaceBilling}
+          billingResponse={workspaceBillingResponse}
           balanceUsd={workspaceBalanceUsd}
           onOpenSettings={onOpenSettings}
           onInvite={() => changeView('members')}
@@ -3687,43 +3644,59 @@ function OnboardingView({
           <div className="onboarding-cloud__center">
             <h1 className="onboarding-cloud__title">{t('settings.onboardingCloudTitle')}</h1>
             <p className="onboarding-cloud__body">{t('settings.onboardingCloudBody')}</p>
-            <button
-              type="button"
-              className="onboarding-cloud__primary"
-              onClick={() => {
-                if (amrStatusResolving) return;
-                if (amrSignedIn) {
-                  recordAmrEntry(analytics.track, 'onboarding_amr_card', new Date(), {
-                    metricsConsent: config.telemetry?.metrics === true,
-                  });
-                  recordAmrEntry(
-                    analytics.track,
-                    'onboarding_amr_sign_in_continue',
-                    new Date(),
-                    {
+            <div className={onboardingWelcomeStyles.signInAction}>
+              {!amrSignedIn && !amrStatusResolving && !cloudBusy ? (
+                <span className={onboardingWelcomeStyles.creditCorner}>
+                  <span
+                    className={`${onboardingWelcomeStyles.credits} od-tooltip`}
+                    data-tooltip={t('settings.onboardingFreeCreditsHint')}
+                    aria-label={t('settings.onboardingFreeCreditsHint')}
+                    tabIndex={0}
+                  >
+                    <span className={onboardingWelcomeStyles.creditLabel}>
+                      {t('settings.onboardingFreeCredits')}
+                    </span>
+                  </span>
+                </span>
+              ) : null}
+              <button
+                type="button"
+                className="onboarding-cloud__primary"
+                onClick={() => {
+                  if (amrStatusResolving) return;
+                  if (amrSignedIn) {
+                    recordAmrEntry(analytics.track, 'onboarding_amr_card', new Date(), {
                       metricsConsent: config.telemetry?.metrics === true,
-                      reuseExistingFrom: ['onboarding_amr_card'],
-                    },
-                  );
-                  continueAfterCloudSignIn();
-                  return;
-                }
-                void handleCloudSignIn();
-              }}
-              disabled={cloudBusy || amrLoginCancelPending || amrStatusResolving}
-              aria-busy={cloudBusy || amrStatusResolving ? true : undefined}
-            >
-              <Icon name="log-in" size={17} />
-              <span>
-                {cloudBusy
-                  ? t('settings.amrSigningIn')
-                  : amrStatusResolving
-                    ? t('common.loading')
-                    : amrSignedIn
-                      ? t('settings.onboardingCloudContinue')
-                      : t('settings.onboardingCloudSignIn')}
-              </span>
-            </button>
+                    });
+                    recordAmrEntry(
+                      analytics.track,
+                      'onboarding_amr_sign_in_continue',
+                      new Date(),
+                      {
+                        metricsConsent: config.telemetry?.metrics === true,
+                        reuseExistingFrom: ['onboarding_amr_card'],
+                      },
+                    );
+                    continueAfterCloudSignIn();
+                    return;
+                  }
+                  void handleCloudSignIn();
+                }}
+                disabled={cloudBusy || amrLoginCancelPending || amrStatusResolving}
+                aria-busy={cloudBusy || amrStatusResolving ? true : undefined}
+              >
+                <Icon name="log-in" size={17} />
+                <span>
+                  {cloudBusy
+                    ? t('settings.amrSigningIn')
+                    : amrStatusResolving
+                      ? t('common.loading')
+                      : amrSignedIn
+                        ? t('settings.onboardingCloudContinue')
+                        : t('settings.onboardingCloudSignIn')}
+                </span>
+              </button>
+            </div>
             {amrLoginError ? (
               <span className="onboarding-cloud__error" role="alert">
                 {amrLoginError}
@@ -3770,39 +3743,41 @@ function OnboardingView({
                 {t('settings.amrCancelSignIn')}
               </button>
             ) : (
-              <div className="onboarding-cloud__alts">
-                <Button
-                  variant="subtle"
-                  className="onboarding-cloud__alt-btn"
-                  onClick={() => {
-                    emitOnboardingClick('local_coding_agent', 'select_runtime', {
-                      runtime_type: 'local_cli',
-                    });
-                    setRuntime('local');
-                    setRuntimeSetupEntry('cloud');
-                    void scanCliAgents({ preferExisting: true });
-                    setStep(2);
-                  }}
-                >
-                  <Icon name="robot" size={16} />
-                  {t('settings.onboardingLocalTitle')}
-                </Button>
-                <span className="onboarding-cloud__alts-or">
-                  {t('settings.onboardingCloudOr')}
-                </span>
-                <Button
-                  variant="subtle"
-                  className="onboarding-cloud__alt-btn"
-                  onClick={() => {
-                    emitOnboardingClick('byok', 'select_runtime', { runtime_type: 'byok' });
-                    setRuntime('byok');
-                    setRuntimeSetupEntry('cloud');
-                    setStep(2);
-                  }}
-                >
-                  <Icon name="key" size={16} />
-                  {t('settings.onboardingByokTitle')}
-                </Button>
+              <div className={onboardingWelcomeStyles.alternatives}>
+                <div className={onboardingWelcomeStyles.divider}>
+                  {t('settings.onboardingOwnAi')}
+                </div>
+                <div className={`onboarding-cloud__alts ${onboardingWelcomeStyles.options}`}>
+                  <Button
+                    variant="subtle"
+                    className="onboarding-cloud__alt-btn"
+                    onClick={() => {
+                      emitOnboardingClick('local_coding_agent', 'select_runtime', {
+                        runtime_type: 'local_cli',
+                      });
+                      setRuntime('local');
+                      setRuntimeSetupEntry('cloud');
+                      void scanCliAgents({ preferExisting: true });
+                      setStep(2);
+                    }}
+                  >
+                    <Icon name="robot" size={16} />
+                    {t('settings.onboardingLocalAi')}
+                  </Button>
+                  <Button
+                    variant="subtle"
+                    className="onboarding-cloud__alt-btn"
+                    onClick={() => {
+                      emitOnboardingClick('byok', 'select_runtime', { runtime_type: 'byok' });
+                      setRuntime('byok');
+                      setRuntimeSetupEntry('cloud');
+                      setStep(2);
+                    }}
+                  >
+                    <Icon name="key" size={16} />
+                    {t('settings.onboardingApiKey')}
+                  </Button>
+                </div>
               </div>
             )}
           </div>

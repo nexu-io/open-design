@@ -975,6 +975,7 @@ import {
 } from './collab/workspace-billing-runtime.js';
 import {
   AUTHORITATIVE_PROJECT_PRESENCE_CAPABILITY,
+  CODING_PLAN_USAGE_EVENTS_CAPABILITY,
   startHubEventsSubscriber,
   WORKSPACE_DIRECTORY_EVENTS_CAPABILITY,
 } from './collab/hub-events-subscriber.js';
@@ -3822,6 +3823,7 @@ export async function startServer({
   const fetchFreshBackgroundWorkspaceDirectory =
     workspaceDirectoryAuthority.backgroundFresh;
   let workspaceHubSubscriptions: WorkspaceHubSubscriptionManager | null = null;
+  const quotaHealthyConnections = new Set<string>();
   const verifyExplicitWorkspaceRequestContext = async (input: {
     req: any;
     requireTeam?: boolean;
@@ -4098,6 +4100,7 @@ export async function startServer({
     ...configuredAmrEnv(),
   });
   const resetWorkspaceIdentityCaches = (): void => {
+    quotaHealthyConnections.clear();
     workspaceDirectoryAuthority.resetIdentity();
     workspaceExactAuthorityCache.resetIdentity();
     workspaceExactContextCache.resetIdentity();
@@ -5781,6 +5784,9 @@ export async function startServer({
     onWorkspaceSwitched: (workspaceId) => warmWorkspaceDigestFaces(workspaceId),
     fetchBilling: accountBillingSummary.read,
     billingRuntime: workspaceBillingRuntime,
+    quotaRealtimeHealthy: (workspaceId) => quotaHealthyConnections.has(
+      directoryConnectionKey(workspaceId, currentWorkspaceDirectoryIdentity()),
+    ),
     fetchBillingCatalog: (workspaceId) => fetchVelaBillingCatalog(workspaceId, {
       configuredEnv: configuredAmrEnv(),
     }),
@@ -5983,6 +5989,18 @@ export async function startServer({
       readVelaControlApiContext,
       configuredAmrEnv(),
     );
+  const setQuotaRealtimeHealthy = (workspaceId: string, identityKey: string, healthy: boolean) => {
+    const key = directoryConnectionKey(workspaceId, identityKey);
+    const previous = quotaHealthyConnections.has(key);
+    if (healthy) quotaHealthyConnections.add(key);
+    else quotaHealthyConnections.delete(key);
+    if (previous !== healthy && identityKey === currentWorkspaceDirectoryIdentity()) {
+      emitWorkspaceEvent(workspaceId, {
+        type: 'billing-changed',
+        at: Date.now(),
+      });
+    }
+  };
   const syncWorkspaceDirectoryRealtimeHealth = (): void => {
     const currentIdentity = currentWorkspaceDirectoryIdentity();
     workspaceDirectoryAuthority.setRealtimeHealthy(
@@ -6062,6 +6080,7 @@ export async function startServer({
           directoryConnectionIdentities.delete(subscribedWorkspaceId);
         }
         if (identityKey) {
+          setQuotaRealtimeHealthy(subscribedWorkspaceId, identityKey, false);
           directoryHealthyConnections.delete(
             directoryConnectionKey(subscribedWorkspaceId, identityKey),
           );
@@ -6096,6 +6115,11 @@ export async function startServer({
       const connectionKey = directoryConnectionKey(
         exactWorkspaceId,
         exactIdentityKey,
+      );
+      setQuotaRealtimeHealthy(
+        exactWorkspaceId,
+        exactIdentityKey,
+        healthy && capabilities.includes(CODING_PLAN_USAGE_EVENTS_CAPABILITY),
       );
       if (
         healthy
@@ -6435,6 +6459,16 @@ export async function startServer({
           // billing member projection even when no billing event accompanies
           // the roster mutation.
           workspaceBillingRuntime.reconnect(subscribedWorkspaceId);
+          break;
+        case 'coding-plan-usage-changed':
+          if (!event.workspaceId || !event.workspaceMemberId || !event.eventId) break;
+          emitWorkspaceEvent(event.workspaceId, {
+            type: 'coding-plan-usage-changed',
+            workspaceId: event.workspaceId,
+            workspaceMemberId: event.workspaceMemberId,
+            eventId: event.eventId,
+            at: Date.now(),
+          });
           break;
         case 'billing-changed':
           accountBillingSummary.invalidate(accountBillingInvalidationToken(event));

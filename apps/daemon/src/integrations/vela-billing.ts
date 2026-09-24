@@ -1,4 +1,5 @@
 import type {
+  WorkspaceBillingPreflight,
   WorkspaceBillingCatalog,
   WorkspaceBillingRevisionClock,
   WorkspaceBillingSnapshot,
@@ -22,11 +23,69 @@ import { runVelaCommand } from './vela-command.js';
 /** Run `vela billing <args>` and resolve its stdout. */
 export type RunVelaBilling = (args: string[]) => Promise<string>;
 
+/** Wall-clock budget for `vela billing preflight`. A hung CLI must not pin
+ * recovery polling or the workspace billing route. */
+export const BILLING_PREFLIGHT_TIMEOUT_MS = 60_000;
+
 export interface FetchVelaBillingOptions {
   /** Injectable child-process runner; defaults to spawning the vela binary. */
   run?: RunVelaBilling;
   /** Settings-selected AMR environment applied to the spawned Vela command. */
   configuredEnv?: Record<string, string>;
+}
+
+/** Missing capability is distinct from a successful empty pool. */
+export async function fetchVelaBillingPreflight(
+  workspaceId: string,
+  modelId: string | null,
+  options: FetchVelaBillingOptions = {},
+): Promise<WorkspaceBillingPreflight | null> {
+  const args = ['preflight', '--workspace-id', workspaceId, '--format', 'json'];
+  if (modelId) args.push('--model', modelId);
+  let stdout: string;
+  try {
+    stdout = await resolveVelaBillingRunner(options)(args);
+  } catch (error) {
+    if (isVelaWorkspaceAuthorizationError(error)) throw error;
+    // Old binaries, old servers and transient failures carry no quota evidence.
+    return null;
+  }
+  return parseBillingPreflight(stdout, workspaceId, modelId);
+}
+
+export function parseBillingPreflight(
+  stdout: string,
+  workspaceId: string,
+  modelId: string | null,
+): WorkspaceBillingPreflight | null {
+  try {
+    const raw = JSON.parse(stdout) as WorkspaceBillingPreflight;
+    const plan = raw.codingPlan;
+    const date = (value: unknown) => typeof value === 'string' && Number.isFinite(Date.parse(value));
+    const credits = (value: unknown) => typeof value === 'string' && /^\d+$/.test(value);
+    if (
+      raw.schemaVersion !== 1 || raw.workspaceId !== workspaceId ||
+      !raw.workspaceMemberId?.trim() || raw.modelId !== modelId || !date(raw.generatedAt) ||
+      typeof raw.balanceUsd !== 'string' || !/^-?\d+(\.\d+)?$/.test(raw.balanceUsd) ||
+      !['coding_plan', 'wallet', 'gateway'].includes(raw.funding) ||
+      (raw.modelCovered !== null && typeof raw.modelCovered !== 'boolean') ||
+      !plan || plan.workspaceId !== workspaceId || !date(plan.generatedAt) ||
+      typeof plan.eligible !== 'boolean' ||
+      (plan.tier !== null && !['go', 'plus', 'pro', 'max'].includes(plan.tier)) ||
+      !Array.isArray(plan.windows) ||
+      (raw.funding === 'coding_plan' && plan.windows.length === 0) ||
+      !plan.windows.every((w) =>
+          typeof w.policyId === 'string' && w.policyId.length > 0 &&
+          Number.isSafeInteger(w.durationSeconds) && w.durationSeconds > 0 &&
+          ['activity_triggered', 'anchored_recurring'].includes(w.resetMode) &&
+          credits(w.usedCredits) && credits(w.remainingCredits) && credits(w.limitCredits) &&
+          BigInt(w.limitCredits) > 0n && BigInt(w.remainingCredits) <= BigInt(w.limitCredits) &&
+          (w.windowStart === null || date(w.windowStart)) && (w.resetsAt === null || date(w.resetsAt)))
+    ) return null;
+    return raw;
+  } catch {
+    return null;
+  }
 }
 
 export class VelaWorkspaceBillingSnapshotUnsupportedError extends Error {
@@ -265,6 +324,7 @@ export function parseBillingSummary(stdout: string): WorkspaceBillingSummary | n
     return null;
   }
   const balances = (raw.balances ?? {}) as Record<string, unknown>;
+  const creditsPerUsd = positiveRate(raw.creditsPerUsd);
   return {
     workspaceId: null,
     membershipTier: str(raw.membershipTier),
@@ -272,6 +332,7 @@ export function parseBillingSummary(stdout: string): WorkspaceBillingSummary | n
     subscriptionCredits: credits(balances.subscriptionCredits),
     rechargeCredits: credits(balances.rechargeCredits),
     balanceUsd: str(raw.balanceUsd) || '0',
+    ...(creditsPerUsd === null ? {} : { creditsPerUsd }),
     subscriptionStatus: str(raw.subscriptionStatus),
     availableActions: Array.isArray(raw.availableActions)
       ? raw.availableActions.filter((a): a is string => typeof a === 'string')
@@ -402,6 +463,18 @@ function parseWorkspaceBillingRevisionClock(
   return { epoch, counter };
 }
 
+/**
+ * An exchange rate is only usable when it is a positive finite number. B sends
+ * money-adjacent fields as numbers or as decimal strings, so both are read, but
+ * a zero / negative / unparseable rate is reported as absent rather than as a
+ * bad divisor — a client that divides by it would print wrong money.
+ */
+function positiveRate(value: unknown): number | null {
+  if (typeof value !== 'number' && typeof value !== 'string') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
 /** B sends credit buckets as decimal strings; a missing/garbage bucket is 0. */
 function credits(value: unknown): number {
   const parsed = Number(value ?? 0);
@@ -521,6 +594,7 @@ const defaultRunVelaBilling = async (
         VELA_INVOCATION_SOURCE: 'open-design',
       },
       maxBuffer: 4 * 1024 * 1024,
+      ...(args[0] === 'preflight' ? { timeoutMs: BILLING_PREFLIGHT_TIMEOUT_MS } : {}),
       onStderr: (value) => {
         stderr = value;
       },

@@ -886,6 +886,17 @@ export interface WorkspaceBillingSummary {
   /** Available balance in USD, as reported by vela (kept as a string to avoid
    *  float drift on money values). */
   balanceUsd: string;
+  /**
+   * Credits per US dollar, as Vela computes it. The Coding Plan quota panel is
+   * the only surface that turns a window's credit count into money, and this is
+   * the rate it must divide by — a client-side copy of a server-owned exchange
+   * rate goes wrong silently the day the backend changes it.
+   *
+   * Optional: absent when the installed Vela CLI / backend does not report it,
+   * or reports a rate that is not a positive number. Callers fall back to their
+   * own documented default rather than rendering nothing.
+   */
+  creditsPerUsd?: number;
   /** Subscription status, e.g. `active` / `canceled`. */
   subscriptionStatus: string;
   /** Actions the caller may take, e.g. `subscription_checkout` / `billing_portal`. */
@@ -899,6 +910,12 @@ export interface WorkspaceBillingSummary {
 }
 
 export interface WorkspaceBillingResponse {
+  /** Advisory funding/usage read. Absent on older CLIs; never infer exhausted. */
+  preflight?: WorkspaceBillingPreflight | null;
+  /** Exact-workspace upstream supports quota events and its producer is healthy.
+   * Wallet runtime freshness alone does not cover Coding Plan consumption.
+   * Missing/false requires the client to keep quota fallback reads. */
+  quotaRealtime?: { healthy: boolean };
   /** Account-scoped metadata; independently nullable from workspace money. */
   summary: WorkspaceBillingSummary | null;
   /**
@@ -922,6 +939,34 @@ export interface WorkspaceBillingResponse {
    * observed for the exact workspace/member in this response.
    */
   authoritativeWorkspaceRead?: WorkspaceBillingAuthoritativeRead;
+}
+
+export interface WorkspaceBillingPreflight {
+  schemaVersion: 1;
+  workspaceId: string;
+  workspaceMemberId: string;
+  modelId: string | null;
+  generatedAt: string;
+  balanceUsd: string;
+  modelCovered: boolean | null;
+  /** Link still checks model access, quotas, free models and auto recharge. */
+  funding: 'coding_plan' | 'wallet' | 'gateway';
+  codingPlan: {
+    workspaceId: string;
+    generatedAt: string;
+    eligible: boolean;
+    tier: 'go' | 'plus' | 'pro' | 'max' | null;
+    windows: Array<{
+      policyId: string;
+      durationSeconds: number;
+      resetMode: 'activity_triggered' | 'anchored_recurring';
+      usedCredits: string;
+      limitCredits: string;
+      remainingCredits: string;
+      windowStart: string | null;
+      resetsAt: string | null;
+    }>;
+  };
 }
 
 export type WorkspaceTeamBillingPlanId = 'team_plus' | 'team_pro' | 'team_max';
