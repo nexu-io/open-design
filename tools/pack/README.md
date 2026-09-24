@@ -16,9 +16,10 @@ Local packaging control plane for Open Design.
 - `tools-pack mac cleanup`
 
 Build artifacts are namespace-scoped under `.tmp/tools-pack/out/mac/namespaces/<namespace>/`.
-Public release bundles keep channel-distinct identities: `Open Design.app`, `Open Design Beta.app`,
-`Open Design Prerelease.app`, or `Open Design Preview.app`. Local `tools-pack install` adds the developer
-namespace so installs can coexist without affecting runtime data/log/cache paths.
+Public release bundles keep channel-distinct display names: `OpenDesign`, `OpenDesign Beta`,
+`OpenDesign Prerelease`, or `OpenDesign Preview`. Their on-disk app-bundle and executable names retain
+the existing `Open Design` spelling for upgrade and data compatibility. Local `tools-pack install` adds
+the developer namespace so installs can coexist without affecting runtime data/log/cache paths.
 
 Packaged runtime state is namespace-scoped under `.tmp/tools-pack/runtime/mac/namespaces/<namespace>/`:
 
