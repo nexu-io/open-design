@@ -26,6 +26,7 @@ import { resolve, dirname, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type {
   OpenDesignLandingDeckInputs,
+  ImageryConfig,
   Slide,
   CoverSlide,
   SectionSlide,
@@ -35,7 +36,7 @@ import type {
   CTASlide,
   EndSlide,
   MixedText,
-} from '../schema';
+} from '../schema.js';
 
 const SKILL_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SISTER_STYLES = resolve(SKILL_ROOT, '..', 'open-design-landing', 'styles.css');
@@ -62,9 +63,11 @@ function ext(href: string): string {
 
 const ARROW_OUT = `<svg viewBox='0 0 24 24'><path d='M5 19L19 5M19 5H8M19 5v11'/></svg>`;
 
-function imgFor(slot: string | undefined, assets: string): string {
+function imgFor(slot: string | undefined, imagery: ImageryConfig): string {
   if (!slot) return '';
-  return `<img src='${assets}${slot}.png' alt='' />`;
+  const assets = imagery.assets_path.replace(/\/?$/, '/');
+  const extension = imagery.strategy === 'placeholder' ? 'svg' : 'png';
+  return `<img src='${assets}${slot}.${extension}' alt='' />`;
 }
 
 /* ------------------------------------------------------------------ *
@@ -657,7 +660,7 @@ function footStrip(idx: number, total: number, brand: OpenDesignLandingDeckInput
 </div>`;
 }
 
-function renderCover(s: CoverSlide, assets: string): string {
+function renderCover(s: CoverSlide, imagery: ImageryConfig): string {
   return `<div class='slide-inner'>
   <div class='copy'>
     <span class='eyebrow'>${s.eyebrow}</span>
@@ -671,7 +674,7 @@ function renderCover(s: CoverSlide, assets: string): string {
     <span class='corner tr'></span>
     <span class='corner bl'></span>
     <span class='corner br'></span>
-    ${imgFor(s.image_slot, assets)}
+    ${imgFor(s.image_slot, imagery)}
   </div>
 </div>`;
 }
@@ -684,7 +687,7 @@ function renderSection(s: SectionSlide): string {
 </div>`;
 }
 
-function renderContent(s: ContentSlide, assets: string): string {
+function renderContent(s: ContentSlide, imagery: ImageryConfig): string {
   const layout = s.layout ?? 'left';
   const hasArt = !!s.image_slot;
   return `<div class='slide-inner'>
@@ -694,7 +697,7 @@ function renderContent(s: ContentSlide, assets: string): string {
     ${s.body ? `<p class='body'>${s.body}</p>` : ''}
     ${s.bullets && s.bullets.length ? `<ul>${s.bullets.map((b) => `<li>${b}</li>`).join('')}</ul>` : ''}
   </div>
-  ${hasArt ? `<div class='art'>${imgFor(s.image_slot, assets)}</div>` : ''}
+  ${hasArt ? `<div class='art'>${imgFor(s.image_slot, imagery)}</div>` : ''}
 </div>`;
 }
 
@@ -721,7 +724,7 @@ function renderStats(s: StatsSlide): string {
 </div>`;
 }
 
-function renderQuote(s: QuoteSlide, assets: string): string {
+function renderQuote(s: QuoteSlide, imagery: ImageryConfig): string {
   const hasArt = !!s.image_slot;
   return `<div class='slide-inner'>
   <div>
@@ -731,7 +734,7 @@ function renderQuote(s: QuoteSlide, assets: string): string {
       <p>${s.author.name}<span>${s.author.title}</span></p>
     </div>
   </div>
-  ${hasArt ? `<div class='art'>${imgFor(s.image_slot, assets)}</div>` : ''}
+  ${hasArt ? `<div class='art'>${imgFor(s.image_slot, imagery)}</div>` : ''}
 </div>`;
 }
 
@@ -764,13 +767,13 @@ function renderEnd(s: EndSlide): string {
 </div>`;
 }
 
-function renderSlideBody(s: Slide, assets: string): string {
+function renderSlideBody(s: Slide, imagery: ImageryConfig): string {
   switch (s.kind) {
-    case 'cover':   return renderCover(s, assets);
+    case 'cover':   return renderCover(s, imagery);
     case 'section': return renderSection(s);
-    case 'content': return renderContent(s, assets);
+    case 'content': return renderContent(s, imagery);
     case 'stats':   return renderStats(s);
-    case 'quote':   return renderQuote(s, assets);
+    case 'quote':   return renderQuote(s, imagery);
     case 'cta':     return renderCTA(s);
     case 'end':     return renderEnd(s);
   }
@@ -797,11 +800,11 @@ function renderSlide(
   i: number,
   total: number,
   inputs: OpenDesignLandingDeckInputs,
-  assets: string,
+  imagery: ImageryConfig,
 ): string {
   return `<section class='slide ${classFor(s)}' data-slide-kind='${s.kind}'>
 ${chromeStrip(inputs.brand, inputs.deck_title)}
-${renderSlideBody(s, assets)}
+${renderSlideBody(s, imagery)}
 ${footStrip(i, total, inputs.brand)}
 </section>`;
 }
@@ -991,10 +994,9 @@ const RUNTIME_SCRIPT = `
  * ------------------------------------------------------------------ */
 
 export function renderDeck(inputs: OpenDesignLandingDeckInputs, baseCss: string): string {
-  const assets = inputs.imagery.assets_path.replace(/\/?$/, '/');
   const total = inputs.slides.length;
   const slides = inputs.slides
-    .map((s, i) => renderSlide(s, i, total, inputs, assets))
+    .map((s, i) => renderSlide(s, i, total, inputs, inputs.imagery))
     .join('\n  ');
   return [
     `<!DOCTYPE html>`,
