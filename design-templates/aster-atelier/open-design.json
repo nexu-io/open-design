@@ -1,0 +1,93 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "aster-atelier",
+  "title": "Aster Atelier",
+  "title_i18n": {
+    "en": "Aster Atelier",
+    "zh-CN": "Aster · 星穹创意工作室",
+    "zh-TW": "Aster · 星穹創意工作室"
+  },
+  "version": "1.0.0",
+  "description": "An original cinematic studio website with classical artwork, cobalt skies and a procedural brass star instrument.",
+  "description_i18n": {
+    "en": "An original cinematic studio website with classical artwork, cobalt skies and a procedural brass star instrument.",
+    "zh-CN": "古典艺术、钴蓝天空与黄铜粒子星盘组成的原创工作室网站模板，带滚动叙事和完整交互。",
+    "zh-TW": "古典藝術、鈷藍天空與黃銅粒子星盤組成的原創工作室網站範本，附滾動敘事及完整互動。"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Aster Atelier template contributors"
+  },
+  "tags": [
+    "community",
+    "prototype",
+    "web",
+    "desktop",
+    "responsive",
+    "studio",
+    "cinematic",
+    "editorial",
+    "art",
+    "scroll"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "surface": "web",
+    "platform": "desktop",
+    "scenario": "design",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html",
+      "motion": "scroll"
+    },
+    "inputs": [
+      {
+        "name": "brand",
+        "label": "Brand name",
+        "type": "string",
+        "required": false,
+        "placeholder": "Aster Atelier"
+      }
+    ],
+    "useCase": {
+      "query": {
+        "en": "Create a cinematic studio website for {{brand}} using the attached example.html as the working source. If brand is empty, keep Aster Atelier. Preserve the cobalt and parchment palette, original classical astronomer and observatory artwork embedded as WebP data URIs, spacious serif typography, five-part composition, rotating procedural point-cloud armillary sphere, scroll parallax, section reveals, chapter indicator, native-dialog navigation and project form, responsive layouts and reduced-motion behavior. Edit the real seed instead of recreating it from scratch. Replace the demonstration copy and brand with the user's context while preserving design proportions and all interactions. Keep the two embedded original artworks unless the user requests replacements. Use installed system fonts; no bundled commercial fonts, paid assets, third-party runtime scripts or Pear website code. The project form is local-only; connect it to a backend only if the user specifies one. Deliver a complete runnable HTML artifact and verify navigation, dialogs, required fields, mobile overflow and reduced-motion support.",
+        "zh-CN": "以附带 example.html 为真实种子，为 {{brand}} 制作电影感工作室网站；品牌为空时保留 Aster Atelier。保留钴蓝与羊皮纸配色、内嵌 WebP 的原创观星者和天文台插画、衬线排版、五段构图、程序生成的黄铜粒子星盘、滚动视差、入场动画、章节进度、原生 dialog 导航与项目表单、响应式及减少动态效果支持。直接修改种子，不从头自由发挥。按用户内容替换示例品牌及文案，保持比例和交互。使用系统字体，不添加商业字体、付费素材、外部运行脚本或 Pear 代码。表单默认只在浏览器本地保存，用户指定后端后才接入。交付完整可运行 HTML，并检查导航、对话框、必填校验、移动端溢出和减少动态效果。"
+      }
+    },
+    "context": {
+      "assets": [
+        "./example.html",
+        "./ASSET-SOURCES.md",
+        "./SKILL.md",
+        "./references/checklist.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/feat/aster-atelier-template/design-templates/aster-atelier"
+}
