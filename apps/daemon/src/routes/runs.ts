@@ -73,6 +73,7 @@ import {
   readTelemetrySinkConfig,
 } from '../langfuse-trace.js';
 import { parseMediaExecutionPolicyInput } from '../media/policy.js';
+import { referenceImageExperimentInput } from '../media/reference-image-experiment.js';
 import { isManagedProjectCwd } from '../mcp-config.js';
 import {
   normalizeExternalPluginRunAnalyticsHints,
@@ -2296,6 +2297,21 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         }
         throw err;
       }
+    }
+    try {
+      const experimentInput = referenceImageExperimentInput({
+        projectName: runProject?.name,
+        requestBody,
+        uploadRoot: UPLOAD_DIR,
+        isContinuation: Boolean(clarificationContinuation),
+      });
+      if (experimentInput) {
+        Object.assign(requestBody, experimentInput);
+        Object.assign(meta, experimentInput);
+      }
+    } catch (error) {
+      return sendApiError(res, 400, 'REFERENCE_EXPERIMENT_INPUT_INVALID',
+        error instanceof Error ? error.message : 'Invalid reference experiment input.');
     }
     if (typeof meta.agentId !== 'string' || !meta.agentId) {
       try {
