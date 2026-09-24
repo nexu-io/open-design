@@ -936,8 +936,34 @@ function adoptHostInputStage(
     ...state,
     inputStage: task.inputStage,
   });
-  if (!corrected.success) return { state, normalized: false };
-  return { state: corrected.data, normalized: true };
+  if (corrected.success) return { state: corrected.data, normalized: true };
+  // A completion at a stage the host never entered, on a task the host never
+  // routed: there is no route, no plan and no locked execution mode to hold the
+  // agent to, so `request` refuses the outcome ("a Full Plan request cannot
+  // complete before Production") while `production` was never entered here.
+  // The host already settles this exact turn when the agent declares nothing —
+  // `inferDirectEditCompletionRuntimeState` resolves it on the direct-edit
+  // completion the evidence proved — so a declaration of that same completion
+  // resolves the same way instead of failing a finished run on stage
+  // bookkeeping. Evidence stays enforced by `validateAcceptedTurn`: a turn that
+  // proved nothing still blocks, on the cause the user can act on.
+  if (
+    state.outcome === 'completed'
+    && state.inputStage === 'production'
+    && state.executionMode === 'simple'
+    && task.route === null
+    && task.inputStage === 'request'
+    && task.clarificationCount === 0
+  ) {
+    const completion = StrategyRuntimeStateV2Schema.safeParse({
+      ...state,
+      route: 'direct_edit',
+      inputStage: 'request',
+      executionMode: 'simple',
+    });
+    if (completion.success) return { state: completion.data, normalized: true };
+  }
+  return { state, normalized: false };
 }
 
 function validateAcceptedTurn(

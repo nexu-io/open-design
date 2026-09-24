@@ -799,6 +799,54 @@ describe('OD Next planning coordinator', () => {
     expect(final.task).toMatchObject({ inputStage: 'clarification', outcome: 'blocked' });
   });
 
+  it('accepts a declared production completion on a task the host never routed', () => {
+    // Field report (2026-09-24): the Agent declared
+    // `{ route: 'full_plan', inputStage: 'production', outcome: 'completed' }`
+    // on a task the host still held as an unrouted request — no route, no plan,
+    // no locked execution mode. Rewriting that stage to `request` is refused by
+    // the schema ("a Full Plan request cannot complete before Production"), so a
+    // run that had just written the entry file was reported as a failure.
+    // The host already resolves this exact turn when the Agent declares nothing
+    // (`inferDirectEditCompletionRuntimeState`); a declaration of the same
+    // completion must resolve the same way, leaving the evidence gates in
+    // `validateAcceptedTurn` to decide whether the turn proved anything.
+    const final = finalizeStrategyPlanningTurn(db, {
+      taskExecutionId: 'task-1',
+      runId: 'run-request',
+      protocol: protocol(`The site is delivered.\n${block('open-design-runtime-state', runtimeState({
+        inputStage: 'production', outcome: 'completed', executionMode: 'simple',
+      }))}`),
+      completionEvidence: { physicalStatus: 'succeeded', deliverableValid: true },
+      executionPreflight: executionPassed,
+      updatedAt: 120,
+    });
+    expect(final.action).toBe('completed');
+    expect(final.reasonCodes).toEqual([]);
+    expect(final.task).toMatchObject({
+      route: 'direct_edit',
+      inputStage: 'request',
+      outcome: 'completed',
+      executionMode: 'simple',
+    });
+  });
+
+  it('keeps blocking an unproven completion on the evidence, not on the stage', () => {
+    const final = finalizeStrategyPlanningTurn(db, {
+      taskExecutionId: 'task-1',
+      runId: 'run-request',
+      protocol: protocol(`Nothing changed.\n${block('open-design-runtime-state', runtimeState({
+        inputStage: 'production', outcome: 'completed', executionMode: 'simple',
+      }))}`),
+      completionEvidence: { physicalStatus: 'succeeded', deliverableValid: false },
+      executionPreflight: executionPassed,
+      updatedAt: 120,
+    });
+    expect(final).toMatchObject({
+      action: 'blocked',
+      reasonCodes: ['od_next_canonical_deliverable_invalid'],
+    });
+  });
+
   it('anchors a clarification-turn repair on a plan whose state names the request stage', () => {
     answerTheOneClarificationRound();
     const plan = planContract(snapshot);
