@@ -327,7 +327,15 @@ child.on('exit', (code, signal) => {
     expect(body).toContain('AGENT_UNAVAILABLE');
   });
 
-  it('keeps serving when delivered-session persistence has no conversation row', async () => {
+  it.each([false, true])('keeps serving without a conversation row (project bound: %s)', async (projectBound) => {
+    const projectId = projectBound ? `unbound_chat_${randomUUID()}` : undefined;
+    if (projectId) {
+      const created = await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: projectId, name: 'Unpersisted legacy chat' }),
+      });
+      expect(created.status).toBe(200);
+    }
     const conversationId = `missing-conversation-${randomUUID()}`;
 
     await withFakeAgent(
@@ -349,6 +357,7 @@ process.exit(0);
           body: JSON.stringify({
             agentId: 'opencode',
             conversationId,
+            ...(projectId ? { projectId } : {}),
             message: 'ask for clarification',
           }),
         });

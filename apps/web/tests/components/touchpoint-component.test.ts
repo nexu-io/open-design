@@ -125,6 +125,21 @@ describe("hasWebTouchpointCloseControl", () => {
 });
 
 describe("verifyWebTouchpoint multi-placement resource closure", () => {
+	it("revokes every created Blob URL when entry byte verification fails", async () => {
+		// Keep this oracle in the verifier suite: modal mounting starts async
+		// verification that can outlive cleanup and contaminate global URL spies.
+		const value = content("opend.home.campaign-modal");
+		let sequence = 0;
+		const create = vi.spyOn(URL, "createObjectURL")
+			.mockImplementation(() => `blob:verified-${sequence++}`);
+		const revoke = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+		await expect(verifyWebTouchpoint({ ...value, entryModule: "tampered" }))
+			.rejects.toThrow("touchpoint_integrity_failed");
+		expect(create).toHaveBeenCalledTimes(value.resources.length);
+		expect(revoke.mock.calls.map(([url]) => url))
+			.toEqual(create.mock.results.map(({ value: url }) => url));
+	});
+
 	it("loads only OD resources from a mixed package containing a Vela subscription action", async () => {
 		const create = vi
 			.spyOn(URL, "createObjectURL")

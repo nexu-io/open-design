@@ -649,7 +649,7 @@ function localBlockedTurnVerdictUnknownToServer(
   server: ChatMessage,
   local: ChatMessage,
 ): { runStatus: ChatMessage['runStatus']; errorEvent: AgentEvent } | null {
-  if (local.strategyTaskBlocked !== true) return null;
+  if (server.strategyTaskBlocked === false || local.strategyTaskBlocked !== true) return null;
   if (local.runStatus !== 'failed') return null;
   if (!server.runId || server.runId !== local.runId) return null;
   if (terminalErrorEventOf(server)) return null;
@@ -670,7 +670,8 @@ function mergeServerMessageWithLocal(
     if ((local.content?.length ?? 0) > (server.content?.length ?? 0)) {
       merged.content = local.content;
     }
-    if ((local.events?.length ?? 0) > (server.events?.length ?? 0)) {
+    if (!(server.strategyTaskBlocked === false && local.strategyTaskBlocked === true)
+      && (local.events?.length ?? 0) > (server.events?.length ?? 0)) {
       merged.events = local.events;
     }
   }
@@ -716,11 +717,9 @@ function mergeServerMessageWithLocal(
   if (!server.runStatus && local.runStatus) {
     merged.runStatus = local.runStatus;
   }
-  // A terminal `blocked` verdict is sticky (the daemon answers every further
-  // continuation of that task with 409 STRATEGY_TASK_STATE_MISMATCH) and the
-  // server row cannot carry it, so a refresh must not quietly un-block the
-  // turn's question form.
-  if (!server.strategyTaskBlocked && local.strategyTaskBlocked) {
+  // Preserve legacy verdicts only when the server has no authoritative value.
+  // An explicit false clears cached protocol blocks after migration.
+  if (server.strategyTaskBlocked === undefined && local.strategyTaskBlocked) {
     merged.strategyTaskBlocked = local.strategyTaskBlocked;
     if (server.strategyTaskBlockedText === undefined) {
       merged.strategyTaskBlockedText = local.strategyTaskBlockedText ?? null;
@@ -6624,25 +6623,13 @@ export function ProjectView({
         if (taskRunAdvanced) {
           findDetachedManualFileWrites(reattachConversationId, runId)?.dispose();
         }
-        const projectedTaskStatus: ChatMessage['runStatus'] =
-          physicalStatus.strategyTask?.terminal === true
-            ? physicalStatus.strategyTask.outcome === 'canceled'
-              ? 'canceled'
-              : physicalStatus.strategyTask.outcome === 'blocked'
-                ? 'failed'
-                : 'succeeded'
-            : 'running';
-        // A crash may persist the predecessor Run after the daemon has already
-        // advanced the logical task. Treat the daemon projection as the
-        // subscription truth: the predecessor's physical `succeeded` status
-        // is not the user task terminal state.
+        // A task may have advanced to production before this request Run was
+        // persisted. Read that physical Run: task `completed` does not say
+        // whether production succeeded, failed, or was canceled.
         const status = taskRunAdvanced
-          ? {
-              ...physicalStatus,
-              id: reattachRunId,
-              status: projectedTaskStatus,
-            }
+          ? await fetchChatRunStatus(reattachRunId, projectRunWorkspaceContext)
           : physicalStatus;
+        if (!status) continue;
         const projectedRunAlreadyHydrated = Boolean(
           taskRunAdvanced
           && messages.some(

@@ -511,10 +511,13 @@ async function taskAggregate(
         'Mapped OD Next Run is missing mandatory exact-send Prompt evidence.',
       );
     }
+    const exactFinalText = [mapping.resumeFinalText, mapping.coldStartFinalText]
+      .find(candidate => candidate && candidate.sha256 === run.promptTelemetry?.odNextExactSend?.sha256)
+      ?? mapping.finalText;
     if (run.promptTelemetry?.odNextExactSend) {
       assertOdNextExactSendPromptEvidence({
         telemetry: run.promptTelemetry,
-        persisted: mapping.finalText,
+        persisted: exactFinalText,
         stage: mapping.inputStage,
         ...(mapping.purpose ? { purpose: mapping.purpose } : {}),
       });
@@ -537,7 +540,7 @@ async function taskAggregate(
             events: run.events.map((event, index) => ({ id: index + 1, ...event })),
           },
           prefs: telemetry.prefs,
-          exactPrompt: { ...mapping.finalText, stage: mapping.inputStage },
+          exactPrompt: { ...exactFinalText, stage: mapping.inputStage },
           onTraceProjection: projection => traceProjections.set(run.id, { runId: run.id, ...projection }),
           taskTraceId: `strategy-task:${task.taskExecutionId}`,
           captureObjects: sendObjects,

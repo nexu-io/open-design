@@ -327,7 +327,7 @@ function persistedRunStatus(runId: string): ChatRunStatusResponse | null {
           packageHash: 'b'.repeat(64), snapshotId: `snapshot-${taskId}`,
         },
         inputStage: (taskTail.strategyTaskRunIndex ?? 0) > 0 ? 'production' : 'request',
-        outcome: taskTail.runStatus === 'failed' ? 'blocked' : 'completed',
+        outcome: 'completed',
         route: (taskTail.strategyTaskRunIndex ?? 0) > 0 ? 'full_plan' : 'direct_edit',
         executionMode: 'simple',
         activeRunId: taskTail.runId,

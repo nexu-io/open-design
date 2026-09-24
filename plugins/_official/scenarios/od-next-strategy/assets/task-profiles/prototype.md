@@ -1,11 +1,20 @@
-# OD Next Prototype Task Profile v2.2.0
+# OD Next Prototype Task Profile v2.2.2
 
 > Rollout: active
 
 Task routing, clarification, Build, and the ship-on-write boundary follow the
-general orchestration Skill. Profile field semantics, required-field rules,
-and the artifact contract bind to the V2 machine contract at the recorded
-taskProfileVersion; this file is the prototype projection of that contract.
+general orchestration Skill. Use profile fields and delivery requirements as design guidance in the
+readable plan; do not serialize them into a machine contract.
+
+## Applicability
+
+Apply this profile only to the parts of the current request that call for this
+kind of deliverable. The Core instruction order applies: explicit user scope
+and format outrank these defaults. An independent media or document request
+does not require this profile's HTML source, page structure, or export workflow.
+Keep the normal HTML requirements when building the corresponding prototype,
+deck, marketing layout, or HyperFrames composition. Do not add a wrapper merely
+because this profile is loaded.
 
 ## Profile fields
 
@@ -27,11 +36,10 @@ visual consistency, responsive behavior, and reference adherence.
 
 ## Artifact contract
 
-The canonical deliverable is editable prototype source with a stable runnable
-entry. Open Design resolves that entry by looking for a root `index.html`,
-then a single root-level html file, then a single file matching the project
-kind; a delivery in which none of those resolves is rejected as an invalid
-canonical deliverable, so lay the files out accordingly. Required deliverables
+For prototype work, deliver editable HTML source with a stable runnable
+entry. Prefer root `index.html` for a new prototype, or preserve the existing
+entry when editing one. This requirement does not apply to independent media
+files requested within a prototype project. Required deliverables
 name the source entry and any user-requested derived package. Buttons,
 navigation, forms, and primary controls implement the declared flow rather
 than acting as decoration.

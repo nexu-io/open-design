@@ -9,10 +9,8 @@ import {
   OD_NEXT_PROMPT_BUNDLE_SCHEMA_V2,
   OD_NEXT_REQUEST_TURN_SCHEMA_V1,
   serializeCanonicalXml,
-  serializeOdNextIntentResolutionTurnV1,
   serializeOdNextPromptBundleV1,
   type AppliedPluginSnapshot,
-  type OpenDesignPlanContractV2,
 } from '@open-design/contracts';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -21,16 +19,11 @@ import { closeDatabase, openDatabase } from '../../src/db.js';
 import { createStrategyRunWriteEvidenceRecorder, strategyRunWriteEvidence } from '../../src/strategies/od-next/run-write-evidence.js';
 import { createClaudeStreamHandler } from '../../src/runtimes/claude-stream.js';
 import { createRunSideEffectLedger, foldEventIntoRunSideEffectLedger } from '../../src/runtimes/run-lifecycle-analytics.js';
-import { bindOdNextExactSendPromptEvidence, assertOdNextExactSendPromptEvidence, buildPromptStackTelemetry } from '../../src/prompt-telemetry.js';
+
 import { createSnapshot, getSnapshot, pruneExpiredSnapshots } from '../../src/plugins/snapshots.js';
 import { reconcileDurableRunTerminals } from '../../src/runtimes/run-terminal-reconciliation.js';
 import {
   StrategyTaskTransitionConflictError,
-  InvalidStrategyTaskRecordError,
-  claimStrategyExecutionIntentResolution,
-  consumeStrategyExecutionIntentResolution,
-  isInitialStrategyTaskRun,
-  reconcileStrategyTaskRunTerminal,
   type CompareAndTransitionStrategyTaskInput,
   cancelStrategyTaskExecution,
   compareAndTransitionStrategyTaskExecution as compareAndTransitionStrategyTaskExecutionRaw,
@@ -46,8 +39,8 @@ import {
 } from './strategy-task-test-fixtures.js';
 
 import {
-  readIntentResolution, recordStrategyRunWriteEvidence, readStrategyTaskWriteEvidence,
-  intentResolutionDigest, startIntentResolution, captureIntentResolutionReply,
+  recordStrategyRunWriteEvidence,
+  readStrategyTaskWriteEvidence,
 } from '../../src/strategies/od-next/intent-resolution-store.js';
 
 const AGENT_ID = 'codex';
@@ -184,60 +177,6 @@ function createStrategySnapshot(db: Database.Database): AppliedPluginSnapshot {
   });
 }
 
-function planContract(snapshot: AppliedPluginSnapshot): OpenDesignPlanContractV2 {
-  const strategy = snapshot.strategy!;
-  return {
-    schema: 'open-design.plan-contract/v2',
-    strategy: {
-      id: 'od-next-strategy',
-      version: strategy.version,
-      packageHash: strategy.packageHash,
-      snapshotId: snapshot.snapshotId,
-    },
-    taskProfile: {
-      schemaVersion: '2',
-      taskType: 'prototype',
-      taskProfileVersion: strategy.selectedTaskProfile.version,
-      goal: 'Build a prototype',
-      contextAndAudience: 'Product team',
-      inputsAndReferences: [],
-      constraints: [],
-      canonicalDeliverable: { id: 'prototype', kind: 'prototype', format: 'html' },
-      requiredDeliverables: [{ id: 'prototype', kind: 'prototype' }],
-      designSpec: {
-        source: 'resolved-baseline',
-        version: '1',
-        decisions: { palette: 'neutral' },
-      },
-      buildRequirements: [{ id: 'build-1', text: 'Build the required prototype.' }],
-      assumptions: [],
-      risks: [],
-      taskSpecific: {},
-    },
-    fullPlan: {
-      executionMode: 'simple',
-      steps: [{ id: 'step-1', objective: 'Build', outputs: ['prototype'] }],
-      readinessArtifacts: [],
-      buildPackages: [],
-    },
-    runManifest: {
-      selectedAgentId: AGENT_ID,
-      capabilitySnapshotHash: 'c'.repeat(64),
-      inputRefs: [],
-      productionRoutes: ['html'],
-      preflight: { intake: 'passed', execution: 'passed' },
-    },
-    decisionSummary: {
-      goal: 'Build a prototype',
-      deliverables: ['prototype'],
-      keyConstraints: [],
-      assumptions: [],
-      risks: [],
-      openDecisions: [],
-    },
-  };
-}
-
 function seedParents(db: Database.Database): AppliedPluginSnapshot {
   db.prepare(
     `INSERT INTO projects (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)`,
@@ -284,46 +223,6 @@ describe('durable strategy task store', () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  function claimResolution(task = createTask(db, snapshot)) {
-    const sourceResultJson = JSON.stringify({ runId: task.latestRunId, parsed: { visibleText: 'Original plan', issues: [{ code: 'od_next_protocol_plan_contract_invalid_json', detail: 'Original parser defect' }], normalizations: [] } });
-    const finalText = serializeOdNextIntentResolutionTurnV1({
-      taskExecutionId: task.taskExecutionId, stage: task.inputStage as 'request' | 'clarification',
-      taskRunIndex: task.runs.length, sourceRunId: task.latestRunId,
-      promptBundleSha256: task.promptBundle.sha256, sourceResultSha256: intentResolutionDigest(sourceResultJson),
-      payload: 'Resolve the execution intent of the frozen original request.',
-    });
-    const input = { taskExecutionId: task.taskExecutionId, expectedRevision: task.revision,
-      sourceRunId: task.latestRunId, nextRunId: 'run-intent', sourceResultJson, finalText, updatedAt: Math.max(110, task.updatedAt + 1) };
-    return { task: claimStrategyExecutionIntentResolution(db, input), input };
-  }
-
-  it.each(['request', 'clarification'] as const)('admits exact-send evidence for a durably claimed %s intent turn without treating it as the initial bundle', stage => {
-    let source = createTask(db, snapshot);
-    if (stage === 'clarification') source = compareAndTransitionStrategyTaskExecutionRaw(db, {
-      taskExecutionId: source.taskExecutionId, expectedRevision: source.revision,
-      to: { route: 'full_plan', inputStage: 'clarification', outcome: 'running', executionMode: null },
-      nextRun: { runId: 'run-answer', sourceRunId: source.latestRunId,
-        finalText: strategyTaskTurnText({ taskExecutionId: source.taskExecutionId, inputStage: 'clarification', taskRunIndex: 1 }) },
-    });
-    const claimed = claimResolution(source).task;
-    closeDatabase(); db = openDatabase(tempDir, { dataDir: tempDir });
-    const task = getStrategyTaskExecution(db, claimed.taskExecutionId)!;
-    const mapping = task.runs.at(-1)!;
-    expect(isInitialStrategyTaskRun(task, mapping.runId)).toBe(false);
-    expect(mapping).toMatchObject({ inputStage: stage, purpose: 'intent_resolution' });
-    const input = {
-      finalText: mapping.finalText.text, persisted: mapping.finalText,
-      stage: mapping.inputStage, purpose: mapping.purpose,
-      telemetry: buildPromptStackTelemetry({ composedPrompt: mapping.finalText.text,
-        sections: [{ kind: 'odNextExactFinalText', content: mapping.finalText.text }] }),
-    };
-    const telemetry = bindOdNextExactSendPromptEvidence(input);
-    expect(telemetry.odNextExactSend).toMatchObject({ kind: 'turn', stage, sha256: mapping.finalText.sha256 });
-    expect(() => assertOdNextExactSendPromptEvidence({ ...input, telemetry })).not.toThrow();
-    expect(() => bindOdNextExactSendPromptEvidence({ ...input, purpose: undefined })).toThrow();
-    expect(() => bindOdNextExactSendPromptEvidence({ ...input, stage: 'production' })).toThrow();
-  });
-
   it('persists actual streamed Write evidence before close and does not erase it with a later filesystem zero', () => {
     const task = createTask(db, snapshot);
     const run = { id: task.latestRunId, sideEffectLedger: createRunSideEffectLedger() };
@@ -367,23 +266,6 @@ describe('durable strategy task store', () => {
     expect(readStrategyTaskWriteEvidence(db, task.taskExecutionId)[0]).toMatchObject({ filesWritten: 0, unknown: true });
   });
 
-  it('marks only new tasks as unresolved and does not silently downgrade missing policy data', () => {
-    const task = createTask(db, snapshot);
-    expect(task.intentResolution).toMatchObject({ version: 1, state: 'unresolved', attempts: 0 });
-    db.prepare('DELETE FROM strategy_task_intent_resolution WHERE task_execution_id=?').run(task.taskExecutionId);
-    expect(() => getStrategyTaskExecution(db, task.taskExecutionId)).toThrow();
-    // A pre-migration row has no policy marker; ordinary production compatibility remains explicit.
-    db.prepare('UPDATE strategy_task_executions SET intent_resolution_version=NULL WHERE task_execution_id=?').run(task.taskExecutionId);
-    migrateStrategyTaskStore(db);
-    expect(getStrategyTaskExecution(db, task.taskExecutionId)).toMatchObject({ intentResolution: null, executionIntent: 'produce' });
-  });
-
-  it.each([null, 99])('rejects policy marker %s when a new policy row remains', version => {
-    const task = createTask(db, snapshot);
-    db.prepare('UPDATE strategy_task_executions SET intent_resolution_version=? WHERE task_execution_id=?').run(version, task.taskExecutionId);
-    expect(() => getStrategyTaskExecution(db, task.taskExecutionId)).toThrow(InvalidStrategyTaskRecordError);
-  });
-
   it('retains positive and unknown evidence by physical owner across database reopen', () => {
     const task = createTask(db, snapshot);
     expect(readStrategyTaskWriteEvidence(db, task.taskExecutionId)).toEqual([{ runId: task.latestRunId, filesWritten: null, unknown: true, sources: ['unknown'] }]);
@@ -392,90 +274,6 @@ describe('durable strategy task store', () => {
     expect(() => recordStrategyRunWriteEvidence(db, { taskExecutionId: task.taskExecutionId, runId: 'another-task-run', filesWritten: 0, unknown: false, source: 'filesystem' })).toThrow();
     closeDatabase(); db = openDatabase(tempDir, { dataDir: tempDir });
     expect(readStrategyTaskWriteEvidence(db, task.taskExecutionId)).toEqual([{ runId: task.latestRunId, filesWritten: 1, unknown: true, sources: ['filesystem', 'tool_stream'] }]);
-  });
-
-  it('claims one same-request-stage supplemental run without treating it as an initial bundle', () => {
-    const { task, input } = claimResolution();
-    expect(task.inputStage).toBe('request');
-    expect(task.clarificationCount).toBe(0);
-    expect(task.planContractRepairAttempts).toBe(0);
-    expect(task.runs.at(-1)).toMatchObject({ runId: 'run-intent', sourceRunId: 'run-request', purpose: 'intent_resolution', taskRunIndex: 1 });
-    expect(isInitialStrategyTaskRun(task, 'run-request')).toBe(true);
-    expect(isInitialStrategyTaskRun(task, 'run-intent')).toBe(false);
-    expect(() => claimStrategyExecutionIntentResolution(db, input)).toThrow();
-    expect(() => compareAndTransitionStrategyTaskExecution(db, {
-      taskExecutionId: task.taskExecutionId, expectedRevision: task.revision,
-      to: { route: 'full_plan', inputStage: 'request', outcome: 'running', executionMode: null },
-      nextRun: { runId: 'run-second', sourceRunId: 'run-intent', finalText: input.finalText }, updatedAt: 120,
-    })).toThrow();
-    closeDatabase(); db = openDatabase(tempDir, { dataDir: tempDir });
-    expect(getStrategyTaskExecution(db, task.taskExecutionId)?.intentResolution).toMatchObject({ attempts: 1, state: 'claimed', sourceResultJson: input.sourceResultJson });
-  });
-
-  it('claims and starts at most once, saves reply before consume, and preserves original parser defects', () => {
-    const { task, input } = claimResolution();
-    startIntentResolution(db, task.taskExecutionId, 'run-intent');
-    expect(() => startIntentResolution(db, task.taskExecutionId, 'run-intent')).toThrow();
-    const replyJson = JSON.stringify({ runId: 'run-intent', executionIntent: 'plan_only', physicalStatus: 'succeeded' });
-    captureIntentResolutionReply(db, { taskExecutionId: task.taskExecutionId, runId: 'run-intent', replyJson });
-    captureIntentResolutionReply(db, { taskExecutionId: task.taskExecutionId, runId: 'run-intent', replyJson });
-    expect(() => captureIntentResolutionReply(db, { taskExecutionId: task.taskExecutionId, runId: 'run-intent', replyJson: '{}' })).toThrow();
-    closeDatabase(); db = openDatabase(tempDir, { dataDir: tempDir });
-    expect(() => startIntentResolution(db, task.taskExecutionId, 'run-intent')).toThrow();
-    expect(() => consumeStrategyExecutionIntentResolution(db, { taskExecutionId: task.taskExecutionId, runId: 'run-intent', expectedRevision: task.revision - 1, executionIntent: 'plan_only', updatedAt: 120 })).toThrow();
-    const consumed = consumeStrategyExecutionIntentResolution(db, { taskExecutionId: task.taskExecutionId, runId: 'run-intent', expectedRevision: task.revision, executionIntent: 'plan_only', updatedAt: 120 });
-    expect(consumed.intentResolution).toMatchObject({ state: 'resolved', attempts: 1, sourceResultJson: input.sourceResultJson, replyJson });
-    expect(consumed.executionIntent).toBe('plan_only');
-    expect(consumed.intentResolution?.sourceResultJson).toContain('Original parser defect');
-    expect(() => consumeStrategyExecutionIntentResolution(db, { taskExecutionId: task.taskExecutionId, runId: 'run-intent', expectedRevision: consumed.revision, executionIntent: 'produce', updatedAt: 121 })).toThrow();
-  });
-
-  it('keeps a supplemental clarification mapping out of the user-answer count', () => {
-    const initial = createTask(db, snapshot);
-    const clarification = compareAndTransitionStrategyTaskExecutionRaw(db, {
-      taskExecutionId: initial.taskExecutionId, expectedRevision: initial.revision,
-      to: { route: 'full_plan', inputStage: 'clarification', outcome: 'running', executionMode: null },
-      nextRun: { runId: 'run-answer', sourceRunId: initial.latestRunId, finalText: strategyTaskTurnText({ taskExecutionId: initial.taskExecutionId, inputStage: 'clarification', taskRunIndex: 1 }) }, updatedAt: 110,
-    });
-    const { task } = claimResolution(clarification);
-    expect(task.runs.map(run => [run.inputStage, run.purpose])).toEqual([
-      ['request', undefined], ['clarification', undefined], ['clarification', 'intent_resolution'],
-    ]);
-    expect(task.clarificationCount).toBe(1);
-    closeDatabase(); db = openDatabase(tempDir, { dataDir: tempDir });
-    expect(getStrategyTaskExecution(db, task.taskExecutionId)?.clarificationCount).toBe(1);
-  });
-
-  it('rolls the claim back with physical Run admission and refuses a wrong frozen result owner', () => {
-    const initial = createTask(db, snapshot);
-    expect(() => db.transaction(() => {
-      claimResolution(initial);
-      throw new Error('Physical run admission rolled back');
-    }).immediate()).toThrow('Physical run admission rolled back');
-    expect(getStrategyTaskExecution(db, initial.taskExecutionId)).toMatchObject({ latestRunId: initial.latestRunId, revision: initial.revision, intentResolution: { attempts: 0, state: 'unresolved' } });
-    const { input } = claimResolution(initial);
-    db.prepare('UPDATE strategy_task_intent_resolution SET source_result_json=? WHERE task_execution_id=?').run('{}', initial.taskExecutionId);
-    expect(() => getStrategyTaskExecution(db, initial.taskExecutionId)).toThrow(InvalidStrategyTaskRecordError);
-    expect(input.sourceResultJson).toContain('Original parser defect');
-  });
-
-  it.each(['claimed', 'started'] as const)('reconciles a %s crash without granting another provider start', state => {
-    const { task } = claimResolution();
-    if (state === 'started') startIntentResolution(db, task.taskExecutionId, 'run-intent');
-    closeDatabase(); db = openDatabase(tempDir, { dataDir: tempDir });
-    expect(reconcileStrategyTaskRunTerminal(db, { runId: 'run-request', status: 'failed', updatedAt: 120 })).toBe(false);
-    expect(reconcileStrategyTaskRunTerminal(db, { runId: 'run-intent', status: 'failed', updatedAt: 120 })).toBe(true);
-    expect(getStrategyTaskExecution(db, task.taskExecutionId)).toMatchObject({ outcome: 'blocked', intentResolution: { state: 'failed', attempts: 1 } });
-    expect(() => startIntentResolution(db, task.taskExecutionId, 'run-intent')).toThrow();
-    expect(() => captureIntentResolutionReply(db, { taskExecutionId: task.taskExecutionId, runId: 'run-intent', replyJson: '{"runId":"run-intent"}' })).toThrow();
-  });
-
-  it('does not admit a claimed supplement after task cancellation', () => {
-    const { task } = claimResolution();
-    const canceled = cancelStrategyTaskExecution(db, { taskExecutionId: task.taskExecutionId, expectedRevision: task.revision, updatedAt: 120 });
-    expect(canceled.outcome).toBe('canceled');
-    expect(() => startIntentResolution(db, task.taskExecutionId, 'run-intent')).toThrow();
-    expect(readIntentResolution(db, task.taskExecutionId)).toMatchObject({ attempts: 1, state: 'failed' });
   });
 
   it('adds nullable/versioned tables without changing ordinary Run queries', () => {
@@ -856,7 +654,7 @@ describe('durable strategy task store', () => {
         executionMode: 'simple',
       },
       nextRun: { runId: 'run-production', sourceRunId: 'run-request' },
-      planContract: planContract(snapshot),
+
     });
     task = compareAndTransitionStrategyTaskExecution(db, {
       taskExecutionId: task.taskExecutionId,
@@ -877,234 +675,6 @@ describe('durable strategy task store', () => {
       latestRunId: 'run-production',
     });
     expect(task.runs.map((run) => run.inputStage)).toEqual(['request', 'production']);
-  });
-
-  it('maps all four physical stages and persists a versioned/hash-bound Plan Contract', () => {
-    let task = createTask(db, snapshot);
-    task = compareAndTransitionStrategyTaskExecution(db, {
-      taskExecutionId: task.taskExecutionId,
-      expectedRevision: task.revision,
-      to: {
-        route: 'full_plan',
-        inputStage: 'clarification',
-        outcome: 'running',
-        executionMode: null,
-      },
-      nextRun: { runId: 'run-clarification', sourceRunId: 'run-request' },
-      updatedAt: 200,
-    });
-    task = compareAndTransitionStrategyTaskExecution(db, {
-      taskExecutionId: task.taskExecutionId,
-      expectedRevision: task.revision,
-      to: {
-        route: 'full_plan',
-        inputStage: 'clarification',
-        outcome: 'running',
-        executionMode: 'simple',
-      },
-      updatedAt: 250,
-    });
-    task = compareAndTransitionStrategyTaskExecution(db, {
-      taskExecutionId: task.taskExecutionId,
-      expectedRevision: task.revision,
-      to: {
-        route: 'full_plan',
-        inputStage: 'contract_repair',
-        outcome: 'running',
-        executionMode: 'simple',
-      },
-      nextRun: { runId: 'run-contract-repair', sourceRunId: 'run-clarification' },
-      updatedAt: 300,
-    });
-    task = compareAndTransitionStrategyTaskExecution(db, {
-      taskExecutionId: task.taskExecutionId,
-      expectedRevision: task.revision,
-      to: {
-        route: 'full_plan',
-        inputStage: 'production',
-        outcome: 'running',
-        executionMode: 'simple',
-      },
-      nextRun: { runId: 'run-production', sourceRunId: 'run-contract-repair' },
-      planContract: planContract(snapshot),
-      updatedAt: 400,
-    });
-    task = compareAndTransitionStrategyTaskExecution(db, {
-      taskExecutionId: task.taskExecutionId,
-      expectedRevision: task.revision,
-      to: {
-        route: 'full_plan',
-        inputStage: 'production',
-        outcome: 'completed',
-        executionMode: 'simple',
-      },
-      updatedAt: 500,
-    });
-
-    expect(task).toMatchObject({
-      outcome: 'completed',
-      clarificationCount: 1,
-      planContractRepairAttempts: 1,
-      initialRunId: 'run-request',
-      latestRunId: 'run-production',
-      activeRunId: null,
-      terminalRunId: 'run-production',
-      planContract: expect.objectContaining({ schema: 'open-design.plan-contract/v2' }),
-      planContractHash: expect.stringMatching(/^[a-f0-9]{64}$/),
-    });
-    expect(task.runs.map(({ finalText: _finalText, ...run }) => run)).toEqual([
-      { runId: 'run-request', inputStage: 'request', taskRunIndex: 0 },
-      {
-        runId: 'run-clarification',
-        inputStage: 'clarification',
-        taskRunIndex: 1,
-        sourceRunId: 'run-request',
-      },
-      {
-        runId: 'run-contract-repair',
-        inputStage: 'contract_repair',
-        taskRunIndex: 2,
-        sourceRunId: 'run-clarification',
-      },
-      {
-        runId: 'run-production',
-        inputStage: 'production',
-        taskRunIndex: 3,
-        sourceRunId: 'run-contract-repair',
-      },
-    ]);
-  });
-
-  it('fails closed on duplicate/illegal stages and immutable route, mode, or Plan identity drift', () => {
-    let task = createTask(db, snapshot);
-    task = compareAndTransitionStrategyTaskExecution(db, {
-      taskExecutionId: task.taskExecutionId,
-      expectedRevision: task.revision,
-      to: {
-        route: 'full_plan',
-        inputStage: 'clarification',
-        outcome: 'running',
-        executionMode: null,
-      },
-      nextRun: { runId: 'run-clarification', sourceRunId: 'run-request' },
-    });
-    expect(() => compareAndTransitionStrategyTaskExecution(db, {
-      taskExecutionId: task.taskExecutionId,
-      expectedRevision: task.revision,
-      to: {
-        route: 'full_plan',
-        inputStage: 'clarification',
-        outcome: 'running',
-        executionMode: null,
-      },
-      nextRun: { runId: 'run-clarification-2', sourceRunId: 'run-clarification' },
-    })).toThrow(/different physical stage|clarification/i);
-    expect(() => compareAndTransitionStrategyTaskExecution(db, {
-      taskExecutionId: task.taskExecutionId,
-      expectedRevision: task.revision,
-      to: {
-        route: 'direct_edit',
-        inputStage: 'production',
-        outcome: 'running',
-        executionMode: 'simple',
-      },
-      nextRun: { runId: 'run-production', sourceRunId: 'run-clarification' },
-    })).toThrow(/route/i);
-
-    task = compareAndTransitionStrategyTaskExecution(db, {
-      taskExecutionId: task.taskExecutionId,
-      expectedRevision: task.revision,
-      to: {
-        route: 'full_plan',
-        inputStage: 'clarification',
-        outcome: 'running',
-        executionMode: 'simple',
-      },
-    });
-    task = compareAndTransitionStrategyTaskExecution(db, {
-      taskExecutionId: task.taskExecutionId,
-      expectedRevision: task.revision,
-      to: {
-        route: 'full_plan',
-        inputStage: 'contract_repair',
-        outcome: 'running',
-        executionMode: 'simple',
-      },
-      nextRun: { runId: 'run-contract-repair', sourceRunId: 'run-clarification' },
-    });
-    expect(task.planContract).toBeUndefined();
-    expect(task.planContractRepairAttempts).toBe(1);
-    expect(() => compareAndTransitionStrategyTaskExecution(db, {
-      taskExecutionId: task.taskExecutionId,
-      expectedRevision: task.revision,
-      to: {
-        route: 'full_plan',
-        inputStage: 'contract_repair',
-        outcome: 'running',
-        executionMode: 'simple',
-      },
-      nextRun: { runId: 'run-contract-repair-2', sourceRunId: 'run-contract-repair' },
-    })).toThrow(/different physical stage|repair/i);
-    expect(() => compareAndTransitionStrategyTaskExecution(db, {
-      taskExecutionId: task.taskExecutionId,
-      expectedRevision: task.revision,
-      to: {
-        route: 'full_plan',
-        inputStage: 'production',
-        outcome: 'running',
-        executionMode: 'complex',
-      },
-      nextRun: { runId: 'run-mode-drift', sourceRunId: 'run-contract-repair' },
-      planContract: planContract(snapshot),
-    })).toThrow(/execution mode/i);
-
-    const mismatched = planContract(snapshot);
-    mismatched.runManifest.selectedAgentId = 'claude';
-    expect(() => compareAndTransitionStrategyTaskExecution(db, {
-      taskExecutionId: task.taskExecutionId,
-      expectedRevision: task.revision,
-      to: {
-        route: 'full_plan',
-        inputStage: 'production',
-        outcome: 'running',
-        executionMode: 'simple',
-      },
-      nextRun: { runId: 'run-production', sourceRunId: 'run-contract-repair' },
-      planContract: mismatched,
-    })).toThrow(/selected agent/i);
-
-    let ordered = createStrategyTaskExecution(db, {
-      taskExecutionId: 'task-order',
-      projectId: 'project-1',
-      conversationId: 'conversation-1',
-      snapshotId: snapshot.snapshotId,
-      selectedAgentId: AGENT_ID,
-      initialRunId: 'run-order-request',
-      ...strategyTaskCreateIdentityFixture(),
-    });
-    ordered = compareAndTransitionStrategyTaskExecution(db, {
-      taskExecutionId: ordered.taskExecutionId,
-      expectedRevision: ordered.revision,
-      to: {
-        route: 'full_plan',
-        inputStage: 'production',
-        outcome: 'running',
-        executionMode: 'simple',
-      },
-      nextRun: { runId: 'run-order-production', sourceRunId: 'run-order-request' },
-      planContract: planContract(snapshot),
-    });
-    expect(() => compareAndTransitionStrategyTaskExecution(db, {
-      taskExecutionId: ordered.taskExecutionId,
-      expectedRevision: ordered.revision,
-      to: {
-        route: 'full_plan',
-        inputStage: 'contract_repair',
-        outcome: 'running',
-        executionMode: 'simple',
-      },
-      nextRun: { runId: 'run-order-repair', sourceRunId: 'run-order-production' },
-    })).toThrow(/Illegal|transition/i);
   });
 
   it('uses a transactional revision CAS so concurrent next-Run claims produce one mapping', () => {
@@ -1252,121 +822,6 @@ describe('durable strategy task store', () => {
     expect(() => getStrategyTaskExecution(db, task.taskExecutionId)).toThrow(/cannot precede/i);
   });
 
-  it('fails closed on Plan JSON/schema/hash and Snapshot identity tampering', () => {
-    let task = createTask(db, snapshot);
-    const originalPlan = planContract(snapshot);
-    originalPlan.taskProfile.designSpec.decisions = {
-      中性色: 'slate',
-      Zeta: 1,
-      alpha: 2,
-      Alpha: 3,
-    };
-    task = compareAndTransitionStrategyTaskExecution(db, {
-      taskExecutionId: task.taskExecutionId,
-      expectedRevision: task.revision,
-      to: {
-        route: 'full_plan',
-        inputStage: 'production',
-        outcome: 'running',
-        executionMode: 'simple',
-      },
-      nextRun: { runId: 'run-production', sourceRunId: 'run-request' },
-      planContract: originalPlan,
-    });
-    const canonicalHash = task.planContractHash;
-
-    const reordered = {
-      decisionSummary: originalPlan.decisionSummary,
-      runManifest: originalPlan.runManifest,
-      fullPlan: originalPlan.fullPlan,
-      taskProfile: {
-        ...originalPlan.taskProfile,
-        designSpec: {
-          ...originalPlan.taskProfile.designSpec,
-          decisions: {
-            Alpha: 3,
-            alpha: 2,
-            Zeta: 1,
-            中性色: 'slate',
-          },
-        },
-      },
-      strategy: originalPlan.strategy,
-      schema: originalPlan.schema,
-    } as OpenDesignPlanContractV2;
-    task = compareAndTransitionStrategyTaskExecution(db, {
-      taskExecutionId: task.taskExecutionId,
-      expectedRevision: task.revision,
-      to: {
-        route: 'full_plan',
-        inputStage: 'production',
-        outcome: 'running',
-        executionMode: 'simple',
-      },
-      planContract: reordered,
-    });
-    expect(task.planContractHash).toBe(canonicalHash);
-
-    const row = db.prepare(`
-      SELECT plan_contract_json AS json, plan_contract_hash AS hash
-        FROM strategy_task_executions WHERE task_execution_id = ?
-    `).get(task.taskExecutionId) as { json: string; hash: string };
-    db.prepare(`
-      UPDATE strategy_task_executions SET plan_contract_json = '{invalid'
-       WHERE task_execution_id = ?
-    `).run(task.taskExecutionId);
-    expect(() => getStrategyTaskExecution(db, task.taskExecutionId)).toThrow(/invalid JSON/i);
-
-    db.prepare(`
-      UPDATE strategy_task_executions SET plan_contract_json = ?, plan_contract_hash = ?
-       WHERE task_execution_id = ?
-    `).run(row.json, 'f'.repeat(64), task.taskExecutionId);
-    expect(() => getStrategyTaskExecution(db, task.taskExecutionId)).toThrow(/hash validation/i);
-
-    db.prepare(`
-      UPDATE strategy_task_executions SET plan_contract_json = '{}', plan_contract_hash = ?
-       WHERE task_execution_id = ?
-    `).run(row.hash, task.taskExecutionId);
-    expect(() => getStrategyTaskExecution(db, task.taskExecutionId)).toThrow(/schema or hash/i);
-
-    db.prepare(`
-      UPDATE strategy_task_executions SET plan_contract_hash = ?, strategy_package_hash = ?
-       WHERE task_execution_id = ?
-    `).run(row.hash, 'e'.repeat(64), task.taskExecutionId);
-    expect(() => getStrategyTaskExecution(db, task.taskExecutionId)).toThrow(/Snapshot binding/i);
-
-    const snapshotRow = db.prepare(`
-      SELECT strategy_json AS strategyJson FROM applied_plugin_snapshots WHERE id = ?
-    `).get(snapshot.snapshotId) as { strategyJson: string };
-    db.prepare(`
-      UPDATE strategy_task_executions
-         SET strategy_package_hash = ?, plan_contract_json = ?, plan_contract_hash = ?
-       WHERE task_execution_id = ?
-    `).run(snapshot.strategy!.packageHash, row.json, row.hash, task.taskExecutionId);
-    db.prepare(`
-      UPDATE applied_plugin_snapshots SET strategy_json = ? WHERE id = ?
-    `).run(JSON.stringify({ ...snapshot.strategy, packageHash: 'd'.repeat(64) }), snapshot.snapshotId);
-    expect(() => getStrategyTaskExecution(db, task.taskExecutionId)).toThrow(/package hash/i);
-    db.prepare(`
-      UPDATE applied_plugin_snapshots SET strategy_json = ? WHERE id = ?
-    `).run(snapshotRow.strategyJson, snapshot.snapshotId);
-
-    db.prepare(`
-      UPDATE applied_plugin_snapshots SET plugin_id = 'ordinary-plugin' WHERE id = ?
-    `).run(snapshot.snapshotId);
-    expect(() => getStrategyTaskExecution(db, task.taskExecutionId)).toThrow(/plugin identity/i);
-    db.prepare(`
-      UPDATE applied_plugin_snapshots SET plugin_id = 'od-next-strategy' WHERE id = ?
-    `).run(snapshot.snapshotId);
-
-    db.prepare(`
-      UPDATE strategy_task_executions
-         SET strategy_package_hash = ?, plan_contract_json = NULL, plan_contract_hash = NULL
-       WHERE task_execution_id = ?
-    `).run(snapshot.strategy!.packageHash, task.taskExecutionId);
-    expect(() => getStrategyTaskExecution(db, task.taskExecutionId)).toThrow(/hash-bound Plan Contract/i);
-  });
-
   it('keeps terminal outcomes sticky and cancellation distinct from blocked', () => {
     let task = createTask(db, snapshot);
     task = cancelStrategyTaskExecution(db, {
@@ -1386,6 +841,28 @@ describe('durable strategy task store', () => {
       },
       nextRun: { runId: 'resurrected-run', sourceRunId: 'run-request' },
     })).toThrow(/terminal/i);
+  });
+
+  it('migrates old task blocks once without rewriting physical Run evidence', () => {
+    const task = createTask(db, snapshot);
+    db.prepare(`UPDATE strategy_task_executions SET outcome = 'blocked',
+      blocked_reason_codes_json = ?, blocked_visible_text = ? WHERE task_execution_id = ?`)
+      .run(JSON.stringify(['old_contract_invalid']), 'Historical diagnostic', task.taskExecutionId);
+    db.prepare(`UPDATE strategy_task_runs SET settlement_reason = 'run_failed' WHERE run_id = ?`).run(task.latestRunId);
+    const runDir = path.join(tempDir, 'runs', task.latestRunId);
+    fs.mkdirSync(runDir, { recursive: true });
+    const physical = JSON.stringify({ status: 'failed', error: 'real process error' });
+    fs.writeFileSync(path.join(runDir, 'state.json'), physical);
+    closeDatabase();
+    db = openDatabase(tempDir, { dataDir: tempDir });
+    const migrated = getStrategyTaskExecution(db, task.taskExecutionId)!;
+    expect(migrated).toMatchObject({ outcome: 'completed', deliverableValid: false, revision: task.revision + 1 });
+    expect(migrated.runs[0]?.settlementReason).toBe('ended');
+    expect(db.prepare('SELECT blocked_visible_text FROM strategy_task_executions WHERE task_execution_id = ?').get(task.taskExecutionId))
+      .toEqual({ blocked_visible_text: 'Historical diagnostic' });
+    migrateStrategyTaskStore(db);
+    expect(getStrategyTaskExecution(db, task.taskExecutionId)?.revision).toBe(migrated.revision);
+    expect(fs.readFileSync(path.join(runDir, 'state.json'), 'utf8')).toBe(physical);
   });
 
   it('leaves an unmapped ordinary physical Run untouched during startup reconciliation', async () => {
@@ -1472,7 +949,7 @@ describe('durable strategy task store', () => {
   });
 
   it.each([
-    ['running', 'blocked'],
+    ['running', 'completed'],
     ['canceled', 'canceled'],
   ] as const)(
     'reconciles a persisted %s physical Run after a real SQLite restart to %s',
@@ -1527,7 +1004,7 @@ describe('durable strategy task store', () => {
     },
   );
 
-  it('persists blocked attribution when startup reconciliation interrupts a running Run', async () => {
+  it('ends the task while retaining the physical failure when startup interrupts a Run', async () => {
     const task = createTask(db, snapshot, 'run-interrupted');
     closeDatabase();
 
@@ -1555,10 +1032,9 @@ describe('durable strategy task store', () => {
     });
 
     const persisted = getStrategyTaskExecution(db, task.taskExecutionId);
-    expect(persisted?.outcome).toBe('blocked');
-    expect(persisted?.blockedContext).toEqual({
-      reasonCodes: ['od_next_physical_run_interrupted'],
-      visibleText: null,
-    });
+    expect(persisted?.outcome).toBe('completed');
+    expect(persisted?.blockedContext).toBeUndefined();
+    expect(persisted?.runs.at(-1)).toMatchObject({ settlementReason: 'ended', settlementFacts: { physicalStatus: 'failed' } });
+    expect(JSON.parse(fs.readFileSync(path.join(runDir, 'state.json'), 'utf8')).status).toBe('failed');
   });
 });

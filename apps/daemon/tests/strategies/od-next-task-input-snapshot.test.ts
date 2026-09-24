@@ -67,6 +67,24 @@ afterEach(() => {
 });
 
 describe('OD Next task-scoped input snapshots', () => {
+  it('carries verified old attachments into a fresh task even after the original upload is removed', () => {
+    const f = fixture();
+    const image = path.join(f.uploadRoot, 'reference.png');
+    writeFileSync(image, PNG);
+    const old = createOdNextTaskInputSnapshot({ ...f, taskExecutionId: 'old-task', imagePaths: [image] });
+    rmSync(image);
+    const next = createOdNextTaskInputSnapshot({ ...f, taskExecutionId: 'new-task', inheritedSnapshot: old });
+    const loaded = loadOdNextTaskInputSnapshot(next, f.snapshotsRoot);
+    expect(loaded.files).toHaveLength(1);
+    expect(loaded.files[0]?.content).toEqual(PNG);
+    expect(loaded.files[0]?.kind).toBe('image');
+    expect(loadOdNextTaskInputSnapshot(old, f.snapshotsRoot).files[0]?.content).toEqual(PNG);
+    expect(() => createOdNextTaskInputSnapshot({ ...f, taskExecutionId: 'bad-task',
+      inheritedSnapshot: { ...old, manifestSha256: '0'.repeat(64) } })).toThrow();
+    const third = createOdNextTaskInputSnapshot({ ...f, taskExecutionId: 'third-task', inheritedSnapshot: next });
+    expect(loadOdNextTaskInputSnapshot(third, f.snapshotsRoot).files).toHaveLength(1);
+  });
+
   it('removes a read-only canonical snapshot idempotently', () => {
     const f = fixture();
     const snapshotDir = path.join(f.snapshotsRoot, 'odnext_cleanup');

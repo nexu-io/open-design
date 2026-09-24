@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 
-import type { AppliedPluginSnapshot, ChatMessage, OpenDesignPlanContractV2 } from '@open-design/contracts';
+import type { ChatMessage } from '@open-design/contracts';
 import { strategyPackageHashFromDigests } from '@open-design/plugin-runtime';
 import express, { type Response } from 'express';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -135,60 +135,6 @@ function seedTaskAndMessage(
   return { snapshot, task };
 }
 
-function planContract(snapshot: AppliedPluginSnapshot): OpenDesignPlanContractV2 {
-  const strategy = snapshot.strategy!;
-  return {
-    schema: 'open-design.plan-contract/v2',
-    strategy: {
-      id: 'od-next-strategy',
-      version: strategy.version,
-      packageHash: strategy.packageHash,
-      snapshotId: snapshot.snapshotId,
-    },
-    taskProfile: {
-      schemaVersion: '2',
-      taskType: 'prototype',
-      taskProfileVersion: strategy.selectedTaskProfile.version,
-      goal: 'Build a prototype',
-      contextAndAudience: 'Product team',
-      inputsAndReferences: [],
-      constraints: [],
-      canonicalDeliverable: { id: 'prototype', kind: 'prototype', format: 'html' },
-      requiredDeliverables: [{ id: 'prototype', kind: 'prototype' }],
-      designSpec: {
-        source: 'resolved-baseline',
-        version: '1',
-        decisions: { palette: 'neutral' },
-      },
-      buildRequirements: [{ id: 'build-1', text: 'Build the required prototype.' }],
-      assumptions: [],
-      risks: [],
-      taskSpecific: {},
-    },
-    fullPlan: {
-      executionMode: 'simple',
-      steps: [{ id: 'step-1', objective: 'Build', outputs: ['prototype'] }],
-      readinessArtifacts: [],
-      buildPackages: [],
-    },
-    runManifest: {
-      selectedAgentId: 'codex',
-      capabilitySnapshotHash: 'c'.repeat(64),
-      inputRefs: [],
-      productionRoutes: ['html'],
-      preflight: { intake: 'passed', execution: 'passed' },
-    },
-    decisionSummary: {
-      goal: 'Build a prototype',
-      deliverables: ['prototype'],
-      keyConstraints: [],
-      assumptions: [],
-      risks: [],
-      openDecisions: [],
-    },
-  };
-}
-
 // Mount only the production conversation registrar; no agent or full daemon
 // starts. Each request sees actual SQLite rows and crosses JSON serialization.
 async function readHistory(
@@ -257,7 +203,7 @@ describe('persisted strategy verdict in conversation history', () => {
     fs.rmSync(dataDir, { recursive: true, force: true });
   });
 
-  it('returns the durable blocked verdict before and after reopening the database without rewriting process success', async () => {
+  it('clears retired blocked verdicts on restart without rewriting physical success', async () => {
     seedTaskAndMessage(db, 'blocked');
     const persisted = db.prepare(`
       SELECT outcome, blocked_reason_codes_json AS reasons
@@ -269,11 +215,11 @@ describe('persisted strategy verdict in conversation history', () => {
     closeDatabase();
     db = openDatabase(dataDir, { dataDir });
     expect(getStrategyTaskExecution(db, TASK_ID)).toMatchObject({
-      outcome: 'blocked', blockedContext: { reasonCodes: [REASON], visibleText: REPLY },
+      outcome: 'completed',
     });
     const cold = await readHistory(db, dataDir);
 
-    for (const messages of [warm, cold]) {
+    for (const [messages, blocked] of [[warm, true], [cold, false]] as const) {
       expect(messages).toHaveLength(1);
       // Existing ChatMessage fields represent task truth independently from
       // physical Run success. This is not a request to invent an error string
@@ -284,8 +230,8 @@ describe('persisted strategy verdict in conversation history', () => {
         runStatus: 'succeeded',
         strategyTaskExecutionId: TASK_ID,
         strategyTaskRunIndex: 0,
-        strategyTaskBlocked: true,
-        strategyTaskBlockedText: REPLY,
+        strategyTaskBlocked: blocked,
+        strategyTaskBlockedText: blocked ? REPLY : null,
       });
       expect(messages[0]?.strategyTaskDelivered).not.toBe(true);
     }
@@ -365,12 +311,12 @@ describe('persisted strategy verdict in conversation history', () => {
     closeDatabase();
     db = openDatabase(dataDir, { dataDir });
     const cold = await readHistory(db, dataDir, { authorizeProjectRequest });
-    for (const messages of [warm, cold]) {
+    for (const [messages, blocked] of [[warm, true], [cold, false]] as const) {
       expect(messages).toHaveLength(2);
       // Preserve the intended same-project, same-conversation restoration.
       expect(messages.find((message) => message.id === MESSAGE_ID)).toMatchObject({
         strategyTaskExecutionId: TASK_ID, strategyTaskRunIndex: 0,
-        strategyTaskBlocked: true, strategyTaskBlockedText: REPLY, runStatus: 'succeeded',
+        strategyTaskBlocked: blocked, strategyTaskBlockedText: blocked ? REPLY : null, runStatus: 'succeeded',
       });
       const imported = messages.find((message) => message.id === importedMessageId);
       expect(imported).toMatchObject({
@@ -401,7 +347,7 @@ describe('persisted strategy verdict in conversation history', () => {
           taskExecutionId: TASK_ID, inputStage: 'production', taskRunIndex: 1,
         }),
       },
-      planContract: planContract(snapshot),
+
       updatedAt: 300,
     });
     compareAndTransitionStrategyTaskExecution(db, {
@@ -420,7 +366,7 @@ describe('persisted strategy verdict in conversation history', () => {
     closeDatabase();
     db = openDatabase(dataDir, { dataDir });
     expect(getStrategyTaskExecution(db, TASK_ID)).toMatchObject({
-      outcome: 'blocked', latestRunId: productionRunId,
+      outcome: 'completed', latestRunId: productionRunId,
       runs: [
         { runId: RUN_ID, taskRunIndex: 0 },
         { runId: productionRunId, taskRunIndex: 1, sourceRunId: RUN_ID },
@@ -437,7 +383,7 @@ describe('persisted strategy verdict in conversation history', () => {
       // predecessor as a failed process or erase the failed child's status.
       expect(message).toMatchObject({
         runId, runStatus, strategyTaskExecutionId: TASK_ID, strategyTaskRunIndex: runIndex,
-        strategyTaskBlocked: true, strategyTaskBlockedText: REPLY,
+        strategyTaskBlocked: false, strategyTaskBlockedText: null,
       });
       expect(message?.strategyTaskDelivered).not.toBe(true);
       expect(getMessage(db, id)?.runStatus).toBe(runStatus);
@@ -448,7 +394,7 @@ describe('persisted strategy verdict in conversation history', () => {
     { label: 'legacy missing attribution', reasons: null, text: null, expectedText: null },
     { label: 'malformed reason JSON', reasons: '{broken', text: REPLY, expectedText: REPLY },
     { label: 'non-text attribution', reasons: '{broken', text: Buffer.from('invalid'), expectedText: null },
-  ])('keeps history readable with $label', async ({ reasons, text, expectedText }) => {
+  ])('keeps history readable with $label', async ({ reasons, text }) => {
     seedTaskAndMessage(db, 'blocked');
     // Corrupt only existing optional storage columns after using the real
     // writer. Display reads must not require a fully verifiable task record.
@@ -466,8 +412,8 @@ describe('persisted strategy verdict in conversation history', () => {
       id: MESSAGE_ID,
       runStatus: 'succeeded',
       strategyTaskExecutionId: TASK_ID,
-      strategyTaskBlocked: true,
-      strategyTaskBlockedText: expectedText,
+      strategyTaskBlocked: false,
+      strategyTaskBlockedText: null,
     });
     expect(messages[0]?.strategyTaskDelivered).not.toBe(true);
   });
@@ -487,15 +433,15 @@ describe('persisted strategy verdict in conversation history', () => {
     expect(messages).toHaveLength(3);
     expect(messages.find((message) => message.id === MESSAGE_ID)).toMatchObject({
       strategyTaskExecutionId: TASK_ID, strategyTaskRunIndex: 0,
-      strategyTaskBlocked: true, strategyTaskBlockedText: REPLY, runStatus: 'succeeded',
+      strategyTaskBlocked: false, strategyTaskBlockedText: null, runStatus: 'succeeded',
     });
     const completed = messages.find((message) => message.id === 'completed-assistant');
     expect(completed).toMatchObject({
       strategyTaskExecutionId: 'completed-task', strategyTaskRunIndex: 0,
-      strategyTaskDelivered: true, runStatus: 'succeeded',
+      strategyTaskDelivered: false, runStatus: 'succeeded',
     });
-    expect(completed?.strategyTaskBlocked).toBeUndefined();
-    expect(completed?.strategyTaskBlockedText).toBeUndefined();
+    expect(completed?.strategyTaskBlocked).toBe(false);
+    expect(completed?.strategyTaskBlockedText).toBeNull();
     const unmapped = messages.find((message) => message.id === 'unmapped-assistant');
     expect(unmapped).toMatchObject({ runId: 'unmapped-run', runStatus: 'succeeded' });
     expect(unmapped?.strategyTaskExecutionId).toBeUndefined();
@@ -516,7 +462,7 @@ describe('persisted strategy verdict in conversation history', () => {
       const legacy = messages.find((message) => message.id === 'legacy-assistant');
       expect(mapped?.strategyTaskExecutionId).toBe(TASK_ID);
       expect(mapped?.strategyTaskBlocked).not.toBe(true);
-      expect(mapped?.strategyTaskDelivered === true).toBe(outcome === 'completed');
+      expect(mapped?.strategyTaskDelivered).toBe(false);
       expect(legacy).toMatchObject({ content: 'Legacy reply.', runStatus: 'succeeded' });
       expect(legacy?.strategyTaskExecutionId).toBeUndefined();
       expect(legacy?.strategyTaskBlocked).toBeUndefined();

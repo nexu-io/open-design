@@ -2009,6 +2009,18 @@ describe("ProductionCampaignModal device impressions", () => {
 		// because nothing can write it until the presentation is open.
 		vi.useFakeTimers({ toFake: [...IMPRESSION_TIMERS] });
 		vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+		let mounted!: () => void;
+		const mountedPromise = new Promise<void>((resolve) => {
+			mounted = resolve;
+		});
+		vi
+			.spyOn(OpenDesignTouchpointElement.prototype, "mount")
+			.mockImplementation(async function (this: OpenDesignTouchpointElement) {
+				this.shadowRoot?.replaceChildren(
+					document.createTextNode("Verified campaign"),
+				);
+				mounted();
+			});
 		let calls = 0;
 		const fetchMock = vi.fn(async () => {
 			calls += 1;
@@ -2020,24 +2032,30 @@ describe("ProductionCampaignModal device impressions", () => {
 		await act(async () => {
 			await vi.advanceTimersByTimeAsync(16);
 		});
-		expect(document.querySelector("opend-touchpoint")).not.toBeNull();
+		// Insertion precedes async mounting. Keep the host stable, then wait for
+		// the real impression that the current lifecycle records after mounting.
+		await act(async () => {
+			await mountedPromise;
+		});
+		const host = document.querySelector("opend-touchpoint");
+		expect(host).not.toBeNull();
 		await advanceToRecordedImpression();
 		await act(async () => {
 			await vi.advanceTimersByTimeAsync(30_000);
 		});
 		expect(calls).toBe(2);
-		expect(document.querySelector("opend-touchpoint")).not.toBeNull();
+		expect(document.querySelector("opend-touchpoint")).toBe(host);
 		act(() => {
 			window.dispatchEvent(new Event("online"));
 		});
 		await act(async () => {
 			await vi.advanceTimersByTimeAsync(1_500);
 		});
-		// The failing attempt and its recovery both have to have happened, or the
-		// two surviving hosts below would only mean nothing ever disturbed them.
+		// The failed poll and the online-triggered recovery must both happen.
 		expect(calls).toBe(3);
-		expect(document.querySelector("opend-touchpoint")).not.toBeNull();
+		expect(document.querySelector("opend-touchpoint")).toBe(host);
 		expect(screen.queryByRole("dialog")).not.toBeNull();
+		expect(OpenDesignTouchpointElement.prototype.mount).toHaveBeenCalledTimes(1);
 	});
 	it.each(["no-decision", "stale-revocation"] as const)(
 		"keeps the displayed campaign on screen when a retained %s poll recovers",

@@ -2300,6 +2300,7 @@ async function consumeDaemonPhysicalRun({
       }
     }
 
+    // `completed` ends orchestration; only the physical Run can declare success.
     if (endStrategyTask?.terminal) {
       // Surface the terminal projection before the status/error handlers run,
       // so a blocked verdict (with its gate attribution) is stamped onto the
@@ -2367,9 +2368,6 @@ async function consumeDaemonPhysicalRun({
           endStatus = 'failed';
           pendingStructuredError ??= createStrategyTaskBlockedError(endStrategyTask);
         }
-      } else if (endStrategyTask.outcome === 'completed') {
-        endStatus = 'succeeded';
-        serverDeclaredSuccess = true;
       }
     }
 

@@ -1,11 +1,21 @@
-# OD Next HyperFrames Task Profile v2.0.0
+# OD Next HyperFrames Task Profile v2.0.2
 
 > Rollout: active
 
 Task routing, clarification, Build, and the ship-on-write boundary follow the
 general orchestration Skill; how HyperFrames is actually invoked is defined
-by the engineering implementation. Profile field semantics and the artifact
-contract bind to the V2 machine contract at the recorded taskProfileVersion.
+by the engineering implementation. Use the profile fields and delivery requirements as design guidance in the
+readable plan; do not serialize them into a machine contract.
+
+## Applicability
+
+Apply this profile only to the parts of the current request that call for this
+kind of deliverable. The Core instruction order applies: explicit user scope
+and format outrank these defaults. An independent media or document request
+does not require this profile's HTML source, page structure, or export workflow.
+Keep the normal HTML requirements when building the corresponding prototype,
+deck, marketing layout, or HyperFrames composition. Do not add a wrapper merely
+because this profile is loaded.
 
 ## Profile fields
 
@@ -24,7 +34,7 @@ readability, asset fidelity, and audio-picture sync.
 
 ## Artifact contract
 
-The canonical deliverable is editable HyperFrames source — a timeline-driven
+For a HyperFrames composition, the default deliverable is editable HyperFrames source — a timeline-driven
 HTML source artifact — with a stable render entry. Final-cut files such as
 MP4 are rendered by Open Design's product-side engineering capability after
 the source is written and are outside the Agent's responsibility, unless the
