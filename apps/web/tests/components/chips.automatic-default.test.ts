@@ -45,3 +45,19 @@ describe('create rail chips claim the automatic default', () => {
     }
   });
 });
+
+// A duplicate chip id collides as a React key and makes findChip and the
+// group-filtered lookups ambiguous: they observe only the first match, so a
+// second entry sharing an id (as `web-clone` did) is silently shadowed and can
+// drift from the entry that is actually used — e.g. quietly losing
+// `automaticDefault`. Existing findChip / rail tests passed with the duplicate
+// present because they only ever see the first match, so keep an explicit
+// catalog-wide invariant that fails the moment an id is reused.
+describe('HOME_HERO_CHIPS catalog', () => {
+  it('has a unique id for every chip', () => {
+    const ids = HOME_HERO_CHIPS.map((chip) => chip.id);
+    const duplicates = [...new Set(ids.filter((id, index) => ids.indexOf(id) !== index))];
+    expect(duplicates).toEqual([]);
+    expect(new Set(ids).size).toBe(HOME_HERO_CHIPS.length);
+  });
+});
