@@ -231,6 +231,121 @@ function runFixturePostinstall(sandbox: string, env: Record<string, string | und
     },
   });
 }
+function writeNativeRecoveryFixture(
+  sandbox: string,
+  behavior: "recover" | "broken",
+): { pnpmPath: string; statePath: string } {
+  const daemonDir = join(sandbox, "apps", "daemon");
+  const sqliteDir = join(daemonDir, "node_modules", "better-sqlite3");
+  const statePath = join(sandbox, "better-sqlite3-rebuilt");
+  const pnpmPath = join(sandbox, "native-pnpm-stub.mjs");
+
+  mkdirSync(sqliteDir, { recursive: true });
+
+  writeFileSync(
+    join(daemonDir, "package.json"),
+    `${JSON.stringify(
+      {
+        name: "@open-design/daemon",
+        type: "module",
+      },
+      null,
+      2,
+    )}\n`,
+  );
+
+  writeFileSync(
+    join(sqliteDir, "package.json"),
+    `${JSON.stringify(
+      {
+        name: "better-sqlite3",
+        version: "0.0.0-fixture",
+        main: "index.cjs",
+      },
+      null,
+      2,
+    )}\n`,
+  );
+
+  writeFileSync(
+    join(sqliteDir, "index.cjs"),
+    `
+const fs = require("node:fs");
+
+class Database {
+  constructor() {
+    const statePath = process.env.OD_BETTER_SQLITE3_FIXTURE_STATE;
+
+    if (
+      ${JSON.stringify(behavior)} !== "recover" ||
+      !statePath ||
+      !fs.existsSync(statePath)
+    ) {
+      const error = new Error("fixture better-sqlite3 ABI mismatch");
+      error.code = "ERR_DLOPEN_FAILED";
+      throw error;
+    }
+  }
+
+  prepare() {
+    return {
+      get() {
+        return { ok: 1 };
+      },
+    };
+  }
+
+  close() {}
+}
+
+module.exports = Database;
+`,
+  );
+
+  writeFileSync(
+    pnpmPath,
+    `
+import { writeFileSync } from "node:fs";
+
+const args = process.argv.slice(2);
+const isRebuild = args.includes("rebuild") && args.includes("better-sqlite3");
+
+if (isRebuild) {
+  writeFileSync(${JSON.stringify(statePath)}, "rebuilt\\n");
+  process.exit(139);
+}
+
+process.exit(0);
+`,
+  );
+
+  return { pnpmPath, statePath };
+}
+
+function runNativeRecoveryFixture(
+  sandbox: string,
+  pnpmPath: string,
+  statePath: string,
+): ReturnType<typeof spawnSync> {
+  return spawnSync(
+    process.execPath,
+    [join(sandbox, "scripts", "postinstall.mjs"), "dependencies"],
+    {
+      cwd: sandbox,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        npm_execpath: pnpmPath,
+        OD_BETTER_SQLITE3_FIXTURE_STATE: statePath,
+        OPEN_DESIGN_POSTINSTALL_ENTRY: undefined,
+        OPEN_DESIGN_POSTINSTALL_PLAN_PATH: undefined,
+        OPEN_DESIGN_POSTINSTALL_RECEIPT_PATH: undefined,
+        OPEN_DESIGN_POSTINSTALL_TARGETS: undefined,
+        OPEN_DESIGN_POSTINSTALL_TIMING_PATH: undefined,
+      },
+    },
+  );
+}
 
 function readTimingEvents(path: string): TimingEvent[] {
   if (!existsSync(path)) return [];
@@ -255,6 +370,38 @@ function eventIndex(events: StubEvent[], event: StubEvent["event"], target: stri
 }
 
 describe("postinstall script contract", () => {
+  it("[P1] continues when better-sqlite3 is usable after a failed rebuild", () => {
+    const sandbox = createSandbox();
+
+    try {
+      const { pnpmPath, statePath } = writeNativeRecoveryFixture(sandbox, "recover");
+      const result = runNativeRecoveryFixture(sandbox, pnpmPath, statePath);
+
+      expect(result.status, result.stderr?.toString()).toBe(0);
+      expect(result.stderr).toContain(
+        "better-sqlite3 rebuild exited with 139, but the native addon is usable; continuing.",
+      );
+      expect(existsSync(statePath)).toBe(true);
+    } finally {
+      rmSync(sandbox, { recursive: true, force: true });
+    }
+  });
+
+  it("[P1] still fails when better-sqlite3 remains unusable after a failed rebuild", () => {
+    const sandbox = createSandbox();
+
+    try {
+      const { pnpmPath, statePath } = writeNativeRecoveryFixture(sandbox, "broken");
+      const result = runNativeRecoveryFixture(sandbox, pnpmPath, statePath);
+
+      expect(result.status).toBe(139);
+      expect(result.stderr).toContain(
+        "better-sqlite3 rebuild failed and the native addon is still unusable.",
+      );
+    } finally {
+      rmSync(sandbox, { recursive: true, force: true });
+    }
+  });
   it("[P2] validates workflow intents and produces a frozen target closure", () => {
     const output = join(tmpdir(), `od-postinstall-plan-${process.pid}.json`);
     try {
