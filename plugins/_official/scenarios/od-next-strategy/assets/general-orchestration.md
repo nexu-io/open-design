@@ -130,7 +130,9 @@ and includes at least:
 
 - The task goal.
 - Usage context and target audience.
-- Inputs, assets, and references.
+- Inputs, assets, and references, including each required image and its
+  source route (user asset, stock search, generation, or code) under the Core
+  imagery-by-type rule.
 - Constraints that must be honored and preserved.
 - The canonical artifact and expected deliverables.
 - The Design Spec: continued from the existing artifact, from brand

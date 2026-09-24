@@ -87,7 +87,7 @@ describe('bundled OD Next strategy package identity', () => {
     ]);
     expect(prototype.selectedTaskProfile).toEqual(expect.objectContaining({
       taskType: 'prototype',
-      version: '2.2.2',
+      version: '2.2.3',
       path: './assets/task-profiles/prototype.md',
     }));
     expect(hyperframes.packageHash).not.toBe(prototype.packageHash);
@@ -282,7 +282,7 @@ describe('hash-gated internal strategy activation and snapshot persistence', () 
     if (!activated || !activated.ok) throw new Error('expected strategy snapshot');
     expect(activated.snapshot.strategy).toEqual(expect.objectContaining({
       id: 'od-next-strategy',
-      version: '2.0.6',
+      version: '2.0.7',
       packageHash: expect.stringMatching(/^[a-f0-9]{64}$/),
       selectedTaskProfile: expect.objectContaining({ taskType: 'prototype' }),
     }));
