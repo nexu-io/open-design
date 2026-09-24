@@ -13638,6 +13638,24 @@ export async function startServer({
       );
       antigravityModelLockRelease = await acquireAntigravityModelLock();
     }
+    // The antigravity model lock is acquired above, but ownership is only
+    // handed off to the child/watch path far below — after a successful spawn
+    // wires the log-file watcher plus the child-exit fallback that release it.
+    // Every early exit in between (cancel, budget/prompt guards, buildArgs
+    // throw, missing-binary, spawn failure) must release the lock here, or the
+    // global chain stays poisoned and every later concrete-model antigravity
+    // run blocks forever (#5466). This release is idempotent and
+    // handoff-guarded: once the child owns it (`antigravityModelLockHandedOff`)
+    // it becomes a no-op, so we never double-release nor reopen the
+    // settings.json cross-talk race (263fd2fe7) by releasing while a
+    // slow-cold-start agy still holds the file.
+    let antigravityModelLockHandedOff = false;
+    const releaseAntigravityModelLockIfUnhanded = () => {
+      if (antigravityModelLockHandedOff) return;
+      const release = antigravityModelLockRelease;
+      antigravityModelLockRelease = null;
+      release?.();
+    };
 
     let args;
     const observeClaudeNativeChildBehavior =
@@ -13700,6 +13718,7 @@ export async function startServer({
       );
     } catch (err) {
       cleanupPromptFile();
+      releaseAntigravityModelLockIfUnhanded();
       throw err;
     }
     // Second-pass budget check that knows about the Windows `.cmd` shim
@@ -13719,6 +13738,7 @@ export async function startServer({
     );
     if (cmdShimBudgetError) {
       cleanupPromptFile();
+      releaseAntigravityModelLockIfUnhanded();
       design.runs.emit(
         run,
         'error',
@@ -13747,6 +13767,7 @@ export async function startServer({
     );
     if (directExeBudgetError) {
       cleanupPromptFile();
+      releaseAntigravityModelLockIfUnhanded();
       design.runs.emit(
         run,
         'error',
@@ -14187,6 +14208,7 @@ export async function startServer({
     // from issue #10.
     if (!resolvedBin || !agentLaunch.launchPath) {
       cleanupPromptFile();
+      releaseAntigravityModelLockIfUnhanded();
       revokeToolToken('child_exit');
       unregisterChatAgentEventSink();
       send('error', createSseErrorPayload(
@@ -14239,6 +14261,7 @@ export async function startServer({
     });
     if (run.cancelRequested || design.runs.isTerminal(run.status)) {
       cleanupPromptFile();
+      releaseAntigravityModelLockIfUnhanded();
       revokeToolToken('child_exit');
       unregisterChatAgentEventSink();
       cleanupOdNextRunInputProjection();
@@ -14510,6 +14533,10 @@ export async function startServer({
           watcherAbort.abort();
           releaseOnce();
         });
+        // Ownership of the lock release now belongs to the watcher +
+        // child-exit fallback above; the pre-spawn early-exit release must
+        // stop firing so it can't race that path or double-release (#5466).
+        antigravityModelLockHandedOff = true;
       }
       if (
         (def.promptViaStdin || def.streamFormat === CODEX_APP_SERVER_STREAM_FORMAT) &&
@@ -14545,6 +14572,7 @@ export async function startServer({
       }
     } catch (err) {
       cleanupPromptFile();
+      releaseAntigravityModelLockIfUnhanded();
       revokeToolToken('child_exit');
       unregisterChatAgentEventSink();
       send('error', createSseErrorPayload(
