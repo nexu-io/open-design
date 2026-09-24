@@ -56,12 +56,30 @@ export function buildHomeMediaComposer(
   } = {},
 ): HomeMediaComposerState {
   const imageModels = options.imageModels ?? IMAGE_MODELS;
+  const defaultInputs = defaultInputsForSurface(surface, promptTemplates, imageModels);
+  const seededInputs = {
+    ...defaultInputs,
+    ...seedInputs,
+  };
+  const templateAwareInputs = surface === 'image'
+    ? homeMediaInputsAfterTemplateChange(
+        surface,
+        seedInputs,
+        {
+          ...seededInputs,
+          template: validTemplateId(
+            surface,
+            stringValue(seededInputs.template),
+            promptTemplates,
+          ),
+        },
+        promptTemplates,
+        imageModels,
+      )
+    : seededInputs;
   const inputs = normalizeHomeMediaInputs(
     surface,
-    {
-      ...defaultInputsForSurface(surface, promptTemplates),
-      ...seedInputs,
-    },
+    templateAwareInputs,
     promptTemplates,
     voiceOptions,
     imageModels,
@@ -88,6 +106,7 @@ export function normalizeHomeMediaInputs(
 ): Record<string, unknown> {
   if (surface === 'image') {
     const ratio = validOption(stringValue(raw.ratio) || stringValue(raw.aspect), MEDIA_ASPECTS, '16:9');
+    const rawModel = stringValue(raw.model);
     return {
       mediaKind: 'image',
       subject: stringValue(raw.subject) || 'a premium product concept',
@@ -95,7 +114,7 @@ export function normalizeHomeMediaInputs(
       aspect: ratio,
       template: validTemplateId(surface, stringValue(raw.template), promptTemplates),
       designSystem: stringValue(raw.designSystem) || 'the active project design system',
-      model: validOption(stringValue(raw.model), imageModels.map((m) => m.id), DEFAULT_IMAGE_MODEL),
+      model: validImageModel(rawModel, imageModels) ? rawModel : DEFAULT_IMAGE_MODEL,
       ratio,
       resolution: validOption(stringValue(raw.resolution), MEDIA_RESOLUTIONS, DEFAULT_MEDIA_RESOLUTION),
     };
@@ -191,9 +210,14 @@ export function metadataForHomeMediaComposer(
   // run aligned with the model shown in the Home composer.
   if (surface === 'image') {
     const imageModel = stringValue(inputs.model);
+    const selectedAspect = stringValue(inputs.aspect);
+    const imageAspect = template && validImageTemplateAspect(selectedAspect)
+      ? selectedAspect
+      : null;
     return {
       kind: 'image',
       ...(imageModel ? { imageModel } : {}),
+      ...(imageAspect ? { imageAspect } : {}),
       ...(promptTemplate ? { promptTemplate } : {}),
     };
   }
@@ -208,6 +232,38 @@ export function metadataForHomeMediaComposer(
   }
   return {
     kind: 'audio',
+  };
+}
+
+export function homeMediaInputsAfterTemplateChange(
+  surface: HomeComposerMediaSurface,
+  previousInputs: Record<string, unknown>,
+  nextInputs: Record<string, unknown>,
+  promptTemplates: PromptTemplateSummary[],
+  imageModels: MediaModel[] = IMAGE_MODELS,
+): Record<string, unknown> {
+  if (
+    surface !== 'image'
+    || stringValue(previousInputs.template) === stringValue(nextInputs.template)
+  ) {
+    return nextInputs;
+  }
+
+  const template = promptTemplates.find(
+    (item) => item.surface === 'image' && item.id === stringValue(nextInputs.template),
+  );
+  if (!template) return nextInputs;
+
+  const model = validImageModel(template.model, imageModels)
+    ? template.model
+    : null;
+  const aspect = validImageTemplateAspect(template.aspect)
+    ? template.aspect
+    : null;
+  return {
+    ...nextInputs,
+    ...(model ? { model } : {}),
+    ...(aspect ? { aspect, ratio: aspect } : {}),
   };
 }
 
@@ -311,13 +367,22 @@ function queryTemplateForSurface(surface: HomeComposerMediaSurface, inputs: Reco
 function defaultInputsForSurface(
   surface: HomeComposerMediaSurface,
   promptTemplates: PromptTemplateSummary[],
+  imageModels: MediaModel[] = IMAGE_MODELS,
 ): Record<string, unknown> {
   if (surface === 'image') {
+    const template = templatesForHomeMediaSurface(surface, promptTemplates)[0] ?? null;
+    const model = template && validImageModel(template.model, imageModels)
+      ? template.model
+      : DEFAULT_IMAGE_MODEL;
+    const aspect = template && validImageTemplateAspect(template.aspect)
+      ? template.aspect
+      : '16:9';
     return {
-      template: firstTemplateId(surface, promptTemplates),
+      template: template?.id ?? NO_TEMPLATE_PLACEHOLDER,
       designSystem: 'the active project design system',
-      model: DEFAULT_IMAGE_MODEL,
-      ratio: '16:9',
+      model,
+      aspect,
+      ratio: aspect,
       resolution: DEFAULT_MEDIA_RESOLUTION,
     };
   }
@@ -337,6 +402,22 @@ function defaultInputsForSurface(
     return { template: firstTemplateId(surface, promptTemplates), model: 'hyperframes-html', ratio: '16:9', duration: 10 };
   }
   return { text: 'the user\'s brief', audioType: 'speech', model: defaultHomeAudioModel('speech'), duration: 10 };
+}
+
+function validImageModel(
+  model: string | undefined,
+  imageModels: MediaModel[],
+): model is string {
+  return Boolean(
+    model
+    && (imageModels.some((item) => item.id === model) || model.startsWith('aihubmix-')),
+  );
+}
+
+function validImageTemplateAspect(
+  aspect: string | undefined,
+): aspect is (typeof MEDIA_ASPECTS)[number] {
+  return Boolean(aspect && (MEDIA_ASPECTS as readonly string[]).includes(aspect));
 }
 
 function stringField(name: string, label: string, placeholder?: string): InputFieldSpec {
