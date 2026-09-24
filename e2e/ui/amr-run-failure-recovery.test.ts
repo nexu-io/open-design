@@ -264,7 +264,7 @@ test('[P0] @critical AMR auth failures return to the existing sign-in gate witho
   await sendPrompt(page, 'AMR auth failure recovery smoke');
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expect(page).toHaveURL(/\/onboarding$/, { timeout: T.long });
-  await expect(page.getByRole('heading', { name: /Sign in to OpenDesign|登录 OpenDesign/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Welcome to OpenDesign|欢迎使用 OpenDesign/i })).toBeVisible();
   await expect(page.getByRole('alertdialog')).toHaveCount(0);
   expect(loginRequested).toBe(false);
 });
@@ -361,7 +361,7 @@ test('[P0] @critical AMR model catalog invalid-key failures return to sign-in wi
   loggedIn = false;
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expect(page).toHaveURL(/\/onboarding$/, { timeout: T.long });
-  await expect(page.getByRole('heading', { name: /Sign in to OpenDesign|登录 OpenDesign/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Welcome to OpenDesign|欢迎使用 OpenDesign/i })).toBeVisible();
   await expect(page.getByRole('alertdialog')).toHaveCount(0);
   expect(loginRequested).toBe(false);
 });
@@ -462,7 +462,7 @@ test('[P0] @critical signed-out Cloud switching keeps the existing sign-in gate 
   // OPEND-3205 removes the Settings detour, not the existing authentication
   // gate. Keep the signed-out fixture and require explicit sign-in, with no run.
   await expect(page).toHaveURL(/\/onboarding$/, { timeout: T.medium });
-  await expect(page.getByRole('heading', { name: /Sign in to OpenDesign|登录 OpenDesign/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Welcome to OpenDesign|欢迎使用 OpenDesign/i })).toBeVisible();
   await expect
     .poll(async () => {
       const raw = await page.evaluate((key) => window.localStorage.getItem(key), STORAGE_KEY);
