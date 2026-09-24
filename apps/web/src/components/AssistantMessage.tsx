@@ -917,6 +917,8 @@ function AssistantMessageImpl({
         content: message.content,
         runStatus: message.runStatus,
         strategyTaskDelivered: message.strategyTaskDelivered,
+        strategyTaskBlocked: message.strategyTaskBlocked,
+        strategyTaskInputStage: message.strategyTaskInputStage,
       });
   const hasTodoSnapshot = events.some(
     (event) => event.kind === "tool_use" && isTodoWriteToolName(event.name),

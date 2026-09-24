@@ -1,6 +1,7 @@
 import { isTodoWriteToolName } from '@open-design/contracts';
 import {
   eventsEndedByAskingUser,
+  strategyTaskRefusedBeforeProduction,
   todoStatusIsUnfinished,
   turnEndedByAskingUser,
 } from '@open-design/contracts';
@@ -105,11 +106,16 @@ export function unfinishedTodosFromEvents(events: AgentEvent[] | undefined): Tod
  * stamp: the footer never reads that flag, it re-derives the answer from the
  * turn's own events. Fixing only the daemon leaves the chat still saying it.
  *
+ * A third rule mirrors the daemon too: a turn whose strategy task was refused
+ * before production ended with the agent's reply, and the build its list names
+ * never started (`strategyTaskRefusedBeforeProduction`).
+ *
  * `content` is the turn's rendered text and is preferred when present — it is
  * what `hasPendingQuestionForm` reads, so the footer and the form card cannot
  * disagree about whether a form is on screen. `runStatus` gates the ask rule
- * exactly as the daemon does: a turn the USER stopped is stopped, whatever it
- * asked on the way out, and its remaining todos stay continuable.
+ * and the refusal rule exactly as the daemon does: a turn the USER stopped is
+ * stopped, whatever it asked on the way out, and its remaining todos stay
+ * continuable.
  */
 export function continuableUnfinishedTodos(
   message:
@@ -118,11 +124,18 @@ export function continuableUnfinishedTodos(
         content?: string;
         runStatus?: 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled' | undefined;
         strategyTaskDelivered?: boolean;
+        strategyTaskBlocked?: boolean;
+        strategyTaskInputStage?: string;
       }
     | undefined,
 ): TodoItem[] {
   if (!message || message.strategyTaskDelivered) return [];
   if (turnRanToCleanEnd(message.runStatus) && messageEndedByAskingUser(message)) return [];
+  if (turnRanToCleanEnd(message.runStatus) && strategyTaskRefusedBeforeProduction({
+    terminal: message.strategyTaskBlocked === true,
+    outcome: message.strategyTaskBlocked === true ? 'blocked' : undefined,
+    inputStage: message.strategyTaskInputStage,
+  })) return [];
   return unfinishedTodosFromEvents(message.events);
 }
 
