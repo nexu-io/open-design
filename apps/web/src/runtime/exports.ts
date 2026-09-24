@@ -870,7 +870,11 @@ export function exportReactComponentAsZip(
 // active file's project-relative path; if it lives inside a top-level
 // directory we scope the archive to that directory, otherwise we ask the
 // daemon for the whole project. Falls back to the in-memory single-file
-// ZIP on any failure so the action never silently no-ops.
+// ZIP on any failure so the action never silently no-ops, and reports
+// which artifact the user actually received (issue #8005): `'archive'` is
+// the project tree the daemon bundled, `'degraded'` is the single-file
+// rendered-page snapshot — callers must surface the degraded outcome
+// instead of presenting it as a plain successful export.
 export async function exportProjectAsZip(opts: {
   projectId: string;
   filePath: string;
@@ -878,7 +882,7 @@ export async function exportProjectAsZip(opts: {
   fallbackTitle: string;
   versionId?: string;
   workspaceContext?: WorkspaceCollabContext | null;
-}): Promise<void> {
+}): Promise<'archive' | 'degraded'> {
   if (opts.versionId) {
     const segments = opts.filePath
       .split('/')
@@ -895,11 +899,11 @@ export async function exportProjectAsZip(opts: {
         : await fetch(url);
       if (!resp.ok) throw new Error(`version html export request failed (${resp.status})`);
       exportAsZip(await resp.text(), opts.fallbackTitle);
-      return;
+      return 'archive';
     } catch (err) {
       console.warn('[exportProjectAsZip] falling back to single-file ZIP:', err);
       exportAsZip(opts.fallbackHtml, opts.fallbackTitle);
-      return;
+      return 'degraded';
     }
   }
   const root = archiveRootFromFilePath(opts.filePath);
@@ -914,10 +918,20 @@ export async function exportProjectAsZip(opts: {
       : await fetch(url);
     if (!resp.ok) throw new Error(`archive request failed (${resp.status})`);
     const blob = await resp.blob();
+    // A 200 does not mean the body is the archive: a reverse proxy can
+    // answer with its own error page, and a dropped connection truncates
+    // the stream mid-transfer. Both previously downloaded as a "successful"
+    // project ZIP the user could never open.
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    if (!isValidZipArchive(bytes)) {
+      throw new Error('archive response is not a readable ZIP (proxy error page or truncated stream?)');
+    }
     triggerDownload(blob, archiveFilenameFrom(resp, opts.fallbackTitle, root));
+    return 'archive';
   } catch (err) {
     console.warn('[exportProjectAsZip] falling back to single-file ZIP:', err);
     exportAsZip(opts.fallbackHtml, opts.fallbackTitle);
+    return 'degraded';
   }
 }
 
@@ -1278,6 +1292,66 @@ export async function downloadProjectArchive(opts: {
     console.warn('[downloadProjectArchive] failed:', err);
     return false;
   }
+}
+
+// Structural ZIP check for the archive download path (issue #8005). Locates
+// the end-of-central-directory record by scanning backwards from the end of
+// the buffer (its trailing comment is variable-length, so there is no fixed
+// offset) and validates the record's single-volume metadata: the disk
+// number and central-directory start disk must be zero, the per-disk and
+// total entry counts must agree, and the central directory the record names
+// must sit inside the file. Readers such as JSZip refuse multi-disk or
+// truncated archives, so anything failing these checks would download as a
+// "successful" project ZIP the user could never open. Exported for unit
+// tests; pure bytes-in/boolean-out with no DOM dependency.
+export function isValidZipArchive(bytes: Uint8Array): boolean {
+  const EOCD_SIZE = 22;
+  // 65535-byte max comment + the record itself bounds where the EOCD can sit.
+  const scanFloor = Math.max(0, bytes.length - (EOCD_SIZE + 65535));
+  let eocd = -1;
+  for (let i = bytes.length - EOCD_SIZE; i >= scanFloor; i--) {
+    if (
+      bytes[i] === 0x50 &&
+      bytes[i + 1] === 0x4b &&
+      bytes[i + 2] === 0x05 &&
+      bytes[i + 3] === 0x06
+    ) {
+      eocd = i;
+      break;
+    }
+  }
+  if (eocd < 0) return false;
+  const view = new DataView(bytes.buffer, bytes.byteOffset + eocd, EOCD_SIZE);
+  const diskNumber = view.getUint16(4, true);
+  const cdStartDisk = view.getUint16(6, true);
+  const diskEntries = view.getUint16(8, true);
+  const totalEntries = view.getUint16(10, true);
+  const cdSize = view.getUint32(12, true);
+  const cdOffset = view.getUint32(16, true);
+  if (diskNumber !== 0 || cdStartDisk !== 0) return false;
+  if (diskEntries !== totalEntries) return false;
+  // ZIP64 sentinels are only trustworthy when the ZIP64 EOCD locator
+  // (PK\x06\x07, single volume) actually precedes the record; a bare
+  // sentinel is corruption, not a giant archive.
+  if (cdOffset === 0xffffffff || cdSize === 0xffffffff || totalEntries === 0xffff) {
+    if (eocd < 20) return false;
+    const locator = new DataView(bytes.buffer, bytes.byteOffset + eocd - 20, 20);
+    return (
+      locator.getUint32(0, true) === 0x07064b50 &&
+      locator.getUint32(4, true) === 0 &&
+      locator.getUint32(16, true) === 1
+    );
+  }
+  // The record must name a central directory that fits inside the file and,
+  // when it declares entries, starts with a central-directory header
+  // signature (PK\x01\x02) — this rejects a fake EOCD planted in what is
+  // otherwise a proxy error page.
+  if (cdOffset + cdSize > eocd) return false;
+  if (totalEntries > 0 && cdSize >= 4) {
+    const cd = new DataView(bytes.buffer, bytes.byteOffset + cdOffset, 4);
+    return cd.getUint32(0, true) === 0x02014b50;
+  }
+  return true;
 }
 
 // Exported for unit tests. Pure string transform with no DOM dependency.

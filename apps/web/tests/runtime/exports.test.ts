@@ -19,6 +19,7 @@ import {
   exportProjectAsPdf,
   exportProjectAsPptx,
   exportProjectAsZip,
+  isValidZipArchive,
   openSandboxedPreviewInNewTab,
   prepareImageExportTarget,
   planDeckImageCapture,
@@ -1066,6 +1067,229 @@ describe('binary project/design-system downloads', () => {
     expect(fetch).toHaveBeenCalledWith('/api/projects/proj%201/export/screens/main%20page.html?inline=1&versionId=v1');
     expect(capturedFilename).toBe('Main-Page-v1.zip');
     expect(capturedBlob?.type).toBe('application/zip');
+  });
+});
+
+// Issue #8005: a failed archive request used to silently substitute the
+// single-file rendered-page ZIP, so the download "succeeded" with the wrong
+// artifact. exportProjectAsZip now validates the archive response and
+// reports which artifact the caller received.
+function buildMinimalZipBytes(entryCount = 1): Uint8Array {
+  const name = new TextEncoder().encode('a.txt');
+  const local = new Uint8Array(30 + name.length);
+  const localView = new DataView(local.buffer);
+  localView.setUint32(0, 0x04034b50, true);
+  localView.setUint16(4, 20, true);
+  localView.setUint16(26, name.length, true);
+  local.set(name, 30);
+  const central = new Uint8Array(46 + name.length);
+  const centralView = new DataView(central.buffer);
+  centralView.setUint32(0, 0x02014b50, true);
+  centralView.setUint16(28, name.length, true);
+  central.set(name, 46);
+  const eocd = new Uint8Array(22);
+  const eocdView = new DataView(eocd.buffer);
+  eocdView.setUint32(0, 0x06054b50, true);
+  eocdView.setUint16(8, entryCount, true);
+  eocdView.setUint16(10, entryCount, true);
+  eocdView.setUint32(12, central.length, true);
+  eocdView.setUint32(16, local.length, true);
+  const out = new Uint8Array(local.length + central.length + eocd.length);
+  out.set(local, 0);
+  out.set(central, local.length);
+  out.set(eocd, local.length + central.length);
+  return out;
+}
+
+// Mutate a field of the trailing 22-byte EOCD record in place.
+function withEocdField(bytes: Uint8Array, fieldOffset: number, value: number): Uint8Array {
+  const out = new Uint8Array(bytes);
+  new DataView(out.buffer).setUint16(out.length - 22 + fieldOffset, value, true);
+  return out;
+}
+
+describe('isValidZipArchive (#8005 archive response validation)', () => {
+  it('accepts a structurally complete single-volume archive', () => {
+    expect(isValidZipArchive(buildMinimalZipBytes())).toBe(true);
+  });
+
+  it('accepts an empty archive (EOCD with zero entries)', () => {
+    const empty = new Uint8Array(22);
+    new DataView(empty.buffer).setUint32(0, 0x06054b50, true);
+    expect(isValidZipArchive(empty)).toBe(true);
+  });
+
+  it('rejects a bare EOCD signature prefix without the full record', () => {
+    expect(isValidZipArchive(new Uint8Array([0x50, 0x4b, 0x05, 0x06]))).toBe(false);
+  });
+
+  it('rejects local headers with no end-of-central-directory record', () => {
+    // nettee on #8009: `PK\x03\x04payload` — a truncated stream — must not pass.
+    const bytes = new TextEncoder().encode('PK\x03\x04payload');
+    expect(isValidZipArchive(bytes)).toBe(false);
+  });
+
+  it('rejects a proxy error page with no ZIP structure', () => {
+    const bytes = new TextEncoder().encode('<html><body>502 Bad Gateway</body></html>');
+    expect(isValidZipArchive(bytes)).toBe(false);
+  });
+
+  it('rejects multi-disk EOCD metadata', () => {
+    // nettee on #8009: flipping `number of this disk` to 1 advertises a
+    // multi-volume archive with only one volume, which readers refuse.
+    const multiDisk = withEocdField(buildMinimalZipBytes(), 4, 1);
+    expect(isValidZipArchive(multiDisk)).toBe(false);
+    const foreignCd = withEocdField(buildMinimalZipBytes(), 6, 1);
+    expect(isValidZipArchive(foreignCd)).toBe(false);
+  });
+
+  it('rejects a fake EOCD whose declared central directory is absent', () => {
+    // An error page ending in a planted EOCD: the declared central directory
+    // range fits inside the file, but no central-header signature lives there.
+    const body = new TextEncoder().encode('<html>gateway timeout — padding pad pad pad</html>');
+    const eocd = new Uint8Array(22);
+    const view = new DataView(eocd.buffer);
+    view.setUint32(0, 0x06054b50, true);
+    view.setUint16(8, 1, true);
+    view.setUint16(10, 1, true);
+    view.setUint32(12, 46, true);
+    view.setUint32(16, 0, true);
+    const bytes = new Uint8Array(body.length + eocd.length);
+    bytes.set(body, 0);
+    bytes.set(eocd, body.length);
+    expect(isValidZipArchive(bytes)).toBe(false);
+  });
+
+  it('accepts ZIP64 sentinels only when the ZIP64 locator precedes the EOCD', () => {
+    const base = buildMinimalZipBytes();
+    const localAndCentral = base.subarray(0, base.length - 22);
+    // Real ZIP64 layout: …[central directory][ZIP64 locator][EOCD], with the
+    // locator's 20 bytes sitting immediately before the 22-byte EOCD.
+    const withLocator = new Uint8Array(localAndCentral.length + 20 + 22);
+    withLocator.set(localAndCentral, 0);
+    withLocator.set(base.subarray(base.length - 22), localAndCentral.length + 20);
+    const locatorView = new DataView(withLocator.buffer);
+    const eocdStart = localAndCentral.length + 20;
+    locatorView.setUint32(eocdStart + 12, 0xffffffff, true);
+    locatorView.setUint32(eocdStart + 16, 0xffffffff, true);
+    locatorView.setUint32(localAndCentral.length, 0x07064b50, true);
+    locatorView.setUint32(localAndCentral.length + 16, 1, true);
+    expect(isValidZipArchive(withLocator)).toBe(true);
+
+    // Bare sentinels without the locator → corrupt, not a giant archive.
+    const bare = new Uint8Array(base);
+    const bareView = new DataView(bare.buffer);
+    bareView.setUint32(bare.length - 22 + 12, 0xffffffff, true);
+    bareView.setUint32(bare.length - 22 + 16, 0xffffffff, true);
+    expect(isValidZipArchive(bare)).toBe(false);
+  });
+});
+
+describe('degraded project ZIP export (#8005)', () => {
+  let capturedBlob: Blob | undefined;
+  let capturedFilename: string | undefined;
+
+  beforeEach(() => {
+    capturedBlob = undefined;
+    capturedFilename = undefined;
+    vi.stubGlobal('URL', {
+      createObjectURL: (blob: Blob) => {
+        capturedBlob = blob;
+        return 'blob:test';
+      },
+      revokeObjectURL: () => {},
+    });
+    vi.stubGlobal('document', {
+      createElement: () => {
+        const anchor = { href: '', click: () => {} } as { href: string; download?: string; click: () => void };
+        Object.defineProperty(anchor, 'download', {
+          set(value: string) {
+            capturedFilename = value;
+          },
+          get() {
+            return capturedFilename ?? '';
+          },
+        });
+        return anchor;
+      },
+      body: { appendChild: () => {}, removeChild: () => {} },
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('reports "archive" and downloads the daemon bytes for a valid archive response', async () => {
+    const zipBytes = buildMinimalZipBytes();
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(new Blob([new Uint8Array(zipBytes)]), {
+      status: 200,
+      headers: { 'content-type': 'application/zip' },
+    })));
+
+    const outcome = await exportProjectAsZip({
+      projectId: 'proj 1',
+      filePath: 'index.html',
+      fallbackHtml: '<main>fallback</main>',
+      fallbackTitle: 'Fallback',
+    });
+
+    expect(outcome).toBe('archive');
+    expect(capturedFilename).toBe('Fallback.zip');
+    expect(Array.from(new Uint8Array(await capturedBlob!.arrayBuffer()))).toEqual(Array.from(zipBytes));
+  });
+
+  it('reports "degraded" and downloads the fallback ZIP when the archive request fails', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('server exploded', { status: 500 })));
+
+    const outcome = await exportProjectAsZip({
+      projectId: 'proj 1',
+      filePath: 'index.html',
+      fallbackHtml: '<main>fallback</main>',
+      fallbackTitle: 'Fallback',
+    });
+
+    expect(outcome).toBe('degraded');
+    expect(capturedFilename).toBe('Fallback.zip');
+    expect(capturedBlob?.type).toBe('application/zip');
+  });
+
+  it('reports "degraded" when a 200 response carries a non-ZIP body', async () => {
+    // The case that motivated the issue: a reverse proxy answering its own
+    // error page with status 200 must not download as a successful export.
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('<html><body>407 Proxy Auth Required</body></html>', {
+      status: 200,
+      headers: { 'content-type': 'text/html' },
+    })));
+
+    const outcome = await exportProjectAsZip({
+      projectId: 'proj 1',
+      filePath: 'index.html',
+      fallbackHtml: '<main>fallback</main>',
+      fallbackTitle: 'Fallback',
+    });
+
+    expect(outcome).toBe('degraded');
+    expect(capturedFilename).toBe('Fallback.zip');
+  });
+
+  it('reports "archive" for the version export path, which builds its own ZIP', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('<!doctype html><p>version</p>', {
+      status: 200,
+      headers: { 'content-type': 'text/html' },
+    })));
+
+    const outcome = await exportProjectAsZip({
+      projectId: 'proj 1',
+      filePath: 'screens/main.html',
+      fallbackHtml: '<main>fallback</main>',
+      fallbackTitle: 'Main Page v1',
+      versionId: 'v1',
+    });
+
+    expect(outcome).toBe('archive');
+    expect(capturedFilename).toBe('Main-Page-v1.zip');
   });
 });
 
