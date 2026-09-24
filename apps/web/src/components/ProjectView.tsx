@@ -725,6 +725,9 @@ function mergeServerMessageWithLocal(
     if (server.strategyTaskBlockedText === undefined) {
       merged.strategyTaskBlockedText = local.strategyTaskBlockedText ?? null;
     }
+    if (server.strategyTaskInputStage === undefined && local.strategyTaskInputStage) {
+      merged.strategyTaskInputStage = local.strategyTaskInputStage;
+    }
   }
   // See `localBlockedTurnVerdictUnknownToServer`. The server's richer event log
   // stays authoritative — the client's error frame is APPENDED to it, not
@@ -6662,7 +6665,7 @@ export function ProjectView({
           // hard refresh. Keep the crash-window recovery below for the case
           // where the successor message has not been persisted yet.
           if (status.strategyTask?.taskExecutionId) {
-            const settledFields = strategySettledMessageFields(status.strategyTask);
+            const settledFields = strategySettledMessageFields(status.strategyTask, runId);
             updateMessageById(
               message.id,
               (prev) => ({
@@ -6726,7 +6729,7 @@ export function ProjectView({
               ) return prev;
               return appendErrorStatusEvent({
                 ...prev,
-                ...(strategySettledMessageFields(strategyTask) ?? {}),
+                ...(strategySettledMessageFields(strategyTask, runId) ?? {}),
                 runStatus: 'failed',
               }, failure.message, failure.code);
             });
@@ -6738,7 +6741,7 @@ export function ProjectView({
         if (status.strategyTask?.taskExecutionId) {
           // A blocked verdict is stamped alongside the task handle so the
           // turn's question form stays terminated after a reload.
-          const settledFields = strategySettledMessageFields(status.strategyTask);
+          const settledFields = strategySettledMessageFields(status.strategyTask, runId);
           updateMessageById(
             message.id,
             (prev) => ({
@@ -7223,11 +7226,10 @@ export function ProjectView({
             authoritativeReattachArtifactPaths = paths;
           },
           onStrategyTaskSettled: (strategyTask) => {
-            const settledFields = strategySettledMessageFields(strategyTask);
-            if (!settledFields) return;
+            if (!strategySettledMessageFields(strategyTask)) return;
             updateMessageById(
               message.id,
-              (prev) => ({ ...prev, ...settledFields }),
+              (prev) => ({ ...prev, ...strategySettledMessageFields(strategyTask, prev.runId) }),
               true,
             );
           },
@@ -10284,7 +10286,7 @@ export function ProjectView({
             : {}),
           ...(runAnalyticsHints ? { analyticsHints: runAnalyticsHints } : {}),
           onStrategyTaskSettled: (strategyTask) => {
-            const settledFields = strategySettledMessageFields(strategyTask);
+            const settledFields = strategySettledMessageFields(strategyTask, currentRunId);
             if (!settledFields) return;
             latestAssistantMsg = { ...latestAssistantMsg, ...settledFields };
             updateMessageById(

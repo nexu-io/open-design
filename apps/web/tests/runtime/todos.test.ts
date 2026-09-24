@@ -347,6 +347,54 @@ describe('continuableUnfinishedTodos', () => {
     expect(continuableUnfinishedTodos(undefined)).toEqual([]);
   });
 
+  // The strategy gate refused this turn before production: the agent answered
+  // with its plan and the Run exited cleanly. The build steps on its list never
+  // started, so the turn did not stop with work undone.
+  it.each(['request', 'clarification', 'contract_repair'] as const)(
+    'offers nothing to continue for a %s-stage turn of a refused task',
+    (strategyTaskInputStage) => {
+      expect(
+        continuableUnfinishedTodos({
+          events: staleSnapshot,
+          runStatus: 'succeeded',
+          strategyTaskBlocked: true,
+          strategyTaskInputStage,
+        }),
+      ).toEqual([]);
+    },
+  );
+
+  it('keeps the unfinished items of a refused production turn or a stopped turn', () => {
+    const pending = ['写入响应式交互原型', '交付根目录运行入口'];
+    // A production turn was asked to build; the gate refused it with the build
+    // unfinished.
+    expect(
+      continuableUnfinishedTodos({
+        events: staleSnapshot,
+        runStatus: 'succeeded',
+        strategyTaskBlocked: true,
+        strategyTaskInputStage: 'production',
+      }).map((todo) => todo.content),
+    ).toEqual(pending);
+    // A turn the user stopped is stopped, whatever stage its task was in.
+    expect(
+      continuableUnfinishedTodos({
+        events: staleSnapshot,
+        runStatus: 'canceled',
+        strategyTaskBlocked: true,
+        strategyTaskInputStage: 'request',
+      }).map((todo) => todo.content),
+    ).toEqual(pending);
+    // Without a known stage the snapshot still decides.
+    expect(
+      continuableUnfinishedTodos({
+        events: staleSnapshot,
+        runStatus: 'succeeded',
+        strategyTaskBlocked: true,
+      }).map((todo) => todo.content),
+    ).toEqual(pending);
+  });
+
   /*
    * 「问完就交棒」那一档。
    *
