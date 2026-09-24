@@ -11,6 +11,7 @@ import '../src/styles/home/index.css';
 import '../src/components/TestCampaignModal.module.css';
 import '../src/components/HoverTouchpointOverlay.module.css';
 import '../src/components/ProductionCampaignBadge.module.css';
+import '../src/components/OnboardingWelcome.module.css';
 
 export const metadata: Metadata = {
   title: 'OpenDesign',

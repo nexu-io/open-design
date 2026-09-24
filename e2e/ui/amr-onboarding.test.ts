@@ -83,12 +83,12 @@ test('[P0] @critical onboarding lets AMR Cloud sign in and complete setup after 
 
   await gotoOnboarding(page);
 
-  // Signed-out cloud landing: the primary button reads "Sign in to OpenDesign
+  // Signed-out cloud landing: the primary button reads "Sign in / Sign up
   // Cloud" and IS the AMR sign-in trigger (it replaced the old "Sign in to
   // continue" AMR-card CTA).
   const primary = cloudPrimaryButton(page);
   await expect(primary).toBeVisible();
-  await expect(primary).toHaveText(/Sign in to OpenDesign|登录 OpenDesign/i);
+  await expect(primary).toHaveText(/Sign in \/ Sign up|登录 \/ 注册/i);
   const statusCallsBeforeLogin = await page.evaluate(() => window.__amrOnboardingStatusCalls ?? 0);
   await clickCloudPrimary(page);
 
@@ -121,14 +121,14 @@ test('[P0] signed-out onboarding can open Local CLI setup without Cloud authoriz
   // the primary action while Local CLI is available as a direct setup path.
   const primary = cloudPrimaryButton(page);
   await expect(primary).toBeVisible();
-  await expect(primary).toHaveText(/Sign in to OpenDesign|登录 OpenDesign/i);
-  await page.getByRole('button', { name: /Local (coding )?agent/i }).click();
+  await expect(primary).toHaveText(/Sign in \/ Sign up|登录 \/ 注册/i);
+  await page.getByRole('button', { name: /Local AI|本地 AI/i }).click();
   await expect(page.locator('.onboarding-view__setup-panel')).toBeVisible();
   await expect(page.getByRole('heading', { name: /Local (coding )?agent/i })).toBeVisible();
   await expect.poll(() => page.evaluate(() => window.__amrOnboardingLoginCalls ?? 0)).toBe(0);
 
   await page.getByRole('button', { name: /^Back$|返回/i }).click();
-  await expect(cloudPrimaryButton(page)).toHaveText(/Sign in to OpenDesign|登录 OpenDesign/i);
+  await expect(cloudPrimaryButton(page)).toHaveText(/Sign in \/ Sign up|登录 \/ 注册/i);
   await expect(page.getByRole('radiogroup')).toHaveCount(0);
 });
 
@@ -142,13 +142,13 @@ test('[P0] signed-out onboarding can open BYOK setup without Cloud authorization
   await seedOnboardingConfig(page, config);
   await gotoOnboarding(page);
 
-  await page.getByRole('button', { name: /Bring Your Own Key/i }).click();
+  await page.getByRole('button', { name: /API Key/i }).click();
   await expect(page.locator('.onboarding-view__setup-panel')).toBeVisible();
   await expect(page.getByRole('heading', { name: /Bring Your Own Key/i })).toBeVisible();
   await expect.poll(() => page.evaluate(() => window.__amrOnboardingLoginCalls ?? 0)).toBe(0);
 
   await page.getByRole('button', { name: /^Back$|返回/i }).click();
-  await expect(cloudPrimaryButton(page)).toHaveText(/Sign in to OpenDesign|登录 OpenDesign/i);
+  await expect(cloudPrimaryButton(page)).toHaveText(/Sign in \/ Sign up|登录 \/ 注册/i);
   await expect(page.getByRole('radiogroup')).toHaveCount(0);
 });
 
@@ -164,8 +164,8 @@ test('[P0] Cloud status loading does not block signed-out Local CLI or BYOK setu
   await gotoOnboarding(page);
 
   await expect(cloudPrimaryButton(page)).toBeDisabled();
-  await expect(page.getByRole('button', { name: /Local (coding )?agent/i })).toBeEnabled();
-  await expect(page.getByRole('button', { name: /Bring Your Own Key/i })).toBeEnabled();
+  await expect(page.getByRole('button', { name: /Local AI|本地 AI/i })).toBeEnabled();
+  await expect(page.getByRole('button', { name: /API Key/i })).toBeEnabled();
   await expect
     .poll(() => page.evaluate(() => window.__amrOnboardingSlowStatusResolved ?? false))
     .toBe(true);
@@ -187,7 +187,7 @@ test('[P0] delayed active Cloud login stays out of Local setup and resumes after
   await seedOnboardingConfig(page, config);
   await gotoOnboarding(page);
 
-  await page.getByRole('button', { name: /Local (coding )?agent/i }).click();
+  await page.getByRole('button', { name: /Local AI|本地 AI/i }).click();
   const localPanel = page.locator('.onboarding-view__setup-panel');
   const continueButton = page.getByRole('button', { name: /^Continue$|继续/i });
   await expect(localPanel).toBeVisible();
@@ -379,9 +379,9 @@ test('[P0] Cloud status failure does not block signed-out Local CLI or BYOK setu
   await expect(page.getByRole('button', { name: /About you|了解你/i })).toHaveCount(0);
   const primary = cloudPrimaryButton(page);
   await expect(primary).toBeVisible();
-  await expect(primary).toHaveText(/Sign in to OpenDesign|登录 OpenDesign/i);
-  await expect(page.getByRole('button', { name: /Local (coding )?agent/i })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Bring Your Own Key/i })).toBeVisible();
+  await expect(primary).toHaveText(/Sign in \/ Sign up|登录 \/ 注册/i);
+  await expect(page.getByRole('button', { name: /Local AI|本地 AI/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /API Key/i })).toBeVisible();
   await expect(page.getByText(/Optional details for better defaults/i)).toHaveCount(0);
 
   await page.goto('/', { waitUntil: 'domcontentloaded' });
@@ -413,12 +413,12 @@ test('[P0] onboarding cancel during a slow AMR status check does not start login
 
   const cancelSignIn = page.getByRole('button', { name: /Cancel sign-in/i });
   await expect(cancelSignIn).toBeVisible();
-  await expect(page.getByRole('button', { name: /Local (coding )?agent/i })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /Bring Your Own Key/i })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Local AI|本地 AI/i })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /API Key/i })).toHaveCount(0);
   await cancelSignIn.click();
 
   const primary = cloudPrimaryButton(page);
-  await expect(primary).toHaveText(/Sign in to OpenDesign|登录 OpenDesign/i);
+  await expect(primary).toHaveText(/Sign in \/ Sign up|登录 \/ 注册/i);
   // The status read was canceled before a daemon login attempt was created,
   // so there is no attempt-scoped process for the client to cancel.
   await expect.poll(() => page.evaluate(() => window.__amrOnboardingCancelCalls ?? 0)).toBe(0);
@@ -426,8 +426,8 @@ test('[P0] onboarding cancel during a slow AMR status check does not start login
     .poll(() => page.evaluate(() => window.__amrOnboardingSlowStatusResolved ?? false))
     .toBe(true);
   await expect(page.getByRole('button', { name: /Cancel sign-in/i })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /Local (coding )?agent/i })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Bring Your Own Key/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Local AI|本地 AI/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /API Key/i })).toBeVisible();
   await expectStableCount(
     () => page.evaluate(() => window.__amrOnboardingLoginCalls ?? 0),
     0,
@@ -449,8 +449,8 @@ test('[P0] onboarding reload restores and cancels an active Cloud login', async 
   await seedOnboardingConfig(page, config);
   await gotoOnboarding(page);
   await expect(page.getByRole('button', { name: /Cancel sign-in/i })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Local (coding )?agent/i })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /Bring Your Own Key/i })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Local AI|本地 AI/i })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /API Key/i })).toHaveCount(0);
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
@@ -458,8 +458,8 @@ test('[P0] onboarding reload restores and cancels an active Cloud login', async 
   await page.getByRole('button', { name: /Cancel sign-in/i }).click();
 
   await expect.poll(() => page.evaluate(() => window.__amrOnboardingCancelCalls ?? 0)).toBe(1);
-  await expect(page.getByRole('button', { name: /Local (coding )?agent/i })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Bring Your Own Key/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Local AI|本地 AI/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /API Key/i })).toBeVisible();
 });
 
 test('[P0] onboarding reload resumes an active Cloud login through completion', async ({ page }) => {
@@ -663,7 +663,7 @@ test('[P0] active Cloud sign-out preserves BYOK and unrelated preferences while 
   await page.getByTestId('sign-out-confirm-accept').click();
 
   await expect(connectLandingHeading(page)).toBeVisible();
-  await expect(cloudPrimaryButton(page)).toHaveText(/Sign in to OpenDesign|登录 OpenDesign/i);
+  await expect(cloudPrimaryButton(page)).toHaveText(/Sign in \/ Sign up|登录 \/ 注册/i);
   await expect(page.getByTestId('home-hero-input')).toHaveCount(0);
   await pollStoredConfig(page).toMatchObject({
     mode: 'daemon',
@@ -791,7 +791,7 @@ test('[P1] Cloud sign-out restores usable install-local BYOK after daemon reset 
   await dismissPrivacyDialog(page);
   await expect(connectLandingHeading(page)).toBeVisible();
 
-  await page.getByRole('button', { name: /Bring Your Own Key/i }).click();
+  await page.getByRole('button', { name: /API Key/i }).click();
   const byokPanel = onboardingByokPanel(page);
   await expect(byokPanel).toBeVisible();
   await expect(page.getByRole('tab', { name: /^OpenAI$/i })).toHaveAttribute('aria-selected', 'true');
@@ -838,7 +838,7 @@ test('[P0] signed-out users are redirected from Home to Cloud sign-in', async ({
   await dismissPrivacyDialog(page);
   await expect(page).toHaveURL(/\/onboarding$/);
   await expect(connectLandingHeading(page)).toBeVisible();
-  await expect(cloudPrimaryButton(page)).toHaveText(/Sign in to OpenDesign|登录 OpenDesign/i);
+  await expect(cloudPrimaryButton(page)).toHaveText(/Sign in \/ Sign up|登录 \/ 注册/i);
   await expect(page.getByTestId('home-hero-input')).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => window.__amrOnboardingLoginCalls ?? 0)).toBe(0);
 });
@@ -865,7 +865,7 @@ for (const destination of [
 
     await expect(page).toHaveURL(/\/onboarding$/);
     await expect(connectLandingHeading(page)).toBeVisible();
-    await expect(cloudPrimaryButton(page)).toHaveText(/Sign in to OpenDesign|登录 OpenDesign/i);
+    await expect(cloudPrimaryButton(page)).toHaveText(/Sign in \/ Sign up|登录 \/ 注册/i);
     await expect.poll(() => page.evaluate(() => window.__amrOnboardingLoginCalls ?? 0)).toBe(0);
   });
 }
@@ -1454,7 +1454,7 @@ async function gotoOnboarding(page: Page) {
   // step now opens on a centered OpenDesign Cloud sign-in landing whose
   // heading is the stable marker that onboarding has rendered.
   await expect(
-    page.getByRole('heading', { name: /Sign in to OpenDesign|登录 OpenDesign/i }),
+    page.getByRole('heading', { name: /Welcome to OpenDesign|欢迎使用 OpenDesign/i }),
   ).toBeVisible();
 }
 
@@ -1475,7 +1475,7 @@ async function clickCloudPrimary(page: Page) {
 // The connect landing heading — the stable "we're still on the cloud sign-in
 // landing" marker that replaced the old "Choose a runtime" heading.
 function connectLandingHeading(page: Page): Locator {
-  return page.getByRole('heading', { name: /Sign in to OpenDesign|登录 OpenDesign/i });
+  return page.getByRole('heading', { name: /Welcome to OpenDesign|欢迎使用 OpenDesign/i });
 }
 
 async function expectModelSourceChooser(page: Page) {

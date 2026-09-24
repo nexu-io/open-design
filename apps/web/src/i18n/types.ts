@@ -285,6 +285,11 @@ export interface Dict {
   'settings.onboardingCloudTitle': string;
   'settings.onboardingCloudBody': string;
   'settings.onboardingCloudSignIn': string;
+  'settings.onboardingFreeCredits': string;
+  'settings.onboardingFreeCreditsHint': string;
+  'settings.onboardingOwnAi': string;
+  'settings.onboardingLocalAi': string;
+  'settings.onboardingApiKey': string;
   'settings.onboardingCloudContinue': string;
   'settings.onboardingCloudAlternative': string;
   'settings.onboardingCloudOr': string;
