@@ -33,14 +33,14 @@ The implementation is split by responsibility:
 ## Registered Runtimes
 
 `BASE_AGENT_DEFS` in `apps/daemon/src/runtimes/registry.ts` currently contains
-26 built-in adapter definitions. `AGENT_DEFS` also appends valid local profiles
+28 built-in adapter definitions. `AGENT_DEFS` also appends valid local profiles
 loaded by `readLocalAgentProfileDefs()`, so an installation can expose more
 entries than the built-in list.
 
 | Stream / protocol | Built-in adapter IDs | CLI binaries |
 |---|---|---|
 | `claude-stream-json` | `claude`, `amp`, `codebuddy` | `claude`, `amp`, `codebuddy` |
-| `json-event-stream` | `codex`, `opencode`, `byok-opencode`, `cursor-agent`, `mimo` | `codex`, `opencode-cli`, `opencode-cli`, `cursor-agent`, `mimo` |
+| `json-event-stream` | `codex`, `opencode`, `byok-opencode`, `cursor-agent`, `mimo`, `dulus` | `codex`, `opencode-cli`, `opencode-cli`, `cursor-agent`, `mimo`, `dulus` |
 | `acp-json-rpc` | `amr`, `devin`, `hermes`, `trae-cli`, `kimi`, `kiro`, `kilo`, `vibe`, `reasonix` | `vela`, `devin`, `hermes`, `traecli`, `kimi`, `kiro-cli`, `kilo`, `vibe-acp`, `reasonix` |
 | `pi-rpc` | `pi` | `pi` |
 | `qoder-stream-json` | `qoder` | `qodercli` |
