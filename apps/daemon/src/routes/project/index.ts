@@ -5609,7 +5609,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       req.params.id,
       'writeFiles',
     )) return;
-    const { tabs = [], active = null, browserTabs = [] } = req.body || {};
+    const { tabs = [], active = null, browserTabs = [], canvas } = req.body || {};
     if (!Array.isArray(tabs) || !tabs.every((t) => typeof t === 'string')) {
       return res.status(400).json({ error: 'tabs must be string[]' });
     }
@@ -5623,6 +5623,8 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         tabs,
         active: typeof active === 'string' ? active : null,
         browserTabs,
+        // #8230 自由画布布局：原样透传，setTabs 里的归一化会挡住坏数据。
+        canvas,
       },
     );
     res.json(result);

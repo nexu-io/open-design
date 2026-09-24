@@ -42,6 +42,11 @@ export interface LauncherContext {
    */
   createBrowser?: () => void;
   /**
+   * 打开项目自由画布（#8230）。一个项目至多持有一块画布，是单一固定面而非
+   * `canvas:<id>` 家族，所以这里同步聚焦那枚固定 tab、不回传 id。
+   */
+  createCanvas?: () => void;
+  /**
    * Open the page creator (`PageCreatorDialog`), which is where a blank page is
    * actually written. The "+" launcher is the single entry point for creating a
    * page: the tab strip's Design Files entry is a plain tab with no dropdown of
@@ -87,6 +92,18 @@ export const ENABLE_BLANK_PAGE_WORKSPACE_ENTRYPOINT = false;
  */
 export function buildLauncherActions(ctx: LauncherContext): LauncherAction[] {
   const actions: LauncherAction[] = [];
+  if (ctx.createCanvas) {
+    actions.push({
+      id: 'new-canvas',
+      iconName: 'layout',
+      labelKey: 'workspace.newCanvas',
+      descriptionKey: 'workspace.newCanvasDescription',
+      // 画布是项目里的单一固定面，同步聚焦、无 id 可穿给 openTab。
+      run: (runCtx) => {
+        runCtx.createCanvas?.();
+      },
+    });
+  }
   if (ENABLE_BLANK_PAGE_WORKSPACE_ENTRYPOINT && ctx.createPage) {
     actions.push({
       id: 'new-page',

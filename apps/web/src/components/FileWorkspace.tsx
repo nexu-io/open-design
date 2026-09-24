@@ -91,6 +91,8 @@ import {
   conversationIdFromSideChatTabId,
   isSideChatTabId,
   isTerminalTabId,
+  isProjectCanvasTab,
+  PROJECT_CANVAS_TAB,
   terminalIdFromTabId,
   liveArtifactSummaryToWorkspaceEntry,
   type LiveArtifactSummary,
@@ -112,6 +114,7 @@ import {
   type LocalizedText,
   type WorkspaceCollabContext,
   type WorkspaceContextItem,
+  type ProjectCanvasState,
 } from '@open-design/contracts';
 import {
   notifyTeamProjectsChanged,
@@ -139,6 +142,15 @@ import { FileSyncBadge, type FileSyncBadgeState } from '../collab/FileSyncBadge'
 import { Toast } from './Toast';
 import { TabLauncherMenu } from './workspace/TabLauncherMenu';
 import { buildLauncherActions, type LauncherContext } from './workspace/tab-launcher';
+import {
+  PROJECT_CANVAS_ARTIFACT_DRAG_MIME,
+  ProjectCanvas,
+} from './canvas/ProjectCanvas';
+import {
+  addArtifactNode,
+  hasNodeForRef,
+  nextCanvasNodeId,
+} from './canvas/canvas-model';
 import { SideChatTab, type ActiveConversationChatState } from './workspace/SideChatTab';
 import { TerminalViewer } from './workspace/TerminalViewer';
 import { CURATED_PLUGIN_IDS_BY_CHIP, curatedPluginPriority } from './plugins-home/curatedPriority';
@@ -247,7 +259,13 @@ interface Props {
   // tabs in one commit — a finished turn's artifacts (OPEND-2588). `name` is
   // still the one that ends up active, and is opened whether or not the batch
   // names it.
-  openRequest?: { name: string; nonce: number; openBatch?: readonly string[] } | null;
+  openRequest?: {
+    name: string;
+    nonce: number;
+    openBatch?: readonly string[];
+    syncToCanvas?: readonly string[];
+    createCanvasForSync?: boolean;
+  } | null;
   browserOpenRequest?: BrowserOpenRequest | null;
   // Browser tab whose <webview> must stay mounted even while another workspace
   // tab is active. Set for programmatic brand extraction: the chat "Continue
@@ -466,6 +484,10 @@ function shouldKeepCurrentSketchState(
 
 export const DESIGN_FILES_TAB = '__design_files__';
 export const DESIGN_SYSTEM_TAB = '__design_system__';
+
+// 模块级空画布：稳定引用，避免每次渲染现造新对象——ProjectCanvas 认 state
+// prop 引用决定是否重建命令栈，现造会把本地 undo 栈冲掉。
+const EMPTY_PROJECT_CANVAS_STATE: ProjectCanvasState = { nodes: [] };
 
 // Module-level default so a caller that omits `previewComments` doesn't mint
 // a fresh [] every render — that identity feeds the memoized FileViewer.
@@ -1869,6 +1891,10 @@ export function FileWorkspace({
   ): OpenTabsState {
     const state: OpenTabsState = { tabs, active };
     if (nextBrowserTabs.length > 0) state.browserTabs = nextBrowserTabs;
+    // 画布布局与 tabs 存在同一块 JSON 里，但它不随开关某个 tab 变化。切 tab
+    // 只重写 tabs/active，这里从最新态里带上 canvas，避免被覆写丢掉。
+    const canvas = tabsStateRef.current.canvas;
+    if (canvas) state.canvas = canvas;
     return state;
   }
 
@@ -1877,6 +1903,26 @@ export function FileWorkspace({
   function commitTabsState(next: OpenTabsState) {
     tabsStateRef.current = next;
     onTabsStateChange(next);
+  }
+
+  function syncGeneratedArtifactsToCanvas(
+    state: OpenTabsState,
+    refs: readonly string[] | undefined,
+    createIfMissing = false,
+  ): OpenTabsState {
+    if (!refs?.length) return state;
+    const current = tabsStateRef.current;
+    if (!current.canvas && !createIfMissing && current.active !== PROJECT_CANVAS_TAB) return state;
+
+    let canvas = current.canvas ?? EMPTY_PROJECT_CANVAS_STATE;
+    for (const ref of refs) {
+      if (!ref.trim() || hasNodeForRef(canvas, ref)) continue;
+      canvas = addArtifactNode(canvas, {
+        id: nextCanvasNodeId(canvas),
+        ref,
+      });
+    }
+    return canvas === current.canvas ? state : { ...state, canvas };
   }
 
   function setPersistedActive(name: string | null) {
@@ -2060,6 +2106,7 @@ export function FileWorkspace({
     if (
       activeTab === DESIGN_FILES_TAB
       || activeTab === DESIGN_SYSTEM_TAB
+      || isProjectCanvasTab(activeTab)
     ) return;
     if (isBrowserTabId(activeTab)) {
       if (!browserTabs.some((tab) => tab.id === activeTab)) {
@@ -2102,10 +2149,17 @@ export function FileWorkspace({
     }
     const batch = openRequest.openBatch;
     if (batch && batch.length > 0) {
-      openFiles(batch, name);
+      openFiles(batch, name, {
+        syncToCanvas: openRequest.syncToCanvas,
+        createCanvasForSync: openRequest.createCanvasForSync,
+      });
       return;
     }
-    openFile(name, { forcePersist: true });
+    openFile(name, {
+      forcePersist: true,
+      syncToCanvas: openRequest.syncToCanvas,
+      createCanvasForSync: openRequest.createCanvasForSync,
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openRequest]);
 
@@ -2168,8 +2222,15 @@ export function FileWorkspace({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slideNavRequest]);
 
-  function openFile(name: string, options?: { forcePersist?: boolean }) {
-    if (name === activeTab) return;
+  function openFile(
+    name: string,
+    options?: {
+      forcePersist?: boolean;
+      syncToCanvas?: readonly string[];
+      createCanvasForSync?: boolean;
+    },
+  ) {
+    if (name === activeTab && !options?.syncToCanvas?.length) return;
     afterActiveManualEditSettles(() => {
       setUploadError(null);
       // Read from the ref after the async edit flush so a concurrent tab update
@@ -2185,7 +2246,11 @@ export function FileWorkspace({
         ? [...currentTabs, name]
         : currentTabs;
       if (nextBrowserTabs !== browserTabs) setBrowserTabs(nextBrowserTabs);
-      commitTabsState(workspaceTabsState(nextTabs, name, nextBrowserTabs));
+      commitTabsState(syncGeneratedArtifactsToCanvas(
+        workspaceTabsState(nextTabs, name, nextBrowserTabs),
+        options?.syncToCanvas,
+        options?.createCanvasForSync,
+      ));
       setActiveTab(name);
     });
   }
@@ -2198,7 +2263,11 @@ export function FileWorkspace({
   // newest deferred activation. Files already open are left alone rather than
   // duplicated, which is what makes a re-open of something the turn already
   // surfaced mid-stream a no-op.
-  function openFiles(names: readonly string[], focusName: string) {
+  function openFiles(
+    names: readonly string[],
+    focusName: string,
+    options?: { syncToCanvas?: readonly string[]; createCanvasForSync?: boolean },
+  ) {
     afterActiveManualEditSettles(() => {
       setUploadError(null);
       const currentTabs = tabsStateRef.current.tabs;
@@ -2211,7 +2280,11 @@ export function FileWorkspace({
         ? reanchorBrowserTabsToCurrentOrder(orderedWorkspaceTabs, browserTabs)
         : browserTabs;
       if (nextBrowserTabs !== browserTabs) setBrowserTabs(nextBrowserTabs);
-      commitTabsState(workspaceTabsState(nextTabs, focusName, nextBrowserTabs));
+      commitTabsState(syncGeneratedArtifactsToCanvas(
+        workspaceTabsState(nextTabs, focusName, nextBrowserTabs),
+        options?.syncToCanvas,
+        options?.createCanvasForSync,
+      ));
       setActiveTab(focusName);
     });
   }
@@ -3375,6 +3448,7 @@ export function FileWorkspace({
 
   const activeTabHasRenderableSurface =
     (activeTab === DESIGN_SYSTEM_TAB && Boolean(designSystemProject))
+    || isProjectCanvasTab(activeTab)
     || (isBrowserTabId(activeTab) && browserTabs.some((tab) => tab.id === activeTab))
     || isTerminalTabId(activeTab)
     || (isSideChatTabId(activeTab) && Boolean(chatConfig) && Boolean(chatAgentsById))
@@ -3387,6 +3461,11 @@ export function FileWorkspace({
   // persisted state: an in-flight file refresh may still restore the target.
   const designFilesTabActive =
     activeTab === DESIGN_FILES_TAB || !activeTabHasRenderableSurface;
+
+  // 画布 tab 是项目里的单一固定面：聚焦它、或它已经摆了节点时才在 tab 条露出
+  // 那枚 chip。空画布不占一枚常驻 tab，进入靠「+」launcher 的 New Canvas。
+  const canvasTabVisible =
+    isProjectCanvasTab(activeTab) || (tabsState.canvas?.nodes.length ?? 0) > 0;
 
   // Identity-stable props for the memoized FileViewer. Without these, every
   // FileWorkspace state change (closing an adjacent tab, drag hover, launcher
@@ -3638,8 +3717,11 @@ export function FileWorkspace({
       else closeTab(key);
     },
     dragStart(key: string, event: ReactDragEvent<HTMLDivElement>) {
-      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.effectAllowed = 'copyMove';
       event.dataTransfer.setData('text/plain', key);
+      if (visibleFiles.some((file) => file.name === key || file.path === key)) {
+        event.dataTransfer.setData(PROJECT_CANVAS_ARTIFACT_DRAG_MIME, key);
+      }
       draggedTabNameRef.current = key;
       setDraggedTabName(key);
     },
@@ -3902,6 +3984,9 @@ export function FileWorkspace({
     // Browser is owned by this branch's DesignBrowserPanel: spin up a browser
     // tab synchronously (no daemon round-trip) and let the launcher close.
     createBrowser: () => openBrowserTab(),
+    // 画布是项目里的单一固定面（#8230），像 design-files/design-system 那样
+    // 直接聚焦它的固定 tab，不新建带 id 的 tab。
+    createCanvas: () => setPersistedActive(PROJECT_CANVAS_TAB),
     // "New blank page" lives in the "+" launcher: the tab strip's Design Files
     // entry is a plain tab, so this is the only entry point to the page
     // creator. The dialog itself still owns the actual write (createBlankPage).
@@ -4078,6 +4163,25 @@ export function FileWorkspace({
             </span>
             <span className="ws-tab-label">{designFilesTabLabel}</span>
           </button>
+          {!initialMaterializationPending && canvasTabVisible ? (
+            <button
+              type="button"
+              className={`ws-tab project-canvas-tab ${
+                isProjectCanvasTab(activeTab) ? 'active' : ''
+              }`}
+              role="tab"
+              aria-selected={isProjectCanvasTab(activeTab)}
+              tabIndex={0}
+              data-testid="project-canvas-tab"
+              onClick={() => setPersistedActive(PROJECT_CANVAS_TAB)}
+              title={t('workspace.newCanvas')}
+            >
+              <span className="tab-icon" aria-hidden>
+                <Icon name="layout" size={14} />
+              </span>
+              <span className="ws-tab-label">{t('workspace.newCanvas')}</span>
+            </button>
+          ) : null}
           {!initialMaterializationPending ? visibleOrderedWorkspaceTabs.map((entry) => {
             if (entry.kind === 'browser') {
               const browserTab = entry.browserTab;
@@ -4369,6 +4473,18 @@ export function FileWorkspace({
             editFocusRequest={designSystemEditRequest}
             onConnectRepo={onConnectRepo}
             githubConnected={githubConnected}
+          />
+        ) : isProjectCanvasTab(activeTab) ? (
+          // 自由画布（#8230）：把项目里已产出的 artifact 平级摆上板对比。布局
+          // 跟 tabs 存同一块 JSON（tabsState.canvas），落库走唯一入口
+          // commitTabsState；节点内容仍复用 renderFileViewer 的沙箱预览。
+          <ProjectCanvas
+            state={tabsState.canvas ?? EMPTY_PROJECT_CANVAS_STATE}
+            onStateChange={(next) =>
+              commitTabsState({ ...tabsStateRef.current, canvas: next })
+            }
+            files={visibleFiles}
+            renderArtifact={(file) => renderFileViewer(file, true)}
           />
         ) : designFilesTabActive ? (
           <DesignFilesPanel
