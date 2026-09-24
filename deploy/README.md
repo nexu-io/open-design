@@ -191,6 +191,41 @@ ANTHROPIC_API_KEY=sk-ant-…
 OPENAI_API_KEY=sk-…
 ```
 
+### Routing an agent CLI through a private/self-hosted LLM gateway
+
+Enterprises that cannot call the public Anthropic or OpenAI APIs (only an
+internal LiteLLM-style proxy, Azure-hosted deployment, or other OpenAI/
+Anthropic-compatible gateway) can redirect the `claude` and `codex` agent
+CLIs entirely, with no code changes and no Vela/AMR involvement:
+
+```bash
+# Claude Code -> private Anthropic-compatible gateway
+ANTHROPIC_BASE_URL=https://llm-gateway.example.internal/anthropic
+ANTHROPIC_API_KEY=sk-…
+
+# Codex -> private OpenAI-compatible gateway
+OPENAI_BASE_URL=https://llm-gateway.example.internal/openai
+CODEX_API_KEY=sk-…   # or OPENAI_API_KEY, both are accepted
+```
+
+The Linux Compose override forwards these three variables into the daemon
+container. After editing `.env`, recreate the service and verify the resolved
+container environment (without printing secrets):
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.linux.yml up -d --no-build
+docker compose -f docker-compose.yml -f docker-compose.linux.yml exec open-design \
+  sh -lc 'test -n "$ANTHROPIC_BASE_URL" || test -n "$OPENAI_BASE_URL"'
+```
+
+Both variables are daemon-recognized, allow-listed CLI environment overrides
+(`apps/daemon/src/app-config.ts`, `AGENT_CLI_ENV_KEYS`) — the CLI itself has
+no other route to a public endpoint once `*_BASE_URL` is set, so all traffic
+for that agent stays on the private gateway. This works the same way whether
+the CLI is baked into a custom image layer or mounted from the host per the
+section above; it is independent of Vela/AMR, which remains unavailable
+unless the Vela CLI is installed and authenticated separately.
+
 If you install Codex inside an unprivileged Linux container and it fails while
 creating its `workspace-write` sandbox, opt into Codex's full-access mode for
 all Codex runs in that deployment:
