@@ -27,6 +27,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   MemoryEntrySummary,
   MemoryExtractionRecord,
+  MemoryExtractionOrigin,
   MemoryType,
 } from '@open-design/contracts';
 
@@ -51,10 +52,15 @@ export interface MemoryWrittenBatch {
   entries: MemoryWrittenEntry[];
 }
 
-export interface UseMemoryWrittenCard {
+export interface UseMemoryWrittenCard<Context = undefined> {
   /** The batch awaiting a card, or null. Consume it, then `dismiss()`. */
-  batch: MemoryWrittenBatch | null;
+  batch: (MemoryWrittenBatch & { context: Context | undefined }) | null;
   dismiss: () => void;
+}
+
+/** One visible turn can observe several physical runs in a strategy chain. */
+export interface MemoryWrittenTurnOrigin extends MemoryExtractionOrigin {
+  observedRunIds?: readonly string[];
 }
 
 /** The `<od-card>` block a written batch renders as. The payload is the same
@@ -104,83 +110,176 @@ function wroteMemory(record: MemoryExtractionRecord): boolean {
  * Watch for memory written by the conversation's own turns.
  *
  * `runActive` is the caller's "a turn is in flight" signal. Each falling edge
- * opens a bounded polling window over the daemon's extraction records; a record
- * that started inside the window and wrote at least one entry becomes one batch,
- * once. Nothing is polled while no turn has run in this mount.
+ * opens an independent bounded polling window. Explicit producing identities
+ * decide ownership; timestamp compatibility is limited to non-overlapping
+ * legacy windows. Nothing is polled before a turn has run in this mount.
  */
-export function useMemoryWrittenCard(runActive: boolean): UseMemoryWrittenCard {
-  const [batch, setBatch] = useState<MemoryWrittenBatch | null>(null);
-  const [pollsLeft, setPollsLeft] = useState(0);
-  // Attempts already turned into a card. Survives dismiss so a still-open
-  // window cannot post the same batch twice.
-  const seenRef = useRef<Set<string>>(new Set());
-  // When the current turn started. Records older than this belong to an earlier
-  // turn (or to Settings → Memory) and are not this conversation's news.
-  const turnStartedAtRef = useRef<number | null>(null);
-  const wasActiveRef = useRef(false);
+function sameConversation(a: MemoryExtractionOrigin | undefined, b: MemoryExtractionOrigin | undefined): boolean {
+  return Boolean(a && b && a.projectId === b.projectId && a.conversationId === b.conversationId);
+}
+
+function recordMatchesOrigin(record: MemoryExtractionRecord, origin: MemoryWrittenTurnOrigin | undefined): boolean {
+  const source = record.extractionOrigin;
+  if (!source || !sameConversation(source, origin)) return false;
+  if (source.runId !== undefined) {
+    return typeof source.runId === 'string' && Boolean(source.runId)
+      && (source.runId === origin?.runId || origin?.observedRunIds?.includes(source.runId) === true);
+  }
+  if (source.assistantMessageId !== undefined) {
+    return typeof source.assistantMessageId === 'string' && Boolean(source.assistantMessageId)
+      && source.assistantMessageId === origin?.assistantMessageId;
+  }
+  return true;
+}
+
+function snapshotOrigin(origin: MemoryWrittenTurnOrigin | undefined): MemoryWrittenTurnOrigin | undefined {
+  return origin ? { ...origin, ...(origin.observedRunIds ? { observedRunIds: [...origin.observedRunIds] } : {}) } : undefined;
+}
+
+export function useMemoryWrittenCard<Context = undefined>(
+  runActive: boolean,
+  context?: Context,
+  origin?: MemoryWrittenTurnOrigin,
+): UseMemoryWrittenCard<Context> {
+  type Batch = NonNullable<UseMemoryWrittenCard<Context>['batch']>;
+  type Window = {
+    context: Context | undefined;
+    origin: MemoryWrittenTurnOrigin | undefined;
+    startedAt: number;
+    remaining: number;
+    legacyAllowed: boolean;
+    runlessAllowed: boolean;
+    timer?: ReturnType<typeof setTimeout>;
+  };
+  const [batch, setBatch] = useState<Batch | null>(null);
+  const batchRef = useRef<Batch | null>(null);
+  const queuedBatches = useRef<Batch[]>([]);
+  const windows = useRef<Set<Window>>(new Set());
+  const seen = useRef(new Set<string>());
+  const selected = useRef(new Set<string>());
+  const mounted = useRef(true);
+  const turn = useRef<Pick<Window, 'context' | 'origin' | 'startedAt' | 'legacyAllowed' | 'runlessAllowed'> | null>(null);
+  const wasActive = useRef(false);
 
   useEffect(() => {
-    const wasActive = wasActiveRef.current;
-    wasActiveRef.current = runActive;
-    if (runActive && !wasActive) {
-      turnStartedAtRef.current = Date.now();
-      return;
-    }
-    // A turn just ended. Extraction runs after child close, so start looking.
-    if (!runActive && wasActive) setPollsLeft(MAX_POLLS);
-  }, [runActive]);
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      for (const window of windows.current) clearTimeout(window.timer);
+      windows.current.clear();
+      queuedBatches.current = [];
+    };
+  }, []);
 
-  useEffect(() => {
-    if (pollsLeft <= 0) return undefined;
-    // Hold the window open while a batch is waiting to be consumed, so a second
-    // attempt cannot overwrite a card the caller has not posted yet.
-    if (batch) return undefined;
-    let cancelled = false;
-    const timer = setTimeout(async () => {
-      if (cancelled) return;
+  const scheduleWindow = useCallback(function schedule(window: Window, delay: number) {
+    window.timer = setTimeout(async () => {
+      if (!mounted.current || !windows.current.has(window)) return;
+      // Consumption pauses retries without resetting this window's budget.
+      if (batchRef.current) {
+        schedule(window, POLL_INTERVAL_MS);
+        return;
+      }
+      let selectedId: string | undefined;
       try {
         const records = await fetchExtractionRecords();
-        if (cancelled) return;
-        const since = turnStartedAtRef.current ?? 0;
-        const fresh = records
-          .filter((record) => record.id
-            && !seenRef.current.has(record.id)
-            && (record.startedAt ?? 0) >= since
-            && wroteMemory(record))
-          .sort((a, b) => (a.startedAt ?? 0) - (b.startedAt ?? 0));
-        const record = fresh[0];
+        if (!mounted.current || !windows.current.has(window)) return;
+        const record = records.filter(record => {
+          if (!record.id || seen.current.has(record.id) || selected.current.has(record.id) || !wroteMemory(record)) return false;
+          if (record.extractionOrigin !== undefined) {
+            // Explicit foreign/malformed provenance never falls through to the
+            // timestamp-based old-daemon compatibility path.
+            if (!recordMatchesOrigin(record, window.origin)) return false;
+            const hasTurnIdentity = record.extractionOrigin?.runId !== undefined
+              || record.extractionOrigin?.assistantMessageId !== undefined;
+            if (!hasTurnIdentity && (!window.runlessAllowed || (record.startedAt ?? 0) < window.startedAt)) return false;
+            // An HTTP record without a run id can be used only when its
+            // explicit conversation selects exactly one unfinished window.
+            return [...windows.current].filter(candidate => recordMatchesOrigin(record, candidate.origin)).length === 1;
+          }
+          return window.legacyAllowed && (record.startedAt ?? 0) >= window.startedAt;
+        }).sort((a, b) => a.startedAt - b.startedAt)[0];
         if (record) {
-          seenRef.current.add(record.id);
+          selectedId = record.id;
+          selected.current.add(record.id);
           const summaries = await fetchEntrySummaries();
-          if (cancelled) return;
-          const byId = new Map(summaries.map((entry) => [entry.id, entry]));
-          const entries = (record.writtenIds ?? [])
-            .map((id) => byId.get(id))
+          if (!mounted.current || !windows.current.has(window)) return;
+          const byId = new Map(summaries.map(entry => [entry.id, entry]));
+          const entries = (record.writtenIds ?? []).map(id => byId.get(id))
             .filter((entry): entry is MemoryEntrySummary => Boolean(entry))
-            .map((entry) => ({
-              id: entry.id,
-              name: entry.name,
-              type: entry.type,
-            }));
-          setBatch({
-            key: record.id,
-            count: record.writtenCount ?? entries.length,
-            entries,
-          });
+            .map(entry => ({ id: entry.id, name: entry.name, type: entry.type }));
+          const next: Batch = {
+            context: window.context, key: record.id,
+            count: record.writtenCount ?? entries.length, entries,
+          };
+          seen.current.add(record.id);
+          if (batchRef.current) queuedBatches.current.push(next);
+          else {
+            batchRef.current = next;
+            setBatch(next);
+          }
         }
       } catch {
-        // Best effort. A card we failed to build is a missing nicety; it must
-        // never surface as an error in the transcript.
+        // Memory extraction remains best effort; retry only this window.
+      } finally {
+        if (selectedId) selected.current.delete(selectedId);
       }
-      if (!cancelled) setPollsLeft((remaining) => Math.max(0, remaining - 1));
-    }, pollsLeft === MAX_POLLS ? 0 : POLL_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [pollsLeft, batch]);
+      if (!mounted.current || !windows.current.has(window)) return;
+      window.remaining -= 1;
+      if (window.remaining > 0) schedule(window, POLL_INTERVAL_MS);
+      else windows.current.delete(window);
+    }, delay);
+  }, []);
 
-  const dismiss = useCallback(() => setBatch(null), []);
+  useEffect(() => {
+    const previous = wasActive.current;
+    wasActive.current = runActive;
+    if (runActive && !previous) {
+      // BYOK preflight can finish before B has a completed polling window.
+      // Its old conversation-only record is already ambiguous to pending A;
+      // upgraded preflight records instead match B's explicit sending draft.
+      let runlessAllowed = true;
+      for (const pending of windows.current) {
+        if (sameConversation(pending.origin, origin)) {
+          pending.runlessAllowed = false;
+          runlessAllowed = false;
+        }
+      }
+      // A may exhaust its budget while B is still active. Preserve this
+      // overlap on B itself; an empty Set at B's end is not new ownership proof.
+      turn.current = {
+        context, origin: snapshotOrigin(origin), startedAt: Date.now(),
+        legacyAllowed: windows.current.size === 0, runlessAllowed,
+      };
+    }
+    // POST /runs may deliver its id after the active edge. Only enrich the
+    // captured conversation; navigation to another owner must not replace it.
+    if (turn.current && sameConversation(turn.current.origin, origin)
+      && (!turn.current.origin?.assistantMessageId || turn.current.origin.assistantMessageId === origin?.assistantMessageId)) {
+      turn.current.origin = snapshotOrigin(origin);
+    }
+    if (!runActive && previous && turn.current) {
+      const overlapping = windows.current.size > 0;
+      // Once overlapping, a source-less record remains ambiguous even if the
+      // other window later expires. Do not reassign it to the survivor.
+      if (overlapping) for (const pending of windows.current) pending.legacyAllowed = false;
+      const sameOwner = [...windows.current].filter(pending => sameConversation(pending.origin, turn.current?.origin));
+      for (const pending of sameOwner) pending.runlessAllowed = false;
+      const window: Window = {
+        ...turn.current, remaining: MAX_POLLS,
+        legacyAllowed: turn.current.legacyAllowed && !overlapping,
+        runlessAllowed: turn.current.runlessAllowed && sameOwner.length === 0,
+      };
+      windows.current.add(window);
+      scheduleWindow(window, 0);
+      turn.current = null;
+    }
+  }, [runActive, context, origin, scheduleWindow]);
+
+  const dismiss = useCallback(() => {
+    const next = queuedBatches.current.shift() ?? null;
+    batchRef.current = next;
+    setBatch(next);
+  }, []);
 
   return { batch, dismiss };
 }

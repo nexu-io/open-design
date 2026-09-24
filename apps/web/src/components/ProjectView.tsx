@@ -2638,6 +2638,21 @@ export function ProjectView({
     useRef<ConversationMaterializationRecovery | null>(null);
   const [messageLoadRetryNonce, setMessageLoadRetryNonce] = useState(0);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // Claimed by Send/reattach, not by transcript order: a delayed host memory
+  // notification can be appended after the currently running assistant row.
+  const memoryTurnAssistantRef = useRef<{
+    projectId: string;
+    conversationId: string;
+    assistantId: string;
+    observedRunIds: string[];
+  } | null>(null);
+  const observeMemoryRun = useCallback((projectId: string, conversationId: string, assistantId: string, runId: string) => {
+    const owner = memoryTurnAssistantRef.current;
+    if (owner?.projectId === projectId && owner.conversationId === conversationId
+      && owner.assistantId === assistantId && !owner.observedRunIds.includes(runId)) {
+      owner.observedRunIds.push(runId);
+    }
+  }, []);
   const [forkingMessageId, setForkingMessageId] = useState<string | null>(null);
   const [activePluginActionPaths, setActivePluginActionPaths] = useState<Set<string>>(() => new Set());
   const [hiddenAssistantPluginActionPaths, setHiddenAssistantPluginActionPaths] = useState<Set<string>>(() => new Set());
@@ -5792,34 +5807,80 @@ export function ProjectView({
   // conversation, so the card is still there after a reload. A batch that wrote
   // nothing never reaches here, so the block simply does not appear at 0 — the
   // draft's rule for every "empty means gone" surface in the panel.
+  const activeMemoryAssistant = messagesConversationId === activeConversationId
+    ? messages.filter(message => message.role === 'assistant' && isActiveRunStatus(message.runStatus)).at(-1)
+    : undefined;
+  useEffect(() => {
+    // A persisted active run is an explicit owner even before its reattach
+    // request completes. Retain its row for the subsequent terminal render.
+    if (activeConversationId && activeMemoryAssistant) {
+      const owner = memoryTurnAssistantRef.current;
+      if (owner?.projectId !== project.id || owner.conversationId !== activeConversationId
+        || owner.assistantId !== activeMemoryAssistant.id) {
+        memoryTurnAssistantRef.current = {
+          projectId: project.id, conversationId: activeConversationId, assistantId: activeMemoryAssistant.id,
+          observedRunIds: activeMemoryAssistant.runId ? [activeMemoryAssistant.runId] : [],
+        };
+      }
+    }
+  }, [project.id, activeConversationId, activeMemoryAssistant]);
+  const memoryTurnOwner = memoryTurnAssistantRef.current;
+  const memoryTurnAssistant = activeMemoryAssistant ?? (messagesConversationId === activeConversationId
+    && memoryTurnOwner?.projectId === project.id
+    && memoryTurnOwner.conversationId === activeConversationId
+    ? messages.find(message => message.id === memoryTurnOwner.assistantId)
+    : undefined);
   const {
     batch: memoryWritten,
     dismiss: dismissMemoryWritten,
-  } = useMemoryWrittenCard(memoryExtractionRunActive);
+  } = useMemoryWrittenCard(memoryExtractionRunActive, {
+    projectId: project.id,
+    conversationId: activeConversationId,
+    workspaceContext: projectRunWorkspaceContext,
+    ...selectedAssistantIdentity,
+  }, {
+    projectId: project.id,
+    conversationId: activeConversationId ?? '',
+    runId: memoryTurnAssistant?.runId,
+    assistantMessageId: memoryTurnAssistant?.id,
+    observedRunIds: memoryTurnOwner?.projectId === project.id
+      && memoryTurnOwner.conversationId === activeConversationId
+      && memoryTurnOwner.assistantId === memoryTurnAssistant?.id ? memoryTurnOwner.observedRunIds : [],
+  });
   useEffect(() => {
-    if (!memoryWritten || !activeConversationId) return;
-    if (messagesConversationId !== activeConversationId) return;
+    if (!memoryWritten) return;
+    const source = memoryWritten.context;
+    if (!source?.conversationId) {
+      dismissMemoryWritten();
+      return;
+    }
     const content = memoryWrittenCardContent(
       memoryWritten,
       t('chat.memoryWrittenSummary', { count: memoryWritten.count }),
     );
-    appendConversationMessage(activeConversationId, {
+    const message: ChatMessage = {
       id: randomUUID(),
       role: 'assistant',
-      agentId: selectedAssistantIdentity.agentId,
-      agentName: selectedAssistantIdentity.agentName,
+      agentId: source.agentId,
+      agentName: source.agentName,
       content,
       events: [{ kind: 'text', text: content }],
       createdAt: Date.now(),
+    };
+    // The extractor finishes after the turn. Persist to its original owner,
+    // and only append on screen if that transcript is still the one displayed.
+    if (projectIdRef.current === source.projectId
+      && activeConversationIdRef.current === source.conversationId
+      && messagesConversationIdRef.current === source.conversationId) {
+      setMessages((current) => [...current, message]);
+    }
+    void saveMessage(source.projectId, source.conversationId, message, {
+      workspaceContext: source.workspaceContext,
     });
     dismissMemoryWritten();
   }, [
     memoryWritten,
     dismissMemoryWritten,
-    activeConversationId,
-    appendConversationMessage,
-    messagesConversationId,
-    selectedAssistantIdentity,
     t,
   ]);
 
@@ -7055,6 +7116,14 @@ export function ProjectView({
         if (!isTerminalRunStatus(status.status)) {
           abortRef.current = controller;
           cancelRef.current = cancelController;
+          const memoryOwner = memoryTurnAssistantRef.current;
+          const observedRunIds = memoryOwner?.projectId === project.id
+            && memoryOwner.conversationId === reattachConversationId && memoryOwner.assistantId === message.id
+            ? memoryOwner.observedRunIds : [];
+          memoryTurnAssistantRef.current = {
+            projectId: project.id, conversationId: reattachConversationId, assistantId: message.id,
+            observedRunIds: [...new Set([...observedRunIds, reattachRunId])],
+          };
           markStreamingConversation(reattachConversationId);
         }
         // Only blank content/events/producedFiles when the daemon confirms the run
@@ -7230,6 +7299,7 @@ export function ProjectView({
             );
           },
           onRunCreated: (nextRunId, strategyTask) => {
+            observeMemoryRun(project.id, reattachConversationId, message.id, nextRunId);
             manualFileWriteRegistration.bindRun(nextRunId);
             activeReattachRunId = nextRunId;
             claimReattachRun(nextRunId);
@@ -7976,6 +8046,7 @@ export function ProjectView({
     persistMessageById,
     auditDesignSystemWorkspaceAfterRun,
     markStreamingConversation,
+    observeMemoryRun,
     clearStreamingMarker,
     clearActiveRunRefs,
     clearCurrentRunStreamingMarker,
@@ -8689,6 +8760,7 @@ export function ProjectView({
        * (重试那一路尤其:被重试的那条用户消息和保留下来的失败尝试都在里面)。
        */
       const paintedFrom: { messages: ChatMessage[] | null } = { messages: null };
+      memoryTurnAssistantRef.current = { projectId: project.id, conversationId: runConversationId, assistantId, observedRunIds: [] };
       setMessages((current) => {
         paintedFrom.messages = current;
         return nextVisibleMessages;
@@ -10286,6 +10358,7 @@ export function ProjectView({
             );
           },
           onRunCreated: (runId, strategyTask) => {
+            observeMemoryRun(project.id, runConversationId, assistantId, runId);
             // A successor boundary must include the final predecessor delta
             // and buffered text event even when the 250ms UI batch has not
             // fired yet.
@@ -10439,6 +10512,7 @@ export function ProjectView({
                 userMessage: userText,
                 projectId: project.id,
                 conversationId: runConversationId,
+                assistantMessageId: assistantId,
                 byokChatProvider,
               }),
             });
@@ -10528,6 +10602,7 @@ export function ProjectView({
             recoveryActionInstanceId: taskAnalytics.recoveryActionInstanceId,
           },
           onRunCreated: (runId, strategyTask) => {
+            observeMemoryRun(project.id, runConversationId, assistantId, runId);
             manualFileWriteRegistration.bindRun(runId);
             textBuffer.flush();
             const resolvedTaskAnalytics = {
@@ -10650,6 +10725,7 @@ export function ProjectView({
       patchAttachedStatuses,
       updateMessageById,
       markStreamingConversation,
+      observeMemoryRun,
       clearStreamingMarker,
       clearCurrentRunStreamingMarker,
       clearProjectTimeout,
