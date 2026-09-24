@@ -4,17 +4,30 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import { BrowserCdpPage } from './browser-cdp.js';
+import type { BrowserNetworkPolicy } from './browser-network-policy.js';
+import { createBrowserNetworkProxy, type BrowserNetworkProxy } from './browser-network-proxy.js';
+
 const STARTUP_TIMEOUT_MS = 15_000;
 const SHUTDOWN_GRACE_MS = 2_000;
+const FORCED_SHUTDOWN_WAIT_MS = 2_000;
 
 export interface BrowserSessionView {
   id: string;
-  websocketUrl: string;
+}
+
+export interface BrowserPageView {
+  id: string;
+  url: string;
 }
 
 interface BrowserSession extends BrowserSessionView {
+  browserHttpBase: string;
   child: ChildProcess;
+  networkProxy: BrowserNetworkProxy;
+  pages: Map<string, BrowserCdpPage>;
   profileDir: string;
+  projectId: string;
   closing: boolean;
 }
 
@@ -80,27 +93,74 @@ function waitForExit(child: ChildProcess, timeoutMs: number): Promise<void> {
   ]);
 }
 
-export function createBrowserSessionService() {
+type RemoveDirectory = (path: string, options: { force: true; recursive: true }) => Promise<void>;
+
+export async function removeBrowserProfile(
+  profileDir: string,
+  remove: RemoveDirectory = fs.promises.rm,
+  delay: (timeoutMs: number) => Promise<void> = (timeoutMs) => new Promise((resolve) => setTimeout(resolve, timeoutMs)),
+): Promise<void> {
+  for (let attempt = 0; attempt < 7; attempt += 1) {
+    try {
+      await remove(profileDir, { force: true, recursive: true });
+      return;
+    } catch (error) {
+      if (attempt === 6) throw error;
+      // Antivirus and Chromium child processes can briefly retain handles on
+      // Windows after the parent exits. Retry with a small bounded backoff.
+      await delay(100 * (attempt + 1));
+    }
+  }
+}
+
+export async function terminateBrowserProcess(
+  child: ChildProcess,
+  profileDir: string,
+  removeProfile: (profileDir: string) => Promise<void> = removeBrowserProfile,
+  wait = { forcedMs: FORCED_SHUTDOWN_WAIT_MS, gracefulMs: SHUTDOWN_GRACE_MS },
+): Promise<void> {
+  if (child.exitCode == null && child.signalCode == null) {
+    child.kill('SIGTERM');
+    await waitForExit(child, wait.gracefulMs);
+    if (child.exitCode == null && child.signalCode == null) {
+      child.kill('SIGKILL');
+      // Windows keeps the profile locked until the process has actually
+      // exited. Never race recursive deletion against a still-live browser.
+      await waitForExit(child, wait.forcedMs);
+    }
+  }
+  await removeProfile(profileDir);
+}
+
+export interface BrowserSessionServiceOptions extends BrowserNetworkPolicy {
+  removeProfile?: (profileDir: string) => Promise<void>;
+}
+
+export function createBrowserSessionService(options: BrowserSessionServiceOptions = {}) {
   const sessions = new Map<string, BrowserSession>();
 
-  const close = async (id: string): Promise<boolean> => {
+  const sessionForProject = (projectId: string, id: string): BrowserSession | null => {
     const session = sessions.get(id);
+    return session?.projectId === projectId ? session : null;
+  };
+
+  const close = async (projectId: string, id: string): Promise<boolean> => {
+    const session = sessionForProject(projectId, id);
     if (!session) return false;
     sessions.delete(id);
     if (session.closing) return true;
     session.closing = true;
-    if (session.child.exitCode == null && session.child.signalCode == null) {
-      session.child.kill('SIGTERM');
-      await waitForExit(session.child, SHUTDOWN_GRACE_MS);
-      if (session.child.exitCode == null && session.child.signalCode == null) {
-        session.child.kill('SIGKILL');
-      }
+    await Promise.allSettled([...session.pages.values()].map((page) => page.close()));
+    session.pages.clear();
+    try {
+      await terminateBrowserProcess(session.child, session.profileDir, options.removeProfile);
+    } finally {
+      await session.networkProxy.close();
     }
-    fs.rmSync(session.profileDir, { recursive: true, force: true });
     return true;
   };
 
-  const create = async (): Promise<BrowserSessionView> => {
+  const create = async (projectId: string): Promise<BrowserSessionView> => {
     const executablePath = findBrowserExecutable();
     if (!executablePath) {
       throw new Error(
@@ -110,17 +170,23 @@ export function createBrowserSessionService() {
     }
     const id = randomUUID();
     const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-browser-session-'));
+    const networkProxy = await createBrowserNetworkProxy(options);
     const child = spawn(executablePath, [
       '--headless=new',
+      '--remote-debugging-address=127.0.0.1',
       '--remote-debugging-port=0',
-      '--remote-allow-origins=*',
+      `--proxy-server=http://127.0.0.1:${networkProxy.port}`,
+      '--proxy-bypass-list=<-loopback>',
       `--user-data-dir=${profileDir}`,
       '--no-first-run',
       '--no-default-browser-check',
       '--disable-background-networking',
       '--disable-component-update',
       '--disable-default-apps',
+      '--disable-extensions',
+      '--disable-quic',
       '--disable-sync',
+      '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
       '--metrics-recording-only',
       'about:blank',
     ], { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -151,28 +217,100 @@ export function createBrowserSessionService() {
       child.stderr?.on('data', inspect);
       child.once('error', onError);
       child.once('exit', onExit);
-    }).catch((error) => {
-      child.kill('SIGKILL');
-      fs.rmSync(profileDir, { recursive: true, force: true });
+    }).catch(async (error) => {
+      try {
+        await terminateBrowserProcess(child, profileDir, options.removeProfile);
+      } finally {
+        await networkProxy.close();
+      }
       throw error;
     });
 
-    const session: BrowserSession = { id, websocketUrl, child, profileDir, closing: false };
+    const socket = new URL(websocketUrl);
+    const session: BrowserSession = {
+      browserHttpBase: `http://${socket.host}`,
+      child,
+      closing: false,
+      id,
+      networkProxy,
+      pages: new Map(),
+      profileDir,
+      projectId,
+    };
     sessions.set(id, session);
     child.once('exit', () => {
       if (!session.closing) {
         sessions.delete(id);
-        fs.rmSync(profileDir, { recursive: true, force: true });
+        void Promise.all([...session.pages.values()].map((page) => page.close()))
+          .then(() => Promise.all([
+            (options.removeProfile ?? removeBrowserProfile)(profileDir),
+            networkProxy.close(),
+          ]))
+          .catch((error) => console.warn('[od] failed to clean browser session profile:', error));
       }
     });
-    return { id, websocketUrl };
+    return { id };
+  };
+
+  const createPage = async (projectId: string, sessionId: string): Promise<BrowserPageView | null> => {
+    const session = sessionForProject(projectId, sessionId);
+    if (!session || session.closing) return null;
+    const response = await fetch(`${session.browserHttpBase}/json/new?${encodeURIComponent('about:blank')}`, {
+      method: 'PUT',
+    });
+    if (!response.ok) throw new Error(`Chrome target creation failed: HTTP ${response.status}`);
+    const target = await response.json() as { id?: unknown; url?: unknown; webSocketDebuggerUrl?: unknown };
+    if (typeof target.id !== 'string' || typeof target.webSocketDebuggerUrl !== 'string') {
+      throw new Error('Chrome returned an invalid target');
+    }
+    let page: BrowserCdpPage;
+    try {
+      page = await BrowserCdpPage.connect(target.id, target.webSocketDebuggerUrl, options);
+    } catch (error) {
+      await fetch(`${session.browserHttpBase}/json/close/${encodeURIComponent(target.id)}`).catch(() => undefined);
+      throw error;
+    }
+    session.pages.set(target.id, page);
+    return { id: target.id, url: typeof target.url === 'string' ? target.url : 'about:blank' };
+  };
+
+  const command = async (
+    projectId: string,
+    sessionId: string,
+    pageId: string,
+    method: string,
+    params: Record<string, unknown>,
+  ): Promise<Record<string, unknown> | null> => {
+    const page = sessionForProject(projectId, sessionId)?.pages.get(pageId);
+    return page ? page.command(method, params) : null;
+  };
+
+  const events = async (
+    projectId: string,
+    sessionId: string,
+    pageId: string,
+    after: number,
+    timeoutMs: number,
+  ) => {
+    const page = sessionForProject(projectId, sessionId)?.pages.get(pageId);
+    return page ? page.eventsAfter(after, timeoutMs) : null;
+  };
+
+  const closePage = async (projectId: string, sessionId: string, pageId: string): Promise<boolean> => {
+    const session = sessionForProject(projectId, sessionId);
+    const page = session?.pages.get(pageId);
+    if (!session || !page) return false;
+    session.pages.delete(pageId);
+    await page.close();
+    await fetch(`${session.browserHttpBase}/json/close/${encodeURIComponent(pageId)}`).catch(() => undefined);
+    return true;
   };
 
   const shutdownActive = async (): Promise<void> => {
-    await Promise.all([...sessions.keys()].map((id) => close(id)));
+    await Promise.all([...sessions.values()].map((session) => close(session.projectId, session.id)));
   };
 
-  return { create, close, shutdownActive };
+  return { close, closePage, command, create, createPage, events, shutdownActive };
 }
 
 export type BrowserSessionService = ReturnType<typeof createBrowserSessionService>;
