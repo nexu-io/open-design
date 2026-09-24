@@ -25,6 +25,8 @@ export function planPackagedPayloadDesktopDelegation(
   runtime: PackagedLauncherRuntime,
   options: {
     currentPid?: number;
+    /** Launch-mode arguments the payload must see, such as `--headless`. */
+    extraArgs?: readonly string[];
     forwardedArgs?: readonly string[];
     timeoutMs?: number;
   } = {},
@@ -53,6 +55,7 @@ export function planPackagedPayloadDesktopDelegation(
       ...(options.forwardedArgs ?? process.argv).filter((arg) =>
         arg.startsWith("opendesign://")
       ),
+      ...(options.extraArgs ?? []),
     ],
     command: runtime.desktopExecutablePath,
     cwd: dirname(runtime.desktopExecutablePath),
@@ -63,6 +66,7 @@ export async function launchPackagedPayloadDesktop(
   runtime: PackagedLauncherRuntime,
   options: {
     currentPid?: number;
+    extraArgs?: readonly string[];
     forwardedArgs?: readonly string[];
     recordFailedAttempt?: (runtime: PackagedLauncherRuntime) => Promise<void>;
     handoff?: typeof handoffCurrentSidecarGeneration;

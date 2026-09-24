@@ -594,6 +594,7 @@ function RailRecentSection({
                     moveToTeamAvailable={moveToTeamAvailable}
                     sharing={moveFlow.sharingId === project.id}
                     shareError={moveFlow.error?.projectId === project.id ? moveFlow.error.kind : null}
+                    runId={project.status?.runId}
                     onOpen={openProject}
                     onRename={onRename}
                     onDuplicate={onDuplicate ? (target) => { void duplicateFlow.duplicate(target); } : undefined}

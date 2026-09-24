@@ -24,6 +24,46 @@ describe("production touchpoint decision loader", () => {
 		await expect(loadProductionTouchpointDecision("opend.home.account-badge", "en-US", new AbortController().signal, "decision-1")).rejects.toMatchObject({ detail: "http_410" } satisfies Partial<ProductionTouchpointLoadError>);
 	});
 
+	// OPEND-3375, the client half. Vela answers a request that carries an
+	// `activeDecisionId` for a deployment that has been taken down with
+	// `410 production_runtime_withdrawn` and NO receipt — byte-identical in shape
+	// to a rollout withdrawal that cannot name a receipt.
+	//
+	// The client already does the right thing with it, because the receipt parse
+	// is what decides: anything that does not produce all four fields becomes an
+	// `http_410`, and `http_410` is the one detail that sets `touchpointWithdrawal`.
+	// This case exists to pin that, not to fix it — a 410 the client cannot read a
+	// receipt out of must never be softened into "transport noise the lease rides
+	// out", which is what every other failure is.
+	it("OPEND-3375: withdraws display on a 410 whose body carries no readable receipt", async () => {
+		const signal = new AbortController().signal;
+		const bodies = [
+			// What OPEND-3375 makes Vela send for a withdrawn deployment.
+			JSON.stringify({ error: "production_runtime_withdrawn" }),
+			// The rollout withdrawal it is deliberately shaped like.
+			JSON.stringify({ error: "production_runtime_revoked" }),
+			// And the degenerate cases, which must not be treated any differently.
+			JSON.stringify({ error: "production_runtime_revoked", receipt: null }),
+			"",
+		];
+		for (const body of bodies) {
+			vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(body, { status: 410 })));
+			const failure = await loadProductionTouchpointDecision(
+				"opend.home.campaign-modal",
+				"en-US",
+				signal,
+				"decision-1",
+			).then(() => null, (error: unknown) => error);
+			expect(failure, `410 body ${JSON.stringify(body)} must withdraw display`).toBeInstanceOf(ProductionTouchpointLoadError);
+			expect(failure).toMatchObject({
+				detail: "http_410",
+				// The flag `withdrawsDisplay` reads in the shared lifecycle: this is
+				// the only failure allowed to end a lease the server already granted.
+				touchpointWithdrawal: true,
+			});
+		}
+	});
+
 	it("does not translate an abort into a load diagnostic", async () => {
 		const abort = new DOMException("aborted", "AbortError");
 		vi.stubGlobal("fetch", vi.fn().mockRejectedValue(abort));

@@ -1,3 +1,4 @@
+import { reportProjectFailure } from '../observability/experience-diagnostics';
 import {
   type DragEvent,
   type ReactNode,
@@ -1047,6 +1048,14 @@ export function WorkspaceTabsBar({
     () => new Map(projects.map((project) => [project.id, project])),
     [projects],
   );
+
+  useEffect(() => {
+    for (const tab of state.tabs) {
+      if (tab.kind !== 'project' || (!dockMenuOpen && tab.id !== state.activeTabId)) continue;
+      const project = projectById.get(tab.projectId);
+      if (project) reportProjectFailure(project, 'workspace_tabs');
+    }
+  }, [dockMenuOpen, state.tabs, state.activeTabId, projectById]);
 
   // Project-route dock (workspaceTabsDock.ts): when ProjectView registers a
   // dock element at the top of the chat column, the strip portals there and

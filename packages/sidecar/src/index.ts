@@ -51,6 +51,7 @@ export {
   normalizeSidecarStamp,
   isCurrentSidecarLauncher,
   readCurrentSidecarStamp,
+  resolveSidecarClientEndpoint,
   SIDECAR_STAMP_FIELDS,
   SIDECAR_STAMP_FLAGS,
 } from "./stamp.js";

@@ -147,6 +147,16 @@ export function sidecarStampKey(stamp: SidecarStamp): string {
   return SIDECAR_STAMP_FIELDS.map((field) => `${field}=${value[field]}`).join("\n");
 }
 
+/**
+ * The client endpoint for `stamp`, resolved with this process's environment.
+ * The value is opaque; hand it to another process verbatim (for example in an
+ * MCP registration) instead of a stamp, because the receiver may resolve a
+ * different temporary directory.
+ */
+export function resolveSidecarClientEndpoint(stamp: SidecarStamp): string {
+  return resolvePrivateIpcPath(stamp);
+}
+
 export function resolvePrivateIpcPath(stamp: SidecarStamp, platform: NodeJS.Platform = process.platform): string {
   const principal = platform === "win32"
     ? (() => {

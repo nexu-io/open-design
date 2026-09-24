@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import hmac
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -51,6 +52,8 @@ class R2Client:
         bucket: str,
         credentials: R2Credentials,
         region: str = "auto",
+        retry_delay: float = 1.0,
+        sleep=time.sleep,
         timeout: float = 15.0,
     ) -> None:
         parsed = urllib.parse.urlparse(endpoint.rstrip("/"))
@@ -64,6 +67,8 @@ class R2Client:
         self.bucket = bucket
         self.credentials = credentials
         self.region = region
+        self.retry_delay = retry_delay
+        self.sleep = sleep
         self.timeout = timeout
 
     def put_file(
@@ -142,17 +147,26 @@ class R2Client:
             f"SignedHeaders={signed_headers}, Signature={signature}"
         )
         request = urllib.request.Request(url, data=body, headers=headers, method="PUT")
-        try:
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:
-                if response.status not in {200, 201}:
-                    raise R2Error(f"R2 PUT returned HTTP {response.status}")
-        except urllib.error.HTTPError as error:
-            if error.code == 412:
-                raise R2PreconditionFailed(f"R2 object already exists: {key}") from error
-            detail = error.read(2048).decode("utf-8", "replace")
-            raise R2Error(f"R2 PUT failed with HTTP {error.code}: {detail}") from error
-        except urllib.error.URLError as error:
-            raise R2Error(f"R2 PUT failed: {error.reason}") from error
+        for attempt in range(2):
+            try:
+                with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                    if response.status not in {200, 201}:
+                        raise R2Error(f"R2 PUT returned HTTP {response.status}")
+                return
+            except urllib.error.HTTPError as error:
+                if error.code == 412:
+                    raise R2PreconditionFailed(f"R2 object already exists: {key}") from error
+                if attempt == 0 and error.code in {408, 429, 500, 502, 503, 504}:
+                    self.sleep(self.retry_delay)
+                    continue
+                detail = error.read(2048).decode("utf-8", "replace")
+                raise R2Error(f"R2 PUT failed with HTTP {error.code}: {detail}") from error
+            except (urllib.error.URLError, TimeoutError) as error:
+                if attempt == 0:
+                    self.sleep(self.retry_delay)
+                    continue
+                reason = error.reason if isinstance(error, urllib.error.URLError) else str(error)
+                raise R2Error(f"R2 PUT failed: {reason}") from error
 
 
 def self_check() -> None:
@@ -188,3 +202,23 @@ def self_check() -> None:
     authorization = request.get_header("Authorization") or ""
     if not authorization.startswith("AWS4-HMAC-SHA256 Credential=access/"):
         raise R2Error("R2 self-check produced an invalid authorization header")
+
+    attempts = 0
+    def timeout_once(request: urllib.request.Request, **_kwargs):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise urllib.error.URLError(TimeoutError("timed out"))
+        return Response()
+
+    retrying = R2Client(
+        endpoint="https://account.r2.cloudflarestorage.com",
+        bucket="results",
+        credentials=R2Credentials("access", "secret"),
+        retry_delay=0,
+        sleep=lambda _seconds: None,
+    )
+    with patch("urllib.request.urlopen", timeout_once):
+        retrying.put_bytes(key="path/retry.json", body=b"{}")
+    if attempts != 2:
+        raise R2Error("R2 self-check did not retry one transient write failure")
