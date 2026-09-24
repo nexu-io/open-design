@@ -21,6 +21,20 @@ export type PiImagePayload = {
 };
 /** Generic parameter bag for a pi RPC command written to child stdin. */
 export type PiRpcParams = JsonRecord;
+/**
+ * Which RPC command continues a prior conversation.
+ *
+ * - `new-session-parent` (default): `new_session { parentSession }`. Upstream pi
+ *   loads the parent transcript into the freshly minted session.
+ * - `switch-session`: `switch_session { sessionPath }`. Oh My Pi's fork narrowed
+ *   `new_session`'s `parentSession` to a lineage-only header field that records
+ *   provenance WITHOUT replaying the parent's entries, so resuming through it
+ *   silently yields an empty context. `switch_session` reopens the transcript in
+ *   place and keeps appending to the same `.jsonl`.
+ */
+export type PiRpcResumeCommand = 'new-session-parent' | 'switch-session';
+/** Directory under the working directory holding a runtime's session `.jsonl` files. */
+export const DEFAULT_PI_SESSION_DIR_NAME = '.pi';
 /** Options for `attachPiRpcSession`. All fields map directly to the pi RPC protocol. */
 export type PiRpcSessionOptions = {
   child: ChildProcess;
@@ -31,6 +45,8 @@ export type PiRpcSessionOptions = {
   imagePaths?: string[];
   uploadRoot?: string;
   parentSession?: string;
+  resumeCommand?: PiRpcResumeCommand;
+  sessionDirName?: string;
 };
 /** Handle returned by `attachPiRpcSession` for querying run state and requesting abort. */
 export type PiRpcSession = {
@@ -94,15 +110,34 @@ export function replyExtensionUi(writable: Writable, raw: JsonRecord): void {
 /** Snapshot of `.pi/sessions/` file metadata taken before a prompt is sent. */
 export type PiSessionFileSnapshot = Map<string, { mtimeMs: number; size: number }>;
 /**
- * Reads `.pi/sessions/*.jsonl` entries from the given working directory,
- * returning file paths with their mtime and size. Returns an empty array
- * when the directory is absent, empty, or unreadable.
+ * Absolute path of the session directory a pi-family runtime writes into,
+ * given its working directory. Each runtime owns its own directory name so two
+ * adapters (pi and Oh My Pi) running against the same project cannot see each
+ * other's transcripts as "the file this run changed".
  *
- * @param cwd - Absolute path to the pi working directory; may be undefined.
+ * @param cwd            - Absolute path to the runtime's working directory.
+ * @param sessionDirName - Directory under `cwd`; defaults to pi's `.pi`.
  */
-export function readPiSessionFiles(cwd: string | undefined): Array<{ path: string; mtimeMs: number; size: number }> {
+export function piSessionsDir(
+  cwd: string,
+  sessionDirName: string = DEFAULT_PI_SESSION_DIR_NAME,
+): string {
+  return path.join(cwd, sessionDirName, 'sessions');
+}
+/**
+ * Reads `<sessionDirName>/sessions/*.jsonl` entries from the given working
+ * directory, returning file paths with their mtime and size. Returns an empty
+ * array when the directory is absent, empty, or unreadable.
+ *
+ * @param cwd            - Absolute path to the pi working directory; may be undefined.
+ * @param sessionDirName - Directory under `cwd`; defaults to pi's `.pi`.
+ */
+export function readPiSessionFiles(
+  cwd: string | undefined,
+  sessionDirName: string = DEFAULT_PI_SESSION_DIR_NAME,
+): Array<{ path: string; mtimeMs: number; size: number }> {
   if (typeof cwd !== 'string' || cwd.length === 0) return [];
-  const sessionsDir = path.join(cwd, '.pi', 'sessions');
+  const sessionsDir = piSessionsDir(cwd, sessionDirName);
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(sessionsDir, { withFileTypes: true });
@@ -123,33 +158,39 @@ export function readPiSessionFiles(cwd: string | undefined): Array<{ path: strin
   return files;
 }
 /**
- * Takes a before-snapshot of `.pi/sessions/` to enable changed-file detection
- * after the prompt completes.
+ * Takes a before-snapshot of the session directory to enable changed-file
+ * detection after the prompt completes.
  *
- * @param cwd - Absolute path to the pi working directory; may be undefined.
+ * @param cwd            - Absolute path to the pi working directory; may be undefined.
+ * @param sessionDirName - Directory under `cwd`; defaults to pi's `.pi`.
  */
-export function snapshotPiSessionFiles(cwd: string | undefined): PiSessionFileSnapshot {
+export function snapshotPiSessionFiles(
+  cwd: string | undefined,
+  sessionDirName: string = DEFAULT_PI_SESSION_DIR_NAME,
+): PiSessionFileSnapshot {
   const snapshot: PiSessionFileSnapshot = new Map();
-  for (const file of readPiSessionFiles(cwd)) {
+  for (const file of readPiSessionFiles(cwd, sessionDirName)) {
     snapshot.set(file.path, { mtimeMs: file.mtimeMs, size: file.size });
   }
   return snapshot;
 }
 /**
- * Compares the current `.pi/sessions/` directory against a before-snapshot
- * and returns the path of the single changed file. Returns `null` when zero
- * or more than one file changed — concurrent pi processes are detected this
- * way to avoid associating the wrong session with this run.
+ * Compares the current session directory against a before-snapshot and returns
+ * the path of the single changed file. Returns `null` when zero or more than
+ * one file changed — concurrent pi processes are detected this way to avoid
+ * associating the wrong session with this run.
  *
- * @param cwd    - Absolute path to the pi working directory; may be undefined.
- * @param before - Snapshot taken before the prompt was sent.
+ * @param cwd            - Absolute path to the pi working directory; may be undefined.
+ * @param before         - Snapshot taken before the prompt was sent.
+ * @param sessionDirName - Directory under `cwd`; defaults to pi's `.pi`.
  * @returns Absolute path of the changed session file, or `null`.
  */
 export function resolveSessionPathChangedSince(
   cwd: string | undefined,
   before: PiSessionFileSnapshot,
+  sessionDirName: string = DEFAULT_PI_SESSION_DIR_NAME,
 ): string | null {
-  const changed = readPiSessionFiles(cwd).filter((file) => {
+  const changed = readPiSessionFiles(cwd, sessionDirName).filter((file) => {
     const previous = before.get(file.path);
     return !previous || file.mtimeMs > previous.mtimeMs || file.size !== previous.size;
   });
@@ -159,10 +200,12 @@ export function resolveSessionPathChangedSince(
  * Attaches the daemon's run lifecycle to an already-spawned `pi --mode rpc` child process.
  *
  * Responsibilities:
- * - Sends a `new_session` RPC command (with `parentSession`) before the prompt when
- *   resuming a prior conversation, waiting for acknowledgement before the prompt is sent.
- *   This preserves conversation history across edit rounds; if the parent session is
- *   rejected, the run is failed immediately rather than continuing without prior context.
+ * - Sends the runtime's conversation-reload RPC command before the prompt when resuming a
+ *   prior conversation, waiting for acknowledgement before the prompt is sent. `pi` uses
+ *   `new_session` with `parentSession`; Oh My Pi uses `switch_session` (see
+ *   {@link PiRpcResumeCommand}). This preserves conversation history across edit rounds;
+ *   if the parent session is rejected, the run is failed immediately rather than
+ *   continuing without prior context.
  * - Encodes and forwards `imagePaths` as base64 in the `prompt` RPC command, subject to
  *   `MAX_IMAGE_COUNT` and `MAX_TOTAL_IMAGE_BYTES` budgets. Symlinks are resolved via
  *   `realpathSync` and re-verified against `uploadRoot` to prevent path-escape attacks.
@@ -187,6 +230,8 @@ export function attachPiRpcSession({
   imagePaths,
   uploadRoot,
   parentSession,
+  resumeCommand = 'new-session-parent',
+  sessionDirName = DEFAULT_PI_SESSION_DIR_NAME,
 }: PiRpcSessionOptions): PiRpcSession {
   const stdin = child.stdin;
   const stdout = child.stdout;
@@ -198,7 +243,7 @@ export function attachPiRpcSession({
   }
 
   const runStartedAt = Date.now();
-  const sessionFilesBeforePrompt = snapshotPiSessionFiles(cwd);
+  const sessionFilesBeforePrompt = snapshotPiSessionFiles(cwd, sessionDirName);
   let finished = false;
   let fatal = false;
   const sentFirstToken = { value: false };
@@ -310,14 +355,30 @@ export function attachPiRpcSession({
     });
   };
 
-  // If a prior session file path is provided, send new_session with
-  // parentSession so pi loads the prior conversation history into the
-  // new session, enabling conversational continuity across edit rounds.
-  // Do not send the prompt until pi acknowledges this RPC: resumed prompts
-  // intentionally contain only the latest user turn, so continuing after a
-  // failed parent load would silently drop prior conversation context.
+  // If a prior session file path is provided, ask the runtime to reload that
+  // conversation before prompting, enabling continuity across edit rounds.
+  // Do not send the prompt until the runtime acknowledges this RPC: resumed
+  // prompts intentionally contain only the latest user turn, so continuing
+  // after a failed load would silently drop prior conversation context.
   if (parentSession) {
-    parentSessionRpcId = sendCommand(stdin, 'new_session', { parentSession });
+    if (resumeCommand === 'switch-session') {
+      // `switch_session` reports success even for a path that no longer
+      // exists — it just opens an empty transcript. Since the daemon already
+      // trimmed the prompt to the latest turn, that would silently erase the
+      // conversation, so prove the file is there before handing it over.
+      if (!fs.existsSync(parentSession)) {
+        fail(
+          `parent session file is missing: ${parentSession}`,
+          'PI_PARENT_SESSION_FAILED',
+        );
+      } else {
+        parentSessionRpcId = sendCommand(stdin, 'switch_session', {
+          sessionPath: parentSession,
+        });
+      }
+    } else {
+      parentSessionRpcId = sendCommand(stdin, 'new_session', { parentSession });
+    }
   } else {
     sendPromptCommand();
   }
@@ -348,6 +409,17 @@ export function attachPiRpcSession({
           );
           return;
         }
+        // A `switch_session` that reports `cancelled` (an extension vetoed the
+        // reload) left the runtime on a different transcript than the one this
+        // turn was trimmed against. Treat it as a resume failure rather than
+        // prompting into the wrong conversation.
+        if (
+          resumeCommand === 'switch-session' &&
+          getRecord(raw.data)?.cancelled === true
+        ) {
+          fail('parent session switch was cancelled', 'PI_PARENT_SESSION_FAILED');
+          return;
+        }
         sendPromptCommand();
         return;
       }
@@ -365,7 +437,11 @@ export function attachPiRpcSession({
       // Capture only the session file changed by this run. If another pi
       // process wrote to the shared session directory concurrently, the
       // resolver returns null instead of risking cross-conversation resume.
-      capturedSessionPath = resolveSessionPathChangedSince(cwd, sessionFilesBeforePrompt);
+      capturedSessionPath = resolveSessionPathChangedSince(
+        cwd,
+        sessionFilesBeforePrompt,
+        sessionDirName,
+      );
       // pi's RPC process stays alive after agent_end (designed for
       // multi-prompt sessions). The daemon's /api/chat is single-shot,
       // so close stdin and let the process exit naturally, or kill it

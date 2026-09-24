@@ -28,6 +28,7 @@ const ICON_EXT: Record<string, 'svg' | 'png'> = {
   'grok-build': 'svg',
   kimi: 'svg',
   pi: 'svg',
+  omp: 'svg',
   kiro: 'svg',
   kilo: 'svg',
   vibe: 'svg',
