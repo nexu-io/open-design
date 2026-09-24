@@ -1,6 +1,11 @@
 import type { Dict } from '../types';
 
 export const de: Dict = {
+  'billing.wallet': 'Wallet-Guthaben',
+  'billing.codingPlanDesignPlan': 'Design Plan',
+  'billing.codingPlanPeriodHours': '{count} Stunden',
+  'billing.codingPlanPeriodDays': '{count} Tage',
+  'billing.codingPlanRemainingPercent': 'Noch {percent} %',
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",
@@ -821,11 +826,13 @@ export const de: Dict = {
   "entry.billingTierPro": "Pro",
   "entry.billingTierPlus": "Plus",
   "entry.billingTierMax": "Max",
+  "entry.billingTierGo": "Go",
   "entry.billingFamilyCreator": "Creator",
   "entry.creditsAria": "{tier} · credits remaining",
   "entry.creditsAriaWithBalance": "{tier} · {balance} credits remaining",
   "entry.creditsGrantTip": "Teams credits are granted by subscription allowance. Usage is available in billing.",
   "entry.creditsUpgrade": "Upgrade",
+  "entry.creditsManage": "Verwalten",
   "entry.creditsOpening": "Opening...",
   "entry.creditsRemaining": "Credits remaining",
   "entry.credits": "Kontingent",

@@ -1,6 +1,11 @@
 import type { Dict } from '../types';
 
 export const pl: Dict = {
+  'billing.wallet': 'Saldo portfela',
+  'billing.codingPlanDesignPlan': 'Design Plan',
+  'billing.codingPlanPeriodHours': '{count} godz.',
+  'billing.codingPlanPeriodDays': '{count} dni',
+  'billing.codingPlanRemainingPercent': 'Pozostało {percent}%',
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",
@@ -821,11 +826,13 @@ export const pl: Dict = {
   "entry.billingTierPro": "Pro",
   "entry.billingTierPlus": "Plus",
   "entry.billingTierMax": "Max",
+  "entry.billingTierGo": "Go",
   "entry.billingFamilyCreator": "Creator",
   "entry.creditsAria": "{tier} · credits remaining",
   "entry.creditsAriaWithBalance": "{tier} · {balance} credits remaining",
   "entry.creditsGrantTip": "Teams credits are granted by subscription allowance. Usage is available in billing.",
   "entry.creditsUpgrade": "Ulepsz",
+  "entry.creditsManage": "Zarządzaj",
   "entry.creditsOpening": "Opening...",
   "entry.creditsRemaining": "Credits remaining",
   "entry.credits": "Limit",

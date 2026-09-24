@@ -360,7 +360,7 @@ describe('account menu plan nameplate follows the selected workspace', () => {
   it('names the workspace subscription, not the account subscription', async () => {
     const home = await mountHomeShell(PAID_TEAM);
 
-    await waitFor(() => expect(home.card().getByText('$12.34')).toBeTruthy());
+    await waitFor(() => expect(home.card().getByText('US$12.34')).toBeTruthy());
     const card = home.card();
     expect(card.queryByText('专业版')).toBeNull();
     expect(card.getByText('团队版')).toBeTruthy();
@@ -371,13 +371,13 @@ describe('account menu plan nameplate follows the selected workspace', () => {
   // workspace must move the nameplate, not only the wallet.
   it('moves both the wallet and the nameplate when the workspace switches', async () => {
     const home = await mountHomeShell(PAID_TEAM);
-    await waitFor(() => expect(home.card().getByText('$12.34')).toBeTruthy());
+    await waitFor(() => expect(home.card().getByText('US$12.34')).toBeTruthy());
 
     await home.switchTo(FREE_TEAM);
 
     // The money half already follows the switch — that is the half the reporter
     // saw working ("但是额度是对的").
-    await waitFor(() => expect(home.card().getByText('$0.00')).toBeTruthy());
+    await waitFor(() => expect(home.card().getByText('US$0.00')).toBeTruthy());
 
     // The plan half must follow it too. Before the fix this still read
     // 专业版 + the PLUS wordmark, because it came from the account summary
@@ -391,7 +391,7 @@ describe('account menu plan nameplate follows the selected workspace', () => {
     const card = home.card();
     expect(card.queryByText('专业版')).toBeNull();
     expect(card.queryByText('团队版')).toBeNull();
-    expect(card.getByText('免费')).toBeTruthy();
+    expect(card.getByText('免费版')).toBeTruthy();
     expect(accountRowBadgeViewBox()).toBe(BADGE_VIEWBOX_WIDTH.team);
   });
 });

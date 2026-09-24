@@ -1,6 +1,11 @@
 import type { Dict } from "../types";
 
 export const zhTW: Dict = {
+  'billing.wallet': '錢包餘額',
+  'billing.codingPlanDesignPlan': 'Design Plan',
+  'billing.codingPlanPeriodHours': '{count} 小時',
+  'billing.codingPlanPeriodDays': '{count} 天',
+  'billing.codingPlanRemainingPercent': '剩餘 {percent}%',
   'invite.header.eyebrow': "團隊邀請",
   'invite.loading': "正在載入邀請…",
   'invite.landing.title': "加入團隊",
@@ -827,11 +832,13 @@ export const zhTW: Dict = {
   "entry.billingTierPro": "Pro",
   "entry.billingTierPlus": "Plus",
   "entry.billingTierMax": "Max",
+  "entry.billingTierGo": "Go",
   "entry.billingFamilyCreator": "創作會員",
   "entry.creditsAria": "{tier} · 可用額度",
   "entry.creditsAriaWithBalance": "{tier} · 可用額度 {balance}",
   "entry.creditsGrantTip": "團隊版按訂閱發放額度，可在計費中查看用量。",
   "entry.creditsUpgrade": "升級",
+  "entry.creditsManage": "管理",
   "entry.creditsOpening": "正在開啟...",
   "entry.creditsRemaining": "可用額度",
   "entry.credits": "額度",

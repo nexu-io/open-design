@@ -30,6 +30,14 @@ export const LOCALE_LABEL: Record<Locale, string> = {
 // flat (not deeply nested) so missing-key TS errors point straight at the
 // offending string instead of a generic object mismatch.
 export interface Dict {
+  'billing.wallet': string;
+  /** The product name of the allowance pool; kept untranslated in every locale. */
+  'billing.codingPlanDesignPlan': string;
+  /** Period of a quota window, derived from its `durationSeconds`. */
+  'billing.codingPlanPeriodHours': string;
+  'billing.codingPlanPeriodDays': string;
+  /** The share of a window STILL AVAILABLE, the number the bar fills to. */
+  'billing.codingPlanRemainingPercent': string;
   // Workspace invite acceptance (C lane)
   'invite.header.eyebrow': string;
   'invite.loading': string;
@@ -1173,11 +1181,13 @@ export interface Dict {
   'entry.billingTierPro': string;
   'entry.billingTierPlus': string;
   'entry.billingTierMax': string;
+  'entry.billingTierGo': string;
   'entry.billingFamilyCreator': string;
   'entry.creditsAria': string;
   'entry.creditsAriaWithBalance': string;
   'entry.creditsGrantTip': string;
   'entry.creditsUpgrade': string;
+  'entry.creditsManage': string;
   'entry.creditsOpening': string;
   'entry.creditsRemaining': string;
   'entry.credits': string;
