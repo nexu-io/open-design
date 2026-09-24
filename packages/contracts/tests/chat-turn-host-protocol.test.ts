@@ -15,10 +15,10 @@ describe('chat turn host protocol', () => {
     expect(result.text).not.toContain('OD Next host handoff gate');
   });
 
-  it('gates request-stage markers on completed Direct Edit', () => {
+  it('gates request-stage markers on a completed simple request turn', () => {
     const result = renderChatTurnHostProtocolInstructions(KEY, 'od_next_request');
 
-    expect(result.text).toContain('route=direct_edit');
+    expect(result.text).toContain('executionMode=simple');
     expect(result.text).toContain('inputStage=request');
     expect(result.text).toContain('outcome=completed');
     expect(result.text).toContain('plan_ready');
