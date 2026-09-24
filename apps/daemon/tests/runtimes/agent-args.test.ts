@@ -1056,6 +1056,8 @@ test('grok-build uses --prompt-file and never embeds the prompt in argv or stdin
     promptFilePath,
     '--no-plan',
     '--always-approve',
+    '--output-format',
+    'streaming-json',
     '--model',
     'grok-4.3',
   ]);
@@ -1087,6 +1089,8 @@ test('grok-build omits effort for default/build models but keeps it for reasonin
     promptFilePath,
     '--no-plan',
     '--always-approve',
+    '--output-format',
+    'streaming-json',
     '--model',
     'grok-4.20-reasoning',
     '--effort',
