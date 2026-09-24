@@ -1,9 +1,10 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
 import { strategyPackageHashFromDigests } from '@open-design/plugin-runtime';
-import { StrategyTaskProjectionV2Schema } from '@open-design/contracts';
+import { OD_NEXT_PROMPT_BUNDLE_SCHEMA_V2, serializeCanonicalXml, StrategyTaskProjectionV2Schema } from '@open-design/contracts';
 import type { AppliedPluginSnapshot, OpenDesignPlanContractV2 } from '@open-design/contracts';
 import type Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -31,6 +32,7 @@ import {
 import {
   createStrategyTaskExecution,
   getStrategyTaskExecution,
+  getStrategyTaskExecutionByRunId,
   compareAndTransitionStrategyTaskExecution,
   cancelStrategyTaskExecution,
 } from '../../../src/strategies/task-store.js';
@@ -446,6 +448,50 @@ describe('OD Next planning coordinator', () => {
     expect(() => resolveStrategyHandoff(db, input, [{ id: 'live', status: 'running' }])).toThrow('still active');
     upsertMessage(db, 'conversation-1', { id: 'ordinary-answer', role: 'assistant', content: 'An unrelated answer.', createdAt: 102 });
     expect(resolveStrategyHandoff(db, input, [])).toBeNull();
+  });
+
+  it.each([
+    ['a bundle written by the pre-reshape v2 composer', (target: Database.Database) => {
+      // Same schema id as today's composer over a layout its parser no longer reads.
+      const text = serializeCanonicalXml({
+        kind: 'element',
+        tag: 'open_design_prompt_bundle',
+        attributes: [['schema', OD_NEXT_PROMPT_BUNDLE_SCHEMA_V2]],
+        children: [{ kind: 'element', tag: 'system_prompt', children: [{ kind: 'text', tag: 'core_system_prompt', text: 'stale' }] }],
+      });
+      const utf8Bytes = Buffer.byteLength(text, 'utf8');
+      const sha256 = createHash('sha256').update(text, 'utf8').digest('hex');
+      target.prepare(`UPDATE strategy_task_executions SET prompt_bundle_text=?, prompt_bundle_utf8_bytes=?, prompt_bundle_sha256=?
+        WHERE task_execution_id='task-1'`).run(text, utf8Bytes, sha256);
+      target.prepare(`UPDATE strategy_task_runs SET final_text=?, final_text_utf8_bytes=?, final_text_sha256=?
+        WHERE run_id='run-request'`).run(text, utf8Bytes, sha256);
+    }],
+    ['a record version this build does not know', (target: Database.Database) => {
+      target.prepare(`UPDATE strategy_task_executions SET schema_version=99 WHERE task_execution_id='task-1'`).run();
+    }],
+  ])('starts a new task instead of blocking the conversation when the previous task is %s', (_name, corrupt) => {
+    upsertMessage(db, 'conversation-1', { id: 'old-answer', role: 'assistant', content: 'Plan: blue background.',
+      runId: 'run-request', runStatus: 'succeeded', createdAt: 101 });
+    corrupt(db);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(() => getStrategyTaskExecutionByRunId(db, 'run-request')).toThrow();
+    const input = { projectId: 'project-1', conversationId: 'conversation-1' };
+    expect(resolveStrategyHandoff(db, input, [])).toBeNull();
+    expect(resolveStrategyHandoff(db, { ...input, clientRequestId: 'retry' },
+      [{ id: 'run-request', status: 'succeeded', clientRequestId: 'retry' }])).toBeNull();
+    expect(warn).toHaveBeenCalledWith('[od-next-task] previous task unreadable; follow-up starts a new task',
+      expect.objectContaining({ runId: 'run-request' }));
+  });
+
+  it('lets a follow-up through while the previous Run only drains after a stop', () => {
+    upsertMessage(db, 'conversation-1', { id: 'old-answer', role: 'assistant', content: 'Plan: blue background.',
+      runId: 'run-request', runStatus: 'running', createdAt: 101 });
+    const input = { projectId: 'project-1', conversationId: 'conversation-1' };
+    expect(resolveStrategyHandoff(db, input,
+      [{ id: 'run-request', status: 'running', cancelRequested: true }])?.taskExecutionId).toBe('task-1');
+    expect(() => resolveStrategyHandoff(db, input, [{ id: 'run-request', status: 'running' }])).toThrow('still active');
+    expect(() => resolveStrategyHandoff(db, input,
+      [{ id: 'queued', status: 'queued', cancelRequested: false }])).toThrow('still active');
   });
 
   it('ignores broken historical model contracts while keeping source tasks immutable', () => {

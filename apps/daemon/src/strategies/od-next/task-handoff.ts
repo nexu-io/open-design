@@ -15,6 +15,40 @@ function visible(text: string): string {
   return new LegacyBlockFilter().push(text, true);
 }
 
+/**
+ * Whether a Run still owns its conversation, so a follow-up has to wait for it.
+ *
+ * A Run the user already asked to stop does not. Stopping answers only after the
+ * agent process exits, while the Web client sends its next message (Stop, or
+ * "send now" on a queued message) as soon as the stop is requested. Counting the
+ * draining Run would refuse exactly the message the user stopped it for.
+ */
+export function holdsConversation(run: { status: string; cancelRequested?: boolean }): boolean {
+  return ['queued', 'running'].includes(run.status) && run.cancelRequested !== true;
+}
+
+/**
+ * Read the previous task that an implicit follow-up would continue.
+ *
+ * History selects context; it never decides whether the user may send. A record
+ * this build cannot read is treated as absent, so the follow-up starts a new task
+ * exactly as it would in a conversation without OD Next history.
+ */
+function readPreviousTask(
+  runId: string,
+  read: () => StrategyTaskExecutionRecord | null,
+): StrategyTaskExecutionRecord | null {
+  try {
+    return read();
+  } catch (error) {
+    console.warn('[od-next-task] previous task unreadable; follow-up starts a new task', {
+      runId,
+      reason: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
 /** Host records select context; the agent interprets the latest user request. */
 export function resolveStrategyHandoff(db: Database.Database, input: {
   projectId?: unknown;
@@ -23,7 +57,7 @@ export function resolveStrategyHandoff(db: Database.Database, input: {
   clientRequestId?: unknown;
   pluginId?: unknown;
   appliedPluginSnapshotId?: unknown;
-}, runs: readonly { id: string; status: string; clientRequestId?: string | null }[]): StrategyTaskExecutionRecord | null {
+}, runs: readonly { id: string; status: string; clientRequestId?: string | null; cancelRequested?: boolean }[]): StrategyTaskExecutionRecord | null {
   let task: StrategyTaskExecutionRecord | null = null;
   if (input.taskExecutionId !== undefined) {
     if (typeof input.taskExecutionId !== 'string' || !/^[A-Za-z0-9._-]+$/.test(input.taskExecutionId)) {
@@ -41,20 +75,24 @@ export function resolveStrategyHandoff(db: Database.Database, input: {
     const retry = typeof input.clientRequestId === 'string'
       ? runs.find(run => run.clientRequestId === input.clientRequestId)
       : null;
-    const retryTask = retry ? getStrategyTaskExecutionByRunId(db, retry.id) : null;
-    if (retryTask?.continuedFromTaskExecutionId) {
-      return getStrategyTaskExecution(db, retryTask.continuedFromTaskExecutionId);
+    const retryTask = retry
+      ? readPreviousTask(retry.id, () => getStrategyTaskExecutionByRunId(db, retry.id))
+      : null;
+    const sourceTaskId = retryTask?.continuedFromTaskExecutionId;
+    if (retry && sourceTaskId) {
+      return readPreviousTask(retry.id, () => getStrategyTaskExecution(db, sourceTaskId));
     }
     if (retryTask) return null;
     const latest = listMessages(db, input.conversationId)
       .filter(message => message.role === 'assistant' && (!retry || message.runId !== retry.id))
       .at(-1);
-    if (latest?.runId) task = getStrategyTaskExecutionByRunId(db, latest.runId);
+    const latestRunId = typeof latest?.runId === 'string' ? latest.runId : null;
+    if (latestRunId) task = readPreviousTask(latestRunId, () => getStrategyTaskExecutionByRunId(db, latestRunId));
     if (task && task.projectId !== input.projectId) return null;
     if (input.appliedPluginSnapshotId && input.appliedPluginSnapshotId !== task?.snapshotId) return null;
   }
   if (!task) return null;
-  const active = runs.find(run => ['queued', 'running'].includes(run.status)
+  const active = runs.find(run => holdsConversation(run)
     && !(typeof input.clientRequestId === 'string' && run.clientRequestId === input.clientRequestId));
   if (active) throw new StrategyHandoffError(409, 'RUN_IN_PROGRESS', 'a run is still active in this conversation');
   return task;

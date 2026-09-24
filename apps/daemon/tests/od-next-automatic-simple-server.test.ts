@@ -1,5 +1,6 @@
 import type { Server } from 'node:http';
 import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { chmod, cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -83,6 +84,7 @@ type RunStatus = {
   updatedAt: number;
   eventsLogPath: string;
   endedWithUnfinishedWork?: boolean;
+  cancelRequested?: boolean;
   error?: string | null;
   errorCode?: string | null;
   strategyTask?: {
@@ -91,6 +93,8 @@ type RunStatus = {
     inputStage: string;
     outcome: string;
     terminal: boolean;
+    activeRunId?: string;
+    nextRunId?: string;
   };
 };
 
@@ -760,6 +764,123 @@ process.exit(127);
     const next = await waitForTask(second.strategyTask!.taskExecutionId, 'completed');
     expect(next.runs).toHaveLength(1);
   });
+
+  it('carries a form answer through a new plan into automatic production', async () => {
+    const fixture = await createPublicRolloutFixture('marker-question-plan', 'design');
+    started = fixture.started; binDir = fixture.binDir;
+    process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
+    const first = await postRun(started.url, publicRunRequest(fixture, 'Make a landing page for our product.', 'answer-first'));
+    await waitForRunTerminal(started.url, first.runId as string);
+    const asked = await waitForTask(first.strategyTask!.taskExecutionId, 'completed');
+    expect(asked.runs).toHaveLength(1);
+    expect(asked.runs[0]!.settlementReason).toBe('question');
+    const answer = await postRun(started.url, {
+      ...publicRunRequest(fixture, 'Audience: developers.', 'answer-second'),
+      taskExecutionId: asked.taskExecutionId,
+    });
+    expect(answer.strategyTask!.taskExecutionId).not.toBe(asked.taskExecutionId);
+    const task = await waitForTask(answer.strategyTask!.taskExecutionId, 'completed');
+    expect(task.continuedFromTaskExecutionId).toBe(asked.taskExecutionId);
+    expect(task.runs).toHaveLength(2);
+    expect(task.runs[0]!.settlementReason).toBe('continued');
+    expect(task.runs[1]!.inputStage).toBe('production');
+    expect((await waitForRunTerminal(started.url, task.latestRunId)).status).toBe('succeeded');
+    const invocations = await readProjectInvocations(fixture.logPath, fixture.projectId);
+    expect(invocations).toHaveLength(3);
+    expect(invocations[1]!.stdin).toContain('Audience: developers.');
+    expect(invocations[2]!.stdin).toContain('This is the production turn');
+    expect(await readFile(path.join(invocations[2]!.cwd, 'index.html'), 'utf8')).toContain('Developer landing');
+  }, 45_000);
+
+  it('continues once when a tool call separates the plan from its production marker', async () => {
+    const fixture = await createPublicRolloutFixture('marker-tool-split', 'design');
+    started = fixture.started; binDir = fixture.binDir;
+    process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
+    const created = await postRun(started.url, publicRunRequest(fixture, 'Create a landing page and a presentation.', 'tool-split'));
+    const request = await waitForRunTerminal(started.url, created.runId as string);
+    expect(request.status, JSON.stringify(request)).toBe('succeeded');
+    const task = await waitForTask(created.strategyTask!.taskExecutionId, 'completed');
+    expect(task.runs).toHaveLength(2);
+    expect(task.runs[0]!.settlementReason).toBe('continued');
+    expect((await waitForRunTerminal(started.url, task.latestRunId)).status).toBe('succeeded');
+    const invocations = await readProjectInvocations(fixture.logPath, fixture.projectId);
+    expect(invocations).toHaveLength(2);
+    expect(await readFile(path.join(invocations[1]!.cwd, 'landing.html'), 'utf8')).toContain('Landing');
+    const response = await fetch(`${started.url}/api/projects/${fixture.projectId}/conversations/${fixture.conversationId}/messages`);
+    const history = await response.json() as { messages: Array<{ content?: string }> };
+    expect(JSON.stringify(history)).not.toContain('od-production-ready');
+    expect(history.messages.some(message => message.content?.includes('Plan: create a landing page and a matching deck.'))).toBe(true);
+  });
+
+  it('points the planning end at its production run so od run watch follows the task', async () => {
+    const fixture = await createPublicRolloutFixture('marker-production', 'design');
+    started = fixture.started; binDir = fixture.binDir;
+    process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
+    const created = await postRun(started.url, publicRunRequest(fixture, 'Create a landing page and a presentation.', 'watch-follow'));
+    const task = await waitForTask(created.strategyTask!.taskExecutionId, 'completed');
+    const planningRunId = created.runId as string;
+    const productionRunId = task.latestRunId;
+    expect(productionRunId).not.toBe(planningRunId);
+    await waitForRunTerminal(started.url, productionRunId);
+    const { stdout } = await runOdCli(['run', 'watch', planningRunId, '--daemon-url', started.url]);
+    const frames = stdout.trim().split('\n').map(line => JSON.parse(line) as {
+      event: string;
+      data: { strategyTask?: NonNullable<RunStatus['strategyTask']> };
+    });
+    const ends = frames.filter(frame => frame.event === 'end');
+    expect(ends).toHaveLength(2);
+    expect(ends[0]!.data.strategyTask).toMatchObject({ terminal: false, nextRunId: productionRunId });
+    expect(ends[0]!.data.strategyTask?.runMappings).toContainEqual({ runId: productionRunId, taskRunIndex: 1 });
+    expect(ends[1]!.data.strategyTask).toMatchObject({ terminal: true, outcome: 'completed' });
+    expect(stdout).not.toContain('od-production-ready');
+  }, 45_000);
+
+  it.each(['active', 'off'] as const)(
+    'starts a new turn instead of failing every message when the previous task is unreadable (rollout %s)', async mode => {
+      const fixture = await createPublicRolloutFixture('marker-unreadable', 'design');
+      started = fixture.started; binDir = fixture.binDir;
+      process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
+      const first = await postRun(started.url, publicRunRequest(fixture, 'Create a landing page.', `unreadable-first-${mode}`));
+      const old = await waitForTask(first.strategyTask!.taskExecutionId, 'completed');
+      await waitForRunTerminal(started.url, old.latestRunId);
+      writeStalePromptBundle(old.taskExecutionId, old.initialRunId);
+      expect(() => getStrategyTaskExecution(database(), old.taskExecutionId)).toThrow();
+      if (mode === 'off') process.env.OD_NEXT_STRATEGY_ROLLOUT = 'off';
+      const warn = vi.spyOn(console, 'warn');
+      const next = await postRun(started.url, publicRunRequest(fixture, 'Now make a pricing page.', `unreadable-next-${mode}`));
+      expect((await waitForRunTerminal(started.url, next.runId as string)).status).toBe('succeeded');
+      expect(warn).toHaveBeenCalledWith('[od-next-task] previous task unreadable; follow-up starts a new task',
+        expect.objectContaining({ runId: expect.any(String) }));
+      if (mode === 'off') {
+        expect(next.strategyTask).toBeUndefined();
+        return;
+      }
+      const task = await waitForTask(next.strategyTask!.taskExecutionId, 'completed');
+      expect(task.taskExecutionId).not.toBe(old.taskExecutionId);
+      expect(task.continuedFromTaskExecutionId).toBeUndefined();
+    }, 45_000);
+
+  it('accepts a message sent while the stopped Run is still draining', async () => {
+    const fixture = await createPublicRolloutFixture('marker-handoff', 'design');
+    started = fixture.started; binDir = fixture.binDir;
+    process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
+    const first = await postRun(started.url, publicRunRequest(fixture,
+      'Hold the run open and drain slowly after a stop.', 'draining-first'));
+    const firstRunId = first.runId as string;
+    await vi.waitFor(async () => expect((await getRun(started!.url, firstRunId)).status).toBe('running'));
+    const stopping = fetch(`${started.url}/api/runs/${encodeURIComponent(firstRunId)}/cancel`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}',
+    });
+    await vi.waitFor(async () => expect(await getRun(started!.url, firstRunId))
+      .toMatchObject({ status: 'running', cancelRequested: true }));
+    const next = await postRun(started.url, publicRunRequest(fixture, 'Continue and create the dog battle page.', 'draining-next'));
+    expect(next.strategyTask!.taskExecutionId).not.toBe(first.strategyTask!.taskExecutionId);
+    expect((await stopping).status).toBe(200);
+    expect((await waitForRunTerminal(started.url, firstRunId)).status).toBe('canceled');
+    expect((await waitForRunTerminal(started.url, next.runId as string)).status).toBe('succeeded');
+    const task = await waitForTask(next.strategyTask!.taskExecutionId, 'completed');
+    expect(task.continuedFromTaskExecutionId).toBe(first.strategyTask!.taskExecutionId);
+  }, 45_000);
 
   it('resumes current marker conversations with only the current request and host directives', async () => {
     const fixture = await createPublicRolloutFixture('marker-question', 'design');
@@ -2727,6 +2848,24 @@ process.stdin.on('end', () => {
     setInterval(() => {}, 1 << 30);
     return;
   }
+  if (stdin.includes('Hold the run open and drain slowly after a stop.') && !stdin.includes('Historical task context.')) {
+    // Stopping answers only after the process exits; keep that window open.
+    process.on('SIGTERM', () => setTimeout(() => process.exit(0), 2500));
+    setInterval(() => {}, 1 << 30);
+    return;
+  }
+  if (${JSON.stringify(label)} === 'marker-tool-split' && !stdin.includes('This is the production turn')) {
+    const key = /<od-production-ready key="([a-f0-9]+)"/.exec(stdin)?.[1];
+    if (!key) throw new Error('Current host marker key was not injected');
+    for (const item of [
+      { id: 'plan', type: 'agent_message', text: 'Plan: create a landing page and a matching deck.' },
+      { id: 'todo', type: 'command_execution', command: 'echo planned', aggregated_output: 'planned', exit_code: 0, status: 'completed' },
+      { id: 'answer', type: 'agent_message', text: '<od-production-ready key="' + key + '" />' },
+    ]) console.log(JSON.stringify({ type: 'item.completed', item }));
+    console.log(JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 1, output_tokens: 1 } }));
+    setTimeout(() => process.exit(0), 5);
+    return;
+  }
   let text = 'Ordinary public run completed.';
   if (${JSON.stringify(label)} === 'marker-handoff') {
     if (stdin.includes('Historical task context.')) {
@@ -2742,7 +2881,7 @@ process.stdin.on('end', () => {
       if (!key) throw new Error('Current host marker key was not injected');
       text = 'Plan: deliver a standalone dog image only.\\n<od-production-ready key="' + key + '" />';
     }
-  } else if (['marker-production', 'marker-missing-session', 'marker-expired-session', 'marker-expired-side-effect'].includes(${JSON.stringify(label)})) {
+  } else if (['marker-production', 'marker-missing-session', 'marker-expired-session', 'marker-expired-side-effect', 'marker-tool-split'].includes(${JSON.stringify(label)})) {
     if (stdin.includes('This is the production turn')) {
       fs.writeFileSync('landing.html', '<!doctype html><html><body>Landing</body></html>');
       fs.writeFileSync('deck.html', '<!doctype html><html><body>Deck</body></html>');
@@ -2754,6 +2893,25 @@ process.stdin.on('end', () => {
     }
   } else if (['marker-question', 'marker-request-expired'].includes(${JSON.stringify(label)})) {
     text = '<question-form id="scope">{"questions":[{"id":"audience","label":"Who is this for?"}]}</question-form>';
+  } else if (${JSON.stringify(label)} === 'marker-question-plan') {
+    if (stdin.includes('This is the production turn')) {
+      fs.writeFileSync('index.html', '<!doctype html><html><body>Developer landing</body></html>');
+      text = 'Wrote index.html.';
+    } else if (stdin.includes('Audience: developers.')) {
+      const key = /<od-production-ready key="([a-f0-9]+)"/.exec(stdin)?.[1];
+      if (!key) throw new Error('Current host marker key was not injected');
+      text = 'Plan: a landing page for developers.\\n<od-production-ready key="' + key + '" />';
+    } else {
+      text = '<question-form id="scope">{"questions":[{"id":"audience","label":"Who is this for?"}]}</question-form>';
+    }
+  } else if (${JSON.stringify(label)} === 'marker-unreadable') {
+    const key = /<od-production-ready key="([a-f0-9]+)"/.exec(stdin)?.[1];
+    if (stdin.includes('This is the production turn')) {
+      fs.writeFileSync('index.html', '<!doctype html><html><body>Page</body></html>');
+      text = 'Wrote index.html.';
+    } else if (key) {
+      text = 'Plan: one page.\\n<od-production-ready key="' + key + '" />';
+    }
   }
   console.log(JSON.stringify({
     type: 'item.completed', item: { id: 'answer', type: 'agent_message', text },
@@ -2781,6 +2939,22 @@ function database() {
   const dataDir = process.env.OD_DATA_DIR;
   if (!dataDir) throw new Error('OD_DATA_DIR is required');
   return openDatabase(process.cwd(), { dataDir });
+}
+
+/** Rewrite a task's frozen bundle in the layout the v2 composer used before its reshape. */
+function writeStalePromptBundle(taskExecutionId: string, initialRunId: string): void {
+  const text = contracts.serializeCanonicalXml({
+    kind: 'element',
+    tag: 'open_design_prompt_bundle',
+    attributes: [['schema', contracts.OD_NEXT_PROMPT_BUNDLE_SCHEMA_V2]],
+    children: [{ kind: 'element', tag: 'system_prompt', children: [{ kind: 'text', tag: 'core_system_prompt', text: 'stale' }] }],
+  });
+  const utf8Bytes = Buffer.byteLength(text, 'utf8');
+  const sha256 = createHash('sha256').update(text, 'utf8').digest('hex');
+  database().prepare(`UPDATE strategy_task_executions SET prompt_bundle_text=?, prompt_bundle_utf8_bytes=?, prompt_bundle_sha256=?
+    WHERE task_execution_id=?`).run(text, utf8Bytes, sha256, taskExecutionId);
+  database().prepare(`UPDATE strategy_task_runs SET final_text=?, final_text_utf8_bytes=?, final_text_sha256=?
+    WHERE run_id=?`).run(text, utf8Bytes, sha256, initialRunId);
 }
 
 async function readDurableRunState(runId: string): Promise<Record<string, unknown>> {

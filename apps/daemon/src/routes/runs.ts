@@ -226,7 +226,7 @@ import {
   type RunEventRecord,
   type SseClient,
 } from '../runtimes/chat-run-records.js';
-import { resolveStrategyHandoff, strategyHandoffTranscript, StrategyHandoffError } from '../strategies/od-next/task-handoff.js';
+import { holdsConversation, resolveStrategyHandoff, strategyHandoffTranscript, StrategyHandoffError } from '../strategies/od-next/task-handoff.js';
 
 // Keep in sync with the web uploader's `looksLikeImage` (apps/web registry):
 // omit-pin seeds must classify the same extensions as `image` so reload chips
@@ -2591,7 +2591,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
                   // two follow-ups cannot both start from the same idle conversation.
                   const active = design.runs.list({ projectId: previousStrategyTask.projectId,
                     conversationId: previousStrategyTask.conversationId }).find(run =>
-                    run.id !== candidate.id && ['queued', 'running'].includes(run.status));
+                    run.id !== candidate.id && holdsConversation(run));
                   if (active) throw new StrategyHandoffError(409, 'RUN_IN_PROGRESS', 'a run is still active in this conversation');
                 }
                 if (createdTaskInputSnapshot) {
