@@ -343,9 +343,11 @@ describe('OPEND-2587 real composer and transcript during delayed local reception
     };
   }
 
-  it('retains the sent message during an unresolved local billing request and admits it once', async () => {
+  it('clears the composer during an unresolved local billing request and admits the send once', async () => {
     const releaseBilling = await sendWithDelayedBilling();
-    expect(composerText().trim()).toBe(PROMPT);
+    // OPEND-3392: the turn is already painted, so the composer must not keep
+    // showing the sent prompt while the billing preflight is in flight.
+    await waitFor(() => expect(composerText().trim()).toBe(''));
     // Diagnostic repeat-click witness: no second turn is submitted.
     const send = screen.queryByTestId('chat-send');
     if (send && !(send as HTMLButtonElement).disabled) fireEvent.click(send);
@@ -372,7 +374,7 @@ describe('OPEND-2587 real composer and transcript during delayed local reception
     expect(pending).toHaveAccessibleName('assistant.statusPreparing');
   });
 
-  it('keeps preparing as the only action when the retained draft is cleared during admission', async () => {
+  it('keeps preparing as the only action while the cleared composer waits on admission', async () => {
     await sendWithDelayedBilling();
     await typeAndSettle('');
     expect(screen.getByTestId('chat-send-pending')).toBeDisabled();
