@@ -201,14 +201,6 @@ function supportsHost(authenticated: boolean): boolean {
 	);
 }
 
-export function readCampaignHostLocale(): string {
-	return (
-		document.documentElement.lang.trim() ||
-		getOpenDesignHost()?.client.osLocale?.trim() ||
-		"en-US"
-	);
-}
-
 function testPlacementIds(deployment: TestDeployment): TestCampaignPlacement[] {
 	return TEST_CAMPAIGN_PLACEMENTS.filter((key) =>
 		deployment.snapshot.placementKeys.includes(key),
@@ -416,7 +408,9 @@ export function TestTouchpointMount({
 			placementKey,
 			staticActions: decision.staticActions,
 			mode: "test",
-			locale: readCampaignHostLocale(),
+			// The runtime decision carries the locale requested by app i18n.
+			// Global DOM language can be overwritten by an embedded editor.
+			locale: decision.content.locale,
 			isCurrent: authorized,
 			dispatchAction: async (id) => {
 				requireCampaignAction(await dispatchTestCampaignAction(decision, id));
