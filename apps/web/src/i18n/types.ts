@@ -4222,6 +4222,7 @@ export interface Dict {
   'fileViewer.exportSlideEta': string;
   'fileViewer.exportFailed': string;
   'fileViewer.exportDone': string;
+  'fileViewer.exportDegradedFallback': string;
   'fileViewer.exportImageFailed': string;
   'fileViewer.exportImageModalSubtitle': string;
   'fileViewer.exportImageFormatLabel': string;
