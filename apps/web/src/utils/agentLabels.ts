@@ -16,6 +16,7 @@ const AGENT_LABELS: Record<string, string> = {
   copilot: 'Copilot',
   'deepseek-harness': 'DeepSeek Harness',
   deepseek: 'DeepSeek',
+  muse: 'Muse Code',
   antigravity: 'Antigravity',
   'anthropic-api': 'Anthropic API via OpenCode',
   'openai-api': 'OpenAI API via OpenCode',
@@ -45,6 +46,7 @@ const AGENT_ALIASES: Record<string, string> = {
   'deepseek harness': 'deepseek-harness',
   'aider cli': 'aider',
   'aider chat': 'aider',
+  'muse code': 'muse',
   agy: 'antigravity',
 };
 
