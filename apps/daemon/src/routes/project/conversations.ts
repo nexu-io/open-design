@@ -415,6 +415,7 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
             strategyTaskBlocked: true,
             strategyTaskBlockedText: turn.blockedText,
           } : {}),
+          ...(turn.inputStage ? { strategyTaskInputStage: turn.inputStage } : {}),
         };
       }),
     });

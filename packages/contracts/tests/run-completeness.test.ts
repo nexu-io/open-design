@@ -5,6 +5,7 @@ import {
   eventsEndedByAskingUser,
   eventsEndedWithUnfinishedWork,
   isTodoWriteToolName,
+  strategyTaskRefusedBeforeProduction,
   turnEndedByAskingUser,
   todoSnapshotHasUnfinishedWork,
   todoStatusIsUnfinished,
@@ -300,5 +301,23 @@ describe('eventsEndedWithUnfinishedWork vs a turn that ended by asking', () => {
         { kind: 'usage', stopReason: 'max_tokens' },
       ]),
     ).toBe(true);
+  });
+});
+
+describe('strategyTaskRefusedBeforeProduction', () => {
+  it('covers a task the gate refused at a stage before production', () => {
+    for (const inputStage of ['request', 'clarification', 'contract_repair']) {
+      expect(strategyTaskRefusedBeforeProduction({ terminal: true, outcome: 'blocked', inputStage })).toBe(true);
+    }
+  });
+
+  it('leaves out production refusals, other verdicts, open tasks and unknown stages', () => {
+    expect(strategyTaskRefusedBeforeProduction({ terminal: true, outcome: 'blocked', inputStage: 'production' })).toBe(false);
+    expect(strategyTaskRefusedBeforeProduction({ terminal: true, outcome: 'completed', inputStage: 'request' })).toBe(false);
+    expect(strategyTaskRefusedBeforeProduction({ terminal: true, outcome: 'canceled', inputStage: 'request' })).toBe(false);
+    expect(strategyTaskRefusedBeforeProduction({ terminal: false, outcome: 'blocked', inputStage: 'request' })).toBe(false);
+    expect(strategyTaskRefusedBeforeProduction({ terminal: true, outcome: 'blocked' })).toBe(false);
+    expect(strategyTaskRefusedBeforeProduction(null)).toBe(false);
+    expect(strategyTaskRefusedBeforeProduction(undefined)).toBe(false);
   });
 });

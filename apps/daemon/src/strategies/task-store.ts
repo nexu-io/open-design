@@ -471,6 +471,8 @@ export interface StrategyTaskTurnProjection {
   /** Persisted task verdict, independent of the physical Run's status. */
   blocked: boolean;
   blockedText: string | null;
+  /** Stage of this Run within the task, as recorded when the Run was mapped. */
+  inputStage: StrategyInputStageV2 | null;
 }
 
 /**
@@ -506,6 +508,7 @@ export function strategyTaskTurnsForRunIds(
         SELECT r.run_id AS runId,
                r.task_execution_id AS taskExecutionId,
                r.task_run_index AS taskRunIndex,
+               r.input_stage AS inputStage,
                t.outcome AS outcome,
                t.blocked_visible_text AS blockedVisibleText
           FROM strategy_task_runs r
@@ -534,6 +537,7 @@ export function strategyTaskTurnsForRunIds(
             && row['blockedVisibleText'].trim().length > 0
             ? row['blockedVisibleText']
             : null,
+          inputStage: isStrategyInputStage(row['inputStage']) ? row['inputStage'] : null,
         });
       }
     }
@@ -1832,13 +1836,15 @@ function parseNullableRoute(value: unknown): StrategyRouteV2 | null {
   throw new InvalidStrategyTaskRecordError('Stored strategy route is invalid.');
 }
 
-function parseStage(value: unknown): StrategyInputStageV2 {
-  if (
-    value === 'request'
+function isStrategyInputStage(value: unknown): value is StrategyInputStageV2 {
+  return value === 'request'
     || value === 'clarification'
     || value === 'contract_repair'
-    || value === 'production'
-  ) return value;
+    || value === 'production';
+}
+
+function parseStage(value: unknown): StrategyInputStageV2 {
+  if (isStrategyInputStage(value)) return value;
   throw new InvalidStrategyTaskRecordError('Stored strategy input stage is invalid.');
 }
 

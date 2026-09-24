@@ -375,3 +375,28 @@ export function strategyTaskProvesDelivery(
 ): boolean {
   return strategyTask?.terminal === true && strategyTask.outcome === 'completed';
 }
+
+/**
+ * Did the strategy gate refuse this turn's task before production?
+ *
+ * A task refused at the request, clarification or contract-repair stage ended
+ * the turn with the agent's own reply: a plan, an answer, a greeting. The build
+ * steps its TodoWrite list names never started, so that list is not work the
+ * turn stopped on, and judging the turn by it reads a finished reply as
+ * "stopped with unfinished work". A task refused at production was asked to
+ * build and did stop short of it, so it stays out of this rule.
+ *
+ * Callers gate it on a clean exit, as they gate the ask rule: a turn the user
+ * stopped is stopped, whatever stage its task was in.
+ */
+export function strategyTaskRefusedBeforeProduction(
+  strategyTask: { outcome?: unknown; terminal?: unknown; inputStage?: unknown } | null | undefined,
+): boolean {
+  return strategyTask?.terminal === true
+    && strategyTask.outcome === 'blocked'
+    && (
+      strategyTask.inputStage === 'request'
+      || strategyTask.inputStage === 'clarification'
+      || strategyTask.inputStage === 'contract_repair'
+    );
+}
