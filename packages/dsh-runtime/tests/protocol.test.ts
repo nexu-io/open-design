@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { PassThrough } from 'node:stream';
-import { describe, test } from 'vitest';
+import { describe, test, vi } from 'vitest';
 import { identityFrame, modelsFrame, parseHostCommand } from '../src/protocol.js';
 import { internals } from '../src/index.js';
 
@@ -330,6 +330,160 @@ describe('@open-design/dsh-runtime protocol', () => {
     assert.equal(idleCalls, 2);
     assert.equal(disposeCalls, 1);
     const frames = chunks.map((chunk) => JSON.parse(chunk) as { type: string; status?: string; error?: unknown });
+    assert.equal(frames.filter((frame) => frame.type === 'result').length, 1);
+    assert.equal(frames.at(-1)?.status, 'cancelled');
+    assert.equal(frames.at(-1)?.error, undefined);
+  });
+
+  test('emits a failed result frame when model selection derivation throws (no silent exit)', async () => {
+    // Model selection (provider/id → resolved selection) is derived before
+    // the run itself. If that derivation throws — e.g. the default-model
+    // service is unavailable, or a host-supplied value is rejected — the
+    // execute must still settle the protocol contract: exactly one result
+    // frame, status failed. Before the fix the derivation sat outside the
+    // error path, so a throw rejected the task promise with no frame at all
+    // and the serve loop exited the process silently, leaving the host
+    // waiting on a result that never arrived.
+    const chunks: string[] = [];
+    const ctx = {
+      agentDefaultModel: {
+        currentSelection: () => {
+          throw new Error('default model unavailable');
+        },
+      },
+    };
+    await internals.execute(ctx as never, {
+      v: 1,
+      type: 'execute',
+      request_id: 'run-bad-selection',
+      cwd: '/project',
+      prompt: 'hi',
+      mcp_servers: [],
+    }, { write: (chunk: string) => chunks.push(chunk) }, () => {}, new AbortController().signal);
+
+    const frames = chunks.map((chunk) => JSON.parse(chunk) as { type: string; status?: string; error?: { code?: string } });
+    assert.equal(frames.filter((frame) => frame.type === 'result').length, 1);
+    assert.equal(frames.at(-1)?.status, 'failed');
+    assert.equal(frames.at(-1)?.error?.code, 'DSH_PROFILE_INVALID_MODEL_SELECTION');
+  });
+
+  test('serve emits exactly one result frame when cleanup throws after a terminal frame', async () => {
+    // Regression: `execute`'s finally runs cleanup (disposeEvent / dispose /
+    // onHandle) AFTER the terminal result frame has been written. If a
+    // disposer throws, `execute` must not reject — otherwise `serve`'s
+    // defense-in-depth fallback would synthesize a SECOND result frame,
+    // violating the exactly-one-terminal-result protocol contract and being
+    // marked fatal by the daemon.
+    let disposeCalls = 0;
+    const handle = {
+      agent: {
+        session: { seq: 0 },
+        whenIdle: async () => {},
+        followup: async () => {},
+        cancel: () => {},
+      },
+      dispose: async () => { disposeCalls += 1; },
+    };
+    const ctx = {
+      agentDefaultModel: {
+        currentSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }),
+      },
+      agents: {
+        create: async () => handle,
+      },
+      on: () => () => {
+        throw new Error('disposeEvent failed');
+      },
+      sessions: { flush: async () => {} },
+    };
+    const input = new PassThrough();
+    const chunks: string[] = [];
+    const exitCodes: number[] = [];
+    const serving = internals.serve(
+      ctx as never,
+      { write: (chunk: string) => chunks.push(chunk) },
+      (code) => exitCodes.push(code),
+      input,
+      (exit) => exit(0),
+    );
+
+    input.write(`${JSON.stringify({
+      v: 1,
+      type: 'execute',
+      request_id: 'run-cleanup-throw',
+      cwd: '/project',
+      prompt: 'hi',
+      mcp_servers: [],
+    })}\n`);
+    const stderrWrites: string[] = [];
+    const stderrSpy = vi.spyOn(process.stderr, 'write');
+    stderrSpy.mockImplementation((chunk) => {
+      stderrWrites.push(String(chunk));
+      return true;
+    });
+    try {
+      await serving;
+    } finally {
+      stderrSpy.mockRestore();
+    }
+
+    assert.equal(disposeCalls, 1);
+    assert.deepEqual(exitCodes, [0]);
+    const frames = chunks.map((chunk) => JSON.parse(chunk) as { type: string; status?: string });
+    // The key protocol assertion: exactly ONE terminal result frame despite
+    // the cleanup throw — a second frame (from serve's fallback) would be
+    // fatal. (Status is 'failed' here only because this mock never delivers a
+    // turn/end event; the bug under test is the duplicate frame, not status.)
+    assert.equal(frames.filter((frame) => frame.type === 'result').length, 1);
+    // Cleanup failures stay non-rejecting but must remain observable: the
+    // failed event disposer is reported on stderr, never silently swallowed.
+    assert.equal(stderrWrites.some((line) => /disposer failed/.test(line)), true);
+  });
+
+  test('reports cancelled, not failed, when selection derivation throws during an active cancel', async () => {
+    // Regression: the model-selection error branch must respect cancellation
+    // semantics. If currentSelection() throws while the abort signal is
+    // already set (e.g. the default-model service is unavailable during an
+    // immediate cancel), the execute must emit `cancelled` — a user
+    // cancellation reported as a failed run would be wrong on the wire.
+    const ctx = {
+      agentDefaultModel: {
+        currentSelection: () => {
+          throw new Error('default model unavailable during cancel');
+        },
+      },
+    };
+    const input = new PassThrough();
+    const chunks: string[] = [];
+    const exitCodes: number[] = [];
+    const serving = internals.serve(
+      ctx as never,
+      { write: (chunk: string) => chunks.push(chunk) },
+      (code) => exitCodes.push(code),
+      input,
+      (exit) => exit(0),
+    );
+
+    // Cancel lands before execute initializes its AbortController, exactly
+    // like the pre-existing handshake-cancel test — but here the selection
+    // derivation ALSO throws, so both conditions collide.
+    input.write(`${JSON.stringify({
+      v: 1,
+      type: 'cancel',
+      request_id: 'run-select-cancel',
+    })}\n`);
+    input.write(`${JSON.stringify({
+      v: 1,
+      type: 'execute',
+      request_id: 'run-select-cancel',
+      cwd: '/project',
+      prompt: 'hi',
+      mcp_servers: [],
+    })}\n`);
+    await serving;
+
+    assert.deepEqual(exitCodes, [0]);
+    const frames = chunks.map((chunk) => JSON.parse(chunk) as { type: string; status?: string; error?: { code?: string } });
     assert.equal(frames.filter((frame) => frame.type === 'result').length, 1);
     assert.equal(frames.at(-1)?.status, 'cancelled');
     assert.equal(frames.at(-1)?.error, undefined);
