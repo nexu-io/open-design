@@ -260,13 +260,13 @@ function taskTraceAttributes(
 }
 
 function observationLevel(status: NormalizedAgentObservationStatusV1 | string): string {
-  if (status === 'failed' || status === 'blocked') return 'ERROR';
+  if (status === 'failed') return 'ERROR';
   if (status === 'canceled') return 'WARNING';
   return 'DEFAULT';
 }
 
 function spanStatus(status: NormalizedAgentObservationStatusV1 | string): OtlpSpanV1['status'] {
-  if (status === 'failed' || status === 'blocked') {
+  if (status === 'failed') {
     return { code: 2, message: status };
   }
   if (status === 'completed') return { code: 1 };

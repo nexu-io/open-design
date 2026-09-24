@@ -3668,7 +3668,6 @@ export const uk: Dict = {
   'questions.tabLabel': 'Запитання',
   'questions.banner': 'Не проти, якщо я поставлю кілька швидких запитань?',
   'questions.bannerAnswered': 'На запитання дано відповідь',
-  'questions.strategyBlockedNotice': "Це завдання зупинено контролем якості стратегії, тому цю форму більше не можна надіслати. Щоб продовжити, почніть новий запит.",
   'questions.continue': 'Продовжити',
   'questions.generating': 'Генерація запитань…',
   'questions.skipAll': "Пропустити · вирішуйте самі",

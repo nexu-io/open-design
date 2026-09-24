@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ChatRunStatusResponse, StrategyTaskProjectionV2 } from '@open-design/contracts';
 import {
   resolveQuestionFormStrategyTaskExecutionId,
-  strategyBlockedMessageFields,
   strategySettledMessageFields,
   strategyTaskParkedOnSucceededRun,
   strategyTaskRunIndex,
@@ -47,7 +46,7 @@ describe('question-form strategy continuation handle recovery', () => {
   });
 });
 
-function blockedProjection(
+function taskProjection(
   overrides: Partial<StrategyTaskProjectionV2> = {},
 ): StrategyTaskProjectionV2 {
   return {
@@ -59,7 +58,7 @@ function blockedProjection(
       snapshotId: 'snapshot-1',
     },
     inputStage: 'request',
-    outcome: 'blocked',
+    outcome: 'completed',
     route: 'full_plan',
     executionMode: null,
     activeRunId: 'run-1',
@@ -68,75 +67,29 @@ function blockedProjection(
   } as StrategyTaskProjectionV2;
 }
 
-describe('strategyBlockedMessageFields', () => {
-  it('derives message termination fields from a blocked terminal projection', () => {
-    expect(strategyBlockedMessageFields(blockedProjection({
-      blockedContext: {
-        reasonCodes: ['od_next_machine_protocol_missing'],
-        visibleText: ' 这轮回复没有携带机器协议块。 ',
-      },
-    }))).toEqual({
-      strategyTaskBlocked: true,
-      strategyTaskBlockedText: '这轮回复没有携带机器协议块。',
-    });
-  });
-
-  it('keeps the blocked flag with a null text when the gate left no visible text', () => {
-    expect(strategyBlockedMessageFields(blockedProjection({
-      blockedContext: {
-        reasonCodes: ['od_next_native_session_continuity_unproven'],
-        visibleText: null,
-      },
-    }))).toEqual({ strategyTaskBlocked: true, strategyTaskBlockedText: null });
-    expect(strategyBlockedMessageFields(blockedProjection())).toEqual({
-      strategyTaskBlocked: true,
-      strategyTaskBlockedText: null,
-    });
-  });
-
-  it('returns null for non-blocked or absent projections', () => {
-    expect(strategyBlockedMessageFields(undefined)).toBeNull();
-    expect(strategyBlockedMessageFields(blockedProjection({
-      outcome: 'completed',
-    }))).toBeNull();
-    expect(strategyBlockedMessageFields(blockedProjection({
-      outcome: 'running',
-      terminal: false,
-    }))).toBeNull();
-  });
-});
-
 describe('strategySettledMessageFields', () => {
   it('does not infer delivery from a historical completed task without evidence', () => {
-    expect(strategySettledMessageFields(blockedProjection({
+    expect(strategySettledMessageFields(taskProjection({
       outcome: 'completed',
       terminal: true,
-      blockedContext: undefined,
     }))).toBeNull();
   });
 
   it('does not claim delivery merely because a marker task ended', () => {
-    expect(strategySettledMessageFields(blockedProjection({
-      outcome: 'completed', terminal: true, blockedContext: undefined,
+    expect(strategySettledMessageFields(taskProjection({
+      outcome: 'completed', terminal: true,
       deliverableValid: false,
     }))).toBeNull();
-    expect(strategySettledMessageFields(blockedProjection({
-      outcome: 'completed', terminal: true, blockedContext: undefined,
+    expect(strategySettledMessageFields(taskProjection({
+      outcome: 'completed', terminal: true,
       deliverableValid: true,
     }))).toEqual({ strategyTaskDelivered: true });
   });
 
-  it('keeps the blocked stamp taking precedence', () => {
-    expect(strategySettledMessageFields(blockedProjection())).toMatchObject({
-      strategyTaskBlocked: true,
-    });
-  });
-
   it('stamps nothing while the task is still running', () => {
-    expect(strategySettledMessageFields(blockedProjection({
+    expect(strategySettledMessageFields(taskProjection({
       outcome: 'running',
       terminal: false,
-      blockedContext: undefined,
     }))).toBeNull();
     expect(strategySettledMessageFields(undefined)).toBeNull();
   });
@@ -145,7 +98,7 @@ describe('strategySettledMessageFields', () => {
 
 describe('daemon-owned task run positions', () => {
   it('resolves source and successor independently from the same task projection', () => {
-    const projection = blockedProjection({ runMappings: [
+    const projection = taskProjection({ runMappings: [
       { runId: 'source', taskRunIndex: 1 },
       { runId: 'successor', taskRunIndex: 2 },
     ] });
@@ -156,21 +109,20 @@ describe('daemon-owned task run positions', () => {
 
   it('keeps legacy, absent and ambiguous positions unknown', () => {
     expect(strategyTaskRunIndex(undefined, 'run-1')).toBeUndefined();
-    expect(strategyTaskRunIndex(blockedProjection(), 'run-1')).toBeUndefined();
-    expect(strategyTaskRunIndex(blockedProjection({ runMappings: [
+    expect(strategyTaskRunIndex(taskProjection(), 'run-1')).toBeUndefined();
+    expect(strategyTaskRunIndex(taskProjection({ runMappings: [
       { runId: 'run-1', taskRunIndex: 0 }, { runId: 'run-1', taskRunIndex: 1 },
     ] }), 'run-1')).toBeUndefined();
-    expect(strategyTaskRunIndex(blockedProjection({ runMappings: [
+    expect(strategyTaskRunIndex(taskProjection({ runMappings: [
       { runId: 'run-1', taskRunIndex: -1 },
     ] }), 'run-1')).toBeUndefined();
   });
 });
 
 describe('strategyTaskParkedOnSucceededRun', () => {
-  const parked = (overrides: Partial<StrategyTaskProjectionV2> = {}) => blockedProjection({
+  const parked = (overrides: Partial<StrategyTaskProjectionV2> = {}) => taskProjection({
     outcome: 'clarification_required',
     terminal: false,
-    blockedContext: undefined,
     ...overrides,
   });
 
@@ -209,7 +161,7 @@ describe('strategyTaskParkedOnSucceededRun', () => {
 
   it('leaves terminal tasks and task-less Runs to their own checks', () => {
     expect(strategyTaskParkedOnSucceededRun(
-      { status: 'succeeded', strategyTask: blockedProjection() },
+      { status: 'succeeded', strategyTask: taskProjection() },
       'run-1',
     )).toBe(false);
     expect(strategyTaskParkedOnSucceededRun({ status: 'succeeded' }, 'run-1')).toBe(false);

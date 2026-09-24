@@ -3852,7 +3852,6 @@ export const zhCN: Dict = {
   "questions.tabLabel": "问题",
   "questions.banner": "想先跟你确认几个小问题～",
   "questions.bannerAnswered": "已回答这些问题",
-  "questions.strategyBlockedNotice": "该任务已被策略质量门拦下，此表单无法再提交。请重新发起一次请求以继续。",
   "questions.continue": "继续",
   "questions.generating": "正在生成问题…",
   "questions.skipAll": "跳过 · 你来判断",

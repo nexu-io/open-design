@@ -361,7 +361,7 @@ describe('OD Next planning coordinator', () => {
     expect(physical.size).toBe(1);
   });
 
-  it('records an ended task and failed physical status without a blocked projection', () => {
+  it('records an ended task and failed physical status', () => {
     const { task } = markerHarness();
     const settled = completeAutomaticSimpleProduction(db, {
       runId: task.latestRunId, physicalStatus: 'failed', deliverableValid: false,
@@ -370,7 +370,6 @@ describe('OD Next planning coordinator', () => {
       outcome: 'completed', terminal: true, settlementReason: 'ended',
       settlementFacts: { physicalStatus: 'failed', deliverableValid: false },
     });
-    expect(projectStrategyTask(settled).blockedContext).toBeUndefined();
   });
 
   it('records simultaneous file, truncation and todo facts without overwriting them', () => {

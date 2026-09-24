@@ -544,7 +544,7 @@ describe('ProjectView daemon reattach restore', () => {
     window.sessionStorage.clear();
   });
 
-  it('settles a hard-routed fresh succeeded row with a terminal blocked strategy projection', async () => {
+  it('settles a hard-routed fresh succeeded row with a terminal strategy projection', async () => {
     const projectId = 'fc036a72-6d8c-41a0-aa83-ae7fdd657da6';
     const conversationId = 'ee4050ef-20f8-4fe5-a703-33073fc789ef';
     const runId = 'a1a163a0-626f-44af-adfd-7850f8274a5c';
@@ -613,15 +613,11 @@ describe('ProjectView daemon reattach restore', () => {
           snapshotId: 'e348ed1a-39f1-4c4c-b03b-25728586f87f',
         },
         inputStage: 'request',
-        outcome: 'blocked',
+        outcome: 'completed',
         route: 'full_plan',
         executionMode: null,
         activeRunId: runId,
         terminal: true,
-        blockedContext: {
-          reasonCodes: ['od_next_protocol_runtime_state_missing'],
-          visibleText: 'beta7 cold-start send path is healthy.',
-        },
       },
     });
     const consoleErrors: unknown[][] = [];
@@ -647,6 +643,55 @@ describe('ProjectView daemon reattach restore', () => {
     } finally {
       consoleError.mockRestore();
     }
+  });
+
+  it('settles a succeeded task row failed when its status probe finds no run', async () => {
+    // A succeeded row carrying a task handle is probed on hydration. When the
+    // daemon cannot answer for that Run (every non-OK status response decodes
+    // to null), the stale-run fallback settles the row failed without adding
+    // an error event, so no specific failure reason is invented for it.
+    const startedAt = Date.now();
+    const content = 'Persisted result for this conversation.';
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-task-unavailable',
+        role: 'assistant',
+        agentId: 'codex',
+        content,
+        events: [{ kind: 'text', text: content }],
+        createdAt: startedAt,
+        startedAt,
+        endedAt: startedAt + 1,
+        runId: 'run-task-unavailable',
+        runStatus: 'succeeded',
+        strategyTaskExecutionId: 'task-unavailable',
+        strategyTaskRunIndex: 0,
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    saveMessage.mockResolvedValue(undefined);
+    fetchChatRunStatus.mockResolvedValue(null);
+
+    renderProjectView();
+
+    await waitFor(() => expect(fetchChatRunStatus).toHaveBeenCalledWith('run-task-unavailable', null));
+    await waitFor(() => {
+      const saved = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .filter((message) => message?.id === 'msg-task-unavailable')
+        .at(-1);
+      expect(saved).toMatchObject({ runId: 'run-task-unavailable', runStatus: 'failed' });
+      expect(saved?.events?.some((event) => event.kind === 'status' && event.label === 'error')).toBe(false);
+    });
+    expect(reattachDaemonRun).not.toHaveBeenCalled();
   });
 
   it('flushes the pending predecessor delta and text event before pinning a task successor', async () => {

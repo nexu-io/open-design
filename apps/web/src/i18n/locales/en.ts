@@ -3682,7 +3682,6 @@ export const en: Dict = {
   'questions.tabLabel': 'Questions',
   'questions.banner': 'Mind if I ask a couple of quick questions?',
   'questions.bannerAnswered': 'Questions answered',
-  'questions.strategyBlockedNotice': "This task was stopped by the strategy quality gate, so this form can no longer be submitted. Start a new request to continue.",
   'questions.continue': 'Continue',
   'questions.generating': 'Generating questions…',
   'questions.skipAll': "Skip — you decide",

@@ -822,7 +822,7 @@ describe('durable strategy task store', () => {
     expect(() => getStrategyTaskExecution(db, task.taskExecutionId)).toThrow(/cannot precede/i);
   });
 
-  it('keeps terminal outcomes sticky and cancellation distinct from blocked', () => {
+  it('keeps the canceled terminal outcome sticky', () => {
     let task = createTask(db, snapshot);
     task = cancelStrategyTaskExecution(db, {
       taskExecutionId: task.taskExecutionId,
@@ -1033,7 +1033,6 @@ describe('durable strategy task store', () => {
 
     const persisted = getStrategyTaskExecution(db, task.taskExecutionId);
     expect(persisted?.outcome).toBe('completed');
-    expect(persisted?.blockedContext).toBeUndefined();
     expect(persisted?.runs.at(-1)).toMatchObject({ settlementReason: 'ended', settlementFacts: { physicalStatus: 'failed' } });
     expect(JSON.parse(fs.readFileSync(path.join(runDir, 'state.json'), 'utf8')).status).toBe('failed');
   });

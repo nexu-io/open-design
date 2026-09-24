@@ -3668,7 +3668,6 @@ export const esES: Dict = {
   'questions.tabLabel': 'Preguntas',
   'questions.banner': '¿Te importa si te hago un par de preguntas rápidas?',
   'questions.bannerAnswered': 'Preguntas respondidas',
-  'questions.strategyBlockedNotice': "El control de calidad de la estrategia detuvo esta tarea, por lo que este formulario ya no se puede enviar. Inicia una nueva solicitud para continuar.",
   'questions.continue': 'Continuar',
   'questions.generating': 'Generando preguntas…',
   'questions.skipAll': "Omitir · tú decides",

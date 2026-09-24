@@ -3668,7 +3668,6 @@ export const it: Dict = {
   'questions.tabLabel': 'Domande',
   'questions.banner': 'Posso farti un paio di domande veloci?',
   'questions.bannerAnswered': 'Domande completate',
-  'questions.strategyBlockedNotice': "Questa attività è stata fermata dal controllo qualità della strategia, quindi questo modulo non può più essere inviato. Avvia una nuova richiesta per continuare.",
   'questions.continue': 'Continua',
   'questions.generating': 'Generazione domande…',
   'questions.skipAll': "Salta · decidi tu",

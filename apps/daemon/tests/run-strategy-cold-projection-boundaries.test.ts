@@ -25,7 +25,6 @@ type Db = ReturnType<typeof openDatabase>;
 const PROJECT = 'cold-strategy-project';
 const CONVERSATION = 'cold-strategy-conversation';
 const TASK = 'cold-strategy-task';
-const REASON = 'od_next_protocol_runtime_state_missing';
 let tempDir: string | undefined;
 let server: http.Server | undefined;
 
@@ -150,8 +149,7 @@ async function seed(strategy = true) {
     });
     compareAndTransitionStrategyTaskExecution(db, {
       taskExecutionId: TASK, expectedRevision: task.revision,
-      to: { route: 'full_plan', inputStage: 'request', outcome: 'blocked', executionMode: null },
-      blockedContext: { reasonCodes: [REASON], visibleText: 'A real task was blocked.' },
+      to: { route: 'full_plan', inputStage: 'request', outcome: 'completed', executionMode: null },
     });
   }
   runs.setDeliverableValidation(run, { valid: false, validation: 'no_artifact' });
@@ -164,7 +162,7 @@ async function seed(strategy = true) {
   const warm = await readStatus(await serve(db, runs, root), run.id);
   expect(warm).toMatchObject({ status: 'succeeded', exitCode: 0, deliverableValid: false });
   if (strategy) {
-    expect(warm.strategyTask).toMatchObject({ taskExecutionId: TASK, outcome: 'blocked', terminal: true });
+    expect(warm.strategyTask).toMatchObject({ taskExecutionId: TASK, outcome: 'completed', terminal: true });
   } else {
     expect(warm.strategyTask).toBeUndefined();
   }

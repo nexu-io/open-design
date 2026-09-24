@@ -731,7 +731,7 @@ export function aggregateStoredStrategyTaskObservations(input: {
 }
 
 function legacyLevel(status: NormalizedAgentObservationStatusV1 | StrategyTaskOutcome): string {
-  if (status === 'failed' || status === 'blocked') return 'ERROR';
+  if (status === 'failed') return 'ERROR';
   if (status === 'canceled') return 'WARNING';
   return 'DEFAULT';
 }

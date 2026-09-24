@@ -3668,7 +3668,6 @@ export const tr: Dict = {
   'questions.tabLabel': 'Sorular',
   'questions.banner': 'Birkaç kısa soru sormamın sakıncası var mı?',
   'questions.bannerAnswered': 'Sorular yanıtlandı',
-  'questions.strategyBlockedNotice': "Bu görev, strateji kalite kapısı tarafından durdurulduğundan bu form artık gönderilemiyor. Devam etmek için yeni bir istek başlatın.",
   'questions.continue': 'Devam et',
   'questions.generating': 'Sorular oluşturuluyor…',
   'questions.skipAll': "Atla · sen karar ver",

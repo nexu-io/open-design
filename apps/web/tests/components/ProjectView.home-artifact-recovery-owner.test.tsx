@@ -143,7 +143,6 @@ let requests: Array<{ method: string; path: string; role: string | null; names: 
 let streamController: ReadableStreamDefaultController<Uint8Array> | undefined;
 let physicalStatus: 'running' | 'succeeded';
 let runStartedAt: number;
-let accumulatedText: string;
 let eventId: number;
 let terminal: boolean;
 let ambient: WorkspaceCollabContext;
@@ -161,9 +160,8 @@ function context(role: 'owner' | 'member'): WorkspaceCollabContext {
 function strategyTask() {
   return {
     activeRunId: `run-${project.id}`, executionMode: null, inputStage: 'request', route: 'full_plan',
-    outcome: 'blocked', terminal: true, taskExecutionId: `task-${project.id}`,
+    outcome: 'completed', terminal: true, taskExecutionId: `task-${project.id}`,
     strategy: { id: 'od-next-strategy', version: '2.0.4', packageHash: 'fixture', snapshotId: 'fixture' },
-    blockedContext: { reasonCodes: ['od_next_protocol_runtime_state_missing'], visibleText: accumulatedText },
   };
 }
 function frame(event: string, data: Record<string, unknown>) {
@@ -171,7 +169,6 @@ function frame(event: string, data: Record<string, unknown>) {
   streamController.enqueue(new TextEncoder().encode(`id: ${++eventId}\nevent: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
 }
 function textFrame(delta: string) {
-  accumulatedText += delta;
   frame('agent', { type: 'text_delta', delta });
 }
 function mountProject() {
@@ -215,7 +212,7 @@ beforeEach(() => {
     metadata: { kind: 'prototype' }, createdAt: Date.now(), updatedAt: Date.now(),
   };
   files = []; fileContents = new Map(); persisted = new Map(); requests = [];
-  physicalStatus = 'running'; runStartedAt = Date.now(); accumulatedText = ''; eventId = 0;
+  physicalStatus = 'running'; runStartedAt = Date.now(); eventId = 0;
   terminal = false; runRequest = undefined; streamController = undefined;
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, 'http://localhost');
@@ -261,9 +258,9 @@ beforeEach(() => {
     }
     if (url.pathname.includes('/messages/') && method === 'PUT') {
       const incoming = body as ChatMessage;
-      // Real conversations.ts preserves the daemon's physical run status even
-      // when the web reports the blocked logical verdict as failed. Retain
-      // client-produced metadata; this store is an HTTP fixture, not SQLite.
+      // Real conversations.ts keeps the daemon's physical run status when the
+      // web reports a different terminal status. Retain client-produced
+      // metadata; this store is an HTTP fixture, not SQLite.
       const saved: ChatMessage = incoming.role === 'assistant' && incoming.runId
         ? { ...incoming, createdAt: runStartedAt, startedAt: runStartedAt,
             preTurnFileNames: [], runStatus: physicalStatus,

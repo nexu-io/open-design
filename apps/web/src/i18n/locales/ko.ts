@@ -3668,7 +3668,6 @@ export const ko: Dict = {
   'questions.tabLabel': '질문',
   'questions.banner': '간단한 질문 몇 가지 드려도 될까요?',
   'questions.bannerAnswered': '질문에 답변함',
-  'questions.strategyBlockedNotice': "이 작업은 전략 품질 게이트에 의해 중단되어 이 양식을 더 이상 제출할 수 없습니다. 계속하려면 새 요청을 시작하세요.",
   'questions.continue': '계속',
   'questions.generating': '질문 생성 중…',
   'questions.skipAll': "건너뛰기 · 맡길게요",

@@ -3668,7 +3668,6 @@ export const ru: Dict = {
   'questions.tabLabel': 'Вопросы',
   'questions.banner': 'Не против, если я задам пару коротких вопросов?',
   'questions.bannerAnswered': 'На вопросы дан ответ',
-  'questions.strategyBlockedNotice': "Эта задача остановлена контролем качества стратегии, поэтому эту форму больше нельзя отправить. Чтобы продолжить, начните новый запрос.",
   'questions.continue': 'Продолжить',
   'questions.generating': 'Генерация вопросов…',
   'questions.skipAll': "Пропустить · решайте сами",

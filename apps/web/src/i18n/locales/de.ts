@@ -3668,7 +3668,6 @@ export const de: Dict = {
   'questions.tabLabel': 'Fragen',
   'questions.banner': 'Darf ich dir ein paar kurze Fragen stellen?',
   'questions.bannerAnswered': 'Fragen beantwortet',
-  'questions.strategyBlockedNotice': "Diese Aufgabe wurde vom Qualitäts-Gate der Strategie gestoppt, daher kann dieses Formular nicht mehr abgeschickt werden. Starte eine neue Anfrage, um fortzufahren.",
   'questions.continue': 'Fortfahren',
   'questions.generating': 'Fragen werden generiert…',
   'questions.skipAll': "Überspringen · du entscheidest",

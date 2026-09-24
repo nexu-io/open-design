@@ -3668,7 +3668,6 @@ export const ptBR: Dict = {
   'questions.tabLabel': 'Perguntas',
   'questions.banner': 'Posso fazer algumas perguntas rápidas?',
   'questions.bannerAnswered': 'Perguntas respondidas',
-  'questions.strategyBlockedNotice': "Esta tarefa foi interrompida pelo controle de qualidade da estratégia, então este formulário não pode mais ser enviado. Inicie uma nova solicitação para continuar.",
   'questions.continue': 'Continuar',
   'questions.generating': 'Gerando perguntas…',
   'questions.skipAll': "Pular · você decide",

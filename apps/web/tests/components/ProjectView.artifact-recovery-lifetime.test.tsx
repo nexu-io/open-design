@@ -180,7 +180,6 @@ let requests: Array<{ method: string; path: string; role: string | null; names: 
 let streamController: ReadableStreamDefaultController<Uint8Array> | undefined;
 let physicalStatus: 'running' | 'succeeded' | 'failed';
 let runStartedAt: number;
-let accumulatedText: string;
 let eventId: number;
 let terminal: boolean;
 let ambient: WorkspaceCollabContext;
@@ -196,18 +195,12 @@ function context(role: 'owner' | 'member'): WorkspaceCollabContext {
   };
 }
 function strategyTask() {
-  if (successfulTerminal) return {
+  return {
+    // A production turn: its plan was frozen, the build ran, and the output
+    // landed in the chat instead of on disk.
     activeRunId: `run-${project.id}`, executionMode: 'simple', inputStage: 'production', route: 'full_plan',
     outcome: 'completed', terminal: true, taskExecutionId: `task-${project.id}`,
     strategy: { id: 'od-next-strategy', version: '2.0.4', packageHash: 'fixture', snapshotId: 'fixture' },
-  };
-  return {
-    // A production gate refused this turn: its plan was frozen, the build ran,
-    // and the output landed in the chat instead of on disk.
-    activeRunId: `run-${project.id}`, executionMode: 'simple', inputStage: 'production', route: 'full_plan',
-    outcome: 'blocked', terminal: true, taskExecutionId: `task-${project.id}`,
-    strategy: { id: 'od-next-strategy', version: '2.0.4', packageHash: 'fixture', snapshotId: 'fixture' },
-    blockedContext: { reasonCodes: ['od_next_protocol_runtime_state_missing'], visibleText: accumulatedText },
   };
 }
 function frame(event: string, data: Record<string, unknown>, runId?: string) {
@@ -216,7 +209,6 @@ function frame(event: string, data: Record<string, unknown>, runId?: string) {
   controller.enqueue(new TextEncoder().encode(`id: ${++eventId}\nevent: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
 }
 function textFrame(delta: string, runId?: string) {
-  accumulatedText += delta;
   frame('agent', { type: 'text_delta', delta }, runId);
 }
 function projectView(overrides: Partial<Parameters<typeof ProjectView>[0]> = {}) {
@@ -273,7 +265,7 @@ beforeEach(() => {
     metadata: { kind: 'prototype' }, createdAt: Date.now(), updatedAt: Date.now(),
   };
   files = []; fileContents = new Map(); persisted = new Map(); requests = [];
-  physicalStatus = 'running'; runStartedAt = Date.now(); accumulatedText = ''; eventId = 0;
+  physicalStatus = 'running'; runStartedAt = Date.now(); eventId = 0;
   terminal = false; runRequest = undefined; streamController = undefined;
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, 'http://localhost');
@@ -361,9 +353,9 @@ beforeEach(() => {
     }
     if (url.pathname.includes('/messages/') && method === 'PUT') {
       const incoming = body as ChatMessage;
-      // Real conversations.ts preserves the daemon's physical run status even
-      // when the web reports the blocked logical verdict as failed. Retain
-      // client-produced metadata; this store is an HTTP fixture, not SQLite.
+      // Real conversations.ts keeps the daemon's physical run status when the
+      // web reports a different terminal status. Retain client-produced
+      // metadata; this store is an HTTP fixture, not SQLite.
       const saved: ChatMessage = incoming.role === 'assistant' && incoming.runId
         ? { ...incoming,
             ...(incoming.runId === `run-${project.id}`
@@ -482,9 +474,9 @@ async function reachPendingArtifactRecovery({ createManualDocument = true } = {}
   });
   expect(fileContents.get('agent-output.html')).toBeUndefined();
   await act(async () => {
-    // The blocked cases end with a non-zero exit, so the turn fails and the
-    // recovery path below runs. A clean exit keeps the turn Done whatever the
-    // task verdict says, which is exactly the successful-terminal cases.
+    // The failing cases end with a non-zero exit, so the turn fails and the
+    // recovery path below runs. A clean exit keeps the turn Done, which is
+    // exactly the successful-terminal cases.
     physicalStatus = successfulTerminal ? 'succeeded' : 'failed'; terminal = true;
     frame('end', { code: successfulTerminal ? 0 : 1, signal: null, status: physicalStatus, artifactCount: 0,
       artifactPaths: [], strategyTask: strategyTask() });
@@ -579,8 +571,8 @@ describe('In-flight artifact recovery lifetime and HTTP completion order', () =>
   });
 
   it('keeps the manually selected and autosaved document active when a successful live completion releases its first HTML response', async () => {
-    // This must reach the real provider's success/onDone path. The older
-    // blocked-strategy cases above exercise onError plus recovery instead.
+    // This must reach the real provider's success/onDone path. The failing
+    // cases above exercise onError plus recovery instead.
     successfulTerminal = true;
     const { oldAssistantId } = await reachPendingArtifactRecovery();
     expect(causalOrder).toContain('html-post-1-stored');

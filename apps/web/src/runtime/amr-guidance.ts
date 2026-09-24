@@ -1118,8 +1118,8 @@ const AGENT_AGNOSTIC_FAILURE_UI: Record<string, RunFailureUi> = {
   //
   // Retry earns its place: the deliverable is missing because THIS turn wrote
   // nothing, and a re-run is exactly the thing that can write it. A turn whose
-  // deliverable does exist never reaches a card at all — `providers/daemon.ts`
-  // keeps it `succeeded` on `projectDeliverableValid`.
+  // Run succeeded never reaches a card at all — `providers/daemon.ts` keeps the
+  // Run's own `succeeded` status.
   //
   // ⚠️ Copy is engineering's, like the rows below it:
   // `docs/design/run-errors/error-ux-design.md` has no cell for it. S23 ("跑完

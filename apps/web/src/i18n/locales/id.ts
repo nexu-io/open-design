@@ -3668,7 +3668,6 @@ export const id: Dict = {
   'questions.tabLabel': 'Questions',
   'questions.banner': 'Mind if I ask a couple of quick questions?',
   'questions.bannerAnswered': 'Questions answered',
-  'questions.strategyBlockedNotice': "Tugas ini dihentikan oleh gerbang kualitas strategi, sehingga formulir ini tidak dapat dikirim lagi. Mulai permintaan baru untuk melanjutkan.",
   'questions.continue': 'Continue',
   'questions.generating': 'Generating questions…',
   'questions.skipAll': "Lewati · kamu putuskan",

@@ -3668,7 +3668,6 @@ export const pl: Dict = {
   'questions.tabLabel': 'Pytania',
   'questions.banner': 'Czy mogę zadać kilka krótkich pytań?',
   'questions.bannerAnswered': 'Pytania uzupełnione',
-  'questions.strategyBlockedNotice': "To zadanie zostało zatrzymane przez bramkę jakości strategii, więc tego formularza nie można już wysłać. Aby kontynuować, rozpocznij nowe żądanie.",
   'questions.continue': 'Kontynuuj',
   'questions.generating': 'Generowanie pytań…',
   'questions.skipAll': "Pomiń · ty decydujesz",
