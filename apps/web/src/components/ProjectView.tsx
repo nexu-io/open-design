@@ -3318,6 +3318,27 @@ export function ProjectView({
   const streamingConversationIdRef = useRef<string | null>(null);
   const [queuedChatSends, setQueuedChatSends] = useState<QueuedChatSend[]>([]);
   const queuedChatSendsRef = useRef<QueuedChatSend[]>([]);
+  /**
+   * Queued sends whose drain has been handed to `handleSend` but not yet
+   * settled. Invariant: a queue card is visible only while its send is still
+   * waiting — once the drain starts, the turn is already painted in the
+   * transcript (OPEND-2614), so the card leaves with it instead of lingering
+   * through the AMR balance preflight (OPEND-3221). The item itself stays in
+   * the durable queue until `handleSend` settles: a refused drain relies on it
+   * being there (`queueDrain` never re-queues), and clearing the id then shows
+   * the card again.
+   */
+  const [startingQueuedChatSendIds, setStartingQueuedChatSendIds] =
+    useState<ReadonlySet<string>>(() => new Set());
+  const setQueuedChatSendStarting = useCallback((id: string, starting: boolean) => {
+    setStartingQueuedChatSendIds((current) => {
+      if (current.has(id) === starting) return current;
+      const next = new Set(current);
+      if (starting) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }, []);
   // A BYOK preflight can reject a send before any Run exists. Keep that
   // submission's task identity in memory so fixing Settings and resubmitting
   // the same draft completes the original task funnel instead of fabricating a
@@ -3640,7 +3661,9 @@ export function ProjectView({
 
   const currentConversationQueuedItems = activeConversationId
     ? queuedChatSends
-        .filter((item) => item.conversationId === activeConversationId)
+        .filter((item) =>
+          item.conversationId === activeConversationId
+          && !startingQueuedChatSendIds.has(item.id))
         .map((item) => {
           const queuedItem = {
             id: item.id,
@@ -10905,17 +10928,22 @@ export function ProjectView({
       handleStop();
       return;
     }
+    setQueuedChatSendStarting(id, true);
     void (async () => {
-      armSlideNavForQueuedSend(item);
-      const started = await handleSend(
-        item.prompt,
-        item.attachments,
-        item.commentAttachments,
-        { ...(item.meta ?? {}), queueDrain: true },
-      );
-      if (started) removeQueuedChatSend(id);
+      try {
+        armSlideNavForQueuedSend(item);
+        const started = await handleSend(
+          item.prompt,
+          item.attachments,
+          item.commentAttachments,
+          { ...(item.meta ?? {}), queueDrain: true },
+        );
+        if (started) removeQueuedChatSend(id);
+      } finally {
+        setQueuedChatSendStarting(id, false);
+      }
     })();
-  }, [armSlideNavForQueuedSend, commitPreviewComments, currentConversationBusy, handleSend, handleStop, prioritizeQueuedChatSend, project.id, removeQueuedChatSend, projectRunWorkspaceContext]);
+  }, [armSlideNavForQueuedSend, commitPreviewComments, currentConversationBusy, handleSend, handleStop, prioritizeQueuedChatSend, project.id, removeQueuedChatSend, projectRunWorkspaceContext, setQueuedChatSendStarting]);
 
   /*
    * B11 「引导对话」 —— 队列行领头那颗按钮走的就是上面的
@@ -10968,14 +10996,20 @@ export function ProjectView({
     );
     if (!next) return;
     startingQueuedChatSendIdRef.current = next.id;
+    setQueuedChatSendStarting(next.id, true);
     armSlideNavForQueuedSend(next);
     void (async () => {
-      const started = await handleSend(
-        next.prompt,
-        next.attachments,
-        next.commentAttachments,
-        { ...(next.meta ?? {}), queueDrain: true },
-      );
+      let started = false;
+      try {
+        started = await handleSend(
+          next.prompt,
+          next.attachments,
+          next.commentAttachments,
+          { ...(next.meta ?? {}), queueDrain: true },
+        );
+      } finally {
+        if (!started) setQueuedChatSendStarting(next.id, false);
+      }
       if (!started) {
         if (startingQueuedChatSendIdRef.current === next.id) {
           startingQueuedChatSendIdRef.current = null;
@@ -10983,6 +11017,7 @@ export function ProjectView({
         return;
       }
       removeQueuedChatSend(next.id);
+      setQueuedChatSendStarting(next.id, false);
       scheduleProjectTimeout(() => {
         if (startingQueuedChatSendIdRef.current !== next.id) return;
         startingQueuedChatSendIdRef.current = null;
@@ -11000,6 +11035,7 @@ export function ProjectView({
     handleSend,
     removeQueuedChatSend,
     scheduleProjectTimeout,
+    setQueuedChatSendStarting,
   ]);
 
   /*
