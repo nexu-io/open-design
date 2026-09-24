@@ -61,8 +61,15 @@ sites the user did not supply. A named real referent that neither library
 shows, such as a specific book cover or product, may come from its official
 page; otherwise design a placeholder and disclose it.
 
-- With `PEXELS_API_KEY` or `PIXABAY_API_KEY` in the environment, use the
-  official API.
+- With `PEXELS_API_KEY` or `PIXABAY_API_KEY` in the environment, fetch every
+  slot in one call instead of writing a script:
+  `"$OD_NODE_BIN" "$OD_BIN" media stock-search --slots '[{"id":"hero","query":"black eyeglasses frame","width":1200,"orientation":"landscape"}]'`.
+  Write each query in English with the subject first. The command searches,
+  re-ranks by alt text, downloads at `width` into `assets/stock/`, records
+  credits in `assets/stock/credits.json`, and prints each slot's `path`,
+  `alt`, and `status`. Use a slot's `alt` to judge fit; for `not_found`,
+  retry that slot once with a broader query. Exit code 5 means no key: use
+  the keyless path below.
 - Without a key, the sites' search pages block scripts (HTTP 403). Open the
   search results page with the web fetch tool instead, for example
   `https://www.pexels.com/search/<query>/` or
