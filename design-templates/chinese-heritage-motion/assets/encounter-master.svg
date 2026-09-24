@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000">
+  <defs>
+    <filter id="grain"><feTurbulence type="fractalNoise" baseFrequency=".72" numOctaves="2"/><feColorMatrix values="0 0 0 0 .18 0 0 0 0 .15 0 0 0 0 .11 0 0 0 .16 0"/></filter>
+    <pattern id="grid" width="52" height="52" patternUnits="userSpaceOnUse"><path d="M52 0H0V52" fill="none" stroke="#9d3a30" stroke-opacity=".17"/></pattern>
+  </defs>
+  <rect width="100%" height="100%" fill="#e5decc"/>
+  <rect width="100%" height="100%" filter="url(#grain)" opacity=".42"/><circle cx="72%" cy="42%" r="26%" fill="#505851" fill-opacity=".08"/><path d="M192 780 C480 420, 864 820, 1376 260" fill="none" stroke="#505851" stroke-opacity=".13" stroke-width="2"/>
+  <g font-family="ui-monospace,monospace" fill="#505851">
+    <text x="6%" y="10%" font-size="26" letter-spacing="3">encounter-master</text>
+    <text x="6%" y="15%" font-size="15" opacity=".55">scene_master · source · 16:10</text>
+    <text x="6%" y="89%" font-size="15" opacity=".62">monumental exterior encounter, cropped silhouette, restrained documentary optics</text>
+  </g>
+  </svg>
