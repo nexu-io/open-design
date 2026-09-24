@@ -121,8 +121,9 @@ async function openNewProjectFromEmptyProjects(page: Page): Promise<void> {
   await expect(page.getByTestId('new-project-panel')).toBeVisible();
 }
 
-// #5517's rail has no "+ New project" button any more, so the Projects view's
-// own CTA is the entry this flow starts from.
+// This flow deliberately drives the Projects view's own CTA (#8097 restored
+// the rail's "+ New project" item, but this helper exists to cover the
+// in-view entry itself).
 async function openNewProjectFromProjectsView(page: Page): Promise<void> {
   await page.addInitScript(() => {
     window.localStorage.setItem('od.entry.railOpen', 'true');

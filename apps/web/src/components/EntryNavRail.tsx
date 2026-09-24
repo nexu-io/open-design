@@ -2116,6 +2116,24 @@ export function EntryNavRail({
   const homeLabel = t('entry.navRecents');
   const isHome = view === 'home';
 
+  // #8097: the rail's “新建项目” entry. #5517 deleted the control while
+  // EntryShell kept passing `onNewProject` (with its `new_project_plus`
+  // ui_click) down here, so the handler was dead wiring and the dialog was
+  // reachable only through the /projects deep link. The item heads the second
+  // destination group — directly above 全部项目 — on BOTH identity branches;
+  // it is defined once and rendered in each so the two lists cannot drift.
+  const newProjectButton = (
+    <NavButton
+      ariaLabel={t('entry.navNewProject')}
+      label={t('entry.navNewProject')}
+      onClick={onNewProject}
+      disabled={newProjectDisabled}
+      testId="entry-nav-new-project"
+    >
+      <Icon name="plus" size={16} />
+    </NavButton>
+  );
+
   const isTeam = Boolean(context) && context!.workspaceType === 'team';
   const permissions = context?.permissions;
   const canInviteMembers = Boolean(permissions?.canInviteMembers);
@@ -2557,6 +2575,7 @@ export function EntryNavRail({
 
         {context ? (
           <div className="entry-nav-rail__team-section">
+            {newProjectButton}
             {/* 全部项目 is the ONE project destination (OPEND-3108): the page
                 splits into 最近浏览过 / 个人项目 / 团队项目 tabs, so a team
                 workspace no longer gets a second 团队项目 entry here. The
@@ -2639,6 +2658,7 @@ export function EntryNavRail({
              the two destination lists read the same. The name is historical —
              nothing in it is team-specific. */
           <div className="entry-nav-rail__team-section">
+            {newProjectButton}
             {/* 项目 is a destination on BOTH branches (OPEND-3140): the local
                 shell's project list is the same page the signed-in 项目 item
                 opens — 草稿 folds to the whole local catalog without a
