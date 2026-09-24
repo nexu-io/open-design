@@ -1,0 +1,1759 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://www.designtokens.org/schemas/2025.10/format.json",
+  "title": "DTCG Format Schema",
+  "description": "JSON Schema for the Design Tokens Community Group (DTCG) Format specification.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "format": "uri-reference",
+      "description": "URI reference to this JSON schema.",
+      "$comment": "$schema is not part of the official DTCG specification."
+    },
+    "$type": {
+      "$ref": "https://www.designtokens.org/schemas/2025.10/format/tokenType.json"
+    },
+    "$description": {
+      "type": "string",
+      "description": "A plain text description of the group"
+    },
+    "$extensions": {
+      "type": "object",
+      "description": "Vendor-specific extensions"
+    },
+    "$extends": {
+      "oneOf": [
+        {
+          "$ref": "#/definitions/curlyBraceReference"
+        },
+        {
+          "$ref": "#/definitions/jsonPointerReference"
+        }
+      ],
+      "description": "Reference to another group to inherit tokens and properties from"
+    },
+    "$deprecated": {
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "description": "Whether this group is deprecated"
+    },
+    "$root": {
+      "$ref": "https://www.designtokens.org/schemas/2025.10/format/token.json"
+    }
+  },
+  "patternProperties": {
+    "^[^${}.][^{}.]*$": {
+      "$ref": "https://www.designtokens.org/schemas/2025.10/format/groupOrToken.json"
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "tokenOrGroupName": {
+      "title": "Token or Group Name",
+      "type": "string",
+      "pattern": "^[^${}.][^{}.]*$",
+      "description": "Valid token/group names: must not start with $ and must not contain {, }, or ."
+    },
+    "curlyBraceReference": {
+      "title": "Curly Brace Reference",
+      "type": "string",
+      "pattern": "^\\{[^${}.][^{}.]*(\\.[^${}.][^{}.]*)*\\}$",
+      "description": "Curly brace reference (e.g., '{tokenName}' or '{group.nested.token}')"
+    },
+    "jsonPointerReference": {
+      "title": "JSON Pointer Reference",
+      "type": "string",
+      "pattern": "^#/",
+      "format": "json-pointer-uri-fragment",
+      "description": "JSON Pointer reference (RFC 6901) to a location in the document (e.g., '#/path/to/target')"
+    },
+    "jsonPointerReferenceObject": {
+      "title": "JSON Pointer Reference Object",
+      "type": "object",
+      "properties": {
+        "$ref": {
+          "$ref": "#/definitions/jsonPointerReference"
+        }
+      },
+      "required": ["$ref"],
+      "additionalProperties": false,
+      "description": "Object containing a JSON Pointer reference for property-level references"
+    },
+    "tokenValueReference": {
+      "title": "Token Value Reference",
+      "oneOf": [
+        {
+          "$ref": "#/definitions/curlyBraceReference"
+        },
+        {
+          "$ref": "#/definitions/jsonPointerReferenceObject"
+        }
+      ],
+      "description": "A reference to a token value using either curly brace syntax or JSON Pointer syntax"
+    },
+    "https://www.designtokens.org/schemas/2025.10/format/tokenType.json": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "$id": "https://www.designtokens.org/schemas/2025.10/format/tokenType.json",
+      "title": "TokenType",
+      "description": "A token type in the DTCG specification",
+      "type": "string",
+      "enum": [
+        "color",
+        "dimension",
+        "fontFamily",
+        "fontWeight",
+        "duration",
+        "cubicBezier",
+        "number",
+        "strokeStyle",
+        "border",
+        "transition",
+        "shadow",
+        "gradient",
+        "typography"
+      ]
+    },
+    "https://www.designtokens.org/schemas/2025.10/format/token.json": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "$id": "https://www.designtokens.org/schemas/2025.10/format/token.json",
+      "title": "Token",
+      "description": "A token in the DTCG specification",
+      "type": "object",
+      "properties": {
+        "$value": {
+          "description": "The token's value - can be a direct value or a reference to another token using curly brace syntax (e.g., '{token.name}'). Mutually exclusive with $ref."
+        },
+        "$type": {
+          "$ref": "https://www.designtokens.org/schemas/2025.10/format/tokenType.json"
+        },
+        "$ref": {
+          "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/jsonPointerReference"
+        },
+        "$description": {
+          "type": "string",
+          "description": "A plain text description of the token"
+        },
+        "$extensions": {
+          "type": "object",
+          "description": "Vendor-specific extensions"
+        },
+        "$deprecated": {
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Whether this token is deprecated"
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "description": "Tokens cannot define both $value and $ref; they must choose exactly one form of reference or direct value.",
+          "if": {
+            "required": ["$value"],
+            "properties": {
+              "$value": true
+            }
+          },
+          "then": {
+            "not": {
+              "required": ["$ref"],
+              "properties": {
+                "$ref": true
+              }
+            }
+          },
+          "else": {
+            "required": ["$ref"],
+            "properties": {
+              "$ref": true
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["$type"],
+            "properties": {
+              "$type": {
+                "const": "color"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "$value": {
+                "oneOf": [
+                  {
+                    "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/color.json"
+                  },
+                  {
+                    "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/tokenValueReference"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["$type"],
+            "properties": {
+              "$type": {
+                "const": "dimension"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "$value": {
+                "oneOf": [
+                  {
+                    "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/dimension.json"
+                  },
+                  {
+                    "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/tokenValueReference"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["$type"],
+            "properties": {
+              "$type": {
+                "const": "fontFamily"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "$value": {
+                "oneOf": [
+                  {
+                    "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/fontFamily.json"
+                  },
+                  {
+                    "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/tokenValueReference"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["$type"],
+            "properties": {
+              "$type": {
+                "const": "fontWeight"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "$value": {
+                "oneOf": [
+                  {
+                    "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/fontWeight.json"
+                  },
+                  {
+                    "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/tokenValueReference"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["$type"],
+            "properties": {
+              "$type": {
+                "const": "duration"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "$value": {
+                "oneOf": [
+                  {
+                    "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/duration.json"
+                  },
+                  {
+                    "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/tokenValueReference"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["$type"],
+            "properties": {
+              "$type": {
+                "const": "cubicBezier"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "$value": {
+                "oneOf": [
+                  {
+                    "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/cubicBezier.json"
+                  },
+                  {
+                    "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/tokenValueReference"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["$type"],
+            "properties": {
+              "$type": {
+                "const": "number"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "$value": {
+                "oneOf": [
+                  {
+                    "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/number.json"
+                  },
+                  {
+                    "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/tokenValueReference"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["$type"],
+            "properties": {
+              "$type": {
+                "const": "strokeStyle"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "$value": {
+                "oneOf": [
+                  {
+                    "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/strokeStyle.json"
+                  },
+                  {
+                    "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/tokenValueReference"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["$type"],
+            "properties": {
+              "$type": {
+                "const": "border"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "$value": {
+                "oneOf": [
+                  {
+                    "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/border.json"
+                  },
+                  {
+                    "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/tokenValueReference"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["$type"],
+            "properties": {
+              "$type": {
+                "const": "transition"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "$value": {
+                "oneOf": [
+                  {
+                    "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/transition.json"
+                  },
+                  {
+                    "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/tokenValueReference"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["$type"],
+            "properties": {
+              "$type": {
+                "const": "shadow"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "$value": {
+                "oneOf": [
+                  {
+                    "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/shadow.json"
+                  },
+                  {
+                    "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/tokenValueReference"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["$type"],
+            "properties": {
+              "$type": {
+                "const": "gradient"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "$value": {
+                "oneOf": [
+                  {
+                    "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/gradient.json"
+                  },
+                  {
+                    "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/tokenValueReference"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["$type"],
+            "properties": {
+              "$type": {
+                "const": "typography"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "$value": {
+                "oneOf": [
+                  {
+                    "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/typography.json"
+                  },
+                  {
+                    "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/tokenValueReference"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "allOf": [
+              {
+                "not": {
+                  "required": ["$type"]
+                }
+              },
+              {
+                "required": ["$value"]
+              },
+              {
+                "properties": {
+                  "$value": {
+                    "not": {
+                      "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/tokenValueReference"
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "then": {
+            "properties": {
+              "$value": {
+                "oneOf": [
+                  {
+                    "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/color.json"
+                  },
+                  {
+                    "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/dimension.json"
+                  },
+                  {
+                    "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/fontFamily.json"
+                  },
+                  {
+                    "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/duration.json"
+                  },
+                  {
+                    "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/cubicBezier.json"
+                  },
+                  {
+                    "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/strokeStyle.json"
+                  },
+                  {
+                    "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/border.json"
+                  },
+                  {
+                    "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/transition.json"
+                  },
+                  {
+                    "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/shadow.json"
+                  },
+                  {
+                    "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/gradient.json"
+                  },
+                  {
+                    "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/typography.json"
+                  },
+                  {
+                    "anyOf": [
+                      {
+                        "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/number.json"
+                      },
+                      {
+                        "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/fontWeight.json"
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "https://www.designtokens.org/schemas/2025.10/format/values/color.json": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "$id": "https://www.designtokens.org/schemas/2025.10/format/values/color.json",
+      "title": "Color Value",
+      "description": "Value schema for color type tokens. Represents a color in a specific color space.",
+      "type": "object",
+      "properties": {
+        "colorSpace": {
+          "description": "The color space or color model used to represent the color",
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": [
+                "srgb",
+                "srgb-linear",
+                "hsl",
+                "hwb",
+                "lab",
+                "lch",
+                "oklab",
+                "oklch",
+                "display-p3",
+                "a98-rgb",
+                "prophoto-rgb",
+                "rec2020",
+                "xyz-d65",
+                "xyz-d50"
+              ]
+            },
+            {
+              "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/jsonPointerReferenceObject"
+            }
+          ]
+        },
+        "components": {
+          "description": "Array of color components. The number and meaning of components depend on the color space. Each component can be a number or the 'none' keyword.",
+          "oneOf": [
+            {
+              "type": "array"
+            },
+            {
+              "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/jsonPointerReferenceObject"
+            }
+          ]
+        },
+        "alpha": {
+          "description": "The alpha (transparency) value of the color. 0 is fully transparent, 1 is fully opaque. If omitted, defaults to 1.",
+          "oneOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            {
+              "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/jsonPointerReferenceObject"
+            }
+          ]
+        },
+        "hex": {
+          "description": "Optional fallback value in 6-digit CSS hex color notation (e.g., '#ff00ff'). Must be 6 digits to avoid conflicts with the alpha value.",
+          "$comment": "Only JSON Pointer references (not curly brace references) are allowed for hex because no string token type exists in the specification that could be referenced with curly braces.",
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            {
+              "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/jsonPointerReferenceObject"
+            }
+          ]
+        }
+      },
+      "required": ["colorSpace", "components"],
+      "additionalProperties": false,
+      "definitions": {
+        "zeroToOneComponent": {
+          "title": "Zero to One Component",
+          "description": "A color component normalized to the range [0-1] (e.g., RGB values, XYZ values)",
+          "oneOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            {
+              "type": "string",
+              "const": "none"
+            },
+            {
+              "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/jsonPointerReferenceObject"
+            }
+          ]
+        },
+        "hueComponent": {
+          "title": "Hue Component",
+          "description": "Hue angle from 0 up to (but not including) 360 degrees",
+          "oneOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "exclusiveMaximum": 360
+            },
+            {
+              "type": "string",
+              "const": "none"
+            },
+            {
+              "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/jsonPointerReferenceObject"
+            }
+          ]
+        },
+        "percentageComponent": {
+          "title": "Percentage Component",
+          "description": "Percentage value from 0 to 100",
+          "oneOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            },
+            {
+              "type": "string",
+              "const": "none"
+            },
+            {
+              "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/jsonPointerReferenceObject"
+            }
+          ]
+        },
+        "chromaComponent": {
+          "title": "Chroma Component",
+          "description": "Chroma value from 0 to infinity",
+          "oneOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "string",
+              "const": "none"
+            },
+            {
+              "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/jsonPointerReferenceObject"
+            }
+          ]
+        },
+        "unboundedComponent": {
+          "title": "Unbounded Component",
+          "description": "A color component with no numeric bounds (e.g., A and B in LAB/OKLAB color spaces)",
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "const": "none"
+            },
+            {
+              "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/jsonPointerReferenceObject"
+            }
+          ]
+        },
+        "rgbComponents": {
+          "title": "RGB Components",
+          "description": "Array of RGB color components [Red, Green, Blue], each normalized to the range [0-1]",
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": [
+            {
+              "$ref": "#/definitions/zeroToOneComponent"
+            },
+            {
+              "$ref": "#/definitions/zeroToOneComponent"
+            },
+            {
+              "$ref": "#/definitions/zeroToOneComponent"
+            }
+          ]
+        },
+        "xyzComponents": {
+          "title": "XYZ Components",
+          "description": "Array of XYZ color components [X, Y, Z], each normalized to the range [0-1]",
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": [
+            {
+              "$ref": "#/definitions/zeroToOneComponent"
+            },
+            {
+              "$ref": "#/definitions/zeroToOneComponent"
+            },
+            {
+              "$ref": "#/definitions/zeroToOneComponent"
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "colorSpace": {
+                "const": "srgb"
+              },
+              "components": {
+                "type": "array"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "components": {
+                "$ref": "#/definitions/rgbComponents"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "colorSpace": {
+                "const": "srgb-linear"
+              },
+              "components": {
+                "type": "array"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "components": {
+                "$ref": "#/definitions/rgbComponents"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "colorSpace": {
+                "const": "display-p3"
+              },
+              "components": {
+                "type": "array"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "components": {
+                "$ref": "#/definitions/rgbComponents"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "colorSpace": {
+                "const": "a98-rgb"
+              },
+              "components": {
+                "type": "array"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "components": {
+                "$ref": "#/definitions/rgbComponents"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "colorSpace": {
+                "const": "prophoto-rgb"
+              },
+              "components": {
+                "type": "array"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "components": {
+                "$ref": "#/definitions/rgbComponents"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "colorSpace": {
+                "const": "rec2020"
+              },
+              "components": {
+                "type": "array"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "components": {
+                "$ref": "#/definitions/rgbComponents"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "colorSpace": {
+                "const": "xyz-d65"
+              },
+              "components": {
+                "type": "array"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "components": {
+                "$ref": "#/definitions/xyzComponents"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "colorSpace": {
+                "const": "xyz-d50"
+              },
+              "components": {
+                "type": "array"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "components": {
+                "$ref": "#/definitions/xyzComponents"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "colorSpace": {
+                "const": "hsl"
+              },
+              "components": {
+                "type": "array"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "components": {
+                "type": "array",
+                "minItems": 3,
+                "maxItems": 3,
+                "items": [
+                  {
+                    "$ref": "#/definitions/hueComponent"
+                  },
+                  {
+                    "$ref": "#/definitions/percentageComponent"
+                  },
+                  {
+                    "$ref": "#/definitions/percentageComponent"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "colorSpace": {
+                "const": "hwb"
+              },
+              "components": {
+                "type": "array"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "components": {
+                "type": "array",
+                "minItems": 3,
+                "maxItems": 3,
+                "items": [
+                  {
+                    "$ref": "#/definitions/hueComponent"
+                  },
+                  {
+                    "$ref": "#/definitions/percentageComponent"
+                  },
+                  {
+                    "$ref": "#/definitions/percentageComponent"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "colorSpace": {
+                "const": "lab"
+              },
+              "components": {
+                "type": "array"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "components": {
+                "type": "array",
+                "minItems": 3,
+                "maxItems": 3,
+                "items": [
+                  {
+                    "$ref": "#/definitions/percentageComponent"
+                  },
+                  {
+                    "$ref": "#/definitions/unboundedComponent"
+                  },
+                  {
+                    "$ref": "#/definitions/unboundedComponent"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "colorSpace": {
+                "const": "lch"
+              },
+              "components": {
+                "type": "array"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "components": {
+                "type": "array",
+                "minItems": 3,
+                "maxItems": 3,
+                "items": [
+                  {
+                    "$ref": "#/definitions/percentageComponent"
+                  },
+                  {
+                    "$ref": "#/definitions/chromaComponent"
+                  },
+                  {
+                    "$ref": "#/definitions/hueComponent"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "colorSpace": {
+                "const": "oklab"
+              },
+              "components": {
+                "type": "array"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "components": {
+                "type": "array",
+                "minItems": 3,
+                "maxItems": 3,
+                "items": [
+                  {
+                    "$ref": "#/definitions/zeroToOneComponent"
+                  },
+                  {
+                    "$ref": "#/definitions/unboundedComponent"
+                  },
+                  {
+                    "$ref": "#/definitions/unboundedComponent"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "colorSpace": {
+                "const": "oklch"
+              },
+              "components": {
+                "type": "array"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "components": {
+                "type": "array",
+                "minItems": 3,
+                "maxItems": 3,
+                "items": [
+                  {
+                    "$ref": "#/definitions/zeroToOneComponent"
+                  },
+                  {
+                    "$ref": "#/definitions/chromaComponent"
+                  },
+                  {
+                    "$ref": "#/definitions/hueComponent"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "https://www.designtokens.org/schemas/2025.10/format/values/dimension.json": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "$id": "https://www.designtokens.org/schemas/2025.10/format/values/dimension.json",
+      "title": "Dimension Value",
+      "description": "Value schema for dimension type tokens. Represents an amount of distance in a single dimension in the UI, such as a position, width, height, radius, or thickness.",
+      "type": "object",
+      "properties": {
+        "value": {
+          "description": "An integer or floating-point value representing the numeric value.",
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/jsonPointerReferenceObject"
+            }
+          ]
+        },
+        "unit": {
+          "description": "Unit of distance. Supported values: 'px' (idealized pixel, equivalent to dp on Android and pt on iOS), 'rem' (multiple of system's default font size).",
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": ["px", "rem"]
+            },
+            {
+              "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/jsonPointerReferenceObject"
+            }
+          ]
+        }
+      },
+      "required": ["value", "unit"],
+      "additionalProperties": false
+    },
+    "https://www.designtokens.org/schemas/2025.10/format/values/fontFamily.json": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "$id": "https://www.designtokens.org/schemas/2025.10/format/values/fontFamily.json",
+      "title": "Font Family Value",
+      "description": "Value schema for fontFamily type tokens. Represents a font name or an array of font names (ordered from most to least preferred).",
+      "oneOf": [
+        {
+          "type": "string",
+          "description": "A single font name",
+          "not": {
+            "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/curlyBraceReference"
+          }
+        },
+        {
+          "type": "array",
+          "description": "An array of font names, ordered from most to least preferred",
+          "items": {
+            "oneOf": [
+              {
+                "type": "string",
+                "not": {
+                  "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/curlyBraceReference"
+                }
+              },
+              {
+                "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/jsonPointerReferenceObject"
+              }
+            ]
+          },
+          "minItems": 1
+        }
+      ]
+    },
+    "https://www.designtokens.org/schemas/2025.10/format/values/fontWeight.json": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "$id": "https://www.designtokens.org/schemas/2025.10/format/values/fontWeight.json",
+      "title": "Font Weight Value",
+      "description": "Value schema for fontWeight type tokens. Represents a font weight as per the OpenType wght tag specification. Lower numbers represent lighter weights, higher numbers represent thicker weights.",
+      "oneOf": [
+        {
+          "type": "number",
+          "description": "Numeric font weight value",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        {
+          "type": "string",
+          "description": "Pre-defined font weight string value",
+          "enum": [
+            "thin",
+            "hairline",
+            "extra-light",
+            "ultra-light",
+            "light",
+            "normal",
+            "regular",
+            "book",
+            "medium",
+            "semi-bold",
+            "demi-bold",
+            "bold",
+            "extra-bold",
+            "ultra-bold",
+            "black",
+            "heavy",
+            "extra-black",
+            "ultra-black"
+          ]
+        }
+      ]
+    },
+    "https://www.designtokens.org/schemas/2025.10/format/values/duration.json": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "$id": "https://www.designtokens.org/schemas/2025.10/format/values/duration.json",
+      "title": "Duration Value",
+      "description": "Value schema for duration type tokens. Represents the length of time in milliseconds an animation or animation cycle takes to complete.",
+      "type": "object",
+      "properties": {
+        "value": {
+          "description": "An integer or floating-point value representing the numeric value.",
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/jsonPointerReferenceObject"
+            }
+          ]
+        },
+        "unit": {
+          "description": "Unit of time. Supported values: 'ms' (millisecond), 's' (second).",
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": ["ms", "s"]
+            },
+            {
+              "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/jsonPointerReferenceObject"
+            }
+          ]
+        }
+      },
+      "required": ["value", "unit"],
+      "additionalProperties": false
+    },
+    "https://www.designtokens.org/schemas/2025.10/format/values/cubicBezier.json": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "$id": "https://www.designtokens.org/schemas/2025.10/format/values/cubicBezier.json",
+      "title": "Cubic Bezier Value",
+      "description": "Value schema for cubicBezier type tokens. Represents how the value of an animated property progresses towards completion over the duration of an animation, effectively creating visual effects such as acceleration, deceleration, and bounce.",
+      "type": "array",
+      "items": [
+        {
+          "$ref": "#/definitions/xCoordinate"
+        },
+        {
+          "$ref": "#/definitions/yCoordinate"
+        },
+        {
+          "$ref": "#/definitions/xCoordinate"
+        },
+        {
+          "$ref": "#/definitions/yCoordinate"
+        }
+      ],
+      "additionalItems": false,
+      "minItems": 4,
+      "maxItems": 4,
+      "definitions": {
+        "xCoordinate": {
+          "title": "X Coordinate",
+          "description": "X coordinate of control point (must be between 0 and 1)",
+          "oneOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            {
+              "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/jsonPointerReferenceObject"
+            }
+          ]
+        },
+        "yCoordinate": {
+          "title": "Y Coordinate",
+          "description": "Y coordinate of control point (can be any real number)",
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/jsonPointerReferenceObject"
+            }
+          ]
+        }
+      }
+    },
+    "https://www.designtokens.org/schemas/2025.10/format/values/number.json": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "$id": "https://www.designtokens.org/schemas/2025.10/format/values/number.json",
+      "title": "Number Value",
+      "description": "Value schema for number type tokens. Numbers can be positive, negative and have fractions. Example uses are gradient stop positions or unitless line heights.",
+      "type": "number"
+    },
+    "https://www.designtokens.org/schemas/2025.10/format/values/strokeStyle.json": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "$id": "https://www.designtokens.org/schemas/2025.10/format/values/strokeStyle.json",
+      "title": "Stroke Style Value",
+      "description": "Value schema for strokeStyle type tokens. Represents the style applied to lines or borders.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "solid",
+            "dashed",
+            "dotted",
+            "double",
+            "groove",
+            "ridge",
+            "outset",
+            "inset"
+          ],
+          "description": "Pre-defined stroke style values with the same meaning as CSS line style values"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "dashArray": {
+              "description": "Array of dimension values specifying lengths of alternating dashes and gaps",
+              "oneOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "oneOf": [
+                      {
+                        "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/dimension.json"
+                      },
+                      {
+                        "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/tokenValueReference"
+                      }
+                    ]
+                  },
+                  "minItems": 1
+                },
+                {
+                  "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/jsonPointerReferenceObject"
+                }
+              ]
+            },
+            "lineCap": {
+              "description": "Line cap style, same meaning as SVG stroke-linecap attribute",
+              "oneOf": [
+                {
+                  "type": "string",
+                  "enum": ["round", "butt", "square"]
+                },
+                {
+                  "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/jsonPointerReferenceObject"
+                }
+              ]
+            }
+          },
+          "required": ["dashArray", "lineCap"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "https://www.designtokens.org/schemas/2025.10/format/values/border.json": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "$id": "https://www.designtokens.org/schemas/2025.10/format/values/border.json",
+      "title": "Border Value",
+      "description": "Value schema for border type tokens. Represents a border style.",
+      "type": "object",
+      "properties": {
+        "color": {
+          "description": "The color of the border",
+          "oneOf": [
+            {
+              "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/color.json"
+            },
+            {
+              "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/tokenValueReference"
+            }
+          ]
+        },
+        "width": {
+          "description": "The width or thickness of the border",
+          "oneOf": [
+            {
+              "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/dimension.json"
+            },
+            {
+              "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/tokenValueReference"
+            }
+          ]
+        },
+        "style": {
+          "description": "The border's style",
+          "oneOf": [
+            {
+              "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/strokeStyle.json"
+            },
+            {
+              "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/tokenValueReference"
+            }
+          ]
+        }
+      },
+      "required": ["color", "width", "style"],
+      "additionalProperties": false
+    },
+    "https://www.designtokens.org/schemas/2025.10/format/values/transition.json": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "$id": "https://www.designtokens.org/schemas/2025.10/format/values/transition.json",
+      "title": "Transition Value",
+      "description": "Value schema for transition type tokens. Represents an animated transition between two states.",
+      "type": "object",
+      "properties": {
+        "duration": {
+          "description": "The duration of the transition",
+          "oneOf": [
+            {
+              "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/duration.json"
+            },
+            {
+              "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/tokenValueReference"
+            }
+          ]
+        },
+        "delay": {
+          "description": "The time to wait before the transition begins",
+          "oneOf": [
+            {
+              "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/duration.json"
+            },
+            {
+              "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/tokenValueReference"
+            }
+          ]
+        },
+        "timingFunction": {
+          "description": "The timing function of the transition",
+          "oneOf": [
+            {
+              "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/cubicBezier.json"
+            },
+            {
+              "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/tokenValueReference"
+            }
+          ]
+        }
+      },
+      "required": ["duration", "delay", "timingFunction"],
+      "additionalProperties": false
+    },
+    "https://www.designtokens.org/schemas/2025.10/format/values/shadow.json": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "$id": "https://www.designtokens.org/schemas/2025.10/format/values/shadow.json",
+      "title": "Shadow Value",
+      "description": "Value schema for shadow type tokens. Represents a shadow style.",
+      "oneOf": [
+        {
+          "$ref": "#/definitions/shadowObject"
+        },
+        {
+          "type": "array",
+          "description": "Array of shadow objects and/or references to shadow tokens",
+          "items": {
+            "oneOf": [
+              {
+                "$ref": "#/definitions/shadowObject"
+              },
+              {
+                "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/tokenValueReference"
+              }
+            ]
+          },
+          "minItems": 1
+        }
+      ],
+      "definitions": {
+        "shadowObject": {
+          "title": "Shadow Object",
+          "type": "object",
+          "properties": {
+            "color": {
+              "description": "The color of the shadow",
+              "oneOf": [
+                {
+                  "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/color.json"
+                },
+                {
+                  "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/tokenValueReference"
+                }
+              ]
+            },
+            "offsetX": {
+              "description": "The horizontal offset that shadow has from the element it is applied to",
+              "oneOf": [
+                {
+                  "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/dimension.json"
+                },
+                {
+                  "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/tokenValueReference"
+                }
+              ]
+            },
+            "offsetY": {
+              "description": "The vertical offset that shadow has from the element it is applied to",
+              "oneOf": [
+                {
+                  "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/dimension.json"
+                },
+                {
+                  "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/tokenValueReference"
+                }
+              ]
+            },
+            "blur": {
+              "description": "The blur radius that is applied to the shadow",
+              "oneOf": [
+                {
+                  "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/dimension.json"
+                },
+                {
+                  "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/tokenValueReference"
+                }
+              ]
+            },
+            "spread": {
+              "description": "The amount by which to expand or contract the shadow",
+              "oneOf": [
+                {
+                  "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/dimension.json"
+                },
+                {
+                  "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/tokenValueReference"
+                }
+              ]
+            },
+            "inset": {
+              "description": "Whether this shadow is inside the containing shape (inner shadow) rather than a drop shadow (default: false)",
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/jsonPointerReferenceObject"
+                }
+              ]
+            }
+          },
+          "required": ["color", "offsetX", "offsetY", "blur", "spread"],
+          "additionalProperties": false
+        }
+      }
+    },
+    "https://www.designtokens.org/schemas/2025.10/format/values/gradient.json": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "$id": "https://www.designtokens.org/schemas/2025.10/format/values/gradient.json",
+      "title": "Gradient Value",
+      "description": "Value schema for gradient type tokens. Represents a color gradient.",
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "$ref": "#/definitions/gradientStop"
+          },
+          {
+            "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/tokenValueReference"
+          }
+        ]
+      },
+      "minItems": 1,
+      "definitions": {
+        "gradientStop": {
+          "title": "Gradient Stop",
+          "type": "object",
+          "properties": {
+            "color": {
+              "description": "The color value at the stop's position on the gradient",
+              "oneOf": [
+                {
+                  "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/color.json"
+                },
+                {
+                  "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/tokenValueReference"
+                }
+              ]
+            },
+            "position": {
+              "description": "The position of the stop along the gradient's axis (range [0, 1]). Values outside this range are clamped.",
+              "oneOf": [
+                {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                {
+                  "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/tokenValueReference"
+                }
+              ]
+            }
+          },
+          "required": ["color", "position"],
+          "additionalProperties": false
+        }
+      }
+    },
+    "https://www.designtokens.org/schemas/2025.10/format/values/typography.json": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "$id": "https://www.designtokens.org/schemas/2025.10/format/values/typography.json",
+      "title": "Typography Value",
+      "description": "Value schema for typography type tokens. Represents a typographic style.",
+      "type": "object",
+      "properties": {
+        "fontFamily": {
+          "description": "The typography's font",
+          "oneOf": [
+            {
+              "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/fontFamily.json"
+            },
+            {
+              "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/tokenValueReference"
+            }
+          ]
+        },
+        "fontSize": {
+          "description": "The size of the typography",
+          "oneOf": [
+            {
+              "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/dimension.json"
+            },
+            {
+              "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/tokenValueReference"
+            }
+          ]
+        },
+        "fontWeight": {
+          "description": "The weight of the typography",
+          "oneOf": [
+            {
+              "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/fontWeight.json"
+            },
+            {
+              "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/tokenValueReference"
+            }
+          ]
+        },
+        "letterSpacing": {
+          "description": "The horizontal spacing between characters",
+          "oneOf": [
+            {
+              "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/dimension.json"
+            },
+            {
+              "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/tokenValueReference"
+            }
+          ]
+        },
+        "lineHeight": {
+          "description": "The vertical spacing between lines of typography (interpreted as a multiplier of fontSize)",
+          "oneOf": [
+            {
+              "$ref": "https://www.designtokens.org/schemas/2025.10/format/values/number.json"
+            },
+            {
+              "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/tokenValueReference"
+            }
+          ]
+        }
+      },
+      "required": [
+        "fontFamily",
+        "fontSize",
+        "fontWeight",
+        "letterSpacing",
+        "lineHeight"
+      ],
+      "additionalProperties": false
+    },
+    "https://www.designtokens.org/schemas/2025.10/format/groupOrToken.json": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "$id": "https://www.designtokens.org/schemas/2025.10/format/groupOrToken.json",
+      "title": "Group or Token",
+      "description": "A group or a token in the DTCG specification. A token is identified by the presence of a $value property, while a group is any object without a $value property.",
+      "oneOf": [
+        {
+          "$ref": "https://www.designtokens.org/schemas/2025.10/format/group.json"
+        },
+        {
+          "$ref": "https://www.designtokens.org/schemas/2025.10/format/token.json"
+        }
+      ]
+    },
+    "https://www.designtokens.org/schemas/2025.10/format/group.json": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "$id": "https://www.designtokens.org/schemas/2025.10/format/group.json",
+      "title": "Group",
+      "description": "A group in the DTCG specification",
+      "type": "object",
+      "properties": {
+        "$type": {
+          "$ref": "https://www.designtokens.org/schemas/2025.10/format/tokenType.json"
+        },
+        "$description": {
+          "type": "string",
+          "description": "A plain text description of the group"
+        },
+        "$extensions": {
+          "type": "object",
+          "description": "Vendor-specific extensions"
+        },
+        "$extends": {
+          "oneOf": [
+            {
+              "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/curlyBraceReference"
+            },
+            {
+              "$ref": "https://www.designtokens.org/schemas/2025.10/format.json#/definitions/jsonPointerReference"
+            }
+          ],
+          "description": "Reference to another group to inherit tokens and properties from"
+        },
+        "$deprecated": {
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Whether this group is deprecated"
+        },
+        "$root": {
+          "$ref": "https://www.designtokens.org/schemas/2025.10/format/token.json"
+        }
+      },
+      "patternProperties": {
+        "^[^${}.][^{}.]*$": {
+          "$ref": "https://www.designtokens.org/schemas/2025.10/format/groupOrToken.json"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
