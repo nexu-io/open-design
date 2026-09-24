@@ -2182,6 +2182,11 @@ process.exit(127);
       firstStdin.indexOf('  </active_stages>'),
     );
     expect(systemPromptSlice.length).toBeGreaterThan(0);
+    // The real request Bundle carries the functional-icon instruction in the
+    // frozen Task Skill and the opt-in primitive in stable request context.
+    expect(systemPromptSlice).toContain('### Bound functional icon geometry');
+    expect(firstStdin).toContain('<od-next-context kind="fact" name="layout-primitives">');
+    expect(firstStdin).toContain('.od-icon { display: inline-block;');
     for (const perTaskValue of [
       'open-design.od-next-task-configuration/v1',
       'open-design.od-next-request-input-facts/v1',
