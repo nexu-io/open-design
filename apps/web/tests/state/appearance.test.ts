@@ -84,12 +84,28 @@ describe('applyAppearanceToDocument', () => {
     expect(document.documentElement.style.getPropertyValue('--accent-hover')).toContain('#ef4444');
   });
 
-  it('falls back to the default accent when no valid accent is configured', () => {
+  it('clears stale accent variables when no valid accent is configured', () => {
+    document.documentElement.style.setProperty('--accent', '#4f46e5');
+    document.documentElement.style.setProperty('--accent-strong', 'stale strong');
+    document.documentElement.style.setProperty('--accent-soft', 'stale soft');
+    document.documentElement.style.setProperty('--accent-tint', 'stale tint');
+    document.documentElement.style.setProperty('--accent-hover', 'stale hover');
+    document.documentElement.setAttribute('data-theme', 'dark');
+
+    applyAppearanceToDocument({ theme: 'dark', accentColor: 'not-a-color' });
+
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+    for (const name of ['--accent', '--accent-strong', '--accent-soft', '--accent-tint', '--accent-hover']) {
+      expect(document.documentElement.style.getPropertyValue(name)).toBe('');
+    }
+  });
+
+  it('leaves inline accent variables unset for system theme and default accent', () => {
     document.documentElement.style.setProperty('--accent', '#4f46e5');
 
-    applyAppearanceToDocument({ accentColor: 'not-a-color' });
+    applyAppearanceToDocument({ theme: 'system', accentColor: DEFAULT_ACCENT_COLOR });
 
-    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
-    expect(document.documentElement.style.getPropertyValue('--accent')).toBe(DEFAULT_ACCENT_COLOR);
+    expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
+    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('');
   });
 });
