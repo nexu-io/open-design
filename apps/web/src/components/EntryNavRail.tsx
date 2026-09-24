@@ -103,6 +103,7 @@ import { canUpgradeFromPlanTier, isMaxPlanTier, resolvePlanLabelTier } from '../
 import {
   AMR_CONSOLE_AUTO_RECHARGE_INTENT,
   AMR_CONSOLE_RECHARGE_INTENT,
+  AMR_CONSOLE_UPGRADE_INTENT,
   amrAutoRechargeUrlForProfile,
   amrConsoleUrlForWorkspace,
   amrPlansUrlForProfile,
@@ -820,9 +821,9 @@ function consoleBillingIntentUrl(base: string | null, intent: string): string | 
 }
 
 /**
- * Shared destination for every generic 「升级」/「升级套餐」 affordance. Pricing
- * owns comparison; selecting a concrete card there is what hands checkout to
- * Cloud.
+ * Shared destination for every generic 「升级」/「升级套餐」 affordance.
+ * Use the workspace's console origin and identity, just like the usage link.
+ * The runtime profile is only a fallback when that scoped URL is unavailable.
  *
  * Who may be shown the entrance is `canReachWorkspaceBillingEntrance`'s call,
  * not this function's: a team member without `canManageBilling` still gets
@@ -851,6 +852,14 @@ export function workspaceUpgradeUrl(
   // workspace identity to authorize yet.
   if (context && !canReachWorkspaceBillingEntrance(context)) return null;
   if (!context && !options) return null;
+  const settingsUrl = context?.workspaceSettingsUrl?.trim();
+  if (settingsUrl) {
+    const plansUrl = consoleBillingIntentUrl(
+      teamConsoleUrl(settingsUrl, 'billing'),
+      AMR_CONSOLE_UPGRADE_INTENT,
+    );
+    if (plansUrl) return plansUrl;
+  }
   return amrPlansUrlForProfile(options?.fallbackProfile);
 }
 

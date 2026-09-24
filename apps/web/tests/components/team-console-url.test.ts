@@ -104,12 +104,27 @@ describe('workspaceUpgradeUrl', () => {
     workspaceBalance: null,
   });
 
+  it.each([
+    'https://open-design.powerformer.net/cloud',
+    'http://127.0.0.1:5173',
+    'https://vela.example.invalid',
+  ])('keeps Upgrade in the workspace console %s without a fallback profile', (base) => {
+    const context = {
+      ...baseContext,
+      workspaceType: 'personal' as const,
+      workspaceSettingsUrl: `${base}/settings?workspaceId=ws-1`,
+    };
+    expect(workspaceUpgradeUrl(context, billingSummary('go'))).toBe(
+      `${base}/dashboard?workspaceId=ws-1&billing=plan`,
+    );
+  });
+
   it('sends a personal workspace to the console plan surface', () => {
     const context: WorkspaceCollabContext = {
       ...baseContext,
       workspaceType: 'personal',
     };
-    expect(workspaceUpgradeUrl(context, null)).toBe(PROD_CONSOLE_PLAN_URL);
+    expect(workspaceUpgradeUrl(context, null)).toBe('https://web.example/dashboard?workspaceId=ws-1&billing=plan');
   });
 
   // 红测(§6.Y 死胡同的第二扇门)。三处注释逐字断言「Personal workspaces always
@@ -129,27 +144,27 @@ describe('workspaceUpgradeUrl', () => {
       role: 'member',
       permissions: { ...baseContext.permissions, canManageBilling: false },
     };
-    expect(workspaceUpgradeUrl(context, null)).toBe(PROD_CONSOLE_PLAN_URL);
+    expect(workspaceUpgradeUrl(context, null)).toBe('https://web.example/dashboard?workspaceId=ws-1&billing=plan');
     expect(
       workspaceUpgradeUrl(context, billingSummary('team_pro'), {
         fallbackProfile: 'prod',
       }),
-    ).toBe(PROD_CONSOLE_PLAN_URL);
+    ).toBe('https://web.example/dashboard?workspaceId=ws-1&billing=plan');
   });
 
   it('sends a never-subscribed team to the console plan surface', () => {
-    expect(workspaceUpgradeUrl(baseContext, null)).toBe(PROD_CONSOLE_PLAN_URL);
+    expect(workspaceUpgradeUrl(baseContext, null)).toBe('https://web.example/dashboard?workspaceId=ws-1&billing=plan');
     expect(workspaceUpgradeUrl(baseContext, billingSummary(''))).toBe(
-      PROD_CONSOLE_PLAN_URL,
+      'https://web.example/dashboard?workspaceId=ws-1&billing=plan',
     );
   });
 
   it('sends an already-subscribed team to the console plan surface', () => {
     expect(
       workspaceUpgradeUrl({ ...baseContext, planId: 'team_pro', billingState: 'active' }, null),
-    ).toBe(PROD_CONSOLE_PLAN_URL);
+    ).toBe('https://web.example/dashboard?workspaceId=ws-1&billing=plan');
     expect(workspaceUpgradeUrl(baseContext, billingSummary('team_pro'))).toBe(
-      PROD_CONSOLE_PLAN_URL,
+      'https://web.example/dashboard?workspaceId=ws-1&billing=plan',
     );
   });
 
