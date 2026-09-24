@@ -52,6 +52,44 @@ describe('fetchAmrModels', () => {
     expect(fetch).toHaveBeenCalledWith('/api/amr/models', { cache: 'no-store' });
   });
 
+  it('forwards the selected workspace identity on model discovery', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({
+        source: 'remote',
+        models: [{ id: 'gpt-5.5', label: 'gpt-5.5' }],
+        refreshing: false,
+      }), { status: 200 })),
+    );
+
+    await expect(fetchAmrModels({
+      workspaceId: 'ws-team-pro',
+      workspaceType: 'team',
+      workspaceMemberId: 'member-1',
+      role: 'member',
+      memberStatus: 'active',
+      lifecycleState: 'active',
+      permissions: {
+        canShareProjects: true,
+        canWriteSyncedFiles: true,
+      },
+    } as any)).resolves.toMatchObject({ source: 'remote' });
+
+    expect(fetch).toHaveBeenCalledWith('/api/amr/models', {
+      cache: 'no-store',
+      headers: {
+        'x-od-workspace-id': 'ws-team-pro',
+        'x-od-workspace-type': 'team',
+        'x-od-workspace-member-id': 'member-1',
+        'x-od-workspace-role': 'member',
+        'x-od-workspace-lifecycle-state': 'active',
+        'x-od-workspace-member-status': 'active',
+        'x-od-workspace-can-share-projects': 'true',
+        'x-od-workspace-can-write-synced-files': 'true',
+      },
+    });
+  });
+
   it('returns null when the daemon does not return AMR models', async () => {
     vi.stubGlobal(
       'fetch',

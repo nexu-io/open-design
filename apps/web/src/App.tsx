@@ -580,20 +580,49 @@ export function resolveSettingsCloseConfig(
   return base.onboardingCompleted ? base : { ...base, onboardingCompleted: true };
 }
 
-function mergeAmrModelsIntoAgents(
+/** Remove the previous workspace catalog while its replacement loads. */
+export function clearAmrLiveModelsFromAgents(agents: AgentInfo[]): AgentInfo[] {
+  let changed = false;
+  const next = agents.map((agent) => {
+    if (agent.id !== 'amr') return agent;
+    const hasModels = Array.isArray(agent.models) && agent.models.length > 0;
+    if (!hasModels && agent.modelsSource === undefined) return agent;
+    changed = true;
+    return { ...agent, models: [], modelsSource: undefined };
+  });
+  return changed ? next : agents;
+}
+
+/** Scoped discovery owns entitlements; headerless agent detection does not. */
+export function mergeAmrModelsIntoAgents(
   agents: AgentInfo[],
   amrModels: AmrModelsResponse | null,
 ): AgentInfo[] {
-  if (!amrModels || amrModels.models.length === 0) return agents;
+  if (!amrModels || amrModels.models.length === 0) {
+    return clearAmrLiveModelsFromAgents(agents);
+  }
   return agents.map((agent) => {
     if (agent.id !== 'amr') return agent;
-    const shouldPreferAgentModels =
-      amrModels.source === 'preset' &&
-      Array.isArray(agent.models) &&
-      agent.models.length > 0;
-    if (shouldPreferAgentModels) return agent;
     return { ...agent, models: amrModels.models, modelsSource: 'live' };
   });
+}
+
+/** The picker follows the same workspace authority as the next run. */
+export function resolveAmrModelsCatalogScope(input: {
+  routeKind: string;
+  activeProject: { id: string; workspaceId?: string | null } | null;
+  activeProjectWorkspaceContext: WorkspaceCollabContext | null;
+  ambientWorkspaceContext: WorkspaceCollabContext | null;
+  ambientWorkspaceLoading: boolean;
+}) {
+  const onProjectRoute = input.routeKind === 'project';
+  const context = onProjectRoute
+    ? input.activeProjectWorkspaceContext
+    : input.ambientWorkspaceContext;
+  const pending = onProjectRoute
+    ? !input.activeProject || Boolean(input.activeProject.workspaceId && !context)
+    : input.ambientWorkspaceLoading;
+  return { context, pending, identity: workspaceIdentityCacheKey(context) };
 }
 
 const CANONICAL_AGENT_ORDER = [
@@ -1950,48 +1979,6 @@ function AppInner() {
     });
   }, [activeProjectId, activeFileName]);
 
-  useEffect(() => {
-    if (!daemonLive) return;
-    let cancelled = false;
-    let timer: number | null = null;
-    const pollGeneration = amrPollGenerationRef.current + 1;
-    amrPollGenerationRef.current = pollGeneration;
-    const pollDelayMs = 1_000;
-    const maxPresetPolls = 10;
-    let presetPolls = 0;
-
-    const applyAmrModels = async () => {
-      const result = await fetchAmrModels();
-      if (
-        cancelled ||
-        amrPollGenerationRef.current !== pollGeneration ||
-        !result ||
-        !Array.isArray(result.models) ||
-        result.models.length === 0
-      ) {
-        return;
-      }
-      amrModelsRef.current = result;
-      setAgents((current) => mergeAmrModelsIntoAgents(current, result));
-      const shouldPollPreset =
-        result.source === 'preset' &&
-        !result.remoteError &&
-        presetPolls < maxPresetPolls;
-      if (shouldPollPreset) {
-        presetPolls += 1;
-        timer = window.setTimeout(() => {
-          void applyAmrModels();
-        }, pollDelayMs);
-      }
-    };
-
-    void applyAmrModels();
-    return () => {
-      cancelled = true;
-      if (timer !== null) window.clearTimeout(timer);
-    };
-  }, [amrPollRestartToken, daemonLive]);
-
   // App-level AMR sign-in state. Feeds two analytics globals: the
   // `amr` configure_type bucket (deriveConfigureGlobals below) and the
   // `user_id` public param (the AMR account id is the only join key
@@ -2935,6 +2922,7 @@ function AppInner() {
         saveConfig(nextConfig);
         setConfig(nextConfig);
         await syncConfigToDaemon(nextConfig);
+        restartAmrPolling();
       }
       const agentRequestId = beginAgentStreamRequest();
       setAgentsLoading(true);
@@ -2953,11 +2941,12 @@ function AppInner() {
         });
         const ordered = orderAgentsByRegistry(next);
         reportAgentDetectDiagnostics(analytics.track, ordered);
+        const merged = mergeAmrModelsIntoAgents(ordered, amrModelsRef.current);
         if (isCurrentAgentStreamRequest(agentRequestId)) {
-          setAgents(mergeAmrModelsIntoAgents(ordered, amrModelsRef.current));
+          setAgents(merged);
           setAgentsLoading(false);
         }
-        return ordered;
+        return merged;
       } catch (err) {
         if (!isCurrentAgentStreamRequest(agentRequestId)) return [];
         setAgentsLoading(false);
@@ -2966,7 +2955,7 @@ function AppInner() {
         return [];
       }
     },
-    [beginAgentStreamRequest, isCurrentAgentStreamRequest],
+    [beginAgentStreamRequest, isCurrentAgentStreamRequest, restartAmrPolling],
   );
 
   useEffect(() => {
@@ -4605,6 +4594,86 @@ function AppInner() {
     ? projectRouteWorkspaceContext.context
     : null;
   projectRouteWorkspaceContextRef.current = activeProjectWorkspaceContext;
+
+  const {
+    context: amrModelsCatalogContext,
+    pending: amrModelsCatalogPending,
+    identity: amrModelsCatalogIdentity,
+  } = resolveAmrModelsCatalogScope({
+    routeKind: route.kind,
+    activeProject,
+    activeProjectWorkspaceContext,
+    ambientWorkspaceContext: workspaceContext,
+    ambientWorkspaceLoading: workspaceContextState.loading,
+  });
+  const amrModelsCatalogContextRef = useRef(amrModelsCatalogContext);
+  amrModelsCatalogContextRef.current = amrModelsCatalogContext;
+
+  // Clear locks from the previous workspace while its replacement loads.
+  useEffect(() => {
+    amrModelsRef.current = null;
+    setAgents((current) => clearAmrLiveModelsFromAgents(current));
+  }, [amrModelsCatalogIdentity, amrModelsCatalogPending]);
+
+  useEffect(() => {
+    if (!daemonLive) return;
+    if (amrModelsCatalogPending) return;
+    let cancelled = false;
+    let timer: number | null = null;
+    const pollGeneration = amrPollGenerationRef.current + 1;
+    amrPollGenerationRef.current = pollGeneration;
+    const pollDelayMs = 1_000;
+    const maxPresetPolls = 10;
+    let presetPolls = 0;
+    // Capture the workspace identity this poll generation was issued for.
+    // Path A model discovery is workspace-scoped; a later switch must not
+    // commit an older personal/team catalog into the new shell.
+    const issuedWorkspaceContext = amrModelsCatalogContextRef.current;
+
+    const applyAmrModels = async () => {
+      const result = await fetchAmrModels(issuedWorkspaceContext);
+      if (cancelled || amrPollGenerationRef.current !== pollGeneration) {
+        return;
+      }
+      if (
+        !result ||
+        !Array.isArray(result.models) ||
+        result.models.length === 0
+      ) {
+        // Fail closed: keep the picker free of unscoped agent models when the
+        // workspace-scoped catalog errors or returns empty (including after a
+        // concurrent fetchAgentsStream upsert while amrModelsRef was null).
+        amrModelsRef.current = null;
+        setAgents((current) => clearAmrLiveModelsFromAgents(current));
+      } else {
+        amrModelsRef.current = result;
+        setAgents((current) => mergeAmrModelsIntoAgents(current, result));
+      }
+      const shouldPollPreset =
+        result &&
+        (result.source === 'preset' || result.refreshing) &&
+        !result.remoteError &&
+        presetPolls < maxPresetPolls;
+      if (shouldPollPreset) {
+        presetPolls += 1;
+        timer = window.setTimeout(() => {
+          void applyAmrModels();
+        }, pollDelayMs);
+      }
+    };
+
+    void applyAmrModels();
+    return () => {
+      cancelled = true;
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, [
+    amrModelsCatalogIdentity,
+    amrModelsCatalogPending,
+    amrPollRestartToken,
+    daemonLive,
+  ]);
+
   // The post-generation upgrade gate belongs to the project that owns the
   // conversation, not whichever Workspace the navigation shell currently
   // selects. A bound project stays fail-closed until its exact membership and

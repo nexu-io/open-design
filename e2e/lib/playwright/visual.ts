@@ -295,6 +295,18 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
     await fulfillAgentsRoute(route, agents);
   });
 
+  // AMR pickers consume the scoped catalog, never the headerless agent probe.
+  await page.route('**/api/amr/models', async (route) => {
+    const amr = agents.find((agent) =>
+      typeof agent === 'object' && agent !== null && 'id' in agent && agent.id === 'amr');
+    await fulfillGet(route, {
+      source: 'remote',
+      refreshing: false,
+      models: amr && typeof amr === 'object' && 'models' in amr && Array.isArray(amr.models)
+        ? amr.models : [],
+    });
+  });
+
   await page.route('**/api/test/connection', async (route) => {
     if (route.request().method() !== 'POST') {
       await route.fallback();

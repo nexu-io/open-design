@@ -5,19 +5,23 @@ import {
   isAutosaveDraftOnlyChange,
   hydrateReadyTeamProject,
   mergeAgentModelChoice,
+  mergeAmrModelsIntoAgents,
   persistComposioConfigChange,
   projectViewAuthorizationLifetimeKey,
   projectRouteSurfaceState,
+  resolveAmrModelsCatalogScope,
   resolveDeepLinkedTeamSharedProject,
   resolveSettingsCloseConfig,
   shouldRouteToFirstRunOnboarding,
   shouldSyncMediaProvidersOnSave,
 } from '../src/App';
-import type { AppConfig, Project } from '../src/types';
+import type { AgentInfo, AppConfig, Project } from '../src/types';
 import type {
+  AmrModelsResponse,
   WorkspaceCollabContext,
   WorkspaceProjectSummary,
 } from '@open-design/contracts';
+import { workspaceIdentityCacheKey } from '../src/collab/workspace-identity';
 
 describe('projectRouteSurfaceState', () => {
   it('only shows an unbounded loader while the initial project list is loading', () => {
@@ -534,5 +538,164 @@ describe('resolveDeepLinkedTeamSharedProject', () => {
     expect(getProject).toHaveBeenCalledTimes(1);
     expect(pullTeamSharedProjectIfAvailable).toHaveBeenCalledTimes(1);
     expect(delay).not.toHaveBeenCalled();
+  });
+});
+
+describe('mergeAmrModelsIntoAgents', () => {
+  const unscopedAgentModels = [
+    { id: 'personal-free-model', label: 'personal-free-model', enabled: true },
+    { id: 'team-only-model', label: 'team-only-model', enabled: false },
+  ];
+  const scopedPresetModels = [
+    { id: 'personal-free-model', label: 'personal-free-model', enabled: true },
+    { id: 'team-only-model', label: 'team-only-model', enabled: true },
+  ];
+  const agents: AgentInfo[] = [
+    {
+      id: 'amr',
+      name: 'AMR',
+      bin: 'vela',
+      available: true,
+      // Non-empty models from headerless `/api/agents` discovery (personal shape).
+      models: unscopedAgentModels,
+      modelsSource: 'fallback',
+    },
+    {
+      id: 'claude',
+      name: 'Claude',
+      bin: 'claude',
+      available: true,
+      models: [{ id: 'claude-sonnet', label: 'claude-sonnet' }],
+    },
+  ];
+
+  it('applies a scoped Path A preset over non-empty unscoped agent models', () => {
+    const scopedPreset: AmrModelsResponse = {
+      source: 'preset',
+      models: scopedPresetModels,
+      refreshing: true,
+    };
+    const next = mergeAmrModelsIntoAgents(agents, scopedPreset);
+    expect(next[0]).toMatchObject({
+      id: 'amr',
+      models: scopedPresetModels,
+      modelsSource: 'live',
+    });
+    expect(next[1]).toEqual(agents[1]);
+  });
+
+  it('applies a remote Path A catalog the same way', () => {
+    const remote: AmrModelsResponse = {
+      source: 'remote',
+      models: scopedPresetModels,
+      refreshing: false,
+    };
+    const next = mergeAmrModelsIntoAgents(agents, remote);
+    expect(next[0]?.models).toEqual(scopedPresetModels);
+    expect(next[0]?.modelsSource).toBe('live');
+  });
+
+  it('strips unscoped AMR models when Path A is unresolved or empty', () => {
+    // Concurrent fetchAgentsStream callbacks merge with amrModelsRef=null after
+    // an identity clear; fail closed so personal free/lock shape cannot stick.
+    const clearedNull = mergeAmrModelsIntoAgents(agents, null);
+    expect(clearedNull[0]).toMatchObject({
+      id: 'amr',
+      models: [],
+      modelsSource: undefined,
+    });
+    expect(clearedNull[1]).toEqual(agents[1]);
+
+    const clearedEmpty = mergeAmrModelsIntoAgents(agents, {
+      source: 'preset',
+      models: [],
+      refreshing: true,
+    });
+    expect(clearedEmpty[0]).toMatchObject({
+      id: 'amr',
+      models: [],
+      modelsSource: undefined,
+    });
+  });
+
+});
+
+describe('resolveAmrModelsCatalogScope', () => {
+  const workspaceA: WorkspaceCollabContext = {
+    workspaceId: 'ws-a',
+    workspaceType: 'team',
+    workspaceMemberId: 'member-a',
+    role: 'member',
+    memberStatus: 'active',
+    lifecycleState: 'active',
+    billingState: 'active',
+    planId: 'team_pro',
+    providerMode: 'platform_credits',
+    seatSummary: { seatLimit: 5, usedSeats: 1, availableSeats: 4, isSeatFull: false },
+    permissions: {
+      canManageMembers: false,
+      canManageBilling: false,
+      canInviteMembers: false,
+      canManageAutoRecharge: false,
+      canShareProjects: true,
+      canWriteSyncedFiles: true,
+      canViewWorkspaceSettings: false,
+      canManageSharedResources: false,
+    },
+  };
+  const workspaceB: WorkspaceCollabContext = {
+    ...workspaceA,
+    workspaceId: 'ws-b',
+    workspaceMemberId: 'member-b',
+  };
+
+  it('uses the open project workspace on project routes even when ambient rail is B', () => {
+    const scope = resolveAmrModelsCatalogScope({
+      routeKind: 'project',
+      activeProject: { id: 'proj-a', workspaceId: 'ws-a' },
+      activeProjectWorkspaceContext: workspaceA,
+      ambientWorkspaceContext: workspaceB,
+      ambientWorkspaceLoading: false,
+    });
+    expect(scope.pending).toBe(false);
+    expect(scope.context).toBe(workspaceA);
+    expect(scope.identity).toBe(workspaceIdentityCacheKey(scope.context));
+  });
+
+  it('falls back to ambient workspace context off project routes', () => {
+    const scope = resolveAmrModelsCatalogScope({
+      routeKind: 'home',
+      activeProject: null,
+      activeProjectWorkspaceContext: null,
+      ambientWorkspaceContext: workspaceB,
+      ambientWorkspaceLoading: false,
+    });
+    expect(scope.pending).toBe(false);
+    expect(scope.context).toBe(workspaceB);
+  });
+
+  it('stays pending while a project-bound workspace authority is still unresolved', () => {
+    const scope = resolveAmrModelsCatalogScope({
+      routeKind: 'project',
+      activeProject: { id: 'proj-a', workspaceId: 'ws-a' },
+      activeProjectWorkspaceContext: null,
+      ambientWorkspaceContext: workspaceB,
+      ambientWorkspaceLoading: false,
+    });
+    expect(scope.pending).toBe(true);
+    expect(scope.context).toBeNull();
+    expect(scope.identity).toBe(workspaceIdentityCacheKey(scope.context));
+  });
+
+  it('allows unscoped personal catalog for projects without a pinned workspace', () => {
+    const scope = resolveAmrModelsCatalogScope({
+      routeKind: 'project',
+      activeProject: { id: 'proj-personal', workspaceId: null },
+      activeProjectWorkspaceContext: null,
+      ambientWorkspaceContext: workspaceB,
+      ambientWorkspaceLoading: false,
+    });
+    expect(scope.pending).toBe(false);
+    expect(scope.context).toBeNull();
   });
 });
