@@ -6,7 +6,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { waitForProcessExit } from '@open-design/platform';
 import { attachCodexAppServerSession } from '../src/agent-protocol/codex-app-server/session.js';
-import { cleanupClosedCodexThread } from '../src/agent-protocol/codex-app-server/thread-cleanup.js';
+import { cleanupClosedCodexThread, codexHistoryCapabilities } from '../src/agent-protocol/codex-app-server/thread-cleanup.js';
 
 // A real stdio child with controlled protocol responses, no provider or service.
 // It records every request before responding, so prohibited resume/list/start
@@ -26,7 +26,7 @@ lines.on('line', line => {
       process.stdout.write(JSON.stringify({ id: frame.id, error: { message: 'initialization refused' } }) + '\\n');
       return;
     }
-    send(frame.id, { userAgent: 'codex/' + (process.env.VERSION || '0.154.0') });
+    send(frame.id, { userAgent: (process.env.CODEX_INTERNAL_ORIGINATOR_OVERRIDE || 'codex') + '/' + (process.env.VERSION || '0.154.0') });
   } else if (frame.method === 'thread/start') {
     send(frame.id, { thread: { id: 'owned-thread', historyMode: process.env.HISTORY_MODE || 'paginated' } });
   } else if (frame.method === 'turn/start') {
@@ -42,7 +42,7 @@ lines.on('line', line => {
 });
 `;
 
-async function scenario(options: { sourceExit?: string; archive?: string; cleanupVersion?: string; missingCommand?: boolean; init?: string; historyMode?: 'legacy' | 'paginated' } = {}) {
+async function scenario(options: { sourceExit?: string; originator?: string; archive?: string; cleanupVersion?: string; missingCommand?: boolean; init?: string; historyMode?: 'legacy' | 'paginated' } = {}) {
   const root = await mkdtemp(path.join(tmpdir(), 'codex-close-cleanup-'));
   const transcript = path.join(root, 'requests.jsonl');
   const script = path.join(root, 'controlled-cli.ts');
@@ -52,7 +52,7 @@ async function scenario(options: { sourceExit?: string; archive?: string; cleanu
     args: [script],
     cwd: root,
     env: { PATH: process.env.PATH, TRANSCRIPT: transcript, CASE_MARKER: 'same-original-context',
-      SOURCE_EXIT: options.sourceExit ?? '0', ARCHIVE: options.archive ?? 'success', HISTORY_MODE: options.historyMode ?? 'paginated' },
+      CODEX_INTERNAL_ORIGINATOR_OVERRIDE: options.originator, SOURCE_EXIT: options.sourceExit ?? '0', ARCHIVE: options.archive ?? 'success', HISTORY_MODE: options.historyMode ?? 'paginated' },
   };
   const original = spawn(invocation.command, invocation.args, { cwd: root, env: invocation.env, stdio: 'pipe' });
   original.stderr.resume();
@@ -98,6 +98,15 @@ async function scenario(options: { sourceExit?: string; archive?: string; cleanu
 describe('closed owned Codex thread cleanup over real stdio', () => {
   it.each(['0', '1', 'kill'])('archives only the captured owned ID after physical exit %s', async (sourceExit) => {
     const { cleanup, cleanupRequests } = await scenario({ sourceExit });
+    expect(cleanup).toEqual({ status: 'archived' });
+    expect(cleanupRequests.map(request => request.method)).toEqual(['initialize', 'initialized', 'thread/archive']);
+    expect(cleanupRequests.at(-1)?.params).toEqual({ threadId: 'owned-thread' });
+  });
+
+  it.each(['0.146.0', '0.153.4'])('archives after physical kill with a spaced originator on %s', async (cleanupVersion) => {
+    const { cleanup, cleanupRequests } = await scenario({
+      sourceExit: 'kill', originator: 'Codex Desktop', cleanupVersion,
+    });
     expect(cleanup).toEqual({ status: 'archived' });
     expect(cleanupRequests.map(request => request.method)).toEqual(['initialize', 'initialized', 'thread/archive']);
     expect(cleanupRequests.at(-1)?.params).toEqual({ threadId: 'owned-thread' });
@@ -220,5 +229,25 @@ describe('closed owned Codex thread cleanup over real stdio', () => {
   it('does not spawn anything without a closed ownership receipt', async () => {
     expect(await cleanupClosedCodexThread({ receipt: null, command: '/must-not-run', args: [], cwd: '/', env: {} }))
       .toEqual({ status: 'skipped', reason: 'no-owned-closed-thread' });
+  });
+});
+
+describe('Codex history version parsing', () => {
+  it.each([
+    ['Codex Desktop/0.146.0 (Mac OS 15.0; arm64) open-design/9.0.0', true, false],
+    ['Codex Desktop/0.153.3', true, false],
+    ['Codex Desktop/0.153.4', true, true],
+    ['open-design/0.154.0 (Windows 11; x64)', true, true],
+    ['Codex Desktop/0.145.0 open-design/9.0.0', false, false],
+    ['Codex Desktop/0.153.4-alpha.1 open-design/9.0.0', false, false],
+    ['Codex Desktop/unknown open-design/9.0.0', false, false],
+    ['Codex Desktop/0.146 open-design/9.0.0', false, false],
+    ['Codex Desktop/0.146.0extra', false, false],
+    ['Codex Desktop\n/0.153.4', false, false],
+    ['/0.153.4', false, false],
+    [' /0.153.4', false, false],
+    [undefined, false, false],
+  ])('reads only the originator version in %s', (userAgent, paginated, legacy) => {
+    expect(codexHistoryCapabilities(userAgent)).toEqual({ paginated, legacy });
   });
 });
