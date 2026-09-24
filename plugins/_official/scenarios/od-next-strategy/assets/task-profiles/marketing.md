@@ -78,13 +78,12 @@ scope; this profile's defaults fill only what is left unspecified.
 - Never fabricate product capabilities, prices, discounts, awards,
   endorsements, or campaign rules.
 - **Licensed-asset boundary (scoped override):** for outward-facing marketing
-  collateral, this boundary overrides the core baseline's authentic-imagery
-  fetch-first rule. Real photographs come only from user- or brand-supplied
+  collateral, this boundary overrides the core imagery-by-type rule for real
+  referents. Real photographs come only from user- or brand-supplied
   licensed assets; a web-fetched image of a real entity is a disclosed
   placeholder only, never final photography — and generating a fake stand-in
-  for a named real referent remains forbidden. For fictional or illustrative
-  subjects, image generation may be preferred over fetching (an allowed
-  vertical exception to the fetch-first default). When a required real
+  for a named real referent remains forbidden. Fictional or illustrative
+  subjects follow the core default and are generated. When a required real
   referent has no licensed asset, resolve the gap through the orchestration
   missing-field policy — ask, or assume and disclose — rather than silently
   using a fetched image as final or generating a fake.

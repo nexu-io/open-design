@@ -38,6 +38,59 @@ approval step, or review Agent. Preserve every required asset and quality
 condition, including semantic fit, authenticity, licensing, local or inline
 references, and image geometry. Do not hotlink or fabricate real referents.
 
+## Route each image slot
+
+Decide each slot's route from what it shows, following the Core imagery rule:
+
+- Real referent (a named product, book cover, brand mark, or a real place,
+  person, or event): use a user or brand asset first, then search stock
+  photos as described below. Never generate it.
+- Illustrative, fictional, or atmospheric subject, or a set that must share
+  one style: generate it. Search stock photos only when generation is
+  unavailable.
+- Chart, diagram, icon, or text-heavy image: build it in code.
+
+When the user explicitly asks for real photos or for generated images, follow
+that request.
+
+## Search stock photos
+
+Use Pexels first and Pixabay second. Do not use Wikipedia or Wikimedia
+Commons, random-image services such as picsum.photos or loremflickr, or other
+sites the user did not supply. A named real referent that neither library
+shows, such as a specific book cover or product, may come from its official
+page; otherwise design a placeholder and disclose it.
+
+- With `PEXELS_API_KEY` or `PIXABAY_API_KEY` in the environment, fetch every
+  slot in one call instead of writing a script:
+  `"$OD_NODE_BIN" "$OD_BIN" media stock-search --slots '[{"id":"hero","query":"black eyeglasses frame","width":1200,"orientation":"landscape"}]'`.
+  Write each query in English with the subject first. The command searches,
+  re-ranks by alt text, downloads at `width` into `assets/stock/`, records
+  credits in `assets/stock/credits.json`, and prints each slot's `path`,
+  `alt`, and `status`. Use a slot's `alt` to judge fit; for `not_found`,
+  retry that slot once with a broader query. Exit code 5 means no key: use
+  the keyless path below.
+- Without a key, the sites' search pages block scripts (HTTP 403). Open the
+  search results page with the web fetch tool instead, for example
+  `https://www.pexels.com/search/<query>/` or
+  `https://pixabay.com/images/search/<query>/`, and read each result's photo
+  ID or image URL together with its alt text.
+  - Pexels file:
+    `https://images.pexels.com/photos/<id>/pexels-photo-<id>.jpeg?auto=compress&cs=tinysrgb&w=<display width>`
+  - Pixabay file: the `cdn.pixabay.com/photo/...` URL listed in the results.
+- Choose candidates from their alt text and titles. Download every slot in
+  one batched command: concurrent requests, a 10–15 s timeout per request,
+  and about 3 minutes in total. Do not poll with sleep or retry one slot in a
+  loop; on HTTP 403 or 429, switch to another candidate or library.
+- Download at display size (long edge 1600 px or less) and keep each JPEG or
+  WebP under about 400 KB.
+- Record each photo's page URL, author when shown, and license (Pexels
+  License or Pixabay Content License) in a comment or sidecar next to the
+  asset.
+- When the time budget runs out, keep the files that succeeded. Generate the
+  remaining illustrative slots; use a disclosed placeholder for any remaining
+  real referent.
+
 ## Reuse capabilities and recover by cause
 
 Use only tools, model IDs, parameters, and permissions actually provided for
@@ -62,16 +115,24 @@ Classify failures before retrying:
 
 Retry only when the change addresses the cause, the relevant state changes,
 or existing guidance permits retrying a temporary failure.
-Do not impose a new tool-count cap or sacrifice quality to reduce calls.
+Do not sacrifice required quality to reduce calls; bound stock photo search
+with its time budget.
 
 ## Batch independent input work
 
 When the tools support it and inputs are independent, batch search, fetch,
 download, format handling, and intrinsic width/height measurements. Preserve
-each item's result and failures; keep dependent requests ordered. Reuse valid
-measurements for unchanged files; after transformation, remeasure affected
-files before sizing their containers. HTTP success and file/size probes do not
-prove semantic fit. A read invocation alone does not prove the image was seen.
+each item's result and failures; keep dependent requests ordered. Submit
+independent generation jobs together and request the smallest output profile
+that covers the display size (usually 1K). Reuse valid measurements for
+unchanged files; after transformation, remeasure affected files before sizing
+their containers.
+
+HTTP success and file/size probes do not prove semantic fit; judge fit from
+the source's title, alt text, or tags, or from the generation prompt. Do not
+read downloaded or generated images back into the conversation to inspect
+them: images stay in context and slow every later step, and a text-only model
+may not see them.
 
 ## Collect results and stop when complete
 
