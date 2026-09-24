@@ -1,0 +1,42 @@
+// Minimal desktop window for OpenDesign slint-design example.
+export component HelloWindow inherits Window {
+    title: "OpenDesign × Slint";
+    preferred-width: 480px;
+    preferred-height: 320px;
+    background: #0f172a;
+
+    VerticalLayout {
+        padding: 32px;
+        spacing: 16px;
+        alignment: center;
+
+        Text {
+            text: "Hello from Slint";
+            color: #f8fafc;
+            font-size: 28px;
+            font-weight: 700;
+            horizontal-alignment: center;
+        }
+
+        Text {
+            text: "Agent loop: check → screenshot → preview";
+            color: #94a3b8;
+            font-size: 14px;
+            horizontal-alignment: center;
+        }
+
+        Rectangle {
+            height: 44px;
+            border-radius: 10px;
+            background: #38bdf8;
+
+            Text {
+                text: "Primary action";
+                color: #0f172a;
+                font-weight: 600;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+    }
+}

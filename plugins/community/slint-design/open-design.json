@@ -1,0 +1,152 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "slint-design",
+  "title": "Slint Design",
+  "version": "0.1.0",
+  "description": "Design native/embedded UIs with Slint for OpenCode/OpenDesign: agent writes .slint, runs slint-viewer --check/--screenshot, and previews PNG. Docs MCP included; viewer MCP opt-in.",
+  "license": "MIT",
+  "author": {
+    "name": "listepo",
+    "url": "https://github.com/listepo"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/community/slint-design",
+  "plugin": {
+    "repo": "https://github.com/nexu-io/open-design/tree/main/plugins/community/slint-design"
+  },
+  "tags": [
+    "slint",
+    "native-ui",
+    "desktop",
+    "embedded",
+    "prototype",
+    "mcp"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "native-ui",
+    "preview": {
+      "type": "image",
+      "poster": "./examples/hello-window.png"
+    },
+    "useCase": {
+      "query": {
+        "en": "Design a Slint UI for {{goal}} at {{size}}, then check and screenshot it for preview.",
+        "zh-CN": "\u7528 Slint \u4e3a {{goal}} \u8bbe\u8ba1\u754c\u9762\uff08\u5c3a\u5bf8 {{size}}\uff09\uff0c\u68c0\u67e5\u5e76\u622a\u56fe\u9884\u89c8\u3002"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./examples/hello-window.slint",
+          "title": "Hello window (.slint)"
+        },
+        {
+          "path": "./examples/hello-window.png",
+          "title": "Hello window preview (PNG)"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./examples",
+        "./templates",
+        "./references"
+      ],
+      "mcp": [
+        {
+          "name": "slint-docs",
+          "url": "https://docs.slint.dev/mcp"
+        }
+      ],
+      "atoms": [
+        "discovery-question-form",
+        "todo-write",
+        "file-write",
+        "critique-theater"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "discovery",
+          "atoms": [
+            "discovery-question-form"
+          ]
+        },
+        {
+          "id": "plan",
+          "atoms": [
+            "todo-write"
+          ]
+        },
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write"
+          ]
+        },
+        {
+          "id": "critique",
+          "atoms": [
+            "critique-theater"
+          ],
+          "repeat": true,
+          "until": "critique.score>=4 || iterations>=2"
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "goal",
+        "type": "string",
+        "required": true,
+        "label": "UI goal"
+      },
+      {
+        "name": "size",
+        "type": "select",
+        "required": false,
+        "label": "Screenshot size",
+        "options": [
+          "1280x800",
+          "1024x768",
+          "390x844"
+        ],
+        "default": "1280x800"
+      },
+      {
+        "name": "template",
+        "type": "select",
+        "required": false,
+        "label": "Start from template",
+        "options": [
+          "none",
+          "desktop-window",
+          "settings-form"
+        ],
+        "default": "desktop-window"
+      }
+    ],
+    "capabilities": [
+      "prompt:inject",
+      "fs:read",
+      "fs:write",
+      "mcp",
+      "subprocess"
+    ]
+  }
+}
