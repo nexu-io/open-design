@@ -264,6 +264,29 @@ function migrate(db: SqliteDb): void {
     CREATE INDEX IF NOT EXISTS idx_messages_conv
       ON messages(conversation_id, position);
 
+    -- Manual context compaction for API-mode (BYOK) conversations. One
+    -- checkpoint per conversation (a re-compaction overwrites the row): the
+    -- web transcript builder replaces everything up to cut_at_message_id with
+    -- the stored summary + workspace ledger, so the packed transcript stops
+    -- growing with the raw history. summary_text is model-generated;
+    -- ledger_json is machine-washed (identifier-merged, key-sorted — see
+    -- runtimes/compaction-ledger.ts) and is never summarized. The boundary
+    -- message id keeps the replacement deterministic across replays.
+    CREATE TABLE IF NOT EXISTS conversation_compactions (
+      conversation_id TEXT PRIMARY KEY,
+      cut_at_message_id TEXT NOT NULL,
+      summary_text TEXT NOT NULL,
+      ledger_json TEXT NOT NULL,
+      model_id TEXT,
+      model_label TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_compaction_cut_message
+      ON conversation_compactions(conversation_id, cut_at_message_id);
+
     -- Agent streams write small immutable batches while a run is active. The
     -- batches are folded into messages.events_json once, at the terminal
     -- boundary, so a long thinking stream never rewrites its full history on
@@ -2504,6 +2527,108 @@ export function updateConversation(db: SqliteDb, id: string, patch: DbRow) {
 
 export function deleteConversation(db: SqliteDb, id: string) {
   db.prepare(`DELETE FROM conversations WHERE id = ?`).run(id);
+}
+
+// ---------- conversation compaction checkpoints ----------
+
+/**
+ * One entry of a compaction checkpoint's workspace ledger. The ledger is the
+ * machine-washed record of the compacted span's producedFiles / artifacts /
+ * traces (merged by identifier, first occurrence wins, key-sorted at write
+ * time — see runtimes/compaction-ledger.ts). It is stored verbatim and is
+ * NEVER summarized: the entry list round-trips byte-stable.
+ */
+export interface CompactionLedgerEntry {
+  identifier: string;
+  description: string;
+  fileName?: string | null;
+}
+
+export interface ConversationCompactionRow {
+  conversationId: string;
+  /** Everything at or before this message id was replaced by the checkpoint. */
+  cutAtMessageId: string;
+  summaryText: string;
+  ledger: CompactionLedgerEntry[];
+  modelId?: string | null;
+  modelLabel?: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export function upsertConversationCompaction(
+  db: SqliteDb,
+  c: ConversationCompactionRow,
+): ConversationCompactionRow | null {
+  db.prepare(
+    `INSERT INTO conversation_compactions
+       (conversation_id, cut_at_message_id, summary_text, ledger_json, model_id, model_label, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(conversation_id) DO UPDATE SET
+       cut_at_message_id = excluded.cut_at_message_id,
+       summary_text = excluded.summary_text,
+       ledger_json = excluded.ledger_json,
+       model_id = excluded.model_id,
+       model_label = excluded.model_label,
+       updated_at = excluded.updated_at`,
+  ).run(
+    c.conversationId,
+    c.cutAtMessageId,
+    c.summaryText,
+    JSON.stringify(c.ledger),
+    c.modelId ?? null,
+    c.modelLabel ?? null,
+    c.createdAt,
+    c.updatedAt,
+  );
+  return getConversationCompaction(db, c.conversationId);
+}
+
+export function getConversationCompaction(
+  db: SqliteDb,
+  conversationId: string,
+): ConversationCompactionRow | null {
+  const row = db
+    .prepare(
+      `SELECT conversation_id, cut_at_message_id, summary_text, ledger_json,
+              model_id, model_label, created_at, updated_at
+         FROM conversation_compactions WHERE conversation_id = ?`,
+    )
+    .get(conversationId) as
+    | {
+        conversation_id: string;
+        cut_at_message_id: string;
+        summary_text: string;
+        ledger_json: string;
+        model_id: string | null;
+        model_label: string | null;
+        created_at: number;
+        updated_at: number;
+      }
+    | undefined;
+  if (!row) return null;
+  let ledger: CompactionLedgerEntry[] = [];
+  try {
+    const parsed: unknown = JSON.parse(row.ledger_json);
+    if (Array.isArray(parsed)) {
+      ledger = parsed.filter(
+        (entry): entry is CompactionLedgerEntry =>
+          !!entry && typeof entry === 'object' && typeof (entry as { identifier?: unknown }).identifier === 'string',
+      );
+    }
+  } catch {
+    ledger = [];
+  }
+  return {
+    conversationId: row.conversation_id,
+    cutAtMessageId: row.cut_at_message_id,
+    summaryText: row.summary_text,
+    ledger,
+    modelId: row.model_id,
+    modelLabel: row.model_label,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
 }
 
 // ---------- conversation intent signals ----------

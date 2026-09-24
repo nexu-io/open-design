@@ -21,6 +21,7 @@ import type {
 import type {
   ApiErrorResponse,
   ChatAnalyticsHints,
+  ChatConversationCompaction,
   ChatRunCreateResponse,
   ChatRunListResponse,
   ChatRunStatus,
@@ -80,7 +81,7 @@ function detectClientType(): 'desktop' | 'web' | 'unknown' {
   return 'unknown';
 }
 import { BackoffController } from '../lib/backoff';
-import { parseSseFrame } from './sse';
+import { parseSseFrame, type ParsedSseFrame } from './sse';
 import {
   summarizeArtifactsForTranscript,
   type PersistedArtifactFileRef,
@@ -133,6 +134,22 @@ const API_MODE_AGENT_IDS = new Set([
   'senseaudio-api',
   'aihubmix-api',
   'bedrock-api',
+]);
+
+// Manual context compaction (#5991) is an API/BYOK-mode feature: the plain
+// HTTP API adapters plus Antigravity, whose def deliberately runs `agy` as a
+// stateless adapter that re-sends the full transcript every turn
+// (runtimes/defs/antigravity.ts). BYOK OpenCode is included because the
+// direct API execution path sends every turn through `streamViaDaemon` with
+// `agentId: 'byok-opencode'` (ProjectView), the one family shared by all
+// eight API adapters — excluding it would silently skip checkpoint replay
+// for the conversations the feature is built for. The daemon's compact
+// creation gate accepts the same classification
+// (routes/project/conversations.ts).
+export const COMPACTION_ELIGIBLE_AGENT_IDS = new Set([
+  ...API_MODE_AGENT_IDS,
+  'antigravity',
+  BYOK_OPENCODE_AGENT_ID,
 ]);
 
 export function latestUserPromptFromHistory(history: ChatMessage[]): string {
@@ -307,9 +324,59 @@ function persistedArtifactFilesOf(message: ChatMessage): PersistedArtifactFileRe
     });
 }
 
-export function buildDaemonTranscript(history: ChatMessage[], targetAgentId?: string): string {
+/**
+ * Replaces the compacted span of a history with a checkpoint's summary and
+ * ledger (#5991). Everything at or before `cutAtMessageId` is dropped; the
+ * checkpoint block stands in for it as the transcript's leading turns.
+ *
+ * When the boundary message is no longer in the history (deleted or edited
+ * away), the checkpoint is ignored and the full history is sent — a stale
+ * checkpoint must never silently drop turns.
+ */
+function sliceHistoryAfterCheckpoint(
+  history: ChatMessage[],
+  checkpoint: ChatConversationCompaction | null | undefined,
+): { messages: ChatMessage[]; checkpointApplied: boolean } {
+  if (!checkpoint) return { messages: history, checkpointApplied: false };
+  const cutIndex = history.findIndex((m) => m.id === checkpoint.cutAtMessageId);
+  if (cutIndex < 0) return { messages: history, checkpointApplied: false };
+  return { messages: history.slice(cutIndex + 1), checkpointApplied: true };
+}
+
+/**
+ * The checkpoint's transcript-shaped leading block. Mirrors the
+ * `## context warning` precedent (buildPriorRunContextWarning): a heading
+ * the agent reads as meta-context, with no new instruction text in the
+ * transcript layer. Byte-stable: the ledger renders in stored
+ * (identifier-sorted) order, so replays of the same checkpoint produce the
+ * same transcript.
+ */
+export function buildCompactionCheckpointBlock(checkpoint: ChatConversationCompaction): string {
+  const lines = [
+    '## compact checkpoint',
+    `OpenDesign compacted the conversation at message ${checkpoint.cutAtMessageId}. The prior turns are replaced by the summary and workspace ledger below.`,
+    '',
+    '## prior summary',
+    checkpoint.summaryText,
+  ];
+  if (checkpoint.ledger.length > 0) {
+    lines.push('', '## workspace ledger');
+    for (const entry of checkpoint.ledger) {
+      const fileSuffix = entry.fileName ? ` (file: ${entry.fileName})` : '';
+      lines.push(`- ${entry.identifier}: ${entry.description}${fileSuffix}`);
+    }
+  }
+  return lines.join('\n');
+}
+
+export function buildDaemonTranscript(
+  history: ChatMessage[],
+  targetAgentId?: string,
+  checkpoint?: ChatConversationCompaction | null,
+): string {
   const scopedHistory = scopeHistoryToAgent(history, targetAgentId);
-  const transcript = scopedHistory
+  const { messages, checkpointApplied } = sliceHistoryAfterCheckpoint(scopedHistory, checkpoint);
+  const transcript = messages
     .map((m) => {
       const trimmed = m.content.trim();
       const sanitized =
@@ -319,8 +386,12 @@ export function buildDaemonTranscript(history: ChatMessage[], targetAgentId?: st
       return `## ${m.role}\n${escapeTranscriptRoleDelimiters(truncateForTranscript(sanitized))}`;
     })
     .join('\n\n');
-  const warning = buildPriorRunContextWarning(scopedHistory);
-  return warning ? `${warning}\n\n${transcript}` : transcript;
+  const parts: string[] = [];
+  const warning = buildPriorRunContextWarning(messages);
+  if (warning) parts.push(warning);
+  if (checkpointApplied && checkpoint) parts.push(buildCompactionCheckpointBlock(checkpoint));
+  if (transcript) parts.push(transcript);
+  return parts.join('\n\n');
 }
 
 /** Build only the turns before the latest user message without text subtraction. */
@@ -338,6 +409,159 @@ export function buildDaemonPriorTranscript(
   return latestUserIndex < 0
     ? buildDaemonTranscript(history, targetAgentId)
     : buildDaemonTranscript(history.slice(0, latestUserIndex), targetAgentId);
+}
+
+/**
+ * Loads the conversation's latest manual-compaction checkpoint from the
+ * daemon (#5991). Returns null when the conversation has no checkpoint
+ * (404), so callers send the full transcript unchanged. Other failures
+ * reject; callers fall back to the uncompacted transcript so compaction
+ * can never block a turn.
+ */
+export async function fetchConversationCompaction(
+  projectId: string,
+  conversationId: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): Promise<ChatConversationCompaction | null> {
+  const response = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/compaction`,
+    {
+      headers: {
+        ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
+      },
+    },
+  );
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    throw new Error(`Failed to load conversation compaction: HTTP ${response.status}`);
+  }
+  const body = (await response.json()) as { compaction?: ChatConversationCompaction | null };
+  return body?.compaction ?? null;
+}
+
+/**
+ * SSE frame events emitted by `POST .../conversations/:cid/compact` (#5991).
+ * `progress` narrates the summary run; `compaction` is the terminal payload;
+ * `error` is the terminal failure after the stream has started (failures
+ * before any byte is written arrive as a plain JSON error response instead).
+ */
+interface CompactSseEvents {
+  progress: { stage: string; message?: string };
+  compaction: { compaction: ChatConversationCompaction };
+  error: { message: string };
+}
+
+/**
+ * Runs manual context compaction for an API/BYOK conversation (#5991).
+ * The daemon produces a checkpoint ({summary, machine-washed ledger, cut
+ * boundary}) through an internal summary run and streams it back as the
+ * terminal `compaction` frame. Throws on any failure — the caller decides
+ * how to surface it; a failed compaction never alters the conversation.
+ */
+export async function compactConversation(
+  projectId: string,
+  conversationId: string,
+  options: {
+    cutAtMessageId?: string;
+    workspaceContext?: WorkspaceCollabContext | null;
+    onProgress?: (stage: string, message?: string) => void;
+  } = {},
+): Promise<ChatConversationCompaction> {
+  const { cutAtMessageId, workspaceContext, onProgress } = options;
+  const response = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/compact`,
+    {
+      method: 'POST',
+      headers: {
+        Accept: 'text/event-stream',
+        'Content-Type': 'application/json',
+        ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
+      },
+      body: JSON.stringify(
+        cutAtMessageId ? { cutAtMessageId } : {},
+      ),
+    },
+  );
+  if (!response.ok) {
+    let message = `Failed to compact conversation: HTTP ${response.status}`;
+    try {
+      const envelope = (await response.json()) as {
+        error?: { message?: string; code?: string };
+        message?: string;
+      };
+      if (envelope?.error?.message) message = envelope.error.message;
+      else if (typeof envelope?.message === 'string') message = envelope.message;
+    } catch {
+      // keep the status-based message
+    }
+    throw new Error(message);
+  }
+  if (!response.body) {
+    throw new Error('Failed to compact conversation: empty response body');
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  /**
+   * Consumes one parsed frame. Returns the checkpoint for the terminal
+   * `compaction` frame; `undefined` means "keep going". Throws for the
+   * terminal `error` frame and for malformed payloads.
+   */
+  const handleFrame = (parsed: ParsedSseFrame): ChatConversationCompaction | undefined => {
+    if (parsed.kind !== 'event') return undefined;
+    if (parsed.event === 'progress') {
+      const data = parsed.data as CompactSseEvents['progress'];
+      onProgress?.(String(data?.stage ?? ''), data?.message);
+      return undefined;
+    }
+    if (parsed.event === 'error') {
+      const data = parsed.data as CompactSseEvents['error'];
+      throw new Error(
+        typeof data?.message === 'string' && data.message
+          ? data.message
+          : 'Failed to compact conversation',
+      );
+    }
+    if (parsed.event === 'compaction') {
+      const data = parsed.data as CompactSseEvents['compaction'];
+      if (!data?.compaction) {
+        throw new Error('Failed to compact conversation: malformed compaction payload');
+      }
+      return data.compaction;
+    }
+    return undefined;
+  };
+  try {
+    while (true) {
+      const readResult = await readFrameWithIdleDeadline(reader, DAEMON_STREAM_IDLE_TIMEOUT_MS);
+      if (readResult === DAEMON_STREAM_IDLE_TIMEOUT) {
+        throw new Error('Failed to compact conversation: stream stalled');
+      }
+      if (readResult.done) break;
+      buf += decoder.decode(readResult.value, { stream: true });
+      let idx: number;
+      while ((idx = buf.indexOf('\n\n')) !== -1) {
+        const frame = buf.slice(0, idx);
+        buf = buf.slice(idx + 2);
+        const parsed = parseSseFrame(frame);
+        if (!parsed) continue;
+        const checkpoint = handleFrame(parsed);
+        if (checkpoint !== undefined) return checkpoint;
+      }
+    }
+    // A well-formed stream ends with `\n\n`, but flush a trailing partial
+    // frame anyway so a truncated final chunk still delivers its result.
+    if (buf.trim() !== '') {
+      const parsed = parseSseFrame(buf);
+      if (parsed) {
+        const checkpoint = handleFrame(parsed);
+        if (checkpoint !== undefined) return checkpoint;
+      }
+    }
+    throw new Error('Failed to compact conversation: stream ended without a result');
+  } finally {
+    try { void reader.cancel(); } catch {}
+  }
 }
 
 export interface DaemonStreamHandlers extends StreamHandlers {
@@ -1076,7 +1300,22 @@ export async function streamViaDaemon({
   // Local CLIs are single-turn print-mode programs, so we collapse the whole
   // chat into one string. If this becomes too noisy for long histories, the
   // fix is to only include the final user turn.
-  const transcript = buildDaemonTranscript(history, agentId);
+  //
+  // Manual compaction (#5991): API/BYOK-mode conversations may carry a
+  // checkpoint. When present, the transcript is rebuilt as
+  // [checkpoint block] + turns after cutAtMessageId instead of the raw
+  // history. Any failure falls back to the full transcript — compaction
+  // must never block or degrade a turn.
+  const wantsCompactionCheckpoint =
+    projectId != null &&
+    conversationId != null &&
+    COMPACTION_ELIGIBLE_AGENT_IDS.has(agentId);
+  const checkpoint = wantsCompactionCheckpoint
+    ? await fetchConversationCompaction(projectId, conversationId, workspaceContext).catch(
+        () => null,
+      )
+    : null;
+  const transcript = buildDaemonTranscript(history, agentId, checkpoint);
   const request: ChatRequest = {
     agentId,
     message: transcript,

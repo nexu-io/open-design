@@ -7,6 +7,7 @@ import { runLiveArtifactsMcpServer } from './mcp-live-artifacts-server.js';
 import { runArtifactsCli } from './artifacts-cli.js';
 import { runResource } from './resource-cli.js';
 import { runProjectHandoff } from './handoff-cli.js';
+import { runCompactCli } from './compact-cli.js';
 import { runConnectorsToolCli } from './tools-connectors-cli.js';
 import { runDesignSystemsToolCli } from './tools-design-systems-cli.js';
 import { DESIGN_SYSTEMS_USAGE, isDesignSystemsHelpArg } from './cli-help/index.js';
@@ -410,6 +411,10 @@ const SUBCOMMAND_MAP = {
   files: runFiles,
   templates: runTemplates,
   conversation: runConversation,
+  compact: async (args: string[]) => {
+    const { exitCode } = await runCompactCli(args);
+    if (exitCode !== 0) process.exit(exitCode);
+  },
   chat: runChat,
   deploy: runDeploy,
   daemon: runDaemon,
