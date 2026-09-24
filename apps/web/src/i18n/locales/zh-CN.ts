@@ -859,6 +859,7 @@ export const zhCN: Dict = {
   "entry.navDashboard": "数据大盘",
   "entry.blankDraftsTitle": "开始一个私人草稿",
   "entry.blankDraftsDescription": "先在这里创建项目。移入团队空间之前，只有你自己可见。",
+  "entry.projectsLoadFailed": "无法加载项目，请重试。",
   "entry.blankAllProjectsTitle": "还没有团队项目",
   "entry.blankAllProjectsDescription": "共享到团队空间的项目会出现在这里，工作空间成员都可以访问。",
   "entry.blankCreate": "新建方案",

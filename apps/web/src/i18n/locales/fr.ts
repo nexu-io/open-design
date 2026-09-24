@@ -855,6 +855,7 @@ export const fr: Dict = {
   "entry.navDashboard": "Tableau de bord",
   "entry.blankDraftsTitle": "Commencer un brouillon privé",
   "entry.blankDraftsDescription": "Créez d'abord un projet ici. Il reste privé jusqu'à ce que vous le déplaciez dans l'espace d'équipe.",
+  "entry.projectsLoadFailed": "Impossible de charger les projets. Veuillez réessayer.",
   "entry.blankAllProjectsTitle": "Aucun projet d'équipe pour le moment",
   "entry.blankAllProjectsDescription": "Les projets partagés avec l'équipe apparaîtront ici pour tous les membres de l'espace de travail.",
   "entry.blankCreate": "Nouveau projet",
