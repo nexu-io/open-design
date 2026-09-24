@@ -90,6 +90,7 @@ export const qwen = requireAgent('qwen');
 export const opencode = requireAgent('opencode');
 export const mimo = requireAgent('mimo');
 export const grokBuild = requireAgent('grok-build');
+export const muse = requireAgent('muse');
 export const aider = requireAgent('aider');
 export const antigravity = requireAgent('antigravity');
 export const codebuddy = requireAgent('codebuddy');
