@@ -44,6 +44,7 @@ export function isOpenAICompatible(model: string, baseUrl: string): boolean {
   if (u.includes('api.deepseek')) return true;
   if (u.includes('api.groq')) return true;
   if (parsed.hostname === 'api.siliconflow.cn' || parsed.hostname === 'api.siliconflow.com') return true;
+  if (parsed.hostname === 'api.ofox.ai') return true;
   if (u.includes('api.together')) return true;
   if (u.includes('openrouter')) return true;
   if (u.includes('openai.com')) return true;
