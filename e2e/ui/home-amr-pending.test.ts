@@ -31,11 +31,10 @@ import { T } from '@/timeouts';
  * frame of the click. The gate's verdict still lands before any project is
  * created.
  *
- * OPEND-3300 / 3309 refined the empty-wallet case: a wallet the shell already
- * shows as $0 (the rail's 额度 pill) is answered on the click tick, on Home,
- * with no frame and no request — the dialog no longer sits over a "准备中"
- * frame the user reads as a run. One background confirmation still runs; only
- * a fundable answer moves the send onto the frame.
+ * Coding Plan billing then dropped the empty-wallet client block: a $0 wallet
+ * the rail already shows is no longer answered on the click tick. Home still
+ * opens the pending frame, the scoped gate still runs, and Link decides
+ * admission. Confirmed sign-out keeps the existing dialog.
  */
 
 declare global {
@@ -227,37 +226,22 @@ test('[P0] AMR send from Home enters the pending frame before the balance gate a
   await expect(page.getByTestId('chat-composer')).toBeVisible({ timeout: T.medium });
 });
 
-test('[P0] an empty wallet the shell already shows blocks on Home: no frame, no create, draft kept', async ({ page }) => {
+test('[P0] an empty wallet the shell already shows does not block Home: no dialog, frame opens, create proceeds', async ({ page }) => {
   await wireSignedInAmrHome(page, { accountBalanceUsd: '0.00' });
-  const billing = await holdAmrBillingGate(page);
   const create = await holdProjectCreate(page);
+  const runRequests = await routeSuccessfulRuns(page, { runId: 'home-amr-empty-wallet-run' });
   const prompt = 'Design a pricing page for an empty wallet.';
 
   await gotoEntryHome(page);
-  // The rail already shows $0 for this workspace before the send.
   await expect(page.getByTestId('home-hero-input')).toBeVisible({ timeout: T.medium });
   await sendFromHome(page, prompt);
 
   const pending = page.getByTestId('project-creation-pending-view');
-  const dialog = page.getByTestId('amr-balance-dialog');
-  await expect(dialog).toBeVisible({ timeout: T.short });
-  await expect(pending).toHaveCount(0);
-  await expect(page.getByTestId('home-hero-input')).toBeVisible();
-  expect(create.requested(), 'a blocked send creates nothing').toBe(false);
-  // The background confirmation is in flight behind the dialog; it must not
-  // move the user anywhere while the wallet is still empty.
-  await expect.poll(() => billing.held(), { timeout: T.medium }).toBe(true);
-  billing.release();
-  await page.waitForTimeout(300);
-  await expect(dialog).toBeVisible();
-  await expect(pending).toHaveCount(0);
-
-  await dialog.getByRole('button', { name: /later|not now|稍后|暂不/i }).click();
-  await expect(dialog).toBeHidden();
-  await expect(page.getByTestId('home-hero-input')).toBeVisible({ timeout: T.medium });
-  await expect(page.getByTestId('home-hero-input')).toHaveText(prompt);
-  await expect(pending).toHaveCount(0);
-  expect(create.requested()).toBe(false);
+  await expect(pending).toBeVisible({ timeout: T.medium });
+  await expect(page.getByTestId('amr-balance-dialog')).toHaveCount(0);
+  await expect.poll(() => create.requested(), { timeout: T.medium }).toBe(true);
+  create.release();
+  await runRequests.expectCount(1);
 });
 
 test('[P0] a stale $0 projection: the confirmation reads a fundable wallet and the send continues into the frame', async ({ page }) => {

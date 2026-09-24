@@ -1,6 +1,11 @@
 import type { Dict } from '../types';
 
 export const ja: Dict = {
+  'billing.wallet': 'ウォレット残高',
+  'billing.codingPlanDesignPlan': 'Design Plan',
+  'billing.codingPlanPeriodHours': '{count} 時間',
+  'billing.codingPlanPeriodDays': '{count} 日間',
+  'billing.codingPlanRemainingPercent': '残り {percent}%',
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",
@@ -816,11 +821,13 @@ export const ja: Dict = {
   "entry.billingTierPro": "Pro",
   "entry.billingTierPlus": "Plus",
   "entry.billingTierMax": "Max",
+  "entry.billingTierGo": "Go",
   "entry.billingFamilyCreator": "クリエイター会員",
   "entry.creditsAria": "{tier} · credits remaining",
   "entry.creditsAriaWithBalance": "{tier} · {balance} credits remaining",
   "entry.creditsGrantTip": "Teams credits are granted by subscription allowance. Usage is available in billing.",
   "entry.creditsUpgrade": "アップグレード",
+  "entry.creditsManage": "管理",
   "entry.creditsOpening": "Opening...",
   "entry.creditsRemaining": "Credits remaining",
   "entry.credits": "利用枠",

@@ -1,6 +1,11 @@
 import type { Dict } from '../types';
 
 export const ko: Dict = {
+  'billing.wallet': '지갑 잔액',
+  'billing.codingPlanDesignPlan': 'Design Plan',
+  'billing.codingPlanPeriodHours': '{count}시간',
+  'billing.codingPlanPeriodDays': '{count}일',
+  'billing.codingPlanRemainingPercent': '{percent}% 남음',
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",
@@ -816,11 +821,13 @@ export const ko: Dict = {
   "entry.billingTierPro": "Pro",
   "entry.billingTierPlus": "Plus",
   "entry.billingTierMax": "Max",
+  "entry.billingTierGo": "Go",
   "entry.billingFamilyCreator": "크리에이터 멤버십",
   "entry.creditsAria": "{tier} · credits remaining",
   "entry.creditsAriaWithBalance": "{tier} · {balance} credits remaining",
   "entry.creditsGrantTip": "Teams credits are granted by subscription allowance. Usage is available in billing.",
   "entry.creditsUpgrade": "업그레이드",
+  "entry.creditsManage": "관리",
   "entry.creditsOpening": "Opening...",
   "entry.creditsRemaining": "Credits remaining",
   "entry.credits": "사용 한도",

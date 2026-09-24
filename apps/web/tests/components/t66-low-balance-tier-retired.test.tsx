@@ -451,15 +451,11 @@ describe('T66 · 软档整档撤掉:余额 (0, $2) 什么都不出', () => {
     expect(screen.queryByTestId('amr-owner-top-up-dialog')).toBeNull();
   });
 
-  // 反向对照。产品同日追问后原话:「余额为零的那个卡片要显示的,并且也要弹窗的」。
-  describe('反向对照 · 余额 = $0 两个都要在', () => {
-    it('$0:卡在,弹窗也在,而且这一次发送被拦住', async () => {
-      await sendWithWorkspaceBalance(EMPTY_BALANCE);
-
-      await waitFor(() => expect(screen.getByTestId('amr-balance-dialog')).toBeTruthy());
-      expect(screen.getByTestId('amr-balance-card-prop').textContent).toBe('0');
-      expect(mockedStreamViaDaemon).not.toHaveBeenCalled();
-    });
+  it('$0 defers funding to Link without a misleading card or dialog', async () => {
+    await sendWithWorkspaceBalance(EMPTY_BALANCE);
+    await waitFor(() => expect(mockedStreamViaDaemon).toHaveBeenCalled());
+    expect(screen.queryByTestId('amr-balance-dialog')).toBeNull();
+    expect(screen.getByTestId('amr-balance-card-prop').textContent).toBe('none');
   });
 
   // OPEND-2600 那一族按档位扫的覆盖,搬到这里翻了个面:任何档位都不再出卡。

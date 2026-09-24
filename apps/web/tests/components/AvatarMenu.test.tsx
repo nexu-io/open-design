@@ -647,6 +647,7 @@ describe('AvatarMenu', () => {
     workspaceId: string;
     personalMembershipTier?: string;
   }) {
+    const billingUrl = `/api/workspace/billing?scope=workspace&workspaceId=${options.workspaceId}${options.personalMembershipTier ? '&includePreflight=1' : ''}`;
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
       if (url === '/api/integrations/vela/status') {
@@ -681,7 +682,7 @@ describe('AvatarMenu', () => {
       if (url === '/api/workspace/context') {
         return workspaceContextResponse(options.ambientContext ?? null);
       }
-      if (url === `/api/workspace/billing?scope=workspace&workspaceId=${options.workspaceId}`) {
+      if (url === billingUrl) {
         return new Response(JSON.stringify({
           summary: options.personalMembershipTier
             ? { membershipTier: options.personalMembershipTier }

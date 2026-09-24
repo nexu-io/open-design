@@ -84,7 +84,7 @@ async function startCollabStubServer(): Promise<StubServer> {
       }
       if (
         method === 'GET' &&
-        url === '/api/workspace/billing?scope=workspace&workspaceId=personal-1'
+        url.startsWith('/api/workspace/billing?scope=workspace&workspaceId=personal-1&includePreflight=1')
       ) {
         res.end(JSON.stringify({
           summary: { membershipTier: 'plus', subscriptionStatus: 'active' },
@@ -132,6 +132,16 @@ async function runCli(args: string[]): Promise<{ stdout: string; stderr: string;
 }
 
 describe('od collab CLI', () => {
+  it('passes the selected model through the daemon billing contract', async () => {
+    stub = await startCollabStubServer();
+    const result = await runCli([
+      'workspace', 'billing', '--workspace-type', 'personal', '--workspace', 'personal-1',
+      '--model', 'model/a+b', '--json', '--daemon-url', stub.baseUrl,
+    ]);
+    expect(result.code).toBe(0);
+    expect(stub.requests[0]?.url).toBe('/api/workspace/billing?scope=workspace&workspaceId=personal-1&includePreflight=1&modelId=model%2Fa%2Bb');
+  });
+
   it('reads Personal billing through an explicit Workspace id', async () => {
     stub = await startCollabStubServer();
     const result = await runCli([
@@ -152,7 +162,7 @@ describe('od collab CLI', () => {
     expect(stub.requests).toHaveLength(1);
     expect(stub.requests[0]).toMatchObject({
       method: 'GET',
-      url: '/api/workspace/billing?scope=workspace&workspaceId=personal-1',
+      url: '/api/workspace/billing?scope=workspace&workspaceId=personal-1&includePreflight=1',
     });
   });
 

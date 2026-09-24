@@ -1,6 +1,11 @@
 import type { Dict } from '../types';
 
 export const th: Dict = {
+  'billing.wallet': 'ยอดเงินในกระเป๋าเงิน',
+  'billing.codingPlanDesignPlan': 'Design Plan',
+  'billing.codingPlanPeriodHours': '{count} ชั่วโมง',
+  'billing.codingPlanPeriodDays': '{count} วัน',
+  'billing.codingPlanRemainingPercent': 'เหลือ {percent}%',
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",
@@ -816,11 +821,13 @@ export const th: Dict = {
   "entry.billingTierPro": "Pro",
   "entry.billingTierPlus": "Plus",
   "entry.billingTierMax": "Max",
+  "entry.billingTierGo": "Go",
   "entry.billingFamilyCreator": "Creator",
   "entry.creditsAria": "{tier} · credits remaining",
   "entry.creditsAriaWithBalance": "{tier} · {balance} credits remaining",
   "entry.creditsGrantTip": "Teams credits are granted by subscription allowance. Usage is available in billing.",
   "entry.creditsUpgrade": "อัปเกรด",
+  "entry.creditsManage": "จัดการ",
   "entry.creditsOpening": "Opening...",
   "entry.creditsRemaining": "Credits remaining",
   "entry.credits": "โควตา",
