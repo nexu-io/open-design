@@ -1,0 +1,113 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-loom",
+  "title": "Loom",
+  "title_i18n": {
+    "zh-CN": "Loom",
+    "zh-TW": "Loom",
+    "ja": "Loom",
+    "ko": "Loom",
+    "de": "Loom",
+    "fr": "Loom",
+    "ru": "Loom",
+    "es": "Loom",
+    "pt-BR": "Loom",
+    "it": "Loom",
+    "vi": "Loom",
+    "pl": "Loom",
+    "id": "Loom",
+    "nl": "Loom",
+    "ar": "Loom",
+    "tr": "Loom",
+    "uk": "Loom",
+    "en": "Loom"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-08-04T09:00:00Z",
+  "description": "Async video communication. Purple primary, friendly surfaces, video-first layout.",
+  "description_i18n": {
+    "zh-CN": "异步视频沟通。紫色主色、友好表面、视频优先布局。",
+    "zh-TW": "非同步影片溝通。紫色主色、友善表面、影片優先版面。",
+    "ja": "非同期ビデオコミュニケーション。紫のプライマリ、親しみやすい面、ビデオファーストのレイアウト。",
+    "ko": "비동기 비디오 커뮤니케이션. 보라색 프라이머리, 친근한 표면, 비디오 우선 레이아웃.",
+    "de": "Asynchrone Videokommunikation. Lila Primärfarbe, freundliche Flächen, Video-first-Layout.",
+    "fr": "Communication vidéo asynchrone. Primaire violet, surfaces amicales, mise en page video-first.",
+    "ru": "Асинхронная видеосвязь. Фиолетовый primary, дружелюбные поверхности, video-first раскладка.",
+    "es": "Comunicación de vídeo asíncrona. Primario púrpura, superficies amables, layout video-first.",
+    "pt-BR": "Comunicação de vídeo assíncrona. Primária roxa, superfícies amigáveis, layout video-first.",
+    "it": "Comunicazione video asincrona. Primario viola, superfici amichevoli, layout video-first.",
+    "vi": "Giao tiếp video bất đồng bộ. Màu tím chủ đạo, bề mặt thân thiện, bố cục ưu tiên video.",
+    "pl": "Asynchroniczna komunikacja wideo. Fioletowa barwa główna, przyjazne powierzchnie, układ video-first.",
+    "id": "Komunikasi video async. Primer ungu, permukaan ramah, tata letak video-first.",
+    "nl": "Asynchrone videocommunicatie. Paarse primary, vriendelijke vlakken, video-first layout.",
+    "ar": "تواصل فيديو غير متزامن. أساسي بنفسجي، أسطح ودّية، تخطيط يضع الفيديو أولاً.",
+    "tr": "Eşzamansız video iletişimi. Mor birincil renk, samimi yüzeyler, video-öncelikli düzen.",
+    "uk": "Асинхронна відеокомунікація. Фіолетовий primary, дружні поверхні, video-first компонування.",
+    "en": "Async video communication. Purple primary, friendly surfaces, video-first layout."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "themed-unique"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Loom design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Loom design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "loom",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}
