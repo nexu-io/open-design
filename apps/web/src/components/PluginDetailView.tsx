@@ -15,8 +15,10 @@ import type {
 } from '@open-design/contracts';
 import {
   applyPlugin,
+  pluginApplyFailed,
   resolvedWorkspaceContextForWrite,
 } from '../state/projects';
+import type { PluginApplyFailure } from '../state/projects';
 import type { WorkspaceContextState } from '../collab/useWorkspaceContext';
 import {
   workspaceProjectHeaders,
@@ -28,6 +30,7 @@ import {
   stashHomePromptHandoff,
 } from './home-hero/plugin-authoring';
 import { useI18n } from '../i18n';
+import { formatPluginApplyFailure } from '../i18n/pluginApplyErrors';
 import { localizePluginDescription, localizePluginTitle } from './plugins-home/localization';
 import { useAnalytics } from '../analytics/provider';
 import { trackPluginDetailClick } from '../analytics/events';
@@ -189,7 +192,11 @@ export function PluginDetailView(props: Props) {
   const { locale, t } = useI18n();
   const analytics = useAnalytics();
   const [plugin, setPlugin] = useState<InstalledPluginRecord | null>(null);
-  const [error, setError] = useState<{ kind: 'load' | 'apply'; message: string } | null>(null);
+  const [error, setError] = useState<
+    | { kind: 'load'; message: string }
+    | { kind: 'apply'; failure: PluginApplyFailure | null }
+    | null
+  >(null);
   const [applying, setApplying] = useState(false);
   const [skillDescriptionState, setSkillDescriptionState] = useState<SkillDescriptionState>({
     pluginId: '',
@@ -259,7 +266,9 @@ export function PluginDetailView(props: Props) {
         <div className="plugin-suite-detail__empty-row" role="alert">
           {error.kind === 'load'
             ? t('pluginDetail.loadFailed', { error: error.message })
-            : t('pluginDetail.applyFailed')}
+            : error.failure
+              ? formatPluginApplyFailure(error.failure, t)
+              : t('pluginDetail.applyFailed')}
         </div>
       </section>
     );
@@ -303,8 +312,11 @@ export function PluginDetailView(props: Props) {
       workspaceContext: resolvedWorkspaceContextForWrite(workspaceContextState),
     });
     setApplying(false);
-    if (!result) {
-      setError({ kind: 'apply', message: '' });
+    if (!result || pluginApplyFailed(result)) {
+      setError({
+        kind: 'apply',
+        failure: pluginApplyFailed(result) ? result : null,
+      });
       return;
     }
     // This surface is a route rendered outside `EntryShell`, so navigating home
