@@ -176,8 +176,10 @@ import {
 import {
   buildAllProjectsList,
   buildDraftsList,
+  catalogProjectTitleHint,
   createSharedProjectPredicate,
   reconcileSharedProjectCatalogFields,
+  type ProjectTitleHint,
 } from '../collab/all-projects-list';
 import {
   forgetOptimisticProjectOwnership,
@@ -452,18 +454,7 @@ function defaultPluginInputsForCreate(
   };
 }
 
-export interface ProjectTitleHint {
-  name: string;
-  /** Workspace whose catalog produced this hint; null for a local-only row. */
-  workspaceId: string | null;
-  /** Member authorization lifetime that produced the catalog row. */
-  workspaceMemberId: string | null;
-  /**
-   * The team catalog is the title authority for a project shared by another
-   * member. Own/private projects may still accept a newer local rename.
-   */
-  authoritative: boolean;
-}
+export type { ProjectTitleHint };
 
 interface Props {
   skills: SkillSummary[];
@@ -1041,23 +1032,14 @@ export function EntryShell({
     // provenance into App before navigation. Passing only the id made App reopen its local
     // SQLite placeholder ("共享项目"), throwing away data already visible on the
     // list and leaving the project header stale until a later metadata event.
-    const projectName = allProjectsList.find((project) => project.id === id)?.name.trim();
     const teamProject = teamProjects.projects.find((project) => project.projectId === id);
     const localProject = projects.find((project) => project.id === id);
-    const projectTitleHint = projectName
-      ? {
-          name: projectName,
-          workspaceId: workspaceContext?.workspaceId ?? null,
-          workspaceMemberId: workspaceContext?.workspaceMemberId ?? null,
-          // A member must render the owner's catalog title even when their
-          // local mirror has a newer timestamp or an older non-placeholder
-          // title. The owner may rename locally before the catalog catches up.
-          authoritative: Boolean(
-            teamProject
-            && teamProject.ownerMemberId !== workspaceContext?.workspaceMemberId,
-          ),
-        }
-      : undefined;
+    const projectTitleHint = catalogProjectTitleHint({
+      projectId: id,
+      sharedProjects: allProjectsList,
+      teamProjects: teamProjects.projects,
+      workspaceContext,
+    });
     const open = () => Promise.resolve(onOpenProject(id, undefined, projectTitleHint));
     if (contentReadyProjectIdsRef.current.has(id)) {
       await open();

@@ -79,7 +79,10 @@ import { projectOwnedBySelf } from './project-actions/ownership';
 import { useProjectDeleteFlow } from './project-actions/useProjectDeleteFlow';
 import { useProjectDuplicateFlow } from './project-actions/useProjectDuplicateFlow';
 import { useWorkspaceProjectMove } from './project-actions/useWorkspaceProjectMove';
-import type { SharedProjectPredicate } from '../collab/all-projects-list';
+import {
+  sortProjectsByRecentActivity,
+  type SharedProjectPredicate,
+} from '../collab/all-projects-list';
 import { acknowledgeProjectCompletion, useProjectRunStatuses } from '../hooks/useProjectRunStatuses';
 import { MessageCenter } from './MessageCenter';
 import type { EntrySettingsSection } from './EntrySettingsMenu';
@@ -482,7 +485,7 @@ function RailRecentSection({
   // rest from the rail entirely). The LIST scrolls past ~11 rows, not the rail
   // — see `.entry-nav-rail__recent-list` in entry-layout.css.
   const items = useMemo(
-    () => [...projects].sort((a, b) => b.updatedAt - a.updatedAt),
+    () => sortProjectsByRecentActivity(projects),
     [projects],
   );
   // Run status for the rows' leading glyph. `Project.status` cannot serve it —

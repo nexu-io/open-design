@@ -37,7 +37,13 @@ import {
   useProjectHoverCover,
 } from './entry-nav-rail/ProjectHoverPreview';
 import { DeleteMark, MoreDotsMark, RenameMark } from './entry-nav-rail/RailRecentRow';
-import { createSharedProjectPredicate } from '../collab/all-projects-list';
+import {
+  buildAllProjectsList,
+  buildRecentProjectsCatalog,
+  catalogProjectTitleHint,
+  createSharedProjectPredicate,
+  type ProjectTitleHint,
+} from '../collab/all-projects-list';
 import { fetchTeamProjectsCatalog } from '../collab/team-projects-catalog';
 import { projectOwnedBySelf } from './project-actions/ownership';
 import {
@@ -47,7 +53,10 @@ import {
   projectOwnerMemberIdsWithOptimisticWitnesses,
   recordOptimisticProjectOwnership,
 } from '../collab/optimistic-project-ownership';
-import { currentWorkspaceAccountGeneration } from '../collab/workspace-identity';
+import {
+  currentWorkspaceAccountGeneration,
+  workspaceIdentityCacheKey,
+} from '../collab/workspace-identity';
 import { ProjectDeleteConfirmDialog } from './project-actions/ProjectDeleteConfirmDialog';
 import {
   type ProjectDeleteHandler,
@@ -184,6 +193,17 @@ interface Props {
   onRenameProject?: (id: string, name: string) => Promise<unknown> | void;
   onDuplicateProject?: ProjectDuplicateHandler;
   onDeleteProject?: ProjectDeleteHandler;
+  /**
+   * Opens a switcher row that has no tab yet (OPEND-3303): the same App handler
+   * the rail's 最近项目 rows reach, so a teammate's shared project is pulled and
+   * named from its catalog row exactly as it is from Home. Without it the row
+   * navigates by id.
+   */
+  onOpenProject?: (
+    id: string,
+    fileName?: string,
+    projectTitleHint?: ProjectTitleHint,
+  ) => Promise<boolean> | boolean | void;
 }
 
 /* Dwell before the dock dropdown's hover preview commits to a row. Long
@@ -191,6 +211,10 @@ interface Props {
    mounts nothing on the way, short enough that stopping on a row feels
    immediate. */
 const PREVIEW_HOVER_DELAY_MS = 180;
+
+/* Rows the dock dropdown shows before any scroll (its max-height fits six);
+   their run statuses are requested with the first paint of the menu. */
+const DOCK_STATUS_HEAD_ROWS = 6;
 
 /* The preview card is the rail's own (`.entry-nav-rail__recent-preview`, 216px
    wide, centred on the row through translateY(-50%)). Kept in JS too because
@@ -775,23 +799,18 @@ function ChromeHomeGlyph() {
  * so the two can never tell different stories about the same project: not for
  * its status (OPEND-2694) and not for its resting state either (OPEND-3129 —
  * this slot and the rail used to draw different resting marks, and one project
- * read as two). A non-project tab such as the plugin marketplace keeps its own
- * icon. The slot is therefore never empty, and the column never has to decide
- * whether to exist.
+ * read as two). The slot is therefore never empty, and the column never has
+ * to decide whether to exist.
  *
  * Unknown is deliberately treated as "nothing to report" rather than guessed
  * at: a guess would flash the wrong status glyph on every open.
  */
 function leadGlyphFor(
-  tab: WorkspaceChromeTab,
-  display: DisplayTab,
+  projectId: string,
   runStatusByProjectId: ReadonlyMap<string, ProjectDisplayStatus>,
   t: ReturnType<typeof useT>,
 ): ReactNode {
-  if (tab.kind !== 'project') {
-    return <Icon name={display.icon} size={14} />;
-  }
-  const status = runStatusByProjectId.get(tab.projectId);
+  const status = runStatusByProjectId.get(projectId);
   if (!status || !hasRunStatusGlyph(status)) {
     return <ProjectFolderGlyph size={14} />;
   }
@@ -804,15 +823,14 @@ function leadGlyphFor(
  * The unread dot at the END of one dropdown row (OPEND-3133): a project whose
  * run finished and has not been opened since. `openTab` spends it through the
  * same shared store the rail's rows read, so the rail drops its dot in the
- * same moment. Nothing for every other tab and status.
+ * same moment. Nothing for every other status.
  */
 function completionNoticeFor(
-  tab: WorkspaceChromeTab,
+  projectId: string,
   runStatusByProjectId: ReadonlyMap<string, ProjectDisplayStatus>,
   t: ReturnType<typeof useT>,
 ): ReactNode {
-  if (tab.kind !== 'project') return null;
-  const status = runStatusByProjectId.get(tab.projectId);
+  const status = runStatusByProjectId.get(projectId);
   if (!status || !hasCompletionNotice(status)) return null;
   return (
     <ProjectCompletionDot
@@ -864,6 +882,7 @@ export function WorkspaceTabsBar({
   onRenameProject,
   onDuplicateProject,
   onDeleteProject,
+  onOpenProject,
 }: Props) {
   const t = useT();
   const analytics = useAnalytics();
@@ -891,17 +910,8 @@ export function WorkspaceTabsBar({
   // #5517 corner fan: the "+" button opens a corner-anchored radial menu of
   // template wedges instead of immediately spawning a home tab.
   const [radialMenu, setRadialMenu] = useState<{ x: number; y: number } | null>(null);
-  // Docked-mode white dropdown (project route): open state of its tab list.
+  // Docked-mode white dropdown (project route): open state of its project list.
   const [dockMenuOpen, setDockMenuOpen] = useState(false);
-  // Most-recently-activated tab ids, newest first — the dropdown lists tabs
-  // in this order (最近打开的在前). Session-local: falls back to strip order
-  // for tabs never activated since launch.
-  const tabMruRef = useRef<string[]>([]);
-  useEffect(() => {
-    const id = state.activeTabId;
-    if (!id) return;
-    tabMruRef.current = [id, ...tabMruRef.current.filter((x) => x !== id)].slice(0, 50);
-  }, [state.activeTabId]);
   const [radialHoverId, setRadialHoverId] = useState<string | null>(null);
   useEffect(() => {
     if (!radialMenu) setRadialHoverId(null);
@@ -1072,26 +1082,16 @@ export function WorkspaceTabsBar({
   }, [tabsDockEl]);
 
   // Run status for the dock dropdown's rows. Only fetched while that menu is
-  // open: it costs one request per open project tab, and the glyphs it feeds
-  // are not on screen otherwise.
-  const dropdownProjectIds = useMemo(
-    () =>
-      state.tabs
-        .filter((tab): tab is Extract<WorkspaceChromeTab, { kind: 'project' }> =>
-          tab.kind === 'project')
-        .map((tab) => tab.projectId),
-    [state.tabs],
-  );
-  const runStatusByProjectId = useProjectRunStatuses(dropdownProjectIds, {
-    enabled: dockMenuOpen,
-    workspaceContext,
-  });
+  // open, and — like the rail's 最近项目 — only for the rows inside its
+  // scrollport: the catalog can hold every project in the workspace, and each
+  // row costs one request. Declared after the catalog below.
+  const [visibleDockProjectIds, setVisibleDockProjectIds] = useState<string[] | null>(null);
 
   // Hovered row in the dock dropdown — the one the preview card is showing.
   // A row only claims it after a short dwell: sweeping the pointer down the
   // list would otherwise mount (and abandon) one cover read per row it
   // crossed. Leaving the menu clears it, so at most one preview is ever live.
-  const [previewTabId, setPreviewTabId] = useState<string | null>(null);
+  const [previewProjectId, setPreviewProjectId] = useState<string | null>(null);
   const [previewAnchor, setPreviewAnchor] = useState<{ top: number; left: number } | null>(null);
   const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dockMenuRef = useRef<HTMLDivElement | null>(null);
@@ -1114,22 +1114,22 @@ export function WorkspaceTabsBar({
       left: fits ? right : Math.max(PREVIEW_GAP_PX, menuRect.left - PREVIEW_GAP_PX - PREVIEW_WIDTH_PX),
     };
   }, []);
-  const queuePreview = useCallback((tabId: string, row: HTMLElement) => {
+  const queuePreview = useCallback((projectId: string, row: HTMLElement) => {
     cancelPreviewTimer();
     previewTimerRef.current = setTimeout(() => {
       previewTimerRef.current = null;
       setPreviewAnchor(anchorPreviewTo(row));
-      setPreviewTabId(tabId);
+      setPreviewProjectId(projectId);
     }, PREVIEW_HOVER_DELAY_MS);
   }, [anchorPreviewTo, cancelPreviewTimer]);
-  const showPreviewNow = useCallback((tabId: string, row: HTMLElement) => {
+  const showPreviewNow = useCallback((projectId: string, row: HTMLElement) => {
     cancelPreviewTimer();
     setPreviewAnchor(anchorPreviewTo(row));
-    setPreviewTabId(tabId);
+    setPreviewProjectId(projectId);
   }, [anchorPreviewTo, cancelPreviewTimer]);
   const clearPreview = useCallback(() => {
     cancelPreviewTimer();
-    setPreviewTabId(null);
+    setPreviewProjectId(null);
     setPreviewAnchor(null);
   }, [cancelPreviewTimer]);
   // Closing the menu (or unmounting) must not leave a queued preview to fire
@@ -1204,15 +1204,32 @@ export function WorkspaceTabsBar({
   // the team hub's catalog — read once per dropdown open (coalesced and cached
   // by the catalog module, so this is not a second poll) rather than through
   // `useTeamProjects`, which would keep polling on the project route.
-  const [teamCatalog, setTeamCatalog] = useState<readonly TeamProject[]>([]);
+  //
+  // The catalog belongs to the workspace it was read for, so it is stored with
+  // that scope and only read back while the scope is still current. Deriving
+  // it in render (not clearing it from an effect) keeps a previous workspace's
+  // shared rows out of the very render in which the workspace changes or the
+  // account signs out.
+  const teamCatalogScopeKey = workspaceContext ? workspaceIdentityCacheKey(workspaceContext) : null;
+  const [scopedTeamCatalog, setScopedTeamCatalog] = useState<{
+    scopeKey: string;
+    rows: readonly TeamProject[];
+  } | null>(null);
+  const teamCatalog = useMemo<readonly TeamProject[]>(
+    () => scopedTeamCatalog && scopedTeamCatalog.scopeKey === teamCatalogScopeKey
+      ? scopedTeamCatalog.rows
+      : [],
+    [scopedTeamCatalog, teamCatalogScopeKey],
+  );
   useEffect(() => {
     if (!dockMenuOpen || !workspaceContextHasTeamIdentity(workspaceContext) || !workspaceContext) {
       return undefined;
     }
     let cancelled = false;
+    const scopeKey = workspaceIdentityCacheKey(workspaceContext);
     fetchTeamProjectsCatalog({ context: workspaceContext })
       .then((catalog) => {
-        if (!cancelled) setTeamCatalog(catalog);
+        if (!cancelled) setScopedTeamCatalog({ scopeKey, rows: catalog });
       })
       .catch((error: unknown) => {
         // Off-team / offline / no hub: the rows read as unshared and owned,
@@ -1264,6 +1281,69 @@ export function WorkspaceTabsBar({
     }),
     [isSharedProject, teamProjectOwnerMemberIds, workspaceContext?.workspaceMemberId],
   );
+
+  // The switcher's rows (OPEND-3303): the Home rail's 最近项目 catalog — every
+  // project this workspace can open, newest activity first — not the tabs
+  // opened this session. Built by the same helper, from the same inputs (the
+  // ambient list, the hub catalog, the shared-state predicate), so the two
+  // entries cannot disagree about which projects exist or their order.
+  const sharedFallbackName = t('recentProjects.sharedProjectFallbackName');
+  const sharedCatalogProjects = useMemo(
+    () => buildAllProjectsList({
+      projects,
+      teamProjects: [...teamCatalog],
+      workspaceContext,
+      sharedFallbackName,
+      isShared: isSharedProject,
+    }),
+    [isSharedProject, projects, sharedFallbackName, teamCatalog, workspaceContext],
+  );
+  const recentCatalog = useMemo(
+    () => buildRecentProjectsCatalog({
+      projects,
+      teamProjects: [...teamCatalog],
+      workspaceContext,
+      sharedFallbackName,
+      isShared: isSharedProject,
+    }),
+    [isSharedProject, projects, sharedFallbackName, teamCatalog, workspaceContext],
+  );
+  const catalogById = useMemo(
+    () => new Map(recentCatalog.map((project) => [project.id, project])),
+    [recentCatalog],
+  );
+  // Until the menu's observer reports, ask for the head of the list — the rows
+  // the menu shows before any scroll — so glyphs land with the rows.
+  const dockRunStatusProjectIds = useMemo(
+    () => visibleDockProjectIds
+      ?? recentCatalog.slice(0, DOCK_STATUS_HEAD_ROWS).map((project) => project.id),
+    [recentCatalog, visibleDockProjectIds],
+  );
+  const runStatusByProjectId = useProjectRunStatuses(dockRunStatusProjectIds, {
+    enabled: dockMenuOpen,
+    workspaceContext,
+  });
+  const dockCatalogKey = recentCatalog.map((project) => project.id).join('\n');
+  useEffect(() => {
+    const menu = dockMenuRef.current;
+    if (!dockMenuOpen || !menu || typeof IntersectionObserver === 'undefined') return undefined;
+    const visible = new Set<string>();
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        const id = (entry.target as HTMLElement).dataset.projectId;
+        if (!id) continue;
+        if (entry.isIntersecting) visible.add(id);
+        else visible.delete(id);
+      }
+      const next = [...visible].sort();
+      setVisibleDockProjectIds((prev) =>
+        prev && prev.length === next.length && prev.every((id, index) => id === next[index])
+          ? prev
+          : next);
+    }, { root: menu });
+    for (const row of menu.querySelectorAll<HTMLElement>('[data-project-id]')) observer.observe(row);
+    return () => observer.disconnect();
+  }, [dockCatalogKey, dockMenuOpen]);
   // The dropdown only exists on the project route, where no project-collection
   // page is on screen; its actions file under Home, as the rail's do off the
   // collection views.
@@ -1842,6 +1922,38 @@ export function WorkspaceTabsBar({
     activateTab(tab);
   }
 
+  /**
+   * Opens one switcher row (OPEND-3303). A project that already has a tab
+   * re-activates it, keeping the file that tab last showed; any other project
+   * opens through App's handler with its catalog title, exactly as the rail's
+   * 最近项目 row would, and the route change then adds its tab. Opening spends
+   * the project's ✓ in both cases.
+   */
+  function openCatalogProject(projectId: string) {
+    const existingTab = state.tabs.find(
+      (tab) => tab.kind === 'project' && tab.projectId === projectId,
+    );
+    if (existingTab) {
+      openTab(existingTab);
+      return;
+    }
+    acknowledgeProjectCompletion(projectId);
+    if (onOpenProject) {
+      void onOpenProject(
+        projectId,
+        undefined,
+        catalogProjectTitleHint({
+          projectId,
+          sharedProjects: sharedCatalogProjects,
+          teamProjects: teamCatalog,
+          workspaceContext,
+        }),
+      );
+      return;
+    }
+    navigate({ kind: 'project', projectId, conversationId: null, fileName: null });
+  }
+
   // Corner-anchored radial fan menu on the "+" button: three concentric bands
   // sweep down-left from the button (the pivot at the top-right corner),
   // carrying the composer Template picker's icons. Each band is a ring split
@@ -2101,30 +2213,30 @@ export function WorkspaceTabsBar({
       displayTabById.get(activeTab.id)
         ?? displayTabFor(activeTab, projectById, t, knownProjectNamesRef.current);
     const isEntryActive = activeTab.kind === 'entry';
-    // Most recently opened first. The active tab ranks first even before the
-    // MRU effect has run for it; never-activated tabs keep strip order after.
-    const mru = tabMruRef.current;
-    const mruRank = (tab: WorkspaceChromeTab): number => {
-      if (tab.id === state.activeTabId) return -1;
-      const index = mru.indexOf(tab.id);
-      return index === -1 ? Number.MAX_SAFE_INTEGER : index;
-    };
-    const projectTabs = state.tabs
-      .filter((tab) => tab.kind !== 'entry')
-      .sort((a, b) => mruRank(a) - mruRank(b));
-    // The hovered row's project, if the ambient list actually carries it. A tab
-    // can name a project this list has not loaded (deep link, other workspace);
-    // that row simply previews nothing rather than showing an empty card.
-    const previewTab = previewTabId
-      ? projectTabs.find((tab) => tab.id === previewTabId)
-      : undefined;
-    const previewProject =
-      previewTab && previewTab.kind === 'project'
-        ? projectById.get(previewTab.projectId) ?? null
-        : null;
+    const activeProjectId = route.kind === 'project' ? route.projectId : null;
+    // The rows: the recent-projects catalog. The open project always has a row
+    // — a deep link can land on one the catalog has not loaded yet (the list
+    // is still reading, or it belongs to another workspace) — and it leads
+    // the list in that case, as it would once the catalog caught up.
+    const activeRowMissing = activeProjectId !== null && !catalogById.has(activeProjectId);
+    const activeFallbackProject = activeRowMissing ? projectById.get(activeProjectId) ?? null : null;
+    const rows: Array<{ id: string; name: string; project: Project | null }> = [
+      ...(activeRowMissing && activeProjectId
+        ? [{
+            id: activeProjectId,
+            name: activeDisplay.title,
+            project: activeFallbackProject,
+          }]
+        : []),
+      ...recentCatalog.map((project) => ({ id: project.id, name: project.name, project })),
+    ];
+    // The hovered row's project, if the catalog actually carries it.
+    const previewProject = previewProjectId
+      ? catalogById.get(previewProjectId) ?? projectById.get(previewProjectId) ?? null
+      : null;
     // The row whose ⋮ menu is open, and what that menu has to say about it.
     const dockActionsProject = dockActionsProjectId
-      ? projectById.get(dockActionsProjectId) ?? null
+      ? catalogById.get(dockActionsProjectId) ?? projectById.get(dockActionsProjectId) ?? null
       : null;
     const dockActionsOwnedBySelf = dockActionsProject
       ? dockRowOwnedBySelf(dockActionsProject.id)
@@ -2167,20 +2279,17 @@ export function WorkspaceTabsBar({
               role="listbox"
               onMouseLeave={clearPreview}
             >
-              {projectTabs.map((tab) => {
-                const display =
-                  displayTabById.get(tab.id)
-                    ?? displayTabFor(tab, projectById, t, knownProjectNamesRef.current);
-                const active = tab.id === state.activeTabId;
-                // The row's project, when the ambient list carries it — the ⋮
-                // menu acts on a Project, so a tab naming one this list has
-                // not loaded (deep link, other workspace) offers no menu.
-                const rowProject =
-                  tab.kind === 'project' ? projectById.get(tab.projectId) ?? null : null;
+              {rows.map((row) => {
+                const active = row.id === activeProjectId;
+                // The row's project, when one is loaded — the ⋮ menu acts on a
+                // Project, so a deep-linked row nothing has loaded yet offers
+                // no menu.
+                const rowProject = row.project;
                 const actionsOpen = rowProject !== null && dockActionsProjectId === rowProject.id;
                 return (
                   <div
-                    key={tab.id}
+                    key={row.id}
+                    data-project-id={row.id}
                     className={`workspace-tabs-dropdown__row${active ? ' is-active' : ''}${
                       rowProject ? ` ${actionStyles.row}` : ''
                     }`}
@@ -2213,7 +2322,7 @@ export function WorkspaceTabsBar({
                       aria-selected={active}
                       onClick={() => {
                         setDockMenuOpen(false);
-                        openTab(tab);
+                        openCatalogProject(row.id);
                       }}
                       /* Focus previews too, so the card is not mouse-only:
                          arrowing/tabbing the list shows the same picture. An
@@ -2221,11 +2330,11 @@ export function WorkspaceTabsBar({
                          slot, and the user asked for it by clicking). */
                       onMouseEnter={(event) => {
                         if (dockActionsProjectId) return;
-                        queuePreview(tab.id, event.currentTarget);
+                        queuePreview(row.id, event.currentTarget);
                       }}
                       onFocus={(event) => {
                         if (dockActionsProjectId) return;
-                        showPreviewNow(tab.id, event.currentTarget);
+                        showPreviewNow(row.id, event.currentTarget);
                       }}
                     >
                       {/* Always up: every row fills the slot now — a live run
@@ -2233,10 +2342,10 @@ export function WorkspaceTabsBar({
                           the column can't half-exist and names stay on one
                           shared left edge. */}
                       <span className="workspace-tabs-dropdown__row-lead">
-                        {leadGlyphFor(tab, display, runStatusByProjectId, t)}
+                        {leadGlyphFor(row.id, runStatusByProjectId, t)}
                       </span>
-                      <span className="workspace-tabs-dropdown__row-label">{display.title}</span>
-                      {completionNoticeFor(tab, runStatusByProjectId, t)}
+                      <span className="workspace-tabs-dropdown__row-label">{row.name}</span>
+                      {completionNoticeFor(row.id, runStatusByProjectId, t)}
                       {active ? (
                         <Icon name="check" size={14} className="workspace-tabs-dropdown__row-check" />
                       ) : null}

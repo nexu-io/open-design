@@ -4,6 +4,8 @@ import type { TeamProject, WorkspaceCollabContext } from '@open-design/contracts
 import {
   buildAllProjectsList,
   buildDraftsList,
+  buildRecentProjectsCatalog,
+  catalogProjectTitleHint,
   createSharedProjectPredicate,
   reconcileSharedProjectCatalogFields,
 } from '../src/collab/all-projects-list';
@@ -475,5 +477,63 @@ describe('createSharedProjectPredicate', () => {
       ),
     ).toEqual(['p-mine']);
     expect(all(projects, teamProjects, isShared)).toEqual([]);
+  });
+});
+
+// OPEND-3303: the Home rail's 最近项目 and the project switcher list one catalog.
+describe('buildRecentProjectsCatalog', () => {
+  it('merges drafts and shared projects in the current workspace, newest first', () => {
+    const context = teamContext();
+    const draft = { ...localProject('draft', 'Draft', 'ws-1'), updatedAt: 3 };
+    const elsewhere = { ...localProject('elsewhere', 'Elsewhere', 'ws-2'), updatedAt: 9 };
+    const mirrored = { ...localProject('mirrored', 'Local Name', 'ws-1'), updatedAt: 1 };
+    const catalog = buildRecentProjectsCatalog({
+      projects: [draft, elsewhere, mirrored],
+      teamProjects: [
+        sharedProject({ projectId: 'mirrored', name: 'Owner Name', updatedAt: 2 }),
+        sharedProject({ projectId: 'remote', name: 'Remote', updatedAt: 5 }),
+      ],
+      workspaceContext: context,
+      sharedFallbackName: 'Shared project',
+    });
+    expect(catalog.map((project) => [project.id, project.name])).toEqual([
+      ['remote', 'Remote'],
+      ['draft', 'Draft'],
+      ['mirrored', 'Owner Name'],
+    ]);
+  });
+});
+
+describe('catalogProjectTitleHint', () => {
+  const context = teamContext();
+  const shared = [localProject('mine', 'Mine'), localProject('theirs', 'Theirs')];
+
+  it("makes a teammate's catalog title authoritative", () => {
+    expect(catalogProjectTitleHint({
+      projectId: 'theirs',
+      sharedProjects: shared,
+      teamProjects: [sharedProject({ projectId: 'theirs' })],
+      workspaceContext: context,
+    })).toEqual({
+      name: 'Theirs',
+      workspaceId: 'ws-1',
+      workspaceMemberId: SELF,
+      authoritative: true,
+    });
+  });
+
+  it('keeps an own project non-authoritative and skips drafts', () => {
+    expect(catalogProjectTitleHint({
+      projectId: 'mine',
+      sharedProjects: shared,
+      teamProjects: [sharedProject({ projectId: 'mine', ownerMemberId: SELF })],
+      workspaceContext: context,
+    })?.authoritative).toBe(false);
+    expect(catalogProjectTitleHint({
+      projectId: 'draft-only',
+      sharedProjects: shared,
+      teamProjects: [],
+      workspaceContext: context,
+    })).toBeUndefined();
   });
 });

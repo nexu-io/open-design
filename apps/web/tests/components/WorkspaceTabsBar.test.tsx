@@ -1,7 +1,7 @@
 
 // @vitest-environment jsdom
 
-import { StrictMode } from 'react';
+import { StrictMode, useLayoutEffect } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -2215,5 +2215,154 @@ describe('WorkspaceTabsBar dock dropdown project actions', () => {
     expect(rename).not.toHaveBeenCalled();
     fireEvent.keyDown(input, { key: 'Enter' });
     await waitFor(() => expect(rename).toHaveBeenCalledWith(project.id, 'Renamed project'));
+  });
+});
+
+// OPEND-3303: the docked switcher lists the same recent-projects catalog as the
+// Home rail's 最近项目 — every project in the workspace, newest activity first —
+// instead of only the project tabs opened this session.
+describe('WorkspaceTabsBar dock dropdown recent-projects catalog', () => {
+  const originalFetch = globalThis.fetch;
+  const dock = document.createElement('div');
+  const teamContext = {
+    workspaceId: 'ws-team-3303',
+    workspaceType: 'team',
+    workspaceMemberId: 'wm-self',
+    role: 'member',
+    memberStatus: 'active',
+    lifecycleState: 'active',
+    permissions: { canInviteMembers: false, canViewWorkspaceSettings: false, canShareProjects: false },
+  } as unknown as WorkspaceCollabContext;
+
+  beforeEach(() => {
+    window.localStorage.clear();
+    vi.clearAllMocks();
+    document.body.append(dock);
+    setWorkspaceTabsDock(dock);
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url === '/api/workspace/projects/team') {
+        return new Response(JSON.stringify({
+          projects: [{
+            projectId: 'project-shared',
+            ownerMemberId: 'wm-other',
+            sharedAt: '2026-09-20T00:00:00.000Z',
+            name: 'Shared By Teammate',
+            createdAt: 4,
+            updatedAt: 4,
+          }],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.startsWith('/api/runs?')) {
+        return new Response(JSON.stringify({ runs: [], awaitingInputProjectIds: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }) as unknown as typeof fetch;
+  });
+
+  afterEach(() => {
+    cleanup();
+    globalThis.fetch = originalFetch;
+    setWorkspaceTabsDock(null);
+    dock.remove();
+  });
+
+  function optionNames(listbox: HTMLElement): string[] {
+    return within(listbox).getAllByRole('option').map((option) => option.textContent?.trim() ?? '');
+  }
+
+  it('lists every recent project, newest first, not just the open tabs', async () => {
+    render(
+      <WorkspaceTabsBar
+        route={{ ...projectRoute }}
+        projects={[project, projectBeta, projectGamma]}
+      />,
+    );
+    fireEvent.click(await screen.findByTestId('workspace-tabs-dropdown-trigger'));
+    const listbox = screen.getByRole('listbox');
+    expect(optionNames(listbox)).toEqual(['Project Gamma', 'Project Beta', 'Project Alpha']);
+    expect(
+      within(listbox).getByRole('option', { name: /Project Alpha/ }).getAttribute('aria-selected'),
+    ).toBe('true');
+  });
+
+  it('opens a project with no tab through the shared open handler', async () => {
+    const onOpenProject = vi.fn(async () => true);
+    render(
+      <WorkspaceTabsBar
+        route={{ ...projectRoute }}
+        projects={[project, projectBeta]}
+        onOpenProject={onOpenProject}
+      />,
+    );
+    fireEvent.click(await screen.findByTestId('workspace-tabs-dropdown-trigger'));
+    fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name: /Project Beta/ }));
+    expect(onOpenProject).toHaveBeenCalledTimes(1);
+    expect(onOpenProject).toHaveBeenCalledWith('project-beta', undefined, expect.anything());
+    expect(screen.queryByRole('listbox')).toBeNull();
+  });
+
+  // Review on #8384: the catalog must be scope-safe in the very commit that
+  // changes the workspace (or signs out), not one passive effect later. The
+  // probe reads the menu in a layout effect of that same commit.
+  it.each([
+    ['another workspace', { ...teamContext, workspaceId: 'ws-team-other', workspaceMemberId: 'wm-other-self' }],
+    ['a sign-out', null],
+  ] as const)('never paints the previous workspace\'s shared rows after %s', async (_label, nextContext) => {
+    const painted: string[] = [];
+    function CommitProbe({ context }: { context: WorkspaceCollabContext | null }) {
+      useLayoutEffect(() => {
+        painted.push(dock.textContent ?? '');
+      }, [context]);
+      return null;
+    }
+    const tree = (context: WorkspaceCollabContext | null) => (
+      <>
+        <WorkspaceTabsBar
+          route={{ ...projectRoute }}
+          projects={[{ ...project, workspaceId: 'ws-team-3303' }]}
+          workspaceContext={context}
+        />
+        <CommitProbe context={context} />
+      </>
+    );
+    const { rerender } = render(tree(teamContext));
+    fireEvent.click(await screen.findByTestId('workspace-tabs-dropdown-trigger'));
+    await waitFor(() => {
+      expect(screen.getByRole('listbox').textContent).toContain('Shared By Teammate');
+    });
+
+    painted.length = 0;
+    rerender(tree(nextContext as WorkspaceCollabContext | null));
+
+    expect(painted.length).toBeGreaterThan(0);
+    expect(painted[0]).not.toContain('Shared By Teammate');
+  });
+
+  it('includes team projects shared by teammates, as the rail does', async () => {
+    const onOpenProject = vi.fn(async () => true);
+    render(
+      <WorkspaceTabsBar
+        route={{ ...projectRoute }}
+        projects={[{ ...project, workspaceId: 'ws-team-3303' }]}
+        workspaceContext={teamContext}
+        onOpenProject={onOpenProject}
+      />,
+    );
+    fireEvent.click(await screen.findByTestId('workspace-tabs-dropdown-trigger'));
+    const listbox = screen.getByRole('listbox');
+    await waitFor(() => {
+      expect(optionNames(listbox)).toEqual(['Shared By Teammate', 'Project Alpha']);
+    });
+    fireEvent.click(within(listbox).getByRole('option', { name: /Shared By Teammate/ }));
+    expect(onOpenProject).toHaveBeenCalledWith('project-shared', undefined, {
+      name: 'Shared By Teammate',
+      workspaceId: 'ws-team-3303',
+      workspaceMemberId: 'wm-self',
+      authoritative: true,
+    });
   });
 });

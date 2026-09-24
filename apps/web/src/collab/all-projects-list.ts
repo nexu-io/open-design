@@ -257,3 +257,86 @@ export function buildDraftsList(input: {
     (project) => belongsToWorkspace(project, workspaceContext) && !isShared(project.id),
   );
 }
+
+/**
+ * Merges the 草稿 and 全部项目 lists into one catalog keyed by project id.
+ * Shared rows win if a project briefly sits in both lists, because they carry
+ * the authoritative workspace-facing title and metadata.
+ */
+export function mergeProjectCatalogs(
+  draftProjects: readonly Project[],
+  sharedProjects: readonly Project[],
+): Project[] {
+  const projectsById = new Map<string, Project>();
+  for (const project of draftProjects) projectsById.set(project.id, project);
+  for (const project of sharedProjects) projectsById.set(project.id, project);
+  return [...projectsById.values()];
+}
+
+/** The 最近项目 order: most recent activity first. Returns a new array. */
+export function sortProjectsByRecentActivity(projects: readonly Project[]): Project[] {
+  return [...projects].sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+/**
+ * The recent-projects catalog: every project the current workspace can open —
+ * the member's drafts plus the shared 全部项目 list — newest activity first.
+ *
+ * The Home rail's 最近项目 and the project page's switcher both list exactly
+ * this catalog (OPEND-3303), so the same account and workspace see the same
+ * projects in the same order from either entry. Callers pass the same
+ * `isShared` predicate their share badges read.
+ */
+export function buildRecentProjectsCatalog(input: {
+  projects: Project[];
+  teamProjects: TeamProject[];
+  workspaceContext: WorkspaceCollabContext | null;
+  sharedFallbackName: string;
+  isShared?: SharedProjectPredicate;
+}): Project[] {
+  const drafts = buildDraftsList(input);
+  const shared = buildAllProjectsList(input);
+  return sortProjectsByRecentActivity(mergeProjectCatalogs(drafts, shared));
+}
+
+export interface ProjectTitleHint {
+  name: string;
+  /** Workspace whose catalog produced this hint; null for a local-only row. */
+  workspaceId: string | null;
+  /** Member authorization lifetime that produced the catalog row. */
+  workspaceMemberId: string | null;
+  /**
+   * The team catalog is the title authority for a project shared by another
+   * member. Own/private projects may still accept a newer local rename.
+   */
+  authoritative: boolean;
+}
+
+/**
+ * The title and provenance a catalog row hands to App's open handler, so the
+ * opened project keeps the name the list showed instead of reopening a stale
+ * local placeholder ("共享项目"). `undefined` when the shared list has no row
+ * (an own draft opens by id alone).
+ */
+export function catalogProjectTitleHint(input: {
+  projectId: string;
+  sharedProjects: readonly Project[];
+  teamProjects: readonly TeamProject[];
+  workspaceContext: WorkspaceCollabContext | null;
+}): ProjectTitleHint | undefined {
+  const { projectId, workspaceContext } = input;
+  const name = input.sharedProjects.find((project) => project.id === projectId)?.name.trim();
+  if (!name) return undefined;
+  const teamProject = input.teamProjects.find((project) => project.projectId === projectId);
+  return {
+    name,
+    workspaceId: workspaceContext?.workspaceId ?? null,
+    workspaceMemberId: workspaceContext?.workspaceMemberId ?? null,
+    // A member must render the owner's catalog title even when their local
+    // mirror has a newer timestamp or an older non-placeholder title. The
+    // owner may rename locally before the catalog catches up.
+    authoritative: Boolean(
+      teamProject && teamProject.ownerMemberId !== workspaceContext?.workspaceMemberId,
+    ),
+  };
+}
