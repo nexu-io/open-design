@@ -657,6 +657,50 @@ describe('selection bridge — empty annotation surface (#890)', () => {
     expect(restoredMain?.getAttribute('data-od-source-path')).toBe('path-0');
   });
 
+  it('keeps emitted annotated target identities round-trippable through their selector', async () => {
+    const cases = [
+      { attrs: 'data-od-id="hero" data-screen-label="Home"', elementId: 'hero', selector: '[data-od-id="hero"]' },
+      { attrs: 'data-screen-label="Home"', elementId: 'Home', selector: '[data-screen-label="Home"]' },
+      { attrs: 'data-od-id="" data-screen-label="Home"', elementId: 'Home', selector: '[data-screen-label="Home"]' },
+      { attrs: 'data-od-id="say &quot;hi&quot;"', elementId: 'say "hi"', selector: '[data-od-id="say \\"hi\\""]' },
+    ];
+
+    for (const testCase of cases) {
+      const { dom, win, parentPostMessage } = setupBridgeDom(
+        `<div id="target" ${testCase.attrs}>Target</div>`,
+        'comment',
+        ['#target'],
+      );
+      await new Promise<void>((resolve) => win.setTimeout(resolve, 10));
+      parentPostMessage.mockClear();
+      win.document.getElementById('target')!.dispatchEvent(
+        new win.MouseEvent('click', { bubbles: true, cancelable: true }),
+      );
+      const payload = postedMessages(parentPostMessage, 'od:comment-target')[0];
+      expect(payload).toMatchObject({
+        elementId: testCase.elementId,
+        selector: testCase.selector,
+      });
+      expect(win.document.querySelector(String(payload?.selector))).toBe(
+        win.document.getElementById('target'),
+      );
+      dom.window.close();
+    }
+
+    const { dom, win, parentPostMessage } = setupBridgeDom(
+      '<div id="target" data-od-id="" data-screen-label="">Target</div>',
+      'inspect',
+      ['#target'],
+    );
+    await new Promise<void>((resolve) => win.setTimeout(resolve, 10));
+    parentPostMessage.mockClear();
+    win.document.getElementById('target')!.dispatchEvent(
+      new win.MouseEvent('click', { bubbles: true, cancelable: true }),
+    );
+    expect(postedMessages(parentPostMessage, 'od:comment-target')).toEqual([]);
+    dom.window.close();
+  });
+
   it('posts od:comment-target for the annotated card when the device-frame iframe is clicked', async () => {
     const { win, parentPostMessage } = setupBridgeDom(
       '<article data-od-id="tablet-card" class="frame-card"><div class="meta">Tablet edition</div><iframe id="f" class="tablet-frame" title="Tablet edition" src="about:blank"></iframe></article>',

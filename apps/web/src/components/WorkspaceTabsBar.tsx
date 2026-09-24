@@ -2684,6 +2684,7 @@ export function WorkspaceTabsBar({
       {deleteFlow.target && typeof document !== 'undefined' ? createPortal(
         <ProjectDeleteConfirmDialog
           projectName={deleteFlow.target.name}
+          activeShareCount={deleteFlow.activeShareCount}
           pending={deleteFlow.pending}
           failed={deleteFlow.failed}
           onCancel={deleteFlow.cancel}

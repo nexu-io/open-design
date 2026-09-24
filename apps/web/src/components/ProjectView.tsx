@@ -6131,6 +6131,7 @@ export function ProjectView({
       project.id,
       activeConversationId,
       projectRunWorkspaceContext,
+      true,
     );
     if (previewCommentsGenerationRef.current !== commentsGeneration) return;
     setPreviewComments(next);

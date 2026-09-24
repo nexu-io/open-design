@@ -144,13 +144,14 @@ export function createCollabCloudClient(options: CollabCloudClientOptions = {}) 
       teamId: string,
       projectId: string,
       comment: CollabCloudComment,
-    ): Promise<{ seq: number }> {
-      const { payload } = await request<{ seq: number }>(
+    ): Promise<{ seq: number; authorKey?: string }> {
+      const { payload } = await request<{ seq: number; authorKey?: string; author?: { authorKey?: string } }>(
         'POST',
         `/teams/${encodeURIComponent(teamId)}/projects/${encodeURIComponent(projectId)}/comments`,
         { comment },
       );
-      return { seq: payload.seq };
+      const authorKey = payload.author?.authorKey ?? payload.authorKey;
+      return { seq: payload.seq, ...(authorKey ? { authorKey } : {}) };
     },
 
     /**

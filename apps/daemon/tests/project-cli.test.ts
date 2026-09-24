@@ -37,7 +37,7 @@ afterEach(async () => {
   tempRoot = '';
 });
 
-async function startProjectStubServer(): Promise<StubServer> {
+async function startProjectStubServer(deleteResponse: unknown = { ok: true }, shareResponse?: unknown, shareStatus = 200): Promise<StubServer> {
   const requests: CapturedRequest[] = [];
   const server = http.createServer((req, res) => {
     let raw = '';
@@ -54,6 +54,14 @@ async function startProjectStubServer(): Promise<StubServer> {
       requests.push(captured);
 
       res.setHeader('content-type', 'application/json');
+      if (captured.method === 'DELETE' && captured.url === '/api/projects/project-1/files/nested%2Findex.html') {
+        res.end(JSON.stringify(deleteResponse));
+        return;
+      }
+      if (captured.method === 'DELETE' && captured.url === '/api/projects/project-1') {
+        res.end(JSON.stringify(deleteResponse));
+        return;
+      }
       if (captured.method === 'POST' && captured.url === '/api/projects/source-project/design-system-copy') {
         res.statusCode = 201;
         res.end(JSON.stringify({
@@ -69,6 +77,14 @@ async function startProjectStubServer(): Promise<StubServer> {
           project: { id: 'duplicate-1', name: 'Duplicate Copy' },
           conversationId: 'conversation-duplicate',
         }));
+        return;
+      }
+      if (captured.method === 'POST' && captured.url === '/api/public-file-stops/retry') {
+        res.end(JSON.stringify({ ...JSON.parse(raw), status: 'stopped' }));
+        return;
+      }
+      if (captured.method === 'GET' && captured.url === '/api/projects/project-1/share-state') {
+        res.end(JSON.stringify({ projectId: 'project-1', bindingExists: false, hasEverShared: false, publications: [] }));
         return;
       }
       if (captured.method === 'GET' && captured.url === '/api/projects/project-1') {
@@ -94,6 +110,13 @@ async function startProjectStubServer(): Promise<StubServer> {
           slug: 'legacy-public-slug',
           fileName: 'nested/index.html',
         }));
+        return;
+      }
+      if (['POST', 'GET'].includes(captured.method)
+        && captured.url === '/api/projects/project-1/files/nested%2Findex.html/publish-public') {
+        if (shareResponse !== undefined) { res.statusCode = shareStatus; res.end(JSON.stringify(shareResponse)); return; }
+        const publication = { url: 'https://example.invalid/returned-link', slug: 'returned-slug', fileName: 'nested/index.html' };
+        res.end(JSON.stringify(captured.method === 'GET' ? { publication } : publication));
         return;
       }
       if (captured.method === 'GET' && captured.url === '/api/workspaces/ws-1/projects?view=team') {
@@ -224,6 +247,117 @@ async function runCli(args: string[]): Promise<{ stdout: string; stderr: string;
 }
 
 describe('od project CLI', () => {
+  it.each([false, true])('resume reports missing workspace rather than an unavailable daemon; nested=%s', async nested => {
+    const code = 'WORKSPACE_CONTEXT_REQUIRED';
+    const message = 'an explicit workspace context is required';
+    stub = await startProjectStubServer(undefined, nested ? { error: { code, message } } : { error: code, message }, 400);
+    const result = await runCli(['project', 'share', 'resume', 'project-1', '--path', 'nested/index.html', '--daemon-url', stub.baseUrl, '--json']);
+    expect(result.code).toBe(1);
+    expect(result.stdout).toBe('');
+    expect(JSON.parse(result.stderr)).toEqual({ error: { code, message, data: {} } });
+    expect(stub.requests).toHaveLength(1);
+    expect(stub.requests[0]!.headers['x-od-workspace-id']).toBeUndefined();
+  });
+  it.each([false, true])('files delete preserves the HTTP response or human output, json=%s', async json => {
+    const body = { ok: true };
+    stub = await startProjectStubServer(body);
+    const result = await runCli(['files', 'delete', 'project-1', 'nested/index.html', '--workspace', 'ws-1', '--workspace-member', 'member-1', '--daemon-url', stub.baseUrl, ...(json ? ['--json'] : [])]);
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe('');
+    if (json) expect(JSON.parse(result.stdout)).toEqual(body);
+    else expect(result.stdout).toBe('[files] deleted nested/index.html\n');
+    expect(stub.requests).toHaveLength(1);
+    expect(stub.requests[0]).toMatchObject({ method: 'DELETE', url: '/api/projects/project-1/files/nested%2Findex.html', headers: { 'x-od-workspace-id': 'ws-1', 'x-od-workspace-member-id': 'member-1' } });
+  });
+  it.each([false, true])('delete reports per-file residuals without extra requests, json=%s', async json => {
+    const body = { ok: true, shareResiduals: [
+      { filePath: 'a\n.html', slug: 'a', retrying: true },
+      { filePath: 'b.html', slug: 'b', retrying: false, code: 'STOP_EXHAUSTED' },
+    ] };
+    stub = await startProjectStubServer(body);
+    const result = await runCli(['project', 'delete', 'project-1', '--workspace', 'ws-1', '--workspace-member', 'member-1', '--daemon-url', stub.baseUrl, ...(json ? ['--json'] : [])]);
+    expect(result.code).toBe(0);
+    if (json) { expect(JSON.parse(result.stdout)).toEqual(body); expect(result.stderr).toBe(''); }
+    else {
+      expect(result.stdout).toBe('[project] deleted project-1\n');
+      expect(result.stderr).toBe('[project] warning: public links may still be live:\n  "a\\n.html" ("a"): stop queued for retry\n  "b.html" ("b"): action required; no automatic retry\n');
+    }
+    expect(stub.requests).toHaveLength(1);
+    expect(stub.requests[0]).toMatchObject({ method: 'DELETE', url: '/api/projects/project-1', headers: { 'x-od-workspace-id': 'ws-1', 'x-od-workspace-member-id': 'member-1' } });
+  });
+  it.each([false, true])('delete reports unchanged no-residual success, json=%s', async json => {
+    stub = await startProjectStubServer();
+    const result = await runCli(['project', 'delete', 'project-1', '--workspace', 'ws-1', '--workspace-member', 'member-1', '--daemon-url', stub.baseUrl, ...(json ? ['--json'] : [])]);
+    expect(result.code).toBe(0); expect(result.stderr).toBe('');
+    if (json) expect(JSON.parse(result.stdout)).toEqual({ ok: true });
+    else expect(result.stdout).toBe('[project] deleted project-1\n');
+    expect(stub.requests).toHaveLength(1);
+  });
+
+  it.each(['publish', 'resume', 'get'])('%s reports no-link success without printing undefined or declaring failure', async action => {
+    const body = { status: action !== 'get' ? 'published' : 'active', link: { status: 'unavailable', code: 'PUBLIC_SHARE_WEB_URL_UNAVAILABLE' }, ...(action === 'get' ? { publication: null, freshness: 'unknown' } : { receipt: { slug: 'stable', filePath: 'nested/index.html', versionId: 'v1', version: 1, publishedAt: 1, entryPath: 'index.html' } }) };
+    stub = await startProjectStubServer(undefined, body);
+    const args = ['project', 'share', action, 'project-1', '--path', 'nested/index.html', '--daemon-url', stub.baseUrl];
+    const result = await runCli(args);
+    expect(result.code).toBe(0); expect(result.stdout.trim()).toBe('Published; link temporarily unavailable.');
+    const json = await runCli([...args, '--json']);
+    expect(json.code).toBe(0); expect(JSON.parse(json.stdout)).toEqual(body);
+  });
+  it('retry-stop targets the persisted file intent, never the deleted project DELETE route', async () => {
+    stub = await startProjectStubServer();
+    const result = await runCli(['project', 'share', 'retry-stop', 'deleted-project', '--path', 'pages/local.html', '--slug', 'stable', '--workspace', 'ws-1', '--workspace-member', 'member-1', '--daemon-url', stub.baseUrl, '--json']);
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({ projectId: 'deleted-project', filePath: 'pages/local.html', slug: 'stable', status: 'stopped' });
+    expect(stub.requests).toHaveLength(1);
+    expect(stub.requests[0]).toMatchObject({ method: 'POST', url: '/api/public-file-stops/retry', headers: { 'x-od-workspace-id': 'ws-1', 'x-od-workspace-member-id': 'member-1' }, body: JSON.stringify({ projectId: 'deleted-project', filePath: 'pages/local.html', slug: 'stable' }) });
+  });
+  it('share status without path reads project binding history through the real CLI process', async () => {
+    stub = await startProjectStubServer();
+    const result = await runCli(['project', 'share', 'status', 'project-1', '--workspace', 'ws-1', '--workspace-member', 'member-1', '--daemon-url', stub.baseUrl, '--json']);
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({ projectId: 'project-1', bindingExists: false, hasEverShared: false, publications: [] });
+    expect(stub.requests).toHaveLength(1);
+    expect(stub.requests[0]).toMatchObject({ method: 'GET', url: '/api/projects/project-1/share-state', headers: { 'x-od-workspace-id': 'ws-1', 'x-od-workspace-member-id': 'member-1' } });
+  });
+  it.each(['publish', 'resume', 'get', 'status', 'stop'])('share %s uses the existing file endpoint and emits raw JSON', async action => {
+    stub = await startProjectStubServer();
+    const result = await runCli([
+      'project', 'share', action, 'project-1', '--path', 'nested/index.html',
+      '--workspace', 'ws-1', '--workspace-member', 'member-1',
+      '--daemon-url', stub.baseUrl, '--json',
+      ...(action === 'stop' ? ['--slug', 'legacy-public-slug'] : []),
+    ]);
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe('');
+    const publication = { url: 'https://example.invalid/returned-link', slug: 'returned-slug', fileName: 'nested/index.html' };
+    expect(JSON.parse(result.stdout)).toEqual(action === 'stop'
+      ? { ok: true, slug: 'legacy-public-slug', fileName: 'nested/index.html' }
+      : ['publish', 'resume'].includes(action) ? publication : { publication });
+    expect(stub.requests).toHaveLength(1);
+    expect(stub.requests[0]).toMatchObject({
+      method: action === 'stop' ? 'DELETE' : ['publish', 'resume'].includes(action) ? 'POST' : 'GET',
+      url: '/api/projects/project-1/files/nested%2Findex.html/publish-public',
+      headers: { 'x-od-workspace-id': 'ws-1', 'x-od-workspace-member-id': 'member-1' },
+      body: action === 'stop' ? JSON.stringify({ slug: 'legacy-public-slug' }) : '',
+    });
+  });
+  it('resume is documented and requires a file before making requests', async () => {
+    stub = await startProjectStubServer();
+    const help = await runCli(['project', 'share', '--help']);
+    expect(help.stdout).toContain('od project share resume <id> --path <file> [--json]');
+    const invalid = await runCli(['project', 'share', 'resume', 'project-1', '--daemon-url', stub.baseUrl, '--json']);
+    expect(invalid.code).toBe(2);
+    expect(stub.requests).toHaveLength(0);
+  });
+  it('resume preserves binding_pending rather than announcing publication success', async () => {
+    const body = { status: 'binding_pending', receipt: { slug: 'stable', filePath: 'nested/index.html', versionId: 'v1', version: 1, publishedAt: 1, entryPath: 'index.html' }, binding: { retrying: true } };
+    stub = await startProjectStubServer(undefined, body);
+    const args = ['project', 'share', 'resume', 'project-1', '--path', 'nested/index.html', '--daemon-url', stub.baseUrl];
+    const json = await runCli([...args, '--json']);
+    expect(json.code).toBe(0); expect(JSON.parse(json.stdout)).toEqual(body);
+    const human = await runCli(args);
+    expect(human.code).toBe(0); expect(human.stdout).toContain('binding pending');
+  });
   it('documents exact workspace identity for bound project and file commands', async () => {
     const projectHelp = await runCli(['project', 'help']);
     const filesHelp = await runCli(['files', 'help']);

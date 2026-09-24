@@ -1,4 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { ProjectPublicFileStopPendingError, type PublicFileDeleteTarget } from '../../collab/project-public-file-stop.js';
+import type { ProjectDeleteResponse } from '@open-design/contracts';
+import { publicFileMutationHandler } from '../public-file-mutation-handler.js';
+import type { PublicFileMutations } from '../../collab/public-file-mutations.js';
 import { rm } from 'node:fs/promises';
 import path from 'node:path';
 import { load } from 'cheerio';
@@ -37,6 +41,7 @@ import {
   PREVIEW_RUNTIME_STATE_VERSION,
 } from '@open-design/contracts/runtime/preview-runtime-state';
 import {
+  ANNOTATED_SELECTOR_HELPERS,
   automaticStrategyTaskProfileForProjectMetadata,
   defaultScenarioPluginIdForProjectMetadata,
   type ChatSessionMode,
@@ -331,6 +336,9 @@ function assertProjectCreatePreparationWithinDeadline(
 }
 
 export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry' | 'appConfig' | 'agents' | 'validation' | 'collabSync'> {
+  /** Stop public bindings before any catalog/local deletion; production supplies this capability. */
+  stopPublicFilesBeforeDelete?: (projectId: string) => Promise<void>;
+  publicFileMutations?: PublicFileMutations;
   /**
    * Request-wide deadline for the read-only preparation POST /api/projects
    * runs before its transaction. Production keeps the 15s default; tests and
@@ -395,6 +403,7 @@ export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | '
    * All optional and no-op off-team / when the collab cloud is unconfigured.
    */
   resolveAuthorMemberId?: (authorization: string | undefined) => Promise<string | undefined>;
+  resolveCurrentAuthorDisplayName?: () => string | null;
   resolveWorkspaceContext?: (
     req: Request,
     projectId: string,
@@ -423,6 +432,7 @@ export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | '
     comment: PreviewComment,
     context: WorkspaceCollabContext | null,
   ) => boolean | void;
+  pullCommentsNow?: (projectId: string, context: WorkspaceCollabContext) => Promise<boolean>;
   onCommentsRead?: (
     projectId: string,
     context: WorkspaceCollabContext | null,
@@ -886,11 +896,7 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
     (document.head || document.documentElement).appendChild(style);
   }
   function active(){ return commentEnabled; }
-  function annotatedSelectorFor(el){
-    var id = el.getAttribute('data-od-id') || el.getAttribute('data-screen-label');
-    if (!id) return null;
-    return el.hasAttribute('data-od-id') ? '[data-od-id="' + esc(id) + '"]' : '[data-screen-label="' + esc(id) + '"]';
-  }
+${ANNOTATED_SELECTOR_HELPERS}
   function domSelectorFor(el){
     if (!el || !el.tagName || el === document.documentElement || el === document.body) return null;
     var parts = [];
@@ -966,9 +972,9 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
     } catch (_) { return null; }
   }
   function targetFrom(el, allowDomFallback, clickedEl, clickPoint){
-    var id = el.getAttribute('data-od-id') || el.getAttribute('data-screen-label');
+    var id = annotatedElementIdFor(el);
     if (allowDomFallback && id && generatedRootAnnotation(el, id)) return null;
-    var selector = annotatedSelectorFor(el);
+    var selector = annotatedSelectorFor(el, esc);
     if (!id && allowDomFallback && meaningfulDomFallbackTarget(el)) {
       selector = domSelectorFor(el);
       if (selector) id = 'dom:' + selector;
@@ -5461,7 +5467,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     }
   });
 
-  app.delete('/api/projects/:id', async (req, res) => {
+  app.delete('/api/projects/:id', publicFileMutationHandler(ctx.publicFileMutations, async (req, res) => {
     try {
       const project = getProject(db, req.params.id);
       if (!project) {
@@ -5477,6 +5483,17 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         project.id,
         'delete',
       )) return;
+      let shareResiduals: ProjectDeleteResponse['shareResiduals'];
+      try {
+        await ctx.stopPublicFilesBeforeDelete?.(project.id);
+      } catch (error) {
+        // Only a durable, unchanged stop intent permits local-only deletion.
+        // Team removal retains its existing unshare/catalog safety boundary.
+        if (!(error instanceof ProjectPublicFileStopPendingError)
+          || !error.canContinueLocalDelete
+          || getWorkspaceProjectByProjectId(db, project.id)?.visibility !== 'personal') throw error;
+        shareResiduals = error.shareResiduals;
+      }
       // spec 04 §11: a team-visible project must be unshared from the hub
       // BEFORE it disappears locally — mirrors the 'personal' branch of
       // /move's `requestTeamVisibility`, the one other place this daemon
@@ -5511,16 +5528,15 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       // Stop any live agent run in this project before its row and directory
       // are removed, otherwise the CLI subprocess is orphaned — it keeps
       // billing and writes into a directory that no longer exists (#5468).
-      await cancelRunsOwnedBy(design.runs, { projectId: req.params.id });
+      await cancelRunsOwnedBy(design.runs, { projectId: project.id });
       dbDeleteProject(db, req.params.id);
       await removeProjectDir(PROJECTS_DIR, req.params.id).catch(() => {});
-      /** @type {import('@open-design/contracts').OkResponse} */
-      const body = { ok: true };
+      const body: ProjectDeleteResponse = { ok: true, ...(shareResiduals?.length ? { shareResiduals } : {}) };
       res.json(body);
     } catch (err: any) {
       sendApiError(res, 400, 'BAD_REQUEST', String(err));
     }
-  });
+  }));
 
   // SSE stream of file-changed events for a project. Drives preview live-reload.
   // Receipt of a `file-changed` event triggers a file-list refresh, which
@@ -5785,6 +5801,8 @@ export function registerProjectArtifactRoutes(app: Express, ctx: RegisterProject
 }
 
 export interface RegisterProjectFileRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'uploads' | 'node' | 'projectStore' | 'projectFiles' | 'documents' | 'artifacts' | 'projectPreviewScopes'> {
+  publicFileMutations?: PublicFileMutations;
+  stopPublicFilesBeforeDelete?: (projectId: string, target?: PublicFileDeleteTarget) => Promise<void>;
   verifyWorkspaceRequestAuthority?: VerifyWorkspaceRequestAuthority;
   authorizeProjectRequest?: AuthorizeProjectRequest;
   /** Startup-hydrated O(1) quarantine lookup for stale Team mirrors. */
@@ -6673,7 +6691,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     }
   });
 
-  app.delete('/api/projects/:id/folders', async (req, res) => {
+  app.delete('/api/projects/:id/folders', publicFileMutationHandler(ctx.publicFileMutations, async (req, res) => {
     try {
       const { path: folderPath } = req.body || {};
       if (typeof folderPath !== 'string' || !folderPath.trim()) {
@@ -6693,6 +6711,11 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         project.id,
         'writeFiles',
       )) return;
+      const target = await resolveProjectFilePath(PROJECTS_DIR, project.id, folderPath, project.metadata);
+      if (!target.name || !(await ctx.node.fs.promises.stat(target.filePath)).isDirectory()) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'target must be a non-root folder');
+      }
+      await ctx.stopPublicFilesBeforeDelete?.(project.id, { folderPath: target.name });
       await deleteProjectFolder(
         PROJECTS_DIR,
         req.params.id,
@@ -6705,7 +6728,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     } catch (err: any) {
       sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
     }
-  });
+  }));
 
   app.get('/api/projects/:id/design-system-package-audit', async (req, res) => {
     try {
@@ -7153,7 +7176,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     }
   });
 
-  app.delete(/^\/api\/projects\/([^/]+)\/raw\/(.+)$/u, async (req, res) => {
+  app.delete(/^\/api\/projects\/([^/]+)\/raw\/(.+)$/u, publicFileMutationHandler(ctx.publicFileMutations, async (req, res) => {
     try {
       const params = req.params as unknown as { 0?: string; 1?: string };
       const projectId = String(params[0] ?? '');
@@ -7173,6 +7196,8 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         project.id,
         'writeFiles',
       )) return;
+      const target = await resolveProjectFilePath(PROJECTS_DIR, projectId, rawSplat, project?.metadata);
+      await ctx.stopPublicFilesBeforeDelete?.(projectId, target.name);
       await deleteProjectFile(PROJECTS_DIR, projectId, rawSplat, project?.metadata);
       await markProjectFileVersionStoreDeleted(PROJECTS_DIR, projectId, rawSplat, project?.metadata);
       // Tombstone, not delete: an HTML card must be able to say "the current
@@ -7192,10 +7217,13 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         res,
         status,
         status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
-        String(err),
+        // Never expose filesystem error messages: they contain daemon-owned paths.
+        status === 404 ? 'file not found'
+          : err instanceof ProjectPublicFileStopPendingError ? 'PUBLIC_FILE_STOP_PENDING'
+          : 'file could not be deleted',
       );
     }
-  });
+  }));
 
   app.get('/api/projects/:id/files/:name/preview', async (req, res) => {
     try {
@@ -7867,8 +7895,11 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     }
   });
 
-  app.delete('/api/projects/:id/files/:name', async (req, res) => {
+  app.delete('/api/projects/:id/files/:name', publicFileMutationHandler(ctx.publicFileMutations, async (req, res) => {
     try {
+      if (typeof req.params.id !== 'string' || typeof req.params.name !== 'string') {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'project and file path are required');
+      }
       if (rejectInternalVersionPath(res, req.params.name)) return;
       const delProject = getProject(db, req.params.id);
       if (!delProject) {
@@ -7884,6 +7915,8 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         delProject.id,
         'writeFiles',
       )) return;
+      const target = await resolveProjectFilePath(PROJECTS_DIR, req.params.id, req.params.name, delProject?.metadata);
+      await ctx.stopPublicFilesBeforeDelete?.(delProject.id, target.name);
       await deleteProjectFile(PROJECTS_DIR, req.params.id, req.params.name, delProject?.metadata);
       await markProjectFileVersionStoreDeleted(PROJECTS_DIR, req.params.id, req.params.name, delProject?.metadata);
       try {
@@ -7900,10 +7933,13 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         res,
         status,
         status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
-        String(err),
+        // Never expose filesystem error messages: they contain daemon-owned paths.
+        status === 404 ? 'file not found'
+          : err instanceof ProjectPublicFileStopPendingError ? 'PUBLIC_FILE_STOP_PENDING'
+          : 'file could not be deleted',
       );
     }
-  });
+  }));
 
 }
 
@@ -8000,7 +8036,7 @@ export function registerProjectUploadRoutes(app: Express, ctx: RegisterProjectUp
         /** @type {import('@open-design/contracts').UploadProjectFilesResponse} */
         const body = { files: out };
         res.json(body);
-      } catch (err: any) {
+      } catch {
         sendApiError(res, 500, 'INTERNAL_ERROR', 'upload failed');
       }
     },

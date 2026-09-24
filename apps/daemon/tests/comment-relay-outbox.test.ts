@@ -1,4 +1,9 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import Database from 'better-sqlite3';
+
+const { execFileMock } = vi.hoisted(() => ({ execFileMock: vi.fn() }));
+
+vi.mock('node:child_process', () => ({ execFile: execFileMock }));
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -15,18 +20,29 @@ import {
   insertProject,
   openDatabase,
 } from '../src/db.js';
-import { createCollabCloudService } from '../src/collab/collab-cloud-service.js';
+import { createCollabCloudService, previewCommentToCloud } from '../src/collab/collab-cloud-service.js';
+import { commentRelayScope } from '../src/collab/comment-relay-scope.js';
+import {
+  createInMemoryPublicFilePublicationStore,
+  createSqlitePublicFilePublicationStore,
+  migratePublicFilePublications,
+} from '../src/collab/public-file-publication-store.js';
 import {
   commentRelayLocalBindingMatches,
   createCommentRelayOutboxStore,
+  migrateCommentRelayOutbox,
   type CommentRelayLocalProjectBinding,
 } from '../src/collab/comment-relay-outbox.js';
-import type { CollabCloudClient } from '../src/integrations/collab-cloud.js';
+import { CollabCloudError, type CollabCloudClient } from '../src/integrations/collab-cloud.js';
+import { createVelaCliCollabClient } from '../src/collab/vela-cli-collab-client.js';
 
 let tempDir: string | null = null;
 
 afterEach(() => {
+  vi.useRealTimers();
   closeDatabase();
+  execFileMock.mockReset();
+  vi.unstubAllEnvs();
   if (tempDir) fs.rmSync(tempDir, { recursive: true, force: true });
   tempDir = null;
 });
@@ -113,6 +129,369 @@ async function waitForCondition(predicate: () => boolean): Promise<void> {
 }
 
 describe('durable Team comment relay outbox', () => {
+  it('starts with an empty durable outbox without pushing a comment', async () => {
+    vi.useFakeTimers();
+    const db = seededDb();
+    const pushes = vi.fn(async () => ({ seq: 1 }));
+    const service = createCollabCloudService({
+      client: clientWithPush(pushes),
+      commentOutbox: createCommentRelayOutboxStore(db, () => 0),
+      listProjectIds: () => [],
+      resolveLocalConversationId: () => 'conv-local',
+      mergeComment: () => 'unchanged',
+      now: () => 0,
+    });
+
+    service.start();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(pushes).not.toHaveBeenCalled();
+    service.dispose();
+  });
+
+  it('keeps a materialized team member relay-eligible when the local mirror has no creator', () => {
+    const teamMember = context('member', {
+      workspaceId: 'ws-multi-client',
+      teamId: 'ws-multi-client',
+      workspaceMemberId: 'mem-multi-viewer',
+    });
+
+    expect(commentRelayScope({
+      binding: {
+        workspaceId: 'ws-multi-client',
+        visibility: 'team',
+        resourceState: 'active',
+        createdByWorkspaceMemberId: null,
+      },
+      context: teamMember,
+      projectId: 'project-1',
+      filePath: 'index.html',
+      publications: createInMemoryPublicFilePublicationStore(),
+    })).toMatchObject({
+      workspaceId: 'ws-multi-client',
+      teamId: 'ws-multi-client',
+      ownerMemberId: 'mem-multi-viewer',
+      relayScope: 'team',
+    });
+  });
+
+  it('backfills legacy personal file paths idempotently without touching malformed or unrelated rows', () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-comment-relay-legacy-'));
+    const dbPath = path.join(tempDir, 'app.sqlite');
+    let db = new Database(dbPath);
+    db.exec(`
+      CREATE TABLE comment_relay_outbox (
+        workspace_id TEXT NOT NULL, workspace_member_id TEXT NOT NULL,
+        team_id TEXT NOT NULL, relay_scope TEXT NOT NULL DEFAULT 'team',
+        project_id TEXT NOT NULL, comment_id TEXT NOT NULL,
+        expected_owner_member_id TEXT, payload_json TEXT NOT NULL,
+        revision INTEGER NOT NULL DEFAULT 1, attempt_count INTEGER NOT NULL DEFAULT 0,
+        next_attempt_at INTEGER NOT NULL, last_error TEXT, created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (workspace_id, workspace_member_id, project_id, comment_id)
+      );
+    `);
+    const insert = db.prepare(`
+      INSERT INTO comment_relay_outbox (workspace_id, workspace_member_id, team_id, relay_scope,
+        project_id, comment_id, expected_owner_member_id, payload_json, next_attempt_at, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 100, 100, 100)
+    `);
+    const payload = (id: string, filePath: string) => JSON.stringify(
+      previewCommentToCloud(comment({ id, filePath }), 'owner-a'),
+    );
+    insert.run('workspace-a', 'owner-a', 'workspace-a', 'personal', 'p1', 'exact', 'owner-a', payload('exact', 'index.html'));
+    insert.run('workspace-a', 'owner-a', 'workspace-a', 'personal', 'p1', 'other-file', 'owner-a', payload('other-file', 'other.html'));
+    insert.run('workspace-a', 'owner-b', 'workspace-a', 'personal', 'p1', 'other-principal', 'owner-b', payload('other-principal', 'index.html'));
+    insert.run('workspace-a', 'owner-a', 'workspace-a', 'team', 'p1', 'team-row', 'owner-a', payload('team-row', 'index.html'));
+    insert.run('workspace-a', 'owner-a', 'workspace-a', 'personal', 'p1', 'malformed', 'owner-a', '{not json');
+
+    migrateCommentRelayOutbox(db);
+    migratePublicFilePublications(db);
+    expect(db.prepare(`SELECT file_path FROM comment_relay_outbox WHERE comment_id = 'exact'`).get()).toEqual({ file_path: 'index.html' });
+    expect(db.prepare(`SELECT file_path FROM comment_relay_outbox WHERE comment_id = 'malformed'`).get()).toEqual({ file_path: '' });
+    migrateCommentRelayOutbox(db);
+    db.close();
+    db = new Database(dbPath);
+    migrateCommentRelayOutbox(db);
+    migratePublicFilePublications(db);
+
+    const publications = createSqlitePublicFilePublicationStore(db, () => 100);
+    const exactScope = { resourceTeamId: 'workspace-a', ownerMemberId: 'owner-a', projectId: 'p1', filePath: 'index.html' };
+    publications.set(exactScope, { url: 'https://example.test/index', slug: 'index', fileName: 'index.html' });
+    expect(publications.deleteIfRevisionMatches(exactScope, publications.getRevision(exactScope)!)).toBe(true);
+    expect(db.prepare(`SELECT comment_id, file_path FROM comment_relay_outbox ORDER BY comment_id`).all()).toEqual([
+      { comment_id: 'malformed', file_path: '' },
+      { comment_id: 'other-file', file_path: 'other.html' },
+      { comment_id: 'other-principal', file_path: 'index.html' },
+      { comment_id: 'team-row', file_path: '' },
+    ]);
+    db.close();
+  });
+
+  it('rolls back publication deletion when personal outbox cancellation is aborted', () => {
+    const db = seededDb();
+    const scope = { resourceTeamId: 'workspace-a', ownerMemberId: 'owner-a', projectId: 'p1', filePath: 'index.html' };
+    const publications = createSqlitePublicFilePublicationStore(db, () => 100);
+    publications.set(scope, { url: 'https://example.test/index', slug: 'index', fileName: 'index.html' });
+    const outbox = createCommentRelayOutboxStore(db, () => 100);
+    outbox.enqueue({ workspaceId: 'workspace-a', workspaceMemberId: 'owner-a', teamId: 'workspace-a', relayScope: 'personal', projectId: 'p1', expectedOwnerMemberId: 'owner-a', comment: previewCommentToCloud(comment({ id: 'atomic-row' }), 'owner-a') });
+    db.exec(`CREATE TRIGGER abort_personal_outbox_delete BEFORE DELETE ON comment_relay_outbox BEGIN SELECT RAISE(ABORT, 'forced cancellation failure'); END;`);
+
+    const revision = publications.getRevision(scope)!;
+    expect(() => publications.deleteIfRevisionMatches(scope, revision)).toThrow('forced cancellation failure');
+    expect(publications.get(scope)?.slug).toBe('index');
+    expect(outbox.listDue(100).map((record) => record.commentId)).toEqual(['atomic-row']);
+    db.exec('DROP TRIGGER abort_personal_outbox_delete');
+    expect(publications.deleteIfRevisionMatches(scope, revision)).toBe(true);
+    expect(publications.get(scope)).toBeNull();
+    expect(outbox.count()).toBe(0);
+  });
+
+  it('delivers an active personal owner publication through a durable outbox after restart', async () => {
+    const db = seededDb();
+    const owner = context('owner', {
+      workspaceId: 'workspace-personal',
+      workspaceType: 'personal',
+      workspaceMemberId: 'personal-owner',
+      teamId: '',
+    });
+    const binding: CommentRelayLocalProjectBinding = {
+      workspaceId: owner.workspaceId,
+      visibility: 'personal',
+      resourceState: 'active',
+      createdByWorkspaceMemberId: owner.workspaceMemberId,
+    };
+    const publications = createSqlitePublicFilePublicationStore(db, () => 100);
+    publications.set({
+      resourceTeamId: owner.workspaceId,
+      ownerMemberId: owner.workspaceMemberId,
+      projectId: 'p1',
+      filePath: 'index.html',
+    }, { url: 'https://example.test/share', slug: 'public-slug', fileName: 'index.html' });
+    const scope = (projectId: string, filePath: string, current: WorkspaceCollabContext) =>
+      commentRelayScope({ binding, context: current, projectId, filePath, publications });
+    const firstOutbox = createCommentRelayOutboxStore(db, () => 100);
+    const first = createCollabCloudService({
+      client: clientWithPush(async () => { throw new Error('offline'); }),
+      commentOutbox: firstOutbox,
+      commentRelayScope: scope,
+      resolveLocalProjectRelayBinding: () => ({ workspaceId: owner.workspaceId, ownerMemberId: owner.workspaceMemberId }),
+      validateCommentRelayProjectBinding: (record) => commentRelayLocalBindingMatches(record, binding),
+      resolveCommentRelayWorkspaceContext: async () => owner,
+      listRemoteProjectRelayBindings: async () => [],
+      listProjectIds: () => [], resolveLocalConversationId: () => 'conv-local', mergeComment: () => 'unchanged',
+      now: () => 100, retryDelayMs: () => 0,
+    });
+    expect(first.enqueueComment(comment({ authorMemberId: owner.workspaceMemberId }), owner)).toBe(true);
+    await first.flushPendingComments();
+    expect(firstOutbox.count()).toBe(1);
+    first.dispose();
+
+    // A real restart closes the SQLite handle. Reopen both the durable outbox
+    // and publication witness rather than merely constructing another service.
+    closeDatabase();
+    const reopened = openDatabase(tempDir!);
+    const restartedPublications = createSqlitePublicFilePublicationStore(reopened, () => 100);
+    const restartedScope = (projectId: string, filePath: string, current: WorkspaceCollabContext) =>
+      commentRelayScope({ binding, context: current, projectId, filePath, publications: restartedPublications });
+    const pushed: Array<{ teamId: string; projectId: string }> = [];
+    const restartedOutbox = createCommentRelayOutboxStore(reopened, () => 100);
+    const restarted = createCollabCloudService({
+      client: clientWithPush(async (teamId, projectId) => { pushed.push({ teamId, projectId }); return { seq: 9 }; }),
+      commentOutbox: restartedOutbox,
+      commentRelayScope: restartedScope,
+      resolveLocalProjectRelayBinding: () => ({ workspaceId: owner.workspaceId, ownerMemberId: owner.workspaceMemberId }),
+      validateCommentRelayProjectBinding: (record) => commentRelayLocalBindingMatches(record, binding),
+      resolveCommentRelayWorkspaceContext: async () => owner,
+      listRemoteProjectRelayBindings: async () => [],
+      listProjectIds: () => [], resolveLocalConversationId: () => 'conv-local', mergeComment: () => 'unchanged',
+      now: () => 100, retryDelayMs: () => 0,
+    });
+    await restarted.flushPendingComments();
+    expect(pushed).toEqual([{ teamId: owner.workspaceId, projectId: 'p1' }]);
+    expect(restartedOutbox.count()).toBe(0);
+    restarted.dispose();
+  });
+  it('fails closed for no publication, a different file, stopped publication, and a switched personal identity', async () => {
+    const db = seededDb();
+    const owner = context('owner', { workspaceId: 'workspace-personal', workspaceType: 'personal', workspaceMemberId: 'personal-owner', teamId: '' });
+    const binding: CommentRelayLocalProjectBinding = { workspaceId: owner.workspaceId, visibility: 'personal', resourceState: 'active', createdByWorkspaceMemberId: owner.workspaceMemberId };
+    const publications = createSqlitePublicFilePublicationStore(db);
+    const scope = (projectId: string, filePath: string, current: WorkspaceCollabContext) =>
+      commentRelayScope({ binding, context: current, projectId, filePath, publications });
+    expect(scope('p1', 'index.html', owner)).toBeNull();
+    publications.set({ resourceTeamId: owner.workspaceId, ownerMemberId: owner.workspaceMemberId, projectId: 'p1', filePath: 'index.html' }, { url: 'https://example.test/share', slug: 'public-slug', fileName: 'index.html' });
+    expect(scope('p1', 'other.html', owner)).toBeNull();
+
+    const outbox = createCommentRelayOutboxStore(db, () => 100);
+    let freshIdentity = owner;
+    let pushes = 0;
+    const service = createCollabCloudService({
+      client: clientWithPush(async () => { pushes += 1; return { seq: 1 }; }),
+      commentOutbox: outbox, commentRelayScope: scope,
+      resolveLocalProjectRelayBinding: () => ({ workspaceId: owner.workspaceId, ownerMemberId: owner.workspaceMemberId }),
+      validateCommentRelayProjectBinding: (record) => commentRelayLocalBindingMatches(record, binding),
+      resolveCommentRelayWorkspaceContext: async () => freshIdentity,
+      listRemoteProjectRelayBindings: async () => [],
+      listProjectIds: () => [], resolveLocalConversationId: () => 'conv-local', mergeComment: () => 'unchanged',
+      now: () => 100, retryDelayMs: () => 0,
+    });
+    expect(service.enqueueComment(comment({ authorMemberId: owner.workspaceMemberId }), owner)).toBe(true);
+    // Same-principal/different-file, project, and principal controls must stay.
+    outbox.enqueue({ workspaceId: owner.workspaceId, workspaceMemberId: owner.workspaceMemberId, teamId: owner.workspaceId, relayScope: 'personal', projectId: 'p1', expectedOwnerMemberId: owner.workspaceMemberId, comment: previewCommentToCloud(comment({ id: 'other-file', filePath: 'other.html' }), owner.workspaceMemberId) });
+    outbox.enqueue({ workspaceId: owner.workspaceId, workspaceMemberId: owner.workspaceMemberId, teamId: owner.workspaceId, relayScope: 'personal', projectId: 'p2', expectedOwnerMemberId: owner.workspaceMemberId, comment: previewCommentToCloud(comment({ id: 'other-project', projectId: 'p2' }), owner.workspaceMemberId) });
+    outbox.enqueue({ workspaceId: owner.workspaceId, workspaceMemberId: 'other-owner', teamId: owner.workspaceId, relayScope: 'personal', projectId: 'p1', expectedOwnerMemberId: 'other-owner', comment: previewCommentToCloud(comment({ id: 'other-principal' }), 'other-owner') });
+    outbox.enqueue({ workspaceId: owner.workspaceId, workspaceMemberId: owner.workspaceMemberId, teamId: owner.workspaceId, relayScope: 'team', projectId: 'p1', expectedOwnerMemberId: owner.workspaceMemberId, comment: previewCommentToCloud(comment({ id: 'team-row' }), owner.workspaceMemberId) });
+    // A stop invalidates pre-stop rows even when the stable alias is immediately
+    // republished; an active witness cannot safely distinguish their generation.
+    const publicationScope = { resourceTeamId: owner.workspaceId, ownerMemberId: owner.workspaceMemberId, projectId: 'p1', filePath: 'index.html' };
+    expect(publications.deleteIfRevisionMatches(publicationScope, publications.getRevision(publicationScope)!)).toBe(true);
+    publications.set({ resourceTeamId: owner.workspaceId, ownerMemberId: owner.workspaceMemberId, projectId: 'p1', filePath: 'index.html' }, { url: 'https://example.test/share', slug: 'public-slug', fileName: 'index.html' });
+    expect(outbox.listDue(100).map((record) => record.commentId).sort()).toEqual(['other-file', 'other-principal', 'other-project', 'team-row']);
+
+    service.dispose();
+    // Cancellation and the unrelated controls survive restart independently.
+    closeDatabase();
+    const reopened = openDatabase(tempDir!);
+    const restartedPublications = createSqlitePublicFilePublicationStore(reopened, () => 100);
+    const restartedScope = (projectId: string, filePath: string, current: WorkspaceCollabContext) =>
+      commentRelayScope({ binding, context: current, projectId, filePath, publications: restartedPublications });
+    const restartedOutbox = createCommentRelayOutboxStore(reopened, () => 100);
+    const controls = restartedOutbox.listDue(100);
+    expect(controls.map((record) => record.commentId).sort()).toEqual(['other-file', 'other-principal', 'other-project', 'team-row']);
+    for (const record of controls) restartedOutbox.acknowledge(record);
+    const restarted = createCollabCloudService({
+      client: clientWithPush(async () => { pushes += 1; return { seq: 1 }; }),
+      commentOutbox: restartedOutbox, commentRelayScope: restartedScope,
+      resolveLocalProjectRelayBinding: () => ({ workspaceId: owner.workspaceId, ownerMemberId: owner.workspaceMemberId }),
+      validateCommentRelayProjectBinding: (record) => commentRelayLocalBindingMatches(record, binding),
+      resolveCommentRelayWorkspaceContext: async () => owner,
+      listRemoteProjectRelayBindings: async () => [],
+      listProjectIds: () => [], resolveLocalConversationId: () => 'conv-local', mergeComment: () => 'unchanged',
+      now: () => 100, retryDelayMs: () => 0,
+    });
+    await restarted.flushPendingComments();
+    expect(pushes).toBe(0);
+    expect(restartedOutbox.count()).toBe(0);
+    // A new post-resume revision still has the normal delivery path.
+    expect(restarted.enqueueComment(comment({ id: 'after-resume', note: 'after-resume', authorMemberId: owner.workspaceMemberId }), owner)).toBe(true);
+    await restarted.flushPendingComments();
+    expect(pushes).toBe(1);
+    expect(restartedOutbox.count()).toBe(0);
+    restarted.dispose();
+  });
+
+  it.each([
+    ['active file first', ['index.html', 'stopped.html']],
+    ['stopped file first', ['stopped.html', 'index.html']],
+  ] as const)('validates every personal publication in a mixed identity batch (%s)', async (_order, filePaths) => {
+    const db = seededDb();
+    const owner = context('owner', {
+      workspaceId: 'workspace-personal',
+      workspaceType: 'personal',
+      workspaceMemberId: 'personal-owner',
+      teamId: '',
+    });
+    const binding: CommentRelayLocalProjectBinding = {
+      workspaceId: owner.workspaceId,
+      visibility: 'personal',
+      resourceState: 'active',
+      createdByWorkspaceMemberId: owner.workspaceMemberId,
+    };
+    const publications = createSqlitePublicFilePublicationStore(db, () => 100);
+    for (const filePath of filePaths) {
+      publications.set({
+        resourceTeamId: owner.workspaceId,
+        ownerMemberId: owner.workspaceMemberId,
+        projectId: 'p1',
+        filePath,
+      }, { url: `https://example.test/${filePath}`, slug: filePath, fileName: filePath });
+    }
+    const scope = (projectId: string, filePath: string, current: WorkspaceCollabContext) =>
+      commentRelayScope({ binding, context: current, projectId, filePath, publications });
+    const pushed: string[] = [];
+    const outbox = createCommentRelayOutboxStore(db, () => 100);
+    const service = createCollabCloudService({
+      client: clientWithPush(async (_teamId, _projectId, payload) => {
+        pushed.push(payload.filePath);
+        return { seq: pushed.length };
+      }),
+      commentOutbox: outbox,
+      commentRelayScope: scope,
+      resolveLocalProjectRelayBinding: () => ({ workspaceId: owner.workspaceId, ownerMemberId: owner.workspaceMemberId }),
+      validateCommentRelayProjectBinding: (record) => commentRelayLocalBindingMatches(record, binding),
+      resolveCommentRelayWorkspaceContext: async () => owner,
+      listRemoteProjectRelayBindings: async () => [],
+      listProjectIds: () => [], resolveLocalConversationId: () => 'conv-local', mergeComment: () => 'unchanged',
+      now: () => 100, retryDelayMs: () => 0,
+    });
+    for (const [index, filePath] of filePaths.entries()) {
+      expect(service.enqueueComment(comment({ id: `comment-${index}`, filePath, authorMemberId: owner.workspaceMemberId }), owner)).toBe(true);
+    }
+    // This is deliberately after enqueue: the records share one durable owner
+    // identity batch, but only the active publication may cross the relay.
+    publications.delete({
+      resourceTeamId: owner.workspaceId,
+      ownerMemberId: owner.workspaceMemberId,
+      projectId: 'p1',
+      filePath: 'stopped.html',
+    });
+
+    await service.flushPendingComments();
+
+    expect(pushed).toEqual(['index.html']);
+    expect(outbox.count()).toBe(0);
+    service.dispose();
+  });
+
+  it('does not let a stale different-creator project block a valid personal project in the same identity batch', async () => {
+    const db = seededDb();
+    const owner = context('owner', { workspaceId: 'workspace-personal', workspaceType: 'personal', workspaceMemberId: 'personal-owner', teamId: '' });
+    const otherCreator = 'another-creator';
+    let freshIdentity = owner;
+    const bindings = new Map<string, CommentRelayLocalProjectBinding>([
+      ['p1', { workspaceId: owner.workspaceId, visibility: 'personal', resourceState: 'active', createdByWorkspaceMemberId: owner.workspaceMemberId }],
+      ['p2', { workspaceId: owner.workspaceId, visibility: 'personal', resourceState: 'active', createdByWorkspaceMemberId: otherCreator }],
+    ]);
+    const publications = createSqlitePublicFilePublicationStore(db, () => 100);
+    for (const [projectId, creator] of [['p1', owner.workspaceMemberId], ['p2', otherCreator]] as const) {
+      publications.set({ resourceTeamId: owner.workspaceId, ownerMemberId: creator, projectId, filePath: 'index.html' }, { url: `https://example.test/${projectId}`, slug: projectId, fileName: 'index.html' });
+    }
+    const scope = (projectId: string, filePath: string, current: WorkspaceCollabContext) =>
+      commentRelayScope({ binding: bindings.get(projectId), context: current, projectId, filePath, publications });
+    const pushed: string[] = [];
+    const outbox = createCommentRelayOutboxStore(db, () => 100);
+    const service = createCollabCloudService({
+      client: clientWithPush(async (_teamId, projectId) => { pushed.push(projectId); return { seq: pushed.length }; }),
+      commentOutbox: outbox, commentRelayScope: scope,
+      resolveLocalProjectRelayBinding: (projectId) => {
+        const binding = bindings.get(projectId);
+        return binding ? { workspaceId: binding.workspaceId!, ownerMemberId: binding.createdByWorkspaceMemberId! } : null;
+      },
+      validateCommentRelayProjectBinding: (record) => commentRelayLocalBindingMatches(record, bindings.get(record.projectId)),
+      resolveCommentRelayWorkspaceContext: async () => freshIdentity,
+      listRemoteProjectRelayBindings: async () => [], listProjectIds: () => [], resolveLocalConversationId: () => 'conv-local', mergeComment: () => 'unchanged',
+      now: () => 100, retryDelayMs: () => 0,
+    });
+    expect(service.enqueueComment(comment({ id: 'valid-p1', projectId: 'p1', authorMemberId: owner.workspaceMemberId }), owner)).toBe(true);
+    // Simulate a row queued before p2's creator changed: it retains the same
+    // durable principal batch, but its current creator scope is no longer ours.
+    outbox.enqueue({ workspaceId: owner.workspaceId, workspaceMemberId: owner.workspaceMemberId, teamId: owner.workspaceId, relayScope: 'personal', projectId: 'p2', expectedOwnerMemberId: otherCreator, comment: previewCommentToCloud(comment({ id: 'stale-p2', projectId: 'p2' }), owner.workspaceMemberId) });
+
+    await service.flushPendingComments();
+    expect(pushed).toEqual(['p1']);
+    expect(outbox.count()).toBe(0);
+
+    // A later login/principal transition is not proof of an unpublish; it
+    // leaves a newly queued active-file row deferred for retry.
+    expect(service.enqueueComment(comment({ id: 'deferred-p1', projectId: 'p1', authorMemberId: owner.workspaceMemberId }), owner)).toBe(true);
+    freshIdentity = { ...owner, workspaceMemberId: 'switched-account' };
+    await service.flushPendingComments();
+    expect(pushed).toEqual(['p1']);
+    expect(outbox.count()).toBe(1);
+    service.dispose();
+  });
+
   it.each<CollabMemberRole>(['owner', 'admin', 'member'])(
     'delivers %s comments under the exact queued Workspace identity',
     async (role) => {
@@ -137,7 +516,7 @@ describe('durable Team comment relay outbox', () => {
           return queuedContext;
         },
         resolveLocalConversationId: () => 'conv-local',
-        mergeComment: () => false,
+        mergeComment: () => 'unchanged',
         now: () => 100,
         retryDelayMs: () => 0,
       });
@@ -172,7 +551,7 @@ describe('durable Team comment relay outbox', () => {
       listProjectIds: () => [],
       resolveProjectWorkspaceContext: async () => queuedContext,
       resolveLocalConversationId: () => 'conv-local',
-      mergeComment: () => false,
+      mergeComment: () => 'unchanged',
       now: () => 200,
       retryDelayMs: () => 0,
     });
@@ -185,9 +564,9 @@ describe('durable Team comment relay outbox', () => {
     closeDatabase();
     const reopened = openDatabase(tempDir!);
     const reopenedOutbox = createCommentRelayOutboxStore(reopened, () => 200);
-    const confirmed: Array<{ commentId: string; seq: number }> = [];
+    const confirmed: Array<{ commentId: string; seq: number; authorKey: string | undefined; memberId: string }> = [];
     const secondService = createCollabCloudService({
-      client: clientWithPush(async () => ({ seq: 42 })),
+      client: clientWithPush(async () => ({ seq: 42, authorKey: 'a'.repeat(64) })),
       commentOutbox: reopenedOutbox,
       resolveLocalProjectRelayBinding: () => ({
         workspaceId: 'workspace-a',
@@ -197,15 +576,15 @@ describe('durable Team comment relay outbox', () => {
       listProjectIds: () => [],
       resolveProjectWorkspaceContext: async () => queuedContext,
       resolveLocalConversationId: () => 'conv-local',
-      mergeComment: () => false,
-      onCommentPushed: ({ commentId, seq }) => confirmed.push({ commentId, seq }),
+      mergeComment: () => 'unchanged',
+      onCommentPushed: ({ commentId, seq, authorKey, memberId }) => confirmed.push({ commentId, seq, authorKey, memberId }),
       now: () => 200,
       retryDelayMs: () => 0,
     });
     await secondService.flushPendingComments();
 
     expect(reopenedOutbox.count()).toBe(0);
-    expect(confirmed).toEqual([{ commentId: 'comment-1', seq: 42 }]);
+    expect(confirmed).toEqual([{ commentId: 'comment-1', seq: 42, authorKey: 'a'.repeat(64), memberId: queuedContext.workspaceMemberId }]);
     secondService.dispose();
   });
 
@@ -229,7 +608,7 @@ describe('durable Team comment relay outbox', () => {
       listProjectIds: () => [],
       resolveProjectWorkspaceContext: async () => queuedContext,
       resolveLocalConversationId: () => 'conv-local',
-      mergeComment: () => false,
+      mergeComment: () => 'unchanged',
       now: () => 250,
       retryDelayMs: () => 0,
     });
@@ -264,7 +643,7 @@ describe('durable Team comment relay outbox', () => {
       listProjectIds: () => [],
       resolveProjectWorkspaceContext: async () => queuedContext,
       resolveLocalConversationId: () => 'conv-local',
-      mergeComment: () => false,
+      mergeComment: () => 'unchanged',
       now: () => 300,
       retryDelayMs: () => 0,
     });
@@ -305,7 +684,7 @@ describe('durable Team comment relay outbox', () => {
       listProjectIds: () => [],
       resolveProjectWorkspaceContext: async () => resolved,
       resolveLocalConversationId: () => 'conv-local',
-      mergeComment: () => false,
+      mergeComment: () => 'unchanged',
       now: () => 400,
       retryDelayMs: () => 0,
     });
@@ -355,7 +734,7 @@ describe('durable Team comment relay outbox', () => {
       listProjectIds: () => [],
       resolveProjectWorkspaceContext: async () => queuedContext,
       resolveLocalConversationId: () => 'conv-local',
-      mergeComment: () => false,
+      mergeComment: () => 'unchanged',
       now: () => 500,
       retryDelayMs: () => 0,
     });
@@ -389,7 +768,7 @@ describe('durable Team comment relay outbox', () => {
       listProjectIds: () => [],
       resolveProjectWorkspaceContext: async () => queuedContext,
       resolveLocalConversationId: () => 'conv-local',
-      mergeComment: () => false,
+      mergeComment: () => 'unchanged',
       now: () => 600,
       retryDelayMs: () => 0,
     });
@@ -398,6 +777,53 @@ describe('durable Team comment relay outbox', () => {
 
     expect(pushes).toBe(0);
     expect(outbox.count()).toBe(0);
+    service.dispose();
+  });
+
+  it('reports a missing remote owner while conditionally acknowledging only that revision', async () => {
+    const db = seededDb();
+    const queuedContext = context('member');
+    const outbox = createCommentRelayOutboxStore(db, () => 700);
+    const catalog = deferred<Array<{ projectId: string; ownerMemberId: string }>>();
+    const pushed: string[] = [];
+    const confirmed: string[] = [];
+    const errors: unknown[] = [];
+    const service = createCollabCloudService({
+      client: clientWithPush(async (_teamId, projectId) => {
+        pushed.push(projectId);
+        return { seq: pushed.length };
+      }),
+      commentOutbox: outbox,
+      resolveLocalProjectRelayBinding: () => ({
+        workspaceId: 'workspace-a',
+        ownerMemberId: 'project-owner',
+      }),
+      listProjectIds: () => [],
+      resolveLocalConversationId: () => 'conv-local',
+      mergeComment: () => 'unchanged',
+      resolveCommentRelayWorkspaceContext: async () => queuedContext,
+      listRemoteProjectRelayBindings: async () => catalog.promise,
+      onCommentPushed: ({ projectId }) => confirmed.push(projectId),
+      onError: (error) => errors.push(error),
+      now: () => 700,
+      retryDelayMs: () => 0,
+    });
+    expect(service.enqueueComment(comment({ id: 'missing-owner', note: 'old revision' }), queuedContext)).toBe(true);
+    expect(service.enqueueComment(comment({ id: 'valid-project', projectId: 'p2' }), queuedContext)).toBe(true);
+
+    const flushing = service.flushPendingComments();
+    await Promise.resolve();
+    expect(service.enqueueComment(comment({ id: 'missing-owner', note: 'new revision', updatedAt: 20 }), queuedContext)).toBe(true);
+    catalog.resolve([{ projectId: 'p2', ownerMemberId: 'project-owner' }]);
+    await flushing;
+
+    expect(pushed).toEqual(['p2']);
+    expect(confirmed).toEqual(['p2']);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toBeInstanceOf(Error);
+    expect((errors[0] as Error).message).toContain('remote project owner missing');
+    expect(outbox.count()).toBe(1);
+    expect(outbox.listDue(700)[0]?.comment.note).toBe('new revision');
     service.dispose();
   });
 
@@ -431,7 +857,7 @@ describe('durable Team comment relay outbox', () => {
       },
       listProjectIds: () => [],
       resolveLocalConversationId: () => 'conv-local',
-      mergeComment: () => false,
+      mergeComment: () => 'unchanged',
       now: () => 1_000,
       retryDelayMs: () => 0,
     }, {
@@ -509,7 +935,7 @@ describe('durable Team comment relay outbox', () => {
       resolveRemoteProjectOwnerMemberId: async () => 'project-owner',
       listProjectIds: () => [],
       resolveLocalConversationId: () => 'conv-local',
-      mergeComment: () => false,
+      mergeComment: () => 'unchanged',
       now: () => 1_000,
       retryDelayMs: () => 0,
     }, {
@@ -585,7 +1011,7 @@ describe('durable Team comment relay outbox', () => {
       }),
       listProjectIds: () => [],
       resolveLocalConversationId: () => 'conv-local',
-      mergeComment: () => false,
+      mergeComment: () => 'unchanged',
       now: () => 1_000,
       retryDelayMs: () => 0,
     }, {
@@ -631,7 +1057,7 @@ describe('durable Team comment relay outbox', () => {
       }),
       listProjectIds: () => [],
       resolveLocalConversationId: () => 'conv-local',
-      mergeComment: () => false,
+      mergeComment: () => 'unchanged',
       now: () => 1_000,
       retryDelayMs: () => 0,
     }, {
@@ -676,7 +1102,7 @@ describe('durable Team comment relay outbox', () => {
       }),
       listProjectIds: () => [],
       resolveLocalConversationId: () => 'conv-local',
-      mergeComment: () => false,
+      mergeComment: () => 'unchanged',
       now: () => 1_000,
       retryDelayMs: () => 0,
     }, {
@@ -735,7 +1161,7 @@ describe('durable Team comment relay outbox', () => {
       listProjectIds: () => ['p1'],
       resolveProjectWorkspaceContext: async () => queuedContext,
       resolveLocalConversationId: () => 'conv-local',
-      mergeComment: () => false,
+      mergeComment: () => 'unchanged',
       now: () => 1_100,
       retryDelayMs: () => 0,
     }, {
@@ -811,7 +1237,7 @@ describe('durable Team comment relay outbox', () => {
       >[0]) => commentRelayLocalBindingMatches(record, binding),
       listProjectIds: () => [],
       resolveLocalConversationId: () => 'conv-local',
-      mergeComment: () => false,
+      mergeComment: () => 'unchanged',
       now: () => 1_200,
       retryDelayMs: () => 0,
     }, {
@@ -866,7 +1292,7 @@ describe('durable Team comment relay outbox', () => {
       listProjectIds: () => ['p1'],
       resolveProjectWorkspaceContext: async () => queuedContext,
       resolveLocalConversationId: () => 'conv-local',
-      mergeComment: () => false,
+      mergeComment: () => 'unchanged',
       onCommentPushed: () => {
         confirmations += 1;
       },
@@ -892,4 +1318,109 @@ describe('durable Team comment relay outbox', () => {
     expect(confirmations).toBe(0);
     expect(outbox.count()).toBe(1);
   });
+
+  it('acknowledges only the rejected revision for a structured 410 SHARE_STOPPED and does not resurrect it after SQLite reopen', async () => {
+    const db = seededDb();
+    const queuedContext = context('member');
+    const outbox = createCommentRelayOutboxStore(db, () => 1_400);
+    const stdout = fs.readFileSync(
+      new URL('./fixtures/vela-cli-comment-push-share-stopped-927e0a62e7.stdout.json', import.meta.url),
+      'utf8',
+    );
+    // Exercise the default runner: runVelaCommand captures stdout on its
+    // rejected process-boundary error, then defaultRunVelaCollab must preserve
+    // the structured terminal failure through runJson and the SQLite outbox.
+    vi.stubEnv('VELA_BIN', process.execPath);
+    vi.stubEnv('OD_DATA_DIR', '');
+    execFileMock.mockImplementationOnce((_bin, _args, _options, callback) => {
+      callback(new Error('unclassified command failure'), stdout, '');
+      return { pid: 4321 };
+    });
+    const client = createVelaCliCollabClient();
+    const errors: unknown[] = [];
+    const confirmed: Array<{ commentId: string; seq: number }> = [];
+    const service = createCollabCloudService({
+      client,
+      commentOutbox: outbox,
+      resolveLocalProjectRelayBinding: () => ({ workspaceId: 'workspace-a', ownerMemberId: 'project-owner' }),
+      resolveRemoteProjectOwnerMemberId: async () => 'project-owner',
+      listProjectIds: () => [], resolveProjectWorkspaceContext: async () => queuedContext,
+      resolveLocalConversationId: () => 'conv-local', mergeComment: () => 'unchanged',
+      onCommentPushed: (event) => confirmed.push(event), onError: (error) => errors.push(error),
+      now: () => 1_400, retryDelayMs: () => 0,
+    });
+    expect(service.enqueueComment(comment(), queuedContext)).toBe(true);
+    await service.flushPendingComments();
+
+    expect(outbox.count()).toBe(0);
+    expect(confirmed).toEqual([]);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toBeInstanceOf(CollabCloudError);
+    expect(errors[0]).toMatchObject({ status: 410, code: 'SHARE_STOPPED' });
+    service.dispose();
+    closeDatabase();
+
+    const reopened = openDatabase(tempDir!);
+    const restartedOutbox = createCommentRelayOutboxStore(reopened, () => 1_400);
+    expect(restartedOutbox.count()).toBe(0);
+  });
+
+  it('keeps a newer queued revision when the in-flight older revision is terminally rejected', async () => {
+    const db = seededDb();
+    const queuedContext = context('member');
+    const outbox = createCommentRelayOutboxStore(db, () => 1_500);
+    const inFlight = deferred<void>();
+    const service = createCollabCloudService({
+      client: clientWithPush(async () => {
+        await inFlight.promise;
+        throw new CollabCloudError(410, 'SHARE_STOPPED');
+      }),
+      commentOutbox: outbox,
+      resolveLocalProjectRelayBinding: () => ({ workspaceId: 'workspace-a', ownerMemberId: 'project-owner' }),
+      resolveRemoteProjectOwnerMemberId: async () => 'project-owner',
+      listProjectIds: () => [], resolveProjectWorkspaceContext: async () => queuedContext,
+      resolveLocalConversationId: () => 'conv-local', mergeComment: () => 'unchanged',
+      now: () => 1_500, retryDelayMs: () => 0,
+    });
+    service.enqueueComment(comment({ note: 'old' }), queuedContext);
+    const flushing = service.flushPendingComments();
+    await Promise.resolve();
+    service.enqueueComment(comment({ note: 'new' }), queuedContext);
+    inFlight.resolve();
+    await flushing;
+
+    const [pending] = outbox.listDue(1_500);
+    expect(pending?.comment.note).toBe('new');
+    expect(outbox.count()).toBe(1);
+    service.dispose();
+  });
+
+  it.each([
+    new CollabCloudError(429, 'RATE_LIMITED', 'SHARE_STOPPED'),
+    new CollabCloudError(500, 'UPSTREAM_FAILURE', 'SHARE_STOPPED'),
+    new CollabCloudError(410, 'ANOTHER_GONE_CODE', 'SHARE_STOPPED'),
+    new Error('410 SHARE_STOPPED'),
+  ])('retries non-terminal structured failures without using message text', async (failure) => {
+    const db = seededDb();
+    const queuedContext = context('member');
+    const outbox = createCommentRelayOutboxStore(db, () => 1_600);
+    let attempts = 0;
+    const service = createCollabCloudService({
+      client: clientWithPush(async () => { attempts += 1; throw failure; }),
+      commentOutbox: outbox,
+      resolveLocalProjectRelayBinding: () => ({ workspaceId: 'workspace-a', ownerMemberId: 'project-owner' }),
+      resolveRemoteProjectOwnerMemberId: async () => 'project-owner',
+      listProjectIds: () => [], resolveProjectWorkspaceContext: async () => queuedContext,
+      resolveLocalConversationId: () => 'conv-local', mergeComment: () => 'unchanged',
+      now: () => 1_600, retryDelayMs: () => 0,
+    });
+    service.enqueueComment(comment(), queuedContext);
+    await service.flushPendingComments();
+    await service.flushPendingComments();
+    await service.flushPendingComments();
+    expect(attempts).toBe(3);
+    expect(outbox.count()).toBe(1);
+    service.dispose();
+  });
+
 });

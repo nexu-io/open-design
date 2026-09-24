@@ -7,6 +7,13 @@ import path from 'node:path';
 import {
   closeDatabase,
   deletePreviewComment,
+  ensureProjectCommentAnchorConversation,
+  ensureWorkspaceProject,
+  getWorkspaceProjectByProjectId,
+  getProject,
+  getProjectPreviewComment,
+  listProjectPreviewComments,
+  mergeSyncedPreviewComment,
   getConversation,
   getPreviewComment,
   insertConversation,
@@ -52,9 +59,11 @@ function asMember(memberId: string): { authorization: string } {
 
 async function startServer({
   shared = true,
+  team = false,
   metadata = { kind: 'prototype' },
 }: {
   shared?: boolean;
+  team?: boolean;
   metadata?: Record<string, unknown>;
 } = {}) {
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-comment-perms-'));
@@ -68,6 +77,9 @@ async function startServer({
   });
   insertConversation(db, { id: CONVERSATION, projectId: PROJECT, title: 'Chat', createdAt: 1, updatedAt: 1 });
 
+  if (team) ensureWorkspaceProject(db, {
+    projectId: PROJECT, workspaceId: 'test-team', visibility: 'team', createdByWorkspaceMemberId: OWNER,
+  });
   const updated: string[] = [];
   const deleted: string[] = [];
   const created: string[] = [];
@@ -80,9 +92,11 @@ async function startServer({
   app.use(express.json());
   registerProjectCommentRoutes(app, {
     db,
-    projectStore: { updateProject } as any,
+    projectStore: { updateProject, getWorkspaceProjectByProjectId } as any,
     conversations: {
       getConversation,
+      getProjectPreviewComment,
+      listProjectPreviewComments,
       listPreviewComments,
       upsertPreviewComment,
       getPreviewComment,
@@ -175,6 +189,90 @@ async function startServer({
 }
 
 describe('preview comment permission gating', () => {
+  it.each([
+    { team: false, caller: OWNER }, { team: false, caller: 'm-member' },
+    { team: true, caller: OWNER }, { team: true, caller: 'm-member' },
+  ])('rejects stored external body edits without effects (team=$team caller=$caller)', async ({ team, caller }) => {
+    const api = await startServer({ team });
+    const anchor = ensureProjectCommentAnchorConversation(api.db, PROJECT)!.conversationId;
+    const route = `/api/projects/${PROJECT}/conversations/${CONVERSATION}/comments`;
+    for (const shape of ['user', 'mixed-member', 'missing-kind', 'kind-only']) {
+      const id = `external-${shape}`;
+      mergeSyncedPreviewComment(api.db, PROJECT, anchor, {
+        ...api.commentTarget, id, projectId: PROJECT, conversationId: 'remote',
+        memberId: '', seq: 1, note: 'original external note', status: 'open',
+        authorKind: 'user', authorAppUserId: 'external-account', createdAt: 10, updatedAt: 10,
+      });
+      // Historical incomplete/mixed identities cannot be produced by the modern
+      // merger; retain them verbatim as fixtures, never repair them on rejection.
+      if (shape === 'mixed-member') api.db.prepare('UPDATE preview_comments SET author_member_id = ? WHERE id = ?').run(caller, id);
+      if (shape === 'missing-kind') api.db.prepare('UPDATE preview_comments SET author_kind = NULL WHERE id = ?').run(id);
+      if (shape === 'kind-only') api.db.prepare('UPDATE preview_comments SET author_app_user_id = NULL WHERE id = ?').run(id);
+      const before = api.db.prepare('SELECT * FROM preview_comments WHERE id = ?').get(id);
+      const projectBefore = getProject(api.db, PROJECT);
+      const outboxBefore = api.db.prepare('SELECT * FROM comment_relay_outbox').all();
+      const rejected = await api.json(route, {
+        method: 'POST', member: caller,
+        body: { id, target: api.commentTarget, note: 'stolen edit',
+          authorKind: 'member', authorMemberId: caller, authorAppUserId: '', authorDisplayName: 'spoofed' },
+      });
+      expect(rejected.status).toBe(403);
+      expect(api.db.prepare('SELECT * FROM preview_comments WHERE id = ?').get(id)).toEqual(before);
+      expect(getProject(api.db, PROJECT)).toEqual(projectBefore);
+      expect(api.db.prepare('SELECT * FROM comment_relay_outbox').all()).toEqual(outboxBefore);
+      expect(api.created).toEqual([]);
+      expect(api.updated).toEqual([]);
+      expect(api.deleted).toEqual([]);
+      expect(api.productEvents).toEqual([]);
+    }
+    // Editing is not Owner handling: the actual status endpoint remains usable.
+    expect((await api.json(route, { member: OWNER })).body.comments).toHaveLength(4);
+    const handled = await api.json(`${route}/external-user`, {
+      method: 'PATCH', member: OWNER, body: { status: 'attached' },
+    });
+    expect(handled.status).toBe(200);
+    expect(handled.body.comment.note).toBe('original external note');
+    expect(handled.body.comment.authorKind).toBe('user');
+  });
+
+  it('preserves the existing authorless POST compatibility branch', async () => {
+    const api = await startServer();
+    const legacy = upsertPreviewComment(api.db, PROJECT, CONVERSATION, { target: api.commentTarget, note: 'legacy' });
+    const edited = await api.json(`/api/projects/${PROJECT}/conversations/${CONVERSATION}/comments`, {
+      method: 'POST', member: OWNER, body: { id: legacy!.id, target: api.commentTarget, note: 'legacy edited' },
+    });
+    expect(edited.status).toBe(200);
+    expect(edited.body.comment).toMatchObject({ note: 'legacy edited', authorMemberId: OWNER });
+  });
+
+  it('personal reads and owner handling include only the current conversation plus internal shared anchor', async () => {
+    const api = await startServer();
+    const own = await api.createComment(OWNER, 'current private note');
+    insertConversation(api.db, { id: 'private-other', projectId: PROJECT, title: 'Other', createdAt: 2, updatedAt: 2 });
+    const hidden = upsertPreviewComment(api.db, PROJECT, 'private-other', {
+      target: api.commentTarget, note: 'other private note', authorMemberId: OWNER,
+    });
+    const route = `/api/projects/${PROJECT}/conversations/${CONVERSATION}/comments`;
+    expect((await api.json(route, { member: OWNER })).body.comments.map((c: { id: string }) => c.id)).toEqual([own.id]);
+    const anchor = ensureProjectCommentAnchorConversation(api.db, PROJECT)!.conversationId;
+    mergeSyncedPreviewComment(api.db, PROJECT, anchor, {
+      ...api.commentTarget, id: 'external-user', projectId: PROJECT, conversationId: 'remote',
+      memberId: '', seq: 1, note: 'shared incoming note', status: 'open',
+      authorKind: 'user', authorAppUserId: 'account-external', createdAt: 10, updatedAt: 10,
+    });
+    insertProject(api.db, { id: 'other-project', name: 'Other', createdAt: 1, updatedAt: 1 });
+    const foreignAnchor = ensureProjectCommentAnchorConversation(api.db, 'other-project')!.conversationId;
+    upsertPreviewComment(api.db, 'other-project', foreignAnchor, { target: api.commentTarget, note: 'foreign anchor' });
+    const listed = await api.json(route, { member: OWNER });
+    expect(listed.status).toBe(200);
+    expect(listed.body.comments.map((c: { id: string }) => c.id).sort()).toEqual([own.id, 'external-user'].sort());
+    const handled = await api.json(`${route}/external-user`, { method: 'PATCH', member: OWNER, body: { status: 'attached' } });
+    expect(handled.status).toBe(200);
+    expect(getPreviewComment(api.db, PROJECT, anchor, 'external-user')).toMatchObject({ status: 'attached', conversationId: anchor });
+    expect((await api.json(`${route}/${hidden!.id}`, { method: 'PATCH', member: OWNER, body: { status: 'attached' } })).status).toBe(404);
+    expect((await api.json(`/api/projects/${PROJECT}/conversations/${anchor}/comments`, { member: OWNER })).status).toBe(404);
+  });
+
   it('classifies new comments as self or other and does not count edits', async () => {
     const api = await startServer();
     const ownComment = await api.createComment(OWNER, 'owner note');
@@ -365,6 +463,83 @@ describe('preview comment permission gating', () => {
     expect(rows).toHaveLength(2);
     expect(rows.find((c) => c.authorMemberId === 'm-author')?.note).toBe('author note');
     expect(rows.find((c) => c.authorMemberId === 'm-other')?.note).toBe('other note');
+  });
+
+  it('ignores spoofed request authors on create and edit', async () => {
+    const api = await startServer();
+    const created = await api.json(
+      `/api/projects/${PROJECT}/conversations/${CONVERSATION}/comments`,
+      {
+        method: 'POST',
+        member: 'm-author',
+        body: {
+          target: api.commentTarget,
+          note: 'trusted author',
+          authorMemberId: 'm-spoofed',
+          authorKind: 'user',
+          authorAppUserId: 'app-spoofed',
+          authorDisplayName: 'Spoofed',
+          authorKey: 'f'.repeat(64),
+        },
+      },
+    );
+    expect(created.status).toBe(200);
+    expect(created.body.comment).toMatchObject({
+      authorMemberId: 'm-author',
+    });
+    expect(created.body.comment).not.toHaveProperty('authorKind');
+    expect(created.body.comment).not.toHaveProperty('authorAppUserId');
+    expect(created.body.comment).not.toHaveProperty('authorDisplayName');
+    expect(created.body.comment).not.toHaveProperty('authorKey');
+
+    const unauthenticated = await api.json(
+      `/api/projects/${PROJECT}/conversations/${CONVERSATION}/comments`,
+      {
+        method: 'POST',
+        body: {
+          target: api.commentTarget,
+          note: 'no caller identity',
+          authorMemberId: 'm-spoofed',
+          authorKind: 'user',
+          authorAppUserId: 'app-spoofed',
+          authorDisplayName: 'Spoofed',
+          authorKey: 'd'.repeat(64),
+        },
+      },
+    );
+    expect(unauthenticated.status).toBe(200);
+    expect(unauthenticated.body.comment).not.toHaveProperty('authorMemberId');
+    expect(unauthenticated.body.comment).not.toHaveProperty('authorKind');
+    expect(unauthenticated.body.comment).not.toHaveProperty('authorAppUserId');
+    expect(unauthenticated.body.comment).not.toHaveProperty('authorDisplayName');
+    expect(unauthenticated.body.comment).not.toHaveProperty('authorKey');
+
+    const edited = await api.json(
+      `/api/projects/${PROJECT}/conversations/${CONVERSATION}/comments`,
+      {
+        method: 'POST',
+        member: 'm-author',
+        body: {
+          id: created.body.comment.id,
+          target: api.commentTarget,
+          note: 'trusted edit',
+          authorMemberId: 'm-spoofed-edit',
+          authorKind: 'user',
+          authorAppUserId: 'app-spoofed-edit',
+          authorDisplayName: 'Spoofed edit',
+          authorKey: 'e'.repeat(64),
+        },
+      },
+    );
+    expect(edited.status).toBe(200);
+    expect(edited.body.comment).toMatchObject({
+      authorMemberId: 'm-author',
+      note: 'trusted edit',
+    });
+    expect(edited.body.comment).not.toHaveProperty('authorKind');
+    expect(edited.body.comment).not.toHaveProperty('authorAppUserId');
+    expect(edited.body.comment).not.toHaveProperty('authorDisplayName');
+    expect(edited.body.comment).not.toHaveProperty('authorKey');
   });
 
   it('POST creates another row for the same author unless an existing id is sent', async () => {

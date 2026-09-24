@@ -2451,7 +2451,7 @@ a.avatar-item:visited {
   box-shadow: var(--shadow-lg);
 }
 /* The floating comments card lives outside the workspace grid, so it does not
-   naturally reduce the preview's layout width. Reserve the card's 360px width,
+   naturally reduce the preview's layout width. Reserve the card's 320px width,
    its 16px viewport inset, and the same 12px breathing room as the local dock
    while the portal is populated. Keeping the reservation on `.viewer-body`
    makes the iframe, annotation overlays, and composer popover share one

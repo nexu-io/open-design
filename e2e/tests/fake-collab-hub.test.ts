@@ -200,6 +200,64 @@ describe('fake collaboration hub Vela resource pulls', () => {
   });
 });
 
+describe('fake collaboration hub comment input', () => {
+  it('stores stdin comments losslessly and preserves legacy argv comments', async () => {
+    fixtureRoot = await mkdtemp(join(tmpdir(), 'open-design-fake-collab-hub-'));
+    hub = await startFakeCollabHub({
+      root: fixtureRoot, workspaceId: WORKSPACE_ID,
+      workspaceName: 'Comment input contract', clients: [OWNER],
+    });
+    const bin = await hub.writeVelaBin(join(fixtureRoot, 'vela'));
+    const comment = {
+      id: 'stdin-comment', note: '完整 Unicode 🌍\nsecond line\n'.repeat(8_192),
+      target: { filePath: 'index.html', selector: '#headline' },
+    };
+    const pushed = await velaCommand(bin,
+      ['collab', 'comment', 'push', 'project-comments', '--comment-file', '-'],
+      JSON.stringify(comment, null, 2));
+    expect(JSON.parse(pushed)).toEqual({ seq: 1 });
+    const legacy = { id: 'legacy-comment', note: 'legacy payload' };
+    expect(JSON.parse(await velaCommand(bin,
+      ['collab', 'comment', 'push', 'project-comments', '--comment-json', JSON.stringify(legacy)],
+    ))).toEqual({ seq: 2 });
+    expect(JSON.parse(await velaCommand(bin,
+      ['collab', 'comment', 'pull', 'project-comments', '--since-seq', '0'],
+    ))).toEqual({
+      comments: [
+        { ...comment, projectId: 'project-comments', seq: 1 },
+        { ...legacy, projectId: 'project-comments', seq: 2 },
+      ], latestSeq: 2,
+    });
+    expect(hub.eventLog.filter((event) => event.type === 'comment-changed')).toHaveLength(2);
+  });
+
+  it('rejects missing, malformed, non-object and unsupported comment inputs without storing or emitting', async () => {
+    fixtureRoot = await mkdtemp(join(tmpdir(), 'open-design-fake-collab-hub-'));
+    hub = await startFakeCollabHub({
+      root: fixtureRoot, workspaceId: WORKSPACE_ID,
+      workspaceName: 'Comment rejection contract', clients: [OWNER],
+    });
+    const bin = await hub.writeVelaBin(join(fixtureRoot, 'vela'));
+    for (const input of ['', '{broken', 'null', '[]', '"text"', '42']) {
+      await expect(velaCommand(bin,
+        ['collab', 'comment', 'push', 'project-comments', '--comment-file', '-'], input,
+      )).rejects.toThrow('fake Vela exited 1');
+    }
+    for (const flags of [[], ['--comment-file'], ['--unknown-input', '{}']]) {
+      await expect(velaCommand(bin,
+        ['collab', 'comment', 'push', 'project-comments', ...flags],
+      )).rejects.toThrow('fake Vela exited 1');
+    }
+    await expect(velaCommand(bin,
+      ['collab', 'comment', 'push', 'project-comments', '--comment-file', 'comment.json'],
+    )).rejects.toThrow('fake comment push requires --comment-file -');
+    expect(JSON.parse(await velaCommand(bin,
+      ['collab', 'comment', 'pull', 'project-comments'],
+    ))).toEqual({ comments: [], latestSeq: 0 });
+    expect(hub.eventLog).toEqual([]);
+  });
+});
+
 async function command(
   args: string[],
   controlKey = OWNER.controlKey,
@@ -248,6 +306,10 @@ async function velaCommand(
     child.once('close', (code) => {
       if (code === 0) resolve(stdout);
       else reject(new Error(`fake Vela exited ${String(code)}: ${stderr}`));
+    });
+    // A rejecting CLI may close stdin before a large payload finishes writing.
+    child.stdin.on('error', (error: NodeJS.ErrnoException) => {
+      if (error.code !== 'EPIPE') reject(error);
     });
     child.stdin.end(input);
   });

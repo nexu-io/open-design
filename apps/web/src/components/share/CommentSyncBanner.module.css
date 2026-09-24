@@ -1,0 +1,29 @@
+.banner {
+  margin: 8px 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border, #EFEFEF);
+  border-radius: 6px;
+  background: var(--bg-secondary, #F7F7F7);
+  color: var(--text-secondary, #666666);
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+.banner p { margin: 0; }
+.banner p + p { margin-block-start: 4px; }
+.title { font-weight: 600; color: var(--text, #333333); }
+.login { margin-block-start: 4px; }
+.login button { text-decoration: underline; }
+.retry {
+  margin-block-start: 8px;
+  height: 32px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 6px;
+  background: var(--bg-muted, #EDEDF0);
+  color: var(--text, #333333);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.retry:disabled { opacity: 0.6; cursor: default; }

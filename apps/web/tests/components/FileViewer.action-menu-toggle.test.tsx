@@ -20,7 +20,7 @@
  *
  * 为什么不是断言 `data-testid`:线上这块菜单没有 testid,按 testid 查恒为 null,
  * 每条断言都会假绿(`share-request-replay` 那个文件的第一版就这么翻过车)。这里
- * 一律认菜单里**只在展开时才存在**的 `menuitem` 行。
+ * 一律认分享面板**只在展开时才存在**的标题；部署行属于二级菜单。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -75,8 +75,8 @@ function renderViewer() {
   );
 }
 
-/** 展开时才存在的分享行。 */
-const sharePanel = () => screen.queryByRole('menuitem', { name: /Get a share link|Deploy to Cloudflare Pages/i });
+/** 分享标题仅随分享面板挂载，不依赖登录状态或二级菜单展开。 */
+const sharePanel = () => screen.queryByRole('heading', { name: 'Share', level: 2 });
 /** 展开时才存在的导出行。 */
 const exportPanel = () => screen.queryByRole('menuitem', { name: /Export as PDF/i });
 /** 整块面板 —— 用来数「有没有叠出第二块」。 */

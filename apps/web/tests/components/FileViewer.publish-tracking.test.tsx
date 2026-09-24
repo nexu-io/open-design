@@ -138,7 +138,7 @@ function stubFetch(
           unpublishBody ??
           (unpublishStatus === 200
             ? { ok: true, slug: 'slug-1', fileName: 'index.html' }
-            : { error: { message: 'WORKSPACE_IDENTITY_REQUIRED' } });
+            : { error: { message: unpublishStatus === 403 ? 'WORKSPACE_IDENTITY_REQUIRED' : 'stop unavailable' } });
         return new Response(JSON.stringify(body), { status: unpublishStatus });
       }
       return new Response(JSON.stringify({ publication: null }), { status: 200 });
@@ -178,14 +178,15 @@ function reactComponentFile(): ProjectFile {
 // The publish trigger is the Share panel's `role="menuitem"` row labelled by
 // `fileViewer.publishSingleFileTitle`; once published it is replaced by the
 // copy-link / `fileViewer.unpublishFile` pair.
-const PUBLISH_ROW = /get a share link/i;
+const PUBLISH_ROW = /generate and copy link|get a share link/i;
 const UNPUBLISH_ROW = /stop sharing/i;
-// `fileViewer.publishingFile` — the row's in-flight label, and therefore the
+// HTML uses `fileViewer.uploadingFile`; the legacy React card still uses
+// `fileViewer.publishingFile`. Both labels identify the in-flight row, and the
 // state the publish handler leaves behind only once its `finally` has run.
-const BUSY_PUBLISH_ROW = /creating link/i;
+const BUSY_PUBLISH_ROW = /creating link|uploading/i;
 // Either settled shape of the panel: the idle publish row, or the copy-link
 // control that replaces it once a published URL is committed.
-const SETTLED_PUBLISH_PANEL = /get a share link|copy share link/i;
+const SETTLED_PUBLISH_PANEL = /generate and copy link|get a share link|copy share link/i;
 
 async function openPublishPanel() {
   renderProjectFileViewer(teamWorkspaceContext(), {
@@ -303,6 +304,25 @@ describe('publish flow analytics', () => {
     });
   });
 
+  it('S10 keeps the link and retry action without claiming a clipboard failure when stopping fails', async () => {
+    const fetchMock = stubFetch({ unpublishStatus: 500 });
+    fireEvent.click(await openPublishPanel());
+    const stop = await screen.findByRole('button', { name: UNPUBLISH_ROW });
+    fireEvent.click(stop);
+    await screen.findByText('Could not turn off the link. Please try again.');
+    expect(stop).toBeEnabled();
+    expect(screen.getByRole('button', { name: /copy share link/i })).toBeEnabled();
+    expect(screen.getByText('https://open-design.ai/p/slug-1')).toBeVisible();
+    expect(screen.queryByText(/please manually copy/i)).toBeNull();
+    expect(screen.queryByText(/failed to generate/i)).toBeNull();
+    const stops = () => fetchMock.mock.calls.filter(([, init]) => init?.method === 'DELETE');
+    expect(stops()).toHaveLength(1);
+    fireEvent.click(stop);
+    await waitFor(() => expect(stops()).toHaveLength(2));
+    await screen.findByText('Could not turn off the link. Please try again.');
+    expect(stop).toBeEnabled();
+  });
+
   it('reports a failed unpublish with the workspace-identity error code', async () => {
     stubFetch({ unpublishStatus: 403 });
     const publishButton = await openPublishPanel();
@@ -379,7 +399,7 @@ describe('publish flow analytics', () => {
       // Wait for the operation's own completion signal rather than timer turns.
       // The handler clears `publishingPublicFile` in its `finally`, strictly
       // after the point where the result event would have been emitted, so the
-      // panel leaving its "Creating link…" state proves the continuation ran
+      // panel leaving its busy state proves the continuation ran
       // past the emission site. A retained viewer renders no chrome at all, so
       // switch back first to observe it — the inactive window has already
       // closed, and an event emitted during it would still be recorded.

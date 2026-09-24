@@ -818,6 +818,13 @@ export function BoardComposerPopover({
                 }
               }}
             />
+            {/* OP2: explain WHY the textarea is read-only when it's specifically
+                a share-page (external) comment — team-member-vs-team-member
+                read-only (OP3) has no such reason line, board only asked for
+                this on the owner-reads-external-comment case. */}
+            {!canEditComment && existing?.authorKind === 'user' ? (
+              <p className="comment-popover-readonly-note">{t('comment.sharePageCommentReadOnly')}</p>
+            ) : null}
           </section>
         ) : null}
       </div>

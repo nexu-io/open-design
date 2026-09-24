@@ -8,14 +8,17 @@
 // only constructed when OD_COLLAB_CLOUD_URL is set (see createCollabCloudClientFromEnv),
 // so an unconfigured daemon never even reaches here.
 
+import { SHARE_COMMENT_TERMINAL_REJECTION } from '@open-design/contracts';
 import type {
   CollabCloudComment,
   CollabCloudMemberDirectoryEntry,
   PreviewComment,
   WorkspaceCollabContext,
 } from '@open-design/contracts';
-import type { CollabCloudClient } from '../integrations/collab-cloud.js';
+import { CollabCloudError, type CollabCloudClient } from '../integrations/collab-cloud.js';
+import type { SyncedCommentMergeResult } from '../db.js';
 import type { WorkspaceContextProvider } from './workspace-context.js';
+import type { CommentRelayScope } from './comment-relay-scope.js';
 import type {
   CommentRelayOutboxIdentity,
   CommentRelayOutboxRecord,
@@ -50,6 +53,53 @@ export interface CollabCloudServiceDeps {
   ) => Promise<WorkspaceCollabContext | null>;
   /** Cheap local binding witness applied per queued record in a batch. */
   validateCommentRelayProjectBinding?: (record: CommentRelayOutboxRecord) => boolean;
+  /** Separate creator-scoped eligibility for active public personal projects. */
+  commentRelayScope?: (
+    projectId: string,
+    filePath: string,
+    context: WorkspaceCollabContext,
+  ) => CommentRelayScope | null;
+  /** Exact active personal-publication files for this project's persisted creator.
+   * This must fail closed and must not consult the member directory. */
+  listPersonalCommentRelayFilePaths?: (
+    projectId: string,
+    context: WorkspaceCollabContext,
+  ) => ReadonlySet<string>;
+  /**
+   * Where a comment we already store lives, by project AND comment id.
+   *
+   * A deletion arriving from the cloud carries no anchor: there is nothing left
+   * to point at. The personal path filters incoming records by `filePath`, so a
+   * tombstone matches nothing and is dropped — while the cursor still advances
+   * past it. The deletion is then unreachable forever, and the local copy keeps
+   * a comment the author deleted on the web.
+   *
+   * Resolving the stored record's own `filePath` is what lets a tombstone be
+   * judged by the same publication rules as the comment it deletes, instead of
+   * by an anchor it cannot have.
+   *
+   * Contract, and each clause is load-bearing:
+   * - BOTH ids are required. Matching on comment id alone would let one
+   *   project's deletion reach another project's row.
+   * - `found: false` means the row is genuinely absent — a safe no-op.
+   * - A failed lookup MUST throw. It must never be reported as absence: that
+   *   would turn "the database did not answer" into "there is nothing to
+   *   delete", and the batch would be acknowledged with the deletion lost.
+   * - Only the stored path is returned. The comment's own content stays out of
+   *   this seam; the caller is deciding eligibility, not reading the comment.
+   */
+  resolveStoredCommentLocation?: (
+    projectId: string,
+    commentId: string,
+  ) => { found: false } | { found: true; filePath: string | null };
+  /** Resolve a server-asserted publication identity to a currently published local path.
+   * null is an unknown/stopped alias; errors retain the batch cursor for retry.
+   * This does not authorize a merge: existing identity/file checks still apply.
+   */
+  resolvePublishedCommentSourcePath?: (input: {
+    projectId: string; publicationSlug: string; publishedPath: string;
+    context: WorkspaceCollabContext;
+  }) => string | null;
   /** Local binding witness captured synchronously when the mutation commits. */
   resolveLocalProjectRelayBinding?: (projectId: string) => {
     workspaceId: string;
@@ -75,13 +125,13 @@ export interface CollabCloudServiceDeps {
   resolveLocalConversationId: (projectId: string) => string | null;
   /**
    * Merge one pulled comment into local storage, idempotently by comment id.
-   * Returns true when a new row was inserted (false when it already existed).
+   * Acknowledge changed or safely unchanged state; throw on persistence failure.
    */
   mergeComment: (input: {
     projectId: string;
     conversationId: string;
     comment: CollabCloudComment;
-  }) => boolean;
+  }) => SyncedCommentMergeResult;
   /** Poll cadence; defaults to the spec's foreground 5s (§D4.5). */
   pollIntervalMs?: number;
   /** Durable outbound Team-comment queue. Omitted by isolated/local callers. */
@@ -91,6 +141,8 @@ export interface CollabCloudServiceDeps {
     projectId: string;
     commentId: string;
     seq: number;
+    memberId: string;
+    authorKey?: string;
   }) => void;
   now?: () => number;
   retryDelayMs?: (attemptCount: number) => number;
@@ -105,17 +157,20 @@ const COMMENT_OUTBOX_PUSH_CONCURRENCY = 4;
  * Map a locally-stored preview comment to the cloud sync unit. Carries the full
  * anchoring payload + drift-ladder fields so the comment keeps pointing at the
  * same element on the receiver. `memberId` is the AUTHOR (who wrote it), taken
- * from the comment's authorMemberId, falling back to the sharing member.
+ * only from the comment's authorMemberId; an authorless comment stays blank so
+ * the relay owner is never misrepresented as its author.
  */
 export function previewCommentToCloud(
   comment: PreviewComment,
-  fallbackMemberId: string,
+  _fallbackMemberId: string,
 ): CollabCloudComment {
   const cloud: CollabCloudComment = {
     id: comment.id,
     projectId: comment.projectId,
     conversationId: comment.conversationId,
-    memberId: comment.authorMemberId ?? fallbackMemberId,
+    // A relay owner is not the author. Keep the legacy required wire field
+    // empty when an external/authorless comment has no workspace member.
+    memberId: comment.authorKind === 'user' ? '' : comment.authorMemberId ?? '',
     seq: 0,
     note: comment.note,
     filePath: comment.filePath,
@@ -139,6 +194,10 @@ export function previewCommentToCloud(
   if (comment.anchorState !== undefined) cloud.anchorState = comment.anchorState;
   if (comment.anchoredVersion !== undefined) cloud.anchoredVersion = comment.anchoredVersion;
   if (comment.lastGoodPosition !== undefined) cloud.lastGoodPosition = comment.lastGoodPosition;
+  if (comment.authorKind !== undefined) cloud.authorKind = comment.authorKind;
+  if (comment.authorAppUserId !== undefined) cloud.authorAppUserId = comment.authorAppUserId;
+  if (comment.authorDisplayName !== undefined) cloud.authorDisplayName = comment.authorDisplayName;
+  if (comment.authorKey !== undefined) cloud.authorKey = comment.authorKey;
   return cloud;
 }
 
@@ -214,6 +273,9 @@ export interface CollabCloudService {
     projectId: string,
     context: WorkspaceCollabContext,
   ): Promise<boolean>;
+  /** Last successfully merged cursor for this exact publication/principal scope.
+   * Null after restart/before pull; never manufacture cursor zero for align. */
+  readMergedCommentCursor(projectId: string, context: WorkspaceCollabContext): number | null;
   /** Start the background poller. */
   start(): void;
   /** Stop the poller. */
@@ -260,8 +322,64 @@ export function createCollabCloudService(deps: CollabCloudServiceDeps): CollabCl
       teamId,
       memberId,
       role: context.role,
-      displayName: context.displayName?.trim() || memberId,
+      displayName: context.displayName?.trim() || memberId
     };
+  }
+
+  type PullIdentity = {
+    teamId: string;
+    memberId: string;
+    relayScope: 'team' | 'personal';
+    allowedFilePaths?: ReadonlySet<string>;
+  };
+
+  // Personal pulls share one remote project stream, but each publication set
+  // sees only a subset of it. Keep their validators and high-water marks apart:
+  // advancing a global cursor after filtering would permanently acknowledge a
+  // comment for a file published (or resumed) later.
+  function pullCursorKey(scopeKey: string, projectId: string, identity: PullIdentity): string {
+    if (identity.relayScope === 'team') return `${scopeKey}:${projectId}`;
+    const filePaths = [...(identity.allowedFilePaths ?? [])].sort();
+    return `${scopeKey}:${projectId}:personal:${JSON.stringify(filePaths)}`;
+  }
+
+  function personalPullIdentity(
+    projectId: string,
+    context: WorkspaceCollabContext,
+  ): PullIdentity | null {
+    if (
+      context.workspaceType !== 'personal'
+      || context.memberStatus !== 'active'
+      || context.lifecycleState === 'deleted'
+    ) return null;
+    const memberId = context.workspaceMemberId.trim();
+    const teamId = context.workspaceId.trim();
+    const allowedFilePaths = deps.listPersonalCommentRelayFilePaths?.(projectId, context);
+    if (!memberId || !teamId || !allowedFilePaths || allowedFilePaths.size === 0) return null;
+    return { teamId, memberId, relayScope: 'personal', allowedFilePaths };
+  }
+
+  function pullIdentity(projectId: string, context: WorkspaceCollabContext): PullIdentity | null {
+    const team = explicitTeamIdentity(context);
+    if (team) return { teamId: team.teamId, memberId: team.memberId, relayScope: 'team' };
+    return personalPullIdentity(projectId, context);
+  }
+
+  function relayIdentity(
+    context: WorkspaceCollabContext,
+    projectId: string,
+    filePath: string,
+  ): { teamId: string; memberId: string; role: 'owner' | 'admin' | 'member'; displayName: string; relayScope: 'team' | 'personal' } | null {
+    const scoped = deps.commentRelayScope?.(projectId, filePath, context);
+    if (!scoped) {
+      if (deps.commentRelayScope) return null;
+      const team = explicitTeamIdentity(context);
+      return team ? { ...team, relayScope: 'team' } : null;
+    }
+    if (context.memberStatus !== 'active' || context.lifecycleState === 'deleted') return null;
+    const memberId = context.workspaceMemberId.trim();
+    if (!memberId || context.workspaceId !== scoped.workspaceId) return null;
+    return { teamId: scoped.teamId, memberId, role: context.role, displayName: context.displayName?.trim() || memberId, relayScope: scoped.relayScope };
   }
 
   async function registerSelf(
@@ -279,7 +397,7 @@ export function createCollabCloudService(deps: CollabCloudServiceDeps): CollabCl
     comment: PreviewComment,
     context: WorkspaceCollabContext,
   ): Promise<{ seq: number } | null> {
-    const identity = explicitTeamIdentity(context);
+    const identity = relayIdentity(context, comment.projectId, comment.filePath);
     if (!identity) return null;
     const cloud = previewCommentToCloud(comment, identity.memberId);
     const result = await deps.client.pushComment(identity.teamId, comment.projectId, cloud);
@@ -290,7 +408,7 @@ export function createCollabCloudService(deps: CollabCloudServiceDeps): CollabCl
     comment: PreviewComment,
     context: WorkspaceCollabContext,
   ): Promise<void> {
-    const identity = explicitTeamIdentity(context);
+    const identity = relayIdentity(context, comment.projectId, comment.filePath);
     if (!identity) return;
     const cloud = previewCommentToCloud(comment, identity.memberId);
     cloud.deleted = true;
@@ -306,7 +424,7 @@ export function createCollabCloudService(deps: CollabCloudServiceDeps): CollabCl
     deleted: boolean,
   ): boolean {
     if (!deps.commentOutbox) return false;
-    const identity = explicitTeamIdentity(context);
+    const identity = relayIdentity(context, comment.projectId, comment.filePath);
     if (!identity) return false;
     const localBinding = deps.resolveLocalProjectRelayBinding?.(comment.projectId) ?? null;
     const expectedOwnerMemberId = localBinding?.ownerMemberId?.trim() || null;
@@ -324,6 +442,7 @@ export function createCollabCloudService(deps: CollabCloudServiceDeps): CollabCl
         workspaceId: context.workspaceId,
         workspaceMemberId: identity.memberId,
         teamId: identity.teamId,
+        relayScope: identity.relayScope,
         projectId: comment.projectId,
         expectedOwnerMemberId,
         comment: cloud,
@@ -340,6 +459,13 @@ export function createCollabCloudService(deps: CollabCloudServiceDeps): CollabCl
     return true;
   }
 
+  /** A stopped public share is a server-confirmed terminal state for this exact durable revision. */
+  function isShareStoppedRelayError(error: unknown): error is CollabCloudError {
+    return error instanceof CollabCloudError
+      && error.status === SHARE_COMMENT_TERMINAL_REJECTION.status
+      && error.code === SHARE_COMMENT_TERMINAL_REJECTION.code;
+  }
+
   function deferOutboxRecord(record: CommentRelayOutboxRecord, error: unknown): void {
     const attemptCount = record.attemptCount + 1;
     const message = error instanceof Error ? error.message : String(error);
@@ -351,14 +477,15 @@ export function createCollabCloudService(deps: CollabCloudServiceDeps): CollabCl
   }
 
   const relayIdentityKey = (record: CommentRelayOutboxIdentity): string =>
-    JSON.stringify([record.workspaceId, record.workspaceMemberId, record.teamId]);
+    JSON.stringify([record.workspaceId, record.workspaceMemberId, record.teamId, record.relayScope]);
 
   const relayIdentityMatches = (
     context: WorkspaceCollabContext,
-    record: CommentRelayOutboxIdentity,
-  ): ReturnType<typeof explicitTeamIdentity> => {
-    const identity = explicitTeamIdentity(context);
+    record: CommentRelayOutboxRecord,
+  ) => {
+    const identity = relayIdentity(context, record.projectId, record.comment.filePath);
     return identity
+      && identity.relayScope === record.relayScope
       && context.workspaceId === record.workspaceId
       && identity.memberId === record.workspaceMemberId
       && identity.teamId === record.teamId
@@ -366,34 +493,63 @@ export function createCollabCloudService(deps: CollabCloudServiceDeps): CollabCl
       : null;
   };
 
+  const personalBatchIdentityMatches = (
+    context: WorkspaceCollabContext,
+    record: CommentRelayOutboxRecord,
+  ): { teamId: string; memberId: string } | null => {
+    const memberId = context.workspaceMemberId.trim();
+    return context.memberStatus === 'active'
+      && context.lifecycleState !== 'deleted'
+      && context.workspaceId === record.workspaceId
+      && memberId === record.workspaceMemberId
+      && record.teamId === record.workspaceId
+      ? { teamId: record.teamId, memberId }
+      : null;
+  };
+
   async function pushOutboxRecord(
     record: CommentRelayOutboxRecord,
-    identity: NonNullable<ReturnType<typeof explicitTeamIdentity>>,
+    identity: { teamId: string; memberId: string },
   ): Promise<void> {
     try {
+      // Recheck each publication-bound record immediately before network I/O:
+      // an earlier record may have awaited while stop/re-publish changed the witness.
+      if (record.publication && !deps.commentOutbox?.isPublicationCurrent?.(record)) {
+        deps.commentOutbox?.acknowledge(record);
+        return;
+      }
       const result = await deps.client.pushComment(
         identity.teamId,
         record.projectId,
-        record.comment,
+        record.publication ? { ...record.comment, filePath: record.publication.publicFilePath } : record.comment,
       );
       // Revision-conditional ACK: if an edit/delete was queued while this
       // payload was in flight, its newer row remains for the next drain.
-      deps.commentOutbox?.acknowledge(record);
+      deps.commentOutbox?.acknowledge(record, 'delivered');
       if (!record.comment.deleted) {
         deps.onCommentPushed?.({
           projectId: record.projectId,
           commentId: record.commentId,
           seq: result.seq,
+          memberId: record.workspaceMemberId,
+          ...(result.authorKey ? { authorKey: result.authorKey } : {}),
         });
       }
     } catch (error) {
+      if (isShareStoppedRelayError(error)) {
+        // The server has authoritatively closed this share. A revision-conditional
+        // ACK preserves a newer local edit that raced this rejected request.
+        deps.commentOutbox?.acknowledge(record);
+        deps.onError?.(error);
+        return;
+      }
       deferOutboxRecord(record, error);
     }
   }
 
   async function pushOutboxProjectLanes(
     records: CommentRelayOutboxRecord[],
-    identity: NonNullable<ReturnType<typeof explicitTeamIdentity>>,
+    identity: { teamId: string; memberId: string },
   ): Promise<void> {
     const lanes = new Map<string, CommentRelayOutboxRecord[]>();
     for (const record of records) {
@@ -495,10 +651,37 @@ export function createCollabCloudService(deps: CollabCloudServiceDeps): CollabCl
       for (const record of eligible) deferOutboxRecord(record, error);
       return;
     }
-    const identity = context ? relayIdentityMatches(context, representative) : null;
+    const identity = context
+      ? representative.relayScope === 'personal'
+        ? personalBatchIdentityMatches(context, representative)
+        : relayIdentityMatches(context, representative)
+      : null;
     if (!context || !identity) {
       const error = new Error('comment relay delivery authority is unavailable or changed');
       for (const record of eligible) deferOutboxRecord(record, error);
+      return;
+    }
+
+    // A durable identity batch can span files and projects. For personal
+    // publications, each record must re-prove its creator-scoped, exact-file
+    // publication after fresh authority resolves and immediately before it is
+    // scheduled. Local binding only proves a project record still belongs here;
+    // it does not prove that this file remains published.
+    if (representative.relayScope === 'personal') {
+      const deliverable: CommentRelayOutboxRecord[] = [];
+      for (const record of eligible) {
+        if (relayIdentityMatches(context, record)) deliverable.push(record);
+        else {
+          // Fresh workspace authority is already proven for this identity
+          // batch. A failed exact-file scope check therefore means the local
+          // durable publication witness was removed (or its creator binding
+          // changed), not that login/workspace resolution is temporarily down.
+          // Do not let a stopped publication revive from SQLite after restart.
+          deps.commentOutbox?.acknowledge(record);
+          deps.onError?.(new Error('comment relay personal publication stopped or creator changed; canceled'));
+        }
+      }
+      await pushOutboxProjectLanes(deliverable, identity);
       return;
     }
 
@@ -525,6 +708,7 @@ export function createCollabCloudService(deps: CollabCloudServiceDeps): CollabCl
       const expectedOwner = record.expectedOwnerMemberId;
       if (!owners || owners.size === 0) {
         deps.commentOutbox?.acknowledge(record);
+        deps.onError?.(new Error('comment relay remote project owner missing; canceled'));
         continue;
       }
       if (expectedOwner !== null && !owners.has(expectedOwner)) {
@@ -610,39 +794,100 @@ export function createCollabCloudService(deps: CollabCloudServiceDeps): CollabCl
   /** Resolves `true` when a pull ran (even if it returned nothing new),
    *  `false` when there was no local conversation to merge into. */
   async function pollProject(
-    teamId: string,
+    identity: PullIdentity,
     scopeKey: string,
     projectId: string,
+    requestContext: WorkspaceCollabContext,
   ): Promise<boolean> {
     const conversationId = deps.resolveLocalConversationId(projectId);
     // No local conversation to attach to yet (e.g. a member who pulled the
     // project but has not opened a chat) — nothing to merge into.
     if (!conversationId) return false;
-    const cursorKey = `${scopeKey}:${projectId}`;
-    const sinceSeq = cursors.get(cursorKey) ?? 0;
+    const requestCursorKey = pullCursorKey(scopeKey, projectId, identity);
+    const sinceSeq = cursors.get(requestCursorKey) ?? 0;
     const result = await deps.client.pullComments(
-      teamId,
+      identity.teamId,
       projectId,
       sinceSeq,
-      etags.get(cursorKey),
+      etags.get(requestCursorKey),
     );
-    etags.set(cursorKey, result.etag);
-    if (result.notModified) return true;
-    let inserted = 0;
-    for (const comment of result.comments) {
-      if (deps.mergeComment({ projectId, conversationId, comment })) inserted += 1;
+    // Personal relay eligibility is per published file. Re-check both the
+    // principal and active publication set after the async transport returns:
+    // an account/workspace switch or stop must never merge an in-flight reply.
+    const comments = result.comments;
+    let responseIdentity = identity;
+    if (identity.relayScope === 'personal') {
+      const freshContext = await deps.resolveProjectWorkspaceContext?.(projectId, { fresh: true }) ?? null;
+      const freshIdentity = freshContext ? personalPullIdentity(projectId, freshContext) : null;
+      if (
+        !freshIdentity
+        || freshContext!.workspaceId !== requestContext.workspaceId
+        || freshIdentity.memberId !== identity.memberId
+        || freshIdentity.teamId !== identity.teamId
+      ) return false;
+      responseIdentity = freshIdentity;
+      // Apply per-record eligibility during sequential merging below: a later
+      // tombstone may target a row created earlier in this very response.
     }
-    cursors.set(cursorKey, result.latestSeq);
+    // Commit the result under the freshly-authoritative publication scope.
+    // If the set changed while a conditional request was in flight, a 304 is
+    // only valid for the old scope. Leave the new scope uncached so its next
+    // poll replays from zero instead of treating hidden comments as seen.
+    const responseCursorKey = pullCursorKey(scopeKey, projectId, responseIdentity);
+    if (result.notModified) {
+      if (responseCursorKey === requestCursorKey) etags.set(responseCursorKey, result.etag);
+      return true;
+    }
+    let inserted = 0;
+    for (const incoming of comments) {
+      let comment = incoming;
+      // Tombstones intentionally have no publication identity: their trusted
+      // project-scoped stored target remains the deletion authority below.
+      if (!incoming.deleted && 'publicationSlug' in incoming) {
+        const publicationSlug = incoming.publicationSlug;
+        if (typeof publicationSlug !== 'string' || !publicationSlug.trim()) {
+          throw new Error('Invalid server publication identity');
+        }
+        if (!deps.resolvePublishedCommentSourcePath) throw new Error('Publication mapping lookup is unavailable');
+        const filePath = deps.resolvePublishedCommentSourcePath({
+          projectId, publicationSlug, publishedPath: incoming.filePath,
+          context: requestContext,
+        });
+        if (filePath === null) continue;
+        comment = { ...incoming, filePath };
+      }
+      if (responseIdentity.relayScope === 'personal') {
+        const allowed = responseIdentity.allowedFilePaths!;
+        if (comment.deleted) {
+          // A tombstone has no authoritative anchor. Even when it carries a
+          // path, only the stored, project-scoped target can authorize deletion.
+          // Resolve here, after preceding records have actually persisted.
+          if (!deps.resolveStoredCommentLocation) {
+            throw new Error('Stored comment location lookup is unavailable');
+          }
+          const location = deps.resolveStoredCommentLocation(projectId, comment.id);
+          if (!location.found) continue; // Confirmed absence is a safe no-op.
+          if (!location.filePath) {
+            throw new Error('Stored comment location has no file path');
+          }
+          if (!allowed.has(location.filePath)) continue;
+        } else if (!allowed.has(comment.filePath)) continue;
+      }
+      const outcome = deps.mergeComment({ projectId, conversationId, comment });
+      if (outcome === 'changed') inserted += 1;
+      else if (outcome !== 'unchanged') {
+        throw new Error('Comment persistence did not acknowledge the pulled record');
+      }
+    }
+    etags.set(responseCursorKey, result.etag);
+    cursors.set(responseCursorKey, result.latestSeq);
     if (inserted > 0) deps.onMerged?.({ projectId, inserted });
     return true;
   }
 
   function pullProjectSingleflight(
     context: WorkspaceCollabContext,
-    identity: {
-      teamId: string;
-      memberId: string;
-    },
+    identity: PullIdentity,
     projectId: string,
   ): Promise<boolean> {
     const scopeKey = `${context.workspaceId}:${identity.memberId}`;
@@ -655,7 +900,7 @@ export function createCollabCloudService(deps: CollabCloudServiceDeps): CollabCl
     const existing = inFlightPulls.get(inFlightKey);
     if (existing) return existing;
 
-    const request = pollProject(identity.teamId, scopeKey, projectId)
+    const request = pollProject(identity, scopeKey, projectId, context)
       .catch((error) => {
         deps.onError?.(error);
         return false;
@@ -673,7 +918,7 @@ export function createCollabCloudService(deps: CollabCloudServiceDeps): CollabCl
     projectId: string,
     context: WorkspaceCollabContext,
   ): Promise<boolean> {
-    const identity = explicitTeamIdentity(context);
+    const identity = pullIdentity(projectId, context);
     if (!identity) return false;
     return pullProjectSingleflight(context, identity, projectId);
   }
@@ -687,20 +932,25 @@ export function createCollabCloudService(deps: CollabCloudServiceDeps): CollabCl
       try {
         const context =
           await deps.resolveProjectWorkspaceContext?.(projectId) ?? null;
-        const identity = context ? explicitTeamIdentity(context) : null;
+        const identity = context ? pullIdentity(projectId, context) : null;
         if (!context || !identity) continue;
-        // Refresh the exact project's member directory entry only when its
-        // immutable workspace/member identity changes. Never borrow the
-        // daemon's ambient active workspace.
-        const identityKey =
-          `${context.workspaceId}:${identity.teamId}:${identity.memberId}:`
-          + `${identity.role}:${identity.displayName}`;
-        if (identityKey !== lastRegisteredKey) {
-          await deps.client.registerMember(identity.teamId, identity.memberId, {
-            displayName: identity.displayName,
-            role: identity.role,
-          });
-          lastRegisteredKey = identityKey;
+        // Team registration remains directory-only; personal publication pulls
+        // deliberately never fetch or synthesize a member directory identity.
+        if (identity.relayScope === 'team') {
+          const teamIdentity = explicitTeamIdentity(context)!;
+          // Refresh the exact project's member directory entry only when its
+          // immutable workspace/member identity changes. Never borrow the
+          // daemon's ambient active workspace.
+          const identityKey =
+            `${context.workspaceId}:${teamIdentity.teamId}:${teamIdentity.memberId}:`
+            + `${teamIdentity.role}:${teamIdentity.displayName}`;
+          if (identityKey !== lastRegisteredKey) {
+            await deps.client.registerMember(teamIdentity.teamId, teamIdentity.memberId, {
+              displayName: teamIdentity.displayName,
+              role: teamIdentity.role,
+            });
+            lastRegisteredKey = identityKey;
+          }
         }
         await pullProjectSingleflight(context, identity, projectId);
       } catch (error) {
@@ -734,6 +984,11 @@ export function createCollabCloudService(deps: CollabCloudServiceDeps): CollabCl
     resolveMember,
     pollOnce,
     pullProject,
+    readMergedCommentCursor(projectId, context) {
+      const identity = pullIdentity(projectId, context);
+      if (!identity) return null;
+      return cursors.get(pullCursorKey(`${context.workspaceId}:${identity.memberId}`, projectId, identity)) ?? null;
+    },
     start() {
       if (timer) return;
       started = true;

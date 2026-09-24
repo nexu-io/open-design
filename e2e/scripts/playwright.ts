@@ -16,6 +16,10 @@ type Command = () => Promise<void>;
 
 const commands: Record<string, Command> = {
   'audit-deck-layout': auditDeckLayoutCommand,
+  'share-chain-probe': async () => {
+    const { runShareChainProbeCommand } = await import('../lib/playwright/share-chain/command.ts');
+    await runShareChainProbeCommand(process.argv.slice(3));
+  },
   clean: cleanArtifacts,
   help: async () => printUsage(),
   'list-ui-groups': listUiGroups,
@@ -199,6 +203,8 @@ Commands:
                           Audit every slide on the canonical 1920×1080 canvas.
                           --slide-index is 1-based; selectors add screenshots
                           without narrowing the full-deck audit.
+  share-chain-probe --execute <real-url> <new-evidence-dir>
+                          Operator-dispatched live share probe; no fixture fallback
   clean                   Remove e2e UI Playwright runtime data and reports
   list-ui-groups [--json] List named UI P0 groups
   run-ui-group <name>     Run a named UI P0 group

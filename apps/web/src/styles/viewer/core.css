@@ -1708,6 +1708,15 @@
   flex-direction: column;
   overflow: hidden;
 }
+/* OP2: reason line under a read-only share-page comment's textarea. No
+   board color/size was given for this specific line; matches the app's
+   existing muted-caption convention (comment-side-time / commentSync). */
+.comment-popover-readonly-note {
+  margin: 6px 0 0;
+  color: #888888;
+  font-size: 11px;
+  line-height: 16px;
+}
 .comment-popover-body {
   flex: 1 1 auto;
   /* Without this a flex item refuses to shrink below its content height, which

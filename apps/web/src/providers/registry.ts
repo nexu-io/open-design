@@ -3,6 +3,7 @@ import {
   workspaceContextHasTeamIdentity,
   type PublicFileManualRevokeRequiredData,
   type PublicProjectFilePublication,
+  type ShareUnpublishResponse,
 } from '@open-design/contracts';
 import { boundedRequestErrorCode } from '../analytics/workspace';
 import type {
@@ -2040,7 +2041,7 @@ export async function unpublishProjectFilePublic(
   slug: string,
   workspaceContext?: WorkspaceCollabContext | null,
   requestId?: string,
-): Promise<{ ok: true; slug: string; fileName: string }> {
+): Promise<ShareUnpublishResponse> {
   const resp = await fetch(
     `/api/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(fileName)}/publish-public`,
     {
@@ -2068,7 +2069,7 @@ export async function unpublishProjectFilePublic(
       daemonErrorCode: typeof payload?.error === 'object' ? payload.error.code : payload?.error,
     });
   }
-  return (await resp.json()) as { ok: true; slug: string; fileName: string };
+  return (await resp.json()) as ShareUnpublishResponse;
 }
 
 export async function checkDeploymentLink(
@@ -2884,16 +2885,23 @@ export async function fetchPreviewComments(
   projectId: string,
   conversationId: string,
   workspaceContext?: WorkspaceCollabContext | null,
+  pullRemote = false,
 ): Promise<PreviewComment[]> {
+  const url = `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/comments`;
+  const headers = workspaceContext ? workspaceProjectHeaders(workspaceContext) : undefined;
+  if (pullRemote && workspaceContext) {
+    try {
+      const remote = await fetch(`${url}/pull`, { method: 'POST', headers });
+      if (remote.ok) {
+        const result = (await remote.json()) as import('@open-design/contracts').ProjectCommentPullResponse;
+        return result.comments;
+      }
+    } catch {
+      // The existing local list stays usable when remote sync is unavailable.
+    }
+  }
   try {
-    const resp = await fetch(
-      `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/comments`,
-      {
-        headers: workspaceContext
-          ? workspaceProjectHeaders(workspaceContext)
-          : undefined,
-      },
-    );
+    const resp = await fetch(url, { headers });
     if (!resp.ok) return [];
     const json = (await resp.json()) as { comments: PreviewComment[] };
     return json.comments ?? [];
