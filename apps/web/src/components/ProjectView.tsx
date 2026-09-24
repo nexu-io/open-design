@@ -7024,6 +7024,7 @@ export function ProjectView({
         claimReattachRun(runId);
         claimReattachRun(reattachRunId);
         let activeReattachRunId = reattachRunId;
+        let reattachTerminalAt: number | undefined;
         /*
          * daemon 刚给出的裁定 —— 见 `replayedRunStatusMayLand`。终态时它就是这条 run 的
          * 权威结论,之后从同一条流里回放出来的 `start`(→ `running`)只是历史帧。
@@ -7232,6 +7233,7 @@ export function ProjectView({
           onRunCreated: (nextRunId, strategyTask) => {
             manualFileWriteRegistration.bindRun(nextRunId);
             activeReattachRunId = nextRunId;
+            reattachTerminalAt = undefined;
             claimReattachRun(nextRunId);
             textBuffer.flush();
             updateMessageById(
@@ -7362,8 +7364,8 @@ export function ProjectView({
               // reattachDaemonRun started — on a reload-while-running it is
               // still 'running' (a near-run-start heartbeat), not the
               // daemon's terminal time. Re-probe now, at the end of
-              // recovery, for the authoritative terminal `updatedAt`.
-              const endedAt = await resolveTerminalEndedAt(
+              // recovery, for the immutable terminal time (legacy `updatedAt` fallback).
+              const endedAt = reattachTerminalAt ?? await resolveTerminalEndedAt(
                 activeReattachRunId,
                 activeReattachRunId === runId ? status : null,
                 projectRunWorkspaceContext,
@@ -7655,7 +7657,7 @@ export function ProjectView({
                         runStatus: latestRunStatus?.status === 'succeeded' ? 'succeeded' : prev.runStatus,
                         endedAt:
                           latestRunStatus?.status === 'succeeded'
-                            ? latestRunStatus.updatedAt
+                            ? terminalRunEndedAt(latestRunStatus)
                             : prev.endedAt,
                       }),
                       true,
@@ -7754,7 +7756,7 @@ export function ProjectView({
                           // Adopt the daemon's authoritative terminal timestamp rather
                           // than the stale disconnect-time stamp taken when the generic
                           // disconnect first fired.
-                          endedAt: latestRunStatus.updatedAt,
+                          endedAt: terminalRunEndedAt(latestRunStatus),
                           ...(latestRunStatus.resumable !== undefined
                             ? { resumable: latestRunStatus.resumable }
                             : {}),
@@ -7769,7 +7771,7 @@ export function ProjectView({
                         (prev) => ({
                           ...removeErrorStatusEvent(prev, err.message, errorCode),
                           runStatus: 'succeeded',
-                          endedAt: latestRunStatus.updatedAt,
+                          endedAt: terminalRunEndedAt(latestRunStatus),
                           ...(latestRunStatus.resumable !== undefined
                             ? { resumable: latestRunStatus.resumable }
                             : {}),
@@ -7789,7 +7791,7 @@ export function ProjectView({
                       (prev) => ({
                         ...prev,
                         runStatus: latestRunStatus.status,
-                        endedAt: latestRunStatus.updatedAt,
+                        endedAt: terminalRunEndedAt(latestRunStatus),
                         ...(latestRunStatus.resumable !== undefined
                           ? { resumable: latestRunStatus.resumable }
                           : {}),
@@ -7824,7 +7826,8 @@ export function ProjectView({
               }
             },
           },
-          onRunStatus: (runStatus) => {
+          onRunStatus: (runStatus, timing) => {
+            if (timing && timing.runId === activeReattachRunId) reattachTerminalAt = timing.terminalAt;
             textBuffer.flush();
             /*
              * 回放出来的「活着」不许压过 daemon 的终态裁定 —— 判据与理由见
@@ -7847,7 +7850,7 @@ export function ProjectView({
               (prev) => ({
                 ...prev,
                 runStatus,
-                endedAt: isTerminalRunStatus(runStatus) ? prev.endedAt ?? Date.now() : prev.endedAt,
+                endedAt: isTerminalRunStatus(runStatus) ? reattachTerminalAt ?? prev.endedAt ?? Date.now() : prev.endedAt,
               }),
               true,
             );
@@ -8651,6 +8654,7 @@ export function ProjectView({
       // that just failed in the current session (the daemon status fetch is only
       // needed on reload, not for runs that are already known to have failed).
       let currentRunId: string | undefined = undefined;
+      let daemonTerminalAt: number | undefined;
       let daemonArtifactCount: number | undefined;
       const updateConversationLatestRun = (
         status: NonNullable<ChatMessage['runStatus']>,
@@ -9596,7 +9600,7 @@ export function ProjectView({
             clearTraceTouchedFilePaths();
             return;
           }
-          const endedAt = Date.now();
+          const endedAt = daemonTerminalAt ?? Date.now();
           let finalRunStatus: ChatMessage['runStatus'] = 'succeeded';
           updateAssistant((prev) => {
             finalRunStatus = resolveSucceededRunStatus(prev.runStatus);
@@ -9837,7 +9841,7 @@ export function ProjectView({
           // updateConversationLatestRun() (which drives the sidebar/dropdown
           // sort + duration) reflect the daemon's terminal time rather than
           // this stale pre-probe timestamp.
-          let endedAt = Date.now();
+          let endedAt = daemonTerminalAt ?? Date.now();
           const errorCode = (err as Error & { code?: string }).code;
           const resumable = (err as Error & { resumable?: boolean }).resumable === true;
           let finalRunStatusAfterError: ChatMessage['runStatus'] = 'failed';
@@ -10000,7 +10004,7 @@ export function ProjectView({
                   // Advance the outer endedAt so updateConversationLatestRun()
                   // below adopts this same authoritative terminal timestamp,
                   // matching the message row's endedAt set further down.
-                  endedAt = latestRunStatus.updatedAt;
+                  endedAt = terminalRunEndedAt(latestRunStatus);
                   if (runMayFinalize) {
                     setError(null);
                     updateAssistant((prev) => {
@@ -10016,7 +10020,7 @@ export function ProjectView({
                           // Adopt the daemon's authoritative terminal timestamp rather
                           // than the stale disconnect-time stamp taken when the generic
                           // disconnect first fired.
-                          endedAt: latestRunStatus.updatedAt,
+                          endedAt: terminalRunEndedAt(latestRunStatus),
                           runStatus: 'succeeded',
                           ...(latestRunStatus.resumable !== undefined
                             ? { resumable: latestRunStatus.resumable }
@@ -10025,7 +10029,7 @@ export function ProjectView({
                       }
                       return {
                         ...recovered,
-                        endedAt: latestRunStatus.updatedAt,
+                        endedAt: terminalRunEndedAt(latestRunStatus),
                         runStatus: 'succeeded',
                         ...(latestRunStatus.resumable !== undefined
                           ? { resumable: latestRunStatus.resumable }
@@ -10046,12 +10050,12 @@ export function ProjectView({
                   clearProjectTimeout(backoffTimer);
                   // Same rationale as the succeeded branch above: keep the
                   // conversation-level stamp in step with the message row.
-                  endedAt = latestRunStatus.updatedAt;
+                  endedAt = terminalRunEndedAt(latestRunStatus);
                   if (runMayFinalize) {
                     if (latestRunStatus.status === 'canceled') setError(null);
                     updateAssistant((prev) => ({
                       ...prev,
-                      endedAt: latestRunStatus.updatedAt,
+                      endedAt: terminalRunEndedAt(latestRunStatus),
                       runStatus: latestRunStatus.status,
                       ...(latestRunStatus.resumable !== undefined
                         ? { resumable: latestRunStatus.resumable }
@@ -10319,6 +10323,7 @@ export function ProjectView({
               lastRunEventId: undefined,
             };
             latestAssistantMsg = pinnedAssistant;
+            daemonTerminalAt = undefined;
             currentRunId = runId;
             manualFileWriteRegistration.bindRun(runId);
             // The view may already be on a different project/conversation;
@@ -10347,13 +10352,14 @@ export function ProjectView({
           onArtifactPaths: (paths) => {
             authoritativeArtifactPaths = paths;
           },
-          onRunStatus: (runStatus) => {
+          onRunStatus: (runStatus, timing) => {
+            if (timing && timing.runId === latestAssistantMsg.runId) daemonTerminalAt = timing.terminalAt;
             // streamViaDaemon reports `failed` before onError when POST
             // /api/runs itself fails. Until onRunCreated supplies an id there is
             // no assistant run to finalize or persist; onError moves the failure
             // to the user row instead.
             if (!currentRunId && runStatus === 'failed') return;
-            const endedAt = isTerminalRunStatus(runStatus) ? Date.now() : undefined;
+            const endedAt = isTerminalRunStatus(runStatus) ? daemonTerminalAt ?? Date.now() : undefined;
             const runMayFinalize =
               !supersededRunsRef.current.has(controller);
             // 这一轮落终态,掉线那一行就该消失。canceled 由回合 footer 报结果,
@@ -10366,7 +10372,7 @@ export function ProjectView({
               (prev) => ({
                 ...prev,
                 runStatus,
-                endedAt: endedAt === undefined ? prev.endedAt : prev.endedAt ?? endedAt,
+                endedAt: endedAt === undefined ? prev.endedAt : daemonTerminalAt ?? prev.endedAt ?? endedAt,
               }),
               true,
               runStatus === 'canceled' ? { telemetryFinalized: true } : undefined,
@@ -10559,6 +10565,7 @@ export function ProjectView({
               lastRunEventId: undefined,
             };
             latestAssistantMsg = pinnedAssistant;
+            daemonTerminalAt = undefined;
             void saveMessage(project.id, runConversationId, pinnedAssistant, {
               workspaceContext: projectRunWorkspaceContext,
             });
@@ -10580,8 +10587,9 @@ export function ProjectView({
               lastRunEventId: undefined,
             }));
           },
-          onRunStatus: (runStatus) => {
-            const endedAt = isTerminalRunStatus(runStatus) ? Date.now() : undefined;
+          onRunStatus: (runStatus, timing) => {
+            if (timing && timing.runId === latestAssistantMsg.runId) daemonTerminalAt = timing.terminalAt;
+            const endedAt = isTerminalRunStatus(runStatus) ? daemonTerminalAt ?? Date.now() : undefined;
             const runMayFinalize = !supersededRunsRef.current.has(controller);
             // 见 CLI / AMR 路径同名回调:落终态就把重连那一行让出去。
             if (currentRunId) {
@@ -10592,7 +10600,7 @@ export function ProjectView({
               (prev) => ({
                 ...prev,
                 runStatus,
-                endedAt: endedAt === undefined ? prev.endedAt : prev.endedAt ?? endedAt,
+                endedAt: endedAt === undefined ? prev.endedAt : daemonTerminalAt ?? prev.endedAt ?? endedAt,
               }),
               true,
               runStatus === 'canceled' ? { telemetryFinalized: true } : undefined,
@@ -14496,12 +14504,18 @@ function isActiveRunStatus(status: ChatMessage['runStatus']): boolean {
 /** A daemon run-status snapshot, as returned by `fetchChatRunStatus`/`listActiveChatRuns`. */
 type RunStatusSnapshot = Awaited<ReturnType<typeof fetchChatRunStatus>>;
 
+function terminalRunEndedAt(status: NonNullable<RunStatusSnapshot>): number {
+  return typeof status.terminalAt === 'number' && Number.isFinite(status.terminalAt) && status.terminalAt >= 0
+    ? status.terminalAt
+    : status.updatedAt;
+}
+
 /**
  * Resolves the authoritative `endedAt` for a terminal-recovery branch.
  *
  * Invariant: every terminal-recovery branch (reload reattach, generic
  * disconnect retry-cap probe, stale/legacy row replay) must stamp `endedAt`
- * from an authoritative TERMINAL `updatedAt` — a status snapshot whose
+ * from the immutable TERMINAL `terminalAt` (legacy `updatedAt` fallback) — a status snapshot whose
  * `status` is terminal (succeeded/canceled/failed), observed at the END of
  * recovery — never from a pre-reattach/heartbeat snapshot or a stale
  * disconnect-time value.
@@ -14509,7 +14523,7 @@ type RunStatusSnapshot = Awaited<ReturnType<typeof fetchChatRunStatus>>;
  * `candidate` is whatever status snapshot the caller already has in hand
  * (e.g. fetched before `reattachDaemonRun` started, which may still read
  * 'running'/'queued' if the daemon only finished afterward). When it is
- * already terminal, its `updatedAt` IS the authoritative value and is
+ * already terminal, its terminal timestamp IS the authoritative value and is
  * returned with no extra round trip. When it is missing or still active, a
  * fresh probe is taken via `fetchChatRunStatus` — the daemon may have
  * finished in the interim — and used if terminal. If the fresh probe is
@@ -14522,11 +14536,11 @@ async function resolveTerminalEndedAt(
   workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<number> {
   if (candidate && !isActiveRunStatus(candidate.status)) {
-    return candidate.updatedAt;
+    return terminalRunEndedAt(candidate);
   }
   const probed = await fetchChatRunStatus(runId, workspaceContext).catch(() => null);
   if (probed && !isActiveRunStatus(probed.status)) {
-    return probed.updatedAt;
+    return terminalRunEndedAt(probed);
   }
   return Date.now();
 }
