@@ -32,6 +32,7 @@ type OnDraftChange = (draft: ManualEditDraft) => void;
 type OnStyleChange = (id: string, styles: Partial<ManualEditStyles>, label: string) => void;
 type OnInvalidStyle = (id: string, keys: Array<keyof ManualEditStyles>) => void;
 type OnApplyPatch = (patch: ManualEditPatch, label: string) => void;
+type OnConfirmDelete = (targetId: string) => void;
 type OnError = (message: string) => void;
 type OnClearSelection = () => void;
 type OnSaveDraft = () => void;
@@ -126,21 +127,28 @@ describe('ManualEditPanel', () => {
     expect(footer?.textContent).toContain('Save');
   });
 
-  it('routes delete as a direct icon-only action', () => {
+  it('requires confirmation before deleting an element', () => {
     const onApplyPatch = vi.fn<OnApplyPatch>();
     renderPanel({ onApplyPatch });
 
-    const footer = host.querySelector('.manual-edit-footer');
-    const deleteButton = host.querySelector('button[aria-label="Delete element"]') as HTMLButtonElement | null;
-    if (!deleteButton) throw new Error('Delete button not found');
+    clickDeleteButton();
 
-    act(() => {
-      deleteButton.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
-    });
+    expect(onApplyPatch).not.toHaveBeenCalled();
+    expect(host.querySelector('.manual-edit-delete-confirm')?.textContent).toContain(
+      'Delete selected element? This can be undone with Undo.',
+    );
+    expect(host.textContent).not.toContain('Save');
+  });
 
-    expect(footer?.contains(deleteButton)).toBe(true);
-    expect(deleteButton.textContent).toBe('');
-    expect(deleteButton.className).toContain('manual-edit-delete-btn');
+  it('deletes only after explicit confirmation', () => {
+    const onApplyPatch = vi.fn<OnApplyPatch>();
+    renderPanel({ onApplyPatch });
+    clickDeleteButton();
+
+    const confirmButton = host.querySelector('.manual-edit-delete-confirm-action') as HTMLButtonElement | null;
+    if (!confirmButton) throw new Error('Delete confirmation button not found');
+    act(() => confirmButton.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })));
+
     expect(onApplyPatch).toHaveBeenCalledWith(
       { id: 'hero-title', kind: 'remove-element' },
       'Delete element',
@@ -165,6 +173,48 @@ describe('ManualEditPanel', () => {
     expect(redo.disabled).toBe(false);
     expect(onUndo).toHaveBeenCalledTimes(1);
     expect(onRedo).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels deletion without applying a patch and restores focus', () => {
+    const onApplyPatch = vi.fn<OnApplyPatch>();
+    renderPanel({ onApplyPatch });
+    const deleteButton = host.querySelector('button[aria-label="Delete element"]') as HTMLButtonElement;
+    deleteButton.focus();
+    clickDeleteButton();
+
+    const confirmation = host.querySelector('.manual-edit-delete-confirm');
+    const cancelButton = Array.from(confirmation?.querySelectorAll('button') ?? [])
+      .find((button) => button.textContent === 'Cancel') as HTMLButtonElement | undefined;
+    if (!cancelButton) throw new Error('Delete cancellation button not found');
+    act(() => cancelButton.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })));
+
+    expect(onApplyPatch).not.toHaveBeenCalled();
+    expect(host.querySelector('.manual-edit-delete-confirm')).toBeNull();
+    expect(dom.window.document.activeElement).toBe(
+      host.querySelector('button[aria-label="Delete element"]'),
+    );
+  });
+
+  it('preserves a parent-controlled confirmation and delegates confirmation', () => {
+    const onConfirmDelete = vi.fn<OnConfirmDelete>();
+    const onDeleteConfirmationChange = vi.fn<(targetId: string | null) => void>();
+    renderPanel({
+      deleteConfirmationTargetId: target.id,
+      onDeleteConfirmationChange,
+      onConfirmDelete,
+    });
+
+    expect(onDeleteConfirmationChange).not.toHaveBeenCalled();
+    const confirmButton = host.querySelector('.manual-edit-delete-confirm-action') as HTMLButtonElement | null;
+    if (!confirmButton) throw new Error('Delete confirmation button not found');
+    act(() => confirmButton.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })));
+    expect(onConfirmDelete).toHaveBeenCalledWith(target.id);
+  });
+
+  it('announces manual-edit errors', () => {
+    renderPanel({ error: 'Could not save the edited file.' });
+
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe('Could not save the edited file.');
   });
 
   it('routes footer reset, cancel, and save actions', () => {
@@ -832,6 +882,12 @@ describe('ManualEditPanel', () => {
     return button;
   }
 
+  function clickDeleteButton() {
+    const deleteButton = host.querySelector('button[aria-label="Delete element"]') as HTMLButtonElement | null;
+    if (!deleteButton) throw new Error('Delete button not found');
+    act(() => deleteButton.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })));
+  }
+
   /** The four-way padding/margin editor, addressed by its collapsible head. */
   function quadRow(label: string): HTMLElement {
     const quad = Array.from(host.querySelectorAll('.cc-quad'))
@@ -852,6 +908,7 @@ describe('ManualEditPanel', () => {
   function renderPanel({
     onDraftChange = vi.fn<OnDraftChange>(),
     onApplyPatch = vi.fn<OnApplyPatch>(),
+    onConfirmDelete,
     onError = vi.fn<OnError>(),
     onStyleChange = vi.fn<OnStyleChange>(),
     onInvalidStyle = vi.fn<OnInvalidStyle>(),
@@ -874,9 +931,13 @@ describe('ManualEditPanel', () => {
     tokenSuggestionsLoading,
     onApplyTokenSuggestion,
     onInspectValueSelect,
+    deleteConfirmationTargetId,
+    onDeleteConfirmationChange,
+    error = null,
   }: {
     onDraftChange?: OnDraftChange;
     onApplyPatch?: OnApplyPatch;
+    onConfirmDelete?: OnConfirmDelete;
     onError?: OnError;
     onStyleChange?: OnStyleChange;
     onInvalidStyle?: OnInvalidStyle;
@@ -899,6 +960,9 @@ describe('ManualEditPanel', () => {
     tokenSuggestionsLoading?: boolean;
     onApplyTokenSuggestion?: (prop: keyof ManualEditStyles, value: string) => void;
     onInspectValueSelect?: (prop: ProjectDesignTokenSuggestionProp, value: string) => void;
+    deleteConfirmationTargetId?: string | null;
+    onDeleteConfirmationChange?: (targetId: string | null) => void;
+    error?: string | null;
   } = {}) {
     const draft = {
       ...emptyManualEditDraft('<html></html>'),
@@ -914,7 +978,7 @@ describe('ManualEditPanel', () => {
           selectedTarget={selectedTarget}
           draft={draft}
           history={[]}
-          error={null}
+          error={error}
           canUndo={canUndo}
           canRedo={canRedo}
           resetAvailable={resetAvailable}
@@ -924,6 +988,9 @@ describe('ManualEditPanel', () => {
           onStyleChange={onStyleChange}
           onInvalidStyle={onInvalidStyle}
           onApplyPatch={onApplyPatch}
+          onConfirmDelete={onConfirmDelete}
+          deleteConfirmationTargetId={deleteConfirmationTargetId}
+          onDeleteConfirmationChange={onDeleteConfirmationChange}
           onError={onError}
           onClearSelection={onClearSelection}
           onCancelDraft={onCancelDraft}
