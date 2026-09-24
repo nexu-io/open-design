@@ -170,7 +170,7 @@ export function applyClaudeStreamJsonRunBookkeeping(
  *    edge case.
  *
  * Agent-originated errors are not lost by this: they arrive on the child's
- * stdout/stderr, and those raw-chunk handlers stamp the clock already.
+ * stderr or parsed non-diagnostic ACP frames, which stamp the clock already.
  *
  * This predicate only covers emissions that reach the daemon BEFORE the verdict
  * — `fail()` flushes open tools and only then sends the error. Everything that
@@ -181,11 +181,16 @@ export function applyClaudeStreamJsonRunBookkeeping(
  */
 export function runtimeEmissionCountsAsAgentProgress(
   channel: string,
-  meta?: { hostSynthesized?: boolean },
+  meta?: { hostSynthesized?: boolean; countsAsProgress?: boolean },
 ): boolean {
-  if (channel === 'error') return false;
+  if (channel === 'error' || meta?.countsAsProgress === false) return false;
   if (meta?.hostSynthesized === true) return false;
   return true;
+}
+
+/** ACP must classify complete frames before raw bytes can establish liveness. */
+export function runtimeStdoutCountsAsAgentProgress(streamFormat: string | undefined): boolean {
+  return streamFormat !== 'acp-json-rpc';
 }
 
 export function resolveChatRunShutdownGraceMs() {

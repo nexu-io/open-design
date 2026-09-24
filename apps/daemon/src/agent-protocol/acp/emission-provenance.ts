@@ -1,6 +1,8 @@
 /** Out-of-band origin of an ACP bridge emission, never part of its payload. */
 export interface AcpEmissionMeta {
   hostSynthesized?: boolean;
+  /** Private diagnostic evidence does not establish agent liveness. */
+  countsAsProgress?: boolean;
 }
 
 const hostSynthesizedEmissions = new WeakSet<object>();
