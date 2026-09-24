@@ -82,6 +82,7 @@ const OD_RESOURCE_EXHAUSTION_ERROR_TOKENS: readonly string[] = [
   "ENFILE",
   "EADDRNOTAVAIL",
   "ENOBUFS",
+  "ERR_NO_BUFFER_SPACE", // Chromium's name for ENOBUFS (Electron net.fetch)
 ];
 
 /**
