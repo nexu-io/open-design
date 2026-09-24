@@ -47,6 +47,7 @@ function withContext(
   detail: string,
   input: ClaudeCliDiagnosticInput,
   code?: string,
+  retryable?: boolean,
 ): ClaudeCliDiagnostic {
   const configDir = envValue(input.env, 'CLAUDE_CONFIG_DIR');
   const baseUrl = envValue(input.env, 'ANTHROPIC_BASE_URL');
@@ -61,7 +62,7 @@ function withContext(
   return {
     message: redactSecrets(message),
     detail: redactSecrets(context.filter(Boolean).join(' ')),
-    retryable: true,
+    retryable: retryable ?? true,
     ...(code ? { code } : {}),
   };
 }
@@ -147,6 +148,54 @@ export function diagnoseClaudeCliFailure(
       'The network connection was closed mid-response — common on unstable networks, VPNs, or proxies that drop long-lived streaming requests, and most likely on large generations. Retry the request.',
       input,
       'AGENT_CONNECTION_DROPPED',
+    );
+  }
+
+  // Prompt / context window overflow. Claude Code surfaces this verbatim as
+  // `Prompt is too long` (or `API Error: Prompt is too long.`) when the
+  // assembled turn exceeds the upstream context window. It must be detected
+  // before the authFailure branch below: a `Prompt is too long` text from a
+  // mid-stream API error frame occasionally co-occurs with fragments the auth
+  // regex picks up (e.g. an expired-token notice logged just before the size
+  // rejection), which previously made the daemon tell the user to re-login
+  // when the actual fix was to reduce the prompt. Returning the dedicated
+  // `AGENT_PROMPT_TOO_LARGE` code lets server.ts pick the prompt_too_large
+  // branch in classifyRunFailure and lets the UI suggest reducing context.
+  // See issue #6979.
+  //
+  // The matchers below are line-anchored on purpose. A bare substring scan
+  // (`/\bprompt is too long\b/i`) also matches ordinary assistant/tool payload
+  // that happens to discuss context limits — e.g. an assistant frame quoting a
+  // docs page or explaining a prior size error — which would mislabel a run
+  // whose real terminal cause is something else entirely. Claude emits each of
+  // these phrases as its own terminal stderr/stdout line (optionally prefixed
+  // by `API Error:` / `Error:`), so requiring the phrase to occupy a whole line
+  // keeps the true positives while dropping prose false positives.
+  const promptTooLargeLine = (re: RegExp): boolean =>
+    text.split('\n').some((line) => {
+      const trimmed = line.trim();
+      return re.test(trimmed);
+    });
+  const promptTooLarge =
+    // "API Error: Prompt is too long." — terminal error with prefix and trailing period
+    promptTooLargeLine(/^api error:\s*prompt is too long\.?$/i) ||
+    // "Error: Prompt is too long" — terminal error with prefix
+    promptTooLargeLine(/^error:\s*prompt is too long$/i) ||
+    // "Prompt is too long" (optionally with trailing period) — exact phrase
+    promptTooLargeLine(/^prompt is too long\.?$/i) ||
+    // "prompt too large" — exact phrase only
+    promptTooLargeLine(/^prompt too large$/i) ||
+    // "context window has been exceeded" / "context size exceeded" — phrase with optional trailing period, optionally prefixed by "API Error:"
+    promptTooLargeLine(/^(?:api error:\s*)?context (?:window|size) (?:has been )?exceeded\.?$/i) ||
+    // "maximum context length of 200000 tokens exceeded" — starts with phrase
+    promptTooLargeLine(/^maximum context length\b/i);
+  if (promptTooLarge) {
+    return withContext(
+      `${runtimeLabel} rejected the run because the prompt exceeds the supported context size.`,
+      'Reduce the prompt length, attachments, or accumulated conversation context, then retry.',
+      input,
+      'AGENT_PROMPT_TOO_LARGE',
+      false,
     );
   }
 
