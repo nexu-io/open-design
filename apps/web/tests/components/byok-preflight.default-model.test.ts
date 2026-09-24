@@ -41,6 +41,28 @@ describe('byokPreflightBlockReason default-model sentinel', () => {
     ).toBeNull();
   });
 
+  it.each([
+    ['anthropic', 'https://api.anthropic.com/api', 'sk-ant-test'],
+    ['openai', 'https://api.openai.com/v1beta', 'sk-openai-test'],
+    ['google', 'https://generativelanguage.googleapis.com/v1', 'AIza-test'],
+    ['ollama', 'https://ollama.com/v1beta', 'test-key'],
+    ['senseaudio', 'https://api.senseaudio.cn/api', 'test-key'],
+    ['aihubmix', 'https://aihubmix.com', 'test-key'],
+  ] as const)(
+    'accepts a literal `default` model on the %s same-origin custom endpoint',
+    (apiProtocol, baseUrl, apiKey) => {
+      expect(
+        byokPreflightBlockReason({
+          ...anthropicPreset,
+          apiProtocol,
+          apiKey,
+          baseUrl,
+          model: 'default',
+        }),
+      ).toBeNull();
+    },
+  );
+
   it('still blocks a missing model on a custom base URL', () => {
     expect(
       byokPreflightBlockReason({

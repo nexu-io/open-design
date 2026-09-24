@@ -117,18 +117,23 @@ export const DEFAULT_BYOK_BASE_URL_BY_PROTOCOL: Record<ByokChatProtocol, string>
   aihubmix: 'https://aihubmix.com/v1',
 };
 
-const BYOK_VERSION_PATH_SEGMENT = /^\/(?:v1beta|v1|api)$/;
+// Exact same-origin spellings that the daemon's provider-specific runtime
+// normalization maps to each built-in endpoint. Alternate version/API paths
+// are custom endpoints even when another protocol treats that path as an
+// alias (for example, OpenAI `/v1beta` and SenseAudio `/api`).
+const BUILT_IN_BYOK_PATHS_BY_PROTOCOL: Record<ByokChatProtocol, readonly string[]> = {
+  anthropic: ['', '/v1'],
+  openai: ['', '/v1'],
+  azure: [],
+  google: ['', '/v1beta'],
+  ollama: ['', '/v1', '/api'],
+  senseaudio: [''],
+  aihubmix: ['/v1'],
+};
 
-// Providers accept their endpoints with or without the versioned path
-// (`ollama.com` == `ollama.com/v1`). Only ONE trailing version segment is
-// stripped on each side: deeper paths (e.g. a same-origin `/api/v1` proxy)
-// are distinct endpoints the daemon preserves verbatim, so they must not
-// collapse into the built-in root.
-function canonicalizeByokPath(path: string): string {
+function normalizedByokPath(path: string): string {
   const trimmed = path.replace(/\/+$/, '');
-  const cut = trimmed.lastIndexOf('/');
-  const segment = cut < 0 ? '' : trimmed.slice(cut);
-  return segment && BYOK_VERSION_PATH_SEGMENT.test(segment) ? trimmed.slice(0, cut) : trimmed;
+  return trimmed === '/' ? '' : trimmed;
 }
 
 /**
@@ -153,7 +158,9 @@ export function isCustomByokBaseUrl(
     const builtIn = new URL(protocolDefault);
     return (
       custom.origin !== builtIn.origin ||
-      canonicalizeByokPath(custom.pathname) !== canonicalizeByokPath(builtIn.pathname)
+      !BUILT_IN_BYOK_PATHS_BY_PROTOCOL[protocol].includes(
+        normalizedByokPath(custom.pathname),
+      )
     );
   } catch {
     return true;

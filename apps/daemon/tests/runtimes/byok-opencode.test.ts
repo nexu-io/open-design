@@ -508,6 +508,25 @@ describe('byok-opencode runtime config', () => {
     });
   });
 
+  it.each([
+    ['anthropic', 'https://api.anthropic.com/api'],
+    ['openai', 'https://api.openai.com/v1beta'],
+    ['google', 'https://generativelanguage.googleapis.com/v1'],
+    ['ollama', 'https://ollama.com/v1beta'],
+    ['senseaudio', 'https://api.senseaudio.cn/api'],
+    ['aihubmix', 'https://aihubmix.com'],
+  ] as const)(
+    'builds provider config for `default` on the %s same-origin custom endpoint',
+    (protocol, baseUrl) => {
+      expect(
+        buildOpenCodeByokProviderConfig(
+          { protocol, apiKey: 'test-key', baseUrl },
+          'default',
+        )?.modelId,
+      ).toBe('open-design-byok/default');
+    },
+  );
+
   it('still rejects `default` on the protocol default endpoint', () => {
     expect(
       buildOpenCodeByokProviderConfig(
