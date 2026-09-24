@@ -88,7 +88,8 @@ export type ByokChatProtocol =
   | 'google'
   | 'ollama'
   | 'senseaudio'
-  | 'aihubmix';
+  | 'aihubmix'
+  | 'opencode-go';
 
 export interface ByokChatProviderConfig {
   protocol: ByokChatProtocol;
