@@ -342,4 +342,63 @@ describe('SearchableModelSelect', () => {
     expect(affordances?.contains(badge)).toBe(true);
     expect(disabledOption).toHaveAccessibleName(longModelLabel);
   });
+
+  it('exposes the full model name on hover for same-prefix long ids', async () => {
+    // The report: two OpenRouter variants share a prefix, the row label is
+    // ellipsised, and no title leaves the two indistinguishable. Hovering any
+    // row must reveal the complete name it stands for.
+    const models: AgentModelOption[] = [
+      {
+        id: 'openrouter/google/gemini-2.5-pro-preview-06-05',
+        label: 'openrouter/google/gemini-2.5-pro-preview-06-05',
+      },
+      {
+        id: 'openrouter/google/gemini-2.5-pro-preview-05-06',
+        label: 'openrouter/google/gemini-2.5-pro-preview-05-06',
+      },
+    ];
+    render(
+      <SearchableModelSelect
+        models={models}
+        value={models[0]!.id}
+        onChange={vi.fn()}
+        searchPlaceholder="Search models"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('combobox'));
+
+    for (const model of models) {
+      const option = await screen.findByRole('option', { name: model.label });
+      expect(option.getAttribute('title')).toBe(model.label);
+    }
+    // The trigger readout truncates the same way, so it carries the full name
+    // on hover too.
+    expect(screen.getByRole('combobox').getAttribute('title')).toBe(models[0]!.label);
+  });
+
+  it('keeps the full name in the hover title when the row shortens it', async () => {
+    render(
+      <SearchableModelSelect
+        models={[
+          { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' },
+          { id: 'deepseek-v4-pro', label: 'deepseek-v4-pro' },
+          { id: 'claude-opus-4.6', label: 'claude-opus-4.6' },
+        ]}
+        value="deepseek-v4-flash"
+        onChange={vi.fn()}
+        searchPlaceholder="Search models"
+        groupByCompany
+        minSearchableOptions={2}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('combobox'));
+
+    // The company-grouped row drops the company token (`v4-pro`) because the
+    // brand mark already carries it; the title restores the full identity.
+    const option = await screen.findByRole('option', { name: 'v4-pro' });
+    expect(option.textContent).toContain('v4-pro');
+    expect(option.getAttribute('title')).toBe('deepseek-v4-pro');
+  });
 });
