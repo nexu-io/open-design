@@ -64,16 +64,34 @@ type CloudflareWorkersConfig = Awaited<
   ReturnType<typeof readCloudflareWorkersConfig>
 >;
 
+// A fetch bound to the proxy dispatcher and, when given, to a per-request
+// budget. The budget is a default: a caller that passes its own `signal`
+// (the revoke does) keeps it.
 function fetchWithRequestInit(
   requestInit: Pick<RequestInit, 'dispatcher'>,
+  timeoutMs?: number,
 ): typeof fetch {
-  return (input, init) => fetch(input, { ...init, ...requestInit });
+  return (input, init) =>
+    fetch(input, { ...(timeoutMs ? { signal: AbortSignal.timeout(timeoutMs) } : {}), ...init, ...requestInit });
 }
 
 // Upper bound on the best-effort revoke call a disconnect makes: it runs inside
 // the credential mutation, so a hung token endpoint must not hold every other
 // OAuth mutation hostage.
 const CLOUDFLARE_REVOKE_TIMEOUT_MS = 10_000;
+// Budget for each call of the connect path — the code exchange at the token
+// endpoint and the GET /user email capture. Without it a stalled endpoint (or
+// a half-open connection through the user's proxy) hung the exchange forever:
+// the callback never answered, the listener stayed bound, and the persisted
+// state never resolved. A timeout is a failed exchange like any other.
+export const CLOUDFLARE_OAUTH_EXCHANGE_TIMEOUT_MS = 20_000;
+
+function describeExchangeError(err: unknown): string {
+  if ((err as { name?: unknown } | null)?.name === 'TimeoutError') {
+    return 'Cloudflare did not answer within ' + Math.round(CLOUDFLARE_OAUTH_EXCHANGE_TIMEOUT_MS / 1000) + 's; the token exchange was abandoned.';
+  }
+  return err instanceof Error ? err.message : String(err);
+}
 
 /** Build the persisted token record from a token-endpoint response, carrying
  * the client/redirect identity (and account) that authorized it so a changed
@@ -337,7 +355,7 @@ export function registerCloudflareRoutes(
     // bumps it) aborts this exchange before it can persist a stale token.
     const attemptGeneration = oauthAttemptGeneration;
     const proxyDispatcher = proxyDispatcherRequestInit(process.env);
-    const fetchImpl = fetchWithRequestInit(proxyDispatcher.requestInit);
+    const fetchImpl = fetchWithRequestInit(proxyDispatcher.requestInit, CLOUDFLARE_OAUTH_EXCHANGE_TIMEOUT_MS);
     // Set once Cloudflare has issued a grant and cleared once that grant is
     // either stored or explicitly discarded. Any throw in between leaves it
     // set, and the catch below revokes it: a grant nobody holds must not stay
@@ -372,7 +390,7 @@ export function registerCloudflareRoutes(
       console.log('[cloudflare-oauth] token stored');
       return true;
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = describeExchangeError(err);
       console.error('[cloudflare-oauth] token exchange failed:', msg);
       if (tokenResp && !wasGrantRevoked(err)) await revokeDiscardedGrant(tokenResp, fetchImpl);
       return false;
@@ -505,7 +523,7 @@ export function registerCloudflareRoutes(
     const attemptGeneration = oauthAttemptGeneration;
     const myListener = activeListener;
     const proxyDispatcher = proxyDispatcherRequestInit(process.env);
-    const fetchImpl = fetchWithRequestInit(proxyDispatcher.requestInit);
+    const fetchImpl = fetchWithRequestInit(proxyDispatcher.requestInit, CLOUDFLARE_OAUTH_EXCHANGE_TIMEOUT_MS);
     // Same discipline as the loopback callback: a grant Cloudflare issued that
     // this handler then fails to store is revoked on the way out.
     let tokenResp: CompleteCloudflareAuthResult | null = null;
@@ -543,7 +561,7 @@ export function registerCloudflareRoutes(
       console.log('[cloudflare-oauth] manual paste-back ok, token stored');
       res.json({ ok: true });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = describeExchangeError(err);
       console.error('[cloudflare-oauth] manual complete failed:', msg);
       if (tokenResp && !wasGrantRevoked(err)) await revokeDiscardedGrant(tokenResp, fetchImpl);
       res.status(400).json({ error: msg });

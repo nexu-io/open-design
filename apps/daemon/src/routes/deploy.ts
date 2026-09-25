@@ -3,7 +3,7 @@ import type { RouteDeps } from '../server-context.js';
 import type { AuthorizeProjectRequest } from '../collab/project-request-authority.js';
 import { clientRequestIdFor } from '../http/client-request-id.js';
 import { classifyDeployFailure } from '../deploy/failure-detail.js';
-import { detachCloudflareWorkerDomain, getCloudflareWorkerDomain, isOwnedCustomDomain, listCloudflareZones, normalizeHostname, ownedCustomDomainsFromMetadata, pendingCustomDomainsFromMetadata, recordedCustomDomainFromMetadata, releasedCustomDomainsFromWorkersDeploy, resolveWorkerScriptName, retiredAccessAppIdFromWorkersDeploy, vouchedCustomDomains, type CloudflareOwnedCustomDomain } from '../deploy/cloudflare-workers.js';
+import { detachCloudflareWorkerDomain, getCloudflareWorkerDomain, isOwnedCustomDomain, listCloudflareZones, normalizeHostname, ownedCustomDomainsFromMetadata, pendingCustomDomainsFromMetadata, recordedCustomDomainFromMetadata, releasedCustomDomainsFromWorkersDeploy, resolvedPendingCustomDomainsFromWorkersDeploy, resolveWorkerScriptName, retiredAccessAppIdFromWorkersDeploy, unverifiedExposureFromMetadata, verifyCloudflareAccessPerimeter, vouchedCustomDomains, withdrawRecordedUnverifiedExposure, type CloudflareOwnedCustomDomain } from '../deploy/cloudflare-workers.js';
 import { getCloudflareAccessToken } from '../deploy.js';
 import { proxyDispatcherRequestInit } from '../connectionTest.js';
 
@@ -82,8 +82,127 @@ function detachedCustomDomainsFromWorkersDeploy(source: unknown): CloudflareOwne
  * described the record. */
 function persistableWorkersResultMetadata(metadata: unknown): unknown {
   if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return metadata;
-  const { detachedCustomDomains: _detached, retiredAccessAppId: _retired, ...rest } = metadata as Record<string, unknown>;
+  const { detachedCustomDomains: _detached, retiredAccessAppId: _retired, resolvedPendingCustomDomains: _resolved, ...rest } = metadata as Record<string, unknown>;
   return rest;
+}
+
+/** One persisted Workers deployment record, as the db returns it. */
+type WorkersDeploymentRecord = {
+  id: string;
+  projectId: string;
+  fileName: string;
+  url: string;
+  deploymentId?: string | undefined;
+  deploymentCount: number;
+  target: 'preview' | 'production';
+  status: string;
+  statusMessage?: string | undefined;
+  reachableAt?: number | undefined;
+  providerMetadata?: unknown;
+  createdAt: number;
+};
+
+/** The db access the record-wide Workers bookkeeping needs. Both route
+ * registrations (deploy/detach and check-link) act on every record of the
+ * provider, because the Workers config is global: one script, one Access app,
+ * one set of attached hostnames, shared by every (project, file) that
+ * deployed it. */
+type WorkersRecordStore = {
+  db: unknown;
+  providerId: string;
+  listDeploymentsByProvider: (db: unknown, providerId: string) => WorkersDeploymentRecord[];
+  upsertDeployment: (db: unknown, record: Record<string, unknown>) => unknown;
+};
+
+function rewriteWorkersRecordMetadata(store: WorkersRecordStore, record: WorkersDeploymentRecord, providerMetadata: Record<string, unknown>): void {
+  store.upsertDeployment(store.db, {
+    id: record.id,
+    projectId: record.projectId,
+    fileName: record.fileName,
+    providerId: store.providerId,
+    url: record.url,
+    deploymentId: record.deploymentId,
+    deploymentCount: record.deploymentCount,
+    target: record.target,
+    status: record.status,
+    statusMessage: record.statusMessage,
+    reachableAt: record.reachableAt,
+    providerMetadata,
+    createdAt: record.createdAt,
+    updatedAt: Date.now(),
+  });
+}
+
+/**
+ * After a detach, no Workers record may keep vouching for the hostname.
+ * Ownership means "OpenDesign attached it", and that attachment is gone; a
+ * record still listing it would classify a later dashboard re-attach of the
+ * same hostname as owned — and the next deploy would detach it again. Every
+ * record of the provider is scanned because the Workers config is global.
+ * The displayed `customDomain` goes with it when it names that hostname.
+ */
+function forgetDetachedWorkersHostnameAcrossRecords(store: WorkersRecordStore, domain: { id: string; hostname: string }): void {
+  const sameDomain = (entry: { id?: string | undefined; hostname: string }): boolean =>
+    (Boolean(domain.id) && entry.id === domain.id) || (Boolean(domain.hostname) && entry.hostname === domain.hostname);
+  for (const record of store.listDeploymentsByProvider(store.db, store.providerId)) {
+    const metadata = record.providerMetadata;
+    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) continue;
+    const owned = ownedCustomDomainsFromMetadata(metadata);
+    const remaining = owned.filter((entry) => !sameDomain(entry));
+    const pending = pendingCustomDomainsFromMetadata(metadata);
+    const remainingPending = pending.filter((hostname) => !sameDomain({ hostname }));
+    const displayed = recordedCustomDomainFromMetadata(metadata);
+    const dropDisplayed =
+      displayed !== undefined &&
+      sameDomain({
+        id: displayed.id !== undefined && displayed.id !== null && String(displayed.id) ? String(displayed.id) : undefined,
+        hostname: normalizeHostname(String(displayed.hostname)),
+      });
+    if (remaining.length === owned.length && remainingPending.length === pending.length && !dropDisplayed) continue;
+    const next: Record<string, unknown> = { ...(metadata as Record<string, unknown>), ownedCustomDomains: remaining };
+    if (remainingPending.length > 0) next.pendingCustomDomains = remainingPending.map((hostname) => ({ hostname }));
+    else delete next.pendingCustomDomains;
+    if (dropDisplayed) delete next.customDomain;
+    rewriteWorkersRecordMetadata(store, record, next);
+  }
+}
+
+/**
+ * Drop one attach write-ahead (a `pendingCustomDomains` entry) from every
+ * record of the SCRIPT that carries it. A write-ahead is copied onto sibling
+ * records (a preview deploy carries the union forward), so resolving it only
+ * on the record a deploy replaces leaves the copies vouching for a hostname
+ * that is detached, refused, or owned outright by another record — and the
+ * next deploy would classify a dashboard re-attach of it as owned. Owned
+ * entries are untouched: this resolves the write-ahead, not the ownership.
+ */
+function forgetPendingWorkersHostnameAcrossRecords(
+  store: WorkersRecordStore,
+  input: { hostname: string; matchesScript: (record: WorkersDeploymentRecord) => boolean },
+): void {
+  const hostname = normalizeHostname(input.hostname);
+  if (!hostname) return;
+  for (const record of store.listDeploymentsByProvider(store.db, store.providerId)) {
+    const metadata = record.providerMetadata;
+    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) continue;
+    const pending = pendingCustomDomainsFromMetadata(metadata);
+    if (!pending.includes(hostname)) continue;
+    if (!input.matchesScript(record)) continue;
+    const remaining = pending.filter((entry) => entry !== hostname);
+    const next: Record<string, unknown> = { ...(metadata as Record<string, unknown>) };
+    if (remaining.length > 0) next.pendingCustomDomains = remaining.map((entry) => ({ hostname: entry }));
+    else delete next.pendingCustomDomains;
+    rewriteWorkersRecordMetadata(store, record, next);
+  }
+}
+
+/** A Workers deploy whose Access gate was not verified when it ran: the
+ * deploy reported `link-delayed` because its public URL did not answer, and
+ * the link check owns the verification from then on. */
+function isDeferredWorkersAccessVerification(metadata: unknown): metadata is Record<string, unknown> {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return false;
+  const record = metadata as Record<string, unknown>;
+  return record.accessProtected === true && record.accessVerified !== true;
 }
 class DeployErrorLike extends Error {
   status: number;
@@ -251,67 +370,24 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
     });
   }
 
-  /**
-   * After a detach, no Workers record may keep vouching for the hostname.
-   * Ownership means "OpenDesign attached it", and that attachment is gone; a
-   * record still listing it would classify a later dashboard re-attach of the
-   * same hostname as owned — and the next deploy would detach it again. Every
-   * record of the provider is scanned because the Workers config is global.
-   * The displayed `customDomain` goes with it when it names that hostname.
-   */
+  const workersRecordStore: WorkersRecordStore = { db, providerId: CLOUDFLARE_WORKERS_PROVIDER_ID, listDeploymentsByProvider, upsertDeployment };
+
+  /** See forgetDetachedWorkersHostnameAcrossRecords. */
   function forgetDetachedWorkersHostname(domain: { id: string; hostname: string }): void {
-    const sameDomain = (entry: { id?: string | undefined; hostname: string }): boolean =>
-      (Boolean(domain.id) && entry.id === domain.id) || (Boolean(domain.hostname) && entry.hostname === domain.hostname);
-    const records: Array<{
-      id: string;
-      projectId: string;
-      fileName: string;
-      url: string;
-      deploymentId?: string | undefined;
-      deploymentCount: number;
-      target: 'preview' | 'production';
-      status: string;
-      statusMessage?: string | undefined;
-      reachableAt?: number | undefined;
-      providerMetadata?: unknown;
-      createdAt: number;
-    }> = listDeploymentsByProvider(db, CLOUDFLARE_WORKERS_PROVIDER_ID);
-    for (const record of records) {
-      const metadata = record.providerMetadata;
-      if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) continue;
-      const owned = ownedCustomDomainsFromMetadata(metadata);
-      const remaining = owned.filter((entry) => !sameDomain(entry));
-      const pending = pendingCustomDomainsFromMetadata(metadata);
-      const remainingPending = pending.filter((hostname) => !sameDomain({ hostname }));
-      const displayed = recordedCustomDomainFromMetadata(metadata);
-      const dropDisplayed =
-        displayed !== undefined &&
-        sameDomain({
-          id: displayed.id !== undefined && displayed.id !== null && String(displayed.id) ? String(displayed.id) : undefined,
-          hostname: normalizeHostname(String(displayed.hostname)),
-        });
-      if (remaining.length === owned.length && remainingPending.length === pending.length && !dropDisplayed) continue;
-      const next: Record<string, unknown> = { ...(metadata as Record<string, unknown>), ownedCustomDomains: remaining };
-      if (remainingPending.length > 0) next.pendingCustomDomains = remainingPending.map((hostname) => ({ hostname }));
-      else delete next.pendingCustomDomains;
-      if (dropDisplayed) delete next.customDomain;
-      upsertDeployment(db, {
-        id: record.id,
-        projectId: record.projectId,
-        fileName: record.fileName,
-        providerId: CLOUDFLARE_WORKERS_PROVIDER_ID,
-        url: record.url,
-        deploymentId: record.deploymentId,
-        deploymentCount: record.deploymentCount,
-        target: record.target,
-        status: record.status,
-        statusMessage: record.statusMessage,
-        reachableAt: record.reachableAt,
-        providerMetadata: next,
-        createdAt: record.createdAt,
-        updatedAt: Date.now(),
-      });
-    }
+    forgetDetachedWorkersHostnameAcrossRecords(workersRecordStore, domain);
+  }
+
+  /** See forgetPendingWorkersHostnameAcrossRecords: resolves the write-ahead
+   * for each hostname on every record that deployed `scriptName`. */
+  function forgetPendingWorkersHostnames(hostnames: readonly string[], scriptName: string, configuredScriptName: string | undefined): void {
+    const matchesScript = (record: WorkersDeploymentRecord): boolean => {
+      try {
+        return workersRecordScriptName(record, configuredScriptName) === scriptName;
+      } catch {
+        return false;
+      }
+    };
+    for (const hostname of hostnames) forgetPendingWorkersHostnameAcrossRecords(workersRecordStore, { hostname, matchesScript });
   }
 
   /**
@@ -469,35 +545,34 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
       const proxyDispatcher = proxyDispatcherRequestInit(process.env);
       try {
         const cfg = { token, accountId: config.accountId, requestInit: proxyDispatcher.requestInit };
-        // Ownership check: the domain id is client-supplied, and the token can
-        // reach every custom domain in the account. Detach ONLY a hostname that
-        // Cloudflare routes to the OpenDesign script (the same resolution the
-        // deploy performs: the configured override, else the project's name).
-        const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : '';
-        const project = projectId ? getProject(db, projectId) : null;
-        const scriptName = resolveWorkerScriptName(config.scriptName || undefined, project?.name || projectId);
         const domain = await getCloudflareWorkerDomain(cfg, req.params.domainId);
         if (!domain) {
           res.json({ ok: true, deleted: false });
           return;
         }
-        if (domain.service !== scriptName) {
-          return sendApiError(
-            res,
-            409,
-            'CFW_DOMAIN_FOREIGN',
-            'Custom domain "' + (domain.hostname || domain.id) + '" is routed to the Worker "' + domain.service + '", not to "' + scriptName + '"; refusing to detach it.',
-          );
-        }
-        // Same ownership rule as the deploy's reconcile: only a hostname a prior
-        // OpenDesign deployment attached (recorded on its providerMetadata) may
-        // be detached here. A hostname someone routed to the script from the
-        // dashboard is theirs — refusing is the only safe answer for a
-        // client-supplied id. The Workers config is global, so every record of
-        // this provider counts, not just the requesting project's.
-        // A hostname a deploy wrote ahead of its attach (pending) is vouched for
-        // by hostname: the attach may have landed even though its record never did.
+        // Ownership check: the domain id is client-supplied, and the token can
+        // reach every custom domain in the account. Same rule as the deploy's
+        // reconcile: only a hostname a prior OpenDesign deployment attached
+        // (recorded on its providerMetadata) may be detached here, and only
+        // through a record that deployed the very script Cloudflare routes the
+        // hostname to (`domain.service`). The CURRENT config's script is not
+        // the yardstick: after a `scriptName` change the old script's
+        // hostnames stay routed to it and stay detachable through the records
+        // that attached them — comparing against the new name stranded them.
+        // A hostname someone routed to the script from the dashboard is
+        // theirs — refusing is the only safe answer for a client-supplied id.
+        // The Workers config is global, so every record of this provider
+        // counts, not just the requesting project's. A hostname a deploy wrote
+        // ahead of its attach (pending) is vouched for by hostname: the attach
+        // may have landed even though its record never did.
         const owned = listDeploymentsByProvider(db, CLOUDFLARE_WORKERS_PROVIDER_ID)
+          .filter((record: WorkersDeploymentRecord) => {
+            try {
+              return workersRecordScriptName(record, config.scriptName || undefined) === domain.service;
+            } catch {
+              return false;
+            }
+          })
           .flatMap((deployment: { providerMetadata?: unknown }) =>
             vouchedCustomDomains(ownedCustomDomainsFromMetadata(deployment.providerMetadata), pendingCustomDomainsFromMetadata(deployment.providerMetadata)));
         if (!isOwnedCustomDomain(domain, owned)) {
@@ -771,6 +846,15 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
             }
             const retiredAccessAppId = retiredAccessAppIdFromWorkersDeploy(result.providerMetadata);
             if (retiredAccessAppId) forgetRetiredWorkersAccessApp(retiredAccessAppId);
+            // Every attach write-ahead this deploy was handed is resolved (the
+            // strict routed list proved each is owned by this record, detached,
+            // or never attached). This record's copy goes with the metadata
+            // replace below; a sibling's copy would keep vouching for it.
+            forgetPendingWorkersHostnames(
+              resolvedPendingCustomDomainsFromWorkersDeploy(result.providerMetadata),
+              workersScriptName,
+              workersConfig?.scriptName || undefined,
+            );
           }
           const now = Date.now();
           /** @type {import('@open-design/contracts').DeployProjectFileResponse} */
@@ -809,6 +893,15 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
             for (const detached of detachedCustomDomainsFromWorkersDeploy(err)) {
               forgetDetachedWorkersHostname({ id: detached.id ?? '', hostname: detached.hostname });
             }
+            // A hostname this attempt proved is NOT attached (4xx-refused, or
+            // withdrawn again) has no write-ahead to keep — on ANY record of
+            // the script, not only the live one the ownership record above
+            // rewrote: a sibling carrying the same copy would keep vouching.
+            forgetPendingWorkersHostnames(
+              releasedCustomDomainsFromWorkersDeploy(err),
+              workersScriptName,
+              workersConfig?.scriptName || undefined,
+            );
             // The prior Access app this attempt deleted (Access off) is gone
             // even though the deploy failed afterwards; no record may keep
             // reporting it as the Worker's protection.
@@ -907,7 +1000,111 @@ export function registerDeploymentCheckRoutes(app: Express, ctx: RegisterDeploym
   const { db } = ctx;
   const { sendApiError } = ctx.http;
   const { getProject } = ctx.projectStore;
-  const { getDeploymentById, CLOUDFLARE_PAGES_PROVIDER_ID, cloudflarePagesProjectNameFromDeployment, checkCloudflarePagesDeploymentLinks, checkDeploymentUrl, upsertDeployment, publicDeployment } = ctx.deploy;
+  const { getDeploymentById, CLOUDFLARE_PAGES_PROVIDER_ID, CLOUDFLARE_WORKERS_PROVIDER_ID, cloudflarePagesProjectNameFromDeployment, checkCloudflarePagesDeploymentLinks, checkDeploymentUrl, listDeploymentsByProvider, readDeployConfig, upsertDeployment, publicDeployment } = ctx.deploy;
+  const workersRecordStore: WorkersRecordStore = { db, providerId: CLOUDFLARE_WORKERS_PROVIDER_ID, listDeploymentsByProvider, upsertDeployment };
+
+  /**
+   * Link check for a Workers deploy whose Access gate was deferred: the deploy
+   * reported `link-delayed` with `accessVerified: false` because its public
+   * URL did not answer in time. The generic reachability probe below must
+   * NEVER settle it — a plain 200 on that path is the exposure the deploy
+   * exists to rule out, not a ready link. The same perimeter verdict the
+   * deploy applies runs here over BOTH public URLs (workers.dev and the
+   * custom hostname): `protected` promotes the record to `ready` and marks
+   * the gate verified; `unprotected` fails it (CFW_ACCESS_UNVERIFIED) and
+   * withdraws the exposure the deploy recorded, exactly as the deploy would
+   * have; `unreachable` leaves it deferred for the next check.
+   */
+  async function checkDeferredWorkersAccess(
+    existing: WorkersDeploymentRecord & { providerId: string; cloudflareWorkers?: unknown },
+    metadata: Record<string, unknown>,
+  ): Promise<unknown> {
+    // `cloudflareWorkers` is the lifted view of the metadata; upsert folds it
+    // back over providerMetadata, so it must not ride along with a rewrite.
+    const { cloudflareWorkers: _lifted, ...record } = existing;
+    const urls: string[] = [];
+    const pushUrl = (url: string | undefined) => {
+      if (url && !urls.includes(url)) urls.push(url);
+    };
+    pushUrl(existing.url);
+    const displayed = recordedCustomDomainFromMetadata(metadata);
+    if (displayed) pushUrl(typeof displayed.url === 'string' && displayed.url ? displayed.url : 'https://' + normalizeHostname(String(displayed.hostname)));
+    const proxyDispatcher = proxyDispatcherRequestInit(process.env);
+    try {
+      const verdict = await verifyCloudflareAccessPerimeter(urls, proxyDispatcher.requestInit);
+      const now = Date.now();
+      if (verdict.outcome === 'protected') {
+        const next: Record<string, unknown> = { ...metadata, accessVerified: true };
+        delete next.accessVerificationDeferred;
+        delete next.unverifiedExposure;
+        return upsertDeployment(db, {
+          ...record,
+          status: 'ready',
+          statusMessage: 'Cloudflare Access is verified on every public link.',
+          reachableAt: now,
+          providerMetadata: next,
+          updatedAt: now,
+        });
+      }
+      if (verdict.outcome === 'unreachable') {
+        return upsertDeployment(db, {
+          ...record,
+          status: 'link-delayed',
+          statusMessage: verdict.error.message,
+          providerMetadata: { ...metadata, accessVerified: false, accessVerificationDeferred: verdict.error.message },
+          updatedAt: now,
+        });
+      }
+      // Unprotected: the exposure THIS deploy created (recorded when it was
+      // deferred) is withdrawn before the failure lands on the record.
+      const steps: unknown[] = Array.isArray(metadata.steps) ? [...metadata.steps] : [];
+      const detachedCustomDomains: CloudflareOwnedCustomDomain[] = [];
+      const exposure = unverifiedExposureFromMetadata(metadata);
+      if (exposure) {
+        try {
+          const config = await readDeployConfig(CLOUDFLARE_WORKERS_PROVIDER_ID);
+          if (!config.accountId) throw new Error('Cloudflare account ID is not configured.');
+          const token = await resolveCloudflareWorkersRouteToken(config);
+          if (!token) throw new Error('Cloudflare API token is not configured.');
+          const withdrawn = await withdrawRecordedUnverifiedExposure(
+            { token: () => resolveCloudflareWorkersRouteToken(config), accountId: config.accountId, requestInit: proxyDispatcher.requestInit },
+            exposure,
+          );
+          steps.push(...withdrawn.steps);
+          detachedCustomDomains.push(...withdrawn.detachedCustomDomains);
+        } catch (withdrawErr) {
+          const detail = String((withdrawErr as Error)?.message || withdrawErr);
+          console.error('[od] Cloudflare Access unverified at link check; could not withdraw the recorded exposure: ' + detail);
+          steps.push({ name: 'access-withdraw', status: 'error', detail });
+        }
+      }
+      steps.push({ name: 'access-verify', status: 'error', detail: verdict.error.message });
+      const details = verdict.error.details as { status?: unknown } | undefined;
+      const next: Record<string, unknown> = {
+        ...metadata,
+        accessVerified: false,
+        steps,
+        check: { status: typeof details?.status === 'number' ? details.status : undefined, ok: false, detail: 'CFW_ACCESS_UNVERIFIED' },
+      };
+      delete next.accessVerificationDeferred;
+      delete next.unverifiedExposure;
+      upsertDeployment(db, {
+        ...record,
+        status: 'failed',
+        statusMessage: verdict.error.message,
+        providerMetadata: next,
+        updatedAt: now,
+      });
+      // The hostnames withdrawn above are gone from Cloudflare: no record may
+      // keep vouching for them (this one included — hence after its rewrite).
+      for (const detached of detachedCustomDomains) {
+        forgetDetachedWorkersHostnameAcrossRecords(workersRecordStore, { id: detached.id ?? '', hostname: detached.hostname });
+      }
+      return getDeploymentById(db, existing.projectId, existing.id);
+    } finally {
+      await proxyDispatcher.close();
+    }
+  }
 
   app.post(
     '/api/projects/:id/deployments/:deploymentId/check-link',
@@ -949,6 +1146,11 @@ export function registerDeploymentCheckRoutes(app: Express, ctx: RegisterDeploym
             reachableAt: checked.status === 'ready' ? now : existing.reachableAt,
             updatedAt: now,
           });
+          return res.json(publicDeployment(body));
+        }
+        if (existing.providerId === CLOUDFLARE_WORKERS_PROVIDER_ID && isDeferredWorkersAccessVerification(existing.providerMetadata)) {
+          /** @type {import('@open-design/contracts').CheckDeploymentLinkResponse} */
+          const body = await checkDeferredWorkersAccess(existing, existing.providerMetadata);
           return res.json(publicDeployment(body));
         }
         const checkUrl = stableCloudflareProjectName

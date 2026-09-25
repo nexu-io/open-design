@@ -5,7 +5,7 @@ import path from 'node:path';
 import type { AddressInfo } from 'node:net';
 import express from 'express';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { registerCloudflareRoutes } from '../src/routes/cloudflare.js';
+import { CLOUDFLARE_OAUTH_EXCHANGE_TIMEOUT_MS, registerCloudflareRoutes } from '../src/routes/cloudflare.js';
 import { startCallbackListener } from '../src/integrations/cloudflare-oauth-server.js';
 import {
   CLOUDFLARE_WORKERS_CONFIG_CORRUPT_CODE,
@@ -258,6 +258,95 @@ describe('cloudflare-oauth routes', () => {
       await clearCloudflareOAuthToken(dataDir);
       // The completed connect committed OAuth mode into the deploy config; the
       // later "/start that fails" case needs that path to be absent again.
+      await rm(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), { force: true });
+    }
+  });
+
+  it('budgets the connect-path calls (code exchange and GET /user) with an AbortSignal', async () => {
+    const dataDir = cloudflareOAuthTokensDir();
+    const realFetch = globalThis.fetch;
+    const signals: Record<string, unknown> = {};
+    vi.stubGlobal('fetch', async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('oauth2/token')) {
+        signals.token = init?.signal;
+        return new Response(
+          JSON.stringify({ access_token: 'acc-budget', token_type: 'Bearer', refresh_token: 'ref-budget', expires_in: 3600 }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url.endsWith('/client/v4/user')) {
+        signals.user = init?.signal;
+        return new Response(JSON.stringify({ success: true, result: { email: 'me@example.com' } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return realFetch(input as never, init as never);
+    });
+    try {
+      expect(CLOUDFLARE_OAUTH_EXCHANGE_TIMEOUT_MS).toBe(20_000);
+      const startResp = await fetch(`${app.baseUrl}/api/cloudflare/oauth/start`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ clientId: 'client-abc', redirectUri: 'http://127.0.0.1:56122/callback' }),
+      });
+      expect(startResp.status).toBe(200);
+      const { state } = (await startResp.json()) as { state: string };
+      const completeResp = await fetch(`${app.baseUrl}/api/cloudflare/oauth/complete`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ state, code: 'AUTHCODE' }),
+      });
+      expect(completeResp.status).toBe(200);
+      expect(signals.token).toBeInstanceOf(AbortSignal);
+      expect(signals.user).toBeInstanceOf(AbortSignal);
+    } finally {
+      vi.unstubAllGlobals();
+      await clearCloudflareOAuthToken(dataDir);
+      await rm(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), { force: true });
+    }
+  });
+
+  it('a code exchange that runs out of its budget is a failed exchange: 400, nothing stored, listener left to the next attempt', async () => {
+    const dataDir = cloudflareOAuthTokensDir();
+    const realFetch = globalThis.fetch;
+    let userCalls = 0;
+    vi.stubGlobal('fetch', async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('oauth2/token')) {
+        // What Node's fetch rejects with once AbortSignal.timeout fires.
+        throw new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+      }
+      if (url.endsWith('/client/v4/user')) {
+        userCalls += 1;
+        return new Response(JSON.stringify({ success: true, result: { email: 'me@example.com' } }), { status: 200 });
+      }
+      return realFetch(input as never, init as never);
+    });
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const startResp = await fetch(`${app.baseUrl}/api/cloudflare/oauth/start`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ clientId: 'client-abc', redirectUri: 'http://127.0.0.1:56122/callback' }),
+      });
+      expect(startResp.status).toBe(200);
+      const { state } = (await startResp.json()) as { state: string };
+      const completeResp = await fetch(`${app.baseUrl}/api/cloudflare/oauth/complete`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ state, code: 'AUTHCODE' }),
+      });
+      expect(completeResp.status).toBe(400);
+      expect(((await completeResp.json()) as { error: string }).error).toContain('did not answer within 20s');
+      expect(userCalls).toBe(0);
+      expect(await getCloudflareOAuthToken(dataDir)).toBeNull();
+      expect(errorSpy).toHaveBeenCalledWith('[cloudflare-oauth] manual complete failed:', expect.stringContaining('did not answer'));
+    } finally {
+      errorSpy.mockRestore();
+      vi.unstubAllGlobals();
+      await clearCloudflareOAuthToken(dataDir);
       await rm(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), { force: true });
     }
   });

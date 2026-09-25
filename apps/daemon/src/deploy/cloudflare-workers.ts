@@ -46,8 +46,12 @@ async function withWorkersDispatcher<T>(
   }
 }
 
-function withRequestInit(config: Pick<WorkersDeployConfig, 'requestInit'>, init: RequestInit): RequestInit {
-  return { signal: AbortSignal.timeout(CLOUDFLARE_API_TIMEOUT_MS), ...init, ...(config.requestInit ?? {}) };
+function withRequestInit(
+  config: Pick<WorkersDeployConfig, 'requestInit'>,
+  init: RequestInit,
+  timeoutMs = CLOUDFLARE_API_TIMEOUT_MS,
+): RequestInit {
+  return { signal: AbortSignal.timeout(timeoutMs), ...init, ...(config.requestInit ?? {}) };
 }
 
 // A fetch that ran out of its AbortSignal.timeout budget. Node rejects with a
@@ -88,6 +92,29 @@ export const CLOUDFLARE_API_TIMEOUT_MS = 30_000;
  * self-email lookup). These are advisory and re-probed later, so they get a
  * tighter budget than an API mutation. */
 export const CLOUDFLARE_PROBE_TIMEOUT_MS = 10_000;
+/** Budget for a request that carries a body the API must ingest (an assets
+ * bucket, the script PUT, a version POST). Sized from the body: a fixed floor
+ * plus an allowance per MiB, capped. A single 25 MiB asset is ~33 MiB once
+ * base64-encoded; on a slow uplink it needs minutes, and the flat API budget
+ * aborted it every time. */
+export const CLOUDFLARE_UPLOAD_TIMEOUT_BASE_MS = CLOUDFLARE_API_TIMEOUT_MS;
+export const CLOUDFLARE_UPLOAD_TIMEOUT_PER_MIB_MS = 10_000;
+export const CLOUDFLARE_UPLOAD_TIMEOUT_MAX_MS = 10 * 60_000;
+export function cloudflareUploadTimeoutMs(bodyBytes: number): number {
+  const bytes = Number.isFinite(bodyBytes) && bodyBytes > 0 ? bodyBytes : 0;
+  const perMib = (bytes / (1024 * 1024)) * CLOUDFLARE_UPLOAD_TIMEOUT_PER_MIB_MS;
+  return Math.min(CLOUDFLARE_UPLOAD_TIMEOUT_MAX_MS, Math.ceil(CLOUDFLARE_UPLOAD_TIMEOUT_BASE_MS + perMib));
+}
+// A body-carrying request that ran out of its sized budget. Typed so the
+// client can tell "the upload itself did not finish" from a provider refusal.
+function uploadTimedOutError(what: string, bodyBytes: number, timeoutMs: number): DeployError {
+  return new DeployError(
+    what + ' did not finish within ' + Math.round(timeoutMs / 1000) + 's (' + bodyBytes + ' bytes). Check the connection and retry.',
+    504,
+    { bodyBytes, timeoutMs },
+    'CFW_UPLOAD_FAILED',
+  );
+}
 const WORKERS_ASSET_MAX_FILE_BYTES = 25 * 1024 * 1024;
 const WORKERS_ASSET_MAX_FILE_COUNT = 20000;
 const WORKERS_SCRIPT_NAME_MAX_LENGTH = 63;
@@ -140,7 +167,7 @@ async function fetchWithRetry(
   url: string,
   init: RequestInit,
   attempts = 3,
-  options: { retryServerErrors?: boolean } = {},
+  options: { retryServerErrors?: boolean; timeoutMs?: number } = {},
 ): Promise<Response> {
   // Non-idempotent methods (POST/PATCH) may already have committed before a 5xx
   // is returned, so retrying a 5xx would mint duplicate resources (immutable
@@ -151,7 +178,9 @@ async function fetchWithRetry(
   const nonIdempotent = method === 'POST' || method === 'PATCH' || options.retryServerErrors === false;
   let last: Response | undefined;
   for (let i = 0; i < attempts; i += 1) {
-    const resp = await fetch(url, withRequestInit(config, init));
+    // A fresh signal per attempt: a retry must get the full budget, not what
+    // the attempt before it left over.
+    const resp = await fetch(url, withRequestInit(config, init, options.timeoutMs));
     const is429 = resp.status === 429;
     const is5xx = resp.status >= 500 && resp.status < 600;
     if (!is429 && !(is5xx && !nonIdempotent)) return resp;
@@ -374,20 +403,31 @@ async function uploadAssetBuckets(
   let completionJwt = sessionJwt;
   for (const bucket of buckets) {
     const form = new FormData();
+    let bodyBytes = 0;
     for (const hash of bucket) {
       const file = hashToFile.get(hash);
       if (!file) continue;
       const content = Buffer.from(file.data).toString('base64');
+      bodyBytes += content.length;
       // A named File part, not a bare Blob: the multipart entry must carry a
       // filename or the assets endpoint drops it as a plain form field and the
       // upload session never completes.
       const type = file.contentType || 'application/octet-stream';
       form.append(hash, new File([content], hash, { type }), hash);
     }
-    const resp = await fetchWithRetry(config,
-      CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/workers/assets/upload?base64=true',
-      { method: 'POST', headers: { Authorization: 'Bearer ' + sessionJwt }, body: form },
-    );
+    const timeoutMs = cloudflareUploadTimeoutMs(bodyBytes);
+    let resp: Response;
+    try {
+      resp = await fetchWithRetry(config,
+        CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/workers/assets/upload?base64=true',
+        { method: 'POST', headers: { Authorization: 'Bearer ' + sessionJwt }, body: form },
+        3,
+        { timeoutMs },
+      );
+    } catch (err) {
+      if (isFetchTimeout(err)) throw uploadTimedOutError('Cloudflare assets upload', bodyBytes, timeoutMs);
+      throw err;
+    }
     const json = await readCloudflareJson(resp);
     // A 200-with-error-envelope (`{success:false, errors:[…]}`) must fail closed,
     // not silently leave completionJwt at the previous bucket's value.
@@ -486,9 +526,18 @@ async function uploadWorkerScript(
   let lastStatus = 502;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const form = new FormData();
-    form.append('metadata', new Blob([JSON.stringify(workerMetadata(config, assetsJwt, runWorkerFirst))], { type: 'application/json' }));
+    const metadataJson = JSON.stringify(workerMetadata(config, assetsJwt, runWorkerFirst));
+    form.append('metadata', new Blob([metadataJson], { type: 'application/json' }));
     form.append('index.js', new Blob([moduleCode], { type: 'application/javascript+module' }), 'index.js');
-    const resp = await fetchWithRetry(config, url, { method: 'PUT', headers: await authHeaders(config), body: form }, 3, { retryServerErrors: false });
+    const bodyBytes = Buffer.byteLength(metadataJson) + Buffer.byteLength(moduleCode);
+    const timeoutMs = cloudflareUploadTimeoutMs(bodyBytes);
+    let resp: Response;
+    try {
+      resp = await fetchWithRetry(config, url, { method: 'PUT', headers: await authHeaders(config), body: form }, 3, { retryServerErrors: false, timeoutMs });
+    } catch (err) {
+      if (isFetchTimeout(err)) throw uploadTimedOutError('Cloudflare Workers script upload', bodyBytes, timeoutMs);
+      throw err;
+    }
     const json = await readCloudflareJson(resp);
     if (resp.ok && json.success !== false) return json;
     lastJson = json;
@@ -509,12 +558,23 @@ async function uploadWorkerScript(
 
 async function uploadWorkerVersion(config: WorkersDeployConfig, scriptName: string, moduleCode: string, assetsJwt: string, runWorkerFirst = false): Promise<string> {
   const form = new FormData();
-  form.append('metadata', new Blob([JSON.stringify(workerMetadata(config, assetsJwt, runWorkerFirst))], { type: 'application/json' }));
+  const metadataJson = JSON.stringify(workerMetadata(config, assetsJwt, runWorkerFirst));
+  form.append('metadata', new Blob([metadataJson], { type: 'application/json' }));
   form.append('index.js', new Blob([moduleCode], { type: 'application/javascript+module' }), 'index.js');
-  const resp = await fetchWithRetry(config,
-    CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/workers/scripts/' + encodeURIComponent(scriptName) + '/versions',
-    { method: 'POST', headers: await authHeaders(config), body: form },
-  );
+  const bodyBytes = Buffer.byteLength(metadataJson) + Buffer.byteLength(moduleCode);
+  const timeoutMs = cloudflareUploadTimeoutMs(bodyBytes);
+  let resp: Response;
+  try {
+    resp = await fetchWithRetry(config,
+      CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/workers/scripts/' + encodeURIComponent(scriptName) + '/versions',
+      { method: 'POST', headers: await authHeaders(config), body: form },
+      3,
+      { timeoutMs },
+    );
+  } catch (err) {
+    if (isFetchTimeout(err)) throw uploadTimedOutError('Cloudflare Workers version upload', bodyBytes, timeoutMs);
+    throw err;
+  }
   const json = await readCloudflareJson(resp);
   if (!resp.ok || json.success === false) throw cloudflareError(json, resp.status, 'Cloudflare Workers version upload failed.');
   const result = (json.result ?? {}) as JsonObject;
@@ -1042,7 +1102,7 @@ async function probeCloudflareAccessPerimeterOnce(url: string, requestInit: Work
 // and the verdicts are ranked: one `unprotected` URL is an exposure and
 // outranks any number of `unreachable` ones, because the caller withdraws on
 // `unprotected` only and merely defers on `unreachable`.
-async function verifyCloudflareAccessPerimeter(urls: string[], requestInit: WorkersRequestInit): Promise<CloudflareAccessPerimeterVerdict> {
+export async function verifyCloudflareAccessPerimeter(urls: string[], requestInit: WorkersRequestInit): Promise<CloudflareAccessPerimeterVerdict> {
   const { attempts, baseMs, maxDelayMs } = accessPerimeterRetry;
   let unreachable: CloudflareAccessPerimeterVerdict | null = null;
   for (const url of urls) {
@@ -1141,6 +1201,88 @@ async function withdrawUnverifiedPreviewExposure(
     console.error(`[cloudflare-workers] Access unverified; could not turn previews back off for ${input.scriptName}: ${message}`);
     input.steps.push({ name: 'previews-disable', status: 'error', detail: message });
   }
+}
+
+/** The exposure a deploy created and could not verify because its public URL
+ * did not answer (`link-delayed`, `accessVerified: false`). Recorded on the
+ * deploy's metadata so the later link check can withdraw it if the URL turns
+ * out to answer WITHOUT the Access gate — the same compensation the deploy
+ * itself applies when the answer arrives in time. Only what THIS run created
+ * is listed: a route or hostname the user already had public is never here. */
+export type CloudflareUnverifiedExposure = {
+  scriptName: string;
+  /** Production: this run turned the workers.dev route on. */
+  subdomainEnabledByThisRun?: boolean;
+  /** Preview: this run turned previews_enabled on. */
+  previewsEnabledByThisRun?: boolean;
+  /** Production: hostnames this run attached that were not routed before. */
+  detachableCustomDomains?: CloudflareOwnedCustomDomain[];
+};
+
+const UNVERIFIED_EXPOSURE_KEY = 'unverifiedExposure';
+
+function recordUnverifiedExposure(metadata: JsonObject, exposure: CloudflareUnverifiedExposure): void {
+  const detachable = exposure.detachableCustomDomains ?? [];
+  if (!exposure.subdomainEnabledByThisRun && !exposure.previewsEnabledByThisRun && detachable.length === 0) return;
+  const recorded: JsonObject = { scriptName: exposure.scriptName };
+  if (exposure.subdomainEnabledByThisRun) recorded.subdomainEnabledByThisRun = true;
+  if (exposure.previewsEnabledByThisRun) recorded.previewsEnabledByThisRun = true;
+  if (detachable.length > 0) {
+    recorded.detachableCustomDomains = detachable.map((domain) => (domain.id ? { id: domain.id, hostname: domain.hostname } : { hostname: domain.hostname }));
+  }
+  metadata[UNVERIFIED_EXPOSURE_KEY] = recorded;
+}
+
+/** The exposure a deferred deploy recorded (see CloudflareUnverifiedExposure),
+ * when well-formed. */
+export function unverifiedExposureFromMetadata(metadata: unknown): CloudflareUnverifiedExposure | undefined {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return undefined;
+  const raw = (metadata as JsonObject)[UNVERIFIED_EXPOSURE_KEY];
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const entry = raw as JsonObject;
+  const scriptName = typeof entry.scriptName === 'string' ? entry.scriptName : '';
+  if (!scriptName) return undefined;
+  const out: CloudflareUnverifiedExposure = { scriptName };
+  if (entry.subdomainEnabledByThisRun === true) out.subdomainEnabledByThisRun = true;
+  if (entry.previewsEnabledByThisRun === true) out.previewsEnabledByThisRun = true;
+  const detachable = ownedCustomDomainsFromMetadata({ ownedCustomDomains: entry.detachableCustomDomains });
+  if (detachable.length > 0) out.detachableCustomDomains = detachable;
+  return out;
+}
+
+/** Withdraw an exposure a deferred deploy recorded, once the link check has
+ * proven the URL answers without the gate. Best-effort per step, like the
+ * in-deploy compensation; returns what it did so the caller can record it and
+ * stop vouching for the hostnames that are gone. */
+export async function withdrawRecordedUnverifiedExposure(
+  config: { token: string | CloudflareTokenProvider; accountId: string; requestInit?: WorkersRequestInit | undefined },
+  exposure: CloudflareUnverifiedExposure,
+): Promise<{ steps: DeployStep[]; detachedCustomDomains: CloudflareOwnedCustomDomain[] }> {
+  return withWorkersDispatcher(config.requestInit, async (requestInit) => {
+    const cfg: WorkersDeployConfig = { token: config.token, accountId: config.accountId, requestInit };
+    const steps: DeployStep[] = [];
+    if (exposure.previewsEnabledByThisRun) {
+      await withdrawUnverifiedPreviewExposure(cfg, { scriptName: exposure.scriptName, previewsEnabledByThisRun: true, steps });
+    }
+    const attached = [...(exposure.detachableCustomDomains ?? [])];
+    const released: string[] = [];
+    if (exposure.subdomainEnabledByThisRun || attached.length > 0) {
+      await withdrawUnverifiedExposure(cfg, {
+        scriptName: exposure.scriptName,
+        subdomainEnabledByThisRun: Boolean(exposure.subdomainEnabledByThisRun),
+        attachedCustomDomains: attached,
+        detachableHostnames: attached.map((domain) => domain.hostname),
+        releasedCustomDomains: released,
+        steps,
+      });
+    }
+    // withdrawUnverifiedExposure removes each hostname it detached from the
+    // attached list; whatever is left could not be detached and stays owned.
+    const detachedCustomDomains = (exposure.detachableCustomDomains ?? []).filter(
+      (domain) => !attached.some((remaining) => remaining.hostname === domain.hostname),
+    );
+    return { steps, detachedCustomDomains };
+  });
 }
 
 function accessAppReferencesWorker(app: JsonObject | null, workerId: string): boolean {
@@ -1250,6 +1392,23 @@ export function releasedCustomDomainsFromWorkersDeploy(source: unknown): string[
   if (!Array.isArray(released)) return [];
   const out: string[] = [];
   for (const entry of released) {
+    const hostname = typeof entry === 'string' ? normalizeHostname(entry) : '';
+    if (hostname && !out.includes(hostname)) out.push(hostname);
+  }
+  return out;
+}
+
+/** Hostnames a successful PRODUCTION deploy resolved
+ * (`resolvedPendingCustomDomains` on its result metadata): every write-ahead it
+ * was handed. The strict routed list it reconciled proved each one is now
+ * either owned by this deploy's record (the configured hostname), detached
+ * (a stale owned hostname), or never attached — so no record of the script
+ * has anything left to vouch for. */
+export function resolvedPendingCustomDomainsFromWorkersDeploy(source: unknown): string[] {
+  const resolved = (source as { resolvedPendingCustomDomains?: unknown } | null | undefined)?.resolvedPendingCustomDomains;
+  if (!Array.isArray(resolved)) return [];
+  const out: string[] = [];
+  for (const entry of resolved) {
     const hostname = typeof entry === 'string' ? normalizeHostname(entry) : '';
     if (hostname && !out.includes(hostname)) out.push(hostname);
   }
@@ -1478,7 +1637,9 @@ async function deployToCloudflareWorkersWith(
       metadata.ownedCustomDomains = priorOwnedCustomDomains.map((owned) =>
         owned.id ? { id: owned.id, hostname: owned.hostname } : { hostname: owned.hostname });
       // Pending write-aheads ride along unchanged (carried, never promoted):
-      // only a production deploy resolves them.
+      // only a production deploy resolves them — and when it does, it reports
+      // them as `resolvedPendingCustomDomains` so the route clears the copies
+      // carried here (this record is then a sibling of the resolving one).
       if (priorPendingCustomDomains.length > 0) {
         metadata.pendingCustomDomains = priorPendingCustomDomains.map((hostname) => ({ hostname }));
       }
@@ -1525,8 +1686,13 @@ async function deployToCloudflareWorkersWith(
           await withdrawUnverifiedPreviewExposure(cfg, { scriptName, previewsEnabledByThisRun: previews.enabledByThisRun, steps });
           throw verdict.error;
         }
-        if (verdict.outcome === 'unreachable') accessDeferred = deferAccessVerification(metadata, steps, verdict);
-        else metadata.accessVerified = true;
+        if (verdict.outcome === 'unreachable') {
+          accessDeferred = deferAccessVerification(metadata, steps, verdict);
+          // What the link check may still have to withdraw (see check-link).
+          recordUnverifiedExposure(metadata, { scriptName, previewsEnabledByThisRun: previews.enabledByThisRun });
+        } else {
+          metadata.accessVerified = true;
+        }
       }
       metadata.steps = steps;
       return {
@@ -1753,8 +1919,20 @@ async function deployToCloudflareWorkersWith(
         });
         throw verdict.error;
       }
-      if (verdict.outcome === 'unreachable') accessDeferred = deferAccessVerification(metadata, steps, verdict);
-      else metadata.accessVerified = true;
+      if (verdict.outcome === 'unreachable') {
+        accessDeferred = deferAccessVerification(metadata, steps, verdict);
+        // What the link check may still have to withdraw (see check-link):
+        // the same set the in-deploy compensation above would have.
+        recordUnverifiedExposure(metadata, {
+          scriptName,
+          subdomainEnabledByThisRun,
+          detachableCustomDomains: configuredHostname && !configuredAlreadyAttached
+            ? attachedCustomDomains.filter((domain) => domain.hostname === configuredHostname)
+            : [],
+        });
+      } else {
+        metadata.accessVerified = true;
+      }
     } else {
       try {
         const checkResp = await fetch(url, { method: 'HEAD', redirect: 'manual', signal: AbortSignal.timeout(CLOUDFLARE_PROBE_TIMEOUT_MS), ...(cfg.requestInit ?? {}) });
@@ -1770,6 +1948,14 @@ async function deployToCloudflareWorkersWith(
     // route stops every record vouching for them before it writes this one.
     if (detachedCustomDomains.length > 0) {
       metadata.detachedCustomDomains = detachedCustomDomains.map((domain) => (domain.id ? { id: domain.id, hostname: domain.hostname } : { hostname: domain.hostname }));
+    }
+    // Every write-ahead this deploy was handed is resolved by the strict list
+    // it just reconciled (configured → owned above; routed → detached above;
+    // else never attached). The route drops the copies every record of this
+    // script carries — this record's own are gone with the metadata replace,
+    // but a sibling (a preview that carried them) would keep vouching.
+    if (priorPendingCustomDomains.length > 0) {
+      metadata.resolvedPendingCustomDomains = [...priorPendingCustomDomains];
     }
     metadata.steps = steps;
     return {

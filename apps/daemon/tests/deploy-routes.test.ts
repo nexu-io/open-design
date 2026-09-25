@@ -14,6 +14,7 @@ import {
   VERCEL_PROVIDER_ID,
   SAVED_CLOUDFLARE_TOKEN_MASK,
 } from '../src/deploy.js';
+import { configureCloudflareAccessPerimeterRetry } from '../src/deploy/cloudflare-workers.js';
 import { ensureProject } from '../src/projects.js';
 import { startServer } from '../src/server.js';
 
@@ -1709,6 +1710,11 @@ describe('deploy provider routes', () => {
         if (method === 'GET' && url.includes('/workers/domains/dom-mine')) {
           return json({ success: true, result: { id: 'dom-mine', hostname: 'mine.example.com', service: 'my-site', zone_id: 'zone-1' } });
         }
+        if (method === 'GET' && url.includes('/workers/domains/dom-moved')) {
+          // The hostname OUR deploy attached, but Cloudflare now routes this id
+          // to another Worker: the vouching record deployed `my-site`, not that.
+          return json({ success: true, result: { id: 'dom-moved', hostname: 'mine.example.com', service: 'someone-elses-worker', zone_id: 'zone-1' } });
+        }
         if (method === 'DELETE' && url.includes('/workers/domains/dom-mine')) {
           return json({ success: true, result: { id: 'dom-mine' } });
         }
@@ -1748,6 +1754,31 @@ describe('deploy provider routes', () => {
           message: expect.stringContaining('not attached by an OpenDesign deployment'),
         });
         expect(cfCalls.some((c) => c.method === 'DELETE')).toBe(false);
+
+        // A record vouches for the hostname, but the domain is routed to a
+        // Worker that record never deployed: the vouching record's script must
+        // be the domain's service, or the id is not ours to detach.
+        const moved = await fetch(`${baseUrl}/api/deploy/cloudflare-workers/domains/dom-moved`, { method: 'DELETE' });
+        expect(moved.status).toBe(409);
+        expect((await moved.json() as { error: { code: string } }).error.code).toBe('CFW_DOMAIN_FOREIGN');
+        expect(cfCalls.some((c) => c.method === 'DELETE')).toBe(false);
+
+        // The configured script is renamed. mine.example.com stays routed to
+        // the OLD script, and the record that attached it recorded that
+        // script — so it stays detachable. Comparing against the CURRENT
+        // config's script (`renamed-site`) stranded every hostname of the old
+        // one with no way to remove it here.
+        expect((await fetch(`${baseUrl}/api/deploy/config`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            providerId: CLOUDFLARE_WORKERS_PROVIDER_ID,
+            token: 'tok',
+            accountId: 'acct_test',
+            scriptName: 'renamed-site',
+            customDomain: { hostname: 'mine.example.com', zoneId: 'zone-1' },
+          }),
+        })).status).toBe(200);
 
         // Same route, the domain the OpenDesign deploy attached: detached.
         const mine = await fetch(`${baseUrl}/api/deploy/cloudflare-workers/domains/dom-mine`, { method: 'DELETE' });
@@ -2705,6 +2736,7 @@ describe('deploy provider routes', () => {
   // Shared fixture for the Workers route tests below: one project with two
   // files that deploy the SAME script, a Cloudflare mock that tracks what is
   // routed to it, and helpers for the deploy / detach routes.
+  type HeadMode = 'access' | 'plain' | 'unreachable';
   async function workersSiblingFixture(slug: string, options: { access?: boolean } = {}) {
     const stateRoot = await mkdtemp(path.join(os.tmpdir(), `od-deploy-route-workers-${slug}-`));
     const priorStateRoot = process.env.OD_USER_STATE_DIR;
@@ -2746,6 +2778,12 @@ describe('deploy provider routes', () => {
     const state = {
       routed: [] as Array<Record<string, string>>,
       attachMode: 'ok' as 'ok' | 'refused' | 'transport',
+      // What the public URLs answer to a HEAD: the Access login redirect, a
+      // plain 200 (no gate), or no answer at all — one answer for every URL,
+      // or a function choosing per URL.
+      headMode: (options.access ? 'access' : 'plain') as HeadMode | ((url: string) => HeadMode),
+      // The script's workers.dev route, as Cloudflare would report and store it.
+      subdomainEnabled: true,
       cfCalls: [] as Array<{ url: string; method: string; dispatched: boolean }>,
     };
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -2754,7 +2792,9 @@ describe('deploy provider routes', () => {
       const method = (init?.method || 'GET').toUpperCase();
       state.cfCalls.push({ url, method, dispatched: init?.dispatcher !== undefined });
       if (method === 'HEAD') {
-        return options.access
+        const headMode = typeof state.headMode === 'function' ? state.headMode(url) : state.headMode;
+        if (headMode === 'unreachable') throw new TypeError('fetch failed');
+        return headMode === 'access'
           ? new Response('', { status: 302, headers: { location: 'https://acct-test.cloudflareaccess.com/cdn-cgi/access/login' } })
           : new Response('', { status: 200 });
       }
@@ -2780,7 +2820,13 @@ describe('deploy provider routes', () => {
         return json({ success: true, result: null });
       }
       if (method === 'PUT' && url.endsWith('/workers/scripts/' + scriptName)) return json({ success: true, result: {} });
-      if (url.endsWith('/workers/scripts/' + scriptName + '/subdomain')) return json({ success: true, result: { enabled: true, previews_enabled: false } });
+      if (url.endsWith('/workers/scripts/' + scriptName + '/subdomain')) {
+        if (method === 'POST') {
+          const body = JSON.parse(String(init?.body)) as { enabled?: unknown };
+          if (typeof body.enabled === 'boolean') state.subdomainEnabled = body.enabled;
+        }
+        return json({ success: true, result: { enabled: state.subdomainEnabled, previews_enabled: false } });
+      }
       if (url.includes('/workers/scripts')) return json({ success: true, result: [{ id: scriptName, tag: 'tag-shared' }] });
       if (url.includes('/access/identity_providers')) return json({ success: true, result: [{ id: 'otp-1', type: 'onetimepin', name: 'One-time PIN login' }] });
       if (url.includes('/access/apps/')) {
@@ -2794,11 +2840,12 @@ describe('deploy provider routes', () => {
       throw new Error(`Unexpected Cloudflare fetch: ${method} ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
-    const deploy = (fileName: string) => fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+    const deploy = (fileName: string, target: 'preview' | 'production' = 'production') => fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fileName, providerId: CLOUDFLARE_WORKERS_PROVIDER_ID }),
+      body: JSON.stringify({ fileName, providerId: CLOUDFLARE_WORKERS_PROVIDER_ID, target }),
     });
+    const checkLink = (deploymentId: string) => fetch(`${baseUrl}/api/projects/${projectId}/deployments/${encodeURIComponent(deploymentId)}/check-link`, { method: 'POST' });
     const detachRoute = (id: string) => fetch(`${baseUrl}/api/deploy/cloudflare-workers/domains/${id}?projectId=${encodeURIComponent(projectId)}`, { method: 'DELETE' });
     const listDeployments = async () => {
       const resp = await fetch(`${baseUrl}/api/projects/${projectId}/deployments`);
@@ -2811,7 +2858,7 @@ describe('deploy provider routes', () => {
       else process.env.OD_USER_STATE_DIR = priorStateRoot;
       await rm(stateRoot, { recursive: true, force: true });
     };
-    return { state, scriptName, putConfig, deploy, detachRoute, listDeployments, cleanup };
+    return { state, scriptName, putConfig, deploy, checkLink, detachRoute, listDeployments, cleanup };
   }
   const scriptNameOf = (f: { scriptName: string }) => f.scriptName;
 
@@ -2901,6 +2948,150 @@ describe('deploy provider routes', () => {
       expect(f.state.cfCalls.some((c) => c.method === 'DELETE' && c.url.endsWith('/workers/domains/dom-a'))).toBe(false);
       expect(f.state.routed.map((d) => d.hostname)).toEqual(['a.example.com']);
     } finally {
+      await f.cleanup();
+    }
+  });
+
+  it('a successful production deploy resolves the attach write-ahead on every sibling record, not only its own', async () => {
+    const f = await workersSiblingFixture('pending-siblings');
+    try {
+      // a.html's attach of a.example.com LANDS but its response is lost: only
+      // a.html's write-ahead vouches for the hostname.
+      await f.putConfig({ hostname: 'a.example.com' });
+      f.state.attachMode = 'transport';
+      expect((await f.deploy('a.html')).status).toBeGreaterThanOrEqual(400);
+      f.state.attachMode = 'ok';
+      expect(f.state.routed.map((d) => d.hostname)).toEqual(['a.example.com']);
+      // A preview deploy of b.html carries the union of the script's
+      // write-aheads forward onto b.html's record: a COPY of the pending entry.
+      expect((await f.deploy('b.html', 'preview')).status).toBe(200);
+      // a.html's production deploy drops the hostname: the strict routed list
+      // proves a.example.com is (stale, vouched) and detaches it. Its own
+      // write-ahead goes with the record replace; b.html's copy must go too.
+      await f.putConfig({ hostname: null });
+      expect((await f.deploy('a.html')).status).toBe(200);
+      expect(f.state.cfCalls.some((c) => c.method === 'DELETE' && c.url.endsWith('/workers/domains/dom-a'))).toBe(true);
+      expect(f.state.routed).toEqual([]);
+      // Someone re-attaches a.example.com from the dashboard. A deploy of
+      // b.html must treat it as FOREIGN and leave it routed: a surviving copy
+      // of the write-ahead on b.html's record classified it owned and
+      // detached it again.
+      const deletesBefore = f.state.cfCalls.filter((c) => c.method === 'DELETE').length;
+      f.state.routed = [{ id: 'dom-a', hostname: 'a.example.com', service: scriptNameOf(f), zone_id: 'zone-1' }];
+      expect((await f.deploy('b.html')).status).toBe(200);
+      expect(f.state.cfCalls.filter((c) => c.method === 'DELETE').length).toBe(deletesBefore);
+      expect(f.state.routed.map((d) => d.hostname)).toEqual(['a.example.com']);
+      // Nor does the detach route accept it: nothing vouches for it any more.
+      const detach = await f.detachRoute('dom-a');
+      expect(detach.status).toBe(409);
+      expect(f.state.cfCalls.filter((c) => c.method === 'DELETE').length).toBe(deletesBefore);
+    } finally {
+      await f.cleanup();
+    }
+  });
+
+  it('a failed deploy drops a released write-ahead from every sibling record, not only the live one', async () => {
+    const f = await workersSiblingFixture('released-siblings');
+    try {
+      // The first attach is lost in transport, so a.html carries a write-ahead
+      // for a.example.com; a preview of b.html copies it onto b.html's record.
+      await f.putConfig({ hostname: 'a.example.com' });
+      f.state.attachMode = 'transport';
+      expect((await f.deploy('a.html')).status).toBeGreaterThanOrEqual(400);
+      expect((await f.deploy('b.html', 'preview')).status).toBe(200);
+      // The lost attach turns out NOT to have landed (nothing is routed), and
+      // the retry is refused outright by Cloudflare: the hostname is released
+      // — certainly not attached — so no record has anything to vouch for.
+      f.state.routed = [];
+      f.state.attachMode = 'refused';
+      expect((await f.deploy('a.html')).status).toBeGreaterThanOrEqual(400);
+      f.state.attachMode = 'ok';
+      // Someone attaches a.example.com from the dashboard. A deploy of b.html
+      // that no longer names it must leave it routed: b.html's surviving copy
+      // of the write-ahead would classify it owned and detach it.
+      f.state.routed = [{ id: 'dom-a', hostname: 'a.example.com', service: scriptNameOf(f), zone_id: 'zone-1' }];
+      await f.putConfig({ hostname: null });
+      expect((await f.deploy('b.html')).status).toBe(200);
+      expect(f.state.cfCalls.some((c) => c.method === 'DELETE' && c.url.endsWith('/workers/domains/dom-a'))).toBe(false);
+      expect(f.state.routed.map((d) => d.hostname)).toEqual(['a.example.com']);
+    } finally {
+      await f.cleanup();
+    }
+  });
+
+  it('check-link on a deferred Access deploy runs the perimeter verdict over both URLs, never the plain reachability probe', async () => {
+    const f = await workersSiblingFixture('deferred-access', { access: true });
+    // The real perimeter budget waits several seconds per URL before it defers.
+    configureCloudflareAccessPerimeterRetry({ attempts: 2, baseMs: 1 });
+    try {
+      // The workers.dev route is OFF before the deploy: this run turns it on,
+      // and attaches a.example.com — both are ITS exposure.
+      f.state.subdomainEnabled = false;
+      f.state.headMode = 'unreachable';
+      await f.putConfig({ hostname: 'a.example.com', access: true });
+      const deployResp = await f.deploy('a.html');
+      expect(deployResp.status).toBe(200);
+      const deployed = (await deployResp.json()) as { id: string; status: string; url: string };
+      expect(deployed.status).toBe('link-delayed');
+      expect(f.state.subdomainEnabled).toBe(true);
+      expect(f.state.routed.map((d) => d.hostname)).toEqual(['a.example.com']);
+
+      // Still no answer: the record stays deferred; nothing is withdrawn.
+      let before = f.state.cfCalls.length;
+      let checked = await f.checkLink(deployed.id);
+      expect(checked.status).toBe(200);
+      expect(((await checked.json()) as { status: string }).status).toBe('link-delayed');
+      expect(f.state.cfCalls.slice(before).every((c) => c.method === 'HEAD')).toBe(true);
+      expect(f.state.subdomainEnabled).toBe(true);
+
+      // The URLs now answer. workers.dev (the record's own `url`) challenges
+      // with the Access gate, but the custom hostname answers a plain 200,
+      // WITHOUT it. The generic probe of `existing.url` alone would have
+      // promoted that to `ready`; the deferred path also probes the recorded
+      // hostname, fails the deploy on it, and withdraws what the deploy
+      // created: the workers.dev route goes back off and the attached hostname
+      // is detached. (The verdict settles on the first unprotected URL, so the
+      // ungated one has to come second for both probes to be observable.)
+      f.state.headMode = (url) => (url === deployed.url ? 'access' : 'plain');
+      before = f.state.cfCalls.length;
+      checked = await f.checkLink(deployed.id);
+      expect(checked.status).toBe(200);
+      const failed = (await checked.json()) as { status: string; statusMessage?: string; reachableAt?: number; cloudflareWorkers?: Record<string, unknown> };
+      expect(failed.status).toBe('failed');
+      expect(failed.reachableAt).toBeUndefined();
+      expect(failed.statusMessage).toContain('https://a.example.com is not behind Cloudflare Access');
+      expect(failed.cloudflareWorkers?.check).toMatchObject({ ok: false, detail: 'CFW_ACCESS_UNVERIFIED' });
+      const heads = f.state.cfCalls.slice(before).filter((c) => c.method === 'HEAD').map((c) => c.url);
+      expect(heads).toContain(deployed.url);
+      expect(heads).toContain('https://a.example.com');
+      expect(f.state.subdomainEnabled).toBe(false);
+      expect(f.state.cfCalls.slice(before).some((c) => c.method === 'DELETE' && c.url.endsWith('/workers/domains/dom-a'))).toBe(true);
+      expect(f.state.routed).toEqual([]);
+      // The record stops vouching for (and displaying) the detached hostname.
+      const records = await f.listDeployments();
+      expect(records.find((d) => d.fileName === 'a.html')?.cloudflareWorkers?.customDomain).toBeUndefined();
+
+      // A fresh deferred deploy whose URLs then answer WITH the gate: ready,
+      // and the gate is recorded as verified.
+      f.state.headMode = 'unreachable';
+      const again = await f.deploy('a.html');
+      expect(again.status).toBe(200);
+      const deferred = (await again.json()) as { id: string; status: string };
+      expect(deferred.status).toBe('link-delayed');
+      f.state.headMode = 'access';
+      checked = await f.checkLink(deferred.id);
+      expect(checked.status).toBe(200);
+      const ready = (await checked.json()) as { status: string; reachableAt?: number; cloudflareWorkers?: Record<string, unknown> };
+      expect(ready.status).toBe('ready');
+      expect(typeof ready.reachableAt).toBe('number');
+      expect(ready.cloudflareWorkers).toMatchObject({ accessProtected: true });
+      // A later check no longer takes the deferred path: no Cloudflare mutation.
+      before = f.state.cfCalls.length;
+      checked = await f.checkLink(deferred.id);
+      expect(checked.status).toBe(200);
+      expect(f.state.cfCalls.slice(before).every((c) => c.method === 'HEAD' || c.method === 'GET')).toBe(true);
+    } finally {
+      configureCloudflareAccessPerimeterRetry();
       await f.cleanup();
     }
   });

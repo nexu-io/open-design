@@ -8,6 +8,10 @@ import {
   CLOUDFLARE_ACCESS_PERIMETER_RETRY_DEFAULTS,
   CLOUDFLARE_API_TIMEOUT_MS,
   CLOUDFLARE_PROBE_TIMEOUT_MS,
+  CLOUDFLARE_UPLOAD_TIMEOUT_BASE_MS,
+  CLOUDFLARE_UPLOAD_TIMEOUT_MAX_MS,
+  CLOUDFLARE_UPLOAD_TIMEOUT_PER_MIB_MS,
+  cloudflareUploadTimeoutMs,
   configureCloudflareAccessPerimeterRetry,
   deployToCloudflareWorkers,
   listCloudflareD1Databases,
@@ -1741,5 +1745,49 @@ describe('Cloudflare Workers request timeouts', () => {
     expect(subdomainPosts).not.toContain(false);
     // The full retry budget was spent before deferring.
     expect(calls.filter((c) => c[1]?.method === 'HEAD').length).toBe(2);
+  });
+
+  it('sizes the upload budget from the body: floor for a small body, per-MiB allowance for a large one, capped', () => {
+    expect(cloudflareUploadTimeoutMs(0)).toBe(CLOUDFLARE_UPLOAD_TIMEOUT_BASE_MS);
+    expect(cloudflareUploadTimeoutMs(1024)).toBeGreaterThan(CLOUDFLARE_UPLOAD_TIMEOUT_BASE_MS);
+    // A 25 MiB asset is ~33 MiB once base64-encoded: minutes, not the flat 30s.
+    const largest = Math.ceil((25 * 1024 * 1024 * 4) / 3);
+    expect(cloudflareUploadTimeoutMs(largest)).toBeGreaterThanOrEqual(CLOUDFLARE_UPLOAD_TIMEOUT_BASE_MS + 33 * CLOUDFLARE_UPLOAD_TIMEOUT_PER_MIB_MS);
+    expect(cloudflareUploadTimeoutMs(largest)).toBeLessThanOrEqual(CLOUDFLARE_UPLOAD_TIMEOUT_MAX_MS);
+    expect(cloudflareUploadTimeoutMs(10 * 1024 * 1024 * 1024)).toBe(CLOUDFLARE_UPLOAD_TIMEOUT_MAX_MS);
+    expect(cloudflareUploadTimeoutMs(Number.NaN)).toBe(CLOUDFLARE_UPLOAD_TIMEOUT_BASE_MS);
+  });
+
+  it('an assets bucket upload that runs out of its budget fails as CFW_UPLOAD_FAILED, not as an untyped abort', async () => {
+    const inner = accessFetch({ session: { success: true, result: { jwt: 'SESS', buckets: [['hash-1']] } } });
+    const fn = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes('/workers/assets/upload')) throw new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+      return inner.fn(url, init);
+    });
+    vi.stubGlobal('fetch', fn);
+    await expect(deployToCloudflareWorkers({ ...base })).rejects.toMatchObject({
+      name: 'DeployError',
+      code: 'CFW_UPLOAD_FAILED',
+      status: 504,
+      message: expect.stringContaining('assets upload did not finish'),
+    });
+    // Nothing went live: the script PUT never ran.
+    expect(inner.calls.some((c) => c[1]?.method === 'PUT' && c[0].includes('/workers/scripts/'))).toBe(false);
+  });
+
+  it('a script PUT that runs out of its budget fails as CFW_UPLOAD_FAILED', async () => {
+    const inner = accessFetch();
+    const fn = vi.fn(async (url: string, init?: RequestInit) => {
+      if ((init?.method || 'GET').toUpperCase() === 'PUT' && url.endsWith('/workers/scripts/my-site')) {
+        throw new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+      }
+      return inner.fn(url, init);
+    });
+    vi.stubGlobal('fetch', fn);
+    await expect(deployToCloudflareWorkers({ ...base })).rejects.toMatchObject({
+      name: 'DeployError',
+      code: 'CFW_UPLOAD_FAILED',
+      message: expect.stringContaining('script upload did not finish'),
+    });
   });
 });
