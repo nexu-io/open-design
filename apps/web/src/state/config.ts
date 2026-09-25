@@ -290,6 +290,21 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     },
   },
   {
+    label: 'Cheaper Inference',
+    protocol: 'openai',
+    baseUrl: 'https://api.cheaperinference.com/v1',
+    preferredModels: [
+      'gpt-5.4-mini',
+      'gpt-5.4',
+      'claude-sonnet-5',
+      'gemini-3.1-pro',
+    ],
+    apiKeyConsoleLink: {
+      host: 'cheaperinference.com',
+      url: 'https://cheaperinference.com/signup',
+    },
+  },
+  {
     label: 'NVIDIA',
     protocol: 'openai',
     baseUrl: 'https://integrate.api.nvidia.com/v1',
@@ -538,6 +553,7 @@ const BYOK_PROVIDER_PRESET_SPECS = [
   },
   { id: 'ppio', title: 'PPIO', providerLabel: 'PPIO' },
   { id: 'novita', title: 'Novita AI', providerLabel: 'Novita AI' },
+  { id: 'cheaperinference', title: 'Cheaper Inference', providerLabel: 'Cheaper Inference' },
   { id: 'nvidia', title: 'NVIDIA', providerLabel: 'NVIDIA' },
   { id: 'stepfun', title: 'StepFun', providerLabel: 'StepFun' },
   { id: 'deepseek', title: 'DeepSeek', providerLabel: 'DeepSeek — OpenAI' },
