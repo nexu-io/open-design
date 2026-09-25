@@ -299,10 +299,32 @@ export async function writeCloudflareWorkersConfig(input: Partial<DeployConfig>)
   return publicCloudflareWorkersConfig(next);
 }
 
+/** Persist just the OAuth identity (clientId + redirectUri + 'oauth' mode) that
+ * authorizes the connect flow, before the account id is known. This bypasses
+ * the accountId/token validation in writeCloudflareWorkersConfig — a fresh
+ * OAuth connect has neither yet; the account id arrives with the token. */
+export async function writeCloudflareOAuthIdentity(input: { clientId: string; redirectUri: string }) {
+  const current = await readCloudflareWorkersConfig();
+  const next: DeployConfig = {
+    ...current,
+    credentialMode: 'oauth',
+    clientId: input.clientId,
+    redirectUri: input.redirectUri,
+  };
+  await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), next);
+  return publicCloudflareWorkersConfig(next);
+}
+
 export function publicCloudflareWorkersConfig(config: Partial<DeployConfig>) {
+  // Readiness is mode-aware: in 'oauth' mode there is intentionally no static
+  // token, so a configured account + client is enough. The live OAuth connection
+  // status is reported separately by GET /api/cloudflare/auth/status.
+  const oauthReady = config?.credentialMode === 'oauth'
+    ? Boolean(config?.accountId && config?.clientId)
+    : Boolean(config?.token && config?.accountId);
   const body: JsonObject = {
     providerId: CLOUDFLARE_WORKERS_PROVIDER_ID,
-    configured: Boolean(config?.token && config?.accountId),
+    configured: oauthReady,
     tokenMask: config?.token ? SAVED_CLOUDFLARE_WORKERS_TOKEN_MASK : '',
     teamId: '',
     teamSlug: '',
@@ -320,11 +342,21 @@ export function publicCloudflareWorkersConfig(config: Partial<DeployConfig>) {
   return body;
 }
 
-/** Directory that holds 'cloudflare-oauth-tokens.json' — the same base dir as
- * the Workers deploy config, so the OAuth credentials live next to
- * 'cloudflare-workers.json'. */
+/** Resolved data root for the OAuth token file, injected by the daemon at
+ * startup from RUNTIME_DATA_DIR so credentials stay inside the runtime data
+ * root (never an independently recomputed OD_USER_STATE_DIR / home fallback
+ * that packaged or isolated runs would write outside of). */
+let cloudflareOAuthTokensRoot: string | undefined;
+
+export function configureCloudflareOAuthTokens(rootDir: string): void {
+  cloudflareOAuthTokensRoot = rootDir;
+}
+
+/** Directory that holds 'cloudflare-oauth-tokens.json'. Uses the daemon-resolved
+ * data root when configured, falling back to OD_USER_STATE_DIR (matching the
+ * pre-existing deploy-config path) for tests and standalone callers. */
 export function cloudflareOAuthTokensDir(): string {
-  return process.env.OD_USER_STATE_DIR || path.join(os.homedir(), '.open-design');
+  return cloudflareOAuthTokensRoot ?? process.env.OD_USER_STATE_DIR ?? path.join(os.homedir(), '.open-design');
 }
 
 /** Refresh an access token this many ms before its recorded expiry, so a

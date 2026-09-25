@@ -1169,6 +1169,7 @@ import {
   checkDeploymentUrl,
   CLOUDFLARE_PAGES_PROVIDER_ID,
   CLOUDFLARE_WORKERS_PROVIDER_ID,
+  configureCloudflareOAuthTokens,
   DeployError,
   deployToCloudflarePages,
   deployToVercel,
@@ -1386,6 +1387,9 @@ const RUNTIME_DATA_DIR = resolveDataDir(process.env.OD_DATA_DIR, PROJECT_ROOT, {
   requireExplicit: SANDBOX_MODE_ENABLED,
 });
 configureDiagnosticsEvidence(RUNTIME_DATA_DIR);
+// Cloudflare OAuth credentials must live inside the runtime data root, not a
+// separately-recomputed OD_USER_STATE_DIR/home fallback.
+configureCloudflareOAuthTokens(RUNTIME_DATA_DIR);
 const SANDBOX_RUNTIME = resolveSandboxRuntimeConfig(SANDBOX_MODE_ENABLED, RUNTIME_DATA_DIR);
 ensureSandboxRuntimeDirs(SANDBOX_RUNTIME);
 const PLUGIN_LOCKFILE_PATH = path.join(RUNTIME_DATA_DIR, 'od-plugin-lock.json');

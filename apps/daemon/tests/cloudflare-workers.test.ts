@@ -10,6 +10,7 @@ import {
   readCloudflareWorkersConfig,
   readDeployConfig,
   SAVED_CLOUDFLARE_WORKERS_TOKEN_MASK,
+  writeCloudflareOAuthIdentity,
   writeCloudflareWorkersConfig,
 } from '../src/deploy.js';
 import {
@@ -75,6 +76,29 @@ describe('cloudflare-workers config', () => {
     try {
       await expect(writeCloudflareWorkersConfig({ token: 'tok' })).rejects.toMatchObject({ code: 'CFW_ACCOUNT_ID_REQUIRED' });
       await expect(writeCloudflareWorkersConfig({ accountId: 'acct_test' })).rejects.toMatchObject({ code: 'CFW_TOKEN_REQUIRED' });
+    } finally {
+      process.env.OD_USER_STATE_DIR = prior;
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('persists the OAuth identity without a token and reports OAuth mode configured', async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'od-workers-config-'));
+    const prior = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = dir;
+    try {
+      const saved = await writeCloudflareOAuthIdentity({ clientId: 'client-123', redirectUri: 'http://127.0.0.1:56122/callback' });
+      expect(saved.credentialMode).toBe('oauth');
+      expect(saved.clientId).toBe('client-123');
+      const raw = await readCloudflareWorkersConfig();
+      expect(raw.clientId).toBe('client-123');
+      expect(raw.credentialMode).toBe('oauth');
+
+      // OAuth mode is configured by account + client (no static token).
+      expect(publicCloudflareWorkersConfig({ credentialMode: 'oauth', accountId: 'acct_test', clientId: 'client-123' }).configured).toBe(true);
+      expect(publicCloudflareWorkersConfig({ credentialMode: 'oauth', clientId: 'client-123' }).configured).toBe(false);
+      // token mode still requires a static token.
+      expect(publicCloudflareWorkersConfig({ credentialMode: 'token', accountId: 'acct_test', clientId: 'client-123' }).configured).toBe(false);
     } finally {
       process.env.OD_USER_STATE_DIR = prior;
       await rm(dir, { recursive: true, force: true });

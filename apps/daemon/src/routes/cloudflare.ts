@@ -24,6 +24,7 @@ import {
   cloudflareOAuthTokensDir,
   getCloudflareAccessToken,
   readCloudflareWorkersConfig,
+  writeCloudflareOAuthIdentity,
 } from '../deploy.js';
 import {
   listCloudflareD1Databases,
@@ -155,7 +156,13 @@ export function registerCloudflareRoutes(
 
     try {
       const cfg = await readCloudflareWorkersConfig();
-      const clientId = (cfg.clientId ?? '').trim();
+      // The Connect UI posts the clientId/redirectUri it just collected; on a
+      // fresh setup these are not yet in the persisted config, so read the body
+      // first (falling back to the config) instead of failing on an empty config.
+      const body = (req.body ?? {}) as { clientId?: unknown; redirectUri?: unknown };
+      const bodyClientId = typeof body.clientId === 'string' ? body.clientId.trim() : '';
+      const bodyRedirectUri = typeof body.redirectUri === 'string' ? body.redirectUri.trim() : '';
+      const clientId = bodyClientId || (cfg.clientId ?? '').trim();
       if (!clientId) {
         return res.status(400).json({
           error:
@@ -163,7 +170,11 @@ export function registerCloudflareRoutes(
         });
       }
       const redirectUri =
-        (cfg.redirectUri ?? '').trim() || cloudflareRedirectUri();
+        bodyRedirectUri || (cfg.redirectUri ?? '').trim() || cloudflareRedirectUri();
+      // Persist the identity now so the callback handler + refresh path (which
+      // re-read the persisted config) carry the same clientId/redirectUri that
+      // authorized this flow.
+      await writeCloudflareOAuthIdentity({ clientId, redirectUri });
       // Always request the full set in one connect so the D1/R2/zones pickers
       // populate and Access gating works without a manual scope dance.
       const scopes = CLOUDFLARE_OAUTH_SCOPES;
