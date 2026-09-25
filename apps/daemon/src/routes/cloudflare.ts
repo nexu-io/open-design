@@ -50,7 +50,7 @@ import {
 import {
   clearCloudflareOAuthToken,
   getCloudflareOAuthToken,
-  setCloudflareOAuthToken,
+  setCloudflareOAuthTokenGuarded,
   type StoredCloudflareOAuthToken,
 } from '../integrations/cloudflare-tokens.js';
 import type { RouteDeps } from '../server-context.js';
@@ -153,7 +153,17 @@ export function registerCloudflareRoutes(
         cfg,
         existing?.generation,
       );
-      await setCloudflareOAuthToken(dataDir, stored);
+      const persisted = await setCloudflareOAuthTokenGuarded(
+        dataDir,
+        stored,
+        () => attemptGeneration === oauthAttemptGeneration,
+      );
+      if (!persisted || attemptGeneration !== oauthAttemptGeneration) {
+        // Cancelled/disconnected/replaced between the exchange and the write —
+        // do not persist a token (or flip the mode) the user already abandoned.
+        console.warn('[cloudflare-oauth] attempt superseded; discarding token');
+        return false;
+      }
       // Only now — with the token durable — switch the credential authority to
       // OAuth, so a denied/closed/cancelled flow never strands a token-mode user.
       await commitCloudflareOAuthMode();
@@ -279,7 +289,17 @@ export function registerCloudflareRoutes(
         cfg,
         existing?.generation,
       );
-      await setCloudflareOAuthToken(dataDir, stored);
+      const persisted = await setCloudflareOAuthTokenGuarded(
+        dataDir,
+        stored,
+        () => attemptGeneration === oauthAttemptGeneration,
+      );
+      if (!persisted || attemptGeneration !== oauthAttemptGeneration) {
+        console.warn('[cloudflare-oauth] attempt superseded; discarding token');
+        return res
+          .status(409)
+          .json({ error: 'Cloudflare OAuth attempt was cancelled or superseded — restart the connection.' });
+      }
       // Only now — with the token durable — switch the credential authority to
       // OAuth, mirroring the loopback callback path.
       await commitCloudflareOAuthMode();

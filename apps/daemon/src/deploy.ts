@@ -10,7 +10,7 @@ import { cloudflareRedirectUri, refreshCloudflareToken } from './integrations/cl
 import {
   getCloudflareOAuthToken,
   isCloudflareOAuthTokenExpired,
-  setCloudflareOAuthToken,
+  setCloudflareOAuthTokenIfGenerationMatches,
   type StoredCloudflareOAuthToken,
 } from './integrations/cloudflare-tokens.js';
 
@@ -543,15 +543,6 @@ async function refreshCloudflareOAuthAccessToken(
     refreshToken: current.refreshToken,
   });
 
-  // Re-read before persisting: if the credential generation changed while the
-  // refresh HTTP call was in flight, another writer owns the newer credential.
-  // Discard this result and adopt theirs instead of clobbering it.
-  const latest = await getCloudflareOAuthToken(dataDir);
-  if (latest && latest.generation !== current.generation) {
-    assertCloudflareOAuthIdentity(latest, config);
-    return latest.accessToken;
-  }
-
   const stored: StoredCloudflareOAuthToken = {
     accessToken: refreshed.access_token,
     tokenType: refreshed.token_type ?? current.tokenType,
@@ -568,7 +559,31 @@ async function refreshCloudflareOAuthAccessToken(
   if (typeof refreshed.expires_in === 'number') {
     stored.expiresAt = Date.now() + refreshed.expires_in * 1000;
   }
-  await setCloudflareOAuthToken(dataDir, stored);
+  // Compare-and-set persist: only write if the store still holds the same
+  // generation the refresh read before the token-endpoint call. A disconnect
+  // that cleared the token (or a sibling that rotated it) during that call
+  // makes this return false instead of resurrecting a credential the user
+  // already revoked.
+  const persisted = await setCloudflareOAuthTokenIfGenerationMatches(
+    dataDir,
+    stored,
+    current.generation ?? 0,
+  );
+  if (!persisted) {
+    const latest = await getCloudflareOAuthToken(dataDir);
+    if (latest) {
+      // A sibling writer owns a newer credential — adopt it rather than clobber.
+      assertCloudflareOAuthIdentity(latest, config);
+      return latest.accessToken;
+    }
+    // Disconnect cleared the token while the refresh was in flight.
+    throw new DeployError(
+      'Cloudflare OAuth was disconnected while refreshing — reconnect Cloudflare.',
+      401,
+      undefined,
+      'CFW_OAUTH_RECONNECT_REQUIRED',
+    );
+  }
   return stored.accessToken;
 }
 

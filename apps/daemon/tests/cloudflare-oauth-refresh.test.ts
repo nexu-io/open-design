@@ -9,7 +9,7 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   beginCloudflareAuth,
@@ -20,6 +20,7 @@ import {
   mergeOfflineAccessScope,
 } from '../src/integrations/cloudflare-oauth.js';
 import {
+  clearCloudflareOAuthToken,
   getCloudflareOAuthToken,
   sanitizeCloudflareOAuthTokensFile,
   setCloudflareOAuthToken,
@@ -227,6 +228,68 @@ describe('writeCloudflareWorkersConfig credential mode validation', () => {
         }),
       ).rejects.toMatchObject({ code: 'CFW_INVALID_CREDENTIAL_MODE' });
     } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('refresh vs disconnect', () => {
+  it('does not resurrect a token when disconnect clears it mid-refresh', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'od-cf-refresh-race-'));
+    configureCloudflareWorkersDataDir(dir);
+    // Establish an expired OAuth token so getCloudflareAccessToken() takes the
+    // refresh path (the oauth credentialMode flip needs a durable token first).
+    await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), {
+      accessToken: 'expired-token',
+      tokenType: 'Bearer',
+      refreshToken: 'ref-token',
+      clientId: 'client-abc',
+      expiresAt: Date.now() - 1000,
+      generation: 5,
+      savedAt: Date.now(),
+    });
+    await writeCloudflareWorkersConfig({
+      credentialMode: 'oauth',
+      accountId: 'acct_test',
+      clientId: 'client-abc',
+    });
+
+    let releaseToken!: (resp: Response) => void;
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => { markStarted = resolve; });
+    const realFetch = globalThis.fetch;
+    vi.stubGlobal('fetch', async (input: unknown, init?: unknown) => {
+      const url = String(input);
+      if (url.includes('oauth2/token')) {
+        markStarted();
+        return new Promise<Response>((resolve) => { releaseToken = resolve; });
+      }
+      return realFetch(input as never, init as never);
+    });
+
+    try {
+      const refreshPromise = getCloudflareAccessToken();
+      await started;
+      // Disconnect clears the token while the refresh token-endpoint call is
+      // still in flight.
+      await clearCloudflareOAuthToken(cloudflareOAuthTokensDir());
+      releaseToken(
+        new Response(
+          JSON.stringify({
+            access_token: 'fresh',
+            token_type: 'Bearer',
+            refresh_token: 'ref-2',
+            expires_in: 3600,
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      );
+      await expect(refreshPromise).rejects.toMatchObject({
+        code: 'CFW_OAUTH_RECONNECT_REQUIRED',
+      });
+      expect(await getCloudflareOAuthToken(cloudflareOAuthTokensDir())).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
       await rm(dir, { recursive: true, force: true });
     }
   });

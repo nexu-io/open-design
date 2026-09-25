@@ -206,6 +206,40 @@ export async function setCloudflareOAuthToken(
   });
 }
 
+/** Compare-and-set persist: write the token only if the store still holds a
+ * token whose generation equals expectedGeneration. Returns false when the
+ * token was cleared (disconnect) or replaced (another writer) while the caller
+ * was computing its refresh - the caller must then treat the credential as
+ * superseded rather than resurrect it. */
+export async function setCloudflareOAuthTokenIfGenerationMatches(
+  dataDir: string,
+  token: StoredCloudflareOAuthToken,
+  expectedGeneration: number,
+): Promise<boolean> {
+  return withLock(dataDir, async () => {
+    const file = await readCloudflareOAuthTokensFile(dataDir);
+    if (!file.token || file.token.generation !== expectedGeneration) return false;
+    await writeTokensFile(dataDir, { token });
+    return true;
+  });
+}
+
+/** Guarded persist: write the token only if guard() still holds inside the
+ * lock. Lets an OAuth attempt re-check its attempt generation at the last
+ * instant so a concurrent cancel/disconnect (which bumps the generation)
+ * aborts the write instead of leaving a stale credential behind. */
+export async function setCloudflareOAuthTokenGuarded(
+  dataDir: string,
+  token: StoredCloudflareOAuthToken,
+  guard: () => boolean,
+): Promise<boolean> {
+  return withLock(dataDir, async () => {
+    if (!guard()) return false;
+    await writeTokensFile(dataDir, { token });
+    return true;
+  });
+}
+
 /** Atomically delete the stored Cloudflare OAuth token. No-op when absent. */
 export async function clearCloudflareOAuthToken(dataDir: string): Promise<void> {
   await withLock(dataDir, async () => {
