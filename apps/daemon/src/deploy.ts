@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { hash as blake3Hash } from 'blake3-wasm';
 import { listFiles, readProjectFile, validateProjectPath } from './projects.js';
 import { findRealTagOffset, HTML_TAG_PATTERNS } from '@open-design/contracts/runtime/html-injection-points';
-import { cloudflareRedirectUri, refreshCloudflareToken } from './integrations/cloudflare-oauth.js';
+import { refreshCloudflareToken } from './integrations/cloudflare-oauth.js';
 import {
   getCloudflareOAuthToken,
   isCloudflareOAuthTokenExpired,
@@ -500,10 +500,10 @@ export async function getCloudflareAccessToken(
       CLOUDFLARE_OAUTH_EXPIRY_SKEW_MS,
     )
   ) {
-    // Fail closed before trusting a still-fresh token: if the persisted
-    // client/redirect identity no longer matches the current config, do not
-    // hand back a credential the configuration does not represent.
-    assertCloudflareOAuthIdentity(current, config);
+    // The token is the authoritative record: it carries its own clientId /
+    // redirectUri, so a still-fresh token is trusted as-is. This is what makes
+    // a crash between the token write and the config-identity write harmless —
+    // the credential never depends on the config matching the token.
     return current.accessToken;
   }
 
@@ -530,17 +530,15 @@ async function refreshCloudflareOAuthAccessToken(
   // Re-read under the lock: a sibling process may have rotated the token while
   // this caller was waiting for the mutex.
   const current = await getCloudflareOAuthToken(dataDir);
-  if (current) {
-    assertCloudflareOAuthIdentity(current, config);
-    if (
-      !isCloudflareOAuthTokenExpired(
-        current,
-        Date.now(),
-        CLOUDFLARE_OAUTH_EXPIRY_SKEW_MS,
-      )
-    ) {
-      return current.accessToken;
-    }
+  if (
+    current &&
+    !isCloudflareOAuthTokenExpired(
+      current,
+      Date.now(),
+      CLOUDFLARE_OAUTH_EXPIRY_SKEW_MS,
+    )
+  ) {
+    return current.accessToken;
   }
   if (!current?.refreshToken) {
     throw new DeployError(
@@ -550,7 +548,11 @@ async function refreshCloudflareOAuthAccessToken(
       'CFW_OAUTH_RECONNECT_REQUIRED',
     );
   }
-  const clientId = (config.clientId ?? '').trim();
+  // The token's own clientId is authoritative for refresh (RFC 6749 §6: the
+  // refresh_token is bound to the client_id that received it). The config's
+  // clientId is only a hint for the NEXT connect, so a crash between the token
+  // write and the config-identity write can never break an existing credential.
+  const clientId = (current.clientId ?? '').trim() || (config.clientId ?? '').trim();
   if (!clientId) {
     throw new DeployError(
       'Cloudflare OAuth client ID is required to refresh the access token.',
@@ -595,7 +597,6 @@ async function refreshCloudflareOAuthAccessToken(
     const latest = await getCloudflareOAuthToken(dataDir);
     if (latest) {
       // A sibling writer owns a newer credential — adopt it rather than clobber.
-      assertCloudflareOAuthIdentity(latest, config);
       return latest.accessToken;
     }
     // Disconnect cleared the token while the refresh was in flight.
@@ -607,34 +608,6 @@ async function refreshCloudflareOAuthAccessToken(
     );
   }
   return stored.accessToken;
-}
-
-/** Fail closed when the persisted client/redirect identity no longer matches
- * the local config — refreshing with a mismatched registration would fail (or
- * mint a token for the wrong client), so we demand a reconnect. */
-function assertCloudflareOAuthIdentity(
-  token: StoredCloudflareOAuthToken,
-  config: DeployConfig,
-): void {
-  const clientId = (config.clientId ?? '').trim();
-  if (clientId && token.clientId && token.clientId !== clientId) {
-    throw new DeployError(
-      'Cloudflare OAuth credentials were issued to a different OAuth client — reconnect Cloudflare.',
-      400,
-      undefined,
-      'CFW_OAUTH_RECONNECT_REQUIRED',
-    );
-  }
-  const redirectUri =
-    (config.redirectUri ?? '').trim() || cloudflareRedirectUri();
-  if (token.redirectUri && token.redirectUri !== redirectUri) {
-    throw new DeployError(
-      'Cloudflare OAuth redirect URI changed — reconnect Cloudflare.',
-      400,
-      undefined,
-      'CFW_OAUTH_RECONNECT_REQUIRED',
-    );
-  }
 }
 
 export async function readDeployConfig(providerId: DeployProviderId = VERCEL_PROVIDER_ID) {

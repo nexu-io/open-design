@@ -187,18 +187,18 @@ describe('refresh path', () => {
 });
 
 describe('getCloudflareAccessToken identity guard', () => {
-  it('rejects a fresh token issued to a different client (fail-closed fast path)', async () => {
+  it('trusts a fresh token issued to a different client (token is authoritative)', async () => {
     const dir = await mkdtemp(path.join(tmpdir(), 'od-cf-identity-'));
     configureCloudflareWorkersDataDir(dir);
     try {
-      // Persist the token first: the credentialMode flip to 'oauth' is now
-      // fail-closed (writeCloudflareWorkersConfig refuses the flip without a
-      // durable token), so the fixture must establish the token before the
-      // mode switch — the exact sequence a real connect flow produces.
+      // The token is the authoritative record: it carries its own clientId.
+      // A stale config clientId (e.g. after a crash between the token write
+      // and the config-identity write) must NOT break a working credential.
       await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), {
         accessToken: 'acc-token',
         tokenType: 'Bearer',
         clientId: 'client-old',
+        redirectUri: 'http://127.0.0.1:56122/callback',
         expiresAt: Date.now() + 3600_000,
         generation: 1,
         savedAt: Date.now(),
@@ -208,9 +208,7 @@ describe('getCloudflareAccessToken identity guard', () => {
         accountId: 'acct_test',
         clientId: 'client-new',
       });
-      await expect(getCloudflareAccessToken()).rejects.toMatchObject({
-        code: 'CFW_OAUTH_RECONNECT_REQUIRED',
-      });
+      await expect(getCloudflareAccessToken()).resolves.toBe('acc-token');
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
