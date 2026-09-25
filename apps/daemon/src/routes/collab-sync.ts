@@ -9,6 +9,7 @@ import { sharePublishResponse } from '../collab/share-publish-response.js';
 import { stopVelaShare } from '../collab/vela-share-stop.js';
 import { publicFileResourceIdFor } from '../collab/public-file-resource-id.js';
 import { resumePendingShareBinding } from '../collab/resume-pending-share-binding.js';
+import { resumeExistingVelaShare } from '../collab/vela-share-binding.js';
 import type { RecordPublicFilePublication } from '../collab/public-file-publication-recording.js';
 import type { ShareContentFingerprints } from '../collab/share-content-fingerprint.js';
 import { createShareFileMapping, publishedPathForSource, type ShareFileMapping } from '../collab/share-file-mapping.js';
@@ -21,6 +22,7 @@ import {
   SHARE_MAX_TOTAL_BYTES,
   type SharePlanSummary,
   type ShareUnpublishResponse,
+  type SharePublishRequest,
   workspaceContextHasWorkspaceIdentity,
   type ProjectContentTransferState,
   type ProjectMetadata,
@@ -69,6 +71,7 @@ import {
   type PublicFilePublication,
   type PublicFilePublicationScope,
   type PublicFilePublicationStore,
+  type StopQueuePublicFilePublicationStore,
 } from '../collab/public-file-publication-store.js';
 import { classifyVelaCommandFailure, logPublicFileFailure } from '../collab/public-file-failure.js';
 import { clientRequestIdFor } from '../http/client-request-id.js';
@@ -1256,6 +1259,36 @@ export function registerCollabSyncRoutes(
     return res.json({ ok: true });
   });
 
+  app.post(/^\/api\/projects\/([^/]+)\/files\/(.+)\/share-plan$/u, async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    // SAFETY: Express regex routes expose numeric capture keys at runtime; Express's named-param type omits them.
+    const params = req.params as unknown as { 0?: string; 1?: string };
+    const projectId = String(params[0] ?? '');
+    const filePath = normalizePublicFilePath(String(params[1] ?? ''));
+    if (!projectId || !filePath) return res.status(400).json({ error: 'invalid_file_path' });
+    const verification = await verifiedWorkspaceContextForRequest(req, projectId);
+    if (!verification.ok) return sendWorkspaceVerificationFailure(res, verification);
+    const context = verification.context;
+    const principal = publicFilePrincipal(context);
+    if (!context || !principal) return res.status(409).json(workspaceIdentityRequiredBody());
+    if (!await canShareProjectsForRequest(req, context)) return res.status(403).json({ error: 'WORKSPACE_PROJECT_SHARE_DENIED' });
+    const resolved = await resolveSharedProjectForPublicFile(resolveSharedProject, projectId, context, principal);
+    if (!resolved.ok) return res.status(503).json({ error: 'WORKSPACE_PROJECT_OWNERSHIP_UNAVAILABLE' });
+    const owner = resolved.project?.ownerMemberId
+      ?? (!resolved.project ? deps.resolveLocalPublicShareOwner?.(projectId, context.workspaceId) : null);
+    if (!owner || owner !== principal.memberId || isUnmaterializedSharedPlaceholder(projectStore?.get?.(projectId))) {
+      return res.status(403).json({ error: 'WORKSPACE_PROJECT_PUBLISH_DENIED' });
+    }
+    if (!resolveProjectDir) return res.status(500).json({ error: 'PROJECT_DIR_UNAVAILABLE' });
+    try {
+      const plan = await buildSharePlan(await resolveProjectDir(projectId), filePath, projectStore?.get?.(projectId)?.metadata);
+      return res.json(plan.summary);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException)?.code;
+      return res.status(code === 'ENOENT' ? 404 : 400).json({ error: code === 'ENOENT' ? 'FILE_NOT_FOUND' : 'FILE_UNAVAILABLE' });
+    }
+  });
+
   app.post(/^\/api\/projects\/([^/]+)\/files\/(.+)\/publish-public$/u, publicFileMutationHandler(deps.publicFileMutations, async (req, res) => {
     const startedAt = Date.now();
     const requestId = clientRequestIdFor(req);
@@ -1298,6 +1331,97 @@ export function registerCollabSyncRoutes(
     const publisher = deps.sharePublishing;
     if (!publisher) return res.status(503).json({ error: 'PUBLIC_SHARE_PUBLISH_UNAVAILABLE' });
     const scope = publicFilePublicationScope(projectId, filePath, principal);
+    // A stopped link cannot be reopened by the ordinary publish/update POST:
+    // that path advances the alias and transfers fresh bytes. Only an explicit
+    // request may reopen the immutable generation previously bound by Vela.
+    const requestBody: unknown = req.body;
+    if (requestBody != null && (typeof requestBody !== 'object' || Array.isArray(requestBody)
+      || Object.keys(requestBody).some(key => key !== 'mode'))) {
+      return res.status(400).json({ error: 'INVALID_SHARE_PUBLISH_REQUEST' });
+    }
+    const mode = (requestBody as SharePublishRequest | undefined)?.mode;
+    if (mode !== undefined && mode !== 'resume') return res.status(400).json({ error: 'INVALID_SHARE_PUBLISH_REQUEST' });
+    if (mode === 'resume') {
+      const remoteState = await deps.readProjectShareState?.(scope).catch(() => null);
+      if (!remoteState || remoteState.projectId !== projectId) {
+        return res.status(503).json({ error: 'SHARE_STATE_UNAVAILABLE' });
+      }
+      const stopped = remoteState.publications.find(item => item.sourceFilePath === filePath && item.status === 'stopped');
+      const localRevision = publicFilePublicationStore.getRevision(scope);
+      if (!stopped || (localRevision && localRevision.slug !== stopped.slug)) {
+        return res.status(409).json({ error: 'SHARE_RESUME_NOT_STOPPED' });
+      }
+      const stopQueue = (publicFilePublicationStore as Partial<StopQueuePublicFilePublicationStore>).listStops?.();
+      if (!stopQueue) return res.status(503).json({ error: 'PUBLIC_SHARE_STOP_STATE_UNAVAILABLE' });
+      if (stopQueue.some(item => item.resourceTeamId === scope.resourceTeamId
+        && item.ownerMemberId === scope.ownerMemberId && item.projectId === projectId
+        && item.filePath === filePath && item.slug === stopped.slug)) {
+        return res.status(409).json({ error: 'SHARE_STOP_IN_PROGRESS' });
+      }
+      try {
+        if (publisher.reservations.reserve(scope).slug !== stopped.slug) {
+          return res.status(409).json({ error: 'SHARE_ALIAS_IDENTITY_MISMATCH' });
+        }
+        const prepared = await publisher.prepare(scope, stopped.slug);
+        // The remote stopped witness outranks a matching local revision left
+        // by a crash after Vela stopped but before OD committed the deletion.
+        // CAS prevents a concurrent new publication from being discarded.
+        if (localRevision && !publicFilePublicationStore.deleteIfRevisionMatches(scope, localRevision)) {
+          return res.status(409).json({ error: 'SHARE_RESUME_NOT_STOPPED' });
+        }
+        let receipt: Awaited<ReturnType<typeof resumeExistingVelaShare>>;
+        try {
+          receipt = await resumeExistingVelaShare(scope, stopped.slug, prepared.run);
+        } catch {
+          // A lost/invalid command reply may follow a successful remote alias
+          // activation. Revoke the exact Owner-verified alias before reporting
+          // a routine retryable failure; otherwise require explicit revocation.
+          try {
+            await stopVelaShare(projectId, stopped.slug, prepared.run);
+            return res.status(502).json({ error: 'PUBLIC_SHARE_RESUME_UNAVAILABLE' });
+          } catch {
+            const after = await deps.readProjectShareState?.(scope).catch(() => null);
+            if (after?.projectId === projectId && after.publications.some(item => item.sourceFilePath === filePath
+              && item.slug === stopped.slug && item.status === 'stopped')) {
+              return res.status(502).json({ error: 'PUBLIC_SHARE_RESUME_UNAVAILABLE' });
+            }
+            return res.status(502).json({ error: {
+              code: 'PUBLIC_FILE_MANUAL_REVOKE_REQUIRED',
+              message: 'The original link may have resumed without a confirmed receipt. Stop the link explicitly using od project share stop before retrying.',
+              data: { projectId, slug: stopped.slug, fileName: filePath, url: prepared.url },
+            } });
+          }
+        }
+        const publication: PublicFilePublication = { url: prepared.url, slug: stopped.slug, fileName: filePath };
+        let outcome: ReturnType<typeof publisher.complete>;
+        try {
+          // Entry path is Vela's saved generation, never a plan from current
+          // local bytes. This also queues existing local comments atomically.
+          outcome = publisher.complete({ scope, resourceId: publicFileResourceIdFor(scope), publication,
+            mapping: [{ sourcePath: filePath, publishedPath: receipt.entryPath }],
+            result: { status: 'published', receipt }, reopened: true });
+        } catch {
+          // Local commit failed AFTER the old link was made public. Restore the
+          // stopped state before reporting failure; otherwise a later resume
+          // would be rejected while the old link remains anonymously live.
+          try {
+            await stopVelaShare(projectId, stopped.slug, prepared.run);
+            return res.status(502).json({ error: 'PUBLIC_SHARE_RESUME_RECORD_UNAVAILABLE' });
+          } catch {
+            // If compensation also fails, the normal owner DELETE can revoke
+            // via the remote project/file/slug witness even without a local row.
+            return res.status(502).json({ error: {
+              code: 'PUBLIC_FILE_MANUAL_REVOKE_REQUIRED',
+              message: 'The original link was resumed remotely but local metadata could not be saved; stop the link explicitly using od project share stop.',
+              data: { projectId, ...publication, receipt },
+            } });
+          }
+        }
+        return res.json(sharePublishResponse(outcome, prepared.url));
+      } catch {
+        return res.status(502).json({ error: 'PUBLIC_SHARE_RESUME_UNAVAILABLE' });
+      }
+    }
     let prepared: Awaited<ReturnType<typeof publisher.prepare>>;
     try {
       const reservation = publisher.reservations.reserve(scope);
@@ -1489,8 +1613,22 @@ export function registerCollabSyncRoutes(
     }
     const scope = publicFilePublicationScope(projectId, filePath, principal);
     const revision = publicFilePublicationStore.getRevision(scope);
-    if (!revision || revision.slug !== slug) return res.status(404).json({ error: 'PUBLIC_SHARE_NOT_FOUND' });
+    if (revision && revision.slug !== slug) return res.status(404).json({ error: 'PUBLIC_SHARE_NOT_FOUND' });
     if (!deps.sharePublishing) return res.status(503).json({ error: 'PUBLIC_SHARE_STOP_UNAVAILABLE' });
+    if (!revision) {
+      if (!sharedProject || sharedProject.ownerMemberId !== principal.memberId) {
+        return res.status(403).json({ error: 'WORKSPACE_PROJECT_PUBLISH_DENIED' });
+      }
+      // A resumed alias may be active in Vela even if the OD transaction that
+      // recorded it failed. Permit only the verified Owner to revoke the exact
+      // project/file/slug that Vela itself reports as active. Never use this
+      // exception to stop a different locally witnessed publication.
+      const remoteState = await deps.readProjectShareState?.(scope).catch(() => null);
+      if (!remoteState || remoteState.projectId !== projectId) return res.status(503).json({ error: 'SHARE_STATE_UNAVAILABLE' });
+      if (!remoteState.publications.some(item => item.sourceFilePath === filePath && item.slug === slug && item.status === 'active')) {
+        return res.status(404).json({ error: 'PUBLIC_SHARE_NOT_FOUND' });
+      }
+    }
     try {
       const prepared = await deps.sharePublishing.prepare(scope, slug);
       const stopped: unknown = JSON.parse(await prepared.run([
@@ -1586,8 +1724,8 @@ export function registerCollabSyncRoutes(
       const local = publicFilePublicationStore.get(scope);
       const localUrl = local?.url ?? (local && deps.resolvePublicShareLink?.(projectId, local.slug)) ?? null;
       const response: import('@open-design/contracts').ProjectFilePublicShareResponse = {
-        publication: local && localUrl !== null && local.slug === remote?.slug ? { ...local, url: localUrl } : null,
-        ...(local && localUrl === null && local.slug === remote?.slug ? { link: { status: 'unavailable' as const, code: 'PUBLIC_SHARE_WEB_URL_UNAVAILABLE' as const } } : {}),
+        publication: remote?.status === 'active' && local && localUrl !== null && local.slug === remote.slug ? { ...local, url: localUrl } : null,
+        ...(remote?.status === 'active' && local && localUrl === null && local.slug === remote.slug ? { link: { status: 'unavailable' as const, code: 'PUBLIC_SHARE_WEB_URL_UNAVAILABLE' as const } } : {}),
         status: remote?.status ?? 'none',
         freshness,
       };

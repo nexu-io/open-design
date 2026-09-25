@@ -443,6 +443,8 @@ export const SHARE_COMMENT_ERROR_CODES = [
   'RATE_LIMITED',
   /** 413 — request body exceeded the transport limit. */
   'PAYLOAD_TOO_LARGE',
+  /** 409 — a new write targets a superseded share version; keep draft and reload. */
+  'STALE_PUBLICATION',
 ] as const;
 export type ShareCommentErrorCode = (typeof SHARE_COMMENT_ERROR_CODES)[number];
 
@@ -526,6 +528,10 @@ export interface ShareComment {
   elementId: string;
   selector: string;
   htmlHint: string;
+  /** Server-stamped alias version at insertion, not a viewer-supplied value. */
+  anchoredVersion?: number;
+  /** Optional normalized anchor geometry; never grants write authority. */
+  position?: { left: number; top: number; width: number; height: number; viewportWidth: number; viewportHeight: number };
   status: string;
   createdAt: number;
   updatedAt: number;
@@ -542,6 +548,8 @@ export interface ShareCommentListResponse {
 
 /** `POST` a comment from the share page. */
 export interface ShareCommentCreateRequest {
+  /** Pinned version of the rendered snapshot; a new key is rejected if the alias advanced. */
+  expectedVersion: number;
   /** See {@link IDEMPOTENCY_KEY_MAX_LENGTH}. Required — replay safety. */
   idempotencyKey: string;
   note: string;
@@ -549,6 +557,7 @@ export interface ShareCommentCreateRequest {
   elementId: string;
   selector: string;
   htmlHint: string;
+  position?: { left: number; top: number; width: number; height: number; viewportWidth: number; viewportHeight: number };
 }
 
 /** Same shape as one list item — see {@link ShareComment}. */
@@ -1155,7 +1164,16 @@ export interface ShareBridgeLocatePayload {
 }
 /** host → frame. The full pin set to draw; replaces whatever is drawn. */
 export interface ShareBridgePinsPayload {
-  items: ReadonlyArray<{ id: string; elementId: string; selector: string; display?: ShareBridgePinDisplay }>;
+  items: ReadonlyArray<{
+    id: string;
+    elementId: string;
+    selector: string;
+    display?: ShareBridgePinDisplay;
+    /** Old-publication comments never bind to same-named targets in a newer document. */
+    forceGhost?: boolean;
+    /** Stored comment geometry, displayed only as untrusted layout fallback. */
+    ghostPosition?: ShareBridgeViewportRect;
+  }>;
 }
 
 /** frame → host. The frame has loaded and will accept the other three types. */
@@ -1662,6 +1680,14 @@ export interface SharePublishLinkUnavailable {
   code: 'PUBLIC_SHARE_WEB_URL_UNAVAILABLE';
 }
 
+/** POST /api/projects/:id/files/:path/publish-public.
+ * Omitted mode always means a fresh publish/update; only a previously stopped
+ * authoritative alias may be reopened without transferring file bytes.
+ */
+export interface SharePublishRequest {
+  mode?: 'resume';
+}
+
 /** Confirmed cancellation from DELETE /api/projects/:id/files/:path/publish-public.
  * The stable alias is stopped, not erased, and can be resumed by the owner. */
 export interface ShareUnpublishResponse {
@@ -2137,6 +2163,13 @@ export interface CommentBackfillState {
   publicationRevision: string;
   /** Whether anything will retry on its own. Meaningful when `state` is `failed`. */
   retryable: boolean;
+  /**
+   * True only when this exact publication was committed by the remotely verified
+   * stopped-link resume path. False for a witnessed first publish/update; omitted
+   * for legacy batches whose origin was never recorded. Never infer this from
+   * a stable URL, a local switch or a previous screenshot.
+   */
+  reopened?: boolean;
   /** Machine-readable cause, when the producer recorded one. */
   code?: string;
 }

@@ -12,13 +12,37 @@
   background: #FFFFFF;
   box-shadow: 0 8px 28px #00000010, 0 2px 6px #00000006;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 400;
   color: #333333;
 }
 
-/* S1/S4: the "链接访问" title row + static description line the panel was
-   missing (板 D-00 固定结构第二/三行). The help "?" tooltip keeps its prior
-   position, at the row's trailing edge. */
+/* S0/S13: signed-out explanation and existing Cloud login action. */
+.signInPrompt {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.signInAction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  min-height: 32px;
+  padding: 6px 12px;
+  border: 1px solid #D6D6D6;
+  border-radius: 6px;
+  background: #282828;
+  color: #FFFFFF;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.signInAction:focus-visible { outline: 2px solid #1677FF; outline-offset: 2px; }
+.signInAction:global(.is-signing) { cursor: default; background: #F7F7F7; color: #333333; }
+
+/* S1/S4: link access heading and description. */
 .linkAccessHeading {
   display: flex;
   flex-direction: column;
@@ -47,11 +71,6 @@
   line-height: 18px;
 }
 
-.linkAccessRowEnd {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
 
 /* D-00 固定结构第二行 .toggle: 32×19 / r999 / 关 #D6D6D6 / 开 #282828, 滑块 15×15 白.
    This IS the publish/unpublish control — board S4 has no separate "stop
@@ -322,6 +341,21 @@ button.copyButton.publishingButton:disabled {
   gap: 6px;
 }
 
+/* S16 advisory: missing references do not prevent publication. */
+.sharePlanWarning {
+  padding: 8px 10px;
+  border: 1px solid #EFE0C8;
+  border-radius: 6px;
+  background: #FDF6EC;
+  color: #8A5A12;
+  font-size: 12px;
+}
+
+.sharePlanWarning p { margin: 0 0 4px; }
+.sharePlanWarning button { color: inherit; text-decoration: underline; }
+.sharePlanWarning ul { margin: 6px 0 0; padding-left: 18px; }
+.sharePlanWarning code { overflow-wrap: anywhere; }
+
 /* S2 help describes panel dismissal, not quitting the app. */
 p.publishHint {
   margin: 0;
@@ -330,13 +364,18 @@ p.publishHint {
   line-height: 17px;
 }
 
-/* S11 (◇): preserve the full selectable URL; only clipboard failure gets
-   this fallback treatment. Successful/idle links retain their existing skin. */
-.copyFallback:global(.chrome-publish-url) {
+/* S3/S4: match the final-design link/copy stack without affecting FileViewer’s separate renderer. */
+.publishedLink {
+  gap: 8px;
+  padding: 0;
+}
+
+.publishedLink :global(.chrome-publish-url) {
   box-sizing: border-box;
+  position: relative;
   width: 100%;
   height: 32px;
-  padding: 0 9px;
+  padding: 0 9px 0 29px;
   border: 1px solid #E5E5E5;
   border-radius: 6px;
   background: #FFFFFF;
@@ -350,6 +389,46 @@ p.publishHint {
   user-select: text;
   cursor: text;
 }
+
+/* S5: the copy row precedes its separate update notice and action. */
+.updateNotice {
+  display: grid;
+  gap: 8px;
+}
+
+.updateNotice p {
+  margin: 0;
+  color: #888888;
+  font-size: 11px;
+  line-height: 17px;
+}
+
+button.updateButton {
+  width: 100%;
+  min-height: 32px;
+  border: 1px solid #DEDEDE;
+  border-radius: 6px;
+  background: #FFFFFF;
+  color: #29292B;
+  font-size: 12px;
+}
+
+button.updateButton:hover:not(:disabled) {
+  background: #F7F7F7;
+}
+
+.publishedLinkIcon {
+  position: absolute;
+  left: 9px;
+  top: 9px;
+  color: #888888;
+}
+
+.publishedLink :global(.chrome-publish-actions) {
+  display: block;
+  width: 100%;
+}
+
 
 .copyHint {
   margin: 0;

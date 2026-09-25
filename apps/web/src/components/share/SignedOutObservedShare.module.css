@@ -1,0 +1,73 @@
+.shell {
+  display: grid;
+  min-height: 100%;
+  place-items: center;
+  padding: 24px;
+  background: #f6f6f6;
+}
+
+.panel {
+  box-sizing: border-box;
+  display: grid;
+  gap: 12px;
+  width: min(100%, 360px);
+  padding: 20px;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 8px 28px #00000010, 0 2px 6px #00000006;
+  color: #333;
+  text-align: start;
+}
+
+.title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.url {
+  display: block;
+  overflow: hidden;
+  padding: 8px 10px;
+  border: 1px solid #ededed;
+  border-radius: 6px;
+  color: #777;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: text;
+}
+
+.copy {
+  width: 100%;
+  min-height: 32px;
+  background: #282828;
+  color: #fff;
+}
+
+.updateNotice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #888;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.updateNotice p { margin: 0; }
+
+.signInAction {
+  flex: none;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: #f3f7ff;
+  color: #1677ff;
+  cursor: pointer;
+}
+
+.signInAction :global(.entry-local-mode-tip__login-badge) {
+  background: transparent;
+  color: inherit;
+}

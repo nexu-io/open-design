@@ -7198,6 +7198,8 @@ async function postImportFolderToDaemon(base, body, baseDir, workspaceHeaders = 
 
 function printProjectShareHelp() {
   console.log(`Usage:
+  od project share preflight <id> --path <file> [--json]
+                    Inspect included and missing references before publishing.
   od project share publish <id> --path <file> [--json]
                     Publish a project file using the same endpoint as the UI.
   od project share resume <id> --path <file> [--json]
@@ -7212,7 +7214,7 @@ function printProjectShareHelp() {
   od project share retry-stop <id> --path <file> --slug <slug> [--json]
                     Retry one persisted stop, including after project deletion.
 
-Supported actions: publish, resume, get, status, stop, and retry-stop.
+Supported actions: preflight, publish, resume, get, status, stop, and retry-stop.
 
 Common options:
   --daemon-url <url>   OpenDesign daemon HTTP base.
@@ -7228,15 +7230,15 @@ async function runProjectShare(args) {
     process.exit(args.length === 0 ? 2 : 0);
   }
   const [requestedAction, ...rest] = args;
-  // Resume intentionally uses the same owner-verified lifecycle endpoint as the UI.
-  const action = requestedAction === 'status' ? 'get' : requestedAction === 'resume' ? 'publish' : requestedAction;
+  // Resume shares the owner-verified endpoint but carries a distinct no-upload intent.
+  const action = requestedAction === 'status' ? 'get' : requestedAction;
   const stringFlags = new Set(['path', 'daemon-url', 'workspace', 'workspace-member',
     ...(['stop', 'retry-stop'].includes(action) ? ['slug'] : [])]);
   let flags;
   try {
     flags = parseFlags(rest, { string: stringFlags, boolean: new Set(['json']) });
   } catch {
-    console.error('Usage: od project share <publish|resume|get|status|stop|retry-stop> <id> --path <file> [--json] (stop requires --slug <slug>). See --help for accepted flags.');
+    console.error('Usage: od project share <preflight|publish|resume|get|status|stop|retry-stop> <id> --path <file> [--json] (stop requires --slug <slug>). See --help for accepted flags.');
     process.exit(2);
   }
   const positional = positionalArgs(rest, stringFlags);
@@ -7246,8 +7248,8 @@ async function runProjectShare(args) {
   const missingFlagValue = [...stringFlags].some((key) =>
     typeof flags[key] === 'string' && (!flags[key].trim() || flags[key].startsWith('--')));
   const slug = typeof flags.slug === 'string' ? flags.slug.trim() : '';
-  if (!['publish', 'get', 'stop', 'retry-stop'].includes(action) || positional.length !== 1 || !id?.trim() || (!filePath && !projectStatus) || missingFlagValue || (['stop', 'retry-stop'].includes(action) && !slug)) {
-    console.error('Usage: od project share <publish|resume|get|status|stop|retry-stop> <id> --path <file> [--json] (stop requires --slug <slug>)');
+  if (!['publish', 'preflight', 'resume', 'get', 'stop', 'retry-stop'].includes(action) || positional.length !== 1 || !id?.trim() || (!filePath && !projectStatus) || missingFlagValue || (['stop', 'retry-stop'].includes(action) && !slug)) {
+    console.error('Usage: od project share <preflight|publish|resume|get|status|stop|retry-stop> <id> --path <file> [--json] (stop requires --slug <slug>)');
     process.exit(2);
   }
   // Validate before discovery; malformed invocations must not contact a daemon.
@@ -7256,12 +7258,14 @@ async function runProjectShare(args) {
   let resp;
   try {
     resp = await fetch(
-      projectStatus ? `${base}/api/projects/${encodeURIComponent(id)}/share-state` : action === 'retry-stop' ? `${base}/api/public-file-stops/retry` : `${base}/api/projects/${encodeURIComponent(id)}/files/${encodeURIComponent(filePath)}/publish-public`,
+      projectStatus ? `${base}/api/projects/${encodeURIComponent(id)}/share-state` : action === 'retry-stop' ? `${base}/api/public-file-stops/retry` : `${base}/api/projects/${encodeURIComponent(id)}/files/${encodeURIComponent(filePath)}/${action === 'preflight' ? 'share-plan' : 'publish-public'}`,
       action === 'retry-stop'
         ? { method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify({ projectId: id, filePath, slug }) }
         : action === 'stop'
         ? { method: 'DELETE', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify({ slug }) }
-        : { method: action === 'publish' ? 'POST' : 'GET', headers },
+        : action === 'resume'
+        ? { method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify({ mode: 'resume' }) }
+        : { method: ['publish', 'preflight'].includes(action) ? 'POST' : 'GET', headers },
     );
   } catch {
     // Do not echo transport exceptions, which can contain URLs or credentials.
@@ -7271,6 +7275,12 @@ async function runProjectShare(args) {
   const data = await resp.json();
   if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
   if (projectStatus) return console.log(JSON.stringify(data, null, 2));
+  if (action === 'preflight') {
+    console.log(`Share plan: ${data.fileCount} files, ${data.totalBytes} bytes.`);
+    for (const item of data.exclusions ?? []) console.log(`Not included (${item.reason}): ${item.path}`);
+    if (!(data.exclusions ?? []).length) console.log('No missing or invalid references.');
+    return;
+  }
   if (['stop', 'retry-stop'].includes(action)) return console.log('Sharing stopped.');
   if (data.status === 'binding_pending') {
     return console.log(`Content published; binding pending.${data.link?.status === 'unavailable' ? ' Link temporarily unavailable.' : ''}`);
@@ -7304,6 +7314,8 @@ async function runProject(args) {
                                           Restore the daemon-selected default
                                           scenario with a snapshot CAS guard.
   od project delete <id>                  Delete a project.
+  od project share preflight <id> --path <file> [--json]
+                    Inspect included and missing references before publishing.
   od project share publish <id> --path <file> [--json]
                     Publish a project file.
   od project share resume <id> --path <file> [--json]

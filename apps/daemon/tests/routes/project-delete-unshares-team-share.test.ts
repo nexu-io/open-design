@@ -227,6 +227,36 @@ it('waits for in-flight public mutation before entering project deletion', async
   expect(order).toEqual(['publish', 'published', 'stop']);
 });
 
+it('S14 confirms a personal project only after each active public alias was stopped', async () => {
+  const projectId = 's14-shared';
+  const hub = fakeHub();
+  let stopProject!: (id: string) => Promise<void>;
+  const { baseUrl, db } = await startServer(hub, id => stopProject(id));
+  const store = createSqlitePublicFilePublicationStore(db);
+  const scope = { resourceTeamId: WORKSPACE_ID, ownerMemberId: OWNER_MEMBER_ID, projectId };
+  insertProject(db, { id: projectId, name: 'Shared', createdAt: 1, updatedAt: 1 });
+  ensureWorkspaceProject(db, { projectId, workspaceId: WORKSPACE_ID, visibility: 'personal', createdByWorkspaceMemberId: OWNER_MEMBER_ID });
+  const remote = new Map<string, 'active' | 'stopped'>();
+  for (const filePath of ['a.html', 'b.html']) {
+    store.set({ ...scope, filePath }, { slug: filePath, url: `https://example.test/${filePath}`, fileName: filePath });
+    remote.set(filePath, 'active');
+  }
+  stopProject = id => createProjectPublicFileStop(store, async key => ({
+    ...key, stop: async () => {
+      expect(getProject(db, projectId)).toBeTruthy();
+      expect(remote.get(key.filePath)).toBe('active');
+      remote.set(key.filePath, 'stopped');
+    },
+  }))({ ...scope, projectId: id });
+  const response = await fetch(`${baseUrl}/api/projects/${projectId}`, { method: 'DELETE', headers: ownerHeaders() });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ ok: true });
+  expect([...remote.values()]).toEqual(['stopped', 'stopped']);
+  expect(store.listByProject(scope)).toEqual([]);
+  expect(getProject(db, projectId)).toBeNull();
+  expect(store.listStops()).toEqual([]);
+});
+
 it.each([true, false])('runs public stop before catalog and local deletion, stop fails=%s', async (fails) => {
   const hub = fakeHub();
   let called = false;

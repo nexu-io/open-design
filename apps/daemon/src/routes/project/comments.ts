@@ -139,6 +139,8 @@ export interface RegisterProjectCommentRoutesDeps extends RouteDeps<'db' | 'proj
     comment: PreviewComment,
     context: WorkspaceCollabContext | null,
   ) => boolean | void;
+  /** Persist exact changes to a previously published personal comment, even while its alias is stopped. */
+  onPublishedCommentMutation?: (comment: PreviewComment, context: WorkspaceCollabContext | null, deleted: boolean) => boolean | void;
   /** Production relay eligibility, including creator-scoped public shares. */
   isCommentRelayEligible?: (
     projectId: string,
@@ -771,6 +773,9 @@ export function registerProjectCommentRoutes(app: Express, ctx: RegisterProjectC
             req.body?.status,
           );
           if (!saved) return null;
+          // SAFETY: updatePreviewCommentStatus returns the normalized DB comment; its fields are the PreviewComment wire snapshot consumed by the relay.
+          const mutationSnapshot = saved as unknown as PreviewComment;
+          if (ctx.onPublishedCommentMutation && ctx.onPublishedCommentMutation(mutationSnapshot, workspaceContext, false) === false) throw new Error('failed to persist published comment mutation');
           updateProject(db, req.params.id, {});
           if (syncEnabled) {
             // SAFETY: the DB normalizer returns the PreviewComment fields consumed by the relay.
@@ -929,6 +934,7 @@ export function registerProjectCommentRoutes(app: Express, ctx: RegisterProjectC
             req.params.commentId,
           );
           if (!deleted) return false;
+          if (ctx.onPublishedCommentMutation && ctx.onPublishedCommentMutation(existing, workspaceContext, true) === false) throw new Error('failed to persist published comment mutation');
           updateProject(db, req.params.id, {});
           if (syncEnabled) {
             requireRelayEnqueued(ctx.onCommentDeleted?.(existing, workspaceContext));

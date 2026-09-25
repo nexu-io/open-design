@@ -22,6 +22,9 @@ import {
   settleManualEditExit,
 } from '../../src/components/FileWorkspace';
 import { ENABLE_BLANK_PAGE_WORKSPACE_ENTRYPOINT } from '../../src/components/workspace/tab-launcher';
+import { fileViewerSourceAuthorizationScopeKey } from '../../src/components/FileViewer';
+import { nextShareRequestNonce } from '../../src/components/share-request-nonce';
+import type { ObservedShareUpdateRequest } from '../../src/components/share/observed-public-share-link';
 import { I18nProvider } from '../../src/i18n';
 import { DesignFilesPanel } from '../../src/components/DesignFilesPanel';
 import {
@@ -344,6 +347,110 @@ function collabValue(workspaceContext: WorkspaceCollabContext): CollabContextVal
   };
 }
 
+it('keeps an observed share witness through a transient missing active file but clears it on a real file switch', async () => {
+  const onObservedPublicShareLink = vi.fn();
+  const file = workspaceFile('index.html');
+  const props: React.ComponentProps<typeof FileWorkspace> = {
+    projectId: 'project-1', projectKind: 'prototype', files: [file], liveArtifacts: [],
+    onRefreshFiles: vi.fn(), isDeck: false,
+    tabsState: { tabs: ['index.html'], active: 'index.html' }, onTabsStateChange: vi.fn(),
+    onObservedPublicShareLink,
+  };
+  const view = render(<CollabProvider value={collabValue(teamContext('workspace-a', 'member-a'))}><FileWorkspace {...props} /></CollabProvider>);
+  await waitFor(() => expect(onObservedPublicShareLink).toHaveBeenCalledWith(null));
+  onObservedPublicShareLink.mockClear();
+
+  view.rerender(<CollabProvider value={collabValue(teamContext('workspace-a', 'member-a'))}><FileWorkspace {...props} files={[]} /></CollabProvider>);
+  expect(onObservedPublicShareLink).not.toHaveBeenCalled();
+
+  view.rerender(<CollabProvider value={collabValue(teamContext('workspace-a', 'member-a'))}><FileWorkspace {...props} files={[file]} /></CollabProvider>);
+  expect(onObservedPublicShareLink).not.toHaveBeenCalled();
+
+  const otherFile = workspaceFile('other.html');
+  view.rerender(<CollabProvider value={collabValue(teamContext('workspace-a', 'member-a'))}><FileWorkspace {...props} files={[file, otherFile]} tabsState={{ tabs: ['other.html'], active: 'other.html' }} /></CollabProvider>);
+  await waitFor(() => expect(onObservedPublicShareLink).toHaveBeenCalledWith(null));
+});
+it('S14 shared HTML deletion warns about the exact active file link before a cancellable delete', async () => {
+  const context = teamContext('workspace-a', 'member-a');
+  const request = vi.fn(async (url: RequestInfo | URL) => String(url).endsWith('/share-state')
+    ? Response.json({ projectId: 'project-1', bindingExists: true, hasEverShared: true, publications: [
+      { sourceFilePath: 'index.html', slug: 'live', status: 'active' },
+      { sourceFilePath: 'old.html', slug: 'old', status: 'stopped' },
+    ] })
+    : new Response('', { status: 200 }));
+  const confirmDelete = vi.fn(() => false);
+  vi.stubGlobal('fetch', request);
+  vi.stubGlobal('confirm', confirmDelete);
+  render(<CollabProvider value={collabValue(context)}><FileWorkspace
+    projectId="project-1" projectKind="prototype" files={[workspaceFile('index.html')]}
+    liveArtifacts={[]} onRefreshFiles={vi.fn()} isDeck={false}
+    tabsState={{ tabs: [], active: null }} onTabsStateChange={vi.fn()}
+  /></CollabProvider>);
+  fireEvent.click(screen.getByTestId('design-file-menu-index.html'));
+  fireEvent.click(screen.getByTestId('design-file-delete-index.html'));
+  await waitFor(() => expect(confirmDelete).toHaveBeenCalledWith(expect.stringContaining('1 pages being shared')));
+  expect(request).toHaveBeenCalledWith('/api/projects/project-1/share-state', expect.objectContaining({ headers: expect.objectContaining({ 'x-od-workspace-id': 'workspace-a' }) }));
+  expect(request.mock.calls.some(([url]) => String(url).includes('/files/index.html') && !String(url).endsWith('/preview'))).toBe(false);
+});
+
+it('S14 batch deletion warns only for active links attached to selected HTML files', async () => {
+  const request = vi.fn(async (url: RequestInfo | URL) => String(url).endsWith('/share-state')
+    ? Response.json({ projectId: 'project-1', bindingExists: true, hasEverShared: true, publications: [
+      { sourceFilePath: 'index.html', slug: 'live', status: 'active' },
+      { sourceFilePath: 'other.html', slug: 'other', status: 'active' },
+      { sourceFilePath: 'index.html', slug: 'old', status: 'stopped' },
+    ] }) : new Response('', { status: 200 }));
+  const confirmDelete = vi.fn(() => false);
+  vi.stubGlobal('fetch', request);
+  vi.stubGlobal('confirm', confirmDelete);
+  const { container } = render(<CollabProvider value={collabValue(teamContext('workspace-a', 'member-a'))}><FileWorkspace
+    projectId="project-1" projectKind="prototype" files={[workspaceFile('index.html'), workspaceFile('picture.png')]}
+    liveArtifacts={[]} onRefreshFiles={vi.fn()} isDeck={false}
+    tabsState={{ tabs: [], active: null }} onTabsStateChange={vi.fn()}
+  /></CollabProvider>);
+  fireEvent.click(screen.getByTestId('design-file-row-index.html').querySelector('.df-card-check')!);
+  fireEvent.click(container.querySelector('[data-testid="design-files-batch-delete"]')!);
+  await waitFor(() => expect(confirmDelete).toHaveBeenCalledWith(expect.stringContaining('1 pages being shared')));
+  expect(request.mock.calls.filter(([url]) => String(url).endsWith('/share-state'))).toHaveLength(1);
+});
+
+it('S14 HTML deletion without workspace identity does not guess that the file has no active links', async () => {
+  const request = vi.fn(async (_url: RequestInfo | URL) => new Response('', { status: 200 }));
+  const confirmDelete = vi.fn(() => true);
+  const alertFailure = vi.fn();
+  vi.stubGlobal('fetch', request);
+  vi.stubGlobal('confirm', confirmDelete);
+  vi.stubGlobal('alert', alertFailure);
+  render(<FileWorkspace
+    projectId="project-1" projectKind="prototype" files={[workspaceFile('index.html')]}
+    liveArtifacts={[]} onRefreshFiles={vi.fn()} isDeck={false}
+    tabsState={{ tabs: [], active: null }} onTabsStateChange={vi.fn()}
+  />);
+  fireEvent.click(screen.getByTestId('design-file-menu-index.html'));
+  fireEvent.click(screen.getByTestId('design-file-delete-index.html'));
+  await waitFor(() => expect(alertFailure).toHaveBeenCalled());
+  expect(confirmDelete).not.toHaveBeenCalled();
+  expect(request.mock.calls.filter(([url]) => String(url).endsWith('/share-state'))).toHaveLength(0);
+});
+it('S14 unavailable share-state blocks HTML deletion rather than silently claiming no active links', async () => {
+  const request = vi.fn(async (_url: RequestInfo | URL) => new Response('', { status: 503 }));
+  const confirmDelete = vi.fn(() => true);
+  const alertFailure = vi.fn();
+  vi.stubGlobal('fetch', request);
+  vi.stubGlobal('confirm', confirmDelete);
+  vi.stubGlobal('alert', alertFailure);
+  render(<CollabProvider value={collabValue(teamContext('workspace-a', 'member-a'))}><FileWorkspace
+    projectId="project-1" projectKind="prototype" files={[workspaceFile('index.html')]}
+    liveArtifacts={[]} onRefreshFiles={vi.fn()} isDeck={false}
+    tabsState={{ tabs: [], active: null }} onTabsStateChange={vi.fn()}
+  /></CollabProvider>);
+  fireEvent.click(screen.getByTestId('design-file-menu-index.html'));
+  fireEvent.click(screen.getByTestId('design-file-delete-index.html'));
+  await waitFor(() => expect(alertFailure).toHaveBeenCalled());
+  expect(confirmDelete).not.toHaveBeenCalled();
+  expect(request.mock.calls.filter(([url]) => String(url).endsWith('/share-state'))).toHaveLength(1);
+});
+
 function cssDeclarations(css: string, selector: string): string {
   const blocks: string[] = [];
   const rulePattern = /([^{}]+)\{([^}]*)\}/g;
@@ -465,12 +572,6 @@ function stubTabRect(tab: HTMLElement, left = 0, width = 100) {
     height: 20,
     toJSON: () => ({}),
   }));
-}
-
-function changeInputValue(input: HTMLInputElement, value: string) {
-  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
-  setter?.call(input, value);
-  input.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
 function renderDesignFilesPanel(overrides: Partial<React.ComponentProps<typeof DesignFilesPanel>> = {}) {
@@ -1571,6 +1672,93 @@ describe('FileWorkspace launcher tab creation', () => {
     expect(screen.getAllByTestId('retained-file-viewer')).toEqual(retainedAfterBeta);
     expect(mockedFetchProjectFileText).toHaveBeenCalledTimes(2);
   });
+
+  it.each(['beta', 'design-files', 'initial-design-files', 'initial-route-pending'] as const)(
+    'S13 consumes same-file login update intent on %s selection without resurrecting on return to A',
+    async (destination) => {
+      const alpha = workspaceFile('alpha.html');
+      const beta = workspaceFile('beta.html');
+      const workspace = teamContext('workspace-a', 'member-a');
+      const authorizationScopeKey = fileViewerSourceAuthorizationScopeKey(false, workspace) ?? '';
+      if (!authorizationScopeKey) throw new Error('missing test workspace scope');
+      const onLoginUpdateRequestHandled = vi.fn();
+      const publishFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.includes('publish-public')) return new Response(JSON.stringify(init?.method === 'POST'
+          ? { url: 'https://example.invalid/alpha', slug: 'alpha', fileName: alpha.name }
+          : { publication: { url: 'https://example.invalid/alpha', slug: 'alpha', fileName: alpha.name },
+              status: 'active', freshness: 'outdated' }), { status: 200 });
+        if (url.includes('/share-state')) return new Response(JSON.stringify({
+          projectId: 'project-1', hasEverShared: true, bindingExists: true,
+          publications: [{ sourceFilePath: alpha.name, slug: 'alpha', status: 'active' }],
+        }), { status: 200 });
+        if (url.includes('/integrations/vela/status')) return new Response(JSON.stringify({
+          loggedIn: true, loginInFlight: false, user: { id: 'account-1' },
+        }), { status: 200 });
+        return new Response('{}', { status: 200 });
+      });
+      if (destination === 'initial-design-files' || destination === 'initial-route-pending') {
+        vi.stubGlobal('fetch', publishFetch);
+      }
+      mockedFetchProjectFileText.mockImplementation(async (_projectId, fileName) => (
+        `<html><body>${fileName}</body></html>`
+      ));
+      function Harness() {
+        const [tabsState, setTabsState] = useState<OpenTabsState>({
+          tabs: [alpha.name, beta.name],
+          active: destination.startsWith('initial-') ? null : alpha.name,
+        });
+        const [openRequest, setOpenRequest] = useState<{ name: string; nonce: number } | null>(null);
+        const [request, setRequest] = useState<ObservedShareUpdateRequest | null>({
+          nonce: 17, accountId: 'account-1', expiresAt: Date.now() + 60_000,
+          link: { status: 'active', projectId: 'project-1', filePath: alpha.name,
+            slug: 'alpha', url: 'https://example.invalid/alpha', workspaceId: workspace.workspaceId,
+            workspaceMemberId: workspace.workspaceMemberId, authorizationScopeKey, freshness: 'outdated' },
+        });
+        return <><button type="button" data-testid="open-requested-route-file"
+          onClick={() => setOpenRequest({ name: alpha.name, nonce: 1 })}>Open requested route file</button>
+        <IframeKeepAliveProvider>
+          <CollabProvider value={collabValue(workspace)}>
+            <FileWorkspace projectId="project-1" projectKind="prototype" files={[alpha, beta]}
+              liveArtifacts={[]} onRefreshFiles={vi.fn()} isDeck={false}
+              tabsState={tabsState} onTabsStateChange={setTabsState}
+              routeFileName={destination === 'initial-route-pending' ? alpha.name : null}
+              openRequest={openRequest}
+              loginUpdateRequest={request}
+              onLoginUpdateRequestHandled={(nonce) => {
+                onLoginUpdateRequestHandled(nonce);
+                setRequest(null);
+              }} />
+          </CollabProvider>
+        </IframeKeepAliveProvider></>;
+      }
+      render(<Harness />);
+      if (destination === 'initial-route-pending') {
+        expect(onLoginUpdateRequestHandled).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByTestId('open-requested-route-file'));
+        await waitFor(() => expect(publishFetch.mock.calls.filter(([url, init]) =>
+          String(url).includes('publish-public') && init?.method === 'POST')).toHaveLength(1));
+        expect(onLoginUpdateRequestHandled).toHaveBeenCalledExactlyOnceWith(17);
+        return;
+      }
+      if (destination === 'initial-design-files') {
+        await waitFor(() => expect(onLoginUpdateRequestHandled).toHaveBeenCalledExactlyOnceWith(17));
+        fireEvent.click(screen.getByRole('tab', { name: /alpha\.html/i }));
+        await waitFor(() => expect(mockedFetchProjectFileText).toHaveBeenCalled());
+        expect(onLoginUpdateRequestHandled).toHaveBeenCalledTimes(1);
+        expect(publishFetch.mock.calls.filter(([url, init]) =>
+          String(url).includes('publish-public') && init?.method === 'POST')).toHaveLength(0);
+        return;
+      }
+      await waitFor(() => expect(mockedFetchProjectFileText).toHaveBeenCalled());
+      expect(onLoginUpdateRequestHandled).not.toHaveBeenCalled();
+      if (destination === 'beta') fireEvent.click(screen.getByRole('tab', { name: /beta\.html/i }));
+      else fireEvent.click(screen.getByTestId('design-files-tab'));
+      await waitFor(() => expect(onLoginUpdateRequestHandled).toHaveBeenCalledExactlyOnceWith(17));
+      fireEvent.click(screen.getByRole('tab', { name: /alpha\.html/i }));
+      expect(onLoginUpdateRequestHandled).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it('evicts the fourth HTML tab without reattaching the three surviving preview frames', async () => {
     const files = ['alpha.html', 'beta.html', 'gamma.html', 'delta.html'].map(workspaceFile);
@@ -3050,20 +3238,22 @@ describe('FileWorkspace launcher tab creation', () => {
         url: 'https://dribbble.com/',
       },
     ];
-
-    render(
-      <FileWorkspace
+    const request = { name: 'landing.html', nonce: 1 };
+    function Host() {
+      const [tabs, setTabs] = useState<OpenTabsState>({ tabs: ['cover.html'], active: '__browser__:1', browserTabs });
+      return <FileWorkspace
         projectId="project-1"
         projectKind="prototype"
         files={[workspaceFile('cover.html'), workspaceFile('landing.html')]}
         liveArtifacts={[]}
         onRefreshFiles={vi.fn()}
         isDeck={false}
-        tabsState={{ tabs: ['cover.html'], active: '__browser__:1', browserTabs }}
-        shareRequest={{ name: 'landing.html', nonce: 1 }}
-        onTabsStateChange={onTabsStateChange}
-      />,
-    );
+        tabsState={tabs}
+        shareRequest={request}
+        onTabsStateChange={next => { onTabsStateChange(next); setTabs(next); }}
+      />;
+    }
+    render(<Host />);
 
     await waitFor(() => {
       expect(onTabsStateChange).toHaveBeenCalledWith({
@@ -3072,6 +3262,37 @@ describe('FileWorkspace launcher tab creation', () => {
         browserTabs,
       });
     });
+    expect(await screen.findByRole('heading', { name: 'Share', level: 2 })).toBeVisible();
+  });
+
+  it('F13: two artifact-card requests at the same clock tick reopen the real Share panel after close', async () => {
+    const onTabsStateChange = vi.fn();
+    let lastNonce = 100;
+    function Host() {
+      const [tabs, setTabs] = useState<OpenTabsState>({ tabs: ['cover.html'], active: '__browser__:1', browserTabs: [{ id: '__browser__:1', label: 'Browser 1', title: 'Dribbble', url: 'https://dribbble.com/' }] });
+      const [shareRequest, setShareRequest] = useState<{ name: string; nonce: number; anchorId: string } | null>({ name: 'landing.html', nonce: 100, anchorId: 'artifact-card' });
+      return <>
+        <button type="button" data-artifact-anchor="artifact-card" onClick={() => setShareRequest(previous => {
+          const nonce = nextShareRequestNonce(previous?.nonce, 100);
+          lastNonce = nonce;
+          return { name: 'landing.html', nonce, anchorId: 'artifact-card' };
+        })}>Artifact card Share</button>
+        <FileWorkspace projectId="project-1" projectKind="prototype" files={[workspaceFile('cover.html'), workspaceFile('landing.html')]}
+          liveArtifacts={[]} onRefreshFiles={vi.fn()} isDeck={false} tabsState={tabs}
+          shareRequest={shareRequest} onTabsStateChange={next => { onTabsStateChange(next); setTabs(next); }} />
+      </>;
+    }
+    render(<Host />);
+    await waitFor(() => expect(onTabsStateChange).toHaveBeenCalledWith(expect.objectContaining({ active: 'landing.html' })));
+    expect(await screen.findByRole('heading', { name: 'Share', level: 2 })).toBeVisible();
+    expect(lastNonce).toBe(100);
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Share', level: 2 })).toBeNull());
+    fireEvent.click(screen.getByRole('button', { name: 'Artifact card Share' }));
+    expect(lastNonce).toBe(101);
+    expect(await screen.findByRole('heading', { name: 'Share', level: 2 })).toBeVisible();
+    expect(onTabsStateChange).toHaveBeenCalledTimes(2);
+    expect(onTabsStateChange).toHaveBeenLastCalledWith(expect.objectContaining({ active: 'landing.html', browserTabs: [expect.objectContaining({ url: 'https://dribbble.com/' })] }));
   });
 
   it('opens and activates the target file for a download request', async () => {
@@ -3102,6 +3323,67 @@ describe('FileWorkspace launcher tab creation', () => {
       });
     });
   });
+
+  it('S14 design-system project delete requires authoritative active-share warning before backing-project deletion', async () => {
+    const onDeleteDesignSystemProject = vi.fn(async () => false);
+    const request = vi.fn(async (url: RequestInfo | URL) => {
+      if (String(url) === '/api/projects/project-1/share-state') return Response.json({
+        projectId: 'project-1', bindingExists: true, hasEverShared: true,
+        publications: [{ slug: 'shared-kit', sourceFilePath: 'kit.html', status: 'active' }],
+      });
+      return new Response('', { status: 200 });
+    });
+    vi.stubGlobal('fetch', request);
+    vi.stubGlobal('confirm', vi.fn(() => true));
+    render(
+      <CollabProvider value={collabValue(teamContext('workspace-a', 'member-a'))}>
+        <FileWorkspace
+          projectId="project-1" projectKind="prototype" files={[workspaceFile('kit.html')]}
+          liveArtifacts={[]} onRefreshFiles={vi.fn()} isDeck={false}
+          tabsState={{ tabs: [], active: '__design_system__' }} onTabsStateChange={vi.fn()}
+          designSystemProject={{ id: 'neutral-modern', title: 'Neutral Modern', category: 'Starter', source: 'bundled', updatedAt: 1 } as never}
+          designSystemEditable onDeleteDesignSystemProject={onDeleteDesignSystemProject}
+        />
+      </CollabProvider>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'More actions' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete Neutral Modern' }));
+    const dialog = await screen.findByTestId('project-delete-confirm-dialog');
+    await waitFor(() => expect(within(dialog).getByText(/1 page.*shared|1 active/i)).toBeTruthy());
+    expect(onDeleteDesignSystemProject).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByTestId('project-delete-confirm-accept'));
+    await waitFor(() => expect(onDeleteDesignSystemProject).toHaveBeenCalledWith('project-1'));
+  });
+
+  it.each(['missing workspace identity', 'share-state HTTP failure'])(
+    'S14 design-system delete blocks unknown active-share count: %s', async (failure) => {
+      const onDeleteDesignSystemProject = vi.fn(async () => true);
+      const request = vi.fn(async (_url: RequestInfo | URL) => new Response('', { status: 503 }));
+      vi.stubGlobal('fetch', request);
+      vi.stubGlobal('confirm', vi.fn(() => true));
+      const panel = (
+        <FileWorkspace
+          projectId="project-1" projectKind="prototype" files={[workspaceFile('kit.html')]}
+          liveArtifacts={[]} onRefreshFiles={vi.fn()} isDeck={false}
+          tabsState={{ tabs: [], active: '__design_system__' }} onTabsStateChange={vi.fn()}
+          designSystemProject={{ id: 'neutral-modern', title: 'Neutral Modern', category: 'Starter', source: 'bundled', updatedAt: 1 } as never}
+          designSystemEditable onDeleteDesignSystemProject={onDeleteDesignSystemProject}
+        />
+      );
+      render(failure === 'missing workspace identity' ? panel
+        : <CollabProvider value={collabValue(teamContext('workspace-a', 'member-a'))}>{panel}</CollabProvider>);
+      fireEvent.click(await screen.findByRole('button', { name: 'More actions' }));
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Delete Neutral Modern' }));
+      const dialog = await screen.findByTestId('project-delete-confirm-dialog');
+      await waitFor(() => expect(within(dialog).getByTestId('project-delete-confirm-accept').hasAttribute('disabled')).toBe(true));
+      expect(onDeleteDesignSystemProject).not.toHaveBeenCalled();
+      if (failure === 'missing workspace identity') {
+        expect(request.mock.calls.some(([url]) => String(url).endsWith('/share-state'))).toBe(false);
+      } else {
+        await waitFor(() => expect(request.mock.calls.some(([url]) => String(url).endsWith('/share-state'))).toBe(true));
+      }
+    },
+  );
 
   it('focuses the design-system workspace tab without adding it to file tabs', async () => {
     const onTabsStateChange = vi.fn();

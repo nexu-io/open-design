@@ -48,6 +48,22 @@ describe('production comment sync state reader', () => {
     await waitFor(() => expect(result.current).toEqual(recovered));
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+  it('keeps same-scope observation during a focus refresh and applies its result', async () => {
+    const current = { ...paused, sessionMissing: false, pending: 0,
+      backfill: { state: 'failed' as const, filePath: 'index.html', publicationRevision: 'r1', retryable: true } };
+    fetchMock.mockResolvedValueOnce(Response.json(current));
+    let finish!: (response: Response) => void;
+    fetchMock.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const { result } = renderHook(() => useCommentSyncState('p', context, { filePath: 'index.html' }));
+    await waitFor(() => expect(result.current).toEqual(current));
+    act(() => window.dispatchEvent(new Event('focus')));
+    expect(result.current).toEqual(current);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    const completed = { ...current, backfill: { ...current.backfill, state: 'succeeded' as const, retryable: false } };
+    await act(async () => { finish(Response.json(completed)); });
+    expect(result.current).toEqual(completed);
+  });
+
   it('fences late old-account responses even if project and membership stay equal', async () => {
     let finish!: (response: Response) => void;
     fetchMock.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));

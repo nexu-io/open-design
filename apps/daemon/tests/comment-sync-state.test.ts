@@ -36,7 +36,11 @@ it('supplies scoped K8 over HTTP with unknown, login recovery, isolated retry an
     }
     const mine = queue.listDue(1).find(row => row.commentId === 'mine')!;
     queue.defer(mine, { error: 'secret-token-do-not-expose', nextAttemptAt: 9000000000000 });
-    const foreignBefore = db.prepare("SELECT * FROM comment_relay_outbox WHERE comment_id!='mine'").all();
+    // Legacy rows may acquire durable idempotency keys on read; retry must not
+    // mutate foreign business data or their delivery scheduling.
+    const foreignRows = () => db.prepare("SELECT * FROM comment_relay_outbox WHERE comment_id!='mine'").all()
+      .map(row => { const business = { ...row as Record<string, unknown> }; delete business.event_key; return business; });
+    const foreignBefore = foreignRows();
     const service = createCommentSyncStateService(db, async () => { if (fail) throw new Error('session unavailable'); return available; });
     registerCommentSyncStateRoutes(app, { db, service, authorize: async req => req.get('x-test-deny')
       ? { ok: false, status: 403, code: 'DENIED', message: 'denied' } : { ok: true, context } });
@@ -53,9 +57,11 @@ it('supplies scoped K8 over HTTP with unknown, login recovery, isolated retry an
     const denied = await fetch(url, { method: 'POST', headers: { 'x-test-deny': '1' } });
     expect(denied.status).toBe(403);
     expect(queue.listDue(1).some(row => row.commentId === 'mine')).toBe(false);
+    const foreignKeys = db.prepare("SELECT comment_id, event_key FROM comment_relay_outbox WHERE comment_id!='mine'").all();
     expect((await fetch(url, { method: 'POST' })).status).toBe(200);
     expect(queue.listDue(1).find(row => row.commentId === 'mine')?.revision).toBe(mine.revision);
-    expect(db.prepare("SELECT * FROM comment_relay_outbox WHERE comment_id!='mine'").all()).toEqual(foreignBefore);
+    expect(foreignRows()).toEqual(foreignBefore);
+    expect(db.prepare("SELECT comment_id, event_key FROM comment_relay_outbox WHERE comment_id!='mine'").all()).toEqual(foreignKeys);
     queue.acknowledge(mine); available = false;
     expect(await (await fetch(url)).json()).toEqual({ pending: 0, lastError: 'COMMENT_SYNC_DELIVERY_FAILED', sessionMissing: false, shareStopped: null });
     available = true;

@@ -18,6 +18,8 @@ export interface RecordPublishedCommentBackfillInput {
   publicationRevision: PublicFilePublicationRevision;
   /** Exact ids present at publication time; later comments cannot satisfy this batch. */
   commentIds: readonly string[];
+  /** Trusted receipt origin; omitted legacy batches have unknown provenance. */
+  reopened?: boolean;
 }
 
 export interface PublishedCommentBackfillOutboxRecord {
@@ -41,6 +43,7 @@ export function migratePublishedCommentBackfillState(db: SqliteDb): void {
       state TEXT NOT NULL CHECK (state IN ('pending', 'succeeded', 'failed')),
       retryable INTEGER NOT NULL CHECK (retryable IN (0, 1)),
       code TEXT,
+      reopened INTEGER CHECK (reopened IN (0, 1)),
       PRIMARY KEY (workspace_id, workspace_member_id, project_id, file_path, publication_revision)
     );
     CREATE TABLE IF NOT EXISTS published_comment_backfill_members (
@@ -54,6 +57,10 @@ export function migratePublishedCommentBackfillState(db: SqliteDb): void {
       PRIMARY KEY (workspace_id, workspace_member_id, project_id, file_path, publication_revision, comment_id)
     );
   `);
+  const columns = db.prepare("PRAGMA table_info(published_comment_backfill_batches)").all() as Array<{ name: string }>;
+  if (!columns.some(column => column.name === "reopened")) {
+    db.exec("ALTER TABLE published_comment_backfill_batches ADD COLUMN reopened INTEGER CHECK (reopened IN (0, 1))");
+  }
 }
 
 function currentPublicationMatches(db: SqliteDb, record: PublishedCommentBackfillOutboxRecord): boolean {
@@ -84,12 +91,13 @@ export function recordPublishedCommentBackfill(db: SqliteDb, input: RecordPublis
   if (!publicationRevision.token) throw new Error('Published comment backfill requires a publication revision');
   const commentIds = [...new Set(input.commentIds)];
   const inserted = db.prepare(`INSERT INTO published_comment_backfill_batches
-    (workspace_id, workspace_member_id, project_id, file_path, publication_revision, state, retryable, code)
-    VALUES (?, ?, ?, ?, ?, ?, 0, NULL)
+    (workspace_id, workspace_member_id, project_id, file_path, publication_revision, state, retryable, code, reopened)
+    VALUES (?, ?, ?, ?, ?, ?, 0, NULL, ?)
     ON CONFLICT(workspace_id, workspace_member_id, project_id, file_path, publication_revision)
     DO NOTHING`).run(
     scope.resourceTeamId, scope.ownerMemberId, scope.projectId, scope.filePath, publicationRevision.token,
     commentIds.length === 0 ? 'succeeded' : 'pending',
+    input.reopened === undefined ? null : input.reopened ? 1 : 0,
   );
   if (!inserted.changes) return;
   const insertMember = db.prepare(`INSERT OR IGNORE INTO published_comment_backfill_members
@@ -154,16 +162,17 @@ export function readPublishedCommentBackfill(
     subject.workspaceId, subject.workspaceMemberId, subject.projectId, subject.filePath,
   ) as { revision?: unknown } | undefined;
   if (!current || typeof current.revision !== 'string' || !current.revision) return undefined;
-  const row = db.prepare(`SELECT state, retryable, code FROM published_comment_backfill_batches
+  const row = db.prepare(`SELECT state, retryable, code, reopened FROM published_comment_backfill_batches
     WHERE workspace_id=? AND workspace_member_id=? AND project_id=? AND file_path=? AND publication_revision=?`).get(
     subject.workspaceId, subject.workspaceMemberId, subject.projectId, subject.filePath, current.revision,
-  ) as { state?: unknown; retryable?: unknown; code?: unknown } | undefined;
+  ) as { state?: unknown; retryable?: unknown; code?: unknown; reopened?: unknown } | undefined;
   if (!row || (row.state !== 'pending' && row.state !== 'succeeded' && row.state !== 'failed')) return undefined;
   const result: CommentBackfillState = {
     state: row.state,
     filePath: subject.filePath,
     publicationRevision: current.revision,
     retryable: row.retryable === 1,
+    ...(row.reopened === 0 || row.reopened === 1 ? { reopened: row.reopened === 1 } : {}),
   };
   return typeof row.code === 'string' && row.code ? { ...result, code: row.code } : result;
 }

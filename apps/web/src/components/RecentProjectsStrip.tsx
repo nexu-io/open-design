@@ -25,17 +25,17 @@ import {
   fetchProjectFiles,
   invalidateProjectFilesCache,
 } from '../providers/registry';
-import type { DesignSystemSummary, Project, ProjectDisplayStatus } from '../types';
+import type { DesignSystemSummary, Project } from '../types';
 import { Icon } from './Icon';
 import type { IconName } from './Icon';
 import { RemixIcon } from './RemixIcon';
 import { InviteDialog } from './InviteDialog';
 import { ProjectDeleteConfirmDialog } from './project-actions/ProjectDeleteConfirmDialog';
 import { useProjectDeleteFlow } from './project-actions/useProjectDeleteFlow';
+import { useBatchProjectShareCount } from './project-actions/useBatchProjectShareCount';
 import { useProjectDuplicateFlow } from './project-actions/useProjectDuplicateFlow';
 import { useWorkspaceProjectMove } from './project-actions/useWorkspaceProjectMove';
-import { STATUS_LABEL_KEYS } from './DesignsTab';
-import { isDesignSystemProject, isPublishedDesignSystemProject } from './design-system-project';
+import { isDesignSystemProject } from './design-system-project';
 import type { SharedProjectPredicate } from '../collab/all-projects-list';
 import { useTeamMembers } from '../collab/useTeamMembers';
 import {
@@ -79,7 +79,7 @@ import {
 // decision; re-exported so its existing importers keep resolving.
 export { deckPreviewSrcDoc } from '../lib/project-cover-pipeline';
 import { useInView } from './plugins-home/useInView';
-import { workspaceIdentityCacheKey } from '../collab/workspace-identity';
+import { currentWorkspaceAccountGeneration, workspaceIdentityCacheKey } from '../collab/workspace-identity';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackProjectCollectionClick,
@@ -97,16 +97,11 @@ import type { ProjectCollectionClickProps } from '@open-design/contracts/analyti
  *  = home's mixed private/shared, 'drafts' = the member's own private list,
  *  'team' = the全部项目 grid where every card is a team-shared project. */
 export type SpaceKind = 'recent' | 'drafts' | 'team';
-import {
-  projectCoverUrl,
-  selectProjectFileCover,
-  type ProjectCoverOverride,
-} from './project-cover';
+import { projectCoverUrl, type ProjectCoverOverride } from './project-cover';
 
 interface Props {
   projects: Project[];
-  /** Used only to show a "Published" status for design-system projects whose
-   *  backing system is published (independent of the project's run status). */
+  /** Retained for existing callers; the collection card no longer renders a publishing badge. */
   designSystems?: DesignSystemSummary[];
   /** Retained for call-site compatibility; the strip skips rendering
    *  while the list is loading so we never need a loading state. */
@@ -166,7 +161,6 @@ interface Props {
   isActive?: boolean;
 }
 
-const EMPTY_DESIGN_SYSTEMS: DesignSystemSummary[] = [];
 /** Fallback for a caller with no sharing surface (no workspace, no grids). */
 const NOTHING_SHARED: SharedProjectPredicate = () => false;
 /** The chip a design-system project wears on its card. Product name, not a
@@ -364,7 +358,6 @@ class BackgroundTaskQueue {
 
 export function RecentProjectsStrip({
   projects,
-  designSystems = EMPTY_DESIGN_SYSTEMS,
   heading,
   description,
   onOpen,
@@ -689,6 +682,10 @@ export function RecentProjectsStrip({
   // space, delete); nothing new is exposed here that a single card cannot do.
   const selectedProjects = visibleProjects.filter(({ project }) => selectedProjectIds.has(project.id));
   const selectedCount = selectedProjectIds.size;
+  const batchShares = useBatchProjectShareCount(
+    bulkDeleteOpen ? selectedProjects.map(({ project }) => project.id) : [],
+    workspaceContext,
+  );
   // Same gate as the per-card menu: only your own projects can be moved or
   // deleted, so a selection containing someone else's shared project disables
   // the mutations instead of half-applying them.
@@ -1185,6 +1182,8 @@ export function RecentProjectsStrip({
   }
 
   async function commitBulkDelete() {
+    if (batchShares.pending || batchShares.failed || batchShares.count === null ||
+      batchShares.generation !== currentWorkspaceAccountGeneration()) return;
     const ids = selectedProjects.map(({ project }) => project.id);
     const startedAt = performance.now();
     setBulkDeleteOpen(false);
@@ -1550,16 +1549,6 @@ export function RecentProjectsStrip({
             workspaceContext,
           );
           const designSystemProject = isDesignSystemProject(project);
-          const status: ProjectDisplayStatus = project.status?.value ?? 'not_started';
-          const publishedDesignSystem = isPublishedDesignSystemProject(project, designSystems);
-          const isActive =
-            !publishedDesignSystem &&
-            (status === 'running' ||
-              status === 'queued' ||
-              status === 'awaiting_input' ||
-              // Incomplete is terminal but needs attention; show the status dot so
-              // it reads as "not done", not a static success pill (#1247 / #1060).
-              status === 'incomplete');
           const shared = isShared(project.id);
           const selected = selectedProjectIds.has(project.id);
           const readonlyShared = shared && !creator.ownedBySelf;
@@ -1957,8 +1946,10 @@ export function RecentProjectsStrip({
         <ProjectDeleteConfirmDialog
           projectName={deleteFlow.target.name}
           activeShareCount={deleteFlow.activeShareCount}
+          shareReadStatus={deleteFlow.shareReadStatus}
           pending={deleteFlow.pending}
           failed={deleteFlow.failed}
+          errorMessage={deleteFlow.errorMessage}
           onCancel={deleteFlow.cancel}
           onConfirm={() => void deleteFlow.commit()}
         />
@@ -2053,6 +2044,11 @@ export function RecentProjectsStrip({
           <DialogDescription>
             {t('designs.deleteSelectedConfirm', { n: selectedCount })}
           </DialogDescription>
+          {batchShares.count !== null && batchShares.count > 0 ? (
+            <DialogDescription>{t('designs.deleteActiveShares', { count: batchShares.count })}</DialogDescription>
+          ) : null}
+          {batchShares.pending ? <p role="status">{t('common.loading')}</p> : null}
+          {batchShares.failed ? <p role="alert">{t('ds.actionFailed')}</p> : null}
           <DialogFooter className="row">
             <button type="button" onClick={() => setBulkDeleteOpen(false)}>
               {t('designs.renameCancel')}
@@ -2060,6 +2056,7 @@ export function RecentProjectsStrip({
             <button
               type="button"
               className="primary danger"
+              disabled={batchShares.pending || batchShares.failed || batchShares.count === null || batchShares.generation !== currentWorkspaceAccountGeneration()}
               onClick={() => void commitBulkDelete()}
             >
               {t('designs.deleteSelected')}
@@ -2283,13 +2280,6 @@ function DeckCoverThumb({
       )}
     </div>
   );
-}
-
-function statusLabel(
-  status: ProjectDisplayStatus,
-  t: ReturnType<typeof useT>,
-): string {
-  return t(STATUS_LABEL_KEYS[status]);
 }
 
 function relativeTime(ts: number, t: ReturnType<typeof useT>): string {

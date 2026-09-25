@@ -135,3 +135,35 @@ it('marks queue removal as a safe discard by default, but succeeds only with exp
   const reopened = openDatabase(root!);
   expect(readPublishedCommentBackfill(reopened, subject)).toEqual({ state: 'succeeded', filePath: 'a.html', publicationRevision: revision.token, retryable: false });
 });
+
+it('migrates legacy batches without inventing a first-publication origin and retains a verified reopened revision', () => {
+  const { db, scope, publications, revision, subject } = setup();
+  db.exec(`DROP TABLE IF EXISTS published_comment_backfill_batches;
+    CREATE TABLE published_comment_backfill_batches (
+      workspace_id TEXT NOT NULL, workspace_member_id TEXT NOT NULL,
+      project_id TEXT NOT NULL, file_path TEXT NOT NULL, publication_revision TEXT NOT NULL,
+      state TEXT NOT NULL CHECK (state IN ('pending', 'succeeded', 'failed')),
+      retryable INTEGER NOT NULL CHECK (retryable IN (0, 1)), code TEXT,
+      PRIMARY KEY (workspace_id, workspace_member_id, project_id, file_path, publication_revision)
+    );`);
+  db.prepare(`INSERT INTO published_comment_backfill_batches
+    (workspace_id, workspace_member_id, project_id, file_path, publication_revision, state, retryable)
+    VALUES (?, ?, ?, ?, ?, 'failed', 0)`).run(
+      scope.resourceTeamId, scope.ownerMemberId, scope.projectId, scope.filePath, revision.token,
+    );
+  expect(readPublishedCommentBackfill(db, subject)).toEqual({
+    state: 'failed', filePath: scope.filePath, publicationRevision: revision.token, retryable: false,
+  });
+  const columns = db.prepare('PRAGMA table_info(published_comment_backfill_batches)').all() as Array<{ name: string }>;
+  expect(columns.some(column => column.name === 'reopened')).toBe(true);
+  publications.set(scope, { slug: revision.slug, url: 'https://example.test/a', fileName: scope.filePath });
+  const current = publications.getRevision(scope)!;
+  db.transaction(() => recordPublishedCommentBackfill(db, {
+    scope, publicationRevision: current, commentIds: ['a'], reopened: true,
+  }))();
+  expect(readPublishedCommentBackfill(db, subject)).toMatchObject({
+    state: 'pending', publicationRevision: current.token, reopened: true,
+  });
+  expect(db.prepare('SELECT reopened FROM published_comment_backfill_batches WHERE publication_revision=?')
+    .get(revision.token)).toEqual({ reopened: null });
+});

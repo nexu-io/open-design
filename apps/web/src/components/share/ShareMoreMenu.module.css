@@ -6,7 +6,7 @@ button.trigger {
   display: flex; align-items: center; justify-content: center;
 }
 .menu {
-  position: absolute; inset-inline-end: 0; top: calc(100% + 4px); z-index: 1;
+  position: fixed; inset-inline-end: auto; top: auto; z-index: 1000;
   box-sizing: border-box; width: 214px; padding: 4px;
   display: flex; flex-direction: column; gap: 2px;
   border: 1px solid #00000008; border-radius: 8px; background: #fff;

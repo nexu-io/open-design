@@ -25,54 +25,57 @@ import styles from './CommentSyncBanner.module.css';
  *    a problem (we did not check, which is not the same as finding a
  *    mismatch) and are NOT rendered as healthy either. They are silent.
  */
-export function CommentSyncBanner({ projectId, workspaceContext, filePath }: {
+export function CommentSyncBanner({ projectId, workspaceContext, filePath, includeBackfill = true, backfillOnly = false }: {
   projectId?: string;
   workspaceContext?: WorkspaceCollabContext | null;
   filePath?: string;
+  includeBackfill?: boolean;
+  backfillOnly?: boolean;
 }) {
-  const { t } = useI18n();
+  const [retryError, setRetryError] = useState(false);
   const [refreshToken, setRefreshToken] = useState(0);
-  const [retrying, setRetrying] = useState<'backfill' | 'align' | null>(null);
+  const [retrying, setRetrying] = useState(false);
+  const { t } = useI18n();
   const state = useCommentSyncState(projectId, workspaceContext, { filePath, refreshToken });
 
   if (!state) return null;
+  if (backfillOnly && (state.sessionMissing || state.shareStopped === true)) return null;
 
   const retryHeaders = workspaceContext ? workspaceProjectHeaders(workspaceContext) : undefined;
 
   async function retryBackfill() {
-    if (!projectId || retrying) return;
-    setRetrying('backfill');
+    setRetryError(false);
+    if (!projectId || !filePath || retrying) return;
+    setRetrying(true);
     try {
-      const query = filePath ? `?filePath=${encodeURIComponent(filePath)}` : '';
-      await fetch(`/api/projects/${encodeURIComponent(projectId)}/comment-sync-state${query}`, {
+      const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/comment-sync-state?filePath=${encodeURIComponent(filePath)}`, {
         method: 'POST', cache: 'no-store', headers: retryHeaders,
       });
+      if (!response.ok) throw new Error(`Comment backfill retry failed: ${response.status}`);
     } catch {
-      // A failed retry attempt leaves the banner exactly as it was; the next
-      // read (below) reports whatever the server actually has, never a
-      // guess derived from this request's own outcome.
+      setRetryError(true);
+      // The persisted GET state remains authoritative; background retries continue.
     } finally {
-      setRetrying(null);
+      setRetrying(false);
       setRefreshToken((token) => token + 1);
     }
   }
-
   async function retryAlign() {
     if (!projectId || retrying) return;
-    setRetrying('align');
+    setRetrying(true);
     try {
       await fetch(`/api/projects/${encodeURIComponent(projectId)}/comments/align`, {
         method: 'POST', cache: 'no-store', headers: retryHeaders,
       });
     } catch {
-      // Same rule as retryBackfill: no local guessing, just re-read.
+      // No local guessing; let the next server read decide whether it remains divergent.
     } finally {
-      setRetrying(null);
+      setRetrying(false);
       setRefreshToken((token) => token + 1);
     }
   }
 
-  if (state.sessionMissing === true) {
+  if (!backfillOnly && state.sessionMissing === true) {
     return (
       <div className={styles.banner} role="status">
         <p>{t('fileViewer.commentSync.sessionMissing')}</p>
@@ -81,7 +84,7 @@ export function CommentSyncBanner({ projectId, workspaceContext, filePath }: {
     );
   }
 
-  if (state.shareStopped === true) {
+  if (!backfillOnly && state.shareStopped === true) {
     return (
       <div className={styles.banner} role="status">
         <p>
@@ -93,33 +96,61 @@ export function CommentSyncBanner({ projectId, workspaceContext, filePath }: {
     );
   }
 
-  // Absent backfill means never attempted, not success — never rendered.
-  // A stale-revision backfill is already filtered out server-side, so any
-  // `backfill` this component sees describes the file's current publication.
-  if (state.backfill?.state === 'failed') {
+  // Pending means the current publication's comments have not finished relay.
+  // A verified reopen also warns that stale deleted/resolved comments may still
+  // be visible; neither branch blocks link copying or claims a retry has begun.
+  if (includeBackfill && state.backfill?.state === 'pending') {
+    const firstPublication = state.backfill.reopened === false;
     return (
-      <div className={styles.banner} role="status">
+      <div className={backfillOnly ? `${styles.banner} ${styles.backfillOnly}` : styles.banner} role="status">
+        {firstPublication ? (
+          <div className={styles.backfillProgress} aria-label={t('fileViewer.commentSync.backfillPendingBody')}>
+            <span className={styles.spinner} aria-hidden="true" />
+            <span>{t('fileViewer.commentSync.backfillPendingBody')}</span>
+          </div>
+        ) : (
+          <p>{t(state.backfill.reopened === true
+            ? 'fileViewer.commentSync.backfillReopenedPendingBody'
+            : 'fileViewer.commentSync.backfillPendingBody')}</p>
+        )}
+      </div>
+    );
+  }
+
+  // Absent backfill means never attempted, not success — never rendered.
+  // A stale-revision backfill is already filtered out server-side. Only a
+  // verified stop→resume receipt tags this revision `reopened`; a stable URL
+  // or UI history is not proof that visitors may still see deleted comments.
+  if (includeBackfill && state.backfill?.state === 'failed') {
+    return (
+      <div className={backfillOnly ? `${styles.banner} ${styles.backfillOnly}` : styles.banner} role="status">
         <p className={styles.title}>{t('fileViewer.commentSync.backfillFailedTitle')}</p>
-        <p>{t('fileViewer.commentSync.backfillFailedBody')}</p>
-        {/* `retryable === true` means the server keeps retrying on its own —
-            a manual button there would invite a redundant, possibly
-            conflicting attempt. Only offer one when nothing else will. */}
-        {!state.backfill.retryable ? (
-          <button type="button" className={styles.retry} onClick={() => void retryBackfill()} disabled={retrying === 'backfill'}>
-            {t('preview.retry')}
-          </button>
-        ) : null}
+        <div className={styles.retryRow}>
+          <p>{t(state.backfill.reopened === true
+            ? (state.backfill.retryable
+              ? 'fileViewer.commentSync.backfillReopenedRetryingBody'
+              : 'fileViewer.commentSync.backfillReopenedTerminalBody')
+            : (state.backfill.retryable
+              ? 'fileViewer.commentSync.backfillRetryingBody'
+              : 'fileViewer.commentSync.backfillTerminalBody'))}</p>
+          {state.backfill.retryable ? (
+            <button type="button" className={styles.retry} onClick={() => void retryBackfill()} disabled={retrying}>
+              {t('preview.retry')}
+            </button>
+          ) : null}
+        </div>
+        {retryError ? <p role="alert">{t('fileViewer.commentSync.backfillFailedBody')}</p> : null}
       </div>
     );
   }
 
   // Absent or `unknown` align is "not checked" — neither a warning nor a
   // clean bill of health. Only `diverged` is actionable.
-  if (state.align?.state === 'diverged') {
+  if (!backfillOnly && state.align?.state === 'diverged') {
     return (
       <div className={styles.banner} role="status">
         <p>{t('fileViewer.commentSync.alignFailedBody')}</p>
-        <button type="button" className={styles.retry} onClick={() => void retryAlign()} disabled={retrying === 'align'}>
+        <button type="button" className={styles.retry} onClick={() => void retryAlign()} disabled={retrying}>
           {t('preview.retry')}
         </button>
       </div>

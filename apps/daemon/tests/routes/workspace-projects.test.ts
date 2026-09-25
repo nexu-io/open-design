@@ -865,6 +865,71 @@ describe('workspace project routes', () => {
     expect(othersTeam.projects.map((item) => item.id)).not.toContain(projectId);
   });
 
+  it('S1-T2: owner team move grants another member read and comment but not file edits, then revokes access', async () => {
+    const projectId = `workspace-team-scope-flow-${Date.now()}`;
+    const projectUrl = `${baseUrl}/api/projects/${projectId}`;
+    const owner = headers('member-team-flow-owner', {
+      'x-od-workspace-type': 'team',
+      'x-od-workspace-role': 'owner',
+    });
+    const member = headers('member-team-flow-reader', { 'x-od-workspace-type': 'team' });
+    await createProject(projectId, 'Team scope authorization flow');
+    const conversation = await fetch(`${projectUrl}/conversations`, {
+      method: 'POST',
+      headers: owner,
+      body: JSON.stringify({ title: 'Team comment fixture', sessionMode: 'chat' }),
+    });
+    expect(conversation.status).toBe(200);
+    const { conversation: { id: conversationId } } = await conversation.json() as { conversation: { id: string } };
+    const move = (visibility: 'team' | 'personal') => fetch(
+      `${baseUrl}/api/workspaces/${workspaceId}/projects/${projectId}/move`,
+      { method: 'POST', headers: owner, body: JSON.stringify({ visibility }) },
+    );
+    const shared = await move('team');
+    expect(shared.status).toBe(200);
+    await expect(shared.json()).resolves.toMatchObject({ project: {
+      id: projectId,
+      visibility: 'team',
+      createdByWorkspaceMemberId: 'member-team-flow-owner',
+    } });
+    const seededFile = await fetch(`${projectUrl}/files`, {
+      method: 'POST',
+      headers: owner,
+      body: JSON.stringify({ name: 'index.html', content: '<h1>Shared team project</h1>' }),
+    });
+    expect(seededFile.status).toBe(200);
+
+    const memberProject = await fetch(projectUrl, { headers: member });
+    expect(memberProject.status).toBe(200);
+    const memberFiles = await fetch(`${projectUrl}/files`, { headers: member });
+    expect(memberFiles.status).toBe(200);
+    await expect(memberFiles.json()).resolves.toMatchObject({ files: [expect.objectContaining({ name: 'index.html' })] });
+    const commentUrl = `${projectUrl}/conversations/${conversationId}/comments`;
+    const commentPayload = JSON.stringify({
+      target: {
+        filePath: 'index.html', elementId: 'hero', selector: '[data-od-id="hero"]',
+        label: 'h1.hero', text: 'Shared team project', htmlHint: '<h1>',
+        position: { x: 0, y: 0, width: 0, height: 0 },
+      },
+      note: 'A second team member can comment without edit access',
+    });
+    const memberComment = await fetch(commentUrl, { method: 'POST', headers: member, body: commentPayload });
+    expect(memberComment.status).toBe(200);
+    await expect(memberComment.json()).resolves.toMatchObject({ comment: { note: 'A second team member can comment without edit access' } });
+    const deniedEdit = await fetch(`${projectUrl}/files`, {
+      method: 'POST',
+      headers: member,
+      body: JSON.stringify({ name: 'blocked.html', content: 'not an editor' }),
+    });
+    expect(deniedEdit.status).toBe(403);
+
+    expect((await move('personal')).status).toBe(200);
+    const revokedProject = await fetch(projectUrl, { headers: member });
+    expect(revokedProject.status).toBe(403);
+    expect((await fetch(`${projectUrl}/files`, { headers: member })).status).toBe(403);
+    expect((await fetch(commentUrl, { method: 'POST', headers: member, body: commentPayload })).status).toBe(403);
+  });
+
   it('enforces workspace project permissions on direct project and file write routes', async () => {
     const projectId = `workspace-direct-write-${Date.now()}`;
     await createProject(projectId, 'Direct write project');

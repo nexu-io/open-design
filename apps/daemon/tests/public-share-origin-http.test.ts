@@ -61,6 +61,15 @@ for (const scenario of cases) it.each([false, true])(`${scenario.name}: HTTP pub
       expect(response.status).toBe(502); expect(body).toEqual({ error: 'PUBLIC_FILE_PUBLISH_UNAVAILABLE', failure: { stage: 'push', reason: 'unknown' } });
       expect(store.getRevision(scope)).toBeNull(); expect(createShareBindingOutbox(db).list()).toEqual([]); return;
     }
+    // A stale two-step CLI can return binding_pending after advancing the
+    // remote alias. Never record or advertise that as an atomic publication.
+    if (pending) {
+      expect(response.status).toBe(502);
+      expect(body).toEqual({ error: 'PUBLIC_FILE_PUBLISH_UNAVAILABLE', failure: { stage: 'snapshot', reason: 'unknown' } });
+      expect(store.getRevision(scope)).toBeNull();
+      expect(createShareBindingOutbox(db).list()).toEqual([]);
+      return;
+    }
     expect(response.status).toBe(200); expect(uploads).toBe(1);
     expect(body.status).toBe(pending ? 'binding_pending' : 'published');
     expect(body.receipt).toEqual({ filePath: 'index.html', slug: fixtureShareSlug, publishedAt: 1, version: 1, versionId: 'version-1', entryPath: 'index.html' });
@@ -103,7 +112,7 @@ for (const scenario of cases) it.each([false, true])(`${scenario.name}: HTTP pub
   } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); runtime.dispose(); db.close(); await rm(root, { recursive: true, force: true }); }
 });
 
-it.each([false, true])('HTTP owner republish resumes stopped alias; initial resume failure=%s', async failResume => {
+it('HTTP owner republish rejects a stopped alias if the old CLI returns binding_pending', async () => {
   const root = await mkdtemp(join(tmpdir(), 'od-resume-http-'));
   const db = new Database(':memory:');
   migratePublicFilePublications(db); migrateCommentRelayOutbox(db);
@@ -114,7 +123,7 @@ it.each([false, true])('HTTP owner republish resumes stopped alias; initial resu
     seatSummary: buildWorkspaceSeatSummary({ seatLimit: 1, usedSeats: 1 }), permissions: buildWorkspacePermissions({ role: 'owner', lifecycleState: 'active' }),
   };
   const runtime = createCollabRuntime({ workspaceContext: { current: async () => context } });
-  const options = { failResume, commands: [] as string[][] };
+  const options = { commands: [] as string[][] };
   let uploads = 0;
   const fixture = createPublicSharePublishingFixture(db, store, async () => JSON.stringify({ id: `version-${++uploads}`, version: uploads }), undefined, options);
   const app = express(); app.use(express.json());
@@ -131,23 +140,138 @@ it.each([false, true])('HTTP owner republish resumes stopped alias; initial resu
     expect((await fetch(url, { method: 'DELETE', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ slug: fixtureShareSlug }) })).status).toBe(200);
     const scope = { resourceTeamId: 'w', ownerMemberId: 'owner', projectId: 'p', filePath: 'index.html' };
     expect((await fixture.readProjectShareState!(scope)).publications[0]?.status).toBe('stopped');
-    const start = options.commands.length;
-    const republished = await (await fetch(url, { method: 'POST' })).json();
-    assertJsonObject(republished);
-    expect(republished).toMatchObject({ status: failResume ? 'binding_pending' : 'published' });
-    expect(options.commands.slice(start).map(args => args.slice(0, 2))).toEqual([['resource', 'push'], ['share', 'publish'], ['share', 'resume']]);
     const revision = store.getRevision(scope);
-    if (failResume) {
-      options.failResume = false;
-      const before = options.commands.length;
-      expect(await (await fetch(url, { method: 'POST' })).json()).toMatchObject({ status: 'published', receipt: republished.receipt });
-      expect(options.commands.slice(before).map(args => args.slice(0, 2))).toEqual([['share', 'resume']]);
-      expect(store.getRevision(scope)).toEqual(revision);
-    }
+    const start = options.commands.length;
+    const response = await fetch(url, { method: 'POST' });
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({ error: 'PUBLIC_FILE_PUBLISH_UNAVAILABLE', failure: { stage: 'snapshot', reason: 'unknown' } });
+    expect(options.commands.slice(start).map(args => args.slice(0, 2))).toEqual([['resource', 'push'], ['share', 'publish']]);
+    expect(store.getRevision(scope)).toEqual(revision);
     expect(uploads).toBe(2);
-    expect((await fixture.readProjectShareState!(scope)).publications[0]).toMatchObject({ status: 'active', slug: fixtureShareSlug });
+    expect((await fixture.readProjectShareState!(scope)).publications[0]).toMatchObject({ status: 'stopped', slug: fixtureShareSlug });
     expect(createShareBindingOutbox(db).list()).toEqual([]);
   } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); runtime.dispose(); db.close(); await rm(root, { recursive: true, force: true }); }
+});
+
+it('S9-R: explicit stopped-link resume returns the original receipt without uploading a second version', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'od-original-link-resume-'));
+  const db = new Database(':memory:');
+  migratePublicFilePublications(db); migrateCommentRelayOutbox(db);
+  const store = createSqlitePublicFilePublicationStore(db);
+  const context: WorkspaceCollabContext = {
+    workspaceId: 'w', workspaceMemberId: 'owner', workspaceType: 'personal', role: 'owner',
+    memberStatus: 'active', lifecycleState: 'active', billingState: 'active', planId: null, providerMode: 'platform_credits',
+    seatSummary: buildWorkspaceSeatSummary({ seatLimit: 1, usedSeats: 1 }), permissions: buildWorkspacePermissions({ role: 'owner', lifecycleState: 'active' }),
+  };
+  const scope = { resourceTeamId: 'w', ownerMemberId: 'owner', projectId: 'p', filePath: 'index.html' };
+  const runtime = createCollabRuntime({ workspaceContext: { current: async () => context } });
+  const commands: string[][] = [];
+  let uploads = 0;
+  const fixtureOptions = { commands, failResume: false, failResumeAfterActivation: false, failComplete: false, failStop: false };
+  let catalogOwner: string | null = 'owner';
+  const fixture = createPublicSharePublishingFixture(db, store, async () => JSON.stringify({ id: `version-${++uploads}`, version: uploads }), undefined, fixtureOptions);
+  const app = express(); app.use(express.json());
+  registerCollabSyncRoutes(app, { collab: runtime, publicFilePublicationStore: store, ...fixture,
+    verifyWorkspaceRequest: async () => context,
+    resolveSharedProject: async projectId => catalogOwner ? ({ projectId, ownerMemberId: catalogOwner, sharedAt: new Date(1).toISOString() }) : null,
+    resolveProjectDir: () => root,
+  });
+  const server = createServer(app);
+  try {
+    await writeFile(join(root, 'index.html'), '<h1>Original version</h1>');
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address(); if (!address || typeof address === 'string') throw new Error('no listener');
+    const url = `http://127.0.0.1:${address.port}/api/projects/p/files/index.html/publish-public`;
+    const early = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode: 'resume' }) });
+    expect(early.status).toBe(409);
+    expect(commands).toEqual([]);
+    const first = await (await fetch(url, { method: 'POST' })).json(); assertJsonObject(first);
+    expect(first).toMatchObject({ status: 'published', receipt: { version: 1, versionId: 'version-1', slug: fixtureShareSlug } });
+    expect((await fetch(url, { method: 'DELETE', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ slug: fixtureShareSlug }) })).status).toBe(200);
+    expect(store.get(scope)).toBeNull();
+    // The saved snapshot, not local content after stop, must be reopened.
+    await writeFile(join(root, 'index.html'), '<h1>Changed locally, not published</h1>');
+    const before = commands.length;
+    fixtureOptions.failResume = true;
+    const failed = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode: 'resume' }) });
+    expect(failed.status).toBe(502);
+    expect(store.get(scope)).toBeNull();
+    expect(uploads).toBe(1);
+    expect((await fixture.readProjectShareState!(scope)).publications[0]?.status).toBe('stopped');
+    fixtureOptions.failResume = false;
+    fixtureOptions.failComplete = true;
+    const uncompensated = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode: 'resume' }) });
+    expect(uncompensated.status).toBe(502);
+    expect(await uncompensated.json()).toMatchObject({ error: 'PUBLIC_SHARE_RESUME_RECORD_UNAVAILABLE' });
+    expect(store.get(scope)).toBeNull();
+    expect((await fixture.readProjectShareState!(scope)).publications[0]?.status).toBe('stopped');
+    fixtureOptions.failStop = true;
+    const manual = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode: 'resume' }) });
+    expect(manual.status).toBe(502);
+    expect(await manual.json()).toMatchObject({ error: { code: 'PUBLIC_FILE_MANUAL_REVOKE_REQUIRED' } });
+    expect(store.get(scope)).toBeNull();
+    expect((await fixture.readProjectShareState!(scope)).publications[0]?.status).toBe('active');
+    const stopUrl = url.replace('index.html', 'other.html');
+    const stopHeaders = { 'content-type': 'application/json' };
+    expect((await fetch(stopUrl, { method: 'DELETE', headers: stopHeaders, body: JSON.stringify({ slug: fixtureShareSlug }) })).status).toBe(404);
+    expect((await fetch(url, { method: 'DELETE', headers: stopHeaders, body: JSON.stringify({ slug: 'different-alias' }) })).status).toBe(404);
+    catalogOwner = null;
+    expect((await fetch(url, { method: 'DELETE', headers: stopHeaders, body: JSON.stringify({ slug: fixtureShareSlug }) })).status).toBe(403);
+    catalogOwner = 'other-member';
+    expect((await fetch(url, { method: 'DELETE', headers: stopHeaders, body: JSON.stringify({ slug: fixtureShareSlug }) })).status).toBe(403);
+    expect((await fixture.readProjectShareState!(scope)).publications[0]?.status).toBe('active');
+    catalogOwner = 'owner';
+    fixtureOptions.failStop = false;
+    expect((await fetch(url, { method: 'DELETE', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ slug: fixtureShareSlug }) })).status).toBe(200);
+    expect((await fixture.readProjectShareState!(scope)).publications[0]?.status).toBe('stopped');
+    fixtureOptions.failComplete = false;
+    const resumedResponse = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode: 'resume' }) });
+    const resumed = await resumedResponse.json(); assertJsonObject(resumed);
+    expect(resumedResponse.status).toBe(200);
+    expect(resumed).toMatchObject({ status: 'published', receipt: first.receipt });
+    expect(commands.slice(before).map(args => args.slice(0, 2))).toEqual([
+      ['share', 'resume-existing'], ['share', 'stop'], ['share', 'resume-existing'], ['share', 'stop'],
+      ['share', 'resume-existing'], ['share', 'stop'], ['share', 'stop'], ['share', 'resume-existing'],
+    ]);
+    expect(uploads).toBe(1);
+    expect(store.get(scope)?.slug).toBe(fixtureShareSlug);
+    const after = commands.length;
+    expect((await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode: 'resume' }) })).status).toBe(409);
+    expect(commands).toHaveLength(after);
+    expect((await fixture.readProjectShareState!(scope)).publications[0]).toMatchObject({ status: 'active', slug: fixtureShareSlug });
+    // Simulate a crash after the remote stop was confirmed but before OD
+    // deleted its local revision. The remote stopped state wins, without
+    // exposing a dead link as active or re-uploading changed local bytes.
+    expect((await fetch(url, { method: 'DELETE', headers: stopHeaders, body: JSON.stringify({ slug: fixtureShareSlug }) })).status).toBe(200);
+    store.set(scope, { url: first.url as string, slug: fixtureShareSlug, fileName: 'index.html' });
+    const staleState = await (await fetch(url)).json(); assertJsonObject(staleState);
+    expect(staleState).toMatchObject({ publication: null, status: 'stopped' });
+    fixtureOptions.failResumeAfterActivation = true;
+    const lostResponse = await fetch(url, { method: 'POST', headers: stopHeaders, body: JSON.stringify({ mode: 'resume' }) });
+    expect(lostResponse.status).toBe(502);
+    expect(await lostResponse.json()).toMatchObject({ error: 'PUBLIC_SHARE_RESUME_UNAVAILABLE' });
+    expect((await fixture.readProjectShareState!(scope)).publications[0]?.status).toBe('stopped');
+    expect(store.get(scope)).toBeNull();
+    fixtureOptions.failStop = true;
+    const ambiguousResponse = await fetch(url, { method: 'POST', headers: stopHeaders, body: JSON.stringify({ mode: 'resume' }) });
+    expect(ambiguousResponse.status).toBe(502);
+    expect(await ambiguousResponse.json()).toMatchObject({ error: { code: 'PUBLIC_FILE_MANUAL_REVOKE_REQUIRED',
+      data: { projectId: 'p', slug: fixtureShareSlug, fileName: 'index.html' } } });
+    expect((await fixture.readProjectShareState!(scope)).publications[0]?.status).toBe('active');
+    expect(store.get(scope)).toBeNull();
+    fixtureOptions.failStop = false;
+    fixtureOptions.failResumeAfterActivation = false;
+    expect((await fetch(url, { method: 'DELETE', headers: stopHeaders, body: JSON.stringify({ slug: fixtureShareSlug }) })).status).toBe(200);
+    expect((await fixture.readProjectShareState!(scope)).publications[0]?.status).toBe('stopped');
+    const staleResumeResponse = await fetch(url, { method: 'POST', headers: stopHeaders, body: JSON.stringify({ mode: 'resume' }) });
+    expect(staleResumeResponse.status).toBe(200);
+    expect(await staleResumeResponse.json()).toMatchObject({ status: 'published', receipt: first.receipt });
+    expect(uploads).toBe(1);
+    expect(store.get(scope)?.slug).toBe(fixtureShareSlug);
+  } finally {
+    server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve()));
+    runtime.dispose(); db.close(); await rm(root, { recursive: true, force: true });
+  }
 });
 
 it('migrates legacy required URL without losing revision, then retains a no-URL publication', () => {
@@ -162,4 +286,59 @@ it('migrates legacy required URL without losing revision, then retains a no-URL 
     store.set(scope, { slug: fixtureShareSlug, fileName: 'f', url: null });
     expect(store.get(scope)?.url).toBeNull(); expect(store.getRevision(scope)?.slug).toBe(fixtureShareSlug);
   } finally { db.close(); }
+});
+
+it('repeating the existing publish POST pushes a new version even with unchanged source', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'od-share-repeat-publish-'));
+  const db = new Database(':memory:');
+  migratePublicFilePublications(db); migrateCommentRelayOutbox(db);
+  const store = createSqlitePublicFilePublicationStore(db);
+  const context: WorkspaceCollabContext = {
+    workspaceId: 'w', workspaceMemberId: 'owner', workspaceType: 'personal', role: 'owner',
+    memberStatus: 'active', lifecycleState: 'active', billingState: 'active', planId: null, providerMode: 'platform_credits',
+    seatSummary: buildWorkspaceSeatSummary({ seatLimit: 1, usedSeats: 1 }),
+    permissions: buildWorkspacePermissions({ role: 'owner', lifecycleState: 'active' }),
+  };
+  const scope = { resourceTeamId: 'w', ownerMemberId: 'owner', projectId: 'p', filePath: 'index.html' };
+  const runtime = createCollabRuntime({ workspaceContext: { current: async () => context } });
+  const commands: string[][] = [];
+  const pushedVersionIds: string[] = [];
+  const fixture = createPublicSharePublishingFixture(db, store, async args => {
+    expect(args[0]).toBe('push');
+    const id = `version-${pushedVersionIds.length + 1}`;
+    pushedVersionIds.push(id);
+    return JSON.stringify({ id, version: pushedVersionIds.length });
+  }, undefined, { commands });
+  const app = express(); app.use(express.json());
+  registerCollabSyncRoutes(app, { collab: runtime, publicFilePublicationStore: store, ...fixture,
+    verifyWorkspaceRequest: async () => context,
+    resolveSharedProject: async projectId => ({ projectId, ownerMemberId: 'owner', sharedAt: new Date(1).toISOString() }),
+    resolveProjectDir: () => root,
+  });
+  const server = createServer(app);
+  try {
+    await writeFile(join(root, 'index.html'), '<h1>Unchanged</h1>');
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address(); if (!address || typeof address === 'string') throw new Error('no listener');
+    const url = `http://127.0.0.1:${address.port}/api/projects/p/files/index.html/publish-public`;
+    const first = await fetch(url, { method: 'POST' });
+    expect(first.status).toBe(200);
+    expect(await first.json()).toMatchObject({ status: 'published' });
+    const firstMutationCommands = commands.filter(args => args[0] === 'resource' || (args[0] === 'share' && args[1] === 'publish'));
+    expect(firstMutationCommands.map(args => args.slice(0, 2))).toEqual([['resource', 'push'], ['share', 'publish']]);
+    expect(pushedVersionIds).toEqual(['version-1']);
+
+    const commandsBeforeRepeat = commands.length;
+    const repeated = await fetch(url, { method: 'POST' });
+    expect(repeated.status).toBe(200);
+    expect(await repeated.json()).toMatchObject({ status: 'published' });
+    const repeatedMutations = commands.slice(commandsBeforeRepeat).filter(args => args[0] === 'resource' || (args[0] === 'share' && args[1] === 'publish'));
+    // Characterize the existing publish POST; a future Update no-op requires its own defined contract.
+    expect(repeatedMutations.map(args => args.slice(0, 2))).toEqual([['resource', 'push'], ['share', 'publish']]);
+    expect(pushedVersionIds).toEqual(['version-1', 'version-2']);
+    expect(store.getRevision(scope)?.token).toBeTruthy();
+  } finally {
+    server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve()));
+    runtime.dispose(); db.close(); await rm(root, { recursive: true, force: true });
+  }
 });

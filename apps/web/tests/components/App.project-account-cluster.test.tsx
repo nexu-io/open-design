@@ -14,6 +14,8 @@ import { useEffect } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../../src/App';
+import { AMR_LOGIN_STATUS_EVENT } from '../../src/components/amrLoginPolling';
+import { fetchVelaLoginStatus } from '../../src/providers/daemon';
 import type { Route } from '../../src/router';
 import type { AppConfig, Project } from '../../src/types';
 import type {
@@ -53,6 +55,7 @@ const useRouteMock = vi.fn<() => Route>(() => PROJECT_ROUTE);
 const useProjectRouteWorkspaceContextMock = vi.hoisted(() => vi.fn());
 const projectViewMountedMock = vi.hoisted(() => vi.fn());
 const projectViewUnmountedMock = vi.hoisted(() => vi.fn());
+const projectViewLoginUpdateRequestMock = vi.hoisted(() => vi.fn());
 
 vi.mock('../../src/router', () => ({
   navigate: vi.fn(),
@@ -69,17 +72,30 @@ vi.mock('../../src/collab/useProjectRouteWorkspaceContext', async (importOrigina
   };
 });
 
+vi.mock('../../src/providers/daemon', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/providers/daemon')>();
+  return { ...actual, fetchVelaLoginStatus: vi.fn().mockResolvedValue(null) };
+});
+
 vi.mock('../../src/components/EntryView', () => ({
   EntryView: () => <div>Entry view</div>,
 }));
 
+vi.mock('../../src/components/CloudSignInTip', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../../src/components/CloudSignInTip')>(),
+  CloudSignInTip: ({ onLoginSuccess }: { onLoginSuccess?: () => void }) => (
+    <button onClick={() => onLoginSuccess?.()}>Sign in to update</button>
+  ),
+}));
+
 vi.mock('../../src/components/ProjectView', () => ({
-  ProjectView: () => {
+  ProjectView: ({ onObservedPublicShareLink, loginUpdateRequest }: { loginUpdateRequest?: unknown; onObservedPublicShareLink?: (share: { projectId: string; filePath: string; slug: string; url: string; status: 'active'; workspaceId: string; workspaceMemberId: string; authorizationScopeKey: string; freshness: 'outdated' }) => void }) => {
+    projectViewLoginUpdateRequestMock(loginUpdateRequest ?? null);
     useEffect(() => {
       projectViewMountedMock();
       return () => projectViewUnmountedMock();
     }, []);
-    return <div>Project view</div>;
+    return <div>Project view<button onClick={() => onObservedPublicShareLink?.({ projectId: 'project-1', filePath: 'index.html', slug: 'prior', url: 'https://example.invalid/p/prior', status: 'active', workspaceId: 'ws-project', workspaceMemberId: 'wm-project', authorizationScopeKey: 'workspace:ws-project:wm-project', freshness: 'outdated' })}>Observe active share</button></div>;
   },
 }));
 
@@ -375,6 +391,91 @@ describe('project route — floating account cluster', () => {
       expect(screen.queryByTestId('entry-top-right-github')).toBeNull();
       expect(screen.queryByTestId('entry-nav-account')).toBeNull();
       expect(screen.queryByTestId('entry-nav-account-updater')).toBeNull();
+    });
+  });
+
+  it('S13 retains only an observed active same-project link for copy when a bound route signs out', async () => {
+    vi.mocked(fetchVelaLoginStatus).mockResolvedValue({
+      loggedIn: true, profile: 'default', configPath: '', user: { id: 'account-1', email: 'owner@example.invalid' },
+    });
+    const view = render(<App />);
+    expect(await screen.findByText('Project view')).toBeTruthy();
+    await waitFor(() => expect(fetchVelaLoginStatus).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: 'Observe active share' }));
+
+    vi.mocked(fetchVelaLoginStatus).mockResolvedValue({ loggedIn: false, profile: 'default', configPath: '', user: null });
+    useProjectRouteWorkspaceContextMock.mockReturnValue({
+      context: null, loading: false, failure: 'unavailable', retry: vi.fn(),
+    });
+    window.dispatchEvent(new Event(AMR_LOGIN_STATUS_EVENT));
+    view.rerender(<App />);
+    await waitFor(() => expect(screen.queryByText('Project view')).toBeNull());
+    expect(screen.getByText('https://example.invalid/p/prior')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /copy share link/i })).toBeEnabled();
+    const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    try {
+      fireEvent.click(screen.getByRole('button', { name: /copy share link/i }));
+      await waitFor(() => expect(writeText).toHaveBeenCalledExactlyOnceWith('https://example.invalid/p/prior'));
+    } finally {
+      if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard);
+      else Reflect.deleteProperty(navigator, 'clipboard');
+    }
+    // Same-project explicit file route B must revoke A even with ProjectView unmounted.
+    useRouteMock.mockReturnValue({ ...PROJECT_ROUTE, fileName: 'other.html' });
+    view.rerender(<App />);
+    await waitFor(() => expect(screen.queryByText('https://example.invalid/p/prior')).toBeNull());
+    useRouteMock.mockReturnValue({ ...PROJECT_ROUTE, fileName: 'index.html' });
+    view.rerender(<App />);
+    expect(screen.queryByText('https://example.invalid/p/prior')).toBeNull();
+    useRouteMock.mockReturnValue({ ...PROJECT_ROUTE, projectId: 'another-project' });
+    view.rerender(<App />);
+    expect(screen.queryByText('https://example.invalid/p/prior')).toBeNull();
+  });
+
+  it.each([
+    ['same account', 'account-1', true, false],
+    ['different account', 'account-2', false, false],
+    ['same account after file B then A', 'account-1', false, true],
+  ] as const)('S13 explicit sign-in-to-update resumes only for %s', async (_label, accountId, allowed, switchFile) => {
+    vi.mocked(fetchVelaLoginStatus).mockResolvedValue({
+      loggedIn: true, profile: 'default', configPath: '', user: { id: 'account-1', email: 'owner@example.invalid' },
+    });
+    const view = render(<App />);
+    await screen.findByText('Project view');
+    fireEvent.click(screen.getByRole('button', { name: 'Observe active share' }));
+    vi.mocked(fetchVelaLoginStatus).mockResolvedValue({ loggedIn: false, profile: 'default', configPath: '', user: null });
+    useProjectRouteWorkspaceContextMock.mockReturnValue({
+      context: null, loading: false, failure: 'unavailable', retry: vi.fn(),
+    });
+    window.dispatchEvent(new Event(AMR_LOGIN_STATUS_EVENT));
+    view.rerender(<App />);
+    await screen.findByText('https://example.invalid/p/prior');
+    expect(screen.getByRole('button', { name: /sign in to update/i })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: /sign in to update/i }));
+    if (switchFile) {
+      useRouteMock.mockReturnValue({ ...PROJECT_ROUTE, fileName: 'other.html' });
+      view.rerender(<App />);
+      await waitFor(() => expect(screen.queryByText('https://example.invalid/p/prior')).toBeNull());
+      useRouteMock.mockReturnValue({ ...PROJECT_ROUTE, fileName: 'index.html' });
+      view.rerender(<App />);
+    }
+    vi.mocked(fetchVelaLoginStatus).mockResolvedValue({
+      loggedIn: true, profile: 'default', configPath: '', user: { id: accountId, email: 'owner@example.invalid' },
+    });
+    useProjectRouteWorkspaceContextMock.mockReturnValue({
+      context: PROJECT_WORKSPACE_CONTEXT, loading: false, retry: vi.fn(),
+    });
+    window.dispatchEvent(new Event(AMR_LOGIN_STATUS_EVENT));
+    view.rerender(<App />);
+    await screen.findByText('Project view');
+    await waitFor(() => {
+      const lastRequest = projectViewLoginUpdateRequestMock.mock.lastCall?.[0];
+      if (allowed) expect(lastRequest).toEqual(expect.objectContaining({
+        accountId: 'account-1', link: expect.objectContaining({ slug: 'prior', freshness: 'outdated' }),
+      }));
+      else expect(lastRequest).toBeNull();
     });
   });
 

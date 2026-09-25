@@ -9,21 +9,52 @@
   line-height: 18px;
   overflow-wrap: anywhere;
 }
+.backfillOnly {
+  margin: 4px 12px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
 .banner p { margin: 0; }
 .banner p + p { margin-block-start: 4px; }
-.title { font-weight: 600; color: var(--text, #333333); }
-.login { margin-block-start: 4px; }
-.login button { text-decoration: underline; }
-.retry {
-  margin-block-start: 8px;
+ .title { font-weight: 600; color: var(--text, #333333); }
+ .backfillProgress {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 6px;
+  background: #29292d;
+  color: #fff;
+  font-weight: 500;
+}
+ .spinner {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  border: 1.5px solid rgb(255 255 255 / 45%);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: commentSyncSpin 0.8s linear infinite;
+}
+ @keyframes commentSyncSpin { to { transform: rotate(360deg); } }
+ .login { margin-block-start: 4px; }
+ .login button { text-decoration: underline; }
+ .retryRow { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-block-start: 4px; }
+ .retryRow p { flex: 1; }
+ .retry {
+  flex: none;
+  min-width: 88px;
   height: 32px;
   padding: 0 10px;
   border: none;
   border-radius: 6px;
-  background: var(--bg-muted, #EDEDF0);
-  color: var(--text, #333333);
+  background: #eaf1ff;
+  color: #2670e8;
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
 }
-.retry:disabled { opacity: 0.6; cursor: default; }
+ .retry:disabled { opacity: 0.6; cursor: default; }

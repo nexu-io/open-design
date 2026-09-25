@@ -8,7 +8,7 @@ import path from 'node:path';
 import { publishReservedVelaShareVersion, publishVelaShareVersion } from '../src/collab/vela-share-publish.js';
 import { runPinnedVelaCommand } from '../src/collab/vela-pinned-command.js';
 
-it.skipIf(!process.env.OD_TEST_VELA_BIN)('keeps one reserved alias through failed publish, SQLite restart, update and partial binding', async () => {
+it.skipIf(!process.env.OD_TEST_VELA_BIN)('keeps one reserved alias through atomic failure, SQLite restart, update and rejected binding', async () => {
   const binary = process.env.OD_TEST_VELA_BIN!;
   const root = await mkdtemp(path.join(tmpdir(), 'od-reserved-publish-'));
   const cliRoot = path.join(root, 'cli');
@@ -19,14 +19,12 @@ it.skipIf(!process.env.OD_TEST_VELA_BIN)('keeps one reserved alias through faile
     const body = JSON.parse(Buffer.concat(chunks).toString()) as Record<string, unknown>;
     calls.push({ url: req.url, method: req.method, workspace: req.headers['x-vela-workspace-id'], body });
     res.setHeader('content-type', 'application/json');
-    if (req.url === '/api/v1/resources/resource/shares') {
+    if (req.url === '/api/v1/resources/resource/shares/bound') {
       publishes.push(body);
-      if (publishes.length === 1) { res.statusCode = 503; res.end('{}'); return; }
-      res.end(JSON.stringify({ slug: body.slug, version: publishes.length, publishedAt: 1234 + publishes.length,
+      if (publishes.length !== 2) { res.statusCode = publishes.length === 1 ? 503 : 409; res.end('{"error":"share_binding_stopped"}'); return; }
+      res.statusCode = 201;
+      res.end(JSON.stringify({ slug: body.slug, version: 1, publishedAt: 1235,
         entryPath: body.entryPath, snapshot: { slug: 'immutable-snapshot', versionId: body.versionId } }));
-    } else if (req.url === '/api/v1/collab/shares') {
-      res.statusCode = publishes.length === 3 ? 403 : 200;
-      res.end(JSON.stringify({ projectId: 'project', slug: body.slug, status: 'active' }));
     } else { res.statusCode = 404; res.end('{}'); }
   });
   try {
@@ -41,31 +39,25 @@ it.skipIf(!process.env.OD_TEST_VELA_BIN)('keeps one reserved alias through faile
         const pending = publishReservedVelaShareVersion({ scope: { resourceTeamId: 'workspace', ownerMemberId: 'owner', projectId: 'project', filePath: 'pages/local.html' },
           resourceId: 'resource', entryPath: 'index.html', name: 'Design', versionId: `immutable-${attempt}` }, createShareAliasReservations(db),
         args => runPinnedVelaCommand({ args, session, dataRoot: cliRoot, workspaceId: 'workspace', configuredEnv: { VELA_BIN: binary } }));
-        if (attempt === 1) await expect(pending).rejects.toThrow('PUBLIC_SHARE_PUBLISH_FAILED');
+        if (attempt !== 2) await expect(pending).rejects.toThrow('PUBLIC_SHARE_PUBLISH_FAILED');
         else {
           const result = await pending;
           slug ??= result.receipt.slug;
-          expect(result.receipt).toEqual({ filePath: 'pages/local.html', slug, version: attempt,
-            versionId: `immutable-${attempt}`, publishedAt: 1234 + attempt, entryPath: 'index.html' });
-          expect(result.status).toBe(attempt === 2 ? 'published' : 'binding_pending');
-          if (result.status === 'binding_pending') expect(result.binding).toEqual({ retrying: false, code: 'FORBIDDEN' });
+          expect(result).toEqual({ status: 'published', receipt: { filePath: 'pages/local.html', slug, version: 1,
+            versionId: 'immutable-2', publishedAt: 1235, entryPath: 'index.html' } });
         }
       } finally { db.close(); }
       expect(await readdir(cliRoot)).toEqual([]);
     }
-    expect(calls).toHaveLength(5); expect(publishes).toHaveLength(3);
+    expect(calls).toHaveLength(3); expect(publishes).toHaveLength(3);
     expect(publishes.map(body => body.slug)).toEqual([slug, slug, slug]);
     expect(new Set(publishes.map(body => body.sourceKey)).size).toBe(1);
     expect(publishes.map(body => body.versionId)).toEqual(['immutable-1', 'immutable-2', 'immutable-3']);
-    let registeredVersion = 2;
-    for (const call of calls) {
+    for (const [index, call] of calls.entries()) {
       expect(call.method).toBe('POST'); expect(call.workspace).toBe('workspace');
-      if (call.url === '/api/v1/collab/shares') {
-        expect(call.body).toEqual({ projectId: 'project', slug, sourceFilePath: 'pages/local.html',
-          expectedResourceId: 'resource', expectedVersion: registeredVersion,
-          expectedVersionId: `immutable-${registeredVersion}` });
-        registeredVersion += 1;
-      }
+      expect(call.url).toBe('/api/v1/resources/resource/shares/bound');
+      expect(call.body).toEqual({ projectId: 'project', sourceFilePath: 'pages/local.html', slug,
+        sourceKey: publishes[0]?.sourceKey, entryPath: 'index.html', name: 'Design', versionId: `immutable-${index + 1}` });
     }
   } finally {
     server.closeAllConnections(); if (server.listening) await new Promise<void>(resolve => server.close(() => resolve()));
@@ -74,7 +66,7 @@ it.skipIf(!process.env.OD_TEST_VELA_BIN)('keeps one reserved alias through faile
 });
 
 // Explicit source-built executable only; never use a developer's login/CLI.
-it.skipIf(!process.env.OD_TEST_VELA_BIN).each([200, 403])('publishes a stable alias with real Go CLI, binding HTTP=%s', async (bindingStatus) => {
+it.skipIf(!process.env.OD_TEST_VELA_BIN).each([201, 403])('publishes a stable alias with real Go CLI, atomic HTTP=%s', async (publishStatus) => {
   const binary = process.env.OD_TEST_VELA_BIN;
   if (!binary) throw new Error('explicit test CLI required');
   const root = await mkdtemp(path.join(tmpdir(), 'od-go-publish-'));
@@ -86,10 +78,9 @@ it.skipIf(!process.env.OD_TEST_VELA_BIN).each([200, 403])('publishes a stable al
     for await (const chunk of req) chunks.push(Buffer.from(chunk));
     requests.push({ url: req.url, method: req.method, bearer: req.headers.authorization, workspace: req.headers['x-vela-workspace-id'], body: JSON.parse(Buffer.concat(chunks).toString('utf8')) });
     res.setHeader('content-type', 'application/json');
-    if (req.url === '/api/v1/resources/resource/shares') res.end(JSON.stringify(receipt));
-    else if (req.url === '/api/v1/collab/shares') {
-      res.statusCode = bindingStatus;
-      res.end(JSON.stringify(bindingStatus === 200 ? { projectId: 'project', slug: 'stable', status: 'active' } : { error: 'forbidden', message: 'synthetic private diagnostic' }));
+    if (req.url === '/api/v1/resources/resource/shares/bound') {
+      res.statusCode = publishStatus;
+      res.end(JSON.stringify(publishStatus === 201 ? receipt : { error: 'forbidden', message: 'synthetic private diagnostic' }));
     } else { res.statusCode = 404; res.end('{}'); }
   });
   try {
@@ -98,15 +89,13 @@ it.skipIf(!process.env.OD_TEST_VELA_BIN).each([200, 403])('publishes a stable al
     if (!address || typeof address === 'string') throw new Error('missing listener');
     const session = { profile: 'test' as const, apiUrl: `http://127.0.0.1:${address.port}`, controlKey: 'synthetic-key', user: null, configMtimeMs: null };
     const pending = publishVelaShareVersion(input, args => runPinnedVelaCommand({ args, session, dataRoot: root, workspaceId: input.workspaceId, configuredEnv: { VELA_BIN: binary } }));
-    expect(await pending).toEqual({
-      status: bindingStatus === 200 ? 'published' : 'binding_pending',
+    if (publishStatus === 201) expect(await pending).toEqual({ status: 'published',
       receipt: { filePath: input.filePath, slug: 'stable', version: 2, versionId: input.versionId, publishedAt: 1234, entryPath: 'index.html' },
-      ...(bindingStatus === 200 ? {} : { binding: { retrying: false, code: 'FORBIDDEN' } }),
     });
-    // Confirmed content survives binding failure, without repeating either mutation.
+    else await expect(pending).rejects.toThrow(/^PUBLIC_SHARE_PUBLISH_FAILED$/);
+    // A failed binding cannot have committed a new alias version: the CLI sends one atomic request.
     expect(requests).toEqual([
-      { url: '/api/v1/resources/resource/shares', method: 'POST', bearer: 'Bearer synthetic-key', workspace: 'workspace', body: { slug: 'stable', sourceKey: 'index.html', entryPath: 'index.html', name: 'Design', versionId: 'immutable-upload' } },
-      { url: '/api/v1/collab/shares', method: 'POST', bearer: 'Bearer synthetic-key', workspace: 'workspace', body: { projectId: 'project', slug: 'stable', sourceFilePath: 'pages/local.html', expectedResourceId: 'resource', expectedVersion: 2, expectedVersionId: 'immutable-upload' } },
+      { url: '/api/v1/resources/resource/shares/bound', method: 'POST', bearer: 'Bearer synthetic-key', workspace: 'workspace', body: { projectId: 'project', sourceFilePath: 'pages/local.html', slug: 'stable', sourceKey: 'index.html', entryPath: 'index.html', name: 'Design', versionId: 'immutable-upload' } },
     ]);
     expect(await readdir(root)).toEqual([]);
   } finally {

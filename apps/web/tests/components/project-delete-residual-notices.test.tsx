@@ -16,17 +16,45 @@ function Harness() {
   const state = useDeletedShareNotices(context);
   return <><button onClick={() => void deleteProject('gone', context, state.capture('gone', context))}>Delete</button><DeletedShareNotices state={state} /></>;
 }
-it('delivers a real delete response to distinct per-file UI without automatic retries', async () => {
+it('renders real deletion failures as global Toast, queues each file, and never retries automatically', async () => {
   request.mockImplementation(async () => Response.json({ ok: true, shareResiduals: rows }));
   render(<Harness />);
   await act(async () => fireEvent.click(screen.getByText('Delete')));
-  expect(screen.getByText('The original file was deleted')).toBeVisible();
-  expect(within(screen.getByRole('status')).getByText('auto.html')).toBeVisible();
-  expect(within(screen.getByRole('alert')).getByText('manual.html')).toBeVisible();
-  expect(within(screen.getByRole('status').closest('li')!).queryByRole('button')).toBeNull();
-  expect(screen.getAllByRole('button', { name: 'Retry disabling' })).toHaveLength(1);
+  const failure = screen.getByRole('alert');
+  expect(failure).toHaveClass('od-toast', 'tone-error', 'placement-top');
+  expect(within(failure).getByText(/manual\.html.*link could not be disabled/i)).toBeVisible();
+  expect(within(failure).getByRole('button', { name: 'Retry disabling' })).toBeEnabled();
+  expect(screen.queryByText('auto.html')).toBeNull();
+  fireEvent.click(within(failure).getByRole('button', { name: /dismiss/i }));
+  expect(within(screen.getByRole('status')).getByText(/auto\.html.*being disabled/i)).toBeVisible();
+  expect(screen.queryByRole('button', { name: 'Retry disabling' })).toBeNull();
   expect(request).toHaveBeenCalledTimes(1);
   expect(request).toHaveBeenCalledWith('/api/projects/gone', expect.objectContaining({ method: 'DELETE' }));
+});
+it('S14-ERR manual Toast action retries the exact deleted file and clears only a confirmed stop', async () => {
+  request.mockResolvedValueOnce(Response.json({ ok: true, shareResiduals: [rows[1]] }))
+    .mockResolvedValueOnce(Response.json({ status: 'stopped', projectId: 'gone',
+      filePath: 'manual.html', slug: 'stable-manual' }));
+  render(<Harness />);
+  await act(async () => fireEvent.click(screen.getByText('Delete')));
+  expect(request).toHaveBeenCalledTimes(1);
+  await act(async () => fireEvent.click(within(screen.getByRole('alert')).getByRole('button', { name: 'Retry disabling' })));
+  expect(request).toHaveBeenCalledTimes(2);
+  expect(request).toHaveBeenLastCalledWith('/api/public-file-stops/retry', expect.objectContaining({
+    method: 'POST', body: JSON.stringify({ projectId: 'gone', filePath: 'manual.html', slug: 'stable-manual' }),
+  }));
+  expect(screen.queryByRole('alert')).toBeNull();
+});
+it('S14-ERR failed manual retry stays visible until dismissed and never fires a second request', async () => {
+  request.mockResolvedValueOnce(Response.json({ ok: true, shareResiduals: [rows[1]] }))
+    .mockResolvedValueOnce(Response.json({ error: 'stop not confirmed' }, { status: 503 }));
+  render(<Harness />);
+  await act(async () => fireEvent.click(screen.getByText('Delete')));
+  await act(async () => fireEvent.click(within(screen.getByRole('alert')).getByRole('button', { name: 'Retry disabling' })));
+  expect(within(screen.getByRole('alert')).getByText(/manual\.html.*link could not be disabled/i)).toBeVisible();
+  fireEvent.click(within(screen.getByRole('alert')).getByRole('button', { name: /dismiss/i }));
+  expect(screen.queryByRole('alert')).toBeNull();
+  expect(request).toHaveBeenCalledTimes(2);
 });
 it('retains concurrent deletion groups, delivers once, and removes only a confirmed stopped file', async () => {
   const { result } = renderHook(() => useDeletedShareNotices(context));

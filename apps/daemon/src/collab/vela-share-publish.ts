@@ -36,9 +36,9 @@ export async function publishReservedVelaShareVersion(
   }, run);
 }
 
-/** Go share publish advances the alias and registers the project binding.
- * Accept only a receipt for this exact alias, entry and immutable upload.
- * This returns content metadata, not proof of lifecycle status or reachability.
+/** Go share publish atomically advances the alias and binds the project.
+ * Accept only a committed receipt for this exact alias, entry and immutable upload.
+ * A two-step CLI binary returning binding_pending cannot satisfy this contract.
  */
 export async function publishVelaShareVersion(
   input: VelaSharePublishInput,
@@ -81,13 +81,8 @@ export async function publishVelaShareVersion(
       || confirmed.publishedAt !== record.publishedAt) throw new Error('inconsistent receipt');
     const receipt = { filePath: request.filePath, slug: request.slug, version: record.version,
       versionId: request.versionId, publishedAt: record.publishedAt, entryPath: request.entryPath };
-    if (record.status === 'published') return { status: 'published', receipt };
-    if (record.status !== 'binding_pending') throw new Error('unknown publish outcome');
-    const binding = record.binding;
-    const code = binding && typeof binding === 'object' && 'code' in binding ? binding.code : undefined;
-    const safeCodes = ['UNAUTHENTICATED', 'FORBIDDEN', 'SHARE_NOT_FOUND', 'SHARE_GENERATION_MISMATCH', 'SHARE_BINDING_UNAVAILABLE', 'SHARE_BINDING_STOPPED'];
-    return { status: 'binding_pending', receipt, binding: { retrying: false,
-      code: typeof code === 'string' && safeCodes.includes(code) ? code : 'SHARE_BINDING_UNAVAILABLE' } };
+    if (record.status !== 'published') throw new Error('unconfirmed publish outcome');
+    return { status: 'published', receipt };
   } catch {
     // Child diagnostics can include upstream bodies. No fallback to snapshots
     // or implicit retry: the remote pointer may already have advanced.

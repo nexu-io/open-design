@@ -4,13 +4,14 @@
  * Coverage for the three additional CommentSyncBanner branches restored
  * alongside K8: `shareStopped`, `backfill` (K2), and `align`. Each must
  * respect the hard semantics documented on `CommentSyncState`:
- * - `backfill` absent, `pending`, or `succeeded` never renders a warning.
+ * - `backfill` absent or succeeded never renders a warning; pending is
+ *   informational, but verified reopened pending warns about stale visible comments.
  * - `align` absent or `unknown` never renders as aligned OR as a problem.
  * - `shareStopped: null` (could not be read) never renders as stopped or as
  *   healthy.
  */
 
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CommentSyncState, WorkspaceCollabContext } from '@open-design/contracts';
 import { buildWorkspacePermissions, buildWorkspaceSeatSummary } from '@open-design/contracts';
@@ -47,7 +48,7 @@ function renderBanner(state: CommentSyncState | null) {
 }
 
 beforeEach(() => { fetchMock.mockReset(); vi.stubGlobal('fetch', fetchMock); resetWorkspaceAccountGeneration(); });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); resetWorkspaceAccountGeneration(); });
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); resetWorkspaceAccountGeneration(); });
 
 describe('CommentSyncBanner — restored branches', () => {
   it('renders nothing when the state is unknown (null)', async () => {
@@ -86,27 +87,93 @@ describe('CommentSyncBanner — restored branches', () => {
     expect(screen.queryByRole('status')).toBeNull();
   });
 
-  it('does not render a backfill warning while backfill is pending or already succeeded', async () => {
-    renderBanner({ ...base, backfill: { state: 'pending', filePath: 'index.html', publicationRevision: 'r1', retryable: false } });
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+  it('renders first-publication backfill as progress and clears it when sync succeeds', async () => {
+    vi.useFakeTimers();
+    fetchMock.mockImplementationOnce(async () => Response.json({ ...base, backfill: { state: 'pending', filePath: 'index.html', publicationRevision: 'r1', retryable: true, reopened: false } }))
+      .mockImplementationOnce(async () => Response.json({ ...base, backfill: { state: 'succeeded', filePath: 'index.html', publicationRevision: 'r1', retryable: false, reopened: false } }));
+    render(<I18nProvider initial="zh-CN"><CommentSyncBanner projectId="p" workspaceContext={personalContext} filePath="index.html" /></I18nProvider>);
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(screen.getByText('正在同步已有评论，访客暂时可能看不到。')).toBeInTheDocument();
+    expect(document.querySelector('[class*="backfillProgress"]')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '重试' })).toBeNull();
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
     expect(screen.queryByRole('status')).toBeNull();
-    cleanup();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('K5 shows stale deleted/resolved risk while a verified reopened revision is still pending', async () => {
+    renderBanner({ ...base, backfill: { state: 'pending', filePath: 'index.html', publicationRevision: 'resume-r2', retryable: false, reopened: true } });
+    await screen.findByText(/已删除或已处理的评论/);
+    expect(screen.queryByText('正在同步已有评论，访客暂时可能看不到。')).toBeNull();
+    expect(screen.queryByRole('button', { name: '重试' })).toBeNull();
+  });
+
+  it('shows no pending banner for an immediately succeeded empty-comment backfill', async () => {
     renderBanner({ ...base, backfill: { state: 'succeeded', filePath: 'index.html', publicationRevision: 'r1', retryable: false } });
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     expect(screen.queryByRole('status')).toBeNull();
   });
 
-  it('renders the approved backfill-failed copy with a retry button when not auto-retrying', async () => {
-    renderBanner({ ...base, backfill: { state: 'failed', filePath: 'index.html', publicationRevision: 'r1', retryable: false } });
-    await screen.findByText('分享已发布');
-    await screen.findByText('已有评论暂未同步，访客暂时看不到');
+  it('polls an automatically retrying backfill until success without focus or manual retry', async () => {
+    vi.useFakeTimers();
+    fetchMock.mockImplementationOnce(async () => Response.json({ ...base, backfill: { state: 'failed', filePath: 'index.html', publicationRevision: 'r1', retryable: true } }))
+      .mockImplementationOnce(async () => Response.json({ ...base, backfill: { state: 'succeeded', filePath: 'index.html', publicationRevision: 'r1', retryable: false } }));
+    render(<I18nProvider initial="zh-CN"><CommentSyncBanner projectId="p" workspaceContext={personalContext} filePath="index.html" /></I18nProvider>);
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(screen.getByText('分享已发布')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '重试' })).toBeInTheDocument();
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it('omits the manual retry button when the server is already auto-retrying (retryable: true)', async () => {
-    renderBanner({ ...base, backfill: { state: 'failed', filePath: 'index.html', publicationRevision: 'r1', retryable: true } });
+  it('shows an accurate terminal backfill outcome without offering a manual retry', async () => {
+    renderBanner({ ...base, backfill: { state: 'failed', filePath: 'index.html', publicationRevision: 'r1', retryable: false } });
     await screen.findByText('分享已发布');
+    await screen.findByText('部分已有评论未能同步到分享页，系统不会自动重试。分享链接仍可使用。');
     expect(screen.queryByRole('button', { name: '重试' })).toBeNull();
+  });
+
+  it('K5 terminal failure retains the original link-risk warning without pretending automatic retry continues', async () => {
+    renderBanner({ ...base, backfill: { state: 'failed', filePath: 'index.html', publicationRevision: 'resume-r2', retryable: false, reopened: true } });
+    await screen.findByText(/已删除或已处理的评论/);
+    expect(screen.getByText(/自动重试已停止/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '重试' })).toBeNull();
+  });
+
+  it('keeps retry disabled while the POST is pending and reports a failed POST', async () => {
+    let release!: (response: Response) => void;
+    const post = new Promise<Response>(resolve => { release = resolve; });
+    fetchMock.mockImplementationOnce(async () => Response.json({ ...base, backfill: { state: 'failed', filePath: 'index.html', publicationRevision: 'r1', retryable: true } }))
+      .mockImplementationOnce(async (_input, init) => {
+        expect(init?.method).toBe('POST');
+        return post;
+      })
+      .mockImplementation(async () => Response.json({ ...base, backfill: { state: 'failed', filePath: 'index.html', publicationRevision: 'r1', retryable: true } }));
+    render(<I18nProvider initial="zh-CN"><CommentSyncBanner projectId="p" workspaceContext={personalContext} filePath="index.html" /></I18nProvider>);
+    const retry = await screen.findByRole('button', { name: '重试' });
+    await act(async () => { retry.click(); });
+    expect(retry).toBeDisabled();
+    await act(async () => { release(new Response(null, { status: 503 })); });
+    expect(await screen.findByRole('alert')).toHaveTextContent('已有评论暂未同步，访客暂时看不到');
+    expect(screen.getByRole('button', { name: '重试' })).toBeEnabled();
+  });
+  it('offers retry for retryable failed backfill and reloads server state after POST', async () => {
+    fetchMock.mockImplementationOnce(async () => Response.json({ ...base, backfill: { state: 'failed', filePath: 'index.html', publicationRevision: 'r1', retryable: true } }))
+      .mockImplementationOnce(async (_input, init) => {
+        expect(init?.method).toBe('POST');
+        return Response.json({ ...base, backfill: { state: 'failed', filePath: 'index.html', publicationRevision: 'r1', retryable: true } });
+      })
+      .mockImplementationOnce(async () => Response.json({ ...base, backfill: { state: 'succeeded', filePath: 'index.html', publicationRevision: 'r1', retryable: false } }));
+    render(<I18nProvider initial="zh-CN"><CommentSyncBanner projectId="p" workspaceContext={personalContext} filePath="index.html" /></I18nProvider>);
+    const retry = await screen.findByRole('button', { name: '重试' });
+    await act(async () => { retry.click(); });
+    expect(fetchMock.mock.calls.map(([url, options]) => [url, options?.method])).toEqual([
+      ['/api/projects/p/comment-sync-state?filePath=index.html', undefined],
+      ['/api/projects/p/comment-sync-state?filePath=index.html', 'POST'],
+      ['/api/projects/p/comment-sync-state?filePath=index.html', undefined],
+    ]);
+    await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
   });
 
   it('does not render an align warning for absent or unknown align (not checked is not a verdict)', async () => {
