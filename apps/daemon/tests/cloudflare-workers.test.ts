@@ -51,11 +51,13 @@ describe('cloudflare-workers config', () => {
       expect(saved.tokenMask).toBe(SAVED_CLOUDFLARE_WORKERS_TOKEN_MASK);
       expect(saved.accountId).toBe('acct_test');
       expect(saved.scriptName).toBe('my-site');
+      expect(saved.credentialMode).toBe('token');
       expect(saved).not.toHaveProperty('token');
 
       const raw = await readCloudflareWorkersConfig();
       expect(raw.token).toBe('tok-secret');
       expect(raw.accountId).toBe('acct_test');
+      expect(raw.credentialMode).toBe('token');
 
       // writing the mask keeps the old token
       await writeCloudflareWorkersConfig({ token: SAVED_CLOUDFLARE_WORKERS_TOKEN_MASK });

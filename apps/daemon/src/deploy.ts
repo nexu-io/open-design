@@ -6,6 +6,14 @@ import { randomUUID } from 'node:crypto';
 import { hash as blake3Hash } from 'blake3-wasm';
 import { listFiles, readProjectFile, validateProjectPath } from './projects.js';
 import { findRealTagOffset, HTML_TAG_PATTERNS } from '@open-design/contracts/runtime/html-injection-points';
+import { cloudflareRedirectUri, refreshCloudflareToken } from './integrations/cloudflare-oauth.js';
+import {
+  getCloudflareOAuthToken,
+  isCloudflareOAuthTokenExpired,
+  setCloudflareOAuthToken,
+  type StoredCloudflareOAuthToken,
+} from './integrations/cloudflare-tokens.js';
+
 export const VERCEL_PROVIDER_ID = 'vercel-self';
 export const CLOUDFLARE_PAGES_PROVIDER_ID = 'cloudflare-pages';
 export const CLOUDFLARE_WORKERS_PROVIDER_ID = 'cloudflare-workers';
@@ -26,6 +34,10 @@ type DeployConfig = {
   cloudflarePages?: CloudflarePagesConfigHints | undefined;
   scriptName?: string | undefined;
   compatibilityDate?: string | undefined;
+  credentialMode?: string | undefined;
+  clientId?: string | undefined;
+  redirectUri?: string | undefined;
+  scopes?: string[] | undefined;
   bindings?: Array<{ type: string; name: string; bucketName?: string; databaseName?: string; id?: string }> | undefined;
   customDomain?: { hostname: string; zoneId: string } | undefined;
 };
@@ -232,6 +244,12 @@ export async function readCloudflareWorkersConfig(): Promise<DeployConfig> {
       accountId: typeof parsed.accountId === 'string' ? parsed.accountId : '',
       scriptName: typeof parsed.scriptName === 'string' ? parsed.scriptName : '',
       compatibilityDate: typeof parsed.compatibilityDate === 'string' ? parsed.compatibilityDate : '',
+      credentialMode: typeof parsed.credentialMode === 'string' ? parsed.credentialMode : 'token',
+      clientId: typeof parsed.clientId === 'string' ? parsed.clientId : '',
+      redirectUri: typeof parsed.redirectUri === 'string' ? parsed.redirectUri : '',
+      scopes: Array.isArray(parsed.scopes)
+        ? parsed.scopes.filter((s: unknown): s is string => typeof s === 'string')
+        : [],
       bindings: Array.isArray(parsed.bindings) ? parsed.bindings : [],
       customDomain: normalizeCloudflareWorkersCustomDomain(parsed.customDomain),
     };
@@ -242,6 +260,10 @@ export async function readCloudflareWorkersConfig(): Promise<DeployConfig> {
         accountId: '',
         scriptName: '',
         compatibilityDate: '',
+        credentialMode: 'token',
+        clientId: '',
+        redirectUri: '',
+        scopes: [],
       };
     }
     throw err;
@@ -260,10 +282,16 @@ export async function writeCloudflareWorkersConfig(input: Partial<DeployConfig>)
     scriptName: typeof input?.scriptName === 'string' ? input.scriptName.trim() : current.scriptName,
     compatibilityDate:
       typeof input?.compatibilityDate === 'string' ? input.compatibilityDate.trim() : current.compatibilityDate,
+    credentialMode: typeof input?.credentialMode === 'string' ? input.credentialMode : current.credentialMode,
+    clientId: typeof input?.clientId === 'string' ? input.clientId.trim() : current.clientId,
+    redirectUri: typeof input?.redirectUri === 'string' ? input.redirectUri.trim() : current.redirectUri,
+    scopes: Array.isArray(input?.scopes) ? input.scopes : current.scopes,
     bindings: Array.isArray(input?.bindings) ? input.bindings : current.bindings,
     customDomain: input?.customDomain !== undefined ? input.customDomain : current.customDomain,
   };
-  if (!next.token) {
+  // In 'oauth' mode the API token is optional — the deploy uses the rotating
+  // OAuth access token instead. Only require a static token in 'token' mode.
+  if (next.credentialMode !== 'oauth' && !next.token) {
     throw new DeployError('Cloudflare API token is required.', 400, undefined, 'CFW_TOKEN_REQUIRED');
   }
   if (!next.accountId) throw new DeployError('Cloudflare account ID is required.', 400, undefined, 'CFW_ACCOUNT_ID_REQUIRED');
@@ -281,11 +309,192 @@ export function publicCloudflareWorkersConfig(config: Partial<DeployConfig>) {
     accountId: config?.accountId || '',
     scriptName: config?.scriptName || '',
     compatibilityDate: config?.compatibilityDate || '',
+    credentialMode: config?.credentialMode || 'token',
+    clientId: config?.clientId || '',
+    redirectUri: config?.redirectUri || '',
+    scopes: Array.isArray(config?.scopes) ? config.scopes : [],
     bindings: config?.bindings || [],
     customDomain: config?.customDomain,
     target: 'preview',
   };
   return body;
+}
+
+/** Directory that holds 'cloudflare-oauth-tokens.json' — the same base dir as
+ * the Workers deploy config, so the OAuth credentials live next to
+ * 'cloudflare-workers.json'. */
+export function cloudflareOAuthTokensDir(): string {
+  return process.env.OD_USER_STATE_DIR || path.join(os.homedir(), '.open-design');
+}
+
+/** Refresh an access token this many ms before its recorded expiry, so a
+ * deploy racing the boundary never sends a token that is about to lapse. */
+const CLOUDFLARE_OAUTH_EXPIRY_SKEW_MS = 60_000;
+
+/** In-process single-flight mutex, keyed by dataDir. Concurrent deploys that
+ * all find an expired token share one refresh instead of stampeding the token
+ * endpoint. */
+const cloudflareOAuthRefreshLocks = new Map<string, Promise<string>>();
+
+/**
+ * Resolve the live Cloudflare credential for a deploy. In 'token' mode this is
+ * the static API token; in 'oauth' mode it is the rotating access token from
+ * 'cloudflare-oauth-tokens.json', refreshed when it is within the expiry skew.
+ * The read -> refresh -> persist sequence is single-flight, and the file is
+ * re-read before every refresh so a sibling process's rotation is never
+ * clobbered.
+ */
+export async function getCloudflareAccessToken(
+  providerId: DeployProviderId = CLOUDFLARE_WORKERS_PROVIDER_ID,
+): Promise<string> {
+  if (providerId !== CLOUDFLARE_WORKERS_PROVIDER_ID) {
+    throw new DeployError(
+      'getCloudflareAccessToken only supports the Cloudflare Workers provider.',
+      400,
+      undefined,
+      'CFW_UNSUPPORTED_PROVIDER',
+    );
+  }
+  const config = await readCloudflareWorkersConfig();
+  if (config.credentialMode !== 'oauth') {
+    if (!config.token) {
+      throw new DeployError(
+        'Cloudflare API token is required.',
+        400,
+        undefined,
+        'CFW_TOKEN_REQUIRED',
+      );
+    }
+    return config.token;
+  }
+
+  const dataDir = cloudflareOAuthTokensDir();
+  // Fast path: a fresh token skips the mutex entirely.
+  const current = await getCloudflareOAuthToken(dataDir);
+  if (
+    current &&
+    !isCloudflareOAuthTokenExpired(
+      current,
+      Date.now(),
+      CLOUDFLARE_OAUTH_EXPIRY_SKEW_MS,
+    )
+  ) {
+    return current.accessToken;
+  }
+
+  // Single-flight refresh: concurrent deploy calls await the same promise.
+  const inflight = cloudflareOAuthRefreshLocks.get(dataDir);
+  if (inflight) return inflight;
+  const task = refreshCloudflareOAuthAccessToken(config, dataDir);
+  cloudflareOAuthRefreshLocks.set(dataDir, task);
+  try {
+    return await task;
+  } finally {
+    if (cloudflareOAuthRefreshLocks.get(dataDir) === task) {
+      cloudflareOAuthRefreshLocks.delete(dataDir);
+    }
+  }
+}
+
+/** Run the read -> refresh -> persist sequence for a dataDir. The caller holds
+ * the single-flight lock for this dataDir. */
+async function refreshCloudflareOAuthAccessToken(
+  config: DeployConfig,
+  dataDir: string,
+): Promise<string> {
+  // Re-read under the lock: a sibling process may have rotated the token while
+  // this caller was waiting for the mutex.
+  const current = await getCloudflareOAuthToken(dataDir);
+  if (current) {
+    assertCloudflareOAuthIdentity(current, config);
+    if (
+      !isCloudflareOAuthTokenExpired(
+        current,
+        Date.now(),
+        CLOUDFLARE_OAUTH_EXPIRY_SKEW_MS,
+      )
+    ) {
+      return current.accessToken;
+    }
+  }
+  if (!current?.refreshToken) {
+    throw new DeployError(
+      'Cloudflare OAuth token is expired and has no refresh token — reconnect Cloudflare.',
+      401,
+      undefined,
+      'CFW_OAUTH_RECONNECT_REQUIRED',
+    );
+  }
+  const clientId = (config.clientId ?? '').trim();
+  if (!clientId) {
+    throw new DeployError(
+      'Cloudflare OAuth client ID is required to refresh the access token.',
+      400,
+      undefined,
+      'CFW_OAUTH_CLIENT_ID_REQUIRED',
+    );
+  }
+
+  const refreshed = await refreshCloudflareToken({
+    clientId,
+    refreshToken: current.refreshToken,
+  });
+
+  // Re-read before persisting: if the credential generation changed while the
+  // refresh HTTP call was in flight, another writer owns the newer credential.
+  // Discard this result and adopt theirs instead of clobbering it.
+  const latest = await getCloudflareOAuthToken(dataDir);
+  if (latest && latest.generation !== current.generation) {
+    assertCloudflareOAuthIdentity(latest, config);
+    return latest.accessToken;
+  }
+
+  const stored: StoredCloudflareOAuthToken = {
+    accessToken: refreshed.access_token,
+    tokenType: refreshed.token_type ?? current.tokenType,
+    clientId: current.clientId ?? clientId,
+    generation: (current.generation ?? 0) + 1,
+    savedAt: Date.now(),
+  };
+  if (current.redirectUri) stored.redirectUri = current.redirectUri;
+  if (current.accountId) stored.accountId = current.accountId;
+  if (refreshed.refresh_token) stored.refreshToken = refreshed.refresh_token;
+  else if (current.refreshToken) stored.refreshToken = current.refreshToken;
+  if (refreshed.scope) stored.scope = refreshed.scope;
+  else if (current.scope) stored.scope = current.scope;
+  if (typeof refreshed.expires_in === 'number') {
+    stored.expiresAt = Date.now() + refreshed.expires_in * 1000;
+  }
+  await setCloudflareOAuthToken(dataDir, stored);
+  return stored.accessToken;
+}
+
+/** Fail closed when the persisted client/redirect identity no longer matches
+ * the local config — refreshing with a mismatched registration would fail (or
+ * mint a token for the wrong client), so we demand a reconnect. */
+function assertCloudflareOAuthIdentity(
+  token: StoredCloudflareOAuthToken,
+  config: DeployConfig,
+): void {
+  const clientId = (config.clientId ?? '').trim();
+  if (clientId && token.clientId && token.clientId !== clientId) {
+    throw new DeployError(
+      'Cloudflare OAuth credentials were issued to a different OAuth client — reconnect Cloudflare.',
+      400,
+      undefined,
+      'CFW_OAUTH_RECONNECT_REQUIRED',
+    );
+  }
+  const redirectUri =
+    (config.redirectUri ?? '').trim() || cloudflareRedirectUri();
+  if (token.redirectUri && token.redirectUri !== redirectUri) {
+    throw new DeployError(
+      'Cloudflare OAuth redirect URI changed — reconnect Cloudflare.',
+      400,
+      undefined,
+      'CFW_OAUTH_RECONNECT_REQUIRED',
+    );
+  }
 }
 
 export async function readDeployConfig(providerId: DeployProviderId = VERCEL_PROVIDER_ID) {

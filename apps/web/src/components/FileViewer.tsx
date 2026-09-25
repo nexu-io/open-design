@@ -122,9 +122,12 @@ import {
   createSocialSharePayload,
   DEFAULT_DEPLOY_PROVIDER_ID,
   deployProjectFile,
+  disconnectCloudflareOAuth,
+  fetchCloudflareAuthStatus,
   fetchCloudflarePagesZones,
   fetchCloudflareD1Databases,
   fetchCloudflareR2Buckets,
+  fetchCloudflareWorkersOAuthStart,
   fetchCloudflareWorkersZones,
   fetchDeployConfig,
   fetchProjectDeployments,
@@ -148,6 +151,7 @@ import {
   restoreProjectFileVersion,
   updateDeployConfig,
   type WebDeployConfigResponse,
+  type WebCloudflareAuthStatus,
   type WebCloudflarePagesDeploySelection,
   type WebCloudflareWorkersBinding,
   type WebCloudflareWorkersCapabilities,
@@ -8010,11 +8014,77 @@ function HtmlViewer({
   const [cloudflareD1Databases, setCloudflareD1Databases] = useState<Array<{ name: string; id: string }>>([]);
   const [cloudflareResourcesLoading, setCloudflareResourcesLoading] = useState(false);
   const [cloudflareResourcesError, setCloudflareResourcesError] = useState<string | null>(null);
+  const [cloudflareWorkersCredentialMode, setCloudflareWorkersCredentialMode] = useState<'token' | 'oauth'>('token');
+  const [cloudflareWorkersClientId, setCloudflareWorkersClientId] = useState('');
+  const [cloudflareWorkersRedirectUri, setCloudflareWorkersRedirectUri] = useState('');
   const [cloudflareWorkersZones, setCloudflareWorkersZones] = useState<Array<{ id: string; name: string; status?: string }>>([]);
   const [cloudflareWorkersCustomDomainHostname, setCloudflareWorkersCustomDomainHostname] = useState('');
   const [cloudflareWorkersCustomDomainZoneId, setCloudflareWorkersCustomDomainZoneId] = useState('');
+  const [cloudflareWorkersOAuthError, setCloudflareWorkersOAuthError] = useState<string | null>(null);
+  const [cloudflareWorkersOAuthStatus, setCloudflareWorkersOAuthStatus] = useState<WebCloudflareAuthStatus | null>(null);
+  const [cloudflareWorkersOAuthBusy, setCloudflareWorkersOAuthBusy] = useState<'idle' | 'starting' | 'awaiting' | 'disconnecting' | 'refreshing'>('idle');
+  const [cloudflareWorkersOAuthPendingAuthUrl, setCloudflareWorkersOAuthPendingAuthUrl] = useState<string | null>(null);
+  const [cloudflareWorkersOAuthNow, setCloudflareWorkersOAuthNow] = useState(() => Date.now());
+  const cloudflareWorkersOAuthPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const deployProviderLoadSeqRef = useRef(0);
 
+  // Bound-account status, derived once per render. `expiresAt` is an epoch-ms
+  // timestamp from GET /api/cloudflare/auth/status; `now` is re-ticked below so
+  // the countdown and the <5 min warning stay current without a page reload.
+  const cloudflareWorkersOAuthConnected = Boolean(cloudflareWorkersOAuthStatus?.connected);
+  const cloudflareWorkersOAuthExpiresAt = cloudflareWorkersOAuthStatus?.expiresAt;
+  const cloudflareWorkersOAuthExpired = Boolean(
+    typeof cloudflareWorkersOAuthExpiresAt === 'number' &&
+    Number.isFinite(cloudflareWorkersOAuthExpiresAt) &&
+    cloudflareWorkersOAuthNow >= cloudflareWorkersOAuthExpiresAt,
+  );
+  const cloudflareWorkersOAuthMinutesRemaining =
+    typeof cloudflareWorkersOAuthExpiresAt === 'number' && Number.isFinite(cloudflareWorkersOAuthExpiresAt)
+      ? Math.max(0, Math.floor((cloudflareWorkersOAuthExpiresAt - cloudflareWorkersOAuthNow) / 60000))
+      : null;
+  const cloudflareWorkersOAuthExpiringSoon = Boolean(
+    typeof cloudflareWorkersOAuthExpiresAt === 'number' &&
+    Number.isFinite(cloudflareWorkersOAuthExpiresAt) &&
+    !cloudflareWorkersOAuthExpired &&
+    cloudflareWorkersOAuthExpiresAt - cloudflareWorkersOAuthNow < 5 * 60 * 1000,
+  );
+  const cloudflareWorkersOAuthDeployRequired =
+    deployProviderId === CLOUDFLARE_WORKERS_PROVIDER_ID && cloudflareWorkersCredentialMode === 'oauth';
+  const cloudflareWorkersOAuthDeployReady =
+    !cloudflareWorkersOAuthDeployRequired || (cloudflareWorkersOAuthConnected && !cloudflareWorkersOAuthExpired);
+
+  // Recompute the expiry countdown once a minute while the deploy surface is
+  // mounted, so "expires in N min" and the <5 min warning stay fresh.
+  useEffect(() => {
+    if (!workspaceActive) return;
+    const tick = setInterval(() => setCloudflareWorkersOAuthNow(Date.now()), 60000);
+    return () => clearInterval(tick);
+  }, [workspaceActive]);
+
+  // Load the bound-account status whenever the Workers provider is selected in
+  // OAuth mode (and again if the user flips the credential mode back to oauth).
+  useEffect(() => {
+    if (!workspaceActive) return;
+    if (deployProviderId !== CLOUDFLARE_WORKERS_PROVIDER_ID || cloudflareWorkersCredentialMode !== 'oauth') return;
+    let cancelled = false;
+    void fetchCloudflareAuthStatus().then((status) => {
+      if (!cancelled && status) setCloudflareWorkersOAuthStatus(status);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceActive, deployProviderId, cloudflareWorkersCredentialMode]);
+
+  // Stop the in-flight loopback poll if the whole component unmounts (the poll
+  // also self-stops on success or its 5-minute cap).
+  useEffect(() => {
+    return () => {
+      if (cloudflareWorkersOAuthPollRef.current) {
+        clearInterval(cloudflareWorkersOAuthPollRef.current);
+        cloudflareWorkersOAuthPollRef.current = null;
+      }
+    };
+  }, []);
   const deployTokenInputRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
     if (!workspaceActive || !deployModalOpen) return;
@@ -9390,8 +9460,12 @@ function HtmlViewer({
     setCloudflareWorkersScriptName(matchingConfig?.scriptName || '');
     setCloudflareWorkersCompatibilityDate(matchingConfig?.compatibilityDate || '');
     setCloudflareWorkersBindings(matchingConfig?.bindings ?? []);
+    setCloudflareWorkersCredentialMode(matchingConfig?.credentialMode === 'oauth' ? 'oauth' : 'token');
+    setCloudflareWorkersClientId(matchingConfig?.clientId || '');
+    setCloudflareWorkersRedirectUri(matchingConfig?.redirectUri || '');
     setCloudflareWorkersCustomDomainHostname(matchingConfig?.customDomain?.hostname || '');
     setCloudflareWorkersCustomDomainZoneId(matchingConfig?.customDomain?.zoneId || '');
+    setCloudflareWorkersOAuthError(null);
     setCloudflareWorkersCapabilities(null);
     setCloudflareWorkersCapabilitiesError(null);
     // The daemon's GET /api/deploy/config response currently hardcodes `target: 'preview'`
@@ -9434,6 +9508,9 @@ function HtmlViewer({
         accountId: cloudflareAccountId.trim(),
         scriptName: cloudflareWorkersScriptName.trim(),
         compatibilityDate: cloudflareWorkersCompatibilityDate.trim(),
+        credentialMode: cloudflareWorkersCredentialMode,
+        clientId: cloudflareWorkersClientId.trim(),
+        redirectUri: cloudflareWorkersRedirectUri.trim(),
         bindings: cloudflareWorkersBindings,
         customDomain: buildCloudflareWorkersCustomDomain(),
       };
@@ -14463,11 +14540,17 @@ function HtmlViewer({
     setDeployError(null);
     setDeployActionToast(null);
     try {
+      const cloudflareWorkersUsesOAuth =
+        deployProviderId === CLOUDFLARE_WORKERS_PROVIDER_ID &&
+        cloudflareWorkersCredentialMode === 'oauth';
       if (
         deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ||
         deployProviderId === CLOUDFLARE_WORKERS_PROVIDER_ID
       ) {
-        if (!deployToken.trim()) {
+        // OAuth mode has no paste-able token: the daemon stores the token it
+        // receives from Cloudflare during the sign-in redirect. Only require a
+        // typed token when the user chose the token-paste credential mode.
+        if (!cloudflareWorkersUsesOAuth && !deployToken.trim()) {
           setDeployActionToast(t('fileViewer.cloudflareApiTokenRequired'));
           deployTokenInputRef.current?.focus();
           return null;
@@ -14534,6 +14617,122 @@ function HtmlViewer({
     return { hostname, zoneId };
   }
 
+  function stopCloudflareWorkersOAuthPoll() {
+    if (cloudflareWorkersOAuthPollRef.current) {
+      clearInterval(cloudflareWorkersOAuthPollRef.current);
+      cloudflareWorkersOAuthPollRef.current = null;
+    }
+  }
+
+  async function refreshCloudflareWorkersOAuthStatus(): Promise<WebCloudflareAuthStatus | null> {
+    const status = await fetchCloudflareAuthStatus();
+    if (status) setCloudflareWorkersOAuthStatus(status);
+    return status;
+  }
+
+  function startCloudflareWorkersOAuthPoll() {
+    stopCloudflareWorkersOAuthPoll();
+    const startedAt = Date.now();
+    cloudflareWorkersOAuthPollRef.current = setInterval(() => {
+      void (async () => {
+        const status = await refreshCloudflareWorkersOAuthStatus();
+        if (status?.connected) {
+          setCloudflareWorkersOAuthBusy('idle');
+          setCloudflareWorkersOAuthError(null);
+          setCloudflareWorkersOAuthPendingAuthUrl(null);
+          if (status.accountId) setCloudflareAccountId(status.accountId);
+          stopCloudflareWorkersOAuthPoll();
+        }
+      })();
+      if (Date.now() - startedAt >= 5 * 60 * 1000) {
+        stopCloudflareWorkersOAuthPoll();
+        setCloudflareWorkersOAuthBusy('idle');
+      }
+    }, 2000);
+  }
+
+  async function connectCloudflareWorkersOAuth() {
+    setCloudflareWorkersOAuthError(null);
+    setCloudflareWorkersOAuthPendingAuthUrl(null);
+    setCloudflareWorkersOAuthBusy('starting');
+    try {
+      const response = await fetchCloudflareWorkersOAuthStart({
+        clientId: cloudflareWorkersClientId.trim(),
+        redirectUri: cloudflareWorkersRedirectUri.trim(),
+      });
+      if (!response?.authorizeUrl) {
+        setCloudflareWorkersOAuthBusy('idle');
+        setCloudflareWorkersOAuthError(t('fileViewer.cloudflareWorkersOauthConnectFailed'));
+        return;
+      }
+      setCloudflareWorkersOAuthPendingAuthUrl(response.authorizeUrl);
+      setCloudflareWorkersOAuthBusy('awaiting');
+      startCloudflareWorkersOAuthPoll();
+      try {
+        // noopener,noreferrer: the Cloudflare authorize tab needs no reference
+        // back to this surface; the loopback listener delivers the token and the
+        // SPA polls /auth/status below.
+        window.open(response.authorizeUrl, '_blank', 'noopener,noreferrer');
+      } catch {
+        // Fallback anchor is rendered while pending.
+      }
+    } catch (err) {
+      setCloudflareWorkersOAuthBusy('idle');
+      setCloudflareWorkersOAuthError(
+        err instanceof Error ? err.message : t('fileViewer.cloudflareWorkersOauthConnectFailed'),
+      );
+    }
+  }
+
+  async function disconnectCloudflareWorkersOAuth() {
+    setCloudflareWorkersOAuthBusy('disconnecting');
+    setCloudflareWorkersOAuthError(null);
+    // Optimistic: flip to disconnected immediately so the UI reads as signed
+    // out while the daemon wipes the token.
+    setCloudflareWorkersOAuthStatus((current) => (current ? { ...current, connected: false } : { connected: false }));
+    await disconnectCloudflareOAuth();
+    const status = await fetchCloudflareAuthStatus();
+    setCloudflareWorkersOAuthStatus(status);
+    setCloudflareWorkersOAuthBusy('idle');
+    if (status?.connected) {
+      setCloudflareWorkersOAuthError(t('mcp.disconnectFailed'));
+    } else {
+      setCloudflareWorkersOAuthPendingAuthUrl(null);
+    }
+  }
+
+  async function refreshCloudflareWorkersOAuthInPlace() {
+    setCloudflareWorkersOAuthBusy('refreshing');
+    setCloudflareWorkersOAuthError(null);
+    try {
+      const status = await fetchCloudflareAuthStatus();
+      if (status) {
+        setCloudflareWorkersOAuthStatus(status);
+        if (status.connected && status.accountId) setCloudflareAccountId(status.accountId);
+        if (status.connected) {
+          setCloudflareWorkersOAuthPendingAuthUrl(null);
+          stopCloudflareWorkersOAuthPoll();
+        }
+      }
+      // Re-fetch config + capabilities, but re-sync ONLY the oauth/auth fields -
+      // never the user's in-progress scriptName / compatibilityDate / bindings.
+      const config = await fetchDeployConfig(deployProviderId);
+      if (config && config.providerId === deployProviderId) {
+        setCloudflareWorkersCredentialMode(config.credentialMode === 'oauth' ? 'oauth' : 'token');
+        setCloudflareWorkersClientId(config.clientId || '');
+        setCloudflareWorkersRedirectUri(config.redirectUri || '');
+        setDeployConfig(config);
+      }
+      await loadCloudflareWorkersCapabilities(config && config.providerId === deployProviderId ? config : deployConfig);
+    } catch (err) {
+      setCloudflareWorkersOAuthError(
+        err instanceof Error ? err.message : t('fileViewer.cloudflareWorkersOauthConnectFailed'),
+      );
+    } finally {
+      setCloudflareWorkersOAuthBusy('idle');
+    }
+  }
+
   async function deployToSelectedProvider() {
     setDeploying(true);
     setDeployPhase('deploying');
@@ -14588,6 +14787,9 @@ function HtmlViewer({
       const cloudflareWorkersChanged = deployProviderId === CLOUDFLARE_WORKERS_PROVIDER_ID && (
         cloudflareWorkersScriptName.trim() !== (deployConfig?.scriptName || '') ||
         cloudflareWorkersCompatibilityDate.trim() !== (deployConfig?.compatibilityDate || '') ||
+        cloudflareWorkersCredentialMode !== (deployConfig?.credentialMode || 'token') ||
+        cloudflareWorkersClientId.trim() !== (deployConfig?.clientId || '') ||
+        cloudflareWorkersRedirectUri.trim() !== (deployConfig?.redirectUri || '') ||
         JSON.stringify(cloudflareWorkersBindings) !== JSON.stringify(deployConfig?.bindings ?? []) ||
         JSON.stringify(buildCloudflareWorkersCustomDomain() ?? null) !== JSON.stringify(deployConfig?.customDomain ?? null)
       );
@@ -15970,6 +16172,8 @@ function HtmlViewer({
   const activeCloudflareCustomDomain = activeCloudflarePages?.customDomain;
   const deployProvider = getDeployProviderOption(deployProviderId);
   const deployProviderLabel = t(deployProvider.labelKey);
+  const isCloudflareWorkersOAuthMode =
+    deployProviderId === CLOUDFLARE_WORKERS_PROVIDER_ID && cloudflareWorkersCredentialMode === 'oauth';
   const selectedCloudflareZone = cloudflareZones.find((zone) => zone.id === cloudflareZoneId) ?? null;
   const normalizedCloudflarePrefix = normalizeCloudflareDomainPrefixInput(cloudflareDomainPrefix);
   const cloudflareHostnamePreview =
@@ -18569,6 +18773,7 @@ function HtmlViewer({
                   </select>
                 </label>
               ) : null}
+              {!isCloudflareWorkersOAuthMode ? (
               <>
               <div className="field-label-row deploy-token-label-row">
                 <label htmlFor="deploy-token" className="deploy-field-title required">{t(deployProvider.tokenLabelKey)}</label>
@@ -18611,6 +18816,7 @@ function HtmlViewer({
                 </div>
               ) : null}
               </>
+              ) : null}
               {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID || deployProviderId === CLOUDFLARE_WORKERS_PROVIDER_ID ? (
                 <>
                   <div className="deploy-field-grid single-field">
@@ -18685,6 +18891,164 @@ function HtmlViewer({
                     </>
                   ) : (
                     <>
+                      <div className="deploy-field-grid single-field">
+                        <label>
+                          <span className="deploy-field-title">{t('fileViewer.cloudflareWorkersOauthCredentialMode')}</span>
+                          <select
+                            title="Paste a Cloudflare API token, or sign in with Cloudflare OAuth."
+                            value={cloudflareWorkersCredentialMode}
+                            onChange={(e) => setCloudflareWorkersCredentialMode(e.target.value === 'oauth' ? 'oauth' : 'token')}
+                          >
+                            <option value="token">{t('fileViewer.cloudflareWorkersOauthCredentialModeToken')}</option>
+                            <option value="oauth">{t('fileViewer.cloudflareWorkersOauthCredentialModeOauth')}</option>
+                          </select>
+                        </label>
+                      </div>
+                      {cloudflareWorkersCredentialMode === 'oauth' ? (
+                        <>
+                          <div className="deploy-field-grid">
+                            <label>
+                              <span className="deploy-field-title required">{t('fileViewer.cloudflareWorkersOauthClientId')}</span>
+                              <input
+                                value={cloudflareWorkersClientId}
+                                onChange={(e) => setCloudflareWorkersClientId(e.target.value)}
+                              />
+                            </label>
+                            <label>
+                              <span className="deploy-field-title required">{t('fileViewer.cloudflareWorkersOauthRedirectUri')}</span>
+                              <input
+                                value={cloudflareWorkersRedirectUri}
+                                onChange={(e) => setCloudflareWorkersRedirectUri(e.target.value)}
+                              />
+                            </label>
+                          </div>
+                          <div className={cloudflareWorkersOAuthConnected ? 'mcp-oauth-control connected' : 'mcp-oauth-control'}>
+                            <div className="mcp-oauth-status" aria-live="polite">
+                              {cloudflareWorkersOAuthExpired ? (
+                                <>
+                                  <span className="mcp-oauth-dot" aria-hidden />
+                                  <span>
+                                    <strong>{t('fileViewer.cloudflareOAuthExpired')}</strong>
+                                  </span>
+                                </>
+                              ) : cloudflareWorkersOAuthConnected ? (
+                                <>
+                                  <span className="mcp-oauth-dot mcp-oauth-dot-ok" aria-hidden />
+                                  <span title={cloudflareWorkersOAuthStatus?.scope ?? undefined}>
+                                    {cloudflareWorkersOAuthStatus?.accountId ? (
+                                      <strong>{t('fileViewer.cloudflareOAuthBound', { accountId: cloudflareWorkersOAuthStatus.accountId })}</strong>
+                                    ) : null}
+                                    {cloudflareWorkersOAuthMinutesRemaining != null ? (
+                                      <span className="hint">
+                                        {' '}{t('fileViewer.cloudflareOAuthExpiresIn', { minutes: cloudflareWorkersOAuthMinutesRemaining })}
+                                      </span>
+                                    ) : null}
+                                    {cloudflareWorkersOAuthStatus?.scope ? (
+                                      <span className="hint">
+                                        {' '}{t('fileViewer.cloudflareOAuthGrantedScopes', { scope: cloudflareWorkersOAuthStatus.scope })}
+                                      </span>
+                                    ) : null}
+                                  </span>
+                                </>
+                              ) : cloudflareWorkersOAuthBusy === 'awaiting' ? (
+                                <>
+                                  <span className="mcp-oauth-dot mcp-oauth-dot-pending" aria-hidden />
+                                  <span>
+                                    <strong>{t('fileViewer.cloudflareOAuthAwaiting')}</strong>
+                                  </span>
+                                </>
+                              ) : (
+                                <>
+                                  <span className="mcp-oauth-dot" aria-hidden />
+                                  <span>
+                                    <strong>{t('fileViewer.cloudflareOAuthNotConnected')}</strong>
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                            <div className="mcp-oauth-actions">
+                              {cloudflareWorkersOAuthConnected || cloudflareWorkersOAuthExpired ? (
+                                <>
+                                  {cloudflareWorkersOAuthExpired || cloudflareWorkersOAuthExpiringSoon ? (
+                                    <button
+                                      type="button"
+                                      className="primary"
+                                      data-testid="cfw-oauth-connect"
+                                      onClick={() => {
+                                        void connectCloudflareWorkersOAuth();
+                                      }}
+                                      disabled={cloudflareWorkersOAuthBusy !== 'idle'}
+                                    >
+                                      {cloudflareWorkersOAuthBusy === 'starting' || cloudflareWorkersOAuthBusy === 'awaiting'
+                                        ? t('fileViewer.cloudflareOAuthOpening')
+                                        : t('fileViewer.cloudflareOAuthReconnect')}
+                                    </button>
+                                  ) : null}
+                                  <button
+                                    type="button"
+                                    data-testid="cfw-oauth-disconnect"
+                                    onClick={() => {
+                                      void disconnectCloudflareWorkersOAuth();
+                                    }}
+                                    disabled={cloudflareWorkersOAuthBusy !== 'idle'}
+                                  >
+                                    {cloudflareWorkersOAuthBusy === 'disconnecting'
+                                      ? t('fileViewer.cloudflareOAuthDisconnecting')
+                                      : t('fileViewer.cloudflareOAuthDisconnect')}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      void refreshCloudflareWorkersOAuthInPlace();
+                                    }}
+                                    disabled={cloudflareWorkersOAuthBusy === 'refreshing' || cloudflareWorkersOAuthBusy === 'disconnecting'}
+                                  >
+                                    {t('fileViewer.cloudflareOAuthRefresh')}
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="primary"
+                                    data-testid="cfw-oauth-connect"
+                                    onClick={() => {
+                                      void connectCloudflareWorkersOAuth();
+                                    }}
+                                    disabled={cloudflareWorkersOAuthBusy !== 'idle'}
+                                  >
+                                    {cloudflareWorkersOAuthBusy === 'starting'
+                                      ? t('fileViewer.cloudflareOAuthOpening')
+                                      : t('fileViewer.cloudflareOAuthSignIn')}
+                                  </button>
+                                  {cloudflareWorkersOAuthBusy === 'awaiting' ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        void refreshCloudflareWorkersOAuthInPlace();
+                                      }}
+                                    >
+                                      {t('fileViewer.cloudflareOAuthRefresh')}
+                                    </button>
+                                  ) : null}
+                                </>
+                              )}
+                            </div>
+                            {cloudflareWorkersOAuthPendingAuthUrl && !cloudflareWorkersOAuthConnected ? (
+                              <div className="mcp-oauth-fallback hint">
+                                <a href={cloudflareWorkersOAuthPendingAuthUrl} target="_blank" rel="noopener noreferrer">
+                                  {t('fileViewer.cloudflareOAuthOpenManually')}
+                                </a>
+                              </div>
+                            ) : null}
+                            {cloudflareWorkersOAuthError ? (
+                              <div className="mcp-oauth-error" role="alert">
+                                {cloudflareWorkersOAuthError}
+                              </div>
+                            ) : null}
+                          </div>
+                        </>
+                      ) : null}
                       <div className="deploy-field-grid">
                         <label>
                           <span className="deploy-field-title">{t('fileViewer.cloudflareWorkersScriptName')}</span>
@@ -19034,7 +19398,7 @@ function HtmlViewer({
                 type="button"
                 className="viewer-action primary"
                 data-testid="cfw-deploy-button"
-                disabled={deploying || savingDeployConfig || deployPhase !== 'idle'}
+                disabled={deploying || savingDeployConfig || deployPhase !== 'idle' || !cloudflareWorkersOAuthDeployReady}
                 onClick={() => {
                   void deployToSelectedProvider();
                 }}

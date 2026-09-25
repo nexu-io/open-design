@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import path from 'node:path';
-import { CLOUDFLARE_WORKERS_PROVIDER_ID, DeployError } from '../deploy.js';
+import { CLOUDFLARE_WORKERS_PROVIDER_ID, DeployError, getCloudflareAccessToken } from '../deploy.js';
 
 type JsonObject = Record<string, unknown>;
 
@@ -9,6 +9,7 @@ type WorkersDeployConfig = {
   accountId: string;
   scriptName?: string | undefined;
   compatibilityDate?: string | undefined;
+  credentialMode?: string | undefined;
   bindings?: CloudflareWorkersBinding[] | undefined;
 };
 
@@ -334,6 +335,7 @@ export async function deployToCloudflareWorkers(input: {
     accountId?: string | undefined;
     scriptName?: string | undefined;
     compatibilityDate?: string | undefined;
+    credentialMode?: string | undefined;
     bindings?: CloudflareWorkersBinding[] | undefined;
   };
   files: WorkersFile[];
@@ -345,13 +347,23 @@ export async function deployToCloudflareWorkers(input: {
   const { config, files, projectId = '', projectName = '', target = 'production', customDomain } = input ?? {};
   const accountId = config?.accountId;
   if (!accountId) throw new DeployError('Cloudflare account ID is required.', 400, undefined, 'CFW_ACCOUNT_ID_REQUIRED');
-  const token: string = config.token;
-  if (!token) throw new DeployError('Cloudflare API token is required.', 400, undefined, 'CFW_TOKEN_REQUIRED');
+  // Resolve the live credential: the configured static API token in 'token'
+  // mode, or the rotating OAuth access token (refreshed behind a single-flight
+  // lock in deploy.ts) in 'oauth' mode.
+  let token: string;
+  if (config.credentialMode === 'oauth') {
+    token = await getCloudflareAccessToken(CLOUDFLARE_WORKERS_PROVIDER_ID);
+  } else if (config.token) {
+    token = config.token;
+  } else {
+    throw new DeployError('Cloudflare API token is required.', 400, undefined, 'CFW_TOKEN_REQUIRED');
+  }
   const cfg: WorkersDeployConfig = {
     token,
     accountId,
     scriptName: config.scriptName,
     compatibilityDate: config.compatibilityDate,
+    credentialMode: config.credentialMode,
     bindings: config.bindings,
   };
   if (cfg.bindings && cfg.bindings.length > 0) {

@@ -3,7 +3,8 @@ import type { RouteDeps } from '../server-context.js';
 import type { AuthorizeProjectRequest } from '../collab/project-request-authority.js';
 import { clientRequestIdFor } from '../http/client-request-id.js';
 import { classifyDeployFailure } from '../deploy/failure-detail.js';
-import { detachCloudflareWorkerDomain, listCloudflareD1Databases, listCloudflareR2Buckets, listCloudflareZones } from '../deploy/cloudflare-workers.js';
+import { detachCloudflareWorkerDomain, listCloudflareZones } from '../deploy/cloudflare-workers.js';
+import { getCloudflareAccessToken } from '../deploy.js';
 
 export interface RegisterDeployRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'ids' | 'deploy' | 'projectStore'> {
   authorizeProjectRequest: AuthorizeProjectRequest;
@@ -86,12 +87,19 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
   app.get('/api/deploy/cloudflare-workers/capabilities', async (_req, res) => {
     try {
       const config = await readDeployConfig(CLOUDFLARE_WORKERS_PROVIDER_ID);
-      const empty = { workers: false, workersDevSubdomain: '', r2: false, d1: false, configured: false };
+      const empty = { workers: false, workersDevSubdomain: '', r2: false, d1: false, access: false, configured: false };
       if (!config?.accountId) {
         res.json(empty);
         return;
       }
-      const token = config.token;
+      let token = config.token;
+      if (config.credentialMode === 'oauth') {
+        try {
+          token = await getCloudflareAccessToken(CLOUDFLARE_WORKERS_PROVIDER_ID);
+        } catch {
+          token = '';
+        }
+      }
       if (!token) {
         res.json(empty);
         return;
@@ -107,7 +115,14 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
   app.get('/api/deploy/cloudflare-workers/zones', async (_req, res) => {
     try {
       const config = await readDeployConfig(CLOUDFLARE_WORKERS_PROVIDER_ID);
-      const token = config.token;
+      let token = config.token;
+      if (config.credentialMode === 'oauth') {
+        try {
+          token = await getCloudflareAccessToken(CLOUDFLARE_WORKERS_PROVIDER_ID);
+        } catch {
+          token = '';
+        }
+      }
       if (!token) {
         res.json({ zones: [] });
         return;
@@ -120,36 +135,19 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
     }
   });
 
-  app.get('/api/cloudflare/resources/r2-buckets', async (_req, res) => {
-    try {
-      const config = await readDeployConfig(CLOUDFLARE_WORKERS_PROVIDER_ID);
-      const token = config.token;
-      const accountId = (config.accountId || '').trim();
-      if (!accountId || !token) return res.json({ buckets: [] });
-      const buckets = await listCloudflareR2Buckets(token, accountId);
-      res.json({ buckets });
-    } catch {
-      res.json({ buckets: [] });
-    }
-  });
-
-  app.get('/api/cloudflare/resources/d1-databases', async (_req, res) => {
-    try {
-      const config = await readDeployConfig(CLOUDFLARE_WORKERS_PROVIDER_ID);
-      const token = config.token;
-      const accountId = (config.accountId || '').trim();
-      if (!accountId || !token) return res.json({ databases: [] });
-      const databases = await listCloudflareD1Databases(token, accountId);
-      res.json({ databases });
-    } catch {
-      res.json({ databases: [] });
-    }
-  });
-
   app.delete('/api/deploy/cloudflare-workers/domains/:domainId', async (req, res) => {
     try {
       const config = await readDeployConfig(CLOUDFLARE_WORKERS_PROVIDER_ID);
-      const token = config.token;
+      // Mirror the capabilities/zones token resolution: oauth refreshes the
+      // rotating access token, token mode reads the configured static token.
+      let token = config.token;
+      if (config.credentialMode === 'oauth') {
+        try {
+          token = await getCloudflareAccessToken(CLOUDFLARE_WORKERS_PROVIDER_ID);
+        } catch {
+          token = '';
+        }
+      }
       if (!config.accountId) {
         return sendApiError(res, 400, 'CFW_ACCOUNT_ID_REQUIRED', 'Cloudflare account ID is required.');
       }

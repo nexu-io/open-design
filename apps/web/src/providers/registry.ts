@@ -1914,6 +1914,73 @@ export async function fetchCloudflareD1Databases(): Promise<WebCloudflareD1Datab
     return [];
   }
 }
+// Cloudflare Workers OAuth "Connect with Cloudflare" flow. The daemon owns the
+// authorization dance end-to-end (it builds the authorize URL from the user's
+// OAuth app credentials, hosts the callback, and stores the resulting token),
+// so the web half only asks it to start and then navigates to the URL it hands
+// back. Scopes are the optional set the user selected; empty means "no extra
+// scopes" (token can still be minted with the account's default grants).
+export type WebCloudflareWorkersOAuthScope = 'zone.read' | 'access.write' | 'd1.read' | 'workers-r2.read';
+
+export interface WebCloudflareWorkersOAuthStartRequest {
+  clientId: string;
+  redirectUri: string;
+  scopes?: string[];
+}
+
+export interface WebCloudflareWorkersOAuthStartResponse {
+  authorizeUrl: string;
+  state: string;
+}
+
+export async function fetchCloudflareWorkersOAuthStart(
+  input: WebCloudflareWorkersOAuthStartRequest,
+): Promise<WebCloudflareWorkersOAuthStartResponse | null> {
+  try {
+    const resp = await fetch('/api/cloudflare/oauth/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!resp.ok) {
+      const payload = (await resp.json().catch(() => null)) as
+        | { error?: { message?: string }; message?: string }
+        | null;
+      throw new Error(payload?.error?.message || payload?.message || `Could not start Cloudflare sign-in (${resp.status})`);
+    }
+    return (await resp.json()) as WebCloudflareWorkersOAuthStartResponse;
+  } catch (err) {
+    if (err instanceof Error) throw err;
+    return null;
+  }
+}
+
+export interface WebCloudflareAuthStatus {
+  connected: boolean;
+  expiresAt?: number;
+  scope?: string;
+  accountId?: string;
+}
+
+export async function fetchCloudflareAuthStatus(): Promise<WebCloudflareAuthStatus | null> {
+  try {
+    const resp = await fetch('/api/cloudflare/auth/status', { cache: 'no-store' });
+    if (!resp.ok) return null;
+    return (await resp.json()) as WebCloudflareAuthStatus;
+  } catch {
+    return null;
+  }
+}
+
+export async function disconnectCloudflareOAuth(): Promise<boolean> {
+  try {
+    const resp = await fetch('/api/cloudflare/oauth/disconnect', { method: 'POST' });
+    return resp.ok;
+  } catch {
+    return false;
+  }
+}
+
 export async function fetchProjectDeployments(
   projectId: string,
   workspaceContext?: WorkspaceCollabContext | null,

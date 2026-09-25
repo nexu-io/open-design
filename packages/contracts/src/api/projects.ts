@@ -933,6 +933,19 @@ export interface CloudflareWorkersCapabilities {
   configured?: boolean;
 }
 
+/**
+ * Rotating Cloudflare OAuth credentials, as persisted in
+ * `cloudflare-oauth-tokens.json`. `scopes` is the granted scope list
+ * (space-separated on the token response, split here for the public surface).
+ */
+export interface CloudflareOAuthCredentials {
+  accessToken: string;
+  refreshToken?: string;
+  expiresAt?: number;
+  scopes?: string[];
+  accountId?: string;
+}
+
 export interface DeployConfigResponse {
   providerId: DeployProviderId;
   configured: boolean;
@@ -943,6 +956,10 @@ export interface DeployConfigResponse {
   projectName?: string;
   scriptName?: string;
   compatibilityDate?: string;
+  credentialMode?: 'token' | 'oauth';
+  clientId?: string;
+  redirectUri?: string;
+  scopes?: string[];
   bindings?: CloudflareWorkersBinding[];
   cloudflarePages?: CloudflarePagesConfigHints;
   customDomain?: { hostname: string; zoneId: string };
@@ -958,6 +975,10 @@ export interface UpdateDeployConfigRequest {
   projectName?: string;
   scriptName?: string;
   compatibilityDate?: string;
+  credentialMode?: 'token' | 'oauth';
+  clientId?: string;
+  redirectUri?: string;
+  scopes?: string[];
   bindings?: CloudflareWorkersBinding[];
   cloudflarePages?: CloudflarePagesConfigHints;
   customDomain?: { hostname: string; zoneId: string };
