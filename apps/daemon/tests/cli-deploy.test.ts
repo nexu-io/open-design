@@ -402,3 +402,56 @@ describe('od deploy CLI', () => {
     expect(stub.requests).toHaveLength(0);
   });
 });
+
+describe('od cloudflare CLI', () => {
+  let stub: StubServer;
+
+  beforeAll(async () => {
+    stub = await startStubServer();
+  });
+
+  afterAll(async () => {
+    await stub.close();
+  });
+
+  beforeEach(() => {
+    stub.requests.length = 0;
+    stub.setResponder(() => ({ status: 200, body: { ok: true } }));
+  });
+
+  it('status GETs /api/cloudflare/auth/status and emits machine-readable JSON under --json', async () => {
+    stub.setResponder(() => ({ status: 200, body: { connected: true, scope: 'workers-scripts.write', expiresAt: 1_700_000_000_000 } }));
+    const result = await runCli(['cloudflare', 'status', '--json', '--daemon-url', stub.baseUrl]);
+    expect(result.code).toBe(0);
+    expect(stub.requests[0]?.method).toBe('GET');
+    expect(stub.requests[0]?.url).toContain('/api/cloudflare/auth/status');
+    expect(JSON.parse(result.stdout)).toEqual({ connected: true, scope: 'workers-scripts.write', expiresAt: 1_700_000_000_000 });
+  });
+
+  it('connect POSTs clientId + redirectUri to /api/cloudflare/oauth/start', async () => {
+    stub.setResponder(() => ({ status: 200, body: { authorizeUrl: 'https://dash.cloudflare.com/oauth2/auth?x=1', state: 's1' } }));
+    const result = await runCli(['cloudflare', 'connect', '--client-id', 'client-abc', '--redirect-uri', 'http://127.0.0.1:56122/callback', '--daemon-url', stub.baseUrl]);
+    expect(result.code).toBe(0);
+    expect(stub.requests[0]?.method).toBe('POST');
+    expect(stub.requests[0]?.url).toContain('/api/cloudflare/oauth/start');
+    expect(JSON.parse(stub.requests[0]?.body ?? '{}')).toEqual({ clientId: 'client-abc', redirectUri: 'http://127.0.0.1:56122/callback' });
+  });
+
+  it('config GETs the Workers deploy config and prints configured/credentialMode', async () => {
+    stub.setResponder(() => ({ status: 200, body: { providerId: 'cloudflare-workers', configured: true, accountId: 'acct_test', credentialMode: 'oauth' } }));
+    const result = await runCli(['cloudflare', 'config', '--daemon-url', stub.baseUrl]);
+    expect(result.code).toBe(0);
+    expect(stub.requests[0]?.method).toBe('GET');
+    expect(stub.requests[0]?.url).toContain('/api/deploy/config?providerId=cloudflare-workers');
+    expect(result.stdout).toContain('configured=true');
+    expect(result.stdout).toContain('credentialMode=oauth');
+  });
+
+  it('config PUTs only the supplied fields when an update flag is present', async () => {
+    stub.setResponder(() => ({ status: 200, body: { providerId: 'cloudflare-workers', configured: true } }));
+    const result = await runCli(['cloudflare', 'config', '--account-id', 'acct-1', '--token', 'tok-1', '--daemon-url', stub.baseUrl]);
+    expect(result.code).toBe(0);
+    expect(stub.requests[0]?.method).toBe('PUT');
+    expect(JSON.parse(stub.requests[0]?.body ?? '{}')).toEqual({ accountId: 'acct-1', token: 'tok-1' });
+  });
+});

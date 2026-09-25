@@ -283,6 +283,8 @@ const DEPLOY_STRING_FLAGS = new Set([
   'workspace', 'workspace-member',
 ]);
 const DEPLOY_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
+const CLOUDFLARE_STRING_FLAGS = new Set(['daemon-url', 'client-id', 'redirect-uri', 'token', 'account-id']);
+const CLOUDFLARE_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 // `od automation …` mirrors the Automations tab. Same surface, same
 // /api/routines store. The CLI form is the embeddability contract:
 // external agents (hermes-agent, openclaw, etc.) can drive OpenDesign
@@ -413,6 +415,7 @@ const SUBCOMMAND_MAP = {
   conversation: runConversation,
   chat: runChat,
   deploy: runDeploy,
+  cloudflare: runCloudflare,
   daemon: runDaemon,
   atoms: runAtoms,
   skill: runSkills,
@@ -12126,4 +12129,130 @@ Options:
   if (flags.json) return process.stdout.write(JSON.stringify(data) + '\n');
   const url = data?.url ?? data?.deploymentUrl ?? '';
   console.log(`[deploy] ${data?.id ?? 'done'}${url ? ` → ${url}` : ''}`);
+}
+
+// `od cloudflare …` is the embeddability half of the Cloudflare Workers deploy
+// provider: configure credentials and drive the OAuth connect/status/disconnect
+// flow over the same /api/* endpoints the web UI uses, so headless agents and
+// external callers can establish the provider credential without a browser.
+async function runCloudflare(args) {
+  const sub = args[0] ?? '';
+  const rest = args.slice(1);
+  if (!sub || sub === 'help' || sub === '--help' || sub === '-h') {
+    console.log(`Usage: od cloudflare <status|connect|disconnect|config> [options]
+
+Subcommands:
+  status                    Show Cloudflare OAuth connection status (GET /api/cloudflare/auth/status).
+  connect                   Begin Cloudflare OAuth (POST /api/cloudflare/oauth/start); prints the authorize URL.
+  disconnect                Disconnect Cloudflare OAuth (POST /api/cloudflare/oauth/disconnect).
+  config                    Read or update the Cloudflare Workers deploy config (GET/PUT /api/deploy/config?providerId=cloudflare-workers).
+
+Common options:
+  --daemon-url <url>        OpenDesign daemon HTTP base.
+  --client-id <id>          Cloudflare OAuth client id (connect / config).
+  --redirect-uri <uri>      Cloudflare OAuth redirect URI (connect / config).
+  --account-id <id>         Cloudflare account id (config).
+  --token <token>           Cloudflare API token (config).
+  --json                    Emit raw JSON response.`);
+    return;
+  }
+  let flags;
+  try {
+    flags = parseFlags(rest, { string: CLOUDFLARE_STRING_FLAGS, boolean: CLOUDFLARE_BOOLEAN_FLAGS });
+  } catch (err) {
+    console.error(err.message);
+    process.exit(2);
+  }
+  if (flags.help || flags.h) {
+    console.log(`Usage: od cloudflare ${sub} [options]
+
+  --daemon-url <url>        OpenDesign daemon HTTP base.
+  --json                    Emit raw JSON response.`);
+    return;
+  }
+  const base = await cliDaemonBaseUrl(flags);
+  const headers = { 'content-type': 'application/json' };
+  let resp;
+
+  if (sub === 'status') {
+    try {
+      resp = await fetch(`${base}/api/cloudflare/auth/status`, { headers });
+    } catch (err) {
+      surfaceFetchError(err, base);
+      process.exit(3);
+    }
+    if (!resp.ok) return structuredHttpFailure(resp);
+    const data = await resp.json();
+    if (flags.json) return process.stdout.write(JSON.stringify(data) + '\n');
+    console.log(data?.connected
+      ? `[cloudflare] connected${data?.scope ? ` (${data.scope})` : ''}`
+      : '[cloudflare] not connected');
+    return;
+  }
+
+  if (sub === 'connect') {
+    const clientId = typeof flags['client-id'] === 'string' ? flags['client-id'].trim() : '';
+    if (!clientId) {
+      console.error('--client-id <id> is required: od cloudflare connect --client-id <id>');
+      process.exit(2);
+    }
+    const redirectUri = typeof flags['redirect-uri'] === 'string' ? flags['redirect-uri'].trim() : '';
+    try {
+      resp = await fetch(`${base}/api/cloudflare/oauth/start`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ clientId, redirectUri }),
+      });
+    } catch (err) {
+      surfaceFetchError(err, base);
+      process.exit(3);
+    }
+    if (!resp.ok) return structuredHttpFailure(resp);
+    const data = await resp.json();
+    if (flags.json) return process.stdout.write(JSON.stringify(data) + '\n');
+    console.log(`[cloudflare] open: ${data?.authorizeUrl ?? ''}`);
+    return;
+  }
+
+  if (sub === 'disconnect') {
+    try {
+      resp = await fetch(`${base}/api/cloudflare/oauth/disconnect`, { method: 'POST', headers });
+    } catch (err) {
+      surfaceFetchError(err, base);
+      process.exit(3);
+    }
+    if (!resp.ok) return structuredHttpFailure(resp);
+    const data = await resp.json().catch(() => ({}));
+    if (flags.json) return process.stdout.write(JSON.stringify(data) + '\n');
+    console.log('[cloudflare] disconnected');
+    return;
+  }
+
+  if (sub === 'config') {
+    const hasUpdate = flags['account-id'] !== undefined || flags.token !== undefined
+      || flags['client-id'] !== undefined || flags['redirect-uri'] !== undefined;
+    const body = {};
+    if (flags['account-id'] !== undefined) body.accountId = flags['account-id'];
+    if (flags.token !== undefined) body.token = flags.token;
+    if (flags['client-id'] !== undefined) body.clientId = flags['client-id'];
+    if (flags['redirect-uri'] !== undefined) body.redirectUri = flags['redirect-uri'];
+    try {
+      resp = await fetch(`${base}/api/deploy/config?providerId=cloudflare-workers`, {
+        method: hasUpdate ? 'PUT' : 'GET',
+        headers,
+        body: hasUpdate ? JSON.stringify(body) : undefined,
+      });
+    } catch (err) {
+      surfaceFetchError(err, base);
+      process.exit(3);
+    }
+    if (!resp.ok) return structuredHttpFailure(resp);
+    const data = await resp.json();
+    if (flags.json) return process.stdout.write(JSON.stringify(data) + '\n');
+    console.log(`[cloudflare] configured=${data?.configured ?? false} accountId=${data?.accountId ?? ''} credentialMode=${data?.credentialMode ?? ''}`);
+    return;
+  }
+
+  console.error(`unknown subcommand: od cloudflare ${sub}`);
+  process.exit(2);
 }
