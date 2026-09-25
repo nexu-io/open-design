@@ -26,6 +26,12 @@ import {
   type StoredCloudflareOAuthToken,
 } from '../src/integrations/cloudflare-tokens.js';
 import { PendingAuthCache } from '../src/mcp-oauth.js';
+import {
+  cloudflareOAuthTokensDir,
+  configureCloudflareWorkersDataDir,
+  getCloudflareAccessToken,
+  writeCloudflareWorkersConfig,
+} from '../src/deploy.js';
 
 type FetchInput = Parameters<typeof fetch>[0];
 type FetchInit = Parameters<typeof fetch>[1];
@@ -174,5 +180,32 @@ describe('refresh path', () => {
     expect(params.get('grant_type')).toBe('refresh_token');
     expect(params.get('refresh_token')).toBe('ref-token-123');
     expect(params.get('client_id')).toBe('cid');
+  });
+});
+
+describe('getCloudflareAccessToken identity guard', () => {
+  it('rejects a fresh token issued to a different client (fail-closed fast path)', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'od-cf-identity-'));
+    configureCloudflareWorkersDataDir(dir);
+    try {
+      await writeCloudflareWorkersConfig({
+        credentialMode: 'oauth',
+        accountId: 'acct_test',
+        clientId: 'client-new',
+      });
+      await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), {
+        accessToken: 'acc-token',
+        tokenType: 'Bearer',
+        clientId: 'client-old',
+        expiresAt: Date.now() + 3600_000,
+        generation: 1,
+        savedAt: Date.now(),
+      });
+      await expect(getCloudflareAccessToken()).rejects.toMatchObject({
+        code: 'CFW_OAUTH_RECONNECT_REQUIRED',
+      });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });

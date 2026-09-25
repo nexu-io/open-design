@@ -6,6 +6,7 @@ import type { AddressInfo } from 'node:net';
 import express from 'express';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { registerCloudflareRoutes } from '../src/routes/cloudflare.js';
+import { configureCloudflareWorkersDataDir } from '../src/deploy.js';
 
 async function startApp(): Promise<{ baseUrl: string; close: () => Promise<void> }> {
   const app = express();
@@ -34,6 +35,7 @@ describe('cloudflare-oauth routes', () => {
   beforeAll(async () => {
     dir = await mkdtemp(path.join(os.tmpdir(), 'od-cf-routes-'));
     process.env.OD_USER_STATE_DIR = dir;
+    configureCloudflareWorkersDataDir(dir);
     app = await startApp();
   });
 

@@ -5,6 +5,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   CLOUDFLARE_WORKERS_PROVIDER_ID,
+  configureCloudflareWorkersDataDir,
   isDeployProviderId,
   publicCloudflareWorkersConfig,
   readCloudflareWorkersConfig,
@@ -45,6 +46,7 @@ describe('cloudflare-workers config', () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), 'od-workers-config-'));
     const prior = process.env.OD_USER_STATE_DIR;
     process.env.OD_USER_STATE_DIR = dir;
+    configureCloudflareWorkersDataDir(dir);
     try {
       const saved = await writeCloudflareWorkersConfig({ token: 'tok-secret', accountId: 'acct_test', scriptName: 'my-site', compatibilityDate: '2025-01-01' });
       expect(saved.providerId).toBe(CLOUDFLARE_WORKERS_PROVIDER_ID);
@@ -73,6 +75,7 @@ describe('cloudflare-workers config', () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), 'od-workers-config-'));
     const prior = process.env.OD_USER_STATE_DIR;
     process.env.OD_USER_STATE_DIR = dir;
+    configureCloudflareWorkersDataDir(dir);
     try {
       await expect(writeCloudflareWorkersConfig({ token: 'tok' })).rejects.toMatchObject({ code: 'CFW_ACCOUNT_ID_REQUIRED' });
       await expect(writeCloudflareWorkersConfig({ accountId: 'acct_test' })).rejects.toMatchObject({ code: 'CFW_TOKEN_REQUIRED' });
@@ -86,6 +89,7 @@ describe('cloudflare-workers config', () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), 'od-workers-config-'));
     const prior = process.env.OD_USER_STATE_DIR;
     process.env.OD_USER_STATE_DIR = dir;
+    configureCloudflareWorkersDataDir(dir);
     try {
       const saved = await writeCloudflareOAuthIdentity({ clientId: 'client-123', redirectUri: 'http://127.0.0.1:56122/callback' });
       expect(saved.credentialMode).toBe('oauth');

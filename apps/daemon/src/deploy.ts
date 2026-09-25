@@ -359,7 +359,19 @@ export function configureCloudflareWorkersDataDir(rootDir: string): void {
 }
 
 function cloudflareWorkersBaseDir(): string {
-  return cloudflareWorkersDataRoot ?? process.env.OD_USER_STATE_DIR ?? path.join(os.homedir(), '.open-design');
+  // No env/home fallback: the data root is an explicit dependency injected by
+  // the daemon via configureCloudflareWorkersDataDir(RUNTIME_DATA_DIR). Fail
+  // closed rather than silently writing Workers config/credentials outside the
+  // runtime data root (the escape pattern the data-dir contract forbids).
+  if (!cloudflareWorkersDataRoot) {
+    throw new DeployError(
+      'Cloudflare Workers data dir is not configured (call configureCloudflareWorkersDataDir with RUNTIME_DATA_DIR).',
+      500,
+      undefined,
+      'CFW_DATA_DIR_UNCONFIGURED',
+    );
+  }
+  return cloudflareWorkersDataRoot;
 }
 
 /** Directory that holds 'cloudflare-oauth-tokens.json' — the daemon-resolved
@@ -420,6 +432,10 @@ export async function getCloudflareAccessToken(
       CLOUDFLARE_OAUTH_EXPIRY_SKEW_MS,
     )
   ) {
+    // Fail closed before trusting a still-fresh token: if the persisted
+    // client/redirect identity no longer matches the current config, do not
+    // hand back a credential the configuration does not represent.
+    assertCloudflareOAuthIdentity(current, config);
     return current.accessToken;
   }
 
