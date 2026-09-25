@@ -176,6 +176,61 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
     expect(out.providerMetadata).toMatchObject({ accessAppId: 'app-existing' });
   });
 
+  it('a `policy` rule references the policy by id and does not pin the app to the OTP identity provider', async () => {
+    const { calls, fn } = accessFetch();
+    vi.stubGlobal('fetch', fn);
+    const out = await deployToCloudflareWorkers({
+      ...base,
+      access: { enabled: true, rule: { kind: 'policy', policyId: 'pol-corp-sso' } },
+    });
+    const createCall = calls.find((c) => c[0].endsWith('/access/apps') && c[1]?.method === 'POST');
+    expect(createCall).toBeTruthy();
+    const createBody = JSON.parse(createCall![1]?.body as string) as Record<string, unknown>;
+    expect(createBody.policies).toEqual([{ id: 'pol-corp-sso', precedence: 1 }]);
+    // The referenced policy may carry its own SSO IdPs: no allowed_idps, and no
+    // OTP provider lookup or creation at all.
+    expect(createBody).not.toHaveProperty('allowed_idps');
+    expect(calls.some((c) => c[0].includes('/access/identity_providers'))).toBe(false);
+    expect(out.providerMetadata).toMatchObject({ accessAppId: 'app-123' });
+  });
+
+  it('finds the app that claims the Worker on a later page of the Access apps list', async () => {
+    const { calls, fn } = accessFetch({ accessUpdate: { success: true, result: { id: 'app-page2' } } });
+    // Page 1 is full (100 unrelated apps, no result_info) so the lookup must
+    // keep paging; the OpenDesign-owned app for this Worker sits on page 2.
+    const filler = Array.from({ length: 100 }, (_, i) => ({
+      id: 'other-' + i,
+      name: 'Other ' + i,
+      destinations: [{ type: 'worker', worker_id: 'tag-other-' + i }],
+    }));
+    const ours = {
+      id: 'app-page2',
+      name: 'my-site (OpenDesign)',
+      destinations: [{ type: 'worker', worker_id: 'tag-abc-123' }],
+    };
+    const paged = vi.fn(async (url: string, init?: RequestInit) => {
+      const method = (init?.method || 'GET').toUpperCase();
+      if (method === 'GET' && /\/access\/apps\?page=\d+/.test(url)) {
+        calls.push([url, init]);
+        const page = Number(new URL(url).searchParams.get('page'));
+        if (page === 1) return jsonResponse({ success: true, result: filler });
+        if (page === 2) return jsonResponse({ success: true, result: [ours] });
+        return jsonResponse({ success: true, result: [] });
+      }
+      return fn(url, init);
+    });
+    vi.stubGlobal('fetch', paged);
+    const out = await deployToCloudflareWorkers({
+      ...base,
+      access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } },
+    });
+    expect(calls.some((c) => c[0].includes('/access/apps?page=2'))).toBe(true);
+    // Updated in place — no duplicate create for a Worker that is already claimed.
+    expect(calls.some((c) => c[0].includes('/access/apps/app-page2') && c[1]?.method === 'PUT')).toBe(true);
+    expect(calls.some((c) => c[0].endsWith('/access/apps') && c[1]?.method === 'POST')).toBe(false);
+    expect(out.providerMetadata).toMatchObject({ accessAppId: 'app-page2' });
+  });
+
   it('refuses to overwrite a user-managed Access app that claims the Worker', async () => {
     const { calls, fn } = accessFetch({
       accessList: {

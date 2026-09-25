@@ -12,6 +12,7 @@ import {
   cloudflareOAuthTokensDir,
   configureCloudflareWorkersDataDir,
   deployConfigPath,
+  readCloudflareWorkersConfig,
 } from '../src/deploy.js';
 import {
   clearCloudflareOAuthToken,
@@ -280,6 +281,67 @@ describe('cloudflare-oauth routes', () => {
     }
   });
 
+  it('a loopback callback that loses the race to /disconnect persists nothing and reports failure to the browser', async () => {
+    const dataDir = cloudflareOAuthTokensDir();
+    let releaseToken!: (resp: Response) => void;
+    let markExchangeStarted!: () => void;
+    const exchangeStarted = new Promise<void>((resolve) => {
+      markExchangeStarted = resolve;
+    });
+    const realFetch = globalThis.fetch;
+    vi.stubGlobal('fetch', async (input: unknown, init?: unknown) => {
+      const url = String(input);
+      if (url.includes('oauth2/token')) {
+        markExchangeStarted();
+        return new Promise<Response>((resolve) => {
+          releaseToken = resolve;
+        });
+      }
+      return realFetch(input as never, init as never);
+    });
+    try {
+      const startResp = await fetch(`${app.baseUrl}/api/cloudflare/oauth/start`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ clientId: 'client-abc', redirectUri: 'http://127.0.0.1:56122/callback' }),
+      });
+      expect(startResp.status).toBe(200);
+      const { state } = (await startResp.json()) as { state: string };
+
+      // The listener is stubbed, so drive the daemon's onCallback exactly as the
+      // loopback server would on GET /callback?code=…&state=….
+      const listenerInput = vi.mocked(startCallbackListener).mock.calls.at(-1)![0];
+      expect(listenerInput.expectedState).toBe(state);
+      const callbackResult = Promise.resolve(listenerInput.onCallback({ kind: 'ok', code: 'AUTHCODE', state }));
+
+      // Disconnect while the token endpoint is still in flight.
+      await exchangeStarted;
+      const disconnectResp = await fetch(`${app.baseUrl}/api/cloudflare/oauth/disconnect`, { method: 'POST' });
+      expect(disconnectResp.status).toBe(200);
+
+      // The exchange now succeeds upstream — but the attempt it belongs to was
+      // superseded, so the token must be discarded and the browser told so
+      // (the listener renders its failure page off a `false` return).
+      releaseToken(
+        new Response(
+          JSON.stringify({ access_token: 'acc-late', token_type: 'Bearer', refresh_token: 'ref', expires_in: 3600 }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      );
+      expect(await callbackResult).toBe(false);
+      expect(await getCloudflareOAuthToken(dataDir)).toBeNull();
+      const status = await (await fetch(`${app.baseUrl}/api/cloudflare/auth/status`)).json() as Record<string, unknown>;
+      expect(status).toMatchObject({ connected: false });
+      // credentialMode stays 'token' — the late token never committed OAuth mode.
+      const cfg = await readCloudflareWorkersConfig();
+      expect(cfg.credentialMode).toBe('token');
+    } finally {
+      vi.unstubAllGlobals();
+      await clearCloudflareOAuthToken(dataDir);
+      await rm(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), { force: true });
+    }
+  });
+
   it('a /start that fails before owning the attempt leaves the previous listener running', async () => {
     const configPath = deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID);
     const body = JSON.stringify({ clientId: 'client-abc', redirectUri: 'http://127.0.0.1:56122/callback' });
@@ -307,6 +369,76 @@ describe('cloudflare-oauth routes', () => {
     } finally {
       await rm(configPath, { recursive: true, force: true });
       await fetch(`${app.baseUrl}/api/cloudflare/oauth/cancel`, { method: 'POST' });
+    }
+  });
+});
+
+// The real loopback listener (the module is mocked above for the route suite).
+describe('cloudflare-oauth loopback listener result page', () => {
+  type ListenerModule = typeof import('../src/integrations/cloudflare-oauth-server.js');
+  async function realListener(): Promise<ListenerModule['startCallbackListener']> {
+    const mod = await vi.importActual<ListenerModule>('../src/integrations/cloudflare-oauth-server.js');
+    return mod.startCallbackListener;
+  }
+
+  it('renders an error page with an error status, not a success page, when the exchange/persist fails', async () => {
+    const start = await realListener();
+    const onCallback = vi.fn(async () => false);
+    const listener = await start({ expectedState: 'st-1', onCallback, port: 0, timeoutMs: 60_000 });
+    try {
+      const resp = await fetch(
+        `http://127.0.0.1:${listener.address.port}/callback?code=AUTHCODE&state=st-1`,
+        { redirect: 'manual' },
+      );
+      expect(onCallback).toHaveBeenCalledWith({ kind: 'ok', code: 'AUTHCODE', state: 'st-1' });
+      // The exchange failed after the code was accepted: the browser must see a
+      // failure status and the failure copy, never the "connected" page.
+      expect(resp.status).toBe(502);
+      expect(resp.headers.get('content-type')).toContain('text/html');
+      const html = await resp.text();
+      expect(html).toContain('Token exchange failed');
+      expect(html).not.toMatch(/success|connected/i);
+    } finally {
+      await listener.stop();
+    }
+  });
+
+  it('renders the same error page when the exchange throws', async () => {
+    const start = await realListener();
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const listener = await start({
+      expectedState: 'st-2',
+      onCallback: async () => {
+        throw new Error('disk full');
+      },
+      port: 0,
+      timeoutMs: 60_000,
+    });
+    try {
+      const resp = await fetch(`http://127.0.0.1:${listener.address.port}/callback?code=AUTHCODE&state=st-2`);
+      expect(resp.status).toBe(502);
+      expect(await resp.text()).toContain('Token exchange failed');
+      expect(errorSpy).toHaveBeenCalled();
+    } finally {
+      errorSpy.mockRestore();
+      await listener.stop();
+    }
+  });
+
+  it('answers a state mismatch with a 400 page and keeps the listener open for the real callback', async () => {
+    const start = await realListener();
+    const onCallback = vi.fn(async () => true);
+    const listener = await start({ expectedState: 'st-3', onCallback, port: 0, timeoutMs: 60_000 });
+    try {
+      const stale = await fetch(`http://127.0.0.1:${listener.address.port}/callback?code=OLD&state=other`);
+      expect(stale.status).toBe(400);
+      expect(await stale.text()).toContain('state mismatch');
+      expect(onCallback).not.toHaveBeenCalled();
+      const real = await fetch(`http://127.0.0.1:${listener.address.port}/callback?code=NEW&state=st-3`);
+      expect(real.status).toBe(200);
+      expect(onCallback).toHaveBeenCalledWith({ kind: 'ok', code: 'NEW', state: 'st-3' });
+    } finally {
+      await listener.stop();
     }
   });
 });

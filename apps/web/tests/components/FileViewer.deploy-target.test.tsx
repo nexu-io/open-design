@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import { FileViewer } from '../../src/components/FileViewer';
 import type { ProjectFile } from '../../src/types';
@@ -10,6 +10,7 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 function baseFile(overrides: Partial<ProjectFile>): ProjectFile {
@@ -294,6 +295,8 @@ function mockWorkersFetch(options: {
   zones?: Array<{ id: string; name: string }>;
   onConfigPut?: (body: Record<string, unknown>) => void;
   onDeployBody?: (body: Record<string, unknown>) => void;
+  /** Receives the JSON body of POST /api/cloudflare/oauth/start. */
+  onOAuthStart?: (body: Record<string, unknown>) => void;
   deployResponse?: Record<string, unknown>;
   /** Evaluated per request so a test can flip the daemon's OAuth status mid-flow. */
   authStatus?: () => Record<string, unknown>;
@@ -352,6 +355,7 @@ function mockWorkersFetch(options: {
       return new Response(JSON.stringify(options.authStatus?.() ?? { connected: false }), { status: 200 });
     }
     if (url === '/api/cloudflare/oauth/start' && method === 'POST') {
+      options.onOAuthStart?.(JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>);
       return new Response(JSON.stringify({
         authorizeUrl: 'https://dash.cloudflare.com/oauth2/auth?state=1',
       }), { status: 200 });
@@ -658,5 +662,159 @@ describe('FileViewer Workers Access rule default', () => {
       expect(configPut).not.toBeNull();
     });
     expect((configPut!.access as { rule?: { kind?: string } }).rule?.kind).toBe('emails');
+  });
+});
+
+describe('FileViewer Workers OAuth scopes', () => {
+  const oauthConfig = {
+    credentialMode: 'oauth',
+    clientId: 'client-1',
+    redirectUri: 'http://127.0.0.1:56122/callback',
+    tokenMask: '',
+    scopes: ['workers-scripts.write', 'access.write'],
+  };
+
+  it('seeds the scopes field from the stored config and POSTs the typed list on OAuth start', async () => {
+    let oauthStartBody: Record<string, unknown> | null = null;
+    vi.stubGlobal('fetch', mockWorkersFetch({
+      config: oauthConfig,
+      authStatus: () => ({ connected: false }),
+      onOAuthStart: (body) => { oauthStartBody = body; },
+    }));
+    vi.stubGlobal('open', vi.fn(() => null));
+
+    await openWorkersDeployModal();
+    const scopesInput = await screen.findByTestId('cfw-oauth-scopes') as HTMLInputElement;
+    await waitFor(() => {
+      expect(scopesInput.value).toBe('workers-scripts.write access.write');
+    });
+    // Comma AND space separated, with a duplicate and stray whitespace: the
+    // daemon receives a trimmed, deduplicated array — not the full default grant.
+    fireEvent.change(scopesInput, { target: { value: ' workers-scripts.write,  zone.read , zone.read ' } });
+
+    const connect = await screen.findByTestId('cfw-oauth-connect');
+    await waitFor(() => {
+      expect((connect as HTMLButtonElement).disabled).toBe(false);
+    });
+    fireEvent.click(connect);
+
+    await waitFor(() => {
+      expect(oauthStartBody).not.toBeNull();
+    });
+    expect(oauthStartBody!.scopes).toEqual(['workers-scripts.write', 'zone.read']);
+    expect(oauthStartBody!.clientId).toBe('client-1');
+  });
+
+  it('omits scopes from the OAuth start request when the field is empty (daemon resolves persisted/default)', async () => {
+    let oauthStartBody: Record<string, unknown> | null = null;
+    vi.stubGlobal('fetch', mockWorkersFetch({
+      config: { ...oauthConfig, scopes: [] },
+      authStatus: () => ({ connected: false }),
+      onOAuthStart: (body) => { oauthStartBody = body; },
+    }));
+    vi.stubGlobal('open', vi.fn(() => null));
+
+    await openWorkersDeployModal();
+    const connect = await screen.findByTestId('cfw-oauth-connect');
+    await waitFor(() => {
+      expect((connect as HTMLButtonElement).disabled).toBe(false);
+    });
+    fireEvent.click(connect);
+    await waitFor(() => {
+      expect(oauthStartBody).not.toBeNull();
+    });
+    // An explicit `scopes: []` is a 400 on the daemon (malformed selection).
+    expect(Object.prototype.hasOwnProperty.call(oauthStartBody, 'scopes')).toBe(false);
+  });
+
+  it('persists the typed scope list in the deploy-config save', async () => {
+    let configPut: Record<string, unknown> | null = null;
+    vi.stubGlobal('fetch', mockWorkersFetch({
+      config: oauthConfig,
+      authStatus: () => ({ connected: true, expiresAt: Date.now() + 3_600_000, savedAt: 1, refreshable: true }),
+      onConfigPut: (body) => { configPut = body; },
+    }));
+
+    await openWorkersDeployModal();
+    const scopesInput = await screen.findByTestId('cfw-oauth-scopes') as HTMLInputElement;
+    await waitFor(() => {
+      expect(scopesInput.value).toBe('workers-scripts.write access.write');
+    });
+    fireEvent.change(scopesInput, { target: { value: 'workers-scripts.write d1.read' } });
+    const deploy = screen.getByTestId('cfw-deploy-button') as HTMLButtonElement;
+    await waitFor(() => {
+      expect(deploy.disabled).toBe(false);
+    });
+    fireEvent.click(deploy);
+
+    await waitFor(() => {
+      expect(configPut).not.toBeNull();
+    });
+    expect(configPut!.scopes).toEqual(['workers-scripts.write', 'd1.read']);
+    expect(configPut!.credentialMode).toBe('oauth');
+  });
+
+  it('saves scopes: [] when the user clears the field, so a stored selection is dropped', async () => {
+    let configPut: Record<string, unknown> | null = null;
+    vi.stubGlobal('fetch', mockWorkersFetch({
+      config: oauthConfig,
+      authStatus: () => ({ connected: true, expiresAt: Date.now() + 3_600_000, savedAt: 1, refreshable: true }),
+      onConfigPut: (body) => { configPut = body; },
+    }));
+
+    await openWorkersDeployModal();
+    const scopesInput = await screen.findByTestId('cfw-oauth-scopes') as HTMLInputElement;
+    await waitFor(() => {
+      expect(scopesInput.value).toBe('workers-scripts.write access.write');
+    });
+    fireEvent.change(scopesInput, { target: { value: '' } });
+    fireEvent.click(screen.getByTestId('cfw-deploy-button'));
+    await waitFor(() => {
+      expect(configPut).not.toBeNull();
+    });
+    expect(configPut!.scopes).toEqual([]);
+  });
+});
+
+describe('FileViewer Workers OAuth expiry clock', () => {
+  it('keeps advancing the countdown after the initial status load until the token reads as expired', async () => {
+    // Fake Date + timers, but let them advance with real time so
+    // testing-library's polling (findBy*/waitFor) still makes progress.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const expiresAt = Date.now() + 3 * 60_000 + 5_000;
+    vi.stubGlobal('fetch', mockWorkersFetch({
+      config: {
+        credentialMode: 'oauth',
+        clientId: 'client-1',
+        redirectUri: 'http://127.0.0.1:56122/callback',
+        tokenMask: '',
+      },
+      authStatus: () => ({ connected: true, expiresAt, savedAt: 1, refreshable: true }),
+    }));
+
+    await openWorkersDeployModal();
+    await screen.findByText('Token expires in 3 min');
+
+    // No further status fetches happen; only the local clock moves.
+    const statusFetches = () => (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls
+      .filter((call) => String(call[0]) === '/api/cloudflare/auth/status').length;
+    const fetchesAfterLoad = statusFetches();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    await screen.findByText('Token expires in 2 min');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    await screen.findByText('Token expires in 1 min');
+
+    // Crossing the expiry flips the status line without a reload or refetch.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(70_000);
+    });
+    await screen.findByText('Token expired. Sign in again.');
+    expect(statusFetches()).toBe(fetchesAfterLoad);
   });
 });

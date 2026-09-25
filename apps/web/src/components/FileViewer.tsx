@@ -798,6 +798,20 @@ function deployResultState(status?: string): 'ready' | 'delayed' | 'protected' |
  * row that still carries a D1 `id` from before a type switch fails the deploy
  * at the script step with an opaque API error.
  */
+/**
+ * Parse the free-text OAuth scope field into the list the daemon validates:
+ * comma and/or whitespace separated, trimmed, deduplicated, order kept. An
+ * empty field yields `[]`.
+ */
+export function parseCloudflareWorkersScopesInput(value: string): string[] {
+  const out: string[] = [];
+  for (const raw of value.split(/[\s,]+/)) {
+    const scope = raw.trim();
+    if (scope && !out.includes(scope)) out.push(scope);
+  }
+  return out;
+}
+
 function normalizeCloudflareWorkersBindings(
   bindings: readonly WebCloudflareWorkersBinding[],
 ): WebCloudflareWorkersBinding[] {
@@ -8042,6 +8056,10 @@ function HtmlViewer({
   const [cloudflareWorkersCredentialMode, setCloudflareWorkersCredentialMode] = useState<'token' | 'oauth'>('token');
   const [cloudflareWorkersClientId, setCloudflareWorkersClientId] = useState('');
   const [cloudflareWorkersRedirectUri, setCloudflareWorkersRedirectUri] = useState('');
+  // Free-text OAuth scope selection (comma/space separated), seeded from the
+  // stored config. Parsed by parseCloudflareWorkersScopesInput at the two
+  // consumers: the /oauth/start POST and the deploy-config save.
+  const [cloudflareWorkersScopes, setCloudflareWorkersScopes] = useState('');
   const [cloudflareWorkersZones, setCloudflareWorkersZones] = useState<Array<{ id: string; name: string; status?: string }>>([]);
   const [cloudflareWorkersCustomDomainHostname, setCloudflareWorkersCustomDomainHostname] = useState('');
   const [cloudflareWorkersCustomDomainZoneId, setCloudflareWorkersCustomDomainZoneId] = useState('');
@@ -9542,6 +9560,7 @@ function HtmlViewer({
     setCloudflareWorkersCredentialMode(matchingConfig?.credentialMode === 'oauth' ? 'oauth' : 'token');
     setCloudflareWorkersClientId(matchingConfig?.clientId || '');
     setCloudflareWorkersRedirectUri(matchingConfig?.redirectUri || '');
+    setCloudflareWorkersScopes((matchingConfig?.scopes ?? []).join(' '));
     setCloudflareWorkersCustomDomainHostname(matchingConfig?.customDomain?.hostname || '');
     setCloudflareWorkersCustomDomainZoneId(matchingConfig?.customDomain?.zoneId || '');
     const cloudflareWorkersAccessConfig = matchingConfig?.access;
@@ -9603,6 +9622,9 @@ function HtmlViewer({
         credentialMode: cloudflareWorkersCredentialMode,
         clientId: cloudflareWorkersClientId.trim(),
         redirectUri: cloudflareWorkersRedirectUri.trim(),
+        // Always sent: an empty list clears a stored selection (the daemon then
+        // falls back to its default grant), so an absent key must not keep it.
+        scopes: parseCloudflareWorkersScopesInput(cloudflareWorkersScopes),
         access: buildCloudflareWorkersAccessConfig(),
         bindings: normalizeCloudflareWorkersBindings(cloudflareWorkersBindings),
         // `null`, not `undefined`: the daemon's read-modify-write keeps the
@@ -14858,9 +14880,14 @@ function HtmlViewer({
       popup = null;
     }
     try {
+      // An explicit empty `scopes` is a 400 on the daemon (malformed, not
+      // "use defaults"); omit the key when nothing is typed so the daemon
+      // resolves the persisted selection or its default grant.
+      const requestedScopes = parseCloudflareWorkersScopesInput(cloudflareWorkersScopes);
       const response = await fetchCloudflareWorkersOAuthStart({
         clientId: cloudflareWorkersClientId.trim(),
         redirectUri: cloudflareWorkersRedirectUri.trim(),
+        ...(requestedScopes.length > 0 ? { scopes: requestedScopes } : {}),
       });
       if (session !== cloudflareWorkersOAuthSessionRef.current) {
         // The modal closed (or the mode switched) while the start request was
@@ -15036,6 +15063,7 @@ function HtmlViewer({
         cloudflareWorkersCredentialMode !== (deployConfig?.credentialMode || 'token') ||
         cloudflareWorkersClientId.trim() !== (deployConfig?.clientId || '') ||
         cloudflareWorkersRedirectUri.trim() !== (deployConfig?.redirectUri || '') ||
+        JSON.stringify(parseCloudflareWorkersScopesInput(cloudflareWorkersScopes)) !== JSON.stringify(deployConfig?.scopes ?? []) ||
         JSON.stringify(normalizeCloudflareWorkersBindings(cloudflareWorkersBindings)) !== JSON.stringify(deployConfig?.bindings ?? []) ||
         JSON.stringify(buildCloudflareWorkersAccessConfig()) !== JSON.stringify(deployConfig?.access ?? { enabled: false }) ||
         JSON.stringify(buildCloudflareWorkersCustomDomain() ?? null) !== JSON.stringify(deployConfig?.customDomain ?? null)
@@ -19179,6 +19207,17 @@ function HtmlViewer({
                               <input
                                 value={cloudflareWorkersRedirectUri}
                                 onChange={(e) => setCloudflareWorkersRedirectUri(e.target.value)}
+                              />
+                            </label>
+                          </div>
+                          <div className="deploy-field-grid single-field">
+                            <label>
+                              <span className="deploy-field-title">{t('fileViewer.cloudflareWorkersOauthScopes')}</span>
+                              <input
+                                data-testid="cfw-oauth-scopes"
+                                value={cloudflareWorkersScopes}
+                                placeholder="workers-scripts.write access.write zone.read …"
+                                onChange={(e) => setCloudflareWorkersScopes(e.target.value)}
                               />
                             </label>
                           </div>

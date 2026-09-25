@@ -155,11 +155,15 @@ export interface WebCloudflareWorkersCustomDomain {
 
 export type WebDeployConfigResponse = DeployConfigResponse & {
   customDomain?: WebCloudflareWorkersCustomDomain;
+  /** Persisted OAuth scope selection; empty/absent means the default grant. */
+  scopes?: string[];
 };
 
 export type WebUpdateDeployConfigRequest = UpdateDeployConfigRequest & {
   /** `null` clears a saved domain; an absent key keeps it (daemon read-modify-write). */
   customDomain?: WebCloudflareWorkersCustomDomain | null;
+  /** OAuth scope selection to persist; `[]` clears it, an absent key keeps it. */
+  scopes?: string[];
 };
 export type WebDeploymentInfo = ProjectDeploymentsResponse['deployments'][number];
 export type WebDeployProjectFileResponse = DeployProjectFileResponse;
