@@ -1362,6 +1362,8 @@ export async function finalizeBrand(
     throw new Error(`brand.json failed validation: ${errorMessage(err)}`);
   }
 
+  // Fingerprint the previous output before the copies below replace it.
+  const baseline = brandBundleBaseline(brandsRoot, id);
   // Pull the agent's downloaded assets into the brand workspace so the
   // deterministic builder and the design system see them.
   copyProjectDirToBrand(projectsRoot, projectId, brandsRoot, id, 'logos');
@@ -1371,7 +1373,7 @@ export async function finalizeBrand(
   const guideMd =
     (await readProjectTextOrNull(projectsRoot, projectId, 'BRAND.md')) ?? brandGuideMd(brand);
 
-  return finalizeBrandCore({ ...opts, id, projectId, meta, brand, guideMd });
+  return finalizeBrandCore({ ...opts, id, projectId, meta, brand, guideMd, baseline });
 }
 
 interface FinalizeBrandCoreOptions extends FinalizeBrandOptions {
@@ -1389,6 +1391,8 @@ interface FinalizeBrandCoreOptions extends FinalizeBrandOptions {
   abortSignal?: AbortSignal;
   /** Programmatic attempt that is allowed to commit terminal writes. */
   extractionAttemptId?: string;
+  /** Brand workspace fingerprints taken before the caller changed it. */
+  baseline?: Record<string, string>;
 }
 
 /**
@@ -1414,7 +1418,7 @@ async function finalizeBrandCore(opts: FinalizeBrandCoreOptions): Promise<BrandF
   } = opts;
 
   throwIfProgrammaticExtractionNotCurrent(opts);
-  const baseline = brandBundleBaseline(brandsRoot, id);
+  const baseline = opts.baseline ?? brandBundleBaseline(brandsRoot, id);
   writeBrand(brandsRoot, id, brand);
   writeBrandGuide(brandsRoot, id, guideMd);
 
@@ -1664,6 +1668,8 @@ export async function runProgrammaticExtraction(
   throwIfProgrammaticExtractionNotCurrent(opts);
   const brandDir = resolveBrandFile(brandsRoot, id, []);
   if (!brandDir) return null;
+  // Prefetch writes logos/ and prefetch/ into the workspace before finalize.
+  const baseline = brandBundleBaseline(brandsRoot, id);
 
   if (opts.designMd?.trim()) {
     throwIfProgrammaticExtractionNotCurrent(opts);
@@ -1676,7 +1682,7 @@ export async function runProgrammaticExtraction(
     if (brand) {
       const guideMd = brandGuideMd(brand);
       throwIfProgrammaticExtractionNotCurrent(opts);
-      const finalized = await finalizeBrandCore({ ...opts, brand, guideMd });
+      const finalized = await finalizeBrandCore({ ...opts, brand, guideMd, baseline });
       throwIfProgrammaticExtractionNotCurrent(opts);
       updateProject(opts.db, opts.projectId, {
         pendingPrompt: brandExtractionPrompt({
@@ -1713,7 +1719,7 @@ export async function runProgrammaticExtraction(
   const brand = brandFromMaterial(material, meta.sourceUrl);
   const guideMd = brandGuideMd(brand);
   throwIfProgrammaticExtractionNotCurrent(opts);
-  const finalized = await finalizeBrandCore({ ...opts, brand, guideMd });
+  const finalized = await finalizeBrandCore({ ...opts, brand, guideMd, baseline });
   throwIfProgrammaticExtractionNotCurrent(opts);
   updateProject(opts.db, opts.projectId, {
     pendingPrompt: brandExtractionPrompt({
@@ -1798,6 +1804,7 @@ export async function extractBrandFromHtml(
     extractionAttemptId,
   }) ?? { ...meta, status: 'extracting', extractionAttemptId, updatedAt: Date.now() };
 
+  const baseline = brandBundleBaseline(brandsRoot, id);
   const material = await prefetchFromHtml(opts.html, opts.css ?? '', baseUrl, brandDir);
   throwIfProgrammaticExtractionNotCurrent({ ...opts, extractionAttemptId });
   // This DOM was read out of the in-app browser tab AFTER the user cleared the
@@ -1820,6 +1827,7 @@ export async function extractBrandFromHtml(
     brand,
     guideMd,
     extractionAttemptId,
+    baseline,
   });
   throwIfProgrammaticExtractionNotCurrent({ ...opts, extractionAttemptId });
   // Flip the project to enrichment mode so a follow-up "AI Optimize" refines the
@@ -2151,7 +2159,8 @@ function brandBundleFiles(brandRoot: string, files: string[], dirs: string[]): B
 /**
  * Fingerprints of what the previous finalize mirrored, taken from the brand
  * workspace before this finalize replaces it. DESIGN.md is not kept in the
- * workspace, so it is re-derived from the previous brand.json.
+ * workspace, so it is re-derived from the previous brand.json with the current
+ * generator; a legacy DESIGN.md from an older generator is therefore kept.
  */
 function brandBundleBaseline(brandsRoot: string, brandId: string): Record<string, string> {
   const brandRoot = resolveBrandFile(brandsRoot, brandId, []);
@@ -2208,7 +2217,11 @@ async function planDesignSystemMirror(
   const brandRoot = resolveBrandFile(brandsRoot, brandId, []);
   if (!brandRoot) throw new Error(`invalid brand id: ${brandId}`);
   // Like the old copy, a directory the brand does not ship is left alone.
-  const shipped = DESIGN_SYSTEM_BUNDLE_DIRS.filter((name) => isDirectory(path.join(brandRoot, name)));
+  // Stale candidates come from disk, so manifest keys never reach the filesystem.
+  const prunable = DESIGN_SYSTEM_BUNDLE_DIRS
+    .filter((name) => isDirectory(path.join(brandRoot, name)))
+    .filter((name) => fs.lstatSync(path.join(dir, name), { throwIfNoEntry: false })?.isDirectory())
+    .flatMap((name) => collectFiles(path.join(dir, name)).map((file) => `${name}/${file.rel}`));
   return planBundleMirror({
     dir,
     files: [
@@ -2217,7 +2230,7 @@ async function planDesignSystemMirror(
     ],
     baseline,
     isManaged: (rel) => isBundlePath(rel, DESIGN_SYSTEM_BUNDLE_FILES, DESIGN_SYSTEM_BUNDLE_DIRS),
-    isPrunable: (rel) => isBundlePath(rel, [], shipped),
+    prunable,
     ...(overrides ? { overrides } : {}),
   });
 }

@@ -4,7 +4,9 @@
 // Hand-edited files and files the generator never produced survive, both in the
 // backing project and in the linked `user:<id>` design system.
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
 import {
+  chmodSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -242,4 +244,60 @@ describe('brand finalize preserves user-owned files (#8144)', () => {
     expect(existsSync(path.join(dir, 'logos', 'keep.svg'))).toBe(true);
     expect(readFileSync(path.join(dir, 'logos', 'mine.svg'), 'utf8')).toBe('<svg id="mine"/>');
   });
+
+  it('never deletes a path named by a crafted manifest key outside the design system', async () => {
+    const { writeBrandJson, finalize } = await setup();
+    writeBrandJson(VALID_BRAND);
+    const first = await finalize();
+    const dir = dsDir(first.designSystemId);
+    const victim = path.join(tempDir, 'victim.txt');
+    writeFileSync(victim, 'keep me\n', 'utf8');
+    const manifestPath = path.join(dir, '.od-generated.json');
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as Record<string, string>;
+    manifest['system/../../../victim.txt'] = createHash('sha256').update('keep me\n').digest('hex');
+    writeFileSync(manifestPath, JSON.stringify(manifest), 'utf8');
+
+    await finalize();
+
+    expect(readFileSync(victim, 'utf8')).toBe('keep me\n');
+  });
+
+  it('follows project logo changes into the design system of a legacy agent-finalized brand', async () => {
+    const { projectDir, writeBrandJson, finalize } = await setup();
+    const projectLogo = path.join(projectDir, 'logos', 'mark.svg');
+    mkdirSync(path.dirname(projectLogo), { recursive: true });
+    writeFileSync(projectLogo, '<svg id="v1"/>', 'utf8');
+    writeBrandJson(VALID_BRAND);
+    const first = await finalize();
+    const dir = dsDir(first.designSystemId);
+    rmSync(path.join(projectDir, '.od-generated.json'), { force: true });
+    rmSync(path.join(dir, '.od-generated.json'), { force: true });
+
+    for (const version of ['v2', 'v3']) {
+      writeFileSync(projectLogo, `<svg id="${version}"/>`, 'utf8');
+      await finalize();
+      expect(readFileSync(path.join(dir, 'logos', 'mark.svg'), 'utf8')).toBe(`<svg id="${version}"/>`);
+    }
+  });
+
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+    'keeps files that landed before a failed finalize refreshable',
+    async () => {
+      const { projectDir, writeBrandJson, finalize } = await setup();
+      writeBrandJson(VALID_BRAND);
+      await finalize();
+      const themeJson = path.join(projectDir, 'system', 'theme.json');
+      chmodSync(themeJson, 0o444);
+      writeBrandJson(RECOLORED_BRAND);
+      await expect(finalize()).rejects.toThrow();
+      chmodSync(themeJson, 0o644);
+      // DESIGN.md landed as the recolored output before the failure.
+      expect(readFileSync(path.join(projectDir, 'DESIGN.md'), 'utf8')).toContain('Cobalt');
+
+      writeBrandJson(VALID_BRAND);
+      await finalize();
+
+      expect(readFileSync(path.join(projectDir, 'DESIGN.md'), 'utf8')).not.toContain('Cobalt');
+    },
+  );
 });

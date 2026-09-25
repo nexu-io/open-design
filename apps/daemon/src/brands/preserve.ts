@@ -44,6 +44,9 @@ export function hashBundleContent(content: Buffer | string): string {
 
 export function readBundleTarget(root: string, rel: string): BundleTargetState {
   const parts = rel.split('/');
+  if (parts.some((part) => part === '' || part === '.' || part === '..' || part.includes('\\'))) {
+    return null;
+  }
   let abs = root;
   for (const [index, part] of parts.entries()) {
     abs = path.join(abs, part);
@@ -70,7 +73,8 @@ export async function planBundleMirror(opts: {
   files: BundleFile[];
   baseline: Record<string, string>;
   isManaged: (rel: string) => boolean;
-  isPrunable?: (rel: string) => boolean;
+  /** Files found on disk that may be deleted if unmodified and no longer produced. */
+  prunable?: string[];
   /** Target state to use instead of what is on disk, by path. */
   overrides?: Record<string, BundleTargetState>;
 }): Promise<BundlePlan> {
@@ -95,19 +99,23 @@ export async function planBundleMirror(opts: {
     const currentHash = current === undefined ? undefined : hashBundleContent(current);
     if (currentHash === next) {
       plan.manifest[file.rel] = next;
-    } else if (currentHash === undefined || currentHash === known[file.rel]) {
-      plan.writes.push(file);
-      plan.manifest[file.rel] = next;
     } else {
-      plan.kept.push(file.rel);
+      if (currentHash === undefined || currentHash === known[file.rel]) plan.writes.push(file);
+      else plan.kept.push(file.rel);
+      // Kept files and pending writes carry the old fingerprint; a write replaces it once it lands.
       const previous = known[file.rel];
       if (previous !== undefined) plan.manifest[file.rel] = previous;
     }
   }
-  for (const [rel, hash] of Object.entries(known)) {
-    if (produced.has(rel) || !opts.isPrunable?.(rel)) continue;
+  for (const rel of opts.prunable ?? []) {
+    if (produced.has(rel)) continue;
     const current = readBundleTarget(opts.dir, rel);
-    if (current instanceof Buffer && hashBundleContent(current) === hash) plan.stale.push(rel);
+    if (!(current instanceof Buffer)) continue;
+    const hash = hashBundleContent(current);
+    if (hash === known[rel]) {
+      plan.stale.push(rel);
+      plan.manifest[rel] = hash;
+    }
   }
   return plan;
 }
@@ -116,18 +124,25 @@ export async function applyBundleMirror(
   plan: BundlePlan,
   write: (file: BundleFile) => Promise<void> | void,
 ): Promise<void> {
-  for (const file of plan.writes) {
-    await write(file);
-    // Record what landed: the project writer may normalize bytes on the way in.
-    const landed = readBundleTarget(plan.dir, file.rel);
-    if (landed instanceof Buffer) plan.manifest[file.rel] = hashBundleContent(landed);
-  }
-  for (const rel of plan.stale) fs.rmSync(path.join(plan.dir, ...rel.split('/')), { force: true });
-  if (readBundleTarget(plan.dir, GENERATED_MANIFEST_FILENAME) !== null) {
-    fs.writeFileSync(
-      path.join(plan.dir, GENERATED_MANIFEST_FILENAME),
-      serializeGeneratedManifest(plan.manifest),
-      'utf8',
-    );
+  try {
+    for (const file of plan.writes) {
+      await write(file);
+      // Record what landed: the project writer may normalize bytes on the way in.
+      const landed = readBundleTarget(plan.dir, file.rel);
+      if (landed instanceof Buffer) plan.manifest[file.rel] = hashBundleContent(landed);
+    }
+    for (const rel of plan.stale) {
+      fs.rmSync(path.join(plan.dir, ...rel.split('/')), { force: true });
+      delete plan.manifest[rel];
+    }
+  } finally {
+    // Also on failure, so files that already landed stay refreshable.
+    if (readBundleTarget(plan.dir, GENERATED_MANIFEST_FILENAME) !== null) {
+      fs.writeFileSync(
+        path.join(plan.dir, GENERATED_MANIFEST_FILENAME),
+        serializeGeneratedManifest(plan.manifest),
+        'utf8',
+      );
+    }
   }
 }
