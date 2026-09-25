@@ -7,7 +7,7 @@ import { hash as blake3Hash } from 'blake3-wasm';
 import { listFiles, readProjectFile, validateProjectPath } from './projects.js';
 import { findRealTagOffset, HTML_TAG_PATTERNS } from '@open-design/contracts/runtime/html-injection-points';
 import { proxyDispatcherRequestInit } from './connectionTest.js';
-import { refreshCloudflareToken, validateCloudflareOAuthScopes } from './integrations/cloudflare-oauth.js';
+import { refreshCloudflareToken, revokeCloudflareToken, validateCloudflareOAuthScopes } from './integrations/cloudflare-oauth.js';
 import {
   fsyncDirectory,
   getCloudflareOAuthToken,
@@ -771,6 +771,41 @@ export async function getCloudflareOAuthStoredEmail(): Promise<string> {
   return (current?.email ?? '').trim();
 }
 
+/** Upper bound on the refresh token-endpoint round trip. The refresh runs
+ * under the single-flight lock, so a hung connection would otherwise park
+ * every deploy call in the daemon behind it until the socket died on its own. */
+export const CLOUDFLARE_OAUTH_REFRESH_TIMEOUT_MS = 20_000;
+/** Bound on the best-effort revoke of a rotated grant nobody holds. */
+const CLOUDFLARE_OAUTH_REVOKE_TIMEOUT_MS = 10_000;
+
+/** Best-effort revoke of the grant a refresh rotated to but nobody will ever
+ * hold: the compare-and-set persist lost, so the rotated refresh token is not
+ * on disk anywhere, yet it stays valid on Cloudflare's side until revoked.
+ * Never throws — the caller's outcome (adopt the newer record or demand a
+ * reconnect) does not depend on Cloudflare answering here. */
+async function revokeSupersededRefreshGrant(
+  refreshed: Awaited<ReturnType<typeof refreshCloudflareToken>>,
+  clientId: string,
+): Promise<void> {
+  const token = refreshed.refresh_token ?? refreshed.access_token;
+  if (!token) return;
+  const proxyDispatcher = proxyDispatcherRequestInit(process.env);
+  try {
+    const ok = await revokeCloudflareToken({
+      token,
+      tokenTypeHint: refreshed.refresh_token ? 'refresh_token' : 'access_token',
+      clientId,
+      fetchImpl: (input, init) => fetch(input, { ...init, ...proxyDispatcher.requestInit }),
+      signal: AbortSignal.timeout(CLOUDFLARE_OAUTH_REVOKE_TIMEOUT_MS),
+    });
+    if (!ok) console.warn('[cloudflare-oauth] revoke of the superseded refresh grant refused by Cloudflare');
+  } catch (err: unknown) {
+    console.warn('[cloudflare-oauth] revoke of the superseded refresh grant failed:', err instanceof Error ? err.message : String(err));
+  } finally {
+    await proxyDispatcher.close();
+  }
+}
+
 /** Run the read -> refresh -> persist sequence for a dataDir. The caller holds
  * the single-flight lock for this dataDir. */
 async function refreshCloudflareOAuthAccessToken(
@@ -816,13 +851,18 @@ async function refreshCloudflareOAuthAccessToken(
   // The token endpoint goes through the same HTTP/SOCKS proxy dispatcher the
   // connect and paste-back exchanges use (routes/cloudflare.ts). A bare fetch
   // here would bypass the user's proxy, so the refresh fails on exactly the
-  // machines where the connect only worked because of it.
+  // machines where the connect only worked because of it. The call is bounded
+  // because it holds the single-flight lock (see CLOUDFLARE_OAUTH_REFRESH_TIMEOUT_MS).
   const proxyDispatcher = proxyDispatcherRequestInit(process.env);
   try {
     refreshed = await refreshCloudflareToken({
       clientId,
       refreshToken: current.refreshToken,
-      fetchImpl: (input, init) => fetch(input, { ...init, ...proxyDispatcher.requestInit }),
+      fetchImpl: (input, init) => fetch(input, {
+        ...init,
+        ...proxyDispatcher.requestInit,
+        signal: AbortSignal.timeout(CLOUDFLARE_OAUTH_REFRESH_TIMEOUT_MS),
+      }),
     });
   } catch (err) {
     // A reconnect in this daemon may have replaced the credential while the
@@ -873,6 +913,10 @@ async function refreshCloudflareOAuthAccessToken(
     current.generation ?? 0,
   );
   if (!persisted) {
+    // The store moved on (disconnect or reconnect) while the token endpoint
+    // was rotating the grant. The record above is never written, so the
+    // refresh token it carries would otherwise stay valid with no holder.
+    await revokeSupersededRefreshGrant(refreshed, clientId);
     const latest = await getCloudflareOAuthToken(dataDir);
     if (latest && !isCloudflareOAuthTokenExpired(latest, Date.now(), CLOUDFLARE_OAUTH_EXPIRY_SKEW_MS)) {
       // A reconnect wrote a newer, still-valid credential — adopt it rather
@@ -902,6 +946,19 @@ async function refreshCloudflareOAuthAccessToken(
  * reconnect that would discard a still-valid grant. */
 export function classifyCloudflareRefreshFailure(err: unknown): DeployError {
   if (err instanceof DeployError) return err;
+  // The bounded fetch gave up (AbortSignal.timeout rejects with a
+  // `TimeoutError` DOMException; a plain abort with `AbortError`). Cloudflare
+  // never answered, so the grant is not known to be dead: transient, no
+  // reconnect.
+  const name = typeof err === 'object' && err !== null ? (err as { name?: unknown }).name : undefined;
+  if (name === 'TimeoutError' || name === 'AbortError') {
+    return new DeployError(
+      'Cloudflare OAuth token refresh timed out after ' + Math.round(CLOUDFLARE_OAUTH_REFRESH_TIMEOUT_MS / 1000) + 's — Cloudflare did not answer; try again.',
+      502,
+      undefined,
+      'CFW_OAUTH_REFRESH_FAILED',
+    );
+  }
   const detail = err instanceof Error ? err.message : String(err);
   const httpStatus = /\bHTTP (\d{3})\b/.exec(detail);
   const status = httpStatus ? Number(httpStatus[1]) : 0;

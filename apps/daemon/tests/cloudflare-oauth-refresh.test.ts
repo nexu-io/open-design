@@ -32,6 +32,7 @@ import { PendingAuthCache } from '../src/mcp-oauth.js';
 import {
   classifyCloudflareRefreshFailure,
   CLOUDFLARE_OAUTH_EXPIRY_SKEW_MS,
+  CLOUDFLARE_OAUTH_REFRESH_TIMEOUT_MS,
   cloudflareOAuthTokensDir,
   configureCloudflareWorkersDataDir,
   getCloudflareAccessToken,
@@ -54,6 +55,17 @@ function tokenFetch(
       headers: { 'content-type': 'application/json' },
     });
   }) as typeof fetch;
+}
+
+/** Intercept the RFC 7009 revoke endpoint and record which token each call
+ * carried, so a suite can assert a rotated grant nobody holds was revoked. */
+function revokeSink(revoked: string[]) {
+  return (input: unknown, init?: unknown): Response | null => {
+    if (!String(input).includes('oauth2/revoke')) return null;
+    const form = new URLSearchParams(String((init as RequestInit | undefined)?.body ?? ''));
+    revoked.push(form.get('token') ?? '');
+    return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
+  };
 }
 
 describe('offline_access scope', () => {
@@ -261,6 +273,8 @@ describe('refresh vs disconnect', () => {
     let releaseToken!: (resp: Response) => void;
     let markStarted!: () => void;
     const started = new Promise<void>((resolve) => { markStarted = resolve; });
+    const revoked: string[] = [];
+    const revoke = revokeSink(revoked);
     const realFetch = globalThis.fetch;
     vi.stubGlobal('fetch', async (input: unknown, init?: unknown) => {
       const url = String(input);
@@ -268,7 +282,7 @@ describe('refresh vs disconnect', () => {
         markStarted();
         return new Promise<Response>((resolve) => { releaseToken = resolve; });
       }
-      return realFetch(input as never, init as never);
+      return revoke(input, init) ?? realFetch(input as never, init as never);
     });
 
     try {
@@ -292,6 +306,9 @@ describe('refresh vs disconnect', () => {
         code: 'CFW_OAUTH_RECONNECT_REQUIRED',
       });
       expect(await getCloudflareOAuthToken(cloudflareOAuthTokensDir())).toBeNull();
+      // The grant the endpoint rotated to was never persisted: nobody holds
+      // `ref-2`, so it must not stay valid on Cloudflare's side.
+      expect(revoked).toEqual(['ref-2']);
     } finally {
       vi.unstubAllGlobals();
       await rm(dir, { recursive: true, force: true });
@@ -345,6 +362,51 @@ describe('refresh failure classification', () => {
       status: 502,
       code: 'CFW_OAUTH_REFRESH_FAILED',
     });
+  });
+
+  it('maps a timed-out token-endpoint call (AbortSignal.timeout) to a transient CFW_OAUTH_REFRESH_FAILED, never a reconnect', () => {
+    const timedOut = classifyCloudflareRefreshFailure(new DOMException('The operation was aborted due to timeout', 'TimeoutError'));
+    expect(timedOut).toMatchObject({ status: 502, code: 'CFW_OAUTH_REFRESH_FAILED' });
+    expect(timedOut.message).toMatch(/timed out/);
+    expect(classifyCloudflareRefreshFailure(new DOMException('This operation was aborted', 'AbortError'))).toMatchObject({
+      status: 502,
+      code: 'CFW_OAUTH_REFRESH_FAILED',
+    });
+  });
+
+  it('a token-endpoint call that hits the refresh deadline surfaces as CFW_OAUTH_REFRESH_FAILED and keeps the grant', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'od-cf-refresh-timeout-'));
+    configureCloudflareWorkersDataDir(dir);
+    const dataDir = cloudflareOAuthTokensDir();
+    await setCloudflareOAuthToken(dataDir, {
+      accessToken: 'expired-token',
+      tokenType: 'Bearer',
+      refreshToken: 'ref-still-good',
+      clientId: 'client-abc',
+      expiresAt: Date.now() - 1000,
+      generation: 0,
+      savedAt: Date.now(),
+    });
+    await writeCloudflareWorkersConfig({ credentialMode: 'oauth', accountId: 'acct_test', clientId: 'client-abc' });
+    let signal: AbortSignal | undefined;
+    vi.stubGlobal('fetch', async (input: unknown, init?: RequestInit) => {
+      if (String(input).includes('oauth2/token')) {
+        signal = init?.signal ?? undefined;
+        // What undici throws when the request's AbortSignal.timeout fires.
+        throw new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+      }
+      throw new Error('unexpected fetch ' + String(input));
+    });
+    try {
+      await expect(getCloudflareAccessToken()).rejects.toMatchObject({ status: 502, code: 'CFW_OAUTH_REFRESH_FAILED' });
+      expect(signal).toBeInstanceOf(AbortSignal);
+      // Cloudflare never answered: the stored grant is still the user's and is not discarded.
+      expect(await getCloudflareOAuthToken(dataDir)).toMatchObject({ refreshToken: 'ref-still-good' });
+      expect(CLOUDFLARE_OAUTH_REFRESH_TIMEOUT_MS).toBeGreaterThan(0);
+    } finally {
+      vi.unstubAllGlobals();
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it('a dead refresh token surfaces as 401 CFW_OAUTH_RECONNECT_REQUIRED, not a raw 400', async () => {
@@ -441,8 +503,12 @@ describe('refresh vs a concurrent reconnect', () => {
     const dataDir = cloudflareOAuthTokensDir();
     await setCloudflareOAuthToken(dataDir, expiredRecord());
     await writeCloudflareWorkersConfig({ credentialMode: 'oauth', accountId: 'acct_test', clientId: 'client-abc' });
+    const revoked: string[] = [];
+    const revoke = revokeSink(revoked);
     const realFetch = globalThis.fetch;
     vi.stubGlobal('fetch', async (input: unknown, init?: unknown) => {
+      const intercepted = revoke(input, init);
+      if (intercepted) return intercepted;
       if (String(input).includes('oauth2/token')) {
         // The token endpoint SUCCEEDS, but a reconnect landed a newer
         // generation meanwhile: the compare-and-set persist must lose.
@@ -462,6 +528,8 @@ describe('refresh vs a concurrent reconnect', () => {
     try {
       await expect(getCloudflareAccessToken()).resolves.toBe('reconnected-fresh');
       expect(await getCloudflareOAuthToken(dataDir)).toMatchObject({ accessToken: 'reconnected-fresh', refreshToken: 'ref-reconnected' });
+      // The dropped rotation (`ref-2`) is revoked; the adopted grant is not touched.
+      expect(revoked).toEqual(['ref-2']);
     } finally {
       vi.unstubAllGlobals();
       await rm(dir, { recursive: true, force: true });
@@ -474,8 +542,12 @@ describe('refresh vs a concurrent reconnect', () => {
     const dataDir = cloudflareOAuthTokensDir();
     await setCloudflareOAuthToken(dataDir, expiredRecord());
     await writeCloudflareWorkersConfig({ credentialMode: 'oauth', accountId: 'acct_test', clientId: 'client-abc' });
+    const revoked: string[] = [];
+    const revoke = revokeSink(revoked);
     const realFetch = globalThis.fetch;
     vi.stubGlobal('fetch', async (input: unknown, init?: unknown) => {
+      const intercepted = revoke(input, init);
+      if (intercepted) return intercepted;
       if (String(input).includes('oauth2/token')) {
         await setCloudflareOAuthToken(dataDir, { ...expiredRecord(), accessToken: 'reconnected-stale', expiresAt: Date.now() - 1 });
         return new Response(
@@ -491,7 +563,47 @@ describe('refresh vs a concurrent reconnect', () => {
       // not persisted over it either (the other writer still won the store).
       await expect(getCloudflareAccessToken()).rejects.toMatchObject({ status: 401, code: 'CFW_OAUTH_RECONNECT_REQUIRED' });
       expect(await getCloudflareOAuthToken(dataDir)).toMatchObject({ accessToken: 'reconnected-stale' });
+      expect(revoked).toEqual(['ref-2']);
     } finally {
+      vi.unstubAllGlobals();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('a failing revoke of the dropped rotation does not change the outcome (best-effort)', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'od-cf-refresh-cas-revoke-fails-'));
+    configureCloudflareWorkersDataDir(dir);
+    const dataDir = cloudflareOAuthTokensDir();
+    await setCloudflareOAuthToken(dataDir, expiredRecord());
+    await writeCloudflareWorkersConfig({ credentialMode: 'oauth', accountId: 'acct_test', clientId: 'client-abc' });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    let revokeAttempted = false;
+    const realFetch = globalThis.fetch;
+    vi.stubGlobal('fetch', async (input: unknown, init?: unknown) => {
+      if (String(input).includes('oauth2/revoke')) {
+        revokeAttempted = true;
+        throw new TypeError('fetch failed');
+      }
+      if (String(input).includes('oauth2/token')) {
+        await setCloudflareOAuthToken(dataDir, {
+          ...expiredRecord(),
+          accessToken: 'reconnected-fresh',
+          refreshToken: 'ref-reconnected',
+          expiresAt: Date.now() + 3_600_000,
+        });
+        return new Response(
+          JSON.stringify({ access_token: 'fresh-from-endpoint', token_type: 'Bearer', refresh_token: 'ref-2', expires_in: 3600 }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return realFetch(input as never, init as never);
+    });
+    try {
+      await expect(getCloudflareAccessToken()).resolves.toBe('reconnected-fresh');
+      expect(revokeAttempted).toBe(true);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('superseded refresh grant failed'), expect.any(String));
+    } finally {
+      warn.mockRestore();
       vi.unstubAllGlobals();
       await rm(dir, { recursive: true, force: true });
     }
@@ -787,6 +899,8 @@ describe('refresh transport', () => {
       // endpoint the same way or it fails on every proxied machine.
       expect(refreshInit).toBeDefined();
       expect(refreshInit?.dispatcher).toBeDefined();
+      // The call is bounded while it holds the single-flight lock.
+      expect(refreshInit?.signal).toBeInstanceOf(AbortSignal);
     } finally {
       vi.unstubAllGlobals();
       if (priorProxy === undefined) delete process.env.HTTPS_PROXY;

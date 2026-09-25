@@ -1013,6 +1013,127 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
     expect(caught?.attachedCustomDomains).toEqual([{ id: 'dom-1', hostname: 'app.example.com' }]);
   });
 
+  it('refuses to attach a hostname already routed to ANOTHER Worker before any PUT goes out (CFW_DOMAIN_CONFLICT)', async () => {
+    // The service-filtered list cannot see the other Worker's binding, so the
+    // attach path must ask for the hostname across every script first.
+    const { calls, fn } = accessFetch({
+      domainsList: { success: true, result: [{ id: 'dom-theirs', hostname: 'app.example.com', service: 'other-script' }] },
+    });
+    vi.stubGlobal('fetch', fn);
+    const onBeforeAttach = vi.fn();
+    await expect(
+      deployToCloudflareWorkers({
+        ...base,
+        access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } },
+        customDomain: { hostname: 'app.example.com', zoneId: 'zone-1' },
+        onBeforeAttach,
+      }),
+    ).rejects.toMatchObject({ name: 'DeployError', code: 'CFW_DOMAIN_CONFLICT', status: 409 });
+    // The pre-check is strict on the hostname and NOT filtered to our script.
+    const precheck = calls.find((c) => (c[1]?.method || 'GET') === 'GET' && c[0].endsWith('/workers/domains?hostname=app.example.com'));
+    expect(precheck).toBeDefined();
+    // No PUT was sent: the other Worker keeps its hostname. Nothing was
+    // written ahead either, so there is no pending record to reconcile.
+    expect(calls.some((c) => c[1]?.method === 'PUT' && c[0].endsWith('/workers/domains'))).toBe(false);
+    expect(calls.some((c) => c[1]?.method === 'DELETE' && c[0].includes('/workers/domains/'))).toBe(false);
+    expect(onBeforeAttach).not.toHaveBeenCalled();
+  });
+
+  it('re-attaches a hostname the strict list already proved is routed to this script without a hostname pre-check', async () => {
+    const { calls, fn } = accessFetch({
+      domainsList: { success: true, result: [{ id: 'dom-1', hostname: 'app.example.com', service: 'my-site' }] },
+    });
+    vi.stubGlobal('fetch', fn);
+    const out = await deployToCloudflareWorkers({
+      ...base,
+      access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } },
+      customDomain: { hostname: 'app.example.com', zoneId: 'zone-1' },
+    });
+    expect(out.status).toBe('ready');
+    expect(calls.some((c) => c[0].includes('/workers/domains?hostname='))).toBe(false);
+    expect(calls.some((c) => c[1]?.method === 'PUT' && c[0].endsWith('/workers/domains'))).toBe(true);
+  });
+
+  it('keeps the attach and reports link-delayed, withdrawing nothing, when the perimeter probe gets no answer at all', async () => {
+    // DNS not propagated / certificate still issuing: the HEAD throws. That is
+    // not an exposure — nothing proves the URL serves ungated — so the attach
+    // and the workers.dev route stay and the verification is deferred.
+    const { calls, fn } = accessFetch({ head: () => { throw new TypeError('fetch failed: getaddrinfo ENOTFOUND'); } });
+    const wrapped = vi.fn(async (url: string, init?: RequestInit) => {
+      if ((init?.method || 'GET').toUpperCase() === 'GET' && url.endsWith('/workers/scripts/my-site/subdomain')) {
+        calls.push([url, init]);
+        return jsonResponse({ success: true, result: { enabled: false, previews_enabled: false } });
+      }
+      return fn(url, init);
+    });
+    vi.stubGlobal('fetch', wrapped);
+    const out = await deployToCloudflareWorkers({
+      ...base,
+      access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } },
+      customDomain: { hostname: 'app.example.com', zoneId: 'zone-1' },
+    });
+    expect(out.status).toBe('link-delayed');
+    expect(out.reachableAt).toBeUndefined();
+    expect(out.statusMessage).toMatch(/Could not reach/);
+    expect(out.providerMetadata).toMatchObject({
+      accessVerified: false,
+      customDomain: { id: 'dom-1', hostname: 'app.example.com' },
+      ownedCustomDomains: [{ id: 'dom-1', hostname: 'app.example.com' }],
+    });
+    expect(out.providerMetadata?.steps).toContainEqual(expect.objectContaining({ name: 'access-verify', detail: expect.stringContaining('deferred') }));
+    // The attach went out and was NOT undone; workers.dev was turned on and NOT back off.
+    expect(calls.some((c) => c[1]?.method === 'PUT' && c[0].endsWith('/workers/domains'))).toBe(true);
+    expect(calls.some((c) => c[1]?.method === 'DELETE' && c[0].includes('/workers/domains/'))).toBe(false);
+    const subdomainPosts = calls
+      .filter((c) => c[0].endsWith('/workers/scripts/my-site/subdomain') && c[1]?.method === 'POST')
+      .map((c) => (JSON.parse(String(c[1]?.body)) as { enabled: boolean }).enabled);
+    expect(subdomainPosts).toEqual([true]);
+    // Every URL was probed with the full retry budget before giving up.
+    expect(calls.filter((c) => c[1]?.method === 'HEAD').length).toBe(2 * 2);
+  });
+
+  it('an ungated answer on one URL still withdraws the exposure even when another URL is unreachable', async () => {
+    // workers.dev does not answer yet; the custom hostname answers 200 with no
+    // Access redirect. Unprotected outranks unreachable: withdraw.
+    const { calls, fn } = accessFetch({
+      head: (url) => {
+        if (url.endsWith('.workers.dev')) throw new TypeError('fetch failed');
+        return new Response('', { status: 200 });
+      },
+    });
+    vi.stubGlobal('fetch', fn);
+    await expect(
+      deployToCloudflareWorkers({
+        ...base,
+        access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } },
+        customDomain: { hostname: 'app.example.com', zoneId: 'zone-1' },
+      }),
+    ).rejects.toMatchObject({ name: 'DeployError', code: 'CFW_ACCESS_UNVERIFIED' });
+    expect(calls.some((c) => c[1]?.method === 'DELETE' && c[0].endsWith('/workers/domains/dom-1'))).toBe(true);
+  });
+
+  it('a preview deploy reports link-delayed and leaves previews_enabled on when the preview URL gets no answer', async () => {
+    const { calls, fn } = accessFetch({ head: () => { throw new TypeError('fetch failed'); } });
+    const wrapped = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes('/versions')) return jsonResponse({ success: true, result: { id: 'v12345678' } });
+      if ((init?.method || 'GET').toUpperCase() === 'GET' && url.endsWith('/workers/scripts/my-site/subdomain')) {
+        calls.push([url, init]);
+        return jsonResponse({ success: true, result: { enabled: true, previews_enabled: false } });
+      }
+      return fn(url, init);
+    });
+    vi.stubGlobal('fetch', wrapped);
+    const out = await deployToCloudflareWorkers({ ...base, target: 'preview', access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } } });
+    expect(out.status).toBe('link-delayed');
+    expect(out.reachableAt).toBeUndefined();
+    expect(out.providerMetadata).toMatchObject({ accessVerified: false });
+    const subdomainPosts = calls
+      .filter((c) => c[0].endsWith('/workers/scripts/my-site/subdomain') && c[1]?.method === 'POST')
+      .map((c) => JSON.parse(String(c[1]?.body)) as { enabled: boolean; previews_enabled: boolean });
+    // Previews turned on by this run and NOT turned back off.
+    expect(subdomainPosts).toEqual([{ enabled: true, previews_enabled: true }]);
+  });
+
   it('reads the workers.dev state before enabling so previews_enabled is preserved', async () => {
     const { calls, fn } = accessFetch();
     vi.stubGlobal('fetch', fn);
@@ -1020,7 +1141,7 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
     // can preserve the user's previews_enabled rather than force it on.
     for (const access of [false, true]) {
       const before = calls.length;
-      await deployToCloudflareWorkers({ ...base, access: access ? { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } } : undefined });
+      await deployToCloudflareWorkers({ ...base, ...(access ? { access: { enabled: true, rule: { kind: 'emails' as const, emails: ['a@b.c'] } } } : {}) });
       const fresh = calls.slice(before);
       const getPos = fresh.findIndex((c) => (c[1]?.method || 'GET') === 'GET' && c[0].endsWith('/workers/scripts/my-site/subdomain'));
       const postPos = fresh.findIndex((c) => c[1]?.method === 'POST' && c[0].endsWith('/workers/scripts/my-site/subdomain'));

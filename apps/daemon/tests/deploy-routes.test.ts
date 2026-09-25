@@ -1696,7 +1696,7 @@ describe('deploy provider routes', () => {
         if (method === 'HEAD') return new Response('', { status: 200 });
         if (url.endsWith('/workers/subdomain')) return json({ success: true, result: { subdomain: 'acct-test' } });
         if (url.includes('assets-upload-session')) return json({ success: true, result: { jwt: 'SESS', buckets: [] } });
-        if (method === 'GET' && url.includes('/workers/domains?service=')) return json({ success: true, result: [] });
+        if (method === 'GET' && url.includes('/workers/domains?')) return json({ success: true, result: [] });
         if (method === 'PUT' && url.endsWith('/workers/domains')) return json({ success: true, result: { id: 'dom-mine' } });
         // --- the detach route ---
         if (method === 'GET' && url.includes('/workers/domains/dom-foreign')) {
@@ -2148,7 +2148,7 @@ describe('deploy provider routes', () => {
         if (method === 'HEAD') return new Response('', { status: 200 });
         if (url.endsWith('/workers/subdomain')) return json({ success: true, result: { subdomain: 'acct-test' } });
         if (url.includes('assets-upload-session')) return json({ success: true, result: { jwt: 'SESS', buckets: [] } });
-        if (method === 'GET' && url.includes('/workers/domains?service=')) return json({ success: true, result: routed });
+        if (method === 'GET' && url.includes('/workers/domains?')) return json({ success: true, result: routed });
         if (method === 'PUT' && url.endsWith('/workers/domains')) {
           const body = JSON.parse(String(init?.body)) as { hostname: string };
           const id = body.hostname === 'old.example.com' ? 'dom-old' : 'dom-new';
@@ -2258,7 +2258,7 @@ describe('deploy provider routes', () => {
         if (method === 'HEAD') return new Response('', { status: 200 });
         if (url.endsWith('/workers/subdomain')) return json({ success: true, result: { subdomain: 'acct-test' } });
         if (url.includes('assets-upload-session')) return json({ success: true, result: { jwt: 'SESS', buckets: [] } });
-        if (method === 'GET' && url.includes('/workers/domains?service=')) return json({ success: true, result: routed });
+        if (method === 'GET' && url.includes('/workers/domains?')) return json({ success: true, result: routed });
         if (method === 'PUT' && url.endsWith('/workers/domains')) {
           const body = JSON.parse(String(init?.body)) as { hostname: string };
           const id = idFor(body.hostname);
@@ -2380,7 +2380,7 @@ describe('deploy provider routes', () => {
         if (method === 'HEAD') return new Response('', { status: 200 });
         if (url.endsWith('/workers/subdomain')) return json({ success: true, result: { subdomain: 'acct-test' } });
         if (url.includes('assets-upload-session')) return json({ success: true, result: { jwt: 'SESS', buckets: [] } });
-        if (method === 'GET' && url.includes('/workers/domains?service=')) return json({ success: true, result: routed });
+        if (method === 'GET' && url.includes('/workers/domains?')) return json({ success: true, result: routed });
         if (method === 'PUT' && url.endsWith('/workers/domains')) {
           const body = JSON.parse(String(init?.body)) as { hostname: string };
           const id = idFor(body.hostname);
@@ -2494,7 +2494,7 @@ describe('deploy provider routes', () => {
         }
         if (url.endsWith('/workers/subdomain')) return json({ success: true, result: { subdomain: 'acct-test' } });
         if (url.includes('assets-upload-session')) return json({ success: true, result: { jwt: 'SESS', buckets: [] } });
-        if (method === 'GET' && url.includes('/workers/domains?service=')) return json({ success: true, result: routed });
+        if (method === 'GET' && url.includes('/workers/domains?')) return json({ success: true, result: routed });
         if (method === 'PUT' && url.endsWith('/workers/domains')) {
           const body = JSON.parse(String(init?.body)) as { hostname: string };
           routed = [...routed.filter((d) => d.hostname !== body.hostname), { id: 'dom-app', hostname: body.hostname, service: scriptName, zone_id: 'zone-1' }];
@@ -2760,7 +2760,7 @@ describe('deploy provider routes', () => {
       }
       if (url.endsWith('/workers/subdomain')) return json({ success: true, result: { subdomain: 'acct-test' } });
       if (url.includes('assets-upload-session')) return json({ success: true, result: { jwt: 'SESS', buckets: [] } });
-      if (method === 'GET' && url.includes('/workers/domains?service=')) return json({ success: true, result: state.routed });
+      if (method === 'GET' && url.includes('/workers/domains?')) return json({ success: true, result: state.routed });
       if (method === 'PUT' && url.endsWith('/workers/domains')) {
         const body = JSON.parse(String(init?.body)) as { hostname: string };
         const id = idFor(body.hostname);

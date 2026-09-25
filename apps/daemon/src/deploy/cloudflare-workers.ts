@@ -794,6 +794,48 @@ export async function listCloudflareWorkerDomainsForScript(
     .filter((domain) => domain.id.length > 0 && domain.hostname.length > 0);
 }
 
+/** The Workers custom-domain record for ONE hostname, whichever script it is
+ * routed to — `null` when the hostname is not a Workers custom domain at all.
+ * The query is deliberately NOT filtered by service: the attach path uses the
+ * answer to refuse a hostname that already belongs to another Worker, and a
+ * service-filtered list can never see that Worker. Strict for the same
+ * reason — a lenient `null` on a list failure would turn the refusal into a
+ * hijack. The `hostname` query is a server-side hint; the match is re-checked. */
+export async function findCloudflareWorkerDomainByHostname(
+  config: WorkersDeployConfig,
+  hostname: string,
+): Promise<CloudflareWorkerDomain | null> {
+  const wanted = normalizeHostname(hostname);
+  const resp = await fetchWithRetry(config,
+    CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/workers/domains?hostname=' + encodeURIComponent(wanted),
+    { method: 'GET', headers: await authHeaders(config) },
+  );
+  const json = await readCloudflareJson(resp);
+  if (!resp.ok || json.success !== true || !Array.isArray(json.result)) {
+    throw cloudflareError(json, resp.ok ? 502 : resp.status, 'Cloudflare Workers custom domain lookup failed.');
+  }
+  const match = (json.result as JsonObject[]).find(
+    (domain) => typeof domain?.hostname === 'string' && normalizeHostname(domain.hostname) === wanted,
+  );
+  if (!match) return null;
+  return {
+    id: match.id !== undefined && match.id !== null ? String(match.id) : '',
+    hostname: wanted,
+    service: typeof match.service === 'string' ? match.service : '',
+  };
+}
+
+/** The attach was refused before any PUT: the hostname is already routed to
+ * another Worker, and re-pointing it would hijack that Worker's traffic. */
+function customDomainBoundElsewhereError(hostname: string, bound: CloudflareWorkerDomain): DeployError {
+  return new DeployError(
+    'Custom domain "' + hostname + '" is already routed to Cloudflare Worker "' + bound.service + '". Detach it from that Worker first, or choose another hostname.',
+    409,
+    { hostname, service: bound.service, ...(bound.id ? { id: bound.id } : {}) },
+    'CFW_DOMAIN_CONFLICT',
+  );
+}
+
 async function createCloudflareAccessApp(
   config: WorkersDeployConfig,
   input: {
@@ -929,51 +971,86 @@ export function configureCloudflareAccessPerimeterRetry(overrides?: Partial<Clou
   accessPerimeterRetry = { ...CLOUDFLARE_ACCESS_PERIMETER_RETRY_DEFAULTS, ...(overrides ?? {}) };
 }
 
-// One HEAD against a public URL; resolves to the failure instead of throwing so
+/** What a perimeter probe learned about a public URL. The two failure kinds
+ * are kept apart on purpose: only `unprotected` is an exposure. */
+export type CloudflareAccessPerimeterVerdict =
+  | { outcome: 'protected' }
+  /** No HTTP answer at all (DNS not yet propagated, certificate still
+   * issuing, connection reset). Nothing proves the URL is exposed — and
+   * nothing proves it is gated, so the deploy is not `ready` either. */
+  | { outcome: 'unreachable'; error: DeployError }
+  /** An HTTP answer that is not the Access login redirect: the URL serves
+   * without the gate. This is the exposure the caller must withdraw. */
+  | { outcome: 'unprotected'; error: DeployError };
+
+// One HEAD against a public URL; resolves to a verdict instead of throwing so
 // the caller can retry a bounded number of times.
-async function probeCloudflareAccessPerimeterOnce(url: string, requestInit: WorkersRequestInit): Promise<DeployError | null> {
+async function probeCloudflareAccessPerimeterOnce(url: string, requestInit: WorkersRequestInit): Promise<CloudflareAccessPerimeterVerdict> {
   let resp: Response;
   try {
     resp = await fetch(url, { method: 'HEAD', redirect: 'manual', ...requestInit });
   } catch (err) {
-    return new DeployError(
-      'Could not verify Cloudflare Access on ' + url + ': ' + String((err as Error)?.message || err),
-      502,
-      { url },
-      'CFW_ACCESS_UNVERIFIED',
-    );
+    return {
+      outcome: 'unreachable',
+      error: new DeployError(
+        'Could not reach ' + url + ' to verify Cloudflare Access: ' + String((err as Error)?.message || err),
+        502,
+        { url },
+        'CFW_ACCESS_UNVERIFIED',
+      ),
+    };
   }
   const location = resp.headers?.get?.('location') || '';
   if (!isCloudflareAccessRedirect(resp.status, location)) {
-    return new DeployError(
-      url + ' is not behind Cloudflare Access (HTTP ' + resp.status + '). The deploy was not marked ready.',
-      502,
-      { url, status: resp.status },
-      'CFW_ACCESS_UNVERIFIED',
-    );
+    return {
+      outcome: 'unprotected',
+      error: new DeployError(
+        url + ' is not behind Cloudflare Access (HTTP ' + resp.status + '). The deploy was not marked ready.',
+        502,
+        { url, status: resp.status },
+        'CFW_ACCESS_UNVERIFIED',
+      ),
+    };
   }
-  return null;
+  return { outcome: 'protected' };
 }
 
 // Hard post-deploy assertion: every URL a deploy with Access enabled reports
 // must answer with an Access login redirect. This holds regardless of any
 // future ordering bug in the steps above. A fresh custom hostname (certificate
 // still issuing) or a just-enabled workers.dev name can take a moment to
-// answer at all, so each URL gets a short bounded retry before the deploy is
-// declared unverified.
-async function verifyCloudflareAccessPerimeter(urls: string[], requestInit: WorkersRequestInit): Promise<void> {
+// answer at all, so each URL gets a short bounded retry. Every URL is probed
+// and the verdicts are ranked: one `unprotected` URL is an exposure and
+// outranks any number of `unreachable` ones, because the caller withdraws on
+// `unprotected` only and merely defers on `unreachable`.
+async function verifyCloudflareAccessPerimeter(urls: string[], requestInit: WorkersRequestInit): Promise<CloudflareAccessPerimeterVerdict> {
   const { attempts, baseMs, maxDelayMs } = accessPerimeterRetry;
+  let unreachable: CloudflareAccessPerimeterVerdict | null = null;
   for (const url of urls) {
-    let failure: DeployError | null = null;
+    let verdict: CloudflareAccessPerimeterVerdict = { outcome: 'protected' };
     for (let attempt = 0; attempt < attempts; attempt += 1) {
-      failure = await probeCloudflareAccessPerimeterOnce(url, requestInit);
-      if (!failure) break;
+      verdict = await probeCloudflareAccessPerimeterOnce(url, requestInit);
+      if (verdict.outcome === 'protected') break;
       if (attempt < attempts - 1) {
         await new Promise((resolve) => setTimeout(resolve, Math.min(maxDelayMs, baseMs * 2 ** attempt)));
       }
     }
-    if (failure) throw failure;
+    if (verdict.outcome === 'unprotected') return verdict;
+    if (verdict.outcome === 'unreachable' && !unreachable) unreachable = verdict;
   }
+  return unreachable ?? { outcome: 'protected' };
+}
+
+// A perimeter probe that got no answer is not an exposure, so nothing is
+// withdrawn: the attach and its write-ahead stay. The deploy is reported
+// `link-delayed` with the gate explicitly unverified, and the later link check
+// (checkDeploymentUrl) re-probes the URL and reports the Access redirect as
+// `protected` once DNS and the certificate have caught up.
+function deferAccessVerification(metadata: JsonObject, steps: DeployStep[], verdict: { error: DeployError }): string {
+  metadata.accessVerified = false;
+  metadata.accessVerificationDeferred = verdict.error.message;
+  steps.push({ name: 'access-verify', status: 'done', detail: 'deferred: ' + verdict.error.message });
+  return verdict.error.message;
 }
 
 // Compensation for a perimeter check that failed: the deploy is not `ready`,
@@ -1418,19 +1495,19 @@ async function deployToCloudflareWorkersWith(
       steps.push({ name: 'previews', status: 'done' });
       const prefix = versionId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8) || 'preview';
       const url = 'https://' + prefix + '-' + scriptName + '.' + subdomain + '.workers.dev';
+      let accessDeferred = '';
       if (accessOn) {
-        // Same hard constraint as production: a preview URL the deploy cannot
-        // prove is gated must not stay reachable through an exposure this run
-        // created — previews_enabled goes back off when this run turned it on.
-        try {
-          await verifyCloudflareAccessPerimeter([url], cfg.requestInit ?? {});
-        } catch (err) {
-          if (err instanceof DeployError && err.code === 'CFW_ACCESS_UNVERIFIED') {
-            await withdrawUnverifiedPreviewExposure(cfg, { scriptName, previewsEnabledByThisRun: previews.enabledByThisRun, steps });
-          }
-          throw err;
+        // Same hard constraint as production: a preview URL that answers
+        // WITHOUT the gate must not stay reachable through an exposure this
+        // run created — previews_enabled goes back off when this run turned
+        // it on. A URL that does not answer at all is deferred, not withdrawn.
+        const verdict = await verifyCloudflareAccessPerimeter([url], cfg.requestInit ?? {});
+        if (verdict.outcome === 'unprotected') {
+          await withdrawUnverifiedPreviewExposure(cfg, { scriptName, previewsEnabledByThisRun: previews.enabledByThisRun, steps });
+          throw verdict.error;
         }
-        metadata.accessVerified = true;
+        if (verdict.outcome === 'unreachable') accessDeferred = deferAccessVerification(metadata, steps, verdict);
+        else metadata.accessVerified = true;
       }
       metadata.steps = steps;
       return {
@@ -1438,8 +1515,9 @@ async function deployToCloudflareWorkersWith(
         url,
         deploymentId: versionId,
         target,
-        status: 'ready',
-        reachableAt: Date.now(),
+        ...(accessDeferred
+          ? { status: 'link-delayed', statusMessage: accessDeferred }
+          : { status: 'ready', reachableAt: Date.now() }),
         providerMetadata: metadata,
       };
     }
@@ -1547,6 +1625,15 @@ async function deployToCloudflareWorkersWith(
     if (customDomain) {
       let domainId: string;
       try {
+        // A bare PUT on /workers/domains re-points a hostname that is already
+        // bound to ANOTHER Worker: the attach would hijack it. Refuse up front,
+        // before the write-ahead and with no PUT sent, unless the strict list
+        // above already proved the hostname is routed to this very script (a
+        // re-attach of our own hostname cannot conflict).
+        if (!configuredAlreadyAttached) {
+          const bound = await findCloudflareWorkerDomainByHostname(cfg, configuredHostname);
+          if (bound && bound.service !== scriptName) throw customDomainBoundElsewhereError(configuredHostname, bound);
+        }
         // Write-ahead: the route records the hostname as pending BEFORE the
         // attach, so a crash between the attach and the deploy's record write
         // still leaves a record vouching for it.
@@ -1625,28 +1712,30 @@ async function deployToCloudflareWorkersWith(
       });
     }
     const publicUrls = [url, ...(customDomain && url !== 'https://' + customDomain.hostname ? ['https://' + customDomain.hostname] : [])];
+    let accessDeferred = '';
     if (accessOn) {
       // Hard constraint: a deploy with Access on is only `ready` when every URL
-      // it reports actually challenges with an Access login. When it does not,
-      // the exposure this run created (workers.dev route, attached hostname) is
-      // withdrawn before the failure surfaces — the site must not stay reachable
-      // on a URL the deploy could not prove is gated.
-      try {
-        await verifyCloudflareAccessPerimeter(publicUrls, cfg.requestInit ?? {});
-      } catch (err) {
-        if (err instanceof DeployError && err.code === 'CFW_ACCESS_UNVERIFIED') {
-          await withdrawUnverifiedExposure(cfg, {
-            scriptName,
-            subdomainEnabledByThisRun,
-            attachedCustomDomains,
-            detachableHostnames: configuredHostname && !configuredAlreadyAttached ? [configuredHostname] : [],
-            releasedCustomDomains,
-            steps,
-          });
-        }
-        throw err;
+      // it reports actually challenges with an Access login. A URL that answers
+      // WITHOUT that challenge is an exposure: what this run created
+      // (workers.dev route, attached hostname) is withdrawn before the failure
+      // surfaces — the site must not stay reachable on a URL the deploy proved
+      // is ungated. A URL that does not answer at all (DNS still propagating,
+      // certificate still issuing) proves nothing either way: the attach and
+      // its write-ahead stay and the verification is deferred to the link check.
+      const verdict = await verifyCloudflareAccessPerimeter(publicUrls, cfg.requestInit ?? {});
+      if (verdict.outcome === 'unprotected') {
+        await withdrawUnverifiedExposure(cfg, {
+          scriptName,
+          subdomainEnabledByThisRun,
+          attachedCustomDomains,
+          detachableHostnames: configuredHostname && !configuredAlreadyAttached ? [configuredHostname] : [],
+          releasedCustomDomains,
+          steps,
+        });
+        throw verdict.error;
       }
-      metadata.accessVerified = true;
+      if (verdict.outcome === 'unreachable') accessDeferred = deferAccessVerification(metadata, steps, verdict);
+      else metadata.accessVerified = true;
     } else {
       try {
         const checkResp = await fetch(url, { method: 'HEAD', redirect: 'manual', ...(cfg.requestInit ?? {}) });
@@ -1669,8 +1758,9 @@ async function deployToCloudflareWorkersWith(
       url,
       deploymentId: scriptName,
       target,
-      status: 'ready',
-      reachableAt: Date.now(),
+      ...(accessDeferred
+        ? { status: 'link-delayed', statusMessage: accessDeferred }
+        : { status: 'ready', reachableAt: Date.now() }),
       providerMetadata: metadata,
     };
   } catch (err) {
