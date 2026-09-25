@@ -8053,22 +8053,19 @@ function HtmlViewer({
   const cloudflareWorkersOAuthDeployReady =
     !cloudflareWorkersOAuthDeployRequired || (cloudflareWorkersOAuthConnected && !cloudflareWorkersOAuthExpired);
 
-  // Recompute the expiry countdown once a minute while the deploy surface is
-  // mounted, so "expires in N min" and the <5 min warning stay fresh.
-  useEffect(() => {
-    if (!workspaceActive) return;
-    const tick = setInterval(() => setCloudflareWorkersOAuthNow(Date.now()), 60000);
-    return () => clearInterval(tick);
-  }, [workspaceActive]);
-
   // Load the bound-account status whenever the Workers provider is selected in
   // OAuth mode (and again if the user flips the credential mode back to oauth).
+  // Each load also re-baselines the expiry clock, so "expires in N min" stays
+  // fresh without a self-rescheduling timer (a forever interval trips vitest's
+  // fake-timer infinite-loop guard under vi.runAllTimers()).
   useEffect(() => {
     if (!workspaceActive) return;
     if (deployProviderId !== CLOUDFLARE_WORKERS_PROVIDER_ID || cloudflareWorkersCredentialMode !== 'oauth') return;
     let cancelled = false;
     void fetchCloudflareAuthStatus().then((status) => {
-      if (!cancelled && status) setCloudflareWorkersOAuthStatus(status);
+      if (cancelled) return;
+      if (status) setCloudflareWorkersOAuthStatus(status);
+      setCloudflareWorkersOAuthNow(Date.now());
     });
     return () => {
       cancelled = true;
