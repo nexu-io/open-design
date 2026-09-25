@@ -25,6 +25,7 @@ import {
   commitCloudflareOAuthMode,
   getCloudflareAccessToken,
   readCloudflareWorkersConfig,
+  resetCloudflareCredentialMode,
   writeCloudflareOAuthIdentity,
 } from '../deploy.js';
 import {
@@ -335,6 +336,9 @@ export function registerCloudflareRoutes(
       await stopActiveListener();
       oauthAttemptGeneration += 1;
       await clearCloudflareOAuthToken(cloudflareOAuthTokensDir());
+      // Reset the credential authority back to a static token so a disconnected
+      // profile doesn't keep reporting 'configured' with no live token.
+      await resetCloudflareCredentialMode();
       res.json({ ok: true });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);

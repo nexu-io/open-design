@@ -188,11 +188,10 @@ describe('getCloudflareAccessToken identity guard', () => {
     const dir = await mkdtemp(path.join(tmpdir(), 'od-cf-identity-'));
     configureCloudflareWorkersDataDir(dir);
     try {
-      await writeCloudflareWorkersConfig({
-        credentialMode: 'oauth',
-        accountId: 'acct_test',
-        clientId: 'client-new',
-      });
+      // Persist the token first: the credentialMode flip to 'oauth' is now
+      // fail-closed (writeCloudflareWorkersConfig refuses the flip without a
+      // durable token), so the fixture must establish the token before the
+      // mode switch — the exact sequence a real connect flow produces.
       await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), {
         accessToken: 'acc-token',
         tokenType: 'Bearer',
@@ -200,6 +199,11 @@ describe('getCloudflareAccessToken identity guard', () => {
         expiresAt: Date.now() + 3600_000,
         generation: 1,
         savedAt: Date.now(),
+      });
+      await writeCloudflareWorkersConfig({
+        credentialMode: 'oauth',
+        accountId: 'acct_test',
+        clientId: 'client-new',
       });
       await expect(getCloudflareAccessToken()).rejects.toMatchObject({
         code: 'CFW_OAUTH_RECONNECT_REQUIRED',

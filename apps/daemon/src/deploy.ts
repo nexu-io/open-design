@@ -278,6 +278,23 @@ export async function readCloudflareWorkersConfig(): Promise<DeployConfig> {
 export async function writeCloudflareWorkersConfig(input: Partial<DeployConfig>) {
   const current = await readCloudflareWorkersConfig();
   const tokenInput = typeof input?.token === 'string' ? input.token.trim() : '';
+  // The authority switch to 'oauth' must not be reachable via a bare config PUT:
+  // require a durable OAuth token before accepting the flip (fail closed).
+  let credentialMode = current.credentialMode;
+  if (typeof input?.credentialMode === 'string') {
+    if (input.credentialMode === 'oauth' && current.credentialMode !== 'oauth') {
+      const oauthToken = await getCloudflareOAuthToken(cloudflareOAuthTokensDir());
+      if (!oauthToken) {
+        throw new DeployError(
+          'Connect Cloudflare first — an OAuth token is required to switch credential mode to oauth.',
+          400,
+          undefined,
+          'CFW_OAUTH_RECONNECT_REQUIRED',
+        );
+      }
+    }
+    credentialMode = input.credentialMode;
+  }
   const next: DeployConfig = {
     token:
       tokenInput && tokenInput !== SAVED_CLOUDFLARE_WORKERS_TOKEN_MASK
@@ -287,7 +304,7 @@ export async function writeCloudflareWorkersConfig(input: Partial<DeployConfig>)
     scriptName: typeof input?.scriptName === 'string' ? input.scriptName.trim() : current.scriptName,
     compatibilityDate:
       typeof input?.compatibilityDate === 'string' ? input.compatibilityDate.trim() : current.compatibilityDate,
-    credentialMode: typeof input?.credentialMode === 'string' ? input.credentialMode : current.credentialMode,
+    credentialMode,
     clientId: typeof input?.clientId === 'string' ? input.clientId.trim() : current.clientId,
     redirectUri: typeof input?.redirectUri === 'string' ? input.redirectUri.trim() : current.redirectUri,
     scopes: Array.isArray(input?.scopes) ? input.scopes : current.scopes,
@@ -327,6 +344,15 @@ export async function writeCloudflareOAuthIdentity(input: { clientId: string; re
 export async function commitCloudflareOAuthMode(): Promise<void> {
   const current = await readCloudflareWorkersConfig();
   const next: DeployConfig = { ...current, credentialMode: 'oauth' };
+  await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), next);
+}
+
+/** Reset the credential authority back to a static token after disconnect,
+ * bypassing the token validation in writeCloudflareWorkersConfig (a user who
+ * only ever used OAuth has no static token to require). */
+export async function resetCloudflareCredentialMode(): Promise<void> {
+  const current = await readCloudflareWorkersConfig();
+  const next: DeployConfig = { ...current, credentialMode: 'token' };
   await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), next);
 }
 
@@ -385,7 +411,7 @@ function cloudflareWorkersBaseDir(): string {
 }
 
 /** Directory that holds 'cloudflare-oauth-tokens.json' — the daemon-resolved
- * data root when configured, else the legacy OD_USER_STATE_DIR/home fallback. */
+ * data root (fails closed with CFW_DATA_DIR_UNCONFIGURED if not configured). */
 export function cloudflareOAuthTokensDir(): string {
   return cloudflareWorkersBaseDir();
 }
