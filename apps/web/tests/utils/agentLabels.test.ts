@@ -13,6 +13,7 @@ describe('agentDisplayName', () => {
     expect(agentDisplayName('cursor-agent')).toBe('Cursor');
     expect(agentDisplayName('deepseek-harness')).toBe('DeepSeek Harness');
     expect(agentDisplayName('kimi')).toBe('Kimi CLI');
+    expect(agentDisplayName('kimchi')).toBe('Kimchi CLI');
   });
 
   it('resolves common aliases like "claude code" and "qodercli"', () => {
