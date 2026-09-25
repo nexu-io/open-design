@@ -119,7 +119,7 @@ describe('refresh_token capture + persistence', () => {
     pending.stop();
   });
 
-  it('persists refreshToken to the stored record and preserves generation', async () => {
+  it('persists refreshToken to the stored record and assigns a fresh generation', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'od-cf-refresh-'));
     try {
       const stored: StoredCloudflareOAuthToken = {
@@ -127,14 +127,16 @@ describe('refresh_token capture + persistence', () => {
         tokenType: 'Bearer',
         refreshToken: 'ref-abc',
         expiresAt: Date.now() + 3600_000,
-        generation: 7,
+        generation: 0,
         savedAt: Date.now(),
       };
       await setCloudflareOAuthToken(dataDir, stored);
 
       const read = await getCloudflareOAuthToken(dataDir);
       expect(read?.refreshToken).toBe('ref-abc');
-      expect(read?.generation).toBe(7);
+      // The store owns generation now (monotonic, survives clear) — the caller's
+      // placeholder is overwritten with the first write's value.
+      expect(read?.generation).toBe(1);
     } finally {
       await rm(dataDir, { recursive: true, force: true });
     }

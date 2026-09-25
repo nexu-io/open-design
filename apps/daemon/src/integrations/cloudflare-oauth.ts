@@ -209,6 +209,15 @@ export interface CompleteCloudflareAuthInput {
   fetchImpl?: typeof fetch;
 }
 
+/** Token endpoint result plus the client/redirect identity that authorized it
+ * (taken from the consumed PKCE state, NOT from any caller-held global) so the
+ * caller can persist a token that is labelled with the client that actually
+ * issued it. */
+export interface CompleteCloudflareAuthResult extends OAuthTokenResponse {
+  clientId: string;
+  redirectUri: string;
+}
+
 /**
  * Post-callback half of the OAuth dance. Looks up `state` in `pending`,
  * validates it (one-shot, TTL-checked by `PendingAuthCache`), and exchanges
@@ -217,7 +226,7 @@ export interface CompleteCloudflareAuthInput {
  */
 export async function completeCloudflareAuth(
   input: CompleteCloudflareAuthInput,
-): Promise<OAuthTokenResponse> {
+): Promise<CompleteCloudflareAuthResult> {
   const consumed = input.pending.consume(input.state);
   if (!consumed) {
     throw new Error('Cloudflare OAuth state not found or expired');
@@ -227,7 +236,7 @@ export async function completeCloudflareAuth(
       `Cloudflare OAuth state mismatch: expected serverId=${CLOUDFLARE_PROVIDER_ID}, got ${consumed.serverId}`,
     );
   }
-  return exchangeCodeForToken(
+  const token = await exchangeCodeForToken(
     {
       tokenEndpoint: consumed.tokenEndpoint,
       clientId: consumed.clientId,
@@ -237,6 +246,7 @@ export async function completeCloudflareAuth(
     },
     input.fetchImpl ?? fetch,
   );
+  return { ...token, clientId: consumed.clientId, redirectUri: consumed.redirectUri };
 }
 
 export interface RefreshCloudflareTokenInput {

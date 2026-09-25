@@ -48,6 +48,10 @@ export interface StoredCloudflareOAuthToken {
 
 export interface CloudflareOAuthTokensFile {
   token?: StoredCloudflareOAuthToken;
+  /** File-level monotonic counter bumped on EVERY write (including clear) so a
+   * cleared credential's generation is never reused by a later connect — a
+   * stale compare-and-set from before the clear can't match a brand-new token. */
+  lastGeneration?: number;
 }
 
 const EMPTY: CloudflareOAuthTokensFile = {};
@@ -67,8 +71,13 @@ export function sanitizeCloudflareOAuthTokensFile(
   raw: unknown,
 ): CloudflareOAuthTokensFile {
   if (!isPlainObject(raw)) return {};
+  const out: CloudflareOAuthTokensFile = {};
+  if (typeof raw.lastGeneration === 'number' && Number.isFinite(raw.lastGeneration)) {
+    out.lastGeneration = raw.lastGeneration;
+  }
   const tok = sanitizeToken(raw.token);
-  return tok ? { token: tok } : {};
+  if (tok) out.token = tok;
+  return out;
 }
 
 function sanitizeToken(raw: unknown): StoredCloudflareOAuthToken | null {
@@ -149,6 +158,10 @@ export async function readCloudflareOAuthTokensFile(
 
 const writeLocks = new Map<string, Promise<unknown>>();
 
+function nextLastGeneration(file: CloudflareOAuthTokensFile): number {
+  return (file.lastGeneration ?? 0) + 1;
+}
+
 async function withLock<T>(dataDir: string, fn: () => Promise<T>): Promise<T> {
   const prev = writeLocks.get(dataDir) ?? Promise.resolve();
   const task = prev.catch(() => {}).then(fn);
@@ -202,12 +215,15 @@ export async function setCloudflareOAuthToken(
   token: StoredCloudflareOAuthToken,
 ): Promise<void> {
   await withLock(dataDir, async () => {
-    await writeTokensFile(dataDir, { token });
+    const file = await readCloudflareOAuthTokensFile(dataDir);
+    const gen = nextLastGeneration(file);
+    token.generation = gen;
+    await writeTokensFile(dataDir, { token, lastGeneration: gen });
   });
 }
 
 /** Compare-and-set persist: write the token only if the store still holds a
- * token whose generation equals expectedGeneration. Returns false when the
+ * token whose file generation equals expectedGeneration. Returns false when the
  * token was cleared (disconnect) or replaced (another writer) while the caller
  * was computing its refresh - the caller must then treat the credential as
  * superseded rather than resurrect it. */
@@ -218,8 +234,13 @@ export async function setCloudflareOAuthTokenIfGenerationMatches(
 ): Promise<boolean> {
   return withLock(dataDir, async () => {
     const file = await readCloudflareOAuthTokensFile(dataDir);
-    if (!file.token || file.token.generation !== expectedGeneration) return false;
-    await writeTokensFile(dataDir, { token });
+    // Compare the FILE generation (not the token's): clear() bumps it without
+    // leaving a token, so a stale refresh read before a disconnect can never
+    // match a brand-new token written after a reconnect (ABA).
+    if (!file.token || file.lastGeneration !== expectedGeneration) return false;
+    const gen = nextLastGeneration(file);
+    token.generation = gen;
+    await writeTokensFile(dataDir, { token, lastGeneration: gen });
     return true;
   });
 }
@@ -235,17 +256,22 @@ export async function setCloudflareOAuthTokenGuarded(
 ): Promise<boolean> {
   return withLock(dataDir, async () => {
     if (!guard()) return false;
-    await writeTokensFile(dataDir, { token });
+    const file = await readCloudflareOAuthTokensFile(dataDir);
+    const gen = nextLastGeneration(file);
+    token.generation = gen;
+    await writeTokensFile(dataDir, { token, lastGeneration: gen });
     return true;
   });
 }
 
-/** Atomically delete the stored Cloudflare OAuth token. No-op when absent. */
+/** Atomically delete the stored Cloudflare OAuth token. Bumps the file
+ * generation so a cleared credential's generation is never reused. */
 export async function clearCloudflareOAuthToken(dataDir: string): Promise<void> {
   await withLock(dataDir, async () => {
     const file = await readCloudflareOAuthTokensFile(dataDir);
     if (!file.token) return;
-    await writeTokensFile(dataDir, {});
+    const gen = nextLastGeneration(file);
+    await writeTokensFile(dataDir, { lastGeneration: gen });
   });
 }
 

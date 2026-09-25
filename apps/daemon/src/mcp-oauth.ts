@@ -478,6 +478,13 @@ export class PendingAuthCache {
     return this.store.size;
   }
 
+  /** Evict every pending state. Used when a new attempt supersedes an old one
+   * so an abandoned browser tab's still-cached PKCE state can no longer be
+   * exchanged and mislabelled as the new attempt. */
+  clear(): void {
+    this.store.clear();
+  }
+
   /** Stop the background sweeper. Used by tests; production lets the
    * timer ride on the daemon process lifetime. */
   stop(): void {

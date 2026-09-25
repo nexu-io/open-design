@@ -32,7 +32,6 @@ import {
   listCloudflareR2Buckets,
 } from '../deploy/cloudflare-workers.js';
 import {
-  type OAuthTokenResponse,
   PendingAuthCache,
 } from '../mcp-oauth.js';
 import {
@@ -40,6 +39,7 @@ import {
   completeCloudflareAuth,
   cloudflareRedirectUri,
   CLOUDFLARE_OAUTH_SCOPES,
+  type CompleteCloudflareAuthResult,
 } from '../integrations/cloudflare-oauth.js';
 import {
   startCallbackListener,
@@ -68,28 +68,26 @@ function fetchWithRequestInit(
 
 /** Build the persisted token record from a token-endpoint response, carrying
  * the client/redirect identity (and account) that authorized it so a changed
- * local client can fail closed at refresh time. */
+ * local client can fail closed at refresh time. The generation is a placeholder
+ * — the token store assigns the real monotonic value. */
 function buildStoredCloudflareToken(
-  tokenResp: OAuthTokenResponse,
+  result: CompleteCloudflareAuthResult,
   cfg: CloudflareWorkersConfig,
-  clientId: string,
-  redirectUri: string,
-  prevGeneration: number | undefined,
 ): StoredCloudflareOAuthToken {
   const stored: StoredCloudflareOAuthToken = {
-    accessToken: tokenResp.access_token,
-    tokenType: tokenResp.token_type ?? 'Bearer',
-    redirectUri,
-    generation: (prevGeneration ?? 0) + 1,
+    accessToken: result.access_token,
+    tokenType: result.token_type ?? 'Bearer',
+    redirectUri: result.redirectUri,
+    generation: 0,
     savedAt: Date.now(),
   };
   const accountId = (cfg.accountId ?? '').trim();
-  if (clientId) stored.clientId = clientId;
+  if (result.clientId) stored.clientId = result.clientId;
   if (accountId) stored.accountId = accountId;
-  if (tokenResp.refresh_token) stored.refreshToken = tokenResp.refresh_token;
-  if (tokenResp.scope) stored.scope = tokenResp.scope;
-  if (typeof tokenResp.expires_in === 'number') {
-    stored.expiresAt = Date.now() + tokenResp.expires_in * 1000;
+  if (result.refresh_token) stored.refreshToken = result.refresh_token;
+  if (result.scope) stored.scope = result.scope;
+  if (typeof result.expires_in === 'number') {
+    stored.expiresAt = Date.now() + result.expires_in * 1000;
   }
   return stored;
 }
@@ -109,12 +107,39 @@ export function registerCloudflareRoutes(
   // token exchange cannot persist a token after the user cancelled, disconnected,
   // or restarted the flow (see handleCallback's pre-persist generation check).
   let oauthAttemptGeneration = 0;
-  // Attempt-local identity captured at /oauth/start. It is NOT written to the
-  // config until the exchange succeeds, so a cancelled/denied replacement can
-  // never break a previously working credential by flipping the stored clientId
-  // before a token for it exists.
-  let pendingOAuthClientId = '';
-  let pendingOAuthRedirectUri = '';
+  // Serializes every credential mutation (persist vs disconnect vs cancel) so
+  // the generation check, token write, and config commit form one critical
+  // section that a disconnect clear/reset cannot interleave with.
+  let credentialMutationTail: Promise<unknown> = Promise.resolve();
+  function runCredentialMutation<T>(fn: () => Promise<T>): Promise<T> {
+    const run = credentialMutationTail.then(fn, fn);
+    credentialMutationTail = run.catch(() => {});
+    return run;
+  }
+
+  // Persist the token + flip credential authority as ONE serialized mutation so
+  // a disconnect (which bumps the generation, clears the token, and resets the
+  // mode under the same lock) can never interleave between the token write and
+  // the config commit.
+  const persistCredential = async (
+    result: CompleteCloudflareAuthResult,
+    attemptGeneration: number,
+  ): Promise<boolean> => {
+    const cfg = await readCloudflareWorkersConfig();
+    const dataDir = cloudflareOAuthTokensDir();
+    const stored = buildStoredCloudflareToken(result, cfg);
+    return runCredentialMutation(async () => {
+      if (attemptGeneration !== oauthAttemptGeneration) return false;
+      const ok = await setCloudflareOAuthTokenGuarded(
+        dataDir,
+        stored,
+        () => attemptGeneration === oauthAttemptGeneration,
+      );
+      if (!ok) return false;
+      await commitCloudflareOAuthMode({ clientId: result.clientId, redirectUri: result.redirectUri });
+      return true;
+    });
+  };
 
   const stopActiveListener = async () => {
     const cur = activeListener;
@@ -151,30 +176,11 @@ export function registerCloudflareRoutes(
         console.warn('[cloudflare-oauth] attempt superseded; discarding token');
         return false;
       }
-      const cfg = await readCloudflareWorkersConfig();
-      const dataDir = cloudflareOAuthTokensDir();
-      const existing = await getCloudflareOAuthToken(dataDir);
-      const stored = buildStoredCloudflareToken(
-        tokenResp,
-        cfg,
-        pendingOAuthClientId,
-        pendingOAuthRedirectUri,
-        existing?.generation,
-      );
-      const persisted = await setCloudflareOAuthTokenGuarded(
-        dataDir,
-        stored,
-        () => attemptGeneration === oauthAttemptGeneration,
-      );
-      if (!persisted || attemptGeneration !== oauthAttemptGeneration) {
-        // Cancelled/disconnected/replaced between the exchange and the write —
-        // do not persist a token (or flip the mode) the user already abandoned.
+      const persisted = await persistCredential(tokenResp, attemptGeneration);
+      if (!persisted) {
         console.warn('[cloudflare-oauth] attempt superseded; discarding token');
         return false;
       }
-      // Only now — with the token durable — switch the credential authority to
-      // OAuth, so a denied/closed/cancelled flow never strands a token-mode user.
-      await commitCloudflareOAuthMode({ clientId: pendingOAuthClientId, redirectUri: pendingOAuthRedirectUri });
       console.log('[cloudflare-oauth] token stored');
       return true;
     } catch (err: unknown) {
@@ -190,9 +196,6 @@ export function registerCloudflareRoutes(
     if (!isLocalSameOrigin(req, getResolvedPort())) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
-    // Only one OAuth dance can be in flight at a time — :56122 is singleton.
-    await stopActiveListener();
-    oauthAttemptGeneration += 1;
 
     try {
       const cfg = await readCloudflareWorkersConfig();
@@ -220,12 +223,14 @@ export function registerCloudflareRoutes(
           error: `Cloudflare OAuth redirect URI must be ${expectedRedirectUri} — the daemon callback listener is fixed to it.`,
         });
       }
-      // Hold the identity in attempt-local state (NOT the persisted config) so
-      // a denied/cancelled replacement can never flip the stored clientId before
-      // a token for it exists. The callback/paste-back commits it together with
-      // the token only after a successful exchange.
-      pendingOAuthClientId = clientId;
-      pendingOAuthRedirectUri = redirectUri;
+      // Serialize the attempt transition (stop prior listener, bump generation,
+      // evict stale PKCE states) so an abandoned attempt's state can no longer
+      // be exchanged and mislabelled as this one.
+      await runCredentialMutation(async () => {
+        await stopActiveListener();
+        oauthAttemptGeneration += 1;
+        pendingAuth.clear();
+      });
       // Always request the full set in one connect so the D1/R2/zones pickers
       // populate and Access gating works without a manual scope dance.
       const scopes = CLOUDFLARE_OAUTH_SCOPES;
@@ -291,30 +296,13 @@ export function registerCloudflareRoutes(
           .status(409)
           .json({ error: 'Cloudflare OAuth attempt was cancelled or superseded — restart the connection.' });
       }
-      const cfg = await readCloudflareWorkersConfig();
-      const dataDir = cloudflareOAuthTokensDir();
-      const existing = await getCloudflareOAuthToken(dataDir);
-      const stored = buildStoredCloudflareToken(
-        tokenResp,
-        cfg,
-        pendingOAuthClientId,
-        pendingOAuthRedirectUri,
-        existing?.generation,
-      );
-      const persisted = await setCloudflareOAuthTokenGuarded(
-        dataDir,
-        stored,
-        () => attemptGeneration === oauthAttemptGeneration,
-      );
-      if (!persisted || attemptGeneration !== oauthAttemptGeneration) {
+      const persisted = await persistCredential(tokenResp, attemptGeneration);
+      if (!persisted) {
         console.warn('[cloudflare-oauth] attempt superseded; discarding token');
         return res
           .status(409)
           .json({ error: 'Cloudflare OAuth attempt was cancelled or superseded — restart the connection.' });
       }
-      // Only now — with the token durable — switch the credential authority to
-      // OAuth, mirroring the loopback callback path.
-      await commitCloudflareOAuthMode({ clientId: pendingOAuthClientId, redirectUri: pendingOAuthRedirectUri });
       // We won the race against the loopback listener (or it was never going
       // to resolve); shut it down so the next /start has a clean slate.
       await stopActiveListener();
@@ -361,8 +349,11 @@ export function registerCloudflareRoutes(
     // their existing grant. Disconnect is the destructive path; this one only
     // releases the singleton :56122 port.
     try {
-      await stopActiveListener();
-      oauthAttemptGeneration += 1;
+      await runCredentialMutation(async () => {
+        await stopActiveListener();
+        oauthAttemptGeneration += 1;
+        pendingAuth.clear();
+      });
       res.json({ ok: true });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -375,12 +366,15 @@ export function registerCloudflareRoutes(
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     try {
-      await stopActiveListener();
-      oauthAttemptGeneration += 1;
-      await clearCloudflareOAuthToken(cloudflareOAuthTokensDir());
-      // Reset the credential authority back to a static token so a disconnected
-      // profile doesn't keep reporting 'configured' with no live token.
-      await resetCloudflareCredentialMode();
+      await runCredentialMutation(async () => {
+        await stopActiveListener();
+        oauthAttemptGeneration += 1;
+        pendingAuth.clear();
+        await clearCloudflareOAuthToken(cloudflareOAuthTokensDir());
+        // Reset the credential authority back to a static token so a disconnected
+        // profile doesn't keep reporting 'configured' with no live token.
+        await resetCloudflareCredentialMode();
+      });
       res.json({ ok: true });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
