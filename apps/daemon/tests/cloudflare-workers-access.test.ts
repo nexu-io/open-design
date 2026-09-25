@@ -1,10 +1,12 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { checkDeploymentUrl, cloudflareOAuthTokensDir, configureCloudflareWorkersDataDir, isCloudflareAccessProtectedResponse, readCloudflareWorkersConfig, writeCloudflareWorkersConfig } from '../src/deploy.js';
 import { setCloudflareOAuthToken } from '../src/integrations/cloudflare-tokens.js';
 import {
+  CLOUDFLARE_ACCESS_PERIMETER_RETRY_DEFAULTS,
+  configureCloudflareAccessPerimeterRetry,
   deployToCloudflareWorkers,
   ownedCustomDomainsFromMetadata,
   probeCloudflareWorkersCapabilities,
@@ -27,6 +29,11 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
+
+// The real perimeter probe budget waits several seconds before it declares a
+// URL unverified; the suites below assert that path and must not wait it out.
+beforeEach(() => configureCloudflareAccessPerimeterRetry({ attempts: 2, baseMs: 1 }));
+afterEach(() => configureCloudflareAccessPerimeterRetry());
 
 type AccessOverrides = Record<string, unknown> & { head?: (url: string) => Response };
 
@@ -658,6 +665,138 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
     ).rejects.toMatchObject({ name: 'DeployError', code: 'CFW_ACCESS_UNVERIFIED' });
   });
 
+  it('withdraws the exposure this run created when the perimeter cannot be verified', async () => {
+    const { calls, fn } = accessFetch({ head: () => new Response('', { status: 200 }) });
+    const wrapped = vi.fn(async (url: string, init?: RequestInit) => {
+      if ((init?.method || 'GET').toUpperCase() === 'GET' && url.endsWith('/workers/scripts/my-site/subdomain')) {
+        calls.push([url, init]);
+        // The route was OFF before this run: this run's enable is the exposure.
+        return jsonResponse({ success: true, result: { enabled: false, previews_enabled: false } });
+      }
+      return fn(url, init);
+    });
+    vi.stubGlobal('fetch', wrapped);
+    let caught: { name?: string; code?: string; attachedCustomDomains?: unknown; steps?: Array<{ name: string; status: string; detail?: string }> } | undefined;
+    try {
+      await deployToCloudflareWorkers({
+        ...base,
+        access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } },
+        customDomain: { hostname: 'app.example.com', zoneId: 'zone-1' },
+      });
+    } catch (err) {
+      caught = err as typeof caught;
+    }
+    expect(caught).toMatchObject({ name: 'DeployError', code: 'CFW_ACCESS_UNVERIFIED' });
+    const subdomainPosts = calls
+      .filter((c) => c[0].endsWith('/workers/scripts/my-site/subdomain') && c[1]?.method === 'POST')
+      .map((c) => JSON.parse(String(c[1]?.body)) as { enabled: boolean });
+    expect(subdomainPosts.map((body) => body.enabled)).toEqual([true, false]);
+    expect(calls.some((c) => c[1]?.method === 'DELETE' && c[0].endsWith('/workers/domains/dom-1'))).toBe(true);
+    // Compensation runs only after the probes gave up, never before.
+    const lastProbe = calls.reduce((last, c, index) => (c[1]?.method === 'HEAD' ? index : last), -1);
+    const disablePos = calls.findIndex((c) => c[1]?.method === 'POST' && c[0].endsWith('/subdomain') && (JSON.parse(String(c[1]?.body)) as { enabled: boolean }).enabled === false);
+    const detachPos = calls.findIndex((c) => c[1]?.method === 'DELETE' && c[0].endsWith('/workers/domains/dom-1'));
+    expect(lastProbe).toBeGreaterThanOrEqual(0);
+    expect(disablePos).toBeGreaterThan(lastProbe);
+    expect(detachPos).toBeGreaterThan(lastProbe);
+    // The detached hostname is no longer reported as this deploy's attachment,
+    // so the route does not record an attachment that no longer exists.
+    expect(caught?.attachedCustomDomains).toEqual([]);
+    expect(caught?.steps).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'subdomain-disable', status: 'done' }),
+      expect.objectContaining({ name: 'custom-domain-detach', status: 'done', detail: 'app.example.com' }),
+    ]));
+  });
+
+  it('leaves a workers.dev route that was already public alone when the perimeter cannot be verified', async () => {
+    const { calls, fn } = accessFetch({ head: () => new Response('', { status: 200 }) });
+    const wrapped = vi.fn(async (url: string, init?: RequestInit) => {
+      if ((init?.method || 'GET').toUpperCase() === 'GET' && url.endsWith('/workers/scripts/my-site/subdomain')) {
+        calls.push([url, init]);
+        return jsonResponse({ success: true, result: { enabled: true, previews_enabled: true } });
+      }
+      return fn(url, init);
+    });
+    vi.stubGlobal('fetch', wrapped);
+    await expect(
+      deployToCloudflareWorkers({ ...base, access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } } }),
+    ).rejects.toMatchObject({ name: 'DeployError', code: 'CFW_ACCESS_UNVERIFIED' });
+    const subdomainPosts = calls
+      .filter((c) => c[0].endsWith('/workers/scripts/my-site/subdomain') && c[1]?.method === 'POST')
+      .map((c) => JSON.parse(String(c[1]?.body)) as { enabled: boolean });
+    expect(subdomainPosts.map((body) => body.enabled)).toEqual([true]);
+    expect(calls.some((c) => c[1]?.method === 'DELETE' && c[0].includes('/workers/domains/'))).toBe(false);
+  });
+
+  it('does not detach a configured hostname that was routed to the script before this run', async () => {
+    const { calls, fn } = accessFetch({
+      head: () => new Response('', { status: 200 }),
+      domainsList: { success: true, result: [{ id: 'dom-1', hostname: 'app.example.com', service: 'my-site' }] },
+    });
+    vi.stubGlobal('fetch', fn);
+    let caught: { name?: string; code?: string; attachedCustomDomains?: unknown } | undefined;
+    try {
+      await deployToCloudflareWorkers({
+        ...base,
+        access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } },
+        customDomain: { hostname: 'app.example.com', zoneId: 'zone-1' },
+      });
+    } catch (err) {
+      caught = err as typeof caught;
+    }
+    expect(caught).toMatchObject({ name: 'DeployError', code: 'CFW_ACCESS_UNVERIFIED' });
+    // The hostname was live before this run; withdrawing it is not this run's
+    // exposure to undo. It stays attached, and stays reported as attached so
+    // the record keeps owning it.
+    expect(calls.some((c) => c[1]?.method === 'DELETE' && c[0].includes('/workers/domains/'))).toBe(false);
+    expect(caught?.attachedCustomDomains).toEqual([{ id: 'dom-1', hostname: 'app.example.com' }]);
+  });
+
+  it('reads the workers.dev state before enabling only when Access is on', async () => {
+    const { calls, fn } = accessFetch();
+    vi.stubGlobal('fetch', fn);
+    await deployToCloudflareWorkers({ ...base, access: { enabled: false } });
+    // Access-off deploy must not read the subdomain state first.
+    expect(calls.some((c) => (c[1]?.method || 'GET') === 'GET' && c[0].endsWith('/workers/scripts/my-site/subdomain'))).toBe(false);
+    const beforeSecond = calls.length;
+    await deployToCloudflareWorkers({ ...base, access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } } });
+    // Scope to the Access-on deploy only: the state GET must precede the enable POST.
+    const second = calls.slice(beforeSecond);
+    const getPos = second.findIndex((c) => (c[1]?.method || 'GET') === 'GET' && c[0].endsWith('/workers/scripts/my-site/subdomain'));
+    const postPos = second.findIndex((c) => c[1]?.method === 'POST' && c[0].endsWith('/workers/scripts/my-site/subdomain'));
+    expect(getPos).toBeGreaterThanOrEqual(0);
+    expect(postPos).toBeGreaterThan(getPos);
+  });
+
+  it('keeps probing a URL that is still propagating instead of failing on the first non-Access answer', async () => {
+    configureCloudflareAccessPerimeterRetry({ attempts: 4, baseMs: 1 });
+    let probes = 0;
+    const { calls, fn } = accessFetch({
+      head: () => {
+        probes += 1;
+        return probes < 3 ? new Response('', { status: 404 }) : accessRedirect();
+      },
+    });
+    vi.stubGlobal('fetch', fn);
+    const out = await deployToCloudflareWorkers({ ...base, access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } } });
+    expect(out.status).toBe('ready');
+    expect(out.providerMetadata).toMatchObject({ accessVerified: true });
+    expect(probes).toBe(3);
+    expect(calls.some((c) => c[1]?.method === 'DELETE')).toBe(false);
+    const subdomainPosts = calls
+      .filter((c) => c[0].endsWith('/workers/scripts/my-site/subdomain') && c[1]?.method === 'POST')
+      .map((c) => JSON.parse(String(c[1]?.body)) as { enabled: boolean });
+    expect(subdomainPosts.map((body) => body.enabled)).toEqual([true]);
+  });
+
+  it('ships a probe budget wide enough for a workers.dev name still propagating', () => {
+    const { attempts, baseMs, maxDelayMs } = CLOUDFLARE_ACCESS_PERIMETER_RETRY_DEFAULTS;
+    let waitedMs = 0;
+    for (let attempt = 0; attempt < attempts - 1; attempt += 1) waitedMs += Math.min(maxDelayMs, baseMs * 2 ** attempt);
+    expect(attempts).toBeGreaterThanOrEqual(5);
+    expect(waitedMs).toBeGreaterThanOrEqual(5000);
+  });
+
   it('fails closed (no fallback create, no live PUT) when the scripts list errors', async () => {
     const { calls, fn } = accessFetch({ scripts: { success: false, errors: [{ message: 'upstream' }] } });
     // make the scripts list a 500 rather than a 200-with-error envelope
@@ -843,15 +982,38 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
     expect(out.providerMetadata).not.toHaveProperty('customDomain');
   });
 
-  it('fails closed when the OTP identity provider cannot be created', async () => {
-    const { calls, fn } = accessFetch({
-      idps: { success: true, result: [] },
-      idpCreate: { success: false, errors: [{ code: 1010, error: 'auth.forbidden' }] },
+  function accessFetchWithIdpCreateStatus(status: number) {
+    const { calls, fn } = accessFetch({ idps: { success: true, result: [] } });
+    const wrapped = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes('/access/identity_providers') && (init?.method || 'GET').toUpperCase() === 'POST') {
+        calls.push([url, init]);
+        return jsonResponse({ success: false, errors: [{ code: 1010, message: 'identity provider create failed' }] }, status);
+      }
+      return fn(url, init);
     });
+    return { calls, fn: wrapped };
+  }
+
+  it.each([[401], [403]])('fails closed with the scope code when the OTP identity provider create is refused (HTTP %s)', async (status) => {
+    const { calls, fn } = accessFetchWithIdpCreateStatus(status);
     vi.stubGlobal('fetch', fn);
     await expect(
       deployToCloudflareWorkers({ ...base, access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } } }),
-    ).rejects.toMatchObject({ name: 'DeployError', code: 'CFW_ACCESS_OTP_SCOPE_REQUIRED' });
+    ).rejects.toMatchObject({ name: 'DeployError', code: 'CFW_ACCESS_OTP_SCOPE_REQUIRED', status });
+    expect(calls.some((c) => c[0].includes('/subdomain') && c[1]?.method === 'POST')).toBe(false);
+  });
+
+  it.each([[500], [429], [400]])('an OTP identity provider create failing with HTTP %s keeps its real status instead of the scope code', async (status) => {
+    const { calls, fn } = accessFetchWithIdpCreateStatus(status);
+    vi.stubGlobal('fetch', fn);
+    let caught: { name?: string; code?: string; status?: number } | undefined;
+    try {
+      await deployToCloudflareWorkers({ ...base, access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } } });
+    } catch (err) {
+      caught = err as { name?: string; code?: string; status?: number };
+    }
+    expect(caught).toMatchObject({ name: 'DeployError', status });
+    expect(caught?.code).not.toBe('CFW_ACCESS_OTP_SCOPE_REQUIRED');
     expect(calls.some((c) => c[0].includes('/subdomain') && c[1]?.method === 'POST')).toBe(false);
   });
 

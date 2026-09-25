@@ -104,6 +104,17 @@ describe('ensureCloudflareD1Database', () => {
     expect(calls.some((c) => c[1]?.method === 'POST')).toBe(false);
   });
 
+  it('fails with CFW_D1_CREATE_FAILED when the create response carries no uuid', async () => {
+    const calls: Call[] = [];
+    const fn = makeFetch({ d1List: { success: true, result: [] }, d1Create: { success: true, result: { name: 'my-db' } } }, calls);
+    vi.stubGlobal('fetch', fn);
+    await expect(ensureCloudflareD1Database({ token: 'tok-secret', accountId: 'acct_test' }, 'my-db')).rejects.toMatchObject({
+      name: 'DeployError',
+      code: 'CFW_D1_CREATE_FAILED',
+      status: 502,
+    });
+  });
+
   it('keeps paging a D1 list that carries no total_pages while pages are full', async () => {
     const calls: Call[] = [];
     const page1 = Array.from({ length: 100 }, (_, i) => ({ name: 'db-' + i, uuid: 'uuid-' + i }));
@@ -253,6 +264,18 @@ describe('deployToCloudflareWorkers ensure-on-bind', () => {
     expect(createIndex).toBeLessThan(putIndex);
     const meta = await metadataOf(calls[putIndex]!);
     expect(meta.bindings).toContainEqual({ type: 'd1', name: 'DB', id: 'db-uuid-123' });
+  });
+
+  it('a d1 create with no uuid fails before any asset upload or script PUT', async () => {
+    const calls: Call[] = [];
+    const fn = makeFetch({ d1List: { success: true, result: [] }, d1Create: { success: true, result: {} } }, calls);
+    vi.stubGlobal('fetch', fn);
+    await expect(
+      deployToCloudflareWorkers({ ...base, config: { ...base.config, bindings: [{ type: 'd1', name: 'DB', databaseName: 'my-db' }] } }),
+    ).rejects.toMatchObject({ name: 'DeployError', code: 'CFW_D1_CREATE_FAILED' });
+    expect(calls.some((c) => c[0].includes('assets-upload-session'))).toBe(false);
+    expect(calls.some((c) => c[0].includes('/workers/assets/upload'))).toBe(false);
+    expect(calls.some((c) => c[1]?.method === 'PUT' && c[0].includes('/workers/scripts/'))).toBe(false);
   });
 
   it('ensures an r2 bucket before the script PUT', async () => {

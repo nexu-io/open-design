@@ -476,14 +476,50 @@ async function ensureWorkerPreviewsEnabled(config: WorkersDeployConfig, scriptNa
   if (!resp.ok || json.success === false) throw cloudflareError(json, resp.status, 'Cloudflare workers.dev preview enable failed.');
 }
 
-async function enableWorkerSubdomain(config: WorkersDeployConfig, scriptName: string, subdomain: string): Promise<string> {
+type WorkerSubdomainEnableResult = {
+  url: string;
+  /** True when the workers.dev route was OFF before this call turned it on.
+   * Only known when `recordPriorState` was requested; false otherwise. */
+  enabledByThisRun: boolean;
+};
+
+// Turn the script's workers.dev route on. With `recordPriorState` the current
+// config is read first, so the caller learns whether THIS run flipped the route
+// from off to on — the one fact a later compensation needs: a deploy that
+// cannot be verified must put back the exposure it created, and must not turn
+// off a route the user already had public.
+async function enableWorkerSubdomain(
+  config: WorkersDeployConfig,
+  scriptName: string,
+  subdomain: string,
+  options: { recordPriorState?: boolean } = {},
+): Promise<WorkerSubdomainEnableResult> {
+  const url = CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/workers/scripts/' + encodeURIComponent(scriptName) + '/subdomain';
+  let wasEnabled = false;
+  if (options.recordPriorState) {
+    const getResp = await fetchWithRetry(url, { method: 'GET', headers: await authHeaders(config) });
+    const getJson = await readCloudflareJson(getResp);
+    if (!getResp.ok || getJson.success === false) throw cloudflareError(getJson, getResp.status, 'Cloudflare workers.dev subdomain config lookup failed.');
+    const current = (getJson.result ?? {}) as JsonObject;
+    wasEnabled = current.enabled === true;
+  }
   const resp = await fetchWithRetry(
-    CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/workers/scripts/' + encodeURIComponent(scriptName) + '/subdomain',
+    url,
     { method: 'POST', headers: await authHeaders(config, { 'Content-Type': 'application/json' }), body: JSON.stringify({ enabled: true, previews_enabled: true }) },
   );
   const json = await readCloudflareJson(resp);
   if (!resp.ok || json.success === false) throw cloudflareError(json, resp.status, 'Cloudflare workers.dev enable failed.');
-  return 'https://' + scriptName + '.' + subdomain + '.workers.dev';
+  return { url: 'https://' + scriptName + '.' + subdomain + '.workers.dev', enabledByThisRun: Boolean(options.recordPriorState) && !wasEnabled };
+}
+
+// Turn the script's workers.dev route back off (compensation only).
+async function disableWorkerSubdomain(config: WorkersDeployConfig, scriptName: string): Promise<void> {
+  const resp = await fetchWithRetry(
+    CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/workers/scripts/' + encodeURIComponent(scriptName) + '/subdomain',
+    { method: 'POST', headers: await authHeaders(config, { 'Content-Type': 'application/json' }), body: JSON.stringify({ enabled: false }) },
+  );
+  const json = await readCloudflareJson(resp);
+  if (!resp.ok || json.success === false) throw cloudflareError(json, resp.status, 'Cloudflare workers.dev disable failed.');
 }
 
 export type CloudflareWorkersAccessRule =
@@ -557,12 +593,19 @@ async function ensureCloudflareOtpIdentityProvider(config: WorkersDeployConfig):
   );
   const createJson = await readCloudflareJson(createResp);
   if (!createResp.ok || createJson.success === false) {
-    throw new DeployError(
-      'Cloudflare Access one-time PIN (OTP) login needs the "Identity Providers Write" permission. Reconnect Cloudflare to grant it, then redeploy.',
-      createResp.status || 403,
-      undefined,
-      'CFW_ACCESS_OTP_SCOPE_REQUIRED',
-    );
+    // Only an auth failure means the token lacks the scope. A 5xx / 429 / 400
+    // is a transient or malformed-request failure and must keep its real
+    // status, so the client can retry it instead of sending the user to
+    // reconnect Cloudflare for a permission it already has.
+    if (createResp.status === 401 || createResp.status === 403) {
+      throw new DeployError(
+        'Cloudflare Access one-time PIN (OTP) login needs the "Identity Providers Write" permission. Reconnect Cloudflare to grant it, then redeploy.',
+        createResp.status,
+        undefined,
+        'CFW_ACCESS_OTP_SCOPE_REQUIRED',
+      );
+    }
+    throw cloudflareError(createJson, createResp.ok ? 502 : createResp.status, 'Cloudflare Access one-time PIN provider creation failed.');
   }
   const created = (createJson.result ?? {}) as JsonObject;
   if (typeof created.id === 'string') return created.id;
@@ -600,7 +643,7 @@ async function findCloudflareAccessAppByWorker(config: WorkersDeployConfig, work
   }
 }
 
-function normalizeHostname(hostname: string): string {
+export function normalizeHostname(hostname: string): string {
   return hostname.trim().toLowerCase().replace(/\.$/, '');
 }
 
@@ -756,8 +799,26 @@ export function cloudflareAccessAppNameForScript(scriptName: string): string {
   return scriptName + ' (OpenDesign)';
 }
 
-const ACCESS_PERIMETER_ATTEMPTS = 3;
-const ACCESS_PERIMETER_RETRY_BASE_MS = 300;
+export type CloudflareAccessPerimeterRetry = { attempts: number; baseMs: number; maxDelayMs: number };
+
+/** Default probe budget for the post-deploy Access check: six probes with
+ * exponential backoff capped per wait, about 7.5s of waiting in total. A
+ * workers.dev name enabled seconds ago can take that long to answer at the
+ * edge at all; the previous three-probe budget (under a second) declared such
+ * a deploy unverified while it was merely still propagating. */
+export const CLOUDFLARE_ACCESS_PERIMETER_RETRY_DEFAULTS: Readonly<CloudflareAccessPerimeterRetry> = Object.freeze({
+  attempts: 6,
+  baseMs: 300,
+  maxDelayMs: 3000,
+});
+
+let accessPerimeterRetry: CloudflareAccessPerimeterRetry = { ...CLOUDFLARE_ACCESS_PERIMETER_RETRY_DEFAULTS };
+
+/** Test hook: shrink (or restore, with no argument) the perimeter probe budget
+ * so a suite asserting the unverified path does not wait out the real one. */
+export function configureCloudflareAccessPerimeterRetry(overrides?: Partial<CloudflareAccessPerimeterRetry>): void {
+  accessPerimeterRetry = { ...CLOUDFLARE_ACCESS_PERIMETER_RETRY_DEFAULTS, ...(overrides ?? {}) };
+}
 
 // One HEAD against a public URL; resolves to the failure instead of throwing so
 // the caller can retry a bounded number of times.
@@ -792,16 +853,67 @@ async function probeCloudflareAccessPerimeterOnce(url: string): Promise<DeployEr
 // answer at all, so each URL gets a short bounded retry before the deploy is
 // declared unverified.
 async function verifyCloudflareAccessPerimeter(urls: string[]): Promise<void> {
+  const { attempts, baseMs, maxDelayMs } = accessPerimeterRetry;
   for (const url of urls) {
     let failure: DeployError | null = null;
-    for (let attempt = 0; attempt < ACCESS_PERIMETER_ATTEMPTS; attempt += 1) {
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
       failure = await probeCloudflareAccessPerimeterOnce(url);
       if (!failure) break;
-      if (attempt < ACCESS_PERIMETER_ATTEMPTS - 1) {
-        await new Promise((resolve) => setTimeout(resolve, ACCESS_PERIMETER_RETRY_BASE_MS * 2 ** attempt));
+      if (attempt < attempts - 1) {
+        await new Promise((resolve) => setTimeout(resolve, Math.min(maxDelayMs, baseMs * 2 ** attempt)));
       }
     }
     if (failure) throw failure;
+  }
+}
+
+// Compensation for a perimeter check that failed: the deploy is not `ready`,
+// so no exposure THIS run created may outlive it. The workers.dev route goes
+// back off only when this run turned it on (a route the user already had
+// public stays as it was), and the hostname this run attached is detached. A
+// hostname that was already routed to the script before this run is not this
+// run's exposure and is left alone. Each step is best-effort and lands on the
+// step list; the perimeter error is what surfaces. A detached hostname is
+// dropped from `attachedCustomDomains` so the failed-deploy bookkeeping does
+// not record as owned an attachment that no longer exists.
+async function withdrawUnverifiedExposure(
+  config: WorkersDeployConfig,
+  input: {
+    scriptName: string;
+    subdomainEnabledByThisRun: boolean;
+    attachedCustomDomains: CloudflareOwnedCustomDomain[];
+    detachableHostnames: readonly string[];
+    steps: DeployStep[];
+  },
+): Promise<void> {
+  const { steps } = input;
+  const describe = (err: unknown) => (err instanceof Error ? err.message : String(err));
+  if (input.subdomainEnabledByThisRun) {
+    try {
+      await disableWorkerSubdomain(config, input.scriptName);
+      steps.push({ name: 'subdomain-disable', status: 'done' });
+    } catch (err) {
+      console.error(`[cloudflare-workers] Access unverified; could not turn workers.dev back off for ${input.scriptName}: ${describe(err)}`);
+      steps.push({ name: 'subdomain-disable', status: 'error', detail: describe(err) });
+    }
+  }
+  for (const attached of [...input.attachedCustomDomains]) {
+    if (!input.detachableHostnames.includes(attached.hostname)) continue;
+    try {
+      let domainId = attached.id ?? '';
+      if (!domainId) {
+        // The attach response carried no id; the list does.
+        const routed = await listCloudflareWorkerDomainsForScript(config, input.scriptName);
+        domainId = routed.find((domain) => domain.hostname === attached.hostname)?.id ?? '';
+      }
+      if (domainId) await detachCloudflareWorkerDomain(config, domainId);
+      const index = input.attachedCustomDomains.indexOf(attached);
+      if (index >= 0) input.attachedCustomDomains.splice(index, 1);
+      steps.push({ name: 'custom-domain-detach', status: 'done', detail: attached.hostname });
+    } catch (err) {
+      console.error(`[cloudflare-workers] Access unverified; could not detach ${attached.hostname} again: ${describe(err)}`);
+      steps.push({ name: 'custom-domain-detach', status: 'error', detail: attached.hostname + ': ' + describe(err) });
+    }
   }
 }
 
@@ -1177,8 +1289,14 @@ export async function deployToCloudflareWorkers(input: {
     }
 
     let url = customDomain ? 'https://' + customDomain.hostname : '';
+    // Whether THIS run turned the workers.dev route on. Read only when Access
+    // is on: that is the case where a failed perimeter check must undo the
+    // exposure, and undoing must not turn off a route the user had public.
+    let subdomainEnabledByThisRun = false;
     if (subdomain) {
-      url = await enableWorkerSubdomain(cfg, scriptName, subdomain);
+      const enabled = await enableWorkerSubdomain(cfg, scriptName, subdomain, { recordPriorState: accessOn });
+      url = enabled.url;
+      subdomainEnabledByThisRun = enabled.enabledByThisRun;
       steps.push({ name: 'subdomain', status: 'done', detail: url });
     }
     let attachedDomainId = '';
@@ -1250,8 +1368,24 @@ export async function deployToCloudflareWorkers(input: {
     const publicUrls = [url, ...(customDomain && url !== 'https://' + customDomain.hostname ? ['https://' + customDomain.hostname] : [])];
     if (accessOn) {
       // Hard constraint: a deploy with Access on is only `ready` when every URL
-      // it reports actually challenges with an Access login.
-      await verifyCloudflareAccessPerimeter(publicUrls);
+      // it reports actually challenges with an Access login. When it does not,
+      // the exposure this run created (workers.dev route, attached hostname) is
+      // withdrawn before the failure surfaces — the site must not stay reachable
+      // on a URL the deploy could not prove is gated.
+      try {
+        await verifyCloudflareAccessPerimeter(publicUrls);
+      } catch (err) {
+        if (err instanceof DeployError && err.code === 'CFW_ACCESS_UNVERIFIED') {
+          await withdrawUnverifiedExposure(cfg, {
+            scriptName,
+            subdomainEnabledByThisRun,
+            attachedCustomDomains,
+            detachableHostnames: configuredHostname && !configuredAlreadyAttached ? [configuredHostname] : [],
+            steps,
+          });
+        }
+        throw err;
+      }
       metadata.accessVerified = true;
     } else {
       try {
@@ -1427,7 +1561,19 @@ export async function ensureCloudflareD1Database(config: WorkersDeployConfig, da
   const json = await readCloudflareJson(resp);
   if (!resp.ok || json.success === false) throw cloudflareError(json, resp.status, 'Cloudflare D1 database creation failed.');
   const result = (json.result ?? {}) as JsonObject;
-  return String(result.uuid ?? '');
+  const uuid = typeof result.uuid === 'string' ? result.uuid : '';
+  // A create that answers without a uuid leaves nothing to bind. Fail here,
+  // before any asset upload, instead of forwarding `id: ''` into the script
+  // metadata and failing the live PUT after the uploads are spent.
+  if (!uuid) {
+    throw new DeployError(
+      'Cloudflare D1 database "' + databaseName + '" was created but the response carried no uuid to bind.',
+      502,
+      json,
+      'CFW_D1_CREATE_FAILED',
+    );
+  }
+  return uuid;
 }
 
 /** Resolve an R2 bucket by name, creating it when it does not exist. The

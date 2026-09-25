@@ -1752,6 +1752,20 @@ describe('deploy provider routes', () => {
         expect(cfCalls.filter((c) => c.method === 'DELETE').map((c) => c.url)).toEqual([
           expect.stringContaining('/workers/domains/dom-mine'),
         ]);
+
+        // Ownership goes with the attachment: the record stops vouching for
+        // (and displaying) the hostname, so when the same hostname is attached
+        // again from the dashboard it is foreign — not re-detached as "owned".
+        const after = await (await fetch(`${baseUrl}/api/projects/${projectId}/deployments`)).json() as {
+          deployments: Array<{ providerId: string; cloudflareWorkers?: { customDomain?: unknown } }>;
+        };
+        const record = after.deployments.find((d) => d.providerId === CLOUDFLARE_WORKERS_PROVIDER_ID);
+        expect(record).toBeTruthy();
+        expect(record?.cloudflareWorkers?.customDomain).toBeUndefined();
+        const reattached = await fetch(`${baseUrl}/api/deploy/cloudflare-workers/domains/dom-mine`, { method: 'DELETE' });
+        expect(reattached.status).toBe(409);
+        expect((await reattached.json() as { error: { code: string } }).error.code).toBe('CFW_DOMAIN_FOREIGN');
+        expect(cfCalls.filter((c) => c.method === 'DELETE')).toHaveLength(1);
       } finally {
         vi.unstubAllGlobals();
       }

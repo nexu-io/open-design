@@ -3,7 +3,7 @@ import type { RouteDeps } from '../server-context.js';
 import type { AuthorizeProjectRequest } from '../collab/project-request-authority.js';
 import { clientRequestIdFor } from '../http/client-request-id.js';
 import { classifyDeployFailure } from '../deploy/failure-detail.js';
-import { detachCloudflareWorkerDomain, getCloudflareWorkerDomain, isOwnedCustomDomain, listCloudflareZones, ownedCustomDomainsFromMetadata, recordedCustomDomainFromMetadata, resolveWorkerScriptName, type CloudflareOwnedCustomDomain } from '../deploy/cloudflare-workers.js';
+import { detachCloudflareWorkerDomain, getCloudflareWorkerDomain, isOwnedCustomDomain, listCloudflareZones, normalizeHostname, ownedCustomDomainsFromMetadata, recordedCustomDomainFromMetadata, resolveWorkerScriptName, type CloudflareOwnedCustomDomain } from '../deploy/cloudflare-workers.js';
 import { getCloudflareAccessToken } from '../deploy.js';
 
 export interface RegisterDeployRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'ids' | 'deploy' | 'projectStore'> {
@@ -171,6 +171,65 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
     return { priorAccessAppId, priorOwnedCustomDomains, priorCustomDomain };
   }
 
+  /**
+   * After a detach, no Workers record may keep vouching for the hostname.
+   * Ownership means "OpenDesign attached it", and that attachment is gone; a
+   * record still listing it would classify a later dashboard re-attach of the
+   * same hostname as owned — and the next deploy would detach it again. Every
+   * record of the provider is scanned because the Workers config is global.
+   * The displayed `customDomain` goes with it when it names that hostname.
+   */
+  function forgetDetachedWorkersHostname(domain: { id: string; hostname: string }): void {
+    const sameDomain = (entry: { id?: string | undefined; hostname: string }): boolean =>
+      (Boolean(domain.id) && entry.id === domain.id) || (Boolean(domain.hostname) && entry.hostname === domain.hostname);
+    const records: Array<{
+      id: string;
+      projectId: string;
+      fileName: string;
+      url: string;
+      deploymentId?: string | undefined;
+      deploymentCount: number;
+      target: 'preview' | 'production';
+      status: string;
+      statusMessage?: string | undefined;
+      reachableAt?: number | undefined;
+      providerMetadata?: unknown;
+      createdAt: number;
+    }> = listDeploymentsByProvider(db, CLOUDFLARE_WORKERS_PROVIDER_ID);
+    for (const record of records) {
+      const metadata = record.providerMetadata;
+      if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) continue;
+      const owned = ownedCustomDomainsFromMetadata(metadata);
+      const remaining = owned.filter((entry) => !sameDomain(entry));
+      const displayed = recordedCustomDomainFromMetadata(metadata);
+      const dropDisplayed =
+        displayed !== undefined &&
+        sameDomain({
+          id: displayed.id !== undefined && displayed.id !== null && String(displayed.id) ? String(displayed.id) : undefined,
+          hostname: normalizeHostname(String(displayed.hostname)),
+        });
+      if (remaining.length === owned.length && !dropDisplayed) continue;
+      const next: Record<string, unknown> = { ...(metadata as Record<string, unknown>), ownedCustomDomains: remaining };
+      if (dropDisplayed) delete next.customDomain;
+      upsertDeployment(db, {
+        id: record.id,
+        projectId: record.projectId,
+        fileName: record.fileName,
+        providerId: CLOUDFLARE_WORKERS_PROVIDER_ID,
+        url: record.url,
+        deploymentId: record.deploymentId,
+        deploymentCount: record.deploymentCount,
+        target: record.target,
+        status: record.status,
+        statusMessage: record.statusMessage,
+        reachableAt: record.reachableAt,
+        providerMetadata: next,
+        createdAt: record.createdAt,
+        updatedAt: Date.now(),
+      });
+    }
+  }
+
   // ---- Deploy --------------------------------------------------------------
 
   app.get('/api/deploy/config', async (req, res) => {
@@ -311,6 +370,7 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
         );
       }
       const deleted = await detachCloudflareWorkerDomain(cfg, req.params.domainId);
+      forgetDetachedWorkersHostname(domain);
       res.json(deleted ? { ok: true } : { ok: true, deleted: false });
     } catch (err: any) {
       const status = err instanceof DeployError ? err.status : 400;
