@@ -253,6 +253,10 @@ export function registerCloudflareRoutes(
         .status(400)
         .json({ error: 'state and code are required' });
     }
+    // Capture the attempt generation so a concurrent cancel/disconnect/start
+    // (which bumps it) aborts this exchange before it can persist a token the
+    // user already abandoned — the same fence the loopback callback enforces.
+    const attemptGeneration = oauthAttemptGeneration;
     const proxyDispatcher = proxyDispatcherRequestInit(process.env);
     try {
       const tokenResp = await completeCloudflareAuth({
@@ -261,6 +265,12 @@ export function registerCloudflareRoutes(
         code,
         fetchImpl: fetchWithRequestInit(proxyDispatcher.requestInit),
       });
+      if (attemptGeneration !== oauthAttemptGeneration) {
+        console.warn('[cloudflare-oauth] attempt superseded; discarding token');
+        return res
+          .status(409)
+          .json({ error: 'Cloudflare OAuth attempt was cancelled or superseded — restart the connection.' });
+      }
       const cfg = await readCloudflareWorkersConfig();
       const dataDir = cloudflareOAuthTokensDir();
       const existing = await getCloudflareOAuthToken(dataDir);

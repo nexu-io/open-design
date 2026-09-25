@@ -282,6 +282,16 @@ export async function writeCloudflareWorkersConfig(input: Partial<DeployConfig>)
   // require a durable OAuth token before accepting the flip (fail closed).
   let credentialMode = current.credentialMode;
   if (typeof input?.credentialMode === 'string') {
+    if (input.credentialMode !== 'token' && input.credentialMode !== 'oauth') {
+      throw new DeployError(
+        'Cloudflare credential mode must be "token" or "oauth".',
+        400,
+        undefined,
+        'CFW_INVALID_CREDENTIAL_MODE',
+      );
+    }
+    // The authority switch to 'oauth' must not be reachable via a bare config PUT:
+    // require a durable OAuth token before accepting the flip (fail closed).
     if (input.credentialMode === 'oauth' && current.credentialMode !== 'oauth') {
       const oauthToken = await getCloudflareOAuthToken(cloudflareOAuthTokensDir());
       if (!oauthToken) {

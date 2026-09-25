@@ -213,3 +213,21 @@ describe('getCloudflareAccessToken identity guard', () => {
     }
   });
 });
+
+describe('writeCloudflareWorkersConfig credential mode validation', () => {
+  it('rejects an unknown credential mode before saving', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'od-cf-mode-'));
+    configureCloudflareWorkersDataDir(dir);
+    try {
+      await expect(
+        writeCloudflareWorkersConfig({
+          credentialMode: 'totp',
+          accountId: 'acct_test',
+          token: 'tok',
+        }),
+      ).rejects.toMatchObject({ code: 'CFW_INVALID_CREDENTIAL_MODE' });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
