@@ -283,7 +283,7 @@ const DEPLOY_STRING_FLAGS = new Set([
   'workspace', 'workspace-member',
 ]);
 const DEPLOY_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
-const CLOUDFLARE_STRING_FLAGS = new Set(['daemon-url', 'client-id', 'redirect-uri', 'token', 'account-id']);
+const CLOUDFLARE_STRING_FLAGS = new Set(['daemon-url', 'client-id', 'redirect-uri', 'token', 'account-id', 'credential-mode']);
 const CLOUDFLARE_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 // `od automation …` mirrors the Automations tab. Same surface, same
 // /api/routines store. The CLI form is the embeddability contract:
@@ -12230,7 +12230,8 @@ Common options:
 
   if (sub === 'config') {
     const hasUpdate = flags['account-id'] !== undefined || flags.token !== undefined
-      || flags['client-id'] !== undefined || flags['redirect-uri'] !== undefined;
+      || flags['client-id'] !== undefined || flags['redirect-uri'] !== undefined
+      || flags['credential-mode'] !== undefined;
     const body = {};
     // The PUT handler keys off body.providerId (not the query param), so always
     // send it — otherwise the token/account land in the Vercel config.
@@ -12239,6 +12240,7 @@ Common options:
     if (flags.token !== undefined) body.token = flags.token;
     if (flags['client-id'] !== undefined) body.clientId = flags['client-id'];
     if (flags['redirect-uri'] !== undefined) body.redirectUri = flags['redirect-uri'];
+    if (flags['credential-mode'] !== undefined) body.credentialMode = flags['credential-mode'];
     try {
       resp = await fetch(`${base}/api/deploy/config?providerId=cloudflare-workers`, {
         method: hasUpdate ? 'PUT' : 'GET',

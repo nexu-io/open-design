@@ -104,6 +104,10 @@ export function registerCloudflareRoutes(
   // state, the open :56122 socket, and the paste-back UI all expire together.
   const pendingAuth = new PendingAuthCache(30 * 60 * 1000);
   let activeListener: CallbackListener | null = null;
+  // Monotonic attempt generation: bumped on start/disconnect/cancel so a slow
+  // token exchange cannot persist a token after the user cancelled, disconnected,
+  // or restarted the flow (see handleCallback's pre-persist generation check).
+  let oauthAttemptGeneration = 0;
 
   const stopActiveListener = async () => {
     const cur = activeListener;
@@ -122,6 +126,9 @@ export function registerCloudflareRoutes(
       console.warn(`[cloudflare-oauth] callback failed: ${outcome.error}`);
       return false;
     }
+    // Capture the attempt generation so a concurrent disconnect/start (which
+    // bumps it) aborts this exchange before it can persist a stale token.
+    const attemptGeneration = oauthAttemptGeneration;
     const proxyDispatcher = proxyDispatcherRequestInit(process.env);
     try {
       const tokenResp = await completeCloudflareAuth({
@@ -130,6 +137,13 @@ export function registerCloudflareRoutes(
         code: outcome.code,
         fetchImpl: fetchWithRequestInit(proxyDispatcher.requestInit),
       });
+      if (attemptGeneration !== oauthAttemptGeneration) {
+        // The attempt was cancelled, disconnected, or replaced while the token
+        // endpoint was in flight — do not persist a token the user already
+        // abandoned.
+        console.warn('[cloudflare-oauth] attempt superseded; discarding token');
+        return false;
+      }
       const cfg = await readCloudflareWorkersConfig();
       const dataDir = cloudflareOAuthTokensDir();
       const existing = await getCloudflareOAuthToken(dataDir);
@@ -159,6 +173,7 @@ export function registerCloudflareRoutes(
     }
     // Only one OAuth dance can be in flight at a time — :56122 is singleton.
     await stopActiveListener();
+    oauthAttemptGeneration += 1;
 
     try {
       const cfg = await readCloudflareWorkersConfig();
@@ -254,6 +269,9 @@ export function registerCloudflareRoutes(
         existing?.generation,
       );
       await setCloudflareOAuthToken(dataDir, stored);
+      // Only now — with the token durable — switch the credential authority to
+      // OAuth, mirroring the loopback callback path.
+      await commitCloudflareOAuthMode();
       // We won the race against the loopback listener (or it was never going
       // to resolve); shut it down so the next /start has a clean slate.
       await stopActiveListener();
@@ -301,6 +319,7 @@ export function registerCloudflareRoutes(
     // releases the singleton :56122 port.
     try {
       await stopActiveListener();
+      oauthAttemptGeneration += 1;
       res.json({ ok: true });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -314,6 +333,7 @@ export function registerCloudflareRoutes(
     }
     try {
       await stopActiveListener();
+      oauthAttemptGeneration += 1;
       await clearCloudflareOAuthToken(cloudflareOAuthTokensDir());
       res.json({ ok: true });
     } catch (err: unknown) {
