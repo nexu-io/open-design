@@ -124,6 +124,8 @@ test('Owner-K1 first publication syncs existing comments', async ({ page }) => {
   await expect(k1Banner).toBeVisible();
   await expect(k1Banner).toContainText('正在同步已有评论');
   await expect(k1Banner.locator('.icon-spin, [aria-hidden="true"]')).toHaveCount(1);
+  await expect(k1Banner).toHaveCSS('border-top-width', '0px');
+  await expect(k1Banner).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await capture(page, 'K1', k1.projectId, { state: 'publication-complete-existing-comments-syncing', existingLocalCommentCount: 1, commentText: '停用分享前已存在的项目评论', publicationUrl: k1Pub.url, commentSyncProjection: { pending: 1, backfill: { state: 'pending', reopened: false, retryable: true } }, renderedSyncStatus: await k1Banner.innerText(), visualGap: 'The first-publication branch now has a dark spinner/status treatment and syncs the persisted historical comment, matching the target progress affordance. The design shows “12条”; this isolated project has one persisted comment, and the production label has no count.' });
 
 });
@@ -181,6 +183,8 @@ test('Owner-K4/K5 distinct comment-sync capture sequences', async ({ page }) => 
   await expect(k4Menu.locator('.chrome-publish-url')).toHaveText(k4Pub.url);
   const k4Banner = k4Menu.getByRole('status').filter({ hasText: '正在同步重新开启的分享链接' });
   await expect(k4Banner).toBeVisible();
+  await expect(k4Banner).toHaveCSS('border-top-width', '0px');
+  await expect(k4Banner).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await capture(page, 'K4', k4.projectId, { state: 'resumed-existing-publication-with-reconciliation-pending', publicationUrl: k4Pub.url, persistedCommentCount: 1, stoppedPeriodCommentChange: { commentId: k4.commentId, status: 'resolved' }, commentSyncProjection: { shareStopped: false, pending: 1, backfill: { state: 'pending', reopened: true, retryable: true } }, renderedSyncStatus: await k4Banner.innerText(), visualGap: 'Current reopened state uses the normal URL/copy controls plus a reconciliation banner. Target K4 shows “正在同步评论…” in the primary action control and no exposed completed link/copy row.' });
 
   // K5: actual stopped → resume UI action; service reports failed, retryable
@@ -209,6 +213,8 @@ test('Owner-K4/K5 distinct comment-sync capture sequences', async ({ page }) => 
   const k5Banner = k5Menu.getByRole('status').filter({ hasText: '评论同步尚未完成' });
   await expect(k5Banner).toContainText('评论同步尚未完成');
   await expect(k5Banner.getByRole('button', { name: '重试' })).toBeVisible();
+  await expect(k5Banner).toHaveCSS('border-top-width', '0px');
+  await expect(k5Banner).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await expect(k5Menu.getByRole('button', { name: '复制链接' })).toBeEnabled();
   await capture(page, 'K5', k5.projectId, { state: 'reopened-link-with-retryable-comment-backfill-failure', publicationUrl: k5Pub.url, linkUsable: true, persistedCommentCount: 1, stoppedPeriodCommentChange: { commentId: k5.commentId, status: 'resolved' }, commentSyncProjection: { shareStopped: false, backfill: { state: 'failed', reopened: true, retryable: true } }, renderedSyncStatus: await k5Banner.innerText(), visualGap: 'State semantics align (usable reopened URL, retryable unfinished reconciliation); copy differs from target: current UI adds “分享已发布” and “正在后台自动重试” text around its retry control.' });
 });
