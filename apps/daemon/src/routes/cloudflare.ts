@@ -40,6 +40,7 @@ import {
   fetchCloudflareUserEmail,
   cloudflareRedirectUri,
   CLOUDFLARE_OAUTH_SCOPES,
+  validateCloudflareOAuthScopes,
   type CompleteCloudflareAuthResult,
 } from '../integrations/cloudflare-oauth.js';
 import {
@@ -259,16 +260,25 @@ export function registerCloudflareRoutes(
       }
       // Honor a caller/persisted scope set (least privilege): a narrow BYO
       // client must not be asked for every permission, and a broad request
-      // defeats the purpose. Validate as a non-empty array of non-empty
-      // strings; fall back to the default only when none is configured.
+      // defeats the purpose. An EXPLICIT selection (request body, else the
+      // persisted config) is validated against the supported allowlist and a
+      // malformed/unknown entry is a 400 before any OAuth state or listener
+      // exists — it must never silently widen to the full default grant. The
+      // default applies only when nothing was selected at all.
       // beginCloudflareAuth merges offline_access regardless.
-      const requestedScopes = Array.isArray(body.scopes) ? body.scopes : cfg.scopes;
-      const scopes =
-        Array.isArray(requestedScopes) &&
-        requestedScopes.length > 0 &&
-        requestedScopes.every((scope) => typeof scope === 'string' && scope.trim().length > 0)
-          ? requestedScopes.map((scope) => String(scope).trim())
-          : CLOUDFLARE_OAUTH_SCOPES;
+      let scopes: string[];
+      try {
+        if (body.scopes !== undefined) {
+          scopes = validateCloudflareOAuthScopes(body.scopes);
+        } else if (Array.isArray(cfg.scopes) && cfg.scopes.length > 0) {
+          scopes = validateCloudflareOAuthScopes(cfg.scopes);
+        } else {
+          scopes = CLOUDFLARE_OAUTH_SCOPES;
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return res.status(400).json({ error: msg });
+      }
       let authorizeUrl = '';
       let state = '';
       let callbackHost = '';

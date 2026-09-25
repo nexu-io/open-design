@@ -12139,6 +12139,20 @@ Options:
   console.log(`[deploy] ${data?.id ?? 'done'}${url ? ` → ${url}` : ''}`);
 }
 
+// Parse a `--scopes` value (comma/space separated). A flag that was supplied
+// but parses to nothing (`--scopes ''`, `--scopes ',,'`) is rejected: omitting
+// `scopes` from the request would make the daemon fall back to the FULL
+// default grant, turning a malformed least-privilege invocation into the
+// widest one. Exits 2 without making a request.
+function parseCloudflareScopesFlag(raw) {
+  const scopes = String(raw).split(/[\s,]+/).map((s) => s.trim()).filter(Boolean);
+  if (scopes.length === 0) {
+    console.error('--scopes must name at least one OAuth scope (comma/space separated); an empty value is rejected rather than widened to the default grant');
+    process.exit(2);
+  }
+  return scopes;
+}
+
 // `od cloudflare …` is the embeddability half of the Cloudflare Workers deploy
 // provider: configure credentials and drive the OAuth connect/status/disconnect
 // flow over the same /api/* endpoints the web UI uses, so headless agents and
@@ -12222,14 +12236,12 @@ Flags that do not apply to a subcommand are rejected (exit 2), never ignored.`);
       process.exit(2);
     }
     const redirectUri = typeof flags['redirect-uri'] === 'string' ? flags['redirect-uri'].trim() : '';
-    const scopes = typeof flags.scopes === 'string'
-      ? flags.scopes.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean)
-      : [];
+    const scopes = flags.scopes !== undefined ? parseCloudflareScopesFlag(flags.scopes) : undefined;
     try {
       resp = await fetch(`${base}/api/cloudflare/oauth/start`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ clientId, redirectUri, ...(scopes.length > 0 ? { scopes } : {}) }),
+        body: JSON.stringify({ clientId, redirectUri, ...(scopes ? { scopes } : {}) }),
       });
     } catch (err) {
       surfaceFetchError(err, base);
@@ -12276,9 +12288,7 @@ Flags that do not apply to a subcommand are rejected (exit 2), never ignored.`);
       }
       body.credentialMode = mode;
     }
-    if (flags.scopes !== undefined) {
-      body.scopes = String(flags.scopes).split(/[\s,]+/).map((s) => s.trim()).filter(Boolean);
-    }
+    if (flags.scopes !== undefined) body.scopes = parseCloudflareScopesFlag(flags.scopes);
     try {
       resp = await fetch(`${base}/api/deploy/config?providerId=cloudflare-workers`, {
         method: hasUpdate ? 'PUT' : 'GET',

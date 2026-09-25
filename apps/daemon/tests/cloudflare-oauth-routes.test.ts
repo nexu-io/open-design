@@ -6,6 +6,7 @@ import type { AddressInfo } from 'node:net';
 import express from 'express';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { registerCloudflareRoutes } from '../src/routes/cloudflare.js';
+import { startCallbackListener } from '../src/integrations/cloudflare-oauth-server.js';
 import {
   CLOUDFLARE_WORKERS_PROVIDER_ID,
   cloudflareOAuthTokensDir,
@@ -103,6 +104,30 @@ describe('cloudflare-oauth routes', () => {
     expect(body.authorizeUrl).toContain('offline_access');
     // A default scope that was NOT requested must not be asked for.
     expect(body.authorizeUrl).not.toContain('access.write');
+  });
+
+  it('rejects an unsupported or malformed explicit scope set with 400 before creating state or a listener', async () => {
+    vi.mocked(startCallbackListener).mockClear();
+    const post = (scopes: unknown) =>
+      fetch(`${app.baseUrl}/api/cloudflare/oauth/start`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ clientId: 'client-abc', redirectUri: 'http://127.0.0.1:56122/callback', scopes }),
+      });
+
+    // A typo must not silently widen to the full default grant.
+    const typo = await post(['workers-scripts.write', 'acess.write']);
+    expect(typo.status).toBe(400);
+    expect(((await typo.json()) as { error: string }).error).toContain('acess.write');
+
+    // An explicit empty selection and a non-array are malformed, not "use defaults".
+    expect((await post([])).status).toBe(400);
+    expect((await post('workers-scripts.write')).status).toBe(400);
+    expect((await post(['workers-scripts.write', ''])).status).toBe(400);
+
+    // No attempt was created: the listener for the earlier (valid) start is
+    // still the active one and no new bind was requested.
+    expect(startCallbackListener).not.toHaveBeenCalled();
   });
 
   it('discards the token when manual completion is cancelled mid-exchange', async () => {

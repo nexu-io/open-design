@@ -79,6 +79,45 @@ export const CLOUDFLARE_OAUTH_SCOPES: string[] = [
   'offline_access',
 ];
 
+/** The scopes OpenDesign knows how to use — the allowlist an explicit
+ * (caller-supplied or persisted) scope selection is validated against. A
+ * least-privilege selection is a SUBSET of the default set; anything outside
+ * it is a scope no OpenDesign code path exercises, so it is rejected rather
+ * than forwarded. */
+export const CLOUDFLARE_OAUTH_SUPPORTED_SCOPES: ReadonlySet<string> = new Set(
+  CLOUDFLARE_OAUTH_SCOPES,
+);
+
+/**
+ * Validate an explicit scope selection. Returns the trimmed, deduplicated
+ * list; throws a plain Error naming the offending entry when `value` is not a
+ * non-empty array of supported scope strings. Callers must surface that error
+ * (HTTP 400 / exit 2) instead of falling back to the default set — a typo or
+ * malformed list silently widening the grant is the fail-open this guards.
+ */
+export function validateCloudflareOAuthScopes(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    throw new Error('Cloudflare OAuth scopes must be an array of scope strings.');
+  }
+  const scopes: string[] = [];
+  for (const entry of value) {
+    const scope = typeof entry === 'string' ? entry.trim() : '';
+    if (!scope) {
+      throw new Error('Cloudflare OAuth scopes must be non-empty strings.');
+    }
+    if (!CLOUDFLARE_OAUTH_SUPPORTED_SCOPES.has(scope)) {
+      throw new Error(
+        `Unsupported Cloudflare OAuth scope "${scope}" — supported scopes: ${CLOUDFLARE_OAUTH_SCOPES.join(', ')}.`,
+      );
+    }
+    if (!scopes.includes(scope)) scopes.push(scope);
+  }
+  if (scopes.length === 0) {
+    throw new Error('Cloudflare OAuth scopes must name at least one scope.');
+  }
+  return scopes;
+}
+
 /** Permission scope for `GET /user` ("User Details Read"). Cloudflare's OIDC
  * layer cannot supply the email instead: its discovery document lists only
  * `openid` / `offline_access` as scopes and `sub` as the sole claim, so the

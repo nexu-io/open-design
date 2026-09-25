@@ -502,3 +502,28 @@ describe('stored account email', () => {
     }
   });
 });
+
+describe('token file permissions', () => {
+  it.skipIf(process.platform === 'win32')('persists the token file owner-only (0600) and leaves no temp file behind', async () => {
+    const { readdir, stat } = await import('node:fs/promises');
+    const dir = await mkdtemp(path.join(tmpdir(), 'od-cf-token-mode-'));
+    const dataDir = path.join(dir, 'nested', 'data');
+    try {
+      await setCloudflareOAuthToken(dataDir, {
+        accessToken: 'acc',
+        tokenType: 'Bearer',
+        generation: 0,
+        savedAt: Date.now(),
+      });
+      const file = path.join(dataDir, 'cloudflare-oauth-tokens.json');
+      expect((await stat(file)).mode & 0o777).toBe(0o600);
+      expect((await readdir(dataDir)).filter((name) => name.endsWith('.tmp'))).toEqual([]);
+
+      // Re-writes (refresh / clear) go through the same path and keep the mode.
+      await clearCloudflareOAuthToken(dataDir);
+      expect((await stat(file)).mode & 0o777).toBe(0o600);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});

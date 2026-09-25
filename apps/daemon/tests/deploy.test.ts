@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
 import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import os from 'node:os';
@@ -96,6 +96,31 @@ describe('deploy config', () => {
         teamSlug: 'renamed-team',
       });
     } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('survives two same-millisecond config writes (exclusive random temp file, no ENOENT rename)', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-config-race-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    // Pin the clock so a timestamp-based temp name would collide.
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    try {
+      const results = await Promise.all([
+        writeVercelConfig({ token: 'tok-a', teamId: 'team_a', teamSlug: 'a' }),
+        writeVercelConfig({ token: 'tok-b', teamId: 'team_b', teamSlug: 'b' }),
+      ]);
+      expect(results.map((r) => r.configured)).toEqual([true, true]);
+      const saved = await readVercelConfig();
+      expect(['tok-a', 'tok-b']).toContain(saved.token);
+      expect(saved.teamId).toBe(saved.token === 'tok-a' ? 'team_a' : 'team_b');
+      const leftovers = (await readdir(stateRoot)).filter((name) => name.includes('.tmp-'));
+      expect(leftovers).toEqual([]);
+    } finally {
+      nowSpy.mockRestore();
       if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
       else process.env.OD_USER_STATE_DIR = priorStateRoot;
       await rm(stateRoot, { recursive: true, force: true });

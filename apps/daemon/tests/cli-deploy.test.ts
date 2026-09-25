@@ -485,4 +485,33 @@ describe('od cloudflare CLI', () => {
     expect(result.stderr).toContain('--credential-mode');
     expect(stub.requests).toHaveLength(0);
   });
+
+  it('connect forwards a comma/space-separated --scopes list as an array', async () => {
+    stub.setResponder(() => ({ status: 200, body: { authorizeUrl: 'https://dash.cloudflare.com/oauth2/auth?x=1', state: 's1' } }));
+    const result = await runCli(['cloudflare', 'connect', '--client-id', 'client-abc', '--scopes', 'workers-scripts.write, zone.read access.write', '--daemon-url', stub.baseUrl]);
+    expect(result.code).toBe(0);
+    expect(JSON.parse(stub.requests[0]?.body ?? '{}')).toEqual({
+      clientId: 'client-abc',
+      redirectUri: '',
+      scopes: ['workers-scripts.write', 'zone.read', 'access.write'],
+    });
+  });
+
+  it('rejects an explicit --scopes that parses to nothing instead of widening to the default grant', async () => {
+    // Omitting `scopes` makes the daemon fall back to the FULL default set, so
+    // a malformed least-privilege invocation must fail (exit 2, no request).
+    const empty = await runCli(['cloudflare', 'connect', '--client-id', 'client-abc', '--scopes', '', '--daemon-url', stub.baseUrl]);
+    expect(empty.code).toBe(2);
+    expect(empty.stderr).toContain('--scopes');
+    expect(stub.requests).toHaveLength(0);
+
+    const separators = await runCli(['cloudflare', 'connect', '--client-id', 'client-abc', '--scopes', ',,', '--daemon-url', stub.baseUrl]);
+    expect(separators.code).toBe(2);
+    expect(stub.requests).toHaveLength(0);
+
+    const config = await runCli(['cloudflare', 'config', '--scopes', ' , ', '--daemon-url', stub.baseUrl]);
+    expect(config.code).toBe(2);
+    expect(config.stderr).toContain('--scopes');
+    expect(stub.requests).toHaveLength(0);
+  });
 });

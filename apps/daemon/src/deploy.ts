@@ -1,12 +1,12 @@
 import fs from 'node:fs';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { hash as blake3Hash } from 'blake3-wasm';
 import { listFiles, readProjectFile, validateProjectPath } from './projects.js';
 import { findRealTagOffset, HTML_TAG_PATTERNS } from '@open-design/contracts/runtime/html-injection-points';
-import { refreshCloudflareToken } from './integrations/cloudflare-oauth.js';
+import { refreshCloudflareToken, validateCloudflareOAuthScopes } from './integrations/cloudflare-oauth.js';
 import {
   getCloudflareOAuthToken,
   isCloudflareOAuthTokenExpired,
@@ -204,15 +204,23 @@ async function writeDeployConfigFile(file: string, config: DeployConfig) {
   await mkdir(path.dirname(file), { recursive: true });
   // Atomic replace: write a sibling temp file then rename over the target so a
   // crash mid-write can never leave a truncated/partial config behind — the
-  // previous file stays valid until the rename lands.
-  const tmp = `${file}.tmp-${process.pid}-${Date.now()}`;
-  await writeFile(tmp, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
+  // previous file stays valid until the rename lands. The temp name carries a
+  // random suffix and is opened with exclusive creation: the Vercel/Pages
+  // writers are not serialized, and a pid+millisecond name let two same-tick
+  // writes share one temp file (the second rename then failed with ENOENT).
+  const tmp = `${file}.tmp-${randomUUID()}`;
   try {
-    fs.chmodSync(tmp, 0o600);
-  } catch {
-    // Best effort on filesystems that do not support chmod.
+    await writeFile(tmp, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600, flag: 'wx' });
+    try {
+      fs.chmodSync(tmp, 0o600);
+    } catch {
+      // Best effort on filesystems that do not support chmod.
+    }
+    await rename(tmp, file);
+  } catch (err) {
+    await rm(tmp, { force: true }).catch(() => {});
+    throw err;
   }
-  await rename(tmp, file);
 }
 
 // Serialize every Workers-config read-modify-write so a settings PUT, a
@@ -325,6 +333,19 @@ export function normalizeCloudflareWorkersBindings(
   });
 }
 
+/** Validate a persisted OAuth scope selection. An empty array clears the
+ * selection (the connect flow then requests the default set); a non-empty one
+ * must consist of supported scopes only, so `/oauth/start` can never be fed a
+ * persisted typo that would fail authorization or be silently widened. */
+function normalizeCloudflareWorkersScopes(value: unknown): string[] {
+  if (Array.isArray(value) && value.length === 0) return [];
+  try {
+    return validateCloudflareOAuthScopes(value);
+  } catch (err) {
+    throw new DeployError(err instanceof Error ? err.message : String(err), 400, undefined, 'CFW_INVALID_SCOPES');
+  }
+}
+
 function normalizeCloudflareWorkersAccess(value: unknown): { enabled: boolean; rule?: CloudflareWorkersAccessRule } | undefined {
   if (!value || typeof value !== 'object') return undefined;
   const v = value as JsonObject;
@@ -425,7 +446,7 @@ export async function writeCloudflareWorkersConfig(input: Partial<DeployConfig>)
     credentialMode,
     clientId: typeof input?.clientId === 'string' ? input.clientId.trim() : current.clientId,
     redirectUri: typeof input?.redirectUri === 'string' ? input.redirectUri.trim() : current.redirectUri,
-    scopes: Array.isArray(input?.scopes) ? input.scopes : current.scopes,
+    scopes: input?.scopes !== undefined ? normalizeCloudflareWorkersScopes(input.scopes) : current.scopes,
     bindings: input?.bindings !== undefined ? normalizeCloudflareWorkersBindings(input.bindings) : current.bindings,
     access: input?.access !== undefined ? normalizeCloudflareWorkersAccess(input.access) : current.access,
     customDomain: input?.customDomain !== undefined ? normalizeCloudflareWorkersCustomDomain(input.customDomain) : current.customDomain,

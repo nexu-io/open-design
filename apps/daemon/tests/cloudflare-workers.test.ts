@@ -162,6 +162,18 @@ describe('cloudflare-workers config', () => {
       const saved = await writeCloudflareWorkersConfig({ customDomain: { hostname: ' app.example.com ', zoneId: 'zone-1' } });
       expect(saved.customDomain).toEqual({ hostname: 'app.example.com', zoneId: 'zone-1' });
 
+      // A persisted scope selection is validated against the supported set so
+      // /oauth/start can never be fed a typo; an empty array clears it.
+      await expect(writeCloudflareWorkersConfig({ scopes: ['workers-scripts.write', 'acess.write'] }))
+        .rejects.toMatchObject({ code: 'CFW_INVALID_SCOPES' });
+      await expect(writeCloudflareWorkersConfig({ scopes: 'workers-scripts.write' as never }))
+        .rejects.toMatchObject({ code: 'CFW_INVALID_SCOPES' });
+      expect((await readCloudflareWorkersConfig()).scopes).toEqual([]);
+      await writeCloudflareWorkersConfig({ scopes: [' workers-scripts.write ', 'zone.read', 'zone.read'] });
+      expect((await readCloudflareWorkersConfig()).scopes).toEqual(['workers-scripts.write', 'zone.read']);
+      await writeCloudflareWorkersConfig({ scopes: [] });
+      expect((await readCloudflareWorkersConfig()).scopes).toEqual([]);
+
       await expect(writeCloudflareWorkersConfig({ bindings: [null] as never }))
         .rejects.toMatchObject({ code: 'CFW_BINDINGS_INVALID' });
       await expect(writeCloudflareWorkersConfig({ bindings: [{ type: 'r2_bucket', name: 'ASSETS', bucketName: 'b' }] }))

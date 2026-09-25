@@ -10,7 +10,7 @@
 // Permissions: chmod 0600 best-effort on POSIX.
 // Lock: in-memory promise chain keyed by dataDir.
 
-import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 
@@ -196,12 +196,28 @@ async function writeTokensFile(
 ): Promise<CloudflareOAuthTokensFile> {
   const file = tokensFile(dataDir);
   await mkdir(path.dirname(file), { recursive: true });
-  const tmp = file + '.' + randomBytes(4).toString('hex') + '.tmp';
-  await writeFile(tmp, JSON.stringify(next, null, 2), 'utf8');
-  await rename(tmp, file);
-  // Best-effort lockdown of file mode. The access token grants posting-as-you
-  // against the user's Cloudflare account, so we restrict to owner-only
-  // read/write where the OS supports it.
+  const tmp = file + '.' + randomBytes(8).toString('hex') + '.tmp';
+  // The bearer credential must never exist on disk in a world-readable file,
+  // not even briefly: create the temp file owner-only (`mode` applies at
+  // creation, before any bytes land) with exclusive creation so a colliding
+  // name can never be reused, then lock the mode down again (umask-proof) and
+  // rename over the target. A crash before the rename leaves only a 0600 temp.
+  try {
+    await writeFile(tmp, JSON.stringify(next, null, 2), { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+    await lockdownTokenFileMode(tmp);
+    await rename(tmp, file);
+  } catch (err) {
+    await rm(tmp, { force: true }).catch(() => {});
+    throw err;
+  }
+  await lockdownTokenFileMode(file);
+  return next;
+}
+
+// Best-effort lockdown of file mode. The access token grants posting-as-you
+// against the user's Cloudflare account, so we restrict to owner-only
+// read/write where the OS supports it.
+async function lockdownTokenFileMode(file: string): Promise<void> {
   try {
     await chmod(file, 0o600);
   } catch (err: unknown) {
@@ -214,7 +230,6 @@ async function writeTokensFile(
       );
     }
   }
-  return next;
 }
 
 /** Get the current stored Cloudflare OAuth token, or null when none is stored
