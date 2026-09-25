@@ -119,7 +119,11 @@ async function listCloudflareAllPages(config: WorkersDeployConfig, path: string,
     if (json.success !== true || !Array.isArray(json.result)) return [];
     all.push(...(json.result as JsonObject[]));
     const info = (json.result_info ?? {}) as JsonObject;
-    const totalPages = typeof info.total_pages === 'number' && info.total_pages > 0 ? info.total_pages : 1;
+    const totalPages = typeof info.total_pages === 'number' && info.total_pages > 0
+      ? info.total_pages
+      : typeof info.total_count === 'number' && info.total_count > 0
+        ? Math.ceil(info.total_count / perPage)
+        : 1;
     if (page >= totalPages) return all;
     page += 1;
   }
@@ -519,7 +523,8 @@ export async function listCloudflareR2Buckets(
       const name = typeof bucket?.name === 'string' ? bucket.name : '';
       if (name) out.push({ name });
     }
-    const nextCursor = typeof result?.cursor === 'string' && result.cursor.length > 0 ? result.cursor : undefined;
+    const info = json.result_info as JsonObject | undefined;
+    const nextCursor = typeof info?.cursor === 'string' && info.cursor.length > 0 ? info.cursor : undefined;
     if (!nextCursor) return out;
     cursor = nextCursor;
   }
