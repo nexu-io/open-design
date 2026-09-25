@@ -9,8 +9,15 @@
 // File: `<dataDir>/cloudflare-oauth-tokens.json`
 // Permissions: chmod 0600 best-effort on POSIX.
 // Lock: in-memory promise chain keyed by dataDir.
+//
+// Concurrency contract: ONE daemon per data dir. The daemon already owns the
+// data dir's SQLite database and IPC endpoint, so a second daemon on the same
+// root is outside the supported topology. Nothing here (neither the in-memory
+// lock nor the generation compare-and-set) coordinates across processes; the
+// generation guards interleavings INSIDE this daemon — a disconnect or a
+// reconnect that lands while a refresh is waiting on the token endpoint.
 
-import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, open, readFile, rename, rm } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 
@@ -45,7 +52,8 @@ export interface StoredCloudflareOAuthToken {
    * on a live user lookup succeeding after the assets are already uploaded. */
   email?: string;
   /** Monotonic counter bumped on every persist, used to detect a credential
-   * that a sibling process rotated underneath an in-flight refresh. */
+   * that was cleared or replaced (disconnect, reconnect) underneath an
+   * in-flight refresh in this daemon. */
   generation: number;
   /** Wall-clock epoch ms when this record was first persisted. */
   savedAt: number;
@@ -202,8 +210,20 @@ async function writeTokensFile(
   // creation, before any bytes land) with exclusive creation so a colliding
   // name can never be reused, then lock the mode down again (umask-proof) and
   // rename over the target. A crash before the rename leaves only a 0600 temp.
+  //
+  // fsync BEFORE the rename (same discipline as the Workers config writer in
+  // deploy.ts): a rename is atomic only for the directory entry. Without
+  // flushing the temp file's bytes first, a power loss after the rename can
+  // leave the target pointing at an empty or truncated file — the credential
+  // (and its refresh token) gone with the entry kept.
   try {
-    await writeFile(tmp, JSON.stringify(next, null, 2), { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+    const handle = await open(tmp, 'wx', 0o600);
+    try {
+      await handle.writeFile(JSON.stringify(next, null, 2), 'utf8');
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
     await lockdownTokenFileMode(tmp);
     await rename(tmp, file);
   } catch (err) {
@@ -256,9 +276,10 @@ export async function setCloudflareOAuthToken(
 
 /** Compare-and-set persist: write the token only if the store still holds a
  * token whose file generation equals expectedGeneration. Returns false when the
- * token was cleared (disconnect) or replaced (another writer) while the caller
- * was computing its refresh - the caller must then treat the credential as
- * superseded rather than resurrect it. */
+ * token was cleared (disconnect) or replaced (a reconnect in this daemon)
+ * while the caller was computing its refresh - the caller must then treat the
+ * credential as superseded rather than resurrect it. The check is in-process
+ * only (see the contract at the top of this file). */
 export async function setCloudflareOAuthTokenIfGenerationMatches(
   dataDir: string,
   token: StoredCloudflareOAuthToken,

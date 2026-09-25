@@ -482,6 +482,36 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
     expect(calls.some((c) => c[0].endsWith('/access/apps/app-123') && c[1]?.method === 'PUT')).toBe(false);
   });
 
+  it('reports the hostname it attached on the error when the deploy fails afterwards, so the route can record it as owned', async () => {
+    const { calls, fn } = accessFetch({
+      domainsList: { success: true, result: [{ id: 'dom-old', hostname: 'old.example.com', service: 'my-site' }] },
+      domainsDelete: { success: false, errors: [{ message: 'detach denied' }] },
+    });
+    vi.stubGlobal('fetch', fn);
+    // The configured hostname attaches (dom-1); the stale owned hostname's
+    // detach then fails. The attach already happened: Cloudflare routes
+    // app.example.com to the script, and only the error can say we did that.
+    await expect(
+      deployToCloudflareWorkers({
+        ...base,
+        customDomain: { hostname: 'app.example.com', zoneId: 'zone-1' },
+        priorOwnedCustomDomains: [{ id: 'dom-old', hostname: 'old.example.com' }],
+      }),
+    ).rejects.toMatchObject({
+      message: 'detach denied',
+      attachedCustomDomains: [{ id: 'dom-1', hostname: 'app.example.com' }],
+    });
+    expect(calls.some((c) => c[0].endsWith('/workers/domains') && c[1]?.method === 'PUT')).toBe(true);
+  });
+
+  it('reports no attached hostname when the deploy fails before or at the attach', async () => {
+    const { fn } = accessFetch({ domains: { success: false, errors: [{ message: 'attach denied' }] } });
+    vi.stubGlobal('fetch', fn);
+    await expect(
+      deployToCloudflareWorkers({ ...base, customDomain: { hostname: 'app.example.com', zoneId: 'zone-1' } }),
+    ).rejects.toMatchObject({ message: 'attach denied', attachedCustomDomains: [] });
+  });
+
   it('detaches a dropped OWNED hostname even with Access off and no custom domain configured', async () => {
     const { calls, fn } = accessFetch({
       domainsList: { success: true, result: [{ id: 'dom-old', hostname: 'old.example.com', service: 'my-site' }] },
@@ -844,8 +874,8 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
       await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), record('token-A'));
       await writeCloudflareWorkersConfig({ credentialMode: 'oauth', accountId: 'acct_test', clientId: 'client-abc' });
       const { calls, fn } = accessFetch();
-      // A sibling process rotates the credential while the assets are being
-      // uploaded (the token store is re-read by the provider, not captured).
+      // A reconnect in this daemon rotates the credential while the assets are
+      // being uploaded (the token store is re-read by the provider, not captured).
       const rotating = vi.fn(async (url: string, init?: RequestInit) => {
         const resp = await fn(url, init);
         if (url.includes('assets-upload-session')) {

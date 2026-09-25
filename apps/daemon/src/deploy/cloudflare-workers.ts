@@ -135,8 +135,9 @@ async function listCloudflareAllPages(config: WorkersDeployConfig, path: string,
     }
     if (json.success !== true || !Array.isArray(json.result)) return [];
     const result = json.result as JsonObject[];
-    if (cloudflareListPageRepeats(all, result)) return all;
-    all.push(...result);
+    const unseen = cloudflareListUnseenItems(all, result);
+    if (result.length > 0 && unseen.length === 0) return all;
+    all.push(...unseen);
     if (!cloudflareListHasMorePages(json, result.length, page, perPage)) return all;
     page += 1;
   }
@@ -151,21 +152,26 @@ function cloudflareListItemKey(item: JsonObject | null | undefined): string | un
   return key === undefined || key === null ? undefined : String(key);
 }
 
-// An endpoint that ignores `page=` answers every page with the same items. When
-// any id on the incoming page was already seen on the previous page, the list
-// is exhausted: the caller drops the incoming page instead of appending
-// duplicates.
-function cloudflareListPageRepeats(collected: JsonObject[], incoming: JsonObject[]): boolean {
-  if (collected.length === 0 || incoming.length === 0) return false;
+// The items of an incoming page not already collected, by id. An endpoint that
+// ignores `page=` answers every page with the same items, and one whose
+// underlying set shifts between requests (a create or delete racing the list)
+// can repeat SOME ids on the next page while still carrying new ones. Only the
+// repeats are dropped, never the whole page — a resource that first appears on
+// a partially overlapping page must still be seen (a missed one turns a
+// list-then-create into a duplicate create). The caller stops paging when a
+// non-empty page yields nothing new. Items without an id cannot be deduplicated
+// and are always kept.
+function cloudflareListUnseenItems(collected: JsonObject[], incoming: JsonObject[]): JsonObject[] {
+  if (collected.length === 0 || incoming.length === 0) return incoming;
   const previous = new Set<string>();
   for (const item of collected) {
     const key = cloudflareListItemKey(item);
     if (key !== undefined) previous.add(key);
   }
-  if (previous.size === 0) return false;
-  return incoming.some((item) => {
+  if (previous.size === 0) return incoming;
+  return incoming.filter((item) => {
     const key = cloudflareListItemKey(item);
-    return key !== undefined && previous.has(key);
+    return key === undefined || !previous.has(key);
   });
 }
 
@@ -209,8 +215,9 @@ async function listCloudflareAllPagesStrict(config: WorkersDeployConfig, path: s
       throw cloudflareError(json, resp.ok ? 502 : resp.status, what + ' failed.');
     }
     const result = json.result as JsonObject[];
-    if (cloudflareListPageRepeats(all, result)) return all;
-    all.push(...result);
+    const unseen = cloudflareListUnseenItems(all, result);
+    if (result.length > 0 && unseen.length === 0) return all;
+    all.push(...unseen);
     if (!cloudflareListHasMorePages(json, result.length, page, perPage)) return all;
     page += 1;
   }
@@ -963,6 +970,11 @@ export async function deployToCloudflareWorkers(input: {
     if (!selfEmail) throw selfEmailUnresolvedError();
   }
   const steps: DeployStep[] = [];
+  // Custom hostnames THIS deploy attached. Reported on the error when the deploy
+  // fails afterwards, so the route can record them as owned — otherwise a
+  // hostname attached by a failed deploy is routed to the script but never
+  // owned, and no later deploy or detach request may touch it.
+  const attachedCustomDomains: CloudflareOwnedCustomDomain[] = [];
   try {
     // Validate the script name and the asset set BEFORE any resource is
     // created: an unviable deploy (bad script name, too many / oversized /
@@ -1173,6 +1185,7 @@ export async function deployToCloudflareWorkers(input: {
         throw err;
       }
       attachedDomainId = domainId;
+      attachedCustomDomains.push(domainId ? { id: domainId, hostname: configuredHostname } : { hostname: configuredHostname });
       const customUrl = 'https://' + customDomain.hostname;
       metadata.customDomain = domainId
         ? { id: domainId, hostname: customDomain.hostname, url: customUrl }
@@ -1235,11 +1248,13 @@ export async function deployToCloudflareWorkers(input: {
       providerMetadata: metadata,
     };
   } catch (err) {
-    // Attach the partial steps (including any created accessAppId) to EVERY
-    // error, not just DeployError — a transport failure after the Access app
-    // step must still let the route record the app id instead of orphaning it.
+    // Attach the partial steps (including any created accessAppId) and the
+    // custom hostnames attached so far to EVERY error, not just DeployError — a
+    // transport failure after the Access app step or the attach must still let
+    // the route record what this deploy now owns instead of orphaning it.
     steps.push({ name: 'error', status: 'error', detail: err instanceof Error ? err.message : String(err) });
     (err as { steps?: DeployStep[] }).steps = steps;
+    (err as { attachedCustomDomains?: CloudflareOwnedCustomDomain[] }).attachedCustomDomains = attachedCustomDomains;
     throw err;
   }
 }

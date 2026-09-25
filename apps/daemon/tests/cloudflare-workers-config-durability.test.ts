@@ -11,13 +11,18 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   CLOUDFLARE_WORKERS_CONFIG_CORRUPT_CODE,
   CLOUDFLARE_WORKERS_PROVIDER_ID,
+  cloudflareOAuthTokensDir,
+  commitCloudflareOAuthMode,
   configureCloudflareWorkersDataDir,
   deployConfigPath,
   getCloudflareAccessToken,
   publicCloudflareWorkersConfig,
   readCloudflareWorkersConfig,
+  resetCloudflareCredentialMode,
+  writeCloudflareOAuthIdentity,
   writeCloudflareWorkersConfig,
 } from '../src/deploy.js';
+import { setCloudflareOAuthToken } from '../src/integrations/cloudflare-tokens.js';
 
 async function withDataDir<T>(run: (dir: string) => Promise<T>): Promise<T> {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'od-workers-config-durability-'));
@@ -99,6 +104,67 @@ describe('Workers config corruption recovery', () => {
       expect(reread.configError).toBeUndefined();
       // The marker is never persisted.
       expect(JSON.parse(await readFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), 'utf8'))).not.toHaveProperty('configError');
+    });
+  });
+
+  // The partial mutations (OAuth identity, mode commit, disconnect reset) spread
+  // the current config. After a corrupt read that is the EMPTY default plus the
+  // marker, so writing it would replace the user's recoverable file with
+  // nothing — and persist the marker. Only the explicit settings PUT above heals.
+  describe('partial mutations on a corrupt file', () => {
+    const CORRUPT = '{"token": "tok", "accountId": "acct_test", "scriptName": "keep-me", "bindings": [';
+
+    it('the OAuth identity write refuses with CFW_CONFIG_CORRUPT and leaves the file byte-for-byte intact', async () => {
+      await withDataDir(async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        const file = deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID);
+        await writeFile(file, CORRUPT, 'utf8');
+        await expect(writeCloudflareOAuthIdentity({ clientId: 'client-1', redirectUri: 'http://127.0.0.1:1/cb' }))
+          .rejects.toMatchObject({ status: 409, code: CLOUDFLARE_WORKERS_CONFIG_CORRUPT_CODE });
+        expect(await readFile(file, 'utf8')).toBe(CORRUPT);
+      });
+    });
+
+    it('the oauth mode commit refuses with CFW_CONFIG_CORRUPT and leaves the file intact', async () => {
+      await withDataDir(async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        const file = deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID);
+        await writeFile(file, CORRUPT, 'utf8');
+        await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), { accessToken: 'acc', tokenType: 'Bearer', generation: 0, savedAt: Date.now() });
+        await expect(commitCloudflareOAuthMode({ clientId: 'client-1', redirectUri: 'http://127.0.0.1:1/cb' }))
+          .rejects.toMatchObject({ status: 409, code: CLOUDFLARE_WORKERS_CONFIG_CORRUPT_CODE });
+        expect(await readFile(file, 'utf8')).toBe(CORRUPT);
+      });
+    });
+
+    it('the disconnect reset skips the write (a corrupt file already reads as token mode) and leaves the file intact', async () => {
+      await withDataDir(async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const file = deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID);
+        await writeFile(file, CORRUPT, 'utf8');
+        await expect(resetCloudflareCredentialMode()).resolves.toBeUndefined();
+        expect(await readFile(file, 'utf8')).toBe(CORRUPT);
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining(CLOUDFLARE_WORKERS_CONFIG_CORRUPT_CODE));
+        expect((await readCloudflareWorkersConfig()).credentialMode).toBe('token');
+      });
+    });
+
+    it('a settings PUT still heals the file, after which the partial mutations work and never persist the marker', async () => {
+      await withDataDir(async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        const file = deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID);
+        await writeFile(file, CORRUPT, 'utf8');
+        await writeCloudflareWorkersConfig({ token: 'tok', accountId: 'acct_test', scriptName: 'healed' });
+        await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), { accessToken: 'acc', tokenType: 'Bearer', generation: 0, savedAt: Date.now() });
+        await writeCloudflareOAuthIdentity({ clientId: 'client-1', redirectUri: 'http://127.0.0.1:1/cb' });
+        await commitCloudflareOAuthMode();
+        expect(JSON.parse(await readFile(file, 'utf8'))).toMatchObject({ scriptName: 'healed', clientId: 'client-1', credentialMode: 'oauth' });
+        await resetCloudflareCredentialMode();
+        const persisted = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>;
+        expect(persisted).toMatchObject({ scriptName: 'healed', clientId: 'client-1', credentialMode: 'token' });
+        expect(persisted).not.toHaveProperty('configError');
+      });
     });
   });
 

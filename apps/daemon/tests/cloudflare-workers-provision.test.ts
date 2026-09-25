@@ -153,6 +153,27 @@ describe('ensureCloudflareD1Database', () => {
     expect(calls.filter((c) => c[0].includes('/d1/database')).length).toBe(2);
   });
 
+  it('keeps the new items of a page that only partially repeats the previous one, and stops on the first page with nothing new', async () => {
+    const calls: Call[] = [];
+    const first = Array.from({ length: 100 }, (_, i) => ({ name: 'db-' + i, uuid: 'uuid-' + i }));
+    // A database created between the two requests shifts the window: page 2
+    // repeats 99 ids from page 1 and carries ONE resource never seen before.
+    // Dropping the page whole would miss it — and a missed database becomes a
+    // duplicate create. Page 3 repeats page 2 entirely: nothing new, stop.
+    const shifted = [{ name: 'db-new', uuid: 'uuid-new' }, ...first.slice(0, 99)];
+    const fn = vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push([url, init]);
+      const page = Number(new URL(url).searchParams.get('page'));
+      return jsonResponse({ success: true, result: page === 1 ? first : shifted });
+    });
+    vi.stubGlobal('fetch', fn);
+    const dbs = await listCloudflareD1Databases('tok-secret', 'acct_test');
+    expect(dbs).toHaveLength(101);
+    expect(new Set(dbs.map((db) => db.id)).size).toBe(101);
+    expect(dbs.some((db) => db.id === 'uuid-new')).toBe(true);
+    expect(calls.filter((c) => c[0].includes('/d1/database')).length).toBe(3);
+  });
+
   it('caps the pages followed when every page is full and every id is new', async () => {
     const calls: Call[] = [];
     const fn = vi.fn(async (url: string, init?: RequestInit) => {

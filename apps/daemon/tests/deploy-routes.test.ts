@@ -1969,6 +1969,111 @@ describe('deploy provider routes', () => {
     }
   });
 
+  it('records the custom hostname a failed Workers deploy attached as owned, so a later detach is not refused as foreign', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-workers-domain-orphan-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    configureCloudflareWorkersDataDir(stateRoot);
+    try {
+      const dataDir = process.env.OD_DATA_DIR;
+      if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+      const projectId = `workers-domain-orphan-${Date.now()}`;
+      const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+      await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>Hello</h1>');
+      expect((await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: projectId, name: 'Domain orphan', skillId: null, designSystemId: null }),
+      })).status).toBe(200);
+      const putConfig = async (hostname: string) => {
+        expect((await fetch(`${baseUrl}/api/deploy/config`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            providerId: CLOUDFLARE_WORKERS_PROVIDER_ID,
+            token: 'tok',
+            accountId: 'acct_test',
+            scriptName: 'my-site',
+            customDomain: { hostname, zoneId: 'zone-1' },
+          }),
+        })).status).toBe(200);
+      };
+      await putConfig('old.example.com');
+
+      const realFetch = globalThis.fetch;
+      const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+      // What Cloudflare routes to the script right now, and whether the stale
+      // hostname's detach goes through.
+      let routed: Array<Record<string, string>> = [];
+      let detachFails = false;
+      const cfCalls: Array<{ url: string; method: string }> = [];
+      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        const method = (init?.method || 'GET').toUpperCase();
+        cfCalls.push({ url, method });
+        if (method === 'HEAD') return new Response('', { status: 200 });
+        if (url.endsWith('/workers/subdomain')) return json({ success: true, result: { subdomain: 'acct-test' } });
+        if (url.includes('assets-upload-session')) return json({ success: true, result: { jwt: 'SESS', buckets: [] } });
+        if (method === 'GET' && url.includes('/workers/domains?service=')) return json({ success: true, result: routed });
+        if (method === 'PUT' && url.endsWith('/workers/domains')) {
+          const body = JSON.parse(String(init?.body)) as { hostname: string };
+          const id = body.hostname === 'old.example.com' ? 'dom-old' : 'dom-new';
+          routed = [...routed.filter((d) => d.hostname !== body.hostname), { id, hostname: body.hostname, service: 'my-site', zone_id: 'zone-1' }];
+          return json({ success: true, result: { id } });
+        }
+        if (method === 'GET' && /\/workers\/domains\/dom-(old|new)$/.test(url)) {
+          const id = url.endsWith('dom-old') ? 'dom-old' : 'dom-new';
+          const hostname = id === 'dom-old' ? 'old.example.com' : 'new.example.com';
+          return json({ success: true, result: { id, hostname, service: 'my-site', zone_id: 'zone-1' } });
+        }
+        if (method === 'DELETE' && url.includes('/workers/domains/')) {
+          if (detachFails) return json({ success: false, errors: [{ message: 'detach denied' }] }, 500);
+          return json({ success: true, result: null });
+        }
+        if (url.includes('/workers/scripts/') && method === 'PUT') return json({ success: true, result: {} });
+        if (url.includes('/subdomain') && method === 'POST') return json({ success: true, result: { enabled: true } });
+        throw new Error(`Unexpected Cloudflare fetch: ${method} ${url}`);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      try {
+        const body = JSON.stringify({ fileName: 'index.html', providerId: CLOUDFLARE_WORKERS_PROVIDER_ID });
+        // A successful deploy attaches old.example.com and records it as owned.
+        const first = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+        expect(first.status).toBe(200);
+
+        // The hostname changes. The next deploy attaches new.example.com, then
+        // fails on the detach of the now-stale old.example.com: the attach
+        // already happened, so new.example.com is routed to the script.
+        await putConfig('new.example.com');
+        detachFails = true;
+        const second = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+        expect(second.status).toBeGreaterThanOrEqual(400);
+        expect(cfCalls.some((c) => c.method === 'PUT' && c.url.endsWith('/workers/domains'))).toBe(true);
+
+        // Both hostnames are ours: the one the failed deploy attached AND the
+        // one the prior deploy owned (a failed deploy never disowns anything).
+        detachFails = false;
+        const before = cfCalls.filter((c) => c.method === 'DELETE').length;
+        const detachNew = await fetch(`${baseUrl}/api/deploy/cloudflare-workers/domains/dom-new?projectId=${encodeURIComponent(projectId)}`, { method: 'DELETE' });
+        expect(detachNew.status).toBe(200);
+        expect(await detachNew.json()).toEqual({ ok: true });
+        const detachOld = await fetch(`${baseUrl}/api/deploy/cloudflare-workers/domains/dom-old?projectId=${encodeURIComponent(projectId)}`, { method: 'DELETE' });
+        expect(detachOld.status).toBe(200);
+        expect(cfCalls.filter((c) => c.method === 'DELETE').slice(before).map((c) => c.url)).toEqual([
+          expect.stringContaining('/workers/domains/dom-new'),
+          expect.stringContaining('/workers/domains/dom-old'),
+        ]);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
   it('refuses a concurrent Cloudflare Workers deploy from a DIFFERENT project that resolves to the same script name', async () => {
     const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-workers-script-singleflight-'));
     const priorStateRoot = process.env.OD_USER_STATE_DIR;

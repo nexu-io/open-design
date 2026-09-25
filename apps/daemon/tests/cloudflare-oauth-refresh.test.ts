@@ -6,7 +6,7 @@
 //   (b) a token response that carries a refresh_token persists it to the record
 //   (c) a refresh call reuses refreshCloudflareToken with the stored refreshToken
 
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, open, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -381,7 +381,11 @@ describe('refresh failure classification', () => {
   });
 });
 
-describe('refresh vs sibling process', () => {
+// The refresh calls the token endpoint OUTSIDE the store's lock, so a reconnect
+// in this daemon can replace the credential while that call is in flight. (No
+// cross-process case exists: one daemon per data dir is the contract, see the
+// header of integrations/cloudflare-tokens.ts.)
+describe('refresh vs a concurrent reconnect', () => {
   function expiredRecord(): StoredCloudflareOAuthToken {
     return {
       accessToken: 'expired-token',
@@ -395,8 +399,8 @@ describe('refresh vs sibling process', () => {
     };
   }
 
-  it("adopts a sibling's newer token when the refresh is rejected after the sibling rotated the grant", async () => {
-    const dir = await mkdtemp(path.join(tmpdir(), 'od-cf-refresh-sibling-'));
+  it('adopts the reconnected token when the refresh is rejected after a reconnect replaced the grant', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'od-cf-refresh-reconnect-'));
     configureCloudflareWorkersDataDir(dir);
     const dataDir = cloudflareOAuthTokensDir();
     await setCloudflareOAuthToken(dataDir, expiredRecord());
@@ -404,13 +408,13 @@ describe('refresh vs sibling process', () => {
     const realFetch = globalThis.fetch;
     vi.stubGlobal('fetch', async (input: unknown, init?: unknown) => {
       if (String(input).includes('oauth2/token')) {
-        // A sibling process on the same data dir refreshed first: its record is
-        // on disk with a newer generation, and Cloudflare now rejects OUR
-        // (already-consumed) refresh token.
+        // A reconnect completed while this refresh was at the token endpoint:
+        // its record is on disk with a newer generation, and Cloudflare now
+        // rejects OUR (superseded) refresh token.
         await setCloudflareOAuthToken(dataDir, {
           ...expiredRecord(),
-          accessToken: 'sibling-fresh',
-          refreshToken: 'ref-sibling',
+          accessToken: 'reconnected-fresh',
+          refreshToken: 'ref-reconnected',
           expiresAt: Date.now() + 3_600_000,
         });
         return new Response(JSON.stringify({ error: 'invalid_grant' }), {
@@ -421,9 +425,9 @@ describe('refresh vs sibling process', () => {
       return realFetch(input as never, init as never);
     });
     try {
-      await expect(getCloudflareAccessToken()).resolves.toBe('sibling-fresh');
-      // The sibling's record is left untouched (no clobber, no reconnect).
-      expect(await getCloudflareOAuthToken(dataDir)).toMatchObject({ accessToken: 'sibling-fresh', refreshToken: 'ref-sibling' });
+      await expect(getCloudflareAccessToken()).resolves.toBe('reconnected-fresh');
+      // The reconnected record is left untouched (no clobber, no reconnect prompt).
+      expect(await getCloudflareOAuthToken(dataDir)).toMatchObject({ accessToken: 'reconnected-fresh', refreshToken: 'ref-reconnected' });
     } finally {
       vi.unstubAllGlobals();
       await rm(dir, { recursive: true, force: true });
@@ -431,7 +435,7 @@ describe('refresh vs sibling process', () => {
   });
 
   it('still demands a reconnect when the only newer record is itself expired', async () => {
-    const dir = await mkdtemp(path.join(tmpdir(), 'od-cf-refresh-sibling-expired-'));
+    const dir = await mkdtemp(path.join(tmpdir(), 'od-cf-refresh-reconnect-expired-'));
     configureCloudflareWorkersDataDir(dir);
     const dataDir = cloudflareOAuthTokensDir();
     await setCloudflareOAuthToken(dataDir, expiredRecord());
@@ -439,7 +443,7 @@ describe('refresh vs sibling process', () => {
     const realFetch = globalThis.fetch;
     vi.stubGlobal('fetch', async (input: unknown, init?: unknown) => {
       if (String(input).includes('oauth2/token')) {
-        await setCloudflareOAuthToken(dataDir, { ...expiredRecord(), accessToken: 'sibling-stale', expiresAt: Date.now() - 1 });
+        await setCloudflareOAuthToken(dataDir, { ...expiredRecord(), accessToken: 'reconnected-stale', expiresAt: Date.now() - 1 });
         return new Response(JSON.stringify({ error: 'invalid_grant' }), {
           status: 400,
           headers: { 'content-type': 'application/json' },
@@ -523,6 +527,65 @@ describe('token file permissions', () => {
       // Re-writes (refresh / clear) go through the same path and keep the mode.
       await clearCloudflareOAuthToken(dataDir);
       expect((await stat(file)).mode & 0o777).toBe(0o600);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('token file durability', () => {
+  it('fsyncs the temp file before renaming it over the token file', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'od-cf-token-fsync-'));
+    const dataDir = path.join(dir, 'data');
+    const file = path.join(dataDir, 'cloudflare-oauth-tokens.json');
+    try {
+      // Reach the FileHandle prototype through a real handle: fs/promises does
+      // not export the class, and an ESM namespace cannot be spied directly.
+      const probe = await open(path.join(dir, 'probe'), 'w');
+      const proto = Object.getPrototypeOf(probe) as { sync: () => Promise<void> };
+      await probe.close();
+      let targetExistedAtSync: boolean | null = null;
+      const syncSpy = vi.spyOn(proto, 'sync').mockImplementation(async function (this: unknown) {
+        // The flush must happen while the bytes are still in the temp file —
+        // before the rename lands the entry (the whole point of syncing first).
+        targetExistedAtSync = await readFile(file, 'utf8').then(() => true, () => false);
+      });
+      try {
+        await setCloudflareOAuthToken(dataDir, { accessToken: 'acc', tokenType: 'Bearer', generation: 0, savedAt: Date.now() });
+        expect(syncSpy).toHaveBeenCalledTimes(1);
+        expect(targetExistedAtSync).toBe(false);
+        expect(JSON.parse(await readFile(file, 'utf8'))).toMatchObject({ token: { accessToken: 'acc' }, lastGeneration: 1 });
+        // A rewrite of an existing file syncs the temp file too.
+        await clearCloudflareOAuthToken(dataDir);
+        expect(syncSpy).toHaveBeenCalledTimes(2);
+      } finally {
+        syncSpy.mockRestore();
+      }
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('removes the temp file and leaves the prior token file intact when the flush fails', async () => {
+    const { readdir } = await import('node:fs/promises');
+    const dir = await mkdtemp(path.join(tmpdir(), 'od-cf-token-fsync-fail-'));
+    const dataDir = path.join(dir, 'data');
+    const file = path.join(dataDir, 'cloudflare-oauth-tokens.json');
+    try {
+      await setCloudflareOAuthToken(dataDir, { accessToken: 'first', tokenType: 'Bearer', generation: 0, savedAt: Date.now() });
+      const probe = await open(path.join(dir, 'probe'), 'w');
+      const proto = Object.getPrototypeOf(probe) as { sync: () => Promise<void> };
+      await probe.close();
+      const syncSpy = vi.spyOn(proto, 'sync').mockRejectedValue(Object.assign(new Error('EIO: flush failed'), { code: 'EIO' }));
+      try {
+        await expect(
+          setCloudflareOAuthToken(dataDir, { accessToken: 'second', tokenType: 'Bearer', generation: 0, savedAt: Date.now() }),
+        ).rejects.toMatchObject({ code: 'EIO' });
+      } finally {
+        syncSpy.mockRestore();
+      }
+      expect(JSON.parse(await readFile(file, 'utf8'))).toMatchObject({ token: { accessToken: 'first' } });
+      expect((await readdir(dataDir)).filter((name) => name.endsWith('.tmp'))).toEqual([]);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

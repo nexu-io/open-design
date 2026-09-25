@@ -3,7 +3,7 @@ import type { RouteDeps } from '../server-context.js';
 import type { AuthorizeProjectRequest } from '../collab/project-request-authority.js';
 import { clientRequestIdFor } from '../http/client-request-id.js';
 import { classifyDeployFailure } from '../deploy/failure-detail.js';
-import { detachCloudflareWorkerDomain, getCloudflareWorkerDomain, isOwnedCustomDomain, listCloudflareZones, ownedCustomDomainsFromMetadata, resolveWorkerScriptName } from '../deploy/cloudflare-workers.js';
+import { detachCloudflareWorkerDomain, getCloudflareWorkerDomain, isOwnedCustomDomain, listCloudflareZones, ownedCustomDomainsFromMetadata, resolveWorkerScriptName, type CloudflareOwnedCustomDomain } from '../deploy/cloudflare-workers.js';
 import { getCloudflareAccessToken } from '../deploy.js';
 
 export interface RegisterDeployRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'ids' | 'deploy' | 'projectStore'> {
@@ -53,6 +53,16 @@ function accessAppIdFromFailedWorkersDeploy(err: unknown): string | undefined {
     (s) => s?.name === 'access-app' && s?.status === 'done' && typeof s?.detail === 'string' && s.detail,
   );
   return step ? String(step.detail) : undefined;
+}
+
+/** The custom hostnames a failed Workers deploy attached before it failed. The
+ * provider annotates its error with them (`attachedCustomDomains`); the same
+ * normalizer that reads a record's ownership reads the annotation, so a
+ * malformed entry is dropped rather than recorded. */
+function attachedCustomDomainsFromFailedWorkersDeploy(err: unknown): CloudflareOwnedCustomDomain[] {
+  const attached = (err as { attachedCustomDomains?: unknown } | null)?.attachedCustomDomains;
+  if (!Array.isArray(attached)) return [];
+  return ownedCustomDomainsFromMetadata({ ownedCustomDomains: attached });
 }
 class DeployErrorLike extends Error {
   status: number;
@@ -254,15 +264,27 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
     }
   });
 
-  // Invariant: an Access app OpenDesign created is always recorded, even when
-  // the deploy that created it fails afterwards (custom-domain attach, the
-  // perimeter HEAD on a hostname whose certificate is still issuing, a 429-
-  // exhausted workers.dev enable). Without the record the next deploy finds an
-  // app it does not "own" and refuses with CFW_ACCESS_APP_FOREIGN forever, and
-  // turning Access off never retires it — the site stays gated by an app the UI
-  // says does not exist. A prior record keeps its live URL/status and only gains
-  // the app id; a first deploy leaves a `failed` record carrying it.
-  function recordAccessAppFromFailedWorkersDeploy(input: {
+  // Invariant: a Cloudflare resource OpenDesign created or attached is always
+  // recorded as owned, even when the deploy that did so fails afterwards.
+  //
+  // - The Access app (created before the script PUT; the deploy can still fail
+  //   on the custom-domain attach, the perimeter HEAD on a hostname whose
+  //   certificate is still issuing, a 429-exhausted workers.dev enable).
+  //   Without the record the next deploy finds an app it does not "own" and
+  //   refuses with CFW_ACCESS_APP_FOREIGN forever, and turning Access off never
+  //   retires it — the site stays gated by an app the UI says does not exist.
+  // - The custom hostname (attached after the script PUT; the deploy can still
+  //   fail on a stale-hostname detach, the final Access PUT, the perimeter
+  //   HEAD). Without the record the hostname is routed to the script but
+  //   classified FOREIGN: a later config change never detaches it and the
+  //   detach route refuses it with CFW_DOMAIN_FOREIGN — the user's dropped
+  //   hostname keeps serving the site with no way to remove it here.
+  //
+  // A prior record keeps its live URL/status and only gains the ids; a first
+  // deploy leaves a `failed` record carrying them. Ownership only grows here:
+  // a failed deploy detaches nothing it can vouch for, so every hostname the
+  // prior record owned stays owned.
+  function recordOwnedResourcesFromFailedWorkersDeploy(input: {
     projectId: string;
     fileName: string;
     target: 'preview' | 'production';
@@ -270,13 +292,22 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
     err: unknown;
   }): void {
     const accessAppId = accessAppIdFromFailedWorkersDeploy(input.err);
-    if (!accessAppId) return;
+    const attachedCustomDomains = attachedCustomDomainsFromFailedWorkersDeploy(input.err);
+    if (!accessAppId && attachedCustomDomains.length === 0) return;
     const { prior } = input;
     const priorMetadata =
       prior?.providerMetadata && typeof prior.providerMetadata === 'object' && !Array.isArray(prior.providerMetadata)
         ? prior.providerMetadata
         : {};
-    if (priorMetadata.accessAppId === accessAppId) return;
+    const priorOwned = ownedCustomDomainsFromMetadata(priorMetadata);
+    const newlyOwned = attachedCustomDomains.filter(
+      (attached) => !priorOwned.some((owned) => owned.hostname === attached.hostname && owned.id === attached.id),
+    );
+    const gainsAccessApp = Boolean(accessAppId) && priorMetadata.accessAppId !== accessAppId;
+    if (!gainsAccessApp && newlyOwned.length === 0) return;
+    const metadata: Record<string, unknown> = { ...priorMetadata };
+    if (gainsAccessApp) Object.assign(metadata, { accessAppId, accessProtected: true, createdByOpenDesign: true });
+    if (newlyOwned.length > 0) metadata.ownedCustomDomains = [...priorOwned, ...newlyOwned];
     const now = Date.now();
     try {
       upsertDeployment(db, {
@@ -291,12 +322,12 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
         status: prior?.status ?? 'failed',
         statusMessage: prior ? prior.statusMessage : String((input.err as Error)?.message || input.err),
         reachableAt: prior?.reachableAt,
-        providerMetadata: { ...priorMetadata, accessAppId, accessProtected: true, createdByOpenDesign: true },
+        providerMetadata: metadata,
         createdAt: prior?.createdAt ?? now,
         updatedAt: now,
       });
     } catch (persistErr) {
-      console.warn('[od] could not record Cloudflare Access app from failed deploy', String((persistErr as Error)?.message || persistErr));
+      console.warn('[od] could not record Cloudflare resources owned by a failed deploy', String((persistErr as Error)?.message || persistErr));
     }
   }
 
@@ -447,7 +478,7 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
       res.json(publicDeployment(body));
     } catch (err: any) {
       if (workersFailureContext) {
-        recordAccessAppFromFailedWorkersDeploy({ ...workersFailureContext, err });
+        recordOwnedResourcesFromFailedWorkersDeploy({ ...workersFailureContext, err });
       }
       const status = deployErrorStatus(err);
       const code = deployErrorCodeFor(err, status);

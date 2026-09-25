@@ -509,17 +509,46 @@ export async function writeCloudflareWorkersConfig(input: Partial<DeployConfig>)
   });
 }
 
+/** The Workers config as it may be written back to disk: the read-time
+ * `configError` marker is never persisted. Every partial mutation below
+ * spreads the current config, which carries the marker after a corrupt read;
+ * without this strip the sentinel would land in the file. */
+function persistableCloudflareWorkersConfig(config: DeployConfig): DeployConfig {
+  const { configError: _configError, ...rest } = config;
+  return rest;
+}
+
+/** Refuse a partial Workers-config mutation while the file on disk is
+ * unparsable. `readCloudflareWorkersConfig` degrades a corrupt file to the
+ * empty defaults so the routes keep working, but a partial write built on
+ * those defaults would REPLACE the user's (recoverable) file with an empty
+ * config — a disconnect or a connect would erase the account id, script name,
+ * bindings, Access rule and custom domain. Only an explicit settings PUT
+ * (`writeCloudflareWorkersConfig`, which builds the whole record from the
+ * request) heals the file. */
+function refuseCloudflareWorkersConfigMutationIfCorrupt(current: DeployConfig, what: string): void {
+  if (!current.configError) return;
+  throw new DeployError(
+    `Cloudflare Workers config file is not valid JSON; refusing to ${what} until the Workers settings are saved again.`,
+    409,
+    undefined,
+    CLOUDFLARE_WORKERS_CONFIG_CORRUPT_CODE,
+  );
+}
+
 /** Persist just the OAuth identity (clientId + redirectUri) that authorizes
  * the connect flow, before the account id is known. This deliberately does NOT
  * flip credentialMode — the authority switch happens only after the token is
  * persisted (see commitCloudflareOAuthMode), so a denied/closed/cancelled flow
  * never strands a working token-mode user. Bypasses the accountId/token
- * validation in writeCloudflareWorkersConfig for the same reason. */
+ * validation in writeCloudflareWorkersConfig for the same reason. Refuses to
+ * run on a corrupt config file (CFW_CONFIG_CORRUPT). */
 export async function writeCloudflareOAuthIdentity(input: { clientId: string; redirectUri: string }) {
   return withCloudflareConfigMutation(async () => {
     const current = await readCloudflareWorkersConfig();
+    refuseCloudflareWorkersConfigMutationIfCorrupt(current, 'record the OAuth client identity');
     const next: DeployConfig = {
-      ...current,
+      ...persistableCloudflareWorkersConfig(current),
       clientId: input.clientId,
       redirectUri: input.redirectUri,
     };
@@ -532,11 +561,14 @@ export async function writeCloudflareOAuthIdentity(input: { clientId: string; re
  * OAuth token has been durably persisted, so a failed/cancelled flow leaves the
  * prior credential mode (and any static token) intact. When identity is given,
  * the config clientId/redirectUri are updated in the same write as the mode
- * switch, so a replacement client is never recorded before its token is. */
+ * switch, so a replacement client is never recorded before its token is.
+ * Refuses to run on a corrupt config file (CFW_CONFIG_CORRUPT); the connect
+ * route then rolls the token write back. */
 export async function commitCloudflareOAuthMode(identity?: { clientId: string; redirectUri: string }): Promise<void> {
   return withCloudflareConfigMutation(async () => {
     const current = await readCloudflareWorkersConfig();
-    const next: DeployConfig = { ...current, credentialMode: 'oauth' };
+    refuseCloudflareWorkersConfigMutationIfCorrupt(current, 'switch the credential mode to oauth');
+    const next: DeployConfig = { ...persistableCloudflareWorkersConfig(current), credentialMode: 'oauth' };
     if (identity) {
       next.clientId = identity.clientId;
       next.redirectUri = identity.redirectUri;
@@ -547,11 +579,21 @@ export async function commitCloudflareOAuthMode(identity?: { clientId: string; r
 
 /** Reset the credential authority back to a static token after disconnect,
  * bypassing the token validation in writeCloudflareWorkersConfig (a user who
- * only ever used OAuth has no static token to require). */
+ * only ever used OAuth has no static token to require). On a corrupt config
+ * file the write is skipped rather than refused: the disconnect route has
+ * already cleared the token by the time this runs, and a corrupt file already
+ * reads as token mode, so the state this write would establish is the state
+ * the daemon reports — while a write would erase the recoverable file. */
 export async function resetCloudflareCredentialMode(): Promise<void> {
   return withCloudflareConfigMutation(async () => {
     const current = await readCloudflareWorkersConfig();
-    const next: DeployConfig = { ...current, credentialMode: 'token' };
+    if (current.configError) {
+      console.warn(
+        `[deploy] ${CLOUDFLARE_WORKERS_CONFIG_CORRUPT_CODE}: leaving the unparsable Cloudflare Workers config untouched on disconnect; save the Workers settings to rewrite it.`,
+      );
+      return;
+    }
+    const next: DeployConfig = { ...persistableCloudflareWorkersConfig(current), credentialMode: 'token' };
     await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), next);
   });
 }
@@ -635,8 +677,9 @@ const cloudflareOAuthRefreshLocks = new Map<string, Promise<string>>();
  * the static API token; in 'oauth' mode it is the rotating access token from
  * 'cloudflare-oauth-tokens.json', refreshed when it is within the expiry skew.
  * The read -> refresh -> persist sequence is single-flight, and the file is
- * re-read before every refresh so a sibling process's rotation is never
- * clobbered.
+ * re-read before every refresh so a connect/disconnect that landed while a
+ * caller waited on the mutex is never clobbered. Coordination is in-process
+ * only: one daemon per data dir is the contract (see cloudflare-tokens.ts).
  */
 export async function getCloudflareAccessToken(
   providerId: DeployProviderId = CLOUDFLARE_WORKERS_PROVIDER_ID,
@@ -711,8 +754,8 @@ async function refreshCloudflareOAuthAccessToken(
   config: DeployConfig,
   dataDir: string,
 ): Promise<string> {
-  // Re-read under the lock: a sibling process may have rotated the token while
-  // this caller was waiting for the mutex.
+  // Re-read under the lock: a reconnect (or an earlier refresh) may have
+  // rotated the token while this caller was waiting for the mutex.
   const current = await getCloudflareOAuthToken(dataDir);
   if (
     current &&
@@ -753,11 +796,13 @@ async function refreshCloudflareOAuthAccessToken(
       refreshToken: current.refreshToken,
     });
   } catch (err) {
-    // A sibling process on the same data dir may have refreshed first. When
-    // Cloudflare rotated the refresh token, THIS call fails `invalid_grant`
-    // even though a fresh credential is already on disk — so re-read before
-    // declaring the grant dead. A newer, unexpired generation means the
-    // sibling won: adopt its token instead of demanding a reconnect.
+    // A reconnect in this daemon may have replaced the credential while the
+    // token endpoint was being called (the refresh runs outside the store's
+    // lock). Cloudflare then rejects THIS call's now-superseded refresh token
+    // with `invalid_grant` even though a fresh credential is already on disk —
+    // so re-read before declaring the grant dead. A newer, unexpired
+    // generation means the other writer won: adopt its token instead of
+    // demanding a reconnect.
     const latest = await getCloudflareOAuthToken(dataDir);
     if (
       latest &&
@@ -788,7 +833,7 @@ async function refreshCloudflareOAuthAccessToken(
   }
   // Compare-and-set persist: only write if the store still holds the same
   // generation the refresh read before the token-endpoint call. A disconnect
-  // that cleared the token (or a sibling that rotated it) during that call
+  // that cleared the token (or a reconnect that replaced it) during that call
   // makes this return false instead of resurrecting a credential the user
   // already revoked.
   const persisted = await setCloudflareOAuthTokenIfGenerationMatches(
@@ -799,7 +844,7 @@ async function refreshCloudflareOAuthAccessToken(
   if (!persisted) {
     const latest = await getCloudflareOAuthToken(dataDir);
     if (latest) {
-      // A sibling writer owns a newer credential — adopt it rather than clobber.
+      // A reconnect wrote a newer credential — adopt it rather than clobber.
       return latest.accessToken;
     }
     // Disconnect cleared the token while the refresh was in flight.
