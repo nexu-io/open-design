@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, open, readFile, rename, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -46,6 +46,9 @@ type DeployConfig = {
   bindings?: Array<{ type: string; name: string; bucketName?: string; databaseName?: string; id?: string }> | undefined;
   access?: { enabled: boolean; rule?: CloudflareWorkersAccessRule } | undefined;
   customDomain?: { hostname: string; zoneId: string } | undefined;
+  /** Set on the safe default returned when the on-disk file is unparsable
+   * (CFW_CONFIG_CORRUPT); never persisted. */
+  configError?: string | undefined;
 };
 type CloudflarePagesConfigHints = {
   lastZoneId?: string;
@@ -210,7 +213,18 @@ async function writeDeployConfigFile(file: string, config: DeployConfig) {
   // writes share one temp file (the second rename then failed with ENOENT).
   const tmp = `${file}.tmp-${randomUUID()}`;
   try {
-    await writeFile(tmp, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600, flag: 'wx' });
+    // fsync BEFORE the rename: a rename is only atomic with respect to the
+    // directory entry. Without flushing the temp file's bytes first, a power
+    // loss after the rename can leave the target pointing at an empty or
+    // truncated file (data lost, entry kept) — exactly the corruption the
+    // atomic replace is meant to rule out.
+    const handle = await open(tmp, 'wx', 0o600);
+    try {
+      await handle.writeFile(`${JSON.stringify(config, null, 2)}\n`, 'utf8');
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
     try {
       fs.chmodSync(tmp, 0o600);
     } catch {
@@ -367,10 +381,41 @@ function normalizeCloudflareWorkersCustomDomain(value: unknown): { hostname: str
   return { hostname, zoneId };
 }
 
+export const CLOUDFLARE_WORKERS_CONFIG_CORRUPT_CODE = 'CFW_CONFIG_CORRUPT';
+
+function emptyCloudflareWorkersConfig(): DeployConfig {
+  return {
+    token: '',
+    accountId: '',
+    scriptName: '',
+    compatibilityDate: '',
+    credentialMode: 'token',
+    clientId: '',
+    redirectUri: '',
+    scopes: [],
+  };
+}
+
 export async function readCloudflareWorkersConfig(): Promise<DeployConfig> {
+  const file = deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID);
   try {
-    const raw = await readFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), 'utf8');
-    const parsed = JSON.parse(raw);
+    const raw = await readFile(file, 'utf8');
+    let parsed: JsonObject;
+    try {
+      const value = JSON.parse(raw);
+      if (!value || typeof value !== 'object' || Array.isArray(value)) throw new SyntaxError('config is not a JSON object');
+      parsed = value as JsonObject;
+    } catch (err) {
+      // Mirror the OAuth token reader: an unparsable file must not brick every
+      // Workers route (config GET/PUT, capabilities, zones, deploy) — degrade to
+      // the unconfigured default, say so loudly, and let the next settings save
+      // rewrite the file. The marker reaches the client via the public config.
+      if (!(err instanceof SyntaxError)) throw err;
+      console.error(
+        `[deploy] ${CLOUDFLARE_WORKERS_CONFIG_CORRUPT_CODE}: ${file} is not valid JSON (${err.message}); treating Cloudflare Workers as unconfigured until the settings are saved again.`,
+      );
+      return { ...emptyCloudflareWorkersConfig(), configError: CLOUDFLARE_WORKERS_CONFIG_CORRUPT_CODE };
+    }
     return {
       token: typeof parsed.token === 'string' ? parsed.token : '',
       accountId: typeof parsed.accountId === 'string' ? parsed.accountId : '',
@@ -387,18 +432,7 @@ export async function readCloudflareWorkersConfig(): Promise<DeployConfig> {
       customDomain: normalizeCloudflareWorkersCustomDomain(parsed.customDomain),
     };
   } catch (err) {
-    if (isErrnoException(err) && err.code === 'ENOENT') {
-      return {
-        token: '',
-        accountId: '',
-        scriptName: '',
-        compatibilityDate: '',
-        credentialMode: 'token',
-        clientId: '',
-        redirectUri: '',
-        scopes: [],
-      };
-    }
+    if (isErrnoException(err) && err.code === 'ENOENT') return emptyCloudflareWorkersConfig();
     throw err;
   }
 }
@@ -547,6 +581,7 @@ export function publicCloudflareWorkersConfig(config: Partial<DeployConfig>) {
     customDomain: config?.customDomain,
     target: 'preview',
   };
+  if (config?.configError) body.configError = config.configError;
   return body;
 }
 
@@ -583,9 +618,12 @@ export function cloudflareOAuthTokensDir(): string {
   return cloudflareWorkersBaseDir();
 }
 
-/** Refresh an access token this many ms before its recorded expiry, so a
- * deploy racing the boundary never sends a token that is about to lapse. */
-const CLOUDFLARE_OAUTH_EXPIRY_SKEW_MS = 60_000;
+/** Refresh an access token this many ms before its recorded expiry. Sized to
+ * a worst-case deploy (asset buckets, a certificate-issuing custom hostname,
+ * perimeter retries), so a token handed out at deploy start is still valid at
+ * its last call; per-call re-resolution (CloudflareTokenProvider) covers the
+ * rest. */
+export const CLOUDFLARE_OAUTH_EXPIRY_SKEW_MS = 10 * 60_000;
 
 /** In-process single-flight mutex, keyed by dataDir. Concurrent deploys that
  * all find an expired token share one refresh instead of stampeding the token

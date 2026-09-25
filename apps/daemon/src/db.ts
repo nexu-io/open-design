@@ -926,6 +926,21 @@ export function listDeployments(db: SqliteDb, projectId: string) {
     .map(normalizeDeployment);
 }
 
+/** Every deployment record for one provider, across projects. The Workers
+ * config (script name, custom domain) is global, so ownership of a Cloudflare
+ * resource is answered against all of a provider's records, not one project. */
+export function listDeploymentsByProvider(db: SqliteDb, providerId: string) {
+  return (db
+    .prepare(
+      `SELECT ${DEPLOYMENT_COLS}
+         FROM deployments
+        WHERE provider_id = ?
+        ORDER BY updated_at DESC`,
+    )
+    .all(providerId) as DbRow[])
+    .map(normalizeDeployment);
+}
+
 export function getDeployment(db: SqliteDb, projectId: string, fileName: string, providerId: string) {
   const row = db
     .prepare(

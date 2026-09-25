@@ -3,7 +3,7 @@ import type { RouteDeps } from '../server-context.js';
 import type { AuthorizeProjectRequest } from '../collab/project-request-authority.js';
 import { clientRequestIdFor } from '../http/client-request-id.js';
 import { classifyDeployFailure } from '../deploy/failure-detail.js';
-import { detachCloudflareWorkerDomain, getCloudflareWorkerDomain, listCloudflareZones, resolveWorkerScriptName } from '../deploy/cloudflare-workers.js';
+import { detachCloudflareWorkerDomain, getCloudflareWorkerDomain, isOwnedCustomDomain, listCloudflareZones, ownedCustomDomainsFromMetadata, resolveWorkerScriptName } from '../deploy/cloudflare-workers.js';
 import { getCloudflareAccessToken } from '../deploy.js';
 
 export interface RegisterDeployRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'ids' | 'deploy' | 'projectStore'> {
@@ -70,7 +70,7 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
   const { PROJECTS_DIR } = ctx.paths;
   const { randomUUID } = ctx.ids;
   const { getProject } = ctx.projectStore;
-  const { VERCEL_PROVIDER_ID, CLOUDFLARE_PAGES_PROVIDER_ID, CLOUDFLARE_WORKERS_PROVIDER_ID, isDeployProviderId, publicDeployConfigForProvider, readDeployConfig, writeDeployConfig, listCloudflarePagesZones, DeployError, listDeployments, publicDeployments, getDeployment, buildDeployFileSet, cloudflarePagesProjectNameForDeploy, deployToCloudflarePages, deployToCloudflareWorkers, probeCloudflareWorkersCapabilities, deployToVercel, upsertDeployment, publicDeployment, cloudflarePagesDeploymentMetadata, prepareDeployPreflight } = ctx.deploy;
+  const { VERCEL_PROVIDER_ID, CLOUDFLARE_PAGES_PROVIDER_ID, CLOUDFLARE_WORKERS_PROVIDER_ID, isDeployProviderId, publicDeployConfigForProvider, readDeployConfig, writeDeployConfig, listCloudflarePagesZones, DeployError, listDeployments, listDeploymentsByProvider, publicDeployments, getDeployment, buildDeployFileSet, cloudflarePagesProjectNameForDeploy, deployToCloudflarePages, deployToCloudflareWorkers, probeCloudflareWorkersCapabilities, deployToVercel, upsertDeployment, publicDeployment, cloudflarePagesDeploymentMetadata, prepareDeployPreflight } = ctx.deploy;
 
   /**
    * A DeployError now carries a specific `code` (MISSING_REFERENCES,
@@ -214,6 +214,22 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
           409,
           'CFW_DOMAIN_FOREIGN',
           'Custom domain "' + (domain.hostname || domain.id) + '" is routed to the Worker "' + domain.service + '", not to "' + scriptName + '"; refusing to detach it.',
+        );
+      }
+      // Same ownership rule as the deploy's reconcile: only a hostname a prior
+      // OpenDesign deployment attached (recorded on its providerMetadata) may
+      // be detached here. A hostname someone routed to the script from the
+      // dashboard is theirs — refusing is the only safe answer for a
+      // client-supplied id. The Workers config is global, so every record of
+      // this provider counts, not just the requesting project's.
+      const owned = listDeploymentsByProvider(db, CLOUDFLARE_WORKERS_PROVIDER_ID)
+        .flatMap((deployment: { providerMetadata?: unknown }) => ownedCustomDomainsFromMetadata(deployment.providerMetadata));
+      if (!isOwnedCustomDomain(domain, owned)) {
+        return sendApiError(
+          res,
+          409,
+          'CFW_DOMAIN_FOREIGN',
+          'Custom domain "' + (domain.hostname || domain.id) + '" was not attached by an OpenDesign deployment; refusing to detach it. Remove it in the Cloudflare dashboard instead.',
         );
       }
       const deleted = await detachCloudflareWorkerDomain(cfg, req.params.domainId);
@@ -390,6 +406,10 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
                 typeof prior?.providerMetadata?.accessAppId === 'string'
                   ? prior.providerMetadata.accessAppId
                   : undefined,
+              priorOwnedCustomDomains: ownedCustomDomainsFromMetadata(prior?.providerMetadata),
+              // Re-resolved per Cloudflare call (oauth: refreshed within the
+              // expiry skew), so a multi-minute deploy never outlives its token.
+              tokenProvider: () => resolveCloudflareWorkersRouteToken(workersConfig!),
             }))
           : await deployToVercel({
               config: await readDeployConfig(VERCEL_PROVIDER_ID),

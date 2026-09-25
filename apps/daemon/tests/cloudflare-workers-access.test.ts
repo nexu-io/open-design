@@ -248,7 +248,7 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
     expect(calls.some((c) => c[1]?.method === 'PUT' && c[0].endsWith('/workers/scripts/my-site'))).toBe(false);
   });
 
-  it('adds a public destination for the custom hostname and verifies both URLs land on Access', async () => {
+  it('claims the custom hostname on the Access app BEFORE attaching it, so the hostname is never live and uncovered', async () => {
     const { calls, fn } = accessFetch();
     vi.stubGlobal('fetch', fn);
     const out = await deployToCloudflareWorkers({
@@ -260,30 +260,35 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
     const attachPos = calls.findIndex((c) => c[0].includes('/workers/domains') && c[1]?.method === 'PUT');
     expect(createPos).toBeGreaterThanOrEqual(0);
     expect(attachPos).toBeGreaterThan(createPos);
-    // The pre-PUT app must NOT claim the custom hostname before it is attached.
+    // A `public` destination on a hostname not yet routed to the Worker is
+    // inert, so the pre-PUT app already claims the configured hostname …
     const createBody = JSON.parse(calls[createPos]![1]?.body as string) as { destinations: unknown[] };
-    expect(createBody.destinations).not.toContainEqual({ type: 'public', uri: 'app.example.com' });
-    // The covering PUT (after the domain attach) claims the now-attached hostname.
-    const finalPutPos = calls.findIndex((c) => c[0].endsWith('/access/apps/app-123') && c[1]?.method === 'PUT');
-    expect(finalPutPos).toBeGreaterThan(attachPos);
-    const finalBody = JSON.parse(calls[finalPutPos]![1]?.body as string) as { destinations: unknown[] };
-    expect(finalBody.destinations).toContainEqual({ type: 'public', uri: 'app.example.com' });
+    expect(createBody.destinations).toContainEqual({ type: 'public', uri: 'app.example.com' });
+    // … and no covering PUT is needed after the attach: there is no window.
+    expect(calls.some((c) => c[0].endsWith('/access/apps/app-123') && c[1]?.method === 'PUT')).toBe(false);
     const heads = calls.filter((c) => c[1]?.method === 'HEAD').map((c) => c[0]);
     expect(heads).toContain('https://my-site.acct-test.workers.dev');
     expect(heads).toContain('https://app.example.com');
-    expect(out.providerMetadata).toMatchObject({ accessVerified: true, customDomain: { id: 'dom-1', hostname: 'app.example.com' } });
+    expect(out.providerMetadata).toMatchObject({
+      accessVerified: true,
+      customDomain: { id: 'dom-1', hostname: 'app.example.com' },
+      ownedCustomDomains: [{ id: 'dom-1', hostname: 'app.example.com' }],
+    });
   });
 
-  it('covers every hostname Cloudflare routes to the script and detaches the ones the config dropped', async () => {
-    // A previous deploy attached old.example.com; the config now names
-    // app.example.com. other.example.com belongs to a different script and is
-    // returned only if Cloudflare ignores the `service` filter — it must never
-    // be touched.
+  it('covers every hostname routed to the script, detaches only the OWNED one the config dropped, and keeps a dashboard-attached hostname routed and covered', async () => {
+    // dom-old was attached by a previous OpenDesign deploy (recorded on its
+    // providerMetadata) and the config now names app.example.com: stale, detach.
+    // dom-dash was attached in the Cloudflare dashboard to THIS script: foreign,
+    // never detached, but it serves the Worker so it stays inside Access.
+    // dom-other belongs to a different script and is returned only if
+    // Cloudflare ignores the `service` filter — it must never be touched.
     const { calls, fn } = accessFetch({
       domainsList: {
         success: true,
         result: [
           { id: 'dom-old', hostname: 'Old.Example.com', service: 'my-site', zone_id: 'zone-1' },
+          { id: 'dom-dash', hostname: 'dash.example.com', service: 'my-site', zone_id: 'zone-1' },
           { id: 'dom-other', hostname: 'other.example.com', service: 'other-script', zone_id: 'zone-1' },
         ],
       },
@@ -293,6 +298,7 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
       ...base,
       access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } },
       customDomain: { hostname: 'app.example.com', zoneId: 'zone-1' },
+      priorOwnedCustomDomains: [{ id: 'dom-old', hostname: 'old.example.com' }],
     });
     const listPos = calls.findIndex((c) => c[0].includes('/workers/domains?service=my-site') && (c[1]?.method || 'GET') === 'GET');
     const uploadPos = calls.findIndex((c) => c[0].includes('assets-upload-session'));
@@ -302,38 +308,63 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
     // Routed hostnames are known before anything is uploaded.
     expect(listPos).toBeGreaterThanOrEqual(0);
     expect(listPos).toBeLessThan(uploadPos);
-    // The pre-PUT app covers the still-routed hostname (normalized) but NOT the
-    // configured hostname it cannot yet serve; the foreign script's hostname is
-    // never ours.
+    // The pre-PUT app covers everything routed (normalized) AND the configured
+    // hostname; the foreign script's hostname is never ours.
     const createBody = JSON.parse(calls[createPos]![1]?.body as string) as { destinations: unknown[] };
     expect(createBody.destinations).toContainEqual({ type: 'public', uri: 'old.example.com' });
-    expect(createBody.destinations).not.toContainEqual({ type: 'public', uri: 'app.example.com' });
+    expect(createBody.destinations).toContainEqual({ type: 'public', uri: 'dash.example.com' });
+    expect(createBody.destinations).toContainEqual({ type: 'public', uri: 'app.example.com' });
     expect(createBody.destinations).not.toContainEqual({ type: 'public', uri: 'other.example.com' });
-    // The covering PUT (immediately after attach, before any detach) closes the
-    // perimeter over everything routed at that instant: the configured hostname
-    // AND the still-attached stale one.
+    // Exactly one PUT: the post-detach reconcile. No covering PUT after the
+    // attach (the hostname was claimed up front).
     const accessPuts = calls
       .map((c, index) => ({ index, call: c }))
       .filter(({ call }) => call[0].endsWith('/access/apps/app-123') && call[1]?.method === 'PUT');
-    expect(accessPuts).toHaveLength(2);
-    const coveringPut = accessPuts[0]!;
-    const finalPut = accessPuts[1]!;
-    expect(coveringPut.index).toBeGreaterThan(attachPos);
-    expect(coveringPut.index).toBeLessThan(detachPos);
-    const coveringBody = JSON.parse(coveringPut.call[1]?.body as string) as { destinations: unknown[] };
-    expect(coveringBody.destinations).toContainEqual({ type: 'public', uri: 'app.example.com' });
-    expect(coveringBody.destinations).toContainEqual({ type: 'public', uri: 'old.example.com' });
-    // After the stale hostname is detached, the app drops it and keeps only the
-    // configured one; the foreign hostname is never detached.
+    expect(accessPuts).toHaveLength(1);
+    const finalPut = accessPuts[0]!;
+    expect(detachPos).toBeGreaterThan(attachPos);
     expect(finalPut.index).toBeGreaterThan(detachPos);
     const finalBody = JSON.parse(finalPut.call[1]?.body as string) as { destinations: unknown[] };
     expect(finalBody.destinations).toContainEqual({ type: 'public', uri: 'app.example.com' });
+    expect(finalBody.destinations).toContainEqual({ type: 'public', uri: 'dash.example.com' });
     expect(finalBody.destinations).not.toContainEqual({ type: 'public', uri: 'old.example.com' });
-    expect(detachPos).toBeGreaterThan(createPos);
-    expect(calls.some((c) => c[0].includes('/workers/domains/dom-other'))).toBe(false);
+    // Only the owned stale hostname is detached.
+    expect(calls.filter((c) => c[1]?.method === 'DELETE' && c[0].includes('/workers/domains/')).map((c) => c[0])).toEqual([
+      expect.stringContaining('/workers/domains/dom-old'),
+    ]);
     const steps = (out.providerMetadata?.steps ?? []) as { name: string; detail?: string }[];
     expect(steps).toContainEqual({ name: 'custom-domain-detach', status: 'done', detail: 'old.example.com' });
-    expect(out.providerMetadata).toMatchObject({ accessVerified: true });
+    expect(out.providerMetadata).toMatchObject({
+      accessVerified: true,
+      ownedCustomDomains: [{ id: 'dom-1', hostname: 'app.example.com' }],
+    });
+  });
+
+  it('matches an owned hostname by id when the record has one, and by hostname when it does not', async () => {
+    const { calls, fn } = accessFetch({
+      domainsList: {
+        success: true,
+        result: [
+          { id: 'dom-by-id', hostname: 'renamed.example.com', service: 'my-site', zone_id: 'zone-1' },
+          { id: 'dom-by-host', hostname: 'legacy.example.com', service: 'my-site', zone_id: 'zone-1' },
+          { id: 'dom-dash', hostname: 'dash.example.com', service: 'my-site', zone_id: 'zone-1' },
+        ],
+      },
+    });
+    vi.stubGlobal('fetch', fn);
+    await deployToCloudflareWorkers({
+      ...base,
+      priorOwnedCustomDomains: [
+        // Same id, hostname since changed on Cloudflare: still ours.
+        { id: 'dom-by-id', hostname: 'was.example.com' },
+        // A record written before the attach response carried an id.
+        { hostname: 'legacy.example.com' },
+      ],
+    });
+    expect(calls.filter((c) => c[1]?.method === 'DELETE' && c[0].includes('/workers/domains/')).map((c) => c[0]).sort()).toEqual([
+      expect.stringContaining('/workers/domains/dom-by-host'),
+      expect.stringContaining('/workers/domains/dom-by-id'),
+    ]);
   });
 
   it('does not re-PUT the Access app when the configured hostname is already attached and nothing is stale', async () => {
@@ -348,6 +379,7 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
       ...base,
       access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } },
       customDomain: { hostname: 'app.example.com', zoneId: 'zone-1' },
+      priorOwnedCustomDomains: [{ id: 'dom-1', hostname: 'app.example.com' }],
     });
     // The pre-PUT app already covers the configured hostname; a steady-state
     // redeploy must not churn an extra PUT.
@@ -355,7 +387,7 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
     expect(calls.some((c) => c[0].endsWith('/access/apps/app-123') && c[1]?.method === 'PUT')).toBe(false);
   });
 
-  it('skips the covering PUT and only drops the stale hostname when the configured hostname is already attached', async () => {
+  it('drops only the stale owned hostname when the configured hostname is already attached', async () => {
     const { calls, fn } = accessFetch({
       domainsList: {
         success: true,
@@ -370,13 +402,16 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
       ...base,
       access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } },
       customDomain: { hostname: 'app.example.com', zoneId: 'zone-1' },
+      priorOwnedCustomDomains: [
+        { id: 'dom-1', hostname: 'app.example.com' },
+        { id: 'dom-old', hostname: 'old.example.com' },
+      ],
     });
     const detachPos = calls.findIndex((c) => c[0].endsWith('/workers/domains/dom-old') && c[1]?.method === 'DELETE');
     const puts = calls
       .map((c, index) => ({ index, call: c }))
       .filter(({ call }) => call[0].endsWith('/access/apps/app-123') && call[1]?.method === 'PUT');
-    // One PUT only: the post-detach reconcile dropping the stale hostname. The
-    // covering PUT is skipped because the configured hostname was already routed.
+    // One PUT only: the post-detach reconcile dropping the stale hostname.
     expect(puts).toHaveLength(1);
     expect(puts[0]!.index).toBeGreaterThan(detachPos);
     const finalBody = JSON.parse(puts[0]!.call[1]?.body as string) as { destinations: unknown[] };
@@ -384,9 +419,9 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
     expect(finalBody.destinations).not.toContainEqual({ type: 'public', uri: 'old.example.com' });
   });
 
-  it('detaches the just-attached hostname when the covering PUT fails, so no public hostname is left behind', async () => {
+  it('drops the configured hostname from the Access app again when the attach fails (compensation) and surfaces the attach error', async () => {
     const { calls, fn } = accessFetch({
-      accessUpdate: { success: false, errors: [{ message: 'cover denied' }] },
+      domains: { success: false, errors: [{ message: 'attach denied' }] },
     });
     vi.stubGlobal('fetch', fn);
     await expect(
@@ -395,47 +430,44 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
         access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } },
         customDomain: { hostname: 'app.example.com', zoneId: 'zone-1' },
       }),
-    ).rejects.toThrow(/cover denied/);
-    const failedPutPos = calls.findIndex((c) => c[0].endsWith('/access/apps/app-123') && c[1]?.method === 'PUT');
-    const detachPos = calls.findIndex((c) => c[0].endsWith('/workers/domains/dom-1') && c[1]?.method === 'DELETE');
-    expect(failedPutPos).toBeGreaterThanOrEqual(0);
-    expect(detachPos).toBeGreaterThan(failedPutPos);
+    ).rejects.toThrow(/attach denied/);
+    const createPos = calls.findIndex((c) => c[0].endsWith('/access/apps') && c[1]?.method === 'POST');
+    const attachPos = calls.findIndex((c) => c[0].includes('/workers/domains') && c[1]?.method === 'PUT');
+    const compensationPos = calls.findIndex((c) => c[0].endsWith('/access/apps/app-123') && c[1]?.method === 'PUT');
+    expect(attachPos).toBeGreaterThan(createPos);
+    expect(compensationPos).toBeGreaterThan(attachPos);
+    const compensationBody = JSON.parse(calls[compensationPos]![1]?.body as string) as { destinations: unknown[] };
+    expect(compensationBody.destinations).not.toContainEqual({ type: 'public', uri: 'app.example.com' });
+    expect(compensationBody.destinations).toContainEqual({ type: 'worker', worker_id: 'tag-abc-123' });
+    // Nothing was attached, so nothing is detached.
+    expect(calls.some((c) => c[1]?.method === 'DELETE' && c[0].includes('/workers/domains/'))).toBe(false);
   });
 
-  it('re-lists to find the domain id when the attach returns none, and still detaches it on covering-PUT failure', async () => {
+  it('still surfaces the attach error when the compensation PUT itself fails', async () => {
     const { calls, fn } = accessFetch({
+      domains: { success: false, errors: [{ message: 'attach denied' }] },
       accessUpdate: { success: false, errors: [{ message: 'cover denied' }] },
-      // attach succeeds but omits an id (some Cloudflare responses return null id)
-      domains: { success: true, result: {} },
     });
-    // First GET /workers/domains is the pre-attach listing (empty, so the
-    // covering PUT runs); the second is the catch's re-list, which returns the
-    // id Cloudflare assigned.
-    let domainsGets = 0;
-    const wrapped = vi.fn(async (url: string, init?: RequestInit) => {
-      if (url.includes('/workers/domains') && (init?.method || 'GET').toUpperCase() === 'GET') {
-        domainsGets += 1;
-        if (domainsGets > 1) {
-          return jsonResponse({ success: true, result: [{ id: 'dom-9', hostname: 'app.example.com', service: 'my-site' }] });
-        }
-      }
-      return fn(url, init);
-    });
-    vi.stubGlobal('fetch', wrapped);
+    vi.stubGlobal('fetch', fn);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     await expect(
       deployToCloudflareWorkers({
         ...base,
         access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } },
         customDomain: { hostname: 'app.example.com', zoneId: 'zone-1' },
       }),
-    ).rejects.toThrow(/cover denied/);
-    expect(calls.some((c) => c[0].endsWith('/workers/domains/dom-9') && c[1]?.method === 'DELETE')).toBe(true);
+    ).rejects.toThrow(/attach denied/);
+    expect(calls.some((c) => c[0].endsWith('/access/apps/app-123') && c[1]?.method === 'PUT')).toBe(true);
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('could not drop "app.example.com"'));
   });
 
-  it('still surfaces the covering-PUT error when the compensation detach itself fails', async () => {
+  it('keeps an already-routed configured hostname on the Access app when its re-attach fails', async () => {
     const { calls, fn } = accessFetch({
-      accessUpdate: { success: false, errors: [{ message: 'cover denied' }] },
-      domainsDelete: { success: false, errors: [{ message: 'detach denied' }] },
+      domainsList: {
+        success: true,
+        result: [{ id: 'dom-1', hostname: 'app.example.com', service: 'my-site', zone_id: 'zone-1' }],
+      },
+      domains: { success: false, errors: [{ message: 'attach denied' }] },
     });
     vi.stubGlobal('fetch', fn);
     await expect(
@@ -443,34 +475,51 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
         ...base,
         access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } },
         customDomain: { hostname: 'app.example.com', zoneId: 'zone-1' },
+        priorOwnedCustomDomains: [{ id: 'dom-1', hostname: 'app.example.com' }],
       }),
-    ).rejects.toThrow(/cover denied/);
-    expect(calls.some((c) => c[0].endsWith('/workers/domains/dom-1') && c[1]?.method === 'DELETE')).toBe(true);
+    ).rejects.toThrow(/attach denied/);
+    // The hostname still serves the Worker: dropping it would expose it.
+    expect(calls.some((c) => c[0].endsWith('/access/apps/app-123') && c[1]?.method === 'PUT')).toBe(false);
   });
 
-  it('detaches a dropped hostname even with Access off and no custom domain configured', async () => {
+  it('detaches a dropped OWNED hostname even with Access off and no custom domain configured', async () => {
     const { calls, fn } = accessFetch({
       domainsList: { success: true, result: [{ id: 'dom-old', hostname: 'old.example.com', service: 'my-site' }] },
     });
     vi.stubGlobal('fetch', fn);
-    const out = await deployToCloudflareWorkers({ ...base });
+    const out = await deployToCloudflareWorkers({ ...base, priorOwnedCustomDomains: [{ id: 'dom-old', hostname: 'old.example.com' }] });
     expect(calls.some((c) => c[0].endsWith('/workers/domains/dom-old') && c[1]?.method === 'DELETE')).toBe(true);
     expect(out.status).toBe('ready');
     const steps = (out.providerMetadata?.steps ?? []) as { name: string }[];
     expect(steps.map((s) => s.name)).toContain('custom-domain-detach');
+    expect(out.providerMetadata?.ownedCustomDomains).toEqual([]);
   });
 
-  it('never reports ready while a routed hostname could not be detached', async () => {
+  it('leaves a dashboard-attached hostname alone when no prior deploy recorded it', async () => {
+    const { calls, fn } = accessFetch({
+      domainsList: { success: true, result: [{ id: 'dom-dash', hostname: 'dash.example.com', service: 'my-site' }] },
+    });
+    vi.stubGlobal('fetch', fn);
+    const out = await deployToCloudflareWorkers({ ...base });
+    expect(calls.some((c) => c[1]?.method === 'DELETE' && c[0].includes('/workers/domains/'))).toBe(false);
+    expect(out.status).toBe('ready');
+    expect(out.providerMetadata?.ownedCustomDomains).toEqual([]);
+  });
+
+  it('never reports ready while an owned routed hostname could not be detached', async () => {
     const { fn } = accessFetch({
       domainsList: { success: true, result: [{ id: 'dom-old', hostname: 'old.example.com', service: 'my-site' }] },
       domainsDelete: { success: false, errors: [{ message: 'detach denied' }] },
     });
     vi.stubGlobal('fetch', fn);
     await expect(
-      deployToCloudflareWorkers({ ...base, access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } } }),
+      deployToCloudflareWorkers({
+        ...base,
+        access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } },
+        priorOwnedCustomDomains: [{ id: 'dom-old', hostname: 'old.example.com' }],
+      }),
     ).rejects.toMatchObject({ name: 'DeployError', message: 'detach denied' });
   });
-
   it('fails closed before any upload when the attached-domains list cannot be read', async () => {
     const { calls, fn } = accessFetch({ domainsList: { success: false, errors: [{ message: 'domains unavailable' }] } });
     vi.stubGlobal('fetch', fn);
@@ -751,6 +800,84 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
     expect(calls.some((c) => c[0].endsWith('/access/apps') && c[1]?.method === 'POST')).toBe(false);
   });
 
+  it('keeps the prior app id on the record and pushes an access-app-retire error step when the Access-off delete fails', async () => {
+    const { calls, fn } = accessFetch({ accessDelete: { success: false, errors: [{ message: 'delete denied' }] } });
+    vi.stubGlobal('fetch', fn);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const out = await deployToCloudflareWorkers({ ...base, access: { enabled: false }, priorAccessAppId: 'app-123' });
+    expect(calls.filter((c) => c[0].includes('/access/apps/') && c[1]?.method === 'DELETE')).toHaveLength(1);
+    expect(out.status).toBe('ready');
+    // The delete did not go through: the app may still exist and its id is the
+    // only handle — it must survive on the record for the next retry.
+    expect(out.providerMetadata).toMatchObject({ accessAppId: 'app-123', createdByOpenDesign: true });
+    expect(out.providerMetadata?.accessProtected).toBeUndefined();
+    const steps = (out.providerMetadata?.steps ?? []) as { name: string; status: string; detail?: string }[];
+    expect(steps).toContainEqual({ name: 'access-app-retire', status: 'error', detail: expect.stringContaining('app-123') });
+    expect(steps.find((s) => s.name === 'access-app-retire')?.detail).toContain('delete denied');
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('could not retire Access app app-123'));
+  });
+
+  it('keeps the prior app id when the retire lookup fails before the delete', async () => {
+    const { calls, fn } = accessFetch({ accessGet: { success: false, errors: [{ message: 'lookup unavailable' }] } });
+    vi.stubGlobal('fetch', fn);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const out = await deployToCloudflareWorkers({ ...base, access: { enabled: false }, priorAccessAppId: 'app-123' });
+    expect(calls.some((c) => c[0].includes('/access/apps/') && c[1]?.method === 'DELETE')).toBe(false);
+    expect(out.providerMetadata).toMatchObject({ accessAppId: 'app-123', createdByOpenDesign: true });
+    const steps = (out.providerMetadata?.steps ?? []) as { name: string; status: string }[];
+    expect(steps).toContainEqual(expect.objectContaining({ name: 'access-app-retire', status: 'error' }));
+  });
+
+  it('re-resolves the OAuth token before every Cloudflare call, so a token rotated mid-deploy is picked up', async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'od-workers-token-rotate-'));
+    const prior = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = dir;
+    configureCloudflareWorkersDataDir(dir);
+    try {
+      const record = (accessToken: string) => ({
+        accessToken,
+        tokenType: 'Bearer',
+        expiresAt: Date.now() + 3_600_000,
+        generation: 0,
+        savedAt: Date.now(),
+      });
+      await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), record('token-A'));
+      await writeCloudflareWorkersConfig({ credentialMode: 'oauth', accountId: 'acct_test', clientId: 'client-abc' });
+      const { calls, fn } = accessFetch();
+      // A sibling process rotates the credential while the assets are being
+      // uploaded (the token store is re-read by the provider, not captured).
+      const rotating = vi.fn(async (url: string, init?: RequestInit) => {
+        const resp = await fn(url, init);
+        if (url.includes('assets-upload-session')) {
+          await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), record('token-B'));
+        }
+        return resp;
+      });
+      vi.stubGlobal('fetch', rotating);
+      await deployToCloudflareWorkers({ ...base, config: { token: '', accountId: 'acct_test', credentialMode: 'oauth' } });
+      const authOf = (call: Call) => (call[1]?.headers as Record<string, string> | undefined)?.Authorization;
+      const session = calls.find((c) => c[0].includes('assets-upload-session'))!;
+      const scriptPut = calls.find((c) => c[0].includes('/workers/scripts/') && c[1]?.method === 'PUT')!;
+      const subdomainPost = calls.find((c) => c[0].endsWith('/subdomain') && c[1]?.method === 'POST')!;
+      expect(authOf(session)).toBe('Bearer token-A');
+      expect(authOf(scriptPut)).toBe('Bearer token-B');
+      expect(authOf(subdomainPost)).toBe('Bearer token-B');
+    } finally {
+      process.env.OD_USER_STATE_DIR = prior;
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('a static API token is used as-is for every call', async () => {
+    const { calls, fn } = accessFetch();
+    vi.stubGlobal('fetch', fn);
+    await deployToCloudflareWorkers(base);
+    const auths = calls
+      .filter((c) => (c[1]?.method || 'GET') !== 'HEAD' && !c[0].includes('/workers/assets/upload'))
+      .map((c) => (c[1]?.headers as Record<string, string> | undefined)?.Authorization);
+    expect(auths.length).toBeGreaterThan(0);
+    expect(new Set(auths)).toEqual(new Set(['Bearer tok-secret']));
+  });
   it('does not touch Access when disabled and no prior app', async () => {
     const { calls, fn } = accessFetch();
     vi.stubGlobal('fetch', fn);

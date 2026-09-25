@@ -30,6 +30,7 @@ import {
 import { PendingAuthCache } from '../src/mcp-oauth.js';
 import {
   classifyCloudflareRefreshFailure,
+  CLOUDFLARE_OAUTH_EXPIRY_SKEW_MS,
   cloudflareOAuthTokensDir,
   configureCloudflareWorkersDataDir,
   getCloudflareAccessToken,
@@ -523,6 +524,59 @@ describe('token file permissions', () => {
       await clearCloudflareOAuthToken(dataDir);
       expect((await stat(file)).mode & 0o777).toBe(0o600);
     } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('getCloudflareAccessToken expiry skew', () => {
+  it('sizes the skew to a worst-case deploy (at least 10 minutes)', () => {
+    expect(CLOUDFLARE_OAUTH_EXPIRY_SKEW_MS).toBeGreaterThanOrEqual(10 * 60_000);
+  });
+
+  it('refreshes a token that would lapse during a long deploy, even though it is still valid right now', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'od-cf-skew-'));
+    configureCloudflareWorkersDataDir(dir);
+    await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), {
+      accessToken: 'about-to-lapse',
+      tokenType: 'Bearer',
+      refreshToken: 'ref-live',
+      clientId: 'client-abc',
+      // Valid for five more minutes: fine for one call, not for a multi-minute deploy.
+      expiresAt: Date.now() + 5 * 60_000,
+      generation: 0,
+      savedAt: Date.now(),
+    });
+    await writeCloudflareWorkersConfig({ credentialMode: 'oauth', accountId: 'acct_test', clientId: 'client-abc' });
+    const realFetch = globalThis.fetch;
+    let refreshCalls = 0;
+    vi.stubGlobal('fetch', async (input: unknown, init?: unknown) => {
+      if (String(input).includes('oauth2/token')) {
+        refreshCalls += 1;
+        return new Response(
+          JSON.stringify({ access_token: 'refreshed-token', token_type: 'Bearer', refresh_token: 'ref-live-2', expires_in: 3600 }),
+          { headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return realFetch(input as never, init as never);
+    });
+    try {
+      await expect(getCloudflareAccessToken()).resolves.toBe('refreshed-token');
+      expect(refreshCalls).toBe(1);
+      // A token comfortably outside the skew is trusted as-is (no refresh churn).
+      await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), {
+        accessToken: 'fresh',
+        tokenType: 'Bearer',
+        refreshToken: 'ref-live-3',
+        clientId: 'client-abc',
+        expiresAt: Date.now() + 3_600_000,
+        generation: 5,
+        savedAt: Date.now(),
+      });
+      await expect(getCloudflareAccessToken()).resolves.toBe('fresh');
+      expect(refreshCalls).toBe(1);
+    } finally {
+      vi.unstubAllGlobals();
       await rm(dir, { recursive: true, force: true });
     }
   });

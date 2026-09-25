@@ -1006,6 +1006,11 @@ export interface DeployConfigResponse {
   access?: CloudflareWorkersAccess;
   cloudflarePages?: CloudflarePagesConfigHints;
   customDomain?: { hostname: string; zoneId: string };
+  /** Set when the on-disk provider config could not be parsed. The daemon
+   * degrades to an unconfigured default instead of failing every route;
+   * saving the settings again rewrites the file. Currently only
+   * `CFW_CONFIG_CORRUPT` (Cloudflare Workers). */
+  configError?: string;
   target: 'preview' | 'production';
 }
 

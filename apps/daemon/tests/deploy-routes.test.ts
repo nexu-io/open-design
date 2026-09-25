@@ -1662,10 +1662,26 @@ describe('deploy provider routes', () => {
     process.env.OD_USER_STATE_DIR = stateRoot;
     configureCloudflareWorkersDataDir(stateRoot);
     try {
+      const dataDir = process.env.OD_DATA_DIR;
+      if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+      const projectId = `workers-domain-owner-${Date.now()}`;
+      const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+      await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>Hello</h1>');
+      expect((await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: projectId, name: 'Domain owner', skillId: null, designSystemId: null }),
+      })).status).toBe(200);
       expect((await fetch(`${baseUrl}/api/deploy/config`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ providerId: CLOUDFLARE_WORKERS_PROVIDER_ID, token: 'tok', accountId: 'acct_test', scriptName: 'my-site' }),
+        body: JSON.stringify({
+          providerId: CLOUDFLARE_WORKERS_PROVIDER_ID,
+          token: 'tok',
+          accountId: 'acct_test',
+          scriptName: 'my-site',
+          customDomain: { hostname: 'mine.example.com', zoneId: 'zone-1' },
+        }),
       })).status).toBe(200);
 
       const realFetch = globalThis.fetch;
@@ -1676,8 +1692,19 @@ describe('deploy provider routes', () => {
         if (url.startsWith(baseUrl)) return realFetch(input, init);
         const method = (init?.method || 'GET').toUpperCase();
         cfCalls.push({ url, method });
+        // --- the recording deploy (attaches mine.example.com as dom-mine) ---
+        if (method === 'HEAD') return new Response('', { status: 200 });
+        if (url.endsWith('/workers/subdomain')) return json({ success: true, result: { subdomain: 'acct-test' } });
+        if (url.includes('assets-upload-session')) return json({ success: true, result: { jwt: 'SESS', buckets: [] } });
+        if (method === 'GET' && url.includes('/workers/domains?service=')) return json({ success: true, result: [] });
+        if (method === 'PUT' && url.endsWith('/workers/domains')) return json({ success: true, result: { id: 'dom-mine' } });
+        // --- the detach route ---
         if (method === 'GET' && url.includes('/workers/domains/dom-foreign')) {
           return json({ success: true, result: { id: 'dom-foreign', hostname: 'app.example.com', service: 'someone-elses-worker', zone_id: 'zone-1' } });
+        }
+        if (method === 'GET' && url.includes('/workers/domains/dom-dash')) {
+          // Routed to OUR script, but attached in the dashboard: not ours to detach.
+          return json({ success: true, result: { id: 'dom-dash', hostname: 'dash.example.com', service: 'my-site', zone_id: 'zone-1' } });
         }
         if (method === 'GET' && url.includes('/workers/domains/dom-mine')) {
           return json({ success: true, result: { id: 'dom-mine', hostname: 'mine.example.com', service: 'my-site', zone_id: 'zone-1' } });
@@ -1685,16 +1712,40 @@ describe('deploy provider routes', () => {
         if (method === 'DELETE' && url.includes('/workers/domains/dom-mine')) {
           return json({ success: true, result: { id: 'dom-mine' } });
         }
+        if (url.includes('/workers/scripts/') && method === 'PUT') return json({ success: true, result: {} });
+        if (url.includes('/subdomain') && method === 'POST') return json({ success: true, result: { enabled: true } });
         throw new Error(`Unexpected Cloudflare fetch: ${method} ${url}`);
       });
       vi.stubGlobal('fetch', fetchMock);
       try {
+        // Before any OpenDesign deploy recorded it, even a hostname routed to
+        // our script is not ours: the ownership rule is "we attached it".
+        const unrecorded = await fetch(`${baseUrl}/api/deploy/cloudflare-workers/domains/dom-mine`, { method: 'DELETE' });
+        expect(unrecorded.status).toBe(409);
+        expect((await unrecorded.json() as { error: { code: string } }).error.code).toBe('CFW_DOMAIN_FOREIGN');
+
+        // A real deploy attaches mine.example.com and records dom-mine as owned.
+        const deployResp = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileName: 'index.html', providerId: CLOUDFLARE_WORKERS_PROVIDER_ID }),
+        });
+        expect(deployResp.status).toBe(200);
+        expect((await deployResp.json() as { cloudflareWorkers: { customDomain: unknown } }).cloudflareWorkers.customDomain).toMatchObject({ hostname: 'mine.example.com' });
+
         const foreign = await fetch(`${baseUrl}/api/deploy/cloudflare-workers/domains/dom-foreign`, { method: 'DELETE' });
         expect(foreign.status).toBe(409);
         expect((await foreign.json() as { error: { code: string } }).error.code).toBe('CFW_DOMAIN_FOREIGN');
+
+        const dashboard = await fetch(`${baseUrl}/api/deploy/cloudflare-workers/domains/dom-dash`, { method: 'DELETE' });
+        expect(dashboard.status).toBe(409);
+        expect((await dashboard.json() as { error: { code: string; message: string } }).error).toMatchObject({
+          code: 'CFW_DOMAIN_FOREIGN',
+          message: expect.stringContaining('not attached by an OpenDesign deployment'),
+        });
         expect(cfCalls.some((c) => c.method === 'DELETE')).toBe(false);
 
-        // Same route, a domain the OpenDesign script owns: detached as before.
+        // Same route, the domain the OpenDesign deploy attached: detached.
         const mine = await fetch(`${baseUrl}/api/deploy/cloudflare-workers/domains/dom-mine`, { method: 'DELETE' });
         expect(mine.status).toBe(200);
         expect(await mine.json()).toEqual({ ok: true });
@@ -1711,6 +1762,39 @@ describe('deploy provider routes', () => {
     }
   });
 
+  it('serves the Workers config route with CFW_CONFIG_CORRUPT when the file is unparsable, instead of a 500 on every route', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-workers-corrupt-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    configureCloudflareWorkersDataDir(stateRoot);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await mkdir(path.dirname(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID)), { recursive: true });
+      await writeFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), '{"token": "tok",', 'utf8');
+      const getResp = await fetch(`${baseUrl}/api/deploy/config?providerId=${CLOUDFLARE_WORKERS_PROVIDER_ID}`);
+      expect(getResp.status).toBe(200);
+      expect(await getResp.json()).toMatchObject({ providerId: CLOUDFLARE_WORKERS_PROVIDER_ID, configured: false, configError: 'CFW_CONFIG_CORRUPT' });
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('CFW_CONFIG_CORRUPT'));
+      const caps = await fetch(`${baseUrl}/api/deploy/cloudflare-workers/capabilities`);
+      expect(caps.status).toBe(200);
+      expect(await caps.json()).toMatchObject({ configured: false });
+      // Saving the settings again heals the file.
+      const saveResp = await fetch(`${baseUrl}/api/deploy/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ providerId: CLOUDFLARE_WORKERS_PROVIDER_ID, token: 'tok', accountId: 'acct_test' }),
+      });
+      expect(saveResp.status).toBe(200);
+      const healed = await (await fetch(`${baseUrl}/api/deploy/config?providerId=${CLOUDFLARE_WORKERS_PROVIDER_ID}`)).json() as Record<string, unknown>;
+      expect(healed).toMatchObject({ configured: true });
+      expect(healed).not.toHaveProperty('configError');
+    } finally {
+      errorSpy.mockRestore();
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
   it('surfaces the Workers result as cloudflareWorkers on the deploy response and the deployments list (through the real db)', async () => {
     const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-workers-lift-'));
     const priorStateRoot = process.env.OD_USER_STATE_DIR;
