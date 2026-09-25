@@ -66,6 +66,31 @@ function isCrossAppImportAllowlisted(repositoryPath: string, specifier: string):
   );
 }
 
+// A prefilter may skip parsing only when escaped spellings cannot hide a
+// registered app name. Unicode, hex, and line-continuation escapes always fall
+// back; removing slashes covers identity escapes such as `\d\a\e\m\o\n`.
+function hasPotentiallyEscapedLiteral(source: string, markers: readonly string[]): boolean {
+  if (source.includes("\\u") || source.includes("\\x") || /\\\r?\n/.test(source)) return true;
+  if (!source.includes("\\")) return false;
+  const unescapedSource = source.replaceAll("\\", "");
+  return markers.some((marker) => unescapedSource.includes(marker));
+}
+
+export function sourceMayImportAnotherApp(
+  repositoryPath: string,
+  source: string,
+  registry: AppDirectoryRegistry,
+): boolean {
+  const importingApp = appDirectoryForRepositoryPath(repositoryPath);
+  const targetMarkers: string[] = [];
+  for (const [appDirectory, packageName] of registry.packageNameByDirectory) {
+    if (appDirectory === importingApp) continue;
+    targetMarkers.push(appDirectory, packageName);
+    if (source.includes(appDirectory) || source.includes(packageName)) return true;
+  }
+  return hasPotentiallyEscapedLiteral(source, targetMarkers);
+}
+
 function targetAppForSpecifier(
   repositoryPath: string,
   specifier: string,
@@ -232,14 +257,7 @@ function isRequireResolveExpression(expression: ts.Expression, bindings: CreateR
   );
 }
 
-function collectImportSpecifierReferences(repositoryPath: string, source: string): ImportSpecifierReference[] {
-  const sourceFile = ts.createSourceFile(
-    repositoryPath,
-    source,
-    ts.ScriptTarget.Latest,
-    true,
-    scriptKindForRepositoryPath(repositoryPath),
-  );
+function collectImportSpecifierReferences(sourceFile: ts.SourceFile): ImportSpecifierReference[] {
   const references: ImportSpecifierReference[] = [];
   const createRequireBindings = collectCreateRequireBindings(sourceFile);
 
@@ -292,11 +310,11 @@ export function collectCrossAppImportViolationsFromSource(
     repositoryPath,
     source,
     ts.ScriptTarget.Latest,
-    false,
+    true,
     scriptKindForRepositoryPath(repositoryPath),
   );
 
-  for (const reference of collectImportSpecifierReferences(repositoryPath, source)) {
+  for (const reference of collectImportSpecifierReferences(sourceFile)) {
     const dedupeKey = `${reference.index}\0${reference.specifier}`;
     if (seen.has(dedupeKey)) continue;
     seen.add(dedupeKey);
@@ -371,6 +389,7 @@ export async function checkCrossAppImports(): Promise<boolean> {
     for (const fullPath of await collectAppSourceFiles(path.join(repoRoot, "apps", appDirectory))) {
       const repositoryPath = path.relative(repoRoot, fullPath).split(path.sep).join("/");
       const source = await readFile(fullPath, "utf8");
+      if (!sourceMayImportAnotherApp(repositoryPath, source, registry)) continue;
       violations.push(...collectCrossAppImportViolationsFromSource(repositoryPath, source, registry));
     }
   }
