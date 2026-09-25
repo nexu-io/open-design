@@ -167,6 +167,16 @@ export function registerCloudflareRoutes(
     }
   };
 
+  // Errors thrown out of persistCredential AFTER it already revoked the grant
+  // this attempt minted (the config-commit failure path). The route handlers
+  // revoke on any other throw; this set keeps the two from double-revoking.
+  const grantAlreadyRevoked = new WeakSet<object>();
+  const markGrantRevoked = (err: unknown): void => {
+    if (typeof err === 'object' && err !== null) grantAlreadyRevoked.add(err);
+  };
+  const wasGrantRevoked = (err: unknown): boolean =>
+    typeof err === 'object' && err !== null && grantAlreadyRevoked.has(err);
+
   const revokeDiscardedGrant = (tokenResp: CompleteCloudflareAuthResult, fetchImpl: typeof fetch): Promise<void> =>
     revokeGrantBestEffort(
       {
@@ -231,6 +241,7 @@ export function registerCloudflareRoutes(
         if (prev) await setCloudflareOAuthToken(dataDir, prev);
         else await clearCloudflareOAuthToken(dataDir);
         await revokeDiscardedGrant(result, fetchImpl);
+        markGrantRevoked(err);
         throw err;
       }
     });
@@ -326,36 +337,44 @@ export function registerCloudflareRoutes(
     // bumps it) aborts this exchange before it can persist a stale token.
     const attemptGeneration = oauthAttemptGeneration;
     const proxyDispatcher = proxyDispatcherRequestInit(process.env);
+    const fetchImpl = fetchWithRequestInit(proxyDispatcher.requestInit);
+    // Set once Cloudflare has issued a grant and cleared once that grant is
+    // either stored or explicitly discarded. Any throw in between leaves it
+    // set, and the catch below revokes it: a grant nobody holds must not stay
+    // valid at Cloudflare.
+    let tokenResp: CompleteCloudflareAuthResult | null = null;
     try {
-      const tokenResp = await completeCloudflareAuth({
+      tokenResp = await completeCloudflareAuth({
         pending: pendingAuth,
         state: outcome.state,
         code: outcome.code,
-        fetchImpl: fetchWithRequestInit(proxyDispatcher.requestInit),
+        fetchImpl,
       });
       if (attemptGeneration !== oauthAttemptGeneration) {
         // The attempt was cancelled, disconnected, or replaced while the token
         // endpoint was in flight — do not persist a token the user already
         // abandoned.
         console.warn('[cloudflare-oauth] attempt superseded; discarding token');
-        await revokeDiscardedGrant(tokenResp, fetchWithRequestInit(proxyDispatcher.requestInit));
+        const discarded = tokenResp;
+        tokenResp = null;
+        await revokeDiscardedGrant(discarded, fetchImpl);
         return false;
       }
-      const persisted = await persistCredential(
-        tokenResp,
-        attemptGeneration,
-        fetchWithRequestInit(proxyDispatcher.requestInit),
-      );
+      const persisted = await persistCredential(tokenResp, attemptGeneration, fetchImpl);
       if (!persisted) {
         console.warn('[cloudflare-oauth] attempt superseded; discarding token');
-        await revokeDiscardedGrant(tokenResp, fetchWithRequestInit(proxyDispatcher.requestInit));
+        const discarded = tokenResp;
+        tokenResp = null;
+        await revokeDiscardedGrant(discarded, fetchImpl);
         return false;
       }
+      tokenResp = null;
       console.log('[cloudflare-oauth] token stored');
       return true;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error('[cloudflare-oauth] token exchange failed:', msg);
+      if (tokenResp && !wasGrantRevoked(err)) await revokeDiscardedGrant(tokenResp, fetchImpl);
       return false;
     } finally {
       await proxyDispatcher.close();
@@ -369,6 +388,16 @@ export function registerCloudflareRoutes(
 
     try {
       const cfg = await readCloudflareWorkersConfig();
+      // A corrupt config reads as the unconfigured default with a marker. Do
+      // not start the browser dance on top of it: the commit at the end of the
+      // exchange would refuse to overwrite the file, and the user would only
+      // learn that after authorizing. Refuse here, before any state exists.
+      if (cfg.configError) {
+        return res.status(409).json({
+          error: 'Cloudflare Workers config file is not valid JSON; save the Workers settings before connecting.',
+          code: cfg.configError,
+        });
+      }
       // The Connect UI posts the clientId/redirectUri it just collected; on a
       // fresh setup these are not yet in the persisted config, so read the body
       // first (falling back to the config) instead of failing on an empty config.
@@ -476,32 +505,37 @@ export function registerCloudflareRoutes(
     const attemptGeneration = oauthAttemptGeneration;
     const myListener = activeListener;
     const proxyDispatcher = proxyDispatcherRequestInit(process.env);
+    const fetchImpl = fetchWithRequestInit(proxyDispatcher.requestInit);
+    // Same discipline as the loopback callback: a grant Cloudflare issued that
+    // this handler then fails to store is revoked on the way out.
+    let tokenResp: CompleteCloudflareAuthResult | null = null;
     try {
-      const tokenResp = await completeCloudflareAuth({
+      tokenResp = await completeCloudflareAuth({
         pending: pendingAuth,
         state,
         code,
-        fetchImpl: fetchWithRequestInit(proxyDispatcher.requestInit),
+        fetchImpl,
       });
       if (attemptGeneration !== oauthAttemptGeneration) {
         console.warn('[cloudflare-oauth] attempt superseded; discarding token');
-        await revokeDiscardedGrant(tokenResp, fetchWithRequestInit(proxyDispatcher.requestInit));
+        const discarded = tokenResp;
+        tokenResp = null;
+        await revokeDiscardedGrant(discarded, fetchImpl);
         return res
           .status(409)
           .json({ error: 'Cloudflare OAuth attempt was cancelled or superseded — restart the connection.' });
       }
-      const persisted = await persistCredential(
-        tokenResp,
-        attemptGeneration,
-        fetchWithRequestInit(proxyDispatcher.requestInit),
-      );
+      const persisted = await persistCredential(tokenResp, attemptGeneration, fetchImpl);
       if (!persisted) {
         console.warn('[cloudflare-oauth] attempt superseded; discarding token');
-        await revokeDiscardedGrant(tokenResp, fetchWithRequestInit(proxyDispatcher.requestInit));
+        const discarded = tokenResp;
+        tokenResp = null;
+        await revokeDiscardedGrant(discarded, fetchImpl);
         return res
           .status(409)
           .json({ error: 'Cloudflare OAuth attempt was cancelled or superseded — restart the connection.' });
       }
+      tokenResp = null;
       // We won the race against the loopback listener (or it was never going
       // to resolve); shut it down so the next /start has a clean slate — but
       // only if a newer /start hasn't already replaced it.
@@ -511,6 +545,7 @@ export function registerCloudflareRoutes(
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error('[cloudflare-oauth] manual complete failed:', msg);
+      if (tokenResp && !wasGrantRevoked(err)) await revokeDiscardedGrant(tokenResp, fetchImpl);
       res.status(400).json({ error: msg });
     } finally {
       await proxyDispatcher.close();

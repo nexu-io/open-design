@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
@@ -8,6 +8,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { registerCloudflareRoutes } from '../src/routes/cloudflare.js';
 import { startCallbackListener } from '../src/integrations/cloudflare-oauth-server.js';
 import {
+  CLOUDFLARE_WORKERS_CONFIG_CORRUPT_CODE,
   CLOUDFLARE_WORKERS_PROVIDER_ID,
   cloudflareOAuthTokensDir,
   configureCloudflareWorkersDataDir,
@@ -662,6 +663,94 @@ describe('cloudflare-oauth routes', () => {
     } finally {
       await rm(configPath, { recursive: true, force: true });
       await fetch(`${app.baseUrl}/api/cloudflare/oauth/cancel`, { method: 'POST' });
+    }
+  });
+
+  it('refuses /start with 409 while the Workers config file is corrupt, before any state or listener exists', async () => {
+    const configPath = deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.mocked(startCallbackListener).mockClear();
+    try {
+      await mkdir(path.dirname(configPath), { recursive: true });
+      await writeFile(configPath, '{"clientId": "client-abc", "redirectUri": ', 'utf8');
+      const resp = await fetch(`${app.baseUrl}/api/cloudflare/oauth/start`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ clientId: 'client-abc', redirectUri: 'http://127.0.0.1:56122/callback' }),
+      });
+      expect(resp.status).toBe(409);
+      const body = (await resp.json()) as { error?: string; code?: string };
+      expect(body.code).toBe(CLOUDFLARE_WORKERS_CONFIG_CORRUPT_CODE);
+      expect(body.error).toMatch(/not valid JSON/);
+      // The refusal happens before the browser dance: no listener was bound,
+      // and there is no pending attempt for a paste-back to complete.
+      expect(startCallbackListener).not.toHaveBeenCalled();
+      const status = await (await fetch(`${app.baseUrl}/api/cloudflare/auth/status`)).json() as { listening: boolean };
+      expect(status.listening).toBe(false);
+      // The corrupt file is left for the settings save to rewrite; /start did
+      // not paper over it.
+      expect(await readFile(configPath, 'utf8')).toContain('"redirectUri": ');
+    } finally {
+      errorSpy.mockRestore();
+      await rm(configPath, { force: true });
+    }
+  });
+
+  it('revokes the freshly issued grant when storing it throws for a reason other than the config commit', async () => {
+    const dataDir = cloudflareOAuthTokensDir();
+    const tokensPath = path.join(dataDir, 'cloudflare-oauth-tokens.json');
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const realFetch = globalThis.fetch;
+    const revokes: string[] = [];
+    vi.stubGlobal('fetch', async (input: unknown, init?: unknown) => {
+      const url = String(input);
+      if (url.includes('oauth2/revoke')) {
+        revokes.push(String((init as RequestInit | undefined)?.body));
+        return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url.includes('oauth2/token')) {
+        return new Response(
+          JSON.stringify({ access_token: 'acc-orphan', token_type: 'Bearer', refresh_token: 'ref-orphan', expires_in: 3600 }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url.endsWith('/client/v4/user')) {
+        return new Response(JSON.stringify({ success: false }), { status: 403, headers: { 'content-type': 'application/json' } });
+      }
+      return realFetch(input as never, init as never);
+    });
+    try {
+      // The token store's file path is occupied by a directory, so the read of
+      // the previous credential inside persistCredential throws EISDIR — a
+      // failure that is neither "superseded" nor the config-commit path.
+      await rm(tokensPath, { recursive: true, force: true });
+      await mkdir(tokensPath, { recursive: true });
+      const startResp = await fetch(`${app.baseUrl}/api/cloudflare/oauth/start`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ clientId: 'client-abc', redirectUri: 'http://127.0.0.1:56122/callback' }),
+      });
+      expect(startResp.status).toBe(200);
+      const { state } = (await startResp.json()) as { state: string };
+      const completeResp = await fetch(`${app.baseUrl}/api/cloudflare/oauth/complete`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ state, code: 'AUTHCODE' }),
+      });
+      expect(completeResp.status).toBe(400);
+      expect(((await completeResp.json()) as { error: string }).error).toMatch(/EISDIR/);
+      // Cloudflare issued a grant nobody holds; it is revoked exactly once,
+      // by its refresh token.
+      expect(revokes).toHaveLength(1);
+      const form = new URLSearchParams(revokes[0]!);
+      expect(form.get('token')).toBe('ref-orphan');
+      expect(form.get('client_id')).toBe('client-abc');
+    } finally {
+      vi.unstubAllGlobals();
+      errorSpy.mockRestore();
+      await rm(tokensPath, { recursive: true, force: true });
+      await fetch(`${app.baseUrl}/api/cloudflare/oauth/cancel`, { method: 'POST' });
+      await rm(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), { force: true });
     }
   });
 });

@@ -47,7 +47,13 @@ async function withWorkersDispatcher<T>(
 }
 
 function withRequestInit(config: Pick<WorkersDeployConfig, 'requestInit'>, init: RequestInit): RequestInit {
-  return { ...init, ...(config.requestInit ?? {}) };
+  return { signal: AbortSignal.timeout(CLOUDFLARE_API_TIMEOUT_MS), ...init, ...(config.requestInit ?? {}) };
+}
+
+// A fetch that ran out of its AbortSignal.timeout budget. Node rejects with a
+// DOMException named `TimeoutError`; a user-aborted signal is `AbortError`.
+function isFetchTimeout(err: unknown): boolean {
+  return (err as { name?: unknown } | null)?.name === 'TimeoutError';
 }
 
 type WorkersFile = {
@@ -74,6 +80,14 @@ type DeployStep = {
 };
 
 const CLOUDFLARE_API = 'https://api.cloudflare.com/client/v4';
+/** Budget for one Cloudflare API request. Without it a stalled upload or a
+ * half-open connection through a user's proxy hangs the deploy forever; the
+ * caller's retry loop never even gets to run. */
+export const CLOUDFLARE_API_TIMEOUT_MS = 30_000;
+/** Budget for the short public probes (Access perimeter HEAD, readiness HEAD,
+ * self-email lookup). These are advisory and re-probed later, so they get a
+ * tighter budget than an API mutation. */
+export const CLOUDFLARE_PROBE_TIMEOUT_MS = 10_000;
 const WORKERS_ASSET_MAX_FILE_BYTES = 25 * 1024 * 1024;
 const WORKERS_ASSET_MAX_FILE_COUNT = 20000;
 const WORKERS_SCRIPT_NAME_MAX_LENGTH = 63;
@@ -660,7 +674,7 @@ function selfEmailUnresolvedError(): DeployError {
 }
 
 async function resolveCloudflareSelfEmail(token: string, requestInit: WorkersRequestInit = {}): Promise<string> {
-  const resp = await fetch(CLOUDFLARE_API + '/user', { headers: cloudflareHeaders(token), ...requestInit });
+  const resp = await fetch(CLOUDFLARE_API + '/user', { headers: cloudflareHeaders(token), signal: AbortSignal.timeout(CLOUDFLARE_PROBE_TIMEOUT_MS), ...requestInit });
   const json = await readCloudflareJson(resp);
   if (!resp.ok || json.success !== true) return '';
   const result = (json.result ?? {}) as JsonObject;
@@ -988,12 +1002,17 @@ export type CloudflareAccessPerimeterVerdict =
 async function probeCloudflareAccessPerimeterOnce(url: string, requestInit: WorkersRequestInit): Promise<CloudflareAccessPerimeterVerdict> {
   let resp: Response;
   try {
-    resp = await fetch(url, { method: 'HEAD', redirect: 'manual', ...requestInit });
+    resp = await fetch(url, { method: 'HEAD', redirect: 'manual', signal: AbortSignal.timeout(CLOUDFLARE_PROBE_TIMEOUT_MS), ...requestInit });
   } catch (err) {
+    // A timeout is "no answer", the same as a refused connection: nothing
+    // proves the URL is exposed, so the caller defers rather than withdraws.
+    const reason = isFetchTimeout(err)
+      ? 'no response within ' + CLOUDFLARE_PROBE_TIMEOUT_MS + 'ms'
+      : String((err as Error)?.message || err);
     return {
       outcome: 'unreachable',
       error: new DeployError(
-        'Could not reach ' + url + ' to verify Cloudflare Access: ' + String((err as Error)?.message || err),
+        'Could not reach ' + url + ' to verify Cloudflare Access: ' + reason,
         502,
         { url },
         'CFW_ACCESS_UNVERIFIED',
@@ -1738,7 +1757,7 @@ async function deployToCloudflareWorkersWith(
       else metadata.accessVerified = true;
     } else {
       try {
-        const checkResp = await fetch(url, { method: 'HEAD', redirect: 'manual', ...(cfg.requestInit ?? {}) });
+        const checkResp = await fetch(url, { method: 'HEAD', redirect: 'manual', signal: AbortSignal.timeout(CLOUDFLARE_PROBE_TIMEOUT_MS), ...(cfg.requestInit ?? {}) });
         const check: JsonObject = { status: checkResp.status, ok: checkResp.ok };
         if (checkResp.status >= 500 || checkResp.status === 1101) check.detail = 'worker-runtime-error';
         metadata.check = check;
@@ -1809,7 +1828,7 @@ async function probeCloudflareWorkersCapabilitiesWith(input: { token: string; ac
 
   async function probe(path: string): Promise<{ success: boolean; code?: number; subdomain?: string }> {
     try {
-      const resp = await fetch(base + path, { headers: cloudflareHeaders(token), ...requestInit });
+      const resp = await fetch(base + path, { headers: cloudflareHeaders(token), signal: AbortSignal.timeout(CLOUDFLARE_API_TIMEOUT_MS), ...requestInit });
       const json = (await resp.json().catch(() => ({}))) as JsonObject;
       const errs = (Array.isArray(json.errors) ? json.errors : []) as JsonObject[];
       const code = typeof errs[0]?.code === 'number' ? (errs[0].code as number) : undefined;
@@ -1875,7 +1894,7 @@ async function listCloudflareR2BucketsWith(
     const url = base + '?' + params.toString();
     const resp = options.strict
       ? await fetchWithRetry({ requestInit }, url, { method: 'GET', headers: cloudflareHeaders(token) })
-      : await fetch(url, { headers: cloudflareHeaders(token), ...requestInit });
+      : await fetch(url, { headers: cloudflareHeaders(token), signal: AbortSignal.timeout(CLOUDFLARE_API_TIMEOUT_MS), ...requestInit });
     const json = (await resp.json().catch(() => ({}))) as JsonObject;
     if (!resp.ok || json.success !== true) {
       // The deploy path (strict) must fail closed: `[]` means "create it" to

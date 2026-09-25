@@ -6,6 +6,8 @@ import { checkDeploymentUrl, cloudflareOAuthTokensDir, configureCloudflareWorker
 import { setCloudflareOAuthToken } from '../src/integrations/cloudflare-tokens.js';
 import {
   CLOUDFLARE_ACCESS_PERIMETER_RETRY_DEFAULTS,
+  CLOUDFLARE_API_TIMEOUT_MS,
+  CLOUDFLARE_PROBE_TIMEOUT_MS,
   configureCloudflareAccessPerimeterRetry,
   deployToCloudflareWorkers,
   listCloudflareD1Databases,
@@ -1689,5 +1691,55 @@ describe('Cloudflare Workers proxy dispatcher', () => {
     expect(inits.some((c) => c.url.includes('/zones?'))).toBe(true);
     expect(inits.some((c) => c.url.includes('/d1/database'))).toBe(true);
     expectAllDispatched(inits, 8);
+  });
+});
+
+describe('Cloudflare Workers request timeouts', () => {
+  it('budgets every request: 30s for the API, 10s for the public probes', () => {
+    expect(CLOUDFLARE_API_TIMEOUT_MS).toBe(30_000);
+    expect(CLOUDFLARE_PROBE_TIMEOUT_MS).toBe(10_000);
+  });
+
+  it('attaches an AbortSignal to every Cloudflare API call and every public HEAD probe of a deploy', async () => {
+    const { calls, fn } = accessFetch();
+    vi.stubGlobal('fetch', fn);
+    const out = await deployToCloudflareWorkers({ ...base, access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } } });
+    expect(out.status).toBe('ready');
+    const api = calls.filter((c) => c[0].startsWith('https://api.cloudflare.com/'));
+    const heads = calls.filter((c) => c[1]?.method === 'HEAD');
+    expect(api.length).toBeGreaterThan(0);
+    expect(heads.length).toBeGreaterThan(0);
+    for (const [, init] of [...api, ...heads]) expect(init?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('attaches an AbortSignal to the Access-off readiness HEAD', async () => {
+    const { calls, fn } = accessFetch({ head: () => new Response('', { status: 200 }) });
+    vi.stubGlobal('fetch', fn);
+    const out = await deployToCloudflareWorkers({ ...base });
+    expect(out.status).toBe('ready');
+    const heads = calls.filter((c) => c[1]?.method === 'HEAD');
+    expect(heads).toHaveLength(1);
+    expect(heads[0]![1]?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('a perimeter probe that times out is unreachable (deferred), never unprotected (withdrawn)', async () => {
+    const { calls, fn } = accessFetch({
+      head: () => { throw new DOMException('The operation was aborted due to timeout', 'TimeoutError'); },
+    });
+    vi.stubGlobal('fetch', fn);
+    const out = await deployToCloudflareWorkers({ ...base, access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } } });
+    expect(out.status).toBe('link-delayed');
+    expect(out.reachableAt).toBeUndefined();
+    expect(out.statusMessage).toMatch(/Could not reach .* no response within 10000ms/);
+    expect(out.providerMetadata).toMatchObject({ accessVerified: false });
+    expect(out.providerMetadata?.steps).toContainEqual(expect.objectContaining({ name: 'access-verify', detail: expect.stringContaining('deferred') }));
+    // Nothing was withdrawn: the Access app stays, workers.dev stays on.
+    expect(calls.some((c) => c[1]?.method === 'DELETE' && c[0].includes('/access/apps/'))).toBe(false);
+    const subdomainPosts = calls
+      .filter((c) => c[0].endsWith('/workers/scripts/my-site/subdomain') && c[1]?.method === 'POST')
+      .map((c) => (JSON.parse(String(c[1]?.body)) as { enabled: boolean }).enabled);
+    expect(subdomainPosts).not.toContain(false);
+    // The full retry budget was spent before deferring.
+    expect(calls.filter((c) => c[1]?.method === 'HEAD').length).toBe(2);
   });
 });
