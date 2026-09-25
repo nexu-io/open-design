@@ -417,19 +417,57 @@ async function getCloudflareWorkerScript(config: WorkersDeployConfig, scriptName
   return scripts.find((item) => item?.id === scriptName) ?? null;
 }
 
+// What the script's `modified_on` looked like BEFORE this deploy's first PUT.
+// `absent`: no script of that name existed, so any script found afterwards was
+// created by this deploy. `known`: the stamp to beat. `unknown`: the pre-read
+// failed or carried no usable stamp, so a later 5xx can never be proven
+// committed and the PUT is retried instead.
+type ScriptModifiedBaseline =
+  | { kind: 'absent' }
+  | { kind: 'known'; modifiedOn: number }
+  | { kind: 'unknown' };
+
+function parseScriptModifiedOn(script: JsonObject | null): number {
+  return typeof script?.modified_on === 'string' ? Date.parse(script.modified_on) : NaN;
+}
+
+async function readScriptModifiedBaseline(config: WorkersDeployConfig, scriptName: string): Promise<ScriptModifiedBaseline> {
+  try {
+    const script = await getCloudflareWorkerScript(config, scriptName);
+    if (!script) return { kind: 'absent' };
+    const modifiedOn = parseScriptModifiedOn(script);
+    return Number.isFinite(modifiedOn) ? { kind: 'known', modifiedOn } : { kind: 'unknown' };
+  } catch {
+    return { kind: 'unknown' };
+  }
+}
+
+// Whether a script PUT that answered 5xx nevertheless landed: true only when
+// the script's `modified_on` is strictly newer than the baseline read before
+// the first PUT (or the script now exists where none did). The comparison is
+// Cloudflare-clock to Cloudflare-clock on purpose — measuring against the
+// daemon's `Date.now()` turns clock skew into a false "committed" and skips a
+// PUT that never happened.
+function scriptCommittedSinceBaseline(baseline: ScriptModifiedBaseline, script: JsonObject | null): boolean {
+  if (baseline.kind === 'unknown' || !script) return false;
+  if (baseline.kind === 'absent') return true;
+  const modifiedOn = parseScriptModifiedOn(script);
+  return Number.isFinite(modifiedOn) && modifiedOn > baseline.modifiedOn;
+}
+
 // The script PUT consumes the assets completion JWT. A 5xx may arrive AFTER the
 // PUT committed, in which case a blind retry fails with a JWT error while the
-// new version is already live. So: never retry the PUT on 5xx blindly — check
-// whether the script's modified_on advanced past this deploy's start first.
+// new version is already live. So: never retry the PUT on 5xx blindly — read
+// the script's modified_on before the first PUT and check whether it advanced.
 async function uploadWorkerScript(
   config: WorkersDeployConfig,
   scriptName: string,
   moduleCode: string,
   assetsJwt: string,
   runWorkerFirst = false,
-  startedAt = Date.now(),
 ): Promise<JsonObject> {
   const url = CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/workers/scripts/' + encodeURIComponent(scriptName);
+  const baseline = await readScriptModifiedBaseline(config, scriptName);
   let lastJson: JsonObject = {};
   let lastStatus = 502;
   for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -445,9 +483,7 @@ async function uploadWorkerScript(
     if (!is5xx) break;
     let committed = false;
     try {
-      const script = await getCloudflareWorkerScript(config, scriptName);
-      const modifiedOn = typeof script?.modified_on === 'string' ? Date.parse(script.modified_on) : NaN;
-      committed = Number.isFinite(modifiedOn) && modifiedOn >= startedAt - 1000;
+      committed = scriptCommittedSinceBaseline(baseline, await getCloudflareWorkerScript(config, scriptName));
     } catch {
       committed = false;
     }
@@ -556,38 +592,30 @@ async function disableWorkerPreviews(config: WorkersDeployConfig, scriptName: st
 
 type WorkerSubdomainEnableResult = {
   url: string;
-  /** True when the workers.dev route was OFF before this call turned it on.
-   * Only known when `recordPriorState` was requested; false otherwise. */
+  /** True when the workers.dev route was OFF before this call turned it on —
+   * the one fact a later compensation needs: a deploy that cannot be verified
+   * must put back the exposure it created, and must not turn off a route the
+   * user already had public. */
   enabledByThisRun: boolean;
 };
 
-// Turn the script's workers.dev route on. With `recordPriorState` the current
-// config is read first, so the caller learns whether THIS run flipped the route
-// from off to on — the one fact a later compensation needs: a deploy that
-// cannot be verified must put back the exposure it created, and must not turn
-// off a route the user already had public.
+// Turn the script's workers.dev route on. The POST replaces the whole config,
+// so the current state is read first and `previews_enabled` is written back
+// exactly as it was: a production deploy must not switch preview URLs on (an
+// exposure nothing would ever withdraw) or off.
 async function enableWorkerSubdomain(
   config: WorkersDeployConfig,
   scriptName: string,
   subdomain: string,
-  options: { recordPriorState?: boolean } = {},
 ): Promise<WorkerSubdomainEnableResult> {
-  const url = CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/workers/scripts/' + encodeURIComponent(scriptName) + '/subdomain';
-  let wasEnabled = false;
-  if (options.recordPriorState) {
-    const getResp = await fetchWithRetry(config, url, { method: 'GET', headers: await authHeaders(config) });
-    const getJson = await readCloudflareJson(getResp);
-    if (!getResp.ok || getJson.success === false) throw cloudflareError(getJson, getResp.status, 'Cloudflare workers.dev subdomain config lookup failed.');
-    const current = (getJson.result ?? {}) as JsonObject;
-    wasEnabled = current.enabled === true;
-  }
-  const resp = await fetchWithRetry(config,
-    url,
-    { method: 'POST', headers: await authHeaders(config, { 'Content-Type': 'application/json' }), body: JSON.stringify({ enabled: true, previews_enabled: true }) },
+  const current = await readWorkerSubdomainConfig(config, scriptName);
+  await writeWorkerSubdomainConfig(
+    config,
+    scriptName,
+    { enabled: true, previews_enabled: current.previewsEnabled },
+    'Cloudflare workers.dev enable failed.',
   );
-  const json = await readCloudflareJson(resp);
-  if (!resp.ok || json.success === false) throw cloudflareError(json, resp.status, 'Cloudflare workers.dev enable failed.');
-  return { url: 'https://' + scriptName + '.' + subdomain + '.workers.dev', enabledByThisRun: Boolean(options.recordPriorState) && !wasEnabled };
+  return { url: 'https://' + scriptName + '.' + subdomain + '.workers.dev', enabledByThisRun: !current.enabled };
 }
 
 // Turn the script's workers.dev route back off (compensation only). The POST
@@ -1229,7 +1257,6 @@ async function deployToCloudflareWorkersWith(
   input: Parameters<typeof deployToCloudflareWorkers>[0],
   requestInit: WorkersRequestInit,
 ): Promise<CloudflareWorkersDeployResult> {
-  const startedAt = Date.now();
   const { config, files, projectId = '', projectName = '', target = 'production', access, priorAccessAppId, customDomain, priorCustomDomain, onBeforeAttach } = input ?? {};
   const priorOwnedCustomDomains = input?.priorOwnedCustomDomains ?? [];
   const priorPendingCustomDomains = input?.priorPendingCustomDomains ?? [];
@@ -1473,7 +1500,7 @@ async function deployToCloudflareWorkersWith(
       steps.push({ name: 'access-app', status: 'done', detail: app.appId });
     }
 
-    await uploadWorkerScript(cfg, scriptName, moduleCode, completionJwt, isCustomModule, startedAt);
+    await uploadWorkerScript(cfg, scriptName, moduleCode, completionJwt, isCustomModule);
     steps.push({ name: 'script', status: 'done' });
     if (accessOn && !accessAppId) {
       // First deploy: the Worker now exists, so its tag is resolvable.
@@ -1506,12 +1533,12 @@ async function deployToCloudflareWorkersWith(
     }
 
     let url = customDomain ? 'https://' + customDomain.hostname : '';
-    // Whether THIS run turned the workers.dev route on. Read only when Access
-    // is on: that is the case where a failed perimeter check must undo the
-    // exposure, and undoing must not turn off a route the user had public.
+    // Whether THIS run turned the workers.dev route on: when Access is on, a
+    // failed perimeter check must undo the exposure, and undoing must not turn
+    // off a route the user had public.
     let subdomainEnabledByThisRun = false;
     if (subdomain) {
-      const enabled = await enableWorkerSubdomain(cfg, scriptName, subdomain, { recordPriorState: accessOn });
+      const enabled = await enableWorkerSubdomain(cfg, scriptName, subdomain);
       url = enabled.url;
       subdomainEnabledByThisRun = enabled.enabledByThisRun;
       steps.push({ name: 'subdomain', status: 'done', detail: url });

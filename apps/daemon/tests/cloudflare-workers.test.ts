@@ -320,15 +320,23 @@ describe('deployToCloudflareWorkers', () => {
     expect(urls[1]).toContain('/workers/domains?service=my-site');
     expect(urls[2]).toContain('assets-upload-session');
     expect(urls[3]).toContain('/workers/assets/upload');
-    expect(urls[4]).toContain('/workers/scripts/my-site');
-    expect(urls[5]).toContain('/workers/scripts/my-site/subdomain');
+    // The script's modified_on is read right before the PUT so a 5xx answer
+    // can be checked against Cloudflare's own clock (never the daemon's).
+    expect(urls[4]).toContain('/workers/scripts?');
+    expect(urls[5]).toContain('/workers/scripts/my-site');
+    expect(calls[5]![1]?.method).toBe('PUT');
+    // The workers.dev config is read before it is replaced.
+    expect(urls[6]).toContain('/workers/scripts/my-site/subdomain');
+    expect(calls[6]![1]?.method ?? 'GET').toBe('GET');
+    expect(urls[7]).toContain('/workers/scripts/my-site/subdomain');
+    expect(calls[7]![1]?.method).toBe('POST');
     expect(out.url).toBe('https://my-site.acct-test.workers.dev');
 
     const uploadCall = calls[3]!;
     expect(uploadCall[1]?.headers).toMatchObject({ Authorization: 'Bearer SESS' });
     expect(uploadCall[1]?.headers).not.toMatchObject({ Authorization: 'Bearer tok-secret' });
 
-    const meta = await metadataOf(calls[4]!);
+    const meta = await metadataOf(calls[5]!);
     expect(meta.bindings).toEqual([{ name: 'ASSETS', type: 'assets' }]);
     expect(meta.keep_bindings).toEqual(['secret_text', 'secret_key']);
     expect(meta.assets).toEqual({ jwt: 'COMPLETION' });
@@ -474,12 +482,44 @@ describe('deployToCloudflareWorkers', () => {
     expect(calls.some((c) => c[1]?.method === 'PUT' && c[0].includes('/workers/domains'))).toBe(true);
   });
 
-  it('treats a 5xx on the script PUT as committed when the script was modified after the deploy started (no JWT retry)', async () => {
+  // The stamps below sit far in the past on purpose: a committed PUT is
+  // recognised by modified_on advancing past the value read BEFORE the first
+  // PUT, not by any relation to the daemon's wall clock.
+  const STAMP_BEFORE_PUT = '2020-01-01T00:00:00Z';
+  const STAMP_AFTER_PUT = '2020-01-01T00:00:01Z';
+
+  function scriptsListReturning(stamps: () => string) {
+    return (url: string, init?: RequestInit) =>
+      (init?.method || 'GET').toUpperCase() === 'GET' && url.includes('/workers/scripts?')
+        ? jsonResponse({ success: true, result: [{ id: 'my-site', tag: 'tag-abc-123', modified_on: stamps() }] })
+        : null;
+  }
+
+  it('treats a 5xx on the script PUT as committed when modified_on advanced past the value read before the PUT (no JWT retry)', async () => {
     let puts = 0;
-    const { calls, fn } = happyFetch({
-      scripts: { success: true, result: [{ id: 'my-site', tag: 'tag-abc-123', modified_on: new Date(Date.now() + 60_000).toISOString() }] },
-    });
+    const { calls, fn } = happyFetch();
+    const scripts = scriptsListReturning(() => (puts === 0 ? STAMP_BEFORE_PUT : STAMP_AFTER_PUT));
     const wrapped = vi.fn(async (url: string, init?: RequestInit) => {
+      if ((init?.method || 'GET').toUpperCase() === 'PUT' && url.endsWith('/workers/scripts/my-site')) {
+        puts += 1;
+        return jsonResponse({ success: false, errors: [{ message: 'upstream timeout' }] }, 502);
+      }
+      return scripts(url, init) ?? fn(url, init);
+    });
+    vi.stubGlobal('fetch', wrapped);
+    const out = await deployToCloudflareWorkers(base);
+    expect(out.status).toBe('ready');
+    expect(puts).toBe(1);
+    expect(calls.some((c) => c[0].endsWith('/subdomain') && c[1]?.method === 'POST')).toBe(true);
+  });
+
+  it('treats a 5xx on the script PUT as committed when no script existed before the PUT and one exists after', async () => {
+    let puts = 0;
+    const { fn } = happyFetch();
+    const wrapped = vi.fn(async (url: string, init?: RequestInit) => {
+      if ((init?.method || 'GET').toUpperCase() === 'GET' && url.includes('/workers/scripts?')) {
+        return jsonResponse({ success: true, result: puts === 0 ? [] : [{ id: 'my-site', tag: 'tag-abc-123', modified_on: STAMP_AFTER_PUT }] });
+      }
       if ((init?.method || 'GET').toUpperCase() === 'PUT' && url.endsWith('/workers/scripts/my-site')) {
         puts += 1;
         return jsonResponse({ success: false, errors: [{ message: 'upstream timeout' }] }, 502);
@@ -490,7 +530,73 @@ describe('deployToCloudflareWorkers', () => {
     const out = await deployToCloudflareWorkers(base);
     expect(out.status).toBe('ready');
     expect(puts).toBe(1);
-    expect(calls.some((c) => c[0].endsWith('/subdomain') && c[1]?.method === 'POST')).toBe(true);
+  });
+
+  it('does not mistake a skewed Cloudflare clock for a committed PUT: an unchanged future modified_on retries and fails closed', async () => {
+    let puts = 0;
+    const { fn } = happyFetch();
+    // Cloudflare's clock runs an hour ahead of the daemon's. Comparing this
+    // stamp to Date.now() would call the PUT committed; comparing it to the
+    // pre-PUT read (identical) must not.
+    const skewed = new Date(Date.now() + 60 * 60_000).toISOString();
+    const scripts = scriptsListReturning(() => skewed);
+    const wrapped = vi.fn(async (url: string, init?: RequestInit) => {
+      if ((init?.method || 'GET').toUpperCase() === 'PUT' && url.endsWith('/workers/scripts/my-site')) {
+        puts += 1;
+        return jsonResponse({ success: false, errors: [{ message: 'upstream timeout' }] }, 502);
+      }
+      return scripts(url, init) ?? fn(url, init);
+    });
+    vi.stubGlobal('fetch', wrapped);
+    await expect(deployToCloudflareWorkers(base)).rejects.toMatchObject({ name: 'DeployError' });
+    expect(puts).toBe(3);
+  });
+
+  it('never claims a 5xx PUT committed when the pre-PUT modified_on could not be read', async () => {
+    let puts = 0;
+    const { fn } = happyFetch();
+    const wrapped = vi.fn(async (url: string, init?: RequestInit) => {
+      if ((init?.method || 'GET').toUpperCase() === 'GET' && url.includes('/workers/scripts?')) {
+        // Every baseline read (before the first PUT) fails; the post-5xx reads
+        // show a fresh stamp that has nothing to be compared against.
+        if (puts === 0) return jsonResponse({ success: false, errors: [{ message: 'list unavailable' }] }, 500);
+        return jsonResponse({ success: true, result: [{ id: 'my-site', tag: 'tag-abc-123', modified_on: new Date().toISOString() }] });
+      }
+      if ((init?.method || 'GET').toUpperCase() === 'PUT' && url.endsWith('/workers/scripts/my-site')) {
+        puts += 1;
+        return jsonResponse({ success: false, errors: [{ message: 'upstream timeout' }] }, 502);
+      }
+      return fn(url, init);
+    });
+    vi.stubGlobal('fetch', wrapped);
+    await expect(deployToCloudflareWorkers(base)).rejects.toMatchObject({ name: 'DeployError' });
+    expect(puts).toBe(3);
+  });
+
+  it('a production deploy turns workers.dev on without switching preview URLs on', async () => {
+    const { calls, fn } = happyFetch({ scriptSubdomainGet: { success: true, result: { enabled: false, previews_enabled: false } } });
+    vi.stubGlobal('fetch', fn);
+    await deployToCloudflareWorkers(base);
+    const posts = calls
+      .filter((c) => c[0].endsWith('/workers/scripts/my-site/subdomain') && c[1]?.method === 'POST')
+      .map((c) => JSON.parse(String(c[1]?.body)) as { enabled: boolean; previews_enabled: boolean });
+    // previews_enabled is an exposure of its own (preview URLs resolve) that a
+    // production deploy never withdraws, so it must not create it.
+    expect(posts).toEqual([{ enabled: true, previews_enabled: false }]);
+    const readPos = calls.findIndex((c) => c[0].endsWith('/workers/scripts/my-site/subdomain') && (c[1]?.method ?? 'GET') === 'GET');
+    const writePos = calls.findIndex((c) => c[0].endsWith('/workers/scripts/my-site/subdomain') && c[1]?.method === 'POST');
+    expect(readPos).toBeGreaterThanOrEqual(0);
+    expect(writePos).toBeGreaterThan(readPos);
+  });
+
+  it('a production deploy leaves preview URLs on when they already were', async () => {
+    const { calls, fn } = happyFetch({ scriptSubdomainGet: { success: true, result: { enabled: false, previews_enabled: true } } });
+    vi.stubGlobal('fetch', fn);
+    await deployToCloudflareWorkers(base);
+    const posts = calls
+      .filter((c) => c[0].endsWith('/workers/scripts/my-site/subdomain') && c[1]?.method === 'POST')
+      .map((c) => JSON.parse(String(c[1]?.body)) as { enabled: boolean; previews_enabled: boolean });
+    expect(posts).toEqual([{ enabled: true, previews_enabled: true }]);
   });
 
   it('retries the script PUT after a 5xx only when the script was NOT modified, then fails closed', async () => {

@@ -143,14 +143,15 @@ export function registerCloudflareRoutes(
   // refresh token does not stay valid with nobody holding it. Never fails the
   // caller: a transport failure, a timeout, or a refusal is logged and the
   // discard proceeds regardless.
-  const revokeDiscardedGrant = async (
-    tokenResp: CompleteCloudflareAuthResult,
+  const revokeGrantBestEffort = async (
+    grant: { refreshToken?: string; accessToken?: string; clientId?: string },
     fetchImpl: typeof fetch,
+    what: string,
   ): Promise<void> => {
-    const token = tokenResp.refresh_token || tokenResp.access_token;
+    const token = grant.refreshToken || grant.accessToken;
     if (!token) return;
-    const tokenTypeHint = tokenResp.refresh_token ? 'refresh_token' : 'access_token';
-    const clientId = (tokenResp.clientId ?? '').trim();
+    const tokenTypeHint = grant.refreshToken ? 'refresh_token' : 'access_token';
+    const clientId = (grant.clientId ?? '').trim();
     try {
       const ok = await revokeCloudflareToken({
         token,
@@ -159,11 +160,38 @@ export function registerCloudflareRoutes(
         fetchImpl,
         signal: AbortSignal.timeout(CLOUDFLARE_REVOKE_TIMEOUT_MS),
       });
-      if (!ok) console.warn('[cloudflare-oauth] revoke of discarded grant refused by Cloudflare');
+      if (!ok) console.warn(`[cloudflare-oauth] revoke of ${what} grant refused by Cloudflare`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.warn('[cloudflare-oauth] revoke of discarded grant failed:', msg);
+      console.warn(`[cloudflare-oauth] revoke of ${what} grant failed:`, msg);
     }
+  };
+
+  const revokeDiscardedGrant = (tokenResp: CompleteCloudflareAuthResult, fetchImpl: typeof fetch): Promise<void> =>
+    revokeGrantBestEffort(
+      {
+        ...(tokenResp.refresh_token ? { refreshToken: tokenResp.refresh_token } : {}),
+        accessToken: tokenResp.access_token,
+        ...(tokenResp.clientId ? { clientId: tokenResp.clientId } : {}),
+      },
+      fetchImpl,
+      'discarded',
+    );
+
+  // Whether a credential a successful reconnect just replaced holds a grant of
+  // its own that must be revoked: one that still exists, and whose token is
+  // not the very token now stored (a provider that hands the same refresh
+  // token back would otherwise have its live grant revoked).
+  const supersededGrantOf = (
+    prev: StoredCloudflareOAuthToken | null,
+    stored: StoredCloudflareOAuthToken,
+  ): StoredCloudflareOAuthToken | null => {
+    if (!prev) return null;
+    const prevToken = prev.refreshToken || prev.accessToken;
+    const storedToken = stored.refreshToken || stored.accessToken;
+    if (!prevToken || prevToken === storedToken) return null;
+    if (prev.refreshToken && prev.refreshToken === stored.refreshToken) return null;
+    return prev;
   };
 
   const persistCredential = async (
@@ -181,18 +209,18 @@ export function registerCloudflareRoutes(
     // connects; the deploy then falls back to a live lookup and fails closed.
     const email = await fetchCloudflareUserEmail(result.access_token, fetchImpl);
     if (email) stored.email = email;
-    return runCredentialMutation(async () => {
-      if (attemptGeneration !== oauthAttemptGeneration) return false;
+    const committed = await runCredentialMutation(async (): Promise<{ ok: boolean; superseded: StoredCloudflareOAuthToken | null }> => {
+      if (attemptGeneration !== oauthAttemptGeneration) return { ok: false, superseded: null };
       const prev = await getCloudflareOAuthToken(dataDir);
       const ok = await setCloudflareOAuthTokenGuarded(
         dataDir,
         stored,
         () => attemptGeneration === oauthAttemptGeneration,
       );
-      if (!ok) return false;
+      if (!ok) return { ok: false, superseded: null };
       try {
         await commitCloudflareOAuthMode({ clientId: result.clientId, redirectUri: result.redirectUri });
-        return true;
+        return { ok: true, superseded: supersededGrantOf(prev, stored) };
       } catch (err) {
         // The token write already landed but the config commit failed — restore
         // the prior token so a previously working credential stays usable instead
@@ -206,6 +234,12 @@ export function registerCloudflareRoutes(
         throw err;
       }
     });
+    // A reconnect that replaced a working credential leaves the OLD grant
+    // valid at Cloudflare with nobody holding it. Revoke it now that the new
+    // one is committed — best-effort and outside the mutation lock, so a slow
+    // revoke endpoint never blocks a concurrent disconnect.
+    if (committed.ok && committed.superseded) await revokeGrantBestEffort(committed.superseded, fetchImpl, 'superseded');
+    return committed.ok;
   };
 
   const stopActiveListener = async () => {

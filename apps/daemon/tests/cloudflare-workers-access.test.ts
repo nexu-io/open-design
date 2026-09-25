@@ -1013,20 +1013,20 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
     expect(caught?.attachedCustomDomains).toEqual([{ id: 'dom-1', hostname: 'app.example.com' }]);
   });
 
-  it('reads the workers.dev state before enabling only when Access is on', async () => {
+  it('reads the workers.dev state before enabling so previews_enabled is preserved', async () => {
     const { calls, fn } = accessFetch();
     vi.stubGlobal('fetch', fn);
-    await deployToCloudflareWorkers({ ...base, access: { enabled: false } });
-    // Access-off deploy must not read the subdomain state first.
-    expect(calls.some((c) => (c[1]?.method || 'GET') === 'GET' && c[0].endsWith('/workers/scripts/my-site/subdomain'))).toBe(false);
-    const beforeSecond = calls.length;
-    await deployToCloudflareWorkers({ ...base, access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } } });
-    // Scope to the Access-on deploy only: the state GET must precede the enable POST.
-    const second = calls.slice(beforeSecond);
-    const getPos = second.findIndex((c) => (c[1]?.method || 'GET') === 'GET' && c[0].endsWith('/workers/scripts/my-site/subdomain'));
-    const postPos = second.findIndex((c) => c[1]?.method === 'POST' && c[0].endsWith('/workers/scripts/my-site/subdomain'));
-    expect(getPos).toBeGreaterThanOrEqual(0);
-    expect(postPos).toBeGreaterThan(getPos);
+    // Both Access on and off read the subdomain state first so the enable POST
+    // can preserve the user's previews_enabled rather than force it on.
+    for (const access of [false, true]) {
+      const before = calls.length;
+      await deployToCloudflareWorkers({ ...base, access: access ? { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } } : undefined });
+      const fresh = calls.slice(before);
+      const getPos = fresh.findIndex((c) => (c[1]?.method || 'GET') === 'GET' && c[0].endsWith('/workers/scripts/my-site/subdomain'));
+      const postPos = fresh.findIndex((c) => c[1]?.method === 'POST' && c[0].endsWith('/workers/scripts/my-site/subdomain'));
+      expect(getPos).toBeGreaterThanOrEqual(0);
+      expect(postPos).toBeGreaterThan(getPos);
+    }
   });
 
   it('keeps probing a URL that is still propagating instead of failing on the first non-Access answer', async () => {

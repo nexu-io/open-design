@@ -1714,6 +1714,10 @@ describe('deploy provider routes', () => {
         }
         if (url.includes('/workers/scripts/') && method === 'PUT') return json({ success: true, result: {} });
         if (url.includes('/subdomain') && method === 'POST') return json({ success: true, result: { enabled: true } });
+        // The deploy reads the script's modified_on before its PUT and the
+        // workers.dev config before replacing it.
+        if (method === 'GET' && url.includes('/workers/scripts?')) return json({ success: true, result: [] });
+        if (method === 'GET' && url.endsWith('/subdomain')) return json({ success: true, result: { enabled: false, previews_enabled: false } });
         throw new Error(`Unexpected Cloudflare fetch: ${method} ${url}`);
       });
       vi.stubGlobal('fetch', fetchMock);
@@ -2162,6 +2166,10 @@ describe('deploy provider routes', () => {
         }
         if (url.includes('/workers/scripts/') && method === 'PUT') return json({ success: true, result: {} });
         if (url.includes('/subdomain') && method === 'POST') return json({ success: true, result: { enabled: true } });
+        // The deploy reads the script's modified_on before its PUT and the
+        // workers.dev config before replacing it.
+        if (method === 'GET' && url.includes('/workers/scripts?')) return json({ success: true, result: [] });
+        if (method === 'GET' && url.endsWith('/subdomain')) return json({ success: true, result: { enabled: false, previews_enabled: false } });
         throw new Error(`Unexpected Cloudflare fetch: ${method} ${url}`);
       });
       vi.stubGlobal('fetch', fetchMock);
@@ -2271,6 +2279,10 @@ describe('deploy provider routes', () => {
         }
         if (url.includes('/workers/scripts/') && method === 'PUT') return json({ success: true, result: {} });
         if (url.includes('/subdomain') && method === 'POST') return json({ success: true, result: { enabled: true } });
+        // The deploy reads the script's modified_on before its PUT and the
+        // workers.dev config before replacing it.
+        if (method === 'GET' && url.includes('/workers/scripts?')) return json({ success: true, result: [] });
+        if (method === 'GET' && url.endsWith('/subdomain')) return json({ success: true, result: { enabled: false, previews_enabled: false } });
         throw new Error(`Unexpected Cloudflare fetch: ${method} ${url}`);
       });
       vi.stubGlobal('fetch', fetchMock);
@@ -2389,6 +2401,10 @@ describe('deploy provider routes', () => {
         }
         if (url.includes('/workers/scripts/') && method === 'PUT') return json({ success: true, result: {} });
         if (url.includes('/subdomain') && method === 'POST') return json({ success: true, result: { enabled: true } });
+        // The deploy reads the script's modified_on before its PUT and the
+        // workers.dev config before replacing it.
+        if (method === 'GET' && url.includes('/workers/scripts?')) return json({ success: true, result: [] });
+        if (method === 'GET' && url.endsWith('/subdomain')) return json({ success: true, result: { enabled: false, previews_enabled: false } });
         throw new Error(`Unexpected Cloudflare fetch: ${method} ${url}`);
       });
       vi.stubGlobal('fetch', fetchMock);

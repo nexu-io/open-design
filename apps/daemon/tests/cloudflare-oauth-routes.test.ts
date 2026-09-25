@@ -366,6 +366,118 @@ describe('cloudflare-oauth routes', () => {
     }
   });
 
+  it('a successful reconnect revokes the grant it replaced, and a failed revoke does not fail the connect', async () => {
+    const dataDir = cloudflareOAuthTokensDir();
+    const realFetch = globalThis.fetch;
+    const revokes: string[] = [];
+    let storedAtRevoke: string | null | undefined;
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.stubGlobal('fetch', async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('oauth2/revoke')) {
+        storedAtRevoke = (await getCloudflareOAuthToken(dataDir))?.accessToken;
+        revokes.push(String(init?.body));
+        throw new TypeError('fetch failed');
+      }
+      if (url.includes('oauth2/token')) {
+        return new Response(
+          JSON.stringify({ access_token: 'acc-new', token_type: 'Bearer', refresh_token: 'ref-new', expires_in: 3600 }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return realFetch(input as never, init as never);
+    });
+    try {
+      await setCloudflareOAuthToken(dataDir, {
+        accessToken: 'acc-old',
+        tokenType: 'Bearer',
+        refreshToken: 'ref-old',
+        clientId: 'client-old',
+        generation: 0,
+        savedAt: Date.now(),
+      });
+      const startResp = await fetch(`${app.baseUrl}/api/cloudflare/oauth/start`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ clientId: 'client-abc', redirectUri: 'http://127.0.0.1:56122/callback' }),
+      });
+      expect(startResp.status).toBe(200);
+      const { state } = (await startResp.json()) as { state: string };
+      const completeResp = await fetch(`${app.baseUrl}/api/cloudflare/oauth/complete`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ state, code: 'AUTHCODE' }),
+      });
+      // The revoke of the OLD grant blew up; the reconnect still succeeded.
+      expect(completeResp.status).toBe(200);
+      expect(await getCloudflareOAuthToken(dataDir)).toMatchObject({ accessToken: 'acc-new', refreshToken: 'ref-new' });
+      // The previous credential is not merely overwritten: its refresh token
+      // (which keeps that grant alive at Cloudflare) is revoked under the
+      // client that issued it, only after the new credential is on disk.
+      expect(revokes).toHaveLength(1);
+      const form = new URLSearchParams(revokes[0]!);
+      expect(form.get('token')).toBe('ref-old');
+      expect(form.get('token_type_hint')).toBe('refresh_token');
+      expect(form.get('client_id')).toBe('client-old');
+      expect(storedAtRevoke).toBe('acc-new');
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('revoke of superseded grant failed'), expect.stringContaining('fetch failed'));
+    } finally {
+      warnSpy.mockRestore();
+      vi.unstubAllGlobals();
+      await clearCloudflareOAuthToken(dataDir);
+      await rm(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), { force: true });
+    }
+  });
+
+  it('a reconnect that is handed the same refresh token back does not revoke it', async () => {
+    const dataDir = cloudflareOAuthTokensDir();
+    const realFetch = globalThis.fetch;
+    const revokes: string[] = [];
+    vi.stubGlobal('fetch', async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('oauth2/revoke')) {
+        revokes.push(String(init?.body));
+        return new Response('', { status: 200 });
+      }
+      if (url.includes('oauth2/token')) {
+        return new Response(
+          JSON.stringify({ access_token: 'acc-rotated', token_type: 'Bearer', refresh_token: 'ref-same', expires_in: 3600 }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return realFetch(input as never, init as never);
+    });
+    try {
+      await setCloudflareOAuthToken(dataDir, {
+        accessToken: 'acc-old',
+        tokenType: 'Bearer',
+        refreshToken: 'ref-same',
+        clientId: 'client-abc',
+        generation: 0,
+        savedAt: Date.now(),
+      });
+      const startResp = await fetch(`${app.baseUrl}/api/cloudflare/oauth/start`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ clientId: 'client-abc', redirectUri: 'http://127.0.0.1:56122/callback' }),
+      });
+      const { state } = (await startResp.json()) as { state: string };
+      const completeResp = await fetch(`${app.baseUrl}/api/cloudflare/oauth/complete`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ state, code: 'AUTHCODE' }),
+      });
+      expect(completeResp.status).toBe(200);
+      expect(await getCloudflareOAuthToken(dataDir)).toMatchObject({ accessToken: 'acc-rotated', refreshToken: 'ref-same' });
+      // Revoking `ref-same` would kill the grant that was just stored.
+      expect(revokes).toEqual([]);
+    } finally {
+      vi.unstubAllGlobals();
+      await clearCloudflareOAuthToken(dataDir);
+      await rm(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), { force: true });
+    }
+  });
+
   it('disconnect revokes the grant at Cloudflare (refresh token + client_id) before clearing the stored token', async () => {
     const dataDir = cloudflareOAuthTokensDir();
     const realFetch = globalThis.fetch;
