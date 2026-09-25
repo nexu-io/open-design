@@ -1957,9 +1957,17 @@ export async function fetchCloudflareWorkersOAuthStart(
 
 export interface WebCloudflareAuthStatus {
   connected: boolean;
-  expiresAt?: number;
-  scope?: string;
-  accountId?: string;
+  expiresAt?: number | null;
+  scope?: string | null;
+  accountId?: string | null;
+  /** Epoch-ms the token record was persisted. Changes on every (re)connect, so
+   * it is the only signal that distinguishes a fresh grant from the stale
+   * record that `connected: true` also reports during a Reconnect. */
+  savedAt?: number | null;
+  /** True when the daemon holds a refresh token and will renew an expired
+   * access token silently on the next deploy; expiry then does not require a
+   * Reconnect and must not disable deploy. */
+  refreshable?: boolean | null;
 }
 
 export async function fetchCloudflareAuthStatus(): Promise<WebCloudflareAuthStatus | null> {

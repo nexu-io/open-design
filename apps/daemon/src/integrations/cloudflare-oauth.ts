@@ -53,6 +53,9 @@ export const CLOUDFLARE_OAUTH_TOKEN_ENDPOINT =
  *   - page.write             Cloudflare Pages — write
  *   - zone.read              Zone — read
  *   - access.write           Access — apps and policies — write
+ *   - user-details.read      User Details — read (GET /user, so the connect
+ *                            flow can record the account email the Access
+ *                            "only me" rule needs; see CLOUDFLARE_USER_DETAILS_READ_SCOPE)
  *   - offline_access         OIDC scope that grants a refresh_token (not a
  *                            permission scope — see CLOUDFLARE_OFFLINE_ACCESS_SCOPE)
  *
@@ -72,8 +75,43 @@ export const CLOUDFLARE_OAUTH_SCOPES: string[] = [
   'zone.read',
   'access.write',
   'access-idp.write',
+  'user-details.read',
   'offline_access',
 ];
+
+/** Permission scope for `GET /user` ("User Details Read"). Cloudflare's OIDC
+ * layer cannot supply the email instead: its discovery document lists only
+ * `openid` / `offline_access` as scopes and `sub` as the sole claim, so the
+ * email must come from the API with this scope. The OAuth CLIENT must be
+ * configured with it, like every other scope in the list. */
+export const CLOUDFLARE_USER_DETAILS_READ_SCOPE = 'user-details.read';
+
+/** `GET /user` — the caller's own Cloudflare user record. */
+export const CLOUDFLARE_USER_ENDPOINT = 'https://api.cloudflare.com/client/v4/user';
+
+/**
+ * Resolve the email of the user an access token belongs to. Best-effort:
+ * resolves to '' on any transport/permission/shape failure so a connect that
+ * lacks `user-details.read` still completes (the Access "only me" rule then
+ * falls back to a live lookup at deploy time and fails closed there).
+ */
+export async function fetchCloudflareUserEmail(
+  accessToken: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<string> {
+  try {
+    const resp = await fetchImpl(CLOUDFLARE_USER_ENDPOINT, {
+      headers: { Authorization: 'Bearer ' + accessToken },
+    });
+    if (!resp.ok) return '';
+    const json = (await resp.json()) as { success?: unknown; result?: { email?: unknown } | null };
+    if (json?.success !== true) return '';
+    const email = json.result?.email;
+    return typeof email === 'string' ? email.trim() : '';
+  } catch {
+    return '';
+  }
+}
 
 /** OIDC scope that asks Cloudflare to issue a refresh_token alongside the
  * access_token. It is NOT a permission scope — requesting it never widens

@@ -455,6 +455,30 @@ describe('od cloudflare CLI', () => {
     expect(JSON.parse(stub.requests[0]?.body ?? '{}')).toEqual({ providerId: 'cloudflare-workers', accountId: 'acct-1', token: 'tok-1' });
   });
 
+  it('rejects flags that do not apply to the subcommand instead of silently ignoring them', async () => {
+    const connect = await runCli(['cloudflare', 'connect', '--client-id', 'c1', '--account-id', 'abc', '--token', 'xyz', '--daemon-url', stub.baseUrl]);
+    expect(connect.code).toBe(2);
+    expect(connect.stderr).toContain('unknown flag for "connect": --account-id');
+    expect(stub.requests).toHaveLength(0);
+
+    const status = await runCli(['cloudflare', 'status', '--credential-mode', 'oauth', '--daemon-url', stub.baseUrl]);
+    expect(status.code).toBe(2);
+    expect(status.stderr).toContain('unknown flag for "status": --credential-mode');
+    expect(stub.requests).toHaveLength(0);
+
+    const disconnect = await runCli(['cloudflare', 'disconnect', '--token', 'x', '--daemon-url', stub.baseUrl]);
+    expect(disconnect.code).toBe(2);
+    expect(disconnect.stderr).toContain('unknown flag for "disconnect": --token');
+    expect(stub.requests).toHaveLength(0);
+  });
+
+  it('documents --credential-mode in the usage text', async () => {
+    const result = await runCli(['cloudflare', '--help']);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain('--credential-mode <mode>');
+    expect(result.stdout).toContain('config options');
+  });
+
   it('config rejects an invalid --credential-mode locally and makes no request', async () => {
     const result = await runCli(['cloudflare', 'config', '--credential-mode', 'ouath', '--daemon-url', stub.baseUrl]);
     expect(result.code).toBe(2);

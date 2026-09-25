@@ -562,10 +562,28 @@ async function refreshCloudflareOAuthAccessToken(
     );
   }
 
-  const refreshed = await refreshCloudflareToken({
-    clientId,
-    refreshToken: current.refreshToken,
-  });
+  let refreshed: Awaited<ReturnType<typeof refreshCloudflareToken>>;
+  try {
+    refreshed = await refreshCloudflareToken({
+      clientId,
+      refreshToken: current.refreshToken,
+    });
+  } catch (err) {
+    // A sibling process on the same data dir may have refreshed first. When
+    // Cloudflare rotated the refresh token, THIS call fails `invalid_grant`
+    // even though a fresh credential is already on disk — so re-read before
+    // declaring the grant dead. A newer, unexpired generation means the
+    // sibling won: adopt its token instead of demanding a reconnect.
+    const latest = await getCloudflareOAuthToken(dataDir);
+    if (
+      latest &&
+      (latest.generation ?? 0) > (current.generation ?? 0) &&
+      !isCloudflareOAuthTokenExpired(latest, Date.now(), CLOUDFLARE_OAUTH_EXPIRY_SKEW_MS)
+    ) {
+      return latest.accessToken;
+    }
+    throw classifyCloudflareRefreshFailure(err);
+  }
 
   const stored: StoredCloudflareOAuthToken = {
     accessToken: refreshed.access_token,
@@ -576,6 +594,7 @@ async function refreshCloudflareOAuthAccessToken(
   };
   if (current.redirectUri) stored.redirectUri = current.redirectUri;
   if (current.accountId) stored.accountId = current.accountId;
+  if (current.email) stored.email = current.email;
   if (refreshed.refresh_token) stored.refreshToken = refreshed.refresh_token;
   else if (current.refreshToken) stored.refreshToken = current.refreshToken;
   if (refreshed.scope) stored.scope = refreshed.scope;
@@ -608,6 +627,35 @@ async function refreshCloudflareOAuthAccessToken(
     );
   }
   return stored.accessToken;
+}
+
+/** Map a token-endpoint refresh failure onto a DeployError the routes already
+ * understand. The OAuth client throws a plain Error ("token endpoint rejected
+ * request: HTTP 400 … invalid_grant"), which used to surface as a generic 400
+ * BAD_REQUEST with the raw body — so a dead refresh token never told the user
+ * to reconnect. A 4xx from the token endpoint means the grant is gone
+ * (revoked, rotated, client changed): CFW_OAUTH_RECONNECT_REQUIRED. Anything
+ * else (network, 5xx) is a transient upstream failure and must NOT prompt a
+ * reconnect that would discard a still-valid grant. */
+export function classifyCloudflareRefreshFailure(err: unknown): DeployError {
+  if (err instanceof DeployError) return err;
+  const detail = err instanceof Error ? err.message : String(err);
+  const httpStatus = /\bHTTP (\d{3})\b/.exec(detail);
+  const status = httpStatus ? Number(httpStatus[1]) : 0;
+  if (status >= 400 && status < 500 && status !== 429) {
+    return new DeployError(
+      'Cloudflare rejected the OAuth refresh (' + detail + ') — reconnect Cloudflare.',
+      401,
+      undefined,
+      'CFW_OAUTH_RECONNECT_REQUIRED',
+    );
+  }
+  return new DeployError(
+    'Cloudflare OAuth token refresh failed: ' + detail,
+    502,
+    undefined,
+    'CFW_OAUTH_REFRESH_FAILED',
+  );
 }
 
 export async function readDeployConfig(providerId: DeployProviderId = VERCEL_PROVIDER_ID) {

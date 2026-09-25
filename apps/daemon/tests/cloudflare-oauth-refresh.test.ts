@@ -6,7 +6,7 @@
 //   (b) a token response that carries a refresh_token persists it to the record
 //   (c) a refresh call reuses refreshCloudflareToken with the stored refreshToken
 
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -24,10 +24,12 @@ import {
   getCloudflareOAuthToken,
   sanitizeCloudflareOAuthTokensFile,
   setCloudflareOAuthToken,
+  setCloudflareOAuthTokenIfGenerationMatches,
   type StoredCloudflareOAuthToken,
 } from '../src/integrations/cloudflare-tokens.js';
 import { PendingAuthCache } from '../src/mcp-oauth.js';
 import {
+  classifyCloudflareRefreshFailure,
   cloudflareOAuthTokensDir,
   configureCloudflareWorkersDataDir,
   getCloudflareAccessToken,
@@ -288,6 +290,212 @@ describe('refresh vs disconnect', () => {
         code: 'CFW_OAUTH_RECONNECT_REQUIRED',
       });
       expect(await getCloudflareOAuthToken(cloudflareOAuthTokensDir())).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('token file without lastGeneration', () => {
+  it('sanitize seeds lastGeneration from the token, but never overrides an explicit value', () => {
+    const token = { accessToken: 'acc', tokenType: 'Bearer', generation: 3, savedAt: 1 };
+    expect(sanitizeCloudflareOAuthTokensFile({ token }).lastGeneration).toBe(3);
+    expect(sanitizeCloudflareOAuthTokensFile({ lastGeneration: 7, token }).lastGeneration).toBe(7);
+    expect(sanitizeCloudflareOAuthTokensFile({}).lastGeneration).toBeUndefined();
+  });
+
+  it('lets the compare-and-set refresh persist against a legacy file', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'od-cf-legacy-file-'));
+    try {
+      await writeFile(
+        path.join(dataDir, 'cloudflare-oauth-tokens.json'),
+        JSON.stringify({
+          token: { accessToken: 'expired', tokenType: 'Bearer', refreshToken: 'ref', generation: 3, savedAt: 1, expiresAt: 1 },
+        }),
+      );
+      const current = await getCloudflareOAuthToken(dataDir);
+      expect(current?.generation).toBe(3);
+      // Before the seed this always returned false (undefined !== 3), so the
+      // expired access token was handed out forever.
+      const ok = await setCloudflareOAuthTokenIfGenerationMatches(
+        dataDir,
+        { accessToken: 'fresh', tokenType: 'Bearer', refreshToken: 'ref-2', generation: 0, savedAt: Date.now() },
+        current!.generation,
+      );
+      expect(ok).toBe(true);
+      expect((await getCloudflareOAuthToken(dataDir))?.accessToken).toBe('fresh');
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('refresh failure classification', () => {
+  it('maps a token-endpoint 4xx to reconnect and anything else to a transient upstream failure', () => {
+    expect(
+      classifyCloudflareRefreshFailure(new Error('token endpoint rejected request: HTTP 400 Bad Request {"error":"invalid_grant"}')),
+    ).toMatchObject({ status: 401, code: 'CFW_OAUTH_RECONNECT_REQUIRED' });
+    expect(
+      classifyCloudflareRefreshFailure(new Error('token endpoint rejected request: HTTP 503 Service Unavailable')),
+    ).toMatchObject({ status: 502, code: 'CFW_OAUTH_REFRESH_FAILED' });
+    expect(classifyCloudflareRefreshFailure(new TypeError('fetch failed'))).toMatchObject({
+      status: 502,
+      code: 'CFW_OAUTH_REFRESH_FAILED',
+    });
+  });
+
+  it('a dead refresh token surfaces as 401 CFW_OAUTH_RECONNECT_REQUIRED, not a raw 400', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'od-cf-refresh-dead-'));
+    configureCloudflareWorkersDataDir(dir);
+    await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), {
+      accessToken: 'expired-token',
+      tokenType: 'Bearer',
+      refreshToken: 'ref-revoked',
+      clientId: 'client-abc',
+      expiresAt: Date.now() - 1000,
+      generation: 0,
+      savedAt: Date.now(),
+    });
+    await writeCloudflareWorkersConfig({ credentialMode: 'oauth', accountId: 'acct_test', clientId: 'client-abc' });
+    const realFetch = globalThis.fetch;
+    vi.stubGlobal('fetch', async (input: unknown, init?: unknown) => {
+      if (String(input).includes('oauth2/token')) {
+        return new Response(JSON.stringify({ error: 'invalid_grant' }), {
+          status: 400,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return realFetch(input as never, init as never);
+    });
+    try {
+      await expect(getCloudflareAccessToken()).rejects.toMatchObject({
+        status: 401,
+        code: 'CFW_OAUTH_RECONNECT_REQUIRED',
+      });
+    } finally {
+      vi.unstubAllGlobals();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('refresh vs sibling process', () => {
+  function expiredRecord(): StoredCloudflareOAuthToken {
+    return {
+      accessToken: 'expired-token',
+      tokenType: 'Bearer',
+      refreshToken: 'ref-rotated-away',
+      clientId: 'client-abc',
+      email: 'me@example.com',
+      expiresAt: Date.now() - 1000,
+      generation: 0,
+      savedAt: Date.now(),
+    };
+  }
+
+  it("adopts a sibling's newer token when the refresh is rejected after the sibling rotated the grant", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'od-cf-refresh-sibling-'));
+    configureCloudflareWorkersDataDir(dir);
+    const dataDir = cloudflareOAuthTokensDir();
+    await setCloudflareOAuthToken(dataDir, expiredRecord());
+    await writeCloudflareWorkersConfig({ credentialMode: 'oauth', accountId: 'acct_test', clientId: 'client-abc' });
+    const realFetch = globalThis.fetch;
+    vi.stubGlobal('fetch', async (input: unknown, init?: unknown) => {
+      if (String(input).includes('oauth2/token')) {
+        // A sibling process on the same data dir refreshed first: its record is
+        // on disk with a newer generation, and Cloudflare now rejects OUR
+        // (already-consumed) refresh token.
+        await setCloudflareOAuthToken(dataDir, {
+          ...expiredRecord(),
+          accessToken: 'sibling-fresh',
+          refreshToken: 'ref-sibling',
+          expiresAt: Date.now() + 3_600_000,
+        });
+        return new Response(JSON.stringify({ error: 'invalid_grant' }), {
+          status: 400,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return realFetch(input as never, init as never);
+    });
+    try {
+      await expect(getCloudflareAccessToken()).resolves.toBe('sibling-fresh');
+      // The sibling's record is left untouched (no clobber, no reconnect).
+      expect(await getCloudflareOAuthToken(dataDir)).toMatchObject({ accessToken: 'sibling-fresh', refreshToken: 'ref-sibling' });
+    } finally {
+      vi.unstubAllGlobals();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('still demands a reconnect when the only newer record is itself expired', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'od-cf-refresh-sibling-expired-'));
+    configureCloudflareWorkersDataDir(dir);
+    const dataDir = cloudflareOAuthTokensDir();
+    await setCloudflareOAuthToken(dataDir, expiredRecord());
+    await writeCloudflareWorkersConfig({ credentialMode: 'oauth', accountId: 'acct_test', clientId: 'client-abc' });
+    const realFetch = globalThis.fetch;
+    vi.stubGlobal('fetch', async (input: unknown, init?: unknown) => {
+      if (String(input).includes('oauth2/token')) {
+        await setCloudflareOAuthToken(dataDir, { ...expiredRecord(), accessToken: 'sibling-stale', expiresAt: Date.now() - 1 });
+        return new Response(JSON.stringify({ error: 'invalid_grant' }), {
+          status: 400,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return realFetch(input as never, init as never);
+    });
+    try {
+      await expect(getCloudflareAccessToken()).rejects.toMatchObject({ status: 401, code: 'CFW_OAUTH_RECONNECT_REQUIRED' });
+    } finally {
+      vi.unstubAllGlobals();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('stored account email', () => {
+  it('sanitize keeps the email captured at connect time', () => {
+    const file = sanitizeCloudflareOAuthTokensFile({
+      token: { accessToken: 'acc', tokenType: 'Bearer', email: ' me@example.com ', generation: 1, savedAt: 1 },
+      lastGeneration: 1,
+    });
+    expect(file.token?.email).toBe('me@example.com');
+    const noEmail = sanitizeCloudflareOAuthTokensFile({
+      token: { accessToken: 'acc', tokenType: 'Bearer', email: 42, generation: 1, savedAt: 1 },
+    });
+    expect(noEmail.token).not.toHaveProperty('email');
+  });
+
+  it('a refresh carries the email forward onto the rotated record', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'od-cf-refresh-email-'));
+    configureCloudflareWorkersDataDir(dir);
+    const dataDir = cloudflareOAuthTokensDir();
+    await setCloudflareOAuthToken(dataDir, {
+      accessToken: 'expired-token',
+      tokenType: 'Bearer',
+      refreshToken: 'ref-token',
+      clientId: 'client-abc',
+      email: 'me@example.com',
+      expiresAt: Date.now() - 1000,
+      generation: 0,
+      savedAt: Date.now(),
+    });
+    await writeCloudflareWorkersConfig({ credentialMode: 'oauth', accountId: 'acct_test', clientId: 'client-abc' });
+    const realFetch = globalThis.fetch;
+    vi.stubGlobal('fetch', async (input: unknown, init?: unknown) => {
+      if (String(input).includes('oauth2/token')) {
+        return new Response(
+          JSON.stringify({ access_token: 'fresh', token_type: 'Bearer', refresh_token: 'ref-2', expires_in: 3600 }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return realFetch(input as never, init as never);
+    });
+    try {
+      await expect(getCloudflareAccessToken()).resolves.toBe('fresh');
+      expect(await getCloudflareOAuthToken(dataDir)).toMatchObject({ accessToken: 'fresh', email: 'me@example.com' });
     } finally {
       vi.unstubAllGlobals();
       await rm(dir, { recursive: true, force: true });

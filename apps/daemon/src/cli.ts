@@ -283,7 +283,15 @@ const DEPLOY_STRING_FLAGS = new Set([
   'workspace', 'workspace-member',
 ]);
 const DEPLOY_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
-const CLOUDFLARE_STRING_FLAGS = new Set(['daemon-url', 'client-id', 'redirect-uri', 'token', 'account-id', 'credential-mode']);
+// Per-subcommand flag sets: `od cloudflare connect --token x` used to parse
+// fine and silently drop the token (nothing sent it anywhere). Anything not in
+// the subcommand's own set is an error, not a no-op.
+const CLOUDFLARE_STRING_FLAGS_BY_SUB = {
+  status: new Set(['daemon-url']),
+  disconnect: new Set(['daemon-url']),
+  connect: new Set(['daemon-url', 'client-id', 'redirect-uri']),
+  config: new Set(['daemon-url', 'client-id', 'redirect-uri', 'token', 'account-id', 'credential-mode']),
+};
 const CLOUDFLARE_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 // `od automation …` mirrors the Automations tab. Same surface, same
 // /api/routines store. The CLI form is the embeddability contract:
@@ -12149,18 +12157,33 @@ Subcommands:
 
 Common options:
   --daemon-url <url>        OpenDesign daemon HTTP base.
-  --client-id <id>          Cloudflare OAuth client id (connect / config).
-  --redirect-uri <uri>      Cloudflare OAuth redirect URI (connect / config).
-  --account-id <id>         Cloudflare account id (config).
-  --token <token>           Cloudflare API token (config).
-  --json                    Emit raw JSON response.`);
+  --json                    Emit raw JSON response.
+
+connect options:
+  --client-id <id>          Cloudflare OAuth client id (required).
+  --redirect-uri <uri>      Cloudflare OAuth redirect URI.
+
+config options (any of these switches the call from GET to PUT):
+  --account-id <id>         Cloudflare account id.
+  --token <token>           Cloudflare API token.
+  --client-id <id>          Cloudflare OAuth client id.
+  --redirect-uri <uri>      Cloudflare OAuth redirect URI.
+  --credential-mode <mode>  "token" (static API token) or "oauth" (connected OAuth token).
+
+Flags that do not apply to a subcommand are rejected (exit 2), never ignored.`);
     return;
+  }
+  const stringFlags = CLOUDFLARE_STRING_FLAGS_BY_SUB[sub];
+  if (!stringFlags) {
+    console.error(`unknown subcommand: od cloudflare ${sub}`);
+    process.exit(2);
   }
   let flags;
   try {
-    flags = parseFlags(rest, { string: CLOUDFLARE_STRING_FLAGS, boolean: CLOUDFLARE_BOOLEAN_FLAGS });
+    flags = parseFlags(rest, { string: stringFlags, boolean: CLOUDFLARE_BOOLEAN_FLAGS });
   } catch (err) {
-    console.error(err.message);
+    const m = /^unknown flag: (--[^.]+)\./.exec(err.message);
+    console.error(m ? `unknown flag for "${sub}": ${m[1]}` : err.message);
     process.exit(2);
   }
   if (flags.help || flags.h) {

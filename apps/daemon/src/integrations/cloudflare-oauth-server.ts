@@ -158,6 +158,13 @@ export async function startCallbackListener(
     const consumesListener = outcome.kind === 'ok' || errorConsumes;
     if (consumesListener) {
       consumed = true;
+      // Cancel the 30-minute self-close timeout once the listener is consumed:
+      // a callback arriving just before the deadline must not be killed
+      // mid-token-exchange by the reaper (the browser would see a reset).
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
     }
 
     // For an 'ok' callback, exchange the code and persist the token BEFORE

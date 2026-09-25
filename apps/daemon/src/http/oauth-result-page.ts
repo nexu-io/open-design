@@ -65,7 +65,7 @@ export function renderOAuthResultPage(opts: OAuthResultPageOptions): string {
   </div>
   <script>
     try {
-      var payload = ${JSON.stringify(payload)};
+      var payload = ${JSON.stringify(payload).replace(/</g, '\\u003c')};
       if (window.opener && !window.opener.closed) {
         window.opener.postMessage(payload, '*');
       }

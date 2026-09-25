@@ -39,6 +39,11 @@ export interface StoredCloudflareOAuthToken {
   clientId?: string;
   /** redirect_uri the token was issued for. */
   redirectUri?: string;
+  /** Email of the Cloudflare user who authorized the token, captured at
+   * connect time via `GET /user` (needs the `user-details.read` scope). The
+   * Access "only me" rule resolves from this record so a deploy never depends
+   * on a live user lookup succeeding after the assets are already uploaded. */
+  email?: string;
   /** Monotonic counter bumped on every persist, used to detect a credential
    * that a sibling process rotated underneath an in-flight refresh. */
   generation: number;
@@ -76,7 +81,14 @@ export function sanitizeCloudflareOAuthTokensFile(
     out.lastGeneration = raw.lastGeneration;
   }
   const tok = sanitizeToken(raw.token);
-  if (tok) out.token = tok;
+  if (tok) {
+    out.token = tok;
+    // A file written before `lastGeneration` existed (or hand-edited without
+    // it) must still be refreshable: the compare-and-set persist matches on the
+    // FILE generation, so seed it from the token or every refresh fails the
+    // check and the expired access token is returned forever.
+    if (out.lastGeneration === undefined) out.lastGeneration = tok.generation;
+  }
   return out;
 }
 
@@ -109,6 +121,10 @@ function sanitizeToken(raw: unknown): StoredCloudflareOAuthToken | null {
     typeof raw.redirectUri === 'string' && raw.redirectUri.trim()
       ? raw.redirectUri.trim()
       : undefined;
+  const email =
+    typeof raw.email === 'string' && raw.email.trim()
+      ? raw.email.trim()
+      : undefined;
   const generation =
     typeof raw.generation === 'number' && Number.isFinite(raw.generation)
       ? raw.generation
@@ -132,6 +148,7 @@ function sanitizeToken(raw: unknown): StoredCloudflareOAuthToken | null {
   if (accountId) out.accountId = accountId;
   if (clientId) out.clientId = clientId;
   if (redirectUri) out.redirectUri = redirectUri;
+  if (email) out.email = email;
   if (expiresAt !== undefined) out.expiresAt = expiresAt;
   return out;
 }

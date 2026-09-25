@@ -37,6 +37,7 @@ import {
 import {
   beginCloudflareAuth,
   completeCloudflareAuth,
+  fetchCloudflareUserEmail,
   cloudflareRedirectUri,
   CLOUDFLARE_OAUTH_SCOPES,
   type CompleteCloudflareAuthResult,
@@ -125,10 +126,18 @@ export function registerCloudflareRoutes(
   const persistCredential = async (
     result: CompleteCloudflareAuthResult,
     attemptGeneration: number,
+    fetchImpl: typeof fetch,
   ): Promise<boolean> => {
     const cfg = await readCloudflareWorkersConfig();
     const dataDir = cloudflareOAuthTokensDir();
     const stored = buildStoredCloudflareToken(result, cfg);
+    // Capture the account email NOW, with the token that just authorized, so
+    // the Access "only me" rule resolves from the stored record at deploy time
+    // instead of discovering after the assets upload that GET /user is not
+    // permitted. Best-effort: a client without `user-details.read` still
+    // connects; the deploy then falls back to a live lookup and fails closed.
+    const email = await fetchCloudflareUserEmail(result.access_token, fetchImpl);
+    if (email) stored.email = email;
     return runCredentialMutation(async () => {
       if (attemptGeneration !== oauthAttemptGeneration) return false;
       const prev = await getCloudflareOAuthToken(dataDir);
@@ -197,7 +206,11 @@ export function registerCloudflareRoutes(
         console.warn('[cloudflare-oauth] attempt superseded; discarding token');
         return false;
       }
-      const persisted = await persistCredential(tokenResp, attemptGeneration);
+      const persisted = await persistCredential(
+        tokenResp,
+        attemptGeneration,
+        fetchWithRequestInit(proxyDispatcher.requestInit),
+      );
       if (!persisted) {
         console.warn('[cloudflare-oauth] attempt superseded; discarding token');
         return false;
@@ -251,8 +264,7 @@ export function registerCloudflareRoutes(
       let callbackPort = 0;
       // Serialize the FULL attempt transition (stop prior listener, bump
       // generation, evict stale PKCE state, mint new state, install the new
-      // listener) so two overlapping /start calls can never race to bind :56122
-      // and the loser's catch can't stop the winner's listener.
+      // listener) so two overlapping /start calls can never race to bind :56122.
       await runCredentialMutation(async () => {
         await stopActiveListener();
         oauthAttemptGeneration += 1;
@@ -281,7 +293,10 @@ export function registerCloudflareRoutes(
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error('[cloudflare-oauth] start failed:', msg);
-      await stopActiveListener();
+      // No cleanup here: stopActiveListener already ran inside the mutation,
+      // and a failed bind never assigns activeListener. A second queued stop
+      // could tear down a newer attempt's listener that a concurrent /start
+      // installed after this mutation rejected.
       res.status(502).json({ error: msg });
     }
   });
@@ -318,7 +333,11 @@ export function registerCloudflareRoutes(
           .status(409)
           .json({ error: 'Cloudflare OAuth attempt was cancelled or superseded — restart the connection.' });
       }
-      const persisted = await persistCredential(tokenResp, attemptGeneration);
+      const persisted = await persistCredential(
+        tokenResp,
+        attemptGeneration,
+        fetchWithRequestInit(proxyDispatcher.requestInit),
+      );
       if (!persisted) {
         console.warn('[cloudflare-oauth] attempt superseded; discarding token');
         return res
@@ -347,13 +366,20 @@ export function registerCloudflareRoutes(
     try {
       const tok = await getCloudflareOAuthToken(cloudflareOAuthTokensDir());
       if (!tok) {
-        return res.json({ connected: false, listening: activeListener !== null });
+        return res.json({ connected: false, refreshable: false, listening: activeListener !== null });
       }
+      // `refreshable` lets the client tell an ordinary access-token expiry (the
+      // daemon refreshes silently on the next call) from a credential that
+      // genuinely needs a Reconnect; `savedAt` changes on every persist, so a
+      // Reconnect poll can wait for a NEW token rather than the still-present
+      // old one.
       res.json({
         connected: true,
         expiresAt: tok.expiresAt ?? null,
+        refreshable: Boolean(tok.refreshToken),
         scope: tok.scope ?? null,
         accountId: tok.accountId ?? null,
+        email: tok.email ?? null,
         savedAt: tok.savedAt,
         listening: activeListener !== null,
       });
