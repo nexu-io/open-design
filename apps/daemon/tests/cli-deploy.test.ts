@@ -452,6 +452,6 @@ describe('od cloudflare CLI', () => {
     const result = await runCli(['cloudflare', 'config', '--account-id', 'acct-1', '--token', 'tok-1', '--daemon-url', stub.baseUrl]);
     expect(result.code).toBe(0);
     expect(stub.requests[0]?.method).toBe('PUT');
-    expect(JSON.parse(stub.requests[0]?.body ?? '{}')).toEqual({ accountId: 'acct-1', token: 'tok-1' });
+    expect(JSON.parse(stub.requests[0]?.body ?? '{}')).toEqual({ providerId: 'cloudflare-workers', accountId: 'acct-1', token: 'tok-1' });
   });
 });

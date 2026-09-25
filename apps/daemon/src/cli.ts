@@ -12232,6 +12232,9 @@ Common options:
     const hasUpdate = flags['account-id'] !== undefined || flags.token !== undefined
       || flags['client-id'] !== undefined || flags['redirect-uri'] !== undefined;
     const body = {};
+    // The PUT handler keys off body.providerId (not the query param), so always
+    // send it — otherwise the token/account land in the Vercel config.
+    body.providerId = 'cloudflare-workers';
     if (flags['account-id'] !== undefined) body.accountId = flags['account-id'];
     if (flags.token !== undefined) body.token = flags.token;
     if (flags['client-id'] !== undefined) body.clientId = flags['client-id'];
