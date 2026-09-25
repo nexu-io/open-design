@@ -960,15 +960,16 @@ export function upsertDeployment(db: SqliteDb, deployment: DbRow) {
     deployment.providerMetadata === undefined
       ? existing?.providerMetadata
       : deployment.providerMetadata;
-  const providerMetadata =
-    deployment.cloudflarePages && typeof deployment.cloudflarePages === 'object'
-      ? {
-          ...(inputProviderMetadata && typeof inputProviderMetadata === 'object' && !Array.isArray(inputProviderMetadata)
-            ? inputProviderMetadata
-            : {}),
-          cloudflarePages: deployment.cloudflarePages,
-        }
-      : inputProviderMetadata;
+  let providerMetadata: unknown = inputProviderMetadata;
+  if (deployment.cloudflarePages && typeof deployment.cloudflarePages === 'object') {
+    providerMetadata = { ...(asJsonObject(providerMetadata) ?? {}), cloudflarePages: deployment.cloudflarePages };
+  }
+  // Workers facts have no column of their own: a typed `cloudflareWorkers`
+  // input is folded into the JSON column and normalizeDeployment lifts it back
+  // out, so the field survives the read that follows this write.
+  if (asJsonObject(deployment.cloudflareWorkers)) {
+    providerMetadata = { ...(asJsonObject(providerMetadata) ?? {}), ...asJsonObject(deployment.cloudflareWorkers) };
+  }
   const next = {
     id: existing?.id ?? deployment.id,
     projectId: deployment.projectId,
@@ -1048,10 +1049,38 @@ function normalizeDeployment(row: DbRow) {
       !Array.isArray(normalizedProviderMetadata.cloudflarePages)
         ? normalizedProviderMetadata.cloudflarePages
         : undefined,
+    cloudflareWorkers: liftCloudflareWorkersInfo(row.providerId, normalizedProviderMetadata),
     providerMetadata: normalizedProviderMetadata,
     createdAt: Number(row.createdAt),
     updatedAt: Number(row.updatedAt),
   };
+}
+
+function asJsonObject(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+}
+
+const CLOUDFLARE_WORKERS_DEPLOY_PROVIDER_ID = 'cloudflare-workers';
+// The public subset of a Workers deployment's providerMetadata (see
+// `CloudflareWorkersDeploymentInfo` in @open-design/contracts). providerMetadata
+// itself is stripped from every deployment response, so anything the client
+// needs must be projected here or it never leaves the daemon.
+const CLOUDFLARE_WORKERS_PUBLIC_METADATA_KEYS = [
+  'accessProtected',
+  'accessAppId',
+  'createdByOpenDesign',
+  'customDomain',
+  'steps',
+  'check',
+] as const;
+
+function liftCloudflareWorkersInfo(providerId: unknown, providerMetadata: Record<string, unknown> | undefined) {
+  if (providerId !== CLOUDFLARE_WORKERS_DEPLOY_PROVIDER_ID || !providerMetadata) return undefined;
+  const info: Record<string, unknown> = {};
+  for (const key of CLOUDFLARE_WORKERS_PUBLIC_METADATA_KEYS) {
+    if (providerMetadata[key] !== undefined) info[key] = providerMetadata[key];
+  }
+  return Object.keys(info).length > 0 ? info : undefined;
 }
 
 function stringifyJsonObjectOrNull(value: unknown) {

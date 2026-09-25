@@ -3,11 +3,65 @@ import type { RouteDeps } from '../server-context.js';
 import type { AuthorizeProjectRequest } from '../collab/project-request-authority.js';
 import { clientRequestIdFor } from '../http/client-request-id.js';
 import { classifyDeployFailure } from '../deploy/failure-detail.js';
-import { detachCloudflareWorkerDomain, listCloudflareZones } from '../deploy/cloudflare-workers.js';
+import { detachCloudflareWorkerDomain, listCloudflareZones, resolveWorkerScriptName } from '../deploy/cloudflare-workers.js';
 import { getCloudflareAccessToken } from '../deploy.js';
 
 export interface RegisterDeployRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'ids' | 'deploy' | 'projectStore'> {
   authorizeProjectRequest: AuthorizeProjectRequest;
+}
+
+// Resolve the live Cloudflare Workers credential for a route. In oauth mode a
+// DeployError from the refresh (CFW_OAUTH_RECONNECT_REQUIRED, …) must reach the
+// client as-is: swallowing it into "token required"/"not configured" tells an
+// OAuth user to paste an API token.
+async function resolveCloudflareWorkersRouteToken(config: { token?: string | undefined; credentialMode?: string | undefined }): Promise<string> {
+  if (config.credentialMode === 'oauth') return getCloudflareAccessToken('cloudflare-workers');
+  return config.token || '';
+}
+
+// Per-SCRIPT single-flight for Cloudflare Workers deploys: the provider's
+// list-then-create steps (Access app, D1, R2) race when two deploys of the same
+// Worker overlap (double-click, agent retry), and the loser fails after its
+// script PUT is already live. The shared resource is the script name, not the
+// project: the Workers config is global, so a `scriptName` override applies to
+// every project, and two projects whose names slug identically also collide.
+const cloudflareWorkersDeploysInFlight = new Map<string, Promise<unknown>>();
+export function isCloudflareWorkersDeployInFlight(scriptName: string): boolean {
+  return cloudflareWorkersDeploysInFlight.has(scriptName);
+}
+async function withCloudflareWorkersDeploySingleFlight<T>(scriptName: string, run: () => Promise<T>): Promise<T> {
+  if (cloudflareWorkersDeploysInFlight.has(scriptName)) {
+    throw new DeployErrorLike('A Cloudflare Workers deploy of "' + scriptName + '" is already in progress.', 409, 'DEPLOY_IN_PROGRESS');
+  }
+  const p = run();
+  cloudflareWorkersDeploysInFlight.set(scriptName, p);
+  try {
+    return await p;
+  } finally {
+    cloudflareWorkersDeploysInFlight.delete(scriptName);
+  }
+}
+
+type FailedDeployStep = { name?: unknown; status?: unknown; detail?: unknown };
+
+/** The Access app id a failed Workers deploy created, if it got that far. The
+ * provider annotates its DeployError with the step list it completed. */
+function accessAppIdFromFailedWorkersDeploy(err: unknown): string | undefined {
+  const steps = (err as { steps?: unknown } | null)?.steps;
+  if (!Array.isArray(steps)) return undefined;
+  const step = (steps as FailedDeployStep[]).find(
+    (s) => s?.name === 'access-app' && s?.status === 'done' && typeof s?.detail === 'string' && s.detail,
+  );
+  return step ? String(step.detail) : undefined;
+}
+class DeployErrorLike extends Error {
+  status: number;
+  code: string;
+  constructor(message: string, status: number, code: string) {
+    super(message);
+    this.status = status;
+    this.code = code;
+  }
 }
 
 export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps) {
@@ -34,7 +88,10 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
    */
   const deployErrorCodeFor = (err: any, status: number): string =>
     (err instanceof DeployError && err.code) ||
+    (err instanceof DeployErrorLike && err.code) ||
     (status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST');
+  const deployErrorStatus = (err: any): number =>
+    err instanceof DeployError || err instanceof DeployErrorLike ? err.status : 400;
 
   // ---- Deploy --------------------------------------------------------------
 
@@ -92,14 +149,7 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
         res.json(empty);
         return;
       }
-      let token = config.token;
-      if (config.credentialMode === 'oauth') {
-        try {
-          token = await getCloudflareAccessToken(CLOUDFLARE_WORKERS_PROVIDER_ID);
-        } catch {
-          token = '';
-        }
-      }
+      const token = await resolveCloudflareWorkersRouteToken(config);
       if (!token) {
         res.json(empty);
         return;
@@ -115,19 +165,17 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
   app.get('/api/deploy/cloudflare-workers/zones', async (_req, res) => {
     try {
       const config = await readDeployConfig(CLOUDFLARE_WORKERS_PROVIDER_ID);
-      let token = config.token;
-      if (config.credentialMode === 'oauth') {
-        try {
-          token = await getCloudflareAccessToken(CLOUDFLARE_WORKERS_PROVIDER_ID);
-        } catch {
-          token = '';
-        }
+      // `/zones?account.id=` (empty) lists every zone the token can see, across
+      // accounts; a picked foreign zone then fails at attach. Require the account.
+      if (!config.accountId) {
+        return sendApiError(res, 400, 'CFW_ACCOUNT_ID_REQUIRED', 'Cloudflare account ID is required.');
       }
+      const token = await resolveCloudflareWorkersRouteToken(config);
       if (!token) {
         res.json({ zones: [] });
         return;
       }
-      const zones = await listCloudflareZones({ token, accountId: config.accountId || '' });
+      const zones = await listCloudflareZones({ token, accountId: config.accountId });
       res.json({ zones });
     } catch (err: any) {
       const status = err instanceof DeployError ? err.status : 400;
@@ -138,19 +186,12 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
   app.delete('/api/deploy/cloudflare-workers/domains/:domainId', async (req, res) => {
     try {
       const config = await readDeployConfig(CLOUDFLARE_WORKERS_PROVIDER_ID);
-      // Mirror the capabilities/zones token resolution: oauth refreshes the
-      // rotating access token, token mode reads the configured static token.
-      let token = config.token;
-      if (config.credentialMode === 'oauth') {
-        try {
-          token = await getCloudflareAccessToken(CLOUDFLARE_WORKERS_PROVIDER_ID);
-        } catch {
-          token = '';
-        }
-      }
       if (!config.accountId) {
         return sendApiError(res, 400, 'CFW_ACCOUNT_ID_REQUIRED', 'Cloudflare account ID is required.');
       }
+      // Mirror the capabilities/zones token resolution: oauth refreshes the
+      // rotating access token, token mode reads the configured static token.
+      const token = await resolveCloudflareWorkersRouteToken(config);
       if (!token) {
         return sendApiError(res, 400, 'CFW_TOKEN_REQUIRED', 'Cloudflare API token is required.');
       }
@@ -176,9 +217,63 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
     }
   });
 
+  // Invariant: an Access app OpenDesign created is always recorded, even when
+  // the deploy that created it fails afterwards (custom-domain attach, the
+  // perimeter HEAD on a hostname whose certificate is still issuing, a 429-
+  // exhausted workers.dev enable). Without the record the next deploy finds an
+  // app it does not "own" and refuses with CFW_ACCESS_APP_FOREIGN forever, and
+  // turning Access off never retires it — the site stays gated by an app the UI
+  // says does not exist. A prior record keeps its live URL/status and only gains
+  // the app id; a first deploy leaves a `failed` record carrying it.
+  function recordAccessAppFromFailedWorkersDeploy(input: {
+    projectId: string;
+    fileName: string;
+    target: 'preview' | 'production';
+    prior: ReturnType<typeof getDeployment>;
+    err: unknown;
+  }): void {
+    const accessAppId = accessAppIdFromFailedWorkersDeploy(input.err);
+    if (!accessAppId) return;
+    const { prior } = input;
+    const priorMetadata =
+      prior?.providerMetadata && typeof prior.providerMetadata === 'object' && !Array.isArray(prior.providerMetadata)
+        ? prior.providerMetadata
+        : {};
+    if (priorMetadata.accessAppId === accessAppId) return;
+    const now = Date.now();
+    try {
+      upsertDeployment(db, {
+        id: prior?.id ?? randomUUID(),
+        projectId: input.projectId,
+        fileName: input.fileName,
+        providerId: CLOUDFLARE_WORKERS_PROVIDER_ID,
+        url: prior?.url ?? '',
+        deploymentId: prior?.deploymentId,
+        deploymentCount: prior?.deploymentCount ?? 0,
+        target: prior?.target ?? input.target,
+        status: prior?.status ?? 'failed',
+        statusMessage: prior ? prior.statusMessage : String((input.err as Error)?.message || input.err),
+        reachableAt: prior?.reachableAt,
+        providerMetadata: { ...priorMetadata, accessAppId, accessProtected: true, createdByOpenDesign: true },
+        createdAt: prior?.createdAt ?? now,
+        updatedAt: now,
+      });
+    } catch (persistErr) {
+      console.warn('[od] could not record Cloudflare Access app from failed deploy', String((persistErr as Error)?.message || persistErr));
+    }
+  }
+
   app.post('/api/projects/:id/deploy', async (req, res) => {
     const startedAt = Date.now();
     let stage: 'file_plan' | 'provider' = 'file_plan';
+    // Set once a Workers deploy has read its prior record, so the catch can
+    // persist an Access app the failed attempt created (see the invariant above).
+    let workersFailureContext: {
+      projectId: string;
+      fileName: string;
+      target: 'preview' | 'production';
+      prior: ReturnType<typeof getDeployment>;
+    } | null = null;
     try {
       const { fileName, providerId = VERCEL_PROVIDER_ID, cloudflarePages, target: rawTarget } = req.body || {};
       // Omitted target defaults to production; any supplied value must be exact.
@@ -239,6 +334,16 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
       const workersConfig = providerId === CLOUDFLARE_WORKERS_PROVIDER_ID
         ? await readDeployConfig(CLOUDFLARE_WORKERS_PROVIDER_ID)
         : undefined;
+      // The single-flight guard for Workers is keyed on the resolved script name
+      // (the same resolution the provider performs) and armed before the CF
+      // calls of a second overlapping deploy can run, so the loser is refused
+      // up front instead of after its script PUT.
+      const workersScriptName = providerId === CLOUDFLARE_WORKERS_PROVIDER_ID
+        ? resolveWorkerScriptName(workersConfig?.scriptName || undefined, project?.name || req.params.id)
+        : '';
+      if (providerId === CLOUDFLARE_WORKERS_PROVIDER_ID) {
+        workersFailureContext = { projectId: req.params.id, fileName, target, prior };
+      }
       const result = providerId === CLOUDFLARE_PAGES_PROVIDER_ID
         ? await deployToCloudflarePages({
             config: {
@@ -252,14 +357,19 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
             target,
           })
         : providerId === CLOUDFLARE_WORKERS_PROVIDER_ID
-          ? await deployToCloudflareWorkers({
-              config: workersConfig ?? await readDeployConfig(CLOUDFLARE_WORKERS_PROVIDER_ID),
+          ? await withCloudflareWorkersDeploySingleFlight(workersScriptName, () => deployToCloudflareWorkers({
+              config: workersConfig!,
               files,
               projectId: req.params.id,
               projectName: project?.name,
               target,
               customDomain: workersConfig?.customDomain,
-            })
+              access: workersConfig?.access,
+              priorAccessAppId:
+                typeof prior?.providerMetadata?.accessAppId === 'string'
+                  ? prior.providerMetadata.accessAppId
+                  : undefined,
+            }))
           : await deployToVercel({
               config: await readDeployConfig(VERCEL_PROVIDER_ID),
               files,
@@ -280,6 +390,10 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
         statusMessage: result.statusMessage,
         reachableAt: result.reachableAt,
         cloudflarePages: result.cloudflarePages,
+        // providerMetadata is stripped by publicDeployment; the db's
+        // normalizeDeployment lifts the Workers result (accessProtected/steps/
+        // check/customDomain) into `cloudflareWorkers`, which is what reaches
+        // the client from both this response and the deployments list.
         providerMetadata:
           providerId === CLOUDFLARE_PAGES_PROVIDER_ID
             ? (result.providerMetadata ?? cloudflarePagesDeploymentMetadata(cloudflarePagesProjectName))
@@ -291,9 +405,12 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
       });
       res.json(publicDeployment(body));
     } catch (err: any) {
-      const status = err instanceof DeployError ? err.status : 400;
+      if (workersFailureContext) {
+        recordAccessAppFromFailedWorkersDeploy({ ...workersFailureContext, err });
+      }
+      const status = deployErrorStatus(err);
       const code = deployErrorCodeFor(err, status);
-      const failure = classifyDeployFailure(stage, err, err instanceof DeployError);
+      const failure = classifyDeployFailure(stage, err, err instanceof DeployError || err instanceof DeployErrorLike);
       const requestId = clientRequestIdFor(req);
       // Structured companion to the response: automatic diagnostics bundles
       // include the daemon log, and `requestId` joins it to the client event.

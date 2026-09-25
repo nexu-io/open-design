@@ -6,6 +6,8 @@ import {
   detachCloudflareWorkerDomain,
   ensureCloudflareD1Database,
   ensureCloudflareR2Bucket,
+  listCloudflareD1Databases,
+  listCloudflareR2Buckets,
   listCloudflareZones,
 } from '../src/deploy/cloudflare-workers.js';
 
@@ -32,6 +34,7 @@ interface FetchOverrides {
   r2Create?: unknown;
   zones?: unknown;
   domains?: unknown;
+  domainsList?: unknown;
   session?: unknown;
   scriptPut?: unknown;
 }
@@ -42,10 +45,14 @@ function makeFetch(overrides: FetchOverrides = {}, calls: Call[]) {
     const method = (init?.method || 'GET').toUpperCase();
     if (method === 'POST' && url.includes('/d1/database')) return jsonResponse(overrides.d1Create ?? { success: true, result: { uuid: 'db-uuid-123' } });
     if (method === 'POST' && url.includes('/r2/buckets')) return jsonResponse(overrides.r2Create ?? { success: true, result: {} });
+    if (url.includes('/workers/scripts?')) return jsonResponse({ success: true, result: [{ id: 'my-site', tag: 'tag-abc-123' }] });
     if (url.includes('/d1/database')) return jsonResponse(overrides.d1List ?? { success: true, result: [] });
     if (url.includes('/r2/buckets')) return jsonResponse(overrides.r2List ?? { success: true, result: { buckets: [] } });
     if (url.includes('/zones')) return jsonResponse(overrides.zones ?? { success: true, result: [] });
-    if (url.includes('/workers/domains')) return jsonResponse(overrides.domains ?? { success: true, result: {} });
+    if (url.includes('/workers/domains')) {
+      if (method === 'GET') return jsonResponse(overrides.domainsList ?? { success: true, result: [] });
+      return jsonResponse(overrides.domains ?? { success: true, result: {} });
+    }
     if (url.includes('assets-upload-session')) {
       return jsonResponse(overrides.session ?? { success: true, result: { jwt: 'SESS', buckets: [[cloudflareWorkersAssetHash(INDEX)]] } });
     }
@@ -75,13 +82,41 @@ describe('ensureCloudflareD1Database', () => {
     expect(JSON.parse(post![1]!.body as string)).toEqual({ name: 'my-db' });
   });
 
-  it('returns the existing uuid without posting when the name matches', async () => {
+  it('returns the existing uuid without posting when the name matches (exact-name query)', async () => {
     const calls: Call[] = [];
     const fn = makeFetch({ d1List: { success: true, result: [{ name: 'my-db', uuid: 'existing-uuid' }] } }, calls);
     vi.stubGlobal('fetch', fn);
     const uuid = await ensureCloudflareD1Database({ token: 'tok-secret', accountId: 'acct_test' }, 'my-db');
     expect(uuid).toBe('existing-uuid');
     expect(calls.some((c) => c[0].includes('/d1/database') && c[1]?.method === 'POST')).toBe(false);
+    const list = calls.find((c) => c[0].includes('/d1/database') && (c[1]?.method || 'GET') === 'GET');
+    expect(list![0]).toContain('name=my-db');
+  });
+
+  it('fails closed on a list error instead of creating a duplicate database', async () => {
+    const calls: Call[] = [];
+    const fn = vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push([url, init]);
+      return jsonResponse({ success: false, errors: [{ message: 'upstream' }] }, 500);
+    });
+    vi.stubGlobal('fetch', fn);
+    await expect(ensureCloudflareD1Database({ token: 'tok-secret', accountId: 'acct_test' }, 'my-db')).rejects.toMatchObject({ name: 'DeployError' });
+    expect(calls.some((c) => c[1]?.method === 'POST')).toBe(false);
+  });
+
+  it('keeps paging a D1 list that carries no total_pages while pages are full', async () => {
+    const calls: Call[] = [];
+    const page1 = Array.from({ length: 100 }, (_, i) => ({ name: 'db-' + i, uuid: 'uuid-' + i }));
+    const fn = vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push([url, init]);
+      if (url.includes('page=1&')) return jsonResponse({ success: true, result: page1, result_info: { count: 100, page: 1, per_page: 100, total_count: 101 } });
+      return jsonResponse({ success: true, result: [{ name: 'my-db', uuid: 'uuid-last' }], result_info: { count: 1, page: 2, per_page: 100, total_count: 101 } });
+    });
+    vi.stubGlobal('fetch', fn);
+    const dbs = await listCloudflareD1Databases('tok-secret', 'acct_test');
+    expect(dbs).toHaveLength(101);
+    expect(dbs.at(-1)).toEqual({ name: 'my-db', id: 'uuid-last' });
+    expect(calls.filter((c) => c[0].includes('/d1/database')).length).toBe(2);
   });
 });
 
@@ -104,6 +139,33 @@ describe('ensureCloudflareR2Bucket', () => {
     const name = await ensureCloudflareR2Bucket({ token: 'tok-secret', accountId: 'acct_test' }, 'my-bucket');
     expect(name).toBe('my-bucket');
     expect(calls.some((c) => c[0].includes('/r2/buckets') && c[1]?.method === 'POST')).toBe(false);
+    const list = calls.find((c) => c[0].includes('/r2/buckets') && (c[1]?.method || 'GET') === 'GET');
+    expect(list![0]).toContain('name_contains=my-bucket');
+    expect(list![0]).toContain('per_page=1000');
+  });
+
+  it('fails closed on a list error instead of posting a duplicate bucket', async () => {
+    const calls: Call[] = [];
+    const fn = vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push([url, init]);
+      return jsonResponse({ success: false, errors: [{ message: 'upstream' }] }, 500);
+    });
+    vi.stubGlobal('fetch', fn);
+    await expect(ensureCloudflareR2Bucket({ token: 'tok-secret', accountId: 'acct_test' }, 'my-bucket')).rejects.toMatchObject({ name: 'DeployError' });
+    expect(calls.some((c) => c[1]?.method === 'POST')).toBe(false);
+  });
+
+  it('follows result_info.cursor across R2 pages', async () => {
+    const calls: Call[] = [];
+    const fn = vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push([url, init]);
+      if (url.includes('cursor=')) return jsonResponse({ success: true, result: { buckets: [{ name: 'my-bucket' }] }, result_info: { cursor: '' } });
+      return jsonResponse({ success: true, result: { buckets: [{ name: 'other' }] }, result_info: { cursor: 'c2', per_page: 20 } });
+    });
+    vi.stubGlobal('fetch', fn);
+    const buckets = await listCloudflareR2Buckets('tok-secret', 'acct_test');
+    expect(buckets.map((b) => b.name)).toEqual(['other', 'my-bucket']);
+    expect(calls[1]![0]).toContain('cursor=c2');
   });
 });
 
@@ -135,6 +197,17 @@ describe('deployToCloudflareWorkers ensure-on-bind', () => {
     expect(putIndex).toBeGreaterThanOrEqual(0);
     expect(createIndex).toBeLessThan(putIndex);
   });
+
+  it('does not run a separate capability probe after the ensure calls succeeded', async () => {
+    const calls: Call[] = [];
+    const fn = makeFetch({ r2List: { success: true, result: { buckets: [{ name: 'my-bucket' }] } } }, calls);
+    vi.stubGlobal('fetch', fn);
+    await deployToCloudflareWorkers({ ...base, config: { ...base.config, bindings: [{ type: 'r2_bucket', name: 'BUCKET', bucketName: 'my-bucket' }] } });
+    // exactly one R2 GET (the ensure lookup); no probe of /access/apps or /d1
+    expect(calls.filter((c) => c[0].includes('/r2/buckets') && (c[1]?.method || 'GET') === 'GET')).toHaveLength(1);
+    expect(calls.some((c) => c[0].includes('/access/apps'))).toBe(false);
+    expect(calls.some((c) => c[0].includes('/d1/database'))).toBe(false);
+  });
 });
 
 describe('deployToCloudflareWorkers custom domain', () => {
@@ -159,6 +232,17 @@ describe('deployToCloudflareWorkers custom domain', () => {
       environment: 'production',
     });
     expect(out.providerMetadata?.customDomain).toEqual({ hostname: 'app.example.com', url: 'https://app.example.com' });
+  });
+
+  it('stores the attached domain id so the DELETE route can be driven from stored state', async () => {
+    const calls: Call[] = [];
+    const fn = makeFetch({ domains: { success: true, result: { id: 'dom-42', hostname: 'app.example.com' } } }, calls);
+    vi.stubGlobal('fetch', fn);
+    const out = await deployToCloudflareWorkers({ ...base, customDomain });
+    expect(out.providerMetadata?.customDomain).toEqual({ id: 'dom-42', hostname: 'app.example.com', url: 'https://app.example.com' });
+    await expect(
+      attachCloudflareWorkerDomain({ token: 'tok-secret', accountId: 'acct_test' }, { hostname: 'app.example.com', service: 'my-site', zone_id: 'zone-1' }),
+    ).resolves.toBe('dom-42');
   });
 
   it('does not attach for a preview target', async () => {
@@ -268,12 +352,16 @@ describe('deployToCloudflareWorkers deploy log', () => {
     return (out.providerMetadata?.check ?? {}) as { status: number; ok: boolean; detail?: string };
   }
 
-  function happyFetch() {
+  function happyFetch(options: { accessProtected?: boolean } = {}) {
     const calls: Call[] = [];
     const fn = vi.fn(async (url: string, init?: RequestInit) => {
       calls.push([url, init]);
       const method = (init?.method || 'GET').toUpperCase();
-      if (method === 'HEAD') return jsonResponse({}, 200);
+      if (method === 'HEAD') {
+        return options.accessProtected
+          ? new Response('', { status: 302, headers: { location: 'https://acct-test.cloudflareaccess.com/cdn-cgi/access/login' } })
+          : jsonResponse({}, 200);
+      }
       if (url.includes('assets-upload-session')) {
         return jsonResponse({ success: true, result: { jwt: 'SESS', buckets: [[cloudflareWorkersAssetHash(INDEX)]] } });
       }
@@ -281,27 +369,40 @@ describe('deployToCloudflareWorkers deploy log', () => {
       if (url.endsWith('/workers/subdomain')) return jsonResponse({ success: true, result: { subdomain: 'acct-test' } });
       if (url.includes('/subdomain')) return jsonResponse({ success: true, result: { enabled: true } });
       if (url.includes('/workers/scripts')) return jsonResponse({ success: true, result: [{ id: 'my-site', tag: 'tag-abc-123' }] });
-      if (url.includes('/workers/domains')) return jsonResponse({ success: true, result: {} });
+      if (url.includes('/access/identity_providers')) return jsonResponse({ success: true, result: [{ id: 'otp-123', type: 'onetimepin', name: 'One-time PIN login' }] });
+      if (url.includes('/access/apps')) {
+        // The app LIST (GET /access/apps) must be an array — a non-array now fails closed.
+        if (method === 'GET' && !/\/access\/apps\/[^/?]/.test(url)) return jsonResponse({ success: true, result: [] });
+        return jsonResponse({ success: true, result: { id: 'app-123' } });
+      }
+      if (url.includes('/workers/domains')) {
+        if ((init?.method || 'GET').toUpperCase() === 'GET') return jsonResponse({ success: true, result: [] });
+        return jsonResponse({ success: true, result: {} });
+      }
       return jsonResponse({ success: true, result: {} });
     });
     return { calls, fn };
   }
 
-  it('records assets, script, subdomain (and custom-domain when set) in order', async () => {
-    const { fn } = happyFetch();
+  it('records assets, script, subdomain (and access-app / custom-domain when set) in order', async () => {
+    const { fn } = happyFetch({ accessProtected: true });
     vi.stubGlobal('fetch', fn);
     const out = await deployToCloudflareWorkers({
       ...base,
+      access: { enabled: true, rule: { kind: 'emails', emails: ['dev@example.com'] } },
       customDomain: { hostname: 'app.example.com', zoneId: 'zone-1' },
     });
     const steps = stepsOf(out);
-    expect(steps.map((s) => s.name)).toEqual(['assets', 'script', 'subdomain', 'custom-domain']);
+    // The Access app is created BEFORE the live script PUT (go-live ordering:
+    // no unprotected window), so it precedes 'script' in the step log.
+    expect(steps.map((s) => s.name)).toEqual(['assets', 'access-app', 'script', 'subdomain', 'custom-domain']);
     expect(steps.find((s) => s.name === 'assets')?.detail).toBe('1');
+    expect(steps.find((s) => s.name === 'access-app')?.detail).toBe('app-123');
     expect(steps.find((s) => s.name === 'subdomain')?.detail).toBe('https://my-site.acct-test.workers.dev');
     expect(steps.find((s) => s.name === 'custom-domain')?.detail).toBe('app.example.com');
   });
 
-  it('omits the custom-domain step when it is unset', async () => {
+  it('omits access-app and custom-domain steps when those options are unset', async () => {
     const { fn } = happyFetch();
     vi.stubGlobal('fetch', fn);
     const out = await deployToCloudflareWorkers(base);
@@ -329,6 +430,7 @@ describe('deployToCloudflareWorkers deploy log', () => {
         return jsonResponse({ success: true, result: { jwt: 'SESS', buckets: [[cloudflareWorkersAssetHash(INDEX)]] } });
       }
       if (url.includes('/workers/assets/upload')) return jsonResponse({ success: true, result: { jwt: 'COMPLETION' } });
+      if (url.includes('/workers/domains')) return jsonResponse({ success: true, result: [] });
       if (url.endsWith('/workers/subdomain')) return jsonResponse({ success: true, result: { subdomain: 'acct-test' } });
       if (url.includes('/subdomain')) return jsonResponse({ success: true, result: { enabled: true } });
       return jsonResponse({ success: true, result: {} });
@@ -347,6 +449,7 @@ describe('deployToCloudflareWorkers deploy log', () => {
         return jsonResponse({ success: true, result: { jwt: 'SESS', buckets: [[cloudflareWorkersAssetHash(INDEX)]] } });
       }
       if (url.includes('/workers/assets/upload')) return jsonResponse({ success: true, result: { jwt: 'COMPLETION' } });
+      if (url.includes('/workers/domains')) return jsonResponse({ success: true, result: [] });
       if (url.endsWith('/workers/subdomain')) return jsonResponse({ success: true, result: { subdomain: 'acct-test' } });
       // script PUT fails
       return jsonResponse({ success: false, errors: [{ message: 'script upload failed' }] }, 400);

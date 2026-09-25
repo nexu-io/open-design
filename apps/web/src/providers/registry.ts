@@ -7,6 +7,9 @@ import {
 import { boundedRequestErrorCode } from '../analytics/workspace';
 import type {
   CloudflareWorkersBinding,
+  CloudflareWorkersDeployCheck,
+  CloudflareWorkersDeployStep,
+  CloudflareWorkersDeploymentInfo,
   CloudflareWorkersCapabilities,
   ConnectorAuthConfigPrepareResponse,
   ConnectorDetail,
@@ -155,7 +158,8 @@ export type WebDeployConfigResponse = DeployConfigResponse & {
 };
 
 export type WebUpdateDeployConfigRequest = UpdateDeployConfigRequest & {
-  customDomain?: WebCloudflareWorkersCustomDomain;
+  /** `null` clears a saved domain; an absent key keeps it (daemon read-modify-write). */
+  customDomain?: WebCloudflareWorkersCustomDomain | null;
 };
 export type WebDeploymentInfo = ProjectDeploymentsResponse['deployments'][number];
 export type WebDeployProjectFileResponse = DeployProjectFileResponse;
@@ -163,22 +167,19 @@ export type WebCloudflarePagesDeploySelection = CloudflarePagesDeploySelection;
 export type WebCloudflarePagesZonesResponse = CloudflarePagesZonesResponse;
 export type WebCloudflareWorkersBinding = CloudflareWorkersBinding & { databaseName?: string };
 export type WebCloudflareWorkersCapabilities = CloudflareWorkersCapabilities;
-export type WebCloudflareDeployStep = {
-  name: string;
-  status: 'done' | 'error';
-  detail?: string;
+export type WebCloudflareWorkersAccessRule =
+  | { kind: 'emails'; emails: string[] }
+  | { kind: 'emailDomain'; emailDomain: string }
+  | { kind: 'self' }
+  | { kind: 'policy'; policyId: string };
+export type WebCloudflareWorkersAccessRuleKind = WebCloudflareWorkersAccessRule['kind'];
+export type WebCloudflareWorkersAccess = {
+  enabled: boolean;
+  rule?: WebCloudflareWorkersAccessRule;
 };
-
-export type WebCloudflareDeployCheck = {
-  status: number;
-  ok: boolean;
-  detail?: string;
-};
-
-export type WebDeployResultProviderMetadata = {
-  steps?: WebCloudflareDeployStep[];
-  check?: WebCloudflareDeployCheck;
-};
+export type WebCloudflareDeployStep = CloudflareWorkersDeployStep;
+export type WebCloudflareDeployCheck = CloudflareWorkersDeployCheck;
+export type WebDeployResultProviderMetadata = CloudflareWorkersDeploymentInfo;
 
 export type WebPublicProjectFileResponse = PublicProjectFilePublication;
 
@@ -1955,6 +1956,9 @@ export async function fetchCloudflareWorkersOAuthStart(
   }
 }
 
+// The daemon's status route emits explicit `null` for the three optional
+// fields when a token has no expiry / scope / account, so the wire type says
+// so; do not narrow these back to plain optionals.
 export interface WebCloudflareAuthStatus {
   connected: boolean;
   expiresAt?: number | null;
