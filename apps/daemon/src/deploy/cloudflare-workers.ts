@@ -74,14 +74,55 @@ function cloudflareError(json: JsonObject, status: number, fallback: string): De
 }
 
 async function fetchWithRetry(url: string, init: RequestInit, attempts = 3): Promise<Response> {
+  // Non-idempotent methods (POST/PATCH) may already have committed before a 5xx
+  // is returned, so retrying a 5xx would mint duplicate resources (immutable
+  // versions, orphan D1 databases, duplicate IdPs). A 429 is always safe to
+  // retry — the request was rate-limited, not processed. Idempotent verbs retry
+  // both 429 and 5xx.
+  const method = (init.method ?? 'GET').toUpperCase();
+  const nonIdempotent = method === 'POST' || method === 'PATCH';
   let last: Response | undefined;
   for (let i = 0; i < attempts; i += 1) {
     const resp = await fetch(url, init);
-    if (resp.status !== 429 && !(resp.status >= 500 && resp.status < 600)) return resp;
+    const is429 = resp.status === 429;
+    const is5xx = resp.status >= 500 && resp.status < 600;
+    if (!is429 && !(is5xx && !nonIdempotent)) return resp;
     last = resp;
     if (i < attempts - 1) await new Promise((resolve) => setTimeout(resolve, 200 * 2 ** i));
   }
   return last as unknown as Response;
+}
+
+// Follow `result_info.total_pages` so a resource beyond page 1 is never missed
+// (a missed page turns a list-then-create into a duplicate create).
+async function listCloudflareAllPages(config: WorkersDeployConfig, path: string, perPage = 100): Promise<JsonObject[]> {
+  const base = CLOUDFLARE_API + path;
+  const all: JsonObject[] = [];
+  let page = 1;
+  for (;;) {
+    const sep = path.includes('?') ? '&' : '?';
+    const resp = await fetchWithRetry(
+      base + sep + 'page=' + page + '&per_page=' + perPage,
+      { method: 'GET', headers: cloudflareHeaders(config.token) },
+    );
+    // Degrade to an empty list on a non-ok or malformed response so the zones/
+    // D1/R2 pickers can fall back to free-text input. Fail-closed list
+    // semantics live in the deploy-path functions that need them (e.g.
+    // findCloudflareAccessAppByWorker throws on a list error in its own loop).
+    if (!resp.ok) return [];
+    let json: JsonObject;
+    try {
+      json = (await resp.json()) as JsonObject;
+    } catch {
+      return [];
+    }
+    if (json.success !== true || !Array.isArray(json.result)) return [];
+    all.push(...(json.result as JsonObject[]));
+    const info = (json.result_info ?? {}) as JsonObject;
+    const totalPages = typeof info.total_pages === 'number' && info.total_pages > 0 ? info.total_pages : 1;
+    if (page >= totalPages) return all;
+    page += 1;
+  }
 }
 
 function cloudflareWorkersAssetPathKey(file: string): string {
@@ -195,7 +236,9 @@ async function uploadAssetBuckets(
       { method: 'POST', headers: { Authorization: 'Bearer ' + sessionJwt }, body: form },
     );
     const json = await readCloudflareJson(resp);
-    if (!resp.ok && !(resp.status >= 200 && resp.status < 300)) throw cloudflareError(json, resp.status, 'Cloudflare assets upload failed.');
+    // A 200-with-error-envelope (`{success:false, errors:[…]}`) must fail closed,
+    // not silently leave completionJwt at the previous bucket's value.
+    if (!resp.ok || json.success === false) throw cloudflareError(json, resp.status, 'Cloudflare assets upload failed.');
     const result = (json.result ?? {}) as JsonObject;
     if (result.jwt) completionJwt = String(result.jwt);
   }
@@ -462,15 +505,24 @@ export async function listCloudflareR2Buckets(
   token: string,
   accountId: string,
 ): Promise<CloudflareR2Bucket[]> {
-  const base = CLOUDFLARE_API + '/accounts/' + encodeURIComponent(accountId);
-  const resp = await fetch(base + '/r2/buckets', { headers: cloudflareHeaders(token) });
-  const json = (await resp.json().catch(() => ({}))) as JsonObject;
-  if (!resp.ok || json.success !== true) return [];
-  const result = json.result as JsonObject | undefined;
-  const buckets = Array.isArray(result?.buckets) ? (result.buckets as JsonObject[]) : [];
-  return buckets
-    .map((bucket) => ({ name: typeof bucket?.name === 'string' ? bucket.name : '' }))
-    .filter((bucket) => bucket.name.length > 0);
+  const base = CLOUDFLARE_API + '/accounts/' + encodeURIComponent(accountId) + '/r2/buckets';
+  const out: CloudflareR2Bucket[] = [];
+  let cursor: string | undefined;
+  for (;;) {
+    const url = base + (cursor ? '?cursor=' + encodeURIComponent(cursor) : '');
+    const resp = await fetch(url, { headers: cloudflareHeaders(token) });
+    const json = (await resp.json().catch(() => ({}))) as JsonObject;
+    if (!resp.ok || json.success !== true) return out;
+    const result = json.result as JsonObject | undefined;
+    const buckets = Array.isArray(result?.buckets) ? (result.buckets as JsonObject[]) : [];
+    for (const bucket of buckets) {
+      const name = typeof bucket?.name === 'string' ? bucket.name : '';
+      if (name) out.push({ name });
+    }
+    const nextCursor = typeof result?.cursor === 'string' && result.cursor.length > 0 ? result.cursor : undefined;
+    if (!nextCursor) return out;
+    cursor = nextCursor;
+  }
 }
 
 /** List an account's D1 databases by uuid (the id a Workers binding needs). */
@@ -478,11 +530,10 @@ export async function listCloudflareD1Databases(
   token: string,
   accountId: string,
 ): Promise<CloudflareD1Database[]> {
-  const base = CLOUDFLARE_API + '/accounts/' + encodeURIComponent(accountId);
-  const resp = await fetch(base + '/d1/database', { headers: cloudflareHeaders(token) });
-  const json = (await resp.json().catch(() => ({}))) as JsonObject;
-  if (!resp.ok || json.success !== true) return [];
-  const databases = Array.isArray(json.result) ? (json.result as JsonObject[]) : [];
+  const databases = await listCloudflareAllPages(
+    { token, accountId } as WorkersDeployConfig,
+    '/accounts/' + encodeURIComponent(accountId) + '/d1/database',
+  );
   return databases
     .map((db) => ({
       name: typeof db?.name === 'string' ? db.name : '',
@@ -526,11 +577,11 @@ export async function ensureCloudflareR2Bucket(config: WorkersDeployConfig, buck
 export async function listCloudflareZones(config: WorkersDeployConfig): Promise<{ id: string; name: string; status: string }[]> {
   // Zones are a top-level resource filtered by account id, not nested under
   // /accounts/{id} (that path 404s with "No route for that URI").
-  const url = CLOUDFLARE_API + '/zones?account.id=' + encodeURIComponent(config.accountId);
-  const resp = await fetch(url, { headers: cloudflareHeaders(config.token) });
-  const json = (await resp.json().catch(() => ({}))) as JsonObject;
-  if (!resp.ok || json.success !== true) return [];
-  const zones = Array.isArray(json.result) ? (json.result as JsonObject[]) : [];
+  const zones = await listCloudflareAllPages(
+    config,
+    '/zones?account.id=' + encodeURIComponent(config.accountId),
+    50,
+  );
   return zones.map((zone) => ({
     id: typeof zone?.id === 'string' ? zone.id : '',
     name: typeof zone?.name === 'string' ? zone.name : '',
