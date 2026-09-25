@@ -26,7 +26,6 @@ import {
   getCloudflareAccessToken,
   readCloudflareWorkersConfig,
   resetCloudflareCredentialMode,
-  writeCloudflareOAuthIdentity,
 } from '../deploy.js';
 import {
   listCloudflareD1Databases,
@@ -73,16 +72,17 @@ function fetchWithRequestInit(
 function buildStoredCloudflareToken(
   tokenResp: OAuthTokenResponse,
   cfg: CloudflareWorkersConfig,
+  clientId: string,
+  redirectUri: string,
   prevGeneration: number | undefined,
 ): StoredCloudflareOAuthToken {
   const stored: StoredCloudflareOAuthToken = {
     accessToken: tokenResp.access_token,
     tokenType: tokenResp.token_type ?? 'Bearer',
-    redirectUri: (cfg.redirectUri ?? '').trim() || cloudflareRedirectUri(),
+    redirectUri,
     generation: (prevGeneration ?? 0) + 1,
     savedAt: Date.now(),
   };
-  const clientId = (cfg.clientId ?? '').trim();
   const accountId = (cfg.accountId ?? '').trim();
   if (clientId) stored.clientId = clientId;
   if (accountId) stored.accountId = accountId;
@@ -109,6 +109,12 @@ export function registerCloudflareRoutes(
   // token exchange cannot persist a token after the user cancelled, disconnected,
   // or restarted the flow (see handleCallback's pre-persist generation check).
   let oauthAttemptGeneration = 0;
+  // Attempt-local identity captured at /oauth/start. It is NOT written to the
+  // config until the exchange succeeds, so a cancelled/denied replacement can
+  // never break a previously working credential by flipping the stored clientId
+  // before a token for it exists.
+  let pendingOAuthClientId = '';
+  let pendingOAuthRedirectUri = '';
 
   const stopActiveListener = async () => {
     const cur = activeListener;
@@ -151,6 +157,8 @@ export function registerCloudflareRoutes(
       const stored = buildStoredCloudflareToken(
         tokenResp,
         cfg,
+        pendingOAuthClientId,
+        pendingOAuthRedirectUri,
         existing?.generation,
       );
       const persisted = await setCloudflareOAuthTokenGuarded(
@@ -166,7 +174,7 @@ export function registerCloudflareRoutes(
       }
       // Only now — with the token durable — switch the credential authority to
       // OAuth, so a denied/closed/cancelled flow never strands a token-mode user.
-      await commitCloudflareOAuthMode();
+      await commitCloudflareOAuthMode({ clientId: pendingOAuthClientId, redirectUri: pendingOAuthRedirectUri });
       console.log('[cloudflare-oauth] token stored');
       return true;
     } catch (err: unknown) {
@@ -212,10 +220,12 @@ export function registerCloudflareRoutes(
           error: `Cloudflare OAuth redirect URI must be ${expectedRedirectUri} — the daemon callback listener is fixed to it.`,
         });
       }
-      // Persist the identity now so the callback handler + refresh path (which
-      // re-read the persisted config) carry the same clientId/redirectUri that
-      // authorized this flow.
-      await writeCloudflareOAuthIdentity({ clientId, redirectUri });
+      // Hold the identity in attempt-local state (NOT the persisted config) so
+      // a denied/cancelled replacement can never flip the stored clientId before
+      // a token for it exists. The callback/paste-back commits it together with
+      // the token only after a successful exchange.
+      pendingOAuthClientId = clientId;
+      pendingOAuthRedirectUri = redirectUri;
       // Always request the full set in one connect so the D1/R2/zones pickers
       // populate and Access gating works without a manual scope dance.
       const scopes = CLOUDFLARE_OAUTH_SCOPES;
@@ -287,6 +297,8 @@ export function registerCloudflareRoutes(
       const stored = buildStoredCloudflareToken(
         tokenResp,
         cfg,
+        pendingOAuthClientId,
+        pendingOAuthRedirectUri,
         existing?.generation,
       );
       const persisted = await setCloudflareOAuthTokenGuarded(
@@ -302,7 +314,7 @@ export function registerCloudflareRoutes(
       }
       // Only now — with the token durable — switch the credential authority to
       // OAuth, mirroring the loopback callback path.
-      await commitCloudflareOAuthMode();
+      await commitCloudflareOAuthMode({ clientId: pendingOAuthClientId, redirectUri: pendingOAuthRedirectUri });
       // We won the race against the loopback listener (or it was never going
       // to resolve); shut it down so the next /start has a clean slate.
       await stopActiveListener();

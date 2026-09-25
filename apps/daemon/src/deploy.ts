@@ -350,10 +350,16 @@ export async function writeCloudflareOAuthIdentity(input: { clientId: string; re
 
 /** Switch the Workers credential authority to OAuth — invoked only after the
  * OAuth token has been durably persisted, so a failed/cancelled flow leaves the
- * prior credential mode (and any static token) intact. */
-export async function commitCloudflareOAuthMode(): Promise<void> {
+ * prior credential mode (and any static token) intact. When identity is given,
+ * the config clientId/redirectUri are updated in the same write as the mode
+ * switch, so a replacement client is never recorded before its token is. */
+export async function commitCloudflareOAuthMode(identity?: { clientId: string; redirectUri: string }): Promise<void> {
   const current = await readCloudflareWorkersConfig();
   const next: DeployConfig = { ...current, credentialMode: 'oauth' };
+  if (identity) {
+    next.clientId = identity.clientId;
+    next.redirectUri = identity.redirectUri;
+  }
   await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), next);
 }
 
