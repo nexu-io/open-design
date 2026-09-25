@@ -32,7 +32,9 @@ export type CallbackOutcome =
 
 export interface StartCallbackListenerInput {
   expectedState: string;
-  onCallback: (outcome: CallbackOutcome) => Promise<void> | void;
+  /** Exchange + persist the token; resolve true on success, false on failure
+   * so the listener can render the durable outcome instead of a blind 200. */
+  onCallback: (outcome: CallbackOutcome) => Promise<boolean> | boolean;
   timeoutMs?: number;
   /** Override port (useful for tests; default 56122). */
   port?: number;
@@ -158,7 +160,31 @@ export async function startCallbackListener(
       consumed = true;
     }
 
-    res.statusCode = outcome.kind === 'ok' ? 200 : 400;
+    // For an 'ok' callback, exchange the code and persist the token BEFORE
+    // rendering, so the browser sees the durable outcome — an invalid code,
+    // upstream failure, or disk error must not show a false success page.
+    if (outcome.kind === 'ok') {
+      let success = false;
+      try {
+        success = (await input.onCallback(outcome)) !== false;
+      } catch (err: unknown) {
+        console.error('[cloudflare-oauth] onCallback failed:', err);
+      }
+      res.statusCode = success ? 200 : 502;
+      res.setHeader('content-type', 'text/html; charset=utf-8');
+      res.end(
+        renderResultPage(
+          success
+            ? outcome
+            : { kind: 'error', error: 'Token exchange failed — close this tab and try again.' },
+        ),
+      );
+      void stop();
+      return;
+    }
+
+    // Error outcome: render 400 immediately (no exchange to run).
+    res.statusCode = 400;
     res.setHeader('content-type', 'text/html; charset=utf-8');
     res.end(renderResultPage(outcome));
 
@@ -168,14 +194,7 @@ export async function startCallbackListener(
       // real flow can still complete on a later hit.
       return;
     }
-
-    try {
-      await input.onCallback(outcome);
-    } catch (err: unknown) {
-      console.error('[cloudflare-oauth] onCallback failed:', err);
-    } finally {
-      void stop();
-    }
+    void stop();
   };
 
   const server = http.createServer((req, res) => {

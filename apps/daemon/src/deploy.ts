@@ -304,20 +304,30 @@ export async function writeCloudflareWorkersConfig(input: Partial<DeployConfig>)
   return publicCloudflareWorkersConfig(next);
 }
 
-/** Persist just the OAuth identity (clientId + redirectUri + 'oauth' mode) that
- * authorizes the connect flow, before the account id is known. This bypasses
- * the accountId/token validation in writeCloudflareWorkersConfig — a fresh
- * OAuth connect has neither yet; the account id arrives with the token. */
+/** Persist just the OAuth identity (clientId + redirectUri) that authorizes
+ * the connect flow, before the account id is known. This deliberately does NOT
+ * flip credentialMode — the authority switch happens only after the token is
+ * persisted (see commitCloudflareOAuthMode), so a denied/closed/cancelled flow
+ * never strands a working token-mode user. Bypasses the accountId/token
+ * validation in writeCloudflareWorkersConfig for the same reason. */
 export async function writeCloudflareOAuthIdentity(input: { clientId: string; redirectUri: string }) {
   const current = await readCloudflareWorkersConfig();
   const next: DeployConfig = {
     ...current,
-    credentialMode: 'oauth',
     clientId: input.clientId,
     redirectUri: input.redirectUri,
   };
   await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), next);
   return publicCloudflareWorkersConfig(next);
+}
+
+/** Switch the Workers credential authority to OAuth — invoked only after the
+ * OAuth token has been durably persisted, so a failed/cancelled flow leaves the
+ * prior credential mode (and any static token) intact. */
+export async function commitCloudflareOAuthMode(): Promise<void> {
+  const current = await readCloudflareWorkersConfig();
+  const next: DeployConfig = { ...current, credentialMode: 'oauth' };
+  await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), next);
 }
 
 export function publicCloudflareWorkersConfig(config: Partial<DeployConfig>) {

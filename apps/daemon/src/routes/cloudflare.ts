@@ -22,6 +22,7 @@ import type { Express } from 'express';
 import { proxyDispatcherRequestInit } from '../connectionTest.js';
 import {
   cloudflareOAuthTokensDir,
+  commitCloudflareOAuthMode,
   getCloudflareAccessToken,
   readCloudflareWorkersConfig,
   writeCloudflareOAuthIdentity,
@@ -115,11 +116,11 @@ export function registerCloudflareRoutes(
     }
   };
 
-  const handleCallback = async (outcome: CallbackOutcome): Promise<void> => {
+  const handleCallback = async (outcome: CallbackOutcome): Promise<boolean> => {
     activeListener = null;
     if (outcome.kind !== 'ok') {
       console.warn(`[cloudflare-oauth] callback failed: ${outcome.error}`);
-      return;
+      return false;
     }
     const proxyDispatcher = proxyDispatcherRequestInit(process.env);
     try {
@@ -138,10 +139,15 @@ export function registerCloudflareRoutes(
         existing?.generation,
       );
       await setCloudflareOAuthToken(dataDir, stored);
+      // Only now — with the token durable — switch the credential authority to
+      // OAuth, so a denied/closed/cancelled flow never strands a token-mode user.
+      await commitCloudflareOAuthMode();
       console.log('[cloudflare-oauth] token stored');
+      return true;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error('[cloudflare-oauth] token exchange failed:', msg);
+      return false;
     } finally {
       await proxyDispatcher.close();
     }

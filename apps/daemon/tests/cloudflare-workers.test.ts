@@ -5,6 +5,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   CLOUDFLARE_WORKERS_PROVIDER_ID,
+  commitCloudflareOAuthMode,
   configureCloudflareWorkersDataDir,
   isDeployProviderId,
   publicCloudflareWorkersConfig,
@@ -85,15 +86,19 @@ describe('cloudflare-workers config', () => {
     }
   });
 
-  it('persists the OAuth identity without a token and reports OAuth mode configured', async () => {
+  it('persists the OAuth identity without flipping the credential authority', async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), 'od-workers-config-'));
     const prior = process.env.OD_USER_STATE_DIR;
     process.env.OD_USER_STATE_DIR = dir;
     configureCloudflareWorkersDataDir(dir);
     try {
+      // The identity (clientId/redirectUri) is persisted, but credentialMode stays
+      // 'token' until commitCloudflareOAuthMode runs after token persistence.
       const saved = await writeCloudflareOAuthIdentity({ clientId: 'client-123', redirectUri: 'http://127.0.0.1:56122/callback' });
-      expect(saved.credentialMode).toBe('oauth');
       expect(saved.clientId).toBe('client-123');
+      expect(saved.credentialMode).toBe('token');
+
+      await commitCloudflareOAuthMode();
       const raw = await readCloudflareWorkersConfig();
       expect(raw.clientId).toBe('client-123');
       expect(raw.credentialMode).toBe('oauth');

@@ -8055,9 +8055,7 @@ function HtmlViewer({
 
   // Load the bound-account status whenever the Workers provider is selected in
   // OAuth mode (and again if the user flips the credential mode back to oauth).
-  // Each load also re-baselines the expiry clock, so "expires in N min" stays
-  // fresh without a self-rescheduling timer (a forever interval trips vitest's
-  // fake-timer infinite-loop guard under vi.runAllTimers()).
+  // Each load also re-baselines the expiry clock.
   useEffect(() => {
     if (!workspaceActive) return;
     if (deployProviderId !== CLOUDFLARE_WORKERS_PROVIDER_ID || cloudflareWorkersCredentialMode !== 'oauth') return;
@@ -8071,6 +8069,30 @@ function HtmlViewer({
       cancelled = true;
     };
   }, [workspaceActive, deployProviderId, cloudflareWorkersCredentialMode]);
+
+  // Advance the expiry clock at each minute boundary until the token expires,
+  // so "expires in N min", the <5 min warning, and deploy readiness stay live.
+  // A re-armed one-shot timeout (bounded by the expiry) replaces a forever
+  // interval — an unbounded interval trips vitest's fake-timer infinite-loop
+  // guard under vi.runAllTimers().
+  useEffect(() => {
+    if (!workspaceActive) return;
+    if (deployProviderId !== CLOUDFLARE_WORKERS_PROVIDER_ID || cloudflareWorkersCredentialMode !== 'oauth') return;
+    const expiresAt = cloudflareWorkersOAuthStatus?.expiresAt;
+    if (typeof expiresAt !== 'number' || !Number.isFinite(expiresAt)) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const tick = () => {
+      setCloudflareWorkersOAuthNow(Date.now());
+      const nowMs = Date.now();
+      if (nowMs < expiresAt) {
+        timer = setTimeout(tick, Math.min(60_000, expiresAt - nowMs));
+      }
+    };
+    timer = setTimeout(tick, Math.min(60_000, expiresAt - Date.now()));
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [workspaceActive, deployProviderId, cloudflareWorkersCredentialMode, cloudflareWorkersOAuthStatus?.expiresAt]);
 
   // Stop the in-flight loopback poll if the whole component unmounts (the poll
   // also self-stops on success or its 5-minute cap).
