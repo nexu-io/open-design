@@ -289,8 +289,8 @@ const DEPLOY_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 const CLOUDFLARE_STRING_FLAGS_BY_SUB = {
   status: new Set(['daemon-url']),
   disconnect: new Set(['daemon-url']),
-  connect: new Set(['daemon-url', 'client-id', 'redirect-uri']),
-  config: new Set(['daemon-url', 'client-id', 'redirect-uri', 'token', 'account-id', 'credential-mode']),
+  connect: new Set(['daemon-url', 'client-id', 'redirect-uri', 'scopes']),
+  config: new Set(['daemon-url', 'client-id', 'redirect-uri', 'token', 'account-id', 'credential-mode', 'scopes']),
 };
 const CLOUDFLARE_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 // `od automation …` mirrors the Automations tab. Same surface, same
@@ -12162,6 +12162,7 @@ Common options:
 connect options:
   --client-id <id>          Cloudflare OAuth client id (required).
   --redirect-uri <uri>      Cloudflare OAuth redirect URI.
+  --scopes <list>           Space/comma-separated OAuth scopes (default: full set).
 
 config options (any of these switches the call from GET to PUT):
   --account-id <id>         Cloudflare account id.
@@ -12169,6 +12170,7 @@ config options (any of these switches the call from GET to PUT):
   --client-id <id>          Cloudflare OAuth client id.
   --redirect-uri <uri>      Cloudflare OAuth redirect URI.
   --credential-mode <mode>  "token" (static API token) or "oauth" (connected OAuth token).
+  --scopes <list>           Space/comma-separated OAuth scopes to persist.
 
 Flags that do not apply to a subcommand are rejected (exit 2), never ignored.`);
     return;
@@ -12220,11 +12222,14 @@ Flags that do not apply to a subcommand are rejected (exit 2), never ignored.`);
       process.exit(2);
     }
     const redirectUri = typeof flags['redirect-uri'] === 'string' ? flags['redirect-uri'].trim() : '';
+    const scopes = typeof flags.scopes === 'string'
+      ? flags.scopes.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean)
+      : [];
     try {
       resp = await fetch(`${base}/api/cloudflare/oauth/start`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ clientId, redirectUri }),
+        body: JSON.stringify({ clientId, redirectUri, ...(scopes.length > 0 ? { scopes } : {}) }),
       });
     } catch (err) {
       surfaceFetchError(err, base);
@@ -12254,7 +12259,7 @@ Flags that do not apply to a subcommand are rejected (exit 2), never ignored.`);
   if (sub === 'config') {
     const hasUpdate = flags['account-id'] !== undefined || flags.token !== undefined
       || flags['client-id'] !== undefined || flags['redirect-uri'] !== undefined
-      || flags['credential-mode'] !== undefined;
+      || flags['credential-mode'] !== undefined || flags.scopes !== undefined;
     const body = {};
     // The PUT handler keys off body.providerId (not the query param), so always
     // send it — otherwise the token/account land in the Vercel config.
@@ -12270,6 +12275,9 @@ Flags that do not apply to a subcommand are rejected (exit 2), never ignored.`);
         process.exit(2);
       }
       body.credentialMode = mode;
+    }
+    if (flags.scopes !== undefined) {
+      body.scopes = String(flags.scopes).split(/[\s,]+/).map((s) => s.trim()).filter(Boolean);
     }
     try {
       resp = await fetch(`${base}/api/deploy/config?providerId=cloudflare-workers`, {
