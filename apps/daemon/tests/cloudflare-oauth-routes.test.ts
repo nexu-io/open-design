@@ -87,6 +87,24 @@ describe('cloudflare-oauth routes', () => {
     expect(body.error).toContain('http://127.0.0.1:56122/callback');
   });
 
+  it('honors a requested scope set instead of always requesting the full default', async () => {
+    const resp = await fetch(`${app.baseUrl}/api/cloudflare/oauth/start`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        clientId: 'client-abc',
+        redirectUri: 'http://127.0.0.1:56122/callback',
+        scopes: ['workers-scripts.write'],
+      }),
+    });
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as { authorizeUrl?: string };
+    expect(body.authorizeUrl).toContain('workers-scripts.write');
+    expect(body.authorizeUrl).toContain('offline_access');
+    // A default scope that was NOT requested must not be asked for.
+    expect(body.authorizeUrl).not.toContain('access.write');
+  });
+
   it('discards the token when manual completion is cancelled mid-exchange', async () => {
     let releaseToken!: (resp: Response) => void;
     let markExchangeStarted!: () => void;

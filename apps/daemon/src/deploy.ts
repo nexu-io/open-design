@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -196,12 +196,17 @@ export async function writeCloudflarePagesConfig(input: Partial<DeployConfig>) {
 
 async function writeDeployConfigFile(file: string, config: DeployConfig) {
   await mkdir(path.dirname(file), { recursive: true });
-  await writeFile(file, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
+  // Atomic replace: write a sibling temp file then rename over the target so a
+  // crash mid-write can never leave a truncated/partial config behind — the
+  // previous file stays valid until the rename lands.
+  const tmp = `${file}.tmp-${process.pid}-${Date.now()}`;
+  await writeFile(tmp, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
   try {
-    fs.chmodSync(file, 0o600);
+    fs.chmodSync(tmp, 0o600);
   } catch {
     // Best effort on filesystems that do not support chmod.
   }
+  await rename(tmp, file);
 }
 
 // Serialize every Workers-config read-modify-write so a settings PUT, a

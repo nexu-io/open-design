@@ -236,7 +236,7 @@ export function registerCloudflareRoutes(
       // The Connect UI posts the clientId/redirectUri it just collected; on a
       // fresh setup these are not yet in the persisted config, so read the body
       // first (falling back to the config) instead of failing on an empty config.
-      const body = (req.body ?? {}) as { clientId?: unknown; redirectUri?: unknown };
+      const body = (req.body ?? {}) as { clientId?: unknown; redirectUri?: unknown; scopes?: unknown };
       const bodyClientId = typeof body.clientId === 'string' ? body.clientId.trim() : '';
       const bodyRedirectUri = typeof body.redirectUri === 'string' ? body.redirectUri.trim() : '';
       const clientId = bodyClientId || (cfg.clientId ?? '').trim();
@@ -257,7 +257,18 @@ export function registerCloudflareRoutes(
           error: `Cloudflare OAuth redirect URI must be ${expectedRedirectUri} — the daemon callback listener is fixed to it.`,
         });
       }
-      const scopes = CLOUDFLARE_OAUTH_SCOPES;
+      // Honor a caller/persisted scope set (least privilege): a narrow BYO
+      // client must not be asked for every permission, and a broad request
+      // defeats the purpose. Validate as a non-empty array of non-empty
+      // strings; fall back to the default only when none is configured.
+      // beginCloudflareAuth merges offline_access regardless.
+      const requestedScopes = Array.isArray(body.scopes) ? body.scopes : cfg.scopes;
+      const scopes =
+        Array.isArray(requestedScopes) &&
+        requestedScopes.length > 0 &&
+        requestedScopes.every((scope) => typeof scope === 'string' && scope.trim().length > 0)
+          ? requestedScopes.map((scope) => String(scope).trim())
+          : CLOUDFLARE_OAUTH_SCOPES;
       let authorizeUrl = '';
       let state = '';
       let callbackHost = '';
