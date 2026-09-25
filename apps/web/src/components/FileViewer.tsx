@@ -8026,6 +8026,10 @@ function HtmlViewer({
   const [cloudflareWorkersOAuthPendingAuthUrl, setCloudflareWorkersOAuthPendingAuthUrl] = useState<string | null>(null);
   const [cloudflareWorkersOAuthNow, setCloudflareWorkersOAuthNow] = useState(() => Date.now());
   const cloudflareWorkersOAuthPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Bumped whenever the OAuth surface is torn down (modal closed, mode left
+  // OAuth) so an in-flight connect request that resolves afterwards bails out
+  // instead of arming a poll into a closed dialog.
+  const cloudflareWorkersOAuthSessionRef = useRef(0);
   const deployProviderLoadSeqRef = useRef(0);
 
   // Bound-account status, derived once per render. `expiresAt` is an epoch-ms
@@ -8050,8 +8054,13 @@ function HtmlViewer({
   );
   const cloudflareWorkersOAuthDeployRequired =
     deployProviderId === CLOUDFLARE_WORKERS_PROVIDER_ID && cloudflareWorkersCredentialMode === 'oauth';
+  // Expiry alone does not block deploy: the daemon refreshes an expired access
+  // token silently through the refresh token, so only an expired token the
+  // daemon reports as NOT refreshable needs a Reconnect first.
+  const cloudflareWorkersOAuthRefreshable = Boolean(cloudflareWorkersOAuthStatus?.refreshable);
   const cloudflareWorkersOAuthDeployReady =
-    !cloudflareWorkersOAuthDeployRequired || (cloudflareWorkersOAuthConnected && !cloudflareWorkersOAuthExpired);
+    !cloudflareWorkersOAuthDeployRequired ||
+    (cloudflareWorkersOAuthConnected && !(cloudflareWorkersOAuthExpired && !cloudflareWorkersOAuthRefreshable));
 
   // Load the bound-account status whenever the Workers provider is selected in
   // OAuth mode (and again if the user flips the credential mode back to oauth).
@@ -8104,6 +8113,27 @@ function HtmlViewer({
       }
     };
   }, []);
+  // The modal closing (Escape, Cancel, bulk reset) or the form leaving OAuth
+  // mode must also end the poll: `HtmlViewer` stays mounted, so the unmount
+  // cleanup above never fires for those, and a poll left running keeps hitting
+  // /api/cloudflare/auth/status for up to five minutes and leaves every OAuth
+  // button stuck on "Opening…" when the modal reopens.
+  const cloudflareWorkersOAuthSurfaceActive =
+    deployModalOpen &&
+    deployProviderId === CLOUDFLARE_WORKERS_PROVIDER_ID &&
+    cloudflareWorkersCredentialMode === 'oauth';
+  useEffect(() => {
+    if (cloudflareWorkersOAuthSurfaceActive) return;
+    cloudflareWorkersOAuthSessionRef.current += 1;
+    if (cloudflareWorkersOAuthPollRef.current) {
+      clearInterval(cloudflareWorkersOAuthPollRef.current);
+      cloudflareWorkersOAuthPollRef.current = null;
+    }
+    setCloudflareWorkersOAuthBusy((current) =>
+      current === 'starting' || current === 'awaiting' ? 'idle' : current,
+    );
+    setCloudflareWorkersOAuthPendingAuthUrl(null);
+  }, [cloudflareWorkersOAuthSurfaceActive]);
   const deployTokenInputRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
     if (!workspaceActive || !deployModalOpen) return;
@@ -9523,7 +9553,9 @@ function HtmlViewer({
     if (providerId === CLOUDFLARE_WORKERS_PROVIDER_ID) {
       return {
         providerId,
-        token,
+        // OAuth mode has no token field on screen: never forward a value left
+        // over from token mode, or the daemon persists it to disk unseen.
+        ...(cloudflareWorkersCredentialMode === 'oauth' ? {} : { token }),
         accountId: cloudflareAccountId.trim(),
         scriptName: cloudflareWorkersScriptName.trim(),
         compatibilityDate: cloudflareWorkersCompatibilityDate.trim(),
@@ -14649,53 +14681,96 @@ function HtmlViewer({
     return status;
   }
 
-  function startCloudflareWorkersOAuthPoll() {
+  function startCloudflareWorkersOAuthPoll(priorSavedAt: number | null | undefined) {
     stopCloudflareWorkersOAuthPoll();
     const startedAt = Date.now();
-    cloudflareWorkersOAuthPollRef.current = setInterval(() => {
-      void (async () => {
-        const status = await refreshCloudflareWorkersOAuthStatus();
-        if (status?.connected) {
-          setCloudflareWorkersOAuthBusy('idle');
-          setCloudflareWorkersOAuthError(null);
-          setCloudflareWorkersOAuthPendingAuthUrl(null);
-          if (status.accountId) setCloudflareAccountId(status.accountId);
-          stopCloudflareWorkersOAuthPoll();
-        }
-      })();
+    let inFlight = false;
+    const handle = setInterval(() => {
       if (Date.now() - startedAt >= 5 * 60 * 1000) {
         stopCloudflareWorkersOAuthPoll();
         setCloudflareWorkersOAuthBusy('idle');
+        return;
       }
+      // One request at a time: a slow daemon must not pile ticks up, and a
+      // late `connected: false` must not overwrite a newer status.
+      if (inFlight) return;
+      inFlight = true;
+      void (async () => {
+        try {
+          const status = await fetchCloudflareAuthStatus();
+          // Dropped when this poll was stopped while the request was in flight
+          // (modal closed, mode switched, in-place refresh already connected).
+          if (cloudflareWorkersOAuthPollRef.current !== handle || !status) return;
+          const freshRecord =
+            typeof status.savedAt !== 'number' || typeof priorSavedAt !== 'number' || status.savedAt !== priorSavedAt;
+          if (status.connected && freshRecord) {
+            setCloudflareWorkersOAuthStatus(status);
+            setCloudflareWorkersOAuthBusy('idle');
+            setCloudflareWorkersOAuthError(null);
+            setCloudflareWorkersOAuthPendingAuthUrl(null);
+            // Only fill the field when it is still empty: a user who already
+            // typed or picked an account id must not be silently overwritten by a
+            // late poll tick.
+            if (status.accountId) setCloudflareAccountId((prev) => (prev.trim() ? prev : (status.accountId ?? '')));
+            stopCloudflareWorkersOAuthPoll();
+          } else if (!status.connected) {
+            setCloudflareWorkersOAuthStatus(status);
+          }
+        } finally {
+          inFlight = false;
+        }
+      })();
     }, 2000);
+    cloudflareWorkersOAuthPollRef.current = handle;
   }
 
   async function connectCloudflareWorkersOAuth() {
     setCloudflareWorkersOAuthError(null);
     setCloudflareWorkersOAuthPendingAuthUrl(null);
     setCloudflareWorkersOAuthBusy('starting');
+    const session = cloudflareWorkersOAuthSessionRef.current;
+    // Snapshot BEFORE the start request: the poll treats only a record saved
+    // after this point as the new grant (see startCloudflareWorkersOAuthPoll).
+    const priorSavedAt = cloudflareWorkersOAuthStatus?.connected ? cloudflareWorkersOAuthStatus.savedAt : null;
+    // Open the tab synchronously, still inside the click gesture: a
+    // `window.open` issued after the `await` below is a non-gesture popup that
+    // Chrome and Safari block by default, leaving only the fallback link. The
+    // tab is pointed at Cloudflare once the daemon hands back the authorize
+    // URL; `opener` is severed first so the authorize page holds no reference
+    // back to this surface (the loopback listener delivers the token and the
+    // SPA polls /auth/status).
+    let popup: Window | null = null;
+    try {
+      popup = window.open('about:blank', '_blank');
+      if (popup) popup.opener = null;
+    } catch {
+      popup = null;
+    }
     try {
       const response = await fetchCloudflareWorkersOAuthStart({
         clientId: cloudflareWorkersClientId.trim(),
         redirectUri: cloudflareWorkersRedirectUri.trim(),
       });
+      if (session !== cloudflareWorkersOAuthSessionRef.current) {
+        // The modal closed (or the mode switched) while the start request was
+        // in flight; the reset effect already put the buttons back to idle.
+        popup?.close();
+        return;
+      }
       if (!response?.authorizeUrl) {
+        popup?.close();
         setCloudflareWorkersOAuthBusy('idle');
         setCloudflareWorkersOAuthError(t('fileViewer.cloudflareWorkersOauthConnectFailed'));
         return;
       }
       setCloudflareWorkersOAuthPendingAuthUrl(response.authorizeUrl);
       setCloudflareWorkersOAuthBusy('awaiting');
-      startCloudflareWorkersOAuthPoll();
-      try {
-        // noopener,noreferrer: the Cloudflare authorize tab needs no reference
-        // back to this surface; the loopback listener delivers the token and the
-        // SPA polls /auth/status below.
-        window.open(response.authorizeUrl, '_blank', 'noopener,noreferrer');
-      } catch {
-        // Fallback anchor is rendered while pending.
-      }
+      startCloudflareWorkersOAuthPoll(priorSavedAt);
+      // No popup (blocked or unavailable): the fallback anchor rendered while
+      // pending is the way in.
+      if (popup) popup.location.href = response.authorizeUrl;
     } catch (err) {
+      popup?.close();
       setCloudflareWorkersOAuthBusy('idle');
       setCloudflareWorkersOAuthError(
         err instanceof Error ? err.message : t('fileViewer.cloudflareWorkersOauthConnectFailed'),
@@ -14737,9 +14812,20 @@ function HtmlViewer({
       // never the user's in-progress scriptName / compatibilityDate / bindings.
       const config = await fetchDeployConfig(deployProviderId);
       if (config && config.providerId === deployProviderId) {
-        setCloudflareWorkersCredentialMode(config.credentialMode === 'oauth' ? 'oauth' : 'token');
-        setCloudflareWorkersClientId(config.clientId || '');
-        setCloudflareWorkersRedirectUri(config.redirectUri || '');
+        // The daemon commits credentialMode 'oauth' only once the token is
+        // persisted, so mid-connect the stored config still says 'token'.
+        // Adopting it then would flip the form out of OAuth mode, tear the
+        // surface down and kill the poll. Only a connected status is
+        // authoritative for the mode.
+        if (status?.connected) {
+          setCloudflareWorkersCredentialMode(config.credentialMode === 'oauth' ? 'oauth' : 'token');
+          // Same rule for the identity fields: the daemon commits clientId /
+          // redirectUri together with the token, so mid-connect the stored
+          // config has neither and adopting it would blank what the user just
+          // typed (and make a retry POST an empty client id).
+          setCloudflareWorkersClientId(config.clientId || '');
+          setCloudflareWorkersRedirectUri(config.redirectUri || '');
+        }
         setDeployConfig(config);
       }
       await loadCloudflareWorkersCapabilities(config && config.providerId === deployProviderId ? config : deployConfig);
@@ -14748,7 +14834,9 @@ function HtmlViewer({
         err instanceof Error ? err.message : t('fileViewer.cloudflareWorkersOauthConnectFailed'),
       );
     } finally {
-      setCloudflareWorkersOAuthBusy('idle');
+      // A refresh that found no new token leaves the loopback poll armed, so
+      // the surface goes back to waiting rather than reading as idle.
+      setCloudflareWorkersOAuthBusy(cloudflareWorkersOAuthPollRef.current ? 'awaiting' : 'idle');
     }
   }
 
