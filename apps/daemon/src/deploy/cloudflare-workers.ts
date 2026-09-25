@@ -238,9 +238,9 @@ async function uploadWorkerScript(config: WorkersDeployConfig, scriptName: strin
   return json;
 }
 
-async function uploadWorkerVersion(config: WorkersDeployConfig, scriptName: string, moduleCode: string): Promise<string> {
+async function uploadWorkerVersion(config: WorkersDeployConfig, scriptName: string, moduleCode: string, assetsJwt: string, runWorkerFirst = false): Promise<string> {
   const form = new FormData();
-  form.append('metadata', new Blob([JSON.stringify(workerMetadata(config, undefined))], { type: 'application/json' }));
+  form.append('metadata', new Blob([JSON.stringify(workerMetadata(config, assetsJwt, runWorkerFirst))], { type: 'application/json' }));
   form.append('index.js', new Blob([moduleCode], { type: 'application/javascript+module' }), 'index.js');
   const resp = await fetchWithRetry(
     CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/workers/scripts/' + encodeURIComponent(scriptName) + '/versions',
@@ -340,7 +340,7 @@ export async function deployToCloudflareWorkers(input: {
 
     if (target === 'preview') {
       const subdomain = await readAccountSubdomain(cfg);
-      const versionId = await uploadWorkerVersion(cfg, scriptName, moduleCode);
+      const versionId = await uploadWorkerVersion(cfg, scriptName, moduleCode, completionJwt, isCustomModule);
       steps.push({ name: 'version', status: 'done' });
       const metadata: JsonObject = { scriptName, versionId };
       metadata.steps = steps;

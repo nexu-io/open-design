@@ -260,6 +260,7 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
               projectId: req.params.id,
               projectName: project?.name,
               target,
+              customDomain: workersConfig?.customDomain,
             })
           : await deployToVercel({
               config: await readDeployConfig(VERCEL_PROVIDER_ID),

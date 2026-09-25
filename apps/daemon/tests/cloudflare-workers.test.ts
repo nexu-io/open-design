@@ -187,6 +187,13 @@ describe('deployToCloudflareWorkers', () => {
     expect(calls.some((c) => c[0].endsWith('/subdomain') && c[1]?.method === 'POST')).toBe(false);
     expect(calls.some((c) => c[0].endsWith('/workers/scripts/my-site') && c[1]?.method === 'PUT')).toBe(false);
     expect(out.url).toMatch(/^https:\/\/[a-z0-9]+-my-site\.acct-test\.workers\.dev$/);
+
+    // The preview version metadata must carry the assets binding + JWT so the
+    // preview URL can actually serve the deployed HTML/assets (not env.ASSETS=undefined).
+    const versionCall = calls.find((c) => c[0].includes('/versions'))!;
+    const meta = await metadataOf(versionCall);
+    expect(meta.bindings).toEqual([{ name: 'ASSETS', type: 'assets' }]);
+    expect(meta.assets).toEqual({ jwt: 'COMPLETION' });
   });
 
   it('maps 403 to PROVIDER_FORBIDDEN and never leaks the token', async () => {
