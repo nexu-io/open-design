@@ -6,6 +6,7 @@
 //   (b) a token response that carries a refresh_token persists it to the record
 //   (c) a refresh call reuses refreshCloudflareToken with the stored refreshToken
 
+import fs from 'node:fs';
 import { mkdtemp, open, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -534,7 +535,7 @@ describe('token file permissions', () => {
 });
 
 describe('token file durability', () => {
-  it('fsyncs the temp file before renaming it over the token file', async () => {
+  it('fsyncs the temp file before the rename and the parent directory after it', async () => {
     const dir = await mkdtemp(path.join(tmpdir(), 'od-cf-token-fsync-'));
     const dataDir = path.join(dir, 'data');
     const file = path.join(dataDir, 'cloudflare-oauth-tokens.json');
@@ -544,23 +545,63 @@ describe('token file durability', () => {
       const probe = await open(path.join(dir, 'probe'), 'w');
       const proto = Object.getPrototypeOf(probe) as { sync: () => Promise<void> };
       await probe.close();
-      let targetExistedAtSync: boolean | null = null;
+      // Every flush, in order: what was synced (the temp file, or the parent
+      // directory) and whether the target entry existed at that moment.
+      const syncs: Array<{ directory: boolean; targetExisted: boolean }> = [];
       const syncSpy = vi.spyOn(proto, 'sync').mockImplementation(async function (this: unknown) {
-        // The flush must happen while the bytes are still in the temp file —
-        // before the rename lands the entry (the whole point of syncing first).
-        targetExistedAtSync = await readFile(file, 'utf8').then(() => true, () => false);
+        syncs.push({
+          directory: fs.fstatSync((this as { fd: number }).fd).isDirectory(),
+          targetExisted: await readFile(file, 'utf8').then(() => true, () => false),
+        });
       });
       try {
         await setCloudflareOAuthToken(dataDir, { accessToken: 'acc', tokenType: 'Bearer', generation: 0, savedAt: Date.now() });
-        expect(syncSpy).toHaveBeenCalledTimes(1);
-        expect(targetExistedAtSync).toBe(false);
+        // The temp file's bytes are flushed while the target does not exist yet
+        // (before the rename), then the directory entry the rename created —
+        // a rename is durable only once the parent directory's metadata is.
+        expect(syncs).toEqual([
+          { directory: false, targetExisted: false },
+          { directory: true, targetExisted: true },
+        ]);
         expect(JSON.parse(await readFile(file, 'utf8'))).toMatchObject({ token: { accessToken: 'acc' }, lastGeneration: 1 });
-        // A rewrite of an existing file syncs the temp file too.
+        // A rewrite of an existing file follows the same discipline.
         await clearCloudflareOAuthToken(dataDir);
-        expect(syncSpy).toHaveBeenCalledTimes(2);
+        expect(syncs.slice(2)).toEqual([
+          { directory: false, targetExisted: true },
+          { directory: true, targetExisted: true },
+        ]);
       } finally {
         syncSpy.mockRestore();
       }
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('a directory the platform refuses to fsync (EPERM) does not fail the token write', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'od-cf-token-dirsync-eperm-'));
+    const dataDir = path.join(dir, 'data');
+    const file = path.join(dataDir, 'cloudflare-oauth-tokens.json');
+    try {
+      const probe = await open(path.join(dir, 'probe'), 'w');
+      const proto = Object.getPrototypeOf(probe) as { sync: () => Promise<void> };
+      await probe.close();
+      let directorySyncAttempted = false;
+      const syncSpy = vi.spyOn(proto, 'sync').mockImplementation(async function (this: unknown) {
+        if (fs.fstatSync((this as { fd: number }).fd).isDirectory()) {
+          directorySyncAttempted = true;
+          throw Object.assign(new Error('EPERM: operation not permitted, fsync'), { code: 'EPERM' });
+        }
+      });
+      try {
+        // The directory flush is best-effort: the write is already as durable
+        // as the temp-file flush made it, and the rename has landed.
+        await setCloudflareOAuthToken(dataDir, { accessToken: 'acc', tokenType: 'Bearer', generation: 0, savedAt: Date.now() });
+      } finally {
+        syncSpy.mockRestore();
+      }
+      expect(directorySyncAttempted).toBe(true);
+      expect(JSON.parse(await readFile(file, 'utf8'))).toMatchObject({ token: { accessToken: 'acc' } });
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

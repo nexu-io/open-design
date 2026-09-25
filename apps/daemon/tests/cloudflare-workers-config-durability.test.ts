@@ -3,6 +3,7 @@
 // PUT, capabilities, zones, deploy), so a corrupt file must degrade to the
 // unconfigured default instead of bricking all of them.
 
+import fs from 'node:fs';
 import { mkdtemp, open, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -43,22 +44,53 @@ afterEach(() => {
 });
 
 describe('Workers config write durability', () => {
-  it('fsyncs the temp file before renaming it over the config', async () => {
+  it('fsyncs the temp file before the rename and the parent directory after it', async () => {
     await withDataDir(async (dir) => {
       // Reach the FileHandle prototype through a real handle: fs/promises does
       // not export the class, and an ESM namespace cannot be spied directly.
       const probe = await open(path.join(dir, 'probe'), 'w');
       const proto = Object.getPrototypeOf(probe) as { sync: () => Promise<void> };
       await probe.close();
-      let syncedBeforeRename = false;
-      const syncSpy = vi.spyOn(proto, 'sync').mockImplementation(async function (this: unknown) {
-        // The temp file must not yet have been renamed over the target when
-        // the flush happens (the whole point of syncing first).
-        syncedBeforeRename = !(await readFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), 'utf8').then(() => true, () => false));
+      // Every flush, in order: what was synced (the temp file, or the parent
+      // directory) and whether the config entry existed at that moment.
+      const syncs: Array<{ directory: boolean; targetExisted: boolean }> = [];
+      vi.spyOn(proto, 'sync').mockImplementation(async function (this: unknown) {
+        syncs.push({
+          directory: fs.fstatSync((this as { fd: number }).fd).isDirectory(),
+          targetExisted: await readFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), 'utf8').then(() => true, () => false),
+        });
       });
       await writeCloudflareWorkersConfig({ token: 'tok', accountId: 'acct_test' });
-      expect(syncSpy).toHaveBeenCalledTimes(1);
-      expect(syncedBeforeRename).toBe(true);
+      // The temp file's bytes are flushed before the rename lands the entry,
+      // then the directory entry itself — a rename is durable only once the
+      // parent directory's metadata is.
+      expect(syncs).toEqual([
+        { directory: false, targetExisted: false },
+        { directory: true, targetExisted: true },
+      ]);
+      expect(JSON.parse(await readFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), 'utf8'))).toMatchObject({
+        token: 'tok',
+        accountId: 'acct_test',
+      });
+    });
+  });
+
+  it('a directory the platform refuses to fsync (EPERM) does not fail the config write', async () => {
+    await withDataDir(async (dir) => {
+      const probe = await open(path.join(dir, 'probe'), 'w');
+      const proto = Object.getPrototypeOf(probe) as { sync: () => Promise<void> };
+      await probe.close();
+      let directorySyncAttempted = false;
+      vi.spyOn(proto, 'sync').mockImplementation(async function (this: unknown) {
+        if (fs.fstatSync((this as { fd: number }).fd).isDirectory()) {
+          directorySyncAttempted = true;
+          throw Object.assign(new Error('EPERM: operation not permitted, fsync'), { code: 'EPERM' });
+        }
+      });
+      // Best-effort: the rename has landed and the temp-file flush already
+      // made the bytes durable, so the refusal must not surface as a failure.
+      await expect(writeCloudflareWorkersConfig({ token: 'tok', accountId: 'acct_test' })).resolves.toMatchObject({ configured: true });
+      expect(directorySyncAttempted).toBe(true);
       expect(JSON.parse(await readFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), 'utf8'))).toMatchObject({
         token: 'tok',
         accountId: 'acct_test',

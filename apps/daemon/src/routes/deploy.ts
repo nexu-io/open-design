@@ -3,7 +3,7 @@ import type { RouteDeps } from '../server-context.js';
 import type { AuthorizeProjectRequest } from '../collab/project-request-authority.js';
 import { clientRequestIdFor } from '../http/client-request-id.js';
 import { classifyDeployFailure } from '../deploy/failure-detail.js';
-import { detachCloudflareWorkerDomain, getCloudflareWorkerDomain, isOwnedCustomDomain, listCloudflareZones, ownedCustomDomainsFromMetadata, resolveWorkerScriptName, type CloudflareOwnedCustomDomain } from '../deploy/cloudflare-workers.js';
+import { detachCloudflareWorkerDomain, getCloudflareWorkerDomain, isOwnedCustomDomain, listCloudflareZones, ownedCustomDomainsFromMetadata, recordedCustomDomainFromMetadata, resolveWorkerScriptName, type CloudflareOwnedCustomDomain } from '../deploy/cloudflare-workers.js';
 import { getCloudflareAccessToken } from '../deploy.js';
 
 export interface RegisterDeployRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'ids' | 'deploy' | 'projectStore'> {
@@ -102,6 +102,64 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
     (status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST');
   const deployErrorStatus = (err: any): number =>
     err instanceof DeployError || err instanceof DeployErrorLike ? err.status : 400;
+
+  /** A Workers record's script name: the one it recorded at deploy time, else
+   * (records written before `scriptName` was stored) resolved the way a deploy
+   * resolves it — the configured override, else its project's name. */
+  function workersRecordScriptName(
+    record: { projectId: string; providerMetadata?: any },
+    configuredScriptName: string | undefined,
+  ): string {
+    const recorded = record.providerMetadata?.scriptName;
+    if (typeof recorded === 'string' && recorded) return recorded;
+    const project = getProject(db, record.projectId);
+    return resolveWorkerScriptName(configuredScriptName, project?.name || record.projectId);
+  }
+
+  /**
+   * Ownership inputs for a Workers deploy, gathered from EVERY record of this
+   * provider that deployed the same script — not only the (project, file)
+   * record the deploy replaces. The Workers config is global: a `scriptName`
+   * override (or two projects whose names slug identically) makes several
+   * records share one Worker, and with it one Access app and one set of
+   * attached hostnames. Read from a single record, a deploy of file B refuses
+   * the Access app file A created (CFW_ACCESS_APP_FOREIGN) and classifies the
+   * hostname A attached as foreign — never detached, never re-protected.
+   *
+   * The replaced record comes first so its ids win where records disagree;
+   * every sibling's owned hostnames are unioned in.
+   */
+  function priorWorkersOwnershipForScript(input: {
+    scriptName: string;
+    configuredScriptName: string | undefined;
+    prior: ReturnType<typeof getDeployment>;
+  }): {
+    priorAccessAppId: string | undefined;
+    priorOwnedCustomDomains: CloudflareOwnedCustomDomain[];
+    priorCustomDomain: Record<string, unknown> | undefined;
+  } {
+    const { prior } = input;
+    const siblings = listDeploymentsByProvider(db, CLOUDFLARE_WORKERS_PROVIDER_ID)
+      .filter((record: { id: string; projectId: string; providerMetadata?: any }) =>
+        record.id !== prior?.id && workersRecordScriptName(record, input.configuredScriptName) === input.scriptName);
+    const records: Array<{ providerMetadata?: any }> = prior ? [prior, ...siblings] : siblings;
+    let priorAccessAppId: string | undefined;
+    let priorCustomDomain: Record<string, unknown> | undefined;
+    const priorOwnedCustomDomains: CloudflareOwnedCustomDomain[] = [];
+    for (const record of records) {
+      const metadata = record.providerMetadata;
+      if (!priorAccessAppId && typeof metadata?.accessAppId === 'string' && metadata.accessAppId) {
+        priorAccessAppId = metadata.accessAppId;
+      }
+      if (!priorCustomDomain) priorCustomDomain = recordedCustomDomainFromMetadata(metadata);
+      for (const owned of ownedCustomDomainsFromMetadata(metadata)) {
+        if (!priorOwnedCustomDomains.some((have) => have.hostname === owned.hostname && have.id === owned.id)) {
+          priorOwnedCustomDomains.push(owned);
+        }
+      }
+    }
+    return { priorAccessAppId, priorOwnedCustomDomains, priorCustomDomain };
+  }
 
   // ---- Deploy --------------------------------------------------------------
 
@@ -412,6 +470,15 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
       if (providerId === CLOUDFLARE_WORKERS_PROVIDER_ID) {
         workersFailureContext = { projectId: req.params.id, fileName, target, prior };
       }
+      // Ownership is answered per SCRIPT, across every record that deployed it
+      // (see priorWorkersOwnershipForScript), not per (project, file) record.
+      const workersOwnership = providerId === CLOUDFLARE_WORKERS_PROVIDER_ID
+        ? priorWorkersOwnershipForScript({
+            scriptName: workersScriptName,
+            configuredScriptName: workersConfig?.scriptName || undefined,
+            prior,
+          })
+        : null;
       const result = providerId === CLOUDFLARE_PAGES_PROVIDER_ID
         ? await deployToCloudflarePages({
             config: {
@@ -433,11 +500,9 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
               target,
               customDomain: workersConfig?.customDomain,
               access: workersConfig?.access,
-              priorAccessAppId:
-                typeof prior?.providerMetadata?.accessAppId === 'string'
-                  ? prior.providerMetadata.accessAppId
-                  : undefined,
-              priorOwnedCustomDomains: ownedCustomDomainsFromMetadata(prior?.providerMetadata),
+              priorAccessAppId: workersOwnership?.priorAccessAppId,
+              priorOwnedCustomDomains: workersOwnership?.priorOwnedCustomDomains,
+              priorCustomDomain: workersOwnership?.priorCustomDomain,
               // Re-resolved per Cloudflare call (oauth: refreshed within the
               // expiry skew), so a multi-minute deploy never outlives its token.
               tokenProvider: () => resolveCloudflareWorkersRouteToken(workersConfig!),

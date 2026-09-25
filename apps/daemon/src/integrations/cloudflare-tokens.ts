@@ -17,7 +17,7 @@
 // generation guards interleavings INSIDE this daemon — a disconnect or a
 // reconnect that lands while a refresh is waiting on the token endpoint.
 
-import { chmod, mkdir, open, readFile, rename, rm } from 'node:fs/promises';
+import { chmod, mkdir, open, readFile, rename, rm, type FileHandle } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 
@@ -198,6 +198,38 @@ async function withLock<T>(dataDir: string, fn: () => Promise<T>): Promise<T> {
   }
 }
 
+/** Codes a platform answers when a directory cannot be opened or fsynced:
+ * Windows refuses to open a directory for reading (EISDIR/EPERM) and some
+ * filesystems reject fsync on a directory descriptor (EINVAL/ENOTSUP). None
+ * of them mean the data-file flush that already happened was lost. */
+const DIRECTORY_SYNC_UNSUPPORTED = new Set(['EISDIR', 'EPERM', 'EINVAL', 'ENOTSUP']);
+
+function isDirectorySyncUnsupported(err: unknown): boolean {
+  return DIRECTORY_SYNC_UNSUPPORTED.has(String((err as { code?: unknown } | null)?.code));
+}
+
+/** Flush the directory entry a rename just landed. Syncing the temp file makes
+ * its BYTES durable, but the rename itself is metadata of the parent directory,
+ * and a power loss can still drop it — the old entry (or none) survives with
+ * the new bytes orphaned. Best-effort: where the platform cannot open or fsync
+ * a directory, the write stays exactly as durable as the data-file flush made it. */
+export async function fsyncDirectory(dir: string): Promise<void> {
+  let handle: FileHandle;
+  try {
+    handle = await open(dir, 'r');
+  } catch (err) {
+    if (isDirectorySyncUnsupported(err)) return;
+    throw err;
+  }
+  try {
+    await handle.sync();
+  } catch (err) {
+    if (!isDirectorySyncUnsupported(err)) throw err;
+  } finally {
+    await handle.close();
+  }
+}
+
 async function writeTokensFile(
   dataDir: string,
   next: CloudflareOAuthTokensFile,
@@ -231,6 +263,8 @@ async function writeTokensFile(
     throw err;
   }
   await lockdownTokenFileMode(file);
+  // The rename is durable only once the directory entry is (see fsyncDirectory).
+  await fsyncDirectory(path.dirname(file));
   return next;
 }
 

@@ -2074,6 +2074,129 @@ describe('deploy provider routes', () => {
     }
   });
 
+  it('a Workers deploy takes the Access app and owned hostnames from EVERY record of the same script, not only the file being deployed', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-workers-shared-ownership-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    configureCloudflareWorkersDataDir(stateRoot);
+    try {
+      const dataDir = process.env.OD_DATA_DIR;
+      if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+      const projectId = `workers-shared-ownership-${Date.now()}`;
+      // Unique per run: the records this test leaves in the shared daemon DB
+      // would otherwise be siblings of every later test that deploys a Worker
+      // named `shared-script`, handing that deploy an Access app its mock
+      // cannot serve (priorWorkersOwnershipForScript reads across projects).
+      const scriptName = `shared-ownership-${Date.now()}`;
+      const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+      await writeFile(path.join(dir, 'a.html'), '<!doctype html><h1>A</h1>');
+      await writeFile(path.join(dir, 'b.html'), '<!doctype html><h1>B</h1>');
+      expect((await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: projectId, name: 'Shared ownership', skillId: null, designSystemId: null }),
+      })).status).toBe(200);
+      // One global scriptName: every file deploys the SAME Worker, so the Access
+      // app and the attached hostname are shared by every (project, file) record.
+      const putConfig = async (customDomain: { hostname: string; zoneId: string } | null) => {
+        expect((await fetch(`${baseUrl}/api/deploy/config`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            providerId: CLOUDFLARE_WORKERS_PROVIDER_ID,
+            token: 'tok',
+            accountId: 'acct_test',
+            scriptName,
+            access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } },
+            customDomain,
+          }),
+        })).status).toBe(200);
+      };
+      await putConfig({ hostname: 'app.example.com', zoneId: 'zone-1' });
+
+      const realFetch = globalThis.fetch;
+      const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+      let routed: Array<Record<string, string>> = [];
+      // Listed under a user-chosen name once created: only a recorded id proves ownership.
+      let listedApps: unknown[] = [];
+      let appPosts = 0;
+      const cfCalls: Array<{ url: string; method: string }> = [];
+      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        const method = (init?.method || 'GET').toUpperCase();
+        cfCalls.push({ url, method });
+        if (method === 'HEAD') {
+          return new Response('', { status: 302, headers: { location: 'https://acct-test.cloudflareaccess.com/cdn-cgi/access/login' } });
+        }
+        if (url.endsWith('/workers/subdomain')) return json({ success: true, result: { subdomain: 'acct-test' } });
+        if (url.includes('assets-upload-session')) return json({ success: true, result: { jwt: 'SESS', buckets: [] } });
+        if (method === 'GET' && url.includes('/workers/domains?service=')) return json({ success: true, result: routed });
+        if (method === 'PUT' && url.endsWith('/workers/domains')) {
+          const body = JSON.parse(String(init?.body)) as { hostname: string };
+          routed = [...routed.filter((d) => d.hostname !== body.hostname), { id: 'dom-app', hostname: body.hostname, service: scriptName, zone_id: 'zone-1' }];
+          return json({ success: true, result: { id: 'dom-app' } });
+        }
+        if (method === 'DELETE' && url.includes('/workers/domains/')) {
+          routed = routed.filter((d) => !url.endsWith('/' + d.id));
+          return json({ success: true, result: null });
+        }
+        if (method === 'PUT' && url.endsWith('/workers/scripts/' + scriptName)) return json({ success: true, result: {} });
+        if (method === 'POST' && url.endsWith('/workers/scripts/' + scriptName + '/subdomain')) return json({ success: true, result: { enabled: true } });
+        if (url.includes('/workers/scripts')) return json({ success: true, result: [{ id: scriptName, tag: 'tag-shared' }] });
+        if (url.includes('/access/identity_providers')) return json({ success: true, result: [{ id: 'otp-1', type: 'onetimepin', name: 'One-time PIN login' }] });
+        if (url.includes('/access/apps/')) {
+          if (method === 'PUT') return json({ success: true, result: { id: 'app-shared' } });
+          return json({ success: true, result: { id: 'app-shared', destinations: [{ type: 'worker', worker_id: 'tag-shared' }] } });
+        }
+        if (url.includes('/access/apps')) {
+          if (method === 'POST') {
+            appPosts += 1;
+            listedApps = [{ id: 'app-shared', name: 'Renamed by user', destinations: [{ type: 'worker', worker_id: 'tag-shared' }] }];
+            return json({ success: true, result: { id: 'app-shared' } });
+          }
+          return json({ success: true, result: listedApps });
+        }
+        return json({ success: true, result: {} });
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      try {
+        const deploy = (fileName: string) => fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileName, providerId: CLOUDFLARE_WORKERS_PROVIDER_ID }),
+        });
+        // a.html creates the Access app and attaches app.example.com. Both are
+        // recorded on a.html's record and nowhere else.
+        const first = await deploy('a.html');
+        expect(first.status).toBe(200);
+        expect(appPosts).toBe(1);
+        expect(routed.map((d) => d.hostname)).toEqual(['app.example.com']);
+
+        // The hostname is dropped from the config, then b.html deploys the SAME
+        // script. b.html has no record of its own: the app and the hostname are
+        // known only through a.html's record.
+        await putConfig(null);
+        const second = await deploy('b.html');
+        expect(second.status).toBe(200);
+        const secondBody = await second.json() as Record<string, unknown>;
+        // It reuses the app a.html created instead of refusing it as foreign …
+        expect(appPosts).toBe(1);
+        expect(secondBody.cloudflareWorkers).toMatchObject({ accessProtected: true, accessAppId: 'app-shared' });
+        // … and detaches the now-stale hostname a.html attached instead of
+        // leaving it routed as a "foreign" hostname it will not touch.
+        expect(cfCalls.some((c) => c.method === 'DELETE' && c.url.endsWith('/workers/domains/dom-app'))).toBe(true);
+        expect(routed).toEqual([]);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
   it('refuses a concurrent Cloudflare Workers deploy from a DIFFERENT project that resolves to the same script name', async () => {
     const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-workers-script-singleflight-'));
     const priorStateRoot = process.env.OD_USER_STATE_DIR;

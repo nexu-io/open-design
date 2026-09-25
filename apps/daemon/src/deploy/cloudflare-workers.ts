@@ -879,6 +879,17 @@ export function ownedCustomDomainsFromMetadata(metadata: unknown): CloudflareOwn
   return out;
 }
 
+/** The custom hostname a prior deployment recorded for display
+ * (`providerMetadata.customDomain`: id, hostname, url), when well-formed. A
+ * preview deploy copies it forward because its metadata replaces the record's. */
+export function recordedCustomDomainFromMetadata(metadata: unknown): JsonObject | undefined {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return undefined;
+  const value = (metadata as JsonObject).customDomain;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const entry = value as JsonObject;
+  return typeof entry.hostname === 'string' && entry.hostname ? { ...entry } : undefined;
+}
+
 /** Ownership test for a hostname Cloudflare routes to the script: it is ours
  * only when a prior OpenDesign deployment recorded it — by domain id when the
  * record has one, by hostname otherwise. Anything else was attached outside
@@ -919,12 +930,15 @@ export async function deployToCloudflareWorkers(input: {
   /** Custom hostnames a prior OpenDesign deployment attached (see
    * ownedCustomDomainsFromMetadata). Only these are reconciled by this deploy. */
   priorOwnedCustomDomains?: readonly CloudflareOwnedCustomDomain[] | undefined;
+  /** The custom hostname a prior deployment recorded for display (see
+   * recordedCustomDomainFromMetadata). A preview deploy carries it forward. */
+  priorCustomDomain?: JsonObject | undefined;
   /** Re-resolved before every Cloudflare call. Defaults to the OAuth access
    * token resolver in 'oauth' mode and to the static `config.token` otherwise. */
   tokenProvider?: CloudflareTokenProvider | undefined;
 }): Promise<CloudflareWorkersDeployResult> {
   const startedAt = Date.now();
-  const { config, files, projectId = '', projectName = '', target = 'production', access, priorAccessAppId, customDomain } = input ?? {};
+  const { config, files, projectId = '', projectName = '', target = 'production', access, priorAccessAppId, customDomain, priorCustomDomain } = input ?? {};
   const priorOwnedCustomDomains = input?.priorOwnedCustomDomains ?? [];
   const accountId = config?.accountId;
   if (!accountId) throw new DeployError('Cloudflare account ID is required.', 400, undefined, 'CFW_ACCOUNT_ID_REQUIRED');
@@ -1024,6 +1038,14 @@ export async function deployToCloudflareWorkers(input: {
       const completionJwt = await uploadAssetBuckets(cfg, session.jwt, session.buckets, hashToFile);
       steps.push({ name: 'assets', status: 'done', detail: String(assetFiles.length) });
       const metadata: JsonObject = { scriptName };
+      // A preview never touches custom-domain routing, but this metadata
+      // REPLACES the record's (routes/deploy.ts), so the production ownership
+      // must ride along — the same reason priorAccessAppId is kept below.
+      // Without it the next production deploy or detach finds the hostname
+      // routed to the script but recorded nowhere, and classifies it foreign.
+      metadata.ownedCustomDomains = priorOwnedCustomDomains.map((owned) =>
+        owned.id ? { id: owned.id, hostname: owned.hostname } : { hostname: owned.hostname });
+      if (priorCustomDomain) metadata.customDomain = { ...priorCustomDomain };
       if (accessOn) {
         // Preview URLs are covered by the preview_worker destination; make sure
         // the app exists BEFORE the version goes live.

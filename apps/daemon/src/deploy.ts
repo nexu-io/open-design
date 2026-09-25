@@ -8,6 +8,7 @@ import { listFiles, readProjectFile, validateProjectPath } from './projects.js';
 import { findRealTagOffset, HTML_TAG_PATTERNS } from '@open-design/contracts/runtime/html-injection-points';
 import { refreshCloudflareToken, validateCloudflareOAuthScopes } from './integrations/cloudflare-oauth.js';
 import {
+  fsyncDirectory,
   getCloudflareOAuthToken,
   isCloudflareOAuthTokenExpired,
   setCloudflareOAuthTokenIfGenerationMatches,
@@ -235,6 +236,10 @@ async function writeDeployConfigFile(file: string, config: DeployConfig) {
     await rm(tmp, { force: true }).catch(() => {});
     throw err;
   }
+  // fsync AFTER the rename too: the temp-file flush made the bytes durable, but
+  // the rename is an entry in the parent directory and a power loss can still
+  // lose that entry. Best-effort where the platform cannot sync a directory.
+  await fsyncDirectory(path.dirname(file));
 }
 
 // Serialize every Workers-config read-modify-write so a settings PUT, a

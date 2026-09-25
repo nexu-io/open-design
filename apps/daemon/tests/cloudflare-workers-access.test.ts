@@ -6,6 +6,7 @@ import { checkDeploymentUrl, cloudflareOAuthTokensDir, configureCloudflareWorker
 import { setCloudflareOAuthToken } from '../src/integrations/cloudflare-tokens.js';
 import {
   deployToCloudflareWorkers,
+  ownedCustomDomainsFromMetadata,
   probeCloudflareWorkersCapabilities,
 } from '../src/deploy/cloudflare-workers.js';
 
@@ -795,6 +796,51 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
     vi.stubGlobal('fetch', wrapped);
     await deployToCloudflareWorkers({ ...base, target: 'preview', access: { enabled: false }, priorAccessAppId: 'app-123' });
     expect(calls.some((c) => c[0].includes('/access/apps/') && c[1]?.method === 'DELETE')).toBe(false);
+  });
+
+  it('a preview deploy carries the production custom-domain ownership forward on its record', async () => {
+    const { calls, fn } = accessFetch();
+    const wrapped = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes('/versions')) return jsonResponse({ success: true, result: { id: 'v12345678' } });
+      return fn(url, init);
+    });
+    vi.stubGlobal('fetch', wrapped);
+    const out = await deployToCloudflareWorkers({
+      ...base,
+      target: 'preview',
+      access: { enabled: false },
+      priorAccessAppId: 'app-123',
+      priorOwnedCustomDomains: [{ id: 'dom-1', hostname: 'app.example.com' }, { hostname: 'legacy.example.com' }],
+      priorCustomDomain: { id: 'dom-1', hostname: 'app.example.com', url: 'https://app.example.com' },
+    });
+    // The deploy route REPLACES the record's providerMetadata with this object,
+    // so anything missing here is gone from the record: the next production
+    // deploy would find app.example.com routed to the script but recorded
+    // nowhere, classify it foreign, and never detach it.
+    expect(out.providerMetadata).toMatchObject({
+      accessAppId: 'app-123',
+      ownedCustomDomains: [{ id: 'dom-1', hostname: 'app.example.com' }, { hostname: 'legacy.example.com' }],
+      customDomain: { id: 'dom-1', hostname: 'app.example.com', url: 'https://app.example.com' },
+    });
+    expect(ownedCustomDomainsFromMetadata(out.providerMetadata)).toEqual([
+      { id: 'dom-1', hostname: 'app.example.com' },
+      { hostname: 'legacy.example.com' },
+    ]);
+    // Carrying ownership forward is bookkeeping only: a preview still never
+    // touches custom-domain routing.
+    expect(calls.some((c) => c[0].includes('/workers/domains') && c[1]?.method !== 'GET')).toBe(false);
+  });
+
+  it('a preview deploy with no prior ownership records an empty owned list and no custom domain', async () => {
+    const { fn } = accessFetch();
+    const wrapped = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes('/versions')) return jsonResponse({ success: true, result: { id: 'v12345678' } });
+      return fn(url, init);
+    });
+    vi.stubGlobal('fetch', wrapped);
+    const out = await deployToCloudflareWorkers({ ...base, target: 'preview', access: { enabled: false } });
+    expect(out.providerMetadata?.ownedCustomDomains).toEqual([]);
+    expect(out.providerMetadata).not.toHaveProperty('customDomain');
   });
 
   it('fails closed when the OTP identity provider cannot be created', async () => {
