@@ -12240,7 +12240,14 @@ Common options:
     if (flags.token !== undefined) body.token = flags.token;
     if (flags['client-id'] !== undefined) body.clientId = flags['client-id'];
     if (flags['redirect-uri'] !== undefined) body.redirectUri = flags['redirect-uri'];
-    if (flags['credential-mode'] !== undefined) body.credentialMode = flags['credential-mode'];
+    if (flags['credential-mode'] !== undefined) {
+      const mode = flags['credential-mode'];
+      if (mode !== 'token' && mode !== 'oauth') {
+        console.error(`--credential-mode must be "token" or "oauth" (got "${mode}")`);
+        process.exit(2);
+      }
+      body.credentialMode = mode;
+    }
     try {
       resp = await fetch(`${base}/api/deploy/config?providerId=cloudflare-workers`, {
         method: hasUpdate ? 'PUT' : 'GET',

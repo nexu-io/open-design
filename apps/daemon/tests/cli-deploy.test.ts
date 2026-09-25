@@ -454,4 +454,11 @@ describe('od cloudflare CLI', () => {
     expect(stub.requests[0]?.method).toBe('PUT');
     expect(JSON.parse(stub.requests[0]?.body ?? '{}')).toEqual({ providerId: 'cloudflare-workers', accountId: 'acct-1', token: 'tok-1' });
   });
+
+  it('config rejects an invalid --credential-mode locally and makes no request', async () => {
+    const result = await runCli(['cloudflare', 'config', '--credential-mode', 'ouath', '--daemon-url', stub.baseUrl]);
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain('--credential-mode');
+    expect(stub.requests).toHaveLength(0);
+  });
 });

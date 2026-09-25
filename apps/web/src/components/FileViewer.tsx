@@ -14839,7 +14839,10 @@ function HtmlViewer({
         file.name,
         deployProviderId,
         cloudflarePagesSelection,
-        deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? deployTarget : undefined,
+        deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ||
+        deployProviderId === CLOUDFLARE_WORKERS_PROVIDER_ID
+          ? deployTarget
+          : undefined,
         workspaceContext,
         deployRequestId,
       );
@@ -18778,7 +18781,8 @@ function HtmlViewer({
                   ))}
                 </select>
               </label>
-              {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
+              {(deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ||
+                deployProviderId === CLOUDFLARE_WORKERS_PROVIDER_ID) ? (
                 <label className="deploy-target-field">
                   <span className="deploy-field-title">{t('fileViewer.deployTargetLabel')}</span>
                   <select

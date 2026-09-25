@@ -180,3 +180,105 @@ describe('FileViewer deploy target selector', () => {
     expect(deployBody!.target).toBe('production');
   });
 });
+
+/**
+ * Workers deploy modal fetch mock. Token mode (credentialMode: 'token') so the
+ * modal skips the OAuth connect dance and can reach the target selector.
+ */
+function mockWorkersDeployFetch(onDeployBody: (body: Record<string, unknown>) => void) {
+  return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+    const method = init?.method || (input instanceof Request ? input.method : 'GET');
+
+    if (url === '/api/projects/project-1/deployments') {
+      return new Response(JSON.stringify({ deployments: [] }), { status: 200 });
+    }
+    if (url === '/api/deploy/config?providerId=cloudflare-workers') {
+      return new Response(JSON.stringify({
+        providerId: 'cloudflare-workers',
+        configured: true,
+        tokenMask: 'saved-cloudflare-workers-token',
+        teamId: '',
+        teamSlug: '',
+        accountId: 'account-123',
+        scriptName: '',
+        compatibilityDate: '',
+        credentialMode: 'token',
+        clientId: '',
+        redirectUri: '',
+        scopes: [],
+        bindings: [],
+        target: 'preview',
+      }), { status: 200 });
+    }
+    if (url === '/api/deploy/cloudflare-workers/capabilities') {
+      return new Response(JSON.stringify({
+        workers: true,
+        workersDevSubdomain: 'demo',
+        r2: true,
+        d1: true,
+        access: false,
+      }), { status: 200 });
+    }
+    if (url === '/api/deploy/cloudflare-workers/zones') {
+      return new Response(JSON.stringify({ zones: [] }), { status: 200 });
+    }
+    if (url === '/api/cloudflare/auth/status') {
+      return new Response(JSON.stringify({ connected: false }), { status: 200 });
+    }
+    if (url === '/api/cloudflare/resources/r2-buckets') {
+      return new Response(JSON.stringify({ buckets: [] }), { status: 200 });
+    }
+    if (url === '/api/cloudflare/resources/d1-databases') {
+      return new Response(JSON.stringify({ databases: [] }), { status: 200 });
+    }
+    if (url === '/api/projects/project-1/deploy' && method === 'POST') {
+      const body = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
+      onDeployBody(body);
+      return new Response(JSON.stringify({
+        id: 'cloudflare-workers-deploy',
+        projectId: 'project-1',
+        fileName: 'index.html',
+        providerId: 'cloudflare-workers',
+        url: 'https://demo.workers.dev',
+        deploymentId: 'cf-w-1',
+        deploymentCount: 1,
+        target: body.target ?? 'production',
+        status: 'ready',
+        createdAt: 1,
+        updatedAt: 2,
+      }), { status: 200 });
+    }
+    return new Response(JSON.stringify({}), { status: 404 });
+  });
+}
+
+describe('FileViewer Workers deploy target', () => {
+  it('sends target: "preview" for a Workers preview selection', async () => {
+    let deployBody: Record<string, unknown> | null = null;
+    vi.stubGlobal('fetch', mockWorkersDeployFetch((body) => { deployBody = body; }));
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={deployableHtmlFile()}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /^share$/i }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Deploy to Cloudflare Workers/i }));
+
+    const targetSelect = await screen.findByRole('combobox', { name: /target/i });
+    fireEvent.change(targetSelect, { target: { value: 'preview' } });
+    await waitFor(() => {
+      expect((targetSelect as HTMLSelectElement).value).toBe('preview');
+    });
+
+    clickDeploySubmitButton();
+
+    await waitFor(() => {
+      expect(deployBody).not.toBeNull();
+    });
+    expect(deployBody!.providerId).toBe('cloudflare-workers');
+    expect(deployBody!.target).toBe('preview');
+  });
+});
