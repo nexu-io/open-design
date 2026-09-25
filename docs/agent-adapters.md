@@ -142,7 +142,7 @@ definitions currently group by transport as follows:
 | `json-event-stream` | `codex`, `cursor-agent`, `opencode`, `mimo`, `byok-opencode` |
 | `copilot-stream-json` | `copilot` |
 | `qoder-stream-json` | `qoder` |
-| `acp-json-rpc` | `amr` (Vela), `devin`, `hermes`, `kimi`, `kiro`, `kilo`, `reasonix`, `trae-cli`, `vibe` |
+| `acp-json-rpc` | `amr` (Vela), `devin`, `hermes`, `kimchi`, `kimi`, `kiro`, `kilo`, `reasonix`, `trae-cli`, `vibe` |
 | `pi-rpc` | `pi` |
 | `dsh-profile-jsonl` | `deepseek-harness` |
 | `plain` | `aider`, `antigravity`, `atomcode`, `deepseek`, `grok-build`, `qwen` |
@@ -432,7 +432,33 @@ the active-run staging implementation is in
   may expose its own reasoning-effort choices; OD validates and forwards only
   one of the choices advertised for that selected model.
 
-### 5.13 Plain stream artifact handoff
+### 5.13 Kimchi CLI
+
+- Invocation is `kimchi --mode acp`. ACP is a global output mode of the CLI
+  rather than an `acp` subcommand (verified against kimchi 1.1.33), so the
+  argv differs from kimi/devin/hermes.
+- Streaming uses the daemon's shared ACP JSON-RPC transport; `session/new`
+  answers with both a `models` payload and a `model` config option, so model
+  selection rides the existing `session/set_config_option` path.
+- Models are discovered live through the ACP handshake and cover whatever
+  providers the user configured in kimchi (the `kimchi-dev` gateway,
+  `openai-codex`, ollama, and others). Fallback hints only appear when the
+  handshake cannot reach the CLI.
+- Sessions: the `session/new` response carries no durable
+  `openCodeSessionId` handle, so follow-up turns start a fresh session with
+  the flattened transcript. Kimchi itself implements `session/load`; native
+  resume would require kimchi to return that handle.
+- Skills use the shared §4 path. External MCP servers are forwarded through
+  the ACP launch descriptor (`acp-merge`), and the daemon's live-artifacts
+  MCP server is injected the same way as for the other ACP adapters.
+- Permission: kimchi's default permissions mode asks before edits. The daemon
+  runs without a TTY and auto-approves `session/request_permission` requests,
+  the same headless posture as Devin/Copilot/Qoder.
+- **Gotcha:** Detection only proves `kimchi --version` runs. Kimchi owns its
+  own login and provider setup; the daemon does not run login flows or edit
+  kimchi configuration.
+
+### 5.14 Plain stream artifact handoff
 
 Adapters with `streamFormat: 'plain'` do not expose structured file-write tool calls to the daemon. Their stdout is still a valid artifact handoff when the model emits Anthropic-style source blocks:
 
@@ -587,7 +613,7 @@ apps/daemon/src/
 ├── copilot-stream.ts       # streamFormat="copilot-stream-json" — the one stream parser that sits flat at src/
 ├── agent-protocol/         # JSON-RPC transports, dispatched via agent-protocol/index.ts (attachAcpSession / attachPiRpcSession)
 │   ├── index.ts            # barrel: attachAcpSession / attachPiRpcSession / mapPiRpcEvent
-│   ├── acp/                # streamFormat="acp-json-rpc": shared transport for AMR, Devin, Hermes, Kimi, Kiro, Kilo, Reasonix, Trae CLI, and Vibe
+│   ├── acp/                # streamFormat="acp-json-rpc": shared transport for AMR, Devin, Hermes, Kimchi, Kimi, Kiro, Kilo, Reasonix, Trae CLI, and Vibe
 │   ├── pi-rpc/             # streamFormat="pi-rpc": pi's JSON-RPC-over-stdio transport
 │   └── core/               # shared JSON-line stream helpers
 └── server.ts               # spawn pipeline + stream dispatch: routes def.streamFormat/eventParser to a parser

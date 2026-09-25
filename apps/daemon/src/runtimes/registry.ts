@@ -8,6 +8,7 @@ import { hermesAgentDef } from './defs/hermes.js';
 import { traeCliAgentDef } from './defs/trae-cli.js';
 import { grokBuildAgentDef } from './defs/grok-build.js';
 import { kimiAgentDef } from './defs/kimi.js';
+import { kimchiAgentDef } from './defs/kimchi.js';
 import { cursorAgentDef } from './defs/cursor-agent.js';
 import { qwenAgentDef } from './defs/qwen.js';
 import { qoderAgentDef } from './defs/qoder.js';
@@ -48,6 +49,7 @@ export const SHIPPED_AGENT_DEFS: RuntimeAgentDef[] = [
   traeCliAgentDef,
   grokBuildAgentDef,
   kimiAgentDef,
+  kimchiAgentDef,
   cursorAgentDef,
   qwenAgentDef,
   qoderAgentDef,
