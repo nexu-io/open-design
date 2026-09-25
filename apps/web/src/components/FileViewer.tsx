@@ -118,10 +118,14 @@ import {
   fetchLiveArtifactRefreshes,
   checkDeploymentLink,
   CLOUDFLARE_PAGES_PROVIDER_ID,
+  CLOUDFLARE_WORKERS_PROVIDER_ID,
   createSocialSharePayload,
   DEFAULT_DEPLOY_PROVIDER_ID,
   deployProjectFile,
   fetchCloudflarePagesZones,
+  fetchCloudflareD1Databases,
+  fetchCloudflareR2Buckets,
+  fetchCloudflareWorkersZones,
   fetchDeployConfig,
   fetchProjectDeployments,
   fetchProjectFileVersion,
@@ -145,8 +149,12 @@ import {
   updateDeployConfig,
   type WebDeployConfigResponse,
   type WebCloudflarePagesDeploySelection,
+  type WebCloudflareWorkersBinding,
+  type WebCloudflareWorkersCapabilities,
+  type WebCloudflareWorkersCustomDomain,
   type WebDeploymentInfo,
   type WebDeployProjectFileResponse,
+  type WebDeployResultProviderMetadata,
   type WebDeployProviderId,
   type WebUpdateDeployConfigRequest,
   type ProjectPreviewBaseScope,
@@ -353,7 +361,7 @@ const IMAGE_EXPORT_FORMAT_OPTIONS: Array<{
 ];
 type DeployProviderOption = {
   id: WebDeployProviderId;
-  labelKey: 'fileViewer.vercelProvider' | 'fileViewer.cloudflarePagesProvider';
+  labelKey: 'fileViewer.vercelProvider' | 'fileViewer.cloudflarePagesProvider' | 'fileViewer.cloudflareWorkersProvider';
   tokenLink: string;
   tokenLinkKey: 'fileViewer.vercelTokenGetLink' | 'fileViewer.cloudflareApiTokenGetLink';
   tokenPlaceholderKey:
@@ -678,6 +686,18 @@ const DEPLOY_PROVIDER_OPTIONS: DeployProviderOption[] = [
     accountIdLabelKey: 'fileViewer.cloudflareAccountId',
     accountIdHintKey: 'fileViewer.cloudflareAccountIdHint',
   },
+  {
+    id: CLOUDFLARE_WORKERS_PROVIDER_ID,
+    labelKey: 'fileViewer.cloudflareWorkersProvider',
+    tokenLink: 'https://dash.cloudflare.com/profile/api-tokens',
+    tokenLinkKey: 'fileViewer.cloudflareApiTokenGetLink',
+    tokenPlaceholderKey: 'fileViewer.cloudflareApiTokenPlaceholder',
+    tokenReuseHintKey: 'fileViewer.cloudflareApiTokenReuseHint',
+    tokenRequiredKey: 'fileViewer.cloudflareApiTokenRequired',
+    tokenLabelKey: 'fileViewer.cloudflareApiToken',
+    accountIdLabelKey: 'fileViewer.cloudflareAccountId',
+    accountIdHintKey: 'fileViewer.cloudflareAccountIdHint',
+  },
 ];
 
 function mergeManualEditInspectorStyles(
@@ -735,6 +755,16 @@ function getDeployProviderOption(providerId: WebDeployProviderId): DeployProvide
   return DEPLOY_PROVIDER_OPTIONS.find((option) => option.id === providerId) ?? DEPLOY_PROVIDER_OPTIONS[0]!;
 }
 
+async function fetchCloudflareWorkersCapabilities(): Promise<WebCloudflareWorkersCapabilities | null> {
+  try {
+    const resp = await fetch('/api/deploy/cloudflare-workers/capabilities', { cache: 'no-store' });
+    if (!resp.ok) return null;
+    return (await resp.json()) as WebCloudflareWorkersCapabilities;
+  } catch {
+    return null;
+  }
+}
+
 function normalizeCloudflareDomainPrefixInput(raw: string): string {
   return raw.trim().toLowerCase();
 }
@@ -749,6 +779,22 @@ function deployResultState(status?: string): 'ready' | 'delayed' | 'protected' |
   if (status === 'failed' || status === 'conflict') return 'failed';
   if (status === 'link-delayed' || status === 'pending') return 'delayed';
   return 'ready';
+}
+
+// Friendly English label for a Cloudflare Workers deploy step. Unknown step
+// names fall through to the raw name so the log stays useful as the daemon
+// adds new steps.
+function cloudflareDeployStepLabel(name: string): string {
+  const labels: Record<string, string> = {
+    assets: 'Assets',
+    script: 'Script',
+    version: 'Version',
+    subdomain: 'Enable workers.dev',
+    'access-app': 'Cloudflare Access',
+    'custom-domain': 'Custom domain',
+    error: 'Failed',
+  };
+  return labels[name] ?? name;
 }
 
 function publicShareUrlForDeployment(deployment?: WebDeploymentInfo | null): string {
@@ -7954,7 +8000,21 @@ function HtmlViewer({
   const [cloudflareZonesError, setCloudflareZonesError] = useState<string | null>(null);
   const [cloudflareZoneId, setCloudflareZoneId] = useState('');
   const [cloudflareDomainPrefix, setCloudflareDomainPrefix] = useState('');
+  const [cloudflareWorkersScriptName, setCloudflareWorkersScriptName] = useState('');
+  const [cloudflareWorkersCompatibilityDate, setCloudflareWorkersCompatibilityDate] = useState('');
+  const [cloudflareWorkersBindings, setCloudflareWorkersBindings] = useState<WebCloudflareWorkersBinding[]>([]);
+  const [cloudflareWorkersCapabilities, setCloudflareWorkersCapabilities] = useState<WebCloudflareWorkersCapabilities | null>(null);
+  const [cloudflareWorkersCapabilitiesLoading, setCloudflareWorkersCapabilitiesLoading] = useState(false);
+  const [cloudflareWorkersCapabilitiesError, setCloudflareWorkersCapabilitiesError] = useState<string | null>(null);
+  const [cloudflareR2Buckets, setCloudflareR2Buckets] = useState<string[]>([]);
+  const [cloudflareD1Databases, setCloudflareD1Databases] = useState<Array<{ name: string; id: string }>>([]);
+  const [cloudflareResourcesLoading, setCloudflareResourcesLoading] = useState(false);
+  const [cloudflareResourcesError, setCloudflareResourcesError] = useState<string | null>(null);
+  const [cloudflareWorkersZones, setCloudflareWorkersZones] = useState<Array<{ id: string; name: string; status?: string }>>([]);
+  const [cloudflareWorkersCustomDomainHostname, setCloudflareWorkersCustomDomainHostname] = useState('');
+  const [cloudflareWorkersCustomDomainZoneId, setCloudflareWorkersCustomDomainZoneId] = useState('');
   const deployProviderLoadSeqRef = useRef(0);
+
   const deployTokenInputRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
     if (!workspaceActive || !deployModalOpen) return;
@@ -9327,6 +9387,13 @@ function HtmlViewer({
     setCloudflareAccountId(matchingConfig?.accountId || '');
     setCloudflareZoneId(matchingConfig?.cloudflarePages?.lastZoneId || '');
     setCloudflareDomainPrefix(matchingConfig?.cloudflarePages?.lastDomainPrefix || '');
+    setCloudflareWorkersScriptName(matchingConfig?.scriptName || '');
+    setCloudflareWorkersCompatibilityDate(matchingConfig?.compatibilityDate || '');
+    setCloudflareWorkersBindings(matchingConfig?.bindings ?? []);
+    setCloudflareWorkersCustomDomainHostname(matchingConfig?.customDomain?.hostname || '');
+    setCloudflareWorkersCustomDomainZoneId(matchingConfig?.customDomain?.zoneId || '');
+    setCloudflareWorkersCapabilities(null);
+    setCloudflareWorkersCapabilitiesError(null);
     // The daemon's GET /api/deploy/config response currently hardcodes `target: 'preview'`
     // as a placeholder (apps/daemon/src/deploy.ts publicDeployConfig /
     // publicCloudflarePagesConfig) rather than persisting a real user preference, so it must
@@ -9358,6 +9425,17 @@ function HtmlViewer({
         token,
         accountId: cloudflareAccountId.trim(),
         cloudflarePages: cloudflareConfigHintsFromForm(),
+      };
+    }
+    if (providerId === CLOUDFLARE_WORKERS_PROVIDER_ID) {
+      return {
+        providerId,
+        token,
+        accountId: cloudflareAccountId.trim(),
+        scriptName: cloudflareWorkersScriptName.trim(),
+        compatibilityDate: cloudflareWorkersCompatibilityDate.trim(),
+        bindings: cloudflareWorkersBindings,
+        customDomain: buildCloudflareWorkersCustomDomain(),
       };
     }
     return {
@@ -9393,6 +9471,10 @@ function HtmlViewer({
     setDeployResult(currentDeployment ?? null);
     if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID && config?.configured) {
       void loadCloudflareZones(config, { requestSeq });
+    } else if (providerId === CLOUDFLARE_WORKERS_PROVIDER_ID && config?.configured) {
+      void loadCloudflareWorkersCapabilities(config, { requestSeq });
+      void loadCloudflareWorkersResources(config, { requestSeq });
+      void loadCloudflareWorkersZones(config, { requestSeq });
     }
     return { config, currentDeployment };
   }
@@ -9423,6 +9505,72 @@ function HtmlViewer({
       setCloudflareZonesError(err instanceof Error ? err.message : t('fileViewer.cloudflareZonesLoadFailed'));
     } finally {
       if (requestSeq === deployProviderLoadSeqRef.current) setCloudflareZonesLoading(false);
+    }
+  }
+
+  async function loadCloudflareWorkersCapabilities(
+    config: WebDeployConfigResponse | null = deployConfig,
+    options?: { requestSeq?: number },
+  ) {
+    if (!config?.configured || config.providerId !== CLOUDFLARE_WORKERS_PROVIDER_ID) return;
+    const requestSeq = options?.requestSeq ?? deployProviderLoadSeqRef.current;
+    setCloudflareWorkersCapabilitiesLoading(true);
+    setCloudflareWorkersCapabilitiesError(null);
+    try {
+      const capabilities = await fetchCloudflareWorkersCapabilities();
+      if (requestSeq !== deployProviderLoadSeqRef.current) return;
+      setCloudflareWorkersCapabilities(capabilities);
+      if (!capabilities) {
+        setCloudflareWorkersCapabilitiesError(t('fileViewer.cloudflareWorkersCapabilitiesLoadFailed'));
+      }
+    } catch (err) {
+      if (requestSeq !== deployProviderLoadSeqRef.current) return;
+      setCloudflareWorkersCapabilities(null);
+      setCloudflareWorkersCapabilitiesError(err instanceof Error ? err.message : t('fileViewer.cloudflareWorkersCapabilitiesLoadFailed'));
+    } finally {
+      if (requestSeq === deployProviderLoadSeqRef.current) setCloudflareWorkersCapabilitiesLoading(false);
+    }
+  }
+
+  async function loadCloudflareWorkersResources(
+    config: WebDeployConfigResponse | null = deployConfig,
+    options?: { requestSeq?: number },
+  ) {
+    if (!config?.configured || config.providerId !== CLOUDFLARE_WORKERS_PROVIDER_ID) return;
+    const requestSeq = options?.requestSeq ?? deployProviderLoadSeqRef.current;
+    setCloudflareResourcesLoading(true);
+    setCloudflareResourcesError(null);
+    try {
+      const [buckets, databases] = await Promise.all([
+        fetchCloudflareR2Buckets(),
+        fetchCloudflareD1Databases(),
+      ]);
+      if (requestSeq !== deployProviderLoadSeqRef.current) return;
+      setCloudflareR2Buckets(buckets.map((bucket) => bucket.name));
+      setCloudflareD1Databases(databases);
+    } catch (err) {
+      if (requestSeq !== deployProviderLoadSeqRef.current) return;
+      setCloudflareR2Buckets([]);
+      setCloudflareD1Databases([]);
+      setCloudflareResourcesError(err instanceof Error ? err.message : 'Could not load Cloudflare resources.');
+    } finally {
+      if (requestSeq === deployProviderLoadSeqRef.current) setCloudflareResourcesLoading(false);
+    }
+  }
+
+  async function loadCloudflareWorkersZones(
+    config: WebDeployConfigResponse | null = deployConfig,
+    options?: { requestSeq?: number },
+  ) {
+    if (!config?.configured || config.providerId !== CLOUDFLARE_WORKERS_PROVIDER_ID) return;
+    const requestSeq = options?.requestSeq ?? deployProviderLoadSeqRef.current;
+    try {
+      const zones = await fetchCloudflareWorkersZones();
+      if (requestSeq !== deployProviderLoadSeqRef.current) return;
+      setCloudflareWorkersZones(zones);
+      setCloudflareWorkersCustomDomainZoneId((current) => current || zones[0]?.id || '');
+    } catch {
+      if (requestSeq === deployProviderLoadSeqRef.current) setCloudflareWorkersZones([]);
     }
   }
 
@@ -14315,7 +14463,10 @@ function HtmlViewer({
     setDeployError(null);
     setDeployActionToast(null);
     try {
-      if (deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID) {
+      if (
+        deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ||
+        deployProviderId === CLOUDFLARE_WORKERS_PROVIDER_ID
+      ) {
         if (!deployToken.trim()) {
           setDeployActionToast(t('fileViewer.cloudflareApiTokenRequired'));
           deployTokenInputRef.current?.focus();
@@ -14332,6 +14483,9 @@ function HtmlViewer({
       syncDeployFormFromConfig(deployProviderId, config);
       if (deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID) {
         await loadCloudflareZones(config);
+      } else if (deployProviderId === CLOUDFLARE_WORKERS_PROVIDER_ID) {
+        await loadCloudflareWorkersCapabilities(config);
+        await loadCloudflareWorkersResources(config);
       }
       return config;
     } catch (err) {
@@ -14360,6 +14514,26 @@ function HtmlViewer({
     };
   }
 
+  function addCloudflareWorkersBinding() {
+    setCloudflareWorkersBindings((current) => [...current, { type: 'r2_bucket', name: '' }]);
+  }
+
+  function updateCloudflareWorkersBinding(index: number, binding: WebCloudflareWorkersBinding) {
+    setCloudflareWorkersBindings((current) => current.map((item, i) => (i === index ? binding : item)));
+  }
+
+  function removeCloudflareWorkersBinding(index: number) {
+    setCloudflareWorkersBindings((current) => current.filter((_, i) => i !== index));
+  }
+
+
+  function buildCloudflareWorkersCustomDomain(): WebCloudflareWorkersCustomDomain | undefined {
+    const hostname = cloudflareWorkersCustomDomainHostname.trim();
+    const zoneId = cloudflareWorkersCustomDomainZoneId.trim();
+    if (!hostname || !zoneId) return undefined;
+    return { hostname, zoneId };
+  }
+
   async function deployToSelectedProvider() {
     setDeploying(true);
     setDeployPhase('deploying');
@@ -14372,7 +14546,11 @@ function HtmlViewer({
     const deployStarted = performance.now();
     const deployRequestId = analytics.newRequestId();
     const providerForTracking: TrackingDeployProvider =
-      deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? 'cloudflare_pages' : 'vercel';
+      deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID
+        ? 'cloudflare_pages'
+        : deployProviderId === CLOUDFLARE_WORKERS_PROVIDER_ID
+          ? 'cloudflare_workers'
+          : 'vercel';
     const firstConfigure = !deployConfig?.configured;
     let savedNewToken = false;
     const fireDeployResult = (
@@ -14407,12 +14585,19 @@ function HtmlViewer({
         cloudflareHints?.lastZoneName !== deployConfig?.cloudflarePages?.lastZoneName ||
         cloudflareHints?.lastDomainPrefix !== deployConfig?.cloudflarePages?.lastDomainPrefix,
       );
+      const cloudflareWorkersChanged = deployProviderId === CLOUDFLARE_WORKERS_PROVIDER_ID && (
+        cloudflareWorkersScriptName.trim() !== (deployConfig?.scriptName || '') ||
+        cloudflareWorkersCompatibilityDate.trim() !== (deployConfig?.compatibilityDate || '') ||
+        JSON.stringify(cloudflareWorkersBindings) !== JSON.stringify(deployConfig?.bindings ?? []) ||
+        JSON.stringify(buildCloudflareWorkersCustomDomain() ?? null) !== JSON.stringify(deployConfig?.customDomain ?? null)
+      );
       const needsConfigSave =
         hasNewToken ||
         teamId.trim() !== (deployConfig?.teamId || '') ||
         teamSlug.trim() !== (deployConfig?.teamSlug || '') ||
         cloudflareAccountId.trim() !== (deployConfig?.accountId || '') ||
         cloudflareHintsChanged ||
+        cloudflareWorkersChanged ||
         !deployConfig?.configured;
       if (needsConfigSave) {
         const nextConfig = await saveDeployConfig();
@@ -15776,6 +15961,9 @@ function HtmlViewer({
   const activeDeployedUrl = activeDeployment?.url?.trim() || '';
   const activeDeploymentDelayed = activeDeployment?.status === 'link-delayed';
   const activeDeploymentProtected = activeDeployment?.status === 'protected';
+  const activeDeploymentProviderMetadata = (
+    activeDeployment as WebDeploymentInfo & { providerMetadata?: WebDeployResultProviderMetadata }
+  )?.providerMetadata;
   const activeCloudflarePages = activeDeployment?.providerId === CLOUDFLARE_PAGES_PROVIDER_ID
     ? activeDeployment.cloudflarePages
     : undefined;
@@ -15918,7 +16106,15 @@ function HtmlViewer({
   const activeProjectSocialShare = projectSocialShare ?? projectSocialShareFallback;
   const deployActionIconFor = (providerId: WebDeployProviderId) => {
     if (providerId === 'cloudflare-pages') return 'pages-line';
+    if (providerId === CLOUDFLARE_WORKERS_PROVIDER_ID) return 'terminal-box-line';
     return 'upload-cloud-line';
+  };
+  const cloudflareWorkersCapabilityStateLabel = (enabled: boolean) =>
+    enabled ? t('fileViewer.cloudflareWorkersEnabled') : t('fileViewer.cloudflareWorkersDisabled');
+  const cloudflareWorkersReasonLabel = (reason: string) => {
+    if (reason === 'r2-not-enabled') return t('fileViewer.cloudflareWorkersReasonR2NotEnabled');
+    if (reason === 'no-permission') return t('fileViewer.cloudflareWorkersReasonNoPermission');
+    return t('fileViewer.cloudflareWorkersReasonUnknown');
   };
   const latestShareDeployment = useMemo(
     () => pickLatestShareDeployment(deploymentsByProvider),
@@ -18346,6 +18542,7 @@ function HtmlViewer({
               <label className="deploy-provider-field">
                 <span className="deploy-field-title">{t('fileViewer.deployProviderLabel')}</span>
                 <select
+                  data-testid="cfw-provider-select"
                   value={deployProviderId}
                   onChange={(e) => {
                     void changeDeployProvider(e.target.value as WebDeployProviderId);
@@ -18372,6 +18569,7 @@ function HtmlViewer({
                   </select>
                 </label>
               ) : null}
+              <>
               <div className="field-label-row deploy-token-label-row">
                 <label htmlFor="deploy-token" className="deploy-field-title required">{t(deployProvider.tokenLabelKey)}</label>
                 <a
@@ -18412,7 +18610,8 @@ function HtmlViewer({
                   ) : null}
                 </div>
               ) : null}
-              {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
+              </>
+              {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID || deployProviderId === CLOUDFLARE_WORKERS_PROVIDER_ID ? (
                 <>
                   <div className="deploy-field-grid single-field">
                     <label>
@@ -18424,63 +18623,232 @@ function HtmlViewer({
                       <span className="field-hint">{t('fileViewer.cloudflareAccountIdHint')}</span>
                     </label>
                   </div>
-                  <div className="deploy-field-grid cloudflare-domain-grid">
-                    <label>
-                      <span className="deploy-field-title">{t('fileViewer.cloudflareDomainPrefixLabel')}</span>
-                      <input
-                        value={cloudflareDomainPrefix}
-                        placeholder={t('fileViewer.cloudflareDomainPrefixPlaceholder')}
-                        onChange={(e) => setCloudflareDomainPrefix(e.target.value)}
-                      />
-                    </label>
-                    <div className="deploy-field-control">
-                      <span className="deploy-field-title-row">
-                        <label className="deploy-field-title" htmlFor="cloudflare-zone-select">
-                          {t('fileViewer.cloudflareZoneLabel')}
+                  {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
+                    <>
+                      <div className="deploy-field-grid cloudflare-domain-grid">
+                        <label>
+                          <span className="deploy-field-title">{t('fileViewer.cloudflareDomainPrefixLabel')}</span>
+                          <input
+                            value={cloudflareDomainPrefix}
+                            placeholder={t('fileViewer.cloudflareDomainPrefixPlaceholder')}
+                            onChange={(e) => setCloudflareDomainPrefix(e.target.value)}
+                          />
                         </label>
+                        <div className="deploy-field-control">
+                          <span className="deploy-field-title-row">
+                            <label className="deploy-field-title" htmlFor="cloudflare-zone-select">
+                              {t('fileViewer.cloudflareZoneLabel')}
+                            </label>
+                            <button
+                              type="button"
+                              className="ghost-link deploy-field-inline-action"
+                              disabled={cloudflareZonesLoading || !deployConfig?.configured}
+                              onClick={() => {
+                                void loadCloudflareZones();
+                              }}
+                            >
+                              <RemixIcon name="refresh-line" size={13} />
+                              {cloudflareZonesLoading ? t('fileViewer.cloudflareZonesLoading') : t('fileViewer.cloudflareZonesRefresh')}
+                            </button>
+                          </span>
+                          <select
+                            id="cloudflare-zone-select"
+                            value={cloudflareZoneId}
+                            disabled={cloudflareZonesLoading || (!deployConfig?.configured && !cloudflareZones.length)}
+                            onChange={(e) => setCloudflareZoneId(e.target.value)}
+                          >
+                            {cloudflareZones.length === 0 ? (
+                              <option value="">{t('fileViewer.cloudflareZonePlaceholder')}</option>
+                            ) : null}
+                            {cloudflareZones.map((zone) => (
+                              <option key={zone.id} value={zone.id}>
+                                {zone.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      {cloudflareZonesError ? (
+                        <p className="deploy-error">{cloudflareZonesError}</p>
+                      ) : cloudflareZonesLoading ? (
+                        <p className="hint">{t('fileViewer.cloudflareZonesLoading')}</p>
+                      ) : deployConfig?.configured && cloudflareZones.length === 0 ? (
+                        <p className="hint">{t('fileViewer.cloudflareZonesEmpty')}</p>
+                      ) : null}
+                      {cloudflareDomainPrefix.trim() && !isValidCloudflareDomainPrefixInput(cloudflareDomainPrefix) ? (
+                        <p className="deploy-error">{t('fileViewer.cloudflareDomainPrefixInvalid')}</p>
+                      ) : cloudflareHostnamePreview ? (
+                        <p className="hint">
+                          {t('fileViewer.cloudflareHostnamePreview', { hostname: cloudflareHostnamePreview })}
+                        </p>
+                      ) : null}
+                    </>
+                  ) : (
+                    <>
+                      <div className="deploy-field-grid">
+                        <label>
+                          <span className="deploy-field-title">{t('fileViewer.cloudflareWorkersScriptName')}</span>
+                          <input
+                            value={cloudflareWorkersScriptName}
+                            placeholder={t('fileViewer.optional')}
+                            onChange={(e) => setCloudflareWorkersScriptName(e.target.value)}
+                          />
+                        </label>
+                        <label>
+                          <span className="deploy-field-title">{t('fileViewer.cloudflareWorkersCompatibilityDate')}</span>
+                          <input
+                            value={cloudflareWorkersCompatibilityDate}
+                            placeholder="YYYY-MM-DD"
+                            onChange={(e) => setCloudflareWorkersCompatibilityDate(e.target.value)}
+                          />
+                        </label>
+                      </div>
+                      <div className="deploy-bindings-block">
+                        <span className="deploy-field-title">{t('fileViewer.cloudflareWorkersBindings')}</span>
+                        {cloudflareWorkersBindings.map((binding, index) => (
+                          <div className="deploy-binding-row" key={index}>
+                            <select
+                              data-testid="cfw-binding-type"
+                              title="Bind this Worker to an R2 bucket or a D1 database."
+                              value={binding.type}
+                              onChange={(e) => updateCloudflareWorkersBinding(index, { ...binding, type: e.target.value })}
+                            >
+                              <option value="r2_bucket">{t('fileViewer.cloudflareWorkersR2')}</option>
+                              <option value="d1">{t('fileViewer.cloudflareWorkersD1')}</option>
+                            </select>
+                            <input
+                              data-testid="cfw-binding-name"
+                              value={binding.name}
+                              placeholder={t('fileViewer.cloudflareWorkersBindingName')}
+                              onChange={(e) => updateCloudflareWorkersBinding(index, { ...binding, name: e.target.value })}
+                            />
+                            {binding.type === 'r2_bucket' ? (
+                              <input
+                                data-testid="cfw-binding-resource"
+                                list="cfw-r2-buckets"
+                                value={binding.bucketName || ''}
+                                placeholder={t('fileViewer.cloudflareWorkersBindingBucketName')}
+                                title="Type to filter existing buckets; a new name creates the bucket on deploy."
+                                onChange={(e) => updateCloudflareWorkersBinding(index, { ...binding, bucketName: e.target.value })}
+                              />
+                            ) : (
+                              <input
+                                data-testid="cfw-binding-resource"
+                                list="cfw-d1-databases"
+                                value={binding.id ? (cloudflareD1Databases.find((db) => db.id === binding.id)?.name || '') : (binding.databaseName || '')}
+                                placeholder={t('fileViewer.cloudflareWorkersBindingDatabaseName')}
+                                title="Type to filter existing databases; a new name creates the database on deploy."
+                                onChange={(e) => {
+                                  const value = e.target.value;
+                                  const existing = cloudflareD1Databases.find((db) => db.name === value);
+                                  updateCloudflareWorkersBinding(index, existing ? { ...binding, id: existing.id, databaseName: '' } : { ...binding, id: '', databaseName: value });
+                                }}
+                              />
+                            )}
+                            <button
+                              type="button"
+                              className="ghost-link button-like"
+                              onClick={() => removeCloudflareWorkersBinding(index)}
+                            >
+                              {t('fileViewer.cloudflareWorkersRemoveBinding')}
+                            </button>
+                          </div>
+                        ))}
+                        <datalist id="cfw-r2-buckets">
+                          {cloudflareR2Buckets.map((bucketName) => (
+                            <option key={bucketName} value={bucketName} />
+                          ))}
+                        </datalist>
+                        <datalist id="cfw-d1-databases">
+                          {cloudflareD1Databases.map((database) => (
+                            <option key={database.id} value={database.name} />
+                          ))}
+                        </datalist>
+                        {cloudflareWorkersBindings.length === 0 ? (
+                          <p className="hint">{t('fileViewer.cloudflareWorkersBindingsEmpty')}</p>
+                        ) : null}
                         <button
                           type="button"
-                          className="ghost-link deploy-field-inline-action"
-                          disabled={cloudflareZonesLoading || !deployConfig?.configured}
-                          onClick={() => {
-                            void loadCloudflareZones();
-                          }}
+                          data-testid="cfw-add-binding"
+                          className="ghost-link button-like"
+                          onClick={addCloudflareWorkersBinding}
                         >
-                          <RemixIcon name="refresh-line" size={13} />
-                          {cloudflareZonesLoading ? t('fileViewer.cloudflareZonesLoading') : t('fileViewer.cloudflareZonesRefresh')}
+                          {t('fileViewer.cloudflareWorkersAddBinding')}
                         </button>
-                      </span>
-                      <select
-                        id="cloudflare-zone-select"
-                        value={cloudflareZoneId}
-                        disabled={cloudflareZonesLoading || (!deployConfig?.configured && !cloudflareZones.length)}
-                        onChange={(e) => setCloudflareZoneId(e.target.value)}
-                      >
-                        {cloudflareZones.length === 0 ? (
-                          <option value="">{t('fileViewer.cloudflareZonePlaceholder')}</option>
+                      </div>
+                      <div className="deploy-bindings-block">
+                        <span className="deploy-field-title">{t('fileViewer.cloudflareWorkersCustomDomain')}</span>
+                        <div className="deploy-field-grid">
+                          <label>
+                            <span className="deploy-field-title">{t('fileViewer.cloudflareWorkersCustomDomainZone')}</span>
+                            <select
+                              data-testid="cfw-custom-domain-zone"
+                              value={cloudflareWorkersCustomDomainZoneId}
+                              disabled={cloudflareWorkersZones.length === 0}
+                              onChange={(e) => setCloudflareWorkersCustomDomainZoneId(e.target.value)}
+                            >
+                              <option value="">{t('fileViewer.optional')}</option>
+                              {cloudflareWorkersZones.map((zone) => (
+                                <option key={zone.id} value={zone.id}>{zone.name}</option>
+                              ))}
+                            </select>
+                          </label>
+                          <label>
+                            <span className="deploy-field-title">{t('fileViewer.cloudflareWorkersCustomDomainHostname')}</span>
+                            <input
+                              data-testid="cfw-custom-domain-hostname"
+                              value={cloudflareWorkersCustomDomainHostname}
+                              placeholder="api.example.com"
+                              onChange={(e) => setCloudflareWorkersCustomDomainHostname(e.target.value)}
+                            />
+                          </label>
+                        </div>
+                      </div>
+                      <div className="deploy-capabilities-block">
+                        <span className="deploy-field-title-row">
+                          <span className="deploy-field-title">{t('fileViewer.cloudflareWorkersCapabilities')}</span>
+                          <button
+                            type="button"
+                            className="ghost-link deploy-field-inline-action"
+                            disabled={cloudflareWorkersCapabilitiesLoading || !deployConfig?.configured}
+                            onClick={() => {
+                              void loadCloudflareWorkersCapabilities();
+                            }}
+                          >
+                            <RemixIcon name="refresh-line" size={13} />
+                            {cloudflareWorkersCapabilitiesLoading
+                              ? t('fileViewer.cloudflareWorkersCapabilitiesLoading')
+                              : t('fileViewer.cloudflareWorkersCapabilitiesRefresh')}
+                          </button>
+                        </span>
+                        {cloudflareWorkersCapabilitiesError ? (
+                          <p className="deploy-error">{cloudflareWorkersCapabilitiesError}</p>
                         ) : null}
-                        {cloudflareZones.map((zone) => (
-                          <option key={zone.id} value={zone.id}>
-                            {zone.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                  {cloudflareZonesError ? (
-                    <p className="deploy-error">{cloudflareZonesError}</p>
-                  ) : cloudflareZonesLoading ? (
-                    <p className="hint">{t('fileViewer.cloudflareZonesLoading')}</p>
-                  ) : deployConfig?.configured && cloudflareZones.length === 0 ? (
-                    <p className="hint">{t('fileViewer.cloudflareZonesEmpty')}</p>
-                  ) : null}
-                  {cloudflareDomainPrefix.trim() && !isValidCloudflareDomainPrefixInput(cloudflareDomainPrefix) ? (
-                    <p className="deploy-error">{t('fileViewer.cloudflareDomainPrefixInvalid')}</p>
-                  ) : cloudflareHostnamePreview ? (
-                    <p className="hint">
-                      {t('fileViewer.cloudflareHostnamePreview', { hostname: cloudflareHostnamePreview })}
-                    </p>
-                  ) : null}
+                        {cloudflareWorkersCapabilities ? (
+                          <ul className="deploy-capabilities-list">
+                            <li>
+                              {t('fileViewer.cloudflareWorkersWorkers')}: {cloudflareWorkersCapabilityStateLabel(cloudflareWorkersCapabilities.workers)}
+                            </li>
+                            <li>
+                              {t('fileViewer.cloudflareWorkersSubdomain')}: {cloudflareWorkersCapabilities.workersDevSubdomain || '-'}
+                            </li>
+                            <li>
+                              {t('fileViewer.cloudflareWorkersR2')}: {cloudflareWorkersCapabilityStateLabel(cloudflareWorkersCapabilities.r2)}
+                              {cloudflareWorkersCapabilities.r2Reason ? ` · ${cloudflareWorkersReasonLabel(cloudflareWorkersCapabilities.r2Reason)}` : ''}
+                            </li>
+                            <li>
+                              {t('fileViewer.cloudflareWorkersD1')}: {cloudflareWorkersCapabilityStateLabel(cloudflareWorkersCapabilities.d1)}
+                              {cloudflareWorkersCapabilities.d1Reason ? ` · ${cloudflareWorkersReasonLabel(cloudflareWorkersCapabilities.d1Reason)}` : ''}
+                            </li>
+                          </ul>
+                        ) : cloudflareWorkersCapabilitiesLoading ? (
+                          <p className="hint">{t('fileViewer.cloudflareWorkersCapabilitiesLoading')}</p>
+                        ) : deployConfig?.configured ? null : (
+                          <p className="hint">{t('fileViewer.cloudflareWorkersCapabilitiesEmpty')}</p>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </>
               ) : (
                 <div className="deploy-field-grid">
@@ -18513,15 +18881,77 @@ function HtmlViewer({
               ) : null}
               {deployResultCards.length > 0 ? (
                 <div className={`deploy-result-block ${deployResultState(activeDeployment?.status)}`}>
-                  <div className="deploy-result-summary">
+                  <div className="deploy-result-summary" data-testid="cfw-deploy-result">
                     <div className="deploy-result-summary-head">
                       <div className="deploy-result-label">{t('fileViewer.deployResultLabel')}</div>
                       <div className={`deploy-result-badge ${deployResultState(activeDeployment?.status)}`}>
                         {statusLabelFor(deployResultState(activeDeployment?.status))}
                       </div>
                     </div>
+                    {deployResultState(activeDeployment?.status) === 'ready' && activeDeployedUrl ? (
+                      <a
+                        className="ghost-link button-like deploy-open-site"
+                        data-testid="cfw-open-site"
+                        href={activeDeployedUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <Icon name="external-link" size={14} />
+                        {t('fileViewer.cloudflareWorkersOpenSite')}
+                      </a>
+                    ) : null}
                     {activeDeployment?.statusMessage ? (
                       <p className="deploy-result-message">{activeDeployment.statusMessage}</p>
+                    ) : null}
+                    {activeDeploymentProviderMetadata?.steps && activeDeploymentProviderMetadata.steps.length > 0 ? (
+                      <ul
+                        data-testid="cfw-deploy-steps"
+                        style={{
+                          listStyle: 'none',
+                          margin: 0,
+                          padding: 0,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 4,
+                        }}
+                      >
+                        {activeDeploymentProviderMetadata.steps.map((step, stepIndex) => (
+                          <li
+                            key={`${step.name}-${stepIndex}`}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'baseline',
+                              gap: 6,
+                              fontSize: 12,
+                              lineHeight: 1.4,
+                            }}
+                          >
+                            <span
+                              aria-hidden="true"
+                              style={{
+                                width: 7,
+                                height: 7,
+                                borderRadius: '50%',
+                                background: step.status === 'error' ? 'var(--red)' : 'var(--green)',
+                                flexShrink: 0,
+                                transform: 'translateY(-1px)',
+                              }}
+                            />
+                            <span style={{ color: 'var(--text)' }}>{cloudflareDeployStepLabel(step.name)}</span>
+                            {step.detail ? (
+                              <span style={{ color: 'var(--text-muted)' }}>{step.detail}</span>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    {activeDeploymentProviderMetadata?.check &&
+                    (activeDeploymentProviderMetadata.check.status >= 500 ||
+                      activeDeploymentProviderMetadata.check.status === 1101) ? (
+                      <p style={{ margin: 0, color: '#b7791f' }}>
+                        {activeDeploymentProviderMetadata.check.detail ||
+                          `Deployed, but the Worker returned HTTP ${activeDeploymentProviderMetadata.check.status} — check Workers Logs.`}
+                      </p>
                     ) : null}
                     <div className="deploy-result-links">
                       {deployResultCards.map((card) => {
@@ -18603,6 +19033,7 @@ function HtmlViewer({
               <button
                 type="button"
                 className="viewer-action primary"
+                data-testid="cfw-deploy-button"
                 disabled={deploying || savingDeployConfig || deployPhase !== 'idle'}
                 onClick={() => {
                   void deployToSelectedProvider();

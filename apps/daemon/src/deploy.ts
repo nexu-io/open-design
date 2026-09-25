@@ -6,15 +6,17 @@ import { randomUUID } from 'node:crypto';
 import { hash as blake3Hash } from 'blake3-wasm';
 import { listFiles, readProjectFile, validateProjectPath } from './projects.js';
 import { findRealTagOffset, HTML_TAG_PATTERNS } from '@open-design/contracts/runtime/html-injection-points';
-
 export const VERCEL_PROVIDER_ID = 'vercel-self';
 export const CLOUDFLARE_PAGES_PROVIDER_ID = 'cloudflare-pages';
+export const CLOUDFLARE_WORKERS_PROVIDER_ID = 'cloudflare-workers';
 export const SAVED_TOKEN_MASK = 'saved-vercel-token';
 export const SAVED_CLOUDFLARE_TOKEN_MASK = 'saved-cloudflare-token';
+export const SAVED_CLOUDFLARE_WORKERS_TOKEN_MASK = 'saved-cloudflare-workers-token';
 
 type JsonObject = Record<string, any>;
-type DeployProviderId = typeof VERCEL_PROVIDER_ID | typeof CLOUDFLARE_PAGES_PROVIDER_ID;
+type DeployProviderId = typeof VERCEL_PROVIDER_ID | typeof CLOUDFLARE_PAGES_PROVIDER_ID | typeof CLOUDFLARE_WORKERS_PROVIDER_ID;
 type DeployErrorDetails = JsonObject | string | undefined;
+
 type DeployConfig = {
   token: string;
   teamId?: string | undefined;
@@ -22,6 +24,10 @@ type DeployConfig = {
   accountId?: string | undefined;
   projectName?: string | undefined;
   cloudflarePages?: CloudflarePagesConfigHints | undefined;
+  scriptName?: string | undefined;
+  compatibilityDate?: string | undefined;
+  bindings?: Array<{ type: string; name: string; bucketName?: string; databaseName?: string; id?: string }> | undefined;
+  customDomain?: { hostname: string; zoneId: string } | undefined;
 };
 type CloudflarePagesConfigHints = {
   lastZoneId?: string;
@@ -59,6 +65,23 @@ export const CLOUDFLARE_PAGES_ASSET_UPLOAD_MAX_BODY_BYTES = 75 * 1024 * 1024;
 export const CLOUDFLARE_PAGES_ASSET_MAX_BYTES = 25 * 1024 * 1024;
 const VERCEL_PROTECTED_MESSAGE =
   'Deployment is protected by Vercel. Disable Deployment Protection or use a custom domain to make this link public.';
+const CLOUDFLARE_ACCESS_PROTECTED_MESSAGE =
+  'Deployment is protected by Cloudflare Access. Authorized users must sign in to open it.';
+
+function isCloudflareAccessRedirect(status: number, location: string): boolean {
+  if (status < 300 || status >= 400) return false;
+  return /cloudflareaccess\.com/i.test(location);
+}
+
+export function isCloudflareAccessProtectedResponse(resp: Response, body = '') {
+  const location = resp.headers?.get?.('location') || '';
+  const text = String(body || '');
+  return (
+    /cloudflareaccess\.com/i.test(location) ||
+    /cloudflare access/i.test(text) ||
+    /cf-access-login/i.test(text)
+  );
+}
 
 export class DeployError extends Error {
   status: number;
@@ -76,7 +99,12 @@ export class DeployError extends Error {
 
 export function deployConfigPath(providerId: DeployProviderId = VERCEL_PROVIDER_ID) {
   const base = process.env.OD_USER_STATE_DIR || path.join(os.homedir(), '.open-design');
-  return path.join(base, providerId === CLOUDFLARE_PAGES_PROVIDER_ID ? 'cloudflare-pages.json' : 'vercel.json');
+  const name = providerId === CLOUDFLARE_PAGES_PROVIDER_ID
+    ? 'cloudflare-pages.json'
+    : providerId === CLOUDFLARE_WORKERS_PROVIDER_ID
+      ? 'cloudflare-workers.json'
+      : 'vercel.json';
+  return path.join(base, name);
 }
 
 export async function readVercelConfig(): Promise<DeployConfig> {
@@ -186,23 +214,100 @@ export function publicCloudflarePagesConfig(config: Partial<DeployConfig>) {
   return body;
 }
 
+function normalizeCloudflareWorkersCustomDomain(value: unknown): { hostname: string; zoneId: string } | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const v = value as JsonObject;
+  const hostname = typeof v.hostname === 'string' ? v.hostname.trim() : '';
+  const zoneId = typeof v.zoneId === 'string' ? v.zoneId.trim() : '';
+  if (!hostname || !zoneId) return undefined;
+  return { hostname, zoneId };
+}
+
+export async function readCloudflareWorkersConfig(): Promise<DeployConfig> {
+  try {
+    const raw = await readFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), 'utf8');
+    const parsed = JSON.parse(raw);
+    return {
+      token: typeof parsed.token === 'string' ? parsed.token : '',
+      accountId: typeof parsed.accountId === 'string' ? parsed.accountId : '',
+      scriptName: typeof parsed.scriptName === 'string' ? parsed.scriptName : '',
+      compatibilityDate: typeof parsed.compatibilityDate === 'string' ? parsed.compatibilityDate : '',
+      bindings: Array.isArray(parsed.bindings) ? parsed.bindings : [],
+      customDomain: normalizeCloudflareWorkersCustomDomain(parsed.customDomain),
+    };
+  } catch (err) {
+    if (isErrnoException(err) && err.code === 'ENOENT') {
+      return {
+        token: '',
+        accountId: '',
+        scriptName: '',
+        compatibilityDate: '',
+      };
+    }
+    throw err;
+  }
+}
+
+export async function writeCloudflareWorkersConfig(input: Partial<DeployConfig>) {
+  const current = await readCloudflareWorkersConfig();
+  const tokenInput = typeof input?.token === 'string' ? input.token.trim() : '';
+  const next: DeployConfig = {
+    token:
+      tokenInput && tokenInput !== SAVED_CLOUDFLARE_WORKERS_TOKEN_MASK
+        ? tokenInput
+        : current.token,
+    accountId: typeof input?.accountId === 'string' ? input.accountId.trim() : current.accountId,
+    scriptName: typeof input?.scriptName === 'string' ? input.scriptName.trim() : current.scriptName,
+    compatibilityDate:
+      typeof input?.compatibilityDate === 'string' ? input.compatibilityDate.trim() : current.compatibilityDate,
+    bindings: Array.isArray(input?.bindings) ? input.bindings : current.bindings,
+    customDomain: input?.customDomain !== undefined ? input.customDomain : current.customDomain,
+  };
+  if (!next.token) {
+    throw new DeployError('Cloudflare API token is required.', 400, undefined, 'CFW_TOKEN_REQUIRED');
+  }
+  if (!next.accountId) throw new DeployError('Cloudflare account ID is required.', 400, undefined, 'CFW_ACCOUNT_ID_REQUIRED');
+  await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), next);
+  return publicCloudflareWorkersConfig(next);
+}
+
+export function publicCloudflareWorkersConfig(config: Partial<DeployConfig>) {
+  const body: JsonObject = {
+    providerId: CLOUDFLARE_WORKERS_PROVIDER_ID,
+    configured: Boolean(config?.token && config?.accountId),
+    tokenMask: config?.token ? SAVED_CLOUDFLARE_WORKERS_TOKEN_MASK : '',
+    teamId: '',
+    teamSlug: '',
+    accountId: config?.accountId || '',
+    scriptName: config?.scriptName || '',
+    compatibilityDate: config?.compatibilityDate || '',
+    bindings: config?.bindings || [],
+    customDomain: config?.customDomain,
+    target: 'preview',
+  };
+  return body;
+}
+
 export async function readDeployConfig(providerId: DeployProviderId = VERCEL_PROVIDER_ID) {
   if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return readCloudflarePagesConfig();
+  if (providerId === CLOUDFLARE_WORKERS_PROVIDER_ID) return readCloudflareWorkersConfig();
   return readVercelConfig();
 }
 
 export async function writeDeployConfig(providerId: DeployProviderId = VERCEL_PROVIDER_ID, input: Partial<DeployConfig> = {}) {
   if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return writeCloudflarePagesConfig(input);
+  if (providerId === CLOUDFLARE_WORKERS_PROVIDER_ID) return writeCloudflareWorkersConfig(input);
   return writeVercelConfig(input);
 }
 
 export function publicDeployConfigForProvider(providerId: DeployProviderId = VERCEL_PROVIDER_ID, config: Partial<DeployConfig> = {}) {
   if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return publicCloudflarePagesConfig(config);
+  if (providerId === CLOUDFLARE_WORKERS_PROVIDER_ID) return publicCloudflareWorkersConfig(config);
   return publicDeployConfig(config);
 }
 
 export function isDeployProviderId(value: unknown): value is DeployProviderId {
-  return value === VERCEL_PROVIDER_ID || value === CLOUDFLARE_PAGES_PROVIDER_ID;
+  return value === VERCEL_PROVIDER_ID || value === CLOUDFLARE_PAGES_PROVIDER_ID || value === CLOUDFLARE_WORKERS_PROVIDER_ID;
 }
 
 function normalizeCloudflarePagesConfigHints(input: unknown, fallback: CloudflarePagesConfigHints = {}): CloudflarePagesConfigHints {
@@ -1747,6 +1852,15 @@ async function requestDeploymentUrl(url: string, method: 'HEAD' | 'GET', timeout
       redirect: 'manual',
       signal: controller.signal,
     });
+    const location = resp.headers?.get?.('location') || '';
+    if (isCloudflareAccessRedirect(resp.status, location)) {
+      return {
+        reachable: false,
+        status: 'protected',
+        statusCode: resp.status,
+        statusMessage: CLOUDFLARE_ACCESS_PROTECTED_MESSAGE,
+      };
+    }
     if (resp.status >= 200 && resp.status < 400) {
       return { reachable: true, statusCode: resp.status };
     }
@@ -1759,6 +1873,14 @@ async function requestDeploymentUrl(url: string, method: 'HEAD' | 'GET', timeout
         status: 'protected',
         statusCode: resp.status,
         statusMessage: VERCEL_PROTECTED_MESSAGE,
+      };
+    }
+    if (resp.status === 401 && isCloudflareAccessProtectedResponse(resp, body)) {
+      return {
+        reachable: false,
+        status: 'protected',
+        statusCode: resp.status,
+        statusMessage: CLOUDFLARE_ACCESS_PROTECTED_MESSAGE,
       };
     }
     return {

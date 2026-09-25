@@ -12058,7 +12058,7 @@ Required:
   --file <fileName>        File name within the project to deploy.
 
 Options:
-  --provider vercel-self|cloudflare-pages   Deploy provider (default: vercel-self).
+  --provider vercel-self|cloudflare-pages|cloudflare-workers   Deploy provider (default: vercel-self).
   --target preview|production               Deployment target (default: server decides).
   --cf-zone-id <id>                         Cloudflare Pages: zone id.
   --cf-zone-name <name>                     Cloudflare Pages: zone name.

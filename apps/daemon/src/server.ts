@@ -1167,6 +1167,7 @@ import {
   buildDeployFileSet,
   checkDeploymentUrl,
   CLOUDFLARE_PAGES_PROVIDER_ID,
+  CLOUDFLARE_WORKERS_PROVIDER_ID,
   DeployError,
   deployToCloudflarePages,
   deployToVercel,
@@ -1178,6 +1179,7 @@ import {
   VERCEL_PROVIDER_ID,
   writeDeployConfig,
 } from './deploy.js';
+import { deployToCloudflareWorkers, probeCloudflareWorkersCapabilities } from './deploy/cloudflare-workers.js';
 import {
   checkCloudflarePagesDeploymentLinks,
   cloudflarePagesDeploymentMetadata,
@@ -1234,7 +1236,6 @@ import {
   isLoopbackPeerAddress,
   requireLocalDaemonRequest,
 } from './http/local-daemon-request.js';
-import { renderOAuthResultPage } from './http/oauth-result-page.js';
 import { bearerTokenFromRequest, createToolRequestAuth } from './http/tool-request-auth.js';
 
 /**
@@ -8497,6 +8498,7 @@ export async function startServer({
   const deployDeps = {
     VERCEL_PROVIDER_ID,
     CLOUDFLARE_PAGES_PROVIDER_ID,
+    CLOUDFLARE_WORKERS_PROVIDER_ID,
     isDeployProviderId,
     publicDeployConfigForProvider,
     readDeployConfig,
@@ -8513,6 +8515,8 @@ export async function startServer({
     checkCloudflarePagesDeploymentLinks,
     checkDeploymentUrl,
     deployToCloudflarePages,
+    deployToCloudflareWorkers,
+    probeCloudflareWorkersCapabilities,
     deployToVercel,
     upsertDeployment,
     publicDeployment,

@@ -334,6 +334,30 @@ describe('od deploy CLI', () => {
     });
   });
 
+  // Case 8: --provider cloudflare-workers → body.providerId === 'cloudflare-workers'
+  it('sends providerId=cloudflare-workers when --provider cloudflare-workers is given', async () => {
+    stub.setResponder(() => ({
+      status: 200,
+      body: { ...STUB_DEPLOYMENT, providerId: 'cloudflare-workers' },
+    }));
+
+    const result = await runCli([
+      'deploy',
+      'proj-1',
+      '--file',
+      'index.html',
+      '--provider',
+      'cloudflare-workers',
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(stub.requests).toHaveLength(1);
+    const body = JSON.parse(stub.requests[0]!.body);
+    expect(body.providerId).toBe('cloudflare-workers');
+  });
+
   // Default provider is vercel-self when --provider is omitted
   it('defaults to providerId=vercel-self when --provider is not given', async () => {
     const result = await runCli([

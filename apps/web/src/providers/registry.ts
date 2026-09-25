@@ -6,6 +6,8 @@ import {
 } from '@open-design/contracts';
 import { boundedRequestErrorCode } from '../analytics/workspace';
 import type {
+  CloudflareWorkersBinding,
+  CloudflareWorkersCapabilities,
   ConnectorAuthConfigPrepareResponse,
   ConnectorDetail,
   ConnectorConnectResponse,
@@ -134,19 +136,49 @@ const IN_FLIGHT_SHARE_ONLY_MS = 0;
 
 export const DEFAULT_DEPLOY_PROVIDER_ID = 'vercel-self';
 export const CLOUDFLARE_PAGES_PROVIDER_ID = 'cloudflare-pages';
+export const CLOUDFLARE_WORKERS_PROVIDER_ID = 'cloudflare-workers';
 export const DEPLOY_PROVIDER_IDS = [
   DEFAULT_DEPLOY_PROVIDER_ID,
   CLOUDFLARE_PAGES_PROVIDER_ID,
+  CLOUDFLARE_WORKERS_PROVIDER_ID,
 ] as const;
 
 export type WebDeployProviderId = (typeof DEPLOY_PROVIDER_IDS)[number];
 
-export type WebDeployConfigResponse = DeployConfigResponse;
-export type WebUpdateDeployConfigRequest = UpdateDeployConfigRequest;
+export interface WebCloudflareWorkersCustomDomain {
+  hostname: string;
+  zoneId: string;
+}
+
+export type WebDeployConfigResponse = DeployConfigResponse & {
+  customDomain?: WebCloudflareWorkersCustomDomain;
+};
+
+export type WebUpdateDeployConfigRequest = UpdateDeployConfigRequest & {
+  customDomain?: WebCloudflareWorkersCustomDomain;
+};
 export type WebDeploymentInfo = ProjectDeploymentsResponse['deployments'][number];
 export type WebDeployProjectFileResponse = DeployProjectFileResponse;
 export type WebCloudflarePagesDeploySelection = CloudflarePagesDeploySelection;
 export type WebCloudflarePagesZonesResponse = CloudflarePagesZonesResponse;
+export type WebCloudflareWorkersBinding = CloudflareWorkersBinding & { databaseName?: string };
+export type WebCloudflareWorkersCapabilities = CloudflareWorkersCapabilities;
+export type WebCloudflareDeployStep = {
+  name: string;
+  status: 'done' | 'error';
+  detail?: string;
+};
+
+export type WebCloudflareDeployCheck = {
+  status: number;
+  ok: boolean;
+  detail?: string;
+};
+
+export type WebDeployResultProviderMetadata = {
+  steps?: WebCloudflareDeployStep[];
+  check?: WebCloudflareDeployCheck;
+};
 
 export type WebPublicProjectFileResponse = PublicProjectFilePublication;
 
@@ -1844,6 +1876,44 @@ export async function fetchCloudflarePagesZones(): Promise<WebCloudflarePagesZon
   }
 }
 
+export async function fetchCloudflareWorkersZones(): Promise<Array<{ id: string; name: string; status?: string }>> {
+  try {
+    const resp = await fetch('/api/deploy/cloudflare-workers/zones', { cache: 'no-store' });
+    if (!resp.ok) return [];
+    const json = (await resp.json()) as { zones?: Array<{ id: string; name: string; status?: string }> };
+    return Array.isArray(json.zones) ? json.zones : [];
+  } catch {
+    return [];
+  }
+}
+
+// Cloudflare Workers R2 / D1 resource pickers. The daemon lists the account's
+// buckets and databases with the live Workers credential; an empty list (or a
+// request failure) means the bindings editor falls back to free-text input.
+export interface WebCloudflareR2Bucket { name: string; }
+export interface WebCloudflareD1Database { name: string; id: string; }
+
+export async function fetchCloudflareR2Buckets(): Promise<WebCloudflareR2Bucket[]> {
+  try {
+    const resp = await fetch('/api/cloudflare/resources/r2-buckets', { cache: 'no-store' });
+    if (!resp.ok) return [];
+    const json = (await resp.json()) as { buckets?: WebCloudflareR2Bucket[] };
+    return Array.isArray(json.buckets) ? json.buckets : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchCloudflareD1Databases(): Promise<WebCloudflareD1Database[]> {
+  try {
+    const resp = await fetch('/api/cloudflare/resources/d1-databases', { cache: 'no-store' });
+    if (!resp.ok) return [];
+    const json = (await resp.json()) as { databases?: WebCloudflareD1Database[] };
+    return Array.isArray(json.databases) ? json.databases : [];
+  } catch {
+    return [];
+  }
+}
 export async function fetchProjectDeployments(
   projectId: string,
   workspaceContext?: WorkspaceCollabContext | null,

@@ -3,6 +3,7 @@ import type { RouteDeps } from '../server-context.js';
 import type { AuthorizeProjectRequest } from '../collab/project-request-authority.js';
 import { clientRequestIdFor } from '../http/client-request-id.js';
 import { classifyDeployFailure } from '../deploy/failure-detail.js';
+import { detachCloudflareWorkerDomain, listCloudflareD1Databases, listCloudflareR2Buckets, listCloudflareZones } from '../deploy/cloudflare-workers.js';
 
 export interface RegisterDeployRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'ids' | 'deploy' | 'projectStore'> {
   authorizeProjectRequest: AuthorizeProjectRequest;
@@ -14,7 +15,7 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
   const { PROJECTS_DIR } = ctx.paths;
   const { randomUUID } = ctx.ids;
   const { getProject } = ctx.projectStore;
-  const { VERCEL_PROVIDER_ID, CLOUDFLARE_PAGES_PROVIDER_ID, isDeployProviderId, publicDeployConfigForProvider, readDeployConfig, writeDeployConfig, listCloudflarePagesZones, DeployError, listDeployments, publicDeployments, getDeployment, buildDeployFileSet, cloudflarePagesProjectNameForDeploy, deployToCloudflarePages, deployToVercel, upsertDeployment, publicDeployment, cloudflarePagesDeploymentMetadata, prepareDeployPreflight } = ctx.deploy;
+  const { VERCEL_PROVIDER_ID, CLOUDFLARE_PAGES_PROVIDER_ID, CLOUDFLARE_WORKERS_PROVIDER_ID, isDeployProviderId, publicDeployConfigForProvider, readDeployConfig, writeDeployConfig, listCloudflarePagesZones, DeployError, listDeployments, publicDeployments, getDeployment, buildDeployFileSet, cloudflarePagesProjectNameForDeploy, deployToCloudflarePages, deployToCloudflareWorkers, probeCloudflareWorkersCapabilities, deployToVercel, upsertDeployment, publicDeployment, cloudflarePagesDeploymentMetadata, prepareDeployPreflight } = ctx.deploy;
 
   /**
    * A DeployError now carries a specific `code` (MISSING_REFERENCES,
@@ -79,6 +80,87 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
           ? { details: err.details }
           : {};
       sendApiError(res, status, deployErrorCodeFor(err, status), String(err?.message || err), init);
+    }
+  });
+
+  app.get('/api/deploy/cloudflare-workers/capabilities', async (_req, res) => {
+    try {
+      const config = await readDeployConfig(CLOUDFLARE_WORKERS_PROVIDER_ID);
+      const empty = { workers: false, workersDevSubdomain: '', r2: false, d1: false, configured: false };
+      if (!config?.accountId) {
+        res.json(empty);
+        return;
+      }
+      const token = config.token;
+      if (!token) {
+        res.json(empty);
+        return;
+      }
+      const caps = await probeCloudflareWorkersCapabilities({ token, accountId: config.accountId });
+      res.json({ ...caps, configured: true });
+    } catch (err: any) {
+      const status = err instanceof DeployError ? err.status : 400;
+      sendApiError(res, status, deployErrorCodeFor(err, status), String(err?.message || err));
+    }
+  });
+
+  app.get('/api/deploy/cloudflare-workers/zones', async (_req, res) => {
+    try {
+      const config = await readDeployConfig(CLOUDFLARE_WORKERS_PROVIDER_ID);
+      const token = config.token;
+      if (!token) {
+        res.json({ zones: [] });
+        return;
+      }
+      const zones = await listCloudflareZones({ token, accountId: config.accountId || '' });
+      res.json({ zones });
+    } catch (err: any) {
+      const status = err instanceof DeployError ? err.status : 400;
+      sendApiError(res, status, deployErrorCodeFor(err, status), String(err?.message || err));
+    }
+  });
+
+  app.get('/api/cloudflare/resources/r2-buckets', async (_req, res) => {
+    try {
+      const config = await readDeployConfig(CLOUDFLARE_WORKERS_PROVIDER_ID);
+      const token = config.token;
+      const accountId = (config.accountId || '').trim();
+      if (!accountId || !token) return res.json({ buckets: [] });
+      const buckets = await listCloudflareR2Buckets(token, accountId);
+      res.json({ buckets });
+    } catch {
+      res.json({ buckets: [] });
+    }
+  });
+
+  app.get('/api/cloudflare/resources/d1-databases', async (_req, res) => {
+    try {
+      const config = await readDeployConfig(CLOUDFLARE_WORKERS_PROVIDER_ID);
+      const token = config.token;
+      const accountId = (config.accountId || '').trim();
+      if (!accountId || !token) return res.json({ databases: [] });
+      const databases = await listCloudflareD1Databases(token, accountId);
+      res.json({ databases });
+    } catch {
+      res.json({ databases: [] });
+    }
+  });
+
+  app.delete('/api/deploy/cloudflare-workers/domains/:domainId', async (req, res) => {
+    try {
+      const config = await readDeployConfig(CLOUDFLARE_WORKERS_PROVIDER_ID);
+      const token = config.token;
+      if (!config.accountId) {
+        return sendApiError(res, 400, 'CFW_ACCOUNT_ID_REQUIRED', 'Cloudflare account ID is required.');
+      }
+      if (!token) {
+        return sendApiError(res, 400, 'CFW_TOKEN_REQUIRED', 'Cloudflare API token is required.');
+      }
+      const deleted = await detachCloudflareWorkerDomain({ token, accountId: config.accountId }, req.params.domainId);
+      res.json(deleted ? { ok: true } : { ok: true, deleted: false });
+    } catch (err: any) {
+      const status = err instanceof DeployError ? err.status : 400;
+      sendApiError(res, status, deployErrorCodeFor(err, status), String(err?.message || err));
     }
   });
 
@@ -156,6 +238,9 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
         providerId === CLOUDFLARE_PAGES_PROVIDER_ID
           ? cloudflarePagesProjectNameForDeploy(db, req.params.id, project?.name, prior)
           : '';
+      const workersConfig = providerId === CLOUDFLARE_WORKERS_PROVIDER_ID
+        ? await readDeployConfig(CLOUDFLARE_WORKERS_PROVIDER_ID)
+        : undefined;
       const result = providerId === CLOUDFLARE_PAGES_PROVIDER_ID
         ? await deployToCloudflarePages({
             config: {
@@ -168,11 +253,19 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
             priorMetadata: prior?.providerMetadata,
             target,
           })
-        : await deployToVercel({
-            config: await readDeployConfig(VERCEL_PROVIDER_ID),
-            files,
-            projectId: req.params.id,
-          });
+        : providerId === CLOUDFLARE_WORKERS_PROVIDER_ID
+          ? await deployToCloudflareWorkers({
+              config: workersConfig ?? await readDeployConfig(CLOUDFLARE_WORKERS_PROVIDER_ID),
+              files,
+              projectId: req.params.id,
+              projectName: project?.name,
+              target,
+            })
+          : await deployToVercel({
+              config: await readDeployConfig(VERCEL_PROVIDER_ID),
+              files,
+              projectId: req.params.id,
+            });
       const now = Date.now();
       /** @type {import('@open-design/contracts').DeployProjectFileResponse} */
       const body = upsertDeployment(db, {
@@ -191,7 +284,9 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
         providerMetadata:
           providerId === CLOUDFLARE_PAGES_PROVIDER_ID
             ? (result.providerMetadata ?? cloudflarePagesDeploymentMetadata(cloudflarePagesProjectName))
-            : prior?.providerMetadata,
+            : providerId === CLOUDFLARE_WORKERS_PROVIDER_ID
+              ? result.providerMetadata
+              : prior?.providerMetadata,
         createdAt: prior?.createdAt ?? now,
         updatedAt: now,
       });

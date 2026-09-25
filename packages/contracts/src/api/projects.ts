@@ -820,7 +820,7 @@ export interface MessagesResponse {
   messages: ChatMessage[];
 }
 
-export type DeployProviderId = 'vercel-self' | 'cloudflare-pages';
+export type DeployProviderId = 'vercel-self' | 'cloudflare-pages' | 'cloudflare-workers';
 export type DeploymentStatus =
   | 'deploying'
   | 'preparing-link'
@@ -915,6 +915,24 @@ export interface CloudflarePagesDeploymentInfo {
   customDomain?: CloudflarePagesCustomDomainInfo;
 }
 
+export interface CloudflareWorkersBinding {
+  type: string;
+  name: string;
+  bucketName?: string;
+  databaseName?: string;
+  id?: string;
+}
+
+export interface CloudflareWorkersCapabilities {
+  workers: boolean;
+  workersDevSubdomain: string;
+  r2: boolean;
+  r2Reason?: string;
+  d1: boolean;
+  d1Reason?: string;
+  configured?: boolean;
+}
+
 export interface DeployConfigResponse {
   providerId: DeployProviderId;
   configured: boolean;
@@ -923,7 +941,11 @@ export interface DeployConfigResponse {
   teamSlug: string;
   accountId?: string;
   projectName?: string;
+  scriptName?: string;
+  compatibilityDate?: string;
+  bindings?: CloudflareWorkersBinding[];
   cloudflarePages?: CloudflarePagesConfigHints;
+  customDomain?: { hostname: string; zoneId: string };
   target: 'preview' | 'production';
 }
 
@@ -934,7 +956,11 @@ export interface UpdateDeployConfigRequest {
   teamSlug?: string;
   accountId?: string;
   projectName?: string;
+  scriptName?: string;
+  compatibilityDate?: string;
+  bindings?: CloudflareWorkersBinding[];
   cloudflarePages?: CloudflarePagesConfigHints;
+  customDomain?: { hostname: string; zoneId: string };
 }
 
 export interface DeploymentInfo {
