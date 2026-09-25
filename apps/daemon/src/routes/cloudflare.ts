@@ -49,6 +49,7 @@ import {
 import {
   clearCloudflareOAuthToken,
   getCloudflareOAuthToken,
+  setCloudflareOAuthToken,
   setCloudflareOAuthTokenGuarded,
   type StoredCloudflareOAuthToken,
 } from '../integrations/cloudflare-tokens.js';
@@ -130,14 +131,25 @@ export function registerCloudflareRoutes(
     const stored = buildStoredCloudflareToken(result, cfg);
     return runCredentialMutation(async () => {
       if (attemptGeneration !== oauthAttemptGeneration) return false;
+      const prev = await getCloudflareOAuthToken(dataDir);
       const ok = await setCloudflareOAuthTokenGuarded(
         dataDir,
         stored,
         () => attemptGeneration === oauthAttemptGeneration,
       );
       if (!ok) return false;
-      await commitCloudflareOAuthMode({ clientId: result.clientId, redirectUri: result.redirectUri });
-      return true;
+      try {
+        await commitCloudflareOAuthMode({ clientId: result.clientId, redirectUri: result.redirectUri });
+        return true;
+      } catch (err) {
+        // The token write already landed but the config commit failed — restore
+        // the prior token so a previously working credential stays usable instead
+        // of leaving a token issued to the new client against a config that still
+        // names the old identity.
+        if (prev) await setCloudflareOAuthToken(dataDir, prev);
+        else await clearCloudflareOAuthToken(dataDir);
+        throw err;
+      }
     });
   };
 
@@ -152,8 +164,17 @@ export function registerCloudflareRoutes(
     }
   };
 
-  const handleCallback = async (outcome: CallbackOutcome): Promise<boolean> => {
-    activeListener = null;
+  // Stop the listener only if it is still the one expected points at — a manual
+  // /complete must not tear down a listener a newer /start already installed.
+  const stopActiveListenerIf = async (expected: CallbackListener | null) => {
+    if (!expected || activeListener !== expected) return;
+    await stopActiveListener();
+  };
+
+  const handleCallback = async (outcome: CallbackOutcome, listener?: CallbackListener): Promise<boolean> => {
+    // Only clear activeListener if it is still the listener this callback was
+    // created for — a newer /start may have already replaced it.
+    if (listener && activeListener === listener) activeListener = null;
     if (outcome.kind !== 'ok') {
       console.warn(`[cloudflare-oauth] callback failed: ${outcome.error}`);
       return false;
@@ -223,39 +244,39 @@ export function registerCloudflareRoutes(
           error: `Cloudflare OAuth redirect URI must be ${expectedRedirectUri} — the daemon callback listener is fixed to it.`,
         });
       }
-      // Serialize the attempt transition (stop prior listener, bump generation,
-      // evict stale PKCE states) so an abandoned attempt's state can no longer
-      // be exchanged and mislabelled as this one.
+      const scopes = CLOUDFLARE_OAUTH_SCOPES;
+      let authorizeUrl = '';
+      let state = '';
+      let callbackHost = '';
+      let callbackPort = 0;
+      // Serialize the FULL attempt transition (stop prior listener, bump
+      // generation, evict stale PKCE state, mint new state, install the new
+      // listener) so two overlapping /start calls can never race to bind :56122
+      // and the loser's catch can't stop the winner's listener.
       await runCredentialMutation(async () => {
         await stopActiveListener();
         oauthAttemptGeneration += 1;
         pendingAuth.clear();
-      });
-      // Always request the full set in one connect so the D1/R2/zones pickers
-      // populate and Access gating works without a manual scope dance.
-      const scopes = CLOUDFLARE_OAUTH_SCOPES;
-      const { authorizeUrl, state } = beginCloudflareAuth({
-        pending: pendingAuth,
-        clientId,
-        redirectUri,
-        scopes,
-      });
-      // Open the one-shot listener BEFORE returning so the client can navigate
-      // the browser to authorizeUrl without racing startup.
-      activeListener = await startCallbackListener({
-        expectedState: state,
-        onCallback: handleCallback,
+        const begun = beginCloudflareAuth({ pending: pendingAuth, clientId, redirectUri, scopes });
+        authorizeUrl = begun.authorizeUrl;
+        state = begun.state;
+        const listenerRef: { current: CallbackListener | null } = { current: null };
+        const listener = await startCallbackListener({
+          expectedState: state,
+          onCallback: (o) => handleCallback(o, listenerRef.current ?? undefined),
+        });
+        listenerRef.current = listener;
+        activeListener = listener;
+        callbackHost = listener.address.host;
+        callbackPort = listener.address.port;
       });
       console.log(
-        `[cloudflare-oauth] start ok state=${state.slice(0, 8)}… listener=${activeListener.address.host}:${activeListener.address.port}`,
+        `[cloudflare-oauth] start ok state=${state.slice(0, 8)}… listener=${callbackHost}:${callbackPort}`,
       );
       res.json({
         authorizeUrl,
         state,
-        callback: {
-          host: activeListener.address.host,
-          port: activeListener.address.port,
-        },
+        callback: { host: callbackHost, port: callbackPort },
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -282,6 +303,7 @@ export function registerCloudflareRoutes(
     // (which bumps it) aborts this exchange before it can persist a token the
     // user already abandoned — the same fence the loopback callback enforces.
     const attemptGeneration = oauthAttemptGeneration;
+    const myListener = activeListener;
     const proxyDispatcher = proxyDispatcherRequestInit(process.env);
     try {
       const tokenResp = await completeCloudflareAuth({
@@ -304,8 +326,9 @@ export function registerCloudflareRoutes(
           .json({ error: 'Cloudflare OAuth attempt was cancelled or superseded — restart the connection.' });
       }
       // We won the race against the loopback listener (or it was never going
-      // to resolve); shut it down so the next /start has a clean slate.
-      await stopActiveListener();
+      // to resolve); shut it down so the next /start has a clean slate — but
+      // only if a newer /start hasn't already replaced it.
+      await stopActiveListenerIf(myListener);
       console.log('[cloudflare-oauth] manual paste-back ok, token stored');
       res.json({ ok: true });
     } catch (err: unknown) {
