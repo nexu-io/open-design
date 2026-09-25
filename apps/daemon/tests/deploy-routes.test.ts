@@ -1656,6 +1656,61 @@ describe('deploy provider routes', () => {
     }
   });
 
+  it('refuses to detach a Workers custom domain routed to another script (409, no DELETE sent)', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-workers-domain-foreign-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    configureCloudflareWorkersDataDir(stateRoot);
+    try {
+      expect((await fetch(`${baseUrl}/api/deploy/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ providerId: CLOUDFLARE_WORKERS_PROVIDER_ID, token: 'tok', accountId: 'acct_test', scriptName: 'my-site' }),
+      })).status).toBe(200);
+
+      const realFetch = globalThis.fetch;
+      const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+      const cfCalls: Array<{ url: string; method: string }> = [];
+      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        const method = (init?.method || 'GET').toUpperCase();
+        cfCalls.push({ url, method });
+        if (method === 'GET' && url.includes('/workers/domains/dom-foreign')) {
+          return json({ success: true, result: { id: 'dom-foreign', hostname: 'app.example.com', service: 'someone-elses-worker', zone_id: 'zone-1' } });
+        }
+        if (method === 'GET' && url.includes('/workers/domains/dom-mine')) {
+          return json({ success: true, result: { id: 'dom-mine', hostname: 'mine.example.com', service: 'my-site', zone_id: 'zone-1' } });
+        }
+        if (method === 'DELETE' && url.includes('/workers/domains/dom-mine')) {
+          return json({ success: true, result: { id: 'dom-mine' } });
+        }
+        throw new Error(`Unexpected Cloudflare fetch: ${method} ${url}`);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      try {
+        const foreign = await fetch(`${baseUrl}/api/deploy/cloudflare-workers/domains/dom-foreign`, { method: 'DELETE' });
+        expect(foreign.status).toBe(409);
+        expect((await foreign.json() as { error: { code: string } }).error.code).toBe('CFW_DOMAIN_FOREIGN');
+        expect(cfCalls.some((c) => c.method === 'DELETE')).toBe(false);
+
+        // Same route, a domain the OpenDesign script owns: detached as before.
+        const mine = await fetch(`${baseUrl}/api/deploy/cloudflare-workers/domains/dom-mine`, { method: 'DELETE' });
+        expect(mine.status).toBe(200);
+        expect(await mine.json()).toEqual({ ok: true });
+        expect(cfCalls.filter((c) => c.method === 'DELETE').map((c) => c.url)).toEqual([
+          expect.stringContaining('/workers/domains/dom-mine'),
+        ]);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
   it('surfaces the Workers result as cloudflareWorkers on the deploy response and the deployments list (through the real db)', async () => {
     const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-workers-lift-'));
     const priorStateRoot = process.env.OD_USER_STATE_DIR;

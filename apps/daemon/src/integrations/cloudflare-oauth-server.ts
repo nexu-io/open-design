@@ -201,6 +201,15 @@ export async function startCallbackListener(
       // real flow can still complete on a later hit.
       return;
     }
+    // A consuming error (Cloudflare rejected the dance, or the user declined)
+    // must reach the daemon the same way an ok callback does: without this the
+    // daemon never clears its activeListener and the UI polls until the 30 min
+    // timeout fires.
+    try {
+      await input.onCallback(outcome);
+    } catch (err: unknown) {
+      console.error('[cloudflare-oauth] onCallback failed:', err);
+    }
     void stop();
   };
 

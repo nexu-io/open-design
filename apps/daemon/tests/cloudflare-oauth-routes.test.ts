@@ -441,4 +441,53 @@ describe('cloudflare-oauth loopback listener result page', () => {
       await listener.stop();
     }
   });
+
+  it('delivers a consuming ?error= callback to onCallback before closing', async () => {
+    const start = await realListener();
+    const onCallback = vi.fn(async () => true);
+    const listener = await start({ expectedState: 'st-4', onCallback, port: 0, timeoutMs: 60_000 });
+    try {
+      const resp = await fetch(`http://127.0.0.1:${listener.address.port}/callback?error=access_denied&state=st-4`);
+      expect(resp.status).toBe(400);
+      // The daemon learns the dance failed NOW (tears down activeListener, the
+      // poll ends) instead of waiting for the 30 min timeout.
+      expect(onCallback).toHaveBeenCalledTimes(1);
+      expect(onCallback).toHaveBeenCalledWith({ kind: 'error', error: 'access_denied', state: 'st-4' });
+      // Consumed: the listener is gone.
+      await expect(fetch(`http://127.0.0.1:${listener.address.port}/callback?code=X&state=st-4`)).rejects.toThrow();
+    } finally {
+      await listener.stop();
+    }
+  });
+
+  it('delivers a state-less ?error= to onCallback and swallows an onCallback throw', async () => {
+    const start = await realListener();
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const onCallback = vi.fn(async () => {
+      throw new Error('boom');
+    });
+    const listener = await start({ expectedState: 'st-5', onCallback, port: 0, timeoutMs: 60_000 });
+    try {
+      const resp = await fetch(`http://127.0.0.1:${listener.address.port}/callback?error=server_error`);
+      expect(resp.status).toBe(400);
+      expect(onCallback).toHaveBeenCalledWith({ kind: 'error', error: 'server_error' });
+      expect(errorSpy).toHaveBeenCalled();
+    } finally {
+      errorSpy.mockRestore();
+      await listener.stop();
+    }
+  });
+
+  it('does not invoke onCallback for a mismatched-state ?error= replay', async () => {
+    const start = await realListener();
+    const onCallback = vi.fn(async () => true);
+    const listener = await start({ expectedState: 'st-6', onCallback, port: 0, timeoutMs: 60_000 });
+    try {
+      const resp = await fetch(`http://127.0.0.1:${listener.address.port}/callback?error=access_denied&state=other`);
+      expect(resp.status).toBe(400);
+      expect(onCallback).not.toHaveBeenCalled();
+    } finally {
+      await listener.stop();
+    }
+  });
 });

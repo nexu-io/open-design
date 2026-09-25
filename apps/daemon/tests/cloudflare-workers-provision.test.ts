@@ -118,6 +118,54 @@ describe('ensureCloudflareD1Database', () => {
     expect(dbs.at(-1)).toEqual({ name: 'my-db', id: 'uuid-last' });
     expect(calls.filter((c) => c[0].includes('/d1/database')).length).toBe(2);
   });
+
+  it('pages by the per_page Cloudflare applied, not the one requested, when the endpoint clamps it', async () => {
+    const calls: Call[] = [];
+    // 100 requested, 20 applied: page 1 is "short" against the request but full
+    // against the response; total_count 25 means one more page exists.
+    const page1 = Array.from({ length: 20 }, (_, i) => ({ name: 'db-' + i, uuid: 'uuid-' + i }));
+    const page2 = Array.from({ length: 5 }, (_, i) => ({ name: 'db-' + (20 + i), uuid: 'uuid-' + (20 + i) }));
+    const fn = vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push([url, init]);
+      const page = Number(new URL(url).searchParams.get('page'));
+      if (page === 1) return jsonResponse({ success: true, result: page1, result_info: { count: 20, page: 1, per_page: 20, total_count: 25 } });
+      return jsonResponse({ success: true, result: page2, result_info: { count: 5, page: 2, per_page: 20, total_count: 25 } });
+    });
+    vi.stubGlobal('fetch', fn);
+    const dbs = await listCloudflareD1Databases('tok-secret', 'acct_test');
+    expect(dbs).toHaveLength(25);
+    expect(calls.filter((c) => c[0].includes('/d1/database')).length).toBe(2);
+  });
+
+  it('stops when an endpoint ignores page= and answers the same page again, without duplicating it', async () => {
+    const calls: Call[] = [];
+    const same = Array.from({ length: 100 }, (_, i) => ({ name: 'db-' + i, uuid: 'uuid-' + i }));
+    const fn = vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push([url, init]);
+      // Full page, no result_info, identical on every page: the "keep paging
+      // while full" fallback would otherwise never terminate.
+      return jsonResponse({ success: true, result: same });
+    });
+    vi.stubGlobal('fetch', fn);
+    const dbs = await listCloudflareD1Databases('tok-secret', 'acct_test');
+    expect(dbs).toHaveLength(100);
+    expect(new Set(dbs.map((db) => db.id)).size).toBe(100);
+    expect(calls.filter((c) => c[0].includes('/d1/database')).length).toBe(2);
+  });
+
+  it('caps the pages followed when every page is full and every id is new', async () => {
+    const calls: Call[] = [];
+    const fn = vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push([url, init]);
+      const page = Number(new URL(url).searchParams.get('page'));
+      const result = Array.from({ length: 100 }, (_, i) => ({ name: 'db-' + page + '-' + i, uuid: 'uuid-' + page + '-' + i }));
+      return jsonResponse({ success: true, result });
+    });
+    vi.stubGlobal('fetch', fn);
+    const dbs = await listCloudflareD1Databases('tok-secret', 'acct_test');
+    expect(calls.filter((c) => c[0].includes('/d1/database')).length).toBe(100);
+    expect(dbs).toHaveLength(100 * 100);
+  });
 });
 
 describe('ensureCloudflareR2Bucket', () => {
@@ -206,6 +254,37 @@ describe('deployToCloudflareWorkers ensure-on-bind', () => {
     // exactly one R2 GET (the ensure lookup); no probe of /access/apps or /d1
     expect(calls.filter((c) => c[0].includes('/r2/buckets') && (c[1]?.method || 'GET') === 'GET')).toHaveLength(1);
     expect(calls.some((c) => c[0].includes('/access/apps'))).toBe(false);
+    expect(calls.some((c) => c[0].includes('/d1/database'))).toBe(false);
+  });
+
+  it('does not create a D1 database or R2 bucket when the script name is invalid', async () => {
+    const calls: Call[] = [];
+    const fn = makeFetch({ d1List: { success: true, result: [] }, r2List: { success: true, result: { buckets: [] } } }, calls);
+    vi.stubGlobal('fetch', fn);
+    await expect(deployToCloudflareWorkers({
+      ...base,
+      config: {
+        ...base.config,
+        scriptName: 'Not_Valid',
+        bindings: [
+          { type: 'd1', name: 'DB', databaseName: 'my-db' },
+          { type: 'r2_bucket', name: 'BUCKET', bucketName: 'my-bucket' },
+        ],
+      },
+    })).rejects.toMatchObject({ name: 'DeployError', code: 'CFW_SCRIPT_UPLOAD_FAILED' });
+    expect(calls.some((c) => c[0].includes('/d1/database'))).toBe(false);
+    expect(calls.some((c) => c[0].includes('/r2/buckets'))).toBe(false);
+  });
+
+  it('does not create a D1 database when an asset path is invalid', async () => {
+    const calls: Call[] = [];
+    const fn = makeFetch({ d1List: { success: true, result: [] } }, calls);
+    vi.stubGlobal('fetch', fn);
+    await expect(deployToCloudflareWorkers({
+      ...base,
+      files: [INDEX, { file: '../escape.html', data: Buffer.from('<p>x</p>') }],
+      config: { ...base.config, bindings: [{ type: 'd1', name: 'DB', databaseName: 'my-db' }] },
+    })).rejects.toMatchObject({ name: 'DeployError', code: 'CFW_UPLOAD_FAILED' });
     expect(calls.some((c) => c[0].includes('/d1/database'))).toBe(false);
   });
 });

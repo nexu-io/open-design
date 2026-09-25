@@ -118,22 +118,60 @@ async function listCloudflareAllPages(config: WorkersDeployConfig, path: string,
       return [];
     }
     if (json.success !== true || !Array.isArray(json.result)) return [];
-    all.push(...(json.result as JsonObject[]));
     const result = json.result as JsonObject[];
+    if (cloudflareListPageRepeats(all, result)) return all;
+    all.push(...result);
     if (!cloudflareListHasMorePages(json, result.length, page, perPage)) return all;
     page += 1;
   }
 }
 
+// Hard ceiling on pages followed per list, so an endpoint that always reports a
+// full page (or ignores `page=` and never repeats an id) cannot loop forever.
+const CLOUDFLARE_LIST_MAX_PAGES = 100;
+
+function cloudflareListItemKey(item: JsonObject | null | undefined): string | undefined {
+  const key = item?.id ?? item?.uuid;
+  return key === undefined || key === null ? undefined : String(key);
+}
+
+// An endpoint that ignores `page=` answers every page with the same items. When
+// any id on the incoming page was already seen on the previous page, the list
+// is exhausted: the caller drops the incoming page instead of appending
+// duplicates.
+function cloudflareListPageRepeats(collected: JsonObject[], incoming: JsonObject[]): boolean {
+  if (collected.length === 0 || incoming.length === 0) return false;
+  const previous = new Set<string>();
+  for (const item of collected) {
+    const key = cloudflareListItemKey(item);
+    if (key !== undefined) previous.add(key);
+  }
+  if (previous.size === 0) return false;
+  return incoming.some((item) => {
+    const key = cloudflareListItemKey(item);
+    return key !== undefined && previous.has(key);
+  });
+}
+
 // Cloudflare list envelopes are inconsistent: Workers scripts carry
 // `result_info.total_pages`, D1 and Access carry `total_count`/`count`/`page`/
 // `per_page` only. When neither is present, keep paging while a page is full.
+// The page size Cloudflare ACTUALLY applied (`result_info.per_page`) wins over
+// the one requested: an endpoint that clamps `per_page` to a smaller value
+// would otherwise look exhausted after a "short" first page.
 function cloudflareListHasMorePages(json: JsonObject, pageLength: number, page: number, perPage: number): boolean {
   if (pageLength === 0) return false;
+  if (page >= CLOUDFLARE_LIST_MAX_PAGES) return false;
   const info = (json.result_info ?? {}) as JsonObject;
-  if (typeof info.total_pages === 'number' && info.total_pages > 0) return page < info.total_pages;
-  if (typeof info.total_count === 'number' && info.total_count > 0) return page < Math.ceil(info.total_count / perPage);
-  return pageLength >= perPage;
+  const totalPages = Number(info.total_pages);
+  if (Number.isFinite(totalPages) && totalPages > 0) return page < totalPages;
+  const responsePerPage = Number(info.per_page);
+  const effectivePerPage = Number.isFinite(responsePerPage) && responsePerPage > 0 ? responsePerPage : perPage;
+  const totalCount = Number(info.total_count);
+  if (Number.isFinite(totalCount) && totalCount >= 0) return page * effectivePerPage < totalCount;
+  const count = Number(info.count);
+  if (Number.isFinite(count) && count >= 0) return count >= effectivePerPage;
+  return pageLength >= effectivePerPage;
 }
 
 // Fail-closed variant for the deploy path: a list failure (429 exhausted, 5xx,
@@ -155,6 +193,7 @@ async function listCloudflareAllPagesStrict(config: WorkersDeployConfig, path: s
       throw cloudflareError(json, resp.ok ? 502 : resp.status, what + ' failed.');
     }
     const result = json.result as JsonObject[];
+    if (cloudflareListPageRepeats(all, result)) return all;
     all.push(...result);
     if (!cloudflareListHasMorePages(json, result.length, page, perPage)) return all;
     page += 1;
@@ -846,28 +885,31 @@ export async function deployToCloudflareWorkers(input: {
     if (!selfEmail) selfEmail = await resolveCloudflareSelfEmail(token);
     if (!selfEmail) throw selfEmailUnresolvedError();
   }
-  // The ensure calls ARE the capability check: they succeed only when R2/D1 are
-  // enabled and the token can reach them. (A separate unretried probe after
-  // them used to flip a fresh success into CFW_R2_UNAVAILABLE on one 429.)
-  if (cfg.bindings && cfg.bindings.length > 0) {
-    const resolved = cfg.bindings.map((binding) => ({ ...binding }));
-    for (const binding of resolved) {
-      if (binding.type === 'd1' && binding.databaseName && !binding.id) {
-        binding.id = await ensureCloudflareD1Database(cfg, binding.databaseName);
-      }
-      if (binding.type === 'r2_bucket' && binding.bucketName) {
-        await ensureCloudflareR2Bucket(cfg, binding.bucketName);
-      }
-    }
-    cfg.bindings = resolved;
-  }
-
   const steps: DeployStep[] = [];
   try {
+    // Validate the script name and the asset set BEFORE any resource is
+    // created: an unviable deploy (bad script name, too many / oversized /
+    // invalid-path assets) must not first mint a D1 database or R2 bucket.
     const scriptName = resolveWorkerScriptName(cfg.scriptName, projectName || projectId);
     const { moduleCode, assetFiles } = splitWorkerModule(files);
     const isCustomModule = moduleCode !== DEFAULT_WORKER_MODULE;
     const { manifest, hashToFile } = buildCloudflareWorkersManifest(assetFiles);
+
+    // The ensure calls ARE the capability check: they succeed only when R2/D1 are
+    // enabled and the token can reach them. (A separate unretried probe after
+    // them used to flip a fresh success into CFW_R2_UNAVAILABLE on one 429.)
+    if (cfg.bindings && cfg.bindings.length > 0) {
+      const resolved = cfg.bindings.map((binding) => ({ ...binding }));
+      for (const binding of resolved) {
+        if (binding.type === 'd1' && binding.databaseName && !binding.id) {
+          binding.id = await ensureCloudflareD1Database(cfg, binding.databaseName);
+        }
+        if (binding.type === 'r2_bucket' && binding.bucketName) {
+          await ensureCloudflareR2Bucket(cfg, binding.bucketName);
+        }
+      }
+      cfg.bindings = resolved;
+    }
 
     if (target === 'preview') {
       // A version upload needs an existing script, and preview URLs need the
@@ -1342,4 +1384,27 @@ export async function detachCloudflareWorkerDomain(config: WorkersDeployConfig, 
   const json = await readCloudflareJson(resp);
   if (!resp.ok || json.success === false) throw cloudflareError(json, resp.status, 'Cloudflare Workers custom domain detach failed.');
   return true;
+}
+
+export type CloudflareWorkerDomain = { id: string; hostname: string; service: string };
+
+/** Read one Workers custom domain by id. `null` on 404 (already gone). Strict
+ * otherwise: the caller uses `service` as an ownership check before a detach,
+ * and an empty fallback would let a hostname routed to another script go. */
+export async function getCloudflareWorkerDomain(config: WorkersDeployConfig, domainId: string): Promise<CloudflareWorkerDomain | null> {
+  const resp = await fetchWithRetry(
+    CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/workers/domains/' + encodeURIComponent(domainId),
+    { method: 'GET', headers: cloudflareHeaders(config.token) },
+  );
+  if (resp.status === 404) return null;
+  const json = await readCloudflareJson(resp);
+  if (!resp.ok || json.success !== true || !json.result || typeof json.result !== 'object') {
+    throw cloudflareError(json, resp.ok ? 502 : resp.status, 'Cloudflare Workers custom domain lookup failed.');
+  }
+  const result = json.result as JsonObject;
+  return {
+    id: result.id !== undefined && result.id !== null ? String(result.id) : domainId,
+    hostname: typeof result.hostname === 'string' ? normalizeHostname(result.hostname) : '',
+    service: typeof result.service === 'string' ? result.service : '',
+  };
 }

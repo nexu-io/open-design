@@ -3,7 +3,7 @@ import type { RouteDeps } from '../server-context.js';
 import type { AuthorizeProjectRequest } from '../collab/project-request-authority.js';
 import { clientRequestIdFor } from '../http/client-request-id.js';
 import { classifyDeployFailure } from '../deploy/failure-detail.js';
-import { detachCloudflareWorkerDomain, listCloudflareZones, resolveWorkerScriptName } from '../deploy/cloudflare-workers.js';
+import { detachCloudflareWorkerDomain, getCloudflareWorkerDomain, listCloudflareZones, resolveWorkerScriptName } from '../deploy/cloudflare-workers.js';
 import { getCloudflareAccessToken } from '../deploy.js';
 
 export interface RegisterDeployRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'ids' | 'deploy' | 'projectStore'> {
@@ -195,7 +195,28 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
       if (!token) {
         return sendApiError(res, 400, 'CFW_TOKEN_REQUIRED', 'Cloudflare API token is required.');
       }
-      const deleted = await detachCloudflareWorkerDomain({ token, accountId: config.accountId }, req.params.domainId);
+      const cfg = { token, accountId: config.accountId };
+      // Ownership check: the domain id is client-supplied, and the token can
+      // reach every custom domain in the account. Detach ONLY a hostname that
+      // Cloudflare routes to the OpenDesign script (the same resolution the
+      // deploy performs: the configured override, else the project's name).
+      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : '';
+      const project = projectId ? getProject(db, projectId) : null;
+      const scriptName = resolveWorkerScriptName(config.scriptName || undefined, project?.name || projectId);
+      const domain = await getCloudflareWorkerDomain(cfg, req.params.domainId);
+      if (!domain) {
+        res.json({ ok: true, deleted: false });
+        return;
+      }
+      if (domain.service !== scriptName) {
+        return sendApiError(
+          res,
+          409,
+          'CFW_DOMAIN_FOREIGN',
+          'Custom domain "' + (domain.hostname || domain.id) + '" is routed to the Worker "' + domain.service + '", not to "' + scriptName + '"; refusing to detach it.',
+        );
+      }
+      const deleted = await detachCloudflareWorkerDomain(cfg, req.params.domainId);
       res.json(deleted ? { ok: true } : { ok: true, deleted: false });
     } catch (err: any) {
       const status = err instanceof DeployError ? err.status : 400;
