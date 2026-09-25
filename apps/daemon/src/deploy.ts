@@ -204,6 +204,16 @@ async function writeDeployConfigFile(file: string, config: DeployConfig) {
   }
 }
 
+// Serialize every Workers-config read-modify-write so a settings PUT, a
+// disconnect reset, and a connect commit can never interleave and lose each
+// other's updates.
+let cloudflareConfigMutationTail: Promise<unknown> = Promise.resolve();
+async function withCloudflareConfigMutation<T>(fn: () => Promise<T>): Promise<T> {
+  const run = cloudflareConfigMutationTail.then(fn, fn);
+  cloudflareConfigMutationTail = run.catch(() => {});
+  return run;
+}
+
 export function publicDeployConfig(config: Partial<DeployConfig>) {
   return {
     providerId: VERCEL_PROVIDER_ID,
@@ -276,6 +286,7 @@ export async function readCloudflareWorkersConfig(): Promise<DeployConfig> {
 }
 
 export async function writeCloudflareWorkersConfig(input: Partial<DeployConfig>) {
+  return withCloudflareConfigMutation(async () => {
   const current = await readCloudflareWorkersConfig();
   const tokenInput = typeof input?.token === 'string' ? input.token.trim() : '';
   // The authority switch to 'oauth' must not be reachable via a bare config PUT:
@@ -329,6 +340,7 @@ export async function writeCloudflareWorkersConfig(input: Partial<DeployConfig>)
   if (!next.accountId) throw new DeployError('Cloudflare account ID is required.', 400, undefined, 'CFW_ACCOUNT_ID_REQUIRED');
   await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), next);
   return publicCloudflareWorkersConfig(next);
+  });
 }
 
 /** Persist just the OAuth identity (clientId + redirectUri) that authorizes
@@ -354,22 +366,26 @@ export async function writeCloudflareOAuthIdentity(input: { clientId: string; re
  * the config clientId/redirectUri are updated in the same write as the mode
  * switch, so a replacement client is never recorded before its token is. */
 export async function commitCloudflareOAuthMode(identity?: { clientId: string; redirectUri: string }): Promise<void> {
-  const current = await readCloudflareWorkersConfig();
-  const next: DeployConfig = { ...current, credentialMode: 'oauth' };
-  if (identity) {
-    next.clientId = identity.clientId;
-    next.redirectUri = identity.redirectUri;
-  }
-  await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), next);
+  return withCloudflareConfigMutation(async () => {
+    const current = await readCloudflareWorkersConfig();
+    const next: DeployConfig = { ...current, credentialMode: 'oauth' };
+    if (identity) {
+      next.clientId = identity.clientId;
+      next.redirectUri = identity.redirectUri;
+    }
+    await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), next);
+  });
 }
 
 /** Reset the credential authority back to a static token after disconnect,
  * bypassing the token validation in writeCloudflareWorkersConfig (a user who
  * only ever used OAuth has no static token to require). */
 export async function resetCloudflareCredentialMode(): Promise<void> {
-  const current = await readCloudflareWorkersConfig();
-  const next: DeployConfig = { ...current, credentialMode: 'token' };
-  await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), next);
+  return withCloudflareConfigMutation(async () => {
+    const current = await readCloudflareWorkersConfig();
+    const next: DeployConfig = { ...current, credentialMode: 'token' };
+    await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), next);
+  });
 }
 
 export function publicCloudflareWorkersConfig(config: Partial<DeployConfig>) {
