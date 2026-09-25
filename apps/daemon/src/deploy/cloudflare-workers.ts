@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { CLOUDFLARE_WORKERS_PROVIDER_ID, DeployError, getCloudflareAccessToken, getCloudflareOAuthStoredEmail, isCloudflareAccessRedirect, normalizeCloudflareWorkersBindings } from '../deploy.js';
+import { proxyDispatcherRequestInit } from '../connectionTest.js';
 
 type JsonObject = Record<string, unknown>;
 
@@ -10,6 +11,12 @@ type JsonObject = Record<string, unknown>;
  * refreshed token instead of sending one captured at deploy start. */
 export type CloudflareTokenProvider = () => Promise<string>;
 
+/** The per-call HTTP dispatcher every Cloudflare request rides. It carries the
+ * user's HTTP/SOCKS proxy (the same one the OAuth connect/refresh/revoke use);
+ * without it a deploy bypasses the proxy and fails on exactly the machines
+ * where the connect only worked because of it. */
+export type WorkersRequestInit = Pick<RequestInit, 'dispatcher'>;
+
 type WorkersDeployConfig = {
   token: string | CloudflareTokenProvider;
   accountId: string;
@@ -17,7 +24,31 @@ type WorkersDeployConfig = {
   compatibilityDate?: string | undefined;
   credentialMode?: string | undefined;
   bindings?: CloudflareWorkersBinding[] | undefined;
+  /** Attached to every request. Set once per top-level call (deploy, probe,
+   * list) by `withWorkersDispatcher`; an exported helper called without it
+   * opens and closes its own. */
+  requestInit?: WorkersRequestInit | undefined;
 };
+
+// One proxy dispatcher per top-level Cloudflare operation, closed when it
+// ends. A caller that already holds one (the deploy's helpers, a route that
+// opened its own) passes it through; only a bare call opens a new one.
+async function withWorkersDispatcher<T>(
+  given: WorkersRequestInit | undefined,
+  run: (requestInit: WorkersRequestInit) => Promise<T>,
+): Promise<T> {
+  if (given) return run(given);
+  const proxy = proxyDispatcherRequestInit(process.env);
+  try {
+    return await run(proxy.requestInit);
+  } finally {
+    await proxy.close();
+  }
+}
+
+function withRequestInit(config: Pick<WorkersDeployConfig, 'requestInit'>, init: RequestInit): RequestInit {
+  return { ...init, ...(config.requestInit ?? {}) };
+}
 
 type WorkersFile = {
   file: string;
@@ -90,7 +121,13 @@ function cloudflareError(json: JsonObject, status: number, fallback: string): De
   return new DeployError(message, status, json);
 }
 
-async function fetchWithRetry(url: string, init: RequestInit, attempts = 3, options: { retryServerErrors?: boolean } = {}): Promise<Response> {
+async function fetchWithRetry(
+  config: Pick<WorkersDeployConfig, 'requestInit'>,
+  url: string,
+  init: RequestInit,
+  attempts = 3,
+  options: { retryServerErrors?: boolean } = {},
+): Promise<Response> {
   // Non-idempotent methods (POST/PATCH) may already have committed before a 5xx
   // is returned, so retrying a 5xx would mint duplicate resources (immutable
   // versions, orphan D1 databases, duplicate IdPs). A 429 is always safe to
@@ -100,7 +137,7 @@ async function fetchWithRetry(url: string, init: RequestInit, attempts = 3, opti
   const nonIdempotent = method === 'POST' || method === 'PATCH' || options.retryServerErrors === false;
   let last: Response | undefined;
   for (let i = 0; i < attempts; i += 1) {
-    const resp = await fetch(url, init);
+    const resp = await fetch(url, withRequestInit(config, init));
     const is429 = resp.status === 429;
     const is5xx = resp.status >= 500 && resp.status < 600;
     if (!is429 && !(is5xx && !nonIdempotent)) return resp;
@@ -118,7 +155,7 @@ async function listCloudflareAllPages(config: WorkersDeployConfig, path: string,
   let page = 1;
   for (;;) {
     const sep = path.includes('?') ? '&' : '?';
-    const resp = await fetchWithRetry(
+    const resp = await fetchWithRetry(config,
       base + sep + 'page=' + page + '&per_page=' + perPage,
       { method: 'GET', headers: await authHeaders(config) },
     );
@@ -206,7 +243,7 @@ async function listCloudflareAllPagesStrict(config: WorkersDeployConfig, path: s
   let page = 1;
   for (;;) {
     const sep = path.includes('?') ? '&' : '?';
-    const resp = await fetchWithRetry(
+    const resp = await fetchWithRetry(config,
       base + sep + 'page=' + page + '&per_page=' + perPage,
       { method: 'GET', headers: await authHeaders(config) },
     );
@@ -304,7 +341,7 @@ function buildCloudflareWorkersManifest(files: WorkersFile[]): { manifest: JsonO
 }
 
 async function startAssetsUploadSession(config: WorkersDeployConfig, scriptName: string, manifest: JsonObject): Promise<{ jwt: string; buckets: string[][] }> {
-  const resp = await fetchWithRetry(
+  const resp = await fetchWithRetry(config,
     CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/workers/scripts/' + encodeURIComponent(scriptName) + '/assets-upload-session',
     { method: 'POST', headers: await authHeaders(config, { 'Content-Type': 'application/json' }), body: JSON.stringify({ manifest }) },
   );
@@ -333,7 +370,7 @@ async function uploadAssetBuckets(
       const type = file.contentType || 'application/octet-stream';
       form.append(hash, new File([content], hash, { type }), hash);
     }
-    const resp = await fetchWithRetry(
+    const resp = await fetchWithRetry(config,
       CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/workers/assets/upload?base64=true',
       { method: 'POST', headers: { Authorization: 'Bearer ' + sessionJwt }, body: form },
     );
@@ -399,7 +436,7 @@ async function uploadWorkerScript(
     const form = new FormData();
     form.append('metadata', new Blob([JSON.stringify(workerMetadata(config, assetsJwt, runWorkerFirst))], { type: 'application/json' }));
     form.append('index.js', new Blob([moduleCode], { type: 'application/javascript+module' }), 'index.js');
-    const resp = await fetchWithRetry(url, { method: 'PUT', headers: await authHeaders(config), body: form }, 3, { retryServerErrors: false });
+    const resp = await fetchWithRetry(config, url, { method: 'PUT', headers: await authHeaders(config), body: form }, 3, { retryServerErrors: false });
     const json = await readCloudflareJson(resp);
     if (resp.ok && json.success !== false) return json;
     lastJson = json;
@@ -424,7 +461,7 @@ async function uploadWorkerVersion(config: WorkersDeployConfig, scriptName: stri
   const form = new FormData();
   form.append('metadata', new Blob([JSON.stringify(workerMetadata(config, assetsJwt, runWorkerFirst))], { type: 'application/json' }));
   form.append('index.js', new Blob([moduleCode], { type: 'application/javascript+module' }), 'index.js');
-  const resp = await fetchWithRetry(
+  const resp = await fetchWithRetry(config,
     CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/workers/scripts/' + encodeURIComponent(scriptName) + '/versions',
     { method: 'POST', headers: await authHeaders(config), body: form },
   );
@@ -435,7 +472,7 @@ async function uploadWorkerVersion(config: WorkersDeployConfig, scriptName: stri
 }
 
 async function readAccountSubdomain(config: WorkersDeployConfig): Promise<string> {
-  const resp = await fetchWithRetry(
+  const resp = await fetchWithRetry(config,
     CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/workers/subdomain',
     { method: 'GET', headers: await authHeaders(config) },
   );
@@ -454,26 +491,67 @@ function noWorkersDevSubdomainError(): DeployError {
   );
 }
 
-// Preview URLs only resolve when the script's subdomain config has
-// previews_enabled. Turn it on without changing the production workers.dev
-// exposure state (a preview deploy must not flip production public).
-async function ensureWorkerPreviewsEnabled(config: WorkersDeployConfig, scriptName: string): Promise<void> {
-  const url = CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/workers/scripts/' + encodeURIComponent(scriptName) + '/subdomain';
-  const getResp = await fetchWithRetry(url, { method: 'GET', headers: await authHeaders(config) });
+function workerSubdomainConfigUrl(config: WorkersDeployConfig, scriptName: string): string {
+  return CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/workers/scripts/' + encodeURIComponent(scriptName) + '/subdomain';
+}
+
+// The script's current workers.dev config (`enabled`, `previews_enabled`).
+// Every write to that config is a full replace, so a writer that changes one
+// flag must read the other first or it clobbers it.
+async function readWorkerSubdomainConfig(config: WorkersDeployConfig, scriptName: string): Promise<{ enabled: boolean; previewsEnabled: boolean }> {
+  const getResp = await fetchWithRetry(config, workerSubdomainConfigUrl(config, scriptName), { method: 'GET', headers: await authHeaders(config) });
   const getJson = await readCloudflareJson(getResp);
   if (!getResp.ok || getJson.success === false) throw cloudflareError(getJson, getResp.status, 'Cloudflare workers.dev subdomain config lookup failed.');
   const current = (getJson.result ?? {}) as JsonObject;
-  if (current.previews_enabled === true) return;
+  return { enabled: current.enabled === true, previewsEnabled: current.previews_enabled === true };
+}
+
+async function writeWorkerSubdomainConfig(
+  config: WorkersDeployConfig,
+  scriptName: string,
+  body: { enabled: boolean; previews_enabled: boolean },
+  what: string,
+): Promise<void> {
   const resp = await fetchWithRetry(
-    url,
-    {
-      method: 'POST',
-      headers: await authHeaders(config, { 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ enabled: current.enabled === true, previews_enabled: true }),
-    },
+    config,
+    workerSubdomainConfigUrl(config, scriptName),
+    { method: 'POST', headers: await authHeaders(config, { 'Content-Type': 'application/json' }), body: JSON.stringify(body) },
   );
   const json = await readCloudflareJson(resp);
-  if (!resp.ok || json.success === false) throw cloudflareError(json, resp.status, 'Cloudflare workers.dev preview enable failed.');
+  if (!resp.ok || json.success === false) throw cloudflareError(json, resp.status, what);
+}
+
+type WorkerPreviewsEnableResult = {
+  /** True when previews_enabled was OFF before this call turned it on — the
+   * exposure a later compensation must put back. */
+  enabledByThisRun: boolean;
+};
+
+// Preview URLs only resolve when the script's subdomain config has
+// previews_enabled. Turn it on without changing the production workers.dev
+// exposure state (a preview deploy must not flip production public).
+async function ensureWorkerPreviewsEnabled(config: WorkersDeployConfig, scriptName: string): Promise<WorkerPreviewsEnableResult> {
+  const current = await readWorkerSubdomainConfig(config, scriptName);
+  if (current.previewsEnabled) return { enabledByThisRun: false };
+  await writeWorkerSubdomainConfig(
+    config,
+    scriptName,
+    { enabled: current.enabled, previews_enabled: true },
+    'Cloudflare workers.dev preview enable failed.',
+  );
+  return { enabledByThisRun: true };
+}
+
+// Turn previews_enabled back off (compensation only), leaving the production
+// workers.dev route as it is.
+async function disableWorkerPreviews(config: WorkersDeployConfig, scriptName: string): Promise<void> {
+  const current = await readWorkerSubdomainConfig(config, scriptName);
+  await writeWorkerSubdomainConfig(
+    config,
+    scriptName,
+    { enabled: current.enabled, previews_enabled: false },
+    'Cloudflare workers.dev preview disable failed.',
+  );
 }
 
 type WorkerSubdomainEnableResult = {
@@ -497,13 +575,13 @@ async function enableWorkerSubdomain(
   const url = CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/workers/scripts/' + encodeURIComponent(scriptName) + '/subdomain';
   let wasEnabled = false;
   if (options.recordPriorState) {
-    const getResp = await fetchWithRetry(url, { method: 'GET', headers: await authHeaders(config) });
+    const getResp = await fetchWithRetry(config, url, { method: 'GET', headers: await authHeaders(config) });
     const getJson = await readCloudflareJson(getResp);
     if (!getResp.ok || getJson.success === false) throw cloudflareError(getJson, getResp.status, 'Cloudflare workers.dev subdomain config lookup failed.');
     const current = (getJson.result ?? {}) as JsonObject;
     wasEnabled = current.enabled === true;
   }
-  const resp = await fetchWithRetry(
+  const resp = await fetchWithRetry(config,
     url,
     { method: 'POST', headers: await authHeaders(config, { 'Content-Type': 'application/json' }), body: JSON.stringify({ enabled: true, previews_enabled: true }) },
   );
@@ -512,14 +590,17 @@ async function enableWorkerSubdomain(
   return { url: 'https://' + scriptName + '.' + subdomain + '.workers.dev', enabledByThisRun: Boolean(options.recordPriorState) && !wasEnabled };
 }
 
-// Turn the script's workers.dev route back off (compensation only).
+// Turn the script's workers.dev route back off (compensation only). The POST
+// replaces the whole config, so previews_enabled is read first and written
+// back as it is — a production compensation must not switch previews off.
 async function disableWorkerSubdomain(config: WorkersDeployConfig, scriptName: string): Promise<void> {
-  const resp = await fetchWithRetry(
-    CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/workers/scripts/' + encodeURIComponent(scriptName) + '/subdomain',
-    { method: 'POST', headers: await authHeaders(config, { 'Content-Type': 'application/json' }), body: JSON.stringify({ enabled: false }) },
+  const current = await readWorkerSubdomainConfig(config, scriptName);
+  await writeWorkerSubdomainConfig(
+    config,
+    scriptName,
+    { enabled: false, previews_enabled: current.previewsEnabled },
+    'Cloudflare workers.dev disable failed.',
   );
-  const json = await readCloudflareJson(resp);
-  if (!resp.ok || json.success === false) throw cloudflareError(json, resp.status, 'Cloudflare workers.dev disable failed.');
 }
 
 export type CloudflareWorkersAccessRule =
@@ -550,8 +631,8 @@ function selfEmailUnresolvedError(): DeployError {
   );
 }
 
-async function resolveCloudflareSelfEmail(token: string): Promise<string> {
-  const resp = await fetch(CLOUDFLARE_API + '/user', { headers: cloudflareHeaders(token) });
+async function resolveCloudflareSelfEmail(token: string, requestInit: WorkersRequestInit = {}): Promise<string> {
+  const resp = await fetch(CLOUDFLARE_API + '/user', { headers: cloudflareHeaders(token), ...requestInit });
   const json = await readCloudflareJson(resp);
   if (!resp.ok || json.success !== true) return '';
   const result = (json.result ?? {}) as JsonObject;
@@ -583,7 +664,7 @@ async function ensureCloudflareOtpIdentityProvider(config: WorkersDeployConfig):
   );
   const existing = providers.find((p) => p?.type === 'onetimepin');
   if (existing && typeof existing.id === 'string') return existing.id;
-  const createResp = await fetchWithRetry(
+  const createResp = await fetchWithRetry(config,
     base,
     {
       method: 'POST',
@@ -620,7 +701,7 @@ async function findCloudflareAccessAppByWorker(config: WorkersDeployConfig, work
   const base = CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/access/apps';
   let page = 1;
   for (;;) {
-    const resp = await fetchWithRetry(
+    const resp = await fetchWithRetry(config,
       base + '?page=' + page + '&per_page=100',
       { method: 'GET', headers: await authHeaders(config) },
     );
@@ -666,7 +747,7 @@ export async function listCloudflareWorkerDomainsForScript(
   config: WorkersDeployConfig,
   scriptName: string,
 ): Promise<CloudflareWorkerAttachedDomain[]> {
-  const resp = await fetchWithRetry(
+  const resp = await fetchWithRetry(config,
     CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/workers/domains?service=' + encodeURIComponent(scriptName),
     { method: 'GET', headers: await authHeaders(config) },
   );
@@ -707,7 +788,7 @@ async function createCloudflareAccessApp(
   },
 ): Promise<{ appId: string; workerId: string }> {
   const selfEmail = input.rule.kind === 'self'
-    ? (input.selfEmail || await resolveCloudflareSelfEmail(await resolveConfigToken(config)))
+    ? (input.selfEmail || await resolveCloudflareSelfEmail(await resolveConfigToken(config), config.requestInit))
     : '';
   if (input.rule.kind === 'self' && !selfEmail) {
     throw selfEmailUnresolvedError();
@@ -775,7 +856,7 @@ async function createCloudflareAccessApp(
   const path = existingId
     ? CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/access/apps/' + encodeURIComponent(existingId)
     : CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/access/apps';
-  const resp = await fetchWithRetry(
+  const resp = await fetchWithRetry(config,
     path,
     {
       method: existingId ? 'PUT' : 'POST',
@@ -822,10 +903,10 @@ export function configureCloudflareAccessPerimeterRetry(overrides?: Partial<Clou
 
 // One HEAD against a public URL; resolves to the failure instead of throwing so
 // the caller can retry a bounded number of times.
-async function probeCloudflareAccessPerimeterOnce(url: string): Promise<DeployError | null> {
+async function probeCloudflareAccessPerimeterOnce(url: string, requestInit: WorkersRequestInit): Promise<DeployError | null> {
   let resp: Response;
   try {
-    resp = await fetch(url, { method: 'HEAD', redirect: 'manual' });
+    resp = await fetch(url, { method: 'HEAD', redirect: 'manual', ...requestInit });
   } catch (err) {
     return new DeployError(
       'Could not verify Cloudflare Access on ' + url + ': ' + String((err as Error)?.message || err),
@@ -852,12 +933,12 @@ async function probeCloudflareAccessPerimeterOnce(url: string): Promise<DeployEr
 // still issuing) or a just-enabled workers.dev name can take a moment to
 // answer at all, so each URL gets a short bounded retry before the deploy is
 // declared unverified.
-async function verifyCloudflareAccessPerimeter(urls: string[]): Promise<void> {
+async function verifyCloudflareAccessPerimeter(urls: string[], requestInit: WorkersRequestInit): Promise<void> {
   const { attempts, baseMs, maxDelayMs } = accessPerimeterRetry;
   for (const url of urls) {
     let failure: DeployError | null = null;
     for (let attempt = 0; attempt < attempts; attempt += 1) {
-      failure = await probeCloudflareAccessPerimeterOnce(url);
+      failure = await probeCloudflareAccessPerimeterOnce(url, requestInit);
       if (!failure) break;
       if (attempt < attempts - 1) {
         await new Promise((resolve) => setTimeout(resolve, Math.min(maxDelayMs, baseMs * 2 ** attempt)));
@@ -875,7 +956,8 @@ async function verifyCloudflareAccessPerimeter(urls: string[]): Promise<void> {
 // run's exposure and is left alone. Each step is best-effort and lands on the
 // step list; the perimeter error is what surfaces. A detached hostname is
 // dropped from `attachedCustomDomains` so the failed-deploy bookkeeping does
-// not record as owned an attachment that no longer exists.
+// not record as owned an attachment that no longer exists, and added to
+// `releasedCustomDomains` so the route drops its attach write-ahead too.
 async function withdrawUnverifiedExposure(
   config: WorkersDeployConfig,
   input: {
@@ -883,6 +965,7 @@ async function withdrawUnverifiedExposure(
     subdomainEnabledByThisRun: boolean;
     attachedCustomDomains: CloudflareOwnedCustomDomain[];
     detachableHostnames: readonly string[];
+    releasedCustomDomains: string[];
     steps: DeployStep[];
   },
 ): Promise<void> {
@@ -909,11 +992,30 @@ async function withdrawUnverifiedExposure(
       if (domainId) await detachCloudflareWorkerDomain(config, domainId);
       const index = input.attachedCustomDomains.indexOf(attached);
       if (index >= 0) input.attachedCustomDomains.splice(index, 1);
+      if (!input.releasedCustomDomains.includes(attached.hostname)) input.releasedCustomDomains.push(attached.hostname);
       steps.push({ name: 'custom-domain-detach', status: 'done', detail: attached.hostname });
     } catch (err) {
       console.error(`[cloudflare-workers] Access unverified; could not detach ${attached.hostname} again: ${describe(err)}`);
       steps.push({ name: 'custom-domain-detach', status: 'error', detail: attached.hostname + ': ' + describe(err) });
     }
+  }
+}
+
+// Preview counterpart of withdrawUnverifiedExposure: the only exposure a
+// preview deploy can create is previews_enabled, and only when THIS run turned
+// it on. Best-effort; the perimeter error is what surfaces.
+async function withdrawUnverifiedPreviewExposure(
+  config: WorkersDeployConfig,
+  input: { scriptName: string; previewsEnabledByThisRun: boolean; steps: DeployStep[] },
+): Promise<void> {
+  if (!input.previewsEnabledByThisRun) return;
+  try {
+    await disableWorkerPreviews(config, input.scriptName);
+    input.steps.push({ name: 'previews-disable', status: 'done' });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[cloudflare-workers] Access unverified; could not turn previews back off for ${input.scriptName}: ${message}`);
+    input.steps.push({ name: 'previews-disable', status: 'error', detail: message });
   }
 }
 
@@ -923,7 +1025,7 @@ function accessAppReferencesWorker(app: JsonObject | null, workerId: string): bo
 }
 
 async function getCloudflareAccessApp(config: WorkersDeployConfig, appId: string): Promise<JsonObject | null> {
-  const resp = await fetchWithRetry(
+  const resp = await fetchWithRetry(config,
     CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/access/apps/' + encodeURIComponent(appId),
     { method: 'GET', headers: await authHeaders(config) },
   );
@@ -1016,6 +1118,27 @@ export function pendingCustomDomainsFromMetadata(metadata: unknown): string[] {
   return out;
 }
 
+/** Hostnames a Workers deploy reported as certainly NOT attached
+ * (`releasedCustomDomains` on its error): a 4xx-refused attach, or an attach
+ * this run withdrew again. Their attach write-ahead can be dropped. */
+export function releasedCustomDomainsFromWorkersDeploy(source: unknown): string[] {
+  const released = (source as { releasedCustomDomains?: unknown } | null | undefined)?.releasedCustomDomains;
+  if (!Array.isArray(released)) return [];
+  const out: string[] = [];
+  for (const entry of released) {
+    const hostname = typeof entry === 'string' ? normalizeHostname(entry) : '';
+    if (hostname && !out.includes(hostname)) out.push(hostname);
+  }
+  return out;
+}
+
+/** The prior Access app id a Workers deploy deleted with Access off
+ * (`retiredAccessAppId` on its result metadata or its error). */
+export function retiredAccessAppIdFromWorkersDeploy(source: unknown): string | undefined {
+  const id = (source as { retiredAccessAppId?: unknown } | null | undefined)?.retiredAccessAppId;
+  return typeof id === 'string' && id ? id : undefined;
+}
+
 /** Everything a set of records vouches for: the recorded owned hostnames plus
  * every pending hostname not already among them, as hostname-only entries so
  * `isOwnedCustomDomain` matches a pending one by hostname. */
@@ -1053,7 +1176,7 @@ export function isOwnedCustomDomain(
 }
 
 async function deleteCloudflareAccessApp(config: WorkersDeployConfig, appId: string): Promise<void> {
-  const resp = await fetchWithRetry(
+  const resp = await fetchWithRetry(config,
     CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/access/apps/' + encodeURIComponent(appId),
     { method: 'DELETE', headers: await authHeaders(config) },
   );
@@ -1097,6 +1220,15 @@ export async function deployToCloudflareWorkers(input: {
    * token resolver in 'oauth' mode and to the static `config.token` otherwise. */
   tokenProvider?: CloudflareTokenProvider | undefined;
 }): Promise<CloudflareWorkersDeployResult> {
+  // Every Cloudflare call of this deploy — list, upload, PUT, Access, HEAD
+  // probe — rides one proxy dispatcher, closed when the deploy ends.
+  return withWorkersDispatcher(undefined, (requestInit) => deployToCloudflareWorkersWith(input, requestInit));
+}
+
+async function deployToCloudflareWorkersWith(
+  input: Parameters<typeof deployToCloudflareWorkers>[0],
+  requestInit: WorkersRequestInit,
+): Promise<CloudflareWorkersDeployResult> {
   const startedAt = Date.now();
   const { config, files, projectId = '', projectName = '', target = 'production', access, priorAccessAppId, customDomain, priorCustomDomain, onBeforeAttach } = input ?? {};
   const priorOwnedCustomDomains = input?.priorOwnedCustomDomains ?? [];
@@ -1132,6 +1264,7 @@ export async function deployToCloudflareWorkers(input: {
     compatibilityDate: config.compatibilityDate,
     credentialMode: config.credentialMode,
     bindings: validatedBindings,
+    requestInit,
   };
   // Resolve the "only me" email BEFORE any upload. In OAuth mode the email
   // captured at connect time is authoritative (`GET /user` needs a scope an
@@ -1141,7 +1274,7 @@ export async function deployToCloudflareWorkers(input: {
   let selfEmail = '';
   if (accessOn && access!.rule!.kind === 'self') {
     if (config.credentialMode === 'oauth') selfEmail = await getCloudflareOAuthStoredEmail();
-    if (!selfEmail) selfEmail = await resolveCloudflareSelfEmail(token);
+    if (!selfEmail) selfEmail = await resolveCloudflareSelfEmail(token, cfg.requestInit);
     if (!selfEmail) throw selfEmailUnresolvedError();
   }
   const steps: DeployStep[] = [];
@@ -1155,6 +1288,16 @@ export async function deployToCloudflareWorkers(input: {
   // the record keeps listing a hostname that is no longer routed, and a later
   // dashboard re-attach of it would be classified owned and detached again.
   const detachedCustomDomains: CloudflareOwnedCustomDomain[] = [];
+  // Hostnames THIS deploy is certain are NOT attached to the script: an attach
+  // Cloudflare rejected outright (4xx — never processed), or one this run
+  // attached and then detached again. Reported on the error so the route drops
+  // their attach write-ahead (`pendingCustomDomains`); an ambiguous failure
+  // (5xx, transport) is NOT listed and its write-ahead stays.
+  const releasedCustomDomains: string[] = [];
+  // The prior Access app this deploy deleted with Access off. Reported on the
+  // result AND on the error so every record still carrying that id stops
+  // claiming the Worker is protected by an app that no longer exists.
+  let retiredAccessAppId = '';
   try {
     // Validate the script name and the asset set BEFORE any resource is
     // created: an unviable deploy (bad script name, too many / oversized /
@@ -1244,12 +1387,22 @@ export async function deployToCloudflareWorkers(input: {
       const versionId = await uploadWorkerVersion(cfg, scriptName, moduleCode, completionJwt, isCustomModule);
       metadata.versionId = versionId;
       steps.push({ name: 'version', status: 'done' });
-      await ensureWorkerPreviewsEnabled(cfg, scriptName);
+      const previews = await ensureWorkerPreviewsEnabled(cfg, scriptName);
       steps.push({ name: 'previews', status: 'done' });
       const prefix = versionId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8) || 'preview';
       const url = 'https://' + prefix + '-' + scriptName + '.' + subdomain + '.workers.dev';
       if (accessOn) {
-        await verifyCloudflareAccessPerimeter([url]);
+        // Same hard constraint as production: a preview URL the deploy cannot
+        // prove is gated must not stay reachable through an exposure this run
+        // created — previews_enabled goes back off when this run turned it on.
+        try {
+          await verifyCloudflareAccessPerimeter([url], cfg.requestInit ?? {});
+        } catch (err) {
+          if (err instanceof DeployError && err.code === 'CFW_ACCESS_UNVERIFIED') {
+            await withdrawUnverifiedPreviewExposure(cfg, { scriptName, previewsEnabledByThisRun: previews.enabledByThisRun, steps });
+          }
+          throw err;
+        }
         metadata.accessVerified = true;
       }
       metadata.steps = steps;
@@ -1344,6 +1497,12 @@ export async function deployToCloudflareWorkers(input: {
         metadata.accessAppId = priorAccessAppId;
         metadata.createdByOpenDesign = true;
       }
+      // Access off and the app is gone: every OTHER record of this script that
+      // recorded the id would keep reporting the Worker as protected by it.
+      if (retirement === 'deleted' && !accessAppId) {
+        retiredAccessAppId = priorAccessAppId;
+        metadata.retiredAccessAppId = priorAccessAppId;
+      }
     }
 
     let url = customDomain ? 'https://' + customDomain.hostname : '';
@@ -1367,6 +1526,16 @@ export async function deployToCloudflareWorkers(input: {
         if (onBeforeAttach) await onBeforeAttach(configuredHostname);
         domainId = await attachCloudflareWorkerDomain(cfg, { hostname: customDomain.hostname, service: scriptName, zone_id: customDomain.zoneId });
       } catch (err) {
+        // A 4xx is Cloudflare refusing the attach outright: the hostname is
+        // certainly not routed to the script, so the write-ahead that vouches
+        // for it can go. A 5xx or a transport failure may have landed the
+        // attach; the write-ahead stays until a later deploy reconciles it.
+        // A hostname that was routed before this run is not released: the
+        // record that vouches for it may be the write-ahead alone.
+        const refused = err instanceof DeployError && err.status >= 400 && err.status < 500;
+        if (refused && !configuredAlreadyAttached && !releasedCustomDomains.includes(configuredHostname)) {
+          releasedCustomDomains.push(configuredHostname);
+        }
         // Compensation: the Access app claimed the configured hostname before
         // the attach. The attach failed, so drop that claim again — only when
         // the hostname was NOT already routed, since a still-routed hostname
@@ -1436,7 +1605,7 @@ export async function deployToCloudflareWorkers(input: {
       // withdrawn before the failure surfaces — the site must not stay reachable
       // on a URL the deploy could not prove is gated.
       try {
-        await verifyCloudflareAccessPerimeter(publicUrls);
+        await verifyCloudflareAccessPerimeter(publicUrls, cfg.requestInit ?? {});
       } catch (err) {
         if (err instanceof DeployError && err.code === 'CFW_ACCESS_UNVERIFIED') {
           await withdrawUnverifiedExposure(cfg, {
@@ -1444,6 +1613,7 @@ export async function deployToCloudflareWorkers(input: {
             subdomainEnabledByThisRun,
             attachedCustomDomains,
             detachableHostnames: configuredHostname && !configuredAlreadyAttached ? [configuredHostname] : [],
+            releasedCustomDomains,
             steps,
           });
         }
@@ -1452,13 +1622,19 @@ export async function deployToCloudflareWorkers(input: {
       metadata.accessVerified = true;
     } else {
       try {
-        const checkResp = await fetch(url, { method: 'HEAD', redirect: 'manual' });
+        const checkResp = await fetch(url, { method: 'HEAD', redirect: 'manual', ...(cfg.requestInit ?? {}) });
         const check: JsonObject = { status: checkResp.status, ok: checkResp.ok };
         if (checkResp.status >= 500 || checkResp.status === 1101) check.detail = 'worker-runtime-error';
         metadata.check = check;
       } catch {
         // A failed post-deploy probe is non-fatal; the deploy still succeeded.
       }
+    }
+    // Stale owned hostnames this deploy detached. A SIBLING record of the same
+    // script (the Workers config is global) may still list one as owned; the
+    // route stops every record vouching for them before it writes this one.
+    if (detachedCustomDomains.length > 0) {
+      metadata.detachedCustomDomains = detachedCustomDomains.map((domain) => (domain.id ? { id: domain.id, hostname: domain.hostname } : { hostname: domain.hostname }));
     }
     metadata.steps = steps;
     return {
@@ -1479,6 +1655,8 @@ export async function deployToCloudflareWorkers(input: {
     (err as { steps?: DeployStep[] }).steps = steps;
     (err as { attachedCustomDomains?: CloudflareOwnedCustomDomain[] }).attachedCustomDomains = attachedCustomDomains;
     (err as { detachedCustomDomains?: CloudflareOwnedCustomDomain[] }).detachedCustomDomains = detachedCustomDomains;
+    (err as { releasedCustomDomains?: string[] }).releasedCustomDomains = releasedCustomDomains;
+    if (retiredAccessAppId) (err as { retiredAccessAppId?: string }).retiredAccessAppId = retiredAccessAppId;
     throw err;
   }
 }
@@ -1502,7 +1680,11 @@ export type CloudflareWorkersCapabilities = {
   accessReason?: string;
 };
 
-export async function probeCloudflareWorkersCapabilities(input: { token: string; accountId: string }): Promise<CloudflareWorkersCapabilities> {
+export async function probeCloudflareWorkersCapabilities(input: { token: string; accountId: string; requestInit?: WorkersRequestInit | undefined }): Promise<CloudflareWorkersCapabilities> {
+  return withWorkersDispatcher(input.requestInit, (requestInit) => probeCloudflareWorkersCapabilitiesWith(input, requestInit));
+}
+
+async function probeCloudflareWorkersCapabilitiesWith(input: { token: string; accountId: string }, requestInit: WorkersRequestInit): Promise<CloudflareWorkersCapabilities> {
   const token = input.token;
   const accountId = input.accountId;
   const base = CLOUDFLARE_API + '/accounts/' + encodeURIComponent(accountId);
@@ -1510,7 +1692,7 @@ export async function probeCloudflareWorkersCapabilities(input: { token: string;
 
   async function probe(path: string): Promise<{ success: boolean; code?: number; subdomain?: string }> {
     try {
-      const resp = await fetch(base + path, { headers: cloudflareHeaders(token) });
+      const resp = await fetch(base + path, { headers: cloudflareHeaders(token), ...requestInit });
       const json = (await resp.json().catch(() => ({}))) as JsonObject;
       const errs = (Array.isArray(json.errors) ? json.errors : []) as JsonObject[];
       const code = typeof errs[0]?.code === 'number' ? (errs[0].code as number) : undefined;
@@ -1555,7 +1737,16 @@ export type CloudflareD1Database = { name: string; id: string };
 export async function listCloudflareR2Buckets(
   token: string,
   accountId: string,
-  options: { strict?: boolean; nameContains?: string } = {},
+  options: { strict?: boolean; nameContains?: string; requestInit?: WorkersRequestInit | undefined } = {},
+): Promise<CloudflareR2Bucket[]> {
+  return withWorkersDispatcher(options.requestInit, (requestInit) => listCloudflareR2BucketsWith(token, accountId, options, requestInit));
+}
+
+async function listCloudflareR2BucketsWith(
+  token: string,
+  accountId: string,
+  options: { strict?: boolean; nameContains?: string },
+  requestInit: WorkersRequestInit,
 ): Promise<CloudflareR2Bucket[]> {
   const base = CLOUDFLARE_API + '/accounts/' + encodeURIComponent(accountId) + '/r2/buckets';
   const out: CloudflareR2Bucket[] = [];
@@ -1566,8 +1757,8 @@ export async function listCloudflareR2Buckets(
     if (cursor) params.set('cursor', cursor);
     const url = base + '?' + params.toString();
     const resp = options.strict
-      ? await fetchWithRetry(url, { method: 'GET', headers: cloudflareHeaders(token) })
-      : await fetch(url, { headers: cloudflareHeaders(token) });
+      ? await fetchWithRetry({ requestInit }, url, { method: 'GET', headers: cloudflareHeaders(token) })
+      : await fetch(url, { headers: cloudflareHeaders(token), ...requestInit });
     const json = (await resp.json().catch(() => ({}))) as JsonObject;
     if (!resp.ok || json.success !== true) {
       // The deploy path (strict) must fail closed: `[]` means "create it" to
@@ -1592,11 +1783,12 @@ export async function listCloudflareR2Buckets(
 export async function listCloudflareD1Databases(
   token: string,
   accountId: string,
+  options: { requestInit?: WorkersRequestInit | undefined } = {},
 ): Promise<CloudflareD1Database[]> {
-  const databases = await listCloudflareAllPages(
-    { token, accountId } as WorkersDeployConfig,
+  const databases = await withWorkersDispatcher(options.requestInit, (requestInit) => listCloudflareAllPages(
+    { token, accountId, requestInit } as WorkersDeployConfig,
     '/accounts/' + encodeURIComponent(accountId) + '/d1/database',
-  );
+  ));
   return databases
     .map((db) => ({
       name: typeof db?.name === 'string' ? db.name : '',
@@ -1618,7 +1810,7 @@ export async function ensureCloudflareD1Database(config: WorkersDeployConfig, da
   );
   const match = existing.find((db) => db?.name === databaseName && typeof db?.uuid === 'string' && db.uuid);
   if (match) return String(match.uuid);
-  const resp = await fetchWithRetry(
+  const resp = await fetchWithRetry(config,
     CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/d1/database',
     { method: 'POST', headers: await authHeaders(config, { 'Content-Type': 'application/json' }), body: JSON.stringify({ name: databaseName }) },
   );
@@ -1643,9 +1835,9 @@ export async function ensureCloudflareD1Database(config: WorkersDeployConfig, da
 /** Resolve an R2 bucket by name, creating it when it does not exist. The
  * bucket name is the identifier, so it is returned unchanged. */
 export async function ensureCloudflareR2Bucket(config: WorkersDeployConfig, bucketName: string): Promise<string> {
-  const existing = await listCloudflareR2Buckets(await resolveConfigToken(config), config.accountId, { strict: true, nameContains: bucketName });
+  const existing = await listCloudflareR2Buckets(await resolveConfigToken(config), config.accountId, { strict: true, nameContains: bucketName, requestInit: config.requestInit });
   if (existing.some((bucket) => bucket.name === bucketName)) return bucketName;
-  const resp = await fetchWithRetry(
+  const resp = await fetchWithRetry(config,
     CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/r2/buckets',
     { method: 'POST', headers: await authHeaders(config, { 'Content-Type': 'application/json' }), body: JSON.stringify({ name: bucketName }) },
   );
@@ -1659,11 +1851,11 @@ export async function ensureCloudflareR2Bucket(config: WorkersDeployConfig, buck
 export async function listCloudflareZones(config: WorkersDeployConfig): Promise<{ id: string; name: string; status: string }[]> {
   // Zones are a top-level resource filtered by account id, not nested under
   // /accounts/{id} (that path 404s with "No route for that URI").
-  const zones = await listCloudflareAllPages(
-    config,
+  const zones = await withWorkersDispatcher(config.requestInit, (requestInit) => listCloudflareAllPages(
+    { ...config, requestInit },
     '/zones?account.id=' + encodeURIComponent(config.accountId),
     50,
-  );
+  ));
   return zones.map((zone) => ({
     id: typeof zone?.id === 'string' ? zone.id : '',
     name: typeof zone?.name === 'string' ? zone.name : '',
@@ -1677,7 +1869,7 @@ export async function attachCloudflareWorkerDomain(
   config: WorkersDeployConfig,
   input: { hostname: string; service: string; zone_id: string },
 ): Promise<string> {
-  const resp = await fetchWithRetry(
+  const resp = await fetchWithRetry(config,
     CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/workers/domains',
     {
       method: 'PUT',
@@ -1704,7 +1896,7 @@ export async function attachCloudflareWorkerDomain(
  * gone, which is treated as a no-op and reported as false (the caller can
  * distinguish "deleted" from "already absent"). */
 export async function detachCloudflareWorkerDomain(config: WorkersDeployConfig, domainId: string): Promise<boolean> {
-  const resp = await fetchWithRetry(
+  const resp = await fetchWithRetry(config,
     CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/workers/domains/' + encodeURIComponent(domainId),
     { method: 'DELETE', headers: await authHeaders(config) },
   );
@@ -1720,7 +1912,7 @@ export type CloudflareWorkerDomain = { id: string; hostname: string; service: st
  * otherwise: the caller uses `service` as an ownership check before a detach,
  * and an empty fallback would let a hostname routed to another script go. */
 export async function getCloudflareWorkerDomain(config: WorkersDeployConfig, domainId: string): Promise<CloudflareWorkerDomain | null> {
-  const resp = await fetchWithRetry(
+  const resp = await fetchWithRetry(config,
     CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/workers/domains/' + encodeURIComponent(domainId),
     { method: 'GET', headers: await authHeaders(config) },
   );

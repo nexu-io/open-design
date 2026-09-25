@@ -2,15 +2,20 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { checkDeploymentUrl, cloudflareOAuthTokensDir, configureCloudflareWorkersDataDir, isCloudflareAccessProtectedResponse, readCloudflareWorkersConfig, writeCloudflareWorkersConfig } from '../src/deploy.js';
+import { checkDeploymentUrl, cloudflareOAuthTokensDir, configureCloudflareWorkersDataDir, isCloudflareAccessProtectedResponse, isCloudflareAccessRedirect, readCloudflareWorkersConfig, writeCloudflareWorkersConfig } from '../src/deploy.js';
 import { setCloudflareOAuthToken } from '../src/integrations/cloudflare-tokens.js';
 import {
   CLOUDFLARE_ACCESS_PERIMETER_RETRY_DEFAULTS,
   configureCloudflareAccessPerimeterRetry,
   deployToCloudflareWorkers,
+  listCloudflareD1Databases,
+  listCloudflareR2Buckets,
+  listCloudflareZones,
   ownedCustomDomainsFromMetadata,
   pendingCustomDomainsFromMetadata,
   probeCloudflareWorkersCapabilities,
+  releasedCustomDomainsFromWorkersDeploy,
+  retiredAccessAppIdFromWorkersDeploy,
   vouchedCustomDomains,
 } from '../src/deploy/cloudflare-workers.js';
 
@@ -522,6 +527,79 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
     ).rejects.toMatchObject({ message: 'attach denied', attachedCustomDomains: [] });
   });
 
+  function attachAnswering(answer: () => Response | Promise<Response>) {
+    const inner = accessFetch();
+    const fn = vi.fn(async (url: string, init?: RequestInit) => {
+      if ((init?.method || 'GET').toUpperCase() === 'PUT' && url.endsWith('/workers/domains')) {
+        inner.calls.push([url, init]);
+        return answer();
+      }
+      return inner.fn(url, init);
+    });
+    return { calls: inner.calls, fn };
+  }
+
+  it('releases the configured hostname when Cloudflare refuses the attach with a 4xx, so its write-ahead can go', async () => {
+    const { fn } = attachAnswering(() => jsonResponse({ success: false, errors: [{ message: 'attach denied' }] }, 400));
+    vi.stubGlobal('fetch', fn);
+    let caught: { message?: string; releasedCustomDomains?: unknown; attachedCustomDomains?: unknown } | undefined;
+    try {
+      await deployToCloudflareWorkers({ ...base, customDomain: { hostname: 'App.Example.com', zoneId: 'zone-1' } });
+    } catch (err) {
+      caught = err as typeof caught;
+    }
+    expect(caught).toMatchObject({ message: 'attach denied', attachedCustomDomains: [], releasedCustomDomains: ['app.example.com'] });
+    expect(releasedCustomDomainsFromWorkersDeploy(caught)).toEqual(['app.example.com']);
+  });
+
+  it('does not release the hostname on a 5xx or a transport failure: the attach may have landed', async () => {
+    const serverError = attachAnswering(() => jsonResponse({ success: false, errors: [{ message: 'attach lost' }] }, 502));
+    vi.stubGlobal('fetch', serverError.fn);
+    await expect(
+      deployToCloudflareWorkers({ ...base, customDomain: { hostname: 'app.example.com', zoneId: 'zone-1' } }),
+    ).rejects.toMatchObject({ message: 'attach lost', releasedCustomDomains: [] });
+    const transport = attachAnswering(() => { throw new TypeError('fetch failed'); });
+    vi.stubGlobal('fetch', transport.fn);
+    await expect(
+      deployToCloudflareWorkers({ ...base, customDomain: { hostname: 'app.example.com', zoneId: 'zone-1' } }),
+    ).rejects.toMatchObject({ message: 'fetch failed', releasedCustomDomains: [] });
+  });
+
+  it('does not release a configured hostname that was routed before this run when its re-attach is refused', async () => {
+    const inner = accessFetch({
+      domainsList: { success: true, result: [{ id: 'dom-1', hostname: 'app.example.com', service: 'my-site' }] },
+    });
+    const fn = vi.fn(async (url: string, init?: RequestInit) => {
+      if ((init?.method || 'GET').toUpperCase() === 'PUT' && url.endsWith('/workers/domains')) {
+        return jsonResponse({ success: false, errors: [{ message: 'attach denied' }] }, 400);
+      }
+      return inner.fn(url, init);
+    });
+    vi.stubGlobal('fetch', fn);
+    // The hostname still serves the Worker, and the write-ahead may be the
+    // only record vouching for it: it must not be dropped.
+    await expect(
+      deployToCloudflareWorkers({ ...base, customDomain: { hostname: 'app.example.com', zoneId: 'zone-1' } }),
+    ).rejects.toMatchObject({ message: 'attach denied', releasedCustomDomains: [] });
+  });
+
+  it('reports the stale owned hostnames it detached on the SUCCESS result, so sibling records stop vouching for them', async () => {
+    const { calls, fn } = accessFetch({
+      domainsList: { success: true, result: [{ id: 'dom-old', hostname: 'old.example.com', service: 'my-site' }] },
+    });
+    vi.stubGlobal('fetch', fn);
+    const out = await deployToCloudflareWorkers({ ...base, priorOwnedCustomDomains: [{ id: 'dom-old', hostname: 'old.example.com' }] });
+    expect(out.status).toBe('ready');
+    expect(calls.some((c) => c[1]?.method === 'DELETE' && c[0].endsWith('/workers/domains/dom-old'))).toBe(true);
+    expect(out.providerMetadata?.detachedCustomDomains).toEqual([{ id: 'dom-old', hostname: 'old.example.com' }]);
+    expect(out.providerMetadata?.ownedCustomDomains).toEqual([]);
+    // Nothing stale, nothing reported.
+    const steady = accessFetch();
+    vi.stubGlobal('fetch', steady.fn);
+    const again = await deployToCloudflareWorkers({ ...base });
+    expect(again.providerMetadata?.detachedCustomDomains).toBeUndefined();
+  });
+
   it('reports the stale owned hostnames it detached when the deploy fails afterwards, and not the one it could not', async () => {
     const inner = accessFetch({
       domainsList: {
@@ -780,7 +858,7 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
       return fn(url, init);
     });
     vi.stubGlobal('fetch', wrapped);
-    let caught: { name?: string; code?: string; attachedCustomDomains?: unknown; steps?: Array<{ name: string; status: string; detail?: string }> } | undefined;
+    let caught: { name?: string; code?: string; attachedCustomDomains?: unknown; releasedCustomDomains?: unknown; steps?: Array<{ name: string; status: string; detail?: string }> } | undefined;
     try {
       await deployToCloudflareWorkers({
         ...base,
@@ -804,12 +882,91 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
     expect(disablePos).toBeGreaterThan(lastProbe);
     expect(detachPos).toBeGreaterThan(lastProbe);
     // The detached hostname is no longer reported as this deploy's attachment,
-    // so the route does not record an attachment that no longer exists.
+    // so the route does not record an attachment that no longer exists — and
+    // it is reported as released, so the route drops its write-ahead too.
     expect(caught?.attachedCustomDomains).toEqual([]);
+    expect(caught?.releasedCustomDomains).toEqual(['app.example.com']);
     expect(caught?.steps).toEqual(expect.arrayContaining([
       expect.objectContaining({ name: 'subdomain-disable', status: 'done' }),
       expect.objectContaining({ name: 'custom-domain-detach', status: 'done', detail: 'app.example.com' }),
     ]));
+  });
+
+  it('turning workers.dev back off writes previews_enabled back as it was, instead of clobbering it', async () => {
+    const { calls, fn } = accessFetch({ head: () => new Response('', { status: 200 }) });
+    const wrapped = vi.fn(async (url: string, init?: RequestInit) => {
+      if ((init?.method || 'GET').toUpperCase() === 'GET' && url.endsWith('/workers/scripts/my-site/subdomain')) {
+        calls.push([url, init]);
+        // Route off, previews on: the compensation must only touch `enabled`.
+        return jsonResponse({ success: true, result: { enabled: false, previews_enabled: true } });
+      }
+      return fn(url, init);
+    });
+    vi.stubGlobal('fetch', wrapped);
+    await expect(
+      deployToCloudflareWorkers({ ...base, access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } } }),
+    ).rejects.toMatchObject({ name: 'DeployError', code: 'CFW_ACCESS_UNVERIFIED' });
+    const subdomainPosts = calls
+      .filter((c) => c[0].endsWith('/workers/scripts/my-site/subdomain') && c[1]?.method === 'POST')
+      .map((c) => JSON.parse(String(c[1]?.body)) as { enabled: boolean; previews_enabled?: boolean });
+    expect(subdomainPosts[subdomainPosts.length - 1]).toEqual({ enabled: false, previews_enabled: true });
+    // The config is read again right before the compensating write.
+    const disablePos = calls.findIndex((c) => c[1]?.method === 'POST' && c[0].endsWith('/workers/scripts/my-site/subdomain') && (JSON.parse(String(c[1]?.body)) as { enabled: boolean }).enabled === false);
+    const readBeforeDisable = calls.slice(0, disablePos).reduce((last, c, index) => ((c[1]?.method || 'GET') === 'GET' && c[0].endsWith('/workers/scripts/my-site/subdomain') ? index : last), -1);
+    const enablePos = calls.findIndex((c) => c[1]?.method === 'POST' && c[0].endsWith('/workers/scripts/my-site/subdomain'));
+    expect(readBeforeDisable).toBeGreaterThan(enablePos);
+  });
+
+  it('a preview deploy turns previews_enabled back off when it turned it on and the perimeter cannot be verified', async () => {
+    const { calls, fn } = accessFetch({ head: () => new Response('', { status: 200 }) });
+    const wrapped = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes('/versions')) return jsonResponse({ success: true, result: { id: 'v12345678' } });
+      if ((init?.method || 'GET').toUpperCase() === 'GET' && url.endsWith('/workers/scripts/my-site/subdomain')) {
+        calls.push([url, init]);
+        // Production route on, previews OFF: this run's enable is the exposure.
+        return jsonResponse({ success: true, result: { enabled: true, previews_enabled: false } });
+      }
+      return fn(url, init);
+    });
+    vi.stubGlobal('fetch', wrapped);
+    let caught: { code?: string; steps?: Array<{ name: string; status: string }> } | undefined;
+    try {
+      await deployToCloudflareWorkers({ ...base, target: 'preview', access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } } });
+    } catch (err) {
+      caught = err as typeof caught;
+    }
+    expect(caught).toMatchObject({ code: 'CFW_ACCESS_UNVERIFIED' });
+    const subdomainPosts = calls
+      .filter((c) => c[0].endsWith('/workers/scripts/my-site/subdomain') && c[1]?.method === 'POST')
+      .map((c) => JSON.parse(String(c[1]?.body)) as { enabled: boolean; previews_enabled: boolean });
+    // Previews on, then back off — and the production route is left as it was.
+    expect(subdomainPosts).toEqual([{ enabled: true, previews_enabled: true }, { enabled: true, previews_enabled: false }]);
+    const lastProbe = calls.reduce((last, c, index) => (c[1]?.method === 'HEAD' ? index : last), -1);
+    const disablePos = calls.findIndex((c) => c[1]?.method === 'POST' && c[0].endsWith('/workers/scripts/my-site/subdomain') && (JSON.parse(String(c[1]?.body)) as { previews_enabled: boolean }).previews_enabled === false);
+    expect(disablePos).toBeGreaterThan(lastProbe);
+    expect(caught?.steps).toContainEqual(expect.objectContaining({ name: 'previews-disable', status: 'done' }));
+  });
+
+  it('a preview deploy leaves previews_enabled alone when it was already on and the perimeter cannot be verified', async () => {
+    const { calls, fn } = accessFetch({ head: () => new Response('', { status: 200 }) });
+    const wrapped = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes('/versions')) return jsonResponse({ success: true, result: { id: 'v12345678' } });
+      if ((init?.method || 'GET').toUpperCase() === 'GET' && url.endsWith('/workers/scripts/my-site/subdomain')) {
+        calls.push([url, init]);
+        return jsonResponse({ success: true, result: { enabled: true, previews_enabled: true } });
+      }
+      return fn(url, init);
+    });
+    vi.stubGlobal('fetch', wrapped);
+    let caught: { code?: string; steps?: Array<{ name: string }> } | undefined;
+    try {
+      await deployToCloudflareWorkers({ ...base, target: 'preview', access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } } });
+    } catch (err) {
+      caught = err as typeof caught;
+    }
+    expect(caught).toMatchObject({ code: 'CFW_ACCESS_UNVERIFIED' });
+    expect(calls.some((c) => c[1]?.method === 'POST' && c[0].endsWith('/workers/scripts/my-site/subdomain'))).toBe(false);
+    expect(caught?.steps?.some((s) => s.name === 'previews-disable')).toBe(false);
   });
 
   it('leaves a workers.dev route that was already public alone when the perimeter cannot be verified', async () => {
@@ -1142,6 +1299,54 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
     expect(calls.some((c) => c[0].endsWith('/access/apps') && c[1]?.method === 'POST')).toBe(false);
   });
 
+  it('turning access off reports the deleted app on the result, so the route can clear it from every record of the script', async () => {
+    const { fn } = accessFetch();
+    vi.stubGlobal('fetch', fn);
+    const out = await deployToCloudflareWorkers({ ...base, access: { enabled: false }, priorAccessAppId: 'app-123' });
+    expect(out.status).toBe('ready');
+    expect(out.providerMetadata?.retiredAccessAppId).toBe('app-123');
+    expect(retiredAccessAppIdFromWorkersDeploy(out.providerMetadata)).toBe('app-123');
+    expect(out.providerMetadata?.accessAppId).toBeUndefined();
+    expect(out.providerMetadata?.accessProtected).toBeUndefined();
+  });
+
+  it('reports the deleted app on the ERROR when the deploy fails after the retire', async () => {
+    const { calls, fn } = accessFetch();
+    const wrapped = vi.fn(async (url: string, init?: RequestInit) => {
+      if ((init?.method || 'GET').toUpperCase() === 'POST' && url.endsWith('/workers/scripts/my-site/subdomain')) {
+        calls.push([url, init]);
+        return jsonResponse({ success: false, errors: [{ message: 'enable denied' }] }, 400);
+      }
+      return fn(url, init);
+    });
+    vi.stubGlobal('fetch', wrapped);
+    await expect(
+      deployToCloudflareWorkers({ ...base, access: { enabled: false }, priorAccessAppId: 'app-123' }),
+    ).rejects.toMatchObject({ message: 'enable denied', retiredAccessAppId: 'app-123' });
+    expect(calls.some((c) => c[0].endsWith('/access/apps/app-123') && c[1]?.method === 'DELETE')).toBe(true);
+  });
+
+  it('does not report a retired app when the prior app was retained, or when Access stays on', async () => {
+    // Retained: the prior app guards a different (renamed) Worker.
+    const retained = accessFetch({
+      accessGet: { success: true, result: { id: 'app-old', destinations: [{ type: 'worker', worker_id: 'tag-other' }] } },
+    });
+    vi.stubGlobal('fetch', retained.fn);
+    const kept = await deployToCloudflareWorkers({ ...base, access: { enabled: false }, priorAccessAppId: 'app-old' });
+    expect(kept.providerMetadata?.retiredAccessAppId).toBeUndefined();
+    expect(retained.calls.some((c) => c[1]?.method === 'DELETE' && c[0].includes('/access/apps/'))).toBe(false);
+    // Access on: a new app governs the Worker; the record's protection is real.
+    const replaced = accessFetch();
+    vi.stubGlobal('fetch', replaced.fn);
+    const out = await deployToCloudflareWorkers({
+      ...base,
+      access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } },
+      priorAccessAppId: 'app-old',
+    });
+    expect(out.providerMetadata).toMatchObject({ accessProtected: true, accessAppId: 'app-123' });
+    expect(out.providerMetadata?.retiredAccessAppId).toBeUndefined();
+  });
+
   it('keeps the prior app id on the record and pushes an access-app-retire error step when the Access-off delete fails', async () => {
     const { calls, fn } = accessFetch({ accessDelete: { success: false, errors: [{ message: 'delete denied' }] } });
     vi.stubGlobal('fetch', fn);
@@ -1157,6 +1362,8 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
     expect(steps).toContainEqual({ name: 'access-app-retire', status: 'error', detail: expect.stringContaining('app-123') });
     expect(steps.find((s) => s.name === 'access-app-retire')?.detail).toContain('delete denied');
     expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('could not retire Access app app-123'));
+    // The app may still exist: nothing tells the route to clear it elsewhere.
+    expect(out.providerMetadata?.retiredAccessAppId).toBeUndefined();
   });
 
   it('keeps the prior app id when the retire lookup fails before the delete', async () => {
@@ -1275,5 +1482,91 @@ describe('cloudflare access check-link classification', () => {
     const resp = new Response('<html>Cloudflare Access</html>', { status: 401 });
     expect(isCloudflareAccessProtectedResponse(resp, '<html>Cloudflare Access login</html>')).toBe(true);
     expect(isCloudflareAccessProtectedResponse(new Response('ok'), 'plain page')).toBe(false);
+  });
+});
+
+describe('Cloudflare Access redirect detection', () => {
+  it('matches the Access host, never a substring of the redirect target', () => {
+    expect(isCloudflareAccessRedirect(302, 'https://acct-test.cloudflareaccess.com/cdn-cgi/access/login')).toBe(true);
+    expect(isCloudflareAccessRedirect(302, 'https://cloudflareaccess.com/')).toBe(true);
+    expect(isCloudflareAccessRedirect(302, 'https://evil.example/?cloudflareaccess.com')).toBe(false);
+    expect(isCloudflareAccessRedirect(302, 'https://evil.example/cloudflareaccess.com')).toBe(false);
+    expect(isCloudflareAccessRedirect(302, 'https://notcloudflareaccess.com/login')).toBe(false);
+    expect(isCloudflareAccessRedirect(302, 'https://cloudflareaccess.com.evil.example/login')).toBe(false);
+    expect(isCloudflareAccessRedirect(302, 'javascript:cloudflareaccess.com')).toBe(false);
+    expect(isCloudflareAccessRedirect(302, '')).toBe(false);
+    expect(isCloudflareAccessRedirect(200, 'https://acct-test.cloudflareaccess.com/cdn-cgi/access/login')).toBe(false);
+    const evil = new Response('', { status: 401, headers: { location: 'https://evil.example/?cloudflareaccess.com' } });
+    expect(isCloudflareAccessProtectedResponse(evil, '')).toBe(false);
+  });
+
+  it('a redirect to a non-Access host that merely mentions cloudflareaccess.com does not verify the perimeter', async () => {
+    const { fn } = accessFetch({
+      head: () => new Response('', { status: 302, headers: { location: 'https://evil.example/?cloudflareaccess.com' } }),
+    });
+    vi.stubGlobal('fetch', fn);
+    await expect(
+      deployToCloudflareWorkers({ ...base, access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } } }),
+    ).rejects.toMatchObject({ name: 'DeployError', code: 'CFW_ACCESS_UNVERIFIED' });
+  });
+});
+
+describe('Cloudflare Workers proxy dispatcher', () => {
+  const priorProxy = process.env.HTTPS_PROXY;
+  beforeEach(() => { process.env.HTTPS_PROXY = 'http://127.0.0.1:9'; });
+  afterEach(() => {
+    if (priorProxy === undefined) delete process.env.HTTPS_PROXY;
+    else process.env.HTTPS_PROXY = priorProxy;
+  });
+
+  function recordingFetch(overrides: AccessOverrides = {}) {
+    const inner = accessFetch(overrides);
+    const inits: Array<{ url: string; init: RequestInit | undefined }> = [];
+    const fn = vi.fn(async (url: string, init?: RequestInit) => {
+      inits.push({ url, init });
+      return inner.fn(url, init);
+    });
+    return { inits, fn };
+  }
+
+  const expectAllDispatched = (inits: Array<{ url: string; init: RequestInit | undefined }>, atLeast: number) => {
+    expect(inits.length).toBeGreaterThanOrEqual(atLeast);
+    for (const call of inits) {
+      expect(call.init?.dispatcher, call.url).toBeDefined();
+    }
+  };
+
+  it('every Cloudflare call of a deploy rides the proxy dispatcher, including the perimeter and readiness probes and GET /user', async () => {
+    const withAccess = recordingFetch();
+    vi.stubGlobal('fetch', withAccess.fn);
+    await deployToCloudflareWorkers({
+      ...base,
+      access: { enabled: true, rule: { kind: 'self' } },
+      customDomain: { hostname: 'app.example.com', zoneId: 'zone-1' },
+      config: { ...base.config, bindings: [{ type: 'r2_bucket', name: 'BUCKET', bucketName: 'assets' }] },
+    });
+    expect(withAccess.inits.some((c) => c.url.endsWith('/user'))).toBe(true);
+    expect(withAccess.inits.some((c) => c.init?.method === 'HEAD')).toBe(true);
+    expect(withAccess.inits.some((c) => c.url.includes('/r2/buckets'))).toBe(true);
+    expectAllDispatched(withAccess.inits, 10);
+    // Access off: the readiness HEAD is a different code path.
+    const withoutAccess = recordingFetch();
+    vi.stubGlobal('fetch', withoutAccess.fn);
+    await deployToCloudflareWorkers({ ...base, target: 'preview' });
+    await deployToCloudflareWorkers({ ...base });
+    expect(withoutAccess.inits.some((c) => c.init?.method === 'HEAD')).toBe(true);
+    expectAllDispatched(withoutAccess.inits, 8);
+  });
+
+  it('the capability probe and the zone, R2 and D1 lists each open their own dispatcher', async () => {
+    const { inits, fn } = recordingFetch();
+    vi.stubGlobal('fetch', fn);
+    await probeCloudflareWorkersCapabilities({ token: 'tok', accountId: 'acct_test' });
+    await listCloudflareZones({ token: 'tok', accountId: 'acct_test' });
+    await listCloudflareR2Buckets('tok', 'acct_test');
+    await listCloudflareD1Databases('tok', 'acct_test');
+    expect(inits.some((c) => c.url.includes('/zones?'))).toBe(true);
+    expect(inits.some((c) => c.url.includes('/d1/database'))).toBe(true);
+    expectAllDispatched(inits, 8);
   });
 });

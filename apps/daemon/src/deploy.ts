@@ -91,16 +91,33 @@ const VERCEL_PROTECTED_MESSAGE =
 const CLOUDFLARE_ACCESS_PROTECTED_MESSAGE =
   'Deployment is protected by Cloudflare Access. Authorized users must sign in to open it.';
 
+/** True when `location` is an absolute URL whose HOST is Cloudflare Access
+ * (`<team>.cloudflareaccess.com`). Matched on the parsed hostname, never as a
+ * substring: `https://evil.example/?cloudflareaccess.com` and
+ * `https://evil.example/cloudflareaccess.com` are not Access, and a perimeter
+ * check that accepted them would mark an unprotected deploy as gated. */
+export function isCloudflareAccessUrl(location: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(String(location || ''));
+  } catch {
+    return false;
+  }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') return false;
+  const hostname = url.hostname.toLowerCase();
+  return hostname === 'cloudflareaccess.com' || hostname.endsWith('.cloudflareaccess.com');
+}
+
 export function isCloudflareAccessRedirect(status: number, location: string): boolean {
   if (status < 300 || status >= 400) return false;
-  return /cloudflareaccess\.com/i.test(location);
+  return isCloudflareAccessUrl(location);
 }
 
 export function isCloudflareAccessProtectedResponse(resp: Response, body = '') {
   const location = resp.headers?.get?.('location') || '';
   const text = String(body || '');
   return (
-    /cloudflareaccess\.com/i.test(location) ||
+    isCloudflareAccessUrl(location) ||
     /cloudflare access/i.test(text) ||
     /cf-access-login/i.test(text)
   );

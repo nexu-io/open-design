@@ -3,8 +3,9 @@ import type { RouteDeps } from '../server-context.js';
 import type { AuthorizeProjectRequest } from '../collab/project-request-authority.js';
 import { clientRequestIdFor } from '../http/client-request-id.js';
 import { classifyDeployFailure } from '../deploy/failure-detail.js';
-import { detachCloudflareWorkerDomain, getCloudflareWorkerDomain, isOwnedCustomDomain, listCloudflareZones, normalizeHostname, ownedCustomDomainsFromMetadata, pendingCustomDomainsFromMetadata, recordedCustomDomainFromMetadata, resolveWorkerScriptName, vouchedCustomDomains, type CloudflareOwnedCustomDomain } from '../deploy/cloudflare-workers.js';
+import { detachCloudflareWorkerDomain, getCloudflareWorkerDomain, isOwnedCustomDomain, listCloudflareZones, normalizeHostname, ownedCustomDomainsFromMetadata, pendingCustomDomainsFromMetadata, recordedCustomDomainFromMetadata, releasedCustomDomainsFromWorkersDeploy, resolveWorkerScriptName, retiredAccessAppIdFromWorkersDeploy, vouchedCustomDomains, type CloudflareOwnedCustomDomain } from '../deploy/cloudflare-workers.js';
 import { getCloudflareAccessToken } from '../deploy.js';
+import { proxyDispatcherRequestInit } from '../connectionTest.js';
 
 export interface RegisterDeployRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'ids' | 'deploy' | 'projectStore'> {
   authorizeProjectRequest: AuthorizeProjectRequest;
@@ -65,13 +66,24 @@ function attachedCustomDomainsFromFailedWorkersDeploy(err: unknown): CloudflareO
   return ownedCustomDomainsFromMetadata({ ownedCustomDomains: attached });
 }
 
-/** The stale owned hostnames a failed Workers deploy detached before it
- * failed (`detachedCustomDomains` on the error). Each of them is gone from
- * Cloudflare, so no record may keep vouching for it. */
-function detachedCustomDomainsFromFailedWorkersDeploy(err: unknown): CloudflareOwnedCustomDomain[] {
-  const detached = (err as { detachedCustomDomains?: unknown } | null)?.detachedCustomDomains;
+/** The stale owned hostnames a Workers deploy detached (`detachedCustomDomains`
+ * on the error of a failed deploy, or on the result metadata of a successful
+ * one). Each of them is gone from Cloudflare, so no record may keep vouching
+ * for it. */
+function detachedCustomDomainsFromWorkersDeploy(source: unknown): CloudflareOwnedCustomDomain[] {
+  const detached = (source as { detachedCustomDomains?: unknown } | null | undefined)?.detachedCustomDomains;
   if (!Array.isArray(detached)) return [];
   return ownedCustomDomainsFromMetadata({ ownedCustomDomains: detached });
+}
+
+/** Result metadata is persisted as the record's providerMetadata; the
+ * bookkeeping a deploy reports for the ROUTE to act on (hostnames it detached,
+ * the Access app it retired) is consumed here and must not be stored as if it
+ * described the record. */
+function persistableWorkersResultMetadata(metadata: unknown): unknown {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return metadata;
+  const { detachedCustomDomains: _detached, retiredAccessAppId: _retired, ...rest } = metadata as Record<string, unknown>;
+  return rest;
 }
 class DeployErrorLike extends Error {
   status: number;
@@ -302,6 +314,54 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
     }
   }
 
+  /**
+   * After a prior Access app is deleted (Access turned off), no Workers record
+   * may keep carrying its id: the record would report the Worker as protected
+   * (`accessProtected`/`accessVerified`) by an app that no longer exists, and
+   * the next deploy of that record would try to retire it again. Every record
+   * of the provider is scanned because the Workers config is global — the
+   * same app guarded every (project, file) that deployed the script.
+   */
+  function forgetRetiredWorkersAccessApp(accessAppId: string): void {
+    if (!accessAppId) return;
+    const records: Array<{
+      id: string;
+      projectId: string;
+      fileName: string;
+      url: string;
+      deploymentId?: string | undefined;
+      deploymentCount: number;
+      target: 'preview' | 'production';
+      status: string;
+      statusMessage?: string | undefined;
+      reachableAt?: number | undefined;
+      providerMetadata?: unknown;
+      createdAt: number;
+    }> = listDeploymentsByProvider(db, CLOUDFLARE_WORKERS_PROVIDER_ID);
+    for (const record of records) {
+      const metadata = record.providerMetadata;
+      if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) continue;
+      if ((metadata as Record<string, unknown>).accessAppId !== accessAppId) continue;
+      const { accessAppId: _id, accessProtected: _protected, accessVerified: _verified, createdByOpenDesign: _created, ...next } = metadata as Record<string, unknown>;
+      upsertDeployment(db, {
+        id: record.id,
+        projectId: record.projectId,
+        fileName: record.fileName,
+        providerId: CLOUDFLARE_WORKERS_PROVIDER_ID,
+        url: record.url,
+        deploymentId: record.deploymentId,
+        deploymentCount: record.deploymentCount,
+        target: record.target,
+        status: record.status,
+        statusMessage: record.statusMessage,
+        reachableAt: record.reachableAt,
+        providerMetadata: next,
+        createdAt: record.createdAt,
+        updatedAt: Date.now(),
+      });
+    }
+  }
+
   // ---- Deploy --------------------------------------------------------------
 
   app.get('/api/deploy/config', async (req, res) => {
@@ -404,49 +464,56 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
       if (!token) {
         return sendApiError(res, 400, 'CFW_TOKEN_REQUIRED', 'Cloudflare API token is required.');
       }
-      const cfg = { token, accountId: config.accountId };
-      // Ownership check: the domain id is client-supplied, and the token can
-      // reach every custom domain in the account. Detach ONLY a hostname that
-      // Cloudflare routes to the OpenDesign script (the same resolution the
-      // deploy performs: the configured override, else the project's name).
-      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : '';
-      const project = projectId ? getProject(db, projectId) : null;
-      const scriptName = resolveWorkerScriptName(config.scriptName || undefined, project?.name || projectId);
-      const domain = await getCloudflareWorkerDomain(cfg, req.params.domainId);
-      if (!domain) {
-        res.json({ ok: true, deleted: false });
-        return;
+      // One proxy dispatcher for both Cloudflare calls of this request, the
+      // same one the OAuth connect/refresh/revoke ride (routes/cloudflare.ts).
+      const proxyDispatcher = proxyDispatcherRequestInit(process.env);
+      try {
+        const cfg = { token, accountId: config.accountId, requestInit: proxyDispatcher.requestInit };
+        // Ownership check: the domain id is client-supplied, and the token can
+        // reach every custom domain in the account. Detach ONLY a hostname that
+        // Cloudflare routes to the OpenDesign script (the same resolution the
+        // deploy performs: the configured override, else the project's name).
+        const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : '';
+        const project = projectId ? getProject(db, projectId) : null;
+        const scriptName = resolveWorkerScriptName(config.scriptName || undefined, project?.name || projectId);
+        const domain = await getCloudflareWorkerDomain(cfg, req.params.domainId);
+        if (!domain) {
+          res.json({ ok: true, deleted: false });
+          return;
+        }
+        if (domain.service !== scriptName) {
+          return sendApiError(
+            res,
+            409,
+            'CFW_DOMAIN_FOREIGN',
+            'Custom domain "' + (domain.hostname || domain.id) + '" is routed to the Worker "' + domain.service + '", not to "' + scriptName + '"; refusing to detach it.',
+          );
+        }
+        // Same ownership rule as the deploy's reconcile: only a hostname a prior
+        // OpenDesign deployment attached (recorded on its providerMetadata) may
+        // be detached here. A hostname someone routed to the script from the
+        // dashboard is theirs — refusing is the only safe answer for a
+        // client-supplied id. The Workers config is global, so every record of
+        // this provider counts, not just the requesting project's.
+        // A hostname a deploy wrote ahead of its attach (pending) is vouched for
+        // by hostname: the attach may have landed even though its record never did.
+        const owned = listDeploymentsByProvider(db, CLOUDFLARE_WORKERS_PROVIDER_ID)
+          .flatMap((deployment: { providerMetadata?: unknown }) =>
+            vouchedCustomDomains(ownedCustomDomainsFromMetadata(deployment.providerMetadata), pendingCustomDomainsFromMetadata(deployment.providerMetadata)));
+        if (!isOwnedCustomDomain(domain, owned)) {
+          return sendApiError(
+            res,
+            409,
+            'CFW_DOMAIN_FOREIGN',
+            'Custom domain "' + (domain.hostname || domain.id) + '" was not attached by an OpenDesign deployment; refusing to detach it. Remove it in the Cloudflare dashboard instead.',
+          );
+        }
+        const deleted = await detachCloudflareWorkerDomain(cfg, req.params.domainId);
+        forgetDetachedWorkersHostname(domain);
+        res.json(deleted ? { ok: true } : { ok: true, deleted: false });
+      } finally {
+        await proxyDispatcher.close();
       }
-      if (domain.service !== scriptName) {
-        return sendApiError(
-          res,
-          409,
-          'CFW_DOMAIN_FOREIGN',
-          'Custom domain "' + (domain.hostname || domain.id) + '" is routed to the Worker "' + domain.service + '", not to "' + scriptName + '"; refusing to detach it.',
-        );
-      }
-      // Same ownership rule as the deploy's reconcile: only a hostname a prior
-      // OpenDesign deployment attached (recorded on its providerMetadata) may
-      // be detached here. A hostname someone routed to the script from the
-      // dashboard is theirs — refusing is the only safe answer for a
-      // client-supplied id. The Workers config is global, so every record of
-      // this provider counts, not just the requesting project's.
-      // A hostname a deploy wrote ahead of its attach (pending) is vouched for
-      // by hostname: the attach may have landed even though its record never did.
-      const owned = listDeploymentsByProvider(db, CLOUDFLARE_WORKERS_PROVIDER_ID)
-        .flatMap((deployment: { providerMetadata?: unknown }) =>
-          vouchedCustomDomains(ownedCustomDomainsFromMetadata(deployment.providerMetadata), pendingCustomDomainsFromMetadata(deployment.providerMetadata)));
-      if (!isOwnedCustomDomain(domain, owned)) {
-        return sendApiError(
-          res,
-          409,
-          'CFW_DOMAIN_FOREIGN',
-          'Custom domain "' + (domain.hostname || domain.id) + '" was not attached by an OpenDesign deployment; refusing to detach it. Remove it in the Cloudflare dashboard instead.',
-        );
-      }
-      const deleted = await detachCloudflareWorkerDomain(cfg, req.params.domainId);
-      forgetDetachedWorkersHostname(domain);
-      res.json(deleted ? { ok: true } : { ok: true, deleted: false });
     } catch (err: any) {
       const status = err instanceof DeployError ? err.status : 400;
       sendApiError(res, status, deployErrorCodeFor(err, status), String(err?.message || err));
@@ -500,7 +567,8 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
   }): void {
     const accessAppId = accessAppIdFromFailedWorkersDeploy(input.err);
     const attachedCustomDomains = attachedCustomDomainsFromFailedWorkersDeploy(input.err);
-    if (!accessAppId && attachedCustomDomains.length === 0) return;
+    const releasedCustomDomains = releasedCustomDomainsFromWorkersDeploy(input.err);
+    if (!accessAppId && attachedCustomDomains.length === 0 && releasedCustomDomains.length === 0) return;
     const { prior } = input;
     // The record may have moved on since `prior` was read: the attach
     // write-ahead (recordPendingWorkersCustomDomain) lands on it mid-deploy.
@@ -518,8 +586,14 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
       (attached) => !priorOwned.some((owned) => owned.hostname === attached.hostname && owned.id === attached.id),
     );
     // Real ownership landed for an attached hostname: its write-ahead is done.
+    // A hostname the deploy is certain is NOT attached (a 4xx-refused attach,
+    // an attach it withdrew again) has nothing to vouch for: its write-ahead
+    // goes too. An ambiguous failure (5xx, transport) is not released by the
+    // provider, so its write-ahead stays until a later deploy reconciles it.
     const pending = pendingCustomDomainsFromMetadata(priorMetadata);
-    const remainingPending = pending.filter((hostname) => !attachedCustomDomains.some((attached) => attached.hostname === hostname));
+    const remainingPending = pending.filter(
+      (hostname) => !attachedCustomDomains.some((attached) => attached.hostname === hostname) && !releasedCustomDomains.includes(hostname),
+    );
     const resolvesPending = remainingPending.length !== pending.length;
     const gainsAccessApp = Boolean(accessAppId) && priorMetadata.accessAppId !== accessAppId;
     if (!gainsAccessApp && newlyOwned.length === 0 && !resolvesPending) return;
@@ -686,6 +760,18 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
                   files,
                   projectId: req.params.id,
                 });
+          if (providerId === CLOUDFLARE_WORKERS_PROVIDER_ID) {
+            // A successful deploy detaches the stale owned hostnames and, with
+            // Access off, deletes the prior Access app. The record written
+            // below only describes THIS (project, file); a sibling record of
+            // the same script would keep vouching for a detached hostname or
+            // reporting the deleted app as protection — settle them first.
+            for (const detached of detachedCustomDomainsFromWorkersDeploy(result.providerMetadata)) {
+              forgetDetachedWorkersHostname({ id: detached.id ?? '', hostname: detached.hostname });
+            }
+            const retiredAccessAppId = retiredAccessAppIdFromWorkersDeploy(result.providerMetadata);
+            if (retiredAccessAppId) forgetRetiredWorkersAccessApp(retiredAccessAppId);
+          }
           const now = Date.now();
           /** @type {import('@open-design/contracts').DeployProjectFileResponse} */
           return upsertDeployment(db, {
@@ -709,7 +795,7 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
               providerId === CLOUDFLARE_PAGES_PROVIDER_ID
                 ? (result.providerMetadata ?? cloudflarePagesDeploymentMetadata(cloudflarePagesProjectName))
                 : providerId === CLOUDFLARE_WORKERS_PROVIDER_ID
-                  ? result.providerMetadata
+                  ? persistableWorkersResultMetadata(result.providerMetadata)
                   : prior?.providerMetadata,
             createdAt: prior?.createdAt ?? now,
             updatedAt: now,
@@ -720,9 +806,14 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
             // A stale hostname this attempt detached is gone from Cloudflare;
             // no record may keep vouching for it. Runs AFTER the ownership
             // record above, which re-writes the prior owned list wholesale.
-            for (const detached of detachedCustomDomainsFromFailedWorkersDeploy(err)) {
+            for (const detached of detachedCustomDomainsFromWorkersDeploy(err)) {
               forgetDetachedWorkersHostname({ id: detached.id ?? '', hostname: detached.hostname });
             }
+            // The prior Access app this attempt deleted (Access off) is gone
+            // even though the deploy failed afterwards; no record may keep
+            // reporting it as the Worker's protection.
+            const retiredAccessAppId = retiredAccessAppIdFromWorkersDeploy(err);
+            if (retiredAccessAppId) forgetRetiredWorkersAccessApp(retiredAccessAppId);
           }
           throw err;
         }
