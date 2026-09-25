@@ -64,7 +64,6 @@ export async function startCallbackListener(
   const timeoutMs = input.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   let consumed = false;
-  let stopped = false;
   let serverRef: http.Server | null = null;
   let timer: NodeJS.Timeout | null = null;
 
@@ -90,10 +89,13 @@ export async function startCallbackListener(
       reaper.unref?.();
     });
 
-  const stop = async () => {
-    if (stopped) return;
-    stopped = true;
-    await closeServer();
+  // Memoized so every caller awaits the SAME close: the daemon's /start drains
+  // a listener the callback already began stopping, and must not bind the
+  // port before that close has actually finished.
+  let stopping: Promise<void> | null = null;
+  const stop = (): Promise<void> => {
+    if (!stopping) stopping = closeServer();
+    return stopping;
   };
 
   const handle = async (req: http.IncomingMessage, res: http.ServerResponse) => {
@@ -146,15 +148,15 @@ export async function startCallbackListener(
     // listener open on stale/malformed requests; the real callback will still
     // find it. Consume on:
     //   - ok callback (matched state, code present)
-    //   - explicit ?error= without a state (Cloudflare rejected before issuing
-    //     state, so there's nothing to match against — safe to consume)
     //   - explicit ?error= with state matching our expectedState (Cloudflare
     //     told the user the dance failed; propagate now instead of waiting for
     //     the 30 min timeout)
-    // An ?error= with a *mismatched* state is treated like the stale success
-    // replay above: 400 the browser, leave the listener live.
-    const errorConsumes =
-      Boolean(errorParam) && (!state || state === input.expectedState);
+    // An ?error= with a *mismatched* or *missing* state is treated like the
+    // stale success replay above: 400 the browser, leave the listener live.
+    // The state is the only proof the request came from OUR dance — anything
+    // on this machine can GET 127.0.0.1:56122/callback?error=x, and a
+    // state-less error consuming the slot would let it kill the flow.
+    const errorConsumes = Boolean(errorParam) && state === input.expectedState;
     const consumesListener = outcome.kind === 'ok' || errorConsumes;
     if (consumesListener) {
       consumed = true;

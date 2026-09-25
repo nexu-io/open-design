@@ -44,6 +44,8 @@ export const CLOUDFLARE_OAUTH_AUTHORIZATION_ENDPOINT =
   'https://dash.cloudflare.com/oauth2/auth';
 export const CLOUDFLARE_OAUTH_TOKEN_ENDPOINT =
   'https://dash.cloudflare.com/oauth2/token';
+export const CLOUDFLARE_OAUTH_REVOKE_ENDPOINT =
+  'https://dash.cloudflare.com/oauth2/revoke';
 
 /**
  * Default OAuth scopes. Cloudflare scope strings correspond to API token
@@ -348,4 +350,41 @@ export async function refreshCloudflareToken(
     },
     input.fetchImpl ?? fetch,
   );
+}
+
+export interface RevokeCloudflareTokenInput {
+  /** The refresh token (preferred — revoking it kills the whole grant) or,
+   * when none was issued, the access token. */
+  token: string;
+  tokenTypeHint?: 'refresh_token' | 'access_token';
+  /** Public-client identification (RFC 7009 §2.1 / RFC 6749 §2.3). */
+  clientId?: string;
+  fetchImpl?: typeof fetch;
+  signal?: AbortSignal;
+}
+
+/**
+ * RFC 7009 token revocation against Cloudflare. Resolves `true` on a 2xx and
+ * `false` on any other status (a revocation endpoint answers 200 for an
+ * already-invalid token, so a non-2xx is a real refusal). Throws only on a
+ * transport failure so the caller can decide whether that blocks anything —
+ * the disconnect route treats it as best-effort.
+ */
+export async function revokeCloudflareToken(
+  input: RevokeCloudflareTokenInput,
+): Promise<boolean> {
+  const form = new URLSearchParams();
+  form.set('token', input.token);
+  if (input.tokenTypeHint) form.set('token_type_hint', input.tokenTypeHint);
+  if (input.clientId) form.set('client_id', input.clientId);
+  const resp = await (input.fetchImpl ?? fetch)(CLOUDFLARE_OAUTH_REVOKE_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/x-www-form-urlencoded',
+      accept: 'application/json',
+    },
+    body: form.toString(),
+    ...(input.signal ? { signal: input.signal } : {}),
+  });
+  return resp.ok;
 }

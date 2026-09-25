@@ -1969,6 +1969,121 @@ describe('deploy provider routes', () => {
     }
   });
 
+  it('a failed Workers deploy records the script it targeted, so a later deploy of a different script does not adopt its Access app', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-workers-failed-scriptname-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    configureCloudflareWorkersDataDir(stateRoot);
+    try {
+      const dataDir = process.env.OD_DATA_DIR;
+      if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+      const projectId = `workers-failed-scriptname-${Date.now()}`;
+      const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+      await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>A</h1>');
+      await writeFile(path.join(dir, 'b.html'), '<!doctype html><h1>B</h1>');
+      expect((await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: projectId, name: 'Workers failed scriptname', skillId: null, designSystemId: null }),
+      })).status).toBe(200);
+      const saveConfig = async (scriptName: string) => {
+        expect((await fetch(`${baseUrl}/api/deploy/config`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            providerId: CLOUDFLARE_WORKERS_PROVIDER_ID,
+            token: 'tok',
+            accountId: 'acct_test',
+            scriptName,
+            access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } },
+          }),
+        })).status).toBe(200);
+      };
+      await saveConfig('orphan-a');
+
+      const realFetch = globalThis.fetch;
+      const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+      let subdomainEnableFails = true;
+      const listedApps: unknown[] = [];
+      let appPosts = 0;
+      let appPuts = 0;
+      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        const method = (init?.method || 'GET').toUpperCase();
+        if (method === 'HEAD') {
+          return new Response('', { status: 302, headers: { location: 'https://acct-test.cloudflareaccess.com/cdn-cgi/access/login' } });
+        }
+        if (url.endsWith('/workers/subdomain')) return json({ success: true, result: { subdomain: 'acct-test' } });
+        if (url.includes('assets-upload-session')) return json({ success: true, result: { jwt: 'SESS', buckets: [] } });
+        if (method === 'GET' && url.includes('/workers/domains')) return json({ success: true, result: [] });
+        if (method === 'POST' && /\/workers\/scripts\/orphan-[ab]\/subdomain$/.test(url)) {
+          if (subdomainEnableFails) {
+            subdomainEnableFails = false;
+            return json({ success: false, errors: [{ message: 'workers.dev enable unavailable' }] }, 500);
+          }
+          return json({ success: true, result: { enabled: true } });
+        }
+        if (method === 'PUT' && /\/workers\/scripts\/orphan-[ab]$/.test(url)) return json({ success: true, result: {} });
+        if (url.includes('/workers/scripts')) {
+          return json({ success: true, result: [{ id: 'orphan-a', tag: 'tag-a' }, { id: 'orphan-b', tag: 'tag-b' }] });
+        }
+        if (url.includes('/access/identity_providers')) return json({ success: true, result: [{ id: 'otp-1', type: 'onetimepin', name: 'One-time PIN login' }] });
+        if (url.includes('/access/apps/')) {
+          if (method === 'PUT') {
+            appPuts += 1;
+            return json({ success: true, result: { id: 'app-1' } });
+          }
+          return json({ success: true, result: { id: 'app-1', destinations: [{ type: 'worker', worker_id: 'tag-a' }] } });
+        }
+        if (url.includes('/access/apps')) {
+          if (method === 'POST') {
+            appPosts += 1;
+            const id = `app-${appPosts}`;
+            listedApps.push({ id, name: 'Renamed by user', destinations: [{ type: 'worker', worker_id: appPosts === 1 ? 'tag-a' : 'tag-b' }] });
+            return json({ success: true, result: { id } });
+          }
+          return json({ success: true, result: listedApps });
+        }
+        return json({ success: true, result: {} });
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      try {
+        // Deploy A to script `orphan-a`: the Access app is created, then the
+        // workers.dev enable fails. The failed record must remember it targeted
+        // `orphan-a` — the script name is the join key the sibling scan uses.
+        const first = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileName: 'index.html', providerId: CLOUDFLARE_WORKERS_PROVIDER_ID }),
+        });
+        expect(first.status).toBeGreaterThanOrEqual(500);
+        expect(appPosts).toBe(1);
+
+        // The global override now points every deploy at `orphan-b`. Without a
+        // recorded script name, A's record would re-resolve to `orphan-b` and be
+        // counted as a sibling of B — handing B the app that guards `orphan-a`.
+        await saveConfig('orphan-b');
+        const second = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileName: 'b.html', providerId: CLOUDFLARE_WORKERS_PROVIDER_ID }),
+        });
+        expect(second.status).toBe(200);
+        const secondBody = await second.json() as Record<string, unknown>;
+        expect(secondBody.cloudflareWorkers).toMatchObject({ accessProtected: true, accessAppId: 'app-2' });
+        expect(appPosts).toBe(2);
+        expect(appPuts).toBe(0);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
   it('records the custom hostname a failed Workers deploy attached as owned, so a later detach is not refused as foreign', async () => {
     const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-workers-domain-orphan-'));
     const priorStateRoot = process.env.OD_USER_STATE_DIR;

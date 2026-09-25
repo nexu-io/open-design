@@ -327,7 +327,11 @@ async function uploadAssetBuckets(
       const file = hashToFile.get(hash);
       if (!file) continue;
       const content = Buffer.from(file.data).toString('base64');
-      form.append(hash, new Blob([content], { type: file.contentType || 'application/octet-stream' }));
+      // A named File part, not a bare Blob: the multipart entry must carry a
+      // filename or the assets endpoint drops it as a plain form field and the
+      // upload session never completes.
+      const type = file.contentType || 'application/octet-stream';
+      form.append(hash, new File([content], hash, { type }), hash);
     }
     const resp = await fetchWithRetry(
       CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/workers/assets/upload?base64=true',

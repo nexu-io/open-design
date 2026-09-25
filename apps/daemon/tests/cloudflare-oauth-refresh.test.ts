@@ -685,3 +685,84 @@ describe('getCloudflareAccessToken expiry skew', () => {
     }
   });
 });
+
+describe('refresh transport', () => {
+  it('routes the refresh token-endpoint call through the configured HTTP proxy dispatcher', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'od-cf-refresh-proxy-'));
+    configureCloudflareWorkersDataDir(dir);
+    await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), {
+      accessToken: 'expired-token',
+      tokenType: 'Bearer',
+      refreshToken: 'ref-token',
+      clientId: 'client-abc',
+      expiresAt: Date.now() - 1000,
+      generation: 1,
+      savedAt: Date.now(),
+    });
+    await writeCloudflareWorkersConfig({
+      credentialMode: 'oauth',
+      accountId: 'acct_test',
+      clientId: 'client-abc',
+    });
+    const priorProxy = process.env.HTTPS_PROXY;
+    process.env.HTTPS_PROXY = 'http://127.0.0.1:9';
+    let refreshInit: RequestInit | undefined;
+    vi.stubGlobal('fetch', async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('oauth2/token')) {
+        refreshInit = init;
+        return new Response(
+          JSON.stringify({ access_token: 'fresh', token_type: 'Bearer', refresh_token: 'ref-2', expires_in: 3600 }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      throw new Error('unexpected fetch ' + url);
+    });
+    try {
+      expect(await getCloudflareAccessToken()).toBe('fresh');
+      // The connect and paste-back exchanges attach the proxy dispatcher
+      // (routes/cloudflare.ts); the silent refresh must reach the same
+      // endpoint the same way or it fails on every proxied machine.
+      expect(refreshInit).toBeDefined();
+      expect(refreshInit?.dispatcher).toBeDefined();
+    } finally {
+      vi.unstubAllGlobals();
+      if (priorProxy === undefined) delete process.env.HTTPS_PROXY;
+      else process.env.HTTPS_PROXY = priorProxy;
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('clearCloudflareOAuthToken', () => {
+  it('wipes a file that no longer parses to a token but still carries credential bytes', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'od-cf-clear-corrupt-'));
+    const file = path.join(dir, 'cloudflare-oauth-tokens.json');
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      // A record with no accessToken sanitizes to "no token" — yet its refresh
+      // token is still on disk, and a disconnect keyed on the parsed token
+      // would leave it there.
+      await writeFile(file, JSON.stringify({ token: { refreshToken: 'leaked-refresh' }, lastGeneration: 3 }));
+      await clearCloudflareOAuthToken(dir);
+      const afterPartial = await readFile(file, 'utf8');
+      expect(afterPartial).not.toContain('leaked-refresh');
+      expect(JSON.parse(afterPartial)).toEqual({ lastGeneration: 4 });
+
+      // Truncated JSON with an access token embedded is wiped too.
+      await writeFile(file, '{"token":{"accessToken":"leaked-access"');
+      await clearCloudflareOAuthToken(dir);
+      const afterCorrupt = await readFile(file, 'utf8');
+      expect(afterCorrupt).not.toContain('leaked-access');
+      expect(JSON.parse(afterCorrupt)).toEqual({ lastGeneration: 1 });
+
+      // No file: nothing is created.
+      await rm(file, { force: true });
+      await clearCloudflareOAuthToken(dir);
+      expect(fs.existsSync(file)).toBe(false);
+    } finally {
+      errorSpy.mockRestore();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});

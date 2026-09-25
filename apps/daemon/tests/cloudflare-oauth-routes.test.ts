@@ -342,6 +342,157 @@ describe('cloudflare-oauth routes', () => {
     }
   });
 
+  it('disconnect revokes the grant at Cloudflare (refresh token + client_id) before clearing the stored token', async () => {
+    const dataDir = cloudflareOAuthTokensDir();
+    const realFetch = globalThis.fetch;
+    const revokes: Array<{ method: string | undefined; body: string }> = [];
+    let tokenStillStoredAtRevoke: boolean | null = null;
+    vi.stubGlobal('fetch', async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('oauth2/revoke')) {
+        tokenStillStoredAtRevoke = (await getCloudflareOAuthToken(dataDir)) !== null;
+        revokes.push({ method: init?.method, body: String(init?.body) });
+        return new Response('', { status: 200 });
+      }
+      return realFetch(input as never, init as never);
+    });
+    try {
+      await setCloudflareOAuthToken(dataDir, {
+        accessToken: 'acc-1',
+        tokenType: 'Bearer',
+        refreshToken: 'ref-1',
+        clientId: 'client-abc',
+        generation: 0,
+        savedAt: Date.now(),
+      });
+      const resp = await fetch(`${app.baseUrl}/api/cloudflare/oauth/disconnect`, { method: 'POST' });
+      expect(resp.status).toBe(200);
+      expect(revokes).toHaveLength(1);
+      expect(revokes[0]!.method).toBe('POST');
+      const form = new URLSearchParams(revokes[0]!.body);
+      // The refresh token is what keeps the grant alive; revoking it (not
+      // just the current access token) is what makes a leaked copy inert.
+      expect(form.get('token')).toBe('ref-1');
+      expect(form.get('token_type_hint')).toBe('refresh_token');
+      expect(form.get('client_id')).toBe('client-abc');
+      // Revoke runs BEFORE the local wipe, so the token it names is the one on disk.
+      expect(tokenStillStoredAtRevoke).toBe(true);
+      expect(await getCloudflareOAuthToken(dataDir)).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+      await clearCloudflareOAuthToken(dataDir);
+      await rm(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), { force: true });
+    }
+  });
+
+  it('disconnect falls back to revoking the access token and still clears locally when the revoke call fails', async () => {
+    const dataDir = cloudflareOAuthTokensDir();
+    const realFetch = globalThis.fetch;
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const revokeBodies: string[] = [];
+    vi.stubGlobal('fetch', async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('oauth2/revoke')) {
+        revokeBodies.push(String(init?.body));
+        throw new TypeError('fetch failed');
+      }
+      return realFetch(input as never, init as never);
+    });
+    try {
+      await setCloudflareOAuthToken(dataDir, {
+        accessToken: 'acc-only',
+        tokenType: 'Bearer',
+        clientId: 'client-abc',
+        generation: 0,
+        savedAt: Date.now(),
+      });
+      const resp = await fetch(`${app.baseUrl}/api/cloudflare/oauth/disconnect`, { method: 'POST' });
+      // Revocation is best-effort: a network failure must not strand the user
+      // with a token they asked to forget.
+      expect(resp.status).toBe(200);
+      expect(revokeBodies).toHaveLength(1);
+      const form = new URLSearchParams(revokeBodies[0]!);
+      expect(form.get('token')).toBe('acc-only');
+      expect(form.get('token_type_hint')).toBe('access_token');
+      expect(await getCloudflareOAuthToken(dataDir)).toBeNull();
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('revoke failed'), expect.stringContaining('fetch failed'));
+    } finally {
+      warnSpy.mockRestore();
+      vi.unstubAllGlobals();
+      await clearCloudflareOAuthToken(dataDir);
+      await rm(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), { force: true });
+    }
+  });
+
+  it('a /start during an in-flight loopback exchange drains that listener before binding a new one', async () => {
+    const dataDir = cloudflareOAuthTokensDir();
+    let releaseToken!: (resp: Response) => void;
+    let markExchangeStarted!: () => void;
+    const exchangeStarted = new Promise<void>((resolve) => {
+      markExchangeStarted = resolve;
+    });
+    const realFetch = globalThis.fetch;
+    vi.stubGlobal('fetch', async (input: unknown, init?: unknown) => {
+      const url = String(input);
+      if (url.includes('oauth2/token')) {
+        markExchangeStarted();
+        return new Promise<Response>((resolve) => {
+          releaseToken = resolve;
+        });
+      }
+      return realFetch(input as never, init as never);
+    });
+    const body = JSON.stringify({ clientId: 'client-abc', redirectUri: 'http://127.0.0.1:56122/callback' });
+    try {
+      const first = await fetch(`${app.baseUrl}/api/cloudflare/oauth/start`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body,
+      });
+      expect(first.status).toBe(200);
+      const { state } = (await first.json()) as { state: string };
+      const listenerInput = vi.mocked(startCallbackListener).mock.calls.at(-1)![0];
+      const callbackResult = Promise.resolve(listenerInput.onCallback({ kind: 'ok', code: 'AUTHCODE', state }));
+      await exchangeStarted;
+
+      // The redirect landed, so the listener is no longer awaiting a callback…
+      const mid = await (await fetch(`${app.baseUrl}/api/cloudflare/auth/status`)).json() as { listening: boolean };
+      expect(mid.listening).toBe(false);
+
+      // …but it still holds :56122 until its self-close after the exchange. A
+      // /start now must stop (drain) it BEFORE it binds its own listener, or
+      // the bind fails EADDRINUSE and the user is told to close another process.
+      listenerStop.mockClear();
+      vi.mocked(startCallbackListener).mockClear();
+      const second = await fetch(`${app.baseUrl}/api/cloudflare/oauth/start`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body,
+      });
+      expect(second.status).toBe(200);
+      expect(listenerStop).toHaveBeenCalledTimes(1);
+      expect(startCallbackListener).toHaveBeenCalledTimes(1);
+      expect(listenerStop.mock.invocationCallOrder[0]!).toBeLessThan(
+        vi.mocked(startCallbackListener).mock.invocationCallOrder[0]!,
+      );
+
+      // The superseded exchange discards its token.
+      releaseToken(
+        new Response(
+          JSON.stringify({ access_token: 'acc-late', token_type: 'Bearer', refresh_token: 'ref', expires_in: 3600 }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      );
+      expect(await callbackResult).toBe(false);
+      expect(await getCloudflareOAuthToken(dataDir)).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+      await fetch(`${app.baseUrl}/api/cloudflare/oauth/cancel`, { method: 'POST' });
+      await clearCloudflareOAuthToken(dataDir);
+      await rm(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), { force: true });
+    }
+  });
+
   it('a /start that fails before owning the attempt leaves the previous listener running', async () => {
     const configPath = deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID);
     const body = JSON.stringify({ clientId: 'client-abc', redirectUri: 'http://127.0.0.1:56122/callback' });
@@ -460,22 +611,41 @@ describe('cloudflare-oauth loopback listener result page', () => {
     }
   });
 
-  it('delivers a state-less ?error= to onCallback and swallows an onCallback throw', async () => {
+  it('keeps the listener live on a state-less ?error= (any local process can send one) and still accepts the real callback', async () => {
     const start = await realListener();
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const onCallback = vi.fn(async () => {
-      throw new Error('boom');
-    });
+    const onCallback = vi.fn(async () => true);
     const listener = await start({ expectedState: 'st-5', onCallback, port: 0, timeoutMs: 60_000 });
     try {
+      // Nothing proves a state-less error came from OUR dance: consuming the
+      // slot on it would let any process on the machine kill the in-flight
+      // authorization with one GET.
       const resp = await fetch(`http://127.0.0.1:${listener.address.port}/callback?error=server_error`);
       expect(resp.status).toBe(400);
-      expect(onCallback).toHaveBeenCalledWith({ kind: 'error', error: 'server_error' });
-      expect(errorSpy).toHaveBeenCalled();
+      expect(onCallback).not.toHaveBeenCalled();
+      const real = await fetch(`http://127.0.0.1:${listener.address.port}/callback?code=NEW&state=st-5`);
+      expect(real.status).toBe(200);
+      expect(onCallback).toHaveBeenCalledTimes(1);
+      expect(onCallback).toHaveBeenCalledWith({ kind: 'ok', code: 'NEW', state: 'st-5' });
     } finally {
-      errorSpy.mockRestore();
       await listener.stop();
     }
+  });
+
+  it('stop() is memoized: a second caller awaits the in-progress close and the port is free afterwards', async () => {
+    const start = await realListener();
+    const listener = await start({ expectedState: 'st-7', onCallback: async () => true, port: 0, timeoutMs: 60_000 });
+    const { port } = listener.address;
+    const first = listener.stop();
+    const second = listener.stop();
+    await Promise.all([first, second]);
+    // The daemon's /start drains a listener the callback already began
+    // stopping; it must be able to bind the same port once that resolves.
+    const probe = http.createServer();
+    await new Promise<void>((resolve, reject) => {
+      probe.once('error', reject);
+      probe.listen(port, '127.0.0.1', () => resolve());
+    });
+    await new Promise<void>((resolve) => probe.close(() => resolve()));
   });
 
   it('does not invoke onCallback for a mismatched-state ?error= replay', async () => {

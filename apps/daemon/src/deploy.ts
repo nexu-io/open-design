@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { hash as blake3Hash } from 'blake3-wasm';
 import { listFiles, readProjectFile, validateProjectPath } from './projects.js';
 import { findRealTagOffset, HTML_TAG_PATTERNS } from '@open-design/contracts/runtime/html-injection-points';
+import { proxyDispatcherRequestInit } from './connectionTest.js';
 import { refreshCloudflareToken, validateCloudflareOAuthScopes } from './integrations/cloudflare-oauth.js';
 import {
   fsyncDirectory,
@@ -795,10 +796,16 @@ async function refreshCloudflareOAuthAccessToken(
   }
 
   let refreshed: Awaited<ReturnType<typeof refreshCloudflareToken>>;
+  // The token endpoint goes through the same HTTP/SOCKS proxy dispatcher the
+  // connect and paste-back exchanges use (routes/cloudflare.ts). A bare fetch
+  // here would bypass the user's proxy, so the refresh fails on exactly the
+  // machines where the connect only worked because of it.
+  const proxyDispatcher = proxyDispatcherRequestInit(process.env);
   try {
     refreshed = await refreshCloudflareToken({
       clientId,
       refreshToken: current.refreshToken,
+      fetchImpl: (input, init) => fetch(input, { ...init, ...proxyDispatcher.requestInit }),
     });
   } catch (err) {
     // A reconnect in this daemon may have replaced the credential while the
@@ -817,6 +824,8 @@ async function refreshCloudflareOAuthAccessToken(
       return latest.accessToken;
     }
     throw classifyCloudflareRefreshFailure(err);
+  } finally {
+    await proxyDispatcher.close();
   }
 
   const stored: StoredCloudflareOAuthToken = {

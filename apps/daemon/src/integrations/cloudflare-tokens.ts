@@ -17,7 +17,7 @@
 // generation guards interleavings INSIDE this daemon — a disconnect or a
 // reconnect that lands while a refresh is waiting on the token endpoint.
 
-import { chmod, mkdir, open, readFile, rename, rm, type FileHandle } from 'node:fs/promises';
+import { access, chmod, mkdir, open, readFile, rename, rm, type FileHandle } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 
@@ -352,14 +352,29 @@ export async function setCloudflareOAuthTokenGuarded(
 }
 
 /** Atomically delete the stored Cloudflare OAuth token. Bumps the file
- * generation so a cleared credential's generation is never reused. */
+ * generation so a cleared credential's generation is never reused.
+ *
+ * Keyed on the FILE existing, not on a token parsing out of it: a corrupt or
+ * hand-edited file that no longer sanitizes to a token can still carry a
+ * refresh token or an access token in its bytes, and a disconnect that
+ * skipped it would leave that credential on disk. */
 export async function clearCloudflareOAuthToken(dataDir: string): Promise<void> {
   await withLock(dataDir, async () => {
+    if (!(await tokensFileExists(dataDir))) return;
     const file = await readCloudflareOAuthTokensFile(dataDir);
-    if (!file.token) return;
     const gen = nextLastGeneration(file);
     await writeTokensFile(dataDir, { lastGeneration: gen });
   });
+}
+
+async function tokensFileExists(dataDir: string): Promise<boolean> {
+  try {
+    await access(tokensFile(dataDir));
+    return true;
+  } catch (err: unknown) {
+    if ((err as { code?: string }).code === 'ENOENT') return false;
+    throw err;
+  }
 }
 
 /** True when the stored token is past its `expiresAt` (or within `skew`

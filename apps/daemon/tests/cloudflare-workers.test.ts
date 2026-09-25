@@ -289,6 +289,25 @@ describe('deployToCloudflareWorkers', () => {
 
   const base = { config: { token: 'tok-secret', accountId: 'acct_test' }, files: [INDEX], projectName: 'My Site' };
 
+  it('uploads each asset as a named File part (filename = hash), not a bare Blob', async () => {
+    const { calls, fn } = happyFetch();
+    vi.stubGlobal('fetch', fn);
+    await deployToCloudflareWorkers(base);
+    const uploadCall = calls.find((c) => c[0].includes('/workers/assets/upload'));
+    expect(uploadCall).toBeDefined();
+    const form = uploadCall![1]?.body;
+    expect(form).toBeInstanceOf(FormData);
+    const hash = cloudflareWorkersAssetHash(INDEX);
+    const part = (form as FormData).get(hash);
+    // A multipart entry without a filename is a plain form field to the
+    // assets endpoint, which then never sees the file: the part must be a File
+    // named by its hash.
+    expect(part).toBeInstanceOf(File);
+    expect((part as File).name).toBe(hash);
+    expect((part as File).type).toBeTruthy();
+    expect(Buffer.from(await (part as File).text(), 'base64').toString('utf8')).toBe('<h1>hi</h1>');
+  });
+
   it('runs subdomain lookup -> session -> buckets -> script PUT -> subdomain enable, using the session JWT', async () => {
     const { calls, fn } = happyFetch();
     vi.stubGlobal('fetch', fn);

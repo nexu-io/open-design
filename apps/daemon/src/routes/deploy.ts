@@ -140,8 +140,18 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
   } {
     const { prior } = input;
     const siblings = listDeploymentsByProvider(db, CLOUDFLARE_WORKERS_PROVIDER_ID)
-      .filter((record: { id: string; projectId: string; providerMetadata?: any }) =>
-        record.id !== prior?.id && workersRecordScriptName(record, input.configuredScriptName) === input.scriptName);
+      .filter((record: { id: string; projectId: string; providerMetadata?: any }) => {
+        if (record.id === prior?.id) return false;
+        try {
+          return workersRecordScriptName(record, input.configuredScriptName) === input.scriptName;
+        } catch (err) {
+          // A record whose script name cannot be resolved (no recorded name and
+          // a project whose name no longer slugs) cannot vouch for anything;
+          // skip it rather than fail every deploy on one stale sibling.
+          console.warn('[od] skipping Cloudflare Workers record with unresolvable script name', record.id, String((err as Error)?.message || err));
+          return false;
+        }
+      });
     const records: Array<{ providerMetadata?: any }> = prior ? [prior, ...siblings] : siblings;
     let priorAccessAppId: string | undefined;
     let priorCustomDomain: Record<string, unknown> | undefined;
@@ -347,6 +357,10 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
     fileName: string;
     target: 'preview' | 'production';
     prior: ReturnType<typeof getDeployment>;
+    /** The script the failed attempt deployed to; recorded so the sibling
+     * scan (workersRecordScriptName) matches this record without having to
+     * re-resolve it from a project that may since be renamed or gone. */
+    scriptName: string;
     err: unknown;
   }): void {
     const accessAppId = accessAppIdFromFailedWorkersDeploy(input.err);
@@ -363,7 +377,7 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
     );
     const gainsAccessApp = Boolean(accessAppId) && priorMetadata.accessAppId !== accessAppId;
     if (!gainsAccessApp && newlyOwned.length === 0) return;
-    const metadata: Record<string, unknown> = { ...priorMetadata };
+    const metadata: Record<string, unknown> = { ...priorMetadata, scriptName: input.scriptName };
     if (gainsAccessApp) Object.assign(metadata, { accessAppId, accessProtected: true, createdByOpenDesign: true });
     if (newlyOwned.length > 0) metadata.ownedCustomDomains = [...priorOwned, ...newlyOwned];
     const now = Date.now();
@@ -392,14 +406,6 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
   app.post('/api/projects/:id/deploy', async (req, res) => {
     const startedAt = Date.now();
     let stage: 'file_plan' | 'provider' = 'file_plan';
-    // Set once a Workers deploy has read its prior record, so the catch can
-    // persist an Access app the failed attempt created (see the invariant above).
-    let workersFailureContext: {
-      projectId: string;
-      fileName: string;
-      target: 'preview' | 'production';
-      prior: ReturnType<typeof getDeployment>;
-    } | null = null;
     try {
       const { fileName, providerId = VERCEL_PROVIDER_ID, cloudflarePages, target: rawTarget } = req.body || {};
       // Omitted target defaults to production; any supplied value must be exact.
@@ -444,107 +450,125 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
         { mode: 'write', capability: 'writeFiles' },
       )) return;
 
-      const prior = getDeployment(db, req.params.id, fileName, providerId);
-      const files = await buildDeployFileSet(
-        PROJECTS_DIR,
-        req.params.id,
-        fileName,
-        { metadata: deployProject?.metadata, includeProjectFiles: true },
-      );
-      const project = getProject(db, req.params.id);
-      stage = 'provider';
-      const cloudflarePagesProjectName =
-        providerId === CLOUDFLARE_PAGES_PROVIDER_ID
-          ? cloudflarePagesProjectNameForDeploy(db, req.params.id, project?.name, prior)
-          : '';
+      // The Workers config and script name are resolved BEFORE any record is
+      // read: the single-flight guard is keyed on the script name, and the
+      // prior record, the ownership scan, and the record upsert (success AND
+      // failure) all run INSIDE it. Read outside the lock, a concurrent deploy
+      // of the same script would gather ownership before the winner recorded
+      // its Access app / hostnames, then overwrite the winner's record with
+      // that stale view once the lock was released.
       const workersConfig = providerId === CLOUDFLARE_WORKERS_PROVIDER_ID
         ? await readDeployConfig(CLOUDFLARE_WORKERS_PROVIDER_ID)
         : undefined;
-      // The single-flight guard for Workers is keyed on the resolved script name
-      // (the same resolution the provider performs) and armed before the CF
-      // calls of a second overlapping deploy can run, so the loser is refused
-      // up front instead of after its script PUT.
       const workersScriptName = providerId === CLOUDFLARE_WORKERS_PROVIDER_ID
-        ? resolveWorkerScriptName(workersConfig?.scriptName || undefined, project?.name || req.params.id)
+        ? resolveWorkerScriptName(workersConfig?.scriptName || undefined, deployProject.name || req.params.id)
         : '';
-      if (providerId === CLOUDFLARE_WORKERS_PROVIDER_ID) {
-        workersFailureContext = { projectId: req.params.id, fileName, target, prior };
-      }
-      // Ownership is answered per SCRIPT, across every record that deployed it
-      // (see priorWorkersOwnershipForScript), not per (project, file) record.
-      const workersOwnership = providerId === CLOUDFLARE_WORKERS_PROVIDER_ID
-        ? priorWorkersOwnershipForScript({
-            scriptName: workersScriptName,
-            configuredScriptName: workersConfig?.scriptName || undefined,
-            prior,
-          })
-        : null;
-      const result = providerId === CLOUDFLARE_PAGES_PROVIDER_ID
-        ? await deployToCloudflarePages({
-            config: {
-              ...await readDeployConfig(CLOUDFLARE_PAGES_PROVIDER_ID),
-              projectName: cloudflarePagesProjectName,
-            },
-            files,
-            projectId: req.params.id,
-            cloudflarePages,
-            priorMetadata: prior?.providerMetadata,
-            target,
-          })
-        : providerId === CLOUDFLARE_WORKERS_PROVIDER_ID
-          ? await withCloudflareWorkersDeploySingleFlight(workersScriptName, () => deployToCloudflareWorkers({
-              config: workersConfig!,
-              files,
-              projectId: req.params.id,
-              projectName: project?.name,
-              target,
-              customDomain: workersConfig?.customDomain,
-              access: workersConfig?.access,
-              priorAccessAppId: workersOwnership?.priorAccessAppId,
-              priorOwnedCustomDomains: workersOwnership?.priorOwnedCustomDomains,
-              priorCustomDomain: workersOwnership?.priorCustomDomain,
-              // Re-resolved per Cloudflare call (oauth: refreshed within the
-              // expiry skew), so a multi-minute deploy never outlives its token.
-              tokenProvider: () => resolveCloudflareWorkersRouteToken(workersConfig!),
-            }))
-          : await deployToVercel({
-              config: await readDeployConfig(VERCEL_PROVIDER_ID),
-              files,
-              projectId: req.params.id,
-            });
-      const now = Date.now();
-      /** @type {import('@open-design/contracts').DeployProjectFileResponse} */
-      const body = upsertDeployment(db, {
-        id: prior?.id ?? randomUUID(),
-        projectId: req.params.id,
-        fileName,
-        providerId,
-        url: result.url,
-        deploymentId: result.deploymentId,
-        deploymentCount: (prior?.deploymentCount ?? 0) + 1,
-        target: result.target ?? target,
-        status: result.status,
-        statusMessage: result.statusMessage,
-        reachableAt: result.reachableAt,
-        cloudflarePages: result.cloudflarePages,
-        // providerMetadata is stripped by publicDeployment; the db's
-        // normalizeDeployment lifts the Workers result (accessProtected/steps/
-        // check/customDomain) into `cloudflareWorkers`, which is what reaches
-        // the client from both this response and the deployments list.
-        providerMetadata:
-          providerId === CLOUDFLARE_PAGES_PROVIDER_ID
-            ? (result.providerMetadata ?? cloudflarePagesDeploymentMetadata(cloudflarePagesProjectName))
+      const runDeploy = async () => {
+        const prior = getDeployment(db, req.params.id, fileName, providerId);
+        // Held so a failed Workers deploy can persist the Access app / hostnames
+        // it created (see the invariant above) while the lock is still ours.
+        const workersFailureContext = providerId === CLOUDFLARE_WORKERS_PROVIDER_ID
+          ? { projectId: req.params.id, fileName, target, prior, scriptName: workersScriptName }
+          : null;
+        try {
+          const files = await buildDeployFileSet(
+            PROJECTS_DIR,
+            req.params.id,
+            fileName,
+            { metadata: deployProject?.metadata, includeProjectFiles: true },
+          );
+          const project = getProject(db, req.params.id);
+          stage = 'provider';
+          const cloudflarePagesProjectName =
+            providerId === CLOUDFLARE_PAGES_PROVIDER_ID
+              ? cloudflarePagesProjectNameForDeploy(db, req.params.id, project?.name, prior)
+              : '';
+          // Ownership is answered per SCRIPT, across every record that deployed it
+          // (see priorWorkersOwnershipForScript), not per (project, file) record.
+          const workersOwnership = providerId === CLOUDFLARE_WORKERS_PROVIDER_ID
+            ? priorWorkersOwnershipForScript({
+                scriptName: workersScriptName,
+                configuredScriptName: workersConfig?.scriptName || undefined,
+                prior,
+              })
+            : null;
+          const result = providerId === CLOUDFLARE_PAGES_PROVIDER_ID
+            ? await deployToCloudflarePages({
+                config: {
+                  ...await readDeployConfig(CLOUDFLARE_PAGES_PROVIDER_ID),
+                  projectName: cloudflarePagesProjectName,
+                },
+                files,
+                projectId: req.params.id,
+                cloudflarePages,
+                priorMetadata: prior?.providerMetadata,
+                target,
+              })
             : providerId === CLOUDFLARE_WORKERS_PROVIDER_ID
-              ? result.providerMetadata
-              : prior?.providerMetadata,
-        createdAt: prior?.createdAt ?? now,
-        updatedAt: now,
-      });
+              ? await deployToCloudflareWorkers({
+                  config: workersConfig!,
+                  files,
+                  projectId: req.params.id,
+                  projectName: project?.name,
+                  target,
+                  customDomain: workersConfig?.customDomain,
+                  access: workersConfig?.access,
+                  priorAccessAppId: workersOwnership?.priorAccessAppId,
+                  priorOwnedCustomDomains: workersOwnership?.priorOwnedCustomDomains,
+                  priorCustomDomain: workersOwnership?.priorCustomDomain,
+                  // Re-resolved per Cloudflare call (oauth: refreshed within the
+                  // expiry skew), so a multi-minute deploy never outlives its token.
+                  tokenProvider: () => resolveCloudflareWorkersRouteToken(workersConfig!),
+                })
+              : await deployToVercel({
+                  config: await readDeployConfig(VERCEL_PROVIDER_ID),
+                  files,
+                  projectId: req.params.id,
+                });
+          const now = Date.now();
+          /** @type {import('@open-design/contracts').DeployProjectFileResponse} */
+          return upsertDeployment(db, {
+            id: prior?.id ?? randomUUID(),
+            projectId: req.params.id,
+            fileName,
+            providerId,
+            url: result.url,
+            deploymentId: result.deploymentId,
+            deploymentCount: (prior?.deploymentCount ?? 0) + 1,
+            target: result.target ?? target,
+            status: result.status,
+            statusMessage: result.statusMessage,
+            reachableAt: result.reachableAt,
+            cloudflarePages: result.cloudflarePages,
+            // providerMetadata is stripped by publicDeployment; the db's
+            // normalizeDeployment lifts the Workers result (accessProtected/steps/
+            // check/customDomain) into `cloudflareWorkers`, which is what reaches
+            // the client from both this response and the deployments list.
+            providerMetadata:
+              providerId === CLOUDFLARE_PAGES_PROVIDER_ID
+                ? (result.providerMetadata ?? cloudflarePagesDeploymentMetadata(cloudflarePagesProjectName))
+                : providerId === CLOUDFLARE_WORKERS_PROVIDER_ID
+                  ? result.providerMetadata
+                  : prior?.providerMetadata,
+            createdAt: prior?.createdAt ?? now,
+            updatedAt: now,
+          });
+        } catch (err) {
+          if (workersFailureContext) {
+            recordOwnedResourcesFromFailedWorkersDeploy({ ...workersFailureContext, err });
+          }
+          throw err;
+        }
+      };
+      // The single-flight guard for Workers is keyed on the resolved script name
+      // (the same resolution the provider performs) and armed before the prior
+      // record is read, so the loser is refused up front — before it can read
+      // stale ownership or write a record — instead of after its script PUT.
+      const body = providerId === CLOUDFLARE_WORKERS_PROVIDER_ID
+        ? await withCloudflareWorkersDeploySingleFlight(workersScriptName, runDeploy)
+        : await runDeploy();
       res.json(publicDeployment(body));
     } catch (err: any) {
-      if (workersFailureContext) {
-        recordOwnedResourcesFromFailedWorkersDeploy({ ...workersFailureContext, err });
-      }
       const status = deployErrorStatus(err);
       const code = deployErrorCodeFor(err, status);
       const failure = classifyDeployFailure(stage, err, err instanceof DeployError || err instanceof DeployErrorLike);

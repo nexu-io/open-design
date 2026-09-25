@@ -40,6 +40,7 @@ import {
   fetchCloudflareUserEmail,
   cloudflareRedirectUri,
   CLOUDFLARE_OAUTH_SCOPES,
+  revokeCloudflareToken,
   validateCloudflareOAuthScopes,
   type CompleteCloudflareAuthResult,
 } from '../integrations/cloudflare-oauth.js';
@@ -68,6 +69,11 @@ function fetchWithRequestInit(
 ): typeof fetch {
   return (input, init) => fetch(input, { ...init, ...requestInit });
 }
+
+// Upper bound on the best-effort revoke call a disconnect makes: it runs inside
+// the credential mutation, so a hung token endpoint must not hold every other
+// OAuth mutation hostage.
+const CLOUDFLARE_REVOKE_TIMEOUT_MS = 10_000;
 
 /** Build the persisted token record from a token-endpoint response, carrying
  * the client/redirect identity (and account) that authorized it so a changed
@@ -106,6 +112,12 @@ export function registerCloudflareRoutes(
   // state, the open :56122 socket, and the paste-back UI all expire together.
   const pendingAuth = new PendingAuthCache(30 * 60 * 1000);
   let activeListener: CallbackListener | null = null;
+  // A listener whose redirect already arrived. It is no longer "active" (the
+  // status poll and a manual /complete must not treat it as awaiting a
+  // callback) but it still holds :56122 until its self-close lands AFTER the
+  // token exchange. A /start in that window must drain it before binding, or
+  // the bind fails EADDRINUSE and the user is told to close "another process".
+  let drainingListener: CallbackListener | null = null;
   // Monotonic attempt generation: bumped on start/disconnect/cancel so a slow
   // token exchange cannot persist a token after the user cancelled, disconnected,
   // or restarted the flow (see handleCallback's pre-persist generation check).
@@ -166,11 +178,61 @@ export function registerCloudflareRoutes(
   const stopActiveListener = async () => {
     const cur = activeListener;
     activeListener = null;
-    if (!cur) return;
+    const draining = drainingListener;
+    drainingListener = null;
+    for (const listener of [cur, draining]) {
+      if (!listener) continue;
+      try {
+        // `stop` is memoized in the listener, so awaiting one that is already
+        // closing waits for THAT close instead of returning early.
+        await listener.stop();
+      } catch {
+        // Best-effort; the listener self-closes on completion / timeout anyway.
+      }
+    }
+  };
+
+  // Best-effort: tell Cloudflare the grant is dead BEFORE forgetting it
+  // locally, so a copy of the refresh token that leaked out of the data dir
+  // cannot keep minting access tokens after the user disconnected. Revokes the
+  // refresh token (which invalidates the whole grant) and falls back to the
+  // access token when none was issued. Never blocks the disconnect: a
+  // transport failure, a timeout, or a non-2xx is logged and the local wipe
+  // proceeds regardless.
+  const revokeStoredGrant = async (dataDir: string): Promise<void> => {
+    let stored: StoredCloudflareOAuthToken | null;
     try {
-      await cur.stop();
+      stored = await getCloudflareOAuthToken(dataDir);
     } catch {
-      // Best-effort; the listener self-closes on completion / timeout anyway.
+      return;
+    }
+    if (!stored) return;
+    const token = stored.refreshToken || stored.accessToken;
+    if (!token) return;
+    const tokenTypeHint = stored.refreshToken ? 'refresh_token' : 'access_token';
+    let clientId = (stored.clientId ?? '').trim();
+    if (!clientId) {
+      try {
+        clientId = ((await readCloudflareWorkersConfig()).clientId ?? '').trim();
+      } catch {
+        // Revoke without client identification rather than skip it.
+      }
+    }
+    const proxyDispatcher = proxyDispatcherRequestInit(process.env);
+    try {
+      const ok = await revokeCloudflareToken({
+        token,
+        tokenTypeHint,
+        ...(clientId ? { clientId } : {}),
+        fetchImpl: fetchWithRequestInit(proxyDispatcher.requestInit),
+        signal: AbortSignal.timeout(CLOUDFLARE_REVOKE_TIMEOUT_MS),
+      });
+      if (!ok) console.warn('[cloudflare-oauth] revoke refused by Cloudflare; clearing the local token anyway');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn('[cloudflare-oauth] revoke failed; clearing the local token anyway:', msg);
+    } finally {
+      await proxyDispatcher.close();
     }
   };
 
@@ -183,8 +245,12 @@ export function registerCloudflareRoutes(
 
   const handleCallback = async (outcome: CallbackOutcome, listener?: CallbackListener): Promise<boolean> => {
     // Only clear activeListener if it is still the listener this callback was
-    // created for — a newer /start may have already replaced it.
-    if (listener && activeListener === listener) activeListener = null;
+    // created for — a newer /start may have already replaced it. It moves to
+    // the draining slot: the port stays bound through the exchange below.
+    if (listener && activeListener === listener) {
+      activeListener = null;
+      drainingListener = listener;
+    }
     if (outcome.kind !== 'ok') {
       console.warn(`[cloudflare-oauth] callback failed: ${outcome.error}`);
       return false;
@@ -440,7 +506,9 @@ export function registerCloudflareRoutes(
         await stopActiveListener();
         oauthAttemptGeneration += 1;
         pendingAuth.clear();
-        await clearCloudflareOAuthToken(cloudflareOAuthTokensDir());
+        const dataDir = cloudflareOAuthTokensDir();
+        await revokeStoredGrant(dataDir);
+        await clearCloudflareOAuthToken(dataDir);
         // Reset the credential authority back to a static token so a disconnected
         // profile doesn't keep reporting 'configured' with no live token.
         await resetCloudflareCredentialMode();
