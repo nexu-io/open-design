@@ -131,7 +131,7 @@ describe('cloudflare-oauth routes', () => {
     expect(startCallbackListener).not.toHaveBeenCalled();
   });
 
-  it('discards the token when manual completion is cancelled mid-exchange', async () => {
+  it('discards the token when manual completion is cancelled mid-exchange, revoking the grant it was issued', async () => {
     let releaseToken!: (resp: Response) => void;
     let markExchangeStarted!: () => void;
     const exchangeStarted = new Promise<void>((resolve) => {
@@ -139,8 +139,13 @@ describe('cloudflare-oauth routes', () => {
     });
 
     const realFetch = globalThis.fetch;
+    const revokes: string[] = [];
     vi.stubGlobal('fetch', async (input: unknown, init?: unknown) => {
       const url = String(input);
+      if (url.includes('oauth2/revoke')) {
+        revokes.push(String((init as RequestInit | undefined)?.body));
+        return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
+      }
       if (url.includes('oauth2/token')) {
         markExchangeStarted();
         return new Promise<Response>((resolve) => {
@@ -180,7 +185,7 @@ describe('cloudflare-oauth routes', () => {
           JSON.stringify({
             access_token: 'acc',
             token_type: 'Bearer',
-            refresh_token: 'ref',
+            refresh_token: 'ref-cancelled-late',
             expires_in: 3600,
           }),
           { status: 200, headers: { 'content-type': 'application/json' } },
@@ -192,6 +197,14 @@ describe('cloudflare-oauth routes', () => {
 
       const persisted = await getCloudflareOAuthToken(cloudflareOAuthTokensDir());
       expect(persisted).toBeNull();
+      // The grant Cloudflare issued to the abandoned attempt is revoked before
+      // the 409 goes out, not merely forgotten: its refresh token would
+      // otherwise stay valid with nobody holding it.
+      expect(revokes).toHaveLength(1);
+      const form = new URLSearchParams(revokes[0]!);
+      expect(form.get('token')).toBe('ref-cancelled-late');
+      expect(form.get('token_type_hint')).toBe('refresh_token');
+      expect(form.get('client_id')).toBe('client-abc');
     } finally {
       vi.unstubAllGlobals();
     }
@@ -289,8 +302,16 @@ describe('cloudflare-oauth routes', () => {
       markExchangeStarted = resolve;
     });
     const realFetch = globalThis.fetch;
+    const revokes: string[] = [];
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.stubGlobal('fetch', async (input: unknown, init?: unknown) => {
       const url = String(input);
+      if (url.includes('oauth2/revoke')) {
+        // The revoke of the superseded grant is attempted — and its failure
+        // must not change the outcome below.
+        revokes.push(String((init as RequestInit | undefined)?.body));
+        throw new TypeError('fetch failed');
+      }
       if (url.includes('oauth2/token')) {
         markExchangeStarted();
         return new Promise<Response>((resolve) => {
@@ -324,7 +345,7 @@ describe('cloudflare-oauth routes', () => {
       // (the listener renders its failure page off a `false` return).
       releaseToken(
         new Response(
-          JSON.stringify({ access_token: 'acc-late', token_type: 'Bearer', refresh_token: 'ref', expires_in: 3600 }),
+          JSON.stringify({ access_token: 'acc-late', token_type: 'Bearer', refresh_token: 'ref-late-disconnect', expires_in: 3600 }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         ),
       );
@@ -335,7 +356,10 @@ describe('cloudflare-oauth routes', () => {
       // credentialMode stays 'token' — the late token never committed OAuth mode.
       const cfg = await readCloudflareWorkersConfig();
       expect(cfg.credentialMode).toBe('token');
+      expect(revokes.map((body) => new URLSearchParams(body).get('token'))).toEqual(['ref-late-disconnect']);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('revoke of discarded grant failed'), expect.stringContaining('fetch failed'));
     } finally {
+      warnSpy.mockRestore();
       vi.unstubAllGlobals();
       await clearCloudflareOAuthToken(dataDir);
       await rm(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), { force: true });
@@ -432,8 +456,13 @@ describe('cloudflare-oauth routes', () => {
       markExchangeStarted = resolve;
     });
     const realFetch = globalThis.fetch;
+    const revokes: string[] = [];
     vi.stubGlobal('fetch', async (input: unknown, init?: unknown) => {
       const url = String(input);
+      if (url.includes('oauth2/revoke')) {
+        revokes.push(String((init as RequestInit | undefined)?.body));
+        return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
+      }
       if (url.includes('oauth2/token')) {
         markExchangeStarted();
         return new Promise<Response>((resolve) => {
@@ -476,15 +505,16 @@ describe('cloudflare-oauth routes', () => {
         vi.mocked(startCallbackListener).mock.invocationCallOrder[0]!,
       );
 
-      // The superseded exchange discards its token.
+      // The superseded exchange discards its token — and revokes the grant.
       releaseToken(
         new Response(
-          JSON.stringify({ access_token: 'acc-late', token_type: 'Bearer', refresh_token: 'ref', expires_in: 3600 }),
+          JSON.stringify({ access_token: 'acc-late', token_type: 'Bearer', refresh_token: 'ref-drained', expires_in: 3600 }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         ),
       );
       expect(await callbackResult).toBe(false);
       expect(await getCloudflareOAuthToken(dataDir)).toBeNull();
+      expect(revokes.map((body) => new URLSearchParams(body).get('token'))).toEqual(['ref-drained']);
     } finally {
       vi.unstubAllGlobals();
       await fetch(`${app.baseUrl}/api/cloudflare/oauth/cancel`, { method: 'POST' });

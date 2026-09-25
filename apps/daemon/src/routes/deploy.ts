@@ -3,7 +3,7 @@ import type { RouteDeps } from '../server-context.js';
 import type { AuthorizeProjectRequest } from '../collab/project-request-authority.js';
 import { clientRequestIdFor } from '../http/client-request-id.js';
 import { classifyDeployFailure } from '../deploy/failure-detail.js';
-import { detachCloudflareWorkerDomain, getCloudflareWorkerDomain, isOwnedCustomDomain, listCloudflareZones, normalizeHostname, ownedCustomDomainsFromMetadata, recordedCustomDomainFromMetadata, resolveWorkerScriptName, type CloudflareOwnedCustomDomain } from '../deploy/cloudflare-workers.js';
+import { detachCloudflareWorkerDomain, getCloudflareWorkerDomain, isOwnedCustomDomain, listCloudflareZones, normalizeHostname, ownedCustomDomainsFromMetadata, pendingCustomDomainsFromMetadata, recordedCustomDomainFromMetadata, resolveWorkerScriptName, vouchedCustomDomains, type CloudflareOwnedCustomDomain } from '../deploy/cloudflare-workers.js';
 import { getCloudflareAccessToken } from '../deploy.js';
 
 export interface RegisterDeployRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'ids' | 'deploy' | 'projectStore'> {
@@ -63,6 +63,15 @@ function attachedCustomDomainsFromFailedWorkersDeploy(err: unknown): CloudflareO
   const attached = (err as { attachedCustomDomains?: unknown } | null)?.attachedCustomDomains;
   if (!Array.isArray(attached)) return [];
   return ownedCustomDomainsFromMetadata({ ownedCustomDomains: attached });
+}
+
+/** The stale owned hostnames a failed Workers deploy detached before it
+ * failed (`detachedCustomDomains` on the error). Each of them is gone from
+ * Cloudflare, so no record may keep vouching for it. */
+function detachedCustomDomainsFromFailedWorkersDeploy(err: unknown): CloudflareOwnedCustomDomain[] {
+  const detached = (err as { detachedCustomDomains?: unknown } | null)?.detachedCustomDomains;
+  if (!Array.isArray(detached)) return [];
+  return ownedCustomDomainsFromMetadata({ ownedCustomDomains: detached });
 }
 class DeployErrorLike extends Error {
   status: number;
@@ -136,6 +145,9 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
   }): {
     priorAccessAppId: string | undefined;
     priorOwnedCustomDomains: CloudflareOwnedCustomDomain[];
+    /** Write-ahead hostnames (see pendingCustomDomainsFromMetadata), unioned
+     * across the same records; vouched for by hostname like owned ones. */
+    priorPendingCustomDomains: string[];
     priorCustomDomain: Record<string, unknown> | undefined;
   } {
     const { prior } = input;
@@ -156,6 +168,7 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
     let priorAccessAppId: string | undefined;
     let priorCustomDomain: Record<string, unknown> | undefined;
     const priorOwnedCustomDomains: CloudflareOwnedCustomDomain[] = [];
+    const priorPendingCustomDomains: string[] = [];
     for (const record of records) {
       const metadata = record.providerMetadata;
       if (!priorAccessAppId && typeof metadata?.accessAppId === 'string' && metadata.accessAppId) {
@@ -167,8 +180,63 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
           priorOwnedCustomDomains.push(owned);
         }
       }
+      for (const pending of pendingCustomDomainsFromMetadata(metadata)) {
+        if (!priorPendingCustomDomains.includes(pending)) priorPendingCustomDomains.push(pending);
+      }
     }
-    return { priorAccessAppId, priorOwnedCustomDomains, priorCustomDomain };
+    return { priorAccessAppId, priorOwnedCustomDomains, priorPendingCustomDomains, priorCustomDomain };
+  }
+
+  /**
+   * Write-ahead for a custom-domain attach. Runs (awaited) immediately BEFORE
+   * the provider's attach call and persists the hostname as pending on the
+   * (project, file) record, so a crash between the attach and the deploy's own
+   * record write leaves a record that still vouches for the hostname. A pending
+   * entry is cleared once real ownership lands (the deploy's success metadata
+   * replaces the record; a failed deploy that reports the attach drops it) and
+   * carried otherwise. Everything else on a prior record is preserved; a first
+   * deploy leaves a `failed` placeholder the deploy overwrites on completion.
+   * Throws when the write cannot land: an attach nobody can vouch for must not
+   * happen, and nothing on Cloudflare has changed yet at this point.
+   */
+  function recordPendingWorkersCustomDomain(input: {
+    projectId: string;
+    fileName: string;
+    target: 'preview' | 'production';
+    scriptName: string;
+    hostname: string;
+  }): void {
+    const hostname = normalizeHostname(input.hostname);
+    if (!hostname) return;
+    const live = getDeployment(db, input.projectId, input.fileName, CLOUDFLARE_WORKERS_PROVIDER_ID);
+    const liveMetadata =
+      live?.providerMetadata && typeof live.providerMetadata === 'object' && !Array.isArray(live.providerMetadata)
+        ? (live.providerMetadata as Record<string, unknown>)
+        : {};
+    const pending = pendingCustomDomainsFromMetadata(liveMetadata);
+    if (pending.includes(hostname)) return;
+    const metadata: Record<string, unknown> = {
+      ...liveMetadata,
+      scriptName: input.scriptName,
+      pendingCustomDomains: [...pending, hostname].map((entry) => ({ hostname: entry })),
+    };
+    const now = Date.now();
+    upsertDeployment(db, {
+      id: live?.id ?? randomUUID(),
+      projectId: input.projectId,
+      fileName: input.fileName,
+      providerId: CLOUDFLARE_WORKERS_PROVIDER_ID,
+      url: live?.url ?? '',
+      deploymentId: live?.deploymentId,
+      deploymentCount: live?.deploymentCount ?? 0,
+      target: live?.target ?? input.target,
+      status: live?.status ?? 'failed',
+      statusMessage: live ? live.statusMessage : 'Cloudflare Workers deploy was interrupted before it finished.',
+      reachableAt: live?.reachableAt,
+      providerMetadata: metadata,
+      createdAt: live?.createdAt ?? now,
+      updatedAt: now,
+    });
   }
 
   /**
@@ -201,6 +269,8 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
       if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) continue;
       const owned = ownedCustomDomainsFromMetadata(metadata);
       const remaining = owned.filter((entry) => !sameDomain(entry));
+      const pending = pendingCustomDomainsFromMetadata(metadata);
+      const remainingPending = pending.filter((hostname) => !sameDomain({ hostname }));
       const displayed = recordedCustomDomainFromMetadata(metadata);
       const dropDisplayed =
         displayed !== undefined &&
@@ -208,8 +278,10 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
           id: displayed.id !== undefined && displayed.id !== null && String(displayed.id) ? String(displayed.id) : undefined,
           hostname: normalizeHostname(String(displayed.hostname)),
         });
-      if (remaining.length === owned.length && !dropDisplayed) continue;
+      if (remaining.length === owned.length && remainingPending.length === pending.length && !dropDisplayed) continue;
       const next: Record<string, unknown> = { ...(metadata as Record<string, unknown>), ownedCustomDomains: remaining };
+      if (remainingPending.length > 0) next.pendingCustomDomains = remainingPending.map((hostname) => ({ hostname }));
+      else delete next.pendingCustomDomains;
       if (dropDisplayed) delete next.customDomain;
       upsertDeployment(db, {
         id: record.id,
@@ -359,8 +431,11 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
       // dashboard is theirs — refusing is the only safe answer for a
       // client-supplied id. The Workers config is global, so every record of
       // this provider counts, not just the requesting project's.
+      // A hostname a deploy wrote ahead of its attach (pending) is vouched for
+      // by hostname: the attach may have landed even though its record never did.
       const owned = listDeploymentsByProvider(db, CLOUDFLARE_WORKERS_PROVIDER_ID)
-        .flatMap((deployment: { providerMetadata?: unknown }) => ownedCustomDomainsFromMetadata(deployment.providerMetadata));
+        .flatMap((deployment: { providerMetadata?: unknown }) =>
+          vouchedCustomDomains(ownedCustomDomainsFromMetadata(deployment.providerMetadata), pendingCustomDomainsFromMetadata(deployment.providerMetadata)));
       if (!isOwnedCustomDomain(domain, owned)) {
         return sendApiError(
           res,
@@ -427,23 +502,38 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
     const attachedCustomDomains = attachedCustomDomainsFromFailedWorkersDeploy(input.err);
     if (!accessAppId && attachedCustomDomains.length === 0) return;
     const { prior } = input;
+    // The record may have moved on since `prior` was read: the attach
+    // write-ahead (recordPendingWorkersCustomDomain) lands on it mid-deploy.
+    // Metadata merges from the LIVE record so that write-ahead is not undone;
+    // status/url/message still come from `prior`, the state before this
+    // attempt, so a placeholder the write-ahead created does not mask the
+    // real failure message.
+    const live = getDeployment(db, input.projectId, input.fileName, CLOUDFLARE_WORKERS_PROVIDER_ID) ?? prior;
     const priorMetadata =
-      prior?.providerMetadata && typeof prior.providerMetadata === 'object' && !Array.isArray(prior.providerMetadata)
-        ? prior.providerMetadata
+      live?.providerMetadata && typeof live.providerMetadata === 'object' && !Array.isArray(live.providerMetadata)
+        ? live.providerMetadata
         : {};
     const priorOwned = ownedCustomDomainsFromMetadata(priorMetadata);
     const newlyOwned = attachedCustomDomains.filter(
       (attached) => !priorOwned.some((owned) => owned.hostname === attached.hostname && owned.id === attached.id),
     );
+    // Real ownership landed for an attached hostname: its write-ahead is done.
+    const pending = pendingCustomDomainsFromMetadata(priorMetadata);
+    const remainingPending = pending.filter((hostname) => !attachedCustomDomains.some((attached) => attached.hostname === hostname));
+    const resolvesPending = remainingPending.length !== pending.length;
     const gainsAccessApp = Boolean(accessAppId) && priorMetadata.accessAppId !== accessAppId;
-    if (!gainsAccessApp && newlyOwned.length === 0) return;
+    if (!gainsAccessApp && newlyOwned.length === 0 && !resolvesPending) return;
     const metadata: Record<string, unknown> = { ...priorMetadata, scriptName: input.scriptName };
     if (gainsAccessApp) Object.assign(metadata, { accessAppId, accessProtected: true, createdByOpenDesign: true });
     if (newlyOwned.length > 0) metadata.ownedCustomDomains = [...priorOwned, ...newlyOwned];
+    if (resolvesPending) {
+      if (remainingPending.length > 0) metadata.pendingCustomDomains = remainingPending.map((hostname) => ({ hostname }));
+      else delete metadata.pendingCustomDomains;
+    }
     const now = Date.now();
     try {
       upsertDeployment(db, {
-        id: prior?.id ?? randomUUID(),
+        id: live?.id ?? prior?.id ?? randomUUID(),
         projectId: input.projectId,
         fileName: input.fileName,
         providerId: CLOUDFLARE_WORKERS_PROVIDER_ID,
@@ -575,7 +665,18 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
                   access: workersConfig?.access,
                   priorAccessAppId: workersOwnership?.priorAccessAppId,
                   priorOwnedCustomDomains: workersOwnership?.priorOwnedCustomDomains,
+                  priorPendingCustomDomains: workersOwnership?.priorPendingCustomDomains,
                   priorCustomDomain: workersOwnership?.priorCustomDomain,
+                  // Write-ahead: the hostname is on the record as pending
+                  // before the attach call goes out (see the invariant above).
+                  onBeforeAttach: (hostname: string) =>
+                    recordPendingWorkersCustomDomain({
+                      projectId: req.params.id,
+                      fileName,
+                      target,
+                      scriptName: workersScriptName,
+                      hostname,
+                    }),
                   // Re-resolved per Cloudflare call (oauth: refreshed within the
                   // expiry skew), so a multi-minute deploy never outlives its token.
                   tokenProvider: () => resolveCloudflareWorkersRouteToken(workersConfig!),
@@ -616,6 +717,12 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
         } catch (err) {
           if (workersFailureContext) {
             recordOwnedResourcesFromFailedWorkersDeploy({ ...workersFailureContext, err });
+            // A stale hostname this attempt detached is gone from Cloudflare;
+            // no record may keep vouching for it. Runs AFTER the ownership
+            // record above, which re-writes the prior owned list wholesale.
+            for (const detached of detachedCustomDomainsFromFailedWorkersDeploy(err)) {
+              forgetDetachedWorkersHostname({ id: detached.id ?? '', hostname: detached.hostname });
+            }
           }
           throw err;
         }

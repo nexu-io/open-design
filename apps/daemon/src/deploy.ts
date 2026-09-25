@@ -857,13 +857,16 @@ async function refreshCloudflareOAuthAccessToken(
   );
   if (!persisted) {
     const latest = await getCloudflareOAuthToken(dataDir);
-    if (latest) {
-      // A reconnect wrote a newer credential — adopt it rather than clobber.
+    if (latest && !isCloudflareOAuthTokenExpired(latest, Date.now(), CLOUDFLARE_OAUTH_EXPIRY_SKEW_MS)) {
+      // A reconnect wrote a newer, still-valid credential — adopt it rather
+      // than clobber. An expired newer record is no credential at all: handing
+      // out its access token would fail the very call this refresh serves.
       return latest.accessToken;
     }
-    // Disconnect cleared the token while the refresh was in flight.
+    // Disconnect cleared the token while the refresh was in flight, or the
+    // credential that replaced it is itself already expired.
     throw new DeployError(
-      'Cloudflare OAuth was disconnected while refreshing — reconnect Cloudflare.',
+      'Cloudflare OAuth was disconnected or replaced by an expired credential while refreshing — reconnect Cloudflare.',
       401,
       undefined,
       'CFW_OAUTH_RECONNECT_REQUIRED',

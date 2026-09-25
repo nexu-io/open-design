@@ -435,6 +435,68 @@ describe('refresh vs a concurrent reconnect', () => {
     }
   });
 
+  it('adopts the newer record when the compare-and-set persist loses to a still-valid reconnect', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'od-cf-refresh-cas-valid-'));
+    configureCloudflareWorkersDataDir(dir);
+    const dataDir = cloudflareOAuthTokensDir();
+    await setCloudflareOAuthToken(dataDir, expiredRecord());
+    await writeCloudflareWorkersConfig({ credentialMode: 'oauth', accountId: 'acct_test', clientId: 'client-abc' });
+    const realFetch = globalThis.fetch;
+    vi.stubGlobal('fetch', async (input: unknown, init?: unknown) => {
+      if (String(input).includes('oauth2/token')) {
+        // The token endpoint SUCCEEDS, but a reconnect landed a newer
+        // generation meanwhile: the compare-and-set persist must lose.
+        await setCloudflareOAuthToken(dataDir, {
+          ...expiredRecord(),
+          accessToken: 'reconnected-fresh',
+          refreshToken: 'ref-reconnected',
+          expiresAt: Date.now() + 3_600_000,
+        });
+        return new Response(
+          JSON.stringify({ access_token: 'fresh-from-endpoint', token_type: 'Bearer', refresh_token: 'ref-2', expires_in: 3600 }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return realFetch(input as never, init as never);
+    });
+    try {
+      await expect(getCloudflareAccessToken()).resolves.toBe('reconnected-fresh');
+      expect(await getCloudflareOAuthToken(dataDir)).toMatchObject({ accessToken: 'reconnected-fresh', refreshToken: 'ref-reconnected' });
+    } finally {
+      vi.unstubAllGlobals();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('demands a reconnect when the compare-and-set persist loses to a newer record that is itself expired', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'od-cf-refresh-cas-expired-'));
+    configureCloudflareWorkersDataDir(dir);
+    const dataDir = cloudflareOAuthTokensDir();
+    await setCloudflareOAuthToken(dataDir, expiredRecord());
+    await writeCloudflareWorkersConfig({ credentialMode: 'oauth', accountId: 'acct_test', clientId: 'client-abc' });
+    const realFetch = globalThis.fetch;
+    vi.stubGlobal('fetch', async (input: unknown, init?: unknown) => {
+      if (String(input).includes('oauth2/token')) {
+        await setCloudflareOAuthToken(dataDir, { ...expiredRecord(), accessToken: 'reconnected-stale', expiresAt: Date.now() - 1 });
+        return new Response(
+          JSON.stringify({ access_token: 'fresh-from-endpoint', token_type: 'Bearer', refresh_token: 'ref-2', expires_in: 3600 }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return realFetch(input as never, init as never);
+    });
+    try {
+      // An expired newer record is no credential: handing out its access token
+      // would fail the very call this refresh serves. The refreshed token is
+      // not persisted over it either (the other writer still won the store).
+      await expect(getCloudflareAccessToken()).rejects.toMatchObject({ status: 401, code: 'CFW_OAUTH_RECONNECT_REQUIRED' });
+      expect(await getCloudflareOAuthToken(dataDir)).toMatchObject({ accessToken: 'reconnected-stale' });
+    } finally {
+      vi.unstubAllGlobals();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it('still demands a reconnect when the only newer record is itself expired', async () => {
     const dir = await mkdtemp(path.join(tmpdir(), 'od-cf-refresh-reconnect-expired-'));
     configureCloudflareWorkersDataDir(dir);

@@ -9,7 +9,9 @@ import {
   configureCloudflareAccessPerimeterRetry,
   deployToCloudflareWorkers,
   ownedCustomDomainsFromMetadata,
+  pendingCustomDomainsFromMetadata,
   probeCloudflareWorkersCapabilities,
+  vouchedCustomDomains,
 } from '../src/deploy/cloudflare-workers.js';
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -518,6 +520,108 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
     await expect(
       deployToCloudflareWorkers({ ...base, customDomain: { hostname: 'app.example.com', zoneId: 'zone-1' } }),
     ).rejects.toMatchObject({ message: 'attach denied', attachedCustomDomains: [] });
+  });
+
+  it('reports the stale owned hostnames it detached when the deploy fails afterwards, and not the one it could not', async () => {
+    const inner = accessFetch({
+      domainsList: {
+        success: true,
+        result: [
+          { id: 'dom-a', hostname: 'a.example.com', service: 'my-site' },
+          { id: 'dom-b', hostname: 'b.example.com', service: 'my-site' },
+        ],
+      },
+    });
+    const fn = vi.fn(async (url: string, init?: RequestInit) => {
+      if ((init?.method || 'GET').toUpperCase() === 'DELETE' && url.endsWith('/workers/domains/dom-b')) {
+        inner.calls.push([url, init]);
+        return jsonResponse({ success: false, errors: [{ message: 'detach denied' }] });
+      }
+      return inner.fn(url, init);
+    });
+    vi.stubGlobal('fetch', fn);
+    // a.example.com IS detached, then b.example.com's detach fails: only the
+    // first is gone from Cloudflare, so only the first must stop being vouched for.
+    await expect(
+      deployToCloudflareWorkers({
+        ...base,
+        priorOwnedCustomDomains: [{ id: 'dom-a', hostname: 'a.example.com' }, { id: 'dom-b', hostname: 'b.example.com' }],
+      }),
+    ).rejects.toMatchObject({
+      message: 'detach denied',
+      detachedCustomDomains: [{ id: 'dom-a', hostname: 'a.example.com' }],
+    });
+    expect(inner.calls.some((c) => c[0].endsWith('/workers/domains/dom-a') && c[1]?.method === 'DELETE')).toBe(true);
+  });
+
+  it('awaits onBeforeAttach with the configured hostname before the attach call goes out', async () => {
+    const { calls, fn } = accessFetch();
+    vi.stubGlobal('fetch', fn);
+    const attachPuts = () => calls.filter((c) => c[0].endsWith('/workers/domains') && c[1]?.method === 'PUT').length;
+    const seen: Array<{ hostname: string; attachCallsSoFar: number }> = [];
+    const out = await deployToCloudflareWorkers({
+      ...base,
+      customDomain: { hostname: 'app.example.com', zoneId: 'zone-1' },
+      onBeforeAttach: async (hostname) => {
+        seen.push({ hostname, attachCallsSoFar: attachPuts() });
+      },
+    });
+    expect(seen).toEqual([{ hostname: 'app.example.com', attachCallsSoFar: 0 }]);
+    expect(attachPuts()).toBe(1);
+    expect(out.providerMetadata?.ownedCustomDomains).toEqual([{ id: 'dom-1', hostname: 'app.example.com' }]);
+  });
+
+  it('a throwing onBeforeAttach aborts the deploy before any attach call', async () => {
+    const { calls, fn } = accessFetch();
+    vi.stubGlobal('fetch', fn);
+    await expect(
+      deployToCloudflareWorkers({
+        ...base,
+        customDomain: { hostname: 'app.example.com', zoneId: 'zone-1' },
+        onBeforeAttach: () => {
+          throw new Error('write-ahead failed');
+        },
+      }),
+    ).rejects.toMatchObject({ message: 'write-ahead failed', attachedCustomDomains: [] });
+    expect(calls.some((c) => c[0].endsWith('/workers/domains') && c[1]?.method === 'PUT')).toBe(false);
+  });
+
+  it('treats a hostname a prior deploy wrote ahead of its attach as owned, by hostname', async () => {
+    const { calls, fn } = accessFetch({
+      domainsList: { success: true, result: [{ id: 'dom-p', hostname: 'pending.example.com', service: 'my-site' }] },
+    });
+    vi.stubGlobal('fetch', fn);
+    // No record OWNS pending.example.com (the deploy that attached it never
+    // wrote its record), but one wrote it ahead of the attach: reconcile it.
+    const out = await deployToCloudflareWorkers({ ...base, priorPendingCustomDomains: ['pending.example.com'] });
+    expect(calls.some((c) => c[0].endsWith('/workers/domains/dom-p') && c[1]?.method === 'DELETE')).toBe(true);
+    expect(out.status).toBe('ready');
+    expect(out.providerMetadata?.ownedCustomDomains).toEqual([]);
+    expect(out.providerMetadata?.pendingCustomDomains).toBeUndefined();
+  });
+
+  it('a preview deploy carries pending write-ahead hostnames forward without promoting them to owned', async () => {
+    const { fn } = accessFetch();
+    vi.stubGlobal('fetch', fn);
+    const out = await deployToCloudflareWorkers({
+      ...base,
+      target: 'preview',
+      access: { enabled: false },
+      priorOwnedCustomDomains: [{ id: 'dom-1', hostname: 'app.example.com' }],
+      priorPendingCustomDomains: ['pending.example.com'],
+    });
+    expect(out.providerMetadata?.ownedCustomDomains).toEqual([{ id: 'dom-1', hostname: 'app.example.com' }]);
+    expect(out.providerMetadata?.pendingCustomDomains).toEqual([{ hostname: 'pending.example.com' }]);
+  });
+
+  it('pendingCustomDomainsFromMetadata + vouchedCustomDomains: pending hostnames are vouched for by hostname, never duplicated over owned', () => {
+    expect(pendingCustomDomainsFromMetadata({ pendingCustomDomains: [{ hostname: 'P.example.com' }, { hostname: 'p.example.com' }, { id: 'x' }, 'junk'] })).toEqual(['p.example.com']);
+    expect(pendingCustomDomainsFromMetadata({ pendingCustomDomains: 'nope' })).toEqual([]);
+    expect(pendingCustomDomainsFromMetadata(null)).toEqual([]);
+    expect(vouchedCustomDomains([{ id: 'dom-1', hostname: 'app.example.com' }], ['app.example.com', 'p.example.com'])).toEqual([
+      { id: 'dom-1', hostname: 'app.example.com' },
+      { hostname: 'p.example.com' },
+    ]);
   });
 
   it('detaches a dropped OWNED hostname even with Access off and no custom domain configured', async () => {

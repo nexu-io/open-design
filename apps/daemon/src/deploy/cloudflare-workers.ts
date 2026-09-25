@@ -995,6 +995,41 @@ export function ownedCustomDomainsFromMetadata(metadata: unknown): CloudflareOwn
   return out;
 }
 
+/** Hostnames a deploy was ABOUT to attach when its record was last written
+ * (`providerMetadata.pendingCustomDomains`, written ahead of the attach call
+ * via `onBeforeAttach`). Without the write-ahead, a crash between the attach
+ * and the deploy's record write leaves the hostname routed to the script but
+ * recorded nowhere — foreign forever. A pending hostname is vouched for by
+ * hostname only (no domain id exists yet) until real ownership lands or a
+ * later production deploy reconciles it. */
+export function pendingCustomDomainsFromMetadata(metadata: unknown): string[] {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return [];
+  const pending = (metadata as JsonObject).pendingCustomDomains;
+  if (!Array.isArray(pending)) return [];
+  const out: string[] = [];
+  for (const entry of pending) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+    const raw = (entry as JsonObject).hostname;
+    const hostname = typeof raw === 'string' ? normalizeHostname(raw) : '';
+    if (hostname && !out.includes(hostname)) out.push(hostname);
+  }
+  return out;
+}
+
+/** Everything a set of records vouches for: the recorded owned hostnames plus
+ * every pending hostname not already among them, as hostname-only entries so
+ * `isOwnedCustomDomain` matches a pending one by hostname. */
+export function vouchedCustomDomains(
+  owned: readonly CloudflareOwnedCustomDomain[],
+  pending: readonly string[],
+): CloudflareOwnedCustomDomain[] {
+  const out: CloudflareOwnedCustomDomain[] = [...owned];
+  for (const hostname of pending) {
+    if (!out.some((entry) => entry.hostname === hostname)) out.push({ hostname });
+  }
+  return out;
+}
+
 /** The custom hostname a prior deployment recorded for display
  * (`providerMetadata.customDomain`: id, hostname, url), when well-formed. A
  * preview deploy copies it forward because its metadata replaces the record's. */
@@ -1046,6 +1081,15 @@ export async function deployToCloudflareWorkers(input: {
   /** Custom hostnames a prior OpenDesign deployment attached (see
    * ownedCustomDomainsFromMetadata). Only these are reconciled by this deploy. */
   priorOwnedCustomDomains?: readonly CloudflareOwnedCustomDomain[] | undefined;
+  /** Hostnames a prior deploy wrote ahead of its attach and never resolved
+   * (see pendingCustomDomainsFromMetadata). Vouched for by hostname, like an
+   * owned entry without an id; a preview deploy carries them forward. */
+  priorPendingCustomDomains?: readonly string[] | undefined;
+  /** Write-ahead hook, awaited immediately BEFORE the custom-domain attach with
+   * the hostname about to be attached. The route persists it as pending so a
+   * crash between the attach and the record write cannot orphan the hostname.
+   * A throw here aborts the deploy before anything is attached. */
+  onBeforeAttach?: ((hostname: string) => Promise<void> | void) | undefined;
   /** The custom hostname a prior deployment recorded for display (see
    * recordedCustomDomainFromMetadata). A preview deploy carries it forward. */
   priorCustomDomain?: JsonObject | undefined;
@@ -1054,8 +1098,9 @@ export async function deployToCloudflareWorkers(input: {
   tokenProvider?: CloudflareTokenProvider | undefined;
 }): Promise<CloudflareWorkersDeployResult> {
   const startedAt = Date.now();
-  const { config, files, projectId = '', projectName = '', target = 'production', access, priorAccessAppId, customDomain, priorCustomDomain } = input ?? {};
+  const { config, files, projectId = '', projectName = '', target = 'production', access, priorAccessAppId, customDomain, priorCustomDomain, onBeforeAttach } = input ?? {};
   const priorOwnedCustomDomains = input?.priorOwnedCustomDomains ?? [];
+  const priorPendingCustomDomains = input?.priorPendingCustomDomains ?? [];
   const accountId = config?.accountId;
   if (!accountId) throw new DeployError('Cloudflare account ID is required.', 400, undefined, 'CFW_ACCOUNT_ID_REQUIRED');
   // Fail closed on the enabled-but-inert shape: `{enabled:true}` with no rule
@@ -1105,6 +1150,11 @@ export async function deployToCloudflareWorkers(input: {
   // hostname attached by a failed deploy is routed to the script but never
   // owned, and no later deploy or detach request may touch it.
   const attachedCustomDomains: CloudflareOwnedCustomDomain[] = [];
+  // Stale OWNED hostnames THIS deploy detached. Reported on the error when the
+  // deploy fails afterwards, so the route stops vouching for them — otherwise
+  // the record keeps listing a hostname that is no longer routed, and a later
+  // dashboard re-attach of it would be classified owned and detached again.
+  const detachedCustomDomains: CloudflareOwnedCustomDomain[] = [];
   try {
     // Validate the script name and the asset set BEFORE any resource is
     // created: an unviable deploy (bad script name, too many / oversized /
@@ -1161,6 +1211,11 @@ export async function deployToCloudflareWorkers(input: {
       // routed to the script but recorded nowhere, and classifies it foreign.
       metadata.ownedCustomDomains = priorOwnedCustomDomains.map((owned) =>
         owned.id ? { id: owned.id, hostname: owned.hostname } : { hostname: owned.hostname });
+      // Pending write-aheads ride along unchanged (carried, never promoted):
+      // only a production deploy resolves them.
+      if (priorPendingCustomDomains.length > 0) {
+        metadata.pendingCustomDomains = priorPendingCustomDomains.map((hostname) => ({ hostname }));
+      }
       if (priorCustomDomain) metadata.customDomain = { ...priorCustomDomain };
       if (accessOn) {
         // Preview URLs are covered by the preview_worker destination; make sure
@@ -1226,11 +1281,14 @@ export async function deployToCloudflareWorkers(input: {
     const attachedDomains = await listCloudflareWorkerDomainsForScript(cfg, scriptName);
     const configuredHostname = customDomain ? normalizeHostname(customDomain.hostname) : '';
     const configuredAlreadyAttached = attachedDomains.some((domain) => domain.hostname === configuredHostname);
+    // A hostname a prior deploy wrote ahead of its attach counts as owned (by
+    // hostname): the attach may have landed even though the record never did.
+    const vouchedDomains = vouchedCustomDomains(priorOwnedCustomDomains, priorPendingCustomDomains);
     const staleDomains = attachedDomains.filter(
-      (domain) => domain.hostname !== configuredHostname && isOwnedCustomDomain(domain, priorOwnedCustomDomains),
+      (domain) => domain.hostname !== configuredHostname && isOwnedCustomDomain(domain, vouchedDomains),
     );
     const foreignHostnames = attachedDomains
-      .filter((domain) => domain.hostname !== configuredHostname && !isOwnedCustomDomain(domain, priorOwnedCustomDomains))
+      .filter((domain) => domain.hostname !== configuredHostname && !isOwnedCustomDomain(domain, vouchedDomains))
       .map((domain) => domain.hostname);
     // The Access app covers, for the whole deploy, every hostname Cloudflare
     // routes to the script PLUS the configured hostname — before it is attached.
@@ -1303,6 +1361,10 @@ export async function deployToCloudflareWorkers(input: {
     if (customDomain) {
       let domainId: string;
       try {
+        // Write-ahead: the route records the hostname as pending BEFORE the
+        // attach, so a crash between the attach and the deploy's record write
+        // still leaves a record vouching for it.
+        if (onBeforeAttach) await onBeforeAttach(configuredHostname);
         domainId = await attachCloudflareWorkerDomain(cfg, { hostname: customDomain.hostname, service: scriptName, zone_id: customDomain.zoneId });
       } catch (err) {
         // Compensation: the Access app claimed the configured hostname before
@@ -1342,6 +1404,7 @@ export async function deployToCloudflareWorkers(input: {
     // user dropped still serving the site. Foreign hostnames are not touched.
     for (const stale of staleDomains) {
       await detachCloudflareWorkerDomain(cfg, stale.id);
+      detachedCustomDomains.push({ id: stale.id, hostname: stale.hostname });
       steps.push({ name: 'custom-domain-detach', status: 'done', detail: stale.hostname });
     }
     // What this deployment owns from here on: the configured hostname (just
@@ -1415,6 +1478,7 @@ export async function deployToCloudflareWorkers(input: {
     steps.push({ name: 'error', status: 'error', detail: err instanceof Error ? err.message : String(err) });
     (err as { steps?: DeployStep[] }).steps = steps;
     (err as { attachedCustomDomains?: CloudflareOwnedCustomDomain[] }).attachedCustomDomains = attachedCustomDomains;
+    (err as { detachedCustomDomains?: CloudflareOwnedCustomDomain[] }).detachedCustomDomains = detachedCustomDomains;
     throw err;
   }
 }
