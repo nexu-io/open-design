@@ -171,6 +171,15 @@ export function registerCloudflareRoutes(
       }
       const redirectUri =
         bodyRedirectUri || (cfg.redirectUri ?? '').trim() || cloudflareRedirectUri();
+      // The callback listener is fixed to the loopback URI — an arbitrary
+      // redirect_uri would send the authorization code somewhere the daemon is
+      // not listening, so reject it before any OAuth state is created.
+      const expectedRedirectUri = cloudflareRedirectUri();
+      if (redirectUri !== expectedRedirectUri) {
+        return res.status(400).json({
+          error: `Cloudflare OAuth redirect URI must be ${expectedRedirectUri} — the daemon callback listener is fixed to it.`,
+        });
+      }
       // Persist the identity now so the callback handler + refresh path (which
       // re-read the persisted config) carry the same clientId/redirectUri that
       // authorized this flow.

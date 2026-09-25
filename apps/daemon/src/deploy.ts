@@ -110,7 +110,12 @@ export class DeployError extends Error {
 }
 
 export function deployConfigPath(providerId: DeployProviderId = VERCEL_PROVIDER_ID) {
-  const base = process.env.OD_USER_STATE_DIR || path.join(os.homedir(), '.open-design');
+  // The Workers config lives under the daemon-resolved data root (same as its
+  // OAuth token) so an isolated OD_DATA_DIR namespace holds both. Vercel/Pages
+  // keep the legacy OD_USER_STATE_DIR/home location unchanged.
+  const base = providerId === CLOUDFLARE_WORKERS_PROVIDER_ID
+    ? cloudflareWorkersBaseDir()
+    : process.env.OD_USER_STATE_DIR || path.join(os.homedir(), '.open-design');
   const name = providerId === CLOUDFLARE_PAGES_PROVIDER_ID
     ? 'cloudflare-pages.json'
     : providerId === CLOUDFLARE_WORKERS_PROVIDER_ID
@@ -342,21 +347,25 @@ export function publicCloudflareWorkersConfig(config: Partial<DeployConfig>) {
   return body;
 }
 
-/** Resolved data root for the OAuth token file, injected by the daemon at
- * startup from RUNTIME_DATA_DIR so credentials stay inside the runtime data
- * root (never an independently recomputed OD_USER_STATE_DIR / home fallback
- * that packaged or isolated runs would write outside of). */
-let cloudflareOAuthTokensRoot: string | undefined;
+/** Resolved data root for the Workers config + OAuth token files, injected by
+ * the daemon at startup from RUNTIME_DATA_DIR so both the config and the token
+ * stay inside the runtime data root (never an independently recomputed
+ * OD_USER_STATE_DIR / home fallback that packaged or isolated namespaces would
+ * write outside of — or leak across). */
+let cloudflareWorkersDataRoot: string | undefined;
 
-export function configureCloudflareOAuthTokens(rootDir: string): void {
-  cloudflareOAuthTokensRoot = rootDir;
+export function configureCloudflareWorkersDataDir(rootDir: string): void {
+  cloudflareWorkersDataRoot = rootDir;
 }
 
-/** Directory that holds 'cloudflare-oauth-tokens.json'. Uses the daemon-resolved
- * data root when configured, falling back to OD_USER_STATE_DIR (matching the
- * pre-existing deploy-config path) for tests and standalone callers. */
+function cloudflareWorkersBaseDir(): string {
+  return cloudflareWorkersDataRoot ?? process.env.OD_USER_STATE_DIR ?? path.join(os.homedir(), '.open-design');
+}
+
+/** Directory that holds 'cloudflare-oauth-tokens.json' — the daemon-resolved
+ * data root when configured, else the legacy OD_USER_STATE_DIR/home fallback. */
 export function cloudflareOAuthTokensDir(): string {
-  return cloudflareOAuthTokensRoot ?? process.env.OD_USER_STATE_DIR ?? path.join(os.homedir(), '.open-design');
+  return cloudflareWorkersBaseDir();
 }
 
 /** Refresh an access token this many ms before its recorded expiry, so a
