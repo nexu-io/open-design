@@ -1083,6 +1083,13 @@ const CLOUDFLARE_WORKERS_DEPLOY_PROVIDER_ID = 'cloudflare-workers';
 const CLOUDFLARE_WORKERS_PUBLIC_METADATA_KEYS = [
   'accessProtected',
   'accessAppId',
+  // Access apps this deploy RETAINED: they still guard the Worker a
+  // script-name change moved away from, so they are not THIS Worker's
+  // protection (never `accessAppId`), but they are the only handles the
+  // client has on apps OpenDesign owns and a later Access-off retires. A key
+  // this projection does not name never leaves the daemon (see the note
+  // above), so the id would be recorded and still invisible.
+  'retainedAccessAppIds',
   'createdByOpenDesign',
   'customDomain',
   'steps',

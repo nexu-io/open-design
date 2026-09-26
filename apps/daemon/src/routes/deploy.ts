@@ -3,7 +3,7 @@ import type { RouteDeps } from '../server-context.js';
 import type { AuthorizeProjectRequest } from '../collab/project-request-authority.js';
 import { clientRequestIdFor } from '../http/client-request-id.js';
 import { classifyDeployFailure } from '../deploy/failure-detail.js';
-import { detachCloudflareWorkerDomain, getCloudflareWorkerDomain, isOwnedCustomDomain, listCloudflareZones, mergeUnverifiedExposure, normalizeHostname, ownedCustomDomainsFromMetadata, pendingCustomDomainsFromMetadata, recordedCustomDomainFromMetadata, releasedCustomDomainsFromWorkersDeploy, remainingUnverifiedExposure, resolvedPendingCustomDomainsFromWorkersDeploy, resolveWorkerScriptName, retiredAccessAppIdFromWorkersDeploy, serializeUnverifiedExposure, unverifiedExposureFromMetadata, verifyCloudflareAccessPerimeter, vouchedCustomDomains, withdrawRecordedUnverifiedExposure, type CloudflareOwnedCustomDomain, type CloudflareUnverifiedExposure } from '../deploy/cloudflare-workers.js';
+import { detachCloudflareWorkerDomain, getCloudflareWorkerDomain, isOwnedCustomDomain, listCloudflareZones, mergeUnverifiedExposure, normalizeHostname, ownedCustomDomainsFromMetadata, pendingCustomDomainsFromMetadata, recordedCustomDomainFromMetadata, releasedCustomDomainsFromWorkersDeploy, remainingUnverifiedExposure, resolvedPendingCustomDomainsFromWorkersDeploy, resolveWorkerScriptName, retainedAccessAppIdsFromMetadata, retiredAccessAppIdFromWorkersDeploy, serializeUnverifiedExposure, unverifiedExposureFromMetadata, verifyCloudflareAccessPerimeter, vouchedCustomDomains, withdrawRecordedUnverifiedExposure, type CloudflareOwnedCustomDomain, type CloudflareUnverifiedExposure } from '../deploy/cloudflare-workers.js';
 import { getCloudflareAccessToken, pendingPublicLinkMessage } from '../deploy.js';
 import { proxyDispatcherRequestInit } from '../connectionTest.js';
 
@@ -468,9 +468,12 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
    * After a prior Access app is deleted (Access turned off), no Workers record
    * may keep carrying its id: the record would report the Worker as protected
    * (`accessProtected`/`accessVerified`) by an app that no longer exists, and
-   * the next deploy of that record would try to retire it again. Every record
-   * of the provider is scanned because the Workers config is global — the
-   * same app guarded every (project, file) that deployed the script.
+   * the next deploy of that record would try to retire it again. A RETAINED app
+   * (see retainedAccessAppIds) is named by the same records under its own key, so
+   * that handle is dropped here too — a stale one keeps offering the UI an app
+   * that is gone. Every record of the provider is scanned because the Workers
+   * config is global — the same app guarded every (project, file) that deployed
+   * the script.
    */
   function forgetRetiredWorkersAccessApp(accessAppId: string): void {
     if (!accessAppId) return;
@@ -491,8 +494,16 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
     for (const record of records) {
       const metadata = record.providerMetadata;
       if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) continue;
-      if ((metadata as Record<string, unknown>).accessAppId !== accessAppId) continue;
-      const { accessAppId: _id, accessProtected: _protected, accessVerified: _verified, createdByOpenDesign: _created, ...next } = metadata as Record<string, unknown>;
+      const held = metadata as Record<string, unknown>;
+      // A record names an app either as the Worker's protection
+      // (`accessAppId`) or as one this deploy RETAINED because it still guards
+      // the Worker a script-name change moved away from
+      // (`retainedAccessAppIds`). Both go stale the moment the app is deleted.
+      const retainedIds = retainedAccessAppIdsFromMetadata(metadata);
+      if (held.accessAppId !== accessAppId && !retainedIds.includes(accessAppId)) continue;
+      const { accessAppId: _id, accessProtected: _protected, accessVerified: _verified, createdByOpenDesign: _created, retainedAccessAppIds: _retained, ...next } = held;
+      const keptRetained = retainedIds.filter((id) => id !== accessAppId);
+      if (keptRetained.length > 0) next.retainedAccessAppIds = keptRetained;
       upsertDeployment(db, {
         id: record.id,
         projectId: record.projectId,

@@ -566,7 +566,12 @@ export async function getPendingCloudflareOAuthRevokes(
  * every other handle untouched. `settled` names tokens Cloudflare has answered
  * about — an honored revoke, or an explicit refusal that means the token is
  * already dead. Best-effort by contract: a file that cannot be written keeps
- * the handles, and the next OAuth mutation retries them. */
+ * the handles, and the next OAuth mutation retries them.
+ *
+ * The credential is read and carried under the same rules as every other
+ * writer: from the RAW object, so a record that no longer sanitizes is still
+ * carried rather than erased, and at the FILE generation, so the refresh
+ * compare-and-set keeps matching it (see the two notes in the body). */
 export async function dropPendingCloudflareOAuthRevokes(
   dataDir: string,
   settled: readonly string[],
@@ -574,7 +579,13 @@ export async function dropPendingCloudflareOAuthRevokes(
   if (settled.length === 0) return;
   await withLock(dataDir, async () => {
     if (!(await tokensFileExists(dataDir))) return;
-    const file = await readCloudflareOAuthTokensFile(dataDir);
+    // Read with the RAW object, exactly as clearCloudflareOAuthToken and
+    // setCloudflareOAuthTokenGuarded do. A record whose accessToken no longer
+    // sanitizes drops out of the typed shape while its refresh token is still a
+    // live grant on disk; a write carrying only `file.token` erased that grant
+    // from the bytes instead of keeping it named, so no later disconnect could
+    // recover it and revoke it (see recoveredDisplacedCredential).
+    const { raw, file } = await readCloudflareOAuthTokensFileWithRaw(dataDir);
     const pending = file.pendingRevokes ?? [];
     const remaining = pending.filter((entry) => {
       const token = entry.refreshToken || entry.accessToken;
@@ -582,9 +593,20 @@ export async function dropPendingCloudflareOAuthRevokes(
     });
     if (remaining.length === pending.length) return;
     const gen = nextLastGeneration(file);
+    // The FILE generation and the carried record's generation stay in step, as
+    // every other writer leaves them. The refresh compare-and-set matches the
+    // FILE generation against the caller's TOKEN generation, so a record
+    // carried at its old generation fails that check from then on: the next
+    // refresh reads itself as superseded, revokes the token it just minted, and
+    // reports CFW_OAUTH_RECONNECT_REQUIRED. A record recovered from the raw
+    // bytes is carried exactly as the store held it — it has no usable access
+    // token, so no refresh compares against its generation at all.
+    const carried = file.token
+      ? { ...file.token, generation: gen }
+      : recoveredDisplacedCredential(raw);
     await writeTokensFile(dataDir, {
       lastGeneration: gen,
-      ...(file.token ? { token: file.token } : {}),
+      ...(carried ? { token: carried } : {}),
       ...(remaining.length > 0 ? { pendingRevokes: remaining } : {}),
     });
   });

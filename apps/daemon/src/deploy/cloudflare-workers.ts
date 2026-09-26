@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import path from 'node:path';
-import { CLOUDFLARE_WORKERS_PROVIDER_ID, DeployError, getCloudflareAccessToken, getCloudflareOAuthStoredEmail, isCloudflareAccessProtectedResponse, isCloudflareAccessRedirect, normalizeCloudflareWorkersBindings } from '../deploy.js';
+import { CLOUDFLARE_WORKERS_PROVIDER_ID, DeployError, getCloudflareAccessToken, getCloudflareOAuthStoredEmail, isCloudflareAccessChallengeResponse, isCloudflareAccessRedirect, normalizeCloudflareWorkersBindings } from '../deploy.js';
 import { proxyDispatcherRequestInit } from '../connectionTest.js';
 
 type JsonObject = Record<string, unknown>;
@@ -1097,20 +1097,21 @@ export type CloudflareWorkerAttachedDomain = { id: string; hostname: string };
 /** The custom hostnames Cloudflare ACTUALLY routes to a script (the account's
  * Workers custom domains filtered to `service=<scriptName>`). Strict: a list
  * failure throws, because every caller derives the Access perimeter from this
- * answer and an empty fallback would silently leave a routed hostname public. */
+ * answer and an empty fallback would silently leave a routed hostname public.
+ * Read to its last page, like the other deploy-path reads: this set becomes the
+ * Access app's public destinations, so a routed hostname the read never reached
+ * would sit outside the perimeter entirely. */
 export async function listCloudflareWorkerDomainsForScript(
   config: WorkersDeployConfig,
   scriptName: string,
 ): Promise<CloudflareWorkerAttachedDomain[]> {
-  const resp = await fetchWithRetry(config,
-    CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/workers/domains?service=' + encodeURIComponent(scriptName),
-    { method: 'GET', headers: await authHeaders(config) },
+  const result = await listCloudflareAllPagesStrict(
+    config,
+    '/accounts/' + encodeURIComponent(config.accountId) + '/workers/domains?service=' + encodeURIComponent(scriptName),
+    100,
+    'Cloudflare Workers custom domains list',
   );
-  const json = await readCloudflareJson(resp);
-  if (!resp.ok || json.success !== true || !Array.isArray(json.result)) {
-    throw cloudflareError(json, resp.ok ? 502 : resp.status, 'Cloudflare Workers custom domains list failed.');
-  }
-  return (json.result as JsonObject[])
+  return result
     // The `service` filter is a server-side hint; re-check it here so a
     // hostname routed to ANOTHER script can never be detached by this deploy.
     .filter((domain) => domain?.service === scriptName)
@@ -1127,21 +1128,22 @@ export async function listCloudflareWorkerDomainsForScript(
  * answer to refuse a hostname that already belongs to another Worker, and a
  * service-filtered list can never see that Worker. Strict for the same
  * reason — a lenient `null` on a list failure would turn the refusal into a
- * hijack. The `hostname` query is a server-side hint; the match is re-checked. */
+ * hijack. Paged to the end for the same reason: a hostname bound to another
+ * Worker on a page this read never reached would read as free, and the PUT that
+ * follows would re-point it. The `hostname` query is a server-side hint; the
+ * match is re-checked. */
 export async function findCloudflareWorkerDomainByHostname(
   config: WorkersDeployConfig,
   hostname: string,
 ): Promise<CloudflareWorkerDomain | null> {
   const wanted = normalizeHostname(hostname);
-  const resp = await fetchWithRetry(config,
-    CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/workers/domains?hostname=' + encodeURIComponent(wanted),
-    { method: 'GET', headers: await authHeaders(config) },
+  const result = await listCloudflareAllPagesStrict(
+    config,
+    '/accounts/' + encodeURIComponent(config.accountId) + '/workers/domains?hostname=' + encodeURIComponent(wanted),
+    100,
+    'Cloudflare Workers custom domain lookup',
   );
-  const json = await readCloudflareJson(resp);
-  if (!resp.ok || json.success !== true || !Array.isArray(json.result)) {
-    throw cloudflareError(json, resp.ok ? 502 : resp.status, 'Cloudflare Workers custom domain lookup failed.');
-  }
-  const match = (json.result as JsonObject[]).find(
+  const match = result.find(
     (domain) => typeof domain?.hostname === 'string' && normalizeHostname(domain.hostname) === wanted,
   );
   if (!match) return null;
@@ -1324,22 +1326,11 @@ export type CloudflareAccessPerimeterVerdict =
    * doing its job, so a 3xx proves nothing and defers as `unreachable`. */
   | { outcome: 'unprotected'; error: DeployError };
 
-// The challenge body of a probe response, when there is one to read: a stub
-// response in a test need not implement a body reader, and a body that fails
-// mid-read proves no more than no body at all.
-async function readProbeBody(resp: Response): Promise<string> {
-  if (typeof resp.text !== 'function') return '';
-  try {
-    return await resp.text();
-  } catch {
-    return '';
-  }
-}
-
 // One GET against a public URL; resolves to a verdict instead of throwing so
-// the caller can retry a bounded number of times. GET, not HEAD: the only
-// proof an Access challenge left on a non-redirect answer (a 401/403 with the
-// login page in it) is in the body, and a HEAD has none.
+// the caller can retry a bounded number of times. GET, not HEAD: this probe
+// asks the question a visitor's browser asks, and the challenge the edge
+// serves for it — the login location, the cookie jar, the cf-mitigated stamp —
+// is what a HEAD-only answer would not have to produce.
 async function probeCloudflareAccessPerimeterOnce(url: string, requestInit: WorkersRequestInit): Promise<CloudflareAccessPerimeterVerdict> {
   let resp: Response;
   try {
@@ -1380,11 +1371,15 @@ async function probeCloudflareAccessPerimeterOnce(url: string, requestInit: Work
     };
   }
   // 401/403 is how Access challenges a request it will not redirect (an API
-  // call, a client that does not follow the login flow); the login page in the
-  // body is what proves the gate is there. Only the proof counts.
+  // call, a client that does not follow the login flow). Only EDGE evidence
+  // counts: the Access login location, the Access cookies, or the edge's own
+  // cf-mitigated challenge stamp. The body deliberately does NOT, because this
+  // probe's URL belongs to the Worker being deployed — an app whose own 403
+  // contains the words "Cloudflare Access" would verify its own gate and an
+  // ungated URL would be reported protected. A bare 401/403 falls through to
+  // `unreachable` below, which defers instead of verifying.
   if (status === 401 || status === 403) {
-    const body = await readProbeBody(resp);
-    if (isCloudflareAccessProtectedResponse(resp, body)) return { outcome: 'protected' };
+    if (isCloudflareAccessChallengeResponse(resp)) return { outcome: 'protected' };
   }
   // Anything else — a 404 while a hostname's route propagates, a 503 from a
   // Worker that is erroring, a 429 from the edge — answers neither question.
@@ -1854,6 +1849,24 @@ export function retiredAccessAppIdFromWorkersDeploy(source: unknown): string | u
   return typeof id === 'string' && id ? id : undefined;
 }
 
+/** The Access apps an OpenDesign deploy RETAINED: apps it created that still
+ * guard the Worker a script-name change moved away from, so deleting them would
+ * make that Worker public. They are NOT this Worker's protection —
+ * `accessAppId` never names one — but they are the only handles OpenDesign has
+ * on apps it owns, and a step-log string is not a handle a later deploy or the
+ * UI can read back, so the record carries them under their own key. */
+export function retainedAccessAppIdsFromMetadata(metadata: unknown): string[] {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return [];
+  const value = (metadata as JsonObject).retainedAccessAppIds;
+  if (!Array.isArray(value)) return [];
+  const out: string[] = [];
+  for (const entry of value) {
+    if (typeof entry !== 'string' || !entry) continue;
+    if (!out.includes(entry)) out.push(entry);
+  }
+  return out;
+}
+
 /** Everything a set of records vouches for: the recorded owned hostnames plus
  * every pending hostname not already among them, as hostname-only entries so
  * `isOwnedCustomDomain` matches a pending one by hostname. */
@@ -2278,6 +2291,16 @@ async function deployToCloudflareWorkersWith(
       if (retirement === 'deleted' && !accessAppId) {
         retiredAccessAppId = priorAccessAppId;
         metadata.retiredAccessAppId = priorAccessAppId;
+      }
+      if (retirement === 'retained') {
+        // The prior app still guards the Worker this script name moved away
+        // from, so it is not this deploy's to delete — and when this record was
+        // the only one naming it, the step log was the only place its id
+        // survived. Keep it under its own key, never as `accessAppId`: that
+        // would report THIS Worker as protected by an app guarding another one.
+        const retained = retainedAccessAppIdsFromMetadata(metadata);
+        if (!retained.includes(priorAccessAppId)) retained.push(priorAccessAppId);
+        metadata.retainedAccessAppIds = retained;
       }
     }
 

@@ -25,10 +25,13 @@ import {
   writeCloudflareWorkersConfig,
 } from '../src/deploy.js';
 import {
+  clearCloudflareOAuthToken,
   clearCloudflareOAuthTokenForRevoke,
+  dropPendingCloudflareOAuthRevokes,
   getCloudflareOAuthToken,
   getPendingCloudflareOAuthRevokes,
   setCloudflareOAuthToken,
+  setCloudflareOAuthTokenIfGenerationMatches,
 } from '../src/integrations/cloudflare-tokens.js';
 
 async function withDataDir<T>(run: (dir: string) => Promise<T>): Promise<T> {
@@ -953,6 +956,73 @@ describe('credential mode is derived from a live OAuth grant', () => {
       expect(revokes).toHaveLength(1);
       expect(revokes[0]).toContain('token=ref-1');
       expect(await getPendingCloudflareOAuthRevokes(cloudflareOAuthTokensDir())).toEqual([]);
+    });
+  });
+
+  it('a settle that drops a handle keeps the file and record generations in step, so the next refresh still matches', async () => {
+    await withDataDir(async () => {
+      const tokens = cloudflareOAuthTokensDir();
+      const credential = (access: string, refresh: string) => ({
+        accessToken: access,
+        refreshToken: refresh,
+        tokenType: 'Bearer',
+        generation: 1,
+        savedAt: Date.now(),
+      });
+      // A credential a transition took off disk leaves its grant as a handle;
+      // the reconnect that follows carries that handle forward beside the new
+      // credential, which is the only state where a settle write has BOTH.
+      await setCloudflareOAuthToken(tokens, credential('access-1', 'ref-1'));
+      await clearCloudflareOAuthTokenForRevoke(tokens);
+      await setCloudflareOAuthToken(tokens, credential('access-2', 'ref-2'));
+      await dropPendingCloudflareOAuthRevokes(tokens, ['ref-1']);
+      expect(await getPendingCloudflareOAuthRevokes(tokens)).toEqual([]);
+      // The refresh compare-and-set matches the FILE generation against the
+      // caller's TOKEN generation. A carried record left at its old generation
+      // fails that check from then on: every refresh reads itself as
+      // superseded, revokes the token it just minted, and reports
+      // CFW_OAUTH_RECONNECT_REQUIRED.
+      const stored = await getCloudflareOAuthToken(tokens);
+      expect(stored).not.toBeNull();
+      const landed = await setCloudflareOAuthTokenIfGenerationMatches(tokens, credential('access-3', 'ref-3'), stored!.generation);
+      expect(landed).toBe(true);
+      expect((await getCloudflareOAuthToken(tokens))?.accessToken).toBe('access-3');
+    });
+  });
+
+  it('a settle that drops a handle still carries a credential that no longer sanitizes, so a later disconnect can revoke it', async () => {
+    await withDataDir(async () => {
+      const tokens = cloudflareOAuthTokensDir();
+      await setCloudflareOAuthToken(tokens, {
+        accessToken: 'access-1',
+        refreshToken: 'ref-real',
+        tokenType: 'Bearer',
+        generation: 1,
+        savedAt: Date.now(),
+      });
+      // The credential leaves the store as a revoke handle …
+      await clearCloudflareOAuthTokenForRevoke(tokens);
+      // … and the reconnect that follows writes a record whose accessToken no
+      // longer sanitizes while its refresh token stays a live grant on disk —
+      // the shape recoveredDisplacedCredential exists for. It reads as no
+      // credential at all.
+      await setCloudflareOAuthToken(tokens, {
+        accessToken: '',
+        refreshToken: 'ref-blank',
+        clientId: 'client-abc',
+        tokenType: 'Bearer',
+        generation: 1,
+        savedAt: Date.now(),
+      });
+      expect(await getCloudflareOAuthToken(tokens)).toBeNull();
+      expect(await getPendingCloudflareOAuthRevokes(tokens)).toHaveLength(1);
+      // Settling the unrelated handle writes the file. A write that carried
+      // only the typed shape would erase the blank record from the bytes, and
+      // the grant it names would be unrecoverable for good.
+      await dropPendingCloudflareOAuthRevokes(tokens, ['ref-real']);
+      expect(await getPendingCloudflareOAuthRevokes(tokens)).toEqual([]);
+      const recovered = await clearCloudflareOAuthToken(tokens);
+      expect(recovered?.refreshToken).toBe('ref-blank');
     });
   });
 

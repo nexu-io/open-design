@@ -2,7 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { checkDeploymentUrl, cloudflareOAuthTokensDir, configureCloudflareWorkersDataDir, isCloudflareAccessChallengeResponse, isCloudflareAccessProtectedResponse, isCloudflareAccessRedirect, readCloudflareWorkersConfig, writeCloudflareWorkersConfig } from '../src/deploy.js';
+import { checkDeploymentUrl, cloudflareOAuthTokensDir, configureCloudflareWorkersDataDir, isCloudflareAccessChallengeResponse, isCloudflareAccessRedirect, readCloudflareWorkersConfig, writeCloudflareWorkersConfig } from '../src/deploy.js';
 import { setCloudflareOAuthToken } from '../src/integrations/cloudflare-tokens.js';
 import {
   CLOUDFLARE_ACCESS_PERIMETER_RETRY_DEFAULTS,
@@ -24,6 +24,7 @@ import {
   probeCloudflareWorkersCapabilities,
   releasedCustomDomainsFromWorkersDeploy,
   remainingUnverifiedExposure,
+  retainedAccessAppIdsFromMetadata,
   retiredAccessAppIdFromWorkersDeploy,
   serializeUnverifiedExposure,
   unverifiedExposureFromMetadata,
@@ -1481,13 +1482,87 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
         onBeforeAttach,
       }),
     ).rejects.toMatchObject({ name: 'DeployError', code: 'CFW_DOMAIN_CONFLICT', status: 409 });
-    // The pre-check is strict on the hostname and NOT filtered to our script.
-    const precheck = calls.find((c) => (c[1]?.method || 'GET') === 'GET' && c[0].endsWith('/workers/domains?hostname=app.example.com'));
+    // The pre-check is strict on the hostname and NOT filtered to our script;
+    // the strict list appends its own page/per_page params after the hostname.
+    const precheck = calls.find((c) => (c[1]?.method || 'GET') === 'GET' && c[0].includes('/workers/domains?hostname=app.example.com'));
     expect(precheck).toBeDefined();
     // No PUT was sent: the other Worker keeps its hostname. Nothing was
     // written ahead either, so there is no pending record to reconcile.
     expect(calls.some((c) => c[1]?.method === 'PUT' && c[0].endsWith('/workers/domains'))).toBe(false);
     expect(calls.some((c) => c[1]?.method === 'DELETE' && c[0].includes('/workers/domains/'))).toBe(false);
+    expect(onBeforeAttach).not.toHaveBeenCalled();
+  });
+
+  it('reads the routed custom-domain list to its last page, so a hostname on page 2 is still covered by the Access app', async () => {
+    const { calls, fn } = accessFetch({
+      accessList: {
+        success: true,
+        result: [{ id: 'app-123', name: 'my-site (OpenDesign)', destinations: [{ type: 'worker', worker_id: 'tag-abc-123' }] }],
+      },
+    });
+    // Page 1 is full of OTHER scripts' hostnames and reports no totals, so only
+    // paging can find the hostname routed to this script — and a routed hostname
+    // absent from the destinations is routed to the Worker and outside the
+    // perimeter at once.
+    const filler = Array.from({ length: 100 }, (_, i) => ({
+      id: 'dom-other-' + i,
+      hostname: 'other-' + i + '.example.com',
+      service: 'other-script',
+    }));
+    const ours = { id: 'dom-page2', hostname: 'paged.example.com', service: 'my-site' };
+    const paged = vi.fn(async (url: string, init?: RequestInit) => {
+      const method = (init?.method || 'GET').toUpperCase();
+      if (method === 'GET' && /\/workers\/domains\?service=my-site&page=\d+/.test(url)) {
+        calls.push([url, init]);
+        const page = Number(new URL(url).searchParams.get('page'));
+        if (page === 1) return jsonResponse({ success: true, result: filler });
+        if (page === 2) return jsonResponse({ success: true, result: [ours] });
+        return jsonResponse({ success: true, result: [] });
+      }
+      return fn(url, init);
+    });
+    vi.stubGlobal('fetch', paged);
+    await deployToCloudflareWorkers({ ...base, access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } } });
+    expect(calls.some((c) => c[0].includes('/workers/domains?service=my-site&page=2'))).toBe(true);
+    const put = calls.find((c) => c[0].endsWith('/access/apps/app-123') && c[1]?.method === 'PUT');
+    const body = JSON.parse(put![1]?.body as string) as { destinations: unknown[] };
+    expect(body.destinations).toContainEqual({ type: 'public', uri: 'paged.example.com' });
+  });
+
+  it('sees a conflicting custom domain on page 2 of the hostname lookup, so the attach is still refused', async () => {
+    // A hostname bound to another Worker on a page the read never reached would
+    // read as free, and the PUT that follows would re-point it: the conflict
+    // check has to page for the same reason the routed set does.
+    const { calls, fn } = accessFetch({ domainsList: { success: true, result: [] } });
+    const filler = Array.from({ length: 100 }, (_, i) => ({
+      id: 'dom-other-' + i,
+      hostname: 'other-' + i + '.example.com',
+      service: 'other-script',
+    }));
+    const theirs = { id: 'dom-theirs', hostname: 'app.example.com', service: 'other-script' };
+    const paged = vi.fn(async (url: string, init?: RequestInit) => {
+      const method = (init?.method || 'GET').toUpperCase();
+      if (method === 'GET' && /\/workers\/domains\?hostname=/.test(url)) {
+        calls.push([url, init]);
+        const page = Number(new URL(url).searchParams.get('page'));
+        if (page === 1) return jsonResponse({ success: true, result: filler });
+        if (page === 2) return jsonResponse({ success: true, result: [theirs] });
+        return jsonResponse({ success: true, result: [] });
+      }
+      return fn(url, init);
+    });
+    vi.stubGlobal('fetch', paged);
+    const onBeforeAttach = vi.fn();
+    await expect(
+      deployToCloudflareWorkers({
+        ...base,
+        access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } },
+        customDomain: { hostname: 'app.example.com', zoneId: 'zone-1' },
+        onBeforeAttach,
+      }),
+    ).rejects.toMatchObject({ name: 'DeployError', code: 'CFW_DOMAIN_CONFLICT', status: 409 });
+    expect(calls.some((c) => c[0].includes('/workers/domains?hostname=app.example.com&page=2'))).toBe(true);
+    expect(calls.some((c) => c[1]?.method === 'PUT' && c[0].endsWith('/workers/domains'))).toBe(false);
     expect(onBeforeAttach).not.toHaveBeenCalled();
   });
 
@@ -1683,6 +1758,26 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
     expect(calls.some((c) => c[0].includes('/access/apps/') && c[1]?.method === 'DELETE')).toBe(false);
     const steps = (out.providerMetadata?.steps ?? []) as Array<{ name: string; detail?: string }>;
     expect(steps).toContainEqual({ name: 'access-app-prior-retained', status: 'done', detail: 'app-old' });
+    // The id is the only handle OpenDesign has on an app it created: a step-log
+    // string is not something a later deploy or the UI can read back, so the
+    // record carries it under its own key — never as `accessAppId`, which would
+    // report THIS Worker as protected by an app guarding another one.
+    expect(out.providerMetadata).toMatchObject({ accessProtected: true, accessAppId: 'app-123' });
+    expect(retainedAccessAppIdsFromMetadata(out.providerMetadata)).toEqual(['app-old']);
+  });
+
+  it('keeps a retained app id on the record with Access off, so a later deploy can still retire it', async () => {
+    const { calls, fn } = accessFetch({
+      accessGet: { success: true, result: { id: 'app-old', destinations: [{ type: 'worker', worker_id: 'tag-other' }] } },
+    });
+    vi.stubGlobal('fetch', fn);
+    const out = await deployToCloudflareWorkers({ ...base, access: { enabled: false }, priorAccessAppId: 'app-old' });
+    // Retained, so nothing was deleted and nothing reports this Worker gated …
+    expect(calls.some((c) => c[0].includes('/access/apps/') && c[1]?.method === 'DELETE')).toBe(false);
+    expect(out.providerMetadata?.accessAppId).toBeUndefined();
+    expect(out.providerMetadata?.retiredAccessAppId).toBeUndefined();
+    // … and the handle survives on the record instead of only in the step log.
+    expect(retainedAccessAppIdsFromMetadata(out.providerMetadata)).toEqual(['app-old']);
   });
 
   it('adopts an existing app carrying the OpenDesign name when no app id was recorded (failed first deploy)', async () => {
@@ -2121,10 +2216,16 @@ describe('cloudflare access check-link classification', () => {
     expect(result.status).toBeUndefined();
   });
 
-  it('recognizes the Access login page body', () => {
-    const resp = new Response('<html>Cloudflare Access</html>', { status: 401 });
-    expect(isCloudflareAccessProtectedResponse(resp, '<html>Cloudflare Access login</html>')).toBe(true);
-    expect(isCloudflareAccessProtectedResponse(new Response('ok'), 'plain page')).toBe(false);
+  it('never reads a response BODY as Access evidence', () => {
+    // The body is written by whatever answered the probe. For the Access
+    // perimeter that is the deploy's own Worker, so a page that merely says
+    // "Cloudflare Access" would verify its own gate.
+    const bodyOnly = new Response('<html>Cloudflare Access login</html>', { status: 401 });
+    expect(isCloudflareAccessChallengeResponse(bodyOnly)).toBe(false);
+    // Evidence the edge leaves in the HEADERS is what counts.
+    const stamped = new Response('', { status: 403, headers: { 'cf-mitigated': 'challenge' } });
+    expect(isCloudflareAccessChallengeResponse(stamped)).toBe(true);
+    expect(isCloudflareAccessChallengeResponse(new Response('ok'))).toBe(false);
   });
 
   it('does not report a shared-probe 401 as Access-protected on body text alone', async () => {
@@ -2299,16 +2400,30 @@ describe('verifyCloudflareAccessPerimeter', () => {
     }
   });
 
-  it('reads the body of a 401/403: the Access login page is the gate, a bare refusal is not', async () => {
-    const login = vi.fn(async () => new Response('<html><title>Cloudflare Access</title></html>', { status: 403 }));
-    vi.stubGlobal('fetch', login);
+  it('verifies a 401/403 on EDGE evidence only, never on the body the app served', async () => {
+    // The deployed app's own 403 page proves nothing: it came from the Worker
+    // this probe is trying to prove is gated, and an ungated URL would be
+    // reported protected.
+    const ownPage = vi.fn(async () => new Response('<html><title>Cloudflare Access</title></html>', { status: 403 }));
+    vi.stubGlobal('fetch', ownPage);
+    const bodyOnly = await verifyCloudflareAccessPerimeter(['https://a.example.com'], {});
+    expect(bodyOnly.outcome).toBe('unreachable');
+    expect(bodyOnly.outcome === 'unreachable' && bodyOnly.error.code).toBe('CFW_ACCESS_UNVERIFIED');
+    // The edge's own challenge stamp is evidence.
+    const stamped = vi.fn(async () => new Response('', { status: 403, headers: { 'cf-mitigated': 'challenge' } }));
+    vi.stubGlobal('fetch', stamped);
     expect((await verifyCloudflareAccessPerimeter(['https://a.example.com'], {})).outcome).toBe('protected');
+    // The Access cookie jar is evidence too …
+    const cookie = vi.fn(async () => new Response('', { status: 401, headers: { 'set-cookie': 'CF_Authorization=tok; Path=/' } }));
+    vi.stubGlobal('fetch', cookie);
+    expect((await verifyCloudflareAccessPerimeter(['https://a.example.com'], {})).outcome).toBe('protected');
+    // … and a bare refusal still proves neither question.
     const bare = vi.fn(async () => new Response('forbidden', { status: 401 }));
     vi.stubGlobal('fetch', bare);
     expect((await verifyCloudflareAccessPerimeter(['https://a.example.com'], {})).outcome).toBe('unreachable');
   });
 
-  it('probes with GET, without following redirects, so the challenge body is readable', async () => {
+  it('probes with GET, without following redirects, so the edge challenge is what answers', async () => {
     const seen: Array<RequestInit | undefined> = [];
     const fn = vi.fn(async (_url: string, init?: RequestInit) => { seen.push(init); return accessRedirect(); });
     vi.stubGlobal('fetch', fn);
@@ -2351,7 +2466,7 @@ describe('Cloudflare Access redirect detection', () => {
     expect(isCloudflareAccessRedirect(302, '')).toBe(false);
     expect(isCloudflareAccessRedirect(200, 'https://acct-test.cloudflareaccess.com/cdn-cgi/access/login')).toBe(false);
     const evil = new Response('', { status: 401, headers: { location: 'https://evil.example/?cloudflareaccess.com' } });
-    expect(isCloudflareAccessProtectedResponse(evil, '')).toBe(false);
+    expect(isCloudflareAccessChallengeResponse(evil)).toBe(false);
   });
 
   it('a redirect to a non-Access host that merely mentions cloudflareaccess.com does not verify the perimeter', async () => {

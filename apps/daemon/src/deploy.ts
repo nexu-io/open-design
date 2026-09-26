@@ -137,33 +137,33 @@ export function isCloudflareAccessRedirect(status: number, location: string): bo
   return isCloudflareAccessUrl(location);
 }
 
-export function isCloudflareAccessProtectedResponse(resp: Response, body = '') {
-  const location = resp.headers?.get?.('location') || '';
-  const text = String(body || '');
-  return (
-    isCloudflareAccessUrl(location) ||
-    /cloudflare access/i.test(text) ||
-    /cf-access-login/i.test(text)
-  );
-}
-
-/** Header-only Cloudflare Access evidence, for the SHARED deploy-URL probe
- * (requestDeploymentUrl). Deliberately not isCloudflareAccessProtectedResponse:
- * that one also accepts body text matching /cloudflare access/i, which proves
- * nothing when the probed URL may belong to ANY provider. The shared probe
- * serves Vercel, Pages and Workers alike, so a Vercel 401 whose error page
- * merely mentions "Cloudflare Access" would be reported as an Access-gated
+/** Cloudflare's EDGE answering a request, from the response headers alone —
+ * never the body. There are exactly three kinds of evidence: the Access login
+ * location, the Access cookie jar, and the edge's own `cf-mitigated` challenge
+ * stamp.
+ *
+ * The body is deliberately not read. A 401/403 body is written by whatever
+ * answered the probe, and for the Access perimeter assertion that is the
+ * deploy's OWN Worker: an app whose 403 happens to contain the words
+ * "Cloudflare Access" made verifyCloudflareAccessPerimeter report the URL as
+ * gated while it was served ungated. Body text proves a string, not a gate.
+ *
+ * `cf-mitigated` is stamped by Cloudflare's edge when it serves a managed
+ * challenge, and is matched as a word so a value that merely contains it
+ * elsewhere is not evidence.
+ *
+ * Used by the SHARED deploy-URL probe (requestDeploymentUrl), which serves
+ * Vercel, Pages and Workers alike: a response that only mentions "Cloudflare
+ * Access" in its body would otherwise be reported as an Access-gated
  * deployment — the record is stamped protected, the user is told to sign in to
  * an Access app that does not exist, and the deployment's real protection
- * (Vercel Deployment Protection) is never named. Body text stays where the
- * probed endpoint IS Cloudflare: verifyCloudflareAccessPerimeter, which only
- * ever probes a Worker's own hostname. What counts here is evidence only Access
- * emits — its login location, or its cookie jar. */
+ * (Vercel Deployment Protection) is never named. */
 export function isCloudflareAccessChallengeResponse(resp: Response): boolean {
   const location = resp.headers?.get?.('location') || '';
   if (isCloudflareAccessUrl(location)) return true;
   const setCookie = resp.headers?.get?.('set-cookie') || '';
-  return /cf[-_]access/i.test(setCookie) || /cf_authorization/i.test(setCookie);
+  if (/cf[-_]access/i.test(setCookie) || /cf_authorization/i.test(setCookie)) return true;
+  return /\bchallenge\b/i.test(resp.headers?.get?.('cf-mitigated') || '');
 }
 
 export class DeployError extends Error {

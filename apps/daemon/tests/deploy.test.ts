@@ -2653,6 +2653,45 @@ describe('deployment db: Cloudflare Workers public info', () => {
     }
   });
 
+  it('lifts the Access app ids a deploy RETAINED, so the client can still name an app OpenDesign owns', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'od-deployment-workers-retained-'));
+    const db = openDatabase(root, { dataDir: path.join(root, '.od') });
+    try {
+      insertProject(db, { id: 'project-1', name: 'Project 1', skillId: null, designSystemId: null, createdAt: 1, updatedAt: 1 });
+      const saved = upsertDeployment(db, {
+        id: 'deployment-1',
+        projectId: 'project-1',
+        fileName: 'index.html',
+        providerId: WORKERS,
+        url: 'https://my-site.acct.workers.dev',
+        deploymentId: 'my-site',
+        deploymentCount: 1,
+        target: 'production',
+        status: 'ready',
+        providerMetadata: {
+          scriptName: 'my-site',
+          accessProtected: true,
+          accessAppId: 'app-new',
+          retainedAccessAppIds: ['app-old'],
+          steps: [],
+        },
+        createdAt: 1,
+        updatedAt: 2,
+      });
+      // providerMetadata is stripped from every deployment response, so a key
+      // the public projection does not name never leaves the daemon: the
+      // retained id would be persisted and still invisible to the client.
+      expect(saved?.cloudflareWorkers).toMatchObject({ accessAppId: 'app-new', retainedAccessAppIds: ['app-old'] });
+      const loaded = getDeployment(db, 'project-1', 'index.html', WORKERS);
+      expect(publicDeployment(loaded!)).toMatchObject({
+        cloudflareWorkers: { accessAppId: 'app-new', retainedAccessAppIds: ['app-old'] },
+      });
+    } finally {
+      closeDatabase();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('folds a typed cloudflareWorkers input into the JSON column and never lifts it for other providers', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'od-deployment-workers-db-fold-'));
     const db = openDatabase(root, { dataDir: path.join(root, '.od') });

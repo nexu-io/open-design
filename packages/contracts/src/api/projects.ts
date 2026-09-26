@@ -982,6 +982,11 @@ export interface CloudflareWorkersDeployCheck {
 export interface CloudflareWorkersDeploymentInfo {
   accessProtected?: boolean;
   accessAppId?: string;
+  /** Access apps OpenDesign created that this deploy RETAINED because they
+   * still guard the Worker a script-name change moved away from. Deliberately
+   * not folded into `accessAppId`: they do not protect THIS Worker. They are
+   * the handles the UI can surface and a later Access-off retires. */
+  retainedAccessAppIds?: string[];
   createdByOpenDesign?: boolean;
   customDomain?: { hostname: string; url: string };
   steps?: CloudflareWorkersDeployStep[];
