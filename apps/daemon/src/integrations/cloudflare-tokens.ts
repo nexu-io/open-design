@@ -57,6 +57,9 @@ export interface StoredCloudflareOAuthToken {
   generation: number;
   /** Wall-clock epoch ms when this record was first persisted. */
   savedAt: number;
+  /** Times a revoke of THIS record (used as a pendingRevokes handle) was
+   * refused with a definitive client error. Present only on handles. */
+  revokeRefusals?: number;
 }
 
 export interface CloudflareOAuthTokensFile {
@@ -202,6 +205,9 @@ function sanitizeToken(raw: unknown): StoredCloudflareOAuthToken | null {
   if (redirectUri) out.redirectUri = redirectUri;
   if (email) out.email = email;
   if (expiresAt !== undefined) out.expiresAt = expiresAt;
+  if (typeof raw.revokeRefusals === 'number' && Number.isFinite(raw.revokeRefusals) && raw.revokeRefusals > 0) {
+    out.revokeRefusals = raw.revokeRefusals;
+  }
   return out;
 }
 
@@ -719,6 +725,31 @@ export async function getPendingCloudflareOAuthRevokes(
 ): Promise<StoredCloudflareOAuthToken[]> {
   const file = await readCloudflareOAuthTokensFile(dataDir);
   return file.pendingRevokes ?? [];
+}
+
+/** Increment the definitive-refusal counter on one pending revoke handle and
+ * return the new count. A definitive client error (400/401) never changes on
+ * retry, so a handle that keeps getting one is retired after a bounded number
+ * of refusals instead of retried on every OAuth mutation forever. Only the
+ * counter moves: the credential and file generation survive byte-identical. */
+export async function noteCloudflareOAuthRevokeRefusal(
+  dataDir: string,
+  token: string,
+): Promise<number> {
+  return withLock(dataDir, async () => {
+    const file = await readCloudflareOAuthTokensFile(dataDir);
+    const pending = file.pendingRevokes ?? [];
+    const handle = pending.find((entry) => (entry.refreshToken || entry.accessToken) === token);
+    if (!handle) return 0;
+    const refusals = (handle.revokeRefusals ?? 0) + 1;
+    handle.revokeRefusals = refusals;
+    await writeTokensFile(dataDir, {
+      ...(file.token ? { token: file.token } : {}),
+      ...(file.lastGeneration !== undefined ? { lastGeneration: file.lastGeneration } : {}),
+      ...(pending.length > 0 ? { pendingRevokes: pending } : {}),
+    });
+    return refusals;
+  });
 }
 
 /** Record a grant nobody holds as a revoke handle, in one locked write that

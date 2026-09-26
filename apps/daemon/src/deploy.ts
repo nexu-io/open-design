@@ -16,6 +16,7 @@ import {
   getCloudflareOAuthToken,
   getPendingCloudflareOAuthRevokes,
   isCloudflareOAuthTokenExpired,
+  noteCloudflareOAuthRevokeRefusal,
   recordPendingCloudflareOAuthRevoke,
   restoreCloudflareOAuthTokenAndDropRevokes,
   setCloudflareOAuthTokenIfGenerationMatches,
@@ -1354,9 +1355,9 @@ const CLOUDFLARE_OAUTH_REVOKE_TIMEOUT_MS = 10_000;
 async function revokeClearedCloudflareGrant(
   displaced: StoredCloudflareOAuthToken,
   fallbackClientId?: string,
-): Promise<boolean> {
+): Promise<{ ok: boolean; status: number }> {
   const token = displaced.refreshToken || displaced.accessToken;
-  if (!token) return true;
+  if (!token) return { ok: true, status: 0 };
   const clientId = (displaced.clientId ?? '').trim() || (fallbackClientId ?? '').trim();
   const proxyDispatcher = proxyDispatcherRequestInit(process.env);
   try {
@@ -1367,15 +1368,16 @@ async function revokeClearedCloudflareGrant(
       fetchImpl: (input, init) => fetch(input, { ...init, ...proxyDispatcher.requestInit }),
       signal: AbortSignal.timeout(CLOUDFLARE_OAUTH_REVOKE_TIMEOUT_MS),
     });
-    // A non-2xx is NOT the answer the handle was recorded for. Returning true
-    // for one erased the only record of a grant that is still live — on a 503
-    // the handle was dropped and the refresh token stayed valid with nothing
-    // left anywhere that named it. The handle stays unless Cloudflare said 2xx.
+    // A non-2xx is NOT the answer the handle was recorded for. Returning ok for
+    // one erased the only record of a grant that is still live — on a 503 the
+    // handle was dropped and the refresh token stayed valid with nothing left
+    // anywhere that named it. The handle stays unless Cloudflare said 2xx (the
+    // settle loop retires a definitive-4xx handle after a bounded refusal count).
     if (!ok) console.warn(`[cloudflare-oauth] revoke of the displaced OAuth grant was refused by Cloudflare (HTTP ${status})`);
-    return ok;
+    return { ok, status };
   } catch (err: unknown) {
     console.warn('[cloudflare-oauth] revoke of the displaced OAuth grant failed:', err instanceof Error ? err.message : String(err));
-    return false;
+    return { ok: false, status: 0 };
   } finally {
     await proxyDispatcher.close();
   }
@@ -1416,6 +1418,12 @@ async function dropCloudflareGrantRevokeHandle(displaced: StoredCloudflareOAuthT
  * that is not a 2xx — stays on disk for the next mutation, and nothing here
  * throws; the mutation it runs ahead of is the caller's business, not this
  * debt's. */
+/** Definitive client-error refusals a revoke handle is allowed before it is
+ * retired. RFC 7009 §2.2.1 client errors (invalid_client, invalid_request) do not
+ * change on retry, so a handle that keeps getting one is dropped after this many
+ * instead of paying a 10s round-trip on every OAuth mutation forever. */
+const CLOUDFLARE_OAUTH_REVOKE_MAX_REFUSALS = 3;
+
 export async function settlePendingCloudflareOAuthGrantRevokes(
   fallbackClientId?: string,
 ): Promise<void> {
@@ -1433,9 +1441,23 @@ export async function settlePendingCloudflareOAuthGrantRevokes(
   if (pending.length === 0) return;
   const settled: string[] = [];
   for (const handle of pending) {
-    if (await revokeClearedCloudflareGrant(handle, fallbackClientId)) {
-      const token = handle.refreshToken || handle.accessToken;
+    const result = await revokeClearedCloudflareGrant(handle, fallbackClientId);
+    const token = handle.refreshToken || handle.accessToken;
+    if (result.ok) {
       if (token) settled.push(token);
+    } else if (result.status === 400 || result.status === 401) {
+      // A definitive client error (invalid_client / invalid_request) never
+      // changes on retry. Retire the handle after a bounded number of refusals
+      // instead of paying a 10s revoke round-trip on every OAuth mutation for a
+      // token that can never be revoked this way. 429/5xx/transport keep
+      // retrying.
+      const refusals = token
+        ? await noteCloudflareOAuthRevokeRefusal(dataDir, token).catch(() => 0)
+        : 0;
+      if (refusals >= CLOUDFLARE_OAUTH_REVOKE_MAX_REFUSALS) {
+        console.error(`[cloudflare-oauth] retiring an unretirable OAuth revoke handle (HTTP ${result.status}) after ${refusals} refusals`);
+        if (token) settled.push(token);
+      }
     }
   }
   if (settled.length === 0) return;
@@ -1606,7 +1628,7 @@ async function refreshCloudflareOAuthAccessToken(
         err instanceof Error ? err.message : String(err),
       );
     }
-    if (await revokeClearedCloudflareGrant(rotated, clientId)) await dropCloudflareGrantRevokeHandle(rotated);
+    if ((await revokeClearedCloudflareGrant(rotated, clientId)).ok) await dropCloudflareGrantRevokeHandle(rotated);
     const latest = await getCloudflareOAuthToken(dataDir);
     if (latest && !isCloudflareOAuthTokenExpired(latest, Date.now(), CLOUDFLARE_OAUTH_EXPIRY_SKEW_MS)) {
       // A reconnect wrote a newer, still-valid credential — adopt it rather
