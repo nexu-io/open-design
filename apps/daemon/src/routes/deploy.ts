@@ -373,6 +373,20 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
           return false;
         }
       });
+    // `prior` is the same (project, file) record; it counts for exposure and
+    // hostname ownership only when it still names THIS script. After a scriptName
+    // change its exposure and owned hostnames belong to the old Worker and must not
+    // be merged into (or withdrawn for) the new one. accessAppId/customDomain stay
+    // record-scoped and are taken regardless.
+    const priorMatchesScript = prior
+      ? (() => {
+          try {
+            return workersRecordScriptName(prior, input.configuredScriptName) === input.scriptName;
+          } catch {
+            return false;
+          }
+        })()
+      : false;
     const records: Array<{ providerMetadata?: any }> = prior ? [prior, ...siblings] : siblings;
     let priorAccessAppId: string | undefined;
     let priorCustomDomain: Record<string, unknown> | undefined;
@@ -386,14 +400,17 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
         priorAccessAppId = metadata.accessAppId;
       }
       if (!priorCustomDomain) priorCustomDomain = recordedCustomDomainFromMetadata(metadata);
-      if (!priorUnverifiedExposure) priorUnverifiedExposure = unverifiedExposureFromMetadata(metadata);
-      for (const owned of ownedCustomDomainsFromMetadata(metadata)) {
-        if (!priorOwnedCustomDomains.some((have) => have.hostname === owned.hostname && have.id === owned.id)) {
-          priorOwnedCustomDomains.push(owned);
+      const scriptScoped = record !== prior || priorMatchesScript;
+      if (scriptScoped) {
+        if (!priorUnverifiedExposure) priorUnverifiedExposure = unverifiedExposureFromMetadata(metadata);
+        for (const owned of ownedCustomDomainsFromMetadata(metadata)) {
+          if (!priorOwnedCustomDomains.some((have) => have.hostname === owned.hostname && have.id === owned.id)) {
+            priorOwnedCustomDomains.push(owned);
+          }
         }
-      }
-      for (const pending of pendingCustomDomainsFromMetadata(metadata)) {
-        if (!priorPendingCustomDomains.includes(pending)) priorPendingCustomDomains.push(pending);
+        for (const pending of pendingCustomDomainsFromMetadata(metadata)) {
+          if (!priorPendingCustomDomains.includes(pending)) priorPendingCustomDomains.push(pending);
+        }
       }
       for (const retained of retainedAccessAppIdsFromMetadata(metadata)) {
         if (!priorRetainedAccessAppIds.includes(retained)) priorRetainedAccessAppIds.push(retained);

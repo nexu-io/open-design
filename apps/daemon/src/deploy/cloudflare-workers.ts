@@ -1677,6 +1677,11 @@ export function mergeUnverifiedExposure(
   prior: CloudflareUnverifiedExposure | undefined,
   own: CloudflareUnverifiedExposure,
 ): CloudflareUnverifiedExposure {
+  // A prior exposure for a DIFFERENT script is not this script's to merge or
+  // withdraw: stamping own.scriptName over it would relabel A's public route as
+  // B's and make the next check-link withdraw the wrong Worker. Return own
+  // unchanged; the caller re-homes A's exposure onto a record of that script.
+  if (prior && prior.scriptName !== own.scriptName) return own;
   const merged: CloudflareUnverifiedExposure = { scriptName: own.scriptName };
   if (prior?.subdomainEnabledByThisRun || own.subdomainEnabledByThisRun) merged.subdomainEnabledByThisRun = true;
   if (prior?.previewsEnabledByThisRun || own.previewsEnabledByThisRun) merged.previewsEnabledByThisRun = true;
