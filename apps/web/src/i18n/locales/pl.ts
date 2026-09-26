@@ -3537,6 +3537,7 @@ export const pl: Dict = {
   'fileViewer.deployLinkProtectedLabel': 'Ochrona wdrożenia włączona',
   'fileViewer.deployLinkProtected': 'Strona została wdrożona, ale ten link podglądu wymaga uwierzytelnienia. Wyłącz Deployment Protection albo użyj własnej domeny.',
   'fileViewer.retryLink': 'Ponów teraz',
+  'fileViewer.deployAccessUnverified': 'Wdrożono, ale OpenDesign nie mógł potwierdzić, że Cloudflare Access chroni ten link. Sprawdź ustawienia Access, zanim go udostępnisz.',
   'questionForm.submit': 'Wyślij',
   'questionForm.skip': 'Pomiń',
   'questionForm.locked': 'Odpowiedziano',

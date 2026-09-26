@@ -3740,6 +3740,7 @@ export const zhTW: Dict = {
   "fileViewer.deployLinkProtected":
     "站點已部署，但此預覽連結要求登入後才能存取。請關閉 Deployment Protection 或使用自訂網域。",
   "fileViewer.retryLink": "立即重試",
+  "fileViewer.deployAccessUnverified": "站點已部署，但 OpenDesign 無法確認此連結是否受 Cloudflare Access 保護。分享前請檢查 Access 設定。",
   "questionForm.submit": "提交",
   "questionForm.skip": "跳過",
   "questionForm.locked": "已回答",

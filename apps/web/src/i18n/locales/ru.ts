@@ -3537,6 +3537,7 @@ export const ru: Dict = {
   'fileViewer.deployLinkProtectedLabel': 'Защита развёртывания включена',
   'fileViewer.deployLinkProtected': 'Сайт развёрнут, но эта ссылка предпросмотра требует аутентификации. Отключите Deployment Protection или используйте собственный домен.',
   'fileViewer.retryLink': 'Повторить',
+  'fileViewer.deployAccessUnverified': 'Развёрнуто, но OpenDesign не удалось подтвердить, что этот адрес защищён Cloudflare Access. Проверьте настройки Access, прежде чем делиться ссылкой.',
   'questionForm.submit': 'Отправить',
   'questionForm.skip': 'Пропустить',
   'questionForm.locked': 'Отвечено',

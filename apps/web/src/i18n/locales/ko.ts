@@ -3537,6 +3537,7 @@ export const ko: Dict = {
   'fileViewer.deployLinkProtectedLabel': '배포 보호가 활성화됨',
   'fileViewer.deployLinkProtected': '사이트가 배포되었지만 이 미리보기 링크에는 인증이 필요합니다. Deployment Protection을 끄거나 사용자 지정 도메인을 사용하세요.',
   'fileViewer.retryLink': '지금 다시 시도',
+  'fileViewer.deployAccessUnverified': '배포되었지만 OpenDesign이 이 링크가 Cloudflare Access로 보호되는지 확인하지 못했습니다. 공유하기 전에 Access 설정을 확인하세요.',
   'questionForm.submit': '제출',
   'questionForm.skip': '건너뛰기',
   'questionForm.locked': '답변됨',

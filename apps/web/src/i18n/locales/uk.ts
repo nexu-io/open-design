@@ -3537,6 +3537,7 @@ export const uk: Dict = {
   'fileViewer.deployLinkProtectedLabel': 'Захист розгортання ввімкнено',
   'fileViewer.deployLinkProtected': 'Сайт розгорнуто, але це посилання попереднього перегляду вимагає автентифікації. Вимкніть Deployment Protection або використайте власний домен.',
   'fileViewer.retryLink': 'Повторити зараз',
+  'fileViewer.deployAccessUnverified': 'Розгорнуто, але OpenDesign не зміг підтвердити, що це посилання захищене Cloudflare Access. Перевірте налаштування Access, перш ніж ділитися ним.',
   'questionForm.submit': 'Надіслати',
   'questionForm.skip': 'Пропустити',
   'questionForm.locked': 'Відповідь дано',

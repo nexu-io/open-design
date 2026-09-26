@@ -3537,6 +3537,7 @@ export const id: Dict = {
   'fileViewer.deployLinkProtectedLabel': 'Deployment dilindungi',
   'fileViewer.deployLinkProtected': 'Vercel meminta autentikasi untuk membuka link ini.',
   'fileViewer.retryLink': 'Coba link lagi',
+  'fileViewer.deployAccessUnverified': 'Berhasil diterapkan, tetapi OpenDesign tidak dapat memastikan bahwa Cloudflare Access melindungi tautan ini. Periksa pengaturan Access sebelum membagikannya.',
   'questionForm.submit': 'Kirim',
   'questionForm.skip': 'Lewati',
   'questionForm.locked': 'Terkunci',

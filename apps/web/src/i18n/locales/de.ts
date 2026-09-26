@@ -3537,6 +3537,7 @@ export const de: Dict = {
   'fileViewer.deployLinkProtectedLabel': 'Deployment-Schutz aktiviert',
   'fileViewer.deployLinkProtected': 'Die Seite wurde deployt, aber dieser Vorschau-Link erfordert eine Anmeldung. Deaktiviere Deployment Protection oder nutze eine eigene Domain.',
   'fileViewer.retryLink': 'Jetzt erneut versuchen',
+  'fileViewer.deployAccessUnverified': 'Bereitgestellt, aber OpenDesign konnte nicht bestätigen, dass Cloudflare Access diesen Link schützt. Prüfe deine Access-Einstellungen, bevor du ihn teilst.',
   'questionForm.submit': 'Absenden',
   'questionForm.skip': 'Überspringen',
   'questionForm.locked': 'Beantwortet',

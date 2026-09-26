@@ -3730,6 +3730,7 @@ export const zhCN: Dict = {
   "fileViewer.deployLinkProtected":
     "站点已部署，但此预览链接要求登录后才能访问。请关闭 Deployment Protection 或使用自定义域名。",
   "fileViewer.retryLink": "立即重试",
+  "fileViewer.deployAccessUnverified": "站点已部署，但 OpenDesign 无法确认此链接是否受 Cloudflare Access 保护。分享前请检查 Access 设置。",
   "questionForm.submit": "提交",
   "questionForm.skip": "跳过",
   "questionForm.locked": "已回答",

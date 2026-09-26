@@ -3537,6 +3537,7 @@ export const ja: Dict = {
   'fileViewer.deployLinkProtectedLabel': 'デプロイ保護が有効',
   'fileViewer.deployLinkProtected': 'サイトはデプロイされましたが、このプレビューリンクには認証が必要です。Deployment Protection を無効にするか、カスタムドメインを使用してください。',
   'fileViewer.retryLink': '今すぐ再試行',
+  'fileViewer.deployAccessUnverified': 'デプロイは完了しましたが、OpenDesign はこのリンクが Cloudflare Access で保護されていることを確認できませんでした。共有する前に Access の設定を確認してください。',
   'questionForm.submit': '送信',
   'questionForm.skip': 'スキップ',
   'questionForm.locked': '回答済み',

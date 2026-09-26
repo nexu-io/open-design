@@ -4462,6 +4462,7 @@ export interface Dict {
   'fileViewer.deployLinkProtectedLabel': string;
   'fileViewer.deployLinkProtected': string;
   'fileViewer.retryLink': string;
+  'fileViewer.deployAccessUnverified': string;
 
   // Question form (assistant question UX)
   'questionForm.submit': string;

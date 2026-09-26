@@ -3537,6 +3537,7 @@ export const ptBR: Dict = {
   'fileViewer.deployLinkProtectedLabel': 'Proteção da implantação ativada',
   'fileViewer.deployLinkProtected': 'O site foi implantado, mas este link de prévia exige autenticação. Desative Deployment Protection ou use um domínio personalizado.',
   'fileViewer.retryLink': 'Tentar novamente agora',
+  'fileViewer.deployAccessUnverified': 'Implantado, mas o OpenDesign não conseguiu verificar se o Cloudflare Access protege este link. Verifique as configurações do Access antes de compartilhá-lo.',
   'questionForm.submit': 'Enviar',
   'questionForm.skip': 'Pular',
   'questionForm.locked': 'Respondido',

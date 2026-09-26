@@ -3537,6 +3537,7 @@ export const it: Dict = {
   'fileViewer.deployLinkProtectedLabel': 'Protezione della distribuzione attivata',
   'fileViewer.deployLinkProtected': 'Il sito è distribuito, ma questo link di anteprima richiede autenticazione. Disattiva Deployment Protection o usa un dominio personalizzato.',
   'fileViewer.retryLink': 'Riprova ora',
+  'fileViewer.deployAccessUnverified': 'Pubblicato, ma OpenDesign non ha potuto verificare che Cloudflare Access protegga questo link. Controlla le impostazioni di Access prima di condividerlo.',
   'questionForm.submit': 'Invia',
   'questionForm.skip': 'Salta',
   'questionForm.locked': 'Risposto',

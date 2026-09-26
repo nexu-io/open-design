@@ -3537,6 +3537,7 @@ export const tr: Dict = {
   'fileViewer.deployLinkProtectedLabel': 'Yayın koruması etkin',
   'fileViewer.deployLinkProtected': 'Site yayınlandı, ancak bu önizleme bağlantısı kimlik doğrulaması istiyor. Deployment Protection’ı kapatın veya özel alan adı kullanın.',
   'fileViewer.retryLink': 'Şimdi yeniden dene',
+  'fileViewer.deployAccessUnverified': 'Dağıtıldı, ancak OpenDesign bu bağlantının Cloudflare Access ile korunduğunu doğrulayamadı. Paylaşmadan önce Access ayarlarını kontrol edin.',
   'questionForm.submit': 'Gönder',
   'questionForm.skip': 'Atla',
   'questionForm.locked': 'Cevaplandı',

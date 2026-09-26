@@ -3537,6 +3537,7 @@ export const ar: Dict = {
   'fileViewer.deployLinkProtectedLabel': 'حماية النشر مفعلة',
   'fileViewer.deployLinkProtected': 'تم نشر الموقع، لكن رابط المعاينة هذا يتطلب المصادقة. عطّل Deployment Protection أو استخدم نطاقاً مخصصاً.',
   'fileViewer.retryLink': 'إعادة المحاولة الآن',
+  'fileViewer.deployAccessUnverified': 'تم النشر، لكن OpenDesign لم يتمكن من التحقق من أن Cloudflare Access يحمي هذا الرابط. تحقق من إعدادات Access قبل مشاركته.',
   'questionForm.submit': 'إرسال',
   'questionForm.skip': 'تخطي',
   'questionForm.locked': 'تمت الإجابة',

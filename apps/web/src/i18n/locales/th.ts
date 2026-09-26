@@ -3537,6 +3537,7 @@ export const th: Dict = {
   'fileViewer.deployLinkProtectedLabel': 'ใส่ตัวยืนยันและปกป้องให้กับการข้ามระบบไว้',
   'fileViewer.deployLinkProtected': 'ถึงจะเอาเว็บเข้าไปไว้ให้แล้วแต่การให้ดูตัวอย่างยังเข้ายาก ปลดรหัสความปลอดภัยเข้าออกที หรือสลับเป็นแบบ Custom',
   'fileViewer.retryLink': 'เข้ากดรีโหลดซ้ำหน่อย',
+  'fileViewer.deployAccessUnverified': 'ปรับใช้แล้ว แต่ OpenDesign ยืนยันไม่ได้ว่า Cloudflare Access กำลังป้องกันลิงก์นี้ ตรวจสอบการตั้งค่า Access ก่อนแชร์',
   'questionForm.submit': 'ส่งผ่าน',
   'questionForm.skip': 'ข้ามตัวนี้',
   'questionForm.locked': 'สำเร็จตอบไปแล้ว',

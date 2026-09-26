@@ -9,6 +9,7 @@ import { findRealTagOffset, HTML_TAG_PATTERNS } from '@open-design/contracts/run
 import { proxyDispatcherRequestInit } from './connectionTest.js';
 import { refreshCloudflareToken, revokeCloudflareToken, validateCloudflareOAuthScopes } from './integrations/cloudflare-oauth.js';
 import {
+  clearCloudflareOAuthToken,
   fsyncDirectory,
   getCloudflareOAuthToken,
   isCloudflareOAuthTokenExpired,
@@ -602,6 +603,20 @@ export async function writeCloudflareWorkersConfig(input: Partial<DeployConfig>)
   if (next.access?.enabled && !next.access.rule) {
     throw new DeployError('Cloudflare Access is enabled but has no rule — add an email, domain, or policy.', 400, undefined, 'CFW_ACCESS_EMPTY_RULE');
   }
+  // Switching the authority from oauth to a static token is a credential
+  // TRANSITION, not a config edit: the grant being left behind is the only
+  // thing that can still mint access tokens, and nothing else would ever
+  // revoke it — the refresh token stays valid on Cloudflare's side while
+  // /auth/status keeps reporting the profile as connected, long after the
+  // deploys stopped using it. The clear runs BEFORE the mode write, the order
+  // disconnect uses, so the read-time derivation (liveCloudflareOAuthGrant)
+  // is never handed a live grant it would re-assert as oauth on the next read.
+  // It runs after the validations above, so a refused save never revokes a
+  // grant it did not leave.
+  if (input?.credentialMode === 'token' && current.credentialMode === 'oauth') {
+    const displaced = await clearCloudflareOAuthToken(cloudflareOAuthTokensDir());
+    if (displaced) await revokeClearedCloudflareGrant(displaced, next.clientId);
+  }
   await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), next);
   return publicCloudflareWorkersConfig(next);
   });
@@ -876,6 +891,37 @@ async function revokeSupersededRefreshGrant(
     if (!ok) console.warn('[cloudflare-oauth] revoke of the superseded refresh grant refused by Cloudflare');
   } catch (err: unknown) {
     console.warn('[cloudflare-oauth] revoke of the superseded refresh grant failed:', err instanceof Error ? err.message : String(err));
+  } finally {
+    await proxyDispatcher.close();
+  }
+}
+
+/** Best-effort revoke of the grant a credential-mode transition just took off
+ * disk — the clear-then-revoke pair the disconnect route performs (see
+ * POST /api/cloudflare/oauth/disconnect). The displaced record's own clientId
+ * is authoritative (RFC 7009 §2.1: the revoke names the client the token was
+ * issued to); the config's is a fallback for a record written before the
+ * identity was recorded. Never throws: the grant is already off disk, and the
+ * mode the user chose does not depend on Cloudflare answering here. */
+async function revokeClearedCloudflareGrant(
+  displaced: StoredCloudflareOAuthToken,
+  fallbackClientId?: string,
+): Promise<void> {
+  const token = displaced.refreshToken || displaced.accessToken;
+  if (!token) return;
+  const clientId = (displaced.clientId ?? '').trim() || (fallbackClientId ?? '').trim();
+  const proxyDispatcher = proxyDispatcherRequestInit(process.env);
+  try {
+    const ok = await revokeCloudflareToken({
+      token,
+      tokenTypeHint: displaced.refreshToken ? 'refresh_token' : 'access_token',
+      ...(clientId ? { clientId } : {}),
+      fetchImpl: (input, init) => fetch(input, { ...init, ...proxyDispatcher.requestInit }),
+      signal: AbortSignal.timeout(CLOUDFLARE_OAUTH_REVOKE_TIMEOUT_MS),
+    });
+    if (!ok) console.warn('[cloudflare-oauth] revoke of the grant a token-mode switch displaced was refused by Cloudflare');
+  } catch (err: unknown) {
+    console.warn('[cloudflare-oauth] revoke of the grant a token-mode switch displaced failed:', err instanceof Error ? err.message : String(err));
   } finally {
     await proxyDispatcher.close();
   }

@@ -533,6 +533,29 @@ describe('FileViewer Workers deploy config (review regressions)', () => {
     expect(screen.getByText(/HTTP 503/)).toBeTruthy();
   });
 
+  it('renders the Access verdict as prose, never as the daemon code token', async () => {
+    // `check.detail` is a closed code the daemon reads back to recognize a
+    // retained exposure (isRetainedUnverifiedExposure) and the link check keys
+    // off the same value. Rendering it verbatim showed the user
+    // "CFW_ACCESS_UNVERIFIED" instead of what actually happened.
+    vi.stubGlobal('fetch', mockWorkersFetch({
+      deployResponse: {
+        cloudflareWorkers: {
+          accessProtected: true,
+          steps: [{ name: 'access-verify', status: 'error', detail: 'Could not reach https://demo.workers.dev' }],
+          check: { status: 502, ok: false, detail: 'CFW_ACCESS_UNVERIFIED' },
+        },
+      },
+    }));
+
+    await openWorkersDeployModal();
+    fireEvent.click(screen.getByTestId('cfw-deploy-button'));
+
+    await screen.findByTestId('cfw-deploy-steps');
+    expect(screen.queryByText(/CFW_ACCESS_UNVERIFIED/)).toBeNull();
+    expect(screen.getByText(/could not verify that Cloudflare Access is guarding this link/i)).toBeTruthy();
+  });
+
   it('keeps deploy enabled on an expired OAuth token the daemon can refresh, and disables it when it cannot', async () => {
     const oauthConfig = {
       credentialMode: 'oauth',

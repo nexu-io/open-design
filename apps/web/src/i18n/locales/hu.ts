@@ -3537,6 +3537,7 @@ export const hu: Dict = {
   'fileViewer.deployLinkProtectedLabel': 'Telepítési védelem bekapcsolva',
   'fileViewer.deployLinkProtected': 'A webhely telepítve van, de ez az előnézeti link hitelesítést kér. Kapcsold ki a Deployment Protectiont, vagy használj saját domaint.',
   'fileViewer.retryLink': 'Újra most',
+  'fileViewer.deployAccessUnverified': 'Telepítve, de az OpenDesign nem tudta ellenőrizni, hogy a Cloudflare Access védi-e ezt a hivatkozást. Megosztás előtt ellenőrizd az Access beállításokat.',
   'questionForm.submit': 'Beküldés',
   'questionForm.skip': 'Kihagyás',
   'questionForm.locked': 'Megválaszolva',

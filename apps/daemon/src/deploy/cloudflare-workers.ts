@@ -482,11 +482,30 @@ function mergeWorkerBindings(managed: JsonObject[], preserved: JsonObject[]): Js
   return [...managed, ...preserved.filter((binding) => !declared.has(String(binding.name)))];
 }
 
-/** The bindings a PUT would otherwise delete. Best effort on purpose, the same
- * fail-open shape as the modified_on baseline read beside it: a script that does
- * not exist yet has none to carry (so the first-deploy path pays no extra call),
- * and a read that fails says nothing about what the PUT should do, so neither
- * may become a failed deploy. */
+/** The one failure this read may not paper over: the deploy is about to replace
+ * the script's whole binding set and could not read what is in it. */
+function bindingsReadFailedError(cause?: unknown): DeployError {
+  return new DeployError(
+    'Cloudflare Workers settings read failed; refusing to replace the binding set.',
+    502,
+    cause === undefined ? undefined : (cause instanceof Error ? cause.message : String(cause)),
+    'CFW_BINDINGS_READ_FAILED',
+  );
+}
+
+/** The bindings a PUT would otherwise delete.
+ *
+ * A script that does not exist yet has none to carry, so the first-deploy path
+ * returns early and pays no extra call. For a script that DOES exist the read
+ * is load-bearing rather than best-effort: upload metadata REPLACES the
+ * binding set, so an unread set does not mean "nothing to carry" — it means
+ * "unknown bindings, about to be deleted". Returning [] there (the shape this
+ * had) let one transient 429 or 5xx silently drop the user's KV namespaces,
+ * queues, Durable Objects, services, vars, Hyperdrive and Vectorize configs;
+ * the value-opaque secret types survive only because `keep_bindings` carries
+ * them, which is exactly the half that does not help. Refuse the deploy
+ * instead: a refused deploy is recoverable and says so, a replaced binding set
+ * is neither. */
 async function readExistingWorkerBindings(
   config: WorkersDeployConfig,
   scriptName: string,
@@ -499,11 +518,14 @@ async function readExistingWorkerBindings(
       { method: 'GET', headers: await authHeaders(config) },
     );
     const json = await readCloudflareJson(resp);
-    if (!resp.ok || json.success === false) return [];
+    if (!resp.ok || json.success === false) throw bindingsReadFailedError();
     const result = (json.result ?? {}) as JsonObject;
     return preservedWorkerBindings(result.bindings);
-  } catch {
-    return [];
+  } catch (err) {
+    // A transport failure, a non-JSON body, a Cloudflare-level refusal and a
+    // 429/5xx are one fact for this decision: the set is unknown.
+    if (err instanceof DeployError && err.code === 'CFW_BINDINGS_READ_FAILED') throw err;
+    throw bindingsReadFailedError(err);
   }
 }
 

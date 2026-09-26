@@ -840,6 +840,21 @@ function cloudflareDeployStepLabel(name: string): string {
   return labels[name] ?? name;
 }
 
+/** The message for a Workers deploy's post-deploy check verdict. The record's
+ * `detail` is a closed code token, not prose: the daemon reads it back to
+ * recognize a retained exposure (isRetainedUnverifiedExposure) and the link
+ * check keys off the same value, so it must never be shown to the user as-is.
+ * Known codes map to a translated sentence; anything else falls through to the
+ * daemon's own human-readable detail, or to the generic status sentence when
+ * there is none. */
+function cloudflareCheckMessage(
+  check: { detail?: string; status?: number },
+  t: ReturnType<typeof useI18n>['t'],
+): string {
+  if (check.detail === 'CFW_ACCESS_UNVERIFIED') return t('fileViewer.deployAccessUnverified');
+  return check.detail || `Deployed, but the Worker returned HTTP ${check.status} — check Workers Logs.`;
+}
+
 function publicShareUrlForDeployment(deployment?: WebDeploymentInfo | null): string {
   if (!deployment) return '';
   const cloudflare = deployment.cloudflarePages;
@@ -19670,8 +19685,7 @@ function HtmlViewer({
                     {activeDeploymentProviderMetadata?.check &&
                     activeDeploymentProviderMetadata.check.status >= 500 ? (
                       <p style={{ margin: 0, color: '#b7791f' }}>
-                        {activeDeploymentProviderMetadata.check.detail ||
-                          `Deployed, but the Worker returned HTTP ${activeDeploymentProviderMetadata.check.status} — check Workers Logs.`}
+                        {cloudflareCheckMessage(activeDeploymentProviderMetadata.check, t)}
                       </p>
                     ) : null}
                     <div className="deploy-result-links">

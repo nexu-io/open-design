@@ -269,7 +269,10 @@ describe('deployToCloudflareWorkers', () => {
         return jsonResponse(overrides.scripts ?? SCRIPTS_LIST);
       }
       if (url.endsWith('/settings')) {
-        return jsonResponse(overrides.settings ?? { success: true, result: { bindings: [] } });
+        return jsonResponse(
+          overrides.settings ?? { success: true, result: { bindings: [] } },
+          (overrides.settingsStatus as number | undefined) ?? 200,
+        );
       }
       if (url.includes('/workers/domains')) {
         if ((init?.method || 'GET').toUpperCase() === 'GET') return jsonResponse(overrides.domainsList ?? { success: true, result: [] });
@@ -443,11 +446,46 @@ describe('deployToCloudflareWorkers', () => {
     expect(meta.bindings).toEqual([{ name: 'ASSETS', type: 'assets' }, { type: 'plain_text', name: 'MODE' }]);
   });
 
-  it('deploys with only the managed bindings when the script settings read fails', async () => {
+  it('refuses the deploy when an existing script settings read fails, instead of replacing the binding set', async () => {
+    // Upload metadata REPLACES the script's bindings, so a set that could not be
+    // read is not "nothing to carry" — carrying nothing is what deletes the
+    // user's KV namespaces, queues, Durable Objects, service bindings and vars.
     const { calls, fn } = happyFetch({ settings: { success: false, errors: [{ message: 'nope' }] } });
     vi.stubGlobal('fetch', fn);
-    const out = await deployToCloudflareWorkers(base);
-    expect(out.status).toBe('ready');
+    await expect(deployToCloudflareWorkers(base)).rejects.toMatchObject({
+      code: 'CFW_BINDINGS_READ_FAILED',
+      status: 502,
+    });
+    // The refusal lands before the script PUT: nothing was uploaded, so nothing
+    // was replaced.
+    expect(calls.some((c) => c[1]?.method === 'PUT')).toBe(false);
+  });
+
+  it('refuses the deploy when the settings read is rate limited or an outage', async () => {
+    // The transient answers are the dangerous ones: a 429 or a 5xx used to read
+    // as "no bindings" and silently replace the set.
+    for (const status of [429, 503]) {
+      const { calls, fn } = happyFetch({
+        settings: { success: false, errors: [{ message: 'unavailable' }] },
+        settingsStatus: status,
+      });
+      vi.stubGlobal('fetch', fn);
+      await expect(deployToCloudflareWorkers(base)).rejects.toMatchObject({
+        code: 'CFW_BINDINGS_READ_FAILED',
+        status: 502,
+      });
+      expect(calls.some((c) => c[1]?.method === 'PUT')).toBe(false);
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('carries the managed-only set without a settings read on a first deploy', async () => {
+    // No script yet means no bindings to preserve: the path pays no extra call,
+    // and the absence of a read must not be refused.
+    const { calls, fn } = happyFetch({ scripts: { success: true, result: [] } });
+    vi.stubGlobal('fetch', fn);
+    await deployToCloudflareWorkers(base);
+    expect(calls.some((c) => c[0].endsWith('/settings'))).toBe(false);
     const meta = await metadataOf(calls.find((c) => c[1]?.method === 'PUT')!);
     expect(meta.bindings).toEqual([{ name: 'ASSETS', type: 'assets' }]);
   });

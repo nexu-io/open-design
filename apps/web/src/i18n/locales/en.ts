@@ -3551,6 +3551,7 @@ export const en: Dict = {
   'fileViewer.deployLinkProtectedLabel': 'Deployment protection enabled',
   'fileViewer.deployLinkProtected': 'Your site deployed, but this preview link is requiring authentication. Disable Deployment Protection or use a custom domain.',
   'fileViewer.retryLink': 'Retry now',
+  'fileViewer.deployAccessUnverified': 'Deployed, but OpenDesign could not verify that Cloudflare Access is guarding this link. Check your Access settings before sharing it.',
   'questionForm.submit': 'Submit',
   'questionForm.skip': 'Skip',
   'questionForm.locked': 'Answered',

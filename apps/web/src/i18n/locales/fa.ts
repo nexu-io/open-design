@@ -3537,6 +3537,7 @@ export const fa: Dict = {
   'fileViewer.deployLinkProtectedLabel': 'محافظت استقرار فعال است',
   'fileViewer.deployLinkProtected': 'سایت مستقر شده، اما این لینک پیش‌نمایش نیاز به احراز هویت دارد. Deployment Protection را غیرفعال کنید یا از دامنه سفارشی استفاده کنید.',
   'fileViewer.retryLink': 'همین حالا دوباره تلاش کنید',
+  'fileViewer.deployAccessUnverified': 'انتشار انجام شد، اما OpenDesign نتوانست تأیید کند که Cloudflare Access از این پیوند محافظت می‌کند. پیش از اشتراک‌گذاری، تنظیمات Access را بررسی کنید.',
   'questionForm.submit': 'ارسال',
   'questionForm.skip': 'رد کردن',
   'questionForm.locked': 'پاسخ داده شده',

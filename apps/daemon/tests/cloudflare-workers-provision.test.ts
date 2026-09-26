@@ -610,6 +610,11 @@ describe('deployToCloudflareWorkers deploy log', () => {
       if (url.includes('/workers/assets/upload')) return jsonResponse({ success: true, result: { jwt: 'COMPLETION' } });
       if (url.includes('/workers/domains')) return jsonResponse({ success: true, result: [] });
       if (url.endsWith('/workers/subdomain')) return jsonResponse({ success: true, result: { subdomain: 'acct-test' } });
+      // The settings read is load-bearing: an unreadable binding set refuses the
+      // deploy instead of replacing it, so it has to SUCCEED here for the script
+      // PUT to be the call that fails.
+      if (url.includes('/workers/scripts?')) return jsonResponse({ success: true, result: [{ id: 'my-site', tag: 'tag-abc-123' }] });
+      if (url.endsWith('/settings')) return jsonResponse({ success: true, result: { bindings: [] } });
       // script PUT fails
       return jsonResponse({ success: false, errors: [{ message: 'script upload failed' }] }, 400);
     });

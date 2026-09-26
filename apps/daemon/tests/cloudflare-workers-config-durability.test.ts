@@ -23,7 +23,7 @@ import {
   writeCloudflareOAuthIdentity,
   writeCloudflareWorkersConfig,
 } from '../src/deploy.js';
-import { setCloudflareOAuthToken } from '../src/integrations/cloudflare-tokens.js';
+import { getCloudflareOAuthToken, setCloudflareOAuthToken } from '../src/integrations/cloudflare-tokens.js';
 
 async function withDataDir<T>(run: (dir: string) => Promise<T>): Promise<T> {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'od-workers-config-durability-'));
@@ -40,6 +40,7 @@ async function withDataDir<T>(run: (dir: string) => Promise<T>): Promise<T> {
 }
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
@@ -305,6 +306,72 @@ describe('credential mode is derived from a live OAuth grant', () => {
         credentialMode: 'token',
         configError: CLOUDFLARE_WORKERS_CONFIG_CORRUPT_CODE,
       });
+    });
+  });
+
+  it('a token-mode switch clears and revokes the grant the config is leaving behind', async () => {
+    await withDataDir(async () => {
+      await writeCloudflareWorkersConfig({ token: 'static-token', accountId: 'acct_test' });
+      await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), {
+        accessToken: 'oauth-access',
+        refreshToken: 'ref-1',
+        tokenType: 'Bearer',
+        clientId: 'client-abc',
+        expiresAt: Date.now() + 3600_000,
+        generation: 1,
+        savedAt: Date.now(),
+      });
+      await commitCloudflareOAuthMode();
+      expect((await readCloudflareWorkersConfig()).credentialMode).toBe('oauth');
+
+      const revokes: string[] = [];
+      vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+        revokes.push(url + ' ' + String(init?.body ?? ''));
+        return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
+      }));
+
+      const saved = await writeCloudflareWorkersConfig({ credentialMode: 'token' });
+      expect(saved.credentialMode).toBe('token');
+      // The grant is off disk — so /auth/status stops reporting a connected
+      // profile the deploys no longer sign with ...
+      expect(await getCloudflareOAuthToken(cloudflareOAuthTokensDir())).toBeNull();
+      // ... and revoked at Cloudflare, so its refresh token cannot be replayed.
+      expect(revokes).toHaveLength(1);
+      expect(revokes[0]).toContain('token=ref-1');
+      expect(revokes[0]).toContain('client_id=client-abc');
+    });
+  });
+
+  it('a refused token-mode switch revokes nothing', async () => {
+    await withDataDir(async () => {
+      // A connect-only profile has no static token to switch to, so the save
+      // itself is refused (CFW_TOKEN_REQUIRED). The grant must survive that: the
+      // user has not left OAuth, and revoking would break the connection their
+      // config still names.
+      await writeFile(
+        deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID),
+        JSON.stringify({ accountId: 'acct_test', credentialMode: 'oauth', clientId: 'client-abc' }),
+        'utf8',
+      );
+      await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), {
+        accessToken: 'oauth-access',
+        refreshToken: 'ref-1',
+        tokenType: 'Bearer',
+        clientId: 'client-abc',
+        expiresAt: Date.now() + 3600_000,
+        generation: 1,
+        savedAt: Date.now(),
+      });
+      const fetchSpy = vi.fn(async () => {
+        throw new Error('a refused save must not reach the revoke endpoint');
+      });
+      vi.stubGlobal('fetch', fetchSpy);
+
+      await expect(writeCloudflareWorkersConfig({ credentialMode: 'token' })).rejects.toMatchObject({
+        code: 'CFW_TOKEN_REQUIRED',
+      });
+      expect(await getCloudflareOAuthToken(cloudflareOAuthTokensDir())).not.toBeNull();
+      expect(fetchSpy).not.toHaveBeenCalled();
     });
   });
 });

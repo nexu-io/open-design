@@ -3537,6 +3537,7 @@ export const esES: Dict = {
   'fileViewer.deployLinkProtectedLabel': 'Protección del despliegue activada',
   'fileViewer.deployLinkProtected': 'El sitio se ha desplegado, pero este enlace de vista previa requiere autenticación. Desactiva Deployment Protection o usa un dominio personalizado.',
   'fileViewer.retryLink': 'Reintentar ahora',
+  'fileViewer.deployAccessUnverified': 'Se ha desplegado, pero OpenDesign no ha podido verificar que Cloudflare Access proteja este enlace. Revisa la configuración de Access antes de compartirlo.',
   'questionForm.submit': 'Enviar',
   'questionForm.skip': 'Omitir',
   'questionForm.locked': 'Respondido',
