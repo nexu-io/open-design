@@ -684,7 +684,12 @@ export async function writeCloudflareWorkersConfig(input: Partial<DeployConfig>)
   const tokenInput = typeof input?.token === 'string' ? input.token.trim() : '';
   // The authority switch to 'oauth' must not be reachable via a bare config PUT:
   // require a durable OAuth token before accepting the flip (fail closed).
-  let credentialMode = currentFile.credentialMode === 'oauth' ? 'oauth' : 'token';
+  // A pending clear (a crash after the intent write) means the EFFECTIVE mode is
+  // 'token' whatever the file stores, so the partial save finishes the interrupted
+  // exit instead of re-persisting the marker.
+  let credentialMode = current.pendingOAuthGrantClear === true
+    ? 'token'
+    : currentFile.credentialMode === 'oauth' ? 'oauth' : 'token';
   if (typeof input?.credentialMode === 'string') {
     if (input.credentialMode !== 'token' && input.credentialMode !== 'oauth') {
       throw new DeployError(
@@ -761,7 +766,7 @@ export async function writeCloudflareWorkersConfig(input: Partial<DeployConfig>)
   }
   // In 'oauth' mode the API token is optional — the deploy uses the rotating
   // OAuth access token instead. Only require a static token in 'token' mode.
-  if (next.credentialMode !== 'oauth' && !next.token) {
+  if (next.credentialMode !== 'oauth' && !next.pendingOAuthGrant && !next.token) {
     throw new DeployError('Cloudflare API token is required.', 400, undefined, 'CFW_TOKEN_REQUIRED');
   }
   if (!next.accountId) throw new DeployError('Cloudflare account ID is required.', 400, undefined, 'CFW_ACCOUNT_ID_REQUIRED');
@@ -811,7 +816,7 @@ export async function writeCloudflareWorkersConfig(input: Partial<DeployConfig>)
   // explicit credentialMode: a partial save that omits the mode still resolves to
   // 'token' and must finish an interrupted clear, not carry the marker forward
   // while the grant stays live with nothing clearing it.
-  if (next.credentialMode === 'token' && (current.credentialMode === 'oauth' || current.pendingOAuthGrantClear === true)) {
+  if (next.credentialMode === 'token' && ((typeof input?.credentialMode === 'string' && input.credentialMode === 'token' && current.credentialMode === 'oauth') || current.pendingOAuthGrantClear === true)) {
     const intent: DeployConfig = { ...persistableCloudflareWorkersConfig(current), pendingOAuthGrantClear: true };
     // A connect in flight is being abandoned by this transition.
     delete intent.pendingOAuthGrant;

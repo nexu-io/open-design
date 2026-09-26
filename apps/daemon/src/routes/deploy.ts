@@ -848,13 +848,11 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
             // dashboard re-attach is classified owned, not foreign-and-stranded.
             db.transaction(() => {
               for (const record of owningRecords) {
-                const metadata = record.providerMetadata as Record<string, unknown>;
-                const currentOwned = ownedCustomDomainsFromMetadata(metadata);
-                if (currentOwned.some((entry) => entry.hostname === domain.hostname)) continue;
-                rewriteWorkersRecordMetadata(workersRecordStore, record, {
-                  ...metadata,
-                  ownedCustomDomains: [...currentOwned, { id: domain.id, hostname: domain.hostname }],
-                });
+                // Restore the captured pre-forget snapshot verbatim: the write-ahead
+                // already dropped the hostname from the DB, and the snapshot still
+                // vouches for it. Re-writing the record's own metadata puts the
+                // hostname back exactly as it was (the DELETE did not land).
+                rewriteWorkersRecordMetadata(workersRecordStore, record, record.providerMetadata as Record<string, unknown>);
               }
             })();
             throw err;
