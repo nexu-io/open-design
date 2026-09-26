@@ -17,7 +17,7 @@ import {
 } from '../src/deploy.js';
 import { getDeploymentById, openDatabase } from '../src/db.js';
 import { configureCloudflareAccessPerimeterRetry } from '../src/deploy/cloudflare-workers.js';
-import { isAccessProtectedWorkersRecord, isRetainedUnverifiedExposure } from '../src/routes/deploy.js';
+import { hasAccessUnverifiedVerdict, isAccessProtectedWorkersRecord, isRetainedUnverifiedExposure } from '../src/routes/deploy.js';
 import { ensureProject } from '../src/projects.js';
 import { startServer } from '../src/server.js';
 
@@ -3280,6 +3280,20 @@ describe('deploy provider routes', () => {
     expect(isRetainedUnverifiedExposure({ unverifiedExposure: { scriptName: '' }, check: { ok: false, detail: 'CFW_ACCESS_UNVERIFIED' } })).toBe(false);
   });
 
+  it('reads the check\'s CFW_ACCESS_UNVERIFIED verdict off the record, whatever else it carries', () => {
+    // The verdict the route keeps on an `unreachable` probe: present on the
+    // failed record, and on one re-deferred afterwards, absent on a merely
+    // deferred deploy and on every other (or malformed) check shape.
+    expect(hasAccessUnverifiedVerdict({ check: { ok: false, detail: 'CFW_ACCESS_UNVERIFIED' } })).toBe(true);
+    expect(hasAccessUnverifiedVerdict({ check: { ok: false, detail: 'CFW_ACCESS_UNVERIFIED' }, accessVerificationDeferred: 'no answer' })).toBe(true);
+    expect(hasAccessUnverifiedVerdict({ check: { status: 200, ok: false, detail: 'CFW_ACCESS_UNVERIFIED' } })).toBe(true);
+    expect(hasAccessUnverifiedVerdict({ accessVerificationDeferred: 'no answer' })).toBe(false);
+    expect(hasAccessUnverifiedVerdict({ check: { ok: true } })).toBe(false);
+    expect(hasAccessUnverifiedVerdict({ check: 'CFW_ACCESS_UNVERIFIED' })).toBe(false);
+    expect(hasAccessUnverifiedVerdict({ check: [] })).toBe(false);
+    expect(hasAccessUnverifiedVerdict({})).toBe(false);
+  });
+
   it('check-link on a FAILED Access deploy takes the perimeter verdict, never the reachability probe', async () => {
     const f = await workersSiblingFixture('failed-access-checklink', { access: true });
     configureCloudflareAccessPerimeterRetry({ attempts: 2, baseMs: 1 });
@@ -3315,11 +3329,19 @@ describe('deploy provider routes', () => {
       expect(stillFailed.cloudflareWorkers?.check).toMatchObject({ ok: false, detail: 'CFW_ACCESS_UNVERIFIED' });
       expect(f.state.cfCalls.slice(before).every((c) => isPublicProbeUrl(c.url))).toBe(true);
 
-      // No answer at all: the failed record is deferred, not promoted.
+      // No answer at all. The record was judged ungated above and its route
+      // and hostname were withdrawn, so this probe can only have hit the URL
+      // that verdict disabled: the verdict and its message STAY, because a
+      // `link-delayed`/"could not reach" rewrite would hide the Access failure
+      // behind a propagation story. Only the deferral markers move.
       f.state.headMode = 'unreachable';
       checked = await f.checkLink(deployed.id);
       expect(checked.status).toBe(200);
-      expect(((await checked.json()) as { status: string }).status).toBe('link-delayed');
+      const stillJudged = (await checked.json()) as { status: string; statusMessage?: string; reachableAt?: number; cloudflareWorkers?: Record<string, unknown> };
+      expect(stillJudged.status).toBe('failed');
+      expect(stillJudged.statusMessage).toContain('is not behind Cloudflare Access');
+      expect(stillJudged.reachableAt).toBeUndefined();
+      expect(stillJudged.cloudflareWorkers?.check).toMatchObject({ ok: false, detail: 'CFW_ACCESS_UNVERIFIED' });
 
       // The URL answers WITH the gate: the deploy is verified and ready, and
       // the failed check's verdict leaves the record with it.

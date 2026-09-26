@@ -1030,4 +1030,31 @@ describe('setCloudflareOAuthTokenGuarded', () => {
       await rm(dir, { recursive: true, force: true });
     }
   });
+
+  it('names the credential the raw file still carries when nothing sanitizes to a token', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'od-cf-guarded-recover-'));
+    const file = path.join(dir, 'cloudflare-oauth-tokens.json');
+    try {
+      // No accessToken: the record drops out of the typed shape while its
+      // refresh token stays a live grant on disk. A write that displaced this
+      // file and reported `displaced: null` is what let a reconnect skip the
+      // revoke and leave the superseded grant usable at Cloudflare — the hole
+      // clearCloudflareOAuthToken reads the raw object to close.
+      await writeFile(file, JSON.stringify({ token: { refreshToken: 'leaked-refresh', clientId: 'client-1' }, lastGeneration: 3 }));
+      const write = await setCloudflareOAuthTokenGuarded(dir, token('second'), () => true);
+      expect(write.written).toBe(true);
+      expect(write.written && write.displaced).toMatchObject({
+        accessToken: '',
+        refreshToken: 'leaked-refresh',
+        clientId: 'client-1',
+        tokenType: 'Bearer',
+      });
+      // The write still landed: the recovered record describes bytes now gone.
+      expect(await getCloudflareOAuthToken(dir)).toMatchObject({ refreshToken: 'ref-second' });
+      expect(JSON.parse(await readFile(file, 'utf8'))).toMatchObject({ lastGeneration: 4 });
+      expect(await readFile(file, 'utf8')).not.toContain('leaked-refresh');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 });

@@ -75,7 +75,13 @@ function accessFetch(overrides: AccessOverrides = {}) {
       const method = (init?.method || 'GET').toUpperCase();
       if (method === 'GET') return jsonResponse(overrides.domainsList ?? { success: true, result: [] });
       if (method === 'DELETE') return jsonResponse(overrides.domainsDelete ?? { success: true, result: null });
-      return jsonResponse(overrides.domains ?? { success: true, result: { id: 'dom-1' } });
+      // `domainsStatus` picks what the API answers with: a 4xx is a refusal
+      // (the attach certainly did not land), a 5xx or a transport failure is
+      // the ambiguous case the attach path must not compensate on.
+      return jsonResponse(
+        overrides.domains ?? { success: true, result: { id: 'dom-1' } },
+        typeof overrides.domainsStatus === 'number' ? overrides.domainsStatus : 200,
+      );
     }
     if (url.includes('assets-upload-session')) {
       return jsonResponse(overrides.session ?? { success: true, result: { jwt: 'SESS', buckets: [] } });
@@ -468,7 +474,10 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
 
   it('drops the configured hostname from the Access app again when the attach fails (compensation) and surfaces the attach error', async () => {
     const { calls, fn } = accessFetch({
+      // A real 4xx: Cloudflare refused the attach outright, so the claim the
+      // pre-PUT app made on the hostname is provably inert and goes again.
       domains: { success: false, errors: [{ message: 'attach denied' }] },
+      domainsStatus: 400,
     });
     vi.stubGlobal('fetch', fn);
     await expect(
@@ -493,6 +502,7 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
   it('still surfaces the attach error when the compensation PUT itself fails', async () => {
     const { calls, fn } = accessFetch({
       domains: { success: false, errors: [{ message: 'attach denied' }] },
+      domainsStatus: 400,
       accessUpdate: { success: false, errors: [{ message: 'cover denied' }] },
     });
     vi.stubGlobal('fetch', fn);
@@ -506,6 +516,29 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
     ).rejects.toThrow(/attach denied/);
     expect(calls.some((c) => c[0].endsWith('/access/apps/app-123') && c[1]?.method === 'PUT')).toBe(true);
     expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('could not drop "app.example.com"'));
+  });
+
+  it('keeps the configured hostname on the Access app when the attach fails with a 5xx, which may have committed', async () => {
+    const { calls, fn } = accessFetch({
+      domains: { success: false, errors: [{ message: 'attach lost' }] },
+      domainsStatus: 502,
+    });
+    vi.stubGlobal('fetch', fn);
+    await expect(
+      deployToCloudflareWorkers({
+        ...base,
+        access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } },
+        customDomain: { hostname: 'app.example.com', zoneId: 'zone-1' },
+      }),
+    ).rejects.toThrow(/attach lost/);
+    // A 5xx (and a transport failure, which takes the same branch) cannot
+    // prove the PUT did not commit: Cloudflare may be routing app.example.com
+    // to this script right now. Dropping the app's claim on the hostname would
+    // leave it serving the site with nothing in front of it, and a first
+    // deploy's record carries no displayed customDomain, so the link check
+    // would never probe it. The claim stays — inert while the hostname is
+    // unrouted — and the next deploy reconciles it.
+    expect(calls.some((c) => c[0].endsWith('/access/apps/app-123') && c[1]?.method === 'PUT')).toBe(false);
   });
 
   it('keeps an already-routed configured hostname on the Access app when its re-attach fails', async () => {

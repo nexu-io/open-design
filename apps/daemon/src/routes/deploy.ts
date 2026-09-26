@@ -214,6 +214,19 @@ export function isAccessProtectedWorkersRecord<T extends { providerMetadata?: un
   return (metadata as Record<string, unknown>).accessProtected === true;
 }
 
+/** Whether a record carries the perimeter check's CFW_ACCESS_UNVERIFIED
+ * verdict: the check judged this Worker's public URLs ungated (or could not
+ * confirm the gate) and the record was failed for it. The verdict OUTRANKS a
+ * later `unreachable` probe, because the failure withdrew the workers.dev
+ * route and attached hostname that probe now walks — an answer of nothing can
+ * only come from a URL this verdict disabled, so re-reporting it as merely
+ * delayed would hide the Access failure behind a propagation story. */
+export function hasAccessUnverifiedVerdict(metadata: Record<string, unknown>): boolean {
+  const check = metadata.check;
+  if (!check || typeof check !== 'object' || Array.isArray(check)) return false;
+  return (check as Record<string, unknown>).detail === 'CFW_ACCESS_UNVERIFIED';
+}
+
 /** An exposure the link check already judged ungated and could not withdraw
  * in full: the record carries the CFW_ACCESS_UNVERIFIED verdict AND a
  * remaining `unverifiedExposure`. Such an exposure is public by verdict, not
@@ -225,9 +238,7 @@ export function isAccessProtectedWorkersRecord<T extends { providerMetadata?: un
  * withdrawing it first would take down a link that may be gated. */
 export function isRetainedUnverifiedExposure(metadata: Record<string, unknown>): boolean {
   if (!unverifiedExposureFromMetadata(metadata)) return false;
-  const check = metadata.check;
-  if (!check || typeof check !== 'object' || Array.isArray(check)) return false;
-  return (check as Record<string, unknown>).detail === 'CFW_ACCESS_UNVERIFIED';
+  return hasAccessUnverifiedVerdict(metadata);
 }
 
 /** Whether a re-read of a deployment record is the very record a verdict was
@@ -1218,6 +1229,12 @@ export function registerDeploymentCheckRoutes(app: Express, ctx: RegisterDeploym
       steps.push(...withdrawn.steps);
       const next: Record<string, unknown> = { ...recordMetadata, steps };
       retainExposure(next, withdrawn.stillExposed);
+      // A retry that fully withdrew the exposure has resolved the ungated
+      // verdict: nothing is public any more, so the probe that follows walks a
+      // withdrawn URL and answers 'unreachable'. Clearing the verdict lets that
+      // defer the record ('link-delayed') instead of pinning it to 'failed',
+      // which is reserved for a record that is still exposed.
+      if (!withdrawn.stillExposed) delete next.check;
       db.transaction(() => {
         upsertDeployment(db, { ...record, providerMetadata: next, updatedAt: now });
         for (const detached of withdrawn.detachedCustomDomains) {
@@ -1339,10 +1356,17 @@ export function registerDeploymentCheckRoutes(app: Express, ctx: RegisterDeploym
           });
         }
         if (verdict.outcome === 'unreachable') {
+          // A record this check ALREADY judged ungated keeps its verdict and
+          // its message: the failure withdrew its workers.dev route and its
+          // attached hostname, so the probe above can only have hit the URL it
+          // disabled, and rewriting the record as `link-delayed`/"could not
+          // reach" would hide the Access failure behind a propagation story.
+          // Only the deferral markers move; the verdict (and its `check`) stay.
+          const judged = hasAccessUnverifiedVerdict(freshMetadata);
           return upsertDeployment(db, {
             ...record,
-            status: 'link-delayed',
-            statusMessage: verdict.error.message,
+            status: judged ? record.status : 'link-delayed',
+            statusMessage: judged ? record.statusMessage : verdict.error.message,
             providerMetadata: { ...freshMetadata, accessVerified: false, accessVerificationDeferred: verdict.error.message },
             updatedAt: now,
           });

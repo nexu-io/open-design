@@ -383,11 +383,16 @@ export async function setCloudflareOAuthTokenGuarded(
 ): Promise<GuardedCloudflareOAuthTokenWrite> {
   return withLock(dataDir, async () => {
     if (!guard()) return { written: false };
-    const file = await readCloudflareOAuthTokensFile(dataDir);
+    // Read with the RAW object, exactly as clearCloudflareOAuthToken does: a
+    // record whose accessToken no longer sanitizes drops out of the typed
+    // shape while its refresh token stays a live grant on disk, and reporting
+    // null for it is what let a reconnect orphan the superseded grant (see
+    // recoveredDisplacedCredential).
+    const { raw, file } = await readCloudflareOAuthTokensFileWithRaw(dataDir);
     const gen = nextLastGeneration(file);
     token.generation = gen;
     await writeTokensFile(dataDir, { token, lastGeneration: gen });
-    return { written: true, displaced: file.token ?? null };
+    return { written: true, displaced: file.token ?? recoveredDisplacedCredential(raw) };
   });
 }
 

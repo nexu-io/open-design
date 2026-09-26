@@ -2162,10 +2162,16 @@ async function deployToCloudflareWorkersWith(
           releasedCustomDomains.push(configuredHostname);
         }
         // Compensation: the Access app claimed the configured hostname before
-        // the attach. The attach failed, so drop that claim again — only when
-        // the hostname was NOT already routed, since a still-routed hostname
-        // must stay covered. The original attach error is what surfaces.
-        if (accessOn && accessAppId && !configuredAlreadyAttached) {
+        // the attach. The attach failed, so drop that claim again — but ONLY
+        // on a refusal (a 4xx), which proves the attach did not land. A 5xx or
+        // a transport failure may have committed the PUT, and a hostname
+        // routed to the script with no app covering it is exactly the exposure
+        // this path exists to rule out. Keeping the claim is safe in that
+        // case: a public destination on a hostname that is not routed is
+        // inert, and the next deploy reconciles it. Only when the hostname was
+        // NOT already routed, since a still-routed hostname must stay covered.
+        // The original attach error is what surfaces.
+        if (accessOn && accessAppId && !configuredAlreadyAttached && refused) {
           try {
             await createCloudflareAccessApp(cfg, {
               scriptName,
