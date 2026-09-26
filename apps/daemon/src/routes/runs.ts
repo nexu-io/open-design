@@ -37,6 +37,7 @@ import type { AnalyticsContext } from '../analytics.js';
 import { spawnEnvForAgent } from '../agents.js';
 import { agentCliEnvForAgent, readAppConfig } from '../app-config.js';
 import type { AuthorizeProjectRequest } from '../collab/project-request-authority.js';
+import { validateLocalDaemonRequest } from '../http/local-daemon-request.js';
 import {
   workspaceResourceContextFromRequest,
   type BoundWorkspaceResourceMutationGate,
@@ -3241,6 +3242,23 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
   };
 
   registerRunCreateRoute(app, handleRunCreate, sendApiError);
+
+  // Restart-safety probe for the desktop updater. `GET /api/runs` refuses an
+  // unscoped listing once any run belongs to a Workspace-bound project, so a
+  // host-level caller could never learn whether it is safe to restart. This
+  // route answers only that question: it is loopback-only (peer, Host and
+  // Origin, which also defeats DNS rebinding) and returns a bare count — no
+  // run, project or conversation ids — so it cannot enumerate Workspace runs.
+  // Registered before `/api/runs/:id` so the path is not read as a run id.
+  app.get('/api/runs/active-count', (req: ApiRequest, res: ApiResponse) => {
+    const local = validateLocalDaemonRequest(req);
+    if (!local.ok) {
+      return sendApiError(res, 403, 'FORBIDDEN', local.message, { details: local.details });
+    }
+    const activeRunCount = design.runs.list({ status: 'active' }).length;
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ activeRunCount });
+  });
 
   app.get('/api/runs', async (req: ApiRequest, res: ApiResponse) => {
     const { projectId, conversationId, status } = req.query;
