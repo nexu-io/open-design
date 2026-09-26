@@ -180,12 +180,12 @@ test('capture S14-ERR residual unshare failure after real delete confirmation', 
     && response.request().method() === 'DELETE');
   await page.getByTestId('project-delete-confirm-accept').click();
   expect((await deletion).ok()).toBeTruthy();
-  await expect(page.getByRole('alert').filter({ hasText: /index\.html.*链接停用失败/ })).toBeVisible();
+  await expect(page.getByRole('alert').filter({ hasText: /index\.html.*停止失败/ })).toBeVisible();
   await capture(page, 'S14-ERR', { projectId, residualSlug: 'ui-audit-old-link' });
   await page.route('**/api/public-file-stops/retry', route => route.fulfill({ json: { status: 'stopped', projectId, filePath: 'index.html', slug: 'ui-audit-old-link' } }));
   const retryRequest = page.waitForRequest(request => request.url().endsWith('/api/public-file-stops/retry') && request.method() === 'POST');
-  await page.getByRole('button', { name: '重试停用' }).click();
+  await page.getByRole('button', { name: '重试', exact: true }).click();
   expect((await retryRequest).postDataJSON()).toEqual({ projectId, filePath: 'index.html', slug: 'ui-audit-old-link' });
-  await expect(page.getByRole('alert').filter({ hasText: /index\.html.*链接停用失败/ })).toHaveCount(0);
+  await expect(page.getByRole('alert').filter({ hasText: /index\.html.*停止失败/ })).toHaveCount(0);
   await expect(confirm).toHaveCount(0);
 });

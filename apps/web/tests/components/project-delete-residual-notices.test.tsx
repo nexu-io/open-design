@@ -22,12 +22,12 @@ it('renders real deletion failures as global Toast, queues each file, and never 
   await act(async () => fireEvent.click(screen.getByText('Delete')));
   const failure = screen.getByRole('alert');
   expect(failure).toHaveClass('od-toast', 'tone-error', 'placement-top');
-  expect(within(failure).getByText(/manual\.html.*link could not be disabled/i)).toBeVisible();
-  expect(within(failure).getByRole('button', { name: 'Retry disabling' })).toBeEnabled();
+  expect(within(failure).getByText(/manual\.html.*could not be stopped/i)).toBeVisible();
+  expect(within(failure).getByRole('button', { name: 'Retry' })).toBeEnabled();
   expect(screen.queryByText('auto.html')).toBeNull();
   fireEvent.click(within(failure).getByRole('button', { name: /dismiss/i }));
-  expect(within(screen.getByRole('status')).getByText(/auto\.html.*being disabled/i)).toBeVisible();
-  expect(screen.queryByRole('button', { name: 'Retry disabling' })).toBeNull();
+  expect(within(screen.getByRole('status')).getByText(/Stopping the share link.*auto\.html/i)).toBeVisible();
+  expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
   expect(request).toHaveBeenCalledTimes(1);
   expect(request).toHaveBeenCalledWith('/api/projects/gone', expect.objectContaining({ method: 'DELETE' }));
 });
@@ -38,7 +38,7 @@ it('S14-ERR manual Toast action retries the exact deleted file and clears only a
   render(<Harness />);
   await act(async () => fireEvent.click(screen.getByText('Delete')));
   expect(request).toHaveBeenCalledTimes(1);
-  await act(async () => fireEvent.click(within(screen.getByRole('alert')).getByRole('button', { name: 'Retry disabling' })));
+  await act(async () => fireEvent.click(within(screen.getByRole('alert')).getByRole('button', { name: 'Retry' })));
   expect(request).toHaveBeenCalledTimes(2);
   expect(request).toHaveBeenLastCalledWith('/api/public-file-stops/retry', expect.objectContaining({
     method: 'POST', body: JSON.stringify({ projectId: 'gone', filePath: 'manual.html', slug: 'stable-manual' }),
@@ -50,8 +50,8 @@ it('S14-ERR failed manual retry stays visible until dismissed and never fires a 
     .mockResolvedValueOnce(Response.json({ error: 'stop not confirmed' }, { status: 503 }));
   render(<Harness />);
   await act(async () => fireEvent.click(screen.getByText('Delete')));
-  await act(async () => fireEvent.click(within(screen.getByRole('alert')).getByRole('button', { name: 'Retry disabling' })));
-  expect(within(screen.getByRole('alert')).getByText(/manual\.html.*link could not be disabled/i)).toBeVisible();
+  await act(async () => fireEvent.click(within(screen.getByRole('alert')).getByRole('button', { name: 'Retry' })));
+  expect(within(screen.getByRole('alert')).getByText(/manual\.html.*could not be stopped/i)).toBeVisible();
   fireEvent.click(within(screen.getByRole('alert')).getByRole('button', { name: /dismiss/i }));
   expect(screen.queryByRole('alert')).toBeNull();
   expect(request).toHaveBeenCalledTimes(2);

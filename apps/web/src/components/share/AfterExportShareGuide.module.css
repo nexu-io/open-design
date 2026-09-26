@@ -1,99 +1,149 @@
-/* Restored from Board8 Chain-6-dialogs.dc.html, .s-m1eexportprompt scope, P1
-   "导出完成 · 分享引导条" mockup (width/pcheck/pfoot/minibar values below are
-   read directly off that markup). Keep the guide below the Share anchor. */
+/* Restored from "交互状态 - Owner - 分享评论1.0.html", the `phase-owner-intro`
+   scope, Owner-P1 "导出完成 · 分享引导" mockup — values below are read
+   directly off that markup/CSS. Keep the guide below the Share anchor. */
 .guide {
   position: absolute;
   inset-block-start: calc(100% + 8px);
   inset-inline-end: 0;
   z-index: 20;
   box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  width: 300px;
-  max-width: calc(100vw - 32px);
-  padding: 14px;
-  border: 1px solid #0000000D;
-  border-radius: 10px;
-  background: #FFFFFF;
-  color: #333333;
-  box-shadow: 0 6px 24px #00000012, 0 2px 6px #00000006;
+  width: 280px;
+  max-width: calc(100vw - 24px);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-panel);
+  color: var(--text-strong);
+  box-shadow: 0 8px 28px #00000012, 0 2px 6px #00000006;
   font-size: 12px;
   line-height: 18px;
 }
-.header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 18px;
+/* Upward caret. The design computes its offset from the live Share-button
+   rect (`--phase-intro-arrow-left`); this integration anchors the whole card
+   to the Share button via `inset-inline-end: 0` on `.guide` instead, so a
+   fixed offset approximating the button's center stands in for that. */
+.guide::before {
+  content: '';
+  position: absolute;
+  top: -5px;
+  right: 36px;
+  width: 9px;
+  height: 9px;
+  transform: rotate(45deg);
+  background: #202020;
+  border-top: 1px solid var(--border);
+  border-left: 1px solid var(--border);
 }
-.pcheck {
-  display: inline-flex;
-  flex: 0 0 16px;
+.hero {
+  position: relative;
+  display: flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  color: #4C9461;
-  background: #EEF6F0;
+  height: 112px;
+  overflow: hidden;
+  border-radius: 11px 11px 0 0;
+  background: #202020;
+}
+/* Staggered comment bubbles, cropped at the edges. */
+.cover {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background-color: #202020;
+  background-image:
+    radial-gradient(ellipse at 50% 48%, rgba(0, 0, 0, 0) 25%, rgba(0, 0, 0, .18) 65%, rgba(0, 0, 0, .65) 100%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='1.35' fill='%233b3b3b'/%3E%3C/svg%3E"),
+    linear-gradient(135deg, #292a2c 0%, #232426 50%, #1e2021 100%);
+  background-size: 100% 100%, 24px 24px, 100% 100%;
+  pointer-events: none;
+}
+.artwork {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 104px;
+  transform: scale(.85);
+  transform-origin: center;
+}
+.bubble {
+  position: absolute;
+  z-index: 1;
+  white-space: nowrap;
+  display: block;
+  padding: 4px 13px 5px;
+  border-radius: 18px 18px 2px 18px;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 21px;
+  letter-spacing: -.25px;
+}
+.bubblePurple { top: 12px; left: 2px; background: #B19AFF; color: #482D80; border-radius: 18px 18px 18px 2px; }
+.bubbleGreen { top: 38px; right: 16px; background: #6DDDB1; color: #155C40; }
+.bubblePink { top: 74px; left: 64px; background: #FF92BC; color: #7D234C; border-radius: 18px 18px 18px 2px; }
+button.close {
+  position: absolute;
+  z-index: 2;
+  top: 8px;
+  right: 8px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  min-height: 0;
+  min-width: 0;
+  padding: 3px;
+  border: 0;
+  border-radius: 5px;
+  background: #191b1de6;
+  color: #d8dcdf;
+}
+button.close svg { width: 14px; height: 14px; }
+button.close:hover { color: #fff; background: #ffffff20; }
+.body { padding: 12px 16px 14px; }
+.title {
+  margin: 0 0 6px;
+  font-size: 14px;
+  line-height: 21px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--text-strong);
 }
 .desc {
-  margin: 4px 0 0;
-  color: #888888;
+  margin: 0;
   font-size: 12px;
-  line-height: 18px;
+  line-height: 19px;
+  color: var(--text-muted);
 }
-.pfoot {
+.actions {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
   gap: 8px;
-  margin-top: 10px;
+  margin-top: 12px;
 }
-button.pghost {
+button.dismiss, button.start {
   box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   height: 28px;
-  padding: 0 12px;
+  min-height: 0;
+  min-width: 0;
+  margin: 0;
+  padding: 0 10px;
   border: 0;
-  border-radius: 5px;
-  background: #EDEDF0;
-  color: #333333;
+  border-radius: 6px;
   font-size: 12px;
+  line-height: 1;
   font-weight: 500;
   white-space: nowrap;
 }
-button.paction {
-  box-sizing: border-box;
-  min-width: 76px;
-  height: 28px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 5px;
-  background: #282828;
-  color: #FFFFFF;
-  font-size: 12px;
-  font-weight: 500;
-  white-space: nowrap;
-}
-.pghost:hover { background: #E4E4E7; }
-.paction:hover { background: #1F1F1F; }
-.minibar {
-  position: relative;
-  width: 100%;
-  height: 3px;
-  margin-top: 10px;
-  border-radius: 2px;
-  background: #E2E2E5;
-  overflow: hidden;
-}
-.minibarFill {
-  position: absolute;
-  inset-block: 0;
-  inset-inline-start: 0;
-  width: 0%;
-  background: #282828;
-}
-.guide button:focus-visible { outline: 2px solid #29292B; outline-offset: 3px; }
+button.dismiss { color: #858585; background: transparent; padding-left: 0; }
+button.dismiss:hover { color: var(--text-strong); }
+button.start { background: #202020; color: #fff; }
+button.start:hover { background: #353535; }
+.guide button:focus-visible { outline: 2px solid #a5bc9a; outline-offset: 2px; }
 .error { margin: 8px 0 0; color: #C94E4E; font-size: 12px; line-height: 18px; }

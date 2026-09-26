@@ -101,11 +101,12 @@ describe('CommentSyncBanner — restored branches', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it('K5 shows stale deleted/resolved risk while a verified reopened revision is still pending', async () => {
+  it('K4 shows stale deleted/resolved risk as the same single dark-line progress treatment as K1, while a verified reopened revision is still pending', async () => {
     renderBanner({ ...base, backfill: { state: 'pending', filePath: 'index.html', publicationRevision: 'resume-r2', retryable: false, reopened: true } });
     await screen.findByText(/已删除或已处理的评论/);
     expect(screen.queryByText('正在同步已有评论，访客暂时可能看不到。')).toBeNull();
     expect(screen.queryByRole('button', { name: '重试' })).toBeNull();
+    expect(document.querySelector('[class*="backfillProgress"]')).toBeInTheDocument();
   });
 
   it('shows no pending banner for an immediately succeeded empty-comment backfill', async () => {
@@ -139,6 +140,18 @@ describe('CommentSyncBanner — restored branches', () => {
     await screen.findByText(/已删除或已处理的评论/);
     expect(screen.getByText(/自动重试已停止/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '重试' })).toBeNull();
+  });
+
+  it('K5 renders the retry button in the red retry-error style for a retryable reopened backfill failure', async () => {
+    renderBanner({ ...base, backfill: { state: 'failed', filePath: 'index.html', publicationRevision: 'resume-r2', retryable: true, reopened: true } });
+    const retry = await screen.findByRole('button', { name: '重试' });
+    expect(retry.className).toMatch(/retryError/);
+  });
+
+  it('keeps the plain (non-red) retry style for a retryable non-reopened backfill failure', async () => {
+    renderBanner({ ...base, backfill: { state: 'failed', filePath: 'index.html', publicationRevision: 'r1', retryable: true, reopened: false } });
+    const retry = await screen.findByRole('button', { name: '重试' });
+    expect(retry.className).not.toMatch(/retryError/);
   });
 
   it('keeps retry disabled while the POST is pending and reports a failed POST', async () => {

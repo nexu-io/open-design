@@ -119,13 +119,10 @@ test('Owner-K1 first publication syncs existing comments', async ({ page }) => {
   } finally {
     finishK1();
   }
-  await expect(k1Menu.locator('.chrome-publish-url')).toHaveText(k1Pub.url);
-  const k1Banner = k1Menu.getByRole('status').filter({ hasText: /已有评论|同步/ }).first();
+  // Target K1: the primary action itself becomes the sync progress bar; no URL row while syncing.
+  const k1Banner = k1Menu.getByLabel('正在同步已有评论，访客暂时可能看不到。');
   await expect(k1Banner).toBeVisible();
-  await expect(k1Banner).toContainText('正在同步已有评论');
-  await expect(k1Banner.locator('.icon-spin, [aria-hidden="true"]')).toHaveCount(1);
-  await expect(k1Banner).toHaveCSS('border-top-width', '0px');
-  await expect(k1Banner).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  await expect(k1Menu.locator('.chrome-publish-url')).toHaveCount(0);
   await capture(page, 'K1', k1.projectId, { state: 'publication-complete-existing-comments-syncing', existingLocalCommentCount: 1, commentText: '停用分享前已存在的项目评论', publicationUrl: k1Pub.url, commentSyncProjection: { pending: 1, backfill: { state: 'pending', reopened: false, retryable: true } }, renderedSyncStatus: await k1Banner.innerText(), visualGap: 'The first-publication branch now has a dark spinner/status treatment and syncs the persisted historical comment, matching the target progress affordance. The design shows “12条”; this isolated project has one persisted comment, and the production label has no count.' });
 
 });
@@ -176,15 +173,13 @@ test('Owner-K4/K5 distinct comment-sync capture sequences', async ({ page }) => 
   await expect(k4Menu.getByRole('switch', { name: '链接访问' })).toHaveAttribute('aria-checked', 'false');
   await k4Menu.getByRole('switch', { name: '链接访问' }).click();
   await expect(k4Menu.getByRole('switch', { name: '链接访问' })).toHaveAttribute('aria-checked', 'true');
-  await expect(k4Menu.locator('.chrome-publish-url')).toHaveText(k4Pub.url);
   await page.reload();
   await openShareMenu(page, k4.projectId);
   await expect(k4Menu.getByRole('switch', { name: '链接访问' })).toHaveAttribute('aria-checked', 'true');
-  await expect(k4Menu.locator('.chrome-publish-url')).toHaveText(k4Pub.url);
-  const k4Banner = k4Menu.getByRole('status').filter({ hasText: '正在同步重新开启的分享链接' });
+  // Target K4: the primary button shows the busy sync state; no URL row while reconciling.
+  const k4Banner = k4Menu.getByRole('button', { name: /正在同步评论/ });
   await expect(k4Banner).toBeVisible();
-  await expect(k4Banner).toHaveCSS('border-top-width', '0px');
-  await expect(k4Banner).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  await expect(k4Menu.locator('.chrome-publish-url')).toHaveCount(0);
   await capture(page, 'K4', k4.projectId, { state: 'resumed-existing-publication-with-reconciliation-pending', publicationUrl: k4Pub.url, persistedCommentCount: 1, stoppedPeriodCommentChange: { commentId: k4.commentId, status: 'resolved' }, commentSyncProjection: { shareStopped: false, pending: 1, backfill: { state: 'pending', reopened: true, retryable: true } }, renderedSyncStatus: await k4Banner.innerText(), visualGap: 'Current reopened state uses the normal URL/copy controls plus a reconciliation banner. Target K4 shows “正在同步评论…” in the primary action control and no exposed completed link/copy row.' });
 
   // K5: actual stopped → resume UI action; service reports failed, retryable

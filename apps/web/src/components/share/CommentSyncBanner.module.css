@@ -58,3 +58,7 @@
   cursor: pointer;
 }
  .retry:disabled { opacity: 0.6; cursor: default; }
+ .retryError { background: #fff0f0; color: #c9363e; }
+ .retryError:hover:not(:disabled) { background: #ffe2e3; color: #b52a32; }
+ .retryError:active:not(:disabled) { background: #ffd3d5; color: #a3222a; }
+ .retryError:focus-visible { outline-color: #c9363e; }

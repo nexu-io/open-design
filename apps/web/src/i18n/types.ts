@@ -145,11 +145,14 @@ export interface Dict {
   'fileViewer.commentSync.backfillReopenedTerminalBody': string;
   'fileViewer.commentSync.backfillTerminalBody': string;
   'fileViewer.commentSync.backfillPendingBody': string;
+  /** K4: reopen-resume comment sync busy state, shown in the primary share button itself. */
+  'fileViewer.commentSync.reopenSyncBusy': string;
   'fileViewer.commentSync.alignFailedBody': string;
   'fileViewer.shareGuide.title': string;
   'fileViewer.shareGuide.description': string;
   'fileViewer.shareGuide.tryShare': string;
   'fileViewer.shareGuide.neverShowAgain': string;
+  'fileViewer.shareGuide.close': string;
   'fileViewer.shareGuide.preferenceSaveFailed': string;
   'common.close': string;
   'common.clear': string;
@@ -4231,10 +4234,6 @@ export interface Dict {
   'fileViewer.shareUpdateUncertain': string;
   'fileViewer.shareUpdateRetry': string;
   'fileViewer.unpublishFileFailed': string;
-  'fileViewer.shareMissingRefs': string;
-  'fileViewer.shareMissingRefsToggle': string;
-  'fileViewer.shareInvalidRefs': string;
-  'fileViewer.sharePlanUnavailable': string;
   'fileViewer.publishFileTooLarge': string;
   'fileViewer.workspaceShareSuccess': string;
   'fileViewer.workspaceShareFailed': string;

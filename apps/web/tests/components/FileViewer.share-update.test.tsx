@@ -290,7 +290,7 @@ it('S6-OK updates the stable alias, shows global transient success, and never au
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: /update link/i })); });
   await waitFor(() => expect(posts(fetch)).toHaveLength(1));
   expect(screen.getByText(publication.url)).toBeTruthy();
-  expect((await screen.findByText('Link updated')).closest('[role="status"]')).toBeTruthy();
+  expect((await screen.findByText(/Updated\. Visitors will see the latest version/i)).closest('[role="status"]')).toBeTruthy();
   expect(copy).not.toHaveBeenCalled();
   await waitFor(() => expect(screen.queryByRole('button', { name: /update link/i })).toBeNull());
   await waitFor(() => expect(fetch.mock.calls.filter(([url, init]) => String(url).includes('publish-public') && !init?.method).length).toBeGreaterThanOrEqual(3));

@@ -158,8 +158,23 @@
   font-size: 12px;
   font-weight: 400;
 }
+/* Design (S6-OK/S6-ERR/S14-ERR): the leading glyph is a solid colored circle
+   badge, not a bare icon — green check for success, red "!" for error. */
 .od-toast.od-toast-share-feedback .od-toast-icon {
-  color: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  color: #fff;
+}
+.od-toast.od-toast-share-feedback.tone-success .od-toast-icon {
+  background: #4C9461;
+}
+.od-toast.od-toast-share-feedback.tone-error .od-toast-icon {
+  background: #E5484D;
 }
 .od-toast.od-toast-share-feedback .od-toast-action {
   flex: 0 0 auto;

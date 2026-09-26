@@ -97,22 +97,22 @@ export function CommentSyncBanner({ projectId, workspaceContext, filePath, inclu
   }
 
   // Pending means the current publication's comments have not finished relay.
-  // A verified reopen also warns that stale deleted/resolved comments may still
-  // be visible; neither branch blocks link copying or claims a retry has begun.
+  // K1 (first publish) and K4 (verified reopen) are both drawn by ShareTab's
+  // OWN primary button now — a progress bar for K1, a busy button for K4 —
+  // so a `backfillOnly` mount (ShareTab's) must not also stack this pill
+  // beneath it. A non-`backfillOnly` mount (none exists today, but the
+  // contract stays honest for a future one) still renders it here.
   if (includeBackfill && state.backfill?.state === 'pending') {
-    const firstPublication = state.backfill.reopened === false;
+    if (backfillOnly) return null;
+    const pendingCopyKey = state.backfill.reopened === true
+      ? 'fileViewer.commentSync.backfillReopenedPendingBody'
+      : 'fileViewer.commentSync.backfillPendingBody';
     return (
       <div className={backfillOnly ? `${styles.banner} ${styles.backfillOnly}` : styles.banner} role="status">
-        {firstPublication ? (
-          <div className={styles.backfillProgress} aria-label={t('fileViewer.commentSync.backfillPendingBody')}>
-            <span className={styles.spinner} aria-hidden="true" />
-            <span>{t('fileViewer.commentSync.backfillPendingBody')}</span>
-          </div>
-        ) : (
-          <p>{t(state.backfill.reopened === true
-            ? 'fileViewer.commentSync.backfillReopenedPendingBody'
-            : 'fileViewer.commentSync.backfillPendingBody')}</p>
-        )}
+        <div className={styles.backfillProgress} aria-label={t(pendingCopyKey)}>
+          <span className={styles.spinner} aria-hidden="true" />
+          <span>{t(pendingCopyKey)}</span>
+        </div>
       </div>
     );
   }
@@ -134,7 +134,12 @@ export function CommentSyncBanner({ projectId, workspaceContext, filePath, inclu
               ? 'fileViewer.commentSync.backfillRetryingBody'
               : 'fileViewer.commentSync.backfillTerminalBody'))}</p>
           {state.backfill.retryable ? (
-            <button type="button" className={styles.retry} onClick={() => void retryBackfill()} disabled={retrying}>
+            <button
+              type="button"
+              className={state.backfill.reopened === true ? `${styles.retry} ${styles.retryError}` : styles.retry}
+              onClick={() => void retryBackfill()}
+              disabled={retrying}
+            >
               {t('preview.retry')}
             </button>
           ) : null}

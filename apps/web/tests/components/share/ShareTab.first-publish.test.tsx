@@ -124,30 +124,32 @@ describe('S1 first-publish visual seam', () => {
     expect(icon.querySelector('path')).toHaveAttribute('d', uploadPath);
   });
 
-  it('shows expandable missing-reference warning without disabling publish', async () => {
+  it('renders no missing-reference warning (2026 UI audit: deleted, no lighter replacement) and still allows publishing', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({
       fileCount: 1, totalBytes: 12, exceedsSizeLimit: false,
       exclusions: [{ path: 'assets/missing.png', reason: 'missing' }],
     }) }));
     const publish = vi.fn().mockResolvedValue(undefined);
     render(<ShareTab {...firstProps({ projectId: 'p1', filePath: 'index.html', publishCurrentFilePublic: publish })} />);
-    await waitFor(() => expect(screen.getByText('fileViewer.shareMissingRefs')).toBeInTheDocument());
     const button = screen.getByRole('menuitem', { name: 'fileViewer.generateAndCopyLink' });
-    expect(button).toBeEnabled();
-    fireEvent.click(screen.getByRole('button', { name: /fileViewer.shareMissingRefsToggle/ }));
-    expect(screen.getByText('assets/missing.png')).toBeInTheDocument();
+    await waitFor(() => expect(button).toBeEnabled());
+    expect(screen.queryByText('fileViewer.shareMissingRefs')).toBeNull();
+    expect(screen.queryByText(/fileViewer.shareMissingRefsToggle/)).toBeNull();
+    expect(screen.queryByText('assets/missing.png')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
     fireEvent.click(button);
     expect(publish).toHaveBeenCalledTimes(1);
   });
 
-  it('reports preflight failure accessibly while requiring explicit generation after selection', async () => {
+  it('renders no plan-unavailable warning (2026 UI audit: deleted, no lighter replacement) while requiring explicit generation after selection', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
     const publish = vi.fn().mockResolvedValue(undefined);
     render(<ShareTab {...firstProps({ projectId: 'p1', filePath: 'index.html', publishCurrentFilePublic: publish })} />);
     const toggle = screen.getByRole('switch', { name: 'fileViewer.linkAccessTitle' });
     expect(toggle).toBeDisabled();
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('fileViewer.sharePlanUnavailable'));
-    expect(toggle).toBeEnabled();
+    await waitFor(() => expect(toggle).toBeEnabled());
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByText('fileViewer.sharePlanUnavailable')).toBeNull();
     const generate = screen.getByRole('menuitem', { name: 'fileViewer.generateAndCopyLink' });
     expect(generate).toBeEnabled();
     fireEvent.click(toggle);
@@ -157,6 +159,23 @@ describe('S1 first-publish visual seam', () => {
     fireEvent.click(toggle);
     fireEvent.click(generate);
     expect(publish).toHaveBeenCalledTimes(1);
+  });
+
+  it('surfaces a pre-check too-large plan through the red publishError row, not a yellow banner, and keeps publish blocked', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({
+      fileCount: 1, totalBytes: 30 * 1048576, exceedsSizeLimit: true, exclusions: [],
+    }) }));
+    const publish = vi.fn().mockResolvedValue(undefined);
+    render(<ShareTab {...firstProps({ projectId: 'p1', filePath: 'index.html', publishCurrentFilePublic: publish })} />);
+    const notice = await screen.findByRole('status');
+    expect(notice.className).toContain('publishError');
+    expect(notice).toHaveTextContent('fileViewer.publishFileTooLarge');
+    expect(notice).toHaveTextContent('30.00 MiB');
+    expect(screen.queryByRole('alert')).toBeNull();
+    const generate = screen.getByRole('menuitem', { name: 'fileViewer.generateAndCopyLink' });
+    expect(generate).toBeDisabled();
+    fireEvent.click(generate);
+    expect(publish).not.toHaveBeenCalled();
   });
 
   it('keeps the link-access switch disabled only while preflight is pending', async () => {

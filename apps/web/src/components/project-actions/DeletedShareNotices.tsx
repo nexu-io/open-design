@@ -13,7 +13,7 @@ export function DeletedShareNotices({ state }: { state: ReturnType<typeof useDel
   return <Toast
     key={JSON.stringify([notice.id, row.filePath, row.slug])}
     className="od-toast-share-feedback"
-    message={`${t('designs.deletedShareTitle')}: ${row.filePath} — ${t(row.retrying ? 'designs.deletedShareRetrying' : 'designs.deletedShareFailed')}`}
+    message={t(row.retrying ? 'designs.deletedShareRetrying' : 'designs.deletedShareFailed', { filePath: row.filePath })}
     details={row.failed ? t('ds.actionFailed') : undefined}
     tone={loading ? 'loading' : 'error'}
     role={loading ? 'status' : 'alert'}

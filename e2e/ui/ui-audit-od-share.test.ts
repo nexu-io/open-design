@@ -335,7 +335,9 @@ test('capture isolated OD share entry, progress and failure states',async({page}
   await deleteRow.getByTestId('workspace-tabs-dropdown-row-more').click();
   await page.getByTestId('workspace-tabs-dropdown-row-menu').getByRole('menuitem',{name:/删除|Delete/}).click();
   await page.getByTestId('project-delete-confirm-accept').click();
-  await expect(page.getByRole('alert').filter({hasText:'ui-audit-link'})).toBeVisible();
+  // Design copy (S14-ERR) names the file, not the slug: "项目已删除，「index.html」的
+  // 分享链接停止失败，仍可访问" — the slug never appears in the toast.
+  await expect(page.getByRole('alert').filter({hasText:'index.html'})).toBeVisible();
   await save(page,'S14-ERR','S14-ERR');
 });
 test('capture updated owner G1 portal and S12 deployment submenu',async({page})=>{
@@ -398,9 +400,9 @@ test('capture first-export share guide and ever-shared exclusion P1 EX0',async({
   await exportButton.click();
   const htmlExport=page.locator('.chrome-unified-popover').getByRole('menuitem',{name:/HTML/i});
   await Promise.all([page.waitForEvent('download'),htmlExport.click()]);
-  await expect(page.getByRole('status',{name:'导出完成'})).toBeVisible();
+  await expect(page.getByRole('status',{name:'分享链接，让大家留下反馈'})).toBeVisible();
   await save(page,'P1','P1');
-  const guide=page.getByRole('status',{name:'导出完成'});
+  const guide=page.getByRole('status',{name:'分享链接，让大家留下反馈'});
   await expect(guide).toBeVisible();
   await page.mouse.move(0,0);
   await page.clock.fastForward(11_000);
@@ -427,7 +429,7 @@ test('capture first-export share guide and ever-shared exclusion P1 EX0',async({
   await expect(exportButton).toBeEnabled();
   await exportButton.click();
   await Promise.all([page.waitForEvent('download'),htmlExport.click()]);
-  await expect(page.getByRole('status',{name:'导出完成'})).toHaveCount(0);
+  await expect(page.getByRole('status',{name:'分享链接，让大家留下反馈'})).toHaveCount(0);
   await save(page,'EX0','EX0');
 });
 

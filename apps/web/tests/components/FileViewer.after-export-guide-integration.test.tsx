@@ -146,7 +146,7 @@ describe("Owner P1 real FileViewer export-to-share chain", () => {
 		);
 		await readyViewer();
 		expect(
-			screen.queryByRole("status", { name: "Export complete" }),
+			screen.queryByRole("status", { name: "Share the link, invite feedback" }),
 		).toBeNull();
 		await exportHtml();
 		await waitFor(() =>
@@ -156,7 +156,7 @@ describe("Owner P1 real FileViewer export-to-share chain", () => {
 			),
 		);
 		expect(
-			screen.queryByRole("status", { name: "Export complete" }),
+			screen.queryByRole("status", { name: "Share the link, invite feedback" }),
 		).toBeNull();
 		await act(async () => {
 			finishExport(
@@ -167,14 +167,14 @@ describe("Owner P1 real FileViewer export-to-share chain", () => {
 			);
 		});
 		const guide = await screen.findByRole("status", {
-			name: "Export complete",
+			name: "Share the link, invite feedback",
 		});
 		if (!download.blob) throw new Error("real HTML export did not download");
 		expect(await download.blob.text()).toContain("downloaded");
-		expect(within(guide).getByRole("button", { name: "Share" })).toBeEnabled();
-		fireEvent.click(within(guide).getByRole("button", { name: "Share" }));
+		expect(within(guide).getByRole("button", { name: "Try sharing" })).toBeEnabled();
+		fireEvent.click(within(guide).getByRole("button", { name: "Try sharing" }));
 		expect(
-			screen.queryByRole("status", { name: "Export complete" }),
+			screen.queryByRole("status", { name: "Share the link, invite feedback" }),
 		).toBeNull();
 		expect(
 			await screen.findByRole("button", { name: "More sharing options" }),
@@ -186,20 +186,20 @@ describe("Owner P1 real FileViewer export-to-share chain", () => {
 		const view = await readyViewer();
 		await exportHtml();
 		const first = await screen.findByRole("status", {
-			name: "Export complete",
+			name: "Share the link, invite feedback",
 		});
 		// Guide close is time-driven; clicking its Share action dismisses only this instance.
-		fireEvent.click(within(first).getByRole("button", { name: "Share" }));
+		fireEvent.click(within(first).getByRole("button", { name: "Try sharing" }));
 		fireEvent.click(screen.getByRole("button", { name: "Close" }));
 		await exportHtml();
 		const again = await screen.findByRole("status", {
-			name: "Export complete",
+			name: "Share the link, invite feedback",
 		});
 		fireEvent.click(
 			within(again).getByRole("button", { name: "Don't show again" }),
 		);
 		expect(
-			screen.queryByRole("status", { name: "Export complete" }),
+			screen.queryByRole("status", { name: "Share the link, invite feedback" }),
 		).toBeNull();
 		expect(
 			window.localStorage.getItem("od:after-export-share-guide:v1:p1-account"),
@@ -211,7 +211,7 @@ describe("Owner P1 real FileViewer export-to-share chain", () => {
 			await Promise.resolve();
 		});
 		expect(
-			screen.queryByRole("status", { name: "Export complete" }),
+			screen.queryByRole("status", { name: "Share the link, invite feedback" }),
 		).toBeNull();
 	});
 
@@ -227,18 +227,18 @@ describe("Owner P1 real FileViewer export-to-share chain", () => {
 			await Promise.resolve();
 		});
 		expect(
-			screen.getByRole("status", { name: "Export complete" }),
+			screen.getByRole("status", { name: "Share the link, invite feedback" }),
 		).toBeVisible();
 		await act(async () => {
 			await vi.advanceTimersByTimeAsync(10_000);
 		});
 		expect(
-			screen.queryByRole("status", { name: "Export complete" }),
+			screen.queryByRole("status", { name: "Share the link, invite feedback" }),
 		).toBeNull();
 		vi.useRealTimers();
 		await exportHtml();
 		expect(
-			await screen.findByRole("status", { name: "Export complete" }),
+			await screen.findByRole("status", { name: "Share the link, invite feedback" }),
 		).toBeVisible();
 	});
 
@@ -257,7 +257,7 @@ describe("Owner P1 real FileViewer export-to-share chain", () => {
 			await readyViewer();
 			await exportHtml();
 			expect(
-				screen.queryByRole("status", { name: "Export complete" }),
+				screen.queryByRole("status", { name: "Share the link, invite feedback" }),
 			).toBeNull();
 			await act(async () => {
 				if (outcome === "cancelled") finish("cancelled");
@@ -271,7 +271,7 @@ describe("Owner P1 real FileViewer export-to-share chain", () => {
 				);
 			}
 			expect(
-				screen.queryByRole("status", { name: "Export complete" }),
+				screen.queryByRole("status", { name: "Share the link, invite feedback" }),
 			).toBeNull();
 		},
 	);

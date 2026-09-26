@@ -6,7 +6,13 @@ button.trigger {
   display: flex; align-items: center; justify-content: center;
 }
 .menu {
-  position: fixed; inset-inline-end: auto; top: auto; z-index: 1000;
+  /* Portals independently to document.body, as a sibling of the share
+     popover's own AnchoredMenuShell portal (z-index: var(--z-menu)). A menu
+     opened FROM INSIDE an already-open menu belongs above it — same rule as
+     `.od-tooltip-layer[data-tooltip-context="menu"]` in primitives.css — so
+     this must clear --z-menu, not sit at an unrelated literal below it
+     (S12: the deploy sub-menu was rendering under the share popover). */
+  position: fixed; inset-inline-end: auto; top: auto; z-index: calc(var(--z-menu) + 1);
   box-sizing: border-box; width: 214px; padding: 4px;
   display: flex; flex-direction: column; gap: 2px;
   border: 1px solid #00000008; border-radius: 8px; background: #fff;

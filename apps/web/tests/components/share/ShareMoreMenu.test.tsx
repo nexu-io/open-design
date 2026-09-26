@@ -1,7 +1,23 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ShareMoreMenu } from '../../../src/components/share/ShareMoreMenu';
+
+/*
+ * jsdom in this suite never loads real stylesheets (no `css: true` in
+ * vitest.config.ts, and CSS Modules resolve to class-name maps only), so a
+ * computed-style assertion here would read browser defaults, not the rule
+ * that actually ships. The regression this guards (S12: the deploy sub-menu
+ * portals to `document.body` at a LOWER z-index than the share popover it
+ * opens from, so it renders underneath instead of on top) is a token-
+ * ordering fact in the source CSS, so assert that directly.
+ */
+const shareMoreMenuCss = readFileSync(
+  join(process.cwd(), 'src/components/share/ShareMoreMenu.module.css'),
+  'utf8',
+);
 
 const originalClientWidth = Object.getOwnPropertyDescriptor(document.documentElement, 'clientWidth');
 const originalInnerHeight = Object.getOwnPropertyDescriptor(window, 'innerHeight');
@@ -12,6 +28,17 @@ afterEach(() => {
   if (originalInnerHeight) Object.defineProperty(window, 'innerHeight', originalInnerHeight);
   else Reflect.deleteProperty(window, 'innerHeight');
   vi.restoreAllMocks();
+});
+
+describe('Owner S12 deployment menu layering', () => {
+  it('stacks above the --z-menu share popover it opens from, not at a fixed literal', () => {
+    // The share popover (AnchoredMenuShell) portals to document.body at
+    // z-index: var(--z-menu). ShareMoreMenu portals independently to the
+    // same document.body as a sibling, so it must clear that token — a
+    // hardcoded literal (e.g. 1000) regresses to sitting underneath it.
+    expect(shareMoreMenuCss).toMatch(/z-index:\s*calc\(var\(--z-menu\)\s*\+\s*1\)/);
+    expect(shareMoreMenuCss).not.toMatch(/z-index:\s*\d/);
+  });
 });
 
 describe('Owner S12 deployment menu', () => {

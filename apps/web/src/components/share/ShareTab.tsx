@@ -9,6 +9,7 @@ import type { useT } from '../../i18n';
 import { RemixIcon } from '../RemixIcon';
 import { CloudSignInTip } from '../CloudSignInTip';
 import { CommentSyncBanner } from './CommentSyncBanner';
+import { useCommentSyncState } from './useCommentSyncState';
 import styles from './ShareTab.module.css';
 export type SharePublishFailureKey = PublicFilePublishFailureKey | 'fileViewer.publishFileTooLarge' | 'fileViewer.unpublishFileFailed';
 
@@ -117,8 +118,6 @@ export function ShareTab({
   const [copyingLink, setCopyingLink] = useState(false);
   const [sharePlan, setSharePlan] = useState<SharePlanSummary | null>(null);
   const [sharePlanPending, setSharePlanPending] = useState(false);
-  const [sharePlanFailed, setSharePlanFailed] = useState(false);
-  const [showShareExclusions, setShowShareExclusions] = useState(false);
   // S1: selected link access is only an unpublished UI intent. It never
   // transfers bytes or creates a URL until Generate and copy is clicked.
   const [prepublishLinkAccess, setPrepublishLinkAccess] = useState(true);
@@ -131,16 +130,25 @@ export function ShareTab({
   useEffect(() => {
     let cancelled = false;
     setSharePlan(null);
-    setSharePlanFailed(false);
     if (!projectId || !filePath || !canPublishPublic || viewerOnly || publicationStatus === 'stopped') { setSharePlanPending(false); return; }
     setSharePlanPending(true);
     void fetchProjectFileSharePlan(projectId, filePath, workspaceContext).then(
       (plan) => { if (!cancelled) { setSharePlan(plan); setSharePlanPending(false); } },
-      () => { if (!cancelled) { setSharePlan(null); setSharePlanPending(false); setSharePlanFailed(true); } },
+      () => { if (!cancelled) { setSharePlan(null); setSharePlanPending(false); } },
     );
     return () => { cancelled = true; };
   }, [projectId, filePath, workspaceContext, canPublishPublic, viewerOnly, publicationStatus]);
   const planTooLarge = sharePlan?.exceedsSizeLimit === true;
+  // K1/K4: while a comment backfill is pending, it replaces the primary
+  // action itself (progress bar or busy button) instead of stacking a
+  // second dark pill below a link the visitor can't fully trust yet.
+  // Only fetch once something is actually published — comment backfill is
+  // meaningless before that, and firing this request during the unpublished
+  // first-share flow competes for share-plan network traffic to no purpose.
+  const commentSyncState = useCommentSyncState(filePublished ? projectId : undefined, workspaceContext, { filePath });
+  const backfillPending = filePublished && commentSyncState?.backfill?.state === 'pending'
+    ? commentSyncState.backfill
+    : null;
   const updateAvailable = Boolean(updateCurrentFilePublic) && filePublished && shareEntryPresentation({
     status: publicationStatus ?? 'none', freshness: publicationFreshness,
   }).appearance === 'outdated';
@@ -206,21 +214,52 @@ export function ShareTab({
                           </svg>
                           <span>{t(publishFailureKey)}</span>
                         </p>
-                      ) : null}
-                      {planTooLarge && sharePlan ? (
-                        <p className={styles.sharePlanWarning} role="alert">
-                          {t('fileViewer.publishFileTooLarge')}
-                          {' '}({(sharePlan.totalBytes / 1048576).toFixed(2)} MiB / {SHARE_MAX_TOTAL_BYTES / 1048576} MiB; {sharePlan.totalBytes} / {SHARE_MAX_TOTAL_BYTES} B)
+                      ) : planTooLarge && sharePlan ? (
+                        // No yellow advisory here (2026 UI audit: G4/S1/S2/S7/S15 — delete, no
+                        // lighter replacement). A pre-check size block still leaves the button
+                        // disabled below with no failed request to explain itself, so it borrows
+                        // the same red publishError row a failed attempt would show.
+                        <p className={styles.publishError} role="status">
+                          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true" focusable="false">
+                            <circle cx="8" cy="8" r="6.2" />
+                            <path d="M8 4.8v3.6M8 11h.01" />
+                          </svg>
+                          <span>
+                            {t('fileViewer.publishFileTooLarge')}
+                            {' '}({(sharePlan.totalBytes / 1048576).toFixed(2)} MiB / {SHARE_MAX_TOTAL_BYTES / 1048576} MiB; {sharePlan.totalBytes} / {SHARE_MAX_TOTAL_BYTES} B)
+                          </span>
                         </p>
                       ) : null}
                       {filePublished ? (
+                        backfillPending ? (
+                        <div className={styles.syncStatus} role="status">
+                          {backfillPending.reopened === true ? (
+                            <Button type="button" className={styles.copyButton} disabled aria-busy="true">
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" focusable="false" className="icon-spin">
+                                <path d="M12 3a9 9 0 1 0 9 9" />
+                              </svg>
+                              <span>{t('fileViewer.commentSync.reopenSyncBusy')}</span>
+                            </Button>
+                          ) : (
+                            <div className={styles.syncProgress} aria-label={t('fileViewer.commentSync.backfillPendingBody')}>
+                              <div className={styles.syncProgressFill} aria-hidden="true" />
+                              <div className={styles.syncProgressText}>
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" focusable="false" className="icon-spin">
+                                  <path d="M12 3a9 9 0 1 0 9 9" />
+                                </svg>
+                                <span>{t('fileViewer.commentSync.backfillPendingBody')}</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        ) : (
                         <>
                         <div className={`chrome-publish-plain ${styles.publishedLink}`}>
-                          <div className="chrome-publish-url" title={publishedFileUrl}>
+                          <div className={`chrome-publish-url ${styles.publishedUrl}`} title={publishedFileUrl}>
                               <RemixIcon name="link" size={12} className={styles.publishedLinkIcon} />
                               {publishedFileUrl}
                             </div>
-                            <div className="chrome-publish-actions">
+                            <div className={`chrome-publish-actions ${styles.publishedActions}`}>
                               <Button
                                 type="button"
                                 className={styles.copyButton}
@@ -264,7 +303,7 @@ export function ShareTab({
                         {!canMutatePublicShare && canResumeUpdateAfterLogin ? (
                           <div className={styles.updateNotice}>
                             <p>{t('fileViewer.shareOutdatedSignInHint')}</p>
-                            <CloudSignInTip sharePrompt className={styles.signInAction}
+                            <CloudSignInTip sharePrompt className={styles.signInSecondaryAction}
                               actionLabel={t('fileViewer.signInToUpdate')}
                               onLoginSuccess={onUpdateLoginSuccess} />
                           </div>
@@ -284,20 +323,13 @@ export function ShareTab({
                           </div>
                         ) : null}
                         </>
+                        )
                       ) : (
                         <>
-                        {sharePlanFailed ? (
-                          <div className={styles.sharePlanWarning} role="alert">{t('fileViewer.sharePlanUnavailable')}</div>
-                        ) : null}
-                        {sharePlan && Array.isArray(sharePlan.exclusions) && sharePlan.exclusions.length > 0 ? (
-                          <div className={styles.sharePlanWarning} role="status">
-                            <p>{t('fileViewer.shareMissingRefs')}</p>
-                            <button type="button" onClick={() => setShowShareExclusions(value => !value)} aria-expanded={showShareExclusions}>
-                              {t('fileViewer.shareMissingRefsToggle')} ({sharePlan.exclusions.length})
-                            </button>
-                            {showShareExclusions ? <ul>{sharePlan.exclusions.map((item, index) => <li key={item.path + index}><code>{item.path}</code> — {item.reason === 'missing' ? t('fileViewer.shareMissingRefsToggle') : t('fileViewer.shareInvalidRefs')}</li>)}</ul> : null}
-                          </div>
-                        ) : null}
+                        {/* 2026 UI audit (G4/S1/S2/S7/S15): the plan-unavailable and
+                            missing-refs advisories were yellow banners; deleted, no lighter
+                            replacement. Neither ever blocked publishing (unlike planTooLarge
+                            above), so there is no reason left to surface here. */}
                         {publicationStatus !== 'stopped' || publishingPublicFile ? (
                         <PublishProgressFrame value={publicationStatus === 'stopped' ? null : publishProgress} label={t('fileViewer.uploadingFile')}>
                         <Button
@@ -376,7 +408,11 @@ export function ShareTab({
                               </Button>
                             </div>
                           ) : null}
-                          <CloudSignInTip sharePrompt className={styles.signInAction}
+                          {/* S0: the sole full-width primary action when nothing has
+                              ever been shared. When a stale link is already shown above
+                              (the filePublished branch just above), this instead plays
+                              S13's secondary "sign in to update" role next to it. */}
+                          <CloudSignInTip sharePrompt className={filePublished && publishedFileUrl ? styles.signInSecondaryAction : styles.signInPrimaryAction}
                             actionLabel={canResumeUpdateAfterLogin ? t('fileViewer.signInToUpdate') : undefined}
                             onLoginSuccess={canResumeUpdateAfterLogin ? onUpdateLoginSuccess : undefined} />
                         </div>

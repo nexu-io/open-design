@@ -174,10 +174,24 @@ describe('S3/S4/S4-C copy-button rendering seam', () => {
     }
   });
 
+  it('G2/S3/S4/S4-C/S10 UI audit: the URL row carries its own styling class directly, not only through an ancestor-scoped selector', () => {
+    // The row previously depended on `.publishedLink :global(.chrome-publish-url)`
+    // — a cross-scope descendant selector — to receive its box geometry. That
+    // selector matched fine on paper but the row rendered with no visible box
+    // in every captured screenshot (G2, S3, S4, S4-C, S10). The fix puts a
+    // module-owned class directly on the element so its styling can never
+    // depend on descendant/selector matching working out.
+    const input = props();
+    render(<ShareTab {...input} />);
+    const url = screen.getByText(input.publishedFileUrl);
+    expect(url.className).toMatch(/publishedUrl/);
+    expect(url.className).toContain('chrome-publish-url');
+  });
+
   it('styles the always-visible URL row to the final 32px link geometry', () => {
     const css = parse(readFileSync(resolve(__dirname, '../../../src/components/share/ShareTab.module.css'), 'utf8'));
     const values: Record<string, string> = {};
-    css.walkRules('.publishedLink :global(.chrome-publish-url)', rule => {
+    css.walkRules('.publishedUrl', rule => {
       rule.walkDecls(decl => { values[decl.prop] = decl.value; });
     });
     expect(values).toMatchObject({
@@ -238,8 +252,8 @@ describe('S3/S4/S4-C copy-button rendering seam', () => {
       return values;
     };
     expect(declarations('.publishedLink')).toMatchObject({ gap: '8px', padding: '0' });
-    expect(declarations('.publishedLink :global(.chrome-publish-url)')).toMatchObject({ width: '100%', height: '32px' });
-    expect(declarations('.publishedLink :global(.chrome-publish-actions)')).toMatchObject({ display: 'block', width: '100%' });
+    expect(declarations('.publishedUrl')).toMatchObject({ width: '100%', height: '32px' });
+    expect(declarations('.publishedActions')).toMatchObject({ display: 'block', width: '100%' });
     expect(declarations('button.copyButton')).toMatchObject({ width: '100%', height: '32px' });
     rerender(<ShareTab {...input} filePublished={false} publishingPublicFile publishProgress={0.4} />);
     expect(screen.getAllByRole('progressbar')).toHaveLength(1);

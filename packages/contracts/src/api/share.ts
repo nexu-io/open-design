@@ -1329,7 +1329,9 @@ export function isShareBridgePinDisplay(value: unknown): value is ShareBridgePin
   return shareBridgeExactRecord(value, ['label', 'colorIndex'])
     && typeof value.label === 'string' && value.label.length >= 1
     && value.label.length <= SHARE_BRIDGE_LIMITS.pinLabelMaxLength
-    && !/[^A-Za-z0-9?]/.test(value.label)
+    // Short ASCII tokens, or exactly one letter so a CJK author's initial (林)
+    // can label their pin. Rendered with textContent; no markup, space or emoji.
+    && /^(?:[A-Za-z0-9?]{1,3}|\p{L})$/u.test(value.label)
     && typeof value.colorIndex === 'number' && Number.isInteger(value.colorIndex)
     && value.colorIndex >= 0 && value.colorIndex < SHARE_BRIDGE_LIMITS.paletteSize;
 }

@@ -39,10 +39,10 @@ describe('share bridge v2 wire boundaries', () => {
     }
   });
   it('allows only short text and palette indexes, never identity or styling', () => {
-    for (const label of ['1', '200', 'A', '?', 'AB']) {
+    for (const label of ['1', '200', 'A', '?', 'AB', '林', 'É']) {
       for (const colorIndex of [0, 29]) expect(bridge.isShareBridgePinDisplay({ label, colorIndex })).toBe(true);
     }
-    for (const label of ['', '1234', '<b>', 'a b', '\n', 'A\n', '😀', '林', '#ff']) {
+    for (const label of ['', '1234', '<b>', 'a b', '\n', 'A\n', '😀', '林冉', 'A林', '林\n', 'é\u0301', '#ff']) {
       expect(bridge.isShareBridgePinDisplay({ label, colorIndex: 0 })).toBe(false);
     }
     for (const colorIndex of [-1, 30, 0.5, NaN, Infinity, '0']) {
