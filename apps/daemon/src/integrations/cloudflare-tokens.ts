@@ -61,9 +61,14 @@ export interface StoredCloudflareOAuthToken {
 
 export interface CloudflareOAuthTokensFile {
   token?: StoredCloudflareOAuthToken;
-  /** File-level monotonic counter bumped on EVERY write (including clear) so a
-   * cleared credential's generation is never reused by a later connect — a
-   * stale compare-and-set from before the clear can't match a brand-new token. */
+  /** File-level monotonic counter, bumped by every write that lands, replaces,
+   * or clears a credential, so a cleared credential's generation is never reused
+   * by a later connect — a stale compare-and-set from before the clear can't
+   * match a brand-new token. A write that retires a revoke handle and nothing
+   * else leaves the credential BYTE-IDENTICAL and does NOT move this counter: a
+   * refresh in flight matches on it, so moving it over an unchanged credential
+   * would make that refresh read itself as superseded (see
+   * dropPendingCloudflareOAuthRevokes). */
   lastGeneration?: number;
   /** Grants a credential transition or a disconnect took out of `token` whose
    * revoke has not been confirmed at Cloudflare yet (see
@@ -81,8 +86,12 @@ export interface CloudflareOAuthTokensFile {
    * discover it to revoke. Recorded HERE, in the same locked write as the clear
    * itself, it outlives the process; every OAuth mutation finishes it on the way
    * past (settlePendingCloudflareOAuthGrantRevokes in deploy.ts) and every other
-   * write to this file carries it forward, so the only thing that can drop a
-   * handle is a revoke Cloudflare confirmed. */
+   * write to this file carries it forward, so only two things can drop a handle: a
+   * revoke Cloudflare confirmed, and the rollback that puts the handle's own grant
+   * back on disk as the live credential
+   * (restoreCloudflareOAuthTokenAndDropRevokes) — there the handle must go, since
+   * a later settle would revoke the credential the config names and the user is
+   * using. */
   pendingRevokes?: StoredCloudflareOAuthToken[];
 }
 
@@ -553,6 +562,47 @@ export async function clearCloudflareOAuthTokenForRevoke(
   });
 }
 
+/** Put a credential back on disk AND retire the revoke handle that names it, in
+ * ONE locked write. This is the inverse of clearCloudflareOAuthTokenForRevoke,
+ * and it exists for the same reason that one pairs its clear with its handle: a
+ * rollback that restored the credential and then dropped the handle in a SECOND
+ * write left a window — a crash between the two, or a drop that failed and was
+ * swallowed — with a live credential on disk that a pending handle still named.
+ * The next OAuth mutation's settle then revokes a grant the config names and the
+ * user is using, and the settings surface reports a connection it just broke.
+ *
+ * One write, so the two halves are never observable apart: either the credential
+ * is back and nothing names it, or nothing changed and the store still holds the
+ * crash state the handle exists to recover from — grant off disk, handle naming
+ * it — for the next mutation to settle.
+ *
+ * The generation moves: this write LANDS a credential, and the ABA guard has to
+ * be able to tell a compare-and-set from before it apart from one after it.
+ * Handles for other grants are carried forward exactly as every other writer
+ * carries them; this write retires only the handle naming the credential it
+ * restores, matched on the same string every reader matches on
+ * (`refreshToken || accessToken`). */
+export async function restoreCloudflareOAuthTokenAndDropRevokes(
+  dataDir: string,
+  token: StoredCloudflareOAuthToken,
+): Promise<void> {
+  const restoredToken = token.refreshToken || token.accessToken;
+  await withLock(dataDir, async () => {
+    const file = await readCloudflareOAuthTokensFile(dataDir);
+    const gen = nextLastGeneration(file);
+    const carried = file.pendingRevokes ?? [];
+    const pendingRevokes = restoredToken
+      ? carried.filter((entry) => (entry.refreshToken || entry.accessToken) !== restoredToken)
+      : carried;
+    token.generation = gen;
+    await writeTokensFile(dataDir, {
+      token,
+      lastGeneration: gen,
+      ...(pendingRevokes.length > 0 ? { pendingRevokes } : {}),
+    });
+  });
+}
+
 /** The grants a credential transition took off disk whose revoke is still
  * unconfirmed. Empty when there is nothing owed, or no file at all. */
 export async function getPendingCloudflareOAuthRevokes(
@@ -569,9 +619,10 @@ export async function getPendingCloudflareOAuthRevokes(
  * the handles, and the next OAuth mutation retries them.
  *
  * The credential is read and carried under the same rules as every other
- * writer: from the RAW object, so a record that no longer sanitizes is still
- * carried rather than erased, and at the FILE generation, so the refresh
- * compare-and-set keeps matching it (see the two notes in the body). */
+ * writer — from the RAW object, so a record that no longer sanitizes is still
+ * carried rather than erased — but this write leaves it BYTE-IDENTICAL, at the
+ * generation it already had, because it replaces no credential (see the note in
+ * the body). */
 export async function dropPendingCloudflareOAuthRevokes(
   dataDir: string,
   settled: readonly string[],
@@ -592,18 +643,26 @@ export async function dropPendingCloudflareOAuthRevokes(
       return !token || !settled.includes(token);
     });
     if (remaining.length === pending.length) return;
-    const gen = nextLastGeneration(file);
-    // The FILE generation and the carried record's generation stay in step, as
-    // every other writer leaves them. The refresh compare-and-set matches the
-    // FILE generation against the caller's TOKEN generation, so a record
-    // carried at its old generation fails that check from then on: the next
-    // refresh reads itself as superseded, revokes the token it just minted, and
-    // reports CFW_OAUTH_RECONNECT_REQUIRED. A record recovered from the raw
-    // bytes is carried exactly as the store held it — it has no usable access
-    // token, so no refresh compares against its generation at all.
-    const carried = file.token
-      ? { ...file.token, generation: gen }
-      : recoveredDisplacedCredential(raw);
+    // Retiring a revoke handle is not a credential transition, so the credential
+    // this write carries back — and the FILE generation its identity is compared
+    // at — survive it untouched. The refresh compare-and-set matches the FILE
+    // generation against the generation the refreshing caller read before it
+    // called the token endpoint, so re-stamping a byte-identical record at a new
+    // generation makes a refresh that is mid-flight read itself as superseded: it
+    // revokes the grant it just minted, reports CFW_OAUTH_RECONNECT_REQUIRED, and
+    // destroys the only credential there is. A benign concurrent write — a settle
+    // landing during a deploy's token-endpoint round trip — is exactly that, and
+    // must not cost the user a reconnect.
+    //
+    // Only a write that CHANGES the credential may move the generation. A record
+    // recovered from the raw bytes (the store holds no usable credential, so this
+    // write is what lands it) is such a write; so is a store with no credential
+    // at all, which keeps the clear-shaped bump every other no-credential write
+    // performs.
+    const carried = file.token ?? recoveredDisplacedCredential(raw);
+    const gen = file.token
+      ? (file.lastGeneration ?? file.token.generation)
+      : nextLastGeneration(file);
     await writeTokensFile(dataDir, {
       lastGeneration: gen,
       ...(carried ? { token: carried } : {}),

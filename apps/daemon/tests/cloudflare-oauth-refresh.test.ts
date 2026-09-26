@@ -23,8 +23,10 @@ import {
 import {
   CLOUDFLARE_OAUTH_UNKNOWN_EXPIRY_TTL_MS,
   clearCloudflareOAuthToken,
+  clearCloudflareOAuthTokenForRevoke,
   cloudflareOAuthExpiresAt,
   getCloudflareOAuthToken,
+  getPendingCloudflareOAuthRevokes,
   isCloudflareOAuthTokenExpired,
   sanitizeCloudflareOAuthTokensFile,
   setCloudflareOAuthToken,
@@ -40,6 +42,7 @@ import {
   cloudflareOAuthTokensDir,
   configureCloudflareWorkersDataDir,
   getCloudflareAccessToken,
+  settlePendingCloudflareOAuthGrantRevokes,
   writeCloudflareWorkersConfig,
 } from '../src/deploy.js';
 
@@ -1127,6 +1130,73 @@ describe('setCloudflareOAuthTokenGuarded', () => {
       expect(JSON.parse(await readFile(file, 'utf8'))).toMatchObject({ lastGeneration: 4 });
       expect(await readFile(file, 'utf8')).not.toContain('leaked-refresh');
     } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+
+// The token-endpoint round trip is the one long window in this path with no
+// store lock held (see refreshCloudflareOAuthAccessToken). Any OAuth mutation
+// that lands inside it — a settle, a disconnect, a connect — used to advance the
+// file generation even when it changed nothing about the credential, so the
+// refresh's compare-and-set missed and the grant it had just minted was revoked
+// on the way to a CFW_OAUTH_RECONNECT_REQUIRED the user could not explain.
+describe('a store write that lands during the token-endpoint round trip', () => {
+  it('a settle that only retires a revoke handle does not cost the refresh its grant', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'od-cf-refresh-concurrent-settle-'));
+    configureCloudflareWorkersDataDir(dir);
+    const dataDir = cloudflareOAuthTokensDir();
+    const expired = (access: string, refresh: string) => ({
+      accessToken: access,
+      refreshToken: refresh,
+      tokenType: 'Bearer',
+      clientId: 'client-abc',
+      expiresAt: Date.now() - 1000,
+      generation: 0,
+      savedAt: Date.now(),
+    });
+    // A transition took one grant off disk and left it named by a handle; the
+    // reconnect that followed stored the credential this refresh rotates.
+    await setCloudflareOAuthToken(dataDir, expired('access-1', 'ref-1'));
+    await clearCloudflareOAuthTokenForRevoke(dataDir);
+    await setCloudflareOAuthToken(dataDir, expired('access-2', 'ref-2'));
+    await writeCloudflareWorkersConfig({ credentialMode: 'oauth', accountId: 'acct_test', clientId: 'client-abc' });
+
+    const tokenCalls: string[] = [];
+    const revokeCalls: string[] = [];
+    const realFetch = globalThis.fetch;
+    vi.stubGlobal('fetch', async (input: unknown, init?: unknown) => {
+      const url = String(input);
+      if (url.includes('revoke')) {
+        revokeCalls.push(url);
+        return new Response(null, { status: 200 });
+      }
+      if (url.includes('oauth2/token')) {
+        tokenCalls.push(url);
+        // The benign concurrent write: an OAuth mutation settling the debt the
+        // handle records, while this refresh waits on Cloudflare.
+        await settlePendingCloudflareOAuthGrantRevokes();
+        return new Response(
+          JSON.stringify({ access_token: 'fresh', token_type: 'Bearer', refresh_token: 'ref-2-rotated', expires_in: 3600 }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return realFetch(input as never, init as never);
+    });
+    try {
+      await expect(getCloudflareAccessToken()).resolves.toBe('fresh');
+      // The rotated credential is the store's, and the settle's grant is the
+      // only grant revoked: the refresh never revoked the one it had just minted.
+      expect(await getCloudflareOAuthToken(dataDir)).toMatchObject({
+        accessToken: 'fresh',
+        refreshToken: 'ref-2-rotated',
+      });
+      expect(tokenCalls).toHaveLength(1);
+      expect(revokeCalls).toHaveLength(1);
+      expect(await getPendingCloudflareOAuthRevokes(dataDir)).toEqual([]);
+    } finally {
+      vi.unstubAllGlobals();
       await rm(dir, { recursive: true, force: true });
     }
   });

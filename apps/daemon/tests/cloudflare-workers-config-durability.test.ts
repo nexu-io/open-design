@@ -30,6 +30,7 @@ import {
   dropPendingCloudflareOAuthRevokes,
   getCloudflareOAuthToken,
   getPendingCloudflareOAuthRevokes,
+  restoreCloudflareOAuthTokenAndDropRevokes,
   setCloudflareOAuthToken,
   setCloudflareOAuthTokenIfGenerationMatches,
 } from '../src/integrations/cloudflare-tokens.js';
@@ -1269,6 +1270,156 @@ describe('credential mode is derived from a live OAuth grant', () => {
 
       await commitCloudflareOAuthMode({ clientId: 'client-abc', redirectUri: 'http://127.0.0.1:1/cb' }, second);
       expect((await readCloudflareWorkersConfig()).credentialMode).toBe('oauth');
+    });
+  });
+});
+
+
+// The store's writers, from the one direction that is NOT a credential
+// transition: a write that retires a revoke handle, and the rollback that puts a
+// credential back. Neither may leave a credential and a handle describing
+// different states of the world.
+describe('credential writes that are not credential transitions', () => {
+  it('a settle that only retires a revoke handle leaves the generation a refresh in flight already read', async () => {
+    await withDataDir(async () => {
+      const tokens = cloudflareOAuthTokensDir();
+      const credential = (access: string, refresh: string) => ({
+        accessToken: access,
+        refreshToken: refresh,
+        tokenType: 'Bearer',
+        generation: 1,
+        savedAt: Date.now(),
+      });
+      await setCloudflareOAuthToken(tokens, credential('access-1', 'ref-1'));
+      // A transition takes one grant off disk and records it as a handle …
+      await clearCloudflareOAuthTokenForRevoke(tokens);
+      // … and a reconnect stores a new credential beside that handle.
+      await setCloudflareOAuthToken(tokens, credential('access-2', 'ref-2'));
+
+      // A refresh reads the generation BEFORE it calls the token endpoint; the
+      // settle below is the write that lands while it is waiting on the answer.
+      const readBeforeTheRoundTrip = (await getCloudflareOAuthToken(tokens))!.generation;
+      const before = await getCloudflareOAuthToken(tokens);
+      await dropPendingCloudflareOAuthRevokes(tokens, ['ref-1']);
+      expect(await getPendingCloudflareOAuthRevokes(tokens)).toEqual([]);
+
+      // The credential this settle carried back is byte-identical: retiring a
+      // handle replaces no credential, so re-stamping the record at a new
+      // generation is what made a mid-flight refresh read itself as superseded,
+      // revoke the grant it had just minted, and report
+      // CFW_OAUTH_RECONNECT_REQUIRED over a credential nobody had replaced.
+      const stored = await getCloudflareOAuthToken(tokens);
+      expect(stored).toEqual(before);
+      expect(stored!.generation).toBe(readBeforeTheRoundTrip);
+      const landed = await setCloudflareOAuthTokenIfGenerationMatches(
+        tokens,
+        credential('access-3', 'ref-3'),
+        readBeforeTheRoundTrip,
+      );
+      expect(landed).toBe(true);
+      expect((await getCloudflareOAuthToken(tokens))?.accessToken).toBe('access-3');
+    });
+  });
+
+  it('the rollback restores the grant and drops its revoke handle in ONE write', async () => {
+    await withDataDir(async (dir) => {
+      const tokens = cloudflareOAuthTokensDir();
+      const tokensFile = path.join(tokens, 'cloudflare-oauth-tokens.json');
+      await writeCloudflareWorkersConfig({ token: 'static-token', accountId: 'acct_test' });
+      await setCloudflareOAuthToken(tokens, {
+        accessToken: 'oauth-access',
+        refreshToken: 'ref-1',
+        tokenType: 'Bearer',
+        clientId: 'client-abc',
+        expiresAt: Date.now() + 3600_000,
+        generation: 1,
+        savedAt: Date.now(),
+      });
+      await commitCloudflareOAuthMode();
+      const before = (JSON.parse(await readFile(tokensFile, 'utf8')) as { lastGeneration: number }).lastGeneration;
+
+      // The same fault the rollback tests above inject: only the REPLACEMENT
+      // config write fails, so the transition clears the credential and then has
+      // to put it back.
+      const probe = await open(path.join(dir, 'probe-rollback-one-write'), 'w');
+      const proto = Object.getPrototypeOf(probe) as { writeFile: (data: unknown, enc?: string) => Promise<void> };
+      await probe.close();
+      const realWrite = proto.writeFile;
+      vi.spyOn(proto, 'writeFile').mockImplementation(async function (this: unknown, data: unknown, enc?: string) {
+        if (typeof data === 'string' && data.includes('"credentialMode": "token"')) {
+          throw new Error('EACCES: permission denied');
+        }
+        return realWrite.call(this, data, enc);
+      });
+
+      await expect(writeCloudflareWorkersConfig({ credentialMode: 'token' })).rejects.toThrow('EACCES');
+      // Two bumps: the clear that took the grant off disk, and the single write
+      // that puts it back and retires the handle together. A rollback split
+      // across two writes moved the counter twice, and a crash — or a drop that
+      // failed and was swallowed — between them left a live credential on disk
+      // that a pending handle still named.
+      const after = JSON.parse(await readFile(tokensFile, 'utf8')) as { lastGeneration: number };
+      expect(after.lastGeneration).toBe(before + 2);
+      const restored = await getCloudflareOAuthToken(tokens);
+      expect(restored).toMatchObject({ accessToken: 'oauth-access', refreshToken: 'ref-1', clientId: 'client-abc' });
+      // … and in step with the file, the way every writer leaves them.
+      expect(restored!.generation).toBe(after.lastGeneration);
+      expect(await getPendingCloudflareOAuthRevokes(tokens)).toEqual([]);
+    });
+  });
+
+  it('a rollback whose restore write fails leaves the pair all-or-nothing', async () => {
+    await withDataDir(async (dir) => {
+      const tokens = cloudflareOAuthTokensDir();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      await writeCloudflareWorkersConfig({ token: 'static-token', accountId: 'acct_test' });
+      await setCloudflareOAuthToken(tokens, {
+        accessToken: 'oauth-access',
+        refreshToken: 'ref-1',
+        tokenType: 'Bearer',
+        clientId: 'client-abc',
+        expiresAt: Date.now() + 3600_000,
+        generation: 1,
+        savedAt: Date.now(),
+      });
+      await commitCloudflareOAuthMode();
+
+      let replacementFailed = false;
+      let tokenStoreWrites = 0;
+      const probe = await open(path.join(dir, 'probe-rollback-second-write'), 'w');
+      const proto = Object.getPrototypeOf(probe) as { writeFile: (data: unknown, enc?: string) => Promise<void> };
+      await probe.close();
+      const realWrite = proto.writeFile;
+      vi.spyOn(proto, 'writeFile').mockImplementation(async function (this: unknown, data: unknown, enc?: string) {
+        const text = typeof data === 'string' ? data : '';
+        if (text.includes('"credentialMode": "token"')) {
+          replacementFailed = true;
+          throw new Error('EACCES: permission denied');
+        }
+        if (replacementFailed && text.includes('"lastGeneration"')) {
+          tokenStoreWrites += 1;
+          // The SECOND half of the rollback's pair is the one that fails — which
+          // is exactly the write a two-statement restore/drop split needed, and
+          // the one whose loss used to be swallowed.
+          if (tokenStoreWrites === 2) throw new Error('EIO: I/O error');
+        }
+        return realWrite.call(this, data, enc);
+      });
+
+      await expect(writeCloudflareWorkersConfig({ credentialMode: 'token' })).rejects.toThrow('EACCES');
+      void warnSpy;
+      const restored = await getCloudflareOAuthToken(tokens);
+      const handles = await getPendingCloudflareOAuthRevokes(tokens);
+      // The invariant: a credential on disk is never one a pending handle names.
+      if (restored) {
+        expect(handles.map((handle) => handle.refreshToken || handle.accessToken)).not.toContain(
+          restored.refreshToken || restored.accessToken,
+        );
+      }
+      // One write means the pair cannot half-land: the rollback completed, so the
+      // grant is back with nothing naming it.
+      expect(restored).toMatchObject({ accessToken: 'oauth-access', refreshToken: 'ref-1' });
+      expect(handles).toEqual([]);
     });
   });
 });

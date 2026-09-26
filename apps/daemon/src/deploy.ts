@@ -17,7 +17,7 @@ import {
   getCloudflareOAuthToken,
   getPendingCloudflareOAuthRevokes,
   isCloudflareOAuthTokenExpired,
-  setCloudflareOAuthToken,
+  restoreCloudflareOAuthTokenAndDropRevokes,
   setCloudflareOAuthTokenIfGenerationMatches,
   type StoredCloudflareOAuthToken,
 } from './integrations/cloudflare-tokens.js';
@@ -809,12 +809,15 @@ export async function writeCloudflareWorkersConfig(input: Partial<DeployConfig>)
       // rewritten below never names oauth with nothing behind it, then the
       // pre-transition config with the marker this transition added dropped.
       try {
-        if (displaced) await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), displaced);
         // The grant is the config's credential again, so the revoke handle this
         // transition recorded in the same write as the clear has to go with it:
         // left behind, the next OAuth mutation would revoke a credential the
-        // config still names and the user is still using.
-        await dropCloudflareGrantRevokeHandle(displaced);
+        // config still names and the user is still using. Both halves are ONE
+        // write (restoreCloudflareOAuthTokenAndDropRevokes). Two writes left the
+        // window this rollback exists to close: a crash between them, or a drop
+        // that failed and was swallowed, stranded a restored credential on disk
+        // with a pending handle still naming it.
+        if (displaced) await restoreCloudflareOAuthTokenAndDropRevokes(cloudflareOAuthTokensDir(), displaced);
         const restored: DeployConfig = { ...persistableCloudflareWorkersConfig(current) };
         delete restored.pendingOAuthGrant;
         delete restored.pendingOAuthGrantClear;
