@@ -185,7 +185,21 @@ async function readCloudflareOAuthTokensFileWithRaw(
       '[cloudflare-tokens] Corrupted JSON, returning empty:',
       e.message,
     );
-    return { raw: undefined, file: { ...EMPTY } };
+    // An unparsable file can still carry a live refresh/access token in its
+    // bytes; salvage those strings so a disconnect revokes the grant instead
+    // of wiping the file and leaving the credential usable at Cloudflare.
+    const field = (key: string): string | undefined => {
+      const match = new RegExp('"' + key + '"\\s*:\\s*"([^"\\\\]+)"').exec(text);
+      return match ? match[1] : undefined;
+    };
+    const salvaged = {
+      token: {
+        accessToken: field('accessToken'),
+        refreshToken: field('refreshToken'),
+        clientId: field('clientId'),
+      },
+    };
+    return { raw: salvaged, file: { ...EMPTY } };
   }
   return { raw, file: sanitizeCloudflareOAuthTokensFile(raw) };
 }
