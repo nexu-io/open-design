@@ -502,10 +502,12 @@ describe('deployToCloudflareWorkers', () => {
       { type: 'queue', name: 'JOBS', queue_name: 'jobs' },
       { type: 'hyperdrive', name: 'PG', id: 'hd-1' },
       { type: 'service', name: 'API', service: 'api-worker' },
+      { type: 'r2_bucket', name: 'STALE', bucket_name: 'old-bucket' },
     ]);
-    // R2/D1 are OpenDesign's to decide (the deploy ensures and rewrites them), so
-    // a leftover of a managed type is dropped rather than duplicated, and the
-    // value-opaque secret types ride on keep_bindings instead.
+    // R2/D1 bindings the user created outside OpenDesign are carried across like
+    // KV and queues (a dashboard-created binding under an undeclared name must not
+    // be deleted by the next deploy); only the value-opaque secret types ride on
+    // keep_bindings instead of being re-sent.
     expect(meta.keep_bindings).toEqual(['secret_text', 'secret_key']);
   });
 

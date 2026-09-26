@@ -162,7 +162,11 @@ export function isCloudflareAccessChallengeResponse(resp: Response): boolean {
   const location = resp.headers?.get?.('location') || '';
   if (isCloudflareAccessUrl(location)) return true;
   const setCookie = resp.headers?.get?.('set-cookie') || '';
-  if (/cf[-_]access/i.test(setCookie) || /cf_authorization/i.test(setCookie)) return true;
+  // Only the real Access cookie proves the gate. A broader cf[-_]access match
+  // would read an app's own cookie whose name merely contains the substring as
+  // an Access gate, stamping a protected verdict on a deployment the probe then
+  // mislabels as "sign in to Cloudflare Access".
+  if (/cf_authorization/i.test(setCookie)) return true;
   return /\bchallenge\b/i.test(resp.headers?.get?.('cf-mitigated') || '');
 }
 

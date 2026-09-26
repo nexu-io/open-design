@@ -2251,8 +2251,12 @@ describe('cloudflare access check-link classification', () => {
   it('accepts only Access-specific header evidence, never body text or a lookalike host', () => {
     const withLocation = new Response('', { status: 401, headers: { location: 'https://acct-test.cloudflareaccess.com/cdn-cgi/access/login' } });
     expect(isCloudflareAccessChallengeResponse(withLocation)).toBe(true);
-    const withCookie = new Response('', { status: 401, headers: { 'set-cookie': 'cf_access=1; Path=/' } });
+    const withCookie = new Response('', { status: 401, headers: { 'set-cookie': 'CF_Authorization=abc; Path=/' } });
     expect(isCloudflareAccessChallengeResponse(withCookie)).toBe(true);
+    // A cookie whose name merely contains cf_access is NOT the Access cookie; it
+    // must not stamp a protected verdict on a deployment that sets its own.
+    const strayCookie = new Response('', { status: 401, headers: { 'set-cookie': 'cf_access=1; Path=/' } });
+    expect(isCloudflareAccessChallengeResponse(strayCookie)).toBe(false);
     const bodyOnly = new Response('<html>Cloudflare Access</html>', { status: 401 });
     expect(isCloudflareAccessChallengeResponse(bodyOnly)).toBe(false);
     const lookalike = new Response('', { status: 401, headers: { location: 'https://evil.example/?cloudflareaccess.com' } });

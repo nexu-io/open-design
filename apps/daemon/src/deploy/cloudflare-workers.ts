@@ -507,12 +507,14 @@ async function uploadAssetBuckets(
   return completionJwt;
 }
 
-/** Binding types OpenDesign owns: the assets binding it injects, plus the R2 and
- * D1 bindings the config declares, which the deploy ensures and rewrites (a D1
- * databaseName is resolved to an id). Upload metadata REPLACES the script's
- * whole binding set, so naming only these types deleted every binding the user
- * had added by any other means. */
-const WORKERS_MANAGED_BINDING_TYPES = new Set(['assets', 'r2_bucket', 'd1']);
+/** Binding types OpenDesign owns outright. Only the assets binding it injects is
+ * dropped from the carried set: R2 and D1 bindings are carried across like KV,
+ * queues and services, because a dashboard- or wrangler-created R2/D1 binding
+ * under a name the config does not declare would otherwise be deleted from the
+ * live script by the next deploy (the upload metadata REPLACES the whole set).
+ * A binding the user deletes from the config then lingers on the script, which
+ * is already the behavior for KV and queues. */
+const WORKERS_MANAGED_BINDING_TYPES = new Set(['assets']);
 
 /** Carried across an upload by `keep_bindings` rather than by re-sending: the
  * settings API redacts their values, so a re-sent entry would write "no value"
