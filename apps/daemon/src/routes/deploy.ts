@@ -1173,7 +1173,16 @@ export function registerDeploymentCheckRoutes(app: Express, ctx: RegisterDeploym
    * only) and never verified it. Probing it for a preview record would judge
    * the preview by a hostname it did not deploy: the production hostname
    * answering ungated would fail a preview whose own URL is gated, and vice
-   * versa. Only a production record's verdict covers it. */
+   * versa. Only a production record's verdict covers it.
+   *
+   * The exposure's own detachable hostnames are added for EVERY target: they
+   * are hostnames a deploy attached and nothing has taken back down, so the
+   * verdict that clears the exposure (the protected branch below) must have
+   * probed each of them. An earlier deploy's hostname can still be routed to
+   * the script while the record displays a different one, and judging by the
+   * displayed domain alone left that still-public hostname unprobed: the
+   * record was promoted `ready`, the exposure was deleted, and the hostname
+   * was forgotten while it was still served. */
   function accessPerimeterUrlsOf(record: { url: string; target: string; providerMetadata: Record<string, unknown> }): string[] {
     const urls: string[] = [];
     const pushUrl = (url: string | undefined) => {
@@ -1183,6 +1192,9 @@ export function registerDeploymentCheckRoutes(app: Express, ctx: RegisterDeploym
     if (record.target !== 'preview') {
       const displayed = recordedCustomDomainFromMetadata(record.providerMetadata);
       if (displayed) pushUrl(typeof displayed.url === 'string' && displayed.url ? displayed.url : 'https://' + normalizeHostname(String(displayed.hostname)));
+    }
+    for (const domain of unverifiedExposureFromMetadata(record.providerMetadata)?.detachableCustomDomains ?? []) {
+      pushUrl('https://' + normalizeHostname(domain.hostname));
     }
     return urls;
   }

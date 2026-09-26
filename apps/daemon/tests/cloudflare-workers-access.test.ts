@@ -2283,6 +2283,26 @@ describe('verifyCloudflareAccessPerimeter', () => {
     expect(seen[0]?.redirect).toBe('manual');
     expect(seen[0]?.signal).toBeInstanceOf(AbortSignal);
   });
+
+  it('never reports protected on a probe budget that floors to zero, and refuses to be handed one', async () => {
+    // The per-URL verdict is SEEDED at `protected` and only the probe loop can
+    // change it, so a budget of zero probes returned it untouched: Access
+    // verified on no evidence at all. The setter refuses such an override …
+    expect(() => configureCloudflareAccessPerimeterRetry({ attempts: 0 })).toThrow(/positive/);
+    expect(() => configureCloudflareAccessPerimeterRetry({ attempts: -3 })).toThrow(/positive/);
+    expect(() => configureCloudflareAccessPerimeterRetry({ attempts: Number.NaN })).toThrow(/positive/);
+
+    // … and a budget the loop would FLOOR to zero still asks once, so no
+    // override reaching the loop can turn into an evidence-free `protected`.
+    configureCloudflareAccessPerimeterRetry({ attempts: 0.4, baseMs: 1 });
+    const fn = vi.fn(async () => {
+      throw new TypeError('fetch failed');
+    });
+    vi.stubGlobal('fetch', fn);
+    const verdict = await verifyCloudflareAccessPerimeter(['https://a.example.com'], {});
+    expect(verdict.outcome).toBe('unreachable');
+    expect(fn).toHaveBeenCalled();
+  });
 });
 
 describe('Cloudflare Access redirect detection', () => {

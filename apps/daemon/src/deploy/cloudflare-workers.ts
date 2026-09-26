@@ -1272,9 +1272,16 @@ export const CLOUDFLARE_ACCESS_PERIMETER_RETRY_DEFAULTS: Readonly<CloudflareAcce
 let accessPerimeterRetry: CloudflareAccessPerimeterRetry = { ...CLOUDFLARE_ACCESS_PERIMETER_RETRY_DEFAULTS };
 
 /** Test hook: shrink (or restore, with no argument) the perimeter probe budget
- * so a suite asserting the unverified path does not wait out the real one. */
+ * so a suite asserting the unverified path does not wait out the real one.
+ * Refuses a budget that would verify nothing (see the probe loop): a zero-probe
+ * budget leaves every URL's verdict at the seeded `protected`, which reports a
+ * deploy Access-verified on no evidence at all. */
 export function configureCloudflareAccessPerimeterRetry(overrides?: Partial<CloudflareAccessPerimeterRetry>): void {
-  accessPerimeterRetry = { ...CLOUDFLARE_ACCESS_PERIMETER_RETRY_DEFAULTS, ...(overrides ?? {}) };
+  const next = { ...CLOUDFLARE_ACCESS_PERIMETER_RETRY_DEFAULTS, ...(overrides ?? {}) };
+  if (!Number.isFinite(next.attempts) || next.attempts <= 0) {
+    throw new RangeError('Cloudflare Access perimeter retry attempts must be a positive number of probes; a zero-probe budget verifies nothing.');
+  }
+  accessPerimeterRetry = next;
 }
 
 /** What a perimeter probe learned about a public URL. The two failure kinds
@@ -1396,7 +1403,13 @@ export async function verifyCloudflareAccessPerimeter(urls: string[], requestIni
       ),
     };
   }
-  const { attempts, baseMs, maxDelayMs } = accessPerimeterRetry;
+  // At least one probe per URL: the per-URL verdict below is SEEDED at
+  // `protected` and only the loop can change it, so a budget that floors to
+  // zero would return that seed without ever asking a question — Access
+  // verified on no evidence. The setter refuses such an override; this floor
+  // is what keeps the loop itself unable to reach it.
+  const attempts = Math.max(1, Math.floor(accessPerimeterRetry.attempts));
+  const { baseMs, maxDelayMs } = accessPerimeterRetry;
   let unreachable: CloudflareAccessPerimeterVerdict | null = null;
   for (const url of urls) {
     let verdict: CloudflareAccessPerimeterVerdict = { outcome: 'protected' };

@@ -3375,6 +3375,67 @@ describe('deploy provider routes', () => {
     }
   });
 
+  it('a protected verdict covers the hostnames the exposure it clears still names, not only the displayed domain', async () => {
+    const f = await workersSiblingFixture('exposure-hostname-verdict', { access: true });
+    configureCloudflareAccessPerimeterRetry({ attempts: 2, baseMs: 1 });
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const db = openDatabase(process.cwd(), { dataDir });
+    try {
+      // This run turns the workers.dev route ON and attaches a.example.com, and
+      // no probe answers: both halves are recorded as the deploy's exposure.
+      f.state.subdomainEnabled = false;
+      f.state.headMode = 'unreachable';
+      await f.putConfig({ hostname: 'a.example.com', access: true });
+      const deployResp = await f.deploy('a.html');
+      expect(deployResp.status).toBe(200);
+      const deployed = (await deployResp.json()) as { id: string; status: string; url: string };
+      expect(deployed.status).toBe('link-delayed');
+      expect(f.state.routed.map((d) => d.hostname)).toEqual(['a.example.com']);
+      const metadataOf = () =>
+        (getDeploymentById(db, f.projectId, deployed.id)?.providerMetadata ?? {}) as Record<string, unknown>;
+      expect(metadataOf().unverifiedExposure).toEqual({
+        scriptName: f.scriptName,
+        subdomainEnabledByThisRun: true,
+        detachableCustomDomains: [{ id: 'dom-a', hostname: 'a.example.com' }],
+      });
+
+      // A later record displays a DIFFERENT hostname while a.example.com is
+      // still routed to the script: the exposure names a hostname the record no
+      // longer displays, which is what an earlier deploy's attach looks like
+      // once the configuration moved on.
+      const row = getDeploymentById(db, f.projectId, deployed.id);
+      if (!row) throw new Error('the deployment record is required');
+      const { cloudflareWorkers: _lifted, ...record } = row;
+      upsertDeployment(db, {
+        ...record,
+        providerMetadata: { ...metadataOf(), customDomain: { hostname: 'b.example.com', zoneId: 'zone-1' } },
+      });
+
+      // The record's own URL and the displayed hostname answer WITH the gate;
+      // the hostname the exposure still names answers a plain 200 — ungated.
+      f.state.headMode = (url) => (url === 'https://a.example.com' ? 'plain' : 'access');
+      const before = f.state.cfCalls.length;
+      const checked = await f.checkLink(deployed.id);
+      expect(checked.status).toBe(200);
+      // The verdict that clears the exposure must have covered every URL it
+      // clears. Judging by the displayed domain alone promoted the record to
+      // `ready` and deleted the exposure, forgetting a hostname that is still
+      // routed and still public.
+      const probed = f.state.cfCalls.slice(before).filter((c) => isPublicProbeUrl(c.url)).map((c) => c.url);
+      expect(probed).toContain('https://a.example.com');
+      const failed = (await checked.json()) as { status: string; cloudflareWorkers?: Record<string, unknown> };
+      expect(failed.status).toBe('failed');
+      expect(failed.cloudflareWorkers?.check).toMatchObject({ ok: false, detail: 'CFW_ACCESS_UNVERIFIED' });
+      // And the still-routed hostname is withdrawn rather than forgotten.
+      expect(f.state.routed).toEqual([]);
+      expect(metadataOf().unverifiedExposure).toBeUndefined();
+    } finally {
+      configureCloudflareAccessPerimeterRetry();
+      await f.cleanup();
+    }
+  });
+
   it('a preview deploy carries the production record\'s unwithdrawn exposure forward', async () => {
     const f = await workersSiblingFixture('preview-exposure-carry', { access: true });
     configureCloudflareAccessPerimeterRetry({ attempts: 2, baseMs: 1 });

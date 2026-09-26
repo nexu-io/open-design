@@ -13,6 +13,7 @@ import {
   fsyncDirectory,
   getCloudflareOAuthToken,
   isCloudflareOAuthTokenExpired,
+  setCloudflareOAuthToken,
   setCloudflareOAuthTokenIfGenerationMatches,
   type StoredCloudflareOAuthToken,
 } from './integrations/cloudflare-tokens.js';
@@ -613,8 +614,19 @@ export async function readCloudflareWorkersConfig(): Promise<DeployConfig> {
     // has not replaced yet. The grant's own clientId is still preferred (the
     // same reason as the derivation below), read best-effort so a marker whose
     // grant was cleared underneath it stays a read, not a new failure mode.
+    //
+    // The marker is honored only while the credential it describes is still
+    // there. It is written BEFORE the token (markCloudflareOAuthGrantPending),
+    // so a crash or a failed token write between the two leaves it durable with
+    // no grant on disk; honoring it unconditionally answered 'oauth' for every
+    // later read, which in turn let a settings PUT carrying credentialMode
+    // 'oauth' skip its token check (the current mode already read as oauth) and
+    // persist a mode with nothing behind it. With no grant the marker decides
+    // nothing, and the derivation below reads the file on its own terms. The
+    // crash between the token write and the mode commit still reads oauth,
+    // because there the grant exists.
     const grant = await liveCloudflareOAuthGrant();
-    return { ...config, credentialMode: 'oauth', clientId: grant?.clientId || config.clientId };
+    if (grant) return { ...config, credentialMode: 'oauth', clientId: grant.clientId || config.clientId };
   }
   if (config.credentialMode === 'oauth') return config;
   // A static credential the user saved outranks the grant (see above), and it is
@@ -717,10 +729,15 @@ export async function writeCloudflareWorkersConfig(input: Partial<DeployConfig>)
   // 2. the destructive half — the grant goes off disk;
   // 3. the mode the user chose, validated above (a token-mode save always has a
   //    static token, so even this write failing leaves a working credential);
-  // 4. the revoke, LAST. A save that failed at 1 or 3 cannot have revoked a
-  //    grant its config still names. A failure at 3 is the one case that does
-  //    revoke: the marker has already settled that the config no longer names
-  //    oauth, and an unheld grant must not stay valid at Cloudflare.
+  // 4. the revoke, LAST, and only once the transition has actually LANDED. A
+  //    save that fails at 3 has replaced nothing: the marker settles that the
+  //    config reads token mode, but the static token it would sign with is the
+  //    one from the record that was just discarded, and the mode the user chose
+  //    never reached the file. So a failure at 3 ROLLS BACK — the displaced
+  //    grant goes back on disk and the pre-transition record is rewritten
+  //    without the marker, which is the state this save found. The revoke is
+  //    reserved for a rollback that itself fails, where nothing is left that
+  //    could hold the grant.
   //
   // It runs after the validations above, so a refused save never gets here.
   const cloudflareConfigFile = deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID);
@@ -733,7 +750,31 @@ export async function writeCloudflareWorkersConfig(input: Partial<DeployConfig>)
     try {
       await writeDeployConfigFile(cloudflareConfigFile, next);
     } catch (err) {
-      if (displaced) await revokeClearedCloudflareGrant(displaced, next.clientId);
+      // The replacement never landed, so this save is a no-op that must not
+      // destroy anything. Revoking here left the user with NEITHER credential:
+      // the static token they typed existed only in the record that was thrown
+      // away, the surviving config read token mode with an empty token, and the
+      // revoke cannot be undone. Roll back instead — grant first, so the record
+      // rewritten below never names oauth with nothing behind it, then the
+      // pre-transition config with the marker this transition added dropped.
+      try {
+        if (displaced) await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), displaced);
+        const restored: DeployConfig = { ...persistableCloudflareWorkersConfig(current) };
+        delete restored.pendingOAuthGrant;
+        delete restored.pendingOAuthGrantClear;
+        await writeDeployConfigFile(cloudflareConfigFile, restored);
+      } catch (rollbackErr) {
+        // The rollback itself failed, so no state is left to hand the grant
+        // back to: a store the restored config no longer names must not keep
+        // reporting a connected profile, and an unheld grant must not stay
+        // valid at Cloudflare. Both steps are best-effort; the save's own error
+        // is what surfaces.
+        console.error(
+          `[deploy] rolling back the failed Cloudflare credential transition did not complete (${rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr)}); revoking the displaced OAuth grant.`,
+        );
+        await clearCloudflareOAuthToken(cloudflareOAuthTokensDir()).catch(() => {});
+        if (displaced) await revokeClearedCloudflareGrant(displaced, next.clientId);
+      }
       throw err;
     }
     if (displaced) await revokeClearedCloudflareGrant(displaced, next.clientId);
