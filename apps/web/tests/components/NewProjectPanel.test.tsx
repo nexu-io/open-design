@@ -698,10 +698,15 @@ describe('NewProjectPanel design system defaults', () => {
 });
 
 describe('NewProjectPanel working directory picker', () => {
-  it('includes a browser-picked working directory in the create payload', async () => {
+  it('includes a server-browser-picked working directory in the create payload', async () => {
     const onCreate = vi.fn();
     mockedIsHostAvailable.mockReturnValue(false);
-    mockedOpenFolderDialog.mockResolvedValue('/Users/me/product-designs');
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((input: RequestInfo | URL) => Promise.resolve({
+      ok: true,
+      json: async () => String(input).includes('path=')
+        ? { path: '/Users/me/product-designs', parent: null, directories: [] }
+        : { roots: [{ path: '/Users/me/product-designs', name: 'home', directories: [] }] },
+    })));
 
     render(
       <NewProjectPanel
@@ -716,10 +721,8 @@ describe('NewProjectPanel working directory picker', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Local storage' }));
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /product-designs/i })).toBeTruthy();
-    });
+    fireEvent.click(await screen.findByRole('button', { name: '/Users/me/product-designs' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Select this folder' }));
     fireEvent.click(screen.getByTestId('create-project'));
 
     expect(onCreate).toHaveBeenCalledWith(
@@ -730,6 +733,7 @@ describe('NewProjectPanel working directory picker', () => {
       }),
     );
     expect(mockedPickHostWorkingDir).not.toHaveBeenCalled();
+    expect(mockedOpenFolderDialog).not.toHaveBeenCalled();
   });
 
   it('threads the desktop host working-dir token into the create payload', async () => {
@@ -796,9 +800,9 @@ describe('NewProjectPanel working directory picker', () => {
     expect(mockedOpenFolderDialog).not.toHaveBeenCalled();
   });
 
-  it('surfaces browser picker daemon failures with localized copy and native details', async () => {
+  it('surfaces server directory browser failures accessibly', async () => {
     mockedIsHostAvailable.mockReturnValue(false);
-    mockedOpenFolderDialog.mockRejectedValue(new Error('Could not open folder picker: zenity is not installed'));
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
 
     render(
       <NewProjectPanel
@@ -814,10 +818,8 @@ describe('NewProjectPanel working directory picker', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Local storage' }));
 
-    expect(await screen.findByText('Could not open folder picker')).toBeTruthy();
-    expect(await screen.findByText('zenity is not installed')).toBeTruthy();
-    expect(screen.queryByText('Could not open folder picker: zenity is not installed')).toBeNull();
-    expect(mockedOpenFolderDialog).toHaveBeenCalledWith({ throwOnError: true });
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(mockedOpenFolderDialog).not.toHaveBeenCalled();
   });
 });
 

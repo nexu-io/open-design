@@ -914,6 +914,7 @@ import { registerDeliverableSyntaxToolRoutes } from './routes/deliverable-syntax
 import { registerDesignSystemToolRoutes } from './routes/design-system-tool.js';
 import { registerDeployRoutes, registerDeploymentCheckRoutes } from './routes/deploy.js';
 import { registerMediaRoutes } from './routes/media.js';
+import { registerDirectoryBrowserRoutes } from './routes/directory-browser.js';
 import { registerProjectRoutes, registerProjectArtifactRoutes, registerProjectFileRoutes, registerProjectUploadRoutes, createEnforceWorkspaceProjectMutation } from './routes/project/index.js';
 import { registerProjectChatArtifactRoutes } from './routes/project/chat-artifacts.js';
 import { createChatArtifactBlobStore } from './chat-artifacts/blob-store.js';
@@ -9274,6 +9275,7 @@ export async function startServer({
     authorizeProjectRequest,
   });
 
+  registerDirectoryBrowserRoutes(app);
   registerMediaRoutes(app, {
     db,
     design,

@@ -1439,6 +1439,12 @@ export interface Dict {
   'workingDirPicker.replace': string;
   'workingDirPicker.recent': string;
   'workingDirPicker.defaultLabel': string;
+  'workingDirPicker.serverTitle': string;
+  'workingDirPicker.up': string;
+  'workingDirPicker.roots': string;
+  'workingDirPicker.selectCurrent': string;
+  'workingDirPicker.empty': string;
+  'workingDirPicker.loadError': string;
   'handoff.toTarget': string;
   'handoff.openInTarget': string;
   'handoff.openAction': string;

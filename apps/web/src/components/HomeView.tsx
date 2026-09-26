@@ -83,6 +83,7 @@ import {
   openFolderDialog,
   pushRecentLinkedDir,
 } from '../providers/registry';
+import { ServerDirectoryPicker } from './ServerDirectoryPicker';
 import { isOpenDesignHostAvailable, pickHostWorkingDir } from '@open-design/host';
 import type {
   DesignSystemSummary,
@@ -644,6 +645,7 @@ export function HomeView({
     if (ownsComposerDraft) clearHomeComposerAttachments();
   }, [ownsComposerDraft]);
   const [workingDir, setWorkingDir] = useState<string | null>(null);
+  const [serverDirectoryPickerOpen, setServerDirectoryPickerOpen] = useState(false);
   // Token paired with `workingDir` when picked through the desktop host's
   // native dialog. Spent on the post-creation working-dir POST so the
   // daemon's desktop-auth gate accepts the path. Null for web picks.
@@ -2185,13 +2187,7 @@ export function HomeView({
     }
     // Pure web path: no desktop host, so there is no token gate — the raw
     // browser folder path is the expected, working input.
-    const picked = await openFolderDialog();
-    if (picked) {
-      setWorkingDir(picked);
-      setWorkingDirToken(null);
-      void rememberRecentDir(picked);
-      return picked;
-    }
+    setServerDirectoryPickerOpen(true);
     return null;
   }
 
@@ -2209,10 +2205,7 @@ export function HomeView({
       return null;
     }
     const picked = await openFolderDialog();
-    if (picked) {
-      void rememberRecentDir(picked);
-      return picked;
-    }
+    if (picked) { void rememberRecentDir(picked); return picked; }
     return null;
   }
 
@@ -3253,7 +3246,7 @@ export function HomeView({
           for the browsable catalogue with its filter / sort / view controls. */}
 
       <AnimatePresence>
-        {detailsRecord && detailsTemplate ? (
+      {detailsRecord && detailsTemplate ? (
           <TemplatePreviewModal
             template={detailsTemplate}
             onClose={() => {
@@ -3462,6 +3455,16 @@ export function HomeView({
             </DialogFooter>
         </Dialog>
       ) : null}
+      <ServerDirectoryPicker
+        open={serverDirectoryPickerOpen}
+        onCancel={() => setServerDirectoryPickerOpen(false)}
+        onSelect={(path) => {
+          setWorkingDir(path);
+          setWorkingDirToken(null);
+          void rememberRecentDir(path);
+          setServerDirectoryPickerOpen(false);
+        }}
+      />
     </div>
   );
 }

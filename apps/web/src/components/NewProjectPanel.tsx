@@ -21,7 +21,8 @@ import type {
 import { useI18n, useT } from '../i18n';
 import { localizeSkillDescription, localizeSkillName } from '../i18n/content';
 import type { Dict } from '../i18n/types';
-import { fetchPromptTemplate, openFolderDialog } from '../providers/registry';
+import { fetchPromptTemplate } from '../providers/registry';
+import { ServerDirectoryPicker } from './ServerDirectoryPicker';
 import { isStoredMediaProviderEntryPresent } from '../state/config';
 import { isMediaProviderPickerReady } from '../media/provider-readiness';
 import type {
@@ -77,14 +78,6 @@ const SFX_AUDIO_DURATIONS_SEC = AUDIO_DURATIONS_SEC.filter((sec) => sec <= 30);
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
 type NewProjectPlatform = Exclude<ProjectPlatform, 'auto'>;
-
-function folderPickerErrorDetails(err: unknown): string | undefined {
-  if (!(err instanceof Error)) return undefined;
-  const message = err.message.trim();
-  if (!message) return undefined;
-  const detail = message.replace(/^Could not open folder picker:\s*/i, '').trim();
-  return detail || message;
-}
 
 const DESIGN_PLATFORMS: Array<{
   value: NewProjectPlatform;
@@ -303,6 +296,7 @@ export function NewProjectPanel({
   const [workingDir, setWorkingDir] = useState<string | null>(null);
   const [workingDirToken, setWorkingDirToken] = useState<string | null>(null);
   const [workingDirPicking, setWorkingDirPicking] = useState(false);
+  const [serverDirectoryPickerOpen, setServerDirectoryPickerOpen] = useState(false);
   const [workingDirError, setWorkingDirError] = useState<
     { message: string; details?: string } | null
   >(null);
@@ -807,18 +801,7 @@ export function NewProjectPanel({
         });
         return;
       }
-      try {
-        const picked = await openFolderDialog({ throwOnError: true });
-        if (picked) {
-          setWorkingDir(picked);
-          setWorkingDirToken(null);
-        }
-      } catch (err) {
-        setWorkingDirError({
-          message: t('chat.linkedFolderPickError'),
-          details: folderPickerErrorDetails(err),
-        });
-      }
+      setServerDirectoryPickerOpen(true);
     } finally {
       setWorkingDirPicking(false);
     }
@@ -1199,6 +1182,11 @@ export function NewProjectPanel({
           onDismiss={() => setWorkingDirError(null)}
         />
       ) : null}
+      <ServerDirectoryPicker
+        open={serverDirectoryPickerOpen}
+        onCancel={() => setServerDirectoryPickerOpen(false)}
+        onSelect={(path) => { setWorkingDir(path); setWorkingDirToken(null); setServerDirectoryPickerOpen(false); }}
+      />
     </div>
   );
 }

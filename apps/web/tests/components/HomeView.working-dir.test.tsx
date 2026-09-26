@@ -79,9 +79,7 @@ describe('HomeView working-dir picker host fallback', () => {
     expect(mockedOpenFolderDialog).not.toHaveBeenCalled();
   });
 
-  // The pure web path (no desktop host) has no token gate, so the raw browser
-  // folder path is the expected input and the dialog fallback is correct.
-  it('uses the browser folder dialog on the pure web path', async () => {
+  it('opens the server directory browser on the pure web path', async () => {
     mockedIsHostAvailable.mockReturnValue(false);
     mockedOpenFolderDialog.mockResolvedValue('/Users/me/web-folder');
 
@@ -90,10 +88,9 @@ describe('HomeView working-dir picker host fallback', () => {
     fireEvent.click(screen.getByTestId('working-dir-trigger'));
     fireEvent.click(screen.getByTestId('working-dir-pick'));
 
-    await waitFor(() => {
-      expect(mockedOpenFolderDialog).toHaveBeenCalledTimes(1);
-    });
+    expect(await screen.findByRole('dialog')).toBeTruthy();
     expect(mockedPickHostWorkingDir).not.toHaveBeenCalled();
+    expect(mockedOpenFolderDialog).not.toHaveBeenCalled();
   });
 
   // An explicit cancel of the host picker must not pop a second dialog.
