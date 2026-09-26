@@ -826,6 +826,51 @@ describe('credential mode is derived from a live OAuth grant', () => {
     });
   });
 
+  it('a settings save completes a transition whose intent wrote but whose clear never ran (crash between intent and clear)', async () => {
+    await withDataDir(async () => {
+      // The earlier crash window: the intent marker landed, the grant is still on
+      // disk, and no revoke handle was ever recorded — the clear (step 2) never
+      // ran. The derived mode reads token, so without re-entering the transition
+      // branch the clear + revoke half would never execute and the grant would
+      // stay live with nothing naming it.
+      await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), {
+        accessToken: 'oauth-access',
+        refreshToken: 'ref-1',
+        tokenType: 'Bearer',
+        clientId: 'client-abc',
+        generation: 1,
+        savedAt: Date.now(),
+      });
+      await writeFile(
+        deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID),
+        JSON.stringify({ token: 'static-token', accountId: 'acct_test', credentialMode: 'oauth', pendingOAuthGrantClear: true }),
+        'utf8',
+      );
+      expect((await readCloudflareWorkersConfig()).credentialMode).toBe('token');
+      expect(await getCloudflareOAuthToken(cloudflareOAuthTokensDir())).not.toBeNull();
+      expect(await getPendingCloudflareOAuthRevokes(cloudflareOAuthTokensDir())).toHaveLength(0);
+
+      const revokes: string[] = [];
+      vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => {
+        revokes.push(String(init?.body ?? ''));
+        return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
+      }));
+
+      // A later save to token mode re-enters the transition and finishes the
+      // clear + revoke the crash interrupted.
+      await writeCloudflareWorkersConfig({ token: 'static-token', accountId: 'acct_test', credentialMode: 'token' });
+
+      expect(await getCloudflareOAuthToken(cloudflareOAuthTokensDir())).toBeNull();
+      expect(await getPendingCloudflareOAuthRevokes(cloudflareOAuthTokensDir())).toEqual([]);
+      expect(revokes).toHaveLength(1);
+      expect(revokes[0]).toContain('token=ref-1');
+      expect(revokes[0]).toContain('client_id=client-abc');
+      const persisted = JSON.parse(await readFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), 'utf8'));
+      expect(persisted.pendingOAuthGrantClear).toBeUndefined();
+      expect(persisted.credentialMode).toBe('token');
+    });
+  });
+
   it('a crash between the clear and the revoke leaves the grant named on disk, and the next OAuth mutation revokes it', async () => {
     await withDataDir(async () => {
       await writeCloudflareWorkersConfig({ token: 'static-token', accountId: 'acct_test' });

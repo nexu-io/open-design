@@ -772,7 +772,13 @@ export async function writeCloudflareWorkersConfig(input: Partial<DeployConfig>)
   //
   // It runs after the validations above, so a refused save never gets here.
   const cloudflareConfigFile = deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID);
-  if (input?.credentialMode === 'token' && current.credentialMode === 'oauth') {
+  // A crash between the intent write and the destructive clear below leaves
+  // pendingOAuthGrantClear set with the grant still on disk and no revoke handle:
+  // the derived mode then reads 'token', so a later save would skip this branch
+  // and never finish the clear+revoke. Enter the transition when the marker is
+  // already pending too, so the abandoned clear runs and the settle below drains
+  // the handle it records. Re-running the clear on an empty store is a no-op.
+  if (input?.credentialMode === 'token' && (current.credentialMode === 'oauth' || current.pendingOAuthGrantClear === true)) {
     const intent: DeployConfig = { ...persistableCloudflareWorkersConfig(current), pendingOAuthGrantClear: true };
     // A connect in flight is being abandoned by this transition.
     delete intent.pendingOAuthGrant;
@@ -786,6 +792,7 @@ export async function writeCloudflareWorkersConfig(input: Partial<DeployConfig>)
     // this save would undo the authority the user just chose, over a credential
     // this save has already revoked.
     delete next.pendingOAuthGrant;
+    delete next.pendingOAuthGrantClear;
     try {
       await writeDeployConfigFile(cloudflareConfigFile, next);
     } catch (err) {
