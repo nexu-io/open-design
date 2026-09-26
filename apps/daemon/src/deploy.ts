@@ -123,6 +123,25 @@ export function isCloudflareAccessProtectedResponse(resp: Response, body = '') {
   );
 }
 
+/** Header-only Cloudflare Access evidence, for the SHARED deploy-URL probe
+ * (requestDeploymentUrl). Deliberately not isCloudflareAccessProtectedResponse:
+ * that one also accepts body text matching /cloudflare access/i, which proves
+ * nothing when the probed URL may belong to ANY provider. The shared probe
+ * serves Vercel, Pages and Workers alike, so a Vercel 401 whose error page
+ * merely mentions "Cloudflare Access" would be reported as an Access-gated
+ * deployment — the record is stamped protected, the user is told to sign in to
+ * an Access app that does not exist, and the deployment's real protection
+ * (Vercel Deployment Protection) is never named. Body text stays where the
+ * probed endpoint IS Cloudflare: verifyCloudflareAccessPerimeter, which only
+ * ever probes a Worker's own hostname. What counts here is evidence only Access
+ * emits — its login location, or its cookie jar. */
+export function isCloudflareAccessChallengeResponse(resp: Response): boolean {
+  const location = resp.headers?.get?.('location') || '';
+  if (isCloudflareAccessUrl(location)) return true;
+  const setCookie = resp.headers?.get?.('set-cookie') || '';
+  return /cf[-_]access/i.test(setCookie) || /cf_authorization/i.test(setCookie);
+}
+
 export class DeployError extends Error {
   status: number;
   details: DeployErrorDetails;
@@ -2621,7 +2640,9 @@ async function requestDeploymentUrl(url: string, method: 'HEAD' | 'GET', timeout
         statusMessage: VERCEL_PROTECTED_MESSAGE,
       };
     }
-    if (resp.status === 401 && isCloudflareAccessProtectedResponse(resp, body)) {
+    // Header evidence only: this probe is shared by every provider, so body
+    // text is not proof of Access. See isCloudflareAccessChallengeResponse.
+    if (resp.status === 401 && isCloudflareAccessChallengeResponse(resp)) {
       return {
         reachable: false,
         status: 'protected',

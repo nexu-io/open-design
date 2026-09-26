@@ -632,7 +632,15 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
               vouchedCustomDomains(ownedCustomDomainsFromMetadata(deployment.providerMetadata), pendingCustomDomainsFromMetadata(deployment.providerMetadata)));
           if (!isOwnedCustomDomain(domain, owned)) return { kind: 'foreign' };
           const deleted = await detachCloudflareWorkerDomain(cfg, req.params.domainId);
-          forgetDetachedWorkersHostname(domain);
+          // The Cloudflare calls stay outside; only the local bookkeeping is
+          // transactional. The record rewrites are bare upserts, one per
+          // record, so they commit whole or not at all — the same shape the
+          // deploy path uses for this identical bookkeeping. A crash midway
+          // must not leave one sibling no longer vouching for the hostname
+          // while another still lists it: a later dashboard re-attach of that
+          // hostname would be classified owned through the survivor and be
+          // detached again, which is the state this forget exists to prevent.
+          db.transaction(() => forgetDetachedWorkersHostname(domain))();
           return { kind: 'detached', deleted };
         });
         if (outcome.kind === 'foreign') {

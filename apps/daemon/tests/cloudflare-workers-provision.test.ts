@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  CLOUDFLARE_LIST_MAX_PAGES,
   attachCloudflareWorkerDomain,
   cloudflareWorkersAssetHash,
   deployToCloudflareWorkers,
@@ -246,6 +247,37 @@ describe('ensureCloudflareR2Bucket', () => {
     const buckets = await listCloudflareR2Buckets('tok-secret', 'acct_test');
     expect(buckets.map((b) => b.name)).toEqual(['other', 'my-bucket']);
     expect(calls[1]![0]).toContain('cursor=c2');
+  });
+
+  it('stops the R2 cursor loop when a page adds no new bucket name', async () => {
+    const calls: Call[] = [];
+    const fn = vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push([url, init]);
+      // The cursor never advances and every page repeats the same bucket: only
+      // the progress check can end this — the page ceiling must not be what
+      // does it, so two requests prove the stop is the added-name count.
+      return jsonResponse({ success: true, result: { buckets: [{ name: 'my-bucket' }] }, result_info: { cursor: 'stuck' } });
+    });
+    vi.stubGlobal('fetch', fn);
+    const buckets = await listCloudflareR2Buckets('tok-secret', 'acct_test');
+    expect(buckets.map((b) => b.name)).toEqual(['my-bucket']);
+    expect(calls).toHaveLength(2);
+  });
+
+  it('bounds the R2 cursor loop at the shared page ceiling while every page adds a name', async () => {
+    const calls: Call[] = [];
+    let served = 0;
+    const fn = vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push([url, init]);
+      served += 1;
+      // A fresh bucket name per page keeps the progress check satisfied, so
+      // only the ceiling can stop a cursor that never advances.
+      return jsonResponse({ success: true, result: { buckets: [{ name: `bucket-${served}` }] }, result_info: { cursor: 'same' } });
+    });
+    vi.stubGlobal('fetch', fn);
+    const buckets = await listCloudflareR2Buckets('tok-secret', 'acct_test');
+    expect(calls).toHaveLength(CLOUDFLARE_LIST_MAX_PAGES);
+    expect(buckets).toHaveLength(CLOUDFLARE_LIST_MAX_PAGES);
   });
 });
 

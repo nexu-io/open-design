@@ -3772,4 +3772,59 @@ describe('deploy provider routes', () => {
       await f.cleanup();
     }
   });
+
+  it('a detach whose record bookkeeping fails leaves every sibling record vouching, as one transaction', async () => {
+    const f = await workersSiblingFixture('detach-atomic');
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const db = openDatabase(process.cwd(), { dataDir });
+    // The bookkeeping is bare upserts, one per record, so it has to be ONE
+    // SQLite transaction. The second record's rewrite is made to fail: nothing
+    // may have been forgotten. Without the wrapper the first upsert autocommits
+    // and that record silently stops vouching for a hostname Cloudflare still
+    // routes, so a later dashboard re-attach of it reads as owned and is
+    // detached again — the exact state this forget exists to prevent.
+    const dbProto = Object.getPrototypeOf(db) as { prepare: (sql: string) => unknown };
+    const realPrepare = dbProto.prepare;
+    let failFromRewrite: number | null = null;
+    let rewrites = 0;
+    let armed = false;
+    const prepareSpy = vi.spyOn(dbProto, 'prepare').mockImplementation(function (this: unknown, sql: string) {
+      if (armed && /insert into deployments/i.test(sql)) {
+        rewrites += 1;
+        if (failFromRewrite !== null && rewrites >= failFromRewrite) throw new Error('database is locked (test)');
+      }
+      return realPrepare.call(this, sql);
+    });
+    try {
+      await f.putConfig({ hostname: 'a.example.com' });
+      expect((await f.deploy('a.html')).status).toBe(200);
+      expect((await f.deploy('b.html')).status).toBe(200);
+      // Two records of this project own and display the hostname, which is what
+      // gives the detach two rewrites to make — and the rollback something to
+      // observe. One record would make this test vacuous, so it is asserted.
+      const before = (await f.listDeployments()).filter((d) => d.fileName === 'a.html' || d.fileName === 'b.html');
+      expect(before.map((d) => d.fileName).sort()).toEqual(['a.html', 'b.html']);
+      for (const record of before) expect(record.cloudflareWorkers?.customDomain).toMatchObject({ hostname: 'a.example.com' });
+
+      // Fail from the SECOND rewrite on: the first is already written inside
+      // the transaction when the failure lands.
+      rewrites = 0;
+      failFromRewrite = 2;
+      armed = true;
+      const detach = await f.detachRoute('dom-a');
+      armed = false;
+      expect(detach.status).toBeGreaterThanOrEqual(400);
+      // The failure is the injected one, not a refusal or a missing record:
+      // Cloudflare was asked to detach, and both rewrites were attempted.
+      expect(f.state.cfCalls.some((c) => c.method === 'DELETE' && c.url.endsWith('/workers/domains/dom-a'))).toBe(true);
+      expect(rewrites).toBe(2);
+
+      const after = (await f.listDeployments()).filter((d) => d.fileName === 'a.html' || d.fileName === 'b.html');
+      for (const record of after) expect(record.cloudflareWorkers?.customDomain).toMatchObject({ hostname: 'a.example.com' });
+    } finally {
+      prepareSpy.mockRestore();
+      await f.cleanup();
+    }
+  });
 });

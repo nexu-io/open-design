@@ -225,7 +225,7 @@ async function listCloudflareAllPages(config: WorkersDeployConfig, path: string,
 
 // Hard ceiling on pages followed per list, so an endpoint that always reports a
 // full page (or ignores `page=` and never repeats an id) cannot loop forever.
-const CLOUDFLARE_LIST_MAX_PAGES = 100;
+export const CLOUDFLARE_LIST_MAX_PAGES = 100;
 
 function cloudflareListItemKey(item: JsonObject | null | undefined): string | undefined {
   const key = item?.id ?? item?.uuid;
@@ -2289,8 +2289,16 @@ async function listCloudflareR2BucketsWith(
 ): Promise<CloudflareR2Bucket[]> {
   const base = CLOUDFLARE_API + '/accounts/' + encodeURIComponent(accountId) + '/r2/buckets';
   const out: CloudflareR2Bucket[] = [];
+  const seen = new Set<string>();
   let cursor: string | undefined;
-  for (;;) {
+  // R2 pages by an OPAQUE cursor: no page count and no total, so the bounds in
+  // listCloudflareAllPages do not apply here. Both stops are needed, because
+  // this list runs inside a deploy (ensureCloudflareR2Bucket reads it): a
+  // cursor Cloudflare keeps handing back without advancing, or an endpoint
+  // that ignores `cursor=`, would otherwise spin here forever holding the
+  // script's deploy single-flight and wedge every later deploy of that script.
+  // Past the shared list ceiling the listing is treated as exhausted.
+  for (let page = 1; page <= CLOUDFLARE_LIST_MAX_PAGES; page++) {
     const params = new URLSearchParams({ per_page: '1000' });
     if (options.nameContains) params.set('name_contains', options.nameContains);
     if (cursor) params.set('cursor', cursor);
@@ -2307,15 +2315,26 @@ async function listCloudflareR2BucketsWith(
     }
     const result = json.result as JsonObject | undefined;
     const buckets = Array.isArray(result?.buckets) ? (result.buckets as JsonObject[]) : [];
+    let added = 0;
     for (const bucket of buckets) {
       const name = typeof bucket?.name === 'string' ? bucket.name : '';
-      if (name) out.push({ name });
+      if (!name || seen.has(name)) continue;
+      seen.add(name);
+      out.push({ name });
+      added += 1;
     }
     const info = json.result_info as JsonObject | undefined;
     const nextCursor = typeof info?.cursor === 'string' && info.cursor.length > 0 ? info.cursor : undefined;
     if (!nextCursor) return out;
+    // A page that contributes no name the list did not already have is not
+    // progress, and following its cursor again is exactly how a stuck cursor
+    // becomes an unbounded loop. A bucket carries no id to dedupe on (`name`
+    // is its whole identity), so the collected-name set is the progress
+    // measure. A name-less entry is skipped, never counted as progress.
+    if (added === 0) return out;
     cursor = nextCursor;
   }
+  return out;
 }
 
 /** List an account's D1 databases by uuid (the id a Workers binding needs). */

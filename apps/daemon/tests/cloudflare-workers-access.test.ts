@@ -2,7 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { checkDeploymentUrl, cloudflareOAuthTokensDir, configureCloudflareWorkersDataDir, isCloudflareAccessProtectedResponse, isCloudflareAccessRedirect, readCloudflareWorkersConfig, writeCloudflareWorkersConfig } from '../src/deploy.js';
+import { checkDeploymentUrl, cloudflareOAuthTokensDir, configureCloudflareWorkersDataDir, isCloudflareAccessChallengeResponse, isCloudflareAccessProtectedResponse, isCloudflareAccessRedirect, readCloudflareWorkersConfig, writeCloudflareWorkersConfig } from '../src/deploy.js';
 import { setCloudflareOAuthToken } from '../src/integrations/cloudflare-tokens.js';
 import {
   CLOUDFLARE_ACCESS_PERIMETER_RETRY_DEFAULTS,
@@ -1774,6 +1774,37 @@ describe('cloudflare access check-link classification', () => {
     const resp = new Response('<html>Cloudflare Access</html>', { status: 401 });
     expect(isCloudflareAccessProtectedResponse(resp, '<html>Cloudflare Access login</html>')).toBe(true);
     expect(isCloudflareAccessProtectedResponse(new Response('ok'), 'plain page')).toBe(false);
+  });
+
+  it('does not report a shared-probe 401 as Access-protected on body text alone', async () => {
+    // The shared probe serves Vercel, Pages and Workers alike, so a 401 whose
+    // page merely MENTIONS Cloudflare Access is not evidence of an Access
+    // gate: reporting it protected tells the user to sign in to an app that
+    // does not exist and never names the deployment's real protection.
+    const fn = vi.fn(async () => new Response('<html>Cloudflare Access</html>', { status: 401, headers: { 'content-type': 'text/html' } }));
+    vi.stubGlobal('fetch', fn);
+    const result = await checkDeploymentUrl('https://my-site.acct-test.workers.dev');
+    expect(result.reachable).toBe(false);
+    expect(result.status).toBeUndefined();
+    expect(result.statusMessage).toBe('Public link returned HTTP 401.');
+  });
+
+  it('reports a shared-probe 401 carrying Access cookie evidence as protected', async () => {
+    const fn = vi.fn(async () => new Response('', { status: 401, headers: { 'set-cookie': 'CF_Authorization=token; Path=/; HttpOnly' } }));
+    vi.stubGlobal('fetch', fn);
+    const result = await checkDeploymentUrl('https://my-site.acct-test.workers.dev');
+    expect(result).toMatchObject({ reachable: false, status: 'protected' });
+  });
+
+  it('accepts only Access-specific header evidence, never body text or a lookalike host', () => {
+    const withLocation = new Response('', { status: 401, headers: { location: 'https://acct-test.cloudflareaccess.com/cdn-cgi/access/login' } });
+    expect(isCloudflareAccessChallengeResponse(withLocation)).toBe(true);
+    const withCookie = new Response('', { status: 401, headers: { 'set-cookie': 'cf_access=1; Path=/' } });
+    expect(isCloudflareAccessChallengeResponse(withCookie)).toBe(true);
+    const bodyOnly = new Response('<html>Cloudflare Access</html>', { status: 401 });
+    expect(isCloudflareAccessChallengeResponse(bodyOnly)).toBe(false);
+    const lookalike = new Response('', { status: 401, headers: { location: 'https://evil.example/?cloudflareaccess.com' } });
+    expect(isCloudflareAccessChallengeResponse(lookalike)).toBe(false);
   });
 });
 
