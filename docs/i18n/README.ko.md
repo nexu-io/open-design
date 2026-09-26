@@ -31,7 +31,7 @@
 
 ## OpenDesign란
 
-🎨 **로컬 우선의 오픈소스 Claude Design 대안.** &nbsp;🖥️ **macOS와 Windows용 네이티브 데스크톱 앱.** &nbsp;⚡ **100개 이상의 기능 스킬 + 별도 렌더링 템플릿 카탈로그** · ✨ **151개의 디자인 시스템 패키지** · 📦 **바로 쓸 수 있는 277개의 플러그인.** &nbsp;🖼️ **웹 · 데스크톱 · 모바일 프로토타입**, **라이브 대시보드 / 아티팩트**, **덱**, **이미지**, **비디오**, 그리고 **HyperFrames** 모션 그래픽을 생성합니다. 🔒 샌드박스 iframe 미리보기 · HTML / PDF / PPTX / MP4 내보내기. &nbsp;🤖 **25개의 고유한 로컬 CLI 실행 파일에서 실행**되며, BYOK를 통해 OpenAI 호환 엔드포인트라면 무엇이든 사용할 수 있습니다.
+🎨 **로컬 우선의 오픈소스 Claude Design 대안.** &nbsp;🖥️ **macOS와 Windows용 네이티브 데스크톱 앱.** &nbsp;⚡ **100개 이상의 기능 스킬 + 별도 렌더링 템플릿 카탈로그** · ✨ **152개의 디자인 시스템 패키지** · 📦 **바로 쓸 수 있는 278개의 플러그인.** &nbsp;🖼️ **웹 · 데스크톱 · 모바일 프로토타입**, **라이브 대시보드 / 아티팩트**, **덱**, **이미지**, **비디오**, 그리고 **HyperFrames** 모션 그래픽을 생성합니다. 🔒 샌드박스 iframe 미리보기 · HTML / PDF / PPTX / MP4 내보내기. &nbsp;🤖 **26개의 고유한 로컬 CLI 실행 파일에서 실행**되며, BYOK를 통해 OpenAI 호환 엔드포인트라면 무엇이든 사용할 수 있습니다.
 
 OpenDesign는 그 루프를 에이전트가 읽고 쓸 수 있는 **기능 스킬 · 렌더링 디자인 템플릿 · 디자인 시스템 · 플러그인의 파일시스템**으로 만듭니다.
 
@@ -133,7 +133,7 @@ OpenDesign의 핵심 워크플로를 빠르게 살펴봅니다. **Home**에서 �
 `od mcp install <agent> --print`로 드라이런 미리보기 · `--uninstall`로 제거 · 전체 목록은 `od mcp install --help`로 확인.
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 25 coding-agent CLIs OpenDesign supports — Claude Code · Codex · OpenCode · Hermes · Antigravity · Vela · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Amp · CodeBuddy · Mimo · AtomCode · Devin · Trae" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 26 coding-agent CLIs OpenDesign supports — DeepSeek Harness · Claude Code · Codex · OpenCode · Hermes · Antigravity · Vela · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Amp · CodeBuddy · Mimo · AtomCode · Devin · Trae" width="100%" />
 </p>
 
 **CLI를 설치하지 않았다고요?** `POST /api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream`의 BYOK 프록시가 동일한 루프(프로세스 스폰 없이)를 제공합니다 — `baseUrl` + `apiKey` + `model`을 붙여넣기만 하면 되며, OpenAI, Anthropic, Azure OpenAI, Google Gemini, Ollama, LM Studio, vLLM 또는 OpenAI 호환 엔드포인트라면 무엇이든 지원합니다. 대상별 SSRF 보호가 데몬 경계에서 내부 IP / 링크 로컬 / CGNAT를 차단합니다.
@@ -219,7 +219,7 @@ Runtime 정의는 [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/runti
 </tr>
 </table>
 
-**바로 복제할 수 있는 93개의 프롬프트**가 [`prompt-templates/`](../../prompt-templates/)에 있습니다 — 미리보기 썸네일, 전체 프롬프트 본문, 대상 모델, 화면 비율, 출처 표기 포함. 한 번의 클릭으로 브리프가 컴포저에 들어갑니다.
+**바로 복제할 수 있는 106개의 프롬프트**가 [`prompt-templates/`](../../prompt-templates/)에 있습니다 — 미리보기 썸네일, 전체 프롬프트 본문, 대상 모델, 화면 비율, 출처 표기 포함. 한 번의 클릭으로 브리프가 컴포저에 들어갑니다.
 
 ### 5 · 비디오 & HyperFrames — 에이전트 네이티브 모션 그래픽
 
@@ -253,7 +253,7 @@ Runtime 정의는 [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/runti
 OpenDesign(OD)는 그 오픈소스 대안입니다. 같은 루프, 같은 아티팩트 우선의 사고방식, 잠금은 전혀 없이:
 
 - 🤖 **에이전트 네이티브, 모델에 구애받지 않음.** 우리는 에이전트를 제공하지 않습니다. 이미 당신의 `PATH`에 있는 `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi`가 디자인 엔진입니다. 한 번의 클릭으로 교체하세요.
-- 🧠 **기본부터 브랜드급.** 모든 렌더는 활성 패키지의 `DESIGN.md`를 핵심 브랜드 계약으로 읽습니다. 151개 디자인 시스템 패키지가 제공되며, 레거시 패키지는 `DESIGN.md`만 포함할 수 있고 새 패키지는 `manifest.json`, `tokens.css`, 컴포넌트, 에셋, 출처 정보를 더할 수 있습니다. 폴더 하나만 넣으면 피커가 찾아냅니다.
+- 🧠 **기본부터 브랜드급.** 모든 렌더는 활성 패키지의 `DESIGN.md`를 핵심 브랜드 계약으로 읽습니다. 152개 디자인 시스템 패키지가 제공되며, 레거시 패키지는 `DESIGN.md`만 포함할 수 있고 새 패키지는 `manifest.json`, `tokens.css`, 컴포넌트, 에셋, 출처 정보를 더할 수 있습니다. 폴더 하나만 넣으면 피커가 찾아냅니다.
 - 🖥️ **로컬 우선, 모든 계층에서 BYOK.** 네이티브 데스크톱 앱은 클라우드 왕복 없이 로컬 우선을 유지합니다. daemon 데이터 경로를 설명하기 전에 반드시 루트 `AGENTS.md`의 **Daemon data directory contract**를 읽어야 합니다.
 - 🌍 **네 가지 평면에서 조합 가능.** **플러그인**은 워크플로, **기능 스킬**은 에이전트 동작, **디자인 템플릿**은 렌더링 청사진, **디자인 시스템**은 브랜드를 담습니다.
 - 🔁 **기존 코드베이스를 새롭게.** `git` 저장소 + `DESIGN.md`를 에이전트에 넘기면 당신의 실제 컴포넌트를 브랜드 사양에 맞게 리팩터링합니다. 전용 플러그인이 Figma / Pencil 워크플로를 React / Next.js / Vue 코드로 마이그레이션합니다.
@@ -265,9 +265,9 @@ OpenDesign(OD)는 그 오픈소스 대안입니다. 같은 루프, 같은 아티
 |---|---|---|---|---|
 | 오픈소스 | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
 | 셀프 호스트 / 데스크톱 | ❌ | ❌ | ❌ | **✅ macOS + Windows + Docker** |
-| 에이전트 네이티브(당신의 CLI에서 실행) | Anthropic 전용 | ❌ | 클라우드 에이전트 전용 | **✅ 25개 CLI + BYOK** |
-| 브랜드급 `DESIGN.md` | 독점 | 테마 JSON | 제한적 토큰 | **✅ 151개 시스템 제공** |
-| 스킬 / 플러그인 / 템플릿 | 비공개 | 플러그인 스토어 | 비공개 | **✅ 100개 이상의 기능 스킬 · 별도 렌더링 템플릿 카탈로그 · 277개 플러그인** |
+| 에이전트 네이티브(당신의 CLI에서 실행) | Anthropic 전용 | ❌ | 클라우드 에이전트 전용 | **✅ 26개 CLI + BYOK** |
+| 브랜드급 `DESIGN.md` | 독점 | 테마 JSON | 제한적 토큰 | **✅ 152개 시스템 제공** |
+| 스킬 / 플러그인 / 템플릿 | 비공개 | 플러그인 스토어 | 비공개 | **✅ 100개 이상의 기능 스킬 · 별도 렌더링 템플릿 카탈로그 · 278개 플러그인** |
 | HyperFrames (HTML→MP4) | ❌ | ❌ | ❌ | **✅ 일급 지원** |
 | 기존 저장소를 브랜드에 맞게 새롭게 | ❌ | ❌ | ❌ | **✅ 에이전트 + `DESIGN.md`로** |
 | 최소 결제 | Pro / Max / Team | Pro / Org | Pro / Team | **BYOK · 호환 엔드포인트라면 무엇이든** |
@@ -284,7 +284,7 @@ OpenDesign를 사용하는 가장 빠른 방법입니다. Node도, pnpm도, 클�
 - **Windows** (x64) → [**open-design.ai**](https://open-design.ai/) 또는 [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 - **Linux** (AppImage, 선택적 레인) → [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 
-설치 후: 앱이 당신의 `PATH`에 있는 모든 코딩 에이전트 CLI를 자동으로 감지하고, 100개 이상의 기능 스킬과 별도 렌더링 템플릿 카탈로그, 151개의 디자인 시스템 패키지를 불러오며, entry view에서 브리프를 입력할 수 있게 합니다.
+설치 후: 앱이 당신의 `PATH`에 있는 모든 코딩 에이전트 CLI를 자동으로 감지하고, 100개 이상의 기능 스킬과 별도 렌더링 템플릿 카탈로그, 152개의 디자인 시스템 패키지를 불러오며, entry view에서 브리프를 입력할 수 있게 합니다.
 
 ### 🤖 코딩 에이전트에 설치 (UI 없이)
 
@@ -406,7 +406,7 @@ od skills list --json
 
 ## 디자인 시스템
 
-**`DESIGN.md` 중심의 151개 디자인 시스템 패키지**가 제공됩니다. 레거시 패키지는 Markdown 계약만 포함할 수 있고, 새 패키지는 `manifest.json`, 컴파일된 `tokens.css`, 컴포넌트 fixture, 자산, 출처 증거도 포함할 수 있습니다. 업스트림 파생 시스템과 프로젝트 고유 추가분이 섞이며 [`design-systems/README.md`](../../design-systems/README.md)가 패키지 형태와 출처를 기록합니다.
+**`DESIGN.md` 중심의 152개 디자인 시스템 패키지**가 제공됩니다. 레거시 패키지는 Markdown 계약만 포함할 수 있고, 새 패키지는 `manifest.json`, 컴파일된 `tokens.css`, 컴포넌트 fixture, 자산, 출처 증거도 포함할 수 있습니다. 업스트림 파생 시스템과 프로젝트 고유 추가분이 섞이며 [`design-systems/README.md`](../../design-systems/README.md)가 패키지 형태와 출처를 기록합니다.
 
 <details>
 <summary><b>전체 카탈로그(클릭하여 펼치기)</b></summary>
@@ -439,11 +439,11 @@ od skills list --json
 
 ## 플러그인
 
-**277개의 공식 플러그인과 183개의 리믹스 가능한 예제**가 [`plugins/_official/`](../../plugins/_official/)에 있습니다. 각 항목은 `open-design.json`과 타입별 payload를 갖는 이식 가능한 디렉터리입니다. 워크플로는 `SKILL.md`, 미디어 템플릿은 `template.json`, 디자인 시스템은 `DESIGN.md`를 사용합니다.
+**278개의 공식 플러그인과 183개의 리믹스 가능한 예제**가 [`plugins/_official/`](../../plugins/_official/)에 있습니다. 각 항목은 `open-design.json`과 타입별 payload를 갖는 이식 가능한 디렉터리입니다. 워크플로는 `SKILL.md`, 미디어 템플릿은 `template.json`, 디자인 시스템은 `DESIGN.md`를 사용합니다.
 
 | 카테고리 | 개수 | 내용 |
 |---|---|---|
-| [`scenarios/`](../../plugins/_official/scenarios/) | 13 | 완전한 디자인 시나리오 — [`od-default`](../../plugins/_official/scenarios/od-default/), [`od-design-refine`](../../plugins/_official/scenarios/od-design-refine/), [`od-figma-migration`](../../plugins/_official/scenarios/od-figma-migration/), [`od-code-migration`](../../plugins/_official/scenarios/od-code-migration/), [`od-react-export`](../../plugins/_official/scenarios/od-react-export/), [`od-nextjs-export`](../../plugins/_official/scenarios/od-nextjs-export/), [`od-vue-export`](../../plugins/_official/scenarios/od-vue-export/), [`od-media-generation`](../../plugins/_official/scenarios/od-media-generation/), [`od-new-generation`](../../plugins/_official/scenarios/od-new-generation/), [`od-tune-collab`](../../plugins/_official/scenarios/od-tune-collab/), [`od-plugin-authoring`](../../plugins/_official/scenarios/od-plugin-authoring/), [`od-share-to-community`](../../plugins/_official/scenarios/od-share-to-community/), [`od-web-effect-extractor`](../../plugins/_official/scenarios/od-web-effect-extractor/) |
+| [`scenarios/`](../../plugins/_official/scenarios/) | 14 | 완전한 디자인 시나리오 — [`od-default`](../../plugins/_official/scenarios/od-default/), [`od-design-refine`](../../plugins/_official/scenarios/od-design-refine/), [`od-figma-migration`](../../plugins/_official/scenarios/od-figma-migration/), [`od-code-migration`](../../plugins/_official/scenarios/od-code-migration/), [`od-react-export`](../../plugins/_official/scenarios/od-react-export/), [`od-nextjs-export`](../../plugins/_official/scenarios/od-nextjs-export/), [`od-vue-export`](../../plugins/_official/scenarios/od-vue-export/), [`od-media-generation`](../../plugins/_official/scenarios/od-media-generation/), [`od-new-generation`](../../plugins/_official/scenarios/od-new-generation/), [`od-tune-collab`](../../plugins/_official/scenarios/od-tune-collab/), [`od-plugin-authoring`](../../plugins/_official/scenarios/od-plugin-authoring/), [`od-share-to-community`](../../plugins/_official/scenarios/od-share-to-community/), [`od-web-effect-extractor`](../../plugins/_official/scenarios/od-web-effect-extractor/), [`od-next-strategy`](../../plugins/_official/scenarios/od-next-strategy/) |
 | [`image-templates/`](../../plugins/_official/image-templates/) | 45 | 원샷 이미지 프롬프트 — 에디토리얼, 시네마틱, 제품, 인물 |
 | [`video-templates/`](../../plugins/_official/video-templates/) | 63 | HyperFrames / Seedance / Veo 모션 템플릿 |
 | [`design-systems/`](../../plugins/_official/design-systems/) | 143 | 플러그인으로 감싼 브랜드 `DESIGN.md` |
@@ -537,8 +537,8 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
              │ spawn(cli, [...], { cwd: managed project cwd })
              ▼
    ┌──────────────────────────────────────────────────────────────────┐
-   │  Base registry: 26 runtime definitions (including byok-opencode),       │
-   │  backed by 25 distinct local CLI executables because byok-opencode      │
+   │  Shipped registry: 27 runtime definitions (including byok-opencode),       │
+   │  backed by 26 distinct local CLI executables because byok-opencode      │
    │  shares the OpenCode executable.                                        │
    │  Composes a functional skill or design template + DESIGN.md; writes files │
    └──────────────────────────────────────────────────────────────────┘
@@ -560,9 +560,9 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 
 ## 로드맵
 
-- [x] 데몬 + 25개 고유 CLI 실행 파일의 26개 runtime 정의 + 스킬/템플릿 레지스트리 + 디자인 시스템 카탈로그
+- [x] 데몬 + 26개 고유 CLI 실행 파일의 27개 runtime 정의 + 스킬/템플릿 레지스트리 + 디자인 시스템 카탈로그
 - [x] 웹 앱 + 챗 + 질문 폼 + 5방향 피커 + 할 일 진행 상황 + 샌드박스 미리보기
-- [x] 100개 이상의 기능 스킬 · 별도 렌더링 템플릿 카탈로그 · 151개 디자인 시스템 패키지 · 5개의 비주얼 방향 · 5개의 디바이스 프레임
+- [x] 100개 이상의 기능 스킬 · 별도 렌더링 템플릿 카탈로그 · 152개 디자인 시스템 패키지 · 5개의 비주얼 방향 · 5개의 디바이스 프레임
 - [x] SQLite 기반 프로젝트 · 대화 · 메시지 · 탭 · 템플릿
 - [x] 다중 프로바이더 BYOK 프록시(`/api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream`) + SSRF 가드
 - [x] Claude Design ZIP 가져오기(`/api/import/claude-design`)

@@ -128,7 +128,7 @@ Functional Skill은 작업 중 agent가 사용자 입력을 다루기 위해 호
 
 ## 새 Design System 추가하기
 
-저장소에 추가하는 새 design system은 [`design-systems/<slug>/`](../../design-systems/) 아래의 package이며, Markdown 파일 하나가 아닙니다. 현재 번들된 151개 system은 모두 아래 package contract로 마이그레이션되었습니다. Daemon은 예전 콘텐츠나 사용자가 설치한 콘텐츠와의 호환성을 위해 `DESIGN.md`만 있는 폴더도 계속 허용하지만, 새 번들 system은 이 legacy 형태로 작성하면 안 됩니다. Catalog는 `/api/design-systems` 요청마다 다시 스캔되므로 편집 후 Design System surface를 새로 고치면 되며 daemon 재시작은 필요하지 않습니다.
+저장소에 추가하는 새 design system은 [`design-systems/<slug>/`](../../design-systems/) 아래의 package이며, Markdown 파일 하나가 아닙니다. 현재 번들된 152개 system은 모두 아래 package contract로 마이그레이션되었습니다. Daemon은 예전 콘텐츠나 사용자가 설치한 콘텐츠와의 호환성을 위해 `DESIGN.md`만 있는 폴더도 계속 허용하지만, 새 번들 system은 이 legacy 형태로 작성하면 안 됩니다. Catalog는 `/api/design-systems` 요청마다 다시 스캔되므로 편집 후 Design System surface를 새로 고치면 되며 daemon 재시작은 필요하지 않습니다.
 
 ### 최소 package 구성
 
@@ -194,7 +194,7 @@ export const fooAgentDef = {
 } satisfies RuntimeAgentDef;
 ```
 
-정의를 [`runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts)로 import해 `BASE_AGENT_DEFS`에 추가하면, 공용 엔진이 `PATH`에서 감지하고 picker에 표시하며 invocation을 구성합니다. wire shape가 같다면 기존 `streamFormat`을 재사용하세요. 완전히 새로운 wire format이라면 [`apps/daemon/src/runtimes/`](../../apps/daemon/src/runtimes/) 또는 [`apps/daemon/src/agent-protocol/`](../../apps/daemon/src/agent-protocol/) 아래의 parser, parser test, 그리고 [`server.ts`](../../apps/daemon/src/server.ts)의 해당 dispatch branch도 필요합니다.
+정의를 [`runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts)로 import해 `SHIPPED_AGENT_DEFS`에 추가하면, 공용 엔진이 `PATH`에서 감지하고 picker에 표시하며 invocation을 구성합니다. wire shape가 같다면 기존 `streamFormat`을 재사용하세요. 완전히 새로운 wire format이라면 [`apps/daemon/src/runtimes/`](../../apps/daemon/src/runtimes/) 또는 [`apps/daemon/src/agent-protocol/`](../../apps/daemon/src/agent-protocol/) 아래의 parser, parser test, 그리고 [`server.ts`](../../apps/daemon/src/server.ts)의 해당 dispatch branch도 필요합니다.
 
 머지 기준:
 

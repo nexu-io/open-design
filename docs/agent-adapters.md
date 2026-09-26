@@ -20,11 +20,11 @@ Where the pieces live (all under `apps/daemon/src/`):
 
 - **The contract (the data spec):** [`runtimes/types.ts`](../apps/daemon/src/runtimes/types.ts) — the `RuntimeAgentDef` type.
 - **One def per CLI:** [`runtimes/defs/*.ts`](../apps/daemon/src/runtimes/defs) — `claude.ts`, `codex.ts`, `cursor-agent.ts`, `devin.ts`, … each exports a single object literal.
-- **The registry (a unique-id array):** [`runtimes/registry.ts`](../apps/daemon/src/runtimes/registry.ts) — `BASE_AGENT_DEFS` collects every def into `AGENT_DEFS`; a boot-time loop throws on any duplicate `id`.
+- **The registry (a unique-id array):** [`runtimes/registry.ts`](../apps/daemon/src/runtimes/registry.ts) — `SHIPPED_AGENT_DEFS` collects the definitions shipped by this build; `AGENT_DEFS` appends user-defined local profiles, and a boot-time loop throws on any duplicate `id`.
 - **The generic engine (zero per-agent code):** `detection.ts`, `capabilities.ts`, `executables.ts` / `resolution.ts`, `launch.ts`, `invocation.ts`, `env.ts`, `mcp.ts`, `models.ts`, `prompt-budget.ts` under `runtimes/`, plus the stream dispatch in [`server.ts`](../apps/daemon/src/server.ts) that routes each def's `streamFormat` / `eventParser` to the matching `*-stream.ts` parser.
 - **The public barrel:** [`agents.ts`](../apps/daemon/src/agents.ts) re-exports `AGENT_DEFS`, `getAgentDef`, `detectAgents`, `resolveAgentLaunch`, … from `runtimes/`. It defines nothing itself — import from it for convenience, but read `runtimes/` for the contract.
 
-> **Adding a CLI is a one-file change.** Drop a new `runtimes/defs/<cli>.ts` exporting one `RuntimeAgentDef`, add it to the `BASE_AGENT_DEFS` array in `registry.ts`, and the engine detects, launches, invokes, and (for an existing `streamFormat`) streams it — **no engine edits, no new class, no method overrides.** The def is config; the loop is shared. A genuinely new wire format is the only case that also adds an engine file (a new `*-stream.ts` and a `streamFormat` value).
+> **Adding a CLI is a one-file change.** Drop a new `runtimes/defs/<cli>.ts` exporting one `RuntimeAgentDef`, add it to the `SHIPPED_AGENT_DEFS` array in `registry.ts`, and the engine detects, launches, invokes, and (for an existing `streamFormat`) streams it — **no engine edits, no new class, no method overrides.** The def is config; the loop is shared. A genuinely new wire format is the only case that also adds an engine file (a new `*-stream.ts` and a `streamFormat` value).
 
 ### The data spec (`RuntimeAgentDef`, abbreviated)
 
@@ -91,7 +91,7 @@ export const acmeAgentDef: RuntimeAgentDef = {
 
 ```ts
 // runtimes/registry.ts
-const BASE_AGENT_DEFS: RuntimeAgentDef[] = [
+export const SHIPPED_AGENT_DEFS: RuntimeAgentDef[] = [
   claudeAgentDef, codexAgentDef, devinAgentDef, cursorAgentDef,
   /* … one entry per CLI (roughly two dozen today) … */
 ];
@@ -104,7 +104,7 @@ for (const def of AGENT_DEFS) {
 }
 ```
 
-`AGENT_DEFS` = `BASE_AGENT_DEFS` plus any user-defined local profiles (`readLocalAgentProfileDefs`), and `getAgentDef(id)` is the lookup the rest of the daemon uses. The event set the `*-stream.ts` parsers emit onto the UI stream (thinking / tool-call / tool-result / text-delta / file-write / error / done) is defined by those parsers, not by the def — see §11 for where they live and `server.ts` for the dispatch.
+`AGENT_DEFS` = `SHIPPED_AGENT_DEFS` plus any user-defined local profiles (`readLocalAgentProfileDefs`), and `getAgentDef(id)` is the lookup the rest of the daemon uses. The event set the `*-stream.ts` parsers emit onto the UI stream (thinking / tool-call / tool-result / text-delta / file-write / error / done) is defined by those parsers, not by the def — see §11 for where they live and `server.ts` for the dispatch.
 
 ## 2. Detection strategy
 
@@ -132,14 +132,15 @@ them.
 
 ## 3. Shipped adapter catalog
 
-The authoritative list is `BASE_AGENT_DEFS` in
+The authoritative list is `SHIPPED_AGENT_DEFS` in
 [`runtimes/registry.ts`](../apps/daemon/src/runtimes/registry.ts). The shipped
 definitions currently group by transport as follows:
 
 | Stream format | Runtime ids |
 |---|---|
 | `claude-stream-json` | `claude`, `amp`, `codebuddy` |
-| `json-event-stream` | `codex`, `cursor-agent`, `opencode`, `mimo`, `byok-opencode` |
+| `codex-app-server` | `codex` (shipping default; selected per run) |
+| `json-event-stream` | `cursor-agent`, `opencode`, `mimo`, `byok-opencode`; `codex` only with `OD_CODEX_TRANSPORT=exec-json` |
 | `copilot-stream-json` | `copilot` |
 | `qoder-stream-json` | `qoder` |
 | `acp-json-rpc` | `amr` (Vela), `devin`, `hermes`, `kimi`, `kiro`, `kilo`, `reasonix`, `trae-cli`, `vibe` |
@@ -562,7 +563,7 @@ apps/daemon/src/
 ├── agents.ts               # public barrel — re-exports AGENT_DEFS / getAgentDef / detectAgents / … from runtimes/ (defines nothing)
 ├── runtimes/
 │   ├── types.ts            # the RuntimeAgentDef contract (the data spec) + shared runtime types
-│   ├── registry.ts         # BASE_AGENT_DEFS array → AGENT_DEFS + unique-id guard + getAgentDef()
+│   ├── registry.ts         # SHIPPED_AGENT_DEFS → AGENT_DEFS + unique-id guard + getAgentDef()
 │   ├── defs/               # one object literal per CLI — the file you add for a new agent
 │   │   ├── claude.ts
 │   │   ├── codex.ts
@@ -593,7 +594,7 @@ apps/daemon/src/
 └── server.ts               # spawn pipeline + stream dispatch: routes def.streamFormat/eventParser to a parser
 ```
 
-The engine is agent-agnostic: it iterates `AGENT_DEFS` and reads fields. A community contribution adds a new agent by dropping one `runtimes/defs/<cli>.ts` and appending it to `BASE_AGENT_DEFS` — detection, launch, invocation, and (for an existing `streamFormat`) parsing come for free, with no change to core daemon code.
+The engine is agent-agnostic: it iterates `AGENT_DEFS` and reads fields. A community contribution adds a new agent by dropping one `runtimes/defs/<cli>.ts` and appending it to `SHIPPED_AGENT_DEFS` — detection, launch, invocation, and (for an existing `streamFormat`) parsing come for free, with no change to core daemon code.
 
 ## 12. Open questions
 
