@@ -676,10 +676,15 @@ export async function writeCloudflareWorkersConfig(input: Partial<DeployConfig>)
   // grant it killed.
   await settlePendingCloudflareOAuthGrantRevokes();
   const current = await readCloudflareWorkersConfig();
+  // The FILE's stored mode, never the derivation: a partial PUT with no
+  // credentialMode in the body must re-persist the mode the file holds, not the
+  // derived 'oauth' a live grant answers — otherwise a failed commit during the
+  // connect window leaves stored 'oauth' over an empty store.
+  const currentFile = await readCloudflareWorkersConfigFile();
   const tokenInput = typeof input?.token === 'string' ? input.token.trim() : '';
   // The authority switch to 'oauth' must not be reachable via a bare config PUT:
   // require a durable OAuth token before accepting the flip (fail closed).
-  let credentialMode = current.credentialMode;
+  let credentialMode = currentFile.credentialMode === 'oauth' ? 'oauth' : 'token';
   if (typeof input?.credentialMode === 'string') {
     if (input.credentialMode !== 'token' && input.credentialMode !== 'oauth') {
       throw new DeployError(
@@ -693,7 +698,7 @@ export async function writeCloudflareWorkersConfig(input: Partial<DeployConfig>)
     // require a LIVE grant before accepting the flip (fail closed). A raw stored
     // record that is expired with no refresh token passes the raw presence check
     // but the resolver refuses, landing oauth over a dead credential.
-    if (input.credentialMode === 'oauth' && current.credentialMode !== 'oauth') {
+    if (input.credentialMode === 'oauth') {
       const oauthToken = await liveCloudflareOAuthGrant();
       if (!oauthToken) {
         throw new DeployError(
@@ -1438,11 +1443,23 @@ export async function settlePendingCloudflareOAuthGrantRevokes(
     return;
   }
   if (pending.length === 0) return;
+  // A handle tagged with the connect attempt that owns it is skipped while the
+  // config's pendingOAuthGrant still names that attempt: an unrelated mutation
+  // must not revoke the grant the connect's failed-commit rollback still needs.
+  let heldAttempt = '';
+  try {
+    heldAttempt = (await readCloudflareWorkersConfig()).pendingOAuthGrant ?? '';
+  } catch (err: unknown) {
+    // Best-effort: an unreadable config protects no attempt; the rollback path
+    // re-enters on the next save.
+    heldAttempt = '';
+  }
   const settled: string[] = [];
   let attempted = 0;
   for (const handle of pending) {
     const token = handle.refreshToken || handle.accessToken;
     if (!token) continue;
+    if (heldAttempt && handle.heldByAttempt === heldAttempt) continue;
     // A hard per-settle budget bounds the revoke drain, so a long handle queue
     // (or a Cloudflare outage) cannot block the settings PUT / disconnect /
     // connect for N×10s; the overflow is deferred to the next OAuth mutation.

@@ -60,6 +60,11 @@ export interface StoredCloudflareOAuthToken {
   /** Times a revoke of THIS record (used as a pendingRevokes handle) was
    * refused with a definitive client error. Present only on handles. */
   revokeRefusals?: number;
+  /** The OAuth attempt id whose rollback still needs this handle: the settle
+   * skips such a handle while the config's pendingOAuthGrant still names that
+   * attempt, so an unrelated mutation cannot revoke a grant the connect's
+   * failed-commit rollback must hand back. Present only on handles. */
+  heldByAttempt?: string;
 }
 
 export interface CloudflareOAuthTokensFile {
@@ -207,6 +212,9 @@ function sanitizeToken(raw: unknown): StoredCloudflareOAuthToken | null {
   if (expiresAt !== undefined) out.expiresAt = expiresAt;
   if (typeof raw.revokeRefusals === 'number' && Number.isFinite(raw.revokeRefusals) && raw.revokeRefusals > 0) {
     out.revokeRefusals = raw.revokeRefusals;
+  }
+  if (typeof raw.heldByAttempt === 'string' && raw.heldByAttempt.trim()) {
+    out.heldByAttempt = raw.heldByAttempt.trim();
   }
   return out;
 }
@@ -519,6 +527,7 @@ export async function setCloudflareOAuthTokenGuarded(
   dataDir: string,
   token: StoredCloudflareOAuthToken,
   guard: () => boolean,
+  heldByAttempt?: string,
 ): Promise<GuardedCloudflareOAuthTokenWrite> {
   return withLock(dataDir, async () => {
     if (!guard()) return { written: false };
@@ -529,6 +538,10 @@ export async function setCloudflareOAuthTokenGuarded(
     // recoveredDisplacedCredential).
     const { raw, file } = await readCloudflareOAuthTokensFileWithRaw(dataDir);
     const displaced = file.token ?? recoveredDisplacedCredential(raw);
+    // Tag the displaced grant's handle with the attempt that owns it: the settle
+    // skips it while the config's pendingOAuthGrant still names that attempt, so
+    // an unrelated mutation cannot revoke the grant the connect's rollback needs.
+    if (displaced && heldByAttempt) displaced.heldByAttempt = heldByAttempt;
     const gen = nextLastGeneration(file);
     token.generation = gen;
     // The displaced grant is named by THIS write (see pendingRevokesAfterLanding):

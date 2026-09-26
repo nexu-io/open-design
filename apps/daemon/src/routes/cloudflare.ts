@@ -347,6 +347,7 @@ export function registerCloudflareRoutes(
           dataDir,
           stored,
           () => attemptGeneration === oauthAttemptGeneration,
+          attemptMarker,
         );
       } catch (err) {
         // The guarded write threw (the store went unwritable): nothing was
