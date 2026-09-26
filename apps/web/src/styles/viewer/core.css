@@ -2396,6 +2396,21 @@
   word-break: break-word;
   white-space: pre-wrap;
 }
+.comment-side-body.is-clamped {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+.comment-side-expand {
+  align-self: flex-start;
+  padding: 2px 0 0;
+  border: 0;
+  background: transparent;
+  color: var(--comment-accent);
+  font: inherit;
+  cursor: pointer;
+}
 .comment-side-attachments {
   display: flex;
   flex-wrap: wrap;

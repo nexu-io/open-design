@@ -9,21 +9,72 @@
   line-height: 18px;
   overflow-wrap: anywhere;
 }
+/* Inside ShareTab this is the design's unboxed `.share-status-panel .notice`:
+   flush with the panel's content edge, no border/fill/padding. */
+.backfillOnly {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
 .banner p { margin: 0; }
 .banner p + p { margin-block-start: 4px; }
-.title { font-weight: 600; color: var(--text, #333333); }
-.login { margin-block-start: 4px; }
-.login button { text-decoration: underline; }
-.retry {
-  margin-block-start: 8px;
+ .title { font-weight: 600; color: var(--text, #333333); }
+ .backfillProgress {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 6px;
+  background: #29292d;
+  color: #fff;
+  font-weight: 500;
+}
+ .spinner {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  border: 1.5px solid rgb(255 255 255 / 45%);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: commentSyncSpin 0.8s linear infinite;
+}
+ @keyframes commentSyncSpin { to { transform: rotate(360deg); } }
+ .login { margin-block-start: 4px; }
+ .login button { text-decoration: underline; }
+ .retryRow { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 36px; margin-block-start: 4px; }
+ .retryRow p { flex: 1; min-width: 0; }
+ .backfillOnly .retryRow p { color: #5c5c5c; }
+ /* Design `.share-status-panel .notice .secondary`: fixed 88px, icon + label. */
+ .retry {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  flex: 0 0 88px;
+  width: 88px;
+  min-width: 88px;
   height: 32px;
-  padding: 0 10px;
+  padding: 0 12px;
   border: none;
   border-radius: 6px;
-  background: var(--bg-muted, #EDEDF0);
-  color: var(--text, #333333);
+  background: #edf3ff;
+  color: #245fce;
   font-size: 12px;
   font-weight: 500;
+  line-height: 18px;
+  white-space: nowrap;
   cursor: pointer;
 }
-.retry:disabled { opacity: 0.6; cursor: default; }
+ .retry > svg { flex: 0 0 13px; width: 13px; height: 13px; }
+ .retry:hover:not(:disabled) { background: #e0eaff; color: #194eaf; }
+ .retry:active:not(:disabled) { background: #d3e1ff; color: #194eaf; }
+ .retry:focus-visible { outline: 2px solid #245fce; outline-offset: 2px; }
+ .retry:disabled { opacity: 0.6; cursor: default; }
+ .retryError { background: #fff0f0; color: #c9363e; }
+ .retryError:hover:not(:disabled) { background: #ffe2e3; color: #b52a32; }
+ .retryError:active:not(:disabled) { background: #ffd3d5; color: #a3222a; }
+ .retryError:focus-visible { outline-color: #c9363e; }

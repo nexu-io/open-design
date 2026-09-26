@@ -2,15 +2,19 @@ import { afterEach, expect, it } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { buildWorkspacePermissions, buildWorkspaceSeatSummary, type WorkspaceCollabContext, type CollabCloudComment } from '@open-design/contracts';
+import { createServer } from 'node:http';
+import express from 'express';
+import { buildWorkspacePermissions, buildWorkspaceSeatSummary, type WorkspaceCollabContext, type CollabCloudComment, type CommentSyncState } from '@open-design/contracts';
 import { closeDatabase, openDatabase, insertProject, insertConversation, upsertPreviewComment, getWorkspaceProjectByProjectId } from '../src/db.js';
 import { createSqlitePublicFilePublicationStore, migratePublicFilePublications } from '../src/collab/public-file-publication-store.js';
 import { createCommentRelayOutboxStore, commentRelayLocalBindingMatches } from '../src/collab/comment-relay-outbox.js';
 import { enqueuePublishedFileComments } from '../src/collab/published-file-comment-backfill.js';
 import { readPublishedCommentBackfill } from '../src/collab/published-comment-backfill-state.js';
+import { createCommentSyncStateService } from '../src/collab/comment-sync-state.js';
+import { registerCommentSyncStateRoutes } from '../src/routes/project/comments.js';
 import { createPublicFilePublicationRecorder } from '../src/collab/public-file-publication-recording.js';
 import { createShareFileMapping } from '../src/collab/share-file-mapping.js';
-import { sourcePathForCurrentPublication } from '../src/collab/comment-relay-publication-mapping.js';
+import { recordPublishedCommentMutation, sourcePathForCurrentPublication } from '../src/collab/comment-relay-publication-mapping.js';
 import { createCollabCloudService } from '../src/collab/collab-cloud-service.js';
 import { createVelaCliCollabClient } from '../src/collab/vela-cli-collab-client.js';
 import { commentRelayScope } from '../src/collab/comment-relay-scope.js';
@@ -138,6 +142,68 @@ it('includes all conversations of exactly one file, preserves ids/authors and ne
     state: 'pending', filePath: s.scope.filePath, retryable: false,
   });
   s.publish(); expect(s.outbox.count()).toBe(3);
+});
+it('K5 deletion-only resume tracks its stopped tombstone, retryable failure and remote ACK', async () => {
+  const s = setup(); s.add('only'); s.publish();
+  const original = s.outbox.listDue(Date.now())[0]!;
+  s.outbox.acknowledge(original, 'delivered');
+  s.publications.delete(s.scope);
+  s.db.transaction(() => {
+    expect(recordPublishedCommentMutation(s.db, s.scope, { ...original.comment, deleted: true,
+      updatedAt: original.comment.updatedAt + 1 })).toBe(true);
+    s.db.prepare("DELETE FROM preview_comments WHERE id='only'").run();
+  })();
+  const resumed = s.publish();
+  expect(resumed.enqueued).toBe(1);
+  expect(s.outbox.listDue(Date.now()).map(row => [row.comment.id, row.comment.deleted])).toEqual([['only', true]]);
+  const app = express(); const server = createServer(app);
+  registerCommentSyncStateRoutes(app, { db: s.db, service: createCommentSyncStateService(s.db, async () => true),
+    authorize: async req => req.get('x-od-workspace-member-id') === 'owner'
+      ? { ok: true, context: { workspaceId: 'w', workspaceMemberId: 'owner' } as WorkspaceCollabContext }
+      : { ok: false, status: 403, code: 'DENIED', message: 'denied' } });
+  let relay: ReturnType<typeof createCollabCloudService> | undefined;
+  try {
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address(); if (!address || typeof address === 'string') throw new Error('listener failed');
+  const statusUrl = `http://127.0.0.1:${address.port}/api/projects/p/comment-sync-state?filePath=pages%2Fwork.html`;
+  const getStatus = async (): Promise<CommentSyncState> => {
+    const response = await fetch(statusUrl, { headers: { 'x-od-workspace-member-id': 'owner' } });
+    expect(response.status).toBe(200); return await response.json() as CommentSyncState;
+  };
+  expect((await getStatus()).backfill).toMatchObject({ state: 'pending', retryable: false, publicationRevision: s.publications.getRevision(s.scope)!.token });
+  const context: WorkspaceCollabContext = { workspaceId: 'w', workspaceType: 'personal', workspaceMemberId: 'owner',
+    teamId: 'w', role: 'owner', memberStatus: 'active', lifecycleState: 'active', billingState: 'active', planId: null,
+    providerMode: 'platform_credits', permissions: buildWorkspacePermissions({ role: 'owner', lifecycleState: 'active' }),
+    seatSummary: buildWorkspaceSeatSummary({ seatLimit: 1, usedSeats: 1 }) };
+  let offline = true;
+  const delivered: CollabCloudComment[] = [];
+  relay = createCollabCloudService({
+    client: { ...createVelaCliCollabClient({ run: async () => { throw new Error('unexpected CLI'); } }),
+      pushComment: async (_team, _project, comment) => {
+        if (offline) throw new Error('offline');
+        delivered.push(comment);
+        return { seq: 2 };
+      } },
+    commentOutbox: s.outbox, listProjectIds: () => [], retryDelayMs: () => 0,
+    resolveCommentRelayWorkspaceContext: async () => context,
+    listRemoteProjectRelayBindings: async () => [{ projectId: 'p', ownerMemberId: 'owner' }],
+    validateCommentRelayProjectBinding: row => commentRelayLocalBindingMatches(row, getWorkspaceProjectByProjectId(s.db, row.projectId)),
+    commentRelayScope: (projectId, filePath, ctx) => commentRelayScope({ projectId, filePath, context: ctx,
+      binding: getWorkspaceProjectByProjectId(s.db, projectId), publications: s.publications }),
+    resolveLocalConversationId: () => 'a-p', mergeComment: () => 'unchanged',
+  });
+    await relay.flushPendingComments();
+    expect((await getStatus()).backfill).toMatchObject({ state: 'failed', retryable: true });
+    expect(s.outbox.count()).toBe(1);
+    offline = false;
+    await relay.flushPendingComments();
+    expect(delivered).toMatchObject([{ id: 'only', deleted: true, filePath: 'index.html' }]);
+    expect(s.outbox.count()).toBe(0);
+    expect((await getStatus()).backfill).toMatchObject({ state: 'succeeded', retryable: false });
+  } finally {
+    relay?.dispose();
+    if (server.listening) await new Promise<void>(resolve => server.close(() => resolve()));
+  }
 });
 it('requires publication transaction and exact current witness', () => {
   const s = setup(); s.add('a'); s.publications.set(s.scope, s.publication);

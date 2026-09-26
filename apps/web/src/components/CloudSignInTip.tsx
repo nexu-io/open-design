@@ -111,7 +111,7 @@ export function RailAccountRecoveryTip() {
  * link fallback — and on success every workspace surface is nudged to
  * re-read, which swaps the rail to the signed-in form (unmounting the card).
  */
-export function CloudSignInTip() {
+export function CloudSignInTip({ sharePrompt = false, className, onLoginSuccess, actionLabel }: { sharePrompt?: boolean; className?: string; onLoginSuccess?: () => void; actionLabel?: string } = {}) {
   const { t } = useI18n();
   const [state, setState] = useState<TipState>('idle');
   const [status, setStatus] = useState<VelaLoginStatus | null>(null);
@@ -171,6 +171,9 @@ export function CloudSignInTip() {
   }
 
   function finishSignedIn() {
+    // A requested post-login action belongs to the still-mounted caller;
+    // broadcast refresh may unmount this tip before the caller can record it.
+    if (mountedRef.current && !cancelledRef.current) onLoginSuccess?.();
     notifyAmrLoginStatusChanged();
     notifyWorkspaceContextRefresh();
     notifyWorkspaceBillingRefresh();
@@ -192,7 +195,7 @@ export function CloudSignInTip() {
     <div className="entry-local-mode-tip__head">
       <span className="entry-local-mode-tip__login-badge">
         <Icon name="log-in" size={14} />
-        {t('settings.amrLogin')}
+        {actionLabel ?? t('settings.amrLogin')}
       </span>
     </div>
   );
@@ -201,7 +204,7 @@ export function CloudSignInTip() {
     <section
       role="button"
       tabIndex={signing ? -1 : 0}
-      className={`entry-local-mode-tip${signing ? ' is-signing' : ''}`}
+      className={`${sharePrompt ? className ?? '' : 'entry-local-mode-tip'}${signing ? ' is-signing' : ''}`}
       onClick={() => {
         if (!signing) void begin();
       }}
@@ -211,8 +214,8 @@ export function CloudSignInTip() {
         event.preventDefault();
         void begin();
       }}
-      aria-label={t('entry.cloudCalloutTitle')}
-      data-testid="entry-cloud-signin-tip"
+      aria-label={actionLabel ?? t(sharePrompt ? 'settings.amrLogin' : 'entry.cloudCalloutTitle')}
+      data-testid={sharePrompt ? 'share-cloud-signin' : 'entry-cloud-signin-tip'}
     >
       {signing ? (
         <>
@@ -254,6 +257,8 @@ export function CloudSignInTip() {
           {headBadge}
           <p role="alert">{t('settings.amrLoginErrorCompact')}</p>
         </>
+      ) : sharePrompt ? (
+        headBadge
       ) : (
         <>
           <p>{t('entry.cloudCalloutBody')}</p>

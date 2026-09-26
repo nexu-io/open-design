@@ -12,13 +12,100 @@
   background: #FFFFFF;
   box-shadow: 0 8px 28px #00000010, 0 2px 6px #00000006;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 400;
   color: #333333;
 }
 
-/* S1/S4: the "链接访问" title row + static description line the panel was
-   missing (板 D-00 固定结构第二/三行). The help "?" tooltip keeps its prior
-   position, at the row's trailing edge. */
+/* S0/S13: signed-out explanation and existing Cloud login action. */
+.signInPrompt {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* S0: matches the design's full-width `.primary` share button exactly —
+   same spec as .copyButton below, just not a native <button> (CloudSignInTip
+   renders a role="button" section). */
+.signInPrimaryAction {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: 100%;
+  height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: #29292B;
+  color: #FFFFFF;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.signInPrimaryAction:hover:not(:global(.is-signing)) { background: #353535; }
+.signInPrimaryAction:focus-visible { outline: 2px solid #1677FF; outline-offset: 2px; }
+.signInPrimaryAction:global(.is-signing) { cursor: default; background: #5A5A5C; }
+
+/* S0/S13: CloudSignInTip renders its label inside the rail's green pill
+   badge (`.entry-local-mode-tip__login-badge`, global). In the share panel the
+   design's buttons are plain text labels — no pill, no icon, inherited color. */
+.signInPrimaryAction :global(.entry-local-mode-tip__head),
+.signInSecondaryAction :global(.entry-local-mode-tip__head) {
+  display: contents;
+  color: inherit;
+}
+
+.signInPrimaryAction :global(.entry-local-mode-tip__login-badge),
+.signInSecondaryAction :global(.entry-local-mode-tip__login-badge) {
+  flex: none;
+  height: auto;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.signInPrimaryAction :global(.entry-local-mode-tip__login-badge) > svg,
+.signInSecondaryAction :global(.entry-local-mode-tip__login-badge) > svg {
+  display: none;
+}
+
+/* S13: the design's `.share-status-panel .notice .secondary` — fixed 88px,
+   borderless blue — same spec as .updateButton below. */
+.signInSecondaryAction {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  flex: 0 0 88px;
+  width: 88px;
+  min-width: 88px;
+  height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  background: #EDF3FF;
+  color: #245FCE;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.signInSecondaryAction:hover:not(:global(.is-signing)) { background: #E0EAFF; color: #194EAF; }
+.signInSecondaryAction:active:not(:global(.is-signing)) { background: #D3E1FF; color: #194EAF; }
+.signInSecondaryAction:focus-visible { outline: 2px solid #245FCE; outline-offset: 2px; }
+.signInSecondaryAction:global(.is-signing) { cursor: default; }
+
+/* S1/S4: link access heading and description. */
 .linkAccessHeading {
   display: flex;
   flex-direction: column;
@@ -47,11 +134,6 @@
   line-height: 18px;
 }
 
-.linkAccessRowEnd {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
 
 /* D-00 固定结构第二行 .toggle: 32×19 / r999 / 关 #D6D6D6 / 开 #282828, 滑块 15×15 白.
    This IS the publish/unpublish control — board S4 has no separate "stop
@@ -330,13 +412,34 @@ p.publishHint {
   line-height: 17px;
 }
 
-/* S11 (◇): preserve the full selectable URL; only clipboard failure gets
-   this fallback treatment. Successful/idle links retain their existing skin. */
-.copyFallback:global(.chrome-publish-url) {
+/* S3/S4: match the final-design link/copy stack without affecting FileViewer’s separate renderer. */
+.publishedLink {
+  gap: 8px;
+  padding: 0;
+}
+
+/* G2/S3/S4/S4-C/S10 UI audit: this used to be reached only through
+   `.publishedLink :global(.chrome-publish-url)`, a cross-scope descendant
+   selector spanning a local CSS-module class and a plain global class name.
+   That compound selector depended on the URL row staying a literal
+   descendant of `.publishedLink` and on this module's rule outranking
+   `shell.css`'s bare `.chrome-publish-url` — true on paper (two classes beat
+   one), but the row was confirmed rendering with zero box in the real
+   packaged/dev build (present in the DOM per the existing Playwright
+   assertions, invisible in every captured screenshot: G2, S3, S4, S4-C, S10
+   all show the toggle/description flowing straight into the copy button
+   with no link line above it — see `docs/../.tmp/ui-audit/final-design-review`
+   captures and `RESTORATION.md`'s admission that the box was never measured
+   by DOM rect, only asserted by text). Root cause not narrowed further since
+   it never reproduces in jsdom (no real cascade/layer resolution there); the
+   fix removes the dependency on cross-scope selector matching entirely by
+   applying a class the module owns directly to the element. */
+.publishedUrl {
   box-sizing: border-box;
+  position: relative;
   width: 100%;
   height: 32px;
-  padding: 0 9px;
+  padding: 0 9px 0 29px;
   border: 1px solid #E5E5E5;
   border-radius: 6px;
   background: #FFFFFF;
@@ -351,11 +454,143 @@ p.publishHint {
   cursor: text;
 }
 
+/* S5/S13: `.share-status-panel .notice` — UNBOXED (no border, fill, or
+   padding): copy on the left, a fixed-width blue action on the right. */
+.updateNotice {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.updateNotice p {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  color: #5C5C5C;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+button.updateButton {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  flex: 0 0 88px;
+  width: 88px;
+  min-width: 88px;
+  height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  background: #EDF3FF;
+  color: #245FCE;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  white-space: nowrap;
+  box-shadow: none;
+}
+
+button.updateButton:hover:not(:disabled) {
+  background: #E0EAFF;
+  color: #194EAF;
+}
+
+button.updateButton:active:not(:disabled) {
+  background: #D3E1FF;
+  color: #194EAF;
+}
+
+button.updateButton:focus-visible {
+  outline: 2px solid #245FCE;
+  outline-offset: 2px;
+}
+
+.publishedLinkIcon {
+  position: absolute;
+  left: 9px;
+  top: 9px;
+  color: #888888;
+}
+
+.publishedActions {
+  display: block;
+  width: 100%;
+}
+
+
 .copyHint {
   margin: 0;
   color: #888888;
   font-size: 12px;
   line-height: 18px;
+}
+
+/* K1/K4: comment-sync-pending replaces the entire published-link block with
+   a single indicator — a progress bar for the first-publish backfill (K1,
+   `reopened` absent/false) or a busy primary button for a verified reopen
+   resync (K4, `reopened === true`). When CommentBackfillState carries a real,
+   measured `total`/`synced` (from published_comment_backfill_members), the
+   fill renders that percentage via `.syncProgressFillDeterminate`; an older
+   daemon that omits those fields keeps the indeterminate sweep below rather
+   than fabricating a number. */
+.syncStatus {
+  display: grid;
+}
+
+.syncProgress {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  height: 32px;
+  border-radius: 6px;
+  background: #6E6E70;
+  overflow: hidden;
+}
+
+.syncProgressFill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -35%;
+  width: 35%;
+  border-radius: inherit;
+  background: #29292B;
+  animation: shareSyncSweep 1.4s ease-in-out infinite;
+}
+
+@keyframes shareSyncSweep {
+  0% { left: -35%; }
+  50% { left: 65%; }
+  100% { left: -35%; }
+}
+
+/* Real measured progress (K1 with a known comment count): a plain static
+   fill anchored to the left edge, its width set inline per render. */
+.syncProgressFillDeterminate {
+  left: 0;
+  animation: none;
+}
+
+.syncProgressText {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: #FFFFFF;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 /* S7/S15 warning only; legacy renderer and deployment errors keep their styles. */

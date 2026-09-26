@@ -12,7 +12,8 @@ import {
   projectKindFilterCategory,
 } from '../../src/components/RecentProjectsStrip';
 import type { Project } from '../../src/types';
-import type { WorkspaceProjectSummary } from '@open-design/contracts';
+import type { WorkspaceProjectSummary, WorkspaceCollabContext } from '@open-design/contracts';
+import { workspaceContextFixture } from '../helpers/workspace-context';
 
 // Typed on the argument the component actually passes, so `.mock.calls`
 // destructures instead of widening to the empty tuple.
@@ -55,6 +56,14 @@ vi.mock('../../src/state/projects', async (importOriginal) => ({
   moveWorkspaceProject: (...args: unknown[]) => moveWorkspaceProject(args[0] as MoveCall),
 }));
 
+let shareReadContext: WorkspaceCollabContext | null = null;
+vi.mock('../../src/collab/useWorkspaceContext', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/collab/useWorkspaceContext')>();
+  return { ...actual, useWorkspaceContext: () => shareReadContext
+    ? { context: shareReadContext, loading: false }
+    : actual.useWorkspaceContext() };
+});
+
 vi.mock('../../src/providers/registry', () => ({
   fetchProjectFileText: vi.fn(async () => null),
   fetchProjectFiles: vi.fn(async () => []),
@@ -65,8 +74,20 @@ vi.mock('../../src/providers/registry', () => ({
 afterEach(() => {
   cleanup();
   moveWorkspaceProject.mockClear();
+  shareReadContext = null;
   vi.restoreAllMocks();
 });
+
+function provideVerifiedZeroShareCount() {
+  shareReadContext = workspaceContextFixture({
+    workspaceId: 'ws-1', workspaceMemberId: 'wm-1', workspaceType: 'personal', role: 'owner',
+  });
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+    const match = String(url).match(/^\/api\/projects\/([^/]+)\/share-state$/);
+    if (!match) return new Response('', { status: 200 });
+    return Response.json({ projectId: decodeURIComponent(match[1]!), bindingExists: false, hasEverShared: false, publications: [] });
+  });
+}
 
 function project(overrides: Partial<Project>): Project {
   return {
@@ -462,7 +483,8 @@ describe('RecentProjectsStrip bulk selection bar (#75)', () => {
     expect(container.querySelector('.recent-projects__bulkbar')).toBeNull();
   });
 
-  it('preserves the main no-share batch dialog DOM and cancel does not delete', () => {
+  it('preserves the main no-share batch dialog DOM and cancel does not delete', async () => {
+    provideVerifiedZeroShareCount();
     // Production markup/copy verified byte-identical to main 8e372744dda5
     // before recording; do not regenerate this baseline for share warnings.
     const onDelete = vi.fn();
@@ -474,6 +496,7 @@ describe('RecentProjectsStrip bulk selection bar (#75)', () => {
     const bar = enterSelectionMode(container, ['Deck project', 'Media project']);
     fireEvent.click(within(bar).getByText('Delete selected'));
     const dialog = screen.getByRole('alertdialog');
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Delete selected' })).toBeEnabled());
     const titleId = dialog.getAttribute('aria-labelledby')!;
     expect(dialog.outerHTML.replaceAll(titleId, 'delete-title')).toBe(
       `<div class="_dialog_8e4a21 modal modal-confirm" role="alertdialog" aria-modal="true" aria-labelledby="delete-title"><h2 class="_title_8e4a21" id="delete-title">Delete project</h2><p class="_description_8e4a21">Delete 2 project(s)?</p><div class="_footer_8e4a21 row"><button type="button">Cancel</button><button type="button" class="primary danger">Delete selected</button></div></div>`,
@@ -485,6 +508,7 @@ describe('RecentProjectsStrip bulk selection bar (#75)', () => {
   });
 
   it('confirms before deleting the whole selection', async () => {
+    provideVerifiedZeroShareCount();
     const onDelete = vi.fn((_id: string) => true);
     const { container } = renderGrid({
       canManageProjectCollection: true,
@@ -498,6 +522,7 @@ describe('RecentProjectsStrip bulk selection bar (#75)', () => {
     const dialog = screen.getByRole('alertdialog');
     expect(within(dialog).getByText('Delete 2 project(s)?')).toBeTruthy();
     expect(onDelete).not.toHaveBeenCalled();
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Delete selected' })).toBeEnabled());
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Delete selected' }));
 

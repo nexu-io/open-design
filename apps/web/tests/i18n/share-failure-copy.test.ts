@@ -21,12 +21,12 @@ const expected: Record<string, string> = {
   "th": "สร้างลิงก์แชร์ไม่สำเร็จ โปรดลองอีกครั้งในภายหลัง",
   "tr": "Paylaşım bağlantısı oluşturulamadı. Lütfen daha sonra tekrar deneyin.",
   "uk": "Не вдалося створити посилання. Повторіть спробу пізніше.",
-  "zh-CN": "生成分享链接失败，请稍后重试。",
+  "zh-CN": "上传失败，请检查网络后重试。",
   "zh-TW": "產生分享連結失敗，請稍後重試。"
 };
 const directory = resolve(__dirname, '../../src/i18n/locales');
 
-describe('share failure recovery copy', () => {
+describe('Owner S7 publish failure copy', () => {
   it('covers every shipped locale', () => {
     expect(readdirSync(directory).filter(name => name.endsWith('.ts')).map(name => name.slice(0, -3)).sort()).toEqual(Object.keys(expected).sort());
     expect(Object.keys(expected)).toHaveLength(19);

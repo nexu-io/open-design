@@ -29,9 +29,9 @@ it('pins receipt validation and return values to the invocation snapshot', async
   expect(run).toHaveBeenCalledTimes(1);
 });
 
-it('preserves confirmed content on partial success and never trusts child retrying or diagnostics', async () => {
+it('rejects a legacy binary partial-success receipt instead of claiming atomic publication', async () => {
   const run = vi.fn<typeof runVelaCommand>().mockResolvedValue(JSON.stringify({ ...receipt, status: 'binding_pending', binding: { code: 'FORBIDDEN', retrying: true, message: 'private' } }));
-  expect(await publishVelaShareVersion(input, run)).toEqual({ status: 'binding_pending', receipt: confirmed, binding: { retrying: false, code: 'FORBIDDEN' } });
+  await expect(publishVelaShareVersion(input, run)).rejects.toThrow('PUBLIC_SHARE_PUBLISH_FAILED');
   expect(run).toHaveBeenCalledTimes(1);
 });
 it.each([{ ...receipt, status: undefined }, { ...receipt, status: 'other' }, { ...receipt, receipt: { ...confirmed, versionId: 'wrong' } }])('rejects unconfirmed result shape', async wire => {

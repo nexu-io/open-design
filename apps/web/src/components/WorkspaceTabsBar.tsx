@@ -166,6 +166,9 @@ interface Props {
    * tab without exposing those tabs in another scope.
    */
   identityScopeKey?: string | null;
+  /** A witnessed public URL may remain on its exact file route after sign-out;
+   * the old account's tabs must still be discarded. */
+  preserveSignedOutShareRoute?: boolean;
   /**
    * Workspace headers for the per-project run lookups behind the dropdown's
    * status glyphs and the hover preview's cover read. Optional: without it the
@@ -860,6 +863,7 @@ export function WorkspaceTabsBar({
   activeProjectWorkspaceId,
   onboardingCompleted = false,
   identityScopeKey,
+  preserveSignedOutShareRoute = false,
   workspaceContext = null,
   onRenameProject,
   onDuplicateProject,
@@ -1559,6 +1563,17 @@ export function WorkspaceTabsBar({
       setState(rehomed);
       return;
     }
+    // The anonymous scope can settle in multiple passes (account -> anon ->
+    // anonymous workspace). Keep only this witnessed public-link route while
+    // discarding every authenticated project tab on each pass.
+    if (nextAccountBucket === 'anon'
+      && preserveSignedOutShareRoute && route.kind === 'project') {
+      const anonymousTabs = freshHomeTabsState();
+      pendingScopeStateRef.current = { scopeKey: identityScopeKey, state: anonymousTabs };
+      pendingScopeRouteRef.current = null;
+      setState(anonymousTabs);
+      return;
+    }
 
     // Preserve the prior fail-closed authentication boundary: workspace
     // bouncing within one account is recoverable, but sign-out or an account
@@ -1583,6 +1598,7 @@ export function WorkspaceTabsBar({
     activeProjectWorkspaceId,
     identityScopeKey,
     onboardingActive,
+    preserveSignedOutShareRoute,
     persistedTabsStore,
     route,
   ]);
@@ -2685,6 +2701,7 @@ export function WorkspaceTabsBar({
         <ProjectDeleteConfirmDialog
           projectName={deleteFlow.target.name}
           activeShareCount={deleteFlow.activeShareCount}
+          shareReadStatus={deleteFlow.shareReadStatus}
           pending={deleteFlow.pending}
           failed={deleteFlow.failed}
           onCancel={deleteFlow.cancel}

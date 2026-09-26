@@ -1073,6 +1073,8 @@ export interface CollabCloudComment {
   seq: number;
   note: string;
   filePath: string;
+  /** Server-asserted alias identity for public-file relays; clients do not supply it. */
+  publicationSlug?: string;
   elementId: string;
   selector: string;
   label: string;

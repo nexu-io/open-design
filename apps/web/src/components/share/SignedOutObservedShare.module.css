@@ -1,0 +1,29 @@
+.shell {
+  display: grid;
+  min-height: 100%;
+  place-items: center;
+  padding: 24px;
+  background: #f6f6f6;
+}
+
+.panel {
+  box-sizing: border-box;
+  display: grid;
+  /* minmax(0, …) lets the long URL row ellipsize instead of widening the card. */
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  width: min(100%, 360px);
+  padding: 20px;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 8px 28px #00000010, 0 2px 6px #00000006;
+  color: #333;
+  text-align: start;
+}
+
+.title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+}

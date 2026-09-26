@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { CollabProvider, useProjectCollabContext } from '../../src/collab/collab-context';
 import { FileOpsSummary } from '../../src/components/FileOpsSummary';
+import { ArtifactPublicationContext } from '../../src/components/share/ArtifactPublicationContext';
 import type { FileOpEntry } from '../../src/runtime/file-ops';
 
 function entry(partial: Partial<FileOpEntry> & { path: string }): FileOpEntry {
@@ -291,6 +292,28 @@ describe('FileOpsSummary artifact cards', () => {
       'landing.html',
       expect.stringMatching(/^export:[^:]+:landing\.html$/),
     );
+  });
+
+  it('shows the current file as shared after confirmed publication, retains the panel trigger, and clears on stop', () => {
+    const onPublish = vi.fn();
+    const props = { entries: [entry({ path: 'result.html' })], projectId: 'proj-1', onPublish, onExport: vi.fn() };
+    const renderCard = (paths: string[] | null) => <ArtifactPublicationContext.Provider value={paths ? new Set(paths) : null}><FileOpsSummary {...props} /></ArtifactPublicationContext.Provider>;
+    const view = render(renderCard([]));
+    const share = screen.getByTestId('artifact-card-publish-result.html');
+    expect(share).toHaveTextContent('Share');
+    view.rerender(renderCard(['other.html']));
+    expect(share).toHaveTextContent('Share');
+    view.rerender(renderCard(['result.html']));
+    expect(share).toHaveTextContent('Shared');
+    expect(share).toBeEnabled();
+    fireEvent.click(share);
+    expect(onPublish).toHaveBeenCalledExactlyOnceWith('result.html', share.getAttribute('data-artifact-anchor'));
+    view.rerender(renderCard([]));
+    expect(share).toHaveTextContent('Share');
+    view.rerender(renderCard(null));
+    expect(share).toHaveTextContent('Status unknown');
+    expect(share).toHaveAccessibleName('Share · Status unknown');
+    expect(share).toBeEnabled();
   });
 
   it('uses production collab authority to disable Share without removing its anchor', () => {

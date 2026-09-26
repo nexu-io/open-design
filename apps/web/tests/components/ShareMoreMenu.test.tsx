@@ -28,6 +28,10 @@ it('selects once and closes; disabled actions never invoke the callback', () => 
   const select = vi.fn();
   const { rerender } = render(<ShareMoreMenu label="More" items={[{ id: 'vercel', label: 'Vercel', onSelect: select }]} />);
   fireEvent.click(screen.getByRole('button', { name: 'More' }));
+  fireEvent.click(screen.getByRole('button', { name: 'More' }));
+  expect(screen.queryByRole('menu')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'More' }));
+  expect(screen.getByRole('menu')).toBeVisible();
   fireEvent.click(screen.getByRole('menuitem'));
   expect(select).toHaveBeenCalledTimes(1);
   expect(screen.queryByRole('menu')).toBeNull();

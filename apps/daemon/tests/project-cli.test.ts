@@ -112,6 +112,11 @@ async function startProjectStubServer(deleteResponse: unknown = { ok: true }, sh
         }));
         return;
       }
+      if (captured.method === 'POST' && captured.url === '/api/projects/project-1/files/nested%2Findex.html/share-plan') {
+        res.statusCode = 200;
+        res.end(JSON.stringify({ fileCount: 1, totalBytes: 12, exceedsSizeLimit: false, exclusions: [{ path: 'assets/missing.png', reason: 'missing' }] }));
+        return;
+      }
       if (['POST', 'GET'].includes(captured.method)
         && captured.url === '/api/projects/project-1/files/nested%2Findex.html/publish-public') {
         if (shareResponse !== undefined) { res.statusCode = shareStatus; res.end(JSON.stringify(shareResponse)); return; }
@@ -319,6 +324,15 @@ describe('od project CLI', () => {
     expect(stub.requests).toHaveLength(1);
     expect(stub.requests[0]).toMatchObject({ method: 'GET', url: '/api/projects/project-1/share-state', headers: { 'x-od-workspace-id': 'ws-1', 'x-od-workspace-member-id': 'member-1' } });
   });
+  it('share preflight uses the same HTTP plan endpoint and returns its JSON DTO', async () => {
+    stub = await startProjectStubServer();
+    const result = await runCli(['project', 'share', 'preflight', 'project-1', '--path', 'nested/index.html', '--workspace', 'ws-1', '--workspace-member', 'member-1', '--daemon-url', stub.baseUrl, '--json']);
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(JSON.parse(result.stdout)).toEqual({ fileCount: 1, totalBytes: 12, exceedsSizeLimit: false, exclusions: [{ path: 'assets/missing.png', reason: 'missing' }] });
+    expect(stub.requests).toHaveLength(1);
+    expect(stub.requests[0]).toMatchObject({ method: 'POST', url: '/api/projects/project-1/files/nested%2Findex.html/share-plan', headers: { 'x-od-workspace-id': 'ws-1', 'x-od-workspace-member-id': 'member-1' }, body: '' });
+  });
   it.each(['publish', 'resume', 'get', 'status', 'stop'])('share %s uses the existing file endpoint and emits raw JSON', async action => {
     stub = await startProjectStubServer();
     const result = await runCli([
@@ -338,13 +352,15 @@ describe('od project CLI', () => {
       method: action === 'stop' ? 'DELETE' : ['publish', 'resume'].includes(action) ? 'POST' : 'GET',
       url: '/api/projects/project-1/files/nested%2Findex.html/publish-public',
       headers: { 'x-od-workspace-id': 'ws-1', 'x-od-workspace-member-id': 'member-1' },
-      body: action === 'stop' ? JSON.stringify({ slug: 'legacy-public-slug' }) : '',
+      body: action === 'stop' ? JSON.stringify({ slug: 'legacy-public-slug' })
+        : action === 'resume' ? JSON.stringify({ mode: 'resume' }) : '',
     });
   });
   it('resume is documented and requires a file before making requests', async () => {
     stub = await startProjectStubServer();
     const help = await runCli(['project', 'share', '--help']);
     expect(help.stdout).toContain('od project share resume <id> --path <file> [--json]');
+    expect(help.stdout).toContain('od project share preflight <id> --path <file> [--json]');
     const invalid = await runCli(['project', 'share', 'resume', 'project-1', '--daemon-url', stub.baseUrl, '--json']);
     expect(invalid.code).toBe(2);
     expect(stub.requests).toHaveLength(0);

@@ -3,10 +3,12 @@
 // Exercise the real fetch/provider error parsing, not a synthetic thrown error.
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import React, { type ComponentProps } from 'react';
+import type { ComponentProps } from 'react';
 import {
   buildWorkspacePermissions,
   buildWorkspaceSeatSummary,
+  SHARE_MAX_TOTAL_BYTES,
+  type SharePlanSummary,
   type WorkspaceCollabContext,
 } from '@open-design/contracts';
 
@@ -104,13 +106,16 @@ function renderProjectFileViewer(
 }
 
 function stubFetch(
-  options: { publishStatus?: number; publishBody?: unknown; unpublishStatus?: number } = {},
+  options: { publishStatus?: number; publishBody?: unknown; unpublishStatus?: number; sharePlan?: () => SharePlanSummary } = {},
 ) {
   const { publishStatus = 200, publishBody, unpublishStatus = 200 } = options;
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString();
     if (url.includes('/api/workspace/context')) {
       return new Response(JSON.stringify({ context: teamWorkspaceContext() }), { status: 200 });
+    }
+    if (url.includes('/share-plan') && options.sharePlan) {
+      return Response.json(options.sharePlan());
     }
     if (url.includes('publish-public')) {
       if (init?.method === 'POST') {
@@ -168,6 +173,46 @@ async function setup(options: Parameters<typeof stubFetch>[0] = { publishBody: p
   vi.useFakeTimers();
   return { fetch, view };
 }
+it('S15 blocks an over-limit planned file before publish, then rechecks a smaller file on reopen', async () => {
+  let totalBytes = SHARE_MAX_TOTAL_BYTES + 1;
+  const fetch = stubFetch({ sharePlan: () => ({ fileCount: 1, totalBytes, exceedsSizeLimit: totalBytes > SHARE_MAX_TOTAL_BYTES, exclusions: [] }) });
+  renderProjectFileViewer(teamWorkspaceContext(), props);
+  fireEvent.click(await screen.findByRole('button', { name: /^share$/i }));
+  const generate = await screen.findByRole('menuitem', { name: /generate and copy link/i });
+  const warning = await screen.findByRole('alert');
+  expect(warning).toHaveTextContent('20 MiB');
+  expect(warning).toHaveTextContent('20.00 MiB');
+  expect(generate).toBeDisabled();
+  fireEvent.click(generate);
+  expect(posts(fetch)).toHaveLength(0);
+  fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+  totalBytes = SHARE_MAX_TOTAL_BYTES;
+  fireEvent.click(await screen.findByRole('button', { name: /^share$/i }));
+  const reopenedGenerate = await screen.findByRole('menuitem', { name: /generate and copy link/i });
+  await vi.waitFor(() => expect(reopenedGenerate).toBeEnabled());
+  expect(posts(fetch)).toHaveLength(0);
+  fireEvent.click(reopenedGenerate);
+  await vi.waitFor(() => expect(posts(fetch)).toHaveLength(1));
+});
+
+it('S1 opens with selected link access but makes no public HTTP write until Generate and copy', async () => {
+  const { fetch } = await setup();
+  const toggle = screen.getByRole('switch', { name: /link access/i });
+  const generate = screen.getByRole('menuitem', { name: /generate and copy link/i });
+  expect(toggle).toHaveAttribute('aria-checked', 'true');
+  expect(screen.queryByText(publication.url)).toBeNull();
+  expect(posts(fetch)).toHaveLength(0);
+  expect(write).not.toHaveBeenCalled();
+  fireEvent.click(toggle);
+  expect(toggle).toHaveAttribute('aria-checked', 'false');
+  expect(generate).toBeDisabled();
+  expect(posts(fetch)).toHaveLength(0);
+  fireEvent.click(toggle);
+  await publish();
+  expect(posts(fetch)).toHaveLength(1);
+  expect(write).toHaveBeenCalledWith(publication.url);
+});
+
 it('keeps publish inspectable but inert while streaming and restores it after completion', async () => {
   const fetch = stubFetch({ publishBody: publication });
   const view = renderProjectFileViewer(teamWorkspaceContext(), { ...props, streaming: true });
@@ -204,6 +249,38 @@ it('does not auto-copy a pending publication when generation has resumed', async
   await act(async () => { pending.resolve(new Response(JSON.stringify(publication), { status: 200 })); });
   expect(write).not.toHaveBeenCalled();
   expect((screen.getByRole('button', { name: /copy share link/i }) as HTMLButtonElement).disabled).toBe(true);
+});
+
+it('manual published-link copy keeps URL through pending, copied timer, failure and retry', async () => {
+  const { fetch } = await setup();
+  await publish();
+  expect(write).toHaveBeenCalledTimes(1);
+  await tick(1800);
+  const pendingCopy = deferred<void>();
+  write.mockImplementationOnce(() => pendingCopy.promise);
+  fireEvent.click(screen.getByRole('button', { name: /copy share link/i }));
+  const copying = screen.getByRole('button', { name: /copying/i });
+  expect(copying).toBeDisabled();
+  expect(copying).toHaveAttribute('aria-busy', 'true');
+  expect(screen.getByText(publication.url)).toBeTruthy();
+  fireEvent.click(copying);
+  expect(write).toHaveBeenCalledTimes(2);
+  await act(async () => pendingCopy.resolve());
+  expect(screen.getByRole('button', { name: /^copied$/i })).toBeTruthy();
+  await tick(1799);
+  expect(screen.getByRole('button', { name: /^copied$/i })).toBeTruthy();
+  await tick(1);
+  expect(screen.getByRole('button', { name: /copy share link/i })).toBeTruthy();
+
+  write.mockRejectedValueOnce(new Error(sensitive));
+  await act(async () => fireEvent.click(screen.getByRole('button', { name: /copy share link/i })));
+  expect(screen.getByText(publication.url)).toBeTruthy();
+  expect(screen.getByText(/manually copy/i)).toBeTruthy();
+  expect(screen.getByRole('button', { name: /copy share link/i })).toBeEnabled();
+  await act(async () => fireEvent.click(screen.getByRole('button', { name: /copy share link/i })));
+  expect(screen.getByRole('button', { name: /^copied$/i })).toBeTruthy();
+  expect(write).toHaveBeenCalledTimes(4);
+  expect(posts(fetch)).toHaveLength(1);
 });
 
 async function publish() {
@@ -249,6 +326,35 @@ it('real 413 too_large ends progress, explains the limit and retries only on dem
   expect(write.mock.calls).toEqual([[publication.url]]);
   expect(screen.queryByText(sizeMessage)).toBeNull();
 });
+it('retries a generic publish failure once and shows the recovered URL', async () => {
+  const { fetch } = await setup({ publishStatus: 500, publishBody: { error: { message: sensitive } } });
+  await publish();
+  const failure = screen.getByText(genericMessage).closest('[role="status"]');
+  expect(failure).toBeTruthy();
+  expect(failure).toHaveTextContent(genericMessage);
+  expect(failure?.querySelector('svg circle')).toBeTruthy();
+  expect(document.body.textContent).not.toContain(sensitive);
+  expect(document.querySelector('progress')).toBeNull();
+  expect(retry()).toBeEnabled();
+  expect(retry().querySelector('svg path')?.getAttribute('d')).toContain('M20 7v5h-5');
+  expect(write).not.toHaveBeenCalled();
+  expect(posts(fetch)).toHaveLength(1);
+  await tick(10_000);
+  expect(posts(fetch)).toHaveLength(1);
+
+  fetch.mockImplementationOnce(async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (String(input).includes('publish-public') && init?.method === 'POST') {
+      return new Response(JSON.stringify(publication), { status: 200 });
+    }
+    return new Response(JSON.stringify({ deployments: [] }), { status: 200 });
+  });
+  await act(async () => fireEvent.click(retry()));
+  expect(screen.queryByText(genericMessage)).toBeNull();
+  expect(screen.getByText(publication.url)).toBeTruthy();
+  expect(posts(fetch)).toHaveLength(2);
+  expect(posts(fetch)[1]![0]).toBe(posts(fetch)[0]![0]);
+  expect(write.mock.calls).toEqual([[publication.url]]);
+});
 it.each([[413, { error: 'unknown_limit', message: sensitive }], [500, { error: 'too_large' }]])(
   'does not misclassify status %s or an unknown 413', async (publishStatus, publishBody) => {
     await setup({ publishStatus, publishBody });
@@ -259,6 +365,28 @@ it.each([[413, { error: 'unknown_limit', message: sensitive }], [500, { error: '
     expect(document.body.textContent).not.toContain(sensitive);
     expect(write).not.toHaveBeenCalled();
   });
+it('S15 closes an over-limit panel and permits a fresh publish after the same HTML is reduced', async () => {
+  const { view, fetch } = await setup({ publishStatus: 413, publishBody: tooLarge });
+  await publish();
+  expect(screen.getByText(sizeMessage)).toBeTruthy();
+  expect(posts(fetch)).toHaveLength(1);
+  fireEvent.click(screen.getByRole('button', { name: /^share$/i }));
+  await act(async () => view.rerenderWith({ ...props, file: { ...htmlFile(),
+    size: 512, mtime: htmlFile().mtime + 1 },
+    liveHtml: '<html><body>smaller</body></html>',
+  }));
+  expect(posts(fetch)).toHaveLength(1); // Editing a failed package must not auto-upload.
+  fireEvent.click(screen.getByRole('button', { name: /^share$/i }));
+  expect(screen.queryByText(sizeMessage)).toBeNull();
+  await tick(0); // The same-file source revision revalidates the share-plan GET.
+  expect(posts(fetch)).toHaveLength(1); // Reopening only offers a fresh manual attempt.
+  expect(screen.getByRole('menuitem', { name: /generate and copy link/i })).toBeEnabled();
+  fetch.mockImplementationOnce(async () => new Response(JSON.stringify(publication), { status: 200 }));
+  await publish();
+  expect(posts(fetch)).toHaveLength(2);
+  expect(screen.getByText(publication.url)).toBeTruthy();
+  expect(write).toHaveBeenCalledExactlyOnceWith(publication.url);
+});
 it.each(['file', 'project'] as const)('clears over-limit error when changing %s', async change => {
   const { view, fetch } = await setup({ publishStatus: 413, publishBody: tooLarge });
   await publish();
@@ -282,6 +410,14 @@ it('keeps bounded progress across panel reopen and copies only the completed res
   expect(request[0]).toBe('/api/projects/s15-project/files/index.html/publish-public');
   expect(request[1]).toMatchObject({ method: 'POST' });
   expect(request[1]?.body).toBeUndefined();
+  const pendingSwitch = screen.getByRole('switch', { name: /link access/i });
+  const pendingAction = screen.getByRole('menuitem', { name: /uploading/i });
+  expect(pendingSwitch).toBeDisabled();
+  expect(pendingAction).toBeDisabled();
+  expect(pendingAction).toHaveAttribute('aria-busy', 'true');
+  fireEvent.click(pendingSwitch);
+  fireEvent.click(pendingAction);
+  expect(posts(fetch)).toHaveLength(1);
   let previous = 0;
   for (const elapsed of [250, 1000, 5000, 60000]) {
     await tick(elapsed);
@@ -299,15 +435,16 @@ it('keeps bounded progress across panel reopen and copies only the completed res
   expect(document.querySelector('progress')!.value).toBeGreaterThanOrEqual(previous);
   expect(posts(fetch)).toHaveLength(1);
   await act(async () => gate.resolve(new Response(JSON.stringify(publication))));
-  expect(document.querySelector('progress')!.value).toBe(1);
-  expect(write.mock.calls).toEqual([[publication.url]]);
-  expect(screen.getByRole('button', { name: /^copied!$/i })).toBeTruthy();
-  await tick(999);
-  expect(document.querySelector('progress')!.value).toBe(1);
-  await tick(1);
   expect(document.querySelector('progress')).toBeNull();
+  expect(screen.getByText(publication.url)).toBeTruthy();
+  expect(write.mock.calls).toEqual([[publication.url]]);
+  expect(screen.getByRole('button', { name: /^copied$/i })).toBeTruthy();
+  await tick(999);
+  expect(document.querySelector('progress')).toBeNull();
+  await tick(1);
+  expect(screen.getByText(publication.url)).toBeTruthy();
   await tick(799);
-  expect(screen.getByRole('button', { name: /^copied!$/i })).toBeTruthy();
+  expect(screen.getByRole('button', { name: /^copied$/i })).toBeTruthy();
   await tick(1);
   expect(screen.getByRole('button', { name: /copy share link/i })).toBeTruthy();
   expect(posts(fetch)).toHaveLength(1);
@@ -317,7 +454,7 @@ it('clipboard rejection preserves the successful publication and its existing co
   await setup();
   write.mockRejectedValueOnce(new Error(sensitive));
   await publish();
-  expect(screen.getByRole('button', { name: /stop sharing/i })).toBeTruthy();
+  expect(screen.getByRole('switch', { name: /link access/i })).toHaveAttribute('aria-checked', 'true');
   expect(screen.getByText(publication.url)).toBeTruthy();
   expect(screen.getByText(/could not copy automatically.*manually copy/i).getAttribute('role')).toBe('status');
   expect(screen.getByRole('button', { name: /copy share link/i })).toBeTruthy();

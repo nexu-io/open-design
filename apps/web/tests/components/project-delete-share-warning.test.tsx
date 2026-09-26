@@ -11,7 +11,7 @@ const request = vi.fn<typeof fetch>();
 const remove = vi.fn(async () => true);
 function Harness() {
   const flow = useProjectDeleteFlow({ onDelete: remove, analyticsPage: 'home', workspaceContext: context });
-  return <><button onClick={() => flow.request(project)}>Request delete</button>{flow.target ? <ProjectDeleteConfirmDialog projectName={flow.target.name} activeShareCount={flow.activeShareCount} pending={flow.pending} failed={flow.failed} onCancel={flow.cancel} onConfirm={() => void flow.commit()} /> : null}</>;
+  return <><button onClick={() => flow.request(project)}>Request delete</button><button onClick={() => void flow.commit()}>Invoke commit directly</button>{flow.target ? <ProjectDeleteConfirmDialog projectName={flow.target.name} activeShareCount={flow.activeShareCount} shareReadStatus={flow.shareReadStatus} pending={flow.pending} failed={flow.failed} onCancel={flow.cancel} onConfirm={() => void flow.commit()} /> : null}</>;
 }
 beforeEach(() => { request.mockReset(); remove.mockClear(); vi.stubGlobal('fetch', request); });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
@@ -37,10 +37,10 @@ it.each<{ statuses: ('active' | 'stopped')[] }>([{ statuses: [] }, { statuses: [
   request.mockImplementation(async () => history(statuses));
   render(<Harness />);
   fireEvent.click(screen.getByText('Request delete'));
-  const before = screen.getByRole('alertdialog').innerHTML;
+  expect(screen.getByTestId('project-delete-confirm-accept')).toBeDisabled();
   await act(async () => { await Promise.resolve(); });
-  expect(screen.getByRole('alertdialog').innerHTML).toBe(before);
   expect(screen.getByText('Delete "Example"?')).toBeVisible();
+  expect(screen.getByTestId('project-delete-confirm-accept')).toBeEnabled();
 });
 it('does not fabricate a count from an unavailable read', async () => {
   request.mockResolvedValue(new Response('', { status: 503 }));
@@ -49,6 +49,37 @@ it('does not fabricate a count from an unavailable read', async () => {
   await act(async () => { await Promise.resolve(); });
   expect(screen.queryByText(/pages being shared/)).toBeNull();
   expect(remove).not.toHaveBeenCalled();
+});
+it('blocks both the button and direct commit until active links are known', async () => {
+  let finish!: (response: Response) => void;
+  request.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+  render(<Harness />);
+  fireEvent.click(screen.getByText('Request delete'));
+  const accept = screen.getByTestId('project-delete-confirm-accept');
+  expect(accept).toBeDisabled();
+  fireEvent.click(accept);
+  fireEvent.click(screen.getByText('Invoke commit directly'));
+  expect(remove).not.toHaveBeenCalled();
+  await act(async () => finish(history(['active'])));
+  expect(await screen.findByText(/1 pages being shared/)).toBeVisible();
+  expect(accept).toBeEnabled();
+  fireEvent.click(accept);
+  await waitFor(() => expect(remove).toHaveBeenCalledExactlyOnceWith('project'));
+});
+it('blocks deletion and visibly reports failed share-state reads, then allows cancel/retry', async () => {
+  request.mockResolvedValueOnce(new Response('', { status: 503 })).mockResolvedValueOnce(history(['active']));
+  render(<Harness />);
+  fireEvent.click(screen.getByText('Request delete'));
+  await waitFor(() => expect(screen.getByRole('alert')).toBeVisible());
+  const accept = screen.getByTestId('project-delete-confirm-accept');
+  expect(accept).toBeDisabled();
+  fireEvent.click(accept);
+  fireEvent.click(screen.getByText('Invoke commit directly'));
+  expect(remove).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByTestId('project-delete-confirm-cancel'));
+  fireEvent.click(screen.getByText('Request delete'));
+  expect(await screen.findByText(/1 pages being shared/)).toBeVisible();
+  expect(screen.getByTestId('project-delete-confirm-accept')).toBeEnabled();
 });
 it('canceling ignores a late history response and never deletes', async () => {
   let finish!: (response: Response) => void;

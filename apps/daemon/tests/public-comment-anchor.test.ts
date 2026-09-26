@@ -7,6 +7,7 @@ import { closeDatabase, openDatabase, insertProject, insertConversation, ensureW
 import { createSqlitePublicFilePublicationStore } from '../src/collab/public-file-publication-store.js';
 import { createPublicFilePublicationRecorder } from '../src/collab/public-file-publication-recording.js';
 import { enqueuePublishedFileComments } from '../src/collab/published-file-comment-backfill.js';
+import { readPublishedCommentBackfill } from '../src/collab/published-comment-backfill-state.js';
 import { createShareFileMapping } from '../src/collab/share-file-mapping.js';
 import { recordCommentRelayPublicationMapping, sourcePathForCurrentPublication } from '../src/collab/comment-relay-publication-mapping.js';
 import { personalCommentRelayFilePaths } from '../src/collab/comment-relay-scope.js';
@@ -73,6 +74,12 @@ it('first personal publication makes public user comments pullable into the shar
   expect(getProjectCommentAnchorConversationId(db, scope.projectId)).toBeNull();
   const record = createPublicFilePublicationRecorder(db, publications, enqueuePublishedFileComments);
   record(scope, publication, mapping);
+  // K1: no existing comments skips waiting/syncing without losing the link.
+  expect(publications.get(scope)).toMatchObject(publication);
+  expect(readPublishedCommentBackfill(db, { projectId: scope.projectId, workspaceId: scope.resourceTeamId,
+    workspaceMemberId: scope.ownerMemberId, filePath: scope.filePath })).toMatchObject({
+    state: 'succeeded', retryable: false, publicationRevision: publications.getRevision(scope)?.token,
+  });
   await expectInbound(db);
   const anchor = getProjectCommentAnchorConversationId(db, scope.projectId);
   record(scope, publication, mapping);

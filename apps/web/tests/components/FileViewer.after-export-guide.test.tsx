@@ -38,6 +38,9 @@ describe('FileViewer real HTML export completion seam', () => {
     await exportHtml();
     await waitFor(() => expect(seam.complete).toHaveBeenCalledWith('success'));
     expect(seam.complete).toHaveBeenCalledTimes(1);
+    // 'Export complete' here is the success toast (`fileViewer.exportDone`),
+    // a coincidentally identical string to the (mocked-hidden) guide's old
+    // title — a separate key owned outside this component's scope.
     expect(screen.getAllByText('Export complete').length).toBeGreaterThan(0);
     expect(seam.options).toHaveBeenLastCalledWith(expect.objectContaining({ hasEverShared: null, appUserId: null }));
     expect(screen.queryByText('Try sharing')).toBeNull();
@@ -46,13 +49,13 @@ describe('FileViewer real HTML export completion seam', () => {
     seam.exportHtml.mockResolvedValue('cancelled');
     await exportHtml();
     await waitFor(() => expect(seam.complete).toHaveBeenCalledWith('cancelled'));
-    expect(screen.queryByText('Export complete')).toBeNull();
+    expect(screen.queryByText('Share the link, invite feedback')).toBeNull();
   });
   it('reports rejection without a success toast', async () => {
     seam.exportHtml.mockRejectedValue(new Error('export test failure'));
     await exportHtml();
     await waitFor(() => expect(seam.complete).toHaveBeenCalledWith('failed'));
-    expect(screen.queryByText('Export complete')).toBeNull();
+    expect(screen.queryByText('Share the link, invite feedback')).toBeNull();
     expect(screen.getAllByText('export test failure').length).toBeGreaterThan(0);
   });
   it('reports a synchronous exporter throw as failure', async () => {

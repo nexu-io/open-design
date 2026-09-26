@@ -24,6 +24,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
 import { FileOpsSummary } from '../../src/components/FileOpsSummary';
+import { nextShareRequestNonce } from '../../src/components/share-request-nonce';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import { FileViewer } from '../../src/components/FileViewer';
@@ -160,6 +161,45 @@ describe('产物卡 Share / Export 请求是可反复开关的入口', () => {
     expect(document.querySelectorAll('.chrome-unified-panel--share')).toHaveLength(1);
   });
 
+  it('F13 real artifact-card Share reopens after the panel Close button at the same millisecond', async () => {
+    stubFetch();
+    vi.spyOn(Date, 'now').mockReturnValue(1710000000000);
+    const seen: number[] = [];
+    function CardAndViewer() {
+      const [request, setRequest] = useState<{ nonce: number; anchorId: string } | null>(null);
+      return <>
+        <FileOpsSummary
+          projectId="project-1"
+          entries={[{ path: 'index.html', fullPath: '/repo/index.html', ops: ['write'], opCounts: { read: 0, write: 1, edit: 0, delete: 0 }, total: 1, status: 'done' }]}
+          turnIsLive={false}
+          onPublish={(name, anchorId) => {
+            expect(name).toBe('index.html');
+            setRequest(previous => {
+              const nonce = nextShareRequestNonce(previous?.nonce, Date.now());
+              seen.push(nonce);
+              return { nonce, anchorId };
+            });
+          }}
+        />
+        {viewerWithActionRequest({ shareRequest: request })}
+      </>;
+    }
+    render(<CardAndViewer />);
+    const cardShare = screen.getByTestId('artifact-card-publish-index.html');
+    cardShare.getBoundingClientRect = () => ({ x: 220, y: 300, left: 220, top: 300, right: 278, bottom: 328, width: 58, height: 28, toJSON: () => ({}) });
+    fireEvent.click(cardShare);
+    await waitFor(() => expect(anchoredMenu()).not.toBeNull());
+    expect(document.querySelectorAll('.chrome-unified-panel--share')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(anchoredMenu()).toBeNull());
+    expect(document.querySelectorAll('.chrome-unified-panel--share')).toHaveLength(0);
+    fireEvent.click(cardShare);
+    await waitFor(() => expect(anchoredMenu()).not.toBeNull());
+    expect(document.querySelectorAll('.chrome-unified-panel--share')).toHaveLength(1);
+    expect(seen).toEqual([1710000000000, 1710000000001]);
+    expect(document.querySelector('.social-share-grid')).toBeNull();
+  });
+
   it('Share 同一枚入口点第二次关闭，第三次可再打开', async () => {
     stubFetch();
     const anchorId = 'publish:index.html';
@@ -246,18 +286,9 @@ describe('分享请求只许消费一次 —— 重挂之后不许重放', () =>
   });
 });
 
-/* ------------------------------------------------------------------ *
- * 锚点 id 也是「打开」状态的一部分,关掉时要一起清
- * ------------------------------------------------------------------ *
- * `menuAnchorId` 决定菜单开在哪儿:有值 = 贴着产物卡上那枚胶囊,null = 原地长在
- * 工具栏下面。它是在卡片那条路上设的,但**从来没有人把它清回 null**。
- *
- * 于是卡上开过一次之后,再点**工具栏**的 Share,菜单会去找那枚卡上的按钮 ——
- * 卡还在就开在卡上(点工具栏却在别处弹出来),卡滚走了就 `findAnchor` 落空、
- * 什么都不画(点了没反应)。两种都是用户说的「这里重新显示会有 bug」。
- */
-describe('工具栏那条路必须开在工具栏,不受上一次卡片锚点影响', () => {
-  it('卡上开过一次之后,点工具栏 Share 要开在**原地**,不是又贴回卡上', async () => {
+/* 工具栏入口必须开在自身旁边，而不是复用上次的产物卡锚点。 */
+describe('工具栏入口切换锚点', () => {
+  it('卡上开过一次之后,点工具栏 Share 在工具栏旁打开顶层浮层', async () => {
     stubFetch();
     renderViewer({ nonce: 1730000000000, anchorId: 'publish:index.html' });
     // 卡上那枚按钮不在 DOM 里(聊天流没渲染),锚点落空 —— 菜单不画
@@ -268,9 +299,10 @@ describe('工具栏那条路必须开在工具栏,不受上一次卡片锚点影
     shareBtn.click();
 
     await waitFor(() => expect(menu(), '点了工具栏却没开出菜单').not.toBeNull());
-    expect(
-      document.querySelector('[data-anchored-menu]'),
-      '工具栏点开的菜单却 portal 到了卡片锚点上',
-    ).toBeNull();
+    const portal = document.querySelector('[data-anchored-menu]');
+    expect(portal).not.toBeNull();
+    expect(portal?.parentElement).toBe(document.body);
+    expect(portal?.getAttribute('data-anchored-menu')).toBe(shareBtn.getAttribute('data-artifact-anchor'));
+    expect(portal?.getAttribute('data-anchored-menu')).not.toBe('publish:index.html');
   });
 });

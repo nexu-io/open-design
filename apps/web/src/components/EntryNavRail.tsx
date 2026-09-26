@@ -611,6 +611,7 @@ function RailRecentSection({
         <ProjectDeleteConfirmDialog
           projectName={deleteFlow.target.name}
           activeShareCount={deleteFlow.activeShareCount}
+          shareReadStatus={deleteFlow.shareReadStatus}
           pending={deleteFlow.pending}
           failed={deleteFlow.failed}
           onCancel={deleteFlow.cancel}

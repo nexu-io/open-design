@@ -27,6 +27,7 @@ import {
   buildWorkspacePermissions,
   buildWorkspaceSeatSummary,
   type WorkspaceCollabContext,
+  SHARE_MAX_TOTAL_BYTES,
 } from '@open-design/contracts';
 import { runVelaResourceCommand } from '../src/collab/vela-cli-resource-adapter.js';
 import {
@@ -1904,6 +1905,126 @@ describe('collab sync routes', () => {
       expect(file.status).toBe(200); expect(file.body).toEqual({ publication: null, status: state, freshness: 'unknown' });
     }
     expect(read).toHaveBeenCalledWith(expect.objectContaining({ projectId: 'p1', resourceTeamId: 'ws-personal-1', ownerMemberId: 'wm-personal-1' }));
+  });
+
+  it('returns missing references from an authorized non-mutating share preflight', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'od-share-plan-'));
+    tempDirs.push(dir);
+    await writeFile(path.join(dir, 'index.html'), '<img src="assets/missing.png">');
+    const db = new Database(':memory:');
+    try {
+      const share = await publicShareFixture({ db });
+      const api = await startSyncServer(personalContextProvider(), {
+        resolveProjectDir: () => dir,
+        ...share,
+      });
+      const result = await api.json('/api/projects/p1/files/index.html/share-plan', { method: 'POST' });
+      expect(result.status).toBe(200);
+      expect(result.body.exclusions).toContainEqual({ path: 'assets/missing.png', reason: 'missing' });
+      expect(vi.mocked(runVelaResourceCommand)).not.toHaveBeenCalled();
+      const denied = await api.json('/api/projects/p1/files/index.html/share-plan', { method: 'POST', headers: { 'x-od-workspace-id': 'wrong' } });
+      expect(denied.status).not.toBe(200);
+    } finally { db.close(); }
+  });
+
+  it.each(['permission', 'nonowner', 'placeholder'] as const)('preflight does not plan or mutate for %s denial', async denial => {
+    const db = new Database(':memory:');
+    try {
+      const share = await publicShareFixture({ db });
+      const context = denial === 'permission' ? fixedShareContextProvider(false) : personalContextProvider();
+      const resolveProjectDir = vi.fn(() => '/must-not-be-read');
+      const resolveSharedProject = vi.fn(async () => ({
+        projectId: 'p1', ownerMemberId: denial === 'nonowner' ? 'another-member' : 'wm-personal-1',
+        sharedAt: new Date(1).toISOString(), name: 'Project',
+      }));
+      const register = vi.fn();
+      const projectStore = {
+        has: vi.fn(() => true), register,
+        get: vi.fn(() => denial === 'placeholder' ? { metadata: { sharedProjectPlaceholderAt: 123 } } : { metadata: {} }),
+      };
+      const api = await startSyncServer(context, {
+        ...share, resolveProjectDir, resolveSharedProject,
+        ...(denial === 'placeholder' ? { projectStore } : {}),
+      });
+      const result = await api.json('/api/projects/p1/files/index.html/share-plan', { method: 'POST' });
+      expect(result.status).toBe(403);
+      expect(resolveProjectDir).not.toHaveBeenCalled();
+      expect(vi.mocked(runVelaResourceCommand)).not.toHaveBeenCalled();
+      expect(share.publicFilePublicationStore.get({ projectId: 'p1', filePath: 'index.html', resourceTeamId: 'ws-personal-1', ownerMemberId: 'wm-personal-1' })).toBeNull();
+      expect(share.readProjectShareState).not.toHaveBeenCalled();
+      expect(register).not.toHaveBeenCalled();
+    } finally { db.close(); }
+  });
+
+  it('S15 rejects generated multi-file share over 20 MiB before upstream upload or publication', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'od-share-s15-'));
+    tempDirs.push(dir);
+    await writeFile(path.join(dir, 'index.html'), '<img src="large.png">');
+    const asset = path.join(dir, 'large.png');
+    await writeFile(asset, Buffer.alloc(1, 65));
+    const db = new Database(':memory:');
+    try {
+      const share = await publicShareFixture({ db });
+      vi.mocked(readVelaControlApiContext).mockReturnValue({ profile: 'test', apiUrl: 'https://api.example.test', controlKey: 'synthetic', user: null, configMtimeMs: null });
+      const api = await startSyncServer(personalContextProvider(), {
+        resolveProjectDir: () => dir,
+        resolveSharedProject: async () => null,
+        ...share,
+      });
+      const planUrl = '/api/projects/p1/files/index.html/share-plan';
+      const publishUrl = '/api/projects/p1/files/index.html/publish-public';
+      const baseline = await api.json(planUrl, { method: 'POST' });
+      expect(baseline.status).toBe(200);
+      expect(baseline.body.fileCount).toBe(2);
+      const atLimitAssetBytes = SHARE_MAX_TOTAL_BYTES - (baseline.body.totalBytes - 1);
+      expect(atLimitAssetBytes).toBeGreaterThan(0);
+      await writeFile(asset, Buffer.alloc(atLimitAssetBytes, 65));
+      const atLimit = await api.json(planUrl, { method: 'POST' });
+      expect(atLimit.status).toBe(200);
+      expect(atLimit.body).toMatchObject({ fileCount: 2, totalBytes: SHARE_MAX_TOTAL_BYTES, exceedsSizeLimit: false });
+      await writeFile(asset, Buffer.alloc(atLimitAssetBytes + 1, 65));
+      const over = await api.json(planUrl, { method: 'POST' });
+      expect(over.status).toBe(200);
+      expect(over.body).toMatchObject({ fileCount: 2, totalBytes: SHARE_MAX_TOTAL_BYTES + 1, exceedsSizeLimit: true });
+      const rejected = await api.json(publishUrl, { method: 'POST' });
+      expect(rejected.status).toBe(413);
+      expect(rejected.body).toMatchObject({ error: 'too_large', bytes: SHARE_MAX_TOTAL_BYTES + 1, totalBytes: SHARE_MAX_TOTAL_BYTES + 1, limit: SHARE_MAX_TOTAL_BYTES, plan: over.body });
+      expect(vi.mocked(runVelaResourceCommand)).not.toHaveBeenCalled();
+      expect(share.publicFilePublicationStore.get({ projectId: 'p1', filePath: 'index.html', resourceTeamId: 'ws-personal-1', ownerMemberId: 'wm-personal-1' })).toBeNull();
+      expect(share.readProjectShareState).not.toHaveBeenCalled();
+      await writeFile(asset, Buffer.alloc(atLimitAssetBytes, 65));
+      const recovered = await api.json(planUrl, { method: 'POST' });
+      expect(recovered.body).toMatchObject({ totalBytes: SHARE_MAX_TOTAL_BYTES, exceedsSizeLimit: false });
+      expect(vi.mocked(runVelaResourceCommand)).not.toHaveBeenCalled();
+    } finally { db.close(); }
+  });
+
+  it('rejects direct public publish of a JSX module before pushing or recording publication', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'od-share-react-module-'));
+    tempDirs.push(dir);
+    await writeFile(path.join(dir, 'icons.jsx'), 'export const Icon = () => null;');
+    await writeFile(path.join(dir, 'backups.html'), '<script type="text/babel" src="icons.jsx"></script>');
+    const db = new Database(':memory:');
+    try {
+      const share = await publicShareFixture({ db });
+      const store = share.publicFilePublicationStore;
+      vi.mocked(readVelaControlApiContext).mockReturnValue({ profile: 'test', apiUrl: 'https://api.example.test', controlKey: 'synthetic', user: null, configMtimeMs: null });
+      vi.mocked(runVelaResourceCommand).mockResolvedValue(JSON.stringify({ id: 'v1', version: 1 }));
+      const api = await startSyncServer(personalContextProvider(), {
+        resolveProjectDir: () => dir, resolveSharedProject: async () => null,
+        ...share,
+      });
+
+      const preflight = await api.json('/api/projects/p1/files/icons.jsx/share-plan', { method: 'POST' });
+      expect(preflight.status).toBe(400);
+      expect(vi.mocked(runVelaResourceCommand)).not.toHaveBeenCalled();
+      expect(store.get({ projectId: 'p1', filePath: 'icons.jsx', resourceTeamId: 'ws-personal-1', ownerMemberId: 'wm-personal-1' })).toBeNull();
+      const response = await api.json('/api/projects/p1/files/icons.jsx/publish-public', { method: 'POST' });
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe('FILE_UNAVAILABLE');
+      expect(vi.mocked(runVelaResourceCommand)).not.toHaveBeenCalled();
+      expect(store.get({ projectId: 'p1', filePath: 'icons.jsx', resourceTeamId: 'ws-personal-1', ownerMemberId: 'wm-personal-1' })).toBeNull();
+    } finally { db.close(); }
   });
 
   it('25 real HTTP freshness compares the rewritten package including dependency bytes', async () => {

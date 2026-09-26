@@ -6,10 +6,11 @@ import { AfterExportShareGuide } from '../../../src/components/share/AfterExport
 import { useAfterExportShareGuide } from '../../../src/components/share/useAfterExportShareGuide';
 
 const labels = {
-  title: 'Export complete',
-  description: 'Share the link and invite others to view it and leave comments.',
-  openShare: 'Share',
+  title: 'Share the link, invite feedback',
+  description: 'Share the link to collect comments directly.',
+  openShare: 'Try sharing',
   neverShow: 'Never show again',
+  close: 'Close new feature guide',
   saveFailed: 'Could not save preference',
 };
 function callbacks() { return { onOpenShare: vi.fn(), onDismiss: vi.fn(), onNeverShow: vi.fn(() => true) }; }
@@ -17,16 +18,28 @@ beforeEach(() => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'perf
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('after export share guide', () => {
-  it('renders the Board8 P1 card: title, description, and exactly the two footer actions', () => {
-    // Board8 Chain-6-dialogs.dc.html, P1 (`.s-m1eexportprompt .prompt[role=status]`)
-    // has no data-design-status placeholder and no standalone close (✕) control;
-    // its only controls are the `.pfoot` pair (`.pghost` never-show, `.paction` open-share).
+  it('renders the Owner-P1 card: title, description, close, and the two footer actions', () => {
+    // "交互状态 - Owner - 分享评论1.0.html", `phase-owner-intro` scope: a
+    // dark comment-bubble hero with a standalone close (✕) button, then
+    // title/description body, then the actions pair (dismiss + try-share).
+    // Supersedes the earlier Board8 source this suite previously restored
+    // from, which had no close control — this design review's PNG capture
+    // and markup both show one.
     const events = callbacks();
     render(<AfterExportShareGuide labels={labels} {...events} />);
     const guide = screen.getByRole('status', { name: labels.title });
     expect(guide.getAttribute('data-design-status')).toBeNull();
     expect(screen.getByText(labels.description)).not.toBeNull();
-    expect(screen.getAllByRole('button')).toHaveLength(2);
+    expect(screen.getByRole('button', { name: labels.close })).not.toBeNull();
+    expect(screen.getAllByRole('button')).toHaveLength(3);
+  });
+  it('closing via the ✕ dismisses this occurrence without persisting the preference', () => {
+    const events = callbacks();
+    render(<AfterExportShareGuide labels={labels} {...events} />);
+    fireEvent.click(screen.getByRole('button', { name: labels.close }));
+    expect(events.onDismiss).toHaveBeenCalledTimes(1);
+    expect(events.onNeverShow).not.toHaveBeenCalled();
+    expect(events.onOpenShare).not.toHaveBeenCalled();
   });
   it('opens share without invoking permanent suppression', () => {
     const events = callbacks();
@@ -37,10 +50,6 @@ describe('after export share guide', () => {
     expect(events.onNeverShow).not.toHaveBeenCalled();
   });
   it('never-show persists the preference, then dismisses this occurrence', () => {
-    // Board8 P1 has no standalone close (✕); "不再提示"/.pghost is the only
-    // manual-dismiss control besides "去分享"/.paction and the 10s auto-collapse.
-    // The old close-button-then-never-show sequence tested here no longer has
-    // a close button to exercise.
     const events = callbacks();
     render(<AfterExportShareGuide labels={labels} {...events} />);
     fireEvent.click(screen.getByRole('button', { name: labels.neverShow }));

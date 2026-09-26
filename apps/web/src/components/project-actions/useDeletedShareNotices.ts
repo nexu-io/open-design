@@ -46,6 +46,10 @@ export function useDeletedShareNotices(context: WorkspaceCollabContext | null) {
   }, [liveScope]);
 
   const dismiss = useCallback((id: number) => setNotices(items => items.filter(item => item.id !== id)), []);
+  const dismissRow = useCallback((id: number, row: NoticeRow) => setNotices(items => items
+    .map(item => item.id === id ? { ...item, rows: item.rows.filter(candidate =>
+      candidate.filePath !== row.filePath || candidate.slug !== row.slug) } : item)
+    .filter(item => item.rows.length)), []);
   const retry = async (notice: DeletedShareNotice, row: NoticeRow) => {
     const key = JSON.stringify([notice.id, row.filePath, row.slug]);
     if (row.retrying || notice.scope !== liveScope() || inFlight.current.has(key)) return;
@@ -72,5 +76,5 @@ export function useDeletedShareNotices(context: WorkspaceCollabContext | null) {
       inFlight.current.delete(key);
     }
   };
-  return { notices: notices.filter(notice => notice.scope === scope), capture, dismiss, retry };
+  return { notices: notices.filter(notice => notice.scope === scope), capture, dismiss, dismissRow, retry };
 }

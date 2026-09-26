@@ -11,6 +11,8 @@ export interface SharePublicationCompletionInput {
   publication: PublicFilePublication;
   mapping: ShareFileMapping;
   result: SharePublishResult;
+  /** Set only by the HTTP route after a remote stopped-alias witness and resume receipt. */
+  reopened?: boolean;
 }
 
 /** Persist local witnesses and both kinds of intent in one transaction, after
@@ -25,7 +27,7 @@ export function createSharePublicationCompletion(
   retryAvailable = false,
 ) {
   const commit = db.transaction((input: SharePublicationCompletionInput): SharePublishResult => {
-    const revision = recordPublication(input.scope, input.publication, input.mapping);
+    const revision = recordPublication(input.scope, input.publication, input.mapping, input.reopened === true);
     if (input.result.status === 'published') return input.result;
     const pending = recordPendingShareBinding(outbox, { ...input.scope, resourceId: input.resourceId,
       publicationRevision: revision.token, receipt: input.result.receipt }, retryAvailable, true);

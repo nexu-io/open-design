@@ -66,6 +66,8 @@ export function useProjectRouteWorkspaceContext(
   const initialExactContext = exactAmbientContext ?? exactBootstrapContext;
   const requestEpochRef = useRef(0);
   const consumedBootstrapContextRef = useRef<WorkspaceCollabContext | null>(null);
+  const latestBootstrapContextRef = useRef<WorkspaceCollabContext | null>(null);
+  latestBootstrapContextRef.current = exactBootstrapContext;
   const [refreshRevision, setRefreshRevision] = useState(0);
   const retryTimerRef = useRef<number | null>(null);
   const retryBackoffRef = useRef<BackoffController | null>(null);
@@ -135,6 +137,10 @@ export function useProjectRouteWorkspaceContext(
       // context during the fresh lookup would let a newly mounted resource
       // effect emit one more wave with the previous account/member headers.
       requestEpochRef.current += 1;
+      // The same rule covers the route's bootstrap witness: one issued before
+      // this refresh belongs to the previous account generation and must never
+      // be adopted after it. Only a witness issued afterwards stays adoptable.
+      consumedBootstrapContextRef.current = latestBootstrapContextRef.current;
       resetRetryBackoff();
       setIdentityRefreshPending(Boolean(workspaceId));
       setResolved({

@@ -1,4 +1,5 @@
 import { readRetriedErrorSurface, retriedErrorSurfaceKey, writeRetriedErrorSurface } from '../runtime/chat/retried-error-surface';
+import type { ObservedPublicShareLink, ObservedShareUpdateRequest } from './share/observed-public-share-link';
 import {
   startTransition,
   useCallback,
@@ -57,11 +58,9 @@ import {
   fetchLiveArtifacts,
   fetchProjectFiles,
   fetchProjectFileText,
-  fetchSkill,
   invalidateProjectFilesCache,
   patchPreviewCommentSortKey,
   patchPreviewCommentStatus,
-  projectRawUrl,
   uploadProjectFiles,
   upsertPreviewComment,
   writeProjectTextFile,
@@ -92,7 +91,6 @@ import {
   type ByokChatProtocol,
   type ChatTaskExecutionAnalytics,
   type ProjectWorkspaceScope,
-  type ResearchOptions,
 } from '@open-design/contracts';
 import {
   anonymizeArtifactId,
@@ -349,6 +347,7 @@ import {
   selectAutoOpenTurnArtifact,
   selectAutoOpenTurnArtifacts,
 } from './auto-open-file';
+import { nextShareRequestNonce } from './share-request-nonce';
 import { buildRepoImportPrompt, designSystemNeedsRepoConnect } from './design-system-github-evidence';
 import { isDesignSystemProject, resolveProjectDesignSystemId } from './design-system-project';
 import { collectReferencedJsxNames } from '../runtime/jsx-module-refs';
@@ -405,7 +404,6 @@ import { createBoundedConcurrency } from '../lib/bounded-concurrency';
 import { buildContinueInCliToast } from '../lib/build-continue-in-cli-toast';
 import { buildClipboardPrompt } from '../lib/build-clipboard-prompt';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
-import { effectiveMaxTokens } from '../state/maxTokens';
 import {
   dismissHomeAttachmentUpload,
   homeAttachmentUploadsFor,
@@ -843,6 +841,10 @@ interface Props {
   initialMaterializationPending?: boolean;
   /** Workspace/member authorization lifetime for async title reads. */
   projectAuthorizationKey?: string;
+  onObservedPublicShareLink?: (share: ObservedPublicShareLink | null) => void;
+  observedPublicShareLink?: ObservedPublicShareLink | null;
+  loginUpdateRequest?: ObservedShareUpdateRequest | null;
+  onLoginUpdateRequestHandled?: (nonce: number) => void;
   amrAuthRetryContinuation?: AmrAuthRetryContinuation | null;
   onArmAmrAuthRetryContinuation?: (
     continuation: Omit<AmrAuthRetryContinuation, 'accountIdAtArm' | 'createdAtMs'>,
@@ -992,7 +994,7 @@ let liveArtifactEventSequence = 0;
 // The brand-extraction project's design-system (brand kit) preview tab. Mirrors
 // the daemon `BRAND_KIT_FILE` (apps/daemon/src/brands/kit-render.ts); kept as a
 // local literal to respect the web↔daemon boundary.
-const BRAND_KIT_FILE = 'brand.html';
+const _BRAND_KIT_FILE = 'brand.html';
 const BRAND_EMPTY_TRANSCRIPT_RETRY_DELAYS_MS = [120, 500, 1_200, 2_000] as const;
 const BYOK_OPENCODE_UNAVAILABLE_MESSAGE =
   'BYOK API runs require OpenCode. Install OpenCode, then rescan local agents in Settings before retrying.';
@@ -2114,6 +2116,10 @@ export function ProjectView({
   resolveAuthoritativeProjectName,
   routeFileName,
   routeConversationId = null,
+  onObservedPublicShareLink,
+  observedPublicShareLink,
+  loginUpdateRequest,
+  onLoginUpdateRequestHandled,
   config,
   agents,
   skills,
@@ -12401,7 +12407,11 @@ export function ProjectView({
   const handleArtifactShare = useCallback(
     (fileName: string, anchorId?: string) => {
       requestOpenFile(fileName);
-      setShareRequest({ name: fileName, nonce: Date.now(), ...(anchorId ? { anchorId } : {}) });
+      setShareRequest((previous) => ({
+        name: fileName,
+        nonce: nextShareRequestNonce(previous?.nonce, Date.now()),
+        ...(anchorId ? { anchorId } : {}),
+      }));
     },
     [requestOpenFile],
   );
@@ -13188,7 +13198,7 @@ export function ProjectView({
   // Continue in CLI / Finalize design package handlers + keyboard
   // shortcut wiring. Close to the JSX so the data flow is easy to
   // trace from the toolbar back to its sources.
-  const handleFinalize = useCallback(() => {
+  const _handleFinalize = useCallback(() => {
     const request = buildFinalizeRequest(config);
     if (!request) {
       setProjectActionsToast(buildFinalizeCredentialsMissingToast(config));
@@ -13199,7 +13209,7 @@ export function ProjectView({
     });
   }, [finalize, config, designMdState]);
 
-  const handleCancelFinalize = useCallback(() => {
+  const _handleCancelFinalize = useCallback(() => {
     finalize.cancel();
   }, [finalize]);
 
@@ -14032,6 +14042,10 @@ export function ProjectView({
           filesGeneration={committedFilesGeneration}
           onRefreshFiles={refreshFileWorkspace}
           onManualFileWritten={recordManualFileWrite}
+          onObservedPublicShareLink={onObservedPublicShareLink}
+          observedPublicShareLink={observedPublicShareLink}
+          loginUpdateRequest={loginUpdateRequest}
+          onLoginUpdateRequestHandled={onLoginUpdateRequestHandled}
           isDeck={isDeck}
           streaming={currentConversationActionDisabled}
           // The building preview needs a real run, not the disabled-actions
@@ -14041,6 +14055,7 @@ export function ProjectView({
           runInFlight={currentConversationStreaming || currentConversationHasActiveRun}
           commentQueueOnSend={commentQueueOnSend}
           commentSendDisabled={currentConversationQueueDisabled}
+          routeFileName={routeFileName}
           openRequest={openRequest}
           browserOpenRequest={browserOpenRequest}
           pinnedBrowserTabId={projectIsProgrammaticBrandExtraction ? BRAND_BROWSER_TAB_ID : null}
@@ -14479,7 +14494,7 @@ function normalizeProjectFileName(value: string): string {
   return value.replace(/\\/g, '/').replace(/^\.?\//, '').toLowerCase();
 }
 
-function assistantAgentDisplayName(
+function _assistantAgentDisplayName(
   agentId: string | null,
   fallbackName?: string,
 ): string | undefined {
