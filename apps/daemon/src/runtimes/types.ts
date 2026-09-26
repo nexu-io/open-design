@@ -254,6 +254,7 @@ export type RuntimeAgentDef = {
   // fresh for every OD run, while the profile wire protocol accepts and
   // reports a durable session id. No CLI resume flag is involved.
   resumesSessionViaProfileStdio?: boolean;
+  nativeSessionCompatibility?: 'profile-ready';
   // How the resumable session id is obtained. For `resumesSessionViaCli`, the
   // default (undefined/false) is "specify-style": the daemon
   // mints `RuntimeContext.newSessionId` and the CLI is told to use it (claude
