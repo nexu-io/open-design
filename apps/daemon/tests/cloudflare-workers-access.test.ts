@@ -1835,6 +1835,65 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
     expect(retainedAccessAppIdsFromMetadata(out.providerMetadata)).toEqual(['app-old']);
   });
 
+  it('carries a retained Access app id forward through a successful redeploy', async () => {
+    const { fn } = accessFetch();
+    vi.stubGlobal('fetch', fn);
+    // The script's prior records carried app-A, retained when a scriptName
+    // change moved this Worker off it. This deploy's metadata REPLACES the
+    // record's, and priorAccessAppId === accessAppId means the retire block
+    // below never runs — so nothing else on this path could keep the handle.
+    const out = await deployToCloudflareWorkers({
+      ...base,
+      access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } },
+      priorAccessAppId: 'app-123',
+      priorRetainedAccessAppIds: ['app-A'],
+    });
+    expect(out.providerMetadata?.accessAppId).toBe('app-123');
+    expect(retainedAccessAppIdsFromMetadata(out.providerMetadata)).toEqual(['app-A']);
+  });
+
+  it('carries retained ids through a preview deploy, whose metadata also replaces the record', async () => {
+    const { fn } = accessFetch();
+    vi.stubGlobal('fetch', fn);
+    const out = await deployToCloudflareWorkers({
+      ...base,
+      target: 'preview',
+      access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } },
+      priorRetainedAccessAppIds: ['app-A'],
+    });
+    expect(retainedAccessAppIdsFromMetadata(out.providerMetadata)).toEqual(['app-A']);
+  });
+
+  it('drops a carried id this run retired or now governs, instead of naming an app that is gone', async () => {
+    const { fn } = accessFetch({
+      accessGet: { success: true, result: { id: 'app-old', destinations: [{ type: 'worker', worker_id: 'tag-abc-123' }] } },
+    });
+    vi.stubGlobal('fetch', fn);
+    // app-old points at THIS Worker, so Access-off retires it: the id must not
+    // survive as a retained one — the app no longer exists to be named …
+    const out = await deployToCloudflareWorkers({
+      ...base,
+      access: { enabled: false },
+      priorAccessAppId: 'app-old',
+      priorRetainedAccessAppIds: ['app-old', 'app-keep'],
+    });
+    expect(out.providerMetadata?.retiredAccessAppId).toBe('app-old');
+    expect(retainedAccessAppIdsFromMetadata(out.providerMetadata)).toEqual(['app-keep']);
+
+    // … and with Access on, the app this deploy PUTs into place governs the
+    // Worker: it is this record's protection, never a retained handle.
+    const replaced = accessFetch();
+    vi.stubGlobal('fetch', replaced.fn);
+    const gated = await deployToCloudflareWorkers({
+      ...base,
+      access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } },
+      priorAccessAppId: 'app-123',
+      priorRetainedAccessAppIds: ['app-123'],
+    });
+    expect(gated.providerMetadata?.accessAppId).toBe('app-123');
+    expect(retainedAccessAppIdsFromMetadata(gated.providerMetadata)).toEqual([]);
+  });
+
   it('adopts an existing app carrying the OpenDesign name when no app id was recorded (failed first deploy)', async () => {
     const { calls, fn } = accessFetch({
       accessList: {

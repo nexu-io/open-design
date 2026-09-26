@@ -11,6 +11,7 @@ import { refreshCloudflareToken, revokeCloudflareToken, validateCloudflareOAuthS
 import {
   clearCloudflareOAuthToken,
   clearCloudflareOAuthTokenForRevoke,
+  cloudflareOAuthExpiresAt,
   dropPendingCloudflareOAuthRevokes,
   fsyncDirectory,
   getCloudflareOAuthToken,
@@ -1451,9 +1452,18 @@ async function refreshCloudflareOAuthAccessToken(
   else if (current.refreshToken) stored.refreshToken = current.refreshToken;
   if (refreshed.scope) stored.scope = refreshed.scope;
   else if (current.scope) stored.scope = current.scope;
-  if (typeof refreshed.expires_in === 'number') {
-    stored.expiresAt = Date.now() + refreshed.expires_in * 1000;
-  }
+  // `expires_in` reaches here UNVALIDATED (see cloudflareOAuthExpiresAt): the
+  // shared token endpoint casts the parsed body with no checking, so a rotated
+  // grant whose response omits the field, or sends it as a string, must not
+  // produce a record with no `expiresAt`. Such a record reads as NON-EXPIRING
+  // (isCloudflareOAuthTokenExpired returns false without a numeric value), so
+  // the fast path in getCloudflareAccessToken would hand out this access token
+  // forever instead of rotating again. Inherit the superseded record's TTL, and
+  // stamp a conservative one when even that is missing.
+  stored.expiresAt = cloudflareOAuthExpiresAt({
+    expiresIn: refreshed.expires_in,
+    priorExpiresAt: current.expiresAt,
+  });
   // Compare-and-set persist: only write if the store still holds the same
   // generation the refresh read before the token-endpoint call. A disconnect
   // that cleared the token (or a reconnect that replaced it) during that call

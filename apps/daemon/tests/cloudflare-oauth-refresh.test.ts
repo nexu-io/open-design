@@ -21,8 +21,11 @@ import {
   mergeOfflineAccessScope,
 } from '../src/integrations/cloudflare-oauth.js';
 import {
+  CLOUDFLARE_OAUTH_UNKNOWN_EXPIRY_TTL_MS,
   clearCloudflareOAuthToken,
+  cloudflareOAuthExpiresAt,
   getCloudflareOAuthToken,
+  isCloudflareOAuthTokenExpired,
   sanitizeCloudflareOAuthTokensFile,
   setCloudflareOAuthToken,
   setCloudflareOAuthTokenGuarded,
@@ -854,6 +857,76 @@ describe('getCloudflareAccessToken expiry skew', () => {
       });
       await expect(getCloudflareAccessToken()).resolves.toBe('fresh');
       expect(refreshCalls).toBe(1);
+    } finally {
+      vi.unstubAllGlobals();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('refresh expiry fallback', () => {
+  // The token endpoint casts the parsed body with no validation, so `expires_in`
+  // reaches these call sites as anything at all. A record written without a
+  // numeric `expiresAt` is not "unknown" to isCloudflareOAuthTokenExpired — it
+  // reads as NON-EXPIRING, so the fast path in getCloudflareAccessToken would
+  // hand out that access token forever.
+  it('never leaves expiresAt undefined, whatever the token response carries', () => {
+    const now = 1_000_000;
+    expect(cloudflareOAuthExpiresAt({ expiresIn: 3600, now })).toBe(now + 3_600_000);
+    // A string `expires_in` is exactly what the unvalidated cast lets through:
+    // it is not a TTL, so the prior record's expiry is inherited instead.
+    expect(cloudflareOAuthExpiresAt({ expiresIn: '3600', priorExpiresAt: 4_000_000, now })).toBe(4_000_000);
+    expect(cloudflareOAuthExpiresAt({ expiresIn: undefined, priorExpiresAt: 4_000_000, now })).toBe(4_000_000);
+    expect(cloudflareOAuthExpiresAt({ expiresIn: Number.NaN, priorExpiresAt: 4_000_000, now })).toBe(4_000_000);
+    expect(cloudflareOAuthExpiresAt({ expiresIn: 0, priorExpiresAt: 4_000_000, now })).toBe(4_000_000);
+    // Nothing usable anywhere: a conservative stamp, never `undefined`.
+    expect(cloudflareOAuthExpiresAt({ expiresIn: undefined, now })).toBe(now + CLOUDFLARE_OAUTH_UNKNOWN_EXPIRY_TTL_MS);
+    expect(cloudflareOAuthExpiresAt({ expiresIn: -1, now })).toBe(now + CLOUDFLARE_OAUTH_UNKNOWN_EXPIRY_TTL_MS);
+    // Inside every expiry skew the callers apply, so a record stamped with the
+    // fallback reads as expired at the NEXT call and refreshes again, instead of
+    // becoming a credential that never rotates.
+    expect(CLOUDFLARE_OAUTH_UNKNOWN_EXPIRY_TTL_MS).toBeLessThanOrEqual(CLOUDFLARE_OAUTH_EXPIRY_SKEW_MS);
+  });
+
+  it('a rotated record the token endpoint gave no expires_in for still expires', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'od-cf-refresh-no-ttl-'));
+    configureCloudflareWorkersDataDir(dir);
+    const dataDir = cloudflareOAuthTokensDir();
+    // Expired, so the fast path is skipped and the refresh below runs.
+    const priorExpiresAt = Date.now() - 1000;
+    await setCloudflareOAuthToken(dataDir, {
+      accessToken: 'lapsed',
+      tokenType: 'Bearer',
+      refreshToken: 'ref-lapsed',
+      clientId: 'client-abc',
+      expiresAt: priorExpiresAt,
+      generation: 0,
+      savedAt: Date.now(),
+    });
+    await writeCloudflareWorkersConfig({ credentialMode: 'oauth', accountId: 'acct_test', clientId: 'client-abc' });
+    const realFetch = globalThis.fetch;
+    vi.stubGlobal('fetch', async (input: unknown, init?: unknown) => {
+      if (String(input).includes('oauth2/token')) {
+        // No `expires_in` at all — the shape the fallback exists for. The
+        // rotation itself succeeded, so the access token is usable now.
+        return new Response(
+          JSON.stringify({ access_token: 'rotated', token_type: 'Bearer', refresh_token: 'ref-rotated' }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return realFetch(input as never, init as never);
+    });
+    try {
+      await expect(getCloudflareAccessToken()).resolves.toBe('rotated');
+      const stored = await getCloudflareOAuthToken(dataDir);
+      expect(stored?.accessToken).toBe('rotated');
+      // The record keeps a NUMERIC expiresAt: without one it would read as
+      // non-expiring and this token would be served forever.
+      expect(typeof stored?.expiresAt).toBe('number');
+      expect(stored?.expiresAt).toBe(priorExpiresAt);
+      // And it reads as expired, so the next call refreshes again rather than
+      // trusting a credential of unknown lifetime.
+      expect(isCloudflareOAuthTokenExpired(stored!, Date.now(), CLOUDFLARE_OAUTH_EXPIRY_SKEW_MS)).toBe(true);
     } finally {
       vi.unstubAllGlobals();
       await rm(dir, { recursive: true, force: true });

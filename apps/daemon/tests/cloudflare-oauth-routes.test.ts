@@ -17,6 +17,7 @@ import {
   writeCloudflareWorkersConfig,
 } from '../src/deploy.js';
 import {
+  CLOUDFLARE_OAUTH_UNKNOWN_EXPIRY_TTL_MS,
   clearCloudflareOAuthToken,
   getCloudflareOAuthToken,
   getPendingCloudflareOAuthRevokes,
@@ -318,6 +319,56 @@ describe('cloudflare-oauth routes', () => {
       await clearCloudflareOAuthToken(dataDir);
       // The completed connect committed OAuth mode into the deploy config; the
       // later "/start that fails" case needs that path to be absent again.
+      await rm(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), { force: true });
+    }
+  });
+
+  it('stamps a conservative expiry when the connect token response carries no usable expires_in', async () => {
+    // `expires_in` is unvalidated on the way out of the token endpoint, so a
+    // connect can persist a record with no `expiresAt` at all. That record is
+    // not "unknown lifetime" to the resolver — it reads as NON-EXPIRING, so the
+    // fast path would serve this access token forever and never rotate it.
+    const dataDir = cloudflareOAuthTokensDir();
+    const realFetch = globalThis.fetch;
+    vi.stubGlobal('fetch', async (input: unknown, init?: unknown) => {
+      const url = String(input);
+      if (url.includes('oauth2/token')) {
+        return new Response(
+          JSON.stringify({ access_token: 'acc-no-ttl', token_type: 'Bearer', refresh_token: 'ref-no-ttl' }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url.endsWith('/client/v4/user')) {
+        return new Response(JSON.stringify({ success: true, result: { email: 'me@example.com' } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return realFetch(input as never, init as never);
+    });
+    try {
+      const startResp = await fetch(`${app.baseUrl}/api/cloudflare/oauth/start`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ clientId: 'client-abc', redirectUri: 'http://127.0.0.1:56122/callback' }),
+      });
+      expect(startResp.status).toBe(200);
+      const { state } = (await startResp.json()) as { state: string };
+      const completeResp = await fetch(`${app.baseUrl}/api/cloudflare/oauth/complete`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ state, code: 'AUTHCODE' }),
+      });
+      expect(completeResp.status).toBe(200);
+      const stored = await getCloudflareOAuthToken(dataDir);
+      expect(stored?.accessToken).toBe('acc-no-ttl');
+      expect(typeof stored?.expiresAt).toBe('number');
+      // Conservative by construction: within the refresh skew, so the next call
+      // refreshes again instead of trusting a token of unknown lifetime.
+      expect(stored!.expiresAt!).toBeLessThanOrEqual(Date.now() + CLOUDFLARE_OAUTH_UNKNOWN_EXPIRY_TTL_MS);
+    } finally {
+      vi.unstubAllGlobals();
+      await clearCloudflareOAuthToken(dataDir);
       await rm(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), { force: true });
     }
   });

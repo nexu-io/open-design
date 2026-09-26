@@ -1869,6 +1869,29 @@ export function retainedAccessAppIdsFromMetadata(metadata: unknown): string[] {
   return out;
 }
 
+/** Seed a FINISHED record's `retainedAccessAppIds` from the ids the script's
+ * prior records carried, plus whatever this run retained, minus the app now
+ * governing this Worker (`accessAppId` names THIS Worker's protection, so it is
+ * never a retained one) and minus any app this run deleted (a retired id no
+ * longer exists to be named).
+ *
+ * A record's metadata REPLACES the prior record's wholesale (routes/deploy.ts),
+ * so without this carry-forward the very next successful deploy erases the key
+ * and orphans the app it names: nothing else on the record, in the UI or in a
+ * step log can still reach it. The key is dropped entirely when nothing
+ * survives, so a record with no retained apps does not carry an empty one. */
+export function seedRetainedAccessAppIds(metadata: JsonObject, priorRetainedAccessAppIds: readonly string[]): void {
+  const governing = typeof metadata.accessAppId === 'string' ? metadata.accessAppId : '';
+  const retired = typeof metadata.retiredAccessAppId === 'string' ? metadata.retiredAccessAppId : '';
+  const retained: string[] = [];
+  for (const id of [...priorRetainedAccessAppIds, ...retainedAccessAppIdsFromMetadata(metadata)]) {
+    if (!id || id === governing || id === retired || retained.includes(id)) continue;
+    retained.push(id);
+  }
+  if (retained.length > 0) metadata.retainedAccessAppIds = retained;
+  else delete metadata.retainedAccessAppIds;
+}
+
 /** Everything a set of records vouches for: the recorded owned hostnames plus
  * every pending hostname not already among them, as hostname-only entries so
  * `isOwnedCustomDomain` matches a pending one by hostname. */
@@ -1930,6 +1953,12 @@ export async function deployToCloudflareWorkers(input: {
   target?: 'preview' | 'production';
   access?: { enabled: boolean; rule?: CloudflareWorkersAccessRule };
   priorAccessAppId?: string;
+  /** Access app ids a prior record of the SAME script RETAINED (see
+   * retainedAccessAppIdsFromMetadata), unioned across every record that
+   * deployed it. This deploy's metadata replaces the record's, so the ids have
+   * to be carried forward here — otherwise a successful redeploy drops the only
+   * handle OpenDesign has on an app it created and still owns. */
+  priorRetainedAccessAppIds?: readonly string[] | undefined;
   customDomain?: { hostname: string; zoneId: string } | undefined;
   /** Custom hostnames a prior OpenDesign deployment attached (see
    * ownedCustomDomainsFromMetadata). Only these are reconciled by this deploy. */
@@ -1968,6 +1997,7 @@ async function deployToCloudflareWorkersWith(
   const { config, files, projectId = '', projectName = '', target = 'production', access, priorAccessAppId, customDomain, priorCustomDomain, priorUnverifiedExposure, onBeforeAttach } = input ?? {};
   const priorOwnedCustomDomains = input?.priorOwnedCustomDomains ?? [];
   const priorPendingCustomDomains = input?.priorPendingCustomDomains ?? [];
+  const priorRetainedAccessAppIds = input?.priorRetainedAccessAppIds ?? [];
   const accountId = config?.accountId;
   if (!accountId) throw new DeployError('Cloudflare account ID is required.', 400, undefined, 'CFW_ACCOUNT_ID_REQUIRED');
   // Fail closed on the enabled-but-inert shape: `{enabled:true}` with no rule
@@ -2179,6 +2209,9 @@ async function deployToCloudflareWorkersWith(
           metadata.accessVerified = true;
         }
       }
+      // The production record's retained handles ride along for the same reason
+      // the ownership above does: this metadata REPLACES the record's.
+      seedRetainedAccessAppIds(metadata, priorRetainedAccessAppIds);
       metadata.steps = steps;
       return {
         providerId: CLOUDFLARE_WORKERS_PROVIDER_ID,
@@ -2521,6 +2554,9 @@ async function deployToCloudflareWorkersWith(
     if (priorPendingCustomDomains.length > 0) {
       metadata.resolvedPendingCustomDomains = [...priorPendingCustomDomains];
     }
+    // Carried forward, not dropped: this metadata replaces the record's, and the
+    // retire block above only ever ADDS to what the script's prior records held.
+    seedRetainedAccessAppIds(metadata, priorRetainedAccessAppIds);
     metadata.steps = steps;
     return {
       providerId: CLOUDFLARE_WORKERS_PROVIDER_ID,

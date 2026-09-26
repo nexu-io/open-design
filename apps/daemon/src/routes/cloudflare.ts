@@ -54,6 +54,7 @@ import {
 import {
   clearCloudflareOAuthToken,
   clearCloudflareOAuthTokenForRevoke,
+  cloudflareOAuthExpiresAt,
   getCloudflareOAuthToken,
   setCloudflareOAuthToken,
   setCloudflareOAuthTokenGuarded,
@@ -116,9 +117,14 @@ function buildStoredCloudflareToken(
   if (accountId) stored.accountId = accountId;
   if (result.refresh_token) stored.refreshToken = result.refresh_token;
   if (result.scope) stored.scope = result.scope;
-  if (typeof result.expires_in === 'number') {
-    stored.expiresAt = Date.now() + result.expires_in * 1000;
-  }
+  // `expires_in` is unvalidated (see cloudflareOAuthExpiresAt): a connect whose
+  // token response omits the field, or sends it as a string, must not leave the
+  // record without an `expiresAt`. Such a record reads as NON-EXPIRING, so the
+  // fast path in getCloudflareAccessToken never refreshes it again and the
+  // credential outlives the access token it was issued. Connect has no prior
+  // record to inherit a TTL from, so the conservative fallback applies and the
+  // next call re-refreshes.
+  stored.expiresAt = cloudflareOAuthExpiresAt({ expiresIn: result.expires_in });
   return stored;
 }
 

@@ -345,6 +345,12 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
     /** Write-ahead hostnames (see pendingCustomDomainsFromMetadata), unioned
      * across the same records; vouched for by hostname like owned ones. */
     priorPendingCustomDomains: string[];
+    /** Access app ids a prior record of this script RETAINED (see
+     * retainedAccessAppIdsFromMetadata), unioned across the same records. The
+     * deploy's metadata replaces the record's, so these must be handed to it or
+     * the next successful deploy drops the only handle on an app OpenDesign
+     * created and still owns. */
+    priorRetainedAccessAppIds: string[];
     priorCustomDomain: Record<string, unknown> | undefined;
     /** The exposure a prior record deferred and could not withdraw (see
      * unverifiedExposureFromMetadata). This record's own copy wins, a sibling's
@@ -373,6 +379,7 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
     let priorUnverifiedExposure: CloudflareUnverifiedExposure | undefined;
     const priorOwnedCustomDomains: CloudflareOwnedCustomDomain[] = [];
     const priorPendingCustomDomains: string[] = [];
+    const priorRetainedAccessAppIds: string[] = [];
     for (const record of records) {
       const metadata = record.providerMetadata;
       if (!priorAccessAppId && typeof metadata?.accessAppId === 'string' && metadata.accessAppId) {
@@ -388,8 +395,11 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
       for (const pending of pendingCustomDomainsFromMetadata(metadata)) {
         if (!priorPendingCustomDomains.includes(pending)) priorPendingCustomDomains.push(pending);
       }
+      for (const retained of retainedAccessAppIdsFromMetadata(metadata)) {
+        if (!priorRetainedAccessAppIds.includes(retained)) priorRetainedAccessAppIds.push(retained);
+      }
     }
-    return { priorAccessAppId, priorOwnedCustomDomains, priorPendingCustomDomains, priorCustomDomain, priorUnverifiedExposure };
+    return { priorAccessAppId, priorOwnedCustomDomains, priorPendingCustomDomains, priorRetainedAccessAppIds, priorCustomDomain, priorUnverifiedExposure };
   }
 
   /**
@@ -972,6 +982,7 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
                   priorAccessAppId: workersOwnership?.priorAccessAppId,
                   priorOwnedCustomDomains: workersOwnership?.priorOwnedCustomDomains,
                   priorPendingCustomDomains: workersOwnership?.priorPendingCustomDomains,
+                  priorRetainedAccessAppIds: workersOwnership?.priorRetainedAccessAppIds,
                   priorCustomDomain: workersOwnership?.priorCustomDomain,
                   priorUnverifiedExposure: workersOwnership?.priorUnverifiedExposure,
                   // Write-ahead: the hostname is on the record as pending

@@ -2733,6 +2733,146 @@ describe('deploy provider routes', () => {
     }
   });
 
+  it('carries a RETAINED Access app id across the script records, so a redeploy of another file cannot orphan it', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-workers-retained-carry-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    configureCloudflareWorkersDataDir(stateRoot);
+    try {
+      const dataDir = process.env.OD_DATA_DIR;
+      if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+      const stamp = Date.now();
+      const projectId = `workers-retained-carry-${stamp}`;
+      // Unique per run: the records this test leaves in the shared daemon DB
+      // would otherwise be siblings of every later test that deploys either
+      // script (priorWorkersOwnershipForScript reads across projects by name).
+      const srcScript = `retain-src-${stamp}`;
+      const dstScript = `retain-dst-${stamp}`;
+      const tagOf = (script: string) => `tag-${script}`;
+      const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+      await writeFile(path.join(dir, 'a.html'), '<!doctype html><h1>A</h1>');
+      await writeFile(path.join(dir, 'b.html'), '<!doctype html><h1>B</h1>');
+      expect((await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: projectId, name: 'Workers retained carry', skillId: null, designSystemId: null }),
+      })).status).toBe(200);
+      const putConfig = async (scriptName: string) => {
+        expect((await fetch(`${baseUrl}/api/deploy/config`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            providerId: CLOUDFLARE_WORKERS_PROVIDER_ID,
+            token: 'tok',
+            accountId: 'acct_test',
+            scriptName,
+            access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } },
+          }),
+        })).status).toBe(200);
+      };
+
+      const realFetch = globalThis.fetch;
+      const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+      // The Access apps this deploy created, by the destination they were made
+      // for. An app whose destination is the CURRENT script's tag is this
+      // Worker's own (it is reused); one left pointing at the tag the script
+      // name moved away from is what a rename RETAINS.
+      const apps = new Map<string, string>();
+      let appPosts = 0;
+      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        const method = (init?.method || 'GET').toUpperCase();
+        if (method === 'HEAD' || isPublicProbeUrl(url)) {
+          return new Response('', { status: 302, headers: { location: 'https://acct-test.cloudflareaccess.com/cdn-cgi/access/login' } });
+        }
+        if (url.endsWith('/workers/subdomain')) return json({ success: true, result: { subdomain: 'acct-test' } });
+        if (url.includes('assets-upload-session')) return json({ success: true, result: { jwt: 'SESS', buckets: [] } });
+        if (url.includes('/workers/assets/upload')) return json({ success: true, result: { jwt: 'COMPLETION' } });
+        if (url.includes('/workers/scripts/') && url.endsWith('/subdomain')) {
+          return json({ success: true, result: { enabled: true, previews_enabled: false } });
+        }
+        if (method === 'GET' && url.includes('/workers/domains?')) return json({ success: true, result: [] });
+        if (method === 'PUT' && (url.endsWith('/workers/scripts/' + srcScript) || url.endsWith('/workers/scripts/' + dstScript))) {
+          return json({ success: true, result: {} });
+        }
+        // Each script carries its OWN tag: that tag is what separates "this app
+        // guards this Worker" from "this app guards the Worker the rename left
+        // behind", which is the whole difference between reuse and retention.
+        if (method === 'GET' && url.includes('/workers/scripts')) {
+          return json({ success: true, result: [srcScript, dstScript].map((id) => ({ id, tag: tagOf(id) })) });
+        }
+        if (url.includes('/access/identity_providers')) return json({ success: true, result: [{ id: 'otp-1', type: 'onetimepin', name: 'One-time PIN login' }] });
+        if (url.includes('/access/apps/')) {
+          const id = url.slice(url.indexOf('/access/apps/') + '/access/apps/'.length);
+          if (method === 'PUT') return json({ success: true, result: { id } });
+          if (method === 'DELETE') return json({ success: true, result: { id } });
+          return json({ success: true, result: { id, destinations: [{ type: 'worker', worker_id: apps.get(id) ?? '' }] } });
+        }
+        if (url.includes('/access/apps')) {
+          if (method === 'POST') {
+            appPosts += 1;
+            const id = `app-${appPosts}`;
+            const body = JSON.parse(String(init?.body ?? '{}')) as { destinations?: Array<{ worker_id?: string }> };
+            apps.set(id, body.destinations?.[0]?.worker_id ?? '');
+            return json({ success: true, result: { id } });
+          }
+          return json({
+            success: true,
+            result: [...apps.entries()].map(([id, destination]) => ({
+              id,
+              name: 'Workers retained carry (OpenDesign)',
+              destinations: [{ type: 'worker', worker_id: destination }],
+            })),
+          });
+        }
+        if (url.endsWith('/user')) return json({ success: true, result: { email: 'me@example.com' } });
+        return json({ success: true, result: {} });
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      try {
+        const deploy = (fileName: string) => fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileName, providerId: CLOUDFLARE_WORKERS_PROVIDER_ID }),
+        });
+        const workersOf = async (resp: Response) =>
+          ((await resp.json()) as Record<string, unknown>).cloudflareWorkers as Record<string, unknown>;
+
+        // a.html deploys the FIRST script name and creates its Access app.
+        await putConfig(srcScript);
+        const first = await deploy('a.html');
+        expect(first.status).toBe(200);
+        expect((await workersOf(first)).accessAppId).toBe('app-1');
+
+        // The script name changes: a.html's redeploy creates a NEW app for the
+        // renamed Worker and RETAINS app-1, which still guards the old one.
+        await putConfig(dstScript);
+        const renamed = await deploy('a.html');
+        expect(renamed.status).toBe(200);
+        const renamedWorkers = await workersOf(renamed);
+        expect(renamedWorkers.accessAppId).toBe('app-2');
+        expect(renamedWorkers.retainedAccessAppIds).toEqual(['app-1']);
+
+        // b.html has no record of its own, so the retained handle is known only
+        // through a.html's record. Its deploy must carry the id forward: the
+        // record's metadata REPLACES the prior one, so a deploy that forgets it
+        // erases the only handle OpenDesign has on an app it still owns.
+        const sibling = await deploy('b.html');
+        expect(sibling.status).toBe(200);
+        const siblingWorkers = await workersOf(sibling);
+        expect(siblingWorkers.accessAppId).toBe('app-2');
+        expect(siblingWorkers.retainedAccessAppIds).toEqual(['app-1']);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
   it('refuses a concurrent Cloudflare Workers deploy from a DIFFERENT project that resolves to the same script name', async () => {
     const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-workers-script-singleflight-'));
     const priorStateRoot = process.env.OD_USER_STATE_DIR;

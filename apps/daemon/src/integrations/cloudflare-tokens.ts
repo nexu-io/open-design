@@ -623,3 +623,46 @@ export function isCloudflareOAuthTokenExpired(
   if (typeof token.expiresAt !== 'number') return false;
   return token.expiresAt - skew <= now;
 }
+
+/** The TTL stamped on a record whose token-endpoint response carried no usable
+ * `expires_in`. Deliberately shorter than every expiry skew the callers apply
+ * (see isCloudflareOAuthTokenExpired), so the record reads as expired at the
+ * very next call and refreshes again: when the endpoint does not say how long
+ * the credential lives, re-refreshing is the recoverable answer and a record
+ * that never expires is not. */
+export const CLOUDFLARE_OAUTH_UNKNOWN_EXPIRY_TTL_MS = 60_000;
+
+/**
+ * The `expiresAt` a stored record gets from a token-endpoint response.
+ *
+ * `expires_in` is the only authority on a NEW lifetime, but it is not
+ * guaranteed to arrive, or to be a number: the shared token endpoint casts the
+ * parsed body with no validation (`tokenRequest` in mcp-oauth.ts), so a string
+ * `"3600"` or an omitted field reaches a caller unchanged. Leaving `expiresAt`
+ * undefined in that case is NOT a neutral default —
+ * `isCloudflareOAuthTokenExpired` reads a record with no numeric `expiresAt`
+ * as non-expiring, so the fast path in `getCloudflareAccessToken` would hand
+ * out that access token forever instead of rotating it again.
+ *
+ * So: the endpoint's number when it gives one; otherwise the lifetime the
+ * superseded record already had (a rotation that does not restate the TTL
+ * keeps it, and one whose prior value has already lapsed simply refreshes
+ * again next call); otherwise a conservative TTL that forces that re-refresh.
+ */
+export function cloudflareOAuthExpiresAt(input: {
+  /** The token-endpoint's `expires_in`, exactly as parsed — `unknown` because
+   * nothing validated it on the way here. */
+  expiresIn: unknown;
+  /** `expiresAt` of the record this one replaces, when there is one. */
+  priorExpiresAt?: number | undefined;
+  now?: number | undefined;
+}): number {
+  const now = input.now ?? Date.now();
+  if (typeof input.expiresIn === 'number' && Number.isFinite(input.expiresIn) && input.expiresIn > 0) {
+    return now + input.expiresIn * 1000;
+  }
+  if (typeof input.priorExpiresAt === 'number' && Number.isFinite(input.priorExpiresAt)) {
+    return input.priorExpiresAt;
+  }
+  return now + CLOUDFLARE_OAUTH_UNKNOWN_EXPIRY_TTL_MS;
+}
