@@ -60,6 +60,7 @@ export type OdNextBundleNodePathV2 = (typeof OD_NEXT_BUNDLE_NODE_PATHS_V2)[numbe
 
 export type OdNextExactInputClassification =
   | 'initial_bundle'
+  | 'per_task_input'
   | 'stage_turn'
   | 'transport_reference'
   | 'out_of_band'
@@ -337,10 +338,10 @@ export const OD_NEXT_EXACT_INPUT_MAP_V1 = [
   },
   {
     id: 'linked_directory_references',
-    classification: 'excluded',
+    classification: 'per_task_input',
     source: 'loadOdNextTaskInputSnapshot().requestInputText',
     owner: 'Task 04 immutable workspace reference',
-    note: 'Live linked-directory paths are excluded; stable linked-dir:N aliases are emitted while access stays out of band.',
+    note: 'Per-task alias-to-absolute-path mappings are emitted in Bundle context, outside the cache-stable head.',
   },
   {
     id: 'clarification_turn',
@@ -682,6 +683,7 @@ export const OD_NEXT_EXACT_TEXT_DELIVERY_PATHS_V1 = [
 
 const ALLOWED_CLASSIFICATIONS = new Set<OdNextExactInputClassification>([
   'initial_bundle',
+  'per_task_input',
   'stage_turn',
   'transport_reference',
   'out_of_band',
@@ -713,7 +715,7 @@ export function assertOdNextExactInputMapV1(
       throw new Error(`OD Next textual input ${entry.id} is missing its Bundle target`);
     }
     if (
-      (entry.classification === 'out_of_band' || entry.classification === 'excluded')
+      (entry.classification === 'out_of_band' || entry.classification === 'excluded' || entry.classification === 'per_task_input')
       && entry.textTarget
     ) {
       throw new Error(`OD Next non-text input ${entry.id} must not declare a Bundle target`);

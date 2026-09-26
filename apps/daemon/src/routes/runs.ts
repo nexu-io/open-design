@@ -74,6 +74,7 @@ import {
 } from '../langfuse-trace.js';
 import { parseMediaExecutionPolicyInput } from '../media/policy.js';
 import { isManagedProjectCwd } from '../mcp-config.js';
+import { validateLinkedDirs } from '../linked-dirs.js';
 import {
   normalizeExternalPluginRunAnalyticsHints,
   OPEN_DESIGN_PLUGIN_ID,
@@ -2857,9 +2858,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           commentCount: Array.isArray(requestBody.commentAttachments)
             ? requestBody.commentAttachments.length
             : 0,
-          linkedDirectoryCount: Array.isArray(runProject?.metadata?.linkedDirs)
-            ? runProject.metadata.linkedDirs.length
-            : 0,
+          linkedDirectories: (() => {
+            if (!Array.isArray(runProject?.metadata?.linkedDirs)) return [];
+            const validated = validateLinkedDirs(runProject.metadata.linkedDirs);
+            return validated.error ? [] : (validated.dirs ?? []);
+          })(),
           mcpServerCount: mcpIds.length + runToolServers.length,
         });
         meta.odNextTaskInputSnapshot = createdTaskInputSnapshot;

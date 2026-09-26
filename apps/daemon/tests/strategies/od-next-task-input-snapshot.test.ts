@@ -320,6 +320,34 @@ describe('OD Next task-scoped input snapshots', () => {
     expect(loaded.taskConfigText).toContain('"locale":"zh-CN"');
   });
 
+  it('puts validated linked-folder alias mappings in the per-task request facts', () => {
+    const f = fixture();
+    const one = createOdNextTaskInputSnapshot({
+      ...f,
+      taskExecutionId: 'odnext_linked_one',
+      linkedDirectories: ['/Volumes/Documents/karlam-journal'],
+    });
+    const oneFacts = loadOdNextTaskInputSnapshot(one, f.snapshotsRoot).workspaceInputFactsText;
+    expect(oneFacts).toContain('"reference":"linked-dir:1"');
+    expect(oneFacts).toContain('"path":"/Volumes/Documents/karlam-journal"');
+
+    const multiple = createOdNextTaskInputSnapshot({
+      ...f,
+      taskExecutionId: 'odnext_linked_multiple',
+      linkedDirectories: ['/linked/first', '/linked/second'],
+    });
+    const multipleFacts = loadOdNextTaskInputSnapshot(multiple, f.snapshotsRoot).workspaceInputFactsText;
+    expect(multipleFacts).toContain('"access":"out_of_band","path":"/linked/first","reference":"linked-dir:1"');
+    expect(multipleFacts).toContain('"access":"out_of_band","path":"/linked/second","reference":"linked-dir:2"');
+
+    const none = createOdNextTaskInputSnapshot({
+      ...f,
+      taskExecutionId: 'odnext_linked_none',
+      linkedDirectories: [],
+    });
+    expect(loadOdNextTaskInputSnapshot(none, f.snapshotsRoot).workspaceInputFactsText).toBe('');
+  });
+
   it('derives type from frozen bytes rather than a deceptive extension', () => {
     const f = fixture();
     writeFileSync(path.join(f.projectRoot, 'not-an-image.png'), 'plain text');

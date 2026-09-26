@@ -57,6 +57,7 @@ export interface OdNextRequestInputFactsV1 {
     linkedDirectories: Array<{
       reference: string;
       access: 'out_of_band';
+      path?: string;
     }>;
   };
   mcp: {

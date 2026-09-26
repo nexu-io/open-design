@@ -44,6 +44,9 @@ describe('OD Next exact Agent input map v1', () => {
       stage: 'contract_repair',
     });
     expect(entriesById.get('cwd_reference')?.classification).toBe('excluded');
+    expect(entriesById.get('linked_directory_references')).toMatchObject({
+      classification: 'per_task_input',
+    });
     expect(entriesById.get('request_text')?.source).toContain('resolveOdNextRequestUserPrompt');
     expect(entriesById.get('daemon_system_prompt')?.textTarget)
       .toBe('open_design_core_system_prompt');

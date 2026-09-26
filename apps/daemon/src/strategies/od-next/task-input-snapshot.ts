@@ -578,6 +578,7 @@ export function createOdNextTaskInputSnapshot(input: {
   imagePaths?: readonly string[];
   commentCount?: number;
   linkedDirectoryCount?: number;
+  linkedDirectories?: string[];
   mcpServerCount?: number;
   fileCapBytes?: number;
   totalCapBytes?: number;
@@ -706,7 +707,10 @@ export function createOdNextTaskInputSnapshot(input: {
         sha256: identity,
       });
     });
-    const linkedDirectoryCount = Math.max(0, Math.floor(input.linkedDirectoryCount ?? 0));
+    const linkedDirectories = input.linkedDirectories ?? Array.from(
+      { length: Math.max(0, Math.floor(input.linkedDirectoryCount ?? 0)) },
+      () => undefined,
+    );
     const requestInputFacts: OdNextRequestInputFactsV1 = {
       schema: OD_NEXT_REQUEST_INPUT_FACTS_SCHEMA_V1,
       attachmentTransport: {
@@ -718,9 +722,10 @@ export function createOdNextTaskInputSnapshot(input: {
       comments: { count: Math.max(0, Math.floor(input.commentCount ?? 0)) },
       workspace: {
         project: { reference: 'workspace:project', access: 'out_of_band' },
-        linkedDirectories: Array.from({ length: linkedDirectoryCount }, (_, index) => ({
+        linkedDirectories: linkedDirectories.map((directory, index) => ({
           reference: `linked-dir:${index + 1}`,
           access: 'out_of_band' as const,
+          ...(directory ? { path: directory } : {}),
         })),
       },
       mcp: {
