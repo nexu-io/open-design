@@ -777,6 +777,10 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
         const cfg = { token, accountId: config.accountId, requestInit: proxyDispatcher.requestInit };
         const domain = await getCloudflareWorkerDomain(cfg, req.params.domainId);
         if (!domain) {
+          // The domain is already gone from Cloudflare: drop any id-keyed
+          // vouching entries so a later re-attach of the same hostname is not
+          // classified owned and detached again.
+          db.transaction(() => forgetDetachedWorkersHostname({ id: req.params.domainId, hostname: '' }))();
           res.json({ ok: true, deleted: false });
           return;
         }
