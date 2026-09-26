@@ -210,6 +210,7 @@ function migrate(db: SqliteDb): void {
       conversation_id TEXT NOT NULL,
       agent_id        TEXT NOT NULL,
       session_id      TEXT NOT NULL,
+      compatibility_generation TEXT,
       stable_prompt_hash TEXT,
       -- Per-section digests of the stable prefix inputs behind
       -- stable_prompt_hash, as JSON (see prompts/stable-sections.ts). Purely
@@ -588,6 +589,19 @@ function migrate(db: SqliteDb): void {
     db.exec(`ALTER TABLE routines ADD COLUMN context_json TEXT`);
   }
   const agentSessionCols = db.prepare(`PRAGMA table_info(agent_sessions)`).all() as DbRow[];
+  if (!agentSessionCols.some((c: DbRow) => c.name === 'compatibility_generation')) {
+    db.exec(`ALTER TABLE agent_sessions ADD COLUMN compatibility_generation TEXT`);
+  }
+  // Old application binaries cannot attest compatibility. Every legacy-column
+  // write clears it, even a no-op update; aware writers restamp in one transaction.
+  db.exec(`CREATE TRIGGER IF NOT EXISTS agent_sessions_invalidate_compatibility
+    AFTER UPDATE OF conversation_id, agent_id, session_id, stable_prompt_hash,
+      stable_prompt_sections, model, cwd, last_message_id, last_input_tokens, updated_at
+    ON agent_sessions
+    BEGIN
+      UPDATE agent_sessions SET compatibility_generation = NULL
+      WHERE conversation_id = NEW.conversation_id AND agent_id = NEW.agent_id;
+    END`);
   if (agentSessionCols.length > 0 && !agentSessionCols.some((c: DbRow) => c.name === 'stable_prompt_hash')) {
     db.exec(`ALTER TABLE agent_sessions ADD COLUMN stable_prompt_hash TEXT`);
   }
@@ -2633,6 +2647,7 @@ export function upsertAgentSession(
     conversationId: string;
     agentId: string;
     sessionId: string;
+    compatibilityGeneration?: string | null;
     stablePromptHash?: string | null;
     stablePromptSections?: string | null;
     model?: string | null;
@@ -2648,36 +2663,42 @@ export function upsertAgentSession(
     input.lastInputTokens <= 1_000_000_000
       ? input.lastInputTokens
       : null;
-  db.prepare(
-    `INSERT INTO agent_sessions
-       (conversation_id, agent_id, session_id, stable_prompt_hash, stable_prompt_sections,
-        model, cwd, last_message_id, last_input_tokens, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(conversation_id, agent_id)
-       DO UPDATE SET session_id = excluded.session_id,
-                     stable_prompt_hash = excluded.stable_prompt_hash,
-                     stable_prompt_sections = excluded.stable_prompt_sections,
-                     model = excluded.model,
-                     cwd = excluded.cwd,
-                     last_message_id = excluded.last_message_id,
-                     last_input_tokens = CASE
-                       WHEN excluded.session_id = agent_sessions.session_id
-                         THEN COALESCE(excluded.last_input_tokens, agent_sessions.last_input_tokens)
-                       ELSE excluded.last_input_tokens
-                     END,
-                     updated_at = excluded.updated_at`,
-  ).run(
-    input.conversationId,
-    input.agentId,
-    input.sessionId,
-    input.stablePromptHash ?? null,
-    input.stablePromptSections ?? null,
-    input.model ?? null,
-    input.cwd ?? null,
-    input.lastMessageId ?? null,
-    lastInputTokens,
-    Date.now(),
-  );
+  db.transaction(() => {
+    db.prepare(
+      `INSERT INTO agent_sessions
+         (conversation_id, agent_id, session_id, stable_prompt_hash, stable_prompt_sections,
+          model, cwd, last_message_id, last_input_tokens, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(conversation_id, agent_id)
+         DO UPDATE SET session_id = excluded.session_id,
+                       stable_prompt_hash = excluded.stable_prompt_hash,
+                       stable_prompt_sections = excluded.stable_prompt_sections,
+                       model = excluded.model,
+                       cwd = excluded.cwd,
+                       last_message_id = excluded.last_message_id,
+                       last_input_tokens = CASE
+                         WHEN excluded.session_id = agent_sessions.session_id
+                           THEN COALESCE(excluded.last_input_tokens, agent_sessions.last_input_tokens)
+                         ELSE excluded.last_input_tokens
+                       END,
+                       updated_at = excluded.updated_at`,
+    ).run(
+      input.conversationId,
+      input.agentId,
+      input.sessionId,
+      input.stablePromptHash ?? null,
+      input.stablePromptSections ?? null,
+      input.model ?? null,
+      input.cwd ?? null,
+      input.lastMessageId ?? null,
+      lastInputTokens,
+      Date.now(),
+    );
+    db.prepare(`UPDATE agent_sessions SET compatibility_generation = ?
+      WHERE conversation_id = ? AND agent_id = ?`).run(
+      input.compatibilityGeneration ?? null, input.conversationId, input.agentId,
+    );
+  })();
 }
 
 export function getAgentSessionRecord(
@@ -2686,6 +2707,7 @@ export function getAgentSessionRecord(
   agentId: string,
 ): {
   sessionId: string;
+  compatibilityGeneration: string | null;
   stablePromptHash: string | null;
   stablePromptSections: string | null;
   model: string | null;
@@ -2695,7 +2717,7 @@ export function getAgentSessionRecord(
 } | null {
   const row = db
     .prepare(
-      `SELECT session_id, stable_prompt_hash, stable_prompt_sections, model, cwd, last_message_id,
+      `SELECT session_id, compatibility_generation, stable_prompt_hash, stable_prompt_sections, model, cwd, last_message_id,
               last_input_tokens
          FROM agent_sessions
         WHERE conversation_id = ? AND agent_id = ?`,
@@ -2704,6 +2726,7 @@ export function getAgentSessionRecord(
   if (!row || typeof row.session_id !== 'string') return null;
   return {
     sessionId: row.session_id,
+    compatibilityGeneration: typeof row.compatibility_generation === 'string' ? row.compatibility_generation : null,
     stablePromptHash:
       typeof row.stable_prompt_hash === 'string' ? row.stable_prompt_hash : null,
     stablePromptSections:

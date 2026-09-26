@@ -69,6 +69,12 @@ function assertIdentityFrame(value: JsonObject): void {
     throw new Error(`protocol_version must equal ${DSH_PROFILE_PROTOCOL_VERSION}`);
   }
   stringField(value, 'plugin_version');
+  if (value.compatibility_generation !== undefined && (
+    typeof value.compatibility_generation !== 'string' ||
+    !/^[A-Za-z0-9._:-]{1,128}$/u.test(value.compatibility_generation)
+  )) {
+    throw new Error('compatibility_generation must be a bounded opaque token');
+  }
   capabilitiesField(value);
 }
 

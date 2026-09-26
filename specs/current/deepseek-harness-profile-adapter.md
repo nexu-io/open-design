@@ -455,3 +455,41 @@ The complete design is ready when:
 - macOS, Linux, and Windows pass process-tree and two-process resume smoke;
 - a credentialed two-turn artifact flow succeeds without committing secrets;
 - no Harness runtime is bundled into OpenDesign.
+
+## Native-session compatibility generation
+
+DSH opts into `RuntimeAgentDef.nativeSessionCompatibility: 'profile-ready'`.
+The optional `compatibility_generation` token in `probe` and `ready` is opaque
+and bounded. Detection is provenance only: the spawned process's validated
+`ready` frame supplies the active generation. The daemon retains full and
+incremental prompt candidates until then, and uses the shared resume prompt
+policy to select both the native handle and transcript mode together.
+
+A missing stored or active generation, or unequal generations in either
+upgrade direction, forces a fresh session with full bootstrap and transcript.
+Legacy mappings reseed once after a generation-aware profile is installed.
+Older profiles remain runnable, but cannot resume through this guard. Other
+adapters do not opt in and retain their existing behavior.
+
+The profile hashes its actual launcher identity (resolved path, launcher bytes,
+and installed DSH package version), protocol generation, explicit plugin and
+composition generations, and loaded composition entries. These inputs never
+leave the profile; only the digest is emitted. Each DSH version is conservatively
+its own compatibility family until cross-version reuse is certified. Moving an
+installation or changing composition can therefore reseed even if native
+history would have remained loadable. Missing launcher metadata or a composition
+that cannot be serialized omits the token and forces full context. Launcher or
+manifest changes newer than process startup also omit the token, so a concurrent
+installation cannot label an already-running process with its replacement. The plugin
+compatibility constant must change for incompatible runtime bridge semantics;
+the composition constant must change for incompatible OD profile semantics.
+
+The daemon stores the token atomically with the validated handle and cursor,
+including cancellation after a validated session frame. SQLite invalidates the
+token on every update to legacy binding columns; generation-aware writers
+restamp it in the same transaction. This prevents a rolled-back application
+binary's update from leaving a falsely trusted token when a newer binary opens
+the database again. It does not retrofit the guard into old application code.
+Structured missing/corrupt resume-target failures retain the one-shot full
+transcript auto-reseed path. Diagnostics expose fixed guard reasons and existing
+redacted handle metadata, not token inputs or raw generation values.
