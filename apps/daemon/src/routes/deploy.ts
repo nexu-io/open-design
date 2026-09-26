@@ -481,9 +481,10 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
    * the next deploy of that record would try to retire it again. A RETAINED app
    * (see retainedAccessAppIds) is named by the same records under its own key, so
    * that handle is dropped here too — a stale one keeps offering the UI an app
-   * that is gone. Every record of the provider is scanned because the Workers
-   * config is global — the same app guarded every (project, file) that deployed
-   * the script.
+   * that is gone. Only the HANDLE goes for such a record: its protection fields
+   * name a different, still-live app (see the body). Every record of the
+   * provider is scanned because the Workers config is global — the same app
+   * guarded every (project, file) that deployed the script.
    */
   function forgetRetiredWorkersAccessApp(accessAppId: string): void {
     if (!accessAppId) return;
@@ -510,10 +511,23 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
       // the Worker a script-name change moved away from
       // (`retainedAccessAppIds`). Both go stale the moment the app is deleted.
       const retainedIds = retainedAccessAppIdsFromMetadata(metadata);
-      if (held.accessAppId !== accessAppId && !retainedIds.includes(accessAppId)) continue;
-      const { accessAppId: _id, accessProtected: _protected, accessVerified: _verified, createdByOpenDesign: _created, retainedAccessAppIds: _retained, ...next } = held;
+      // Which handle names the deleted app decides what may be rewritten. A
+      // record whose OWN protection is that app loses the protection fields
+      // with it. A record that merely RETAINED the id is protected by a
+      // different, still-live app: stripping its fields would report a live
+      // Worker as unprotected and forget how to retire its own app, so only the
+      // dead handle goes.
+      const holdsAsProtection = held.accessAppId === accessAppId;
+      if (!holdsAsProtection && !retainedIds.includes(accessAppId)) continue;
+      const next: Record<string, unknown> = holdsAsProtection
+        ? (() => {
+            const { accessAppId: _id, accessProtected: _protected, accessVerified: _verified, createdByOpenDesign: _created, retainedAccessAppIds: _retained, ...rest } = held;
+            return rest;
+          })()
+        : { ...held };
       const keptRetained = retainedIds.filter((id) => id !== accessAppId);
       if (keptRetained.length > 0) next.retainedAccessAppIds = keptRetained;
+      else delete next.retainedAccessAppIds;
       upsertDeployment(db, {
         id: record.id,
         projectId: record.projectId,

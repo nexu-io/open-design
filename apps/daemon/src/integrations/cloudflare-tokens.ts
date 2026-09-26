@@ -576,8 +576,9 @@ export async function clearCloudflareOAuthTokenForRevoke(
  * crash state the handle exists to recover from — grant off disk, handle naming
  * it — for the next mutation to settle.
  *
- * The generation moves: this write LANDS a credential, and the ABA guard has to
- * be able to tell a compare-and-set from before it apart from one after it.
+ * The generation moves only when a credential LANDS: the ABA guard has to be
+ * able to tell a compare-and-set from before this write apart from one after
+ * it. A record with a blank `accessToken` is not one (see the body).
  * Handles for other grants are carried forward exactly as every other writer
  * carries them; this write retires only the handle naming the credential it
  * restores, matched on the same string every reader matches on
@@ -587,8 +588,37 @@ export async function restoreCloudflareOAuthTokenAndDropRevokes(
   token: StoredCloudflareOAuthToken,
 ): Promise<void> {
   const restoredToken = token.refreshToken || token.accessToken;
+  // A record with a blank `accessToken` is not a credential to put back (see
+  // recoveredDisplacedCredential): the rollback is handing back a grant to
+  // revoke, not a token any reader can serve. Landing it is what left the store
+  // reading as empty — connected:false, CFW_OAUTH_RECONNECT_REQUIRED — over a
+  // file naming a live grant, stamped at a generation the record's own value
+  // could never match. So this write keeps the store as it stands and leaves the
+  // record NAMED: the pending handle the next settle revokes.
+  const landable = token.accessToken !== '';
   await withLock(dataDir, async () => {
     const file = await readCloudflareOAuthTokensFile(dataDir);
+    if (!landable) {
+      const named = file.pendingRevokes ?? [];
+      // A serveable credential naming this grant is already the state this
+      // write exists to produce, so there is nothing to add — and leaving a
+      // handle beside a credential it names is the one pair the store must
+      // never hold.
+      const live = file.token ? file.token.refreshToken || file.token.accessToken : '';
+      if (
+        !restoredToken ||
+        live === restoredToken ||
+        named.some((entry) => (entry.refreshToken || entry.accessToken) === restoredToken)
+      ) {
+        return;
+      }
+      await writeTokensFile(dataDir, {
+        ...(file.token ? { token: file.token } : {}),
+        ...(file.lastGeneration !== undefined ? { lastGeneration: file.lastGeneration } : {}),
+        pendingRevokes: [token, ...named],
+      });
+      return;
+    }
     const gen = nextLastGeneration(file);
     const carried = file.pendingRevokes ?? [];
     const pendingRevokes = restoredToken
@@ -654,19 +684,37 @@ export async function dropPendingCloudflareOAuthRevokes(
     // landing during a deploy's token-endpoint round trip — is exactly that, and
     // must not cost the user a reconnect.
     //
-    // Only a write that CHANGES the credential may move the generation. A record
-    // recovered from the raw bytes (the store holds no usable credential, so this
-    // write is what lands it) is such a write; so is a store with no credential
-    // at all, which keeps the clear-shaped bump every other no-credential write
-    // performs.
-    const carried = file.token ?? recoveredDisplacedCredential(raw);
-    const gen = file.token
-      ? (file.lastGeneration ?? file.token.generation)
+    // A record recovered from the raw bytes is NOT a credential this write may
+    // land. recoveredDisplacedCredential only runs when sanitizeToken rejected
+    // the record, and that rejection is a blank `accessToken`: written into
+    // `token` it makes every reader see an empty store — connected:false,
+    // CFW_OAUTH_RECONNECT_REQUIRED — over a file that still holds a live refresh
+    // grant, while the generation this write stamps can never match the record's
+    // own, so no refresh can compare-and-set again. It is not a credential to
+    // serve; it is a grant to revoke. Keep it NAMED instead, so the next settle
+    // revokes it, and leave `token` out of this write.
+    const landed = file.token ?? null;
+    const recovered = landed ? null : recoveredDisplacedCredential(raw);
+    const recoveredName = recovered ? recovered.refreshToken || recovered.accessToken : '';
+    const handles = recovered
+      ? [
+          recovered,
+          ...remaining.filter((entry) => (entry.refreshToken || entry.accessToken) !== recoveredName),
+        ]
+      : remaining;
+    // Only a write that CHANGES the credential may move the generation. A
+    // credential the file already held is carried back byte-identical at the
+    // generation it had; a store with no credential at all keeps the
+    // clear-shaped bump every other no-credential write performs; a recovered
+    // handle lands no credential, so it moves nothing either.
+    const carried = landed ?? recovered;
+    const gen = carried
+      ? (file.lastGeneration ?? carried.generation)
       : nextLastGeneration(file);
     await writeTokensFile(dataDir, {
       lastGeneration: gen,
-      ...(carried ? { token: carried } : {}),
-      ...(remaining.length > 0 ? { pendingRevokes: remaining } : {}),
+      ...(landed ? { token: landed } : {}),
+      ...(handles.length > 0 ? { pendingRevokes: handles } : {}),
     });
   });
 }

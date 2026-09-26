@@ -3219,6 +3219,66 @@ describe('deploy provider routes', () => {
     }
   });
 
+  it('retiring one script\'s Access app leaves a sibling that only RETAINED it protected by its own app', async () => {
+    const f = await workersSiblingFixture('retire-retained-only', { access: true });
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const db = openDatabase(process.cwd(), { dataDir });
+    try {
+      await f.putConfig({ access: true });
+      const first = await f.deploy('a.html');
+      expect(first.status).toBe(200);
+      const aId = ((await first.json()) as { id: string }).id;
+      // A second record of the same script exists only to carry the retained
+      // handle: its OWN protection is a different app.
+      const second = await f.deploy('b.html');
+      expect(second.status).toBe(200);
+      const bId = ((await second.json()) as { id: string }).id;
+
+      // Rewrite b.html's record into the shape a script-name change leaves
+      // behind: protected by app-live, still naming the id of an app that guards
+      // the Worker the rename moved away from.
+      const row = getDeploymentById(db, f.projectId, bId);
+      if (!row) throw new Error('the deployment record is required');
+      const { cloudflareWorkers: _lifted, ...record } = row;
+      upsertDeployment(db, {
+        ...record,
+        providerMetadata: {
+          ...((row.providerMetadata ?? {}) as Record<string, unknown>),
+          accessAppId: 'app-live',
+          accessProtected: true,
+          accessVerified: true,
+          createdByOpenDesign: true,
+          retainedAccessAppIds: ['app-shared'],
+        },
+      });
+
+      // Access off through a.html deletes the app a.html itself recorded.
+      await f.putConfig({ access: false });
+      const retiring = await f.deploy('a.html');
+      expect(retiring.status).toBe(200);
+      expect(f.state.cfCalls.some((c) => c.method === 'DELETE' && c.url.endsWith('/access/apps/app-shared'))).toBe(true);
+
+      // The record whose own protection that app was loses the protection
+      // fields with it …
+      const own = (getDeploymentById(db, f.projectId, aId)?.providerMetadata ?? {}) as Record<string, unknown>;
+      expect(own.accessAppId).toBeUndefined();
+      expect(own.accessProtected).toBeUndefined();
+      // … while the record that merely RETAINED the id keeps every one of them:
+      // they name a different, still-live app, and stripping them would report a
+      // live Worker as unprotected and forget how to retire the app that guards
+      // it. Only the dead handle goes.
+      const kept = (getDeploymentById(db, f.projectId, bId)?.providerMetadata ?? {}) as Record<string, unknown>;
+      expect(kept.accessAppId).toBe('app-live');
+      expect(kept.accessProtected).toBe(true);
+      expect(kept.accessVerified).toBe(true);
+      expect(kept.createdByOpenDesign).toBe(true);
+      expect(kept.retainedAccessAppIds).toBeUndefined();
+    } finally {
+      await f.cleanup();
+    }
+  });
+
   it('a 4xx-refused attach drops the hostname write-ahead, while an ambiguous attach failure keeps it', async () => {
     const f = await workersSiblingFixture('attach-refused');
     try {

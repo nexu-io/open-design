@@ -1072,9 +1072,10 @@ describe('credential mode is derived from a live OAuth grant', () => {
     });
   });
 
-  it('a settle that drops a handle still carries a credential that no longer sanitizes, so a later disconnect can revoke it', async () => {
+  it('a settle that drops a handle never lands a credential with no access token, and keeps its grant named for the next settle', async () => {
     await withDataDir(async () => {
       const tokens = cloudflareOAuthTokensDir();
+      const tokensFile = path.join(tokens, 'cloudflare-oauth-tokens.json');
       await setCloudflareOAuthToken(tokens, {
         accessToken: 'access-1',
         refreshToken: 'ref-real',
@@ -1098,13 +1099,32 @@ describe('credential mode is derived from a live OAuth grant', () => {
       });
       expect(await getCloudflareOAuthToken(tokens)).toBeNull();
       expect(await getPendingCloudflareOAuthRevokes(tokens)).toHaveLength(1);
-      // Settling the unrelated handle writes the file. A write that carried
-      // only the typed shape would erase the blank record from the bytes, and
-      // the grant it names would be unrecoverable for good.
+      const before = JSON.parse(await readFile(tokensFile, 'utf8')) as { lastGeneration: number };
+
+      // Settling the unrelated handle writes the file. That write may NOT land
+      // the recovered record as the credential: a blank accessToken in `token`
+      // reads as an empty store — connected:false,
+      // CFW_OAUTH_RECONNECT_REQUIRED — over a file that still names a live
+      // grant, stamped at a generation the record's own value can never match,
+      // so the refresh compare-and-set is dead for good.
       await dropPendingCloudflareOAuthRevokes(tokens, ['ref-real']);
+      const after = JSON.parse(await readFile(tokensFile, 'utf8')) as {
+        lastGeneration: number;
+        token?: { accessToken?: string };
+        pendingRevokes?: Array<{ refreshToken?: string; accessToken?: string }>;
+      };
+      expect(await getCloudflareOAuthToken(tokens)).toBeNull();
+      expect(after.token).toBeUndefined();
+      // Landing no credential moves no generation.
+      expect(after.lastGeneration).toBe(before.lastGeneration);
+      // The grant is not forgotten either: it stays NAMED, so the next settle
+      // revokes it instead of leaving it live at Cloudflare forever.
+      expect(after.pendingRevokes?.map((handle) => handle.refreshToken)).toEqual(['ref-blank']);
+
+      // The next settle names the recovered grant and clears the file.
+      await dropPendingCloudflareOAuthRevokes(tokens, ['ref-blank']);
       expect(await getPendingCloudflareOAuthRevokes(tokens)).toEqual([]);
-      const recovered = await clearCloudflareOAuthToken(tokens);
-      expect(recovered?.refreshToken).toBe('ref-blank');
+      expect(await getCloudflareOAuthToken(tokens)).toBeNull();
     });
   });
 
@@ -1420,6 +1440,60 @@ describe('credential writes that are not credential transitions', () => {
       // grant is back with nothing naming it.
       expect(restored).toMatchObject({ accessToken: 'oauth-access', refreshToken: 'ref-1' });
       expect(handles).toEqual([]);
+    });
+  });
+
+  it('a rollback handed a record with no access token lands nothing and keeps its grant named', async () => {
+    await withDataDir(async () => {
+      const tokens = cloudflareOAuthTokensDir();
+      const tokensFile = path.join(tokens, 'cloudflare-oauth-tokens.json');
+      await setCloudflareOAuthToken(tokens, {
+        accessToken: 'access-1',
+        refreshToken: 'ref-real',
+        tokenType: 'Bearer',
+        clientId: 'client-abc',
+        generation: 1,
+        savedAt: Date.now(),
+      });
+      // A transition takes the grant off disk as a revoke handle …
+      await clearCloudflareOAuthTokenForRevoke(tokens);
+      // … and the guarded write that follows reports a record whose accessToken
+      // no longer sanitizes. That is the shape a rollback is handed — never a
+      // credential a reader could serve.
+      const unservable = {
+        accessToken: '',
+        refreshToken: 'ref-blank',
+        tokenType: 'Bearer',
+        clientId: 'client-abc',
+        generation: 1,
+        savedAt: Date.now(),
+      };
+      await setCloudflareOAuthToken(tokens, { ...unservable });
+      expect(await getCloudflareOAuthToken(tokens)).toBeNull();
+      const before = JSON.parse(await readFile(tokensFile, 'utf8')) as { lastGeneration: number };
+
+      await restoreCloudflareOAuthTokenAndDropRevokes(tokens, { ...unservable });
+
+      const after = JSON.parse(await readFile(tokensFile, 'utf8')) as {
+        lastGeneration: number;
+        token?: { accessToken?: string };
+        pendingRevokes?: Array<{ refreshToken?: string; accessToken?: string }>;
+      };
+      // Nothing landed: a blank accessToken in `token` reads as an empty store
+      // — connected:false, CFW_OAUTH_RECONNECT_REQUIRED — over a file that
+      // names a live grant, and the generation it would be stamped at can never
+      // match the record's own, so the refresh compare-and-set is dead for good.
+      expect(after.token).toBeUndefined();
+      expect(await getCloudflareOAuthToken(tokens)).toBeNull();
+      // Landing no credential moves no generation.
+      expect(after.lastGeneration).toBe(before.lastGeneration);
+      // The grant is not dropped along with the handle this write was going to
+      // retire: it is NAMED, and the grant the earlier transition displaced stays
+      // named beside it, so the next settle revokes both instead of leaking them.
+      expect(after.pendingRevokes?.map((handle) => handle.refreshToken ?? handle.accessToken)).toEqual([
+        'ref-blank',
+        'ref-real',
+      ]);
     });
   });
 });
