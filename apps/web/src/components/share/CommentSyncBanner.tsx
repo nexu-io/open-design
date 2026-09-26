@@ -133,7 +133,6 @@ export function CommentSyncBanner({ projectId, workspaceContext, filePath, inclu
   if (includeBackfill && state.backfill?.state === 'failed') {
     return (
       <div className={backfillOnly ? `${styles.banner} ${styles.backfillOnly}` : styles.banner} role="status">
-        <p className={styles.title}>{t('fileViewer.commentSync.backfillFailedTitle')}</p>
         <div className={styles.retryRow}>
           <p>{t(state.backfill.reopened === true
             ? (state.backfill.retryable

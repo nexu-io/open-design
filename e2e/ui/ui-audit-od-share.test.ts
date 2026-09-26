@@ -302,7 +302,7 @@ test('capture isolated OD share entry, progress and failure states',async({page}
   await failedBackfillRead;
   const backfillBanner=page.getByRole('status').filter({hasText:/已有评论还没同步|评论.*同步/}).first();
   await expect(backfillBanner).toBeVisible();
-  await expect(backfillBanner).toContainText('已有评论暂未同步，访客暂时看不到。正在后台自动重试。');
+  await expect(backfillBanner).toContainText('已有评论还没同步，访问者暂时看不到。正在自动重试。');
   await save(page,'K2','K2',{backfill:{state:'failed',retryable:true,filePath:'index.html'},provenance:'GET-only local UI fixture'});
   // This same failed-backfill response follows the scripted stop → re-enable (S9-R).
   await save(page,'K5','K5');

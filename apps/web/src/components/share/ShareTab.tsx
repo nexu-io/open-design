@@ -220,6 +220,16 @@ export function ShareTab({
   const backfillPending = filePublished && commentSyncState?.backfill?.state === 'pending'
     ? commentSyncState.backfill
     : null;
+  // K1 design ("同步已有评论 · 12 条") names the initial batch size. An older
+  // daemon that predates CommentBackfillState.total leaves it absent, not
+  // zero — that keeps the indeterminate sweep and the generic sentence
+  // instead of rendering "0 条" for a count nobody measured.
+  const backfillTotal = typeof backfillPending?.total === 'number' && backfillPending.total > 0
+    ? backfillPending.total
+    : null;
+  const backfillProgress = backfillTotal !== null && typeof backfillPending?.synced === 'number'
+    ? Math.min(1, Math.max(0, backfillPending.synced / backfillTotal))
+    : null;
   const updateAvailable = Boolean(updateCurrentFilePublic) && filePublished && shareEntryPresentation({
     status: publicationStatus ?? 'none', freshness: publicationFreshness,
   }).appearance === 'outdated';
@@ -312,15 +322,31 @@ export function ShareTab({
                               <span>{t('fileViewer.commentSync.reopenSyncBusy')}</span>
                             </Button>
                           ) : (
-                            <div className={styles.syncProgress} aria-label={t('fileViewer.commentSync.backfillPendingBody')}>
-                              <div className={styles.syncProgressFill} aria-hidden="true" />
+                            <>
+                            <div
+                              className={styles.syncProgress}
+                              aria-label={backfillTotal !== null
+                                ? t('fileViewer.commentSync.backfillPendingCountBody', { count: backfillTotal })
+                                : t('fileViewer.commentSync.backfillPendingBody')}
+                            >
+                              <div
+                                className={backfillProgress !== null
+                                  ? `${styles.syncProgressFill} ${styles.syncProgressFillDeterminate}`
+                                  : styles.syncProgressFill}
+                                aria-hidden="true"
+                                style={backfillProgress !== null ? { width: `${Math.round(backfillProgress * 100)}%` } : undefined}
+                              />
                               <div className={styles.syncProgressText}>
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" focusable="false" className="icon-spin">
                                   <path d="M12 3a9 9 0 1 0 9 9" />
                                 </svg>
-                                <span>{t('fileViewer.commentSync.backfillPendingBody')}</span>
+                                <span>{backfillTotal !== null
+                                  ? t('fileViewer.commentSync.backfillPendingCountBody', { count: backfillTotal })
+                                  : t('fileViewer.commentSync.backfillPendingBody')}</span>
                               </div>
                             </div>
+                            <p className={styles.publishHint}>{t('fileViewer.publishingContinuesOnClose')}</p>
+                            </>
                           )}
                         </div>
                         ) : (
@@ -430,7 +456,7 @@ export function ShareTab({
                         <div className={styles.signInPrompt}>
                           <div className={styles.linkAccessHeading}>
                             <span className={styles.linkAccessLabel}>{t('fileViewer.linkAccessTitle')}</span>
-                            <p className={styles.linkAccessDescription}>{t(canResumeUpdateAfterLogin ? 'fileViewer.shareOutdatedSignInHint' : 'fileViewer.publishFileRequiresWorkspace')}</p>
+                            <p className={styles.linkAccessDescription}>{t(canResumeUpdateAfterLogin ? 'fileViewer.shareOutdatedSignInHint' : 'fileViewer.signInToShareDescription')}</p>
                           </div>
                           {filePublished && publishedFileUrl ? (
                             <SharePublishedLinkControls

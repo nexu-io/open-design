@@ -137,7 +137,6 @@ export interface Dict {
   'fileViewer.commentSync.sessionMissing': string;
   'fileViewer.commentSync.shareStoppedPersonal': string;
   'fileViewer.commentSync.shareStoppedTeam': string;
-  'fileViewer.commentSync.backfillFailedTitle': string;
   'fileViewer.commentSync.backfillFailedBody': string;
   'fileViewer.commentSync.backfillRetryingBody': string;
   'fileViewer.commentSync.backfillReopenedPendingBody': string;
@@ -145,6 +144,8 @@ export interface Dict {
   'fileViewer.commentSync.backfillReopenedTerminalBody': string;
   'fileViewer.commentSync.backfillTerminalBody': string;
   'fileViewer.commentSync.backfillPendingBody': string;
+  /** K1 with a known batch size: `{count}` is the initial backfill batch's total comment count. */
+  'fileViewer.commentSync.backfillPendingCountBody': string;
   /** K4: reopen-resume comment sync busy state, shown in the primary share button itself. */
   'fileViewer.commentSync.reopenSyncBusy': string;
   'fileViewer.commentSync.alignFailedBody': string;
@@ -4230,6 +4231,7 @@ export interface Dict {
   'fileViewer.signInToUpdate': string;
   'fileViewer.signInToShare': string;
   'fileViewer.shareOutdatedSignInHint': string;
+  'fileViewer.signInToShareDescription': string;
   'fileViewer.shareUpdateSuccess': string;
   'fileViewer.shareUpdateFailed': string;
   'fileViewer.shareUpdateUncertain': string;

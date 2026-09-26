@@ -538,9 +538,11 @@ button.updateButton:focus-visible {
 /* K1/K4: comment-sync-pending replaces the entire published-link block with
    a single indicator — a progress bar for the first-publish backfill (K1,
    `reopened` absent/false) or a busy primary button for a verified reopen
-   resync (K4, `reopened === true`). CommentSyncState/CommentBackfillState
-   carry no live percentage or item count, so the fill is an indeterminate
-   sweep rather than a fabricated number. */
+   resync (K4, `reopened === true`). When CommentBackfillState carries a real,
+   measured `total`/`synced` (from published_comment_backfill_members), the
+   fill renders that percentage via `.syncProgressFillDeterminate`; an older
+   daemon that omits those fields keeps the indeterminate sweep below rather
+   than fabricating a number. */
 .syncStatus {
   display: grid;
 }
@@ -570,6 +572,13 @@ button.updateButton:focus-visible {
   0% { left: -35%; }
   50% { left: 65%; }
   100% { left: -35%; }
+}
+
+/* Real measured progress (K1 with a known comment count): a plain static
+   fill anchored to the left edge, its width set inline per render. */
+.syncProgressFillDeterminate {
+  left: 0;
+  animation: none;
 }
 
 .syncProgressText {

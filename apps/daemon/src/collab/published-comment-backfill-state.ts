@@ -167,12 +167,22 @@ export function readPublishedCommentBackfill(
     subject.workspaceId, subject.workspaceMemberId, subject.projectId, subject.filePath, current.revision,
   ) as { state?: unknown; retryable?: unknown; code?: unknown; reopened?: unknown } | undefined;
   if (!row || (row.state !== 'pending' && row.state !== 'succeeded' && row.state !== 'failed')) return undefined;
+  // Real, measured progress from the SAME batch — the exact initial member
+  // set this revision's backfill recorded at publish time — not an estimate.
+  // A total of 0 never reaches here as `pending` (an empty batch is recorded
+  // `succeeded` immediately), so this only ever adds a meaningful count.
+  const members = db.prepare(`SELECT COUNT(*) AS total, COALESCE(SUM(delivered), 0) AS synced
+    FROM published_comment_backfill_members
+    WHERE workspace_id=? AND workspace_member_id=? AND project_id=? AND file_path=? AND publication_revision=?`).get(
+    subject.workspaceId, subject.workspaceMemberId, subject.projectId, subject.filePath, current.revision,
+  ) as { total: number; synced: number };
   const result: CommentBackfillState = {
     state: row.state,
     filePath: subject.filePath,
     publicationRevision: current.revision,
     retryable: row.retryable === 1,
     ...(row.reopened === 0 || row.reopened === 1 ? { reopened: row.reopened === 1 } : {}),
+    ...(members.total > 0 ? { total: members.total, synced: members.synced } : {}),
   };
   return typeof row.code === 'string' && row.code ? { ...result, code: row.code } : result;
 }

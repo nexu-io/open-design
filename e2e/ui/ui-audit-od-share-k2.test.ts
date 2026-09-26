@@ -43,8 +43,8 @@ test('Owner-K2 keeps failed published-comment status and retry unboxed in the Sh
   const menu = page.locator('.share-menu-popover[role="menu"]');
   await expect(menu).toBeVisible();
   const status = menu.getByRole('status');
-  await expect(status).toContainText('分享已发布');
-  await expect(status).toContainText('已有评论暂未同步');
+  await expect(status).not.toContainText('分享已发布');
+  await expect(status).toContainText('已有评论还没同步，访问者暂时看不到。正在自动重试。');
   const retry = status.getByRole('button', { name: '重试' });
   await expect(retry).toBeVisible();
   const statusStyle = await status.evaluate(element => ({ border: getComputedStyle(element).borderTopWidth, background: getComputedStyle(element).backgroundColor }));

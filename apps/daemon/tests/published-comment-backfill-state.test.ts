@@ -84,7 +84,19 @@ it('persists the exact initial batch and exposes empty and pending current state
   publications.set(next, { slug: 'share-b', url: 'https://example.test/b', fileName: 'b.html' });
   const nextRevision = publications.getRevision(next)!;
   db.transaction(() => recordPublishedCommentBackfill(db, { scope: next, publicationRevision: nextRevision, commentIds: ['initial'] }))();
-  expect(readPublishedCommentBackfill(db, { ...subject, filePath: 'b.html' })).toEqual({ state: 'pending', filePath: 'b.html', publicationRevision: nextRevision.token, retryable: false });
+  expect(readPublishedCommentBackfill(db, { ...subject, filePath: 'b.html' })).toEqual({ state: 'pending', filePath: 'b.html', publicationRevision: nextRevision.token, retryable: false, total: 1, synced: 0 });
+});
+
+it('reports the initial batch size and delivered count as real, measured progress', () => {
+  const { db, scope, revision, subject } = setup();
+  db.transaction(() => recordPublishedCommentBackfill(db, { scope, publicationRevision: revision, commentIds: ['a', 'b', 'c'] }))();
+  expect(readPublishedCommentBackfill(db, subject)).toMatchObject({ state: 'pending', total: 3, synced: 0 });
+  const record = (commentId: string) => ({ workspaceId: scope.resourceTeamId, workspaceMemberId: scope.ownerMemberId, projectId: scope.projectId, commentId, comment: { filePath: scope.filePath }, publication: { slug: revision.slug, token: revision.token, publicFilePath: 'index.html' } });
+  markPublishedCommentBackfillOutcome(db, record('a'), 'delivered');
+  expect(readPublishedCommentBackfill(db, subject)).toMatchObject({ state: 'pending', total: 3, synced: 1 });
+  markPublishedCommentBackfillOutcome(db, record('b'), 'delivered');
+  markPublishedCommentBackfillOutcome(db, record('c'), 'delivered');
+  expect(readPublishedCommentBackfill(db, subject)).toMatchObject({ state: 'succeeded', total: 3, synced: 3 });
 });
 
 it('requires delivered receipts for every initial member and keeps failures file and revision scoped', () => {
@@ -95,7 +107,7 @@ it('requires delivered receipts for every initial member and keeps failures file
   markPublishedCommentBackfillOutcome(db, record('late'), 'delivered');
   expect(readPublishedCommentBackfill(db, subject)?.state).toBe('pending');
   markPublishedCommentBackfillOutcome(db, record('b'), 'deferred');
-  expect(readPublishedCommentBackfill(db, subject)).toEqual({ state: 'failed', filePath: 'a.html', publicationRevision: revision.token, retryable: true, code: 'BACKFILL_DELIVERY_DEFERRED' });
+  expect(readPublishedCommentBackfill(db, subject)).toEqual({ state: 'failed', filePath: 'a.html', publicationRevision: revision.token, retryable: true, code: 'BACKFILL_DELIVERY_DEFERRED', total: 2, synced: 1 });
   markPublishedCommentBackfillOutcome(db, record('b'), 'delivered');
   expect(readPublishedCommentBackfill(db, subject)?.state).toBe('succeeded');
   // Once this publication's initial value arrived, a later ordinary edit
@@ -123,7 +135,7 @@ it('marks queue removal as a safe discard by default, but succeeds only with exp
   });
   enqueue('a');
   expect(outbox.acknowledge(outbox.listDue(1)[0]!)).toBe(true);
-  expect(readPublishedCommentBackfill(db, subject)).toEqual({ state: 'failed', filePath: 'a.html', publicationRevision: revision.token, retryable: false, code: 'BACKFILL_DELIVERY_DISCARDED' });
+  expect(readPublishedCommentBackfill(db, subject)).toEqual({ state: 'failed', filePath: 'a.html', publicationRevision: revision.token, retryable: false, code: 'BACKFILL_DELIVERY_DISCARDED', total: 2, synced: 0 });
 
   enqueue('b');
   expect(outbox.defer(outbox.listDue(1)[0]!, { nextAttemptAt: 1, error: 'credential=secret' })).toBe(true);
@@ -133,7 +145,7 @@ it('marks queue removal as a safe discard by default, but succeeds only with exp
   for (const row of outbox.listDue(1)) expect(outbox.acknowledge(row, 'delivered')).toBe(true);
   closeDatabase();
   const reopened = openDatabase(root!);
-  expect(readPublishedCommentBackfill(reopened, subject)).toEqual({ state: 'succeeded', filePath: 'a.html', publicationRevision: revision.token, retryable: false });
+  expect(readPublishedCommentBackfill(reopened, subject)).toEqual({ state: 'succeeded', filePath: 'a.html', publicationRevision: revision.token, retryable: false, total: 2, synced: 2 });
 });
 
 it('migrates legacy batches without inventing a first-publication origin and retains a verified reopened revision', () => {

@@ -2174,6 +2174,22 @@ export interface CommentBackfillState {
   reopened?: boolean;
   /** Machine-readable cause, when the producer recorded one. */
   code?: string;
+  /**
+   * The initial batch's size and how many of its members have been
+   * delivered so far — both real, measured counts from
+   * `published_comment_backfill_members`, never an estimate.
+   *
+   * Absent means an older daemon build that predates this field, not zero:
+   * a client seeing no `total` falls back to an indeterminate indicator
+   * instead of rendering "0 条". When present, `synced` is always `<= total`
+   * and describes THIS batch/revision only — a member delivered by a later,
+   * unrelated send does not retroactively inflate an earlier revision's
+   * count, because `readPublishedCommentBackfill` already scopes the query
+   * to the file's current `publicationRevision`.
+   */
+  total?: number;
+  /** See {@link CommentBackfillState.total}. Only meaningful alongside it. */
+  synced?: number;
 }
 
 /**

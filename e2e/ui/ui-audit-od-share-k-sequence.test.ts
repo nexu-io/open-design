@@ -98,7 +98,7 @@ test('Owner-K1 first publication syncs existing comments', async ({ page }) => {
   const k1 = await setupProject(page, 'k1');
   const k1Pub = await setPublicationProjection(page, k1.projectId, 'none', 'k1-existing-comment');
   await page.route(`**/api/projects/${k1.projectId}/comment-sync-state*`, route => route.request().method() === 'GET'
-    ? route.fulfill({ json: { pending: 1, sessionMissing: false, lastError: null, shareStopped: false, backfill: { state: 'pending', filePath: 'index.html', publicationRevision: 'k1-revision', retryable: true, reopened: false } } })
+    ? route.fulfill({ json: { pending: 1, sessionMissing: false, lastError: null, shareStopped: false, backfill: { state: 'pending', filePath: 'index.html', publicationRevision: 'k1-revision', retryable: true, reopened: false, total: 1, synced: 0 } } })
     : route.fallback());
   let finishK1!: () => void;
   let startedK1!: () => void;
@@ -120,10 +120,12 @@ test('Owner-K1 first publication syncs existing comments', async ({ page }) => {
     finishK1();
   }
   // Target K1: the primary action itself becomes the sync progress bar; no URL row while syncing.
-  const k1Banner = k1Menu.getByLabel('正在同步已有评论，访客暂时可能看不到。');
+  // The design's exact copy is "同步已有评论 · N 条" (N = the initial backfill batch
+  // size); this isolated project persisted one real comment, so N is 1.
+  const k1Banner = k1Menu.getByLabel('同步已有评论 · 1 条');
   await expect(k1Banner).toBeVisible();
   await expect(k1Menu.locator('.chrome-publish-url')).toHaveCount(0);
-  await capture(page, 'K1', k1.projectId, { state: 'publication-complete-existing-comments-syncing', existingLocalCommentCount: 1, commentText: '停用分享前已存在的项目评论', publicationUrl: k1Pub.url, commentSyncProjection: { pending: 1, backfill: { state: 'pending', reopened: false, retryable: true } }, renderedSyncStatus: await k1Banner.innerText(), visualGap: 'The first-publication branch now has a dark spinner/status treatment and syncs the persisted historical comment, matching the target progress affordance. The design shows “12条”; this isolated project has one persisted comment, and the production label has no count.' });
+  await capture(page, 'K1', k1.projectId, { state: 'publication-complete-existing-comments-syncing', existingLocalCommentCount: 1, commentText: '停用分享前已存在的项目评论', publicationUrl: k1Pub.url, commentSyncProjection: { pending: 1, backfill: { state: 'pending', reopened: false, retryable: true, total: 1, synced: 0 } }, renderedSyncStatus: await k1Banner.innerText(), visualGap: 'The first-publication branch now matches the design copy exactly, including the "同步已有评论 · N 条" count and the "关闭面板不会中断上传。" help line. The design shows “12条”; this isolated project has one real persisted comment, so N is 1 rather than 12 — the count is real and driven by the daemon-reported batch size, not a fixed mismatch.' });
 
 });
 
@@ -205,8 +207,8 @@ test('Owner-K4/K5 distinct comment-sync capture sequences', async ({ page }) => 
   await openShareMenu(page, k5.projectId);
   await expect(k5Menu.getByRole('switch', { name: '链接访问' })).toHaveAttribute('aria-checked', 'true');
   await expect(k5Menu.locator('.chrome-publish-url')).toHaveText(k5Pub.url);
-  const k5Banner = k5Menu.getByRole('status').filter({ hasText: '评论同步尚未完成' });
-  await expect(k5Banner).toContainText('评论同步尚未完成');
+  const k5Banner = k5Menu.getByRole('status').filter({ hasText: '评论同步未完成' });
+  await expect(k5Banner).toContainText('评论同步未完成，分享页可能仍显示已处理的评论。');
   await expect(k5Banner.getByRole('button', { name: '重试' })).toBeVisible();
   await expect(k5Banner).toHaveCSS('border-top-width', '0px');
   await expect(k5Banner).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');

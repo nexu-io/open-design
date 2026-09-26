@@ -121,7 +121,8 @@ describe('CommentSyncBanner — restored branches', () => {
       .mockImplementationOnce(async () => Response.json({ ...base, backfill: { state: 'succeeded', filePath: 'index.html', publicationRevision: 'r1', retryable: false } }));
     render(<I18nProvider initial="zh-CN"><CommentSyncBanner projectId="p" workspaceContext={personalContext} filePath="index.html" /></I18nProvider>);
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
-    expect(screen.getByText('分享已发布')).toBeInTheDocument();
+    expect(screen.getByText('已有评论还没同步，访问者暂时看不到。正在自动重试。')).toBeInTheDocument();
+    expect(screen.queryByText('分享已发布')).toBeNull();
     expect(screen.getByRole('button', { name: '重试' })).toBeInTheDocument();
     await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
     expect(screen.queryByRole('status')).toBeNull();
@@ -130,7 +131,6 @@ describe('CommentSyncBanner — restored branches', () => {
 
   it('shows an accurate terminal backfill outcome without offering a manual retry', async () => {
     renderBanner({ ...base, backfill: { state: 'failed', filePath: 'index.html', publicationRevision: 'r1', retryable: false } });
-    await screen.findByText('分享已发布');
     await screen.findByText('部分已有评论未能同步到分享页，系统不会自动重试。分享链接仍可使用。');
     expect(screen.queryByRole('button', { name: '重试' })).toBeNull();
   });

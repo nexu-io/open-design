@@ -60,7 +60,7 @@ describe('S0/S13 signed-out Share panel', () => {
   it('explains why an unbound workspace cannot publish and offers a real sign-in entry, not an empty shell', () => {
     const input = props({ canPublishPublic: false, filePublished: false, publishedFileUrl: '' });
     render(<I18nProvider><ShareTab {...input} /></I18nProvider>);
-    expect(screen.getByText('fileViewer.publishFileRequiresWorkspace')).toBeVisible();
+    expect(screen.getByText('fileViewer.signInToShareDescription')).toBeVisible();
     expect(screen.getByRole('button', { name: 'fileViewer.signInToShare' })).toBeEnabled();
     expect(screen.queryByRole('switch', { name: 'fileViewer.linkAccessTitle' })).toBeNull();
     expect(input.publishCurrentFilePublic).not.toHaveBeenCalled();
