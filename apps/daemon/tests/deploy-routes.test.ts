@@ -17,7 +17,7 @@ import {
   SAVED_CLOUDFLARE_TOKEN_MASK,
 } from '../src/deploy.js';
 import { setCloudflareOAuthToken } from '../src/integrations/cloudflare-tokens.js';
-import { getDeploymentById, openDatabase } from '../src/db.js';
+import { getDeploymentById, openDatabase, upsertDeployment } from '../src/db.js';
 import { configureCloudflareAccessPerimeterRetry } from '../src/deploy/cloudflare-workers.js';
 import { hasAccessUnverifiedVerdict, isAccessProtectedWorkersRecord, isRetainedUnverifiedExposure } from '../src/routes/deploy.js';
 import { ensureProject } from '../src/projects.js';
@@ -3784,6 +3784,86 @@ describe('deploy provider routes', () => {
       expect(recordedExposure()).toEqual({ scriptName: f.scriptName, subdomainEnabledByThisRun: true });
     } finally {
       configureCloudflareAccessPerimeterRetry();
+      await f.cleanup();
+    }
+  });
+
+  it('a Workers check-link with Access off takes the script\'s deploy single-flight, so no deploy lands inside its probe', async () => {
+    const f = await workersSiblingFixture('generic-check-singleflight');
+    try {
+      await f.putConfig({});
+      const deployResp = await f.deploy('a.html');
+      expect(deployResp.status).toBe(200);
+      const deployed = (await deployResp.json()) as { id: string; status: string };
+      expect(deployed.status).toBe('ready');
+
+      // The probe is held open inside its fetch, so the window a deploy of the
+      // same script would land in is open and deterministic.
+      f.state.headMode = 'unreachable';
+      let release: () => void = () => {};
+      const held = new Promise<void>((resolve) => { release = resolve; });
+      f.state.headHold = () => held;
+      const checking = f.checkLink(deployed.id);
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      // REFUSED. Admitted, the deploy would replace the record and this check
+      // would then write its pre-probe snapshot back over the deploy's result —
+      // providerMetadata (ownedCustomDomains, steps, check) and status alike.
+      const redeploy = await f.deploy('a.html');
+      expect(redeploy.status).toBe(409);
+      expect(await redeploy.json()).toMatchObject({ error: { code: 'DEPLOY_IN_PROGRESS' } });
+
+      release();
+      const checked = await checking;
+      expect(checked.status).toBe(200);
+      // The verdict lands on the record it probed: a link that did not answer.
+      expect(((await checked.json()) as { status: string }).status).toBe('link-delayed');
+    } finally {
+      await f.cleanup();
+    }
+  });
+
+  it('a Workers check-link does not write its pre-probe snapshot over a record another writer replaced', async () => {
+    const f = await workersSiblingFixture('generic-check-reread');
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const db = openDatabase(process.cwd(), { dataDir });
+    try {
+      await f.putConfig({});
+      const deployResp = await f.deploy('a.html');
+      expect(deployResp.status).toBe(200);
+      const deployed = (await deployResp.json()) as { id: string; status: string };
+      expect(deployed.status).toBe('ready');
+
+      f.state.headMode = 'unreachable';
+      let release: () => void = () => {};
+      const held = new Promise<void>((resolve) => { release = resolve; });
+      f.state.headHold = () => held;
+      const checking = f.checkLink(deployed.id);
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      // A concurrent writer rewrites the record while the probe is in flight —
+      // the shape of a sibling record's hostname bookkeeping, or of a deploy
+      // that settled the record.
+      const row = getDeploymentById(db, f.projectId, deployed.id);
+      if (!row) throw new Error('the deployment record is required');
+      const { cloudflareWorkers: _liftedRow, ...record } = row;
+      upsertDeployment(db, {
+        ...record,
+        status: 'ready',
+        statusMessage: 'settled by another writer',
+        providerMetadata: { ...((record.providerMetadata ?? {}) as Record<string, unknown>), settledByAnotherWriter: true },
+      });
+
+      release();
+      const checked = await checking;
+      expect(checked.status).toBe(200);
+      // The verdict was computed for a snapshot the record no longer is. Written
+      // back, it would put the pre-probe status and metadata over that write;
+      // re-read under the single-flight, the record is handed back untouched.
+      expect(((await checked.json()) as { statusMessage?: string }).statusMessage).toBe('settled by another writer');
+      const after = getDeploymentById(db, f.projectId, deployed.id)?.providerMetadata as Record<string, unknown> | undefined;
+      expect(after?.settledByAnotherWriter).toBe(true);
+    } finally {
       await f.cleanup();
     }
   });

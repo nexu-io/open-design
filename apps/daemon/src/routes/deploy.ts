@@ -1453,6 +1453,50 @@ export function registerDeploymentCheckRoutes(app: Express, ctx: RegisterDeploym
         const checkUrl = stableCloudflareProjectName
           ? `https://${stableCloudflareProjectName}.pages.dev`
           : existing.url;
+        // A Workers record whose Access is OFF reaches the generic reachability
+        // probe below, and that path used to own no lock: `existing` was read
+        // before the probe and the probe runs for up to its 8s budget, so a
+        // deploy of the same script admitted in that window replaced the record
+        // and this write then put the pre-probe snapshot back over it —
+        // providerMetadata (ownedCustomDomains, accessAppId, steps, check) and
+        // status alike. A hostname OpenDesign attached whose ownership is lost
+        // that way reads as FOREIGN on the next deploy and is never detached.
+        // The probe and the write therefore run inside the script's deploy
+        // single-flight, and the write lands on a RE-READ guarded exactly as the
+        // Access check-link above guards it: a record a deploy settled meanwhile
+        // is handed back untouched, and a deploy arriving during the probe is
+        // refused with 409 DEPLOY_IN_PROGRESS instead of raced against.
+        if (existing.providerId === CLOUDFLARE_WORKERS_PROVIDER_ID) {
+          const existingMetadata = (existing.providerMetadata ?? {}) as Record<string, unknown>;
+          const scriptName = await deferredWorkersRecordScriptName(existing, existingMetadata);
+          const body = await withCloudflareWorkersDeploySingleFlight(scriptName, async () => {
+            const result = await checkDeploymentUrl(checkUrl);
+            const now = Date.now();
+            const fresh = getDeploymentById(db, existing.projectId, existing.id);
+            if (!fresh || !sameDeploymentRecord(fresh, existing)) return fresh;
+            // `cloudflareWorkers` is the lifted view of the metadata; upsert
+            // folds it back over providerMetadata, so it must not ride along
+            // with a rewrite.
+            const { cloudflareWorkers: _lifted, ...record } = fresh;
+            return upsertDeployment(db, {
+              ...record,
+              url: checkUrl || fresh.url,
+              status: result.reachable ? 'ready' : result.status || 'link-delayed',
+              statusMessage: result.reachable
+                ? 'Public link is ready.'
+                : result.statusMessage || pendingPublicLinkMessage(fresh.providerId),
+              reachableAt: result.reachable ? now : fresh.reachableAt,
+              updatedAt: now,
+            });
+          });
+          // Nothing is left to report a verdict about, and a 200 whose body is
+          // null is not a verdict — the client cannot tell it apart from a
+          // broken response.
+          if (!body) {
+            return sendApiError(res, 404, 'FILE_NOT_FOUND', 'deployment not found');
+          }
+          return res.json(publicDeployment(body));
+        }
         const result = await checkDeploymentUrl(checkUrl);
         const now = Date.now();
         /** @type {import('@open-design/contracts').CheckDeploymentLinkResponse} */

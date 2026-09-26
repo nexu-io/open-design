@@ -1521,6 +1521,31 @@ export function serializeUnverifiedExposure(exposure: CloudflareUnverifiedExposu
   return recorded;
 }
 
+/** The union of an exposure a record already carries and one this run created,
+ * for the records whose metadata REPLACES a prior record's — a preview deploy's
+ * does (see the preview branch below). Both halves describe live, unwithdrawn
+ * exposure, and each field is a separate handle: the workers.dev route, the
+ * preview route, and each attached hostname. Replacing instead of merging drops
+ * the half that is not this run's, which is a route or hostname that IS public
+ * and ends up recorded nowhere, with the link check that must withdraw it
+ * holding nothing to act on. Hostnames are unioned by name (one hostname is one
+ * handle, however many records list it); `own` names the script, which is the
+ * same script for both halves. */
+export function mergeUnverifiedExposure(
+  prior: CloudflareUnverifiedExposure | undefined,
+  own: CloudflareUnverifiedExposure,
+): CloudflareUnverifiedExposure {
+  const merged: CloudflareUnverifiedExposure = { scriptName: own.scriptName };
+  if (prior?.subdomainEnabledByThisRun || own.subdomainEnabledByThisRun) merged.subdomainEnabledByThisRun = true;
+  if (prior?.previewsEnabledByThisRun || own.previewsEnabledByThisRun) merged.previewsEnabledByThisRun = true;
+  const detachable: CloudflareOwnedCustomDomain[] = [];
+  for (const domain of [...(prior?.detachableCustomDomains ?? []), ...(own.detachableCustomDomains ?? [])]) {
+    if (!detachable.some((kept) => kept.hostname === domain.hostname)) detachable.push(domain);
+  }
+  if (detachable.length > 0) merged.detachableCustomDomains = detachable;
+  return merged;
+}
+
 function recordUnverifiedExposure(metadata: JsonObject, exposure: CloudflareUnverifiedExposure): void {
   const recorded = serializeUnverifiedExposure(exposure);
   if (recorded) metadata[UNVERIFIED_EXPOSURE_KEY] = recorded;
@@ -2020,7 +2045,16 @@ async function deployToCloudflareWorkersWith(
         if (verdict.outcome === 'unreachable') {
           accessDeferred = deferAccessVerification(metadata, steps, verdict);
           // What the link check may still have to withdraw (see check-link).
-          recordUnverifiedExposure(metadata, { scriptName, previewsEnabledByThisRun: previews.enabledByThisRun });
+          // MERGED with the production exposure carried forward above, never
+          // replacing it: that carried record is the only handle on the
+          // workers.dev route and on the hostnames a deferred PRODUCTION deploy
+          // left public, and this run's previews_enabled is added to it.
+          // Recording only this run's own exposure here would drop the carried
+          // half from the record entirely (recordUnverifiedExposure assigns).
+          recordUnverifiedExposure(metadata, mergeUnverifiedExposure(priorUnverifiedExposure, {
+            scriptName,
+            previewsEnabledByThisRun: previews.enabledByThisRun,
+          }));
         } else {
           metadata.accessVerified = true;
         }
@@ -2107,7 +2141,20 @@ async function deployToCloudflareWorkersWith(
       // further down turns it back on once the app is in place. No account
       // subdomain means no route to turn off — and nothing would turn it back
       // on either — so the guard skips the call rather than write a no-op.
-      await disableWorkerSubdomain(cfg, scriptName);
+      // BEST-EFFORT, and the only step of this deploy that is: a failure here (a
+      // 429 that outlasted its retries, a 5xx, a proxy error) must not abort the
+      // deploy. The Worker is already live and the route is ON, so the Access app
+      // below is what closes the gate — aborting instead would leave that Worker
+      // public with nothing recorded (no attach, no released hostname, no
+      // access-app step, no exposure) and no later check holding a handle to
+      // withdraw it. The step records the failure and the deploy carries on.
+      try {
+        await disableWorkerSubdomain(cfg, scriptName);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`[cloudflare-workers] could not hold the workers.dev route off for ${scriptName} while the Access app is created: ${message}`);
+        steps.push({ name: 'subdomain-disable', status: 'error', detail: message });
+      }
     }
     if (accessOn && !accessAppId) {
       // First deploy: the Worker now exists, so its tag is resolvable.

@@ -17,6 +17,7 @@ import {
   listCloudflareD1Databases,
   listCloudflareR2Buckets,
   listCloudflareZones,
+  mergeUnverifiedExposure,
   ownedCustomDomainsFromMetadata,
   pendingCustomDomainsFromMetadata,
   probeCloudflareWorkersCapabilities,
@@ -1105,6 +1106,60 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
     for (const position of disables) expect(position).toBeLessThan(createPos);
   });
 
+  it('a first deploy whose hold-off window disable FAILS still creates the Access app and records the route', async () => {
+    // The regression this pins: on a first deploy the PUT creates the Worker
+    // with its workers.dev route already assigned, and the hold-off disable that
+    // covers the window before the Access app exists was UNGUARDED. A transient
+    // failure aborted the deploy with the Worker live and gated by nothing, and
+    // nothing recorded the exposure — no attach, no released hostname, no
+    // access-app step — so no later check had a handle to withdraw it.
+    let scriptLists = 0;
+    let disableAttempts = 0;
+    const { calls, fn } = accessFetch({ head: () => new Response('', { status: 503 }) });
+    const wrapped = vi.fn(async (url: string, init?: RequestInit) => {
+      const method = (init?.method || 'GET').toUpperCase();
+      if (method === 'GET' && url.includes('/workers/scripts?')) {
+        calls.push([url, init]);
+        scriptLists += 1;
+        // Nothing exists until the PUT lands: the Access tag lookup and the
+        // modified_on baseline both see an account with no such script.
+        return scriptLists <= 2
+          ? jsonResponse({ success: true, result: [] })
+          : jsonResponse({ success: true, result: [{ id: 'my-site', tag: 'tag-abc-123' }] });
+      }
+      if (method === 'GET' && url.endsWith('/workers/scripts/my-site/subdomain')) {
+        calls.push([url, init]);
+        // What Cloudflare reports for a Worker it has just created.
+        return jsonResponse({ success: true, result: { enabled: true, previews_enabled: false } });
+      }
+      if (method === 'POST' && url.endsWith('/workers/scripts/my-site/subdomain')) {
+        const body = JSON.parse(String(init?.body)) as { enabled?: boolean };
+        // The FIRST hold-off write fails (a 5xx after its retries, a proxy
+        // error); every later write behaves as the API normally would.
+        if (body.enabled === false && disableAttempts++ === 0) {
+          calls.push([url, init]);
+          return jsonResponse({ success: false, errors: [{ message: 'subdomain disable refused' }] }, 500);
+        }
+      }
+      return fn(url, init);
+    });
+    vi.stubGlobal('fetch', wrapped);
+    const out = await deployToCloudflareWorkers({ ...base, access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } } });
+    // The deploy CONTINUED past the failed hold-off: it did not reject.
+    expect(out.status).toBe('link-delayed');
+    expect(out.providerMetadata?.steps).toContainEqual(expect.objectContaining({ name: 'subdomain-disable', status: 'error' }));
+    // The Access app is what closes the gate the live route opened, so reaching
+    // it is the whole point of carrying on.
+    expect(out.providerMetadata).toMatchObject({ accessProtected: true, accessAppId: 'app-123' });
+    expect(calls.some((c) => c[0].endsWith('/access/apps') && c[1]?.method === 'POST')).toBe(true);
+    // And the route is recorded as THIS run's exposure (Cloudflare assigned it
+    // at creation), so the link check still holds a handle on it.
+    expect(out.providerMetadata?.unverifiedExposure).toEqual({
+      scriptName: 'my-site',
+      subdomainEnabledByThisRun: true,
+    });
+  });
+
   it('turning workers.dev back off writes previews_enabled back as it was, instead of clobbering it', async () => {
     const { calls, fn } = accessFetch({ head: () => new Response('', { status: 200 }) });
     const wrapped = vi.fn(async (url: string, init?: RequestInit) => {
@@ -1601,6 +1656,40 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
     expect(out.providerMetadata).not.toHaveProperty('unverifiedExposure');
   });
 
+  it('a preview deploy MERGES its own exposure into the production exposure it carries, instead of replacing it', async () => {
+    // The regression this pins: the preview branch records its OWN exposure
+    // (previews_enabled) into the same metadata key the carried production
+    // exposure lives under, and recordUnverifiedExposure ASSIGNS. Recording only
+    // the preview's dropped the carried workers.dev route and attached hostname
+    // — a route that IS public, recorded nowhere, with the link check that must
+    // withdraw it holding no handle.
+    const { fn } = accessFetch({ head: () => new Response('', { status: 503 }) });
+    const wrapped = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes('/versions')) return jsonResponse({ success: true, result: { id: 'v12345678' } });
+      return fn(url, init);
+    });
+    vi.stubGlobal('fetch', wrapped);
+    const out = await deployToCloudflareWorkers({
+      ...base,
+      target: 'preview',
+      access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } },
+      priorUnverifiedExposure: {
+        scriptName: 'my-site',
+        subdomainEnabledByThisRun: true,
+        detachableCustomDomains: [{ id: 'dom-1', hostname: 'app.example.com' }],
+      },
+    });
+    // The preview URL did not answer: deferred, and this run's previews_enabled
+    // joins the carried exposure instead of replacing it.
+    expect(out.status).toBe('link-delayed');
+    expect(out.providerMetadata?.unverifiedExposure).toEqual({
+      scriptName: 'my-site',
+      subdomainEnabledByThisRun: true,
+      previewsEnabledByThisRun: true,
+      detachableCustomDomains: [{ id: 'dom-1', hostname: 'app.example.com' }],
+    });
+  });
+
   it('a preview deploy with no prior ownership records an empty owned list and no custom domain', async () => {
     const { fn } = accessFetch();
     const wrapped = vi.fn(async (url: string, init?: RequestInit) => {
@@ -1883,6 +1972,32 @@ describe('cloudflare access check-link classification', () => {
     expect(isCloudflareAccessChallengeResponse(bodyOnly)).toBe(false);
     const lookalike = new Response('', { status: 401, headers: { location: 'https://evil.example/?cloudflareaccess.com' } });
     expect(isCloudflareAccessChallengeResponse(lookalike)).toBe(false);
+  });
+});
+
+describe('mergeUnverifiedExposure', () => {
+  it('unions a carried production exposure with this run\'s own instead of replacing it', () => {
+    expect(mergeUnverifiedExposure(
+      { scriptName: 'my-site', subdomainEnabledByThisRun: true, detachableCustomDomains: [{ id: 'dom-1', hostname: 'app.example.com' }] },
+      { scriptName: 'my-site', previewsEnabledByThisRun: true },
+    )).toEqual({
+      scriptName: 'my-site',
+      subdomainEnabledByThisRun: true,
+      previewsEnabledByThisRun: true,
+      detachableCustomDomains: [{ id: 'dom-1', hostname: 'app.example.com' }],
+    });
+  });
+
+  it('is this run\'s own exposure, with nothing withdrawn and nothing added, when nothing was carried', () => {
+    expect(mergeUnverifiedExposure(undefined, { scriptName: 'my-site', previewsEnabledByThisRun: false }))
+      .toEqual({ scriptName: 'my-site' });
+  });
+
+  it('keeps one handle per hostname when both halves list the same one', () => {
+    expect(mergeUnverifiedExposure(
+      { scriptName: 'my-site', detachableCustomDomains: [{ id: 'dom-1', hostname: 'app.example.com' }] },
+      { scriptName: 'my-site', detachableCustomDomains: [{ hostname: 'app.example.com' }] },
+    )).toEqual({ scriptName: 'my-site', detachableCustomDomains: [{ id: 'dom-1', hostname: 'app.example.com' }] });
   });
 });
 
