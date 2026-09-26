@@ -911,6 +911,68 @@ describe('credential mode is derived from a live OAuth grant', () => {
     });
   });
 
+  it('a rollback that fails after handing the grant back keeps it named when its revoke goes unanswered, and the next save finishes it', async () => {
+    await withDataDir(async (dir) => {
+      await writeCloudflareWorkersConfig({ token: 'static-token', accountId: 'acct_test' });
+      await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), {
+        accessToken: 'oauth-access',
+        refreshToken: 'ref-1',
+        tokenType: 'Bearer',
+        clientId: 'client-abc',
+        expiresAt: Date.now() + 3600_000,
+        generation: 1,
+        savedAt: Date.now(),
+      });
+      await commitCloudflareOAuthMode();
+
+      const revokes: string[] = [];
+      let answer = 503;
+      vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+        revokes.push(url + ' ' + String(init?.body ?? ''));
+        return { ok: answer < 300, status: answer, json: async () => ({}) } as unknown as Response;
+      }));
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      // As above: the intent write lands, the replacement write fails, and so
+      // does the config write the rollback would restore the record with. The
+      // rollback's restore has ALREADY put the grant back on disk and retired
+      // the handle the clear recorded for it by the time that write fails.
+      const probe = await open(path.join(dir, 'probe-rollback-unanswered'), 'w');
+      const proto = Object.getPrototypeOf(probe) as { writeFile: (data: unknown, enc?: string) => Promise<void> };
+      await probe.close();
+      const realWrite = proto.writeFile;
+      const writeSpy = vi.spyOn(proto, 'writeFile').mockImplementation(async function (this: unknown, data: unknown, enc?: string) {
+        const text = typeof data === 'string' ? data : '';
+        if (text.includes('"lastGeneration"')) return realWrite.call(this, data, enc);
+        if (text.includes('"pendingOAuthGrantClear": true')) return realWrite.call(this, data, enc);
+        throw new Error('EIO: I/O error');
+      });
+
+      await expect(writeCloudflareWorkersConfig({ credentialMode: 'token' })).rejects.toThrow('EIO');
+      // The grant is off disk — a store the config no longer names must not
+      // report a connected profile — and was tried once, but Cloudflare never
+      // said it is dead. A plain clear followed by one unrecorded revoke left
+      // NOTHING naming it here: the restore had dropped the handle, the clear
+      // recorded none, and the 503 was the end of it. The clear now names the
+      // grant in the same write it takes it off disk, so the handle survives.
+      expect(await getCloudflareOAuthToken(cloudflareOAuthTokensDir())).toBeNull();
+      expect(revokes).toHaveLength(1);
+      expect(revokes[0]).toContain('token=ref-1');
+      expect((await getPendingCloudflareOAuthRevokes(cloudflareOAuthTokensDir())).map((handle) => handle.refreshToken)).toEqual(['ref-1']);
+
+      // The config is writable again. The intent marker survived the failed
+      // save, so the next save re-enters the transition, and its settle
+      // retries the handle; a 2xx is what retires it.
+      writeSpy.mockRestore();
+      answer = 200;
+      await writeCloudflareWorkersConfig({ credentialMode: 'token' });
+      expect((await readCloudflareWorkersConfig()).credentialMode).toBe('token');
+      expect(revokes).toHaveLength(2);
+      expect(revokes[1]).toContain('token=ref-1');
+      expect(await getPendingCloudflareOAuthRevokes(cloudflareOAuthTokensDir())).toEqual([]);
+    });
+  });
+
   it('a settings save completes a transition whose intent wrote but whose clear never ran (crash between intent and clear)', async () => {
     await withDataDir(async () => {
       // The earlier crash window: the intent marker landed, the grant is still on

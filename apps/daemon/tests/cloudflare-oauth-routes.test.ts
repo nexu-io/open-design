@@ -515,6 +515,7 @@ describe('cloudflare-oauth routes', () => {
     });
     const realFetch = globalThis.fetch;
     const revokes: string[] = [];
+    let revokeAnswer: 'unanswered' | 200 = 'unanswered';
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.stubGlobal('fetch', async (input: unknown, init?: unknown) => {
       const url = String(input);
@@ -522,7 +523,8 @@ describe('cloudflare-oauth routes', () => {
         // The revoke of the superseded grant is attempted — and its failure
         // must not change the outcome below.
         revokes.push(String((init as RequestInit | undefined)?.body));
-        throw new TypeError('fetch failed');
+        if (revokeAnswer === 'unanswered') throw new TypeError('fetch failed');
+        return new Response('{}', { status: revokeAnswer, headers: { 'content-type': 'application/json' } });
       }
       if (url.includes('oauth2/token')) {
         markExchangeStarted();
@@ -570,6 +572,17 @@ describe('cloudflare-oauth routes', () => {
       expect(cfg.credentialMode).toBe('token');
       expect(revokes.map((body) => new URLSearchParams(body).get('token'))).toEqual(['ref-late-disconnect']);
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('revoke of discarded grant failed'), expect.stringContaining('fetch failed'));
+      // Cloudflare never answered, and the grant was never written to the
+      // store, so the only record that still names it is the handle recorded
+      // BEFORE the revoke was attempted. One unrecorded call used to be its
+      // only record: a fetch failure there leaked the refresh token for good.
+      expect((await getPendingCloudflareOAuthRevokes(dataDir)).map((handle) => handle.refreshToken)).toEqual(['ref-late-disconnect']);
+      // The next OAuth mutation retries it, and a 2xx is what retires it.
+      revokeAnswer = 200;
+      const again = await fetch(`${app.baseUrl}/api/cloudflare/oauth/disconnect`, { method: 'POST' });
+      expect(again.status).toBe(200);
+      expect(revokes.map((body) => new URLSearchParams(body).get('token'))).toEqual(['ref-late-disconnect', 'ref-late-disconnect']);
+      expect(await getPendingCloudflareOAuthRevokes(dataDir)).toEqual([]);
     } finally {
       warnSpy.mockRestore();
       vi.unstubAllGlobals();
@@ -1057,6 +1070,8 @@ describe('cloudflare-oauth routes', () => {
       expect((await getCloudflareOAuthToken(dataDir))?.refreshToken).toBe('ref-prior');
       expect(revokes).toHaveLength(1);
       expect(new URLSearchParams(revokes[0]!).get('token')).toBe('ref-pending');
+      // The grant was named by a handle before the revoke; a 2xx retires it.
+      expect(await getPendingCloudflareOAuthRevokes(dataDir)).toEqual([]);
     } finally {
       vi.unstubAllGlobals();
       await rm(configPath, { force: true });
@@ -1459,10 +1474,183 @@ describe('cloudflare-oauth routes', () => {
       // The credential the out-of-order write stored is not the authority, so it
       // is discarded rather than left behind a config that no longer names it.
       expect(await getCloudflareOAuthToken(dataDir)).toBeNull();
-      expect(revokes.map((body) => new URLSearchParams(body).get('token'))).toContain('ref-new');
+      // The out-of-order write left it as the store's live record, so the
+      // rollback's clear takes it off disk named by a handle and the settle
+      // revokes it — once, not again by the discard that follows — and the
+      // 2xx retires the handle.
+      expect(revokes.map((body) => new URLSearchParams(body).get('token')).filter((token) => token === 'ref-new')).toHaveLength(1);
+      expect(await getPendingCloudflareOAuthRevokes(dataDir)).toEqual([]);
     } finally {
       tokenStoreHooks.beforeGuardedWrite = null;
       vi.unstubAllGlobals();
+      await rm(configPath, { force: true });
+      await clearCloudflareOAuthToken(dataDir);
+      await fetch(`${app.baseUrl}/api/cloudflare/oauth/cancel`, { method: 'POST' });
+    }
+  });
+
+  it('a rollback that takes the grant it minted back off disk keeps it named when the revoke goes unanswered, and the next disconnect finishes it', async () => {
+    const dataDir = cloudflareOAuthTokensDir();
+    const configPath = deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const realFetch = globalThis.fetch;
+    const revokes: string[] = [];
+    // Cloudflare answers 503 for the grant this connect mints, 200 for anything else.
+    let answerForNew = 503;
+    vi.stubGlobal('fetch', async (input: unknown, init?: unknown) => {
+      const url = String(input);
+      if (url.includes('oauth2/revoke')) {
+        const body = String((init as RequestInit | undefined)?.body);
+        revokes.push(body);
+        const status = new URLSearchParams(body).get('token') === 'ref-new' ? answerForNew : 200;
+        return new Response('{}', { status, headers: { 'content-type': 'application/json' } });
+      }
+      if (url.includes('oauth2/token')) {
+        return new Response(
+          JSON.stringify({ access_token: 'acc-new', token_type: 'Bearer', refresh_token: 'ref-new', expires_in: 3600 }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url.endsWith('/client/v4/user')) {
+        return new Response(JSON.stringify({ success: false }), { status: 403, headers: { 'content-type': 'application/json' } });
+      }
+      return realFetch(input as never, init as never);
+    });
+    const tokensOf = (bodies: string[]): string[] => bodies.map((body) => new URLSearchParams(body).get('token') ?? '');
+    try {
+      await writeCloudflareWorkersConfig({ token: 'static-token', accountId: 'acct_test' });
+      await setCloudflareOAuthToken(dataDir, {
+        accessToken: 'acc-prior',
+        refreshToken: 'ref-prior',
+        tokenType: 'Bearer',
+        clientId: 'client-abc',
+        generation: 0,
+        savedAt: Date.now(),
+      });
+      const startResp = await fetch(`${app.baseUrl}/api/cloudflare/oauth/start`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ clientId: 'client-abc', redirectUri: 'http://127.0.0.1:56122/callback' }),
+      });
+      expect(startResp.status).toBe(200);
+      const { state } = (await startResp.json()) as { state: string };
+      // The save takes the oauth->token transition BEFORE this connect's token
+      // write lands, so the write leaves the minted grant as the store's live
+      // record and the commit that follows refuses.
+      tokenStoreHooks.beforeGuardedWrite = async () => {
+        await writeCloudflareWorkersConfig({ credentialMode: 'token', token: 'static-token' });
+      };
+      const completeResp = await fetch(`${app.baseUrl}/api/cloudflare/oauth/complete`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ state, code: 'AUTHCODE' }),
+      });
+      expect(completeResp.status).toBe(400);
+      // The rollback took the grant off disk — a store the config no longer
+      // names must not report a connected profile — but Cloudflare never said
+      // it is dead, so the handle the clear wrote in the same write survives.
+      // A plain clear plus one unrecorded revoke left nothing naming it here.
+      expect(await getCloudflareOAuthToken(dataDir)).toBeNull();
+      expect((await getPendingCloudflareOAuthRevokes(dataDir)).map((handle) => handle.refreshToken)).toEqual(['ref-new']);
+      expect(tokensOf(revokes).filter((token) => token === 'ref-new')).toHaveLength(1);
+
+      // The next OAuth mutation retries it, and a 2xx is what retires it.
+      answerForNew = 200;
+      const again = await fetch(`${app.baseUrl}/api/cloudflare/oauth/disconnect`, { method: 'POST' });
+      expect(again.status).toBe(200);
+      expect(tokensOf(revokes).filter((token) => token === 'ref-new')).toHaveLength(2);
+      expect(await getPendingCloudflareOAuthRevokes(dataDir)).toEqual([]);
+    } finally {
+      tokenStoreHooks.beforeGuardedWrite = null;
+      vi.unstubAllGlobals();
+      warnSpy.mockRestore();
+      await rm(configPath, { force: true });
+      await clearCloudflareOAuthToken(dataDir);
+      await fetch(`${app.baseUrl}/api/cloudflare/oauth/cancel`, { method: 'POST' });
+    }
+  });
+
+  it('a failed config commit whose restore also fails leaves both grants named when their revokes go unanswered', async () => {
+    const dataDir = cloudflareOAuthTokensDir();
+    const configPath = deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const realFetch = globalThis.fetch;
+    const revokes: string[] = [];
+    let answer = 503;
+    vi.stubGlobal('fetch', async (input: unknown, init?: unknown) => {
+      const url = String(input);
+      if (url.includes('oauth2/revoke')) {
+        revokes.push(String((init as RequestInit | undefined)?.body));
+        return new Response('{}', { status: answer, headers: { 'content-type': 'application/json' } });
+      }
+      if (url.includes('oauth2/token')) {
+        return new Response(
+          JSON.stringify({ access_token: 'acc-new', token_type: 'Bearer', refresh_token: 'ref-new', expires_in: 3600 }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url.endsWith('/client/v4/user')) {
+        return new Response(JSON.stringify({ success: false }), { status: 403, headers: { 'content-type': 'application/json' } });
+      }
+      return realFetch(input as never, init as never);
+    });
+    const tokensOf = (bodies: string[]): string[] => bodies.map((body) => new URLSearchParams(body).get('token') ?? '');
+    try {
+      await writeCloudflareWorkersConfig({ token: 'static-token', accountId: 'acct_test' });
+      await setCloudflareOAuthToken(dataDir, {
+        accessToken: 'acc-prior',
+        refreshToken: 'ref-prior',
+        tokenType: 'Bearer',
+        clientId: 'client-abc',
+        generation: 0,
+        savedAt: Date.now(),
+      });
+      // The restore of the displaced credential is the one write that fails.
+      tokenStoreFault.failSetOfAccessToken = 'acc-prior';
+      const startResp = await fetch(`${app.baseUrl}/api/cloudflare/oauth/start`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ clientId: 'client-abc', redirectUri: 'http://127.0.0.1:56122/callback' }),
+      });
+      expect(startResp.status).toBe(200);
+      const { state } = (await startResp.json()) as { state: string };
+      // The grant is stored when the config goes unparsable underneath the mode
+      // commit, which refuses; the rollback then cannot hand the displaced
+      // credential back either.
+      tokenStoreHooks.afterGuardedWrite = async () => {
+        await writeFile(configPath, '{"clientId": "client-abc", "redirectUri": ', 'utf8');
+      };
+      const completeResp = await fetch(`${app.baseUrl}/api/cloudflare/oauth/complete`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ state, code: 'AUTHCODE' }),
+      });
+      expect(completeResp.status).toBe(400);
+      // The store is cleared rather than left with a dead credential, and BOTH
+      // grants are named: the one this attempt minted, by the handle the clear
+      // recorded in the same write, and the one it displaced, by the handle the
+      // guarded write recorded and the failed restore never retired. Each was
+      // tried once; neither answer was a 2xx, so neither handle is dropped.
+      expect(await getCloudflareOAuthToken(dataDir)).toBeNull();
+      expect((await getPendingCloudflareOAuthRevokes(dataDir)).map((handle) => handle.refreshToken)).toEqual(['ref-new', 'ref-prior']);
+      expect(tokensOf(revokes).filter((token) => token === 'ref-new')).toHaveLength(1);
+      expect(tokensOf(revokes).filter((token) => token === 'ref-prior')).toHaveLength(1);
+
+      // The next OAuth mutation retries both, and a 2xx retires each.
+      await rm(configPath, { force: true });
+      answer = 200;
+      const again = await fetch(`${app.baseUrl}/api/cloudflare/oauth/disconnect`, { method: 'POST' });
+      expect(again.status).toBe(200);
+      expect(tokensOf(revokes).filter((token) => token === 'ref-new')).toHaveLength(2);
+      expect(tokensOf(revokes).filter((token) => token === 'ref-prior')).toHaveLength(2);
+      expect(await getPendingCloudflareOAuthRevokes(dataDir)).toEqual([]);
+    } finally {
+      tokenStoreFault.failSetOfAccessToken = '';
+      tokenStoreHooks.afterGuardedWrite = null;
+      vi.unstubAllGlobals();
+      errorSpy.mockRestore();
+      warnSpy.mockRestore();
       await rm(configPath, { force: true });
       await clearCloudflareOAuthToken(dataDir);
       await fetch(`${app.baseUrl}/api/cloudflare/oauth/cancel`, { method: 'POST' });

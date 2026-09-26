@@ -9,7 +9,6 @@ import { findRealTagOffset, HTML_TAG_PATTERNS } from '@open-design/contracts/run
 import { proxyDispatcherRequestInit } from './connectionTest.js';
 import { refreshCloudflareToken, revokeCloudflareToken, validateCloudflareOAuthScopes } from './integrations/cloudflare-oauth.js';
 import {
-  clearCloudflareOAuthToken,
   clearCloudflareOAuthTokenForRevoke,
   cloudflareOAuthExpiresAt,
   dropPendingCloudflareOAuthRevokes,
@@ -854,15 +853,24 @@ export async function writeCloudflareWorkersConfig(input: Partial<DeployConfig>)
         // The rollback itself failed, so no state is left to hand the grant
         // back to: a store the restored config no longer names must not keep
         // reporting a connected profile, and an unheld grant must not stay
-        // valid at Cloudflare. Both steps are best-effort; the save's own error
-        // is what surfaces.
+        // valid at Cloudflare. The restore may already have LANDED the grant
+        // and retired its handle before the config write failed, so the clear
+        // here has to name it again in the same write it takes it off disk
+        // (clearCloudflareOAuthTokenForRevoke) — a plain clear followed by one
+        // unrecorded revoke left a 5xx or a timeout there with a live refresh
+        // token no file named. The settle then revokes every handle: retired by
+        // a 2xx, retried by the next OAuth mutation otherwise. Both steps are
+        // best-effort; the save's own error is what surfaces.
         console.error(
           `[deploy] rolling back the failed Cloudflare credential transition did not complete (${rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr)}); revoking the displaced OAuth grant.`,
         );
-        await clearCloudflareOAuthToken(cloudflareOAuthTokensDir()).catch(() => {});
-        if (displaced && await revokeClearedCloudflareGrant(displaced, next.clientId)) {
-          await dropCloudflareGrantRevokeHandle(displaced);
-        }
+        await clearCloudflareOAuthTokenForRevoke(cloudflareOAuthTokensDir()).catch((clearErr: unknown) => {
+          console.warn(
+            '[cloudflare-oauth] could not clear the OAuth grant a failed rollback left behind; the next OAuth mutation settles it:',
+            clearErr instanceof Error ? clearErr.message : String(clearErr),
+          );
+        });
+        await settlePendingCloudflareOAuthGrantRevokes(next.clientId);
       }
       throw err;
     }
