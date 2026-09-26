@@ -1224,7 +1224,7 @@ export interface RegisterDeploymentCheckRoutesDeps extends RouteDeps<'db' | 'htt
 
 export function registerDeploymentCheckRoutes(app: Express, ctx: RegisterDeploymentCheckRoutesDeps) {
   const { db } = ctx;
-  const { sendApiError } = ctx.http;
+  const { sendApiError, isLocalSameOrigin, resolvedPortRef } = ctx.http;
   const { getProject } = ctx.projectStore;
   const { getDeploymentById, CLOUDFLARE_PAGES_PROVIDER_ID, CLOUDFLARE_WORKERS_PROVIDER_ID, cloudflarePagesProjectNameFromDeployment, checkCloudflarePagesDeploymentLinks, checkDeploymentUrl, listDeploymentsByProvider, readDeployConfig, upsertDeployment, publicDeployment } = ctx.deploy;
   const workersRecordStore: WorkersRecordStore = { db, providerId: CLOUDFLARE_WORKERS_PROVIDER_ID, listDeploymentsByProvider, upsertDeployment };
@@ -1523,6 +1523,16 @@ export function registerDeploymentCheckRoutes(app: Express, ctx: RegisterDeploym
   app.post(
     '/api/projects/:id/deployments/:deploymentId/check-link',
     async (req, res) => {
+      // The check-link mutates Cloudflare (workers.dev route off, custom hostname
+      // detach) when it withdraws a retained exposure, so it takes the same
+      // DNS-rebinding guard every mutating /api/cloudflare/* route applies. The
+      // global /api gate short-circuits loopback peers, which a rebinding page's
+      // browser is, so this is the only thing between a hostile origin and a
+      // blind POST that takes down a route or hostname the user's site is served
+      // on.
+      if (!isLocalSameOrigin(req, resolvedPortRef.current)) {
+        return res.status(403).json({ error: 'cross-origin request rejected' });
+      }
       try {
         if (!getProject(db, req.params.id)) {
           return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
