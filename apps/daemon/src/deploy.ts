@@ -690,9 +690,11 @@ export async function writeCloudflareWorkersConfig(input: Partial<DeployConfig>)
       );
     }
     // The authority switch to 'oauth' must not be reachable via a bare config PUT:
-    // require a durable OAuth token before accepting the flip (fail closed).
+    // require a LIVE grant before accepting the flip (fail closed). A raw stored
+    // record that is expired with no refresh token passes the raw presence check
+    // but the resolver refuses, landing oauth over a dead credential.
     if (input.credentialMode === 'oauth' && current.credentialMode !== 'oauth') {
-      const oauthToken = await getCloudflareOAuthToken(cloudflareOAuthTokensDir());
+      const oauthToken = await liveCloudflareOAuthGrant();
       if (!oauthToken) {
         throw new DeployError(
           'Connect Cloudflare first — an OAuth token is required to switch credential mode to oauth.',

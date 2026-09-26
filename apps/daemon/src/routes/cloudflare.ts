@@ -676,6 +676,7 @@ export function registerCloudflareRoutes(
         const listener = await startCallbackListener({
           expectedState: state,
           onCallback: (o) => handleCallback(o, listenerRef.current ?? undefined),
+          returnUrl: 'http://127.0.0.1:' + getResolvedPort(),
         });
         listenerRef.current = listener;
         activeListener = listener;

@@ -40,6 +40,9 @@ export interface StartCallbackListenerInput {
   port?: number;
   /** Override host (useful for tests; default 127.0.0.1). */
   host?: string;
+  /** The daemon's own origin, for the success page's "Return to OpenDesign"
+   * link. When absent, falls back to the legacy OD_PORT env read. */
+  returnUrl?: string;
 }
 
 export interface CallbackListener {
@@ -186,6 +189,7 @@ export async function startCallbackListener(
           success
             ? outcome
             : { kind: 'error', error: 'Token exchange failed — close this tab and try again.' },
+          input.returnUrl,
         ),
       );
       void stop();
@@ -195,7 +199,7 @@ export async function startCallbackListener(
     // Error outcome: render 400 immediately (no exchange to run).
     res.statusCode = 400;
     res.setHeader('content-type', 'text/html; charset=utf-8');
-    res.end(renderResultPage(outcome));
+    res.end(renderResultPage(outcome, input.returnUrl));
 
     if (!consumesListener) {
       // Stale-tab replay or malformed request — don't surface to the caller
@@ -260,9 +264,9 @@ export async function startCallbackListener(
   };
 }
 
-function renderResultPage(outcome: CallbackOutcome): string {
+function renderResultPage(outcome: CallbackOutcome, returnUrl?: string): string {
   if (outcome.kind === 'ok') {
-    const origin = `http://127.0.0.1:${process.env.OD_PORT || '7456'}`;
+    const origin = returnUrl || `http://127.0.0.1:${process.env.OD_PORT || '7456'}`;
     return renderOAuthResultPage({ ok: true, providerLabel: 'Cloudflare', returnUrl: origin });
   }
   return renderOAuthResultPage({
