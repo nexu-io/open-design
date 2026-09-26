@@ -20,6 +20,7 @@ import {
   createDesignSystemDraft,
   fetchAgentsStream,
   fetchCloudflarePagesZones,
+  fetchCloudflareWorkersOAuthStart,
   fetchDeployConfig,
   fetchDesignSystemsResult,
   fetchAppVersionInfo,
@@ -91,6 +92,68 @@ describe('skill operation diagnostics', () => {
         message: 'Unknown upstream failure',
         status: 503,
       },
+    });
+  });
+});
+
+describe('Cloudflare Workers OAuth start', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("surfaces the daemon's string error instead of the generic fallback", async () => {
+    // The Cloudflare routes answer a refusal with `{ error: '<why>' }`. Reading
+    // only a nested error.message turned every actionable refusal into
+    // "Could not start Cloudflare sign-in (400)".
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      error: 'Cloudflare OAuth client ID is required.',
+    }), { status: 400, headers: { 'Content-Type': 'application/json' } })));
+
+    await expect(fetchCloudflareWorkersOAuthStart({
+      clientId: '',
+      redirectUri: 'http://127.0.0.1:56122/callback',
+    })).rejects.toThrow('Cloudflare OAuth client ID is required.');
+  });
+
+  it('still reads a nested error.message and a bare message', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      error: { message: 'nested refusal' },
+    }), { status: 400 })));
+    await expect(fetchCloudflareWorkersOAuthStart({
+      clientId: 'a',
+      redirectUri: 'http://127.0.0.1:56122/callback',
+    })).rejects.toThrow('nested refusal');
+
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      message: 'flat refusal',
+    }), { status: 400 })));
+    await expect(fetchCloudflareWorkersOAuthStart({
+      clientId: 'a',
+      redirectUri: 'http://127.0.0.1:56122/callback',
+    })).rejects.toThrow('flat refusal');
+  });
+
+  it('falls back to the status when the body carries no message at all', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('not json', { status: 502 })));
+    await expect(fetchCloudflareWorkersOAuthStart({
+      clientId: 'a',
+      redirectUri: 'http://127.0.0.1:56122/callback',
+    })).rejects.toThrow('Could not start Cloudflare sign-in (502)');
+  });
+
+  it('returns the authorize URL and state the daemon minted', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      authorizeUrl: 'https://dash.cloudflare.com/oauth2/auth?client_id=abc',
+      state: 'st-1',
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })));
+
+    await expect(fetchCloudflareWorkersOAuthStart({
+      clientId: 'abc',
+      redirectUri: 'http://127.0.0.1:56122/callback',
+    })).resolves.toEqual({
+      authorizeUrl: 'https://dash.cloudflare.com/oauth2/auth?client_id=abc',
+      state: 'st-1',
     });
   });
 });

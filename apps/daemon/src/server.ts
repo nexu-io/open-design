@@ -823,6 +823,7 @@ import {
   listProjectsAwaitingInput,
   listConversations,
   listDeployments,
+  listDeploymentsByProvider,
   listLatestProjectRunStatuses,
   listMessages,
   listPreviewComments,
@@ -909,6 +910,7 @@ import { registerPluginMarketplaceRoutes } from './routes/plugins/marketplaces.j
 import { registerPluginEventRoutes, registerPluginRoutes, registerProjectPluginRoutes } from './routes/plugins/index.js';
 import { registerMcpRoutes } from './mcp-routes.js';
 import { registerXaiRoutes } from './routes/xai.js';
+import { registerCloudflareRoutes } from './routes/cloudflare.js';
 import { registerLiveArtifactRoutes } from './routes/live-artifact.js';
 import { registerDeliverableSyntaxToolRoutes } from './routes/deliverable-syntax-tool.js';
 import { registerDesignSystemToolRoutes } from './routes/design-system-tool.js';
@@ -1167,6 +1169,8 @@ import {
   buildDeployFileSet,
   checkDeploymentUrl,
   CLOUDFLARE_PAGES_PROVIDER_ID,
+  CLOUDFLARE_WORKERS_PROVIDER_ID,
+  configureCloudflareWorkersDataDir,
   DeployError,
   deployToCloudflarePages,
   deployToVercel,
@@ -1178,6 +1182,7 @@ import {
   VERCEL_PROVIDER_ID,
   writeDeployConfig,
 } from './deploy.js';
+import { deployToCloudflareWorkers, probeCloudflareWorkersCapabilities } from './deploy/cloudflare-workers.js';
 import {
   checkCloudflarePagesDeploymentLinks,
   cloudflarePagesDeploymentMetadata,
@@ -1383,6 +1388,9 @@ const RUNTIME_DATA_DIR = resolveDataDir(process.env.OD_DATA_DIR, PROJECT_ROOT, {
   requireExplicit: SANDBOX_MODE_ENABLED,
 });
 configureDiagnosticsEvidence(RUNTIME_DATA_DIR);
+// Cloudflare Workers config + OAuth credentials must live inside the runtime
+// data root, not a separately-recomputed OD_USER_STATE_DIR/home fallback.
+configureCloudflareWorkersDataDir(RUNTIME_DATA_DIR);
 const SANDBOX_RUNTIME = resolveSandboxRuntimeConfig(SANDBOX_MODE_ENABLED, RUNTIME_DATA_DIR);
 ensureSandboxRuntimeDirs(SANDBOX_RUNTIME);
 const PLUGIN_LOCKFILE_PATH = path.join(RUNTIME_DATA_DIR, 'od-plugin-lock.json');
@@ -8497,6 +8505,7 @@ export async function startServer({
   const deployDeps = {
     VERCEL_PROVIDER_ID,
     CLOUDFLARE_PAGES_PROVIDER_ID,
+    CLOUDFLARE_WORKERS_PROVIDER_ID,
     isDeployProviderId,
     publicDeployConfigForProvider,
     readDeployConfig,
@@ -8504,6 +8513,7 @@ export async function startServer({
     listCloudflarePagesZones,
     DeployError,
     listDeployments,
+    listDeploymentsByProvider,
     publicDeployments,
     getDeployment,
     getDeploymentById,
@@ -8513,6 +8523,8 @@ export async function startServer({
     checkCloudflarePagesDeploymentLinks,
     checkDeploymentUrl,
     deployToCloudflarePages,
+    deployToCloudflareWorkers,
+    probeCloudflareWorkersCapabilities,
     deployToVercel,
     upsertDeployment,
     publicDeployment,
@@ -8622,6 +8634,10 @@ export async function startServer({
     mcp: { pendingAuth: mcpPendingAuth, daemonUrlRef, inheritedEnvironment },
   });
   registerXaiRoutes(app, {
+    http: httpDeps,
+    paths: pathDeps,
+  });
+  registerCloudflareRoutes(app, {
     http: httpDeps,
     paths: pathDeps,
   });

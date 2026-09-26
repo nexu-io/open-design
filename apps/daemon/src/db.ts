@@ -926,6 +926,21 @@ export function listDeployments(db: SqliteDb, projectId: string) {
     .map(normalizeDeployment);
 }
 
+/** Every deployment record for one provider, across projects. The Workers
+ * config (script name, custom domain) is global, so ownership of a Cloudflare
+ * resource is answered against all of a provider's records, not one project. */
+export function listDeploymentsByProvider(db: SqliteDb, providerId: string) {
+  return (db
+    .prepare(
+      `SELECT ${DEPLOYMENT_COLS}
+         FROM deployments
+        WHERE provider_id = ?
+        ORDER BY updated_at DESC`,
+    )
+    .all(providerId) as DbRow[])
+    .map(normalizeDeployment);
+}
+
 export function getDeployment(db: SqliteDb, projectId: string, fileName: string, providerId: string) {
   const row = db
     .prepare(
@@ -960,15 +975,16 @@ export function upsertDeployment(db: SqliteDb, deployment: DbRow) {
     deployment.providerMetadata === undefined
       ? existing?.providerMetadata
       : deployment.providerMetadata;
-  const providerMetadata =
-    deployment.cloudflarePages && typeof deployment.cloudflarePages === 'object'
-      ? {
-          ...(inputProviderMetadata && typeof inputProviderMetadata === 'object' && !Array.isArray(inputProviderMetadata)
-            ? inputProviderMetadata
-            : {}),
-          cloudflarePages: deployment.cloudflarePages,
-        }
-      : inputProviderMetadata;
+  let providerMetadata: unknown = inputProviderMetadata;
+  if (deployment.cloudflarePages && typeof deployment.cloudflarePages === 'object') {
+    providerMetadata = { ...(asJsonObject(providerMetadata) ?? {}), cloudflarePages: deployment.cloudflarePages };
+  }
+  // Workers facts have no column of their own: a typed `cloudflareWorkers`
+  // input is folded into the JSON column and normalizeDeployment lifts it back
+  // out, so the field survives the read that follows this write.
+  if (asJsonObject(deployment.cloudflareWorkers)) {
+    providerMetadata = { ...(asJsonObject(providerMetadata) ?? {}), ...asJsonObject(deployment.cloudflareWorkers) };
+  }
   const next = {
     id: existing?.id ?? deployment.id,
     projectId: deployment.projectId,
@@ -1048,10 +1064,45 @@ function normalizeDeployment(row: DbRow) {
       !Array.isArray(normalizedProviderMetadata.cloudflarePages)
         ? normalizedProviderMetadata.cloudflarePages
         : undefined,
+    cloudflareWorkers: liftCloudflareWorkersInfo(row.providerId, normalizedProviderMetadata),
     providerMetadata: normalizedProviderMetadata,
     createdAt: Number(row.createdAt),
     updatedAt: Number(row.updatedAt),
   };
+}
+
+function asJsonObject(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+}
+
+const CLOUDFLARE_WORKERS_DEPLOY_PROVIDER_ID = 'cloudflare-workers';
+// The public subset of a Workers deployment's providerMetadata (see
+// `CloudflareWorkersDeploymentInfo` in @open-design/contracts). providerMetadata
+// itself is stripped from every deployment response, so anything the client
+// needs must be projected here or it never leaves the daemon.
+const CLOUDFLARE_WORKERS_PUBLIC_METADATA_KEYS = [
+  'accessProtected',
+  'accessAppId',
+  // Access apps this deploy RETAINED: they still guard the Worker a
+  // script-name change moved away from, so they are not THIS Worker's
+  // protection (never `accessAppId`), but they are the only handles the
+  // client has on apps OpenDesign owns and a later Access-off retires. A key
+  // this projection does not name never leaves the daemon (see the note
+  // above), so the id would be recorded and still invisible.
+  'retainedAccessAppIds',
+  'createdByOpenDesign',
+  'customDomain',
+  'steps',
+  'check',
+] as const;
+
+function liftCloudflareWorkersInfo(providerId: unknown, providerMetadata: Record<string, unknown> | undefined) {
+  if (providerId !== CLOUDFLARE_WORKERS_DEPLOY_PROVIDER_ID || !providerMetadata) return undefined;
+  const info: Record<string, unknown> = {};
+  for (const key of CLOUDFLARE_WORKERS_PUBLIC_METADATA_KEYS) {
+    if (providerMetadata[key] !== undefined) info[key] = providerMetadata[key];
+  }
+  return Object.keys(info).length > 0 ? info : undefined;
 }
 
 function stringifyJsonObjectOrNull(value: unknown) {

@@ -820,7 +820,7 @@ export interface MessagesResponse {
   messages: ChatMessage[];
 }
 
-export type DeployProviderId = 'vercel-self' | 'cloudflare-pages';
+export type DeployProviderId = 'vercel-self' | 'cloudflare-pages' | 'cloudflare-workers';
 export type DeploymentStatus =
   | 'deploying'
   | 'preparing-link'
@@ -915,6 +915,84 @@ export interface CloudflarePagesDeploymentInfo {
   customDomain?: CloudflarePagesCustomDomainInfo;
 }
 
+export interface CloudflareWorkersBinding {
+  type: string;
+  name: string;
+  bucketName?: string;
+  databaseName?: string;
+  id?: string;
+}
+
+export type CloudflareWorkersAccessRule =
+  | { kind: 'emails'; emails: string[] }
+  | { kind: 'emailDomain'; emailDomain: string }
+  | { kind: 'self' }
+  | { kind: 'policy'; policyId: string };
+
+export interface CloudflareWorkersAccess {
+  enabled: boolean;
+  rule?: CloudflareWorkersAccessRule;
+}
+
+export interface CloudflareWorkersCapabilities {
+  workers: boolean;
+  workersDevSubdomain: string;
+  r2: boolean;
+  r2Reason?: string;
+  d1: boolean;
+  d1Reason?: string;
+  access: boolean;
+  accessReason?: string;
+  configured?: boolean;
+}
+
+/**
+ * Rotating Cloudflare OAuth credentials, as persisted in
+ * `cloudflare-oauth-tokens.json`. `scope` is the granted scope string exactly
+ * as the token response carries it (space-separated); the daemon stores and
+ * returns it unsplit.
+ */
+export interface CloudflareOAuthCredentials {
+  accessToken: string;
+  refreshToken?: string;
+  expiresAt?: number;
+  scope?: string;
+  accountId?: string;
+}
+
+export interface CloudflareWorkersDeployStep {
+  name: string;
+  status: 'done' | 'error';
+  detail?: string;
+}
+
+/** Post-deploy reachability probe of the Worker URL; `status` is the HTTP status. */
+export interface CloudflareWorkersDeployCheck {
+  status: number;
+  ok: boolean;
+  detail?: string;
+}
+
+/**
+ * Public, provider-specific facts about a Cloudflare Workers deployment. The
+ * daemon's internal `providerMetadata` is stripped from every deployment
+ * response; anything the UI needs (the step list, the Access badge, the 5xx
+ * health warning) must be lifted into this declared field instead.
+ */
+export interface CloudflareWorkersDeploymentInfo {
+  accessProtected?: boolean;
+  accessAppId?: string;
+  /** Access apps OpenDesign created that this deploy RETAINED because they
+   * still guard the Worker a script-name change moved away from. Deliberately
+   * not folded into `accessAppId`: they do not protect THIS Worker. They are
+   * the handles the UI can surface and a later Access-off retires. */
+  retainedAccessAppIds?: string[];
+  createdByOpenDesign?: boolean;
+  customDomain?: { hostname: string; url: string };
+  steps?: CloudflareWorkersDeployStep[];
+  check?: CloudflareWorkersDeployCheck;
+}
+
 export interface DeployConfigResponse {
   providerId: DeployProviderId;
   configured: boolean;
@@ -923,7 +1001,21 @@ export interface DeployConfigResponse {
   teamSlug: string;
   accountId?: string;
   projectName?: string;
+  scriptName?: string;
+  compatibilityDate?: string;
+  credentialMode?: 'token' | 'oauth';
+  clientId?: string;
+  redirectUri?: string;
+  scopes?: string[];
+  bindings?: CloudflareWorkersBinding[];
+  access?: CloudflareWorkersAccess;
   cloudflarePages?: CloudflarePagesConfigHints;
+  customDomain?: { hostname: string; zoneId: string };
+  /** Set when the on-disk provider config could not be parsed. The daemon
+   * degrades to an unconfigured default instead of failing every route;
+   * saving the settings again rewrites the file. Currently only
+   * `CFW_CONFIG_CORRUPT` (Cloudflare Workers). */
+  configError?: string;
   target: 'preview' | 'production';
 }
 
@@ -934,7 +1026,17 @@ export interface UpdateDeployConfigRequest {
   teamSlug?: string;
   accountId?: string;
   projectName?: string;
+  scriptName?: string;
+  compatibilityDate?: string;
+  credentialMode?: 'token' | 'oauth';
+  clientId?: string;
+  redirectUri?: string;
+  scopes?: string[];
+  bindings?: CloudflareWorkersBinding[];
+  access?: CloudflareWorkersAccess;
   cloudflarePages?: CloudflarePagesConfigHints;
+  /** `null` clears a saved domain; an absent key keeps it (daemon read-modify-write). */
+  customDomain?: { hostname: string; zoneId: string } | null;
 }
 
 export interface DeploymentInfo {
@@ -950,6 +1052,7 @@ export interface DeploymentInfo {
   statusMessage?: string;
   reachableAt?: number;
   cloudflarePages?: CloudflarePagesDeploymentInfo;
+  cloudflareWorkers?: CloudflareWorkersDeploymentInfo;
   createdAt: number;
   updatedAt: number;
 }

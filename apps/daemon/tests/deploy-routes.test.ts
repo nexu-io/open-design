@@ -6,13 +6,27 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import {
   CLOUDFLARE_PAGES_PROVIDER_ID,
+  CLOUDFLARE_WORKERS_PROVIDER_ID,
+  cloudflareOAuthTokensDir,
   cloudflarePagesProjectNameForProject,
+  commitCloudflareOAuthMode,
+  configureCloudflareWorkersDataDir,
   deployConfigPath,
+  pendingPublicLinkMessage,
   VERCEL_PROVIDER_ID,
   SAVED_CLOUDFLARE_TOKEN_MASK,
 } from '../src/deploy.js';
+import { setCloudflareOAuthToken } from '../src/integrations/cloudflare-tokens.js';
+import { getDeploymentById, openDatabase, upsertDeployment } from '../src/db.js';
+import { configureCloudflareAccessPerimeterRetry } from '../src/deploy/cloudflare-workers.js';
+import { hasAccessUnverifiedVerdict, isAccessProtectedWorkersRecord, isRetainedUnverifiedExposure } from '../src/routes/deploy.js';
 import { ensureProject } from '../src/projects.js';
 import { startServer } from '../src/server.js';
+
+// A fetch that leaves api.cloudflare.com is a probe of a PUBLIC deploy URL:
+// the Access perimeter probe (a GET — its challenge-body heuristic needs a
+// body) or the Access-off readiness probe (a HEAD).
+const isPublicProbeUrl = (url: string): boolean => !url.startsWith('https://api.cloudflare.com/');
 
 describe('deploy provider routes', () => {
   let server: http.Server;
@@ -1587,5 +1601,2748 @@ describe('deploy provider routes', () => {
       else process.env.OD_USER_STATE_DIR = priorStateRoot;
       await rm(stateRoot, { recursive: true, force: true });
     }
+  });
+
+  it('rejects the Workers zones picker without an account id instead of listing every visible zone', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-workers-zones-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    configureCloudflareWorkersDataDir(stateRoot);
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url.startsWith(baseUrl)) return realFetchFor()(input, init);
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    const realFetch = globalThis.fetch;
+    const realFetchFor = () => realFetch;
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const resp = await fetch(`${baseUrl}/api/deploy/cloudflare-workers/zones`);
+      expect(resp.status).toBe(400);
+      expect(await resp.json()).toMatchObject({ error: { code: 'CFW_ACCOUNT_ID_REQUIRED' } });
+      // no Cloudflare call was made
+      expect(fetchMock.mock.calls.every(([input]) => String(input instanceof Request ? input.url : input).startsWith(baseUrl))).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('propagates an OAuth credential failure from the Workers routes instead of collapsing it to "not configured"', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-workers-oauth-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    configureCloudflareWorkersDataDir(stateRoot);
+    try {
+      const saveResp = await fetch(`${baseUrl}/api/deploy/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ providerId: CLOUDFLARE_WORKERS_PROVIDER_ID, token: 'tok', accountId: 'acct_test' }),
+      });
+      expect(saveResp.status).toBe(200);
+      // Flip to oauth with a grant that is present but cannot refresh (expired,
+      // no refresh token). Committing the mode is legitimate — the store is not
+      // empty — and the credential resolver then throws, which is the propagation
+      // this test is about. (A commit over an EMPTY store is refused by
+      // commitCloudflareOAuthMode, so "oauth mode with nothing behind it" is no
+      // longer a state a settings save or a connect can drive the daemon into.)
+      await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), {
+        accessToken: 'oauth-access',
+        tokenType: 'Bearer',
+        expiresAt: Date.now() - 60_000,
+        generation: 0,
+        savedAt: Date.now() - 120_000,
+      });
+      await commitCloudflareOAuthMode();
+
+      // The resolver throws 401 CFW_OAUTH_RECONNECT_REQUIRED; the routes used to
+      // swallow it into `configured:false` / `zones:[]` / CFW_TOKEN_REQUIRED.
+      const caps = await fetch(`${baseUrl}/api/deploy/cloudflare-workers/capabilities`);
+      expect(caps.status).toBe(401);
+      const capsBody = await caps.json() as { error: { code: string }; configured?: boolean };
+      expect(capsBody.configured).toBeUndefined();
+      expect(capsBody.error.code).toBe('CFW_OAUTH_RECONNECT_REQUIRED');
+
+      const zones = await fetch(`${baseUrl}/api/deploy/cloudflare-workers/zones`);
+      expect(zones.status).toBe(401);
+      expect((await zones.json() as { error: { code: string } }).error.code).toBe('CFW_OAUTH_RECONNECT_REQUIRED');
+
+      const del = await fetch(`${baseUrl}/api/deploy/cloudflare-workers/domains/dom-1`, { method: 'DELETE' });
+      expect(del.status).toBe(401);
+      expect((await del.json() as { error: { code: string } }).error.code).toBe('CFW_OAUTH_RECONNECT_REQUIRED');
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses to detach a Workers custom domain routed to another script (409, no DELETE sent)', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-workers-domain-foreign-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    configureCloudflareWorkersDataDir(stateRoot);
+    try {
+      const dataDir = process.env.OD_DATA_DIR;
+      if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+      const projectId = `workers-domain-owner-${Date.now()}`;
+      const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+      await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>Hello</h1>');
+      expect((await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: projectId, name: 'Domain owner', skillId: null, designSystemId: null }),
+      })).status).toBe(200);
+      expect((await fetch(`${baseUrl}/api/deploy/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          providerId: CLOUDFLARE_WORKERS_PROVIDER_ID,
+          token: 'tok',
+          accountId: 'acct_test',
+          scriptName: 'my-site',
+          customDomain: { hostname: 'mine.example.com', zoneId: 'zone-1' },
+        }),
+      })).status).toBe(200);
+
+      const realFetch = globalThis.fetch;
+      const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+      const cfCalls: Array<{ url: string; method: string }> = [];
+      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        const method = (init?.method || 'GET').toUpperCase();
+        cfCalls.push({ url, method });
+        // --- the recording deploy (attaches mine.example.com as dom-mine) ---
+        if (method === 'HEAD') return new Response('', { status: 200 });
+        if (url.endsWith('/workers/subdomain')) return json({ success: true, result: { subdomain: 'acct-test' } });
+        if (url.includes('assets-upload-session')) return json({ success: true, result: { jwt: 'SESS', buckets: [] } });
+        if (method === 'GET' && url.includes('/workers/domains?')) return json({ success: true, result: [] });
+        if (method === 'PUT' && url.endsWith('/workers/domains')) return json({ success: true, result: { id: 'dom-mine' } });
+        // --- the detach route ---
+        if (method === 'GET' && url.includes('/workers/domains/dom-foreign')) {
+          return json({ success: true, result: { id: 'dom-foreign', hostname: 'app.example.com', service: 'someone-elses-worker', zone_id: 'zone-1' } });
+        }
+        if (method === 'GET' && url.includes('/workers/domains/dom-dash')) {
+          // Routed to OUR script, but attached in the dashboard: not ours to detach.
+          return json({ success: true, result: { id: 'dom-dash', hostname: 'dash.example.com', service: 'my-site', zone_id: 'zone-1' } });
+        }
+        if (method === 'GET' && url.includes('/workers/domains/dom-mine')) {
+          return json({ success: true, result: { id: 'dom-mine', hostname: 'mine.example.com', service: 'my-site', zone_id: 'zone-1' } });
+        }
+        if (method === 'GET' && url.includes('/workers/domains/dom-moved')) {
+          // The hostname OUR deploy attached, but Cloudflare now routes this id
+          // to another Worker: the vouching record deployed `my-site`, not that.
+          return json({ success: true, result: { id: 'dom-moved', hostname: 'mine.example.com', service: 'someone-elses-worker', zone_id: 'zone-1' } });
+        }
+        if (method === 'DELETE' && url.includes('/workers/domains/dom-mine')) {
+          return json({ success: true, result: { id: 'dom-mine' } });
+        }
+        if (url.includes('/workers/scripts/') && method === 'PUT') return json({ success: true, result: {} });
+        if (url.includes('/subdomain') && method === 'POST') return json({ success: true, result: { enabled: true } });
+        // The deploy reads the script's modified_on before its PUT and the
+        // workers.dev config before replacing it.
+        if (method === 'GET' && url.includes('/workers/scripts?')) return json({ success: true, result: [] });
+        if (method === 'GET' && url.endsWith('/subdomain')) return json({ success: true, result: { enabled: false, previews_enabled: false } });
+        throw new Error(`Unexpected Cloudflare fetch: ${method} ${url}`);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      try {
+        // Before any OpenDesign deploy recorded it, even a hostname routed to
+        // our script is not ours: the ownership rule is "we attached it".
+        const unrecorded = await fetch(`${baseUrl}/api/deploy/cloudflare-workers/domains/dom-mine`, { method: 'DELETE' });
+        expect(unrecorded.status).toBe(409);
+        expect((await unrecorded.json() as { error: { code: string } }).error.code).toBe('CFW_DOMAIN_FOREIGN');
+
+        // A real deploy attaches mine.example.com and records dom-mine as owned.
+        const deployResp = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileName: 'index.html', providerId: CLOUDFLARE_WORKERS_PROVIDER_ID }),
+        });
+        expect(deployResp.status).toBe(200);
+        expect((await deployResp.json() as { cloudflareWorkers: { customDomain: unknown } }).cloudflareWorkers.customDomain).toMatchObject({ hostname: 'mine.example.com' });
+
+        const foreign = await fetch(`${baseUrl}/api/deploy/cloudflare-workers/domains/dom-foreign`, { method: 'DELETE' });
+        expect(foreign.status).toBe(409);
+        expect((await foreign.json() as { error: { code: string } }).error.code).toBe('CFW_DOMAIN_FOREIGN');
+
+        const dashboard = await fetch(`${baseUrl}/api/deploy/cloudflare-workers/domains/dom-dash`, { method: 'DELETE' });
+        expect(dashboard.status).toBe(409);
+        expect((await dashboard.json() as { error: { code: string; message: string } }).error).toMatchObject({
+          code: 'CFW_DOMAIN_FOREIGN',
+          message: expect.stringContaining('not attached by an OpenDesign deployment'),
+        });
+        expect(cfCalls.some((c) => c.method === 'DELETE')).toBe(false);
+
+        // A record vouches for the hostname, but the domain is routed to a
+        // Worker that record never deployed: the vouching record's script must
+        // be the domain's service, or the id is not ours to detach.
+        const moved = await fetch(`${baseUrl}/api/deploy/cloudflare-workers/domains/dom-moved`, { method: 'DELETE' });
+        expect(moved.status).toBe(409);
+        expect((await moved.json() as { error: { code: string } }).error.code).toBe('CFW_DOMAIN_FOREIGN');
+        expect(cfCalls.some((c) => c.method === 'DELETE')).toBe(false);
+
+        // The configured script is renamed. mine.example.com stays routed to
+        // the OLD script, and the record that attached it recorded that
+        // script — so it stays detachable. Comparing against the CURRENT
+        // config's script (`renamed-site`) stranded every hostname of the old
+        // one with no way to remove it here.
+        expect((await fetch(`${baseUrl}/api/deploy/config`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            providerId: CLOUDFLARE_WORKERS_PROVIDER_ID,
+            token: 'tok',
+            accountId: 'acct_test',
+            scriptName: 'renamed-site',
+            customDomain: { hostname: 'mine.example.com', zoneId: 'zone-1' },
+          }),
+        })).status).toBe(200);
+
+        // Same route, the domain the OpenDesign deploy attached: detached.
+        const mine = await fetch(`${baseUrl}/api/deploy/cloudflare-workers/domains/dom-mine`, { method: 'DELETE' });
+        expect(mine.status).toBe(200);
+        expect(await mine.json()).toEqual({ ok: true });
+        expect(cfCalls.filter((c) => c.method === 'DELETE').map((c) => c.url)).toEqual([
+          expect.stringContaining('/workers/domains/dom-mine'),
+        ]);
+
+        // Ownership goes with the attachment: the record stops vouching for
+        // (and displaying) the hostname, so when the same hostname is attached
+        // again from the dashboard it is foreign — not re-detached as "owned".
+        const after = await (await fetch(`${baseUrl}/api/projects/${projectId}/deployments`)).json() as {
+          deployments: Array<{ providerId: string; cloudflareWorkers?: { customDomain?: unknown } }>;
+        };
+        const record = after.deployments.find((d) => d.providerId === CLOUDFLARE_WORKERS_PROVIDER_ID);
+        expect(record).toBeTruthy();
+        expect(record?.cloudflareWorkers?.customDomain).toBeUndefined();
+        const reattached = await fetch(`${baseUrl}/api/deploy/cloudflare-workers/domains/dom-mine`, { method: 'DELETE' });
+        expect(reattached.status).toBe(409);
+        expect((await reattached.json() as { error: { code: string } }).error.code).toBe('CFW_DOMAIN_FOREIGN');
+        expect(cfCalls.filter((c) => c.method === 'DELETE')).toHaveLength(1);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('serves the Workers config route with CFW_CONFIG_CORRUPT when the file is unparsable, instead of a 500 on every route', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-workers-corrupt-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    configureCloudflareWorkersDataDir(stateRoot);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await mkdir(path.dirname(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID)), { recursive: true });
+      await writeFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), '{"token": "tok",', 'utf8');
+      const getResp = await fetch(`${baseUrl}/api/deploy/config?providerId=${CLOUDFLARE_WORKERS_PROVIDER_ID}`);
+      expect(getResp.status).toBe(200);
+      expect(await getResp.json()).toMatchObject({ providerId: CLOUDFLARE_WORKERS_PROVIDER_ID, configured: false, configError: 'CFW_CONFIG_CORRUPT' });
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('CFW_CONFIG_CORRUPT'));
+      const caps = await fetch(`${baseUrl}/api/deploy/cloudflare-workers/capabilities`);
+      expect(caps.status).toBe(200);
+      expect(await caps.json()).toMatchObject({ configured: false });
+      // Saving the settings again heals the file.
+      const saveResp = await fetch(`${baseUrl}/api/deploy/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ providerId: CLOUDFLARE_WORKERS_PROVIDER_ID, token: 'tok', accountId: 'acct_test' }),
+      });
+      expect(saveResp.status).toBe(200);
+      const healed = await (await fetch(`${baseUrl}/api/deploy/config?providerId=${CLOUDFLARE_WORKERS_PROVIDER_ID}`)).json() as Record<string, unknown>;
+      expect(healed).toMatchObject({ configured: true });
+      expect(healed).not.toHaveProperty('configError');
+    } finally {
+      errorSpy.mockRestore();
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+  it('surfaces the Workers result as cloudflareWorkers on the deploy response and the deployments list (through the real db)', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-workers-lift-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    configureCloudflareWorkersDataDir(stateRoot);
+    try {
+      const dataDir = process.env.OD_DATA_DIR;
+      if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+      const projectId = `workers-lift-${Date.now()}`;
+      const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+      await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>Hello</h1>');
+      expect((await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: projectId, name: 'Workers lift', skillId: null, designSystemId: null }),
+      })).status).toBe(200);
+      expect((await fetch(`${baseUrl}/api/deploy/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ providerId: CLOUDFLARE_WORKERS_PROVIDER_ID, token: 'tok', accountId: 'acct_test', scriptName: 'lift-check' }),
+      })).status).toBe(200);
+
+      const realFetch = globalThis.fetch;
+      const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        const method = (init?.method || 'GET').toUpperCase();
+        // The post-deploy probe answers 503: an edge answer, which the report
+        // shows as a bare status (no Worker-exception detail is inferred).
+        if (method === 'HEAD') return new Response('', { status: 503 });
+        if (url.endsWith('/workers/subdomain')) return json({ success: true, result: { subdomain: 'acct-test' } });
+        if (url.includes('assets-upload-session')) return json({ success: true, result: { jwt: 'SESS', buckets: [] } });
+        if (method === 'GET' && url.includes('/workers/domains')) return json({ success: true, result: [] });
+        return json({ success: true, result: {} });
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      try {
+        const resp = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileName: 'index.html', providerId: CLOUDFLARE_WORKERS_PROVIDER_ID }),
+        });
+        expect(resp.status).toBe(200);
+        const body = await resp.json() as Record<string, unknown>;
+        expect(body.providerMetadata).toBeUndefined();
+        expect(body.cloudflareWorkers).toMatchObject({
+          check: { status: 503, ok: false },
+        });
+        const steps = (body.cloudflareWorkers as { steps: Array<{ name: string }> }).steps.map((s) => s.name);
+        expect(steps).toEqual(expect.arrayContaining(['assets', 'script', 'subdomain']));
+
+        const listResp = await fetch(`${baseUrl}/api/projects/${projectId}/deployments`);
+        expect(listResp.status).toBe(200);
+        const list = await listResp.json() as { deployments: Array<Record<string, unknown>> };
+        const workers = list.deployments.find((d) => d.providerId === CLOUDFLARE_WORKERS_PROVIDER_ID);
+        expect(workers?.providerMetadata).toBeUndefined();
+        expect(workers?.cloudflareWorkers).toMatchObject({ check: { status: 503 } });
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('records the Access app a failed Workers deploy created, so the next deploy owns it instead of hitting CFW_ACCESS_APP_FOREIGN', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-workers-access-orphan-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    configureCloudflareWorkersDataDir(stateRoot);
+    try {
+      const dataDir = process.env.OD_DATA_DIR;
+      if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+      const projectId = `workers-access-orphan-${Date.now()}`;
+      const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+      await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>Hello</h1>');
+      expect((await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: projectId, name: 'Workers access orphan', skillId: null, designSystemId: null }),
+      })).status).toBe(200);
+      expect((await fetch(`${baseUrl}/api/deploy/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          providerId: CLOUDFLARE_WORKERS_PROVIDER_ID,
+          token: 'tok',
+          accountId: 'acct_test',
+          scriptName: 'access-orphan',
+          access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } },
+        }),
+      })).status).toBe(200);
+
+      const realFetch = globalThis.fetch;
+      const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+      let subdomainEnableFails = true;
+      // The app list AFTER creation: the user renamed the app, so only the
+      // recorded id (not the name marker) proves OpenDesign owns it.
+      let listedApps: unknown[] = [];
+      let appPosts = 0;
+      let appPuts = 0;
+      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        const method = (init?.method || 'GET').toUpperCase();
+        if (method === 'HEAD' || isPublicProbeUrl(url)) {
+          return new Response('', { status: 302, headers: { location: 'https://acct-test.cloudflareaccess.com/cdn-cgi/access/login' } });
+        }
+        if (url.endsWith('/workers/subdomain')) return json({ success: true, result: { subdomain: 'acct-test' } });
+        if (url.includes('assets-upload-session')) return json({ success: true, result: { jwt: 'SESS', buckets: [] } });
+        if (method === 'GET' && url.includes('/workers/domains')) return json({ success: true, result: [] });
+        if (method === 'POST' && url.endsWith('/workers/scripts/access-orphan/subdomain')) {
+          if (subdomainEnableFails) {
+            subdomainEnableFails = false;
+            return json({ success: false, errors: [{ message: 'workers.dev enable unavailable' }] }, 500);
+          }
+          return json({ success: true, result: { enabled: true } });
+        }
+        if (method === 'PUT' && url.endsWith('/workers/scripts/access-orphan')) return json({ success: true, result: {} });
+        if (url.includes('/workers/scripts')) return json({ success: true, result: [{ id: 'access-orphan', tag: 'tag-orphan' }] });
+        if (url.includes('/access/identity_providers')) return json({ success: true, result: [{ id: 'otp-1', type: 'onetimepin', name: 'One-time PIN login' }] });
+        if (url.includes('/access/apps/')) {
+          if (method === 'PUT') {
+            appPuts += 1;
+            return json({ success: true, result: { id: 'app-orphan' } });
+          }
+          return json({ success: true, result: { id: 'app-orphan', destinations: [{ type: 'worker', worker_id: 'tag-orphan' }] } });
+        }
+        if (url.includes('/access/apps')) {
+          if (method === 'POST') {
+            appPosts += 1;
+            listedApps = [{ id: 'app-orphan', name: 'Renamed by user', destinations: [{ type: 'worker', worker_id: 'tag-orphan' }] }];
+            return json({ success: true, result: { id: 'app-orphan' } });
+          }
+          return json({ success: true, result: listedApps });
+        }
+        return json({ success: true, result: {} });
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      try {
+        const body = JSON.stringify({ fileName: 'index.html', providerId: CLOUDFLARE_WORKERS_PROVIDER_ID });
+        const first = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+        expect(first.status).toBeGreaterThanOrEqual(500);
+        expect(appPosts).toBe(1);
+
+        // The failed attempt left a record that carries the app it created.
+        const listResp = await fetch(`${baseUrl}/api/projects/${projectId}/deployments`);
+        const list = await listResp.json() as { deployments: Array<Record<string, unknown>> };
+        const orphaned = list.deployments.find((d) => d.providerId === CLOUDFLARE_WORKERS_PROVIDER_ID);
+        expect(orphaned).toMatchObject({
+          status: 'failed',
+          cloudflareWorkers: { accessAppId: 'app-orphan', createdByOpenDesign: true },
+        });
+        // Ownership only: the failed attempt never gated the Worker, so it
+        // must not pose as an Access deploy (which a link check could then
+        // "verify" and promote to ready).
+        expect((orphaned?.cloudflareWorkers as Record<string, unknown>).accessProtected).toBeUndefined();
+        expect((orphaned?.cloudflareWorkers as Record<string, unknown>).accessVerified).toBeUndefined();
+        expect(isAccessProtectedWorkersRecord({ providerMetadata: orphaned?.cloudflareWorkers })).toBe(false);
+
+        // The retry updates OUR app in place instead of refusing it as foreign.
+        const second = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+        expect(second.status).toBe(200);
+        const secondBody = await second.json() as Record<string, unknown>;
+        expect(secondBody.cloudflareWorkers).toMatchObject({ accessProtected: true, accessAppId: 'app-orphan' });
+        expect(secondBody.status).toBe('ready');
+        expect(appPosts).toBe(1);
+        expect(appPuts).toBe(1);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('a failed Workers deploy still reports the deploy error when its ownership bookkeeping cannot run', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-workers-bookkeeping-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    configureCloudflareWorkersDataDir(stateRoot);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const dataDir = process.env.OD_DATA_DIR;
+      if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+      const stamp = Date.now();
+      const projectId = `workers-bookkeeping-${stamp}`;
+      const scriptName = `bookkeeping-${stamp}`;
+      const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+      await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>Hello</h1>');
+      expect((await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: projectId, name: 'Workers bookkeeping', skillId: null, designSystemId: null }),
+      })).status).toBe(200);
+      // Access on: the attempt creates the Access app and then fails, which is
+      // exactly the failure shape whose ownership record the route persists.
+      expect((await fetch(`${baseUrl}/api/deploy/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          providerId: CLOUDFLARE_WORKERS_PROVIDER_ID,
+          token: 'tok',
+          accountId: 'acct_test',
+          scriptName,
+          access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } },
+        }),
+      })).status).toBe(200);
+
+      const db = openDatabase(process.cwd(), { dataDir });
+      // The deployments table goes unreadable mid-deploy: the failed-deploy
+      // bookkeeping reads the record it is about to rewrite, so the whole
+      // bookkeeping transaction fails.
+      const dbProto = Object.getPrototypeOf(db) as { prepare: (sql: string) => unknown };
+      const realPrepare = dbProto.prepare;
+      let bookkeepingReadsFail = false;
+      const prepareSpy = vi.spyOn(dbProto, 'prepare').mockImplementation(function (this: unknown, sql: string) {
+        if (bookkeepingReadsFail && /from deployments/i.test(sql)) throw new Error('database is locked (test)');
+        return realPrepare.call(this, sql);
+      });
+
+      const realFetch = globalThis.fetch;
+      const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+      const cloudflareDown = () => json({ success: false, errors: [{ message: 'cloudflare unavailable (test)' }] }, 500);
+      let release: () => void = () => {};
+      const held = new Promise<void>((resolve) => { release = resolve; });
+      let heldOnce = false;
+      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        const method = (init?.method || 'GET').toUpperCase();
+        if (method === 'HEAD') return new Response('', { status: 200 });
+        if (!heldOnce) {
+          // Hold the deploy at its first Cloudflare call, so the table can be
+          // taken out from under it while the deploy is still in flight.
+          heldOnce = true;
+          await held;
+        }
+        if (url.endsWith('/workers/subdomain')) return json({ success: true, result: { subdomain: 'acct-test' } });
+        if (url.includes('assets-upload-session')) return json({ success: true, result: { jwt: 'SESS', buckets: [] } });
+        if (method === 'GET' && url.includes('/workers/domains')) return json({ success: true, result: [] });
+        if (url.includes('/access/identity_providers')) return json({ success: true, result: [{ id: 'otp-1', type: 'onetimepin', name: 'One-time PIN login' }] });
+        // Everything from the Access app onwards fails: the app is created
+        // first, so the error carries the app id the route must record. A
+        // lookup is served (it is not the failure under test) — what fails is
+        // the attach PUT, and the workers.dev enable after it.
+        if (url.includes('/access/apps/')) {
+          if (method === 'PUT') return cloudflareDown();
+          return json({ success: true, result: { id: 'app-bookkeeping', destinations: [{ type: 'worker', worker_id: 'tag-b' }] } });
+        }
+        if (url.includes('/access/apps')) {
+          if (method === 'POST') return json({ success: true, result: { id: 'app-bookkeeping' } });
+          return json({ success: true, result: [] });
+        }
+        if (method === 'PUT' && url.endsWith('/workers/scripts/' + scriptName)) return json({ success: true, result: {} });
+        if (url.endsWith('/workers/scripts/' + scriptName + '/subdomain')) return cloudflareDown();
+        if (url.includes('/workers/scripts')) return json({ success: true, result: [{ id: scriptName, tag: 'tag-b' }] });
+        return json({ success: true, result: {} });
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      try {
+        const body = JSON.stringify({ fileName: 'index.html', providerId: CLOUDFLARE_WORKERS_PROVIDER_ID });
+        const deploying = fetch(`${baseUrl}/api/projects/${projectId}/deploy`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        bookkeepingReadsFail = true;
+        release();
+
+        const resp = await deploying;
+        prepareSpy.mockRestore();
+        expect(resp.status).toBeGreaterThanOrEqual(500);
+        const failureBody = await resp.json() as { error: { code: string; message: string } };
+        // The DEPLOY error reaches the client. Without the guard the bookkeeping
+        // failure replaces it — a generic error, which this route answers as a
+        // 400 carrying its own message.
+        expect(failureBody.error.message).toContain('cloudflare unavailable (test)');
+        expect(JSON.stringify(failureBody)).not.toContain('database is locked');
+        expect(warnSpy.mock.calls.some(([message]) => String(message).includes('failed-deploy bookkeeping'))).toBe(true);
+      } finally {
+        prepareSpy.mockRestore();
+        vi.unstubAllGlobals();
+      }
+    } finally {
+      warnSpy.mockRestore();
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('a failed Workers deploy records the script it targeted, so a later deploy of a different script does not adopt its Access app', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-workers-failed-scriptname-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    configureCloudflareWorkersDataDir(stateRoot);
+    try {
+      const dataDir = process.env.OD_DATA_DIR;
+      if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+      const projectId = `workers-failed-scriptname-${Date.now()}`;
+      const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+      await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>A</h1>');
+      await writeFile(path.join(dir, 'b.html'), '<!doctype html><h1>B</h1>');
+      expect((await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: projectId, name: 'Workers failed scriptname', skillId: null, designSystemId: null }),
+      })).status).toBe(200);
+      const saveConfig = async (scriptName: string) => {
+        expect((await fetch(`${baseUrl}/api/deploy/config`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            providerId: CLOUDFLARE_WORKERS_PROVIDER_ID,
+            token: 'tok',
+            accountId: 'acct_test',
+            scriptName,
+            access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } },
+          }),
+        })).status).toBe(200);
+      };
+      await saveConfig('orphan-a');
+
+      const realFetch = globalThis.fetch;
+      const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+      let subdomainEnableFails = true;
+      const listedApps: unknown[] = [];
+      let appPosts = 0;
+      let appPuts = 0;
+      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        const method = (init?.method || 'GET').toUpperCase();
+        if (method === 'HEAD' || isPublicProbeUrl(url)) {
+          return new Response('', { status: 302, headers: { location: 'https://acct-test.cloudflareaccess.com/cdn-cgi/access/login' } });
+        }
+        if (url.endsWith('/workers/subdomain')) return json({ success: true, result: { subdomain: 'acct-test' } });
+        if (url.includes('assets-upload-session')) return json({ success: true, result: { jwt: 'SESS', buckets: [] } });
+        if (method === 'GET' && url.includes('/workers/domains')) return json({ success: true, result: [] });
+        if (method === 'POST' && /\/workers\/scripts\/orphan-[ab]\/subdomain$/.test(url)) {
+          if (subdomainEnableFails) {
+            subdomainEnableFails = false;
+            return json({ success: false, errors: [{ message: 'workers.dev enable unavailable' }] }, 500);
+          }
+          return json({ success: true, result: { enabled: true } });
+        }
+        if (method === 'PUT' && /\/workers\/scripts\/orphan-[ab]$/.test(url)) return json({ success: true, result: {} });
+        if (url.includes('/workers/scripts')) {
+          return json({ success: true, result: [{ id: 'orphan-a', tag: 'tag-a' }, { id: 'orphan-b', tag: 'tag-b' }] });
+        }
+        if (url.includes('/access/identity_providers')) return json({ success: true, result: [{ id: 'otp-1', type: 'onetimepin', name: 'One-time PIN login' }] });
+        if (url.includes('/access/apps/')) {
+          if (method === 'PUT') {
+            appPuts += 1;
+            return json({ success: true, result: { id: 'app-1' } });
+          }
+          return json({ success: true, result: { id: 'app-1', destinations: [{ type: 'worker', worker_id: 'tag-a' }] } });
+        }
+        if (url.includes('/access/apps')) {
+          if (method === 'POST') {
+            appPosts += 1;
+            const id = `app-${appPosts}`;
+            listedApps.push({ id, name: 'Renamed by user', destinations: [{ type: 'worker', worker_id: appPosts === 1 ? 'tag-a' : 'tag-b' }] });
+            return json({ success: true, result: { id } });
+          }
+          return json({ success: true, result: listedApps });
+        }
+        return json({ success: true, result: {} });
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      try {
+        // Deploy A to script `orphan-a`: the Access app is created, then the
+        // workers.dev enable fails. The failed record must remember it targeted
+        // `orphan-a` — the script name is the join key the sibling scan uses.
+        const first = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileName: 'index.html', providerId: CLOUDFLARE_WORKERS_PROVIDER_ID }),
+        });
+        expect(first.status).toBeGreaterThanOrEqual(500);
+        expect(appPosts).toBe(1);
+
+        // The global override now points every deploy at `orphan-b`. Without a
+        // recorded script name, A's record would re-resolve to `orphan-b` and be
+        // counted as a sibling of B — handing B the app that guards `orphan-a`.
+        await saveConfig('orphan-b');
+        const second = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileName: 'b.html', providerId: CLOUDFLARE_WORKERS_PROVIDER_ID }),
+        });
+        expect(second.status).toBe(200);
+        const secondBody = await second.json() as Record<string, unknown>;
+        expect(secondBody.cloudflareWorkers).toMatchObject({ accessProtected: true, accessAppId: 'app-2' });
+        expect(appPosts).toBe(2);
+        expect(appPuts).toBe(0);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('records the custom hostname a failed Workers deploy attached as owned, so a later detach is not refused as foreign', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-workers-domain-orphan-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    configureCloudflareWorkersDataDir(stateRoot);
+    try {
+      const dataDir = process.env.OD_DATA_DIR;
+      if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+      const projectId = `workers-domain-orphan-${Date.now()}`;
+      const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+      await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>Hello</h1>');
+      expect((await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: projectId, name: 'Domain orphan', skillId: null, designSystemId: null }),
+      })).status).toBe(200);
+      const putConfig = async (hostname: string) => {
+        expect((await fetch(`${baseUrl}/api/deploy/config`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            providerId: CLOUDFLARE_WORKERS_PROVIDER_ID,
+            token: 'tok',
+            accountId: 'acct_test',
+            scriptName: 'my-site',
+            customDomain: { hostname, zoneId: 'zone-1' },
+          }),
+        })).status).toBe(200);
+      };
+      await putConfig('old.example.com');
+
+      const realFetch = globalThis.fetch;
+      const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+      // What Cloudflare routes to the script right now, and whether the stale
+      // hostname's detach goes through.
+      let routed: Array<Record<string, string>> = [];
+      let detachFails = false;
+      const cfCalls: Array<{ url: string; method: string }> = [];
+      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        const method = (init?.method || 'GET').toUpperCase();
+        cfCalls.push({ url, method });
+        if (method === 'HEAD') return new Response('', { status: 200 });
+        if (url.endsWith('/workers/subdomain')) return json({ success: true, result: { subdomain: 'acct-test' } });
+        if (url.includes('assets-upload-session')) return json({ success: true, result: { jwt: 'SESS', buckets: [] } });
+        if (method === 'GET' && url.includes('/workers/domains?')) return json({ success: true, result: routed });
+        if (method === 'PUT' && url.endsWith('/workers/domains')) {
+          const body = JSON.parse(String(init?.body)) as { hostname: string };
+          const id = body.hostname === 'old.example.com' ? 'dom-old' : 'dom-new';
+          routed = [...routed.filter((d) => d.hostname !== body.hostname), { id, hostname: body.hostname, service: 'my-site', zone_id: 'zone-1' }];
+          return json({ success: true, result: { id } });
+        }
+        if (method === 'GET' && /\/workers\/domains\/dom-(old|new)$/.test(url)) {
+          const id = url.endsWith('dom-old') ? 'dom-old' : 'dom-new';
+          const hostname = id === 'dom-old' ? 'old.example.com' : 'new.example.com';
+          return json({ success: true, result: { id, hostname, service: 'my-site', zone_id: 'zone-1' } });
+        }
+        if (method === 'DELETE' && url.includes('/workers/domains/')) {
+          if (detachFails) return json({ success: false, errors: [{ message: 'detach denied' }] }, 500);
+          return json({ success: true, result: null });
+        }
+        if (url.includes('/workers/scripts/') && method === 'PUT') return json({ success: true, result: {} });
+        if (url.includes('/subdomain') && method === 'POST') return json({ success: true, result: { enabled: true } });
+        // The deploy reads the script's modified_on before its PUT and the
+        // workers.dev config before replacing it.
+        if (method === 'GET' && url.includes('/workers/scripts?')) return json({ success: true, result: [] });
+        if (method === 'GET' && url.endsWith('/subdomain')) return json({ success: true, result: { enabled: false, previews_enabled: false } });
+        throw new Error(`Unexpected Cloudflare fetch: ${method} ${url}`);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      try {
+        const body = JSON.stringify({ fileName: 'index.html', providerId: CLOUDFLARE_WORKERS_PROVIDER_ID });
+        // A successful deploy attaches old.example.com and records it as owned.
+        const first = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+        expect(first.status).toBe(200);
+
+        // The hostname changes. The next deploy attaches new.example.com, then
+        // fails on the detach of the now-stale old.example.com: the attach
+        // already happened, so new.example.com is routed to the script.
+        await putConfig('new.example.com');
+        detachFails = true;
+        const second = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+        expect(second.status).toBeGreaterThanOrEqual(400);
+        expect(cfCalls.some((c) => c.method === 'PUT' && c.url.endsWith('/workers/domains'))).toBe(true);
+
+        // Both hostnames are ours: the one the failed deploy attached AND the
+        // one the prior deploy owned (a failed deploy never disowns anything).
+        detachFails = false;
+        const before = cfCalls.filter((c) => c.method === 'DELETE').length;
+        const detachNew = await fetch(`${baseUrl}/api/deploy/cloudflare-workers/domains/dom-new?projectId=${encodeURIComponent(projectId)}`, { method: 'DELETE' });
+        expect(detachNew.status).toBe(200);
+        expect(await detachNew.json()).toEqual({ ok: true });
+        const detachOld = await fetch(`${baseUrl}/api/deploy/cloudflare-workers/domains/dom-old?projectId=${encodeURIComponent(projectId)}`, { method: 'DELETE' });
+        expect(detachOld.status).toBe(200);
+        expect(cfCalls.filter((c) => c.method === 'DELETE').slice(before).map((c) => c.url)).toEqual([
+          expect.stringContaining('/workers/domains/dom-new'),
+          expect.stringContaining('/workers/domains/dom-old'),
+        ]);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('a failed Workers deploy stops vouching for the stale hostnames it detached, and keeps vouching for the one it could not', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-workers-detach-forget-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    configureCloudflareWorkersDataDir(stateRoot);
+    try {
+      const dataDir = process.env.OD_DATA_DIR;
+      if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+      const projectId = `workers-detach-forget-${Date.now()}`;
+      const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+      await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>Hello</h1>');
+      expect((await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: projectId, name: 'Workers detach-forget', skillId: null, designSystemId: null }),
+      })).status).toBe(200);
+      const putConfig = async (hostname: string) => {
+        expect((await fetch(`${baseUrl}/api/deploy/config`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            providerId: CLOUDFLARE_WORKERS_PROVIDER_ID,
+            token: 'tok',
+            accountId: 'acct_test',
+            scriptName: 'my-site',
+            customDomain: { hostname, zoneId: 'zone-1' },
+          }),
+        })).status).toBe(200);
+      };
+      const realFetch = globalThis.fetch;
+      const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+      const idFor = (hostname: string) => 'dom-' + hostname.split('.')[0];
+      const hostnameFor = (id: string) => id.replace(/^dom-/, '') + '.example.com';
+      // What Cloudflare routes to the script right now; detaches that are
+      // refused; whether an attach lands but its response is lost.
+      let routed: Array<Record<string, string>> = [];
+      const detachFailsFor = new Set<string>();
+      let attachResponseLost = false;
+      const cfCalls: Array<{ url: string; method: string }> = [];
+      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        const method = (init?.method || 'GET').toUpperCase();
+        cfCalls.push({ url, method });
+        if (method === 'HEAD') return new Response('', { status: 200 });
+        if (url.endsWith('/workers/subdomain')) return json({ success: true, result: { subdomain: 'acct-test' } });
+        if (url.includes('assets-upload-session')) return json({ success: true, result: { jwt: 'SESS', buckets: [] } });
+        if (method === 'GET' && url.includes('/workers/domains?')) return json({ success: true, result: routed });
+        if (method === 'PUT' && url.endsWith('/workers/domains')) {
+          const body = JSON.parse(String(init?.body)) as { hostname: string };
+          const id = idFor(body.hostname);
+          routed = [...routed.filter((d) => d.hostname !== body.hostname), { id, hostname: body.hostname, service: 'my-site', zone_id: 'zone-1' }];
+          if (attachResponseLost) return json({ success: false, errors: [{ message: 'attach response lost' }] }, 500);
+          return json({ success: true, result: { id } });
+        }
+        const single = /\/workers\/domains\/(dom-[a-z]+)$/.exec(url);
+        if (method === 'GET' && single) {
+          const id = single[1]!;
+          return json({ success: true, result: { id, hostname: hostnameFor(id), service: 'my-site', zone_id: 'zone-1' } });
+        }
+        if (method === 'DELETE' && single) {
+          const id = single[1]!;
+          if (detachFailsFor.has(id)) return json({ success: false, errors: [{ message: 'detach denied' }] }, 500);
+          routed = routed.filter((d) => d.id !== id);
+          return json({ success: true, result: null });
+        }
+        if (url.includes('/workers/scripts/') && method === 'PUT') return json({ success: true, result: {} });
+        if (url.includes('/subdomain') && method === 'POST') return json({ success: true, result: { enabled: true } });
+        // The deploy reads the script's modified_on before its PUT and the
+        // workers.dev config before replacing it.
+        if (method === 'GET' && url.includes('/workers/scripts?')) return json({ success: true, result: [] });
+        if (method === 'GET' && url.endsWith('/subdomain')) return json({ success: true, result: { enabled: false, previews_enabled: false } });
+        throw new Error(`Unexpected Cloudflare fetch: ${method} ${url}`);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      const deployBody = JSON.stringify({ fileName: 'index.html', providerId: CLOUDFLARE_WORKERS_PROVIDER_ID });
+      const deploy = () => fetch(`${baseUrl}/api/projects/${projectId}/deploy`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: deployBody });
+      const detachRoute = (id: string) => fetch(`${baseUrl}/api/deploy/cloudflare-workers/domains/${id}?projectId=${encodeURIComponent(projectId)}`, { method: 'DELETE' });
+      try {
+        // a.example.com: attached and owned.
+        await putConfig('a.example.com');
+        expect((await deploy()).status).toBe(200);
+        // b.example.com: attached, but the stale a.example.com cannot be
+        // detached — the deploy fails and BOTH stay owned.
+        await putConfig('b.example.com');
+        detachFailsFor.add('dom-a');
+        expect((await deploy()).status).toBeGreaterThanOrEqual(400);
+        expect(routed.map((d) => d.hostname)).toEqual(['a.example.com', 'b.example.com']);
+        // c.example.com: attached; a.example.com IS detached, then the detach
+        // of b.example.com fails. The deploy fails with a.example.com gone.
+        await putConfig('c.example.com');
+        detachFailsFor.clear();
+        detachFailsFor.add('dom-b');
+        expect((await deploy()).status).toBeGreaterThanOrEqual(400);
+        expect(cfCalls.some((c) => c.method === 'DELETE' && c.url.endsWith('/workers/domains/dom-a'))).toBe(true);
+        expect(routed.map((d) => d.hostname)).toEqual(['b.example.com', 'c.example.com']);
+
+        // No record vouches for a.example.com any more: a detach request for it
+        // is refused as foreign and sends nothing to Cloudflare …
+        detachFailsFor.clear();
+        const deletesBefore = cfCalls.filter((c) => c.method === 'DELETE').length;
+        const detachA = await detachRoute('dom-a');
+        expect(detachA.status).toBe(409);
+        expect(JSON.stringify(await detachA.json())).toContain('CFW_DOMAIN_FOREIGN');
+        expect(cfCalls.filter((c) => c.method === 'DELETE').length).toBe(deletesBefore);
+        // … while the hostname the deploy could not detach and the one it
+        // attached are both still owned.
+        for (const id of ['dom-b', 'dom-c']) {
+          const resp = await detachRoute(id);
+          expect(resp.status).toBe(200);
+          expect(await resp.json()).toEqual({ ok: true });
+        }
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('a hostname written ahead of its attach is vouched for by hostname when the attach landed but its record never did', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-workers-attach-write-ahead-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    configureCloudflareWorkersDataDir(stateRoot);
+    try {
+      const dataDir = process.env.OD_DATA_DIR;
+      if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+      const projectId = `workers-attach-write-ahead-${Date.now()}`;
+      const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+      await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>Hello</h1>');
+      expect((await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: projectId, name: 'Workers attach-write-ahead', skillId: null, designSystemId: null }),
+      })).status).toBe(200);
+      const putConfig = async (hostname: string) => {
+        expect((await fetch(`${baseUrl}/api/deploy/config`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            providerId: CLOUDFLARE_WORKERS_PROVIDER_ID,
+            token: 'tok',
+            accountId: 'acct_test',
+            scriptName: 'my-site',
+            customDomain: { hostname, zoneId: 'zone-1' },
+          }),
+        })).status).toBe(200);
+      };
+      const realFetch = globalThis.fetch;
+      const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+      const idFor = (hostname: string) => 'dom-' + hostname.split('.')[0];
+      const hostnameFor = (id: string) => id.replace(/^dom-/, '') + '.example.com';
+      // What Cloudflare routes to the script right now; detaches that are
+      // refused; whether an attach lands but its response is lost.
+      let routed: Array<Record<string, string>> = [];
+      const detachFailsFor = new Set<string>();
+      let attachResponseLost = false;
+      const cfCalls: Array<{ url: string; method: string }> = [];
+      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        const method = (init?.method || 'GET').toUpperCase();
+        cfCalls.push({ url, method });
+        if (method === 'HEAD') return new Response('', { status: 200 });
+        if (url.endsWith('/workers/subdomain')) return json({ success: true, result: { subdomain: 'acct-test' } });
+        if (url.includes('assets-upload-session')) return json({ success: true, result: { jwt: 'SESS', buckets: [] } });
+        if (method === 'GET' && url.includes('/workers/domains?')) return json({ success: true, result: routed });
+        if (method === 'PUT' && url.endsWith('/workers/domains')) {
+          const body = JSON.parse(String(init?.body)) as { hostname: string };
+          const id = idFor(body.hostname);
+          routed = [...routed.filter((d) => d.hostname !== body.hostname), { id, hostname: body.hostname, service: 'my-site', zone_id: 'zone-1' }];
+          if (attachResponseLost) return json({ success: false, errors: [{ message: 'attach response lost' }] }, 500);
+          return json({ success: true, result: { id } });
+        }
+        const single = /\/workers\/domains\/(dom-[a-z]+)$/.exec(url);
+        if (method === 'GET' && single) {
+          const id = single[1]!;
+          return json({ success: true, result: { id, hostname: hostnameFor(id), service: 'my-site', zone_id: 'zone-1' } });
+        }
+        if (method === 'DELETE' && single) {
+          const id = single[1]!;
+          if (detachFailsFor.has(id)) return json({ success: false, errors: [{ message: 'detach denied' }] }, 500);
+          routed = routed.filter((d) => d.id !== id);
+          return json({ success: true, result: null });
+        }
+        if (url.includes('/workers/scripts/') && method === 'PUT') return json({ success: true, result: {} });
+        if (url.includes('/subdomain') && method === 'POST') return json({ success: true, result: { enabled: true } });
+        // The deploy reads the script's modified_on before its PUT and the
+        // workers.dev config before replacing it.
+        if (method === 'GET' && url.includes('/workers/scripts?')) return json({ success: true, result: [] });
+        if (method === 'GET' && url.endsWith('/subdomain')) return json({ success: true, result: { enabled: false, previews_enabled: false } });
+        throw new Error(`Unexpected Cloudflare fetch: ${method} ${url}`);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      const deployBody = JSON.stringify({ fileName: 'index.html', providerId: CLOUDFLARE_WORKERS_PROVIDER_ID });
+      const deploy = () => fetch(`${baseUrl}/api/projects/${projectId}/deploy`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: deployBody });
+      const detachRoute = (id: string) => fetch(`${baseUrl}/api/deploy/cloudflare-workers/domains/${id}?projectId=${encodeURIComponent(projectId)}`, { method: 'DELETE' });
+      try {
+        // The attach of c.example.com LANDS at Cloudflare, but its response is
+        // lost: the deploy fails believing nothing was attached, so no record
+        // owns the hostname — only the write-ahead vouches for it.
+        await putConfig('c.example.com');
+        attachResponseLost = true;
+        expect((await deploy()).status).toBeGreaterThanOrEqual(400);
+        expect(routed.map((d) => d.hostname)).toEqual(['c.example.com']);
+        attachResponseLost = false;
+
+        // The next deploy reconciles it as a stale OWNED hostname (by
+        // hostname) instead of leaving it routed as foreign.
+        await putConfig('d.example.com');
+        expect((await deploy()).status).toBe(200);
+        expect(cfCalls.some((c) => c.method === 'DELETE' && c.url.endsWith('/workers/domains/dom-c'))).toBe(true);
+        expect(routed.map((d) => d.hostname)).toEqual(['d.example.com']);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('a Workers deploy takes the Access app and owned hostnames from EVERY record of the same script, not only the file being deployed', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-workers-shared-ownership-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    configureCloudflareWorkersDataDir(stateRoot);
+    try {
+      const dataDir = process.env.OD_DATA_DIR;
+      if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+      const projectId = `workers-shared-ownership-${Date.now()}`;
+      // Unique per run: the records this test leaves in the shared daemon DB
+      // would otherwise be siblings of every later test that deploys a Worker
+      // named `shared-script`, handing that deploy an Access app its mock
+      // cannot serve (priorWorkersOwnershipForScript reads across projects).
+      const scriptName = `shared-ownership-${Date.now()}`;
+      const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+      await writeFile(path.join(dir, 'a.html'), '<!doctype html><h1>A</h1>');
+      await writeFile(path.join(dir, 'b.html'), '<!doctype html><h1>B</h1>');
+      expect((await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: projectId, name: 'Shared ownership', skillId: null, designSystemId: null }),
+      })).status).toBe(200);
+      // One global scriptName: every file deploys the SAME Worker, so the Access
+      // app and the attached hostname are shared by every (project, file) record.
+      const putConfig = async (customDomain: { hostname: string; zoneId: string } | null) => {
+        expect((await fetch(`${baseUrl}/api/deploy/config`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            providerId: CLOUDFLARE_WORKERS_PROVIDER_ID,
+            token: 'tok',
+            accountId: 'acct_test',
+            scriptName,
+            access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } },
+            customDomain,
+          }),
+        })).status).toBe(200);
+      };
+      await putConfig({ hostname: 'app.example.com', zoneId: 'zone-1' });
+
+      const realFetch = globalThis.fetch;
+      const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+      let routed: Array<Record<string, string>> = [];
+      // Listed under a user-chosen name once created: only a recorded id proves ownership.
+      let listedApps: unknown[] = [];
+      let appPosts = 0;
+      const cfCalls: Array<{ url: string; method: string }> = [];
+      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        const method = (init?.method || 'GET').toUpperCase();
+        cfCalls.push({ url, method });
+        if (method === 'HEAD' || isPublicProbeUrl(url)) {
+          return new Response('', { status: 302, headers: { location: 'https://acct-test.cloudflareaccess.com/cdn-cgi/access/login' } });
+        }
+        if (url.endsWith('/workers/subdomain')) return json({ success: true, result: { subdomain: 'acct-test' } });
+        if (url.includes('assets-upload-session')) return json({ success: true, result: { jwt: 'SESS', buckets: [] } });
+        if (method === 'GET' && url.includes('/workers/domains?')) return json({ success: true, result: routed });
+        if (method === 'PUT' && url.endsWith('/workers/domains')) {
+          const body = JSON.parse(String(init?.body)) as { hostname: string };
+          routed = [...routed.filter((d) => d.hostname !== body.hostname), { id: 'dom-app', hostname: body.hostname, service: scriptName, zone_id: 'zone-1' }];
+          return json({ success: true, result: { id: 'dom-app' } });
+        }
+        if (method === 'DELETE' && url.includes('/workers/domains/')) {
+          routed = routed.filter((d) => !url.endsWith('/' + d.id));
+          return json({ success: true, result: null });
+        }
+        if (method === 'PUT' && url.endsWith('/workers/scripts/' + scriptName)) return json({ success: true, result: {} });
+        if (method === 'POST' && url.endsWith('/workers/scripts/' + scriptName + '/subdomain')) return json({ success: true, result: { enabled: true } });
+        if (url.includes('/workers/scripts')) return json({ success: true, result: [{ id: scriptName, tag: 'tag-shared' }] });
+        if (url.includes('/access/identity_providers')) return json({ success: true, result: [{ id: 'otp-1', type: 'onetimepin', name: 'One-time PIN login' }] });
+        if (url.includes('/access/apps/')) {
+          if (method === 'PUT') return json({ success: true, result: { id: 'app-shared' } });
+          return json({ success: true, result: { id: 'app-shared', destinations: [{ type: 'worker', worker_id: 'tag-shared' }] } });
+        }
+        if (url.includes('/access/apps')) {
+          if (method === 'POST') {
+            appPosts += 1;
+            listedApps = [{ id: 'app-shared', name: 'Renamed by user', destinations: [{ type: 'worker', worker_id: 'tag-shared' }] }];
+            return json({ success: true, result: { id: 'app-shared' } });
+          }
+          return json({ success: true, result: listedApps });
+        }
+        return json({ success: true, result: {} });
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      try {
+        const deploy = (fileName: string) => fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileName, providerId: CLOUDFLARE_WORKERS_PROVIDER_ID }),
+        });
+        // a.html creates the Access app and attaches app.example.com. Both are
+        // recorded on a.html's record and nowhere else.
+        const first = await deploy('a.html');
+        expect(first.status).toBe(200);
+        expect(appPosts).toBe(1);
+        expect(routed.map((d) => d.hostname)).toEqual(['app.example.com']);
+
+        // The hostname is dropped from the config, then b.html deploys the SAME
+        // script. b.html has no record of its own: the app and the hostname are
+        // known only through a.html's record.
+        await putConfig(null);
+        const second = await deploy('b.html');
+        expect(second.status).toBe(200);
+        const secondBody = await second.json() as Record<string, unknown>;
+        // It reuses the app a.html created instead of refusing it as foreign …
+        expect(appPosts).toBe(1);
+        expect(secondBody.cloudflareWorkers).toMatchObject({ accessProtected: true, accessAppId: 'app-shared' });
+        // … and detaches the now-stale hostname a.html attached instead of
+        // leaving it routed as a "foreign" hostname it will not touch.
+        expect(cfCalls.some((c) => c.method === 'DELETE' && c.url.endsWith('/workers/domains/dom-app'))).toBe(true);
+        expect(routed).toEqual([]);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('carries a RETAINED Access app id across the script records, so a redeploy of another file cannot orphan it', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-workers-retained-carry-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    configureCloudflareWorkersDataDir(stateRoot);
+    try {
+      const dataDir = process.env.OD_DATA_DIR;
+      if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+      const stamp = Date.now();
+      const projectId = `workers-retained-carry-${stamp}`;
+      // Unique per run: the records this test leaves in the shared daemon DB
+      // would otherwise be siblings of every later test that deploys either
+      // script (priorWorkersOwnershipForScript reads across projects by name).
+      const srcScript = `retain-src-${stamp}`;
+      const dstScript = `retain-dst-${stamp}`;
+      const tagOf = (script: string) => `tag-${script}`;
+      const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+      await writeFile(path.join(dir, 'a.html'), '<!doctype html><h1>A</h1>');
+      await writeFile(path.join(dir, 'b.html'), '<!doctype html><h1>B</h1>');
+      expect((await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: projectId, name: 'Workers retained carry', skillId: null, designSystemId: null }),
+      })).status).toBe(200);
+      const putConfig = async (scriptName: string) => {
+        expect((await fetch(`${baseUrl}/api/deploy/config`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            providerId: CLOUDFLARE_WORKERS_PROVIDER_ID,
+            token: 'tok',
+            accountId: 'acct_test',
+            scriptName,
+            access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } },
+          }),
+        })).status).toBe(200);
+      };
+
+      const realFetch = globalThis.fetch;
+      const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+      // The Access apps this deploy created, by the destination they were made
+      // for. An app whose destination is the CURRENT script's tag is this
+      // Worker's own (it is reused); one left pointing at the tag the script
+      // name moved away from is what a rename RETAINS.
+      const apps = new Map<string, string>();
+      let appPosts = 0;
+      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        const method = (init?.method || 'GET').toUpperCase();
+        if (method === 'HEAD' || isPublicProbeUrl(url)) {
+          return new Response('', { status: 302, headers: { location: 'https://acct-test.cloudflareaccess.com/cdn-cgi/access/login' } });
+        }
+        if (url.endsWith('/workers/subdomain')) return json({ success: true, result: { subdomain: 'acct-test' } });
+        if (url.includes('assets-upload-session')) return json({ success: true, result: { jwt: 'SESS', buckets: [] } });
+        if (url.includes('/workers/assets/upload')) return json({ success: true, result: { jwt: 'COMPLETION' } });
+        if (url.includes('/workers/scripts/') && url.endsWith('/subdomain')) {
+          return json({ success: true, result: { enabled: true, previews_enabled: false } });
+        }
+        if (method === 'GET' && url.includes('/workers/domains?')) return json({ success: true, result: [] });
+        if (method === 'PUT' && (url.endsWith('/workers/scripts/' + srcScript) || url.endsWith('/workers/scripts/' + dstScript))) {
+          return json({ success: true, result: {} });
+        }
+        // Each script carries its OWN tag: that tag is what separates "this app
+        // guards this Worker" from "this app guards the Worker the rename left
+        // behind", which is the whole difference between reuse and retention.
+        if (method === 'GET' && url.includes('/workers/scripts')) {
+          return json({ success: true, result: [srcScript, dstScript].map((id) => ({ id, tag: tagOf(id) })) });
+        }
+        if (url.includes('/access/identity_providers')) return json({ success: true, result: [{ id: 'otp-1', type: 'onetimepin', name: 'One-time PIN login' }] });
+        if (url.includes('/access/apps/')) {
+          const id = url.slice(url.indexOf('/access/apps/') + '/access/apps/'.length);
+          if (method === 'PUT') return json({ success: true, result: { id } });
+          if (method === 'DELETE') return json({ success: true, result: { id } });
+          return json({ success: true, result: { id, destinations: [{ type: 'worker', worker_id: apps.get(id) ?? '' }] } });
+        }
+        if (url.includes('/access/apps')) {
+          if (method === 'POST') {
+            appPosts += 1;
+            const id = `app-${appPosts}`;
+            const body = JSON.parse(String(init?.body ?? '{}')) as { destinations?: Array<{ worker_id?: string }> };
+            apps.set(id, body.destinations?.[0]?.worker_id ?? '');
+            return json({ success: true, result: { id } });
+          }
+          return json({
+            success: true,
+            result: [...apps.entries()].map(([id, destination]) => ({
+              id,
+              name: 'Workers retained carry (OpenDesign)',
+              destinations: [{ type: 'worker', worker_id: destination }],
+            })),
+          });
+        }
+        if (url.endsWith('/user')) return json({ success: true, result: { email: 'me@example.com' } });
+        return json({ success: true, result: {} });
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      try {
+        const deploy = (fileName: string) => fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileName, providerId: CLOUDFLARE_WORKERS_PROVIDER_ID }),
+        });
+        const workersOf = async (resp: Response) =>
+          ((await resp.json()) as Record<string, unknown>).cloudflareWorkers as Record<string, unknown>;
+
+        // a.html deploys the FIRST script name and creates its Access app.
+        await putConfig(srcScript);
+        const first = await deploy('a.html');
+        expect(first.status).toBe(200);
+        expect((await workersOf(first)).accessAppId).toBe('app-1');
+
+        // The script name changes: a.html's redeploy creates a NEW app for the
+        // renamed Worker and RETAINS app-1, which still guards the old one.
+        await putConfig(dstScript);
+        const renamed = await deploy('a.html');
+        expect(renamed.status).toBe(200);
+        const renamedWorkers = await workersOf(renamed);
+        expect(renamedWorkers.accessAppId).toBe('app-2');
+        expect(renamedWorkers.retainedAccessAppIds).toEqual(['app-1']);
+
+        // b.html has no record of its own, so the retained handle is known only
+        // through a.html's record. Its deploy must carry the id forward: the
+        // record's metadata REPLACES the prior one, so a deploy that forgets it
+        // erases the only handle OpenDesign has on an app it still owns.
+        const sibling = await deploy('b.html');
+        expect(sibling.status).toBe(200);
+        const siblingWorkers = await workersOf(sibling);
+        expect(siblingWorkers.accessAppId).toBe('app-2');
+        expect(siblingWorkers.retainedAccessAppIds).toEqual(['app-1']);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses a concurrent Cloudflare Workers deploy from a DIFFERENT project that resolves to the same script name', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-workers-script-singleflight-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    configureCloudflareWorkersDataDir(stateRoot);
+    try {
+      const dataDir = process.env.OD_DATA_DIR;
+      if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+      const stamp = Date.now();
+      const projectIds = [`workers-shared-a-${stamp}`, `workers-shared-b-${stamp}`];
+      for (const projectId of projectIds) {
+        const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+        await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>Hello</h1>');
+        expect((await fetch(`${baseUrl}/api/projects`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: projectId, name: `Shared ${projectId}`, skillId: null, designSystemId: null }),
+        })).status).toBe(200);
+      }
+      // A global scriptName override makes every project deploy the same Worker.
+      expect((await fetch(`${baseUrl}/api/deploy/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ providerId: CLOUDFLARE_WORKERS_PROVIDER_ID, token: 'tok', accountId: 'acct_test', scriptName: 'shared-script' }),
+      })).status).toBe(200);
+
+      const realFetch = globalThis.fetch;
+      let scriptPuts = 0;
+      const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        const method = (init?.method || 'GET').toUpperCase();
+        if (url.endsWith('/workers/subdomain')) {
+          await new Promise((resolve) => setTimeout(resolve, 400));
+          return json({ success: true, result: { subdomain: 'acct-test' } });
+        }
+        if (url.includes('assets-upload-session')) return json({ success: true, result: { jwt: 'SESS', buckets: [] } });
+        if (method === 'GET' && url.includes('/workers/domains')) return json({ success: true, result: [] });
+        if (method === 'PUT' && url.endsWith('/workers/scripts/shared-script')) {
+          scriptPuts += 1;
+          return json({ success: true, result: {} });
+        }
+        if (url.includes('/subdomain')) return json({ success: true, result: { enabled: true } });
+        if (method === 'HEAD') return new Response('', { status: 200 });
+        return json({ success: true, result: {} });
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      try {
+        const body = JSON.stringify({ fileName: 'index.html', providerId: CLOUDFLARE_WORKERS_PROVIDER_ID });
+        const first = fetch(`${baseUrl}/api/projects/${projectIds[0]}/deploy`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        const second = fetch(`${baseUrl}/api/projects/${projectIds[1]}/deploy`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+        const [r1, r2] = await Promise.all([first, second]);
+        expect([r1.status, r2.status].sort()).toEqual([200, 409]);
+        const rejected = r1.status === 409 ? r1 : r2;
+        const rejectedBody = await rejected.json() as { error: { code: string; message: string } };
+        expect(rejectedBody.error.code).toBe('DEPLOY_IN_PROGRESS');
+        expect(rejectedBody.error.message).toContain('shared-script');
+        expect(scriptPuts).toBe(1);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses a second concurrent Cloudflare Workers deploy of the same project with 409 DEPLOY_IN_PROGRESS', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-workers-singleflight-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    configureCloudflareWorkersDataDir(stateRoot);
+    try {
+      const dataDir = process.env.OD_DATA_DIR;
+      if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+      const projectId = `workers-singleflight-${Date.now()}`;
+      const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+      await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>Hello</h1>');
+      const createProjectResp = await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: projectId, name: 'Workers single flight', skillId: null, designSystemId: null }),
+      });
+      expect(createProjectResp.status).toBe(200);
+      const saveResp = await fetch(`${baseUrl}/api/deploy/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ providerId: CLOUDFLARE_WORKERS_PROVIDER_ID, token: 'tok', accountId: 'acct_test', scriptName: 'single-flight' }),
+      });
+      expect(saveResp.status).toBe(200);
+
+      const realFetch = globalThis.fetch;
+      let scriptPuts = 0;
+      const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        const method = (init?.method || 'GET').toUpperCase();
+        if (url.endsWith('/workers/subdomain')) {
+          // Hold the first deploy here long enough for the second request to arrive.
+          await new Promise((resolve) => setTimeout(resolve, 400));
+          return json({ success: true, result: { subdomain: 'acct-test' } });
+        }
+        if (url.includes('assets-upload-session')) return json({ success: true, result: { jwt: 'SESS', buckets: [] } });
+        if (method === 'GET' && url.includes('/workers/domains')) return json({ success: true, result: [] });
+        if (method === 'PUT' && url.endsWith('/workers/scripts/single-flight')) {
+          scriptPuts += 1;
+          return json({ success: true, result: {} });
+        }
+        if (url.includes('/subdomain')) return json({ success: true, result: { enabled: true } });
+        if (method === 'HEAD') return new Response('', { status: 200 });
+        return json({ success: true, result: {} });
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      try {
+        const body = JSON.stringify({ fileName: 'index.html', providerId: CLOUDFLARE_WORKERS_PROVIDER_ID });
+        const first = fetch(`${baseUrl}/api/projects/${projectId}/deploy`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        const second = fetch(`${baseUrl}/api/projects/${projectId}/deploy`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+        const [r1, r2] = await Promise.all([first, second]);
+        const statuses = [r1.status, r2.status].sort();
+        expect(statuses).toEqual([200, 409]);
+        const rejected = r1.status === 409 ? r1 : r2;
+        expect(await rejected.json()).toMatchObject({ error: { code: 'DEPLOY_IN_PROGRESS' } });
+        expect(scriptPuts).toBe(1);
+
+        // Once the first finished, a new deploy is admitted again.
+        const third = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+        expect(third.status).toBe(200);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  // Shared fixture for the Workers route tests below: one project with two
+  // files that deploy the SAME script, a Cloudflare mock that tracks what is
+  // routed to it, and helpers for the deploy / detach routes.
+  type HeadMode = 'access' | 'plain' | 'unreachable';
+  async function workersSiblingFixture(slug: string, options: { access?: boolean } = {}) {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), `od-deploy-route-workers-${slug}-`));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    configureCloudflareWorkersDataDir(stateRoot);
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const stamp = Date.now();
+    const projectId = `workers-${slug}-${stamp}`;
+    // Unique per run so the records this test leaves in the shared daemon DB
+    // are nobody else's siblings (priorWorkersOwnershipForScript reads across
+    // projects by script name).
+    const scriptName = `${slug}-${stamp}`;
+    const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+    await writeFile(path.join(dir, 'a.html'), '<!doctype html><h1>A</h1>');
+    await writeFile(path.join(dir, 'b.html'), '<!doctype html><h1>B</h1>');
+    expect((await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: `Workers ${slug}`, skillId: null, designSystemId: null }),
+    })).status).toBe(200);
+    const putConfig = async (input: { hostname?: string | null; access?: boolean }) => {
+      expect((await fetch(`${baseUrl}/api/deploy/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          providerId: CLOUDFLARE_WORKERS_PROVIDER_ID,
+          token: 'tok',
+          accountId: 'acct_test',
+          scriptName,
+          customDomain: input.hostname ? { hostname: input.hostname, zoneId: 'zone-1' } : null,
+          access: input.access ? { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } } : { enabled: false },
+        }),
+      })).status).toBe(200);
+    };
+    const realFetch = globalThis.fetch;
+    const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+    const idFor = (hostname: string) => 'dom-' + hostname.split('.')[0];
+    const state = {
+      routed: [] as Array<Record<string, string>>,
+      attachMode: 'ok' as 'ok' | 'refused' | 'transport',
+      // What the public URLs answer to a probe: the Access login redirect, a
+      // plain 200 (no gate), or no answer at all — one answer for every URL,
+      // or a function choosing per URL.
+      headMode: (options.access ? 'access' : 'plain') as HeadMode | ((url: string) => HeadMode),
+      // The script's workers.dev route, as Cloudflare would report and store it.
+      subdomainEnabled: true,
+      cfCalls: [] as Array<{ url: string; method: string; dispatched: boolean }>,
+      // Consumed once: the next non-HEAD Cloudflare call awaits it before it
+      // answers, holding a deploy at its first API call.
+      hold: null as null | (() => Promise<void>),
+      // Consumed once: the next probe awaits it before it
+      // answers, holding a check-link inside its probe.
+      headHold: null as null | (() => Promise<void>),
+      // Whether turning the workers.dev route OFF (the exposure withdrawal)
+      // succeeds at Cloudflare.
+      subdomainDisableMode: 'ok' as 'ok' | 'error',
+    };
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      const method = (init?.method || 'GET').toUpperCase();
+      state.cfCalls.push({ url, method, dispatched: init?.dispatcher !== undefined });
+      if (method === 'HEAD' || isPublicProbeUrl(url)) {
+        if (state.headHold) {
+          const headHold = state.headHold;
+          state.headHold = null;
+          await headHold();
+        }
+        const headMode = typeof state.headMode === 'function' ? state.headMode(url) : state.headMode;
+        if (headMode === 'unreachable') throw new TypeError('fetch failed');
+        return headMode === 'access'
+          ? new Response('', { status: 302, headers: { location: 'https://acct-test.cloudflareaccess.com/cdn-cgi/access/login' } })
+          : new Response('', { status: 200 });
+      }
+      if (state.hold) {
+        const hold = state.hold;
+        state.hold = null;
+        await hold();
+      }
+      if (url.endsWith('/workers/subdomain')) return json({ success: true, result: { subdomain: 'acct-test' } });
+      if (url.includes('assets-upload-session')) return json({ success: true, result: { jwt: 'SESS', buckets: [] } });
+      if (method === 'GET' && url.includes('/workers/domains?')) return json({ success: true, result: state.routed });
+      if (method === 'PUT' && url.endsWith('/workers/domains')) {
+        const body = JSON.parse(String(init?.body)) as { hostname: string };
+        const id = idFor(body.hostname);
+        if (state.attachMode === 'refused') return json({ success: false, errors: [{ message: 'attach refused' }] }, 400);
+        // The attach lands either way; on 'transport' its response is lost.
+        state.routed = [...state.routed.filter((d) => d.hostname !== body.hostname), { id, hostname: body.hostname, service: scriptName, zone_id: 'zone-1' }];
+        if (state.attachMode === 'transport') throw new TypeError('fetch failed');
+        return json({ success: true, result: { id } });
+      }
+      const single = /\/workers\/domains\/(dom-[a-z]+)$/.exec(url);
+      if (method === 'GET' && single) {
+        const id = single[1]!;
+        return json({ success: true, result: { id, hostname: id.replace(/^dom-/, '') + '.example.com', service: scriptName, zone_id: 'zone-1' } });
+      }
+      if (method === 'DELETE' && single) {
+        state.routed = state.routed.filter((d) => d.id !== single[1]);
+        return json({ success: true, result: null });
+      }
+      if (method === 'PUT' && url.endsWith('/workers/scripts/' + scriptName)) return json({ success: true, result: {} });
+      if (url.endsWith('/workers/scripts/' + scriptName + '/subdomain')) {
+        if (method === 'POST') {
+          const body = JSON.parse(String(init?.body)) as { enabled?: unknown };
+          if (body.enabled === false && state.subdomainDisableMode === 'error') {
+            return json({ success: false, errors: [{ message: 'subdomain disable refused' }] }, 500);
+          }
+          if (typeof body.enabled === 'boolean') state.subdomainEnabled = body.enabled;
+        }
+        return json({ success: true, result: { enabled: state.subdomainEnabled, previews_enabled: false } });
+      }
+      if (url.includes('/workers/scripts')) return json({ success: true, result: [{ id: scriptName, tag: 'tag-shared' }] });
+      if (url.includes('/access/identity_providers')) return json({ success: true, result: [{ id: 'otp-1', type: 'onetimepin', name: 'One-time PIN login' }] });
+      if (url.includes('/access/apps/')) {
+        if (method === 'PUT') return json({ success: true, result: { id: 'app-shared' } });
+        return json({ success: true, result: { id: 'app-shared', destinations: [{ type: 'worker', worker_id: 'tag-shared' }] } });
+      }
+      if (url.includes('/access/apps')) {
+        if (method === 'POST') return json({ success: true, result: { id: 'app-shared' } });
+        return json({ success: true, result: [] });
+      }
+      throw new Error(`Unexpected Cloudflare fetch: ${method} ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const deploy = (fileName: string, target: 'preview' | 'production' = 'production') => fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileName, providerId: CLOUDFLARE_WORKERS_PROVIDER_ID, target }),
+    });
+    const checkLink = (deploymentId: string) => fetch(`${baseUrl}/api/projects/${projectId}/deployments/${encodeURIComponent(deploymentId)}/check-link`, { method: 'POST' });
+    const detachRoute = (id: string) => fetch(`${baseUrl}/api/deploy/cloudflare-workers/domains/${id}?projectId=${encodeURIComponent(projectId)}`, { method: 'DELETE' });
+    const listDeployments = async () => {
+      const resp = await fetch(`${baseUrl}/api/projects/${projectId}/deployments`);
+      expect(resp.status).toBe(200);
+      return ((await resp.json()) as { deployments: Array<{ fileName: string; status: string; cloudflareWorkers?: Record<string, unknown> }> }).deployments;
+    };
+    const cleanup = async () => {
+      vi.unstubAllGlobals();
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    };
+    return { state, projectId, scriptName, putConfig, deploy, checkLink, detachRoute, listDeployments, cleanup };
+  }
+  const scriptNameOf = (f: { scriptName: string }) => f.scriptName;
+
+  it('a successful Workers deploy stops every sibling record vouching for the hostnames it detached', async () => {
+    const f = await workersSiblingFixture('detach-success');
+    try {
+      // a.html attaches app.example.com; only a.html's record owns it.
+      await f.putConfig({ hostname: 'app.example.com' });
+      expect((await f.deploy('a.html')).status).toBe(200);
+      expect(f.state.routed.map((d) => d.hostname)).toEqual(['app.example.com']);
+      // The hostname is dropped and b.html deploys the same script: it detaches
+      // the stale hostname a.html attached, and SUCCEEDS.
+      await f.putConfig({ hostname: null });
+      expect((await f.deploy('b.html')).status).toBe(200);
+      expect(f.state.cfCalls.some((c) => c.method === 'DELETE' && c.url.endsWith('/workers/domains/dom-app'))).toBe(true);
+      expect(f.state.routed).toEqual([]);
+      // a.html's record must no longer vouch for it: a detach request for the
+      // id is refused as foreign (the hostname is not OpenDesign's any more)
+      // and nothing is sent to Cloudflare.
+      const deletesBefore = f.state.cfCalls.filter((c) => c.method === 'DELETE').length;
+      const detach = await f.detachRoute('dom-app');
+      expect(detach.status).toBe(409);
+      expect(JSON.stringify(await detach.json())).toContain('was not attached by an OpenDesign deployment');
+      expect(f.state.cfCalls.filter((c) => c.method === 'DELETE').length).toBe(deletesBefore);
+    } finally {
+      await f.cleanup();
+    }
+  });
+
+  it('turning Access off on one file clears the deleted Access app from every sibling record of the same script', async () => {
+    const f = await workersSiblingFixture('retire-siblings', { access: true });
+    try {
+      await f.putConfig({ access: true });
+      const first = await f.deploy('a.html');
+      expect(first.status).toBe(200);
+      expect(((await first.json()) as { cloudflareWorkers?: Record<string, unknown> }).cloudflareWorkers).toMatchObject({ accessProtected: true, accessAppId: 'app-shared' });
+      // Access off, deployed through b.html: the app a.html recorded is deleted.
+      await f.putConfig({ access: false });
+      const second = await f.deploy('b.html');
+      expect(second.status).toBe(200);
+      expect(f.state.cfCalls.some((c) => c.method === 'DELETE' && c.url.endsWith('/access/apps/app-shared'))).toBe(true);
+      // Neither record may keep reporting the Worker as protected by it.
+      const deployments = await f.listDeployments();
+      const a = deployments.find((d) => d.fileName === 'a.html');
+      const b = deployments.find((d) => d.fileName === 'b.html');
+      expect(a).toBeDefined();
+      expect(b).toBeDefined();
+      for (const record of [a!, b!]) {
+        expect(record.cloudflareWorkers?.accessAppId).toBeUndefined();
+        expect(record.cloudflareWorkers?.accessProtected).toBeUndefined();
+      }
+    } finally {
+      await f.cleanup();
+    }
+  });
+
+  it('retiring one script\'s Access app leaves a sibling that only RETAINED it protected by its own app', async () => {
+    const f = await workersSiblingFixture('retire-retained-only', { access: true });
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const db = openDatabase(process.cwd(), { dataDir });
+    try {
+      await f.putConfig({ access: true });
+      const first = await f.deploy('a.html');
+      expect(first.status).toBe(200);
+      const aId = ((await first.json()) as { id: string }).id;
+      // A second record of the same script exists only to carry the retained
+      // handle: its OWN protection is a different app.
+      const second = await f.deploy('b.html');
+      expect(second.status).toBe(200);
+      const bId = ((await second.json()) as { id: string }).id;
+
+      // Rewrite b.html's record into the shape a script-name change leaves
+      // behind: protected by app-live, still naming the id of an app that guards
+      // the Worker the rename moved away from.
+      const row = getDeploymentById(db, f.projectId, bId);
+      if (!row) throw new Error('the deployment record is required');
+      const { cloudflareWorkers: _lifted, ...record } = row;
+      upsertDeployment(db, {
+        ...record,
+        providerMetadata: {
+          ...((row.providerMetadata ?? {}) as Record<string, unknown>),
+          accessAppId: 'app-live',
+          accessProtected: true,
+          accessVerified: true,
+          createdByOpenDesign: true,
+          retainedAccessAppIds: ['app-shared'],
+        },
+      });
+
+      // Access off through a.html deletes the app a.html itself recorded.
+      await f.putConfig({ access: false });
+      const retiring = await f.deploy('a.html');
+      expect(retiring.status).toBe(200);
+      expect(f.state.cfCalls.some((c) => c.method === 'DELETE' && c.url.endsWith('/access/apps/app-shared'))).toBe(true);
+
+      // The record whose own protection that app was loses the protection
+      // fields with it …
+      const own = (getDeploymentById(db, f.projectId, aId)?.providerMetadata ?? {}) as Record<string, unknown>;
+      expect(own.accessAppId).toBeUndefined();
+      expect(own.accessProtected).toBeUndefined();
+      // … while the record that merely RETAINED the id keeps every one of them:
+      // they name a different, still-live app, and stripping them would report a
+      // live Worker as unprotected and forget how to retire the app that guards
+      // it. Only the dead handle goes.
+      const kept = (getDeploymentById(db, f.projectId, bId)?.providerMetadata ?? {}) as Record<string, unknown>;
+      expect(kept.accessAppId).toBe('app-live');
+      expect(kept.accessProtected).toBe(true);
+      expect(kept.accessVerified).toBe(true);
+      expect(kept.createdByOpenDesign).toBe(true);
+      expect(kept.retainedAccessAppIds).toBeUndefined();
+    } finally {
+      await f.cleanup();
+    }
+  });
+
+  it('a 4xx-refused attach drops the hostname write-ahead, while an ambiguous attach failure keeps it', async () => {
+    const f = await workersSiblingFixture('attach-refused');
+    try {
+      // Cloudflare refuses the attach outright: nothing is routed, and the
+      // write-ahead for a.example.com must not outlive the failure.
+      await f.putConfig({ hostname: 'a.example.com' });
+      f.state.attachMode = 'refused';
+      expect((await f.deploy('a.html')).status).toBeGreaterThanOrEqual(400);
+      expect(f.state.routed).toEqual([]);
+      f.state.attachMode = 'ok';
+      // Someone attaches a.example.com from the dashboard. A later deploy that
+      // no longer names it must treat it as FOREIGN and leave it routed — a
+      // surviving write-ahead would classify it as owned and detach it.
+      f.state.routed = [{ id: 'dom-a', hostname: 'a.example.com', service: scriptNameOf(f), zone_id: 'zone-1' }];
+      await f.putConfig({ hostname: null });
+      expect((await f.deploy('a.html')).status).toBe(200);
+      expect(f.state.cfCalls.some((c) => c.method === 'DELETE' && c.url.endsWith('/workers/domains/dom-a'))).toBe(false);
+      expect(f.state.routed.map((d) => d.hostname)).toEqual(['a.example.com']);
+
+      // The attach of b.example.com LANDS but its response is lost: only the
+      // write-ahead vouches for it, and it must stay so the next deploy
+      // reconciles the hostname as stale OWNED (by hostname).
+      await f.putConfig({ hostname: 'b.example.com' });
+      f.state.attachMode = 'transport';
+      expect((await f.deploy('a.html')).status).toBeGreaterThanOrEqual(400);
+      expect(f.state.routed.map((d) => d.hostname)).toEqual(['a.example.com', 'b.example.com']);
+      f.state.attachMode = 'ok';
+      await f.putConfig({ hostname: null });
+      expect((await f.deploy('a.html')).status).toBe(200);
+      expect(f.state.cfCalls.some((c) => c.method === 'DELETE' && c.url.endsWith('/workers/domains/dom-b'))).toBe(true);
+      expect(f.state.cfCalls.some((c) => c.method === 'DELETE' && c.url.endsWith('/workers/domains/dom-a'))).toBe(false);
+      expect(f.state.routed.map((d) => d.hostname)).toEqual(['a.example.com']);
+    } finally {
+      await f.cleanup();
+    }
+  });
+
+  it('a successful production deploy resolves the attach write-ahead on every sibling record, not only its own', async () => {
+    const f = await workersSiblingFixture('pending-siblings');
+    try {
+      // a.html's attach of a.example.com LANDS but its response is lost: only
+      // a.html's write-ahead vouches for the hostname.
+      await f.putConfig({ hostname: 'a.example.com' });
+      f.state.attachMode = 'transport';
+      expect((await f.deploy('a.html')).status).toBeGreaterThanOrEqual(400);
+      f.state.attachMode = 'ok';
+      expect(f.state.routed.map((d) => d.hostname)).toEqual(['a.example.com']);
+      // A preview deploy of b.html carries the union of the script's
+      // write-aheads forward onto b.html's record: a COPY of the pending entry.
+      expect((await f.deploy('b.html', 'preview')).status).toBe(200);
+      // a.html's production deploy drops the hostname: the strict routed list
+      // proves a.example.com is (stale, vouched) and detaches it. Its own
+      // write-ahead goes with the record replace; b.html's copy must go too.
+      await f.putConfig({ hostname: null });
+      expect((await f.deploy('a.html')).status).toBe(200);
+      expect(f.state.cfCalls.some((c) => c.method === 'DELETE' && c.url.endsWith('/workers/domains/dom-a'))).toBe(true);
+      expect(f.state.routed).toEqual([]);
+      // Someone re-attaches a.example.com from the dashboard. A deploy of
+      // b.html must treat it as FOREIGN and leave it routed: a surviving copy
+      // of the write-ahead on b.html's record classified it owned and
+      // detached it again.
+      const deletesBefore = f.state.cfCalls.filter((c) => c.method === 'DELETE').length;
+      f.state.routed = [{ id: 'dom-a', hostname: 'a.example.com', service: scriptNameOf(f), zone_id: 'zone-1' }];
+      expect((await f.deploy('b.html')).status).toBe(200);
+      expect(f.state.cfCalls.filter((c) => c.method === 'DELETE').length).toBe(deletesBefore);
+      expect(f.state.routed.map((d) => d.hostname)).toEqual(['a.example.com']);
+      // Nor does the detach route accept it: nothing vouches for it any more.
+      const detach = await f.detachRoute('dom-a');
+      expect(detach.status).toBe(409);
+      expect(f.state.cfCalls.filter((c) => c.method === 'DELETE').length).toBe(deletesBefore);
+    } finally {
+      await f.cleanup();
+    }
+  });
+
+  it('a failed deploy drops a released write-ahead from every sibling record, not only the live one', async () => {
+    const f = await workersSiblingFixture('released-siblings');
+    try {
+      // The first attach is lost in transport, so a.html carries a write-ahead
+      // for a.example.com; a preview of b.html copies it onto b.html's record.
+      await f.putConfig({ hostname: 'a.example.com' });
+      f.state.attachMode = 'transport';
+      expect((await f.deploy('a.html')).status).toBeGreaterThanOrEqual(400);
+      expect((await f.deploy('b.html', 'preview')).status).toBe(200);
+      // The lost attach turns out NOT to have landed (nothing is routed), and
+      // the retry is refused outright by Cloudflare: the hostname is released
+      // — certainly not attached — so no record has anything to vouch for.
+      f.state.routed = [];
+      f.state.attachMode = 'refused';
+      expect((await f.deploy('a.html')).status).toBeGreaterThanOrEqual(400);
+      f.state.attachMode = 'ok';
+      // Someone attaches a.example.com from the dashboard. A deploy of b.html
+      // that no longer names it must leave it routed: b.html's surviving copy
+      // of the write-ahead would classify it owned and detach it.
+      f.state.routed = [{ id: 'dom-a', hostname: 'a.example.com', service: scriptNameOf(f), zone_id: 'zone-1' }];
+      await f.putConfig({ hostname: null });
+      expect((await f.deploy('b.html')).status).toBe(200);
+      expect(f.state.cfCalls.some((c) => c.method === 'DELETE' && c.url.endsWith('/workers/domains/dom-a'))).toBe(false);
+      expect(f.state.routed.map((d) => d.hostname)).toEqual(['a.example.com']);
+    } finally {
+      await f.cleanup();
+    }
+  });
+
+  it('check-link on a deferred Access deploy runs the perimeter verdict over both URLs, never the plain reachability probe', async () => {
+    const f = await workersSiblingFixture('deferred-access', { access: true });
+    // The real perimeter budget waits several seconds per URL before it defers.
+    configureCloudflareAccessPerimeterRetry({ attempts: 2, baseMs: 1 });
+    try {
+      // The workers.dev route is OFF before the deploy: this run turns it on,
+      // and attaches a.example.com — both are ITS exposure.
+      f.state.subdomainEnabled = false;
+      f.state.headMode = 'unreachable';
+      await f.putConfig({ hostname: 'a.example.com', access: true });
+      const deployResp = await f.deploy('a.html');
+      expect(deployResp.status).toBe(200);
+      const deployed = (await deployResp.json()) as { id: string; status: string; url: string };
+      expect(deployed.status).toBe('link-delayed');
+      expect(f.state.subdomainEnabled).toBe(true);
+      expect(f.state.routed.map((d) => d.hostname)).toEqual(['a.example.com']);
+
+      // Still no answer: the record stays deferred; nothing is withdrawn.
+      let before = f.state.cfCalls.length;
+      let checked = await f.checkLink(deployed.id);
+      expect(checked.status).toBe(200);
+      expect(((await checked.json()) as { status: string }).status).toBe('link-delayed');
+      expect(f.state.cfCalls.slice(before).every((c) => isPublicProbeUrl(c.url))).toBe(true);
+      expect(f.state.subdomainEnabled).toBe(true);
+
+      // The URLs now answer. workers.dev (the record's own `url`) challenges
+      // with the Access gate, but the custom hostname answers a plain 200,
+      // WITHOUT it. The generic probe of `existing.url` alone would have
+      // promoted that to `ready`; the deferred path also probes the recorded
+      // hostname, fails the deploy on it, and withdraws what the deploy
+      // created: the workers.dev route goes back off and the attached hostname
+      // is detached. (The verdict settles on the first unprotected URL, so the
+      // ungated one has to come second for both probes to be observable.)
+      f.state.headMode = (url) => (url === deployed.url ? 'access' : 'plain');
+      before = f.state.cfCalls.length;
+      checked = await f.checkLink(deployed.id);
+      expect(checked.status).toBe(200);
+      const failed = (await checked.json()) as { status: string; statusMessage?: string; reachableAt?: number; cloudflareWorkers?: Record<string, unknown> };
+      expect(failed.status).toBe('failed');
+      expect(failed.reachableAt).toBeUndefined();
+      expect(failed.statusMessage).toContain('https://a.example.com is not behind Cloudflare Access');
+      expect(failed.cloudflareWorkers?.check).toMatchObject({ ok: false, detail: 'CFW_ACCESS_UNVERIFIED' });
+      const probed = f.state.cfCalls.slice(before).filter((c) => isPublicProbeUrl(c.url)).map((c) => c.url);
+      expect(probed).toContain(deployed.url);
+      expect(probed).toContain('https://a.example.com');
+      expect(f.state.subdomainEnabled).toBe(false);
+      expect(f.state.cfCalls.slice(before).some((c) => c.method === 'DELETE' && c.url.endsWith('/workers/domains/dom-a'))).toBe(true);
+      expect(f.state.routed).toEqual([]);
+      // The record stops vouching for (and displaying) the detached hostname.
+      const records = await f.listDeployments();
+      expect(records.find((d) => d.fileName === 'a.html')?.cloudflareWorkers?.customDomain).toBeUndefined();
+
+      // A fresh deferred deploy whose URLs then answer WITH the gate: ready,
+      // and the gate is recorded as verified.
+      f.state.headMode = 'unreachable';
+      const again = await f.deploy('a.html');
+      expect(again.status).toBe(200);
+      const deferred = (await again.json()) as { id: string; status: string };
+      expect(deferred.status).toBe('link-delayed');
+      f.state.headMode = 'access';
+      checked = await f.checkLink(deferred.id);
+      expect(checked.status).toBe(200);
+      const ready = (await checked.json()) as { status: string; reachableAt?: number; cloudflareWorkers?: Record<string, unknown> };
+      expect(ready.status).toBe('ready');
+      expect(typeof ready.reachableAt).toBe('number');
+      expect(ready.cloudflareWorkers).toMatchObject({ accessProtected: true });
+      // A later check of the ready record is still a perimeter verdict (the
+      // record stays Access-protected), never a Cloudflare mutation.
+      before = f.state.cfCalls.length;
+      checked = await f.checkLink(deferred.id);
+      expect(checked.status).toBe(200);
+      expect(f.state.cfCalls.slice(before).every((c) => c.method === 'HEAD' || c.method === 'GET')).toBe(true);
+    } finally {
+      configureCloudflareAccessPerimeterRetry();
+      await f.cleanup();
+    }
+  });
+
+  it('a redeploy that fails its Access perimeter records the verdict even when it owns nothing new', async () => {
+    // The failed attempt owns no app, no hostname and no write-ahead: the same
+    // script, the same Access app, no custom domain. The perimeter verdict is
+    // still a finding about THIS attempt, so the record has to carry it —
+    // otherwise the first deploy's "ready" stands, the record leaves the Access
+    // path, and the next check-link reads the plain 200 this attempt proved.
+    const f = await workersSiblingFixture('verdict-only', { access: true });
+    configureCloudflareAccessPerimeterRetry({ attempts: 1, baseMs: 1 });
+    try {
+      await f.putConfig({ access: true });
+      const first = await f.deploy('a.html');
+      expect(first.status).toBe(200);
+      expect(((await first.json()) as { status: string }).status).toBe('ready');
+
+      // The URL now answers a plain 200. This run turned nothing on — it did not
+      // create the script and the workers.dev route was already on — so what is
+      // left is the verdict, not an exposure of this run's to withdraw.
+      f.state.headMode = 'plain';
+      await f.deploy('a.html');
+
+      const record = (await f.listDeployments()).find((d) => d.fileName === 'a.html');
+      expect(record?.status).toBe('failed');
+      expect(record?.cloudflareWorkers).toMatchObject({
+        accessProtected: true,
+        check: { ok: false, detail: 'CFW_ACCESS_UNVERIFIED' },
+      });
+      expect(record?.cloudflareWorkers?.unverifiedExposure).toBeUndefined();
+    } finally {
+      configureCloudflareAccessPerimeterRetry();
+      await f.cleanup();
+    }
+  });
+
+  it('classifies a record as Access-protected on the deploy marker alone, whatever its status', () => {
+    // The marker only a deploy that gated the Worker writes — on the deferred
+    // status, on a failed check's status, and on a verified ready record.
+    expect(isAccessProtectedWorkersRecord({ status: 'link-delayed', providerMetadata: { accessVerified: false, accessProtected: true } })).toBe(true);
+    expect(isAccessProtectedWorkersRecord({ status: 'failed', providerMetadata: { accessProtected: true, accessVerified: false, check: { ok: false, detail: 'CFW_ACCESS_UNVERIFIED' } } })).toBe(true);
+    expect(isAccessProtectedWorkersRecord({ status: 'ready', providerMetadata: { accessProtected: true, accessVerified: true } })).toBe(true);
+    // A FAILED deploy's ownership bookkeeping (accessAppId + createdByOpenDesign,
+    // no gate marker) never gated the Worker: not Access-protected, so the
+    // link check must not be able to "verify" it.
+    expect(isAccessProtectedWorkersRecord({ status: 'failed', providerMetadata: { accessAppId: 'app-1', createdByOpenDesign: true } })).toBe(false);
+    // The deferral marker without the gate marker (a hand-edited record) is
+    // not one either; nor is a marker of the wrong shape.
+    expect(isAccessProtectedWorkersRecord({ status: 'link-delayed', providerMetadata: { accessVerified: false } })).toBe(false);
+    expect(isAccessProtectedWorkersRecord({ status: 'ready', providerMetadata: { accessProtected: 'true' } })).toBe(false);
+    expect(isAccessProtectedWorkersRecord({ status: 'link-delayed', providerMetadata: undefined })).toBe(false);
+    expect(isAccessProtectedWorkersRecord({ status: 'link-delayed', providerMetadata: [] })).toBe(false);
+  });
+
+  it('classifies an exposure as retained only once a check judged it ungated', () => {
+    const exposure = { scriptName: 'site', subdomainEnabledByThisRun: true };
+    // A failed check's verdict with something still to withdraw.
+    expect(isRetainedUnverifiedExposure({ unverifiedExposure: exposure, check: { ok: false, detail: 'CFW_ACCESS_UNVERIFIED' } })).toBe(true);
+    // A re-deferred failed record keeps the verdict: still retained.
+    expect(isRetainedUnverifiedExposure({ unverifiedExposure: exposure, check: { ok: false, detail: 'CFW_ACCESS_UNVERIFIED' }, accessVerificationDeferred: 'no answer' })).toBe(true);
+    // A deferred deploy's exposure awaits its verdict: not retained.
+    expect(isRetainedUnverifiedExposure({ unverifiedExposure: exposure, accessVerificationDeferred: 'no answer' })).toBe(false);
+    // Judged, with nothing left to withdraw.
+    expect(isRetainedUnverifiedExposure({ check: { ok: false, detail: 'CFW_ACCESS_UNVERIFIED' } })).toBe(false);
+    // Some other verdict, or a malformed exposure.
+    expect(isRetainedUnverifiedExposure({ unverifiedExposure: exposure, check: { ok: true } })).toBe(false);
+    expect(isRetainedUnverifiedExposure({ unverifiedExposure: { scriptName: '' }, check: { ok: false, detail: 'CFW_ACCESS_UNVERIFIED' } })).toBe(false);
+  });
+
+  it('reads the check\'s CFW_ACCESS_UNVERIFIED verdict off the record, whatever else it carries', () => {
+    // The verdict the route keeps on an `unreachable` probe: present on the
+    // failed record, and on one re-deferred afterwards, absent on a merely
+    // deferred deploy and on every other (or malformed) check shape.
+    expect(hasAccessUnverifiedVerdict({ check: { ok: false, detail: 'CFW_ACCESS_UNVERIFIED' } })).toBe(true);
+    expect(hasAccessUnverifiedVerdict({ check: { ok: false, detail: 'CFW_ACCESS_UNVERIFIED' }, accessVerificationDeferred: 'no answer' })).toBe(true);
+    expect(hasAccessUnverifiedVerdict({ check: { status: 200, ok: false, detail: 'CFW_ACCESS_UNVERIFIED' } })).toBe(true);
+    expect(hasAccessUnverifiedVerdict({ accessVerificationDeferred: 'no answer' })).toBe(false);
+    expect(hasAccessUnverifiedVerdict({ check: { ok: true } })).toBe(false);
+    expect(hasAccessUnverifiedVerdict({ check: 'CFW_ACCESS_UNVERIFIED' })).toBe(false);
+    expect(hasAccessUnverifiedVerdict({ check: [] })).toBe(false);
+    expect(hasAccessUnverifiedVerdict({})).toBe(false);
+  });
+
+  it('check-link on a FAILED Access deploy takes the perimeter verdict, never the reachability probe', async () => {
+    const f = await workersSiblingFixture('failed-access-checklink', { access: true });
+    configureCloudflareAccessPerimeterRetry({ attempts: 2, baseMs: 1 });
+    try {
+      f.state.subdomainEnabled = false;
+      f.state.headMode = 'unreachable';
+      await f.putConfig({ hostname: 'a.example.com', access: true });
+      const deployResp = await f.deploy('a.html');
+      expect(deployResp.status).toBe(200);
+      const deployed = (await deployResp.json()) as { id: string; status: string; url: string };
+      expect(deployed.status).toBe('link-delayed');
+
+      // The URLs answer WITHOUT the gate: the check fails the deploy and
+      // withdraws its whole exposure (route off, hostname detached).
+      f.state.headMode = 'plain';
+      let checked = await f.checkLink(deployed.id);
+      expect(checked.status).toBe(200);
+      expect(((await checked.json()) as { status: string }).status).toBe('failed');
+      expect(f.state.subdomainEnabled).toBe(false);
+      expect(f.state.routed).toEqual([]);
+
+      // The failed record's URL still answers a plain 200. The generic
+      // reachability probe reads that as a ready link — on a gated Worker it
+      // is the very exposure the deploy failed for. The record stays failed,
+      // on the perimeter verdict, with nothing left to withdraw (probes only).
+      let before = f.state.cfCalls.length;
+      checked = await f.checkLink(deployed.id);
+      expect(checked.status).toBe(200);
+      const stillFailed = (await checked.json()) as { status: string; statusMessage?: string; reachableAt?: number; cloudflareWorkers?: Record<string, unknown> };
+      expect(stillFailed.status).toBe('failed');
+      expect(stillFailed.reachableAt).toBeUndefined();
+      expect(stillFailed.statusMessage).toContain('is not behind Cloudflare Access');
+      expect(stillFailed.cloudflareWorkers?.check).toMatchObject({ ok: false, detail: 'CFW_ACCESS_UNVERIFIED' });
+      expect(f.state.cfCalls.slice(before).every((c) => isPublicProbeUrl(c.url))).toBe(true);
+
+      // No answer at all. The record was judged ungated above and its route
+      // and hostname were withdrawn, so this probe can only have hit the URL
+      // that verdict disabled: the verdict and its message STAY, because a
+      // `link-delayed`/"could not reach" rewrite would hide the Access failure
+      // behind a propagation story. Only the deferral markers move.
+      f.state.headMode = 'unreachable';
+      checked = await f.checkLink(deployed.id);
+      expect(checked.status).toBe(200);
+      const stillJudged = (await checked.json()) as { status: string; statusMessage?: string; reachableAt?: number; cloudflareWorkers?: Record<string, unknown> };
+      expect(stillJudged.status).toBe('failed');
+      expect(stillJudged.statusMessage).toContain('is not behind Cloudflare Access');
+      expect(stillJudged.reachableAt).toBeUndefined();
+      expect(stillJudged.cloudflareWorkers?.check).toMatchObject({ ok: false, detail: 'CFW_ACCESS_UNVERIFIED' });
+
+      // The URL answers WITH the gate: the deploy is verified and ready, and
+      // the failed check's verdict leaves the record with it.
+      f.state.headMode = 'access';
+      before = f.state.cfCalls.length;
+      checked = await f.checkLink(deployed.id);
+      expect(checked.status).toBe(200);
+      const ready = (await checked.json()) as { status: string; reachableAt?: number; cloudflareWorkers?: Record<string, unknown> };
+      expect(ready.status).toBe('ready');
+      expect(typeof ready.reachableAt).toBe('number');
+      expect(ready.cloudflareWorkers).toMatchObject({ accessProtected: true });
+      expect(ready.cloudflareWorkers?.check).toBeUndefined();
+      expect(f.state.cfCalls.slice(before).every((c) => isPublicProbeUrl(c.url))).toBe(true);
+    } finally {
+      configureCloudflareAccessPerimeterRetry();
+      await f.cleanup();
+    }
+  });
+
+  it('a protected verdict covers the hostnames the exposure it clears still names, not only the displayed domain', async () => {
+    const f = await workersSiblingFixture('exposure-hostname-verdict', { access: true });
+    configureCloudflareAccessPerimeterRetry({ attempts: 2, baseMs: 1 });
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const db = openDatabase(process.cwd(), { dataDir });
+    try {
+      // This run turns the workers.dev route ON and attaches a.example.com, and
+      // no probe answers: both halves are recorded as the deploy's exposure.
+      f.state.subdomainEnabled = false;
+      f.state.headMode = 'unreachable';
+      await f.putConfig({ hostname: 'a.example.com', access: true });
+      const deployResp = await f.deploy('a.html');
+      expect(deployResp.status).toBe(200);
+      const deployed = (await deployResp.json()) as { id: string; status: string; url: string };
+      expect(deployed.status).toBe('link-delayed');
+      expect(f.state.routed.map((d) => d.hostname)).toEqual(['a.example.com']);
+      const metadataOf = () =>
+        (getDeploymentById(db, f.projectId, deployed.id)?.providerMetadata ?? {}) as Record<string, unknown>;
+      expect(metadataOf().unverifiedExposure).toEqual({
+        scriptName: f.scriptName,
+        subdomainEnabledByThisRun: true,
+        detachableCustomDomains: [{ id: 'dom-a', hostname: 'a.example.com' }],
+      });
+
+      // A later record displays a DIFFERENT hostname while a.example.com is
+      // still routed to the script: the exposure names a hostname the record no
+      // longer displays, which is what an earlier deploy's attach looks like
+      // once the configuration moved on.
+      const row = getDeploymentById(db, f.projectId, deployed.id);
+      if (!row) throw new Error('the deployment record is required');
+      const { cloudflareWorkers: _lifted, ...record } = row;
+      upsertDeployment(db, {
+        ...record,
+        providerMetadata: { ...metadataOf(), customDomain: { hostname: 'b.example.com', zoneId: 'zone-1' } },
+      });
+
+      // The record's own URL and the displayed hostname answer WITH the gate;
+      // the hostname the exposure still names answers a plain 200 — ungated.
+      f.state.headMode = (url) => (url === 'https://a.example.com' ? 'plain' : 'access');
+      const before = f.state.cfCalls.length;
+      const checked = await f.checkLink(deployed.id);
+      expect(checked.status).toBe(200);
+      // The verdict that clears the exposure must have covered every URL it
+      // clears. Judging by the displayed domain alone promoted the record to
+      // `ready` and deleted the exposure, forgetting a hostname that is still
+      // routed and still public.
+      const probed = f.state.cfCalls.slice(before).filter((c) => isPublicProbeUrl(c.url)).map((c) => c.url);
+      expect(probed).toContain('https://a.example.com');
+      const failed = (await checked.json()) as { status: string; cloudflareWorkers?: Record<string, unknown> };
+      expect(failed.status).toBe('failed');
+      expect(failed.cloudflareWorkers?.check).toMatchObject({ ok: false, detail: 'CFW_ACCESS_UNVERIFIED' });
+      // And the still-routed hostname is withdrawn rather than forgotten.
+      expect(f.state.routed).toEqual([]);
+      expect(metadataOf().unverifiedExposure).toBeUndefined();
+    } finally {
+      configureCloudflareAccessPerimeterRetry();
+      await f.cleanup();
+    }
+  });
+
+  it('a preview deploy carries the production record\'s unwithdrawn exposure forward', async () => {
+    const f = await workersSiblingFixture('preview-exposure-carry', { access: true });
+    configureCloudflareAccessPerimeterRetry({ attempts: 2, baseMs: 1 });
+    try {
+      // a.html's production deploy defers: it turned the workers.dev route on
+      // and attached a.example.com, and no probe answered.
+      f.state.subdomainEnabled = false;
+      f.state.headMode = 'unreachable';
+      await f.putConfig({ hostname: 'a.example.com', access: true });
+      const deployed = (await (await f.deploy('a.html')).json()) as { id: string; status: string };
+      expect(deployed.status).toBe('link-delayed');
+      const dataDir = process.env.OD_DATA_DIR;
+      if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+      const db = openDatabase(process.cwd(), { dataDir });
+      const exposureOf = (id: string) =>
+        (getDeploymentById(db, f.projectId, id)?.providerMetadata as Record<string, unknown> | undefined)?.unverifiedExposure;
+      const productionExposure = {
+        scriptName: f.scriptName,
+        subdomainEnabledByThisRun: true,
+        detachableCustomDomains: [{ id: 'dom-a', hostname: 'a.example.com' }],
+      };
+      expect(exposureOf(deployed.id)).toEqual(productionExposure);
+
+      // b.html's PREVIEW deploy of the same script REPLACES its own record's
+      // metadata: the sibling's exposure has to ride along, or the check that
+      // must withdraw a route that IS public finds it recorded nowhere and
+      // leaves the Worker exposed.
+      f.state.headMode = 'access';
+      const preview = (await (await f.deploy('b.html', 'preview')).json()) as { id: string; status: string };
+      expect(preview.status).toBe('ready');
+      expect(exposureOf(preview.id)).toEqual(productionExposure);
+
+      // And it is still actionable from that record: the URLs answer ungated,
+      // so the check withdraws the workers.dev route and the hostname.
+      f.state.headMode = 'plain';
+      const checked = await f.checkLink(preview.id);
+      expect(checked.status).toBe(200);
+      expect(((await checked.json()) as { status: string }).status).toBe('failed');
+      expect(f.state.subdomainEnabled).toBe(false);
+      expect(f.state.routed).toEqual([]);
+    } finally {
+      configureCloudflareAccessPerimeterRetry();
+      await f.cleanup();
+    }
+  });
+
+  it('check-link retries a withdrawal the failed check could not finish, under the script single-flight and before it probes', async () => {
+    const f = await workersSiblingFixture('retained-exposure', { access: true });
+    configureCloudflareAccessPerimeterRetry({ attempts: 2, baseMs: 1 });
+    const isDisable = (c: { url: string; method: string }) => c.method === 'POST' && c.url.endsWith('/workers/scripts/' + f.scriptName + '/subdomain');
+    try {
+      f.state.subdomainEnabled = false;
+      f.state.headMode = 'unreachable';
+      await f.putConfig({ hostname: 'a.example.com', access: true });
+      const deployResp = await f.deploy('a.html');
+      expect(deployResp.status).toBe(200);
+      const deployed = (await deployResp.json()) as { id: string; status: string };
+      expect(deployed.status).toBe('link-delayed');
+      expect(f.state.subdomainEnabled).toBe(true);
+      expect(f.state.routed.map((d) => d.hostname)).toEqual(['a.example.com']);
+
+      // Ungated. The hostname detaches, but turning the workers.dev route back
+      // off is refused: the deploy fails and that half of its exposure stays
+      // recorded.
+      f.state.headMode = 'plain';
+      f.state.subdomainDisableMode = 'error';
+      let checked = await f.checkLink(deployed.id);
+      expect(checked.status).toBe(200);
+      const failed = (await checked.json()) as { status: string; cloudflareWorkers?: { steps?: Array<Record<string, unknown>> } };
+      expect(failed.status).toBe('failed');
+      expect(failed.cloudflareWorkers?.steps).toContainEqual(expect.objectContaining({ name: 'subdomain-disable', status: 'error' }));
+      expect(f.state.subdomainEnabled).toBe(true);
+      expect(f.state.routed).toEqual([]);
+
+      // The next check retries the withdrawal FIRST — before any probe — and
+      // the record stays failed while the route still answers ungated.
+      let before = f.state.cfCalls.length;
+      checked = await f.checkLink(deployed.id);
+      expect(checked.status).toBe(200);
+      expect(((await checked.json()) as { status: string }).status).toBe('failed');
+      const calls = f.state.cfCalls.slice(before);
+      const firstDisable = calls.findIndex(isDisable);
+      const firstProbe = calls.findIndex((c) => isPublicProbeUrl(c.url));
+      expect(firstDisable).toBeGreaterThanOrEqual(0);
+      expect(firstProbe).toBeGreaterThan(firstDisable);
+      expect(f.state.subdomainEnabled).toBe(true);
+
+      // Cloudflare accepts the disable now: the retry lands and nothing is
+      // left to withdraw. With the route off the URL no longer answers, so the
+      // verdict defers the record rather than promoting it.
+      f.state.subdomainDisableMode = 'ok';
+      f.state.headMode = 'unreachable';
+      before = f.state.cfCalls.length;
+      checked = await f.checkLink(deployed.id);
+      expect(checked.status).toBe(200);
+      const withdrawn = (await checked.json()) as { status: string; cloudflareWorkers?: { steps?: Array<Record<string, unknown>> } };
+      expect(withdrawn.status).toBe('link-delayed');
+      expect(withdrawn.cloudflareWorkers?.steps).toContainEqual(expect.objectContaining({ name: 'subdomain-disable', status: 'done' }));
+      expect(f.state.cfCalls.slice(before).filter(isDisable).length).toBeGreaterThanOrEqual(1);
+      expect(f.state.subdomainEnabled).toBe(false);
+
+      // Nothing retained any more: a later check is probes only.
+      before = f.state.cfCalls.length;
+      checked = await f.checkLink(deployed.id);
+      expect(checked.status).toBe(200);
+      expect(f.state.cfCalls.slice(before).every((c) => isPublicProbeUrl(c.url))).toBe(true);
+    } finally {
+      configureCloudflareAccessPerimeterRetry();
+      await f.cleanup();
+    }
+  });
+
+  it('a deploy that fails its Access perimeter records the verdict and the exposure it could not withdraw, and never settles the link on a plain 200', async () => {
+    const f = await workersSiblingFixture('failed-unprotected', { access: false });
+    configureCloudflareAccessPerimeterRetry({ attempts: 2, baseMs: 1 });
+    const isDisable = (c: { url: string; method: string }) =>
+      c.method === 'POST' && c.url.endsWith('/workers/scripts/' + f.scriptName + '/subdomain');
+    try {
+      const dataDir = process.env.OD_DATA_DIR;
+      if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+      const db = openDatabase(process.cwd(), { dataDir });
+      const metadataOf = (id: string) =>
+        (getDeploymentById(db, f.projectId, id)?.providerMetadata ?? {}) as Record<string, unknown>;
+
+      // A first, Access-OFF deploy of the file: its record owns the URL the
+      // failing deploy below will keep reporting.
+      await f.putConfig({ access: false });
+      const first = await f.deploy('a.html');
+      expect(first.status).toBe(200);
+      const record = (await first.json()) as { id: string; status: string; url: string };
+      expect(record.status).toBe('ready');
+      expect(record.url).toContain(f.scriptName);
+
+      // The workers.dev route is off (turned off from the dashboard since), so
+      // turning it on is THIS run's exposure. Access is on now and the URLs
+      // answer a plain 200 — ungated — while the withdrawal cannot complete:
+      // the disable is refused. The deploy fails with the route still public.
+      f.state.subdomainEnabled = false;
+      f.state.subdomainDisableMode = 'error';
+      f.state.headMode = 'plain';
+      await f.putConfig({ hostname: 'a.example.com', access: true });
+      const failedDeploy = await f.deploy('a.html');
+      expect(failedDeploy.status).toBeGreaterThanOrEqual(400);
+      // The failed attempt carries the perimeter verdict, so the record may not
+      // keep the prior 'ready' / "Public link is ready." while this very write
+      // lands the ungated verdict and the exposure it could not withdraw. The
+      // link check writes the identical finding as 'failed' with the error, and
+      // the record must not disagree with it about one and the same deploy.
+      const failedRecord = getDeploymentById(db, f.projectId, record.id);
+      expect(failedRecord?.status).toBe('failed');
+      expect(failedRecord?.statusMessage).toContain('is not behind Cloudflare Access');
+      expect(failedRecord?.statusMessage).not.toContain('Public link is ready.');
+      expect(f.state.subdomainEnabled).toBe(true);
+      // The hostname half of the withdrawal did land; the route half did not.
+      expect(f.state.routed).toEqual([]);
+
+      // The record the failure left: on the ACCESS path (so no later check can
+      // settle it with a reachability probe), carrying the coded verdict and
+      // the half of the exposure that is still public.
+      const metadata = metadataOf(record.id);
+      expect(metadata.accessProtected).toBe(true);
+      expect(metadata.accessVerified).toBe(false);
+      expect(metadata.check).toMatchObject({ ok: false, detail: 'CFW_ACCESS_UNVERIFIED' });
+      expect(metadata.unverifiedExposure).toEqual({
+        scriptName: f.scriptName,
+        subdomainEnabledByThisRun: true,
+      });
+
+      // The record's URL answers a plain 200 — the answer that used to become
+      // "Public link is ready." for the very deploy that proved it ungated. The
+      // check retries the withdrawal FIRST (a Cloudflare mutation the generic
+      // reachability path never makes) and stays failed while the route is on.
+      const before = f.state.cfCalls.length;
+      const checked = await f.checkLink(record.id);
+      expect(checked.status).toBe(200);
+      const stillExposed = (await checked.json()) as { status: string; statusMessage?: string; cloudflareWorkers?: Record<string, unknown> };
+      expect(stillExposed.status).toBe('failed');
+      expect(stillExposed.statusMessage).not.toContain('Public link is ready.');
+      expect(stillExposed.cloudflareWorkers?.check).toMatchObject({ ok: false, detail: 'CFW_ACCESS_UNVERIFIED' });
+      expect(f.state.cfCalls.slice(before).some(isDisable)).toBe(true);
+      expect(f.state.subdomainEnabled).toBe(true);
+
+      // Cloudflare accepts the disable now: the retry lands, and with the route
+      // off the URL no longer answers, so the record defers instead of claiming
+      // a ready link.
+      f.state.subdomainDisableMode = 'ok';
+      f.state.headMode = 'unreachable';
+      const checkedAgain = await f.checkLink(record.id);
+      expect(checkedAgain.status).toBe(200);
+      expect(((await checkedAgain.json()) as { status: string }).status).toBe('link-delayed');
+      expect(f.state.subdomainEnabled).toBe(false);
+      expect(metadataOf(record.id).unverifiedExposure).toBeUndefined();
+    } finally {
+      configureCloudflareAccessPerimeterRetry();
+      await f.cleanup();
+    }
+  });
+
+  it('check-link refuses to withdraw a deferred deploy\'s exposure with 409 DEPLOY_IN_PROGRESS while a deploy of the script is in flight', async () => {
+    const f = await workersSiblingFixture('deferred-singleflight', { access: true });
+    configureCloudflareAccessPerimeterRetry({ attempts: 2, baseMs: 1 });
+    try {
+      // A deferred deploy: this run turned the workers.dev route on and
+      // attached a.example.com; both are recorded as its exposure.
+      f.state.subdomainEnabled = false;
+      f.state.headMode = 'unreachable';
+      await f.putConfig({ hostname: 'a.example.com', access: true });
+      const deployResp = await f.deploy('a.html');
+      expect(deployResp.status).toBe(200);
+      const deployed = (await deployResp.json()) as { id: string; status: string };
+      expect(deployed.status).toBe('link-delayed');
+      expect(f.state.subdomainEnabled).toBe(true);
+      expect(f.state.routed.map((d) => d.hostname)).toEqual(['a.example.com']);
+
+      // The URLs now answer WITHOUT the gate, so a check-link would withdraw.
+      // A deploy of the same script is admitted first and held at its first
+      // Cloudflare call: the withdrawal must not race it.
+      f.state.headMode = 'plain';
+      let release: () => void = () => {};
+      const held = new Promise<void>((resolve) => { release = resolve; });
+      f.state.hold = () => held;
+      const inflight = f.deploy('a.html');
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      const before = f.state.cfCalls.length;
+      const recordedBefore = (await f.listDeployments()).find((d) => d.fileName === 'a.html');
+      expect(recordedBefore?.status).toBe('link-delayed');
+      const refused = await f.checkLink(deployed.id);
+      expect(refused.status).toBe(409);
+      expect(await refused.json()).toMatchObject({ error: { code: 'DEPLOY_IN_PROGRESS' } });
+      // Nothing was withdrawn: the probes ran, no route was turned off, no
+      // hostname detached, and the record is still the deferred one.
+      // (The held deploy's first, still-pending call may sit in the log; it is
+      // not a withdrawal either.)
+      const withdrawals = f.state.cfCalls.slice(before).filter((c) => c.method === 'DELETE' || (c.method === 'POST' && c.url.endsWith('/subdomain')));
+      expect(withdrawals).toEqual([]);
+      expect(f.state.subdomainEnabled).toBe(true);
+      expect(f.state.routed.map((d) => d.hostname)).toEqual(['a.example.com']);
+      // The deferral marker (`accessVerified: false`) lives in providerMetadata,
+      // which publicDeployment strips and the lifted `cloudflareWorkers` view
+      // does not carry; the public record is compared whole instead: still
+      // link-delayed, its access-verify step still the deferred one, and not
+      // rewritten by the refused check.
+      const recordedAfter = (await f.listDeployments()).find((d) => d.fileName === 'a.html');
+      expect(recordedAfter?.status).toBe('link-delayed');
+      expect(recordedAfter?.cloudflareWorkers?.steps).toContainEqual(expect.objectContaining({ name: 'access-verify', status: 'done', detail: expect.stringMatching(/^deferred: /) }));
+      expect(recordedAfter).toEqual(recordedBefore);
+
+      // Once the deploy is released and finishes, the single-flight is free
+      // again and a check-link is admitted.
+      release();
+      const finished = await inflight;
+      expect([200, 502]).toContain(finished.status);
+      const after = await f.checkLink(deployed.id);
+      expect(after.status).toBe(200);
+    } finally {
+      configureCloudflareAccessPerimeterRetry();
+      await f.cleanup();
+    }
+  });
+
+  it('check-link applies a protected verdict against a RE-READ of the record, so a deploy that settled it during the probe is not overwritten', async () => {
+    const f = await workersSiblingFixture('deferred-reread', { access: true });
+    configureCloudflareAccessPerimeterRetry({ attempts: 2, baseMs: 1 });
+    try {
+      f.state.headMode = 'unreachable';
+      await f.putConfig({ access: true });
+      const deployResp = await f.deploy('a.html');
+      expect(deployResp.status).toBe(200);
+      const deployed = (await deployResp.json()) as { id: string; status: string };
+      expect(deployed.status).toBe('link-delayed');
+
+      // The URLs now answer WITH the gate. A check-link is held inside its
+      // probe; meanwhile a deploy of the same file runs to completion and
+      // settles the record as `ready` with its own result.
+      f.state.headMode = 'access';
+      let release: () => void = () => {};
+      const held = new Promise<void>((resolve) => { release = resolve; });
+      f.state.headHold = () => held;
+      const checking = f.checkLink(deployed.id);
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      const redeploy = await f.deploy('a.html');
+      expect(redeploy.status).toBe(200);
+      const settled = (await redeploy.json()) as { id: string; status: string };
+      expect(settled.id).toBe(deployed.id);
+      expect(settled.status).toBe('ready');
+      const settledRecord = (await f.listDeployments()).find((d) => d.fileName === 'a.html');
+      expect(settledRecord?.status).toBe('ready');
+
+      // The probe's verdict (protected) arrives after the deploy finished. The
+      // record it snapshotted before the probe is stale: written back, it
+      // would replace the deploy's result with a promoted copy of the OLD
+      // deferred record. Re-read under the lock, the record is no longer a
+      // deferral and comes back untouched.
+      release();
+      const checked = await checking;
+      expect(checked.status).toBe(200);
+      expect(((await checked.json()) as { status: string; statusMessage?: string }).statusMessage).not.toBe('Cloudflare Access is verified on every public link.');
+      expect((await f.listDeployments()).find((d) => d.fileName === 'a.html')).toEqual(settledRecord);
+    } finally {
+      configureCloudflareAccessPerimeterRetry();
+      await f.cleanup();
+    }
+  });
+
+  it('check-link answers 404 FILE_NOT_FOUND when the record is deleted while its probe is in flight, instead of 200 with a null body', async () => {
+    const f = await workersSiblingFixture('deferred-record-gone', { access: true });
+    configureCloudflareAccessPerimeterRetry({ attempts: 2, baseMs: 1 });
+    try {
+      // The deploy defers: the public URL does not answer yet.
+      f.state.headMode = 'unreachable';
+      await f.putConfig({ access: true });
+      const deployResp = await f.deploy('a.html');
+      expect(deployResp.status).toBe(200);
+      const deployed = (await deployResp.json()) as { id: string; status: string };
+      expect(deployed.status).toBe('link-delayed');
+
+      const dataDir = process.env.OD_DATA_DIR;
+      if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+      const db = openDatabase(process.cwd(), { dataDir });
+
+      // The gate answers now, and the check-link is held inside its probe. The
+      // record goes away underneath it (a project delete cascades its
+      // deployments; any other writer that removes it looks the same), so the
+      // verdict's re-read under the single-flight finds nothing to land on.
+      f.state.headMode = 'access';
+      let release: () => void = () => {};
+      const held = new Promise<void>((resolve) => { release = resolve; });
+      f.state.headHold = () => held;
+      const checking = f.checkLink(deployed.id);
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      db.prepare('DELETE FROM deployments WHERE project_id = ? AND id = ?').run(f.projectId, deployed.id);
+      release();
+
+      const checked = await checking;
+      // A record that is gone is not a verdict: 404, never a 200 carrying null.
+      expect(checked.status).toBe(404);
+      expect(await checked.json()).toMatchObject({
+        error: { code: 'FILE_NOT_FOUND', message: 'deployment not found' },
+      });
+    } finally {
+      configureCloudflareAccessPerimeterRetry();
+      await f.cleanup();
+    }
+  });
+
+  it('check-link refuses to re-defer (unreachable verdict) with 409 DEPLOY_IN_PROGRESS while a deploy of the script is in flight', async () => {
+    const f = await workersSiblingFixture('deferred-unreachable-singleflight', { access: true });
+    configureCloudflareAccessPerimeterRetry({ attempts: 2, baseMs: 1 });
+    try {
+      f.state.headMode = 'unreachable';
+      await f.putConfig({ access: true });
+      const deployResp = await f.deploy('a.html');
+      expect(deployResp.status).toBe(200);
+      const deployed = (await deployResp.json()) as { id: string; status: string };
+      expect(deployed.status).toBe('link-delayed');
+
+      // Still no answer, and a deploy of the script is admitted and held at
+      // its first Cloudflare call. Even a verdict that only re-defers is a
+      // write over the record the deploy is about to replace: refused.
+      let release: () => void = () => {};
+      const held = new Promise<void>((resolve) => { release = resolve; });
+      f.state.hold = () => held;
+      const inflight = f.deploy('a.html');
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      const recordedBefore = (await f.listDeployments()).find((d) => d.fileName === 'a.html');
+      const refused = await f.checkLink(deployed.id);
+      expect(refused.status).toBe(409);
+      expect(await refused.json()).toMatchObject({ error: { code: 'DEPLOY_IN_PROGRESS' } });
+      expect((await f.listDeployments()).find((d) => d.fileName === 'a.html')).toEqual(recordedBefore);
+
+      release();
+      const finished = await inflight;
+      expect([200, 502]).toContain(finished.status);
+    } finally {
+      configureCloudflareAccessPerimeterRetry();
+      await f.cleanup();
+    }
+  });
+
+  it('the detach route refuses with 409 DEPLOY_IN_PROGRESS while a deploy of the hostname\'s script is in flight, and is admitted once it finished', async () => {
+    const f = await workersSiblingFixture('detach-singleflight');
+    try {
+      await f.putConfig({ hostname: 'a.example.com' });
+      expect((await f.deploy('a.html')).status).toBe(200);
+      expect(f.state.routed.map((d) => d.hostname)).toEqual(['a.example.com']);
+
+      // A deploy of the script is admitted and held at its first Cloudflare
+      // call; it attaches (and writes ahead) the very hostname a detach
+      // would remove.
+      let release: () => void = () => {};
+      const held = new Promise<void>((resolve) => { release = resolve; });
+      f.state.hold = () => held;
+      const inflight = f.deploy('a.html');
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      const before = f.state.cfCalls.length;
+      const refused = await f.detachRoute('dom-a');
+      expect(refused.status).toBe(409);
+      expect(await refused.json()).toMatchObject({ error: { code: 'DEPLOY_IN_PROGRESS' } });
+      // Nothing was detached and no record stopped vouching for the hostname.
+      expect(f.state.cfCalls.slice(before).some((c) => c.method === 'DELETE')).toBe(false);
+      expect(f.state.routed.map((d) => d.hostname)).toEqual(['a.example.com']);
+
+      release();
+      expect((await inflight).status).toBe(200);
+      expect(f.state.routed.map((d) => d.hostname)).toEqual(['a.example.com']);
+      const admitted = await f.detachRoute('dom-a');
+      expect(admitted.status).toBe(200);
+      expect(f.state.cfCalls.some((c) => c.method === 'DELETE' && c.url.endsWith('/workers/domains/dom-a'))).toBe(true);
+      expect(f.state.routed).toEqual([]);
+    } finally {
+      await f.cleanup();
+    }
+  });
+
+  it('check-link on a deferred PREVIEW deploy does not probe the production hostname the record carries for display', async () => {
+    const f = await workersSiblingFixture('deferred-preview', { access: true });
+    configureCloudflareAccessPerimeterRetry({ attempts: 2, baseMs: 1 });
+    try {
+      // a.html's production deploy attaches and verifies a.example.com.
+      await f.putConfig({ hostname: 'a.example.com', access: true });
+      expect((await f.deploy('a.html')).status).toBe(200);
+      expect(f.state.routed.map((d) => d.hostname)).toEqual(['a.example.com']);
+      // b.html's PREVIEW deploy carries that hostname forward for display,
+      // but does not route or verify it; its public URL does not answer yet.
+      f.state.headMode = 'unreachable';
+      const previewResp = await f.deploy('b.html', 'preview');
+      expect(previewResp.status).toBe(200);
+      const preview = (await previewResp.json()) as { id: string; status: string; url: string; target: string; cloudflareWorkers?: Record<string, unknown> };
+      expect(preview.status).toBe('link-delayed');
+      expect(preview.target).toBe('preview');
+      expect(preview.url).not.toBe('https://a.example.com');
+      expect(preview.cloudflareWorkers?.customDomain).toMatchObject({ hostname: 'a.example.com' });
+
+      // The preview URL answers WITH the gate; the production hostname
+      // answers a plain 200. The preview never deployed that hostname, so its
+      // verdict must not be judged by it: ready, and the hostname not probed.
+      f.state.headMode = (url) => (url === preview.url ? 'access' : 'plain');
+      const before = f.state.cfCalls.length;
+      const checked = await f.checkLink(preview.id);
+      expect(checked.status).toBe(200);
+      const ready = (await checked.json()) as { status: string; statusMessage?: string };
+      expect(ready.status).toBe('ready');
+      const probed = f.state.cfCalls.slice(before).filter((c) => isPublicProbeUrl(c.url)).map((c) => c.url);
+      expect(probed).toContain(preview.url);
+      expect(probed).not.toContain('https://a.example.com');
+      // Nothing was withdrawn: the production hostname stays attached.
+      expect(f.state.routed.map((d) => d.hostname)).toEqual(['a.example.com']);
+    } finally {
+      configureCloudflareAccessPerimeterRetry();
+      await f.cleanup();
+    }
+  });
+
+  it('a failed check-link keeps the part of the exposure it could NOT withdraw recorded, and drops only what it did withdraw', async () => {
+    const f = await workersSiblingFixture('deferred-partial-withdraw', { access: true });
+    configureCloudflareAccessPerimeterRetry({ attempts: 2, baseMs: 1 });
+    try {
+      // This run turns the workers.dev route on and attaches a.example.com.
+      f.state.subdomainEnabled = false;
+      f.state.headMode = 'unreachable';
+      await f.putConfig({ hostname: 'a.example.com', access: true });
+      const deployResp = await f.deploy('a.html');
+      expect(deployResp.status).toBe(200);
+      const deployed = (await deployResp.json()) as { id: string; status: string };
+      expect(deployed.status).toBe('link-delayed');
+      expect(f.state.subdomainEnabled).toBe(true);
+      const dataDir = process.env.OD_DATA_DIR;
+      if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+      // The recorded exposure is not part of the public record (it is the
+      // route's own bookkeeping), so it is read from the daemon's database.
+      const db = openDatabase(process.cwd(), { dataDir });
+      const recordedExposure = () => (getDeploymentById(db, f.projectId, deployed.id)?.providerMetadata as Record<string, unknown> | undefined)?.unverifiedExposure;
+      expect(recordedExposure()).toEqual({
+        scriptName: f.scriptName,
+        subdomainEnabledByThisRun: true,
+        detachableCustomDomains: [{ id: 'dom-a', hostname: 'a.example.com' }],
+      });
+
+      // The URLs answer WITHOUT the gate. The withdrawal detaches the hostname
+      // but Cloudflare refuses to turn the workers.dev route back off.
+      f.state.headMode = 'plain';
+      f.state.subdomainDisableMode = 'error';
+      const checked = await f.checkLink(deployed.id);
+      expect(checked.status).toBe(200);
+      const failed = (await checked.json()) as { status: string; cloudflareWorkers?: { steps?: Array<Record<string, unknown>> } };
+      expect(failed.status).toBe('failed');
+      expect(failed.cloudflareWorkers?.steps).toContainEqual(expect.objectContaining({ name: 'subdomain-disable', status: 'error' }));
+      expect(failed.cloudflareWorkers?.steps).toContainEqual(expect.objectContaining({ name: 'custom-domain-detach', status: 'done', detail: 'a.example.com' }));
+      expect(f.state.routed).toEqual([]);
+      expect(f.state.subdomainEnabled).toBe(true);
+      // The route is still public and still this deploy's to take down: it
+      // stays recorded. The detached hostname does not.
+      expect(recordedExposure()).toEqual({ scriptName: f.scriptName, subdomainEnabledByThisRun: true });
+    } finally {
+      configureCloudflareAccessPerimeterRetry();
+      await f.cleanup();
+    }
+  });
+
+  it('a Workers check-link with Access off takes the script\'s deploy single-flight, so no deploy lands inside its probe', async () => {
+    const f = await workersSiblingFixture('generic-check-singleflight');
+    try {
+      await f.putConfig({});
+      const deployResp = await f.deploy('a.html');
+      expect(deployResp.status).toBe(200);
+      const deployed = (await deployResp.json()) as { id: string; status: string };
+      expect(deployed.status).toBe('ready');
+
+      // The probe is held open inside its fetch, so the window a deploy of the
+      // same script would land in is open and deterministic.
+      f.state.headMode = 'unreachable';
+      let release: () => void = () => {};
+      const held = new Promise<void>((resolve) => { release = resolve; });
+      f.state.headHold = () => held;
+      const checking = f.checkLink(deployed.id);
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      // REFUSED. Admitted, the deploy would replace the record and this check
+      // would then write its pre-probe snapshot back over the deploy's result —
+      // providerMetadata (ownedCustomDomains, steps, check) and status alike.
+      const redeploy = await f.deploy('a.html');
+      expect(redeploy.status).toBe(409);
+      expect(await redeploy.json()).toMatchObject({ error: { code: 'DEPLOY_IN_PROGRESS' } });
+
+      release();
+      const checked = await checking;
+      expect(checked.status).toBe(200);
+      // The verdict lands on the record it probed: a link that did not answer.
+      expect(((await checked.json()) as { status: string }).status).toBe('link-delayed');
+    } finally {
+      await f.cleanup();
+    }
+  });
+
+  it('a Workers check-link does not write its pre-probe snapshot over a record another writer replaced', async () => {
+    const f = await workersSiblingFixture('generic-check-reread');
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const db = openDatabase(process.cwd(), { dataDir });
+    try {
+      await f.putConfig({});
+      const deployResp = await f.deploy('a.html');
+      expect(deployResp.status).toBe(200);
+      const deployed = (await deployResp.json()) as { id: string; status: string };
+      expect(deployed.status).toBe('ready');
+
+      f.state.headMode = 'unreachable';
+      let release: () => void = () => {};
+      const held = new Promise<void>((resolve) => { release = resolve; });
+      f.state.headHold = () => held;
+      const checking = f.checkLink(deployed.id);
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      // A concurrent writer rewrites the record while the probe is in flight —
+      // the shape of a sibling record's hostname bookkeeping, or of a deploy
+      // that settled the record.
+      const row = getDeploymentById(db, f.projectId, deployed.id);
+      if (!row) throw new Error('the deployment record is required');
+      const { cloudflareWorkers: _liftedRow, ...record } = row;
+      upsertDeployment(db, {
+        ...record,
+        status: 'ready',
+        statusMessage: 'settled by another writer',
+        providerMetadata: { ...((record.providerMetadata ?? {}) as Record<string, unknown>), settledByAnotherWriter: true },
+      });
+
+      release();
+      const checked = await checking;
+      expect(checked.status).toBe(200);
+      // The verdict was computed for a snapshot the record no longer is. Written
+      // back, it would put the pre-probe status and metadata over that write;
+      // re-read under the single-flight, the record is handed back untouched.
+      expect(((await checked.json()) as { statusMessage?: string }).statusMessage).toBe('settled by another writer');
+      const after = getDeploymentById(db, f.projectId, deployed.id)?.providerMetadata as Record<string, unknown> | undefined;
+      expect(after?.settledByAnotherWriter).toBe(true);
+    } finally {
+      await f.cleanup();
+    }
+  });
+
+  it('the detach route sends its Cloudflare calls through the proxy dispatcher', async () => {
+    const f = await workersSiblingFixture('detach-proxy');
+    const priorProxy = process.env.HTTPS_PROXY;
+    try {
+      await f.putConfig({ hostname: 'a.example.com' });
+      expect((await f.deploy('a.html')).status).toBe(200);
+      process.env.HTTPS_PROXY = 'http://127.0.0.1:9';
+      const before = f.state.cfCalls.length;
+      const detach = await f.detachRoute('dom-a');
+      expect(detach.status).toBe(200);
+      const routeCalls = f.state.cfCalls.slice(before);
+      expect(routeCalls.map((c) => c.method)).toEqual(['GET', 'DELETE']);
+      // The OAuth connect/refresh/revoke ride the user's proxy; a detach that
+      // did not would fail on exactly the machines the connect worked on.
+      expect(routeCalls.every((c) => c.dispatched)).toBe(true);
+    } finally {
+      if (priorProxy === undefined) delete process.env.HTTPS_PROXY;
+      else process.env.HTTPS_PROXY = priorProxy;
+      await f.cleanup();
+    }
+  });
+
+  it('a detach whose record bookkeeping fails leaves every sibling record vouching, as one transaction', async () => {
+    const f = await workersSiblingFixture('detach-atomic');
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const db = openDatabase(process.cwd(), { dataDir });
+    // The bookkeeping is bare upserts, one per record, so it has to be ONE
+    // SQLite transaction. The second record's rewrite is made to fail: nothing
+    // may have been forgotten. Without the wrapper the first upsert autocommits
+    // and that record silently stops vouching for a hostname Cloudflare still
+    // routes, so a later dashboard re-attach of it reads as owned and is
+    // detached again — the exact state this forget exists to prevent.
+    const dbProto = Object.getPrototypeOf(db) as { prepare: (sql: string) => unknown };
+    const realPrepare = dbProto.prepare;
+    let failFromRewrite: number | null = null;
+    let rewrites = 0;
+    let armed = false;
+    const prepareSpy = vi.spyOn(dbProto, 'prepare').mockImplementation(function (this: unknown, sql: string) {
+      if (armed && /insert into deployments/i.test(sql)) {
+        rewrites += 1;
+        if (failFromRewrite !== null && rewrites >= failFromRewrite) throw new Error('database is locked (test)');
+      }
+      return realPrepare.call(this, sql);
+    });
+    try {
+      await f.putConfig({ hostname: 'a.example.com' });
+      expect((await f.deploy('a.html')).status).toBe(200);
+      expect((await f.deploy('b.html')).status).toBe(200);
+      // Two records of this project own and display the hostname, which is what
+      // gives the detach two rewrites to make — and the rollback something to
+      // observe. One record would make this test vacuous, so it is asserted.
+      const before = (await f.listDeployments()).filter((d) => d.fileName === 'a.html' || d.fileName === 'b.html');
+      expect(before.map((d) => d.fileName).sort()).toEqual(['a.html', 'b.html']);
+      for (const record of before) expect(record.cloudflareWorkers?.customDomain).toMatchObject({ hostname: 'a.example.com' });
+
+      // Fail from the SECOND rewrite on: the first is already written inside
+      // the transaction when the failure lands.
+      rewrites = 0;
+      failFromRewrite = 2;
+      armed = true;
+      const detach = await f.detachRoute('dom-a');
+      armed = false;
+      expect(detach.status).toBeGreaterThanOrEqual(400);
+      // The failure is the injected one, not a refusal or a missing record: the
+      // write-ahead forget was attempted (both rewrites) and, having failed, the
+      // DELETE was never sent — Cloudflare still routes the hostname and both
+      // records still vouch for it.
+      expect(f.state.cfCalls.some((c) => c.method === 'DELETE' && c.url.endsWith('/workers/domains/dom-a'))).toBe(false);
+      expect(rewrites).toBe(2);
+
+      const after = (await f.listDeployments()).filter((d) => d.fileName === 'a.html' || d.fileName === 'b.html');
+      for (const record of after) expect(record.cloudflareWorkers?.customDomain).toMatchObject({ hostname: 'a.example.com' });
+    } finally {
+      prepareSpy.mockRestore();
+      await f.cleanup();
+    }
+  });
+});
+
+// The provider owns the "still preparing" sentence. It cannot be reached through
+// the check-link route today — every non-reachable verdict from
+// checkDeploymentUrl already carries a statusMessage of its own, so the `||`
+// fallback never fires — but it is a latent wrong-provider message and the
+// mapping is asserted directly here rather than through a path that cannot
+// exercise it.
+describe('pendingPublicLinkMessage', () => {
+  it('names the deployment\'s own provider for a Cloudflare Workers record', () => {
+    expect(pendingPublicLinkMessage(CLOUDFLARE_WORKERS_PROVIDER_ID)).toBe(
+      'Cloudflare Workers is still preparing the public link.',
+    );
+  });
+
+  it('keeps the Vercel sentence for Vercel and for anything unrecognized', () => {
+    expect(pendingPublicLinkMessage(VERCEL_PROVIDER_ID)).toBe('Vercel is still preparing the public link.');
+    expect(pendingPublicLinkMessage('some-future-provider')).toBe('Vercel is still preparing the public link.');
   });
 });

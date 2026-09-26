@@ -1,20 +1,44 @@
 import fs from 'node:fs';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, open, readFile, rename, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { hash as blake3Hash } from 'blake3-wasm';
 import { listFiles, readProjectFile, validateProjectPath } from './projects.js';
 import { findRealTagOffset, HTML_TAG_PATTERNS } from '@open-design/contracts/runtime/html-injection-points';
+import { proxyDispatcherRequestInit } from './connectionTest.js';
+import { refreshCloudflareToken, revokeCloudflareToken, validateCloudflareOAuthScopes } from './integrations/cloudflare-oauth.js';
+import {
+  clearCloudflareOAuthTokenForRevoke,
+  cloudflareOAuthExpiresAt,
+  dropPendingCloudflareOAuthRevokes,
+  fsyncDirectory,
+  getCloudflareOAuthToken,
+  getPendingCloudflareOAuthRevokes,
+  isCloudflareOAuthTokenExpired,
+  noteCloudflareOAuthRevokeRefusal,
+  recordPendingCloudflareOAuthRevoke,
+  restoreCloudflareOAuthTokenAndDropRevokes,
+  setCloudflareOAuthTokenIfGenerationMatches,
+  type StoredCloudflareOAuthToken,
+} from './integrations/cloudflare-tokens.js';
 
 export const VERCEL_PROVIDER_ID = 'vercel-self';
 export const CLOUDFLARE_PAGES_PROVIDER_ID = 'cloudflare-pages';
+export const CLOUDFLARE_WORKERS_PROVIDER_ID = 'cloudflare-workers';
 export const SAVED_TOKEN_MASK = 'saved-vercel-token';
 export const SAVED_CLOUDFLARE_TOKEN_MASK = 'saved-cloudflare-token';
+export const SAVED_CLOUDFLARE_WORKERS_TOKEN_MASK = 'saved-cloudflare-workers-token';
 
 type JsonObject = Record<string, any>;
-type DeployProviderId = typeof VERCEL_PROVIDER_ID | typeof CLOUDFLARE_PAGES_PROVIDER_ID;
+type DeployProviderId = typeof VERCEL_PROVIDER_ID | typeof CLOUDFLARE_PAGES_PROVIDER_ID | typeof CLOUDFLARE_WORKERS_PROVIDER_ID;
 type DeployErrorDetails = JsonObject | string | undefined;
+type CloudflareWorkersAccessRule =
+  | { kind: 'emails'; emails: string[] }
+  | { kind: 'emailDomain'; emailDomain: string }
+  | { kind: 'self' }
+  | { kind: 'policy'; policyId: string };
+
 type DeployConfig = {
   token: string;
   teamId?: string | undefined;
@@ -22,6 +46,37 @@ type DeployConfig = {
   accountId?: string | undefined;
   projectName?: string | undefined;
   cloudflarePages?: CloudflarePagesConfigHints | undefined;
+  scriptName?: string | undefined;
+  compatibilityDate?: string | undefined;
+  credentialMode?: string | undefined;
+  clientId?: string | undefined;
+  redirectUri?: string | undefined;
+  scopes?: string[] | undefined;
+  bindings?: CloudflareWorkersConfigBinding[] | undefined;
+  access?: { enabled: boolean; rule?: CloudflareWorkersAccessRule } | undefined;
+  customDomain?: { hostname: string; zoneId: string } | undefined;
+  /** The attempt id of an OAuth connect whose intent is recorded but whose
+   * `credentialMode` commit has not landed yet (see
+   * markCloudflareOAuthGrantPending). Any value means a connect is in flight,
+   * and the read path treats it as authoritative over both the stored mode and
+   * the static token beside it: that grant IS the credential the connect is
+   * storing, and signing with anything else leaves it valid with no holder.
+   *
+   * The VALUE names which attempt, which is what makes the marker an identity
+   * and not just a flag: only the commit that carries this id may land the mode
+   * over it, so a save that abandons the connect (dropping the marker) cannot
+   * be undone by the commit that was still in flight — see
+   * commitCloudflareOAuthMode. */
+  pendingOAuthGrant?: string | undefined;
+  /** Durable intent of a credential transition OFF oauth (see
+   * writeCloudflareWorkersConfig): the grant is on its way out, so the read
+   * path stops deriving oauth from it before it is destroyed — the window
+   * between the clear and the mode write can never read as oauth with nothing
+   * behind it. */
+  pendingOAuthGrantClear?: boolean | undefined;
+  /** Set on the safe default returned when the on-disk file is unparsable
+   * (CFW_CONFIG_CORRUPT); never persisted. */
+  configError?: string | undefined;
 };
 type CloudflarePagesConfigHints = {
   lastZoneId?: string;
@@ -59,6 +114,63 @@ export const CLOUDFLARE_PAGES_ASSET_UPLOAD_MAX_BODY_BYTES = 75 * 1024 * 1024;
 export const CLOUDFLARE_PAGES_ASSET_MAX_BYTES = 25 * 1024 * 1024;
 const VERCEL_PROTECTED_MESSAGE =
   'Deployment is protected by Vercel. Disable Deployment Protection or use a custom domain to make this link public.';
+const CLOUDFLARE_ACCESS_PROTECTED_MESSAGE =
+  'Deployment is protected by Cloudflare Access. Authorized users must sign in to open it.';
+
+/** True when `location` is an absolute URL whose HOST is Cloudflare Access
+ * (`<team>.cloudflareaccess.com`). Matched on the parsed hostname, never as a
+ * substring: `https://evil.example/?cloudflareaccess.com` and
+ * `https://evil.example/cloudflareaccess.com` are not Access, and a perimeter
+ * check that accepted them would mark an unprotected deploy as gated. */
+export function isCloudflareAccessUrl(location: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(String(location || ''));
+  } catch {
+    return false;
+  }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') return false;
+  const hostname = url.hostname.toLowerCase();
+  return hostname === 'cloudflareaccess.com' || hostname.endsWith('.cloudflareaccess.com');
+}
+
+export function isCloudflareAccessRedirect(status: number, location: string): boolean {
+  if (status < 300 || status >= 400) return false;
+  return isCloudflareAccessUrl(location);
+}
+
+/** Cloudflare's EDGE answering a request, from the response headers alone —
+ * never the body. There are exactly three kinds of evidence: the Access login
+ * location, the Access cookie jar, and the edge's own `cf-mitigated` challenge
+ * stamp.
+ *
+ * The body is deliberately not read. A 401/403 body is written by whatever
+ * answered the probe, and for the Access perimeter assertion that is the
+ * deploy's OWN Worker: an app whose 403 happens to contain the words
+ * "Cloudflare Access" made verifyCloudflareAccessPerimeter report the URL as
+ * gated while it was served ungated. Body text proves a string, not a gate.
+ *
+ * `cf-mitigated` is stamped by Cloudflare's edge when it serves a managed
+ * challenge, and is matched as a word so a value that merely contains it
+ * elsewhere is not evidence.
+ *
+ * Used by the SHARED deploy-URL probe (requestDeploymentUrl), which serves
+ * Vercel, Pages and Workers alike: a response that only mentions "Cloudflare
+ * Access" in its body would otherwise be reported as an Access-gated
+ * deployment — the record is stamped protected, the user is told to sign in to
+ * an Access app that does not exist, and the deployment's real protection
+ * (Vercel Deployment Protection) is never named. */
+export function isCloudflareAccessChallengeResponse(resp: Response): boolean {
+  const location = resp.headers?.get?.('location') || '';
+  if (isCloudflareAccessUrl(location)) return true;
+  const setCookie = resp.headers?.get?.('set-cookie') || '';
+  // Only the real Access cookie proves the gate. A broader cf[-_]access match
+  // would read an app's own cookie whose name merely contains the substring as
+  // an Access gate, stamping a protected verdict on a deployment the probe then
+  // mislabels as "sign in to Cloudflare Access".
+  if (/cf_authorization/i.test(setCookie)) return true;
+  return /\bchallenge\b/i.test(resp.headers?.get?.('cf-mitigated') || '');
+}
 
 export class DeployError extends Error {
   status: number;
@@ -75,8 +187,18 @@ export class DeployError extends Error {
 }
 
 export function deployConfigPath(providerId: DeployProviderId = VERCEL_PROVIDER_ID) {
-  const base = process.env.OD_USER_STATE_DIR || path.join(os.homedir(), '.open-design');
-  return path.join(base, providerId === CLOUDFLARE_PAGES_PROVIDER_ID ? 'cloudflare-pages.json' : 'vercel.json');
+  // The Workers config lives under the daemon-resolved data root (same as its
+  // OAuth token) so an isolated OD_DATA_DIR namespace holds both. Vercel/Pages
+  // keep the legacy OD_USER_STATE_DIR/home location unchanged.
+  const base = providerId === CLOUDFLARE_WORKERS_PROVIDER_ID
+    ? cloudflareWorkersBaseDir()
+    : process.env.OD_USER_STATE_DIR || path.join(os.homedir(), '.open-design');
+  const name = providerId === CLOUDFLARE_PAGES_PROVIDER_ID
+    ? 'cloudflare-pages.json'
+    : providerId === CLOUDFLARE_WORKERS_PROVIDER_ID
+      ? 'cloudflare-workers.json'
+      : 'vercel.json';
+  return path.join(base, name);
 }
 
 export async function readVercelConfig(): Promise<DeployConfig> {
@@ -151,12 +273,50 @@ export async function writeCloudflarePagesConfig(input: Partial<DeployConfig>) {
 
 async function writeDeployConfigFile(file: string, config: DeployConfig) {
   await mkdir(path.dirname(file), { recursive: true });
-  await writeFile(file, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
+  // Atomic replace: write a sibling temp file then rename over the target so a
+  // crash mid-write can never leave a truncated/partial config behind — the
+  // previous file stays valid until the rename lands. The temp name carries a
+  // random suffix and is opened with exclusive creation: the Vercel/Pages
+  // writers are not serialized, and a pid+millisecond name let two same-tick
+  // writes share one temp file (the second rename then failed with ENOENT).
+  const tmp = `${file}.tmp-${randomUUID()}`;
   try {
-    fs.chmodSync(file, 0o600);
-  } catch {
-    // Best effort on filesystems that do not support chmod.
+    // fsync BEFORE the rename: a rename is only atomic with respect to the
+    // directory entry. Without flushing the temp file's bytes first, a power
+    // loss after the rename can leave the target pointing at an empty or
+    // truncated file (data lost, entry kept) — exactly the corruption the
+    // atomic replace is meant to rule out.
+    const handle = await open(tmp, 'wx', 0o600);
+    try {
+      await handle.writeFile(`${JSON.stringify(config, null, 2)}\n`, 'utf8');
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    try {
+      fs.chmodSync(tmp, 0o600);
+    } catch {
+      // Best effort on filesystems that do not support chmod.
+    }
+    await rename(tmp, file);
+  } catch (err) {
+    await rm(tmp, { force: true }).catch(() => {});
+    throw err;
   }
+  // fsync AFTER the rename too: the temp-file flush made the bytes durable, but
+  // the rename is an entry in the parent directory and a power loss can still
+  // lose that entry. Best-effort where the platform cannot sync a directory.
+  await fsyncDirectory(path.dirname(file));
+}
+
+// Serialize every Workers-config read-modify-write so a settings PUT, a
+// disconnect reset, and a connect commit can never interleave and lose each
+// other's updates.
+let cloudflareConfigMutationTail: Promise<unknown> = Promise.resolve();
+async function withCloudflareConfigMutation<T>(fn: () => Promise<T>): Promise<T> {
+  const run = cloudflareConfigMutationTail.then(fn, fn);
+  cloudflareConfigMutationTail = run.catch(() => {});
+  return run;
 }
 
 export function publicDeployConfig(config: Partial<DeployConfig>) {
@@ -186,23 +346,1405 @@ export function publicCloudflarePagesConfig(config: Partial<DeployConfig>) {
   return body;
 }
 
+function normalizeCloudflareWorkersAccessRule(rule: unknown): CloudflareWorkersAccessRule | undefined {
+  if (!rule || typeof rule !== 'object') return undefined;
+  const r = rule as JsonObject;
+  // An empty rule (`emails: []`, blank domain) is a truthy object that would
+  // pass the "enabled but no rule" checks and only fail inside the Access app
+  // create — after the IdP and (on a first deploy) the live script PUT. Return
+  // undefined so the write-time validation rejects it up front.
+  if (r.kind === 'emails') {
+    const emails = Array.isArray(r.emails)
+      ? r.emails.filter((e): e is string => typeof e === 'string').map((e) => e.trim()).filter(Boolean)
+      : [];
+    return emails.length > 0 ? { kind: 'emails', emails } : undefined;
+  }
+  if (r.kind === 'emailDomain') {
+    const emailDomain = typeof r.emailDomain === 'string' ? r.emailDomain.trim() : '';
+    return emailDomain ? { kind: 'emailDomain', emailDomain } : undefined;
+  }
+  if (r.kind === 'self') return { kind: 'self' };
+  if (r.kind === 'policy') {
+    const policyId = typeof r.policyId === 'string' ? r.policyId.trim() : '';
+    return policyId ? { kind: 'policy', policyId } : undefined;
+  }
+  return undefined;
+}
+
+const CLOUDFLARE_WORKERS_BINDING_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const CLOUDFLARE_WORKERS_RESERVED_BINDING_NAMES = new Set(['ASSETS']);
+
+/** The binding types the OpenDesign config owns, and the fields each type owns.
+ * This mirrors the type->field map the settings UI renders
+ * (`apps/web/src/components/FileViewer.tsx`): its R2 branch edits `bucketName`,
+ * its D1 branch edits `id` / `databaseName`, and neither touches the other's. */
+export type CloudflareWorkersConfigBinding = {
+  type: string;
+  name: string;
+  bucketName?: string;
+  databaseName?: string;
+  id?: string;
+};
+
+/** Validate ONE config binding and reduce it to the fields its type owns.
+ *
+ * Throws `CFW_BINDINGS_INVALID` rather than dropping anything: an unsupported
+ * type is REJECTED, because silently dropping it deploys live with a binding the
+ * user asked for and did not get. Reducing by TYPE rather than by field presence
+ * is what stops `{type:'r2_bucket', bucketName:'x', id:'abc'}` from carrying that
+ * stray `id` into the live script PUT, after the assets upload has been spent. */
+function normalizeCloudflareWorkersBinding(entry: unknown, index: number): CloudflareWorkersConfigBinding {
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+    throw new DeployError('Cloudflare Workers binding #' + (index + 1) + ' must be an object.', 400, undefined, 'CFW_BINDINGS_INVALID');
+  }
+  const b = entry as JsonObject;
+  const type = typeof b.type === 'string' ? b.type.trim() : '';
+  const name = typeof b.name === 'string' ? b.name.trim() : '';
+  if (!type) throw new DeployError('Cloudflare Workers binding #' + (index + 1) + ' needs a string "type".', 400, undefined, 'CFW_BINDINGS_INVALID');
+  if (type !== 'r2_bucket' && type !== 'd1') {
+    throw new DeployError('Cloudflare Workers binding #' + (index + 1) + ' has unsupported type "' + type + '" (supported: r2_bucket, d1).', 400, undefined, 'CFW_BINDINGS_INVALID');
+  }
+  if (!CLOUDFLARE_WORKERS_BINDING_NAME.test(name)) {
+    throw new DeployError('Cloudflare Workers binding name "' + name + '" is invalid (letters, digits and underscores; cannot start with a digit).', 400, undefined, 'CFW_BINDINGS_INVALID');
+  }
+  if (CLOUDFLARE_WORKERS_RESERVED_BINDING_NAMES.has(name)) {
+    throw new DeployError('Cloudflare Workers binding name "' + name + '" is reserved for the static assets binding.', 400, undefined, 'CFW_BINDINGS_INVALID');
+  }
+  if (type === 'r2_bucket') {
+    const bucketName = typeof b.bucketName === 'string' ? b.bucketName.trim() : '';
+    if (!bucketName) {
+      throw new DeployError('Cloudflare Workers R2 binding "' + name + '" needs a bucketName.', 400, undefined, 'CFW_BINDINGS_INVALID');
+    }
+    return { type, name, bucketName };
+  }
+  const id = typeof b.id === 'string' ? b.id.trim() : '';
+  const databaseName = typeof b.databaseName === 'string' ? b.databaseName.trim() : '';
+  if (!id && !databaseName) {
+    throw new DeployError('Cloudflare Workers D1 binding "' + name + '" needs a databaseName or id.', 400, undefined, 'CFW_BINDINGS_INVALID');
+  }
+  return { type, name, ...(id ? { id } : {}), ...(databaseName ? { databaseName } : {}) };
+}
+
+/** Validate the Workers bindings a config carries. Throws a DeployError
+ * (`CFW_BINDINGS_INVALID`) instead of letting a malformed entry TypeError at
+ * deploy time after the assets were uploaded, or letting a user binding named
+ * `ASSETS` collide with the injected assets binding. */
+export function normalizeCloudflareWorkersBindings(value: unknown): CloudflareWorkersConfigBinding[] | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (!Array.isArray(value)) {
+    throw new DeployError('Cloudflare Workers bindings must be an array.', 400, undefined, 'CFW_BINDINGS_INVALID');
+  }
+  const seen = new Set<string>();
+  return value.map((entry, index) => {
+    const binding = normalizeCloudflareWorkersBinding(entry, index);
+    if (seen.has(binding.name)) {
+      throw new DeployError('Cloudflare Workers binding name "' + binding.name + '" is duplicated.', 400, undefined, 'CFW_BINDINGS_INVALID');
+    }
+    seen.add(binding.name);
+    return binding;
+  });
+}
+
+/** The persisted binding set, read back. Entries this build cannot understand are
+ * DROPPED rather than thrown: this gates a config READ that every Workers route
+ * depends on, so a hand-edited or older file must degrade to "fewer bindings"
+ * instead of bricking the settings panel. The write path above still rejects
+ * them — a value the user just typed is an error to report, not to swallow.
+ * Objects only, so a hand-written `[null]` cannot reach the client, where the
+ * settings normalizer calls `binding.name.trim()`. */
+function persistedCloudflareWorkersBindings(value: unknown): CloudflareWorkersConfigBinding[] {
+  if (!Array.isArray(value)) return [];
+  const out: CloudflareWorkersConfigBinding[] = [];
+  const seen = new Set<string>();
+  for (const entry of value) {
+    let binding: CloudflareWorkersConfigBinding;
+    try {
+      binding = normalizeCloudflareWorkersBinding(entry, out.length);
+    } catch {
+      continue;
+    }
+    if (seen.has(binding.name)) continue;
+    seen.add(binding.name);
+    out.push(binding);
+  }
+  return out;
+}
+
+/** Validate a persisted OAuth scope selection. An empty array clears the
+ * selection (the connect flow then requests the default set); a non-empty one
+ * must consist of supported scopes only, so `/oauth/start` can never be fed a
+ * persisted typo that would fail authorization or be silently widened. */
+function normalizeCloudflareWorkersScopes(value: unknown): string[] {
+  if (Array.isArray(value) && value.length === 0) return [];
+  try {
+    return validateCloudflareOAuthScopes(value);
+  } catch (err) {
+    throw new DeployError(err instanceof Error ? err.message : String(err), 400, undefined, 'CFW_INVALID_SCOPES');
+  }
+}
+
+function normalizeCloudflareWorkersAccess(value: unknown): { enabled: boolean; rule?: CloudflareWorkersAccessRule } | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const v = value as JsonObject;
+  if (v.enabled !== true) return { enabled: false };
+  const rule = normalizeCloudflareWorkersAccessRule(v.rule);
+  // Enabled access with an unrecognised/empty rule must stay ENABLED-but-inert
+  // (rule omitted), never silently flip to "off": the deploy then fails closed
+  // with CFW_ACCESS_EMPTY_RULE instead of going live unprotected while the UI
+  // believes Access is on.
+  return rule === undefined ? { enabled: true } : { enabled: true, rule };
+}
+
+function normalizeCloudflareWorkersCustomDomain(value: unknown): { hostname: string; zoneId: string } | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const v = value as JsonObject;
+  const hostname = typeof v.hostname === 'string' ? v.hostname.trim() : '';
+  const zoneId = typeof v.zoneId === 'string' ? v.zoneId.trim() : '';
+  if (!hostname || !zoneId) return undefined;
+  return { hostname, zoneId };
+}
+
+export const CLOUDFLARE_WORKERS_CONFIG_CORRUPT_CODE = 'CFW_CONFIG_CORRUPT';
+
+function emptyCloudflareWorkersConfig(): DeployConfig {
+  return {
+    token: '',
+    accountId: '',
+    scriptName: '',
+    compatibilityDate: '',
+    credentialMode: 'token',
+    clientId: '',
+    redirectUri: '',
+    scopes: [],
+  };
+}
+
+async function readCloudflareWorkersConfigFile(): Promise<DeployConfig> {
+  const file = deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID);
+  try {
+    const raw = await readFile(file, 'utf8');
+    let parsed: JsonObject;
+    try {
+      const value = JSON.parse(raw);
+      if (!value || typeof value !== 'object' || Array.isArray(value)) throw new SyntaxError('config is not a JSON object');
+      parsed = value as JsonObject;
+    } catch (err) {
+      // Mirror the OAuth token reader: an unparsable file must not brick every
+      // Workers route (config GET/PUT, capabilities, zones, deploy) — degrade to
+      // the unconfigured default, say so loudly, and let the next settings save
+      // rewrite the file. The marker reaches the client via the public config.
+      if (!(err instanceof SyntaxError)) throw err;
+      console.error(
+        `[deploy] ${CLOUDFLARE_WORKERS_CONFIG_CORRUPT_CODE}: ${file} is not valid JSON (${err.message}); treating Cloudflare Workers as unconfigured until the settings are saved again.`,
+      );
+      return { ...emptyCloudflareWorkersConfig(), configError: CLOUDFLARE_WORKERS_CONFIG_CORRUPT_CODE };
+    }
+    return {
+      token: typeof parsed.token === 'string' ? parsed.token : '',
+      accountId: typeof parsed.accountId === 'string' ? parsed.accountId : '',
+      scriptName: typeof parsed.scriptName === 'string' ? parsed.scriptName : '',
+      compatibilityDate: typeof parsed.compatibilityDate === 'string' ? parsed.compatibilityDate : '',
+      credentialMode: typeof parsed.credentialMode === 'string' ? parsed.credentialMode : 'token',
+      clientId: typeof parsed.clientId === 'string' ? parsed.clientId : '',
+      redirectUri: typeof parsed.redirectUri === 'string' ? parsed.redirectUri : '',
+      scopes: Array.isArray(parsed.scopes)
+        ? parsed.scopes.filter((s: unknown): s is string => typeof s === 'string')
+        : [],
+      bindings: persistedCloudflareWorkersBindings(parsed.bindings),
+      access: normalizeCloudflareWorkersAccess(parsed.access),
+      customDomain: normalizeCloudflareWorkersCustomDomain(parsed.customDomain),
+      pendingOAuthGrant:
+        typeof parsed.pendingOAuthGrant === 'string' && parsed.pendingOAuthGrant.trim()
+          ? parsed.pendingOAuthGrant.trim()
+          : undefined,
+      pendingOAuthGrantClear: parsed.pendingOAuthGrantClear === true,
+    };
+  } catch (err) {
+    if (isErrnoException(err) && err.code === 'ENOENT') return emptyCloudflareWorkersConfig();
+    throw err;
+  }
+}
+
+/** The live OAuth grant on disk, or null when there is none for the credential
+ * authority to be derived from: nothing stored, a grant with no refresh token
+ * that is already within the expiry skew, or no configured data root. Never
+ * throws: it gates a config READ, which must not gain a new failure mode.
+ *
+ * Expiry alone does not disqualify a grant. One that carries a refresh token
+ * needs nothing from the config to be refreshed: the record holds the clientId
+ * the refresh is bound to (buildStoredCloudflareToken persists it, and
+ * refreshCloudflareOAuthAccessToken prefers current.clientId), and the resolver
+ * refreshes before it signs. Reading an expired-but-refreshable grant as "no
+ * grant" left a connect-only user — no static token, so this derivation is the
+ * only thing that can route to the grant — in token mode with an empty token:
+ * every deploy failed CFW_TOKEN_REQUIRED while /auth/status reported a connected
+ * profile. Only a grant that cannot refresh at all is unusable once expired (the
+ * resolver refuses that one with CFW_OAUTH_RECONNECT_REQUIRED), which is the
+ * state a reconnect fixes. */
+
+async function liveCloudflareOAuthGrant(): Promise<StoredCloudflareOAuthToken | null> {
+  try {
+    const current = await getCloudflareOAuthToken(cloudflareOAuthTokensDir());
+    if (!current) return null;
+    if (!current.refreshToken && isCloudflareOAuthTokenExpired(current, Date.now(), CLOUDFLARE_OAUTH_EXPIRY_SKEW_MS)) return null;
+    return current;
+  } catch {
+    return null;
+  }
+}
+
+/** The Workers config with the credential authority resolved from what is
+ * actually on disk, not from the stored mode flag alone.
+ *
+ * The OAuth commit spans two files — the token first, the config's
+ * `credentialMode` second (see commitCloudflareOAuthMode) — so a crash between
+ * the two leaves a live grant on disk while the config still says 'token'.
+ * Reading 'token' there makes every deploy ignore the grant sitting next to it
+ * and fall back to a static API token a connect-only user never had, with
+ * nothing left that knows the grant is there to revoke. So a present, usable
+ * grant decides the mode, but only where the config has no static token of its
+ * own to prefer: an explicit token is the user's stated choice of authority and
+ * is never overruled. Deriving oauth from the grant regardless made 'token'
+ * unreachable for as long as a grant existed — the selector flipped straight
+ * back on every read, so a user could not leave OAuth mode at all. Leaving is
+ * what disconnect does, and it clears the grant before resetting the mode, so
+ * this derivation is never handed a stale grant to re-assert.
+ *
+ * A credential TRANSITION in flight is decided by its durable marker before any
+ * of that derivation runs (see markCloudflareOAuthGrantPending and
+ * writeCloudflareWorkersConfig). The marker is written BEFORE the destructive
+ * half of the transition, so it is the only honest answer for the window in
+ * which the two files beside it disagree: a live grant whose config has not
+ * committed 'oauth' yet (the connect crash) is the authority, and a config
+ * leaving oauth decides token mode even while the grant is still on disk.
+ * Without it, the first window signs with a static token while the grant stays
+ * valid with no holder, and the second reports oauth with nothing behind it.
+ *
+ * A config that reads as corrupt is returned untouched: it is already a distinct
+ * degraded state whose recovery is a settings save, and the disconnect reset
+ * documents that it reads as token mode. */
+export async function readCloudflareWorkersConfig(): Promise<DeployConfig> {
+  const config = await readCloudflareWorkersConfigFile();
+  if (config.configError) return config;
+  if (config.pendingOAuthGrantClear) return { ...config, credentialMode: 'token' };
+  if (config.pendingOAuthGrant) {
+    // The grant the connect is storing is the authority from the instant the
+    // marker lands — the stored mode and any static token are what that write
+    // has not replaced yet. The grant's own clientId is still preferred (the
+    // same reason as the derivation below), read best-effort so a marker whose
+    // grant was cleared underneath it stays a read, not a new failure mode.
+    //
+    // The marker is honored only while the credential it describes is still
+    // there. It is written BEFORE the token (markCloudflareOAuthGrantPending),
+    // so a crash or a failed token write between the two leaves it durable with
+    // no grant on disk; honoring it unconditionally answered 'oauth' for every
+    // later read, which in turn let a settings PUT carrying credentialMode
+    // 'oauth' skip its token check (the current mode already read as oauth) and
+    // persist a mode with nothing behind it. With no grant the marker decides
+    // nothing, and the derivation below reads the file on its own terms. The
+    // crash between the token write and the mode commit still reads oauth,
+    // because there the grant exists.
+    const grant = await liveCloudflareOAuthGrant();
+    if (grant) return { ...config, credentialMode: 'oauth', clientId: grant.clientId || config.clientId };
+  }
+  if (config.credentialMode === 'oauth') return config;
+  // A static credential the user saved outranks the grant (see above), and it is
+  // checked before the grant is even read, so a token-mode config neither pays
+  // for nor depends on the OAuth token file.
+  if (config.token) return config;
+  const grant = await liveCloudflareOAuthGrant();
+  if (!grant) return config;
+  return {
+    ...config,
+    credentialMode: 'oauth',
+    // The token's own clientId is authoritative for the connection it issued
+    // (refreshCloudflareOAuthAccessToken reads it the same way), so a config
+    // that never got the identity write still names the client that can refresh
+    // the grant, and reads as configured instead of as a broken connection.
+    clientId: grant.clientId || config.clientId,
+  };
+}
+
+export async function writeCloudflareWorkersConfig(input: Partial<DeployConfig>) {
+  return withCloudflareConfigMutation(async () => {
+  // A settings save is an OAuth mutation like any other: a transition that
+  // crashed before it could confirm the revoke it recorded settles here first,
+  // so the grant dies on the first save after the crash instead of never.
+  // INSIDE the lock (see settleCloudflareOAuthGrantRevokes): a settle that ran
+  // ahead of the lock could revoke the handle a transition already inside it
+  // had just recorded, and then watch that transition's rollback restore the
+  // grant it killed.
+  await settlePendingCloudflareOAuthGrantRevokes();
+  const current = await readCloudflareWorkersConfig();
+  // The FILE's stored mode, never the derivation: a partial PUT with no
+  // credentialMode in the body must re-persist the mode the file holds, not the
+  // derived 'oauth' a live grant answers — otherwise a failed commit during the
+  // connect window leaves stored 'oauth' over an empty store.
+  const currentFile = await readCloudflareWorkersConfigFile();
+  const tokenInput = typeof input?.token === 'string' ? input.token.trim() : '';
+  // The authority switch to 'oauth' must not be reachable via a bare config PUT:
+  // require a durable OAuth token before accepting the flip (fail closed).
+  // A pending clear (a crash after the intent write) means the EFFECTIVE mode is
+  // 'token' whatever the file stores, so the partial save finishes the interrupted
+  // exit instead of re-persisting the marker.
+  let credentialMode = current.pendingOAuthGrantClear === true
+    ? 'token'
+    : currentFile.credentialMode === 'oauth' ? 'oauth' : 'token';
+  if (typeof input?.credentialMode === 'string') {
+    if (input.credentialMode !== 'token' && input.credentialMode !== 'oauth') {
+      throw new DeployError(
+        'Cloudflare credential mode must be "token" or "oauth".',
+        400,
+        undefined,
+        'CFW_INVALID_CREDENTIAL_MODE',
+      );
+    }
+    // The authority switch to 'oauth' must not be reachable via a bare config PUT:
+    // require a LIVE grant before accepting the flip (fail closed). A raw stored
+    // record that is expired with no refresh token passes the raw presence check
+    // but the resolver refuses, landing oauth over a dead credential.
+    if (input.credentialMode === 'oauth') {
+      const oauthToken = await liveCloudflareOAuthGrant();
+      if (!oauthToken) {
+        throw new DeployError(
+          'Connect Cloudflare first — an OAuth token is required to switch credential mode to oauth.',
+          400,
+          undefined,
+          'CFW_OAUTH_RECONNECT_REQUIRED',
+        );
+      }
+    }
+    credentialMode = input.credentialMode;
+  }
+  const next: DeployConfig = {
+    token:
+      tokenInput && tokenInput !== SAVED_CLOUDFLARE_WORKERS_TOKEN_MASK
+        ? tokenInput
+        : current.token,
+    accountId: typeof input?.accountId === 'string' ? input.accountId.trim() : current.accountId,
+    scriptName: typeof input?.scriptName === 'string' ? input.scriptName.trim() : current.scriptName,
+    compatibilityDate:
+      typeof input?.compatibilityDate === 'string' ? input.compatibilityDate.trim() : current.compatibilityDate,
+    credentialMode,
+    clientId: typeof input?.clientId === 'string' ? input.clientId.trim() : current.clientId,
+    redirectUri: typeof input?.redirectUri === 'string' ? input.redirectUri.trim() : current.redirectUri,
+    scopes: input?.scopes !== undefined ? normalizeCloudflareWorkersScopes(input.scopes) : current.scopes,
+    bindings: input?.bindings !== undefined ? normalizeCloudflareWorkersBindings(input.bindings) : current.bindings,
+    access: input?.access !== undefined ? normalizeCloudflareWorkersAccess(input.access) : current.access,
+    customDomain: input?.customDomain !== undefined ? normalizeCloudflareWorkersCustomDomain(input.customDomain) : current.customDomain,
+  };
+  // The pending-credential markers are not part of the request, and `next`
+  // REPLACES the record that carries them: carry them forward. Only an
+  // abandonment may drop one — the oauth->token transition below, the
+  // disconnect reset, and clearPendingCloudflareOAuthGrant — because a connect's
+  // commit refuses to land its mode when the marker no longer names its attempt
+  // (commitCloudflareOAuthMode). A save that erased them would make every
+  // in-flight connect read as abandoned and refuse a commit that is still
+  // perfectly alive, on nothing more than the user editing their settings.
+  if (current.pendingOAuthGrant) next.pendingOAuthGrant = current.pendingOAuthGrant;
+  if (current.pendingOAuthGrantClear) next.pendingOAuthGrantClear = current.pendingOAuthGrantClear;
+  // A save that chooses 'oauth' supersedes a half-finished exit from oauth —
+  // the rule markCloudflareOAuthGrantPending applies to a connect. The check
+  // above proved a grant is in the store, and the marker's whole purpose is to
+  // keep every read answering token mode while a grant is being taken OFF disk.
+  // Carried forward here, it persisted a record whose derived mode read 'token'
+  // while the response echoed 'oauth': configured:true on the settings surface
+  // over a config no deploy would sign OAuth with. A clear that a crash
+  // interrupted before its destructive half has nothing left to finish — the
+  // grant it was going to take off disk is the one this save names as the
+  // authority — and one that did run left an empty store the check refused.
+  if (input?.credentialMode === 'oauth') delete next.pendingOAuthGrantClear;
+  // Persist exactly what the read path will see. The read path applies the same
+  // normalizers, so an un-normalized write that reads back as `undefined` would
+  // silently downgrade "Access on" / "custom domain" to "off" on the next deploy
+  // while the PUT response echoed the intended value.
+  if (input?.access !== undefined && input.access !== null && next.access === undefined) {
+    throw new DeployError('Cloudflare Access is enabled but has no valid rule — add at least one email, a domain, a policy id, or "only me".', 400, undefined, 'CFW_ACCESS_EMPTY_RULE');
+  }
+  if (input?.customDomain !== undefined && input.customDomain !== null && next.customDomain === undefined) {
+    throw new DeployError('Cloudflare Workers custom domain needs both a hostname and a zoneId.', 400, undefined, 'CFW_CUSTOM_DOMAIN_INVALID');
+  }
+  // In 'oauth' mode the API token is optional — the deploy uses the rotating
+  // OAuth access token instead. Only require a static token in 'token' mode.
+  // A token-mode save that abandons a connect (explicitly, or by finishing a
+  // pending clear) must carry a static token: it drops the marker the in-flight
+  // connect's commit needs, and its own rollback restores a record whose only
+  // credential was the grant it just revoked. A partial save (no explicit mode)
+  // inside the connect window keeps the bypass — it does not abandon the connect.
+  const abandonsConnect = next.credentialMode === 'token' && (input?.credentialMode === 'token' || current.pendingOAuthGrantClear === true);
+  if (next.credentialMode !== 'oauth' && !next.token && (!next.pendingOAuthGrant || abandonsConnect)) {
+    throw new DeployError('Cloudflare API token is required.', 400, undefined, 'CFW_TOKEN_REQUIRED');
+  }
+  if (!next.accountId) throw new DeployError('Cloudflare account ID is required.', 400, undefined, 'CFW_ACCOUNT_ID_REQUIRED');
+  if (next.access?.enabled && !next.access.rule) {
+    throw new DeployError('Cloudflare Access is enabled but has no rule — add an email, domain, or policy.', 400, undefined, 'CFW_ACCESS_EMPTY_RULE');
+  }
+  // Switching the authority from oauth to a static token is a credential
+  // TRANSITION, not a config edit: the grant being left behind is the only
+  // thing that can still mint access tokens, and nothing else would ever
+  // revoke it — the refresh token stays valid on Cloudflare's side while
+  // /auth/status keeps reporting the profile as connected, long after the
+  // deploys stopped using it. The order below is what keeps a save that FAILS
+  // from destroying anything it cannot account for:
+  //
+  // 1. the intent, durably, while the credential is still there. From this
+  //    write on every read of the config is in token mode whatever the file's
+  //    stored mode says (readCloudflareWorkersConfig), so the window in which
+  //    the grant is gone and the file still reads 'oauth' with nothing behind
+  //    it cannot exist;
+  // 2. the destructive half — the grant goes off disk, and is recorded as a
+  //    durable revoke handle in the same locked write (see
+  //    clearCloudflareOAuthTokenForRevoke). A crash from here on leaves the
+  //    grant named by a file on disk, which is what lets the next OAuth
+  //    mutation finish the revoke this save never got to;
+  // 3. the mode the user chose, validated above (a token-mode save always has a
+  //    static token, so even this write failing leaves a working credential);
+  // 4. the revoke, LAST, and only once the transition has actually LANDED. A
+  //    save that fails at 3 has replaced nothing: the marker settles that the
+  //    config reads token mode, but the static token it would sign with is the
+  //    one from the record that was just discarded, and the mode the user chose
+  //    never reached the file. So a failure at 3 ROLLS BACK — the displaced
+  //    grant goes back on disk and the pre-transition record is rewritten
+  //    without the marker, which is the state this save found. The revoke is
+  //    reserved for a rollback that itself fails, where nothing is left that
+  //    could hold the grant.
+  //
+  // It runs after the validations above, so a refused save never gets here.
+  const cloudflareConfigFile = deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID);
+  // A crash between the intent write and the destructive clear below leaves
+  // pendingOAuthGrantClear set with the grant still on disk and no revoke handle:
+  // the derived mode then reads 'token', so a later save would skip this branch
+  // and never finish the clear+revoke. Enter the transition when the marker is
+  // already pending too, so the abandoned clear runs and the settle below drains
+  // the handle it records. Re-running the clear on an empty store is a no-op.
+  //
+  // Keyed on next.credentialMode (the EFFECTIVE mode) rather than the request's
+  // explicit credentialMode: a partial save that omits the mode still resolves to
+  // 'token' and must finish an interrupted clear, not carry the marker forward
+  // while the grant stays live with nothing clearing it.
+  if (next.credentialMode === 'token' && ((typeof input?.credentialMode === 'string' && input.credentialMode === 'token' && current.credentialMode === 'oauth') || current.pendingOAuthGrantClear === true)) {
+    const intent: DeployConfig = { ...persistableCloudflareWorkersConfig(current), pendingOAuthGrantClear: true };
+    // A connect in flight is being abandoned by this transition.
+    delete intent.pendingOAuthGrant;
+    await writeDeployConfigFile(cloudflareConfigFile, intent);
+    const displaced = await clearCloudflareOAuthTokenForRevoke(cloudflareOAuthTokensDir());
+    // This save IS the abandonment the pending markers exist to record: the
+    // credential a connect in flight was storing is destroyed here, so the
+    // record written below must not carry that attempt's marker forward (the
+    // carry-forward above put it there). A marker that still names an attempt is
+    // what lets that attempt's commit land the mode — and landing oauth over
+    // this save would undo the authority the user just chose, over a credential
+    // this save has already revoked.
+    delete next.pendingOAuthGrant;
+    delete next.pendingOAuthGrantClear;
+    try {
+      await writeDeployConfigFile(cloudflareConfigFile, next);
+    } catch (err) {
+      // The replacement never landed, so this save is a no-op that must not
+      // destroy anything. Revoking here left the user with NEITHER credential:
+      // the static token they typed existed only in the record that was thrown
+      // away, the surviving config read token mode with an empty token, and the
+      // revoke cannot be undone. Roll back instead — grant first, so the record
+      // rewritten below never names oauth with nothing behind it, then the
+      // pre-transition config with the marker this transition added dropped.
+      try {
+        // The grant is the config's credential again, so the revoke handle this
+        // transition recorded in the same write as the clear has to go with it:
+        // left behind, the next OAuth mutation would revoke a credential the
+        // config still names and the user is still using. Both halves are ONE
+        // write (restoreCloudflareOAuthTokenAndDropRevokes). Two writes left the
+        // window this rollback exists to close: a crash between them, or a drop
+        // that failed and was swallowed, stranded a restored credential on disk
+        // with a pending handle still naming it.
+        //
+        // The restore lands the grant only while its handle still names it. A
+        // handle that is gone means a settle confirmed the revoke — Cloudflare
+        // has killed the grant — and putting it back would name a dead
+        // credential as the authority. The intent marker from step 1 is then
+        // left standing: the config keeps reading token mode over an empty
+        // store, which is the crash state the branch condition above already
+        // re-enters and finishes on the next save.
+        let landed = true;
+        if (displaced) {
+          // The restore itself refuses (returns false) when a DIFFERENT credential
+          // landed between this transition's clear and its rollback: '' names the
+          // empty store this transition left, so any live credential is a newcomer
+          // and the check runs INSIDE the token lock (no read/write race). A refused
+          // restore leaves the intent marker standing; the next save re-enters the
+          // transition to finish the clear and revoke.
+          landed = await restoreCloudflareOAuthTokenAndDropRevokes(cloudflareOAuthTokensDir(), displaced, '');
+        }
+        if (landed) {
+          const restored: DeployConfig = { ...persistableCloudflareWorkersConfig(current) };
+          delete restored.pendingOAuthGrant;
+          delete restored.pendingOAuthGrantClear;
+          await writeDeployConfigFile(cloudflareConfigFile, restored);
+        }
+      } catch (rollbackErr) {
+        // The rollback itself failed, so no state is left to hand the grant
+        // back to: a store the restored config no longer names must not keep
+        // reporting a connected profile, and an unheld grant must not stay
+        // valid at Cloudflare. The restore may already have LANDED the grant
+        // and retired its handle before the config write failed, so the clear
+        // here has to name it again in the same write it takes it off disk
+        // (clearCloudflareOAuthTokenForRevoke) — a plain clear followed by one
+        // unrecorded revoke left a 5xx or a timeout there with a live refresh
+        // token no file named. The settle then revokes every handle: retired by
+        // a 2xx, retried by the next OAuth mutation otherwise. Both steps are
+        // best-effort; the save's own error is what surfaces.
+        console.error(
+          `[deploy] rolling back the failed Cloudflare credential transition did not complete (${rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr)}); revoking the displaced OAuth grant.`,
+        );
+        await clearCloudflareOAuthTokenForRevoke(cloudflareOAuthTokensDir()).catch((clearErr: unknown) => {
+          console.warn(
+            '[cloudflare-oauth] could not clear the OAuth grant a failed rollback left behind; the next OAuth mutation settles it:',
+            clearErr instanceof Error ? clearErr.message : String(clearErr),
+          );
+        });
+        await settlePendingCloudflareOAuthGrantRevokes(next.clientId);
+      }
+      throw err;
+    }
+    // The transition landed. The revoke handle recorded by the clear's own
+    // write is settled here — and would have been left for the next OAuth
+    // mutation to settle had this process died between the two.
+    await settlePendingCloudflareOAuthGrantRevokes(next.clientId);
+  } else {
+    await writeDeployConfigFile(cloudflareConfigFile, next);
+  }
+  return publicCloudflareWorkersConfig(next);
+  });
+}
+
+/** The Workers config as it may be written back to disk: the read-time
+ * `configError` marker is never persisted. Every partial mutation below
+ * spreads the current config, which carries the marker after a corrupt read;
+ * without this strip the sentinel would land in the file. */
+function persistableCloudflareWorkersConfig(config: DeployConfig): DeployConfig {
+  const { configError: _configError, ...rest } = config;
+  return rest;
+}
+
+/** Refuse a partial Workers-config mutation while the file on disk is
+ * unparsable. `readCloudflareWorkersConfig` degrades a corrupt file to the
+ * empty defaults so the routes keep working, but a partial write built on
+ * those defaults would REPLACE the user's (recoverable) file with an empty
+ * config — a disconnect or a connect would erase the account id, script name,
+ * bindings, Access rule and custom domain. Only an explicit settings PUT
+ * (`writeCloudflareWorkersConfig`, which builds the whole record from the
+ * request) heals the file. */
+function refuseCloudflareWorkersConfigMutationIfCorrupt(current: DeployConfig, what: string): void {
+  if (!current.configError) return;
+  throw new DeployError(
+    `Cloudflare Workers config file is not valid JSON; refusing to ${what} until the Workers settings are saved again.`,
+    409,
+    undefined,
+    CLOUDFLARE_WORKERS_CONFIG_CORRUPT_CODE,
+  );
+}
+
+/** Record the durable intent of an OAuth connect: the grant's write is about to
+ * land and its `credentialMode` commit comes second, so a crash between the two
+ * leaves a live grant beside a config that still says 'token' — and when that
+ * config also holds a static token, every deploy silently keeps signing with
+ * the static one while the grant stays valid with nobody holding it. Writing
+ * the marker FIRST makes the read path answer with the credential the connect
+ * is actually storing, from before the token exists until the commit lands.
+ * Dropped by commitCloudflareOAuthMode, by the settings PUT that takes the
+ * transition branch, by the disconnect reset, and by every path that abandons
+ * the attempt (clearPendingCloudflareOAuthGrant). Refuses to run on a corrupt
+ * config file (CFW_CONFIG_CORRUPT), like the other partial mutations.
+ *
+ * Returns the id it recorded. That id is the attempt's identity, and it is the
+ * ONLY thing that lets the commit half of this connect tell "the marker is
+ * still mine" from "something destroyed the credential this marker stood for
+ * while my token write was in flight": the marker is a boolean-shaped flag no
+ * more, and the commit is handed this id to check against.
+ *
+ * Reads the FILE, not the derived config: what this writes back is the stored
+ * record plus the marker, never a mode the derivation inferred from the grant
+ * beside it. */
+export async function markCloudflareOAuthGrantPending(): Promise<string> {
+  const attemptId = randomUUID();
+  return withCloudflareConfigMutation(async () => {
+    // A reconnect is an OAuth mutation like any other (see
+    // writeCloudflareWorkersConfig): it settles a transition's unconfirmed
+    // revoke before it records its own intent — inside the lock, for the
+    // reason given there.
+    await settlePendingCloudflareOAuthGrantRevokes();
+    const current = await readCloudflareWorkersConfigFile();
+    refuseCloudflareWorkersConfigMutationIfCorrupt(current, 'record the pending OAuth grant');
+    // The opposite intent cannot be pending at the same time: a connect
+    // supersedes a half-finished exit from oauth. Finish BOTH halves of that
+    // exit before recording the new marker: take the grant off disk and name it
+    // by a revoke handle (the destructive half the interrupted exit never got
+    // to), then record token mode. The commit-time settle revokes it; a guarded
+    // write that then throws inherits a handle instead of orphaning a grant.
+    if (current.pendingOAuthGrantClear) {
+      await clearCloudflareOAuthTokenForRevoke(cloudflareOAuthTokensDir());
+    }
+    const next: DeployConfig = { ...persistableCloudflareWorkersConfig(current), pendingOAuthGrant: attemptId };
+    if (current.pendingOAuthGrantClear) next.credentialMode = 'token';
+    delete next.pendingOAuthGrantClear;
+    await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), next);
+    return attemptId;
+  });
+}
+
+/** Drop a pending-credential-transition marker without touching the mode: the
+ * paths that ABANDON an OAuth attempt (a guarded token write that lost its
+ * race, a config commit whose credential was restored or cleared) leave the
+ * config as they found it, minus the intent that attempt recorded. A marker
+ * left behind would make every later read answer 'oauth' with no credential
+ * behind it — deploys failing CFW_OAUTH_RECONNECT_REQUIRED while /auth/status
+ * reports a disconnected profile. A no-op when nothing is pending, and on a
+ * corrupt file (which cannot carry a marker and must not be rewritten). */
+export async function clearPendingCloudflareOAuthGrant(): Promise<void> {
+  return withCloudflareConfigMutation(async () => {
+    const current = await readCloudflareWorkersConfigFile();
+    // Only the CONNECT marker this call abandons. pendingOAuthGrantClear is a
+    // half-finished EXIT from oauth whose clear + revoke a different path owns;
+    // dropping it here would leave the file reading oauth with nothing behind it.
+    if (!current.pendingOAuthGrant) return;
+    if (current.configError) return;
+    const next: DeployConfig = { ...persistableCloudflareWorkersConfig(current) };
+    delete next.pendingOAuthGrant;
+    await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), next);
+  });
+}
+
+/** Switch the Workers credential authority to OAuth — invoked only after the
+ * OAuth token has been durably persisted, so a failed/cancelled flow leaves the
+ * prior credential mode (and any static token) intact. When identity is given,
+ * the config clientId/redirectUri are updated in the same write as the mode
+ * switch, so a replacement client is never recorded before its token is.
+ * Refuses to run on a corrupt config file (CFW_CONFIG_CORRUPT); the connect
+ * route then rolls the token write back.
+ *
+ * Refuses with CFW_OAUTH_RECONNECT_REQUIRED when the token store is empty. This
+ * write is only ever the SECOND half of the OAuth commit — the connect route's
+ * persistCredential writes the token first — so a store with nothing in it means
+ * the credential this commit is the second half of has been cleared or revoked
+ * underneath it, and recording 'oauth' then names a mode with no credential
+ * behind it. The connect route's rollback owns the failure semantics.
+ *
+ * `attemptId` is the id markCloudflareOAuthGrantPending recorded for THIS
+ * attempt, and passing it is what makes the empty-store check sufficient. The
+ * check alone cannot see the whole window: the connect's token write runs
+ * OUTSIDE the config lock, so a settings PUT can take the oauth->token
+ * transition (clearing the store, revoking the grant the connect minted, and
+ * dropping the marker) and the connect's guarded write can still land after it —
+ * the store then holds a credential again, and a commit that only asked "is
+ * anything stored?" would re-write credentialMode 'oauth' over the authority the
+ * user just chose. The marker id answers the question that actually matters:
+ * does the intent this attempt recorded still stand? A commit whose id is gone
+ * refuses, and the connect route's rollback owns the failure semantics. */
+export async function commitCloudflareOAuthMode(
+  identity?: { clientId: string; redirectUri: string },
+  attemptId?: string,
+): Promise<void> {
+  return withCloudflareConfigMutation(async () => {
+    const current = await readCloudflareWorkersConfig();
+    refuseCloudflareWorkersConfigMutationIfCorrupt(current, 'switch the credential mode to oauth');
+    // The marker this attempt recorded has to still be the one on file. It is
+    // dropped by everything that destroys the credential the marker stands for
+    // — the oauth->token transition (which also revokes it), the disconnect
+    // reset, the abandonment paths — and overwritten by a newer connect, whose
+    // own commit is then the one that may land the mode. Landing it here would
+    // re-assert an authority that no longer holds this attempt's grant.
+    if (attemptId !== undefined && current.pendingOAuthGrant !== attemptId) {
+      throw new DeployError(
+        'Connect Cloudflare first — the OAuth attempt this mode switch belongs to was abandoned while its credential was being stored, so its grant is no longer the authority this config may record.',
+        400,
+        undefined,
+        'CFW_OAUTH_RECONNECT_REQUIRED',
+      );
+    }
+    // The connect window is exactly when a settings PUT can read mode 'token' on
+    // disk beside the live grant persistCredential has just written, derive
+    // 'oauth' from that grant (readCloudflareWorkersConfig), and take the
+    // oauth->token transition branch — clearing and revoking the grant the
+    // connect just minted. Writing 'oauth' anyway records the mode with nothing
+    // behind it: the settings surface reports configured:true while
+    // /auth/status reports disconnected, and every deploy fails
+    // CFW_OAUTH_RECONNECT_REQUIRED. Refuse instead, so the connect route's
+    // rollback stays the single owner of the failure semantics. This runs under
+    // the same mutation lock as the settings PUT's transition, so the two cannot
+    // interleave.
+    if (!(await getCloudflareOAuthToken(cloudflareOAuthTokensDir()))) {
+      throw new DeployError(
+        'Connect Cloudflare first — an OAuth token is required to switch credential mode to oauth.',
+        400,
+        undefined,
+        'CFW_OAUTH_RECONNECT_REQUIRED',
+      );
+    }
+    const next: DeployConfig = { ...persistableCloudflareWorkersConfig(current), credentialMode: 'oauth' };
+    if (identity) {
+      next.clientId = identity.clientId;
+      next.redirectUri = identity.redirectUri;
+    }
+    // The mode this commit lands is what both markers stood in for: the
+    // connect is no longer pending (mode oauth is now durable) and any
+    // half-finished exit from oauth is settled by it.
+    delete next.pendingOAuthGrant;
+    delete next.pendingOAuthGrantClear;
+    await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), next);
+    // The commit is the second half of a connect: it settles every unconfirmed
+    // revoke on the way past — a crashed exit from OAuth's debt, and the grant
+    // this connect's own token write displaced, which that write recorded as a
+    // handle in the same locked write (setCloudflareOAuthTokenGuarded). AFTER
+    // the mode lands, never before: until this write the displaced grant's fate
+    // is undecided — a commit that refuses hands it back to the connect route's
+    // rollback, which restores it as the live credential — and a settle ahead of
+    // the write revoked it first, so the rollback restored a grant Cloudflare
+    // had already killed. Still inside the lock, for the reason
+    // settleCloudflareOAuthGrantRevokes gives.
+    await settlePendingCloudflareOAuthGrantRevokes(identity?.clientId);
+  });
+}
+
+/** Reset the credential authority back to a static token after disconnect,
+ * bypassing the token validation in writeCloudflareWorkersConfig (a user who
+ * only ever used OAuth has no static token to require). On a corrupt config
+ * file the mode write is skipped rather than refused — a corrupt file already
+ * reads as token mode, so the state that write would establish is the state the
+ * daemon reports, while a write would erase the recoverable file. The
+ * credential still goes off disk there: the user asked for it to be gone, and a
+ * config file that cannot be parsed says nothing about the token store.
+ *
+ * Disconnect is a credential transition OFF oauth like any other, and it runs
+ * in the order a settings save does (see writeCloudflareWorkersConfig above),
+ * for the same reason: the span between the credential leaving the store and
+ * the mode landing must not be a state a crash can freeze. Taking the
+ * credential off disk first — which is what the disconnect route did, before
+ * this function recorded anything — left the stored mode 'oauth' beside an
+ * empty store with nothing on disk marking the transition in flight. A crash, a
+ * SIGKILL, or a daemon stop during the revoke round trip (one attempt per
+ * handle, 10s timeout) then made that state durable: readCloudflareWorkersConfig
+ * fell through to the stored 'oauth', the settings surface reported
+ * configured:true while /auth/status reported disconnected, and every deploy
+ * failed CFW_OAUTH_RECONNECT_REQUIRED — with no in-app remedy, because the
+ * Disconnect and Reconnect buttons only render while the status reads connected
+ * or expired.
+ *
+ * 1. the intent, durably, while the credential is still there, so every read
+ *    from that write on answers token mode whatever the file's stored mode says
+ *    (readCloudflareWorkersConfig) — and so a later token-mode save re-enters
+ *    this transition to finish a clear a crash interrupted;
+ * 2. the destructive half — the grant goes off disk, and is recorded as a
+ *    durable revoke handle in the same locked write
+ *    (clearCloudflareOAuthTokenForRevoke), so the grant is named by a file from
+ *    the instant it leaves the store;
+ * 3. the mode the user chose, with both markers dropped: the mode is now the
+ *    durable statement, and the displaced credential is named by the revoke
+ *    handle rather than by a pending intent;
+ * 4. the revoke, LAST and only once the transition has landed, named by the
+ *    record the clear returned (RFC 7009 §2.1) rather than by a re-read of the
+ *    config — which is also what kept the revoke from being network-bound ahead
+ *    of the mode write. A revoke that times out, is refused, or answers 5xx
+ *    keeps its handle for the next OAuth mutation, as does a process that dies
+ *    here.
+ *
+ * Nothing rolls back on a failure after step 1: the user asked for the
+ * credential to be gone, and the marker written there keeps every read honest
+ * about that even when the steps behind it did not finish. */
+export async function resetCloudflareCredentialMode(): Promise<void> {
+  return withCloudflareConfigMutation(async () => {
+    const cloudflareConfigFile = deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID);
+    const current = await readCloudflareWorkersConfig();
+    if (current.configError) {
+      console.warn(
+        `[deploy] ${CLOUDFLARE_WORKERS_CONFIG_CORRUPT_CODE}: leaving the unparsable Cloudflare Workers config untouched on disconnect; save the Workers settings to rewrite it.`,
+      );
+      // A corrupt file cannot carry the intent marker, but the credential the
+      // user asked to destroy must still go, along with the revokes recorded by
+      // every credential destruction before it: an orphaned grant is exactly
+      // what must not survive a disconnect. The settle drops a handle only on a
+      // revoke Cloudflare confirmed, so a grant whose revoke is still owed keeps
+      // the record that names it.
+      const displacedOnCorruptConfig = await clearCloudflareOAuthTokenForRevoke(cloudflareOAuthTokensDir());
+      await settlePendingCloudflareOAuthGrantRevokes(displacedOnCorruptConfig?.clientId);
+      return;
+    }
+    // 1. The intent, while the credential is still on disk. Dropping
+    // pendingOAuthGrant abandons any connect in flight: this transition is about
+    // to destroy the credential that attempt is storing, and a commit still
+    // naming this attempt's marker would land oauth over the authority the user
+    // has just left (commitCloudflareOAuthMode).
+    const intent: DeployConfig = { ...persistableCloudflareWorkersConfig(current), pendingOAuthGrantClear: true };
+    delete intent.pendingOAuthGrant;
+    await writeDeployConfigFile(cloudflareConfigFile, intent);
+    // 2. The destructive half, recorded as a durable revoke handle in the same
+    // locked write, so a process that dies from here on leaves the grant named
+    // by a file on disk.
+    const displaced = await clearCloudflareOAuthTokenForRevoke(cloudflareOAuthTokensDir());
+    // 3. The mode the user chose. Both markers go: no marker may keep a read
+    // answering 'oauth' with nothing behind it, and none may keep answering
+    // token mode over a credential the next connect legitimately stores.
+    const next: DeployConfig = { ...persistableCloudflareWorkersConfig(current), credentialMode: 'token' };
+    delete next.pendingOAuthGrant;
+    delete next.pendingOAuthGrantClear;
+    await writeDeployConfigFile(cloudflareConfigFile, next);
+    // 4. The revoke, named by the record the clear returned.
+    await settlePendingCloudflareOAuthGrantRevokes(displaced?.clientId);
+  });
+}
+
+export function publicCloudflareWorkersConfig(config: Partial<DeployConfig>) {
+  // Readiness is mode-aware: in 'oauth' mode there is intentionally no static
+  // token, so a configured account + client is enough. The live OAuth connection
+  // status is reported separately by GET /api/cloudflare/auth/status.
+  const oauthReady = config?.credentialMode === 'oauth'
+    ? Boolean(config?.accountId && config?.clientId)
+    : Boolean(config?.token && config?.accountId);
+  const body: JsonObject = {
+    providerId: CLOUDFLARE_WORKERS_PROVIDER_ID,
+    configured: oauthReady,
+    tokenMask: config?.token ? SAVED_CLOUDFLARE_WORKERS_TOKEN_MASK : '',
+    teamId: '',
+    teamSlug: '',
+    accountId: config?.accountId || '',
+    scriptName: config?.scriptName || '',
+    compatibilityDate: config?.compatibilityDate || '',
+    credentialMode: config?.credentialMode || 'token',
+    clientId: config?.clientId || '',
+    redirectUri: config?.redirectUri || '',
+    scopes: Array.isArray(config?.scopes) ? config.scopes : [],
+    bindings: config?.bindings || [],
+    access: config?.access || { enabled: false },
+    customDomain: config?.customDomain,
+    target: 'preview',
+  };
+  if (config?.configError) body.configError = config.configError;
+  return body;
+}
+
+/** Resolved data root for the Workers config + OAuth token files, injected by
+ * the daemon at startup from RUNTIME_DATA_DIR so both the config and the token
+ * stay inside the runtime data root (never an independently recomputed
+ * OD_USER_STATE_DIR / home fallback that packaged or isolated namespaces would
+ * write outside of — or leak across). */
+let cloudflareWorkersDataRoot: string | undefined;
+
+export function configureCloudflareWorkersDataDir(rootDir: string): void {
+  cloudflareWorkersDataRoot = rootDir;
+}
+
+function cloudflareWorkersBaseDir(): string {
+  // No env/home fallback: the data root is an explicit dependency injected by
+  // the daemon via configureCloudflareWorkersDataDir(RUNTIME_DATA_DIR). Fail
+  // closed rather than silently writing Workers config/credentials outside the
+  // runtime data root (the escape pattern the data-dir contract forbids).
+  if (!cloudflareWorkersDataRoot) {
+    throw new DeployError(
+      'Cloudflare Workers data dir is not configured (call configureCloudflareWorkersDataDir with RUNTIME_DATA_DIR).',
+      500,
+      undefined,
+      'CFW_DATA_DIR_UNCONFIGURED',
+    );
+  }
+  return cloudflareWorkersDataRoot;
+}
+
+/** Directory that holds 'cloudflare-oauth-tokens.json' — the daemon-resolved
+ * data root (fails closed with CFW_DATA_DIR_UNCONFIGURED if not configured). */
+export function cloudflareOAuthTokensDir(): string {
+  return cloudflareWorkersBaseDir();
+}
+
+/** Refresh an access token this many ms before its recorded expiry. Sized to
+ * a worst-case deploy (asset buckets, a certificate-issuing custom hostname,
+ * perimeter retries), so a token handed out at deploy start is still valid at
+ * its last call; per-call re-resolution (CloudflareTokenProvider) covers the
+ * rest. */
+export const CLOUDFLARE_OAUTH_EXPIRY_SKEW_MS = 10 * 60_000;
+
+/** In-process single-flight mutex, keyed by dataDir. Concurrent deploys that
+ * all find an expired token share one refresh instead of stampeding the token
+ * endpoint. */
+const cloudflareOAuthRefreshLocks = new Map<string, Promise<string>>();
+
+/**
+ * Resolve the live Cloudflare credential for a deploy. In 'token' mode this is
+ * the static API token; in 'oauth' mode it is the rotating access token from
+ * 'cloudflare-oauth-tokens.json', refreshed when it is within the expiry skew.
+ * The read -> refresh -> persist sequence is single-flight, and the file is
+ * re-read before every refresh so a connect/disconnect that landed while a
+ * caller waited on the mutex is never clobbered. Coordination is in-process
+ * only: one daemon per data dir is the contract (see cloudflare-tokens.ts).
+ */
+export async function getCloudflareAccessToken(
+  providerId: DeployProviderId = CLOUDFLARE_WORKERS_PROVIDER_ID,
+): Promise<string> {
+  if (providerId !== CLOUDFLARE_WORKERS_PROVIDER_ID) {
+    throw new DeployError(
+      'getCloudflareAccessToken only supports the Cloudflare Workers provider.',
+      400,
+      undefined,
+      'CFW_UNSUPPORTED_PROVIDER',
+    );
+  }
+  const config = await readCloudflareWorkersConfig();
+  if (config.credentialMode !== 'oauth') {
+    if (!config.token) {
+      throw new DeployError(
+        'Cloudflare API token is required.',
+        400,
+        undefined,
+        'CFW_TOKEN_REQUIRED',
+      );
+    }
+    return config.token;
+  }
+
+  const dataDir = cloudflareOAuthTokensDir();
+  // Fast path: a fresh token skips the mutex entirely.
+  const current = await getCloudflareOAuthToken(dataDir);
+  if (
+    current &&
+    !isCloudflareOAuthTokenExpired(
+      current,
+      Date.now(),
+      CLOUDFLARE_OAUTH_EXPIRY_SKEW_MS,
+    )
+  ) {
+    // The token is the authoritative record: it carries its own clientId /
+    // redirectUri, so a still-fresh token is trusted as-is. This is what makes
+    // a crash between the token write and the config-identity write harmless —
+    // the credential never depends on the config matching the token.
+    return current.accessToken;
+  }
+
+  // Single-flight refresh: concurrent deploy calls await the same promise.
+  const inflight = cloudflareOAuthRefreshLocks.get(dataDir);
+  if (inflight) return inflight;
+  const task = refreshCloudflareOAuthAccessToken(config, dataDir);
+  cloudflareOAuthRefreshLocks.set(dataDir, task);
+  try {
+    return await task;
+  } finally {
+    if (cloudflareOAuthRefreshLocks.get(dataDir) === task) {
+      cloudflareOAuthRefreshLocks.delete(dataDir);
+    }
+  }
+}
+
+/**
+ * The email recorded on the stored Cloudflare OAuth token at connect time, or
+ * '' when none is stored (token mode, a record written before the email was
+ * captured, or a client that lacks `user-details.read`). The Access "only me"
+ * rule resolves from this before any upload; callers fall back to `GET /user`.
+ */
+export async function getCloudflareOAuthStoredEmail(): Promise<string> {
+  const current = await getCloudflareOAuthToken(cloudflareOAuthTokensDir());
+  return (current?.email ?? '').trim();
+}
+
+/** Upper bound on the refresh token-endpoint round trip. The refresh runs
+ * under the single-flight lock, so a hung connection would otherwise park
+ * every deploy call in the daemon behind it until the socket died on its own. */
+export const CLOUDFLARE_OAUTH_REFRESH_TIMEOUT_MS = 20_000;
+/** Bound on the best-effort revoke of a rotated grant nobody holds. */
+const CLOUDFLARE_OAUTH_REVOKE_TIMEOUT_MS = 10_000;
+
+/** Best-effort revoke of the grant a credential-mode transition just took off
+ * disk — the clear-then-revoke pair the disconnect route performs (see
+ * POST /api/cloudflare/oauth/disconnect). The displaced record's own clientId
+ * is authoritative (RFC 7009 §2.1: the revoke names the client the token was
+ * issued to); the config's is a fallback for a record written before the
+ * identity was recorded. Never throws: the grant is already off disk, and the
+ * mode the user chose does not depend on Cloudflare answering here.
+ *
+ * Returns whether the intent is SETTLED, and only a 2xx is. A refusal
+ * (400 invalid_token) is not an answer that the grant is dead — Cloudflare
+ * declines to revoke tokens it does not recognize, which includes a token that
+ * is still live — and a 429 or a 5xx is the endpoint itself failing, so neither
+ * may be mistaken for "revoked". Anything but a 2xx, and any transport failure
+ * or timeout, answers false, which keeps the durable handle on disk as the one
+ * record that still names a live grant; the next OAuth mutation retries it. */
+async function revokeClearedCloudflareGrant(
+  displaced: StoredCloudflareOAuthToken,
+  fallbackClientId?: string,
+): Promise<{ ok: boolean; status: number }> {
+  const token = displaced.refreshToken || displaced.accessToken;
+  if (!token) return { ok: true, status: 0 };
+  const clientId = (displaced.clientId ?? '').trim() || (fallbackClientId ?? '').trim();
+  const proxyDispatcher = proxyDispatcherRequestInit(process.env);
+  try {
+    const { ok, status } = await revokeCloudflareToken({
+      token,
+      tokenTypeHint: displaced.refreshToken ? 'refresh_token' : 'access_token',
+      ...(clientId ? { clientId } : {}),
+      fetchImpl: (input, init) => fetch(input, { ...init, ...proxyDispatcher.requestInit }),
+      signal: AbortSignal.timeout(CLOUDFLARE_OAUTH_REVOKE_TIMEOUT_MS),
+    });
+    // A non-2xx is NOT the answer the handle was recorded for. Returning ok for
+    // one erased the only record of a grant that is still live — on a 503 the
+    // handle was dropped and the refresh token stayed valid with nothing left
+    // anywhere that named it. The handle stays unless Cloudflare said 2xx (the
+    // settle loop retires a definitive-4xx handle after a bounded refusal count).
+    if (!ok) console.warn(`[cloudflare-oauth] revoke of the displaced OAuth grant was refused by Cloudflare (HTTP ${status})`);
+    return { ok, status };
+  } catch (err: unknown) {
+    console.warn('[cloudflare-oauth] revoke of the displaced OAuth grant failed:', err instanceof Error ? err.message : String(err));
+    return { ok: false, status: 0 };
+  } finally {
+    await proxyDispatcher.close();
+  }
+}
+
+/** Drop the durable revoke handle a transition recorded for one grant, once
+ * that grant is accounted for locally (restored to the store by a rollback, or
+ * revoked at Cloudflare). Best-effort: an unwritable store keeps the handle,
+ * and the handle is dropped only by name, so a failed drop can never take a
+ * different grant's handle with it. */
+async function dropCloudflareGrantRevokeHandle(displaced: StoredCloudflareOAuthToken | null): Promise<void> {
+  const token = displaced ? displaced.refreshToken || displaced.accessToken : '';
+  if (!token) return;
+  try {
+    await dropPendingCloudflareOAuthRevokes(cloudflareOAuthTokensDir(), [token]);
+  } catch (err: unknown) {
+    console.warn(
+      '[cloudflare-oauth] could not drop the Cloudflare grant revoke handle the rollback accounted for:',
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+}
+
+/** Finish the revokes a credential transition recorded but never confirmed.
+ *
+ * A transition that takes the OAuth grant off disk records it as a durable
+ * revoke handle IN THE SAME WRITE as the clear
+ * (clearCloudflareOAuthTokenForRevoke), so a crash between the clear and the
+ * revoke — or between the clear and the mode write, which leaves the config
+ * reading token mode over an empty store — cannot leave a refresh token valid
+ * at Cloudflare with no file that names it. The recovered state is this call:
+ * every OAuth mutation runs it on the way past, so the grant dies at the first
+ * connect, disconnect, or settings save after the crash instead of never.
+ *
+ * `fallbackClientId` identifies the client for a handle recorded before the
+ * record carried its own identity. Best-effort throughout: a handle whose
+ * revoke cannot be completed — a transport failure, a timeout, or any answer
+ * that is not a 2xx — stays on disk for the next mutation, and nothing here
+ * throws; the mutation it runs ahead of is the caller's business, not this
+ * debt's. */
+/** Definitive client-error refusals a revoke handle is allowed before it is
+ * retired. RFC 7009 §2.2.1 client errors (invalid_client, invalid_request) do not
+ * change on retry, so a handle that keeps getting one is dropped after this many
+ * instead of paying a 10s round-trip on every OAuth mutation forever. */
+const CLOUDFLARE_OAUTH_REVOKE_MAX_REFUSALS = 3;
+/** The most revoke round-trips one settle performs, so a long handle queue does
+ * not block the settings PUT / disconnect / connect for N×10s during an outage.
+ * Handles past the budget are deferred to the next OAuth mutation. */
+const CLOUDFLARE_OAUTH_REVOKE_MAX_ATTEMPTS_PER_SETTLE = 3;
+
+export async function settlePendingCloudflareOAuthGrantRevokes(
+  fallbackClientId?: string,
+): Promise<void> {
+  const dataDir = cloudflareOAuthTokensDir();
+  let pending: StoredCloudflareOAuthToken[];
+  try {
+    pending = await getPendingCloudflareOAuthRevokes(dataDir);
+  } catch (err: unknown) {
+    console.warn(
+      '[cloudflare-oauth] could not read the OAuth token store to settle a pending grant revoke:',
+      err instanceof Error ? err.message : String(err),
+    );
+    return;
+  }
+  if (pending.length === 0) return;
+  // A handle tagged with the connect attempt that owns it is skipped while the
+  // config's pendingOAuthGrant still names that attempt: an unrelated mutation
+  // must not revoke the grant the connect's failed-commit rollback still needs.
+  let heldAttempt = '';
+  try {
+    heldAttempt = (await readCloudflareWorkersConfig()).pendingOAuthGrant ?? '';
+  } catch (err: unknown) {
+    // Best-effort: an unreadable config protects no attempt; the rollback path
+    // re-enters on the next save.
+    heldAttempt = '';
+  }
+  const settled: string[] = [];
+  let attempted = 0;
+  for (const handle of pending) {
+    const token = handle.refreshToken || handle.accessToken;
+    if (!token) continue;
+    if (heldAttempt && handle.heldByAttempt === heldAttempt) continue;
+    // A hard per-settle budget bounds the revoke drain, so a long handle queue
+    // (or a Cloudflare outage) cannot block the settings PUT / disconnect /
+    // connect for N×10s; the overflow is deferred to the next OAuth mutation.
+    if (attempted >= CLOUDFLARE_OAUTH_REVOKE_MAX_ATTEMPTS_PER_SETTLE) {
+      console.warn(`[cloudflare-oauth] deferred ${pending.length - attempted} pending revoke handle(s) to the next OAuth mutation (per-settle budget ${CLOUDFLARE_OAUTH_REVOKE_MAX_ATTEMPTS_PER_SETTLE})`);
+      break;
+    }
+    attempted += 1;
+    const result = await revokeClearedCloudflareGrant(handle, fallbackClientId);
+    if (result.ok) {
+      settled.push(token);
+    } else if (result.status === 400 || result.status === 401) {
+      // A definitive client error (invalid_client / invalid_request) never
+      // changes on retry. Retire the handle after a bounded number of refusals
+      // instead of paying a 10s revoke round-trip on every OAuth mutation for a
+      // token that can never be revoked this way. 429/5xx/transport keep
+      // retrying.
+      const refusals = await noteCloudflareOAuthRevokeRefusal(dataDir, token).catch(() => 0);
+      if (refusals >= CLOUDFLARE_OAUTH_REVOKE_MAX_REFUSALS) {
+        console.error(`[cloudflare-oauth] retiring an unretirable OAuth revoke handle (HTTP ${result.status}) after ${refusals} refusals`);
+        settled.push(token);
+      }
+    }
+  }
+  if (settled.length === 0) return;
+  try {
+    await dropPendingCloudflareOAuthRevokes(dataDir, settled);
+  } catch (err: unknown) {
+    console.warn(
+      '[cloudflare-oauth] could not drop a settled Cloudflare grant revoke handle; the next OAuth mutation retries it:',
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+}
+
+/** settlePendingCloudflareOAuthGrantRevokes as a standalone OAuth mutation: the
+ * same settle, taken under the Workers-config mutation lock. Every settle has to
+ * run there, not only the ones that precede a config write. A settle outside
+ * the lock can read a handle a transition has JUST recorded, revoke it with a
+ * 2xx, and then watch that transition's rollback put the grant back as the live
+ * credential (restoreCloudflareOAuthTokenAndDropRevokes): the config then
+ * names a grant Cloudflare has already killed, the status surface reports a
+ * connection, and every deploy on it fails. Under the lock the settle observes
+ * the transition either whole or not at all. Callers already inside the lock
+ * use settlePendingCloudflareOAuthGrantRevokes directly — the lock is not
+ * re-entrant. */
+export async function settleCloudflareOAuthGrantRevokes(fallbackClientId?: string): Promise<void> {
+  return withCloudflareConfigMutation(() => settlePendingCloudflareOAuthGrantRevokes(fallbackClientId));
+}
+
+/** Run the read -> refresh -> persist sequence for a dataDir. The caller holds
+ * the single-flight lock for this dataDir. */
+async function refreshCloudflareOAuthAccessToken(
+  config: DeployConfig,
+  dataDir: string,
+): Promise<string> {
+  // Re-read under the lock: a reconnect (or an earlier refresh) may have
+  // rotated the token while this caller was waiting for the mutex.
+  const current = await getCloudflareOAuthToken(dataDir);
+  if (
+    current &&
+    !isCloudflareOAuthTokenExpired(
+      current,
+      Date.now(),
+      CLOUDFLARE_OAUTH_EXPIRY_SKEW_MS,
+    )
+  ) {
+    return current.accessToken;
+  }
+  if (!current?.refreshToken) {
+    throw new DeployError(
+      'Cloudflare OAuth token is expired and has no refresh token — reconnect Cloudflare.',
+      401,
+      undefined,
+      'CFW_OAUTH_RECONNECT_REQUIRED',
+    );
+  }
+  // The token's own clientId is authoritative for refresh (RFC 6749 §6: the
+  // refresh_token is bound to the client_id that received it). The config's
+  // clientId is only a hint for the NEXT connect, so a crash between the token
+  // write and the config-identity write can never break an existing credential.
+  const clientId = (current.clientId ?? '').trim() || (config.clientId ?? '').trim();
+  if (!clientId) {
+    throw new DeployError(
+      'Cloudflare OAuth client ID is required to refresh the access token.',
+      400,
+      undefined,
+      'CFW_OAUTH_CLIENT_ID_REQUIRED',
+    );
+  }
+
+  let refreshed: Awaited<ReturnType<typeof refreshCloudflareToken>>;
+  // The token endpoint goes through the same HTTP/SOCKS proxy dispatcher the
+  // connect and paste-back exchanges use (routes/cloudflare.ts). A bare fetch
+  // here would bypass the user's proxy, so the refresh fails on exactly the
+  // machines where the connect only worked because of it. The call is bounded
+  // because it holds the single-flight lock (see CLOUDFLARE_OAUTH_REFRESH_TIMEOUT_MS).
+  const proxyDispatcher = proxyDispatcherRequestInit(process.env);
+  try {
+    refreshed = await refreshCloudflareToken({
+      clientId,
+      refreshToken: current.refreshToken,
+      fetchImpl: (input, init) => fetch(input, {
+        ...init,
+        ...proxyDispatcher.requestInit,
+        signal: AbortSignal.timeout(CLOUDFLARE_OAUTH_REFRESH_TIMEOUT_MS),
+      }),
+    });
+  } catch (err) {
+    // A reconnect in this daemon may have replaced the credential while the
+    // token endpoint was being called (the refresh runs outside the store's
+    // lock). Cloudflare then rejects THIS call's now-superseded refresh token
+    // with `invalid_grant` even though a fresh credential is already on disk —
+    // so re-read before declaring the grant dead. A newer, unexpired
+    // generation means the other writer won: adopt its token instead of
+    // demanding a reconnect.
+    const latest = await getCloudflareOAuthToken(dataDir);
+    if (
+      latest &&
+      (latest.generation ?? 0) > (current.generation ?? 0) &&
+      !isCloudflareOAuthTokenExpired(latest, Date.now(), CLOUDFLARE_OAUTH_EXPIRY_SKEW_MS)
+    ) {
+      return latest.accessToken;
+    }
+    throw classifyCloudflareRefreshFailure(err);
+  } finally {
+    await proxyDispatcher.close();
+  }
+
+  const stored: StoredCloudflareOAuthToken = {
+    accessToken: refreshed.access_token,
+    tokenType: refreshed.token_type ?? current.tokenType,
+    clientId: current.clientId ?? clientId,
+    generation: (current.generation ?? 0) + 1,
+    savedAt: Date.now(),
+  };
+  if (current.redirectUri) stored.redirectUri = current.redirectUri;
+  if (current.accountId) stored.accountId = current.accountId;
+  if (current.email) stored.email = current.email;
+  if (refreshed.refresh_token) stored.refreshToken = refreshed.refresh_token;
+  else if (current.refreshToken) stored.refreshToken = current.refreshToken;
+  if (refreshed.scope) stored.scope = refreshed.scope;
+  else if (current.scope) stored.scope = current.scope;
+  // `expires_in` reaches here UNVALIDATED (see cloudflareOAuthExpiresAt): the
+  // shared token endpoint casts the parsed body with no checking, so a rotated
+  // grant whose response omits the field, or sends it as a string, must not
+  // produce a record with no `expiresAt`. Such a record reads as NON-EXPIRING
+  // (isCloudflareOAuthTokenExpired returns false without a numeric value), so
+  // the fast path in getCloudflareAccessToken would hand out this access token
+  // forever instead of rotating again. Inherit the superseded record's TTL, and
+  // stamp a conservative one when even that is missing.
+  stored.expiresAt = cloudflareOAuthExpiresAt({
+    expiresIn: refreshed.expires_in,
+    priorExpiresAt: current.expiresAt,
+  });
+  // Compare-and-set persist: only write if the store still holds the same
+  // generation the refresh read before the token-endpoint call. A disconnect
+  // that cleared the token (or a reconnect that replaced it) during that call
+  // makes this return false instead of resurrecting a credential the user
+  // already revoked.
+  const persisted = await setCloudflareOAuthTokenIfGenerationMatches(
+    dataDir,
+    stored,
+    current.generation ?? 0,
+  );
+  if (!persisted) {
+    // The store moved on (disconnect or reconnect) while the token endpoint
+    // was rotating the grant. The record above is never written, so the
+    // refresh token it carries would otherwise stay valid with no holder.
+    // Name it durably FIRST, under the token lock, and only then revoke it: a
+    // revoke that times out, answers 5xx, or never runs because the process
+    // dies here used to leave the rotated grant valid with no file naming it.
+    // The handle is retired only by a 2xx; otherwise the next OAuth mutation's
+    // settle retries it. Named by what the token endpoint actually issued, not
+    // by the record above — that one inherits the OLD refresh token when the
+    // response rotated none, and the old grant is the store's to account for.
+    const rotated: StoredCloudflareOAuthToken = {
+      accessToken: refreshed.access_token,
+      ...(refreshed.refresh_token ? { refreshToken: refreshed.refresh_token } : {}),
+      tokenType: stored.tokenType,
+      clientId,
+      generation: stored.generation,
+      savedAt: stored.savedAt,
+    };
+    try {
+      await recordPendingCloudflareOAuthRevoke(dataDir, rotated);
+    } catch (err: unknown) {
+      console.warn(
+        '[cloudflare-oauth] could not record the superseded refresh grant as a revoke handle:',
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+    if ((await revokeClearedCloudflareGrant(rotated, clientId)).ok) await dropCloudflareGrantRevokeHandle(rotated);
+    const latest = await getCloudflareOAuthToken(dataDir);
+    if (latest && !isCloudflareOAuthTokenExpired(latest, Date.now(), CLOUDFLARE_OAUTH_EXPIRY_SKEW_MS)) {
+      // A reconnect wrote a newer, still-valid credential — adopt it rather
+      // than clobber. An expired newer record is no credential at all: handing
+      // out its access token would fail the very call this refresh serves.
+      return latest.accessToken;
+    }
+    // Disconnect cleared the token while the refresh was in flight, or the
+    // credential that replaced it is itself already expired.
+    throw new DeployError(
+      'Cloudflare OAuth was disconnected or replaced by an expired credential while refreshing — reconnect Cloudflare.',
+      401,
+      undefined,
+      'CFW_OAUTH_RECONNECT_REQUIRED',
+    );
+  }
+  return stored.accessToken;
+}
+
+/** Map a token-endpoint refresh failure onto a DeployError the routes already
+ * understand. The OAuth client throws a plain Error ("token endpoint rejected
+ * request: HTTP 400 … invalid_grant"), which used to surface as a generic 400
+ * BAD_REQUEST with the raw body — so a dead refresh token never told the user
+ * to reconnect. A 4xx from the token endpoint means the grant is gone
+ * (revoked, rotated, client changed): CFW_OAUTH_RECONNECT_REQUIRED. Anything
+ * else (network, 5xx) is a transient upstream failure and must NOT prompt a
+ * reconnect that would discard a still-valid grant. */
+export function classifyCloudflareRefreshFailure(err: unknown): DeployError {
+  if (err instanceof DeployError) return err;
+  // The bounded fetch gave up (AbortSignal.timeout rejects with a
+  // `TimeoutError` DOMException; a plain abort with `AbortError`). Cloudflare
+  // never answered, so the grant is not known to be dead: transient, no
+  // reconnect.
+  const name = typeof err === 'object' && err !== null ? (err as { name?: unknown }).name : undefined;
+  if (name === 'TimeoutError' || name === 'AbortError') {
+    return new DeployError(
+      'Cloudflare OAuth token refresh timed out after ' + Math.round(CLOUDFLARE_OAUTH_REFRESH_TIMEOUT_MS / 1000) + 's — Cloudflare did not answer; try again.',
+      502,
+      undefined,
+      'CFW_OAUTH_REFRESH_FAILED',
+    );
+  }
+  const detail = err instanceof Error ? err.message : String(err);
+  const httpStatus = /\bHTTP (\d{3})\b/.exec(detail);
+  const status = httpStatus ? Number(httpStatus[1]) : 0;
+  if (status >= 400 && status < 500 && status !== 429) {
+    return new DeployError(
+      'Cloudflare rejected the OAuth refresh (' + detail + ') — reconnect Cloudflare.',
+      401,
+      undefined,
+      'CFW_OAUTH_RECONNECT_REQUIRED',
+    );
+  }
+  return new DeployError(
+    'Cloudflare OAuth token refresh failed: ' + detail,
+    502,
+    undefined,
+    'CFW_OAUTH_REFRESH_FAILED',
+  );
+}
+
 export async function readDeployConfig(providerId: DeployProviderId = VERCEL_PROVIDER_ID) {
   if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return readCloudflarePagesConfig();
+  if (providerId === CLOUDFLARE_WORKERS_PROVIDER_ID) return readCloudflareWorkersConfig();
   return readVercelConfig();
 }
 
 export async function writeDeployConfig(providerId: DeployProviderId = VERCEL_PROVIDER_ID, input: Partial<DeployConfig> = {}) {
   if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return writeCloudflarePagesConfig(input);
+  if (providerId === CLOUDFLARE_WORKERS_PROVIDER_ID) return writeCloudflareWorkersConfig(input);
   return writeVercelConfig(input);
 }
 
 export function publicDeployConfigForProvider(providerId: DeployProviderId = VERCEL_PROVIDER_ID, config: Partial<DeployConfig> = {}) {
   if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return publicCloudflarePagesConfig(config);
+  if (providerId === CLOUDFLARE_WORKERS_PROVIDER_ID) return publicCloudflareWorkersConfig(config);
   return publicDeployConfig(config);
 }
 
 export function isDeployProviderId(value: unknown): value is DeployProviderId {
-  return value === VERCEL_PROVIDER_ID || value === CLOUDFLARE_PAGES_PROVIDER_ID;
+  return value === VERCEL_PROVIDER_ID || value === CLOUDFLARE_PAGES_PROVIDER_ID || value === CLOUDFLARE_WORKERS_PROVIDER_ID;
 }
 
 function normalizeCloudflarePagesConfigHints(input: unknown, fallback: CloudflarePagesConfigHints = {}): CloudflarePagesConfigHints {
@@ -1720,6 +3262,17 @@ export async function waitForReachableDeploymentUrl(
   };
 }
 
+/** The sentence for a link check whose probe returned no verdict of its own.
+ *
+ * The provider owns it: this fallback serves Vercel AND a Cloudflare Workers
+ * record whose Access is off, and one hard-coded "Vercel" sentence told Workers
+ * users about a provider that was never theirs. */
+export function pendingPublicLinkMessage(providerId: string): string {
+  return providerId === CLOUDFLARE_WORKERS_PROVIDER_ID
+    ? 'Cloudflare Workers is still preparing the public link.'
+    : 'Vercel is still preparing the public link.';
+}
+
 export async function checkDeploymentUrl(url: unknown, { timeoutMs = 8_000 }: { timeoutMs?: number } = {}): Promise<DeploymentUrlCheck> {
   const normalized = normalizeDeploymentUrl(url);
   if (!normalized) {
@@ -1747,6 +3300,15 @@ async function requestDeploymentUrl(url: string, method: 'HEAD' | 'GET', timeout
       redirect: 'manual',
       signal: controller.signal,
     });
+    const location = resp.headers?.get?.('location') || '';
+    if (isCloudflareAccessRedirect(resp.status, location)) {
+      return {
+        reachable: false,
+        status: 'protected',
+        statusCode: resp.status,
+        statusMessage: CLOUDFLARE_ACCESS_PROTECTED_MESSAGE,
+      };
+    }
     if (resp.status >= 200 && resp.status < 400) {
       return { reachable: true, statusCode: resp.status };
     }
@@ -1759,6 +3321,16 @@ async function requestDeploymentUrl(url: string, method: 'HEAD' | 'GET', timeout
         status: 'protected',
         statusCode: resp.status,
         statusMessage: VERCEL_PROTECTED_MESSAGE,
+      };
+    }
+    // Header evidence only: this probe is shared by every provider, so body
+    // text is not proof of Access. See isCloudflareAccessChallengeResponse.
+    if (resp.status === 401 && isCloudflareAccessChallengeResponse(resp)) {
+      return {
+        reachable: false,
+        status: 'protected',
+        statusCode: resp.status,
+        statusMessage: CLOUDFLARE_ACCESS_PROTECTED_MESSAGE,
       };
     }
     return {

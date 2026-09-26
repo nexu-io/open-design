@@ -2,6 +2,8 @@ export interface OAuthResultPageOptions {
   ok: boolean;
   serverId?: string | null;
   message?: string | null;
+  providerLabel?: string | null;
+  returnUrl?: string | null;
 }
 
 export function renderOAuthResultPage(opts: OAuthResultPageOptions): string {
@@ -9,12 +11,26 @@ export function renderOAuthResultPage(opts: OAuthResultPageOptions): string {
   const title = ok ? 'Connected' : 'Authorization failed';
   const heading = ok ? '✅ Connected' : '⚠️ Authorization failed';
   const body = ok
-    ? `Your MCP server <code>${escapeHtml(opts.serverId ?? '')}</code> is now connected. You can close this tab and return to OpenDesign.`
+    ? (opts.providerLabel
+      ? `${escapeHtml(opts.providerLabel)} is now connected.`
+      : `Your MCP server <code>${escapeHtml(opts.serverId ?? '')}</code> is now connected. You can close this tab and return to OpenDesign.`)
     : escapeHtml(opts.message ?? 'Authorization could not be completed.');
   const accent = ok ? '#1a7f37' : '#cf222e';
   const payload = ok
     ? { type: 'mcp-oauth', ok: true, serverId: opts.serverId ?? null }
     : { type: 'mcp-oauth', ok: false, message: opts.message ?? null };
+  // Where the flow was started from, when the caller knows: an absolute http(s)
+  // URL is the one thing this page will link to. Anything else — no value, a
+  // relative path, a `javascript:` URL a future caller passes by mistake — is
+  // not a way back, and falls through to the button below.
+  const returnUrl = safeReturnUrl(opts.returnUrl);
+  // The one affordance this page offers. The callback tab is often opened as a
+  // `_blank` fallback the browser does not let script close, so when there is a
+  // URL to go back to the honest control is a link, not a button that may do
+  // nothing; the button stays for a tab with nowhere to return to.
+  const action = returnUrl
+    ? `<a class="action-link" href="${escapeHtml(returnUrl)}">Return to OpenDesign</a>`
+    : '<button type="button" onclick="window.close()">Close this tab</button>';
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -42,14 +58,15 @@ export function renderOAuthResultPage(opts: OAuthResultPageOptions): string {
   h1 { margin: 0 0 8px; font-size: 18px; color: ${accent}; }
   p  { margin: 0 0 16px; font-size: 14px; line-height: 1.55; }
   code { background: #f3f4f6; padding: 1px 6px; border-radius: 4px; font-size: 12.5px; }
-  button {
+  button, .action-link {
     appearance: none; border: 1px solid #d0d7de; background: white;
     border-radius: 8px; padding: 8px 14px; font-size: 13px; cursor: pointer;
   }
-  button:hover { background: #f6f8fa; }
+  .action-link { display: inline-block; color: inherit; text-decoration: none; }
+  button:hover, .action-link:hover { background: #f6f8fa; }
   @media (prefers-color-scheme: dark) {
-    button { background: #21262d; border-color: #30363d; color: #e6edf3; }
-    button:hover { background: #30363d; }
+    button, .action-link { background: #21262d; border-color: #30363d; color: #e6edf3; }
+    button:hover, .action-link:hover { background: #30363d; }
   }
 </style>
 </head>
@@ -57,11 +74,11 @@ export function renderOAuthResultPage(opts: OAuthResultPageOptions): string {
   <div class="card">
     <h1>${escapeHtml(heading)}</h1>
     <p>${body}</p>
-    <button type="button" onclick="window.close()">Close this tab</button>
+    ${action}
   </div>
   <script>
     try {
-      var payload = ${JSON.stringify(payload)};
+      var payload = ${JSON.stringify(payload).replace(/</g, '\\u003c')};
       if (window.opener && !window.opener.closed) {
         window.opener.postMessage(payload, '*');
       }
@@ -71,9 +88,25 @@ export function renderOAuthResultPage(opts: OAuthResultPageOptions): string {
         bc.close();
       }
     } catch (e) { /* ignore postMessage failures */ }
+    ${returnUrl ? `if (window.opener) { setTimeout(function () { try { window.close(); } catch (e) {} }, 1200); }` : ''}
   </script>
 </body>
 </html>`;
+}
+
+/** The `returnUrl` this page may render as a link: the caller's value back,
+ * verbatim (the caller escapes it into the attribute), when it is an absolute
+ * http(s) URL — and null otherwise, so an unusable or unexpectedly-schemed value
+ * can never reach an `href`. Null also means there is nowhere to return to, and
+ * the tab offers the close button instead. */
+function safeReturnUrl(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  try {
+    const { protocol } = new URL(raw);
+    return protocol === 'http:' || protocol === 'https:' ? raw : null;
+  } catch {
+    return null;
+  }
 }
 
 function escapeHtml(s: unknown): string {

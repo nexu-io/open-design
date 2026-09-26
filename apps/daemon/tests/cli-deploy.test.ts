@@ -334,6 +334,30 @@ describe('od deploy CLI', () => {
     });
   });
 
+  // Case 8: --provider cloudflare-workers → body.providerId === 'cloudflare-workers'
+  it('sends providerId=cloudflare-workers when --provider cloudflare-workers is given', async () => {
+    stub.setResponder(() => ({
+      status: 200,
+      body: { ...STUB_DEPLOYMENT, providerId: 'cloudflare-workers' },
+    }));
+
+    const result = await runCli([
+      'deploy',
+      'proj-1',
+      '--file',
+      'index.html',
+      '--provider',
+      'cloudflare-workers',
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(stub.requests).toHaveLength(1);
+    const body = JSON.parse(stub.requests[0]!.body);
+    expect(body.providerId).toBe('cloudflare-workers');
+  });
+
   // Default provider is vercel-self when --provider is omitted
   it('defaults to providerId=vercel-self when --provider is not given', async () => {
     const result = await runCli([
@@ -375,6 +399,138 @@ describe('od deploy CLI', () => {
     ]);
 
     expect(result.code).not.toBe(0);
+    expect(stub.requests).toHaveLength(0);
+  });
+});
+
+describe('od cloudflare CLI', () => {
+  let stub: StubServer;
+
+  beforeAll(async () => {
+    stub = await startStubServer();
+  });
+
+  afterAll(async () => {
+    await stub.close();
+  });
+
+  beforeEach(() => {
+    stub.requests.length = 0;
+    stub.setResponder(() => ({ status: 200, body: { ok: true } }));
+  });
+
+  it('status GETs /api/cloudflare/auth/status and emits machine-readable JSON under --json', async () => {
+    stub.setResponder(() => ({ status: 200, body: { connected: true, scope: 'workers-scripts.write', expiresAt: 1_700_000_000_000 } }));
+    const result = await runCli(['cloudflare', 'status', '--json', '--daemon-url', stub.baseUrl]);
+    expect(result.code).toBe(0);
+    expect(stub.requests[0]?.method).toBe('GET');
+    expect(stub.requests[0]?.url).toContain('/api/cloudflare/auth/status');
+    expect(JSON.parse(result.stdout)).toEqual({ connected: true, scope: 'workers-scripts.write', expiresAt: 1_700_000_000_000 });
+  });
+
+  it('connect POSTs clientId + redirectUri to /api/cloudflare/oauth/start', async () => {
+    stub.setResponder(() => ({ status: 200, body: { authorizeUrl: 'https://dash.cloudflare.com/oauth2/auth?x=1', state: 's1' } }));
+    const result = await runCli(['cloudflare', 'connect', '--client-id', 'client-abc', '--redirect-uri', 'http://127.0.0.1:56122/callback', '--daemon-url', stub.baseUrl]);
+    expect(result.code).toBe(0);
+    expect(stub.requests[0]?.method).toBe('POST');
+    expect(stub.requests[0]?.url).toContain('/api/cloudflare/oauth/start');
+    expect(JSON.parse(stub.requests[0]?.body ?? '{}')).toEqual({ clientId: 'client-abc', redirectUri: 'http://127.0.0.1:56122/callback' });
+  });
+
+  it('config GETs the Workers deploy config and prints configured/credentialMode', async () => {
+    stub.setResponder(() => ({ status: 200, body: { providerId: 'cloudflare-workers', configured: true, accountId: 'acct_test', credentialMode: 'oauth' } }));
+    const result = await runCli(['cloudflare', 'config', '--daemon-url', stub.baseUrl]);
+    expect(result.code).toBe(0);
+    expect(stub.requests[0]?.method).toBe('GET');
+    expect(stub.requests[0]?.url).toContain('/api/deploy/config?providerId=cloudflare-workers');
+    expect(result.stdout).toContain('configured=true');
+    expect(result.stdout).toContain('credentialMode=oauth');
+  });
+
+  it('config PUTs only the supplied fields, and a bare --token asserts token mode', async () => {
+    stub.setResponder(() => ({ status: 200, body: { providerId: 'cloudflare-workers', configured: true } }));
+    const result = await runCli(['cloudflare', 'config', '--account-id', 'acct-1', '--token', 'tok-1', '--daemon-url', stub.baseUrl]);
+    expect(result.code).toBe(0);
+    expect(stub.requests[0]?.method).toBe('PUT');
+    // A stored token is only ever consulted in 'token' mode, so --token with no
+    // explicit mode must state it: leaving the stored mode alone stored a token
+    // no deploy used, and a config reading 'oauth' over a dead refresh grant
+    // kept failing CFW_OAUTH_RECONNECT_REQUIRED with a valid token in the same
+    // file.
+    expect(JSON.parse(stub.requests[0]?.body ?? '{}')).toEqual({ providerId: 'cloudflare-workers', accountId: 'acct-1', token: 'tok-1', credentialMode: 'token' });
+  });
+
+  it('config keeps an explicit credential mode, and asserts none without a token', async () => {
+    stub.setResponder(() => ({ status: 200, body: { providerId: 'cloudflare-workers', configured: true } }));
+    // An explicit mode is the user's decision, even alongside a token.
+    const oauth = await runCli(['cloudflare', 'config', '--token', 'tok-1', '--credential-mode', 'oauth', '--daemon-url', stub.baseUrl]);
+    expect(oauth.code).toBe(0);
+    expect(JSON.parse(stub.requests[0]?.body ?? '{}')).toEqual({ providerId: 'cloudflare-workers', token: 'tok-1', credentialMode: 'oauth' });
+
+    stub.requests.length = 0;
+    // No token: nothing to switch the mode for.
+    const accountOnly = await runCli(['cloudflare', 'config', '--account-id', 'acct-1', '--daemon-url', stub.baseUrl]);
+    expect(accountOnly.code).toBe(0);
+    expect(JSON.parse(stub.requests[0]?.body ?? '{}')).toEqual({ providerId: 'cloudflare-workers', accountId: 'acct-1' });
+  });
+
+  it('rejects flags that do not apply to the subcommand instead of silently ignoring them', async () => {
+    const connect = await runCli(['cloudflare', 'connect', '--client-id', 'c1', '--account-id', 'abc', '--token', 'xyz', '--daemon-url', stub.baseUrl]);
+    expect(connect.code).toBe(2);
+    expect(connect.stderr).toContain('unknown flag for "connect": --account-id');
+    expect(stub.requests).toHaveLength(0);
+
+    const status = await runCli(['cloudflare', 'status', '--credential-mode', 'oauth', '--daemon-url', stub.baseUrl]);
+    expect(status.code).toBe(2);
+    expect(status.stderr).toContain('unknown flag for "status": --credential-mode');
+    expect(stub.requests).toHaveLength(0);
+
+    const disconnect = await runCli(['cloudflare', 'disconnect', '--token', 'x', '--daemon-url', stub.baseUrl]);
+    expect(disconnect.code).toBe(2);
+    expect(disconnect.stderr).toContain('unknown flag for "disconnect": --token');
+    expect(stub.requests).toHaveLength(0);
+  });
+
+  it('documents --credential-mode in the usage text', async () => {
+    const result = await runCli(['cloudflare', '--help']);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain('--credential-mode <mode>');
+    expect(result.stdout).toContain('config options');
+  });
+
+  it('config rejects an invalid --credential-mode locally and makes no request', async () => {
+    const result = await runCli(['cloudflare', 'config', '--credential-mode', 'ouath', '--daemon-url', stub.baseUrl]);
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain('--credential-mode');
+    expect(stub.requests).toHaveLength(0);
+  });
+
+  it('connect forwards a comma/space-separated --scopes list as an array', async () => {
+    stub.setResponder(() => ({ status: 200, body: { authorizeUrl: 'https://dash.cloudflare.com/oauth2/auth?x=1', state: 's1' } }));
+    const result = await runCli(['cloudflare', 'connect', '--client-id', 'client-abc', '--scopes', 'workers-scripts.write, zone.read access.write', '--daemon-url', stub.baseUrl]);
+    expect(result.code).toBe(0);
+    expect(JSON.parse(stub.requests[0]?.body ?? '{}')).toEqual({
+      clientId: 'client-abc',
+      redirectUri: '',
+      scopes: ['workers-scripts.write', 'zone.read', 'access.write'],
+    });
+  });
+
+  it('rejects an explicit --scopes that parses to nothing instead of widening to the default grant', async () => {
+    // Omitting `scopes` makes the daemon fall back to the FULL default set, so
+    // a malformed least-privilege invocation must fail (exit 2, no request).
+    const empty = await runCli(['cloudflare', 'connect', '--client-id', 'client-abc', '--scopes', '', '--daemon-url', stub.baseUrl]);
+    expect(empty.code).toBe(2);
+    expect(empty.stderr).toContain('--scopes');
+    expect(stub.requests).toHaveLength(0);
+
+    const separators = await runCli(['cloudflare', 'connect', '--client-id', 'client-abc', '--scopes', ',,', '--daemon-url', stub.baseUrl]);
+    expect(separators.code).toBe(2);
+    expect(stub.requests).toHaveLength(0);
+
+    const config = await runCli(['cloudflare', 'config', '--scopes', ' , ', '--daemon-url', stub.baseUrl]);
+    expect(config.code).toBe(2);
+    expect(config.stderr).toContain('--scopes');
     expect(stub.requests).toHaveLength(0);
   });
 });

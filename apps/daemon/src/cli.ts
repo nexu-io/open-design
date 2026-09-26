@@ -283,6 +283,16 @@ const DEPLOY_STRING_FLAGS = new Set([
   'workspace', 'workspace-member',
 ]);
 const DEPLOY_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
+// Per-subcommand flag sets: `od cloudflare connect --token x` used to parse
+// fine and silently drop the token (nothing sent it anywhere). Anything not in
+// the subcommand's own set is an error, not a no-op.
+const CLOUDFLARE_STRING_FLAGS_BY_SUB = {
+  status: new Set(['daemon-url']),
+  disconnect: new Set(['daemon-url']),
+  connect: new Set(['daemon-url', 'client-id', 'redirect-uri', 'scopes']),
+  config: new Set(['daemon-url', 'client-id', 'redirect-uri', 'token', 'account-id', 'credential-mode', 'scopes']),
+};
+const CLOUDFLARE_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 // `od automation …` mirrors the Automations tab. Same surface, same
 // /api/routines store. The CLI form is the embeddability contract:
 // external agents (hermes-agent, openclaw, etc.) can drive OpenDesign
@@ -413,6 +423,7 @@ const SUBCOMMAND_MAP = {
   conversation: runConversation,
   chat: runChat,
   deploy: runDeploy,
+  cloudflare: runCloudflare,
   daemon: runDaemon,
   atoms: runAtoms,
   skill: runSkills,
@@ -12058,7 +12069,7 @@ Required:
   --file <fileName>        File name within the project to deploy.
 
 Options:
-  --provider vercel-self|cloudflare-pages   Deploy provider (default: vercel-self).
+  --provider vercel-self|cloudflare-pages|cloudflare-workers   Deploy provider (default: vercel-self).
   --target preview|production               Deployment target (default: server decides).
   --cf-zone-id <id>                         Cloudflare Pages: zone id.
   --cf-zone-name <name>                     Cloudflare Pages: zone name.
@@ -12126,4 +12137,183 @@ Options:
   if (flags.json) return process.stdout.write(JSON.stringify(data) + '\n');
   const url = data?.url ?? data?.deploymentUrl ?? '';
   console.log(`[deploy] ${data?.id ?? 'done'}${url ? ` → ${url}` : ''}`);
+}
+
+// Parse a `--scopes` value (comma/space separated). A flag that was supplied
+// but parses to nothing (`--scopes ''`, `--scopes ',,'`) is rejected: omitting
+// `scopes` from the request would make the daemon fall back to the FULL
+// default grant, turning a malformed least-privilege invocation into the
+// widest one. Exits 2 without making a request.
+function parseCloudflareScopesFlag(raw) {
+  const scopes = String(raw).split(/[\s,]+/).map((s) => s.trim()).filter(Boolean);
+  if (scopes.length === 0) {
+    console.error('--scopes must name at least one OAuth scope (comma/space separated); an empty value is rejected rather than widened to the default grant');
+    process.exit(2);
+  }
+  return scopes;
+}
+
+// `od cloudflare …` is the embeddability half of the Cloudflare Workers deploy
+// provider: configure credentials and drive the OAuth connect/status/disconnect
+// flow over the same /api/* endpoints the web UI uses, so headless agents and
+// external callers can establish the provider credential without a browser.
+async function runCloudflare(args) {
+  const sub = args[0] ?? '';
+  const rest = args.slice(1);
+  if (!sub || sub === 'help' || sub === '--help' || sub === '-h') {
+    console.log(`Usage: od cloudflare <status|connect|disconnect|config> [options]
+
+Subcommands:
+  status                    Show Cloudflare OAuth connection status (GET /api/cloudflare/auth/status).
+  connect                   Begin Cloudflare OAuth (POST /api/cloudflare/oauth/start); prints the authorize URL.
+  disconnect                Disconnect Cloudflare OAuth (POST /api/cloudflare/oauth/disconnect).
+  config                    Read or update the Cloudflare Workers deploy config (GET/PUT /api/deploy/config?providerId=cloudflare-workers).
+
+Common options:
+  --daemon-url <url>        OpenDesign daemon HTTP base.
+  --json                    Emit raw JSON response.
+
+connect options:
+  --client-id <id>          Cloudflare OAuth client id (required).
+  --redirect-uri <uri>      Cloudflare OAuth redirect URI.
+  --scopes <list>           Space/comma-separated OAuth scopes (default: full set).
+
+config options (any of these switches the call from GET to PUT):
+  --account-id <id>         Cloudflare account id.
+  --token <token>           Cloudflare API token.
+  --client-id <id>          Cloudflare OAuth client id.
+  --redirect-uri <uri>      Cloudflare OAuth redirect URI.
+  --credential-mode <mode>  "token" (static API token) or "oauth" (connected OAuth token).
+  --scopes <list>           Space/comma-separated OAuth scopes to persist.
+
+Flags that do not apply to a subcommand are rejected (exit 2), never ignored.`);
+    return;
+  }
+  const stringFlags = CLOUDFLARE_STRING_FLAGS_BY_SUB[sub];
+  if (!stringFlags) {
+    console.error(`unknown subcommand: od cloudflare ${sub}`);
+    process.exit(2);
+  }
+  let flags;
+  try {
+    flags = parseFlags(rest, { string: stringFlags, boolean: CLOUDFLARE_BOOLEAN_FLAGS });
+  } catch (err) {
+    const m = /^unknown flag: (--[^.]+)\./.exec(err.message);
+    console.error(m ? `unknown flag for "${sub}": ${m[1]}` : err.message);
+    process.exit(2);
+  }
+  if (flags.help || flags.h) {
+    console.log(`Usage: od cloudflare ${sub} [options]
+
+  --daemon-url <url>        OpenDesign daemon HTTP base.
+  --json                    Emit raw JSON response.`);
+    return;
+  }
+  const base = await cliDaemonBaseUrl(flags);
+  const headers = { 'content-type': 'application/json' };
+  let resp;
+
+  if (sub === 'status') {
+    try {
+      resp = await fetch(`${base}/api/cloudflare/auth/status`, { headers });
+    } catch (err) {
+      surfaceFetchError(err, base);
+      process.exit(3);
+    }
+    if (!resp.ok) return structuredHttpFailure(resp);
+    const data = await resp.json();
+    if (flags.json) return process.stdout.write(JSON.stringify(data) + '\n');
+    console.log(data?.connected
+      ? `[cloudflare] connected${data?.scope ? ` (${data.scope})` : ''}`
+      : '[cloudflare] not connected');
+    return;
+  }
+
+  if (sub === 'connect') {
+    const clientId = typeof flags['client-id'] === 'string' ? flags['client-id'].trim() : '';
+    if (!clientId) {
+      console.error('--client-id <id> is required: od cloudflare connect --client-id <id>');
+      process.exit(2);
+    }
+    const redirectUri = typeof flags['redirect-uri'] === 'string' ? flags['redirect-uri'].trim() : '';
+    const scopes = flags.scopes !== undefined ? parseCloudflareScopesFlag(flags.scopes) : undefined;
+    try {
+      resp = await fetch(`${base}/api/cloudflare/oauth/start`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ clientId, redirectUri, ...(scopes ? { scopes } : {}) }),
+      });
+    } catch (err) {
+      surfaceFetchError(err, base);
+      process.exit(3);
+    }
+    if (!resp.ok) return structuredHttpFailure(resp);
+    const data = await resp.json();
+    if (flags.json) return process.stdout.write(JSON.stringify(data) + '\n');
+    console.log(`[cloudflare] open: ${data?.authorizeUrl ?? ''}`);
+    return;
+  }
+
+  if (sub === 'disconnect') {
+    try {
+      resp = await fetch(`${base}/api/cloudflare/oauth/disconnect`, { method: 'POST', headers });
+    } catch (err) {
+      surfaceFetchError(err, base);
+      process.exit(3);
+    }
+    if (!resp.ok) return structuredHttpFailure(resp);
+    const data = await resp.json().catch(() => ({}));
+    if (flags.json) return process.stdout.write(JSON.stringify(data) + '\n');
+    console.log('[cloudflare] disconnected');
+    return;
+  }
+
+  if (sub === 'config') {
+    const hasUpdate = flags['account-id'] !== undefined || flags.token !== undefined
+      || flags['client-id'] !== undefined || flags['redirect-uri'] !== undefined
+      || flags['credential-mode'] !== undefined || flags.scopes !== undefined;
+    const body = {};
+    // The PUT handler keys off body.providerId (not the query param), so always
+    // send it — otherwise the token/account land in the Vercel config.
+    body.providerId = 'cloudflare-workers';
+    if (flags['account-id'] !== undefined) body.accountId = flags['account-id'];
+    if (flags.token !== undefined) body.token = flags.token;
+    if (flags['client-id'] !== undefined) body.clientId = flags['client-id'];
+    if (flags['redirect-uri'] !== undefined) body.redirectUri = flags['redirect-uri'];
+    if (flags['credential-mode'] !== undefined) {
+      const mode = flags['credential-mode'];
+      if (mode !== 'token' && mode !== 'oauth') {
+        console.error(`--credential-mode must be "token" or "oauth" (got "${mode}")`);
+        process.exit(2);
+      }
+      body.credentialMode = mode;
+    } else if (flags.token !== undefined) {
+      // `--token` with no explicit mode IS the statement that the token is the
+      // authority. A stored token is only ever consulted in 'token' mode, so
+      // leaving the stored mode alone stored a token that no deploy used: a
+      // config reading 'oauth' over a dead refresh grant kept failing
+      // CFW_OAUTH_RECONNECT_REQUIRED with a valid token in the same file. The
+      // daemon's oauth->token transition revokes the displaced grant.
+      body.credentialMode = 'token';
+    }
+    if (flags.scopes !== undefined) body.scopes = parseCloudflareScopesFlag(flags.scopes);
+    try {
+      resp = await fetch(`${base}/api/deploy/config?providerId=cloudflare-workers`, {
+        method: hasUpdate ? 'PUT' : 'GET',
+        headers,
+        body: hasUpdate ? JSON.stringify(body) : undefined,
+      });
+    } catch (err) {
+      surfaceFetchError(err, base);
+      process.exit(3);
+    }
+    if (!resp.ok) return structuredHttpFailure(resp);
+    const data = await resp.json();
+    if (flags.json) return process.stdout.write(JSON.stringify(data) + '\n');
+    console.log(`[cloudflare] configured=${data?.configured ?? false} accountId=${data?.accountId ?? ''} credentialMode=${data?.credentialMode ?? ''}`);
+    return;
+  }
+
+  console.error(`unknown subcommand: od cloudflare ${sub}`);
+  process.exit(2);
 }

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
 import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import os from 'node:os';
@@ -41,6 +41,7 @@ import {
   writeVercelConfig,
 } from '../src/deploy.js';
 import { closeDatabase, getDeployment, insertProject, openDatabase, upsertDeployment } from '../src/db.js';
+import { publicDeployment } from '../src/deploy/cloudflare-pages-helpers.js';
 import { ensureProject } from '../src/projects.js';
 
 async function setupProject() {
@@ -95,6 +96,31 @@ describe('deploy config', () => {
         teamSlug: 'renamed-team',
       });
     } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('survives two same-millisecond config writes (exclusive random temp file, no ENOENT rename)', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-config-race-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    // Pin the clock so a timestamp-based temp name would collide.
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    try {
+      const results = await Promise.all([
+        writeVercelConfig({ token: 'tok-a', teamId: 'team_a', teamSlug: 'a' }),
+        writeVercelConfig({ token: 'tok-b', teamId: 'team_b', teamSlug: 'b' }),
+      ]);
+      expect(results.map((r) => r.configured)).toEqual([true, true]);
+      const saved = await readVercelConfig();
+      expect(['tok-a', 'tok-b']).toContain(saved.token);
+      expect(saved.teamId).toBe(saved.token === 'tok-a' ? 'team_a' : 'team_b');
+      const leftovers = (await readdir(stateRoot)).filter((name) => name.includes('.tmp-'));
+      expect(leftovers).toEqual([]);
+    } finally {
+      nowSpy.mockRestore();
       if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
       else process.env.OD_USER_STATE_DIR = priorStateRoot;
       await rm(stateRoot, { recursive: true, force: true });
@@ -2573,5 +2599,137 @@ describe('deployment link readiness', () => {
       'set-cookie': '_vercel_sso_nonce=test',
     });
     expect(isVercelProtectedResponse(new Response(null, { headers }), 'Authentication Required')).toBe(true);
+  });
+});
+
+describe('deployment db: Cloudflare Workers public info', () => {
+  const WORKERS = 'cloudflare-workers';
+  const workersMetadata = {
+    scriptName: 'my-site',
+    accessProtected: true,
+    accessAppId: 'app-1',
+    createdByOpenDesign: true,
+    accessVerified: true,
+    steps: [{ name: 'script', status: 'done' }],
+    check: { status: 200, ok: true },
+  };
+  const lifted = {
+    accessProtected: true,
+    accessAppId: 'app-1',
+    createdByOpenDesign: true,
+    steps: [{ name: 'script', status: 'done' }],
+    check: { status: 200, ok: true },
+  };
+
+  it('lifts the Workers facts out of providerMetadata so they survive publicDeployment', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'od-deployment-workers-db-'));
+    const db = openDatabase(root, { dataDir: path.join(root, '.od') });
+    try {
+      insertProject(db, { id: 'project-1', name: 'Project 1', skillId: null, designSystemId: null, createdAt: 1, updatedAt: 1 });
+      const saved = upsertDeployment(db, {
+        id: 'deployment-1',
+        projectId: 'project-1',
+        fileName: 'index.html',
+        providerId: WORKERS,
+        url: 'https://my-site.acct.workers.dev',
+        deploymentId: 'my-site',
+        deploymentCount: 1,
+        target: 'production',
+        status: 'ready',
+        providerMetadata: workersMetadata,
+        createdAt: 1,
+        updatedAt: 2,
+      });
+      expect(saved?.cloudflareWorkers).toEqual(lifted);
+      const loaded = getDeployment(db, 'project-1', 'index.html', WORKERS);
+      expect(loaded?.cloudflareWorkers).toEqual(lifted);
+      // The internal record keeps everything; the public projection is a subset.
+      expect(loaded?.providerMetadata).toEqual(workersMetadata);
+      expect(publicDeployment(loaded!)).not.toHaveProperty('providerMetadata');
+      expect(publicDeployment(loaded!)).toMatchObject({ cloudflareWorkers: lifted });
+    } finally {
+      closeDatabase();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('lifts the Access app ids a deploy RETAINED, so the client can still name an app OpenDesign owns', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'od-deployment-workers-retained-'));
+    const db = openDatabase(root, { dataDir: path.join(root, '.od') });
+    try {
+      insertProject(db, { id: 'project-1', name: 'Project 1', skillId: null, designSystemId: null, createdAt: 1, updatedAt: 1 });
+      const saved = upsertDeployment(db, {
+        id: 'deployment-1',
+        projectId: 'project-1',
+        fileName: 'index.html',
+        providerId: WORKERS,
+        url: 'https://my-site.acct.workers.dev',
+        deploymentId: 'my-site',
+        deploymentCount: 1,
+        target: 'production',
+        status: 'ready',
+        providerMetadata: {
+          scriptName: 'my-site',
+          accessProtected: true,
+          accessAppId: 'app-new',
+          retainedAccessAppIds: ['app-old'],
+          steps: [],
+        },
+        createdAt: 1,
+        updatedAt: 2,
+      });
+      // providerMetadata is stripped from every deployment response, so a key
+      // the public projection does not name never leaves the daemon: the
+      // retained id would be persisted and still invisible to the client.
+      expect(saved?.cloudflareWorkers).toMatchObject({ accessAppId: 'app-new', retainedAccessAppIds: ['app-old'] });
+      const loaded = getDeployment(db, 'project-1', 'index.html', WORKERS);
+      expect(publicDeployment(loaded!)).toMatchObject({
+        cloudflareWorkers: { accessAppId: 'app-new', retainedAccessAppIds: ['app-old'] },
+      });
+    } finally {
+      closeDatabase();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('folds a typed cloudflareWorkers input into the JSON column and never lifts it for other providers', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'od-deployment-workers-db-fold-'));
+    const db = openDatabase(root, { dataDir: path.join(root, '.od') });
+    try {
+      insertProject(db, { id: 'project-1', name: 'Project 1', skillId: null, designSystemId: null, createdAt: 1, updatedAt: 1 });
+      const folded = upsertDeployment(db, {
+        id: 'deployment-2',
+        projectId: 'project-1',
+        fileName: 'about.html',
+        providerId: WORKERS,
+        url: 'https://my-site.acct.workers.dev',
+        deploymentCount: 1,
+        target: 'production',
+        status: 'ready',
+        cloudflareWorkers: { accessProtected: false, steps: [] },
+        createdAt: 1,
+        updatedAt: 2,
+      });
+      expect(folded?.cloudflareWorkers).toEqual({ accessProtected: false, steps: [] });
+      expect(folded?.providerMetadata).toEqual({ accessProtected: false, steps: [] });
+
+      const pages = upsertDeployment(db, {
+        id: 'deployment-3',
+        projectId: 'project-1',
+        fileName: 'index.html',
+        providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
+        url: 'https://demo.pages.dev',
+        deploymentCount: 1,
+        target: 'preview',
+        status: 'ready',
+        providerMetadata: { accessAppId: 'not-a-workers-app', steps: [] },
+        createdAt: 1,
+        updatedAt: 2,
+      });
+      expect(pages?.cloudflareWorkers).toBeUndefined();
+    } finally {
+      closeDatabase();
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });

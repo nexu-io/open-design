@@ -6,6 +6,11 @@ import {
 } from '@open-design/contracts';
 import { boundedRequestErrorCode } from '../analytics/workspace';
 import type {
+  CloudflareWorkersBinding,
+  CloudflareWorkersDeployCheck,
+  CloudflareWorkersDeployStep,
+  CloudflareWorkersDeploymentInfo,
+  CloudflareWorkersCapabilities,
   ConnectorAuthConfigPrepareResponse,
   ConnectorDetail,
   ConnectorConnectResponse,
@@ -134,19 +139,51 @@ const IN_FLIGHT_SHARE_ONLY_MS = 0;
 
 export const DEFAULT_DEPLOY_PROVIDER_ID = 'vercel-self';
 export const CLOUDFLARE_PAGES_PROVIDER_ID = 'cloudflare-pages';
+export const CLOUDFLARE_WORKERS_PROVIDER_ID = 'cloudflare-workers';
 export const DEPLOY_PROVIDER_IDS = [
   DEFAULT_DEPLOY_PROVIDER_ID,
   CLOUDFLARE_PAGES_PROVIDER_ID,
+  CLOUDFLARE_WORKERS_PROVIDER_ID,
 ] as const;
 
 export type WebDeployProviderId = (typeof DEPLOY_PROVIDER_IDS)[number];
 
-export type WebDeployConfigResponse = DeployConfigResponse;
-export type WebUpdateDeployConfigRequest = UpdateDeployConfigRequest;
+export interface WebCloudflareWorkersCustomDomain {
+  hostname: string;
+  zoneId: string;
+}
+
+export type WebDeployConfigResponse = DeployConfigResponse & {
+  customDomain?: WebCloudflareWorkersCustomDomain;
+  /** Persisted OAuth scope selection; empty/absent means the default grant. */
+  scopes?: string[];
+};
+
+export type WebUpdateDeployConfigRequest = UpdateDeployConfigRequest & {
+  /** `null` clears a saved domain; an absent key keeps it (daemon read-modify-write). */
+  customDomain?: WebCloudflareWorkersCustomDomain | null;
+  /** OAuth scope selection to persist; `[]` clears it, an absent key keeps it. */
+  scopes?: string[];
+};
 export type WebDeploymentInfo = ProjectDeploymentsResponse['deployments'][number];
 export type WebDeployProjectFileResponse = DeployProjectFileResponse;
 export type WebCloudflarePagesDeploySelection = CloudflarePagesDeploySelection;
 export type WebCloudflarePagesZonesResponse = CloudflarePagesZonesResponse;
+export type WebCloudflareWorkersBinding = CloudflareWorkersBinding & { databaseName?: string };
+export type WebCloudflareWorkersCapabilities = CloudflareWorkersCapabilities;
+export type WebCloudflareWorkersAccessRule =
+  | { kind: 'emails'; emails: string[] }
+  | { kind: 'emailDomain'; emailDomain: string }
+  | { kind: 'self' }
+  | { kind: 'policy'; policyId: string };
+export type WebCloudflareWorkersAccessRuleKind = WebCloudflareWorkersAccessRule['kind'];
+export type WebCloudflareWorkersAccess = {
+  enabled: boolean;
+  rule?: WebCloudflareWorkersAccessRule;
+};
+export type WebCloudflareDeployStep = CloudflareWorkersDeployStep;
+export type WebCloudflareDeployCheck = CloudflareWorkersDeployCheck;
+export type WebDeployResultProviderMetadata = CloudflareWorkersDeploymentInfo;
 
 export type WebPublicProjectFileResponse = PublicProjectFilePublication;
 
@@ -1841,6 +1878,128 @@ export async function fetchCloudflarePagesZones(): Promise<WebCloudflarePagesZon
   } catch (err) {
     if (err instanceof Error) throw err;
     return null;
+  }
+}
+
+export async function fetchCloudflareWorkersZones(): Promise<Array<{ id: string; name: string; status?: string }>> {
+  try {
+    const resp = await fetch('/api/deploy/cloudflare-workers/zones', { cache: 'no-store' });
+    if (!resp.ok) return [];
+    const json = (await resp.json()) as { zones?: Array<{ id: string; name: string; status?: string }> };
+    return Array.isArray(json.zones) ? json.zones : [];
+  } catch {
+    return [];
+  }
+}
+
+// Cloudflare Workers R2 / D1 resource pickers. The daemon lists the account's
+// buckets and databases with the live Workers credential; an empty list (or a
+// request failure) means the bindings editor falls back to free-text input.
+export interface WebCloudflareR2Bucket { name: string; }
+export interface WebCloudflareD1Database { name: string; id: string; }
+
+export async function fetchCloudflareR2Buckets(): Promise<WebCloudflareR2Bucket[]> {
+  try {
+    const resp = await fetch('/api/cloudflare/resources/r2-buckets', { cache: 'no-store' });
+    if (!resp.ok) return [];
+    const json = (await resp.json()) as { buckets?: WebCloudflareR2Bucket[] };
+    return Array.isArray(json.buckets) ? json.buckets : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchCloudflareD1Databases(): Promise<WebCloudflareD1Database[]> {
+  try {
+    const resp = await fetch('/api/cloudflare/resources/d1-databases', { cache: 'no-store' });
+    if (!resp.ok) return [];
+    const json = (await resp.json()) as { databases?: WebCloudflareD1Database[] };
+    return Array.isArray(json.databases) ? json.databases : [];
+  } catch {
+    return [];
+  }
+}
+// Cloudflare Workers OAuth "Connect with Cloudflare" flow. The daemon owns the
+// authorization dance end-to-end (it builds the authorize URL from the user's
+// OAuth app credentials, hosts the callback, and stores the resulting token),
+// so the web half only asks it to start and then navigates to the URL it hands
+// back. Scopes are the optional set the user selected; empty means "no extra
+// scopes" (token can still be minted with the account's default grants).
+export type WebCloudflareWorkersOAuthScope = 'zone.read' | 'access.write' | 'd1.read' | 'workers-r2.read';
+
+export interface WebCloudflareWorkersOAuthStartRequest {
+  clientId: string;
+  redirectUri: string;
+  scopes?: string[];
+}
+
+export interface WebCloudflareWorkersOAuthStartResponse {
+  authorizeUrl: string;
+  state: string;
+}
+
+export async function fetchCloudflareWorkersOAuthStart(
+  input: WebCloudflareWorkersOAuthStartRequest,
+): Promise<WebCloudflareWorkersOAuthStartResponse | null> {
+  try {
+    const resp = await fetch('/api/cloudflare/oauth/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!resp.ok) {
+      const payload = (await resp.json().catch(() => null)) as
+        | { error?: string | { message?: string }; message?: string }
+        | null;
+      // The daemon's Cloudflare routes answer a refusal with a bare STRING
+      // (`{ error: '<why>' }`); a couple of older shapes nest the message. Read
+      // the string form first — reading only the nested one turned every
+      // actionable refusal ("client ID is required", "not valid JSON") into the
+      // generic fallback.
+      const message = typeof payload?.error === 'string' ? payload.error : payload?.error?.message ?? payload?.message;
+      throw new Error(message || `Could not start Cloudflare sign-in (${resp.status})`);
+    }
+    return (await resp.json()) as WebCloudflareWorkersOAuthStartResponse;
+  } catch (err) {
+    if (err instanceof Error) throw err;
+    return null;
+  }
+}
+
+// The daemon's status route emits explicit `null` for the three optional
+// fields when a token has no expiry / scope / account, so the wire type says
+// so; do not narrow these back to plain optionals.
+export interface WebCloudflareAuthStatus {
+  connected: boolean;
+  expiresAt?: number | null;
+  scope?: string | null;
+  accountId?: string | null;
+  /** Epoch-ms the token record was persisted. Changes on every (re)connect, so
+   * it is the only signal that distinguishes a fresh grant from the stale
+   * record that `connected: true` also reports during a Reconnect. */
+  savedAt?: number | null;
+  /** True when the daemon holds a refresh token and will renew an expired
+   * access token silently on the next deploy; expiry then does not require a
+   * Reconnect and must not disable deploy. */
+  refreshable?: boolean | null;
+}
+
+export async function fetchCloudflareAuthStatus(): Promise<WebCloudflareAuthStatus | null> {
+  try {
+    const resp = await fetch('/api/cloudflare/auth/status', { cache: 'no-store' });
+    if (!resp.ok) return null;
+    return (await resp.json()) as WebCloudflareAuthStatus;
+  } catch {
+    return null;
+  }
+}
+
+export async function disconnectCloudflareOAuth(): Promise<boolean> {
+  try {
+    const resp = await fetch('/api/cloudflare/oauth/disconnect', { method: 'POST' });
+    return resp.ok;
+  } catch {
+    return false;
   }
 }
 
