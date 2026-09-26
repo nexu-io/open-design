@@ -1879,7 +1879,8 @@ describe('deploy provider routes', () => {
         const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
         if (url.startsWith(baseUrl)) return realFetch(input, init);
         const method = (init?.method || 'GET').toUpperCase();
-        // The post-deploy probe answers 503: the Worker is live but erroring.
+        // The post-deploy probe answers 503: an edge answer, which the report
+        // shows as a bare status (no Worker-exception detail is inferred).
         if (method === 'HEAD') return new Response('', { status: 503 });
         if (url.endsWith('/workers/subdomain')) return json({ success: true, result: { subdomain: 'acct-test' } });
         if (url.includes('assets-upload-session')) return json({ success: true, result: { jwt: 'SESS', buckets: [] } });
@@ -1897,7 +1898,7 @@ describe('deploy provider routes', () => {
         const body = await resp.json() as Record<string, unknown>;
         expect(body.providerMetadata).toBeUndefined();
         expect(body.cloudflareWorkers).toMatchObject({
-          check: { status: 503, ok: false, detail: 'worker-runtime-error' },
+          check: { status: 503, ok: false },
         });
         const steps = (body.cloudflareWorkers as { steps: Array<{ name: string }> }).steps.map((s) => s.name);
         expect(steps).toEqual(expect.arrayContaining(['assets', 'script', 'subdomain']));
@@ -1907,7 +1908,7 @@ describe('deploy provider routes', () => {
         const list = await listResp.json() as { deployments: Array<Record<string, unknown>> };
         const workers = list.deployments.find((d) => d.providerId === CLOUDFLARE_WORKERS_PROVIDER_ID);
         expect(workers?.providerMetadata).toBeUndefined();
-        expect(workers?.cloudflareWorkers).toMatchObject({ check: { status: 503, detail: 'worker-runtime-error' } });
+        expect(workers?.cloudflareWorkers).toMatchObject({ check: { status: 503 } });
       } finally {
         vi.unstubAllGlobals();
       }

@@ -86,6 +86,18 @@ function accessFetch(overrides: AccessOverrides = {}) {
     if (url.endsWith('/workers/subdomain')) {
       return jsonResponse(overrides.subdomainGet ?? { success: true, result: { subdomain: 'acct-test' } });
     }
+    // The script's workers.dev config. Its URL also carries the scripts-LIST
+    // prefix, so it has to be matched before that branch: served from the list
+    // it came back as a bare array, and every flag on it read as `false` —
+    // which is how a first deploy's Cloudflare-assigned route went unseen.
+    if (url.includes('/workers/scripts/') && url.endsWith('/subdomain')) {
+      if ((init?.method || 'GET').toUpperCase() === 'POST') {
+        return jsonResponse(overrides.subdomainPost ?? { success: true, result: { enabled: true } });
+      }
+      // A script with its route off — the same thing the list body happened to
+      // say. Override it with `scriptSubdomainGet` to describe anything else.
+      return jsonResponse(overrides.scriptSubdomainGet ?? { success: true, result: { enabled: false, previews_enabled: false } });
+    }
     if (url.includes('/workers/scripts')) {
       return jsonResponse(overrides.scripts ?? { success: true, result: [{ id: 'my-site', tag: 'tag-abc-123' }] });
     }
@@ -941,6 +953,78 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
       subdomainEnabledByThisRun: true,
       detachableCustomDomains: [{ id: 'dom-1', hostname: 'app.example.com' }],
     });
+  });
+
+  it('withdraws the workers.dev route Cloudflare assigned when this run created the script', async () => {
+    // The regression this pins: Cloudflare assigns a workers.dev route at
+    // Worker creation, so a FIRST deploy reads the route back as already
+    // enabled. Read as "the user already had it public", the exposure was never
+    // withdrawn — and then forgotten, because the deploy throws before it can
+    // record what it left behind.
+    let scriptLists = 0;
+    const { calls, fn } = accessFetch({ head: () => new Response('', { status: 200 }) });
+    const wrapped = vi.fn(async (url: string, init?: RequestInit) => {
+      const method = (init?.method || 'GET').toUpperCase();
+      if (method === 'GET' && url.includes('/workers/scripts?')) {
+        calls.push([url, init]);
+        scriptLists += 1;
+        // Nothing exists until the PUT lands: both the Access tag lookup and
+        // the modified_on baseline see an account with no such script.
+        return scriptLists <= 2
+          ? jsonResponse({ success: true, result: [] })
+          : jsonResponse({ success: true, result: [{ id: 'my-site', tag: 'tag-abc-123' }] });
+      }
+      if (method === 'GET' && url.endsWith('/workers/scripts/my-site/subdomain')) {
+        calls.push([url, init]);
+        // What Cloudflare reports for a Worker it has just created.
+        return jsonResponse({ success: true, result: { enabled: true, previews_enabled: false } });
+      }
+      return fn(url, init);
+    });
+    vi.stubGlobal('fetch', wrapped);
+    await expect(
+      deployToCloudflareWorkers({ ...base, access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } } }),
+    ).rejects.toMatchObject({ name: 'DeployError', code: 'CFW_ACCESS_UNVERIFIED' });
+    const subdomainPosts = calls
+      .filter((c) => c[0].endsWith('/workers/scripts/my-site/subdomain') && c[1]?.method === 'POST')
+      .map((c) => JSON.parse(String(c[1]?.body)) as { enabled: boolean });
+    // On, then back off: the route is this run's exposure even though the
+    // read-back (Cloudflare's creation default) said it was already on.
+    expect(subdomainPosts.map((body) => body.enabled)).toEqual([true, false]);
+  });
+
+  it('records the route Cloudflare assigned to a script this run created, so the link check can still act on it', async () => {
+    let scriptLists = 0;
+    const { calls, fn } = accessFetch({ head: () => new Response('', { status: 503 }) });
+    const wrapped = vi.fn(async (url: string, init?: RequestInit) => {
+      const method = (init?.method || 'GET').toUpperCase();
+      if (method === 'GET' && url.includes('/workers/scripts?')) {
+        calls.push([url, init]);
+        scriptLists += 1;
+        return scriptLists <= 2
+          ? jsonResponse({ success: true, result: [] })
+          : jsonResponse({ success: true, result: [{ id: 'my-site', tag: 'tag-abc-123' }] });
+      }
+      if (method === 'GET' && url.endsWith('/workers/scripts/my-site/subdomain')) {
+        calls.push([url, init]);
+        return jsonResponse({ success: true, result: { enabled: true, previews_enabled: false } });
+      }
+      return fn(url, init);
+    });
+    vi.stubGlobal('fetch', wrapped);
+    const out = await deployToCloudflareWorkers({ ...base, access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } } });
+    // The URL did not answer: deferred, not withdrawn. The exposure this run
+    // created is written down all the same, so the link check has a handle on a
+    // route that IS public the moment the edge recovers.
+    expect(out.status).toBe('link-delayed');
+    expect(out.providerMetadata?.unverifiedExposure).toEqual({
+      scriptName: 'my-site',
+      subdomainEnabledByThisRun: true,
+    });
+    expect(
+      calls.some((c) => c[1]?.method === 'POST' && c[0].endsWith('/workers/scripts/my-site/subdomain')
+        && (JSON.parse(String(c[1]?.body)) as { enabled?: boolean }).enabled === false),
+    ).toBe(false);
   });
 
   it('turning workers.dev back off writes previews_enabled back as it was, instead of clobbering it', async () => {

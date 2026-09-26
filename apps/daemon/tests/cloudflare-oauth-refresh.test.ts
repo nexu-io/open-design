@@ -960,6 +960,36 @@ describe('clearCloudflareOAuthToken', () => {
       await rm(dir, { recursive: true, force: true });
     }
   });
+
+  it('hands back the credential the raw file still carries when nothing sanitizes to a token', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'od-cf-clear-recover-'));
+    const file = path.join(dir, 'cloudflare-oauth-tokens.json');
+    try {
+      // No accessToken: the record drops out of the typed shape, and a clear
+      // that reported "nothing displaced" is what let a disconnect skip the
+      // revoke and leave the refresh token — the half that keeps the whole
+      // grant alive — usable at Cloudflare.
+      await writeFile(file, JSON.stringify({ token: { refreshToken: 'leaked-refresh', clientId: 'client-1' }, lastGeneration: 3 }));
+      expect(await clearCloudflareOAuthToken(dir)).toMatchObject({
+        accessToken: '',
+        refreshToken: 'leaked-refresh',
+        clientId: 'client-1',
+        tokenType: 'Bearer',
+      });
+      // The wipe still lands: the recovered record describes bytes that are gone.
+      const wiped = await readFile(file, 'utf8');
+      expect(wiped).not.toContain('leaked-refresh');
+      expect(JSON.parse(wiped)).toEqual({ lastGeneration: 4 });
+
+      // A credential is only recovered from a string. A non-string accessToken
+      // is not coerced into one — there is nothing to name at the revoke.
+      await writeFile(file, JSON.stringify({ token: { accessToken: 42 }, lastGeneration: 9 }));
+      expect(await clearCloudflareOAuthToken(dir)).toBeNull();
+      expect(JSON.parse(await readFile(file, 'utf8'))).toEqual({ lastGeneration: 10 });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('setCloudflareOAuthTokenGuarded', () => {

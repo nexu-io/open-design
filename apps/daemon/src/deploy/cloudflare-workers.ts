@@ -583,15 +583,31 @@ function scriptCommittedSinceBaseline(baseline: ScriptModifiedBaseline, script: 
 // PUT committed, in which case a blind retry fails with a JWT error while the
 // new version is already live. So: never retry the PUT on 5xx blindly — read
 // the script's modified_on before the first PUT and check whether it advanced.
+type WorkerScriptUploadResult = {
+  json: JsonObject;
+  /** True when no script of this name existed before this run's PUT, so this
+   * run is the one that CREATED it. Cloudflare assigns a workers.dev route at
+   * creation, so a first deploy reads that route back as already-enabled: the
+   * flag is what keeps the exposure from being read as the user's own. */
+  scriptCreatedByThisRun: boolean;
+};
+
 async function uploadWorkerScript(
   config: WorkersDeployConfig,
   scriptName: string,
   moduleCode: string,
   assetsJwt: string,
   runWorkerFirst = false,
-): Promise<JsonObject> {
+): Promise<WorkerScriptUploadResult> {
   const url = CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/workers/scripts/' + encodeURIComponent(scriptName);
   const baseline = await readScriptModifiedBaseline(config, scriptName);
+  // `absent` is the only baseline that proves creation: a script found
+  // afterwards cannot be this run's. A failed pre-read stays `unknown` — it
+  // proves nothing either way, and claiming creation would withdraw a route the
+  // user may already have had public. (`workerId === ''` carries the same fact
+  // on the Access path, but it is `''` for EVERY deploy with Access off, so it
+  // cannot be ORed in here without marking every such deploy's route as ours.)
+  const scriptCreatedByThisRun = baseline.kind === 'absent';
   // Read ONCE, before the retry loop: what to carry is a property of the script
   // as this deploy found it, not of an attempt.
   const preservedBindings = await readExistingWorkerBindings(config, scriptName, baseline.kind !== 'absent');
@@ -612,7 +628,7 @@ async function uploadWorkerScript(
       throw err;
     }
     const json = await readCloudflareJson(resp);
-    if (resp.ok && json.success !== false) return json;
+    if (resp.ok && json.success !== false) return { json, scriptCreatedByThisRun };
     lastJson = json;
     lastStatus = resp.status;
     const is5xx = resp.status >= 500 && resp.status < 600;
@@ -623,7 +639,7 @@ async function uploadWorkerScript(
     } catch {
       committed = false;
     }
-    if (committed) return { success: true, result: { id: scriptName, committed_after_5xx: true } };
+    if (committed) return { json: { success: true, result: { id: scriptName, committed_after_5xx: true } }, scriptCreatedByThisRun };
     if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 200 * 2 ** attempt));
   }
   throw cloudflareError(lastJson, lastStatus, 'Cloudflare Workers script upload failed.');
@@ -711,16 +727,25 @@ async function writeWorkerSubdomainConfig(
 
 type WorkerPreviewsEnableResult = {
   /** True when previews_enabled was OFF before this call turned it on — the
-   * exposure a later compensation must put back. */
+   * exposure a later compensation must put back — or when this run created the
+   * script, whose creation defaults are what the read-back is showing. */
   enabledByThisRun: boolean;
 };
 
 // Preview URLs only resolve when the script's subdomain config has
 // previews_enabled. Turn it on without changing the production workers.dev
 // exposure state (a preview deploy must not flip production public).
-async function ensureWorkerPreviewsEnabled(config: WorkersDeployConfig, scriptName: string): Promise<WorkerPreviewsEnableResult> {
+async function ensureWorkerPreviewsEnabled(
+  config: WorkersDeployConfig,
+  scriptName: string,
+  scriptCreatedByThisRun: boolean,
+): Promise<WorkerPreviewsEnableResult> {
   const current = await readWorkerSubdomainConfig(config, scriptName);
-  if (current.previewsEnabled) return { enabledByThisRun: false };
+  // Already on: normally an exposure this run did not create and must not put
+  // back. It is this run's all the same when this run created the script — what
+  // the read-back shows is then Cloudflare's creation default, not a state the
+  // user ever chose.
+  if (current.previewsEnabled) return { enabledByThisRun: scriptCreatedByThisRun };
   await writeWorkerSubdomainConfig(
     config,
     scriptName,
@@ -744,10 +769,12 @@ async function disableWorkerPreviews(config: WorkersDeployConfig, scriptName: st
 
 type WorkerSubdomainEnableResult = {
   url: string;
-  /** True when the workers.dev route was OFF before this call turned it on —
-   * the one fact a later compensation needs: a deploy that cannot be verified
-   * must put back the exposure it created, and must not turn off a route the
-   * user already had public. */
+  /** True when the workers.dev route was OFF before this call turned it on, or
+   * when this run created the script (Cloudflare assigns the route at
+   * creation, so the read-back would otherwise look like the user's own) — the
+   * one fact a later compensation needs: a deploy that cannot be verified must
+   * put back the exposure it created, and must not turn off a route the user
+   * already had public. */
   enabledByThisRun: boolean;
 };
 
@@ -759,6 +786,7 @@ async function enableWorkerSubdomain(
   config: WorkersDeployConfig,
   scriptName: string,
   subdomain: string,
+  scriptCreatedByThisRun: boolean,
 ): Promise<WorkerSubdomainEnableResult> {
   const current = await readWorkerSubdomainConfig(config, scriptName);
   await writeWorkerSubdomainConfig(
@@ -767,7 +795,10 @@ async function enableWorkerSubdomain(
     { enabled: true, previews_enabled: current.previewsEnabled },
     'Cloudflare workers.dev enable failed.',
   );
-  return { url: 'https://' + scriptName + '.' + subdomain + '.workers.dev', enabledByThisRun: !current.enabled };
+  return {
+    url: 'https://' + scriptName + '.' + subdomain + '.workers.dev',
+    enabledByThisRun: !current.enabled || scriptCreatedByThisRun,
+  };
 }
 
 // Turn the script's workers.dev route back off (compensation only). The POST
@@ -1849,7 +1880,9 @@ async function deployToCloudflareWorkersWith(
       const versionId = await uploadWorkerVersion(cfg, scriptName, moduleCode, completionJwt, isCustomModule);
       metadata.versionId = versionId;
       steps.push({ name: 'version', status: 'done' });
-      const previews = await ensureWorkerPreviewsEnabled(cfg, scriptName);
+      // A preview deploy is never the run that created the script: the
+      // CFW_PREVIEW_REQUIRES_PRODUCTION gate above proved it already existed.
+      const previews = await ensureWorkerPreviewsEnabled(cfg, scriptName, false);
       steps.push({ name: 'previews', status: 'done' });
       const prefix = versionId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8) || 'preview';
       const url = 'https://' + prefix + '-' + scriptName + '.' + subdomain + '.workers.dev';
@@ -1941,7 +1974,8 @@ async function deployToCloudflareWorkersWith(
       steps.push({ name: 'access-app', status: 'done', detail: app.appId });
     }
 
-    await uploadWorkerScript(cfg, scriptName, moduleCode, completionJwt, isCustomModule);
+    const uploaded = await uploadWorkerScript(cfg, scriptName, moduleCode, completionJwt, isCustomModule);
+    const scriptCreatedByThisRun = uploaded.scriptCreatedByThisRun;
     steps.push({ name: 'script', status: 'done' });
     if (accessOn && !accessAppId) {
       // First deploy: the Worker now exists, so its tag is resolvable.
@@ -1979,7 +2013,7 @@ async function deployToCloudflareWorkersWith(
     // off a route the user had public.
     let subdomainEnabledByThisRun = false;
     if (subdomain) {
-      const enabled = await enableWorkerSubdomain(cfg, scriptName, subdomain);
+      const enabled = await enableWorkerSubdomain(cfg, scriptName, subdomain, scriptCreatedByThisRun);
       url = enabled.url;
       subdomainEnabledByThisRun = enabled.enabledByThisRun;
       steps.push({ name: 'subdomain', status: 'done', detail: url });
@@ -2114,8 +2148,13 @@ async function deployToCloudflareWorkersWith(
     } else {
       try {
         const checkResp = await fetch(url, { method: 'HEAD', redirect: 'manual', signal: AbortSignal.timeout(CLOUDFLARE_PROBE_TIMEOUT_MS), ...(cfg.requestInit ?? {}) });
+        // No `detail` is derived here. A 5xx from this probe is as likely to be
+        // Cloudflare's own edge (520-527, an edge 503) as the Worker throwing,
+        // and 1101 is a Workers *error code* the edge reports in a response
+        // body — never an HTTP status a HEAD can see. Naming the Worker for any
+        // 5xx would report an edge outage as the app's own failure; the report
+        // renders the status itself.
         const check: JsonObject = { status: checkResp.status, ok: checkResp.ok };
-        if (checkResp.status >= 500 || checkResp.status === 1101) check.detail = 'worker-runtime-error';
         metadata.check = check;
       } catch {
         // A failed post-deploy probe is non-fatal; the deploy still succeeded.

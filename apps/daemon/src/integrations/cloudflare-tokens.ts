@@ -161,24 +161,39 @@ function sanitizeToken(raw: unknown): StoredCloudflareOAuthToken | null {
   return out;
 }
 
+/** The file as BOTH the sanitized shape and the raw JSON behind it. A clear
+ * needs the raw object: a record whose credential no longer sanitizes is still
+ * a credential on disk, and only the bytes say which string it is. */
+async function readCloudflareOAuthTokensFileWithRaw(
+  dataDir: string,
+): Promise<{ raw: unknown; file: CloudflareOAuthTokensFile }> {
+  let text: string;
+  try {
+    text = await readFile(tokensFile(dataDir), 'utf8');
+  } catch (err: unknown) {
+    const e = err as { code?: string };
+    if (e.code === 'ENOENT') return { raw: undefined, file: { ...EMPTY } };
+    throw err;
+  }
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch (err: unknown) {
+    const e = err as { name?: string; message?: string };
+    if (e.name !== 'SyntaxError') throw err;
+    console.error(
+      '[cloudflare-tokens] Corrupted JSON, returning empty:',
+      e.message,
+    );
+    return { raw: undefined, file: { ...EMPTY } };
+  }
+  return { raw, file: sanitizeCloudflareOAuthTokensFile(raw) };
+}
+
 export async function readCloudflareOAuthTokensFile(
   dataDir: string,
 ): Promise<CloudflareOAuthTokensFile> {
-  try {
-    const raw = await readFile(tokensFile(dataDir), 'utf8');
-    return sanitizeCloudflareOAuthTokensFile(JSON.parse(raw));
-  } catch (err: unknown) {
-    const e = err as { code?: string; name?: string; message?: string };
-    if (e.code === 'ENOENT') return { ...EMPTY };
-    if (e.name === 'SyntaxError') {
-      console.error(
-        '[cloudflare-tokens] Corrupted JSON, returning empty:',
-        e.message,
-      );
-      return { ...EMPTY };
-    }
-    throw err;
-  }
+  return (await readCloudflareOAuthTokensFileWithRaw(dataDir)).file;
 }
 
 const writeLocks = new Map<string, Promise<unknown>>();
@@ -364,24 +379,64 @@ export async function setCloudflareOAuthTokenGuarded(
   });
 }
 
+/** The credential a clear must still name when nothing sanitizes out of the
+ * file. A record with a blank `accessToken` drops out of the typed shape, but
+ * its refresh token is a live grant on disk; handing back null for it is what
+ * let a disconnect skip the revoke and leave that grant usable.
+ *
+ * Whichever string the file still carries lands in the field the caller reads:
+ * a refresh token in `refreshToken`, so the revoke's `token_type_hint` says
+ * `refresh_token` and the grant (not just a copy of the access token) dies.
+ * Null when the raw object yields neither string. */
+function recoveredDisplacedCredential(raw: unknown): StoredCloudflareOAuthToken | null {
+  if (!isPlainObject(raw) || !isPlainObject(raw.token)) return null;
+  const tok = raw.token;
+  const str = (value: unknown): string | undefined =>
+    typeof value === 'string' && value.trim() ? value.trim() : undefined;
+  const accessToken = str(tok.accessToken);
+  const refreshToken = str(tok.refreshToken);
+  if (!refreshToken && !accessToken) return null;
+  const clientId = str(tok.clientId);
+  const generation = tok.generation;
+  const savedAt = tok.savedAt;
+  return {
+    // Whichever half the file carried. The refresh token rides in its own
+    // field so the caller's `refreshToken || accessToken` picks it first.
+    accessToken: accessToken ?? '',
+    ...(refreshToken ? { refreshToken } : {}),
+    tokenType: str(tok.tokenType) ?? 'Bearer',
+    ...(clientId ? { clientId } : {}),
+    generation:
+      typeof generation === 'number' && Number.isFinite(generation)
+        ? generation
+        : 0,
+    savedAt:
+      typeof savedAt === 'number' && Number.isFinite(savedAt)
+        ? savedAt
+        : Date.now(),
+  };
+}
+
 /** Atomically delete the stored Cloudflare OAuth token. Bumps the file
  * generation so a cleared credential's generation is never reused. Returns
- * the record the clear took off disk (null when none parsed out of the file),
- * read inside the lock so a caller revoking it at Cloudflare names the
- * credential the store actually held — not one a concurrent refresh has
- * since rotated away (see GuardedCloudflareOAuthTokenWrite).
+ * the record the clear took off disk, read inside the lock so a caller
+ * revoking it at Cloudflare names the credential the store actually held —
+ * not one a concurrent refresh has since rotated away (see
+ * GuardedCloudflareOAuthTokenWrite).
  *
  * Keyed on the FILE existing, not on a token parsing out of it: a corrupt or
  * hand-edited file that no longer sanitizes to a token can still carry a
  * refresh token or an access token in its bytes, and a disconnect that
- * skipped it would leave that credential on disk. */
+ * skipped it would leave that credential on disk. Such a file is recovered
+ * from its raw object (see recoveredDisplacedCredential) rather than reported
+ * as nothing to revoke. */
 export async function clearCloudflareOAuthToken(dataDir: string): Promise<StoredCloudflareOAuthToken | null> {
   return withLock(dataDir, async () => {
     if (!(await tokensFileExists(dataDir))) return null;
-    const file = await readCloudflareOAuthTokensFile(dataDir);
+    const { raw, file } = await readCloudflareOAuthTokensFileWithRaw(dataDir);
     const gen = nextLastGeneration(file);
     await writeTokensFile(dataDir, { lastGeneration: gen });
-    return file.token ?? null;
+    return file.token ?? recoveredDisplacedCredential(raw);
   });
 }
 

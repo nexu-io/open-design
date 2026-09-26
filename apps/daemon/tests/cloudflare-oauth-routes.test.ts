@@ -631,6 +631,42 @@ describe('cloudflare-oauth routes', () => {
     }
   });
 
+  it('revokes the credential a hand-edited store left as raw bytes, instead of skipping the revoke', async () => {
+    const dataDir = cloudflareOAuthTokensDir();
+    const realFetch = globalThis.fetch;
+    const revokes: Array<{ method: string | undefined; body: string }> = [];
+    vi.stubGlobal('fetch', async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('oauth2/revoke')) {
+        revokes.push({ method: init?.method, body: String(init?.body) });
+        return new Response('', { status: 200 });
+      }
+      return realFetch(input as never, init as never);
+    });
+    try {
+      // No accessToken, so nothing sanitizes to a token — while the refresh
+      // token sitting in the same bytes is a live grant. Reading "no token"
+      // here is what made the disconnect skip the revoke entirely.
+      await writeFile(
+        path.join(dataDir, 'cloudflare-oauth-tokens.json'),
+        JSON.stringify({ token: { refreshToken: 'ref-orphan', clientId: 'client-abc' } }),
+      );
+      const resp = await fetch(`${app.baseUrl}/api/cloudflare/oauth/disconnect`, { method: 'POST' });
+      expect(resp.status).toBe(200);
+      expect(revokes).toHaveLength(1);
+      const form = new URLSearchParams(revokes[0]!.body);
+      expect(form.get('token')).toBe('ref-orphan');
+      // A refresh token is what the hint must say: the grant, not a copy of an
+      // access token, is what has to die.
+      expect(form.get('token_type_hint')).toBe('refresh_token');
+      expect(form.get('client_id')).toBe('client-abc');
+    } finally {
+      vi.unstubAllGlobals();
+      await clearCloudflareOAuthToken(dataDir);
+      await rm(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), { force: true });
+    }
+  });
+
   it('disconnect revokes exactly the record its wipe displaced; a credential rotated in after the wipe is neither wiped nor revoked', async () => {
     const dataDir = cloudflareOAuthTokensDir();
     const realFetch = globalThis.fetch;

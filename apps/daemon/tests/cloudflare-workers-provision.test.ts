@@ -548,7 +548,7 @@ describe('deployToCloudflareWorkers deploy log', () => {
     expect(head![1]).toMatchObject({ redirect: 'manual' });
   });
 
-  it('flags worker-runtime-error detail when the probe returns 500', async () => {
+  it('records a 5xx probe as a status, without naming the Worker for an edge answer', async () => {
     const fn = vi.fn(async (url: string, init?: RequestInit) => {
       const method = (init?.method || 'GET').toUpperCase();
       if (method === 'HEAD') return jsonResponse({}, 500);
@@ -563,10 +563,11 @@ describe('deployToCloudflareWorkers deploy log', () => {
     });
     vi.stubGlobal('fetch', fn);
     const out = await deployToCloudflareWorkers(base);
-    const check = checkOf(out);
-    expect(check.status).toBe(500);
-    expect(check.ok).toBe(false);
-    expect(check.detail).toBe('worker-runtime-error');
+    // A 5xx here is as likely to be Cloudflare's own edge (520-527, an edge
+    // 503) as the Worker throwing, and 1101 is a Workers *error code* the edge
+    // reports in a body — never a status a HEAD can see. The probe reports the
+    // status it got and nothing else; the report renders that status itself.
+    expect(checkOf(out)).toEqual({ status: 500, ok: false });
   });
 
   it('attaches a partial steps log (with an error entry) to a failed deploy', async () => {
