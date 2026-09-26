@@ -131,6 +131,45 @@ describe('ensureCloudflareD1Database', () => {
     expect(calls.filter((c) => c[0].includes('/d1/database')).length).toBe(2);
   });
 
+  it('keeps paging a D1 list whose total_count and count are present but null', async () => {
+    const calls: Call[] = [];
+    const page1 = Array.from({ length: 100 }, (_, i) => ({ name: 'db-' + i, uuid: 'uuid-' + i }));
+    const fn = vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push([url, init]);
+      // Cloudflare answers these fields as present-but-null on some lists, and
+      // Number(null) is 0 — a value the "usable total" test accepted, so
+      // pagination ended after page one. A missed page is a missed database,
+      // and every strict caller reads a list without the target as "create it".
+      if (url.includes('page=1&')) {
+        return jsonResponse({ success: true, result: page1, result_info: { count: null, page: 1, per_page: 100, total_count: null } });
+      }
+      return jsonResponse({ success: true, result: [{ name: 'my-db', uuid: 'uuid-last' }], result_info: { count: 1, page: 2, per_page: 100, total_count: null } });
+    });
+    vi.stubGlobal('fetch', fn);
+    const dbs = await listCloudflareD1Databases('tok-secret', 'acct_test');
+    expect(dbs).toHaveLength(101);
+    expect(dbs.at(-1)).toEqual({ name: 'my-db', id: 'uuid-last' });
+    expect(calls.filter((c) => c[0].includes('/d1/database')).length).toBe(2);
+  });
+
+  it('keeps paging a D1 list whose count fields are empty strings', async () => {
+    const calls: Call[] = [];
+    const page1 = Array.from({ length: 100 }, (_, i) => ({ name: 'db-' + i, uuid: 'uuid-' + i }));
+    const fn = vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push([url, init]);
+      // Number('') is 0 as well, so an empty string stopped pagination the same
+      // way null did. Only an actual number may be read as a page total.
+      const page = Number(new URL(url).searchParams.get('page'));
+      const info = { count: '', page, per_page: 100, total_count: '' };
+      if (url.includes('page=1&')) return jsonResponse({ success: true, result: page1, result_info: info });
+      return jsonResponse({ success: true, result: [{ name: 'my-db', uuid: 'uuid-last' }], result_info: { ...info, count: 1 } });
+    });
+    vi.stubGlobal('fetch', fn);
+    const dbs = await listCloudflareD1Databases('tok-secret', 'acct_test');
+    expect(dbs).toHaveLength(101);
+    expect(calls.filter((c) => c[0].includes('/d1/database')).length).toBe(2);
+  });
+
   it('pages by the per_page Cloudflare applied, not the one requested, when the endpoint clamps it', async () => {
     const calls: Call[] = [];
     // 100 requested, 20 applied: page 1 is "short" against the request but full

@@ -269,7 +269,7 @@ describe('credential mode is derived from a live OAuth grant', () => {
     });
   });
 
-  it('an expired grant leaves the config in token mode and the static token in use', async () => {
+  it('an expired grant does not outrank the static token the user saved', async () => {
     await withDataDir(async () => {
       await writeCloudflareWorkersConfig({ token: 'static-token', accountId: 'acct_test' });
       await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), {
@@ -281,10 +281,81 @@ describe('credential mode is derived from a live OAuth grant', () => {
         generation: 1,
         savedAt: Date.now(),
       });
-      // A grant the resolver would have to refresh is not authority to change
-      // the mode: the refresh needs an identity the config may not carry yet.
+      // The static token the user saved outranks the grant beside it whether or
+      // not the grant is expired — expiry never gets a vote here. What expiry
+      // decides is whether a grant can be authority at all when there is no
+      // static token to prefer (see the refreshable-grant case below).
       expect((await readCloudflareWorkersConfig()).credentialMode).toBe('token');
       await expect(getCloudflareAccessToken()).resolves.toBe('static-token');
+    });
+  });
+
+  it('an expired but refreshable grant still decides the mode when the config has no static token', async () => {
+    await withDataDir(async () => {
+      // The crash window again, one hour later: the config still says 'token'
+      // and still holds no static token, so the grant on disk is the only
+      // authority there is. Expiry must not read as "no grant" — this user never
+      // had a static token to fall back on, so leaving the mode at 'token' made
+      // every deploy fail CFW_TOKEN_REQUIRED while /auth/status went on
+      // reporting a connected profile.
+      await writeFile(
+        deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID),
+        JSON.stringify({ accountId: 'acct_test', credentialMode: 'token' }),
+        'utf8',
+      );
+      await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), {
+        accessToken: 'stale-access',
+        refreshToken: 'ref-1',
+        tokenType: 'Bearer',
+        clientId: 'client-abc',
+        expiresAt: Date.now() - 1000,
+        generation: 1,
+        savedAt: Date.now(),
+      });
+      const config = await readCloudflareWorkersConfig();
+      expect(config).toMatchObject({ credentialMode: 'oauth', clientId: 'client-abc', token: '' });
+      expect(publicCloudflareWorkersConfig(config)).toMatchObject({ credentialMode: 'oauth', configured: true });
+      // The refresh needs nothing from the config: the record's own clientId is
+      // what the token endpoint is bound to, and the resolver spends the grant
+      // before it signs anything.
+      const refreshes: string[] = [];
+      vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+        refreshes.push(url + ' ' + String(init?.body ?? ''));
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ access_token: 'oauth-fresh', token_type: 'Bearer', refresh_token: 'ref-2' }),
+        } as unknown as Response;
+      }));
+      await expect(getCloudflareAccessToken()).resolves.toBe('oauth-fresh');
+      expect(refreshes).toHaveLength(1);
+      expect(refreshes[0]).toContain('refresh_token=ref-1');
+      expect(refreshes[0]).toContain('client_id=client-abc');
+    });
+  });
+
+  it('an expired grant that cannot refresh stays token mode, so the reconnect it needs is visible', async () => {
+    await withDataDir(async () => {
+      // Nothing can refresh this one, so the resolver would refuse it outright
+      // (CFW_OAUTH_RECONNECT_REQUIRED). Deriving oauth from it would report a
+      // mode whose every deploy spends a grant that cannot be renewed, instead
+      // of the token-mode state whose failure names the reconnect the user
+      // actually has to perform.
+      await writeFile(
+        deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID),
+        JSON.stringify({ accountId: 'acct_test', credentialMode: 'token' }),
+        'utf8',
+      );
+      await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), {
+        accessToken: 'stale-access',
+        tokenType: 'Bearer',
+        clientId: 'client-abc',
+        expiresAt: Date.now() - 1000,
+        generation: 1,
+        savedAt: Date.now(),
+      });
+      expect((await readCloudflareWorkersConfig()).credentialMode).toBe('token');
+      await expect(getCloudflareAccessToken()).rejects.toMatchObject({ code: 'CFW_TOKEN_REQUIRED' });
     });
   });
 

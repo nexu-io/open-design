@@ -532,15 +532,27 @@ async function readCloudflareWorkersConfigFile(): Promise<DeployConfig> {
 }
 
 /** The live OAuth grant on disk, or null when there is none for the credential
- * authority to be derived from: nothing stored, a stored token already within the
- * expiry skew (the resolver would have to refresh it, and a refresh needs a client
- * identity the config may not carry yet), or no configured data root. Never
- * throws: it gates a config READ, which must not gain a new failure mode. */
+ * authority to be derived from: nothing stored, a grant with no refresh token
+ * that is already within the expiry skew, or no configured data root. Never
+ * throws: it gates a config READ, which must not gain a new failure mode.
+ *
+ * Expiry alone does not disqualify a grant. One that carries a refresh token
+ * needs nothing from the config to be refreshed: the record holds the clientId
+ * the refresh is bound to (buildStoredCloudflareToken persists it, and
+ * refreshCloudflareOAuthAccessToken prefers current.clientId), and the resolver
+ * refreshes before it signs. Reading an expired-but-refreshable grant as "no
+ * grant" left a connect-only user — no static token, so this derivation is the
+ * only thing that can route to the grant — in token mode with an empty token:
+ * every deploy failed CFW_TOKEN_REQUIRED while /auth/status reported a connected
+ * profile. Only a grant that cannot refresh at all is unusable once expired (the
+ * resolver refuses that one with CFW_OAUTH_RECONNECT_REQUIRED), which is the
+ * state a reconnect fixes. */
+
 async function liveCloudflareOAuthGrant(): Promise<StoredCloudflareOAuthToken | null> {
   try {
     const current = await getCloudflareOAuthToken(cloudflareOAuthTokensDir());
     if (!current) return null;
-    if (isCloudflareOAuthTokenExpired(current, Date.now(), CLOUDFLARE_OAUTH_EXPIRY_SKEW_MS)) return null;
+    if (!current.refreshToken && isCloudflareOAuthTokenExpired(current, Date.now(), CLOUDFLARE_OAUTH_EXPIRY_SKEW_MS)) return null;
     return current;
   } catch {
     return null;

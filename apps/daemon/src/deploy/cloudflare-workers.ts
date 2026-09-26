@@ -296,6 +296,10 @@ function cloudflareListUnseenItems(collected: JsonObject[], incoming: JsonObject
 // Cloudflare list envelopes are inconsistent: Workers scripts carry
 // `result_info.total_pages`, D1 and Access carry `total_count`/`count`/`page`/
 // `per_page` only. When neither is present, keep paging while a page is full.
+// A field can also be present and unusable — `null` or `''` — and must be read
+// as absent, never as a number: Number(null) is 0, and a 0 count ends
+// pagination after page one, where a missed page is a missed resource that
+// every strict caller reads as "does not exist".
 // The page size Cloudflare ACTUALLY applied (`result_info.per_page`) wins over
 // the one requested: an endpoint that clamps `per_page` to a smaller value
 // would otherwise look exhausted after a "short" first page.
@@ -307,9 +311,9 @@ function cloudflareListHasMorePages(json: JsonObject, pageLength: number, page: 
   if (Number.isFinite(totalPages) && totalPages > 0) return page < totalPages;
   const responsePerPage = Number(info.per_page);
   const effectivePerPage = Number.isFinite(responsePerPage) && responsePerPage > 0 ? responsePerPage : perPage;
-  const totalCount = Number(info.total_count);
+  const totalCount = typeof info.total_count === 'number' ? info.total_count : NaN;
   if (Number.isFinite(totalCount) && totalCount >= 0) return page * effectivePerPage < totalCount;
-  const count = Number(info.count);
+  const count = typeof info.count === 'number' ? info.count : NaN;
   if (Number.isFinite(count) && count >= 0) return count >= effectivePerPage;
   return pageLength >= effectivePerPage;
 }
