@@ -15,7 +15,7 @@ import {
 import { Button } from '@open-design/components';
 import { createPortal } from 'react-dom';
 import type { DesignSystemEditClickProps, TrackingArtifactKind, TrackingProjectKind } from '@open-design/contracts/analytics';
-import type { ObservedPublicShareLink, ObservedShareUpdateRequest } from './share/observed-public-share-link';
+import { isObservedShareFileSwitch, type ObservedPublicShareLink, type ObservedShareUpdateRequest } from './share/observed-public-share-link';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackFileManagerClick,
@@ -3175,8 +3175,9 @@ export function FileWorkspace({
       ))
     )) onLoginUpdateRequestHandled?.(loginUpdateRequest.nonce);
     if (identity === null || observedActiveFileRef.current === identity) return;
+    const switchedFile = isObservedShareFileSwitch(observedActiveFileRef.current, identity);
     observedActiveFileRef.current = identity;
-    onObservedPublicShareLink?.(null);
+    if (switchedFile) onObservedPublicShareLink?.(null);
   }, [activeViewerFile?.name, projectId, onObservedPublicShareLink, loginUpdateRequest, onLoginUpdateRequestHandled,
     activeTab, filesAuthoritative, initialMaterializationPending, openRequest?.name, routeFileName]);
   const htmlViewerFileSnapshotsRef = useRef<{

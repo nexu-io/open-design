@@ -357,8 +357,9 @@ it('keeps an observed share witness through a transient missing active file but 
     onObservedPublicShareLink,
   };
   const view = render(<CollabProvider value={collabValue(teamContext('workspace-a', 'member-a'))}><FileWorkspace {...props} /></CollabProvider>);
-  await waitFor(() => expect(onObservedPublicShareLink).toHaveBeenCalledWith(null));
-  onObservedPublicShareLink.mockClear();
+  await act(async () => {});
+  // Mounting is not a file switch; see isObservedShareFileSwitch.
+  expect(onObservedPublicShareLink).not.toHaveBeenCalled();
 
   view.rerender(<CollabProvider value={collabValue(teamContext('workspace-a', 'member-a'))}><FileWorkspace {...props} files={[]} /></CollabProvider>);
   expect(onObservedPublicShareLink).not.toHaveBeenCalled();
@@ -369,6 +370,26 @@ it('keeps an observed share witness through a transient missing active file but 
   const otherFile = workspaceFile('other.html');
   view.rerender(<CollabProvider value={collabValue(teamContext('workspace-a', 'member-a'))}><FileWorkspace {...props} files={[file, otherFile]} tabsState={{ tabs: ['other.html'], active: 'other.html' }} /></CollabProvider>);
   await waitFor(() => expect(onObservedPublicShareLink).toHaveBeenCalledWith(null));
+});
+it('keeps an observed share witness when the same file view remounts (Owner-S13 sign-out race)', async () => {
+  // Signing out refreshes the Workspace context before the login status
+  // settles; ProjectView re-keys and remounts FileWorkspace on the SAME file.
+  // A remount is not a file switch: clearing the App-held witness here makes
+  // WorkspaceTabsBar see no signed-out share route and re-home to Home.
+  const onObservedPublicShareLink = vi.fn();
+  const file = workspaceFile('index.html');
+  const props: React.ComponentProps<typeof FileWorkspace> = {
+    projectId: 'project-1', projectKind: 'prototype', files: [file], liveArtifacts: [],
+    onRefreshFiles: vi.fn(), isDeck: false,
+    tabsState: { tabs: ['index.html'], active: 'index.html' }, onTabsStateChange: vi.fn(),
+    onObservedPublicShareLink,
+  };
+  const context = teamContext('workspace-a', 'member-a');
+  const first = render(<CollabProvider value={collabValue(context)}><FileWorkspace {...props} /></CollabProvider>);
+  first.unmount();
+  render(<CollabProvider value={collabValue(context)}><FileWorkspace {...props} /></CollabProvider>);
+  await act(async () => {});
+  expect(onObservedPublicShareLink).not.toHaveBeenCalledWith(null);
 });
 it('S14 shared HTML deletion warns about the exact active file link before a cancellable delete', async () => {
   const context = teamContext('workspace-a', 'member-a');
