@@ -2555,10 +2555,12 @@ describe('verifyCloudflareAccessPerimeter', () => {
     const bodyOnly = await verifyCloudflareAccessPerimeter(['https://a.example.com'], {});
     expect(bodyOnly.outcome).toBe('unreachable');
     expect(bodyOnly.outcome === 'unreachable' && bodyOnly.error.code).toBe('CFW_ACCESS_UNVERIFIED');
-    // The edge's own challenge stamp is evidence.
+    // A cf-mitigated challenge (WAF / Bot Fight Mode / Under Attack Mode) proves
+    // nothing about identity — any human can solve it — so it must NOT verify the
+    // gate, or a deploy with no Access app would be marked ready on it.
     const stamped = vi.fn(async () => new Response('', { status: 403, headers: { 'cf-mitigated': 'challenge' } }));
     vi.stubGlobal('fetch', stamped);
-    expect((await verifyCloudflareAccessPerimeter(['https://a.example.com'], {})).outcome).toBe('protected');
+    expect((await verifyCloudflareAccessPerimeter(['https://a.example.com'], {})).outcome).toBe('unreachable');
     // The Access cookie jar is evidence too …
     const cookie = vi.fn(async () => new Response('', { status: 401, headers: { 'set-cookie': 'CF_Authorization=tok; Path=/' } }));
     vi.stubGlobal('fetch', cookie);

@@ -341,11 +341,20 @@ export function registerCloudflareRoutes(
       // rotates the refresh token, the write then displaces the ROTATED
       // record, and a revoke (or rollback) keyed on the pre-read would name
       // the consumed token while the live one is orphaned.
-      const write = await setCloudflareOAuthTokenGuarded(
-        dataDir,
-        stored,
-        () => attemptGeneration === oauthAttemptGeneration,
-      );
+      let write: Awaited<ReturnType<typeof setCloudflareOAuthTokenGuarded>>;
+      try {
+        write = await setCloudflareOAuthTokenGuarded(
+          dataDir,
+          stored,
+          () => attemptGeneration === oauthAttemptGeneration,
+        );
+      } catch (err) {
+        // The guarded write threw (the store went unwritable): nothing was
+        // stored, so the connect marker this attempt recorded must not outlive
+        // it — otherwise the config reads oauth with no grant behind it.
+        await clearPendingGrantMarker();
+        throw err;
+      }
       if (!write.written) {
         // The guard lost its race: nothing was stored, so the intent this
         // attempt recorded must not outlive it.

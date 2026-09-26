@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import path from 'node:path';
-import { CLOUDFLARE_WORKERS_PROVIDER_ID, DeployError, getCloudflareAccessToken, getCloudflareOAuthStoredEmail, isCloudflareAccessChallengeResponse, isCloudflareAccessRedirect, normalizeCloudflareWorkersBindings } from '../deploy.js';
+import { CLOUDFLARE_WORKERS_PROVIDER_ID, DeployError, getCloudflareAccessToken, getCloudflareOAuthStoredEmail, isCloudflareAccessRedirect, normalizeCloudflareWorkersBindings } from '../deploy.js';
 import { proxyDispatcherRequestInit } from '../connectionTest.js';
 
 type JsonObject = Record<string, unknown>;
@@ -737,7 +737,21 @@ async function uploadWorkerScript(
     try {
       resp = await fetchWithRetry(config, url, { method: 'PUT', headers: await authHeaders(config), body: form }, 3, { retryServerErrors: false, timeoutMs });
     } catch (err) {
-      if (isFetchTimeout(err)) throw uploadTimedOutError('Cloudflare Workers script upload', bodyBytes, timeoutMs);
+      if (isFetchTimeout(err)) {
+        // A timeout may still have committed: Cloudflare creates the script and
+        // assigns the workers.dev route at creation. Check the committed marker
+        // before rethrowing so the Access-on caller proceeds to the hold-off and
+        // app create instead of aborting over a Worker that is already live and
+        // ungated.
+        let committed = false;
+        try {
+          committed = scriptCommittedSinceBaseline(baseline, await getCloudflareWorkerScript(config, scriptName));
+        } catch {
+          committed = false;
+        }
+        if (committed) return { json: { success: true, result: { id: scriptName, committed_after_timeout: true } }, scriptCreatedByThisRun };
+        throw uploadTimedOutError('Cloudflare Workers script upload', bodyBytes, timeoutMs);
+      }
       throw err;
     }
     const json = await readCloudflareJson(resp);
@@ -1392,7 +1406,15 @@ async function probeCloudflareAccessPerimeterOnce(url: string, requestInit: Work
       };
     }
     if (status === 401 || status === 403) {
-      if (isCloudflareAccessChallengeResponse(resp)) return { outcome: 'protected' };
+      // Only the real Access cookie proves a 401/403 is the Access challenge. A
+      // cf-mitigated challenge (WAF / Bot Fight Mode / Under Attack Mode) is
+      // solvable by any human and proves nothing about identity, so it must NOT
+      // verify the gate — the deploy would be marked ready with accessVerified on
+      // no Access app at all. The display-only requestDeploymentUrl message keeps
+      // the broader match (isCloudflareAccessChallengeResponse); this probe does
+      // not. A bare 401/403 falls through to unreachable, which defers.
+      const setCookie = resp.headers?.get?.('set-cookie') || '';
+      if (/cf_authorization/i.test(setCookie)) return { outcome: 'protected' };
     }
     // A 3xx that is not the Access login: follow it only when it stays on the
     // SAME host. Access intercepts before the Worker, so a redirect the Worker
@@ -1462,7 +1484,11 @@ export async function verifyCloudflareAccessPerimeter(urls: string[], requestIni
     let verdict: CloudflareAccessPerimeterVerdict = { outcome: 'protected' };
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       verdict = await probeCloudflareAccessPerimeterOnce(url, requestInit);
-      if (verdict.outcome === 'protected') break;
+      // Both verdicts are sticky: a proven 2xx (unprotected) is definitive, and
+      // re-probing it only risks a transient outage demoting it to unreachable,
+      // which would leave the route on and the deploy link-delayed instead of
+      // withdrawn. Only unreachable re-probes.
+      if (verdict.outcome === 'protected' || verdict.outcome === 'unprotected') break;
       if (attempt < attempts - 1) {
         await new Promise((resolve) => setTimeout(resolve, Math.min(maxDelayMs, baseMs * 2 ** attempt)));
       }
@@ -2316,6 +2342,13 @@ async function deployToCloudflareWorkersWith(
       steps.push({ name: 'access-app', status: 'done', detail: app.appId });
     }
 
+    // First deploy with Access on (no pre-PUT app, so the Worker had no tag yet):
+    // the PUT creates the script and Cloudflare assigns a workers.dev route at
+    // creation. If the PUT throws AFTER committing (a timeout), the Worker is
+    // live and ungated with no later step to annotate it. Record the script up
+    // front so the catch reports the exposure; the Access create below clears it
+    // once the gate exists.
+    if (accessOn && !accessAppId) ungatedRouteScriptName = scriptName;
     const uploaded = await uploadWorkerScript(cfg, scriptName, moduleCode, completionJwt, isCustomModule);
     const scriptCreatedByThisRun = uploaded.scriptCreatedByThisRun;
     steps.push({ name: 'script', status: 'done' });

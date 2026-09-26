@@ -965,7 +965,11 @@ export async function markCloudflareOAuthGrantPending(): Promise<string> {
     const next: DeployConfig = { ...persistableCloudflareWorkersConfig(current), pendingOAuthGrant: attemptId };
     // The opposite intent cannot be pending at the same time: a connect
     // supersedes a half-finished exit from oauth, and its own commit settles
-    // the mode.
+    // the mode. Dropping the clear marker WITHOUT finishing the exit left the
+    // file reading oauth with the grant already off disk — connected:false,
+    // configured:true, every deploy CFW_OAUTH_RECONNECT_REQUIRED. Finish the
+    // exit in the same write by recording token mode.
+    if (current.pendingOAuthGrantClear) next.credentialMode = 'token';
     delete next.pendingOAuthGrantClear;
     await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), next);
     return attemptId;
@@ -983,11 +987,13 @@ export async function markCloudflareOAuthGrantPending(): Promise<string> {
 export async function clearPendingCloudflareOAuthGrant(): Promise<void> {
   return withCloudflareConfigMutation(async () => {
     const current = await readCloudflareWorkersConfigFile();
-    if (!current.pendingOAuthGrant && !current.pendingOAuthGrantClear) return;
+    // Only the CONNECT marker this call abandons. pendingOAuthGrantClear is a
+    // half-finished EXIT from oauth whose clear + revoke a different path owns;
+    // dropping it here would leave the file reading oauth with nothing behind it.
+    if (!current.pendingOAuthGrant) return;
     if (current.configError) return;
     const next: DeployConfig = { ...persistableCloudflareWorkersConfig(current) };
     delete next.pendingOAuthGrant;
-    delete next.pendingOAuthGrantClear;
     await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), next);
   });
 }
