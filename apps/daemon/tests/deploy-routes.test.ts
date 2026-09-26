@@ -4312,9 +4312,11 @@ describe('deploy provider routes', () => {
       const detach = await f.detachRoute('dom-a');
       armed = false;
       expect(detach.status).toBeGreaterThanOrEqual(400);
-      // The failure is the injected one, not a refusal or a missing record:
-      // Cloudflare was asked to detach, and both rewrites were attempted.
-      expect(f.state.cfCalls.some((c) => c.method === 'DELETE' && c.url.endsWith('/workers/domains/dom-a'))).toBe(true);
+      // The failure is the injected one, not a refusal or a missing record: the
+      // write-ahead forget was attempted (both rewrites) and, having failed, the
+      // DELETE was never sent — Cloudflare still routes the hostname and both
+      // records still vouch for it.
+      expect(f.state.cfCalls.some((c) => c.method === 'DELETE' && c.url.endsWith('/workers/domains/dom-a'))).toBe(false);
       expect(rewrites).toBe(2);
 
       const after = (await f.listDeployments()).filter((d) => d.fileName === 'a.html' || d.fileName === 'b.html');

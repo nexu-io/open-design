@@ -1551,8 +1551,16 @@ async function withdrawUnverifiedExposure(
       await disableWorkerSubdomain(config, input.scriptName);
       steps.push({ name: 'subdomain-disable', status: 'done' });
     } catch (err) {
-      console.error(`[cloudflare-workers] Access unverified; could not turn workers.dev back off for ${input.scriptName}: ${describe(err)}`);
-      steps.push({ name: 'subdomain-disable', status: 'error', detail: describe(err) });
+      // A 404 means the script does not exist: nothing was ever routed, so there
+      // is no route to withdraw. Treat it as done — otherwise the exposure half
+      // never clears and every later check pays a Cloudflare round trip on a
+      // phantom script.
+      if (err instanceof DeployError && err.status === 404) {
+        steps.push({ name: 'subdomain-disable', status: 'done', detail: 'script not found (nothing routed)' });
+      } else {
+        console.error(`[cloudflare-workers] Access unverified; could not turn workers.dev back off for ${input.scriptName}: ${describe(err)}`);
+        steps.push({ name: 'subdomain-disable', status: 'error', detail: describe(err) });
+      }
     }
   }
   for (const attached of [...input.attachedCustomDomains]) {
@@ -1600,9 +1608,15 @@ async function withdrawUnverifiedPreviewExposure(
     await disableWorkerPreviews(config, input.scriptName);
     input.steps.push({ name: 'previews-disable', status: 'done' });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(`[cloudflare-workers] Access unverified; could not turn previews back off for ${input.scriptName}: ${message}`);
-    input.steps.push({ name: 'previews-disable', status: 'error', detail: message });
+    // A 404 means the script does not exist: nothing was ever routed, so there
+    // is nothing to withdraw. Treat it as done so the exposure half clears.
+    if (err instanceof DeployError && err.status === 404) {
+      input.steps.push({ name: 'previews-disable', status: 'done', detail: 'script not found (nothing routed)' });
+    } else {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`[cloudflare-workers] Access unverified; could not turn previews back off for ${input.scriptName}: ${message}`);
+      input.steps.push({ name: 'previews-disable', status: 'error', detail: message });
+    }
   }
 }
 

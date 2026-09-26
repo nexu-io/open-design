@@ -818,16 +818,40 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
             .flatMap((deployment: { providerMetadata?: unknown }) =>
               vouchedCustomDomains(ownedCustomDomainsFromMetadata(deployment.providerMetadata), pendingCustomDomainsFromMetadata(deployment.providerMetadata)));
           if (!isOwnedCustomDomain(domain, owned)) return { kind: 'foreign' };
-          const deleted = await detachCloudflareWorkerDomain(cfg, req.params.domainId);
-          // The Cloudflare calls stay outside; only the local bookkeeping is
-          // transactional. The record rewrites are bare upserts, one per
-          // record, so they commit whole or not at all — the same shape the
-          // deploy path uses for this identical bookkeeping. A crash midway
-          // must not leave one sibling no longer vouching for the hostname
-          // while another still lists it: a later dashboard re-attach of that
-          // hostname would be classified owned through the survivor and be
-          // detached again, which is the state this forget exists to prevent.
+          // Capture the records that owned the hostname so a failed DELETE can
+          // re-vouch them (see below). The write-ahead forgets first: a daemon
+          // killed between the DELETE and the forget cannot leave records vouching
+          // for a hostname no longer routed, and a DELETE that did not land must
+          // not strand a still-routed hostname with nobody vouching for it.
+          const owningRecords = listDeploymentsByProvider(db, CLOUDFLARE_WORKERS_PROVIDER_ID).filter((record: WorkersDeploymentRecord) => {
+            const metadata = record.providerMetadata;
+            if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return false;
+            return ownedCustomDomainsFromMetadata(metadata).some((entry) => entry.hostname === domain.hostname);
+          });
+          // Write-ahead: forget the hostname across records BEFORE the DELETE, so a
+          // crash between the two cannot leave records vouching for a hostname no
+          // longer routed (the deploy path's onBeforeDetach does the same).
           db.transaction(() => forgetDetachedWorkersHostname(domain))();
+          let deleted: boolean;
+          try {
+            deleted = await detachCloudflareWorkerDomain(cfg, req.params.domainId);
+          } catch (err) {
+            // The DELETE did not land (or its outcome is unknown): the hostname is
+            // still routed. Re-vouch it on the records that owned it so a later
+            // dashboard re-attach is classified owned, not foreign-and-stranded.
+            db.transaction(() => {
+              for (const record of owningRecords) {
+                const metadata = record.providerMetadata as Record<string, unknown>;
+                const currentOwned = ownedCustomDomainsFromMetadata(metadata);
+                if (currentOwned.some((entry) => entry.hostname === domain.hostname)) continue;
+                rewriteWorkersRecordMetadata(workersRecordStore, record, {
+                  ...metadata,
+                  ownedCustomDomains: [...currentOwned, { id: domain.id, hostname: domain.hostname }],
+                });
+              }
+            })();
+            throw err;
+          }
           return { kind: 'detached', deleted };
         });
         if (outcome.kind === 'foreign') {
@@ -1624,7 +1648,19 @@ export function registerDeploymentCheckRoutes(app: Express, ctx: RegisterDeploym
         if (verdict.outcome === 'protected') {
           const next: Record<string, unknown> = { ...freshMetadata, accessVerified: true };
           delete next.accessVerificationDeferred;
-          delete next.unverifiedExposure;
+          // The probe covered only the record's own URL, its displayed custom
+          // domain, and its detachable hostnames — not the OTHER target's URL. Clear
+          // only the probed halves and retain the unprobed one so a later check of
+          // the sibling target can still withdraw it.
+          const exposure = unverifiedExposureFromMetadata(freshMetadata);
+          let stillExposed: CloudflareUnverifiedExposure | undefined;
+          if (exposure) {
+            const retained: CloudflareUnverifiedExposure = { scriptName: exposure.scriptName };
+            if (record.target === 'preview' && exposure.subdomainEnabledByThisRun) retained.subdomainEnabledByThisRun = true;
+            if (record.target !== 'preview' && exposure.previewsEnabledByThisRun) retained.previewsEnabledByThisRun = true;
+            if (retained.subdomainEnabledByThisRun || retained.previewsEnabledByThisRun) stillExposed = retained;
+          }
+          retainExposure(next, stillExposed);
           // A verdict an earlier check recorded (CFW_ACCESS_UNVERIFIED) is
           // superseded by this one; an Access-verified record carries none.
           delete next.check;
