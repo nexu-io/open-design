@@ -766,7 +766,13 @@ export async function writeCloudflareWorkersConfig(input: Partial<DeployConfig>)
   }
   // In 'oauth' mode the API token is optional — the deploy uses the rotating
   // OAuth access token instead. Only require a static token in 'token' mode.
-  if (next.credentialMode !== 'oauth' && !next.pendingOAuthGrant && !next.token) {
+  // A token-mode save that abandons a connect (explicitly, or by finishing a
+  // pending clear) must carry a static token: it drops the marker the in-flight
+  // connect's commit needs, and its own rollback restores a record whose only
+  // credential was the grant it just revoked. A partial save (no explicit mode)
+  // inside the connect window keeps the bypass — it does not abandon the connect.
+  const abandonsConnect = next.credentialMode === 'token' && (input?.credentialMode === 'token' || current.pendingOAuthGrantClear === true);
+  if (next.credentialMode !== 'oauth' && !next.token && (!next.pendingOAuthGrant || abandonsConnect)) {
     throw new DeployError('Cloudflare API token is required.', 400, undefined, 'CFW_TOKEN_REQUIRED');
   }
   if (!next.accountId) throw new DeployError('Cloudflare account ID is required.', 400, undefined, 'CFW_ACCOUNT_ID_REQUIRED');
