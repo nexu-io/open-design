@@ -615,7 +615,14 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
       }),
     ).rejects.toMatchObject({
       message: 'detach denied',
-      attachedCustomDomains: [{ id: 'dom-1', hostname: 'app.example.com' }],
+      // The attached hostname AND the stale one whose detach failed: the
+      // write-ahead (onBeforeDetach) already forgot the stale hostname, so the
+      // error re-vouches it — it is still routed — alongside the one the run
+      // attached, so the route records both as owned.
+      attachedCustomDomains: [
+        { id: 'dom-1', hostname: 'app.example.com' },
+        { id: 'dom-old', hostname: 'old.example.com' },
+      ],
     });
     expect(calls.some((c) => c[0].endsWith('/workers/domains') && c[1]?.method === 'PUT')).toBe(true);
   });
@@ -2500,6 +2507,27 @@ describe('verifyCloudflareAccessPerimeter', () => {
         expect(verdict.error.message).toContain('HTTP ' + status);
       }
     }
+  });
+
+  it('follows a same-host redirect the Worker itself issued and judges the final answer ungated', async () => {
+    // Access intercepts BEFORE the Worker, so a redirect the app issues (a
+    // _worker.js that redirects / to /home) means the request already reached
+    // the app ungated. Deferring it forever left the route this run enabled
+    // public with no path to ready or withdrawal.
+    let first = true;
+    const fn = vi.fn(async () => {
+      if (first) {
+        first = false;
+        return new Response('', { status: 302, headers: { location: '/home' } });
+      }
+      return new Response('', { status: 200 });
+    });
+    vi.stubGlobal('fetch', fn);
+    const verdict = await verifyCloudflareAccessPerimeter(['https://a.example.com'], {});
+    expect(verdict.outcome).toBe('unprotected');
+    // The same-host redirect was followed (two fetches in the first probe; the
+    // perimeter retry re-probes the now-200 URL, so do not pin the exact count).
+    expect(fn.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
   it('defers on a 4xx/5xx that is not the Access challenge: an outage is not an exposure', async () => {

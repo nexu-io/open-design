@@ -282,7 +282,7 @@ class DeployErrorLike extends Error {
 
 export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps) {
   const { db } = ctx;
-  const { sendApiError } = ctx.http;
+  const { sendApiError, isLocalSameOrigin, resolvedPortRef } = ctx.http;
   const { PROJECTS_DIR } = ctx.paths;
   const { randomUUID } = ctx.ids;
   const { getProject } = ctx.projectStore;
@@ -638,6 +638,14 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
   });
 
   app.delete('/api/deploy/cloudflare-workers/domains/:domainId', async (req, res) => {
+    // A detach mutates the user's Cloudflare account, so it takes the same
+    // DNS-rebinding guard every mutating /api/cloudflare/* route applies. The
+    // global /api gate short-circuits loopback peers, which a rebinding page's
+    // browser IS, so this is the only thing between a hostile origin and a
+    // DELETE against a hostname the user owns.
+    if (!isLocalSameOrigin(req, resolvedPortRef.current)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
     try {
       const config = await readDeployConfig(CLOUDFLARE_WORKERS_PROVIDER_ID);
       if (!config.accountId) {
@@ -861,26 +869,29 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
     // the identical finding as 'failed' with the error (failUnverified). Both
     // fields describe the attempt that produced them.
     const failureMessage = String((input.err as Error)?.message || input.err);
-    try {
-      upsertDeployment(db, {
-        id: live?.id ?? prior?.id ?? randomUUID(),
-        projectId: input.projectId,
-        fileName: input.fileName,
-        providerId: CLOUDFLARE_WORKERS_PROVIDER_ID,
-        url: prior?.url ?? '',
-        deploymentId: prior?.deploymentId,
-        deploymentCount: prior?.deploymentCount ?? 0,
-        target: prior?.target ?? input.target,
-        status: accessUnverified ? 'failed' : prior?.status ?? 'failed',
-        statusMessage: accessUnverified || !prior ? failureMessage : prior.statusMessage,
-        reachableAt: prior?.reachableAt,
-        providerMetadata: metadata,
-        createdAt: prior?.createdAt ?? now,
-        updatedAt: now,
-      });
-    } catch (persistErr) {
-      console.warn('[od] could not record Cloudflare resources owned by a failed deploy', String((persistErr as Error)?.message || persistErr));
-    }
+    // Throws when the write cannot land. This runs inside the failed-deploy
+    // bookkeeping transaction (commitFailureBookkeeping), whose point is that the
+    // ownership record and the sibling rewrites land TOGETHER. A swallowed failure
+    // here let the siblings commit (forgetting a detached hostname / a retired
+    // Access app) while the record of the app and hostname THIS attempt created
+    // was lost — the resources orphaned as if no bookkeeping had run. The caller
+    // logs the failure and surfaces the deploy's own error.
+    upsertDeployment(db, {
+      id: live?.id ?? prior?.id ?? randomUUID(),
+      projectId: input.projectId,
+      fileName: input.fileName,
+      providerId: CLOUDFLARE_WORKERS_PROVIDER_ID,
+      url: prior?.url ?? '',
+      deploymentId: prior?.deploymentId,
+      deploymentCount: prior?.deploymentCount ?? 0,
+      target: prior?.target ?? input.target,
+      status: accessUnverified ? 'failed' : prior?.status ?? 'failed',
+      statusMessage: accessUnverified || !prior ? failureMessage : prior.statusMessage,
+      reachableAt: prior?.reachableAt,
+      providerMetadata: metadata,
+      createdAt: prior?.createdAt ?? now,
+      updatedAt: now,
+    });
   }
 
   app.post('/api/projects/:id/deploy', async (req, res) => {
@@ -1009,6 +1020,13 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
                       scriptName: workersScriptName,
                       hostname,
                     }),
+                  // Write-ahead for the detach, the mirror image: the stale
+                  // hostname leaves EVERY record of the script before the DELETE.
+                  // A daemon killed in the window (the deploy result persists only
+                  // after the final Access PUT and perimeter probe) must not leave
+                  // siblings vouching for a hostname no longer routed.
+                  onBeforeDetach: (domain: { id: string; hostname: string }) =>
+                    db.transaction(() => forgetDetachedWorkersHostname(domain))(),
                   // Re-resolved per Cloudflare call (oauth: refreshed within the
                   // expiry skew), so a multi-minute deploy never outlives its token.
                   tokenProvider: () => resolveCloudflareWorkersRouteToken(workersConfig!),

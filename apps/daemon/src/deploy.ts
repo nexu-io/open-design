@@ -798,7 +798,12 @@ export async function writeCloudflareWorkersConfig(input: Partial<DeployConfig>)
   // and never finish the clear+revoke. Enter the transition when the marker is
   // already pending too, so the abandoned clear runs and the settle below drains
   // the handle it records. Re-running the clear on an empty store is a no-op.
-  if (input?.credentialMode === 'token' && (current.credentialMode === 'oauth' || current.pendingOAuthGrantClear === true)) {
+  //
+  // Keyed on next.credentialMode (the EFFECTIVE mode) rather than the request's
+  // explicit credentialMode: a partial save that omits the mode still resolves to
+  // 'token' and must finish an interrupted clear, not carry the marker forward
+  // while the grant stays live with nothing clearing it.
+  if (next.credentialMode === 'token' && (current.credentialMode === 'oauth' || current.pendingOAuthGrantClear === true)) {
     const intent: DeployConfig = { ...persistableCloudflareWorkersConfig(current), pendingOAuthGrantClear: true };
     // A connect in flight is being abandoned by this transition.
     delete intent.pendingOAuthGrant;
@@ -840,9 +845,23 @@ export async function writeCloudflareWorkersConfig(input: Partial<DeployConfig>)
         // left standing: the config keeps reading token mode over an empty
         // store, which is the crash state the branch condition above already
         // re-enters and finishes on the next save.
-        const landed = displaced
-          ? await restoreCloudflareOAuthTokenAndDropRevokes(cloudflareOAuthTokensDir(), displaced)
-          : true;
+        let landed = true;
+        if (displaced) {
+          const live = await getCloudflareOAuthToken(cloudflareOAuthTokensDir());
+          const displacedKey = displaced.refreshToken || displaced.accessToken;
+          const liveKey = live ? live.refreshToken || live.accessToken : '';
+          // A DIFFERENT credential landed between this transition's clear and its
+          // rollback (a connect's guarded write, a refresh compare-and-set): the
+          // token lock is not the config lock. Restoring the displaced grant over
+          // it would orphan the live credential — no file and no handle names it.
+          // Skip the restore; the intent marker stays and the next save re-enters
+          // the transition to finish the clear and revoke.
+          if (live && displacedKey && liveKey !== displacedKey) {
+            landed = false;
+          } else {
+            landed = await restoreCloudflareOAuthTokenAndDropRevokes(cloudflareOAuthTokensDir(), displaced);
+          }
+        }
         if (landed) {
           const restored: DeployConfig = { ...persistableCloudflareWorkersConfig(current) };
           delete restored.pendingOAuthGrant;

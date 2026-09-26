@@ -92,6 +92,14 @@ export const CLOUDFLARE_API_TIMEOUT_MS = 30_000;
  * self-email lookup). These are advisory and re-probed later, so they get a
  * tighter budget than an API mutation. */
 export const CLOUDFLARE_PROBE_TIMEOUT_MS = 10_000;
+/** How many SAME-HOST redirects the Access perimeter probe follows before it
+ * judges the final answer. Access intercepts before the Worker, so a redirect
+ * the Worker itself issues (a _worker.js that redirects /) means the request
+ * already reached the app ungated — deferring it forever would leave the route
+ * this run enabled public with no path to ready or withdrawal. Off-host
+ * redirects are NOT followed (they are how a custom Access login domain / an
+ * enterprise IdP answers), so they keep the deferral. */
+export const CLOUDFLARE_ACCESS_PROBE_MAX_SAME_HOST_REDIRECTS = 3;
 /** Budget for a request that carries a body the API must ingest (an assets
  * bucket, the script PUT, a version POST). Sized from the body: a fixed floor
  * plus an allowance per MiB, capped. A single 25 MiB asset is ~33 MiB once
@@ -1333,66 +1341,87 @@ export type CloudflareAccessPerimeterVerdict =
 // asks the question a visitor's browser asks, and the challenge the edge
 // serves for it — the login location, the cookie jar, the cf-mitigated stamp —
 // is what a HEAD-only answer would not have to produce.
-async function probeCloudflareAccessPerimeterOnce(url: string, requestInit: WorkersRequestInit): Promise<CloudflareAccessPerimeterVerdict> {
-  let resp: Response;
+/** The URL a redirect Location resolves to when it stays on the SAME host
+ * (scheme + host + port) as the probe URL, else null. Relative Locations and
+ * absolute same-host Locations are followed; an off-host Location (a custom
+ * Access login domain, an enterprise IdP) is not. */
+function sameHostRedirectTarget(baseUrl: string, location: string): string | null {
+  if (!location) return null;
   try {
-    resp = await fetch(url, { method: 'GET', redirect: 'manual', signal: AbortSignal.timeout(CLOUDFLARE_PROBE_TIMEOUT_MS), ...requestInit });
-  } catch (err) {
-    // A timeout is "no answer", the same as a refused connection: nothing
-    // proves the URL is exposed, so the caller defers rather than withdraws.
-    const reason = isFetchTimeout(err)
-      ? 'no response within ' + CLOUDFLARE_PROBE_TIMEOUT_MS + 'ms'
-      : String((err as Error)?.message || err);
+    const resolved = new URL(location, baseUrl);
+    const base = new URL(baseUrl);
+    if (resolved.protocol !== base.protocol || resolved.host !== base.host) return null;
+    return resolved.href;
+  } catch {
+    return null;
+  }
+}
+
+async function probeCloudflareAccessPerimeterOnce(url: string, requestInit: WorkersRequestInit): Promise<CloudflareAccessPerimeterVerdict> {
+  let currentUrl = url;
+  for (let hop = 0; hop <= CLOUDFLARE_ACCESS_PROBE_MAX_SAME_HOST_REDIRECTS; hop += 1) {
+    let resp: Response;
+    try {
+      resp = await fetch(currentUrl, { method: 'GET', redirect: 'manual', signal: AbortSignal.timeout(CLOUDFLARE_PROBE_TIMEOUT_MS), ...requestInit });
+    } catch (err) {
+      const reason = isFetchTimeout(err)
+        ? 'no response within ' + CLOUDFLARE_PROBE_TIMEOUT_MS + 'ms'
+        : String((err as Error)?.message || err);
+      return {
+        outcome: 'unreachable',
+        error: new DeployError(
+          'Could not reach ' + url + ' to verify Cloudflare Access: ' + reason,
+          502,
+          { url },
+          'CFW_ACCESS_UNVERIFIED',
+        ),
+      };
+    }
+    const status = resp.status;
+    const location = resp.headers?.get?.('location') || '';
+    if (isCloudflareAccessRedirect(status, location)) return { outcome: 'protected' };
+    if (status < 300) {
+      return {
+        outcome: 'unprotected',
+        error: new DeployError(
+          url + ' is not behind Cloudflare Access (HTTP ' + status + '). The deploy was not marked ready.',
+          502,
+          { url, status },
+          'CFW_ACCESS_UNVERIFIED',
+        ),
+      };
+    }
+    if (status === 401 || status === 403) {
+      if (isCloudflareAccessChallengeResponse(resp)) return { outcome: 'protected' };
+    }
+    // A 3xx that is not the Access login: follow it only when it stays on the
+    // SAME host. Access intercepts before the Worker, so a redirect the Worker
+    // itself issues means the request already reached the app ungated; judging
+    // the next hop proves that. An off-host Location is the custom Access login
+    // / enterprise IdP answer, which defers.
+    if (status >= 300 && status < 400) {
+      const next = sameHostRedirectTarget(currentUrl, location);
+      if (next && hop < CLOUDFLARE_ACCESS_PROBE_MAX_SAME_HOST_REDIRECTS) {
+        currentUrl = next;
+        continue;
+      }
+    }
     return {
       outcome: 'unreachable',
       error: new DeployError(
-        'Could not reach ' + url + ' to verify Cloudflare Access: ' + reason,
-        502,
-        { url },
-        'CFW_ACCESS_UNVERIFIED',
-      ),
-    };
-  }
-  const status = resp.status;
-  const location = resp.headers?.get?.('location') || '';
-  if (isCloudflareAccessRedirect(status, location)) return { outcome: 'protected' };
-  // Only a 2xx proves the gate absent: it serves the app itself. A 3xx is NOT
-  // proof of anything — a custom Access login domain, an enterprise IdP or the
-  // app's own redirect answers 3xx while the gate is very much present, and
-  // reading one as ungated withdrew a working deploy's workers.dev route and
-  // hostname. It falls through to `unreachable`, which defers.
-  if (status < 300) {
-    return {
-      outcome: 'unprotected',
-      error: new DeployError(
-        url + ' is not behind Cloudflare Access (HTTP ' + status + '). The deploy was not marked ready.',
+        'Could not verify that ' + url + ' is behind Cloudflare Access: HTTP ' + status + ' proves neither the Access challenge nor an ungated URL. The deploy was not marked ready.',
         502,
         { url, status },
         'CFW_ACCESS_UNVERIFIED',
       ),
     };
   }
-  // 401/403 is how Access challenges a request it will not redirect (an API
-  // call, a client that does not follow the login flow). Only EDGE evidence
-  // counts: the Access login location, the Access cookies, or the edge's own
-  // cf-mitigated challenge stamp. The body deliberately does NOT, because this
-  // probe's URL belongs to the Worker being deployed — an app whose own 403
-  // contains the words "Cloudflare Access" would verify its own gate and an
-  // ungated URL would be reported protected. A bare 401/403 falls through to
-  // `unreachable` below, which defers instead of verifying.
-  if (status === 401 || status === 403) {
-    if (isCloudflareAccessChallengeResponse(resp)) return { outcome: 'protected' };
-  }
-  // Anything else — a 404 while a hostname's route propagates, a 503 from a
-  // Worker that is erroring, a 429 from the edge — answers neither question.
-  // Deferring is the only safe reading: classifying it as ungated would
-  // withdraw a working deploy's attach and workers.dev route over an outage.
   return {
     outcome: 'unreachable',
     error: new DeployError(
-      'Could not verify that ' + url + ' is behind Cloudflare Access: HTTP ' + status + ' proves neither the Access challenge nor an ungated URL. The deploy was not marked ready.',
+      'Cloudflare Access probe exceeded its same-host redirect budget for ' + url + '.',
       502,
-      { url, status },
+      { url },
       'CFW_ACCESS_UNVERIFIED',
     ),
   };
@@ -1972,6 +2001,12 @@ export async function deployToCloudflareWorkers(input: {
    * crash between the attach and the record write cannot orphan the hostname.
    * A throw here aborts the deploy before anything is attached. */
   onBeforeAttach?: ((hostname: string) => Promise<void> | void) | undefined;
+  /** Write-ahead hook, awaited immediately BEFORE a stale owned hostname is
+   * detached, mirroring onBeforeAttach: the route drops the hostname from every
+   * record of the script before the DELETE, so a daemon killed in the window
+   * (before the deploy result persists, up to ~15s later) does not leave
+   * siblings vouching for a hostname no longer routed. */
+  onBeforeDetach?: ((domain: { id: string; hostname: string }) => Promise<void> | void) | undefined;
   /** The custom hostname a prior deployment recorded for display (see
    * recordedCustomDomainFromMetadata). A preview deploy carries it forward. */
   priorCustomDomain?: JsonObject | undefined;
@@ -1994,7 +2029,7 @@ async function deployToCloudflareWorkersWith(
   input: Parameters<typeof deployToCloudflareWorkers>[0],
   requestInit: WorkersRequestInit,
 ): Promise<CloudflareWorkersDeployResult> {
-  const { config, files, projectId = '', projectName = '', target = 'production', access, priorAccessAppId, customDomain, priorCustomDomain, priorUnverifiedExposure, onBeforeAttach } = input ?? {};
+  const { config, files, projectId = '', projectName = '', target = 'production', access, priorAccessAppId, customDomain, priorCustomDomain, priorUnverifiedExposure, onBeforeAttach, onBeforeDetach } = input ?? {};
   const priorOwnedCustomDomains = input?.priorOwnedCustomDomains ?? [];
   const priorPendingCustomDomains = input?.priorPendingCustomDomains ?? [];
   const priorRetainedAccessAppIds = input?.priorRetainedAccessAppIds ?? [];
@@ -2437,7 +2472,20 @@ async function deployToCloudflareWorkersWith(
     // failure throws, so the deploy is never reported ready with a hostname the
     // user dropped still serving the site. Foreign hostnames are not touched.
     for (const stale of staleDomains) {
-      await detachCloudflareWorkerDomain(cfg, stale.id);
+      if (onBeforeDetach) await onBeforeDetach({ id: stale.id, hostname: stale.hostname });
+      try {
+        await detachCloudflareWorkerDomain(cfg, stale.id);
+      } catch (err) {
+        // The write-ahead (onBeforeDetach) dropped the hostname from every record
+        // BEFORE the DELETE; a failed DELETE means it is STILL routed, so re-vouch
+        // it through the error's attachedCustomDomains so the failed-deploy
+        // bookkeeping records it as owned again (a later detach must not refuse it
+        // as foreign).
+        if (!attachedCustomDomains.some((domain) => domain.hostname === stale.hostname)) {
+          attachedCustomDomains.push({ id: stale.id, hostname: stale.hostname });
+        }
+        throw err;
+      }
       detachedCustomDomains.push({ id: stale.id, hostname: stale.hostname });
       steps.push({ name: 'custom-domain-detach', status: 'done', detail: stale.hostname });
     }
