@@ -962,13 +962,16 @@ export async function markCloudflareOAuthGrantPending(): Promise<string> {
     await settlePendingCloudflareOAuthGrantRevokes();
     const current = await readCloudflareWorkersConfigFile();
     refuseCloudflareWorkersConfigMutationIfCorrupt(current, 'record the pending OAuth grant');
-    const next: DeployConfig = { ...persistableCloudflareWorkersConfig(current), pendingOAuthGrant: attemptId };
     // The opposite intent cannot be pending at the same time: a connect
-    // supersedes a half-finished exit from oauth, and its own commit settles
-    // the mode. Dropping the clear marker WITHOUT finishing the exit left the
-    // file reading oauth with the grant already off disk — connected:false,
-    // configured:true, every deploy CFW_OAUTH_RECONNECT_REQUIRED. Finish the
-    // exit in the same write by recording token mode.
+    // supersedes a half-finished exit from oauth. Finish BOTH halves of that
+    // exit before recording the new marker: take the grant off disk and name it
+    // by a revoke handle (the destructive half the interrupted exit never got
+    // to), then record token mode. The commit-time settle revokes it; a guarded
+    // write that then throws inherits a handle instead of orphaning a grant.
+    if (current.pendingOAuthGrantClear) {
+      await clearCloudflareOAuthTokenForRevoke(cloudflareOAuthTokensDir());
+    }
+    const next: DeployConfig = { ...persistableCloudflareWorkersConfig(current), pendingOAuthGrant: attemptId };
     if (current.pendingOAuthGrantClear) next.credentialMode = 'token';
     delete next.pendingOAuthGrantClear;
     await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), next);

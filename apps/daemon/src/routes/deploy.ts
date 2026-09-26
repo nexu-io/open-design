@@ -556,6 +556,12 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
       if (!isDeployProviderId(providerId)) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'unsupported deploy provider');
       }
+      // The Workers config GET leaks account id, Access allow-list emails, OAuth
+      // client id, scopes and custom domain — the same DNS-rebinding guard as the
+      // PUT, gated on the provider.
+      if (providerId === CLOUDFLARE_WORKERS_PROVIDER_ID && !isLocalSameOrigin(req, resolvedPortRef.current)) {
+        return res.status(403).json({ error: 'cross-origin request rejected' });
+      }
       /** @type {import('@open-design/contracts').DeployConfigResponse} */
       const body = publicDeployConfigForProvider(providerId, await readDeployConfig(providerId));
       res.json(body);
@@ -602,7 +608,10 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
     }
   });
 
-  app.get('/api/deploy/cloudflare-workers/capabilities', async (_req, res) => {
+  app.get('/api/deploy/cloudflare-workers/capabilities', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPortRef.current)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
     try {
       const config = await readDeployConfig(CLOUDFLARE_WORKERS_PROVIDER_ID);
       const empty = { workers: false, workersDevSubdomain: '', r2: false, d1: false, access: false, configured: false };
@@ -623,7 +632,10 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
     }
   });
 
-  app.get('/api/deploy/cloudflare-workers/zones', async (_req, res) => {
+  app.get('/api/deploy/cloudflare-workers/zones', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPortRef.current)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
     try {
       const config = await readDeployConfig(CLOUDFLARE_WORKERS_PROVIDER_ID);
       // `/zones?account.id=` (empty) lists every zone the token can see, across
