@@ -149,7 +149,7 @@ Un Skill fonctionnel est une capacité que l'agent invoque pendant une tâche po
 
 Un nouveau design system du dépôt est un package sous
 [`design-systems/<slug>/`](../../design-systems/), pas un fichier Markdown isolé.
-Les 151 systèmes fournis utilisent désormais le contrat de package ci-dessous.
+Les 152 systèmes fournis utilisent désormais le contrat de package ci-dessous.
 Le daemon accepte encore les dossiers contenant uniquement `DESIGN.md` pour la
 compatibilité avec les contenus anciens ou installés par l'utilisateur, mais ce
 n'est pas la cible d'authoring. Le catalogue est rescanné à chaque requête
@@ -240,7 +240,7 @@ export const fooAgentDef = {
 ```
 
 Importez la définition dans [`runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts)
-et ajoutez-la à `BASE_AGENT_DEFS` ; le moteur partagé la détecte alors dans le
+et ajoutez-la à `SHIPPED_AGENT_DEFS` ; le moteur partagé la détecte alors dans le
 `PATH`, l'affiche dans le picker et construit son invocation. Réutilisez un
 `streamFormat` existant lorsque la forme du wire correspond. Un format wire
 réellement nouveau exige aussi un parser sous [`apps/daemon/src/runtimes/`](../../apps/daemon/src/runtimes/)

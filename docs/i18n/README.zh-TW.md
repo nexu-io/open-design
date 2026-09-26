@@ -31,7 +31,7 @@
 
 ## 什麼是 OpenDesign
 
-🎨 **本地優先、開源的 Claude Design 替代方案。** &nbsp;🖥️ **macOS 與 Windows 的原生桌面應用程式。** &nbsp;⚡ **100+ 個功能 skills + 獨立渲染範本型錄** · ✨ **151 套品牌級設計系統套件** · 📦 **277 個開箱即用的外掛。** &nbsp;🖼️ 可生成 **網頁 · 桌面 · 行動裝置原型**、**即時儀表板／artifacts**、**簡報**、**圖片**、**影片**，外加 **HyperFrames** 動態圖像。🔒 沙箱化 iframe 預覽 · 支援 HTML / PDF / PPTX / MP4 匯出。 &nbsp;🤖 **可在 Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity 等 25 個不同的本地 CLI 可執行檔上執行**，或透過 BYOK 接上任何相容 OpenAI 的端點。
+🎨 **本地優先、開源的 Claude Design 替代方案。** &nbsp;🖥️ **macOS 與 Windows 的原生桌面應用程式。** &nbsp;⚡ **100+ 個功能 skills + 獨立渲染範本型錄** · ✨ **152 套品牌級設計系統套件** · 📦 **278 個開箱即用的外掛。** &nbsp;🖼️ 可生成 **網頁 · 桌面 · 行動裝置原型**、**即時儀表板／artifacts**、**簡報**、**圖片**、**影片**，外加 **HyperFrames** 動態圖像。🔒 沙箱化 iframe 預覽 · 支援 HTML / PDF / PPTX / MP4 匯出。 &nbsp;🤖 **可在 Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity 等 26 個不同的本地 CLI 可執行檔上執行**，或透過 BYOK 接上任何相容 OpenAI 的端點。
 
 OpenDesign 是這樣誕生的：當 Anthropic 隨 Claude Design 推出的那套 **agent 原生** 迴圈——釐清需求、鎖定方向、串流產出 artifact、評析、交付——不再封閉，而是化為一個由 **功能 skills、渲染設計範本、設計系統與外掛組成的檔案系統**，讓你筆電上既有的編碼 agent 都能讀取、寫入、再混搭。你的 CLI 成為設計引擎，你的筆電成為工作室，而你團隊的 `DESIGN.md` 則成為品牌契約。
 
@@ -133,7 +133,7 @@ OpenDesign 是這樣誕生的：當 Anthropic 隨 Claude Design 推出的那套 
 `od mcp install <agent> --print` 可預覽 dry-run · `--uninstall` 可移除 · 完整清單請執行 `od mcp install --help`。
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 25 coding-agent CLIs OpenDesign supports — Claude Code · Codex · OpenCode · Hermes · Antigravity · Vela · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Amp · CodeBuddy · Mimo · AtomCode · Devin · Trae" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 26 coding-agent CLIs OpenDesign supports — DeepSeek Harness · Claude Code · Codex · OpenCode · Hermes · Antigravity · Vela · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Amp · CodeBuddy · Mimo · AtomCode · Devin · Trae" width="100%" />
 </p>
 
 **沒有安裝任何 CLI？** 位於 `POST /api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream` 的 BYOK 代理可提供相同的迴圈（不需衍生程序）——貼上 `baseUrl` + `apiKey` + `model` 即可，支援 OpenAI、Anthropic、Azure OpenAI、Google Gemini、Ollama、LM Studio、vLLM，或任何相容 OpenAI 的端點。逐目標的 SSRF 防護會在 daemon 邊界阻擋內部 IP／link-local／CGNAT。
@@ -219,7 +219,7 @@ Runtime 定義位於 [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/ru
 </tr>
 </table>
 
-**93 組可即刻複製的 prompt** 收錄於 [`prompt-templates/`](../../prompt-templates/)——含預覽縮圖、完整 prompt 內文、目標模型、長寬比與來源出處。點一下即可把需求放進撰寫框。
+**106 組可即刻複製的 prompt** 收錄於 [`prompt-templates/`](../../prompt-templates/)——含預覽縮圖、完整 prompt 內文、目標模型、長寬比與來源出處。點一下即可把需求放進撰寫框。
 
 ### 5 · 影片與 HyperFrames——agent 原生的動態圖像
 
@@ -253,7 +253,7 @@ Runtime 定義位於 [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/ru
 OpenDesign（OD）就是那個開源的替代方案。同樣的迴圈、同樣以 artifact 為先的思維模式，卻沒有任何鎖定：
 
 - 🤖 **agent 原生、模型無關。** 我們不附帶 agent。你 `PATH` 上既有的 `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi` 就是設計引擎。一鍵即可切換。
-- 🧠 **預設即品牌級。** 每次渲染都把目前套件的 `DESIGN.md` 當作核心品牌契約讀取。儲存庫隨附 151 套設計系統套件；舊套件可以只含 `DESIGN.md`，新套件還可加入 `manifest.json`、`tokens.css`、元件、資產與來源資訊。放進資料夾，選擇器就會找到它。
+- 🧠 **預設即品牌級。** 每次渲染都把目前套件的 `DESIGN.md` 當作核心品牌契約讀取。儲存庫隨附 152 套設計系統套件；舊套件可以只含 `DESIGN.md`，新套件還可加入 `manifest.json`、`tokens.css`、元件、資產與來源資訊。放進資料夾，選擇器就會找到它。
 - 🖥️ **本地優先、每一層都可 BYOK。** 原生桌面應用程式保持本地優先，不會雲端往返。在描述 daemon 資料路徑之前，必須閱讀儲存庫根目錄 `AGENTS.md` 中的 **Daemon data directory contract**。
 - 🌍 **在四個平面上可組合。** **外掛**承載可執行的工作流程 · 功能 **skills** 承載 agent 行為 · **設計範本**承載渲染藍圖 · **設計系統**承載品牌。四者都採用可攜、可版控的目錄，任何人都能撰寫與發布。
 - 🔁 **翻新既有的程式碼庫。** 把一個 `git` 儲存庫 + `DESIGN.md` 交給 agent，它就會把你真實的元件重構至品牌規格。專屬外掛能把 Figma / Pencil 工作流程遷移成 React / Next.js / Vue 程式碼。
@@ -265,9 +265,9 @@ OpenDesign（OD）就是那個開源的替代方案。同樣的迴圈、同樣�
 |---|---|---|---|---|
 | 開源 | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
 | 自架／桌面 | ❌ | ❌ | ❌ | **✅ macOS + Windows + Docker** |
-| agent 原生（在你的 CLI 中執行） | 僅限 Anthropic | ❌ | 僅限雲端 agent | **✅ 25 個 CLI + BYOK** |
-| 品牌級 `DESIGN.md` | 專有 | Theme JSON | 有限的 token | **✅ 隨附 151 套系統** |
-| skills／外掛／範本 | 封閉 | 外掛商店 | 封閉 | **✅ 100+ 個功能 skills · 獨立渲染範本型錄 · 277 個外掛** |
+| agent 原生（在你的 CLI 中執行） | 僅限 Anthropic | ❌ | 僅限雲端 agent | **✅ 26 個 CLI + BYOK** |
+| 品牌級 `DESIGN.md` | 專有 | Theme JSON | 有限的 token | **✅ 隨附 152 套系統** |
+| skills／外掛／範本 | 封閉 | 外掛商店 | 封閉 | **✅ 100+ 個功能 skills · 獨立渲染範本型錄 · 278 個外掛** |
 | HyperFrames（HTML→MP4） | ❌ | ❌ | ❌ | **✅ 一等公民** |
 | 把既有儲存庫翻新至品牌 | ❌ | ❌ | ❌ | **✅ 透過 agent + `DESIGN.md`** |
 | 最低計費 | Pro / Max / Team | Pro / Org | Pro / Team | **BYOK · 任何相容端點** |
@@ -284,7 +284,7 @@ OpenDesign（OD）就是那個開源的替代方案。同樣的迴圈、同樣�
 - **Windows**（x64）→ [**open-design.ai**](https://open-design.ai/?utm_source=github&utm_medium=referral&utm_content=readme_download_windows) 或 [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 - **Linux**（AppImage，選用通道）→ [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 
-安裝後：應用程式會自動偵測你 `PATH` 上的每一個編碼 agent CLI、載入 100+ 個功能 skills、獨立渲染範本型錄與 151 套設計系統套件，並讓你在入口視圖中輸入需求。
+安裝後：應用程式會自動偵測你 `PATH` 上的每一個編碼 agent CLI、載入 100+ 個功能 skills、獨立渲染範本型錄與 152 套設計系統套件，並讓你在入口視圖中輸入需求。
 
 ### 🤖 安裝進你的編碼 agent（無 UI）
 
@@ -417,7 +417,7 @@ od skills list --json
 
 ## 設計系統
 
-**151 套以 `DESIGN.md` 為核心的品牌級設計系統套件**隨儲存庫一同附帶。舊套件可只有這份 Markdown 契約；新套件還可包含 `manifest.json`、編譯後的 `tokens.css`、元件範例、資產與來源證據。型錄同時包含由上游整理而來的系統與專案自有補充；[`design-systems/README.md`](../../design-systems/README.md) 記錄套件結構與來源。切換一套系統 → 下一次渲染就會使用新的 token。
+**152 套以 `DESIGN.md` 為核心的品牌級設計系統套件**隨儲存庫一同附帶。舊套件可只有這份 Markdown 契約；新套件還可包含 `manifest.json`、編譯後的 `tokens.css`、元件範例、資產與來源證據。型錄同時包含由上游整理而來的系統與專案自有補充；[`design-systems/README.md`](../../design-systems/README.md) 記錄套件結構與來源。切換一套系統 → 下一次渲染就會使用新的 token。
 
 <details>
 <summary><b>完整型錄（點擊展開）</b></summary>
@@ -450,11 +450,11 @@ od skills list --json
 
 ## 外掛
 
-**277 個官方外掛與 183 個可混搭參考範例**位於 [`plugins/_official/`](../../plugins/_official/)。每個項目都是以 `open-design.json` 為核心的可攜式外掛目錄，並帶有類型所需的 payload，例如 agent 工作流程的 `SKILL.md`、媒體範本的 `template.json`，或設計系統項目的 `DESIGN.md`。直接跳到某個分類：
+**278 個官方外掛與 183 個可混搭參考範例**位於 [`plugins/_official/`](../../plugins/_official/)。每個項目都是以 `open-design.json` 為核心的可攜式外掛目錄，並帶有類型所需的 payload，例如 agent 工作流程的 `SKILL.md`、媒體範本的 `template.json`，或設計系統項目的 `DESIGN.md`。直接跳到某個分類：
 
 | 分類 | 數量 | 內容 |
 |---|---|---|
-| [`scenarios/`](../../plugins/_official/scenarios/) | 13 | 完整的設計情境——[`od-default`](../../plugins/_official/scenarios/od-default/)、[`od-design-refine`](../../plugins/_official/scenarios/od-design-refine/)、[`od-figma-migration`](../../plugins/_official/scenarios/od-figma-migration/)、[`od-code-migration`](../../plugins/_official/scenarios/od-code-migration/)、[`od-react-export`](../../plugins/_official/scenarios/od-react-export/)、[`od-nextjs-export`](../../plugins/_official/scenarios/od-nextjs-export/)、[`od-vue-export`](../../plugins/_official/scenarios/od-vue-export/)、[`od-media-generation`](../../plugins/_official/scenarios/od-media-generation/)、[`od-new-generation`](../../plugins/_official/scenarios/od-new-generation/)、[`od-tune-collab`](../../plugins/_official/scenarios/od-tune-collab/)、[`od-plugin-authoring`](../../plugins/_official/scenarios/od-plugin-authoring/), [`od-share-to-community`](../../plugins/_official/scenarios/od-share-to-community/), [`od-web-effect-extractor`](../../plugins/_official/scenarios/od-web-effect-extractor/) |
+| [`scenarios/`](../../plugins/_official/scenarios/) | 14 | 完整的設計情境——[`od-default`](../../plugins/_official/scenarios/od-default/)、[`od-design-refine`](../../plugins/_official/scenarios/od-design-refine/)、[`od-figma-migration`](../../plugins/_official/scenarios/od-figma-migration/)、[`od-code-migration`](../../plugins/_official/scenarios/od-code-migration/)、[`od-react-export`](../../plugins/_official/scenarios/od-react-export/)、[`od-nextjs-export`](../../plugins/_official/scenarios/od-nextjs-export/)、[`od-vue-export`](../../plugins/_official/scenarios/od-vue-export/)、[`od-media-generation`](../../plugins/_official/scenarios/od-media-generation/)、[`od-new-generation`](../../plugins/_official/scenarios/od-new-generation/)、[`od-tune-collab`](../../plugins/_official/scenarios/od-tune-collab/)、[`od-plugin-authoring`](../../plugins/_official/scenarios/od-plugin-authoring/), [`od-share-to-community`](../../plugins/_official/scenarios/od-share-to-community/), [`od-web-effect-extractor`](../../plugins/_official/scenarios/od-web-effect-extractor/), [`od-next-strategy`](../../plugins/_official/scenarios/od-next-strategy/) |
 | [`image-templates/`](../../plugins/_official/image-templates/) | 45 | 一次性圖片 prompt——編輯、電影感、產品、肖像 |
 | [`video-templates/`](../../plugins/_official/video-templates/) | 63 | HyperFrames / Seedance / Veo 動態範本 |
 | [`design-systems/`](../../plugins/_official/design-systems/) | 143 | 包裝成外掛的品牌 `DESIGN.md` |
@@ -549,8 +549,8 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
              ▼
    ┌──────────────────────────────────────────────────────────────────┐
    │  Local runtime definitions come from runtimes/registry.ts;                 │
-   │  the base registry has 26 definitions (including byok-opencode),           │
-   │  backed by 25 distinct local CLI executables because byok-opencode shares │
+   │  the shipped registry has 27 definitions (including byok-opencode),       │
+   │  backed by 26 distinct local CLI executables because byok-opencode shares │
    │  the OpenCode executable. See docs/agent-adapters.md.                     │
    │  composes a functional skill or design template + DESIGN.md; writes files │
    └──────────────────────────────────────────────────────────────────┘
@@ -572,9 +572,9 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 
 ## 藍圖
 
-- [x] Daemon + 25 個不同 CLI 可執行檔上的 26 個 runtime 定義 + skill／設計範本 registry + 設計系統型錄
+- [x] Daemon + 26 個不同 CLI 可執行檔上的 27 個 runtime 定義 + skill／設計範本 registry + 設計系統型錄
 - [x] Web 應用程式 + chat + 提問表單 + 5 方向選擇器 + todo 進度 + 沙箱化預覽
-- [x] 100+ 個功能 skills · 獨立渲染範本型錄 · 151 套設計系統套件 · 5 種視覺方向 · 5 種裝置外框
+- [x] 100+ 個功能 skills · 獨立渲染範本型錄 · 152 套設計系統套件 · 5 種視覺方向 · 5 種裝置外框
 - [x] 以 SQLite 為後援的專案 · 對話 · 訊息 · 分頁 · 範本
 - [x] 多供應商 BYOK 代理（`/api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream`）+ SSRF 防護
 - [x] Claude Design ZIP 匯入（`/api/import/claude-design`）
