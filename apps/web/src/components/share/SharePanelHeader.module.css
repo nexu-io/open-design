@@ -20,6 +20,13 @@
   font-weight: 600;
 }
 
+/* The signed-out standalone card's title was always 16px/24px (its own
+   `.title` in SignedOutObservedShare.module.css, pre-consolidation). */
+.titleLg {
+  font-size: 16px;
+  line-height: 24px;
+}
+
 button.close {
   box-sizing: border-box;
   flex: 0 0 20px;
@@ -30,7 +37,7 @@ button.close {
   border: 0;
   border-radius: 5px;
   background: transparent;
-  color: #858585;
+  color: var(--share-text-dim);
   display: flex;
   align-items: center;
   justify-content: center;

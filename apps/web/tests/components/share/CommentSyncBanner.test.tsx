@@ -145,7 +145,10 @@ describe('CommentSyncBanner — restored branches', () => {
   it('K5 renders the retry button in the red retry-error style for a retryable reopened backfill failure', async () => {
     renderBanner({ ...base, backfill: { state: 'failed', filePath: 'index.html', publicationRevision: 'resume-r2', retryable: true, reopened: true } });
     const retry = await screen.findByRole('button', { name: '重试' });
-    expect(retry.className).toMatch(/retryError/);
+    // 2026 refactor: item 1 — the red retry style moved into the shared
+    // `ShareButton`'s `soft-error` variant (`softError` class), replacing
+    // the old local `.retryError`.
+    expect(retry.className).toMatch(/softError/);
     // Round-3 audit (K5): the design's retry glyph precedes the label.
     const glyph = retry.querySelector('svg[aria-hidden="true"] path');
     expect(glyph).toHaveAttribute('d', 'M20 11a8 8 0 0 0-14.3-4.9L4 8M4 4v4h4M4 13a8 8 0 0 0 14.3 4.9L20 16m0 4v-4h-4');
@@ -155,7 +158,7 @@ describe('CommentSyncBanner — restored branches', () => {
   it('keeps the plain (non-red) retry style for a retryable non-reopened backfill failure', async () => {
     renderBanner({ ...base, backfill: { state: 'failed', filePath: 'index.html', publicationRevision: 'r1', retryable: true, reopened: false } });
     const retry = await screen.findByRole('button', { name: '重试' });
-    expect(retry.className).not.toMatch(/retryError/);
+    expect(retry.className).not.toMatch(/softError/);
   });
 
   it('keeps retry disabled while the POST is pending and reports a failed POST', async () => {

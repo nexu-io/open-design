@@ -1,6 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Button } from '@open-design/components';
+import { Icon } from '../Icon';
 import styles from './ShareMoreMenu.module.css';
 
 interface ShareMoreAction {
@@ -113,9 +114,7 @@ export function ShareMoreMenu({ label, items }: { label: string; items: readonly
             setOpen(true);
           }
         }}>
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" focusable="false">
-          <circle cx="3" cy="8" r="1" /><circle cx="8" cy="8" r="1" /><circle cx="13" cy="8" r="1" />
-        </svg>
+        <Icon name="share-more-dots" size={16} />
       </Button>
       {typeof document !== 'undefined' ? createPortal(menuNode, document.body) : null}
     </div>

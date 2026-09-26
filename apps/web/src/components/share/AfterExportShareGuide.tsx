@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@open-design/components';
 import { advanceShareGuideClock, startShareGuideClock, type ShareGuideClock } from './after-export-share-guide';
+import { Icon } from '../Icon';
+import { ShareButton } from './ShareButton';
+import { ShareErrorRow } from './ShareErrorRow';
 import styles from './AfterExportShareGuide.module.css';
 
 const TOTAL_MS = 10_000;
@@ -59,9 +62,7 @@ export function AfterExportShareGuide({ onOpenShare, onDismiss, onNeverShow, lab
         </div>
       </div>
       <Button type="button" className={styles.close} aria-label={labels.close} onClick={onDismiss}>
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
-          <path d="M11.9997 10.5865L16.9495 5.63672L18.3637 7.05093L13.4139 12.0007L18.3637 16.9504L16.9495 18.3646L11.9997 13.4149L7.04996 18.3646L5.63574 16.9504L10.5855 12.0007L5.63574 7.05093L7.04996 5.63672L11.9997 10.5865Z" />
-        </svg>
+        <Icon name="share-close-fill" size={15} />
       </Button>
       <div className={styles.body}>
         <h2 className={styles.title}>{labels.title}</h2>
@@ -71,9 +72,13 @@ export function AfterExportShareGuide({ onOpenShare, onDismiss, onNeverShow, lab
             if (onNeverShow()) onDismiss();
             else setSaveFailed(true);
           }}>{labels.neverShow}</Button>
-          <Button className={styles.start} type="button" onClick={() => { onDismiss(); onOpenShare(); }}>{labels.openShare}</Button>
+          <ShareButton variant="dark-sm" onClick={() => { onDismiss(); onOpenShare(); }}>{labels.openShare}</ShareButton>
         </div>
-        {saveFailed ? <p className={styles.error} role="alert">{labels.saveFailed}</p> : null}
+        {saveFailed ? (
+          <div className={styles.error}>
+            <ShareErrorRow message={labels.saveFailed} role="alert" />
+          </div>
+        ) : null}
       </div>
     </section>
   );

@@ -8,6 +8,7 @@ import { buildWorkspacePermissions, buildWorkspaceSeatSummary, type WorkspaceCol
 import { parse } from 'postcss';
 import { zhCN } from '../../../src/i18n/locales/zh-CN';
 import { ShareTab } from '../../../src/components/share/ShareTab';
+import { readShareCss } from '../../helpers/read-share-css';
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
@@ -59,9 +60,10 @@ describe('S1 first-publish visual seam', () => {
   });
 
   it('uses the S2 help typography without borrowing the failure or copy hint', () => {
-    const css = parse(readFileSync(resolve(__dirname, '../../../src/components/share/ShareTab.module.css'), 'utf8'));
+    const css = parse(readShareCss(resolve(__dirname, '../../../src/components/share/ShareTab.module.css')));
     const values: Record<string, string> = {};
     css.walkRules('p.publishHint', rule => { rule.walkDecls(decl => { values[decl.prop] = decl.value; }); });
+    // color now reads from share-tokens.css (item 5); still #999999 there.
     expect(values).toMatchObject({ margin: '0', color: '#999999', 'font-size': '10.5px', 'line-height': '17px' });
   });
   it.each([0, 0.45, 0.9])('integrates progress %s into the busy control without changing its value', (publishProgress) => {
@@ -73,15 +75,22 @@ describe('S1 first-publish visual seam', () => {
     expect(button).toBeDisabled();
     expect(progress).toHaveAttribute('value', String(publishProgress));
     expect(progress.parentElement).toBe(button.parentElement);
-    expect(progress.className).toContain('publishProgress');
-    expect(button.className).toContain('publishingButton');
+    // Moved to ShareProgressButton.module.css as `.uploadProgress` (2026
+    // refactor: item 4 — one ShareProgressButton owns both S2/K1 visuals).
+    expect(progress.className).toContain('uploadProgress');
+    // .publishingButton moved into ShareButton's `transparentBusy` modifier (item 1).
+    expect(button.className).toContain('transparentBusy');
     fireEvent.click(button);
     expect(input.publishCurrentFilePublic).not.toHaveBeenCalled();
   });
   it('scopes the 360px canvas shell to the mounted share panel, not Export', () => {
-    const css = parse(readFileSync(resolve(__dirname, '../../../src/components/share/ShareTab.module.css'), 'utf8'));
+    // 2026 refactor (item 2): the fixed-canvas skin moved out of a
+    // `:has(.panel)` structural coupling in ShareTab.module.css into an
+    // explicit `.chrome-unified-popover--share` class in shell.css that the
+    // call site (FileViewer) sets whenever the mounted tab is Share.
+    const css = parse(readFileSync(resolve(__dirname, '../../../src/styles/shell.css'), 'utf8'));
     const values: Record<string, string> = {};
-    css.walkRules(':global(.chrome-share-menu--unified .chrome-unified-popover):has(.panel)', rule => {
+    css.walkRules('.chrome-unified-popover.chrome-unified-popover--share', rule => {
       rule.walkDecls(decl => { values[decl.prop] = decl.value; });
     });
     expect(values).toMatchObject({
@@ -115,7 +124,8 @@ describe('S1 first-publish visual seam', () => {
   it('binds the canvas button style, Chinese label and 13px upload icon', () => {
     render(<ShareTab {...firstProps({ t: (key) => zhCN[key] })} />);
     const button = screen.getByRole('menuitem', { name: '生成并复制链接' });
-    expect(button.className).toContain('copyButton');
+    // .copyButton moved into ShareButton's `primary` variant (item 1).
+    expect(button.className).toContain('primary');
     expect(button.className).not.toContain('share-menu-item');
     const icon = button.querySelector('svg')!;
     for (const [name, value] of Object.entries({ width: '13', height: '13', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.8', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true', focusable: 'false' })) {
@@ -161,14 +171,19 @@ describe('S1 first-publish visual seam', () => {
     expect(publish).toHaveBeenCalledTimes(1);
   });
 
-  it('surfaces a pre-check too-large plan through the red publishError row, not a yellow banner, and keeps publish blocked', async () => {
+  it('surfaces a pre-check too-large plan through the shared red ShareErrorRow, not a yellow banner, and keeps publish blocked', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({
       fileCount: 1, totalBytes: 30 * 1048576, exceedsSizeLimit: true, exclusions: [],
     }) }));
     const publish = vi.fn().mockResolvedValue(undefined);
     render(<ShareTab {...firstProps({ projectId: 'p1', filePath: 'index.html', publishCurrentFilePublic: publish })} />);
     const notice = await screen.findByRole('status');
-    expect(notice.className).toContain('publishError');
+    // 2026 refactor: item 2 — the red error row moved into the shared
+    // `ShareErrorRow` component (its own CSS Module, so the class name is no
+    // longer literally "publishError"); assert its actual rendered shape
+    // (a <p> with the row's warning-circle icon) instead of a class name.
+    expect(notice.tagName).toBe('P');
+    expect(notice.querySelector('svg')).not.toBeNull();
     expect(notice).toHaveTextContent('fileViewer.publishFileTooLarge');
     expect(notice).toHaveTextContent('30.00 MiB');
     expect(screen.queryByRole('alert')).toBeNull();
@@ -245,9 +260,11 @@ describe('S1 first-publish visual seam', () => {
   });
 
   it('declares canvas geometry through the existing local seam, not shared Button defaults', () => {
-    const css = parse(readFileSync(resolve(__dirname, '../../../src/components/share/ShareTab.module.css'), 'utf8'));
+    // .copyButton moved into ShareButton.module.css's `button.primary` (item 1);
+    // colors now read from share-tokens.css (item 5) instead of being literals.
+    const css = parse(readShareCss(resolve(__dirname, '../../../src/components/share/ShareButton.module.css')));
     const values: Record<string, string> = {};
-    css.walkRules('button.copyButton', rule => { rule.walkDecls(decl => { values[decl.prop] = decl.value; }); });
+    css.walkRules('button.primary', rule => { rule.walkDecls(decl => { values[decl.prop] = decl.value; }); });
     expect(values).toMatchObject({ height: '32px', 'border-radius': '6px', padding: '0 8px', gap: '5px', background: '#29292B', color: '#FFFFFF', 'font-size': '12px', 'font-weight': '500', 'line-height': '18px', border: '0' });
   });
 });

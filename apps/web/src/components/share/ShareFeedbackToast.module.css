@@ -14,8 +14,8 @@
   max-width: min(560px, calc(100vw - 32px));
   padding: 10px 16px;
   border-radius: 999px;
-  background: #202020;
-  color: #fff;
+  background: var(--share-surface-dark);
+  color: var(--share-white);
   font-size: 12px;
   line-height: 18px;
   box-shadow: 0 6px 24px #1c1b1a12, 0 2px 6px #1c1b1a0a;
@@ -49,7 +49,7 @@
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  color: #fff;
+  color: var(--share-white);
   font-size: 11px;
   font-weight: 700;
   line-height: 1;
@@ -59,10 +59,10 @@
   height: 11px;
 }
 .success {
-  background: #4C9461;
+  background: var(--share-success);
 }
 .error {
-  background: #E5484D;
+  background: var(--share-danger);
 }
 .loading {
   background: rgba(255, 255, 255, 0.16);
@@ -90,7 +90,7 @@
   padding: 0 2px;
   border: 0;
   background: transparent;
-  color: #fff;
+  color: var(--share-white);
   font: inherit;
   font-weight: 500;
   text-decoration: underline;
@@ -119,7 +119,7 @@
   cursor: pointer;
 }
 .close:hover {
-  color: #fff;
+  color: var(--share-white);
 }
 .action:focus-visible,
 .close:focus-visible {

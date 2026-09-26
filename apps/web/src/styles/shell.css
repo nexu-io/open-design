@@ -990,6 +990,28 @@ html.od-radial-open .workspace-shell {
   background: var(--bg-panel);
   box-shadow: var(--shadow-md);
 }
+
+/* Chain-1/5 shared shell, Share tab only: the export panel keeps the
+   content-hugging base rule above; Share alone gets the fixed-canvas skin
+   (2026 refactor: item 2 — the caller now sets this class explicitly
+   whenever the mounted tab is Share, replacing the previous
+   `:has(.panel)` structural-selector coupling to ShareTab's own root
+   class in ShareTab.module.css). Same declarations as before the move. */
+.chrome-unified-popover.chrome-unified-popover--share {
+  box-sizing: border-box;
+  width: 360px;
+  min-width: 0;
+  max-width: calc(100vw - 32px);
+  padding: 16px 20px;
+  gap: 12px;
+  border: 1px solid #00000008;
+  border-radius: 12px;
+  background: #FFFFFF;
+  box-shadow: 0 8px 28px #00000010, 0 2px 6px #00000006;
+  font-size: 12px;
+  font-weight: 400;
+  color: #333333;
+}
 .chrome-unified-panel {
   display: flex;
   flex-direction: column;

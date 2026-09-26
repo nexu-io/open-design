@@ -13,7 +13,7 @@
   border-radius: 12px;
   background: var(--bg-panel);
   color: var(--text-strong);
-  box-shadow: 0 8px 28px #00000012, 0 2px 6px #00000006;
+  box-shadow: var(--share-guide-shadow);
   font-size: 12px;
   line-height: 18px;
 }
@@ -29,7 +29,7 @@
   width: 9px;
   height: 9px;
   transform: rotate(45deg);
-  background: #202020;
+  background: var(--share-surface-dark);
   border-top: 1px solid var(--border);
   border-left: 1px solid var(--border);
 }
@@ -41,14 +41,14 @@
   height: 112px;
   overflow: hidden;
   border-radius: 11px 11px 0 0;
-  background: #202020;
+  background: var(--share-surface-dark);
 }
 /* Staggered comment bubbles, cropped at the edges. */
 .cover {
   position: absolute;
   inset: 0;
   overflow: hidden;
-  background-color: #202020;
+  background-color: var(--share-surface-dark);
   background-image:
     radial-gradient(ellipse at 50% 48%, rgba(0, 0, 0, 0) 25%, rgba(0, 0, 0, .18) 65%, rgba(0, 0, 0, .65) 100%),
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='1.35' fill='%233b3b3b'/%3E%3C/svg%3E"),
@@ -100,7 +100,7 @@ button.close {
   color: #d8dcdf;
 }
 button.close svg { width: 14px; height: 14px; }
-button.close:hover { color: #fff; background: #ffffff20; }
+button.close:hover { color: var(--share-white); background: #ffffff20; }
 .body { padding: 12px 16px 14px; }
 .title {
   margin: 0 0 6px;
@@ -123,7 +123,10 @@ button.close:hover { color: #fff; background: #ffffff20; }
   gap: 8px;
   margin-top: 12px;
 }
-button.dismiss, button.start {
+/* .start moved into the shared `ShareButton`'s `dark-sm` variant (2026
+   refactor: item 1) — ShareButton.module.css. .dismiss (a plain ghost text
+   button, not one of item 1's named targets) keeps its own shape here. */
+button.dismiss {
   box-sizing: border-box;
   display: inline-flex;
   align-items: center;
@@ -140,10 +143,14 @@ button.dismiss, button.start {
   line-height: 1;
   font-weight: 500;
   white-space: nowrap;
+  color: var(--share-text-dim);
+  background: transparent;
+  padding-left: 0;
 }
-button.dismiss { color: #858585; background: transparent; padding-left: 0; }
 button.dismiss:hover { color: var(--text-strong); }
-button.start { background: #202020; color: #fff; }
-button.start:hover { background: #353535; }
 .guide button:focus-visible { outline: 2px solid #a5bc9a; outline-offset: 2px; }
-.error { margin: 8px 0 0; color: #C94E4E; font-size: 12px; line-height: 18px; }
+/* Typography/color now come from ShareErrorRow's shared `.row` (margin: 0);
+   this wrapper owns only the top spacing this call site needs. The extra
+   `p` in the selector out-specifies `.row`'s own margin:0 regardless of CSS
+   Module file/import order. */
+.error p { margin-top: 8px; }

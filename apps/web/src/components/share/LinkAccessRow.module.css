@@ -1,0 +1,67 @@
+/* S1/S4: link access heading and description. Moved from ShareTab.module.css
+   (2026 refactor: item 3) — same values, now the single owner. */
+.heading {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 28px;
+}
+
+.label {
+  color: var(--share-text-strong);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.description {
+  margin: 0;
+  color: var(--share-text-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* D-00 固定结构第二行 .toggle: 32×19 / r999 / 关 #D6D6D6 / 开 #282828, 滑块 15×15 白.
+   This IS the publish/unpublish control — board S4 has no separate "stop
+   sharing" button. The existing chrome-publish-button--ghost text button
+   stays (see the evidence file: removing it isn't licensed by this board
+   alone), but both controls read and act on the same `filePublished` state
+   through the same two handlers, so they can never disagree. */
+.toggle {
+  flex: none;
+  width: 32px;
+  height: 19px;
+  padding: 2px;
+  border: none;
+  border-radius: 999px;
+  background: #D6D6D6;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  transition: background-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.toggle:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.toggleOn {
+  background: var(--share-toggle-on);
+  justify-content: flex-end;
+}
+
+.toggleThumb {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--share-white);
+  box-shadow: 0 1px 2px #00000026;
+}

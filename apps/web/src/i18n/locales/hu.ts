@@ -3284,6 +3284,7 @@ export const hu: Dict = {
   'fileViewer.publishFile': 'Publish file',
   'fileViewer.publishingFile': 'Link létrehozása…',
   "fileViewer.uploadingFile": "Feltöltés folyamatban",
+  "fileViewer.shareReopening": "Ismételt megnyitás…",
   "fileViewer.publishingContinuesOnClose": "A panel bezárása nem szakítja meg a feltöltést.",
   'fileViewer.unpublishFile': 'Megosztás leállítása',
   'fileViewer.shareEmptyStateTitle': 'Még nincs mit megosztani',

@@ -1,0 +1,88 @@
+/* S2: native progress semantics under the existing disabled action, not a
+   second row. The upstream simulation still owns its value and lifetime.
+   Moved from ShareTab.module.css (2026 refactor: item 4). */
+.uploadControl {
+  position: relative;
+  width: 100%;
+}
+
+.uploadProgress {
+  position: absolute;
+  inset: 0;
+  appearance: none;
+  box-sizing: border-box;
+  width: 100%;
+  height: 32px;
+  margin: 0;
+  border: 0;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--share-track);
+  pointer-events: none;
+}
+
+.uploadProgress::-webkit-progress-bar {
+  background: var(--share-track);
+}
+
+.uploadProgress::-webkit-progress-value {
+  background: var(--share-ink);
+}
+
+.uploadProgress::-moz-progress-bar {
+  background: var(--share-ink);
+}
+
+/* K1/K4: comment-sync-pending replaces the entire published-link block with
+   a single indicator — a progress bar for the first-publish backfill (K1,
+   `reopened` absent/false) or a busy primary button for a verified reopen
+   resync (K4, handled by the caller, not this component). When
+   CommentBackfillState carries a real, measured `total`/`synced`, the fill
+   renders that percentage via `.syncProgressFillDeterminate`; an older
+   daemon that omits those fields keeps the indeterminate sweep below rather
+   than fabricating a number. */
+.syncProgress {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  height: 32px;
+  border-radius: 6px;
+  background: var(--share-track);
+  overflow: hidden;
+}
+
+.syncProgressFill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -35%;
+  width: 35%;
+  border-radius: inherit;
+  background: var(--share-ink);
+  animation: shareSyncSweep 1.4s ease-in-out infinite;
+}
+
+@keyframes shareSyncSweep {
+  0% { left: -35%; }
+  50% { left: 65%; }
+  100% { left: -35%; }
+}
+
+/* Real measured progress (K1 with a known comment count): a plain static
+   fill anchored to the left edge, its width set inline per render. */
+.syncProgressFillDeterminate {
+  left: 0;
+  animation: none;
+}
+
+.syncProgressText {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--share-white);
+  font-size: 12px;
+  font-weight: 500;
+}

@@ -8,16 +8,16 @@
   gap: 5px;
   border: 0;
   border-radius: 6px;
-  background: #282828;
-  color: #FFFFFF;
+  background: var(--share-toggle-on);
+  color: var(--share-white);
   font-size: 12px;
   font-weight: 500;
   box-shadow: none;
 }
 
 :global(.chrome-action.chrome-action-secondary).toolbar:hover:not(:disabled) {
-  background: #282828;
-  color: #FFFFFF;
+  background: var(--share-toggle-on);
+  color: var(--share-white);
 }
 
 :global(.chrome-action.chrome-action-secondary).toolbar:disabled {
@@ -38,7 +38,7 @@
   border: 0;
   border-radius: 6px;
   background: #EDEDF0;
-  color: #333333;
+  color: var(--share-text-strong);
   font-size: 12px;
   font-weight: 500;
   -webkit-backdrop-filter: none;
@@ -48,7 +48,7 @@
 
 :global(.artifact-card) .card:global(.artifact-card-act):hover:not(:disabled) {
   background: #EDEDF0;
-  color: #333333;
+  color: var(--share-text-strong);
 }
 
 /* Final G1/G2 uses a 300px reference card: 12px insets + 8px gap make

@@ -8,6 +8,7 @@ import { buildWorkspacePermissions, buildWorkspaceSeatSummary, type WorkspaceCol
 import { parse } from 'postcss';
 import { ShareTab } from '../../../src/components/share/ShareTab';
 import { I18nProvider } from '../../../src/i18n';
+import { readShareCss } from '../../helpers/read-share-css';
 
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
@@ -144,7 +145,9 @@ describe('S3/S4/S4-C copy-button rendering seam', () => {
     render(<ShareTab {...props({ publishLinkFeedback: feedback })} />);
     const label = feedback === 'copied' ? 'preview.shareCopied' : 'fileViewer.copyShareLink';
     const button = screen.getByRole('button', { name: label });
-    expect(button.className).toContain('copyButton');
+    // 2026 refactor: item 1 — the copy button moved into the shared
+    // `ShareButton`'s `primary` variant, replacing the old local `.copyButton`.
+    expect(button.className).toContain('primary');
     const icon = button.querySelector('svg')!;
     expect(icon).toHaveAttribute('width', '13');
     expect(icon).toHaveAttribute('height', '13');
@@ -157,7 +160,7 @@ describe('S3/S4/S4-C copy-button rendering seam', () => {
     expect(icon).toHaveAttribute('aria-hidden', 'true');
     expect(icon.querySelector('path')).toHaveAttribute('d', feedback === 'copied' ? checkPath : linkPath);
     expect(icon.classList.toString().includes('copiedIcon')).toBe(feedback === 'copied');
-    expect(screen.getByRole('switch', { name: 'fileViewer.linkAccessTitle' }).className).not.toContain('copyButton');
+    expect(screen.getByRole('switch', { name: 'fileViewer.linkAccessTitle' }).className).not.toContain('primary');
   });
 
   it('keeps the full selectable share URL visible through idle, copied, and clipboard-failure states', () => {
@@ -189,11 +192,14 @@ describe('S3/S4/S4-C copy-button rendering seam', () => {
   });
 
   it('styles the always-visible URL row to the final 32px link geometry', () => {
-    const css = parse(readFileSync(resolve(__dirname, '../../../src/components/share/ShareTab.module.css'), 'utf8'));
+    const css = parse(readShareCss(resolve(__dirname, '../../../src/components/share/ShareTab.module.css')));
     const values: Record<string, string> = {};
     css.walkRules('.publishedUrl', rule => {
       rule.walkDecls(decl => { values[decl.prop] = decl.value; });
     });
+    // 2026 refactor: item 5 — sizing/color literals now read from the share
+    // token stylesheet instead of being repeated here; see share-tokens.css
+    // for their resolved values (still 32px / #E5E5E5 / 6px / #666666).
     expect(values).toMatchObject({
       height: '32px', padding: '0 9px 0 29px', border: '1px solid #E5E5E5',
       'border-radius': '6px', background: '#FFFFFF', color: '#666666',
@@ -245,7 +251,7 @@ describe('S3/S4/S4-C copy-button rendering seam', () => {
     expect(screen.getByRole('button', { name: 'fileViewer.copyShareLink' })).toBeVisible();
     expect(screen.getByRole('switch', { name: 'fileViewer.linkAccessTitle' })).toBeVisible();
     expect(screen.getByRole('switch', { name: 'fileViewer.linkAccessTitle' })).toBeVisible();
-    const css = parse(readFileSync(resolve(__dirname, '../../../src/components/share/ShareTab.module.css'), 'utf8'));
+    const css = parse(readShareCss(resolve(__dirname, '../../../src/components/share/ShareTab.module.css')));
     const declarations = (selector: string) => {
       const values: Record<string, string> = {};
       css.walkRules(selector, rule => rule.walkDecls(decl => { values[decl.prop] = decl.value; }));
@@ -254,7 +260,11 @@ describe('S3/S4/S4-C copy-button rendering seam', () => {
     expect(declarations('.publishedLink')).toMatchObject({ gap: '8px', padding: '0' });
     expect(declarations('.publishedUrl')).toMatchObject({ width: '100%', height: '32px' });
     expect(declarations('.publishedActions')).toMatchObject({ display: 'block', width: '100%' });
-    expect(declarations('button.copyButton')).toMatchObject({ width: '100%', height: '32px' });
+    // .copyButton moved into ShareButton.module.css's `button.primary` (item 1).
+    const shareButtonCss = parse(readShareCss(resolve(__dirname, '../../../src/components/share/ShareButton.module.css')));
+    const shareButtonDeclarations: Record<string, string> = {};
+    shareButtonCss.walkRules('button.primary', rule => rule.walkDecls(decl => { shareButtonDeclarations[decl.prop] = decl.value; }));
+    expect(shareButtonDeclarations).toMatchObject({ width: '100%', height: '32px' });
     rerender(<ShareTab {...input} filePublished={false} publishingPublicFile publishProgress={0.4} />);
     expect(screen.getAllByRole('progressbar')).toHaveLength(1);
     expect(screen.getByRole('progressbar')).toHaveAttribute('aria-label', 'fileViewer.uploadingFile');
@@ -321,19 +331,35 @@ describe('S3/S4/S4-C copy-button rendering seam', () => {
   });
 
   it('declares the canvas values locally (static CSS contract, not pixel measurement)', () => {
-    const css = parse(readFileSync(resolve(__dirname, '../../../src/components/share/ShareTab.module.css'), 'utf8'));
-    const declarations = (selector: string) => {
+    // 2026 refactor: item 1/5 — the copy button's shape moved into the shared
+    // `ShareButton`'s `primary` variant (ShareButton.module.css), and its
+    // colors now read from share-tokens.css instead of being literals here.
+    // Assert BOTH: the selector references the right token, and that token
+    // still resolves to the exact original literal.
+    const shareButtonCss = parse(readShareCss(resolve(__dirname, '../../../src/components/share/ShareButton.module.css')));
+    const tokenCss = parse(readFileSync(resolve(__dirname, '../../../src/styles/share-tokens.css'), 'utf8'));
+    const declarations = (css: ReturnType<typeof parse>, selector: string) => {
       const values: Record<string, string> = {};
       css.walkRules(selector, (rule) => { rule.walkDecls((decl) => { values[decl.prop] = decl.value; }); });
       return values;
     };
-    expect(declarations('button.copyButton')).toMatchObject({
-      height: '32px', 'border-radius': '6px', gap: '5px', background: '#29292B', color: '#FFFFFF',
+    const tokens = declarations(tokenCss, ':root');
+    expect(tokens['--share-ink']).toBe('#29292B');
+    expect(tokens['--share-ink-hover']).toBe('#353535');
+    expect(tokens['--share-ink-busy']).toBe('#5A5A5C');
+    expect(tokens['--share-copied']).toBe('#82D994');
+
+    expect(declarations(shareButtonCss, 'button.primary')).toMatchObject({
+      height: '32px', 'border-radius': '6px', gap: '5px',
+      background: '#29292B', color: '#FFFFFF',
       'font-size': '12px', 'font-weight': '500', 'line-height': '18px', border: '0', padding: '0 8px',
     });
-    expect(declarations('button.copyButton:hover:not(:disabled)')).toMatchObject({ background: '#29292B' });
-    expect(declarations('.copiedIcon')).toMatchObject({ color: '#82D994' });
-    expect(declarations('button.copyButton[aria-busy="true"]:disabled')).toMatchObject({
+    // ShareTab's copyButton passes `hoverLighten={false}`, keeping the
+    // no-visible-change hover — `.noHoverLighten` is what encodes that.
+    expect(declarations(shareButtonCss, 'button.primary.noHoverLighten:hover:not(:disabled)')).toMatchObject({ background: '#29292B' });
+    const copiedIconCss = parse(readShareCss(resolve(__dirname, '../../../src/components/share/ShareTab.module.css')));
+    expect(declarations(copiedIconCss, '.copiedIcon')).toMatchObject({ color: '#82D994' });
+    expect(declarations(shareButtonCss, 'button.primary[aria-busy="true"]:disabled')).toMatchObject({
       background: '#5A5A5C', color: '#FFFFFF', opacity: '1',
     });
   });

@@ -3465,6 +3465,7 @@ export const zhTW: Dict = {
   "fileViewer.publishFile": "發布檔案",
   "fileViewer.publishingFile": "產生中…",
   "fileViewer.uploadingFile": "上傳中",
+  "fileViewer.shareReopening": "正在開啟…",
   "fileViewer.publishingContinuesOnClose": "關閉面板不會中斷上傳。",
   "fileViewer.unpublishFile": "停止分享",
   "fileViewer.shareEmptyStateTitle": "暫時無法分享",

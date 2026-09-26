@@ -3292,6 +3292,7 @@ export const fa: Dict = {
   'fileViewer.publishFile': 'Publish file',
   'fileViewer.publishingFile': 'در حال ایجاد پیوند…',
   "fileViewer.uploadingFile": "در حال بارگذاری",
+  "fileViewer.shareReopening": "درحال بازگشایی…",
   "fileViewer.publishingContinuesOnClose": "بستن این پنل، بارگذاری را متوقف نمی‌کند.",
   'fileViewer.unpublishFile': 'توقف اشتراک‌گذاری',
   'fileViewer.shareEmptyStateTitle': 'چیزی برای اشتراک‌گذاری وجود ندارد',

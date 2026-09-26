@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useT } from '../../i18n';
 import styles from './SignedOutObservedShare.module.css';
-import shareStyles from './ShareTab.module.css';
 import { SharePublishedLinkControls } from './ShareTab';
-import { CloudSignInTip } from '../CloudSignInTip';
+import { SharePanelHeader } from './SharePanelHeader';
+import { LinkAccessRow } from './LinkAccessRow';
+import { ShareNoticeRow } from './ShareNoticeRow';
+import { ShareSignInButton } from './ShareSignInButton';
+
 
 /** Matches the signed-in panel's copied-feedback lifetime (design S3/S4-C: ~1.8s). */
 const COPIED_FEEDBACK_MS = 1800;
@@ -50,22 +53,22 @@ export function SignedOutObservedShare({ url, canUpdate, onLoginUpdateSuccess }:
   return (
     <div className={styles.shell} role="status">
       <div className={styles.panel}>
-        <h2 className={styles.title}>{t('fileViewer.share')}</h2>
-        <div className={shareStyles.linkAccessHeading}>
-          <div className={shareStyles.linkAccessRow}>
-            <span className={shareStyles.linkAccessLabel}>{t('fileViewer.linkAccessTitle')}</span>
-            <button type="button" role="switch" aria-checked="true" aria-label={t('fileViewer.linkAccessTitle')}
-              className={`${shareStyles.linkAccessToggle} ${shareStyles.linkAccessToggleOn}`} disabled>
-              <span className={shareStyles.linkAccessToggleThumb} aria-hidden="true" />
-            </button>
-          </div>
-          <p className={shareStyles.linkAccessDescription}>{t('fileViewer.linkAccessDescription')}</p>
-        </div>
+        <SharePanelHeader title={t('fileViewer.share')} size="lg" />
+        <LinkAccessRow
+          label={t('fileViewer.linkAccessTitle')}
+          description={t('fileViewer.linkAccessDescription')}
+          checked
+          disabled
+        />
         <SharePublishedLinkControls url={url} copying={copying} feedback={feedback} onCopy={copy} t={t} />
-        {canUpdate ? <div className={shareStyles.updateNotice}>
-          <p>{t('fileViewer.shareOutdatedSignInHint')}</p>
-          <CloudSignInTip sharePrompt className={shareStyles.signInSecondaryAction} actionLabel={t('fileViewer.signInToUpdate')} onLoginSuccess={onLoginUpdateSuccess} />
-        </div> : null}
+        {canUpdate ? (
+          <ShareNoticeRow
+            message={t('fileViewer.shareOutdatedSignInHint')}
+            action={
+              <ShareSignInButton variant="soft" actionLabel={t('fileViewer.signInToUpdate')} onLoginSuccess={onLoginUpdateSuccess} />
+            }
+          />
+        ) : null}
       </div>
     </div>
   );
