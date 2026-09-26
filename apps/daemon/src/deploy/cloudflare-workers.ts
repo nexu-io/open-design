@@ -1597,6 +1597,40 @@ export function remainingUnverifiedExposure(
   return serializeUnverifiedExposure(remaining) ? remaining : undefined;
 }
 
+/** Annotate the perimeter error of an UNPROTECTED deploy with what the verdict
+ * proved and what the withdrawal could not take back. The deploy is about to
+ * fail, and the route's failure bookkeeping would otherwise record OWNERSHIP
+ * alone: a workers.dev route or hostname that IS public ends up recorded
+ * nowhere (nothing left that knows to withdraw it), and the record carries no
+ * Access marker — so the next check-link hands it to the generic reachability
+ * probe, where a plain 200 becomes status `ready` / "Public link is ready." —
+ * the very answer this deploy proved was an exposure.
+ *
+ * The annotated fields are the ones the link check writes when it reaches this
+ * verdict itself (see routes/deploy.ts failUnverified), so a record written
+ * from a failed deploy and one written from a failed check carry the same
+ * state. Only what is STILL exposed is attached: a withdrawal that took
+ * everything back leaves no `unverifiedExposure` key, and the record is then
+ * the verdict alone (retried, never promoted on a plain 200). */
+function markAccessUnverifiedFailure<T extends Error>(
+  error: T,
+  exposure: CloudflareUnverifiedExposure,
+  withdrawn: { steps: readonly DeployStep[]; detachedCustomDomains: readonly CloudflareOwnedCustomDomain[] },
+): T {
+  const remaining = remainingUnverifiedExposure(exposure, withdrawn);
+  const recorded = remaining ? serializeUnverifiedExposure(remaining) : undefined;
+  const annotated = error as T & { accessProtected?: boolean; check?: JsonObject; unverifiedExposure?: JsonObject };
+  annotated.accessProtected = true;
+  const details = (error as { details?: { status?: unknown } }).details;
+  annotated.check = {
+    ...(typeof details?.status === 'number' ? { status: details.status } : {}),
+    ok: false,
+    detail: 'CFW_ACCESS_UNVERIFIED',
+  };
+  if (recorded) annotated.unverifiedExposure = recorded;
+  return error;
+}
+
 /** The exposure a deferred deploy recorded (see CloudflareUnverifiedExposure),
  * when well-formed. */
 export function unverifiedExposureFromMetadata(metadata: unknown): CloudflareUnverifiedExposure | undefined {
@@ -2061,8 +2095,13 @@ async function deployToCloudflareWorkersWith(
         // it on. A URL that does not answer at all is deferred, not withdrawn.
         const verdict = await verifyCloudflareAccessPerimeter([url], cfg.requestInit ?? {});
         if (verdict.outcome === 'unprotected') {
+          // The exposure is captured as this run's own before the withdrawal
+          // (which reports what it did through `steps`), so what the failure
+          // carries is what the verdict proved and the withdrawal could not
+          // undo — never a claim that the route is back off.
+          const ownExposure: CloudflareUnverifiedExposure = { scriptName, previewsEnabledByThisRun: previews.enabledByThisRun };
           await withdrawUnverifiedPreviewExposure(cfg, { scriptName, previewsEnabledByThisRun: previews.enabledByThisRun, steps });
-          throw verdict.error;
+          throw markAccessUnverifiedFailure(verdict.error, ownExposure, { steps, detachedCustomDomains: [] });
         }
         if (verdict.outcome === 'unreachable') {
           accessDeferred = deferAccessVerification(metadata, steps, verdict);
@@ -2328,6 +2367,13 @@ async function deployToCloudflareWorkersWith(
       // its write-ahead stay and the verification is deferred to the link check.
       const verdict = await verifyCloudflareAccessPerimeter(publicUrls, cfg.requestInit ?? {});
       if (verdict.outcome === 'unprotected') {
+        // This run's own exposure, captured BEFORE the withdrawal: that call
+        // splices each hostname it detached out of `attachedCustomDomains`, so
+        // the list afterwards says what survived, not what was created.
+        const detachable = configuredHostname && !configuredAlreadyAttached
+          ? attachedCustomDomains.filter((domain) => domain.hostname === configuredHostname)
+          : [];
+        const attachedBefore = [...detachable];
         await withdrawUnverifiedExposure(cfg, {
           scriptName,
           subdomainEnabledByThisRun,
@@ -2336,7 +2382,16 @@ async function deployToCloudflareWorkersWith(
           releasedCustomDomains,
           steps,
         });
-        throw verdict.error;
+        throw markAccessUnverifiedFailure(
+          verdict.error,
+          { scriptName, subdomainEnabledByThisRun, detachableCustomDomains: detachable },
+          {
+            steps,
+            detachedCustomDomains: attachedBefore.filter(
+              (domain) => !attachedCustomDomains.some((kept) => kept.hostname === domain.hostname),
+            ),
+          },
+        );
       }
       if (verdict.outcome === 'unreachable') {
         accessDeferred = deferAccessVerification(metadata, steps, verdict);

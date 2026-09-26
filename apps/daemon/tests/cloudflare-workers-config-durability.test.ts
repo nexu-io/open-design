@@ -12,11 +12,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   CLOUDFLARE_WORKERS_CONFIG_CORRUPT_CODE,
   CLOUDFLARE_WORKERS_PROVIDER_ID,
+  clearPendingCloudflareOAuthGrant,
   cloudflareOAuthTokensDir,
   commitCloudflareOAuthMode,
   configureCloudflareWorkersDataDir,
   deployConfigPath,
   getCloudflareAccessToken,
+  markCloudflareOAuthGrantPending,
   publicCloudflareWorkersConfig,
   readCloudflareWorkersConfig,
   resetCloudflareCredentialMode,
@@ -509,6 +511,198 @@ describe('credential mode is derived from a live OAuth grant', () => {
       const raw = await readCloudflareWorkersConfig();
       expect(raw.credentialMode).toBe('token');
       expect(publicCloudflareWorkersConfig(raw).credentialMode).toBe('token');
+    });
+  });
+
+  it('a connect that crashed between the grant write and the mode commit signs with the grant it stored, not the static token beside it', async () => {
+    await withDataDir(async () => {
+      // A profile that has both a static token and (mid-connect) a live grant:
+      // the config on disk still says 'token' because the commit is the second
+      // half of the connect. Without a durable intent, the static token wins
+      // the read, every deploy silently keeps signing with it, and the grant
+      // stays valid with nobody holding it while /auth/status reports connected.
+      await writeCloudflareWorkersConfig({ token: 'static-token', accountId: 'acct_test' });
+      await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), {
+        accessToken: 'oauth-access',
+        refreshToken: 'ref-1',
+        tokenType: 'Bearer',
+        clientId: 'client-abc',
+        expiresAt: Date.now() + 3600_000,
+        generation: 1,
+        savedAt: Date.now(),
+      });
+      await markCloudflareOAuthGrantPending();
+
+      const persisted = JSON.parse(await readFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), 'utf8')) as Record<string, unknown>;
+      expect(persisted.pendingOAuthGrant).toBe(true);
+      // The stored mode flag is untouched — the marker is what decides.
+      expect(persisted.credentialMode).toBe('token');
+
+      const config = await readCloudflareWorkersConfig();
+      expect(config.credentialMode).toBe('oauth');
+      expect(await getCloudflareAccessToken()).toBe('oauth-access');
+    });
+  });
+
+  it('the commit that lands oauth mode drops the pending marker', async () => {
+    await withDataDir(async () => {
+      await writeCloudflareWorkersConfig({ token: 'static-token', accountId: 'acct_test' });
+      await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), {
+        accessToken: 'oauth-access',
+        refreshToken: 'ref-1',
+        tokenType: 'Bearer',
+        clientId: 'client-abc',
+        expiresAt: Date.now() + 3600_000,
+        generation: 1,
+        savedAt: Date.now(),
+      });
+      await markCloudflareOAuthGrantPending();
+      await commitCloudflareOAuthMode({ clientId: 'client-abc', redirectUri: 'http://127.0.0.1:1/cb' });
+
+      const persisted = JSON.parse(await readFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), 'utf8')) as Record<string, unknown>;
+      // The mode itself is now the durable statement, so the marker goes.
+      expect(persisted.credentialMode).toBe('oauth');
+      expect(persisted.pendingOAuthGrant).toBeUndefined();
+      expect((await readCloudflareWorkersConfig()).credentialMode).toBe('oauth');
+    });
+  });
+
+  it('an abandoned attempt drops the marker and leaves the mode as it found it', async () => {
+    await withDataDir(async () => {
+      await writeCloudflareWorkersConfig({ token: 'static-token', accountId: 'acct_test' });
+      await markCloudflareOAuthGrantPending();
+      // While the marker stands, the config answers 'oauth' even though the
+      // grant it describes was never stored — which is exactly why every path
+      // that abandons an attempt has to clear it.
+      expect((await readCloudflareWorkersConfig()).credentialMode).toBe('oauth');
+
+      await clearPendingCloudflareOAuthGrant();
+      const persisted = JSON.parse(await readFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), 'utf8')) as Record<string, unknown>;
+      expect(persisted.pendingOAuthGrant).toBeUndefined();
+      expect(persisted.credentialMode).toBe('token');
+      expect((await readCloudflareWorkersConfig()).credentialMode).toBe('token');
+      expect(await getCloudflareAccessToken()).toBe('static-token');
+    });
+  });
+
+  it('lands the token-mode config BEFORE revoking the grant it displaced', async () => {
+    await withDataDir(async () => {
+      await writeCloudflareWorkersConfig({ token: 'static-token', accountId: 'acct_test' });
+      await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), {
+        accessToken: 'oauth-access',
+        refreshToken: 'ref-1',
+        tokenType: 'Bearer',
+        clientId: 'client-abc',
+        expiresAt: Date.now() + 3600_000,
+        generation: 1,
+        savedAt: Date.now(),
+      });
+      await commitCloudflareOAuthMode();
+
+      // Read both files at the instant the revoke goes out: the config must
+      // already read token mode with no pending marker, and the credential must
+      // already be off disk. A save that failed before that point must never
+      // have revoked a grant its config still named.
+      const atRevoke: Array<{ mode: unknown; pending: unknown; stored: boolean }> = [];
+      vi.stubGlobal('fetch', vi.fn(async () => {
+        const persisted = JSON.parse(await readFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), 'utf8')) as Record<string, unknown>;
+        atRevoke.push({
+          mode: persisted.credentialMode,
+          pending: persisted.pendingOAuthGrantClear,
+          stored: (await getCloudflareOAuthToken(cloudflareOAuthTokensDir())) !== null,
+        });
+        return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
+      }));
+
+      const saved = await writeCloudflareWorkersConfig({ credentialMode: 'token' });
+      expect(saved.credentialMode).toBe('token');
+      expect(atRevoke).toEqual([{ mode: 'token', pending: undefined, stored: false }]);
+    });
+  });
+
+  it('a save whose intent write fails destroys nothing and revokes nothing', async () => {
+    await withDataDir(async (dir) => {
+      await writeCloudflareWorkersConfig({ token: 'static-token', accountId: 'acct_test' });
+      await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), {
+        accessToken: 'oauth-access',
+        refreshToken: 'ref-1',
+        tokenType: 'Bearer',
+        clientId: 'client-abc',
+        expiresAt: Date.now() + 3600_000,
+        generation: 1,
+        savedAt: Date.now(),
+      });
+      await commitCloudflareOAuthMode();
+
+      const revokes = vi.fn();
+      vi.stubGlobal('fetch', revokes);
+      // The intent write is the failing one: nothing after it may have run.
+      const probe = await open(path.join(dir, 'probe-intent'), 'w');
+      const proto = Object.getPrototypeOf(probe) as { writeFile: (data: unknown, enc?: string) => Promise<void> };
+      await probe.close();
+      const realWrite = proto.writeFile;
+      vi.spyOn(proto, 'writeFile').mockImplementation(async function (this: unknown, data: unknown, enc?: string) {
+        if (typeof data === 'string' && data.includes('"pendingOAuthGrantClear": true')) {
+          throw new Error('ENOSPC: no space left on device');
+        }
+        return realWrite.call(this, data, enc);
+      });
+
+      await expect(writeCloudflareWorkersConfig({ credentialMode: 'token' })).rejects.toThrow('ENOSPC');
+      // The credential the config still names is untouched, and Cloudflare was
+      // never told to kill it.
+      expect(await getCloudflareOAuthToken(cloudflareOAuthTokensDir())).not.toBeNull();
+      expect(revokes).not.toHaveBeenCalled();
+      const persisted = JSON.parse(await readFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), 'utf8')) as Record<string, unknown>;
+      expect(persisted.credentialMode).toBe('oauth');
+      expect(persisted.pendingOAuthGrantClear).toBeUndefined();
+      expect((await readCloudflareWorkersConfig()).credentialMode).toBe('oauth');
+    });
+  });
+
+  it('a save whose mode write fails still settles the transition and revokes the grant its config no longer names', async () => {
+    await withDataDir(async (dir) => {
+      await writeCloudflareWorkersConfig({ token: 'static-token', accountId: 'acct_test' });
+      await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), {
+        accessToken: 'oauth-access',
+        refreshToken: 'ref-1',
+        tokenType: 'Bearer',
+        clientId: 'client-abc',
+        expiresAt: Date.now() + 3600_000,
+        generation: 1,
+        savedAt: Date.now(),
+      });
+      await commitCloudflareOAuthMode();
+
+      const revokes: string[] = [];
+      vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+        revokes.push(url + ' ' + String(init?.body ?? ''));
+        return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
+      }));
+      // The mode write is the failing one, i.e. the write AFTER the credential
+      // was taken off disk.
+      const probe = await open(path.join(dir, 'probe-mode'), 'w');
+      const proto = Object.getPrototypeOf(probe) as { writeFile: (data: unknown, enc?: string) => Promise<void> };
+      await probe.close();
+      const realWrite = proto.writeFile;
+      vi.spyOn(proto, 'writeFile').mockImplementation(async function (this: unknown, data: unknown, enc?: string) {
+        if (typeof data === 'string' && data.includes('"credentialMode": "token"')) {
+          throw new Error('EACCES: permission denied');
+        }
+        return realWrite.call(this, data, enc);
+      });
+
+      await expect(writeCloudflareWorkersConfig({ credentialMode: 'token' })).rejects.toThrow('EACCES');
+      // The intent marker (written before the credential went) decides the
+      // mode, so the record is not left reading oauth with nothing behind it …
+      const persisted = JSON.parse(await readFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), 'utf8')) as Record<string, unknown>;
+      expect(persisted.pendingOAuthGrantClear).toBe(true);
+      expect((await readCloudflareWorkersConfig()).credentialMode).toBe('token');
+      // … the credential is off disk, and the grant it displaced is revoked
+      // rather than left valid with nobody holding it.
+      expect(await getCloudflareOAuthToken(cloudflareOAuthTokensDir())).toBeNull();
+      expect(revokes).toHaveLength(1);
+      expect(revokes[0]).toContain('token=ref-1');
     });
   });
 });

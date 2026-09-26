@@ -924,7 +924,7 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
       return fn(url, init);
     });
     vi.stubGlobal('fetch', wrapped);
-    let caught: { name?: string; code?: string; attachedCustomDomains?: unknown; releasedCustomDomains?: unknown; steps?: Array<{ name: string; status: string; detail?: string }> } | undefined;
+    let caught: { name?: string; code?: string; accessProtected?: unknown; check?: unknown; unverifiedExposure?: unknown; attachedCustomDomains?: unknown; releasedCustomDomains?: unknown; steps?: Array<{ name: string; status: string; detail?: string }> } | undefined;
     try {
       await deployToCloudflareWorkers({
         ...base,
@@ -956,6 +956,98 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
       expect.objectContaining({ name: 'subdomain-disable', status: 'done' }),
       expect.objectContaining({ name: 'custom-domain-detach', status: 'done', detail: 'app.example.com' }),
     ]));
+    // The withdrawal took back everything this run created, so the error
+    // carries the verdict and no exposure: the record is the Access failure
+    // alone — judged on the perimeter, never settled by a plain 200 probe.
+    expect(caught?.accessProtected).toBe(true);
+    expect(caught?.check).toEqual({ status: 200, ok: false, detail: 'CFW_ACCESS_UNVERIFIED' });
+    expect(caught).not.toHaveProperty('unverifiedExposure');
+  });
+
+  it('attaches the exposure it could not withdraw, with the Access verdict, to the error that fails the deploy', async () => {
+    // The withdrawal is best-effort, so an ungated URL can leave a route (or a
+    // hostname) still public while the deploy throws. The error has to carry
+    // what remains: without it the route's failure bookkeeping records
+    // ownership alone, the record leaves the Access path, and the next
+    // check-link reads a plain 200 — the very answer that proved the exposure
+    // — as a ready link.
+    const { calls, fn } = accessFetch({
+      head: () => new Response('', { status: 200 }),
+      // Neither half of the withdrawal can complete: turning the route back off
+      // is refused, and the attach answered without an id while the strict
+      // re-list resolves none for the hostname.
+      domains: { success: true, result: {} },
+      domainsList: { success: true, result: [] },
+    });
+    const wrapped = vi.fn(async (url: string, init?: RequestInit) => {
+      if ((init?.method || 'GET').toUpperCase() === 'POST' && url.endsWith('/workers/scripts/my-site/subdomain')) {
+        const body = JSON.parse(String(init?.body)) as { enabled?: unknown };
+        if (body.enabled === false) {
+          calls.push([url, init]);
+          return jsonResponse({ success: false, errors: [{ message: 'subdomain disable refused' }] }, 500);
+        }
+      }
+      return fn(url, init);
+    });
+    vi.stubGlobal('fetch', wrapped);
+    let caught: { name?: string; code?: string; accessProtected?: unknown; check?: unknown; unverifiedExposure?: unknown; steps?: Array<{ name: string; status: string; detail?: string }> } | undefined;
+    try {
+      await deployToCloudflareWorkers({
+        ...base,
+        access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } },
+        customDomain: { hostname: 'app.example.com', zoneId: 'zone-1' },
+      });
+    } catch (err) {
+      caught = err as typeof caught;
+    }
+    expect(caught).toMatchObject({ name: 'DeployError', code: 'CFW_ACCESS_UNVERIFIED' });
+    expect(caught?.steps).toContainEqual(expect.objectContaining({ name: 'subdomain-disable', status: 'error' }));
+    expect(caught?.steps).toContainEqual(expect.objectContaining({ name: 'custom-domain-detach', status: 'error', detail: 'app.example.com: could not resolve the domain id to detach' }));
+    // The record fields the verdict lands as — the same ones the link check
+    // writes when it reaches this verdict itself.
+    expect(caught?.accessProtected).toBe(true);
+    expect(caught?.check).toEqual({ status: 200, ok: false, detail: 'CFW_ACCESS_UNVERIFIED' });
+    // Only what is STILL public: the route this run turned on, and the hostname
+    // it attached and could not detach.
+    expect(caught?.unverifiedExposure).toEqual({
+      scriptName: 'my-site',
+      subdomainEnabledByThisRun: true,
+      detachableCustomDomains: [{ hostname: 'app.example.com' }],
+    });
+  });
+
+  it('attaches the preview exposure it could not withdraw, with the Access verdict, to the error', async () => {
+    const { calls, fn } = accessFetch({ head: () => new Response('', { status: 200 }) });
+    const wrapped = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes('/versions')) return jsonResponse({ success: true, result: { id: 'v12345678' } });
+      if ((init?.method || 'GET').toUpperCase() === 'POST' && url.endsWith('/workers/scripts/my-site/subdomain')) {
+        const body = JSON.parse(String(init?.body)) as { previews_enabled?: unknown };
+        if (body.previews_enabled === false) {
+          calls.push([url, init]);
+          return jsonResponse({ success: false, errors: [{ message: 'previews disable refused' }] }, 500);
+        }
+        return jsonResponse({ success: true, result: { enabled: true, previews_enabled: true } });
+      }
+      return fn(url, init);
+    });
+    vi.stubGlobal('fetch', wrapped);
+    let caught: { name?: string; code?: string; accessProtected?: unknown; check?: unknown; unverifiedExposure?: unknown; steps?: Array<{ name: string; status: string; detail?: string }> } | undefined;
+    try {
+      await deployToCloudflareWorkers({
+        ...base,
+        target: 'preview',
+        access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } },
+      });
+    } catch (err) {
+      caught = err as typeof caught;
+    }
+    expect(caught).toMatchObject({ name: 'DeployError', code: 'CFW_ACCESS_UNVERIFIED' });
+    // This run turned previews on and could not turn them back off: the preview
+    // route stays public, and the error says so.
+    expect(caught?.steps).toContainEqual(expect.objectContaining({ name: 'previews-disable', status: 'error' }));
+    expect(caught?.accessProtected).toBe(true);
+    expect(caught?.check).toEqual({ status: 200, ok: false, detail: 'CFW_ACCESS_UNVERIFIED' });
+    expect(caught?.unverifiedExposure).toEqual({ scriptName: 'my-site', previewsEnabledByThisRun: true });
   });
 
   it('keeps a hostname whose domain id cannot be resolved as owned, instead of reporting it detached', async () => {

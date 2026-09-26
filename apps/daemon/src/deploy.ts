@@ -49,6 +49,18 @@ type DeployConfig = {
   bindings?: CloudflareWorkersConfigBinding[] | undefined;
   access?: { enabled: boolean; rule?: CloudflareWorkersAccessRule } | undefined;
   customDomain?: { hostname: string; zoneId: string } | undefined;
+  /** Durable intent of an OAuth connect whose grant write has landed but whose
+   * `credentialMode` commit has not (see markCloudflareOAuthGrantPending). The
+   * read path treats it as authoritative over both the stored mode and the
+   * static token beside it: that grant IS the credential the connect is
+   * storing, and signing with anything else leaves it valid with no holder. */
+  pendingOAuthGrant?: boolean | undefined;
+  /** Durable intent of a credential transition OFF oauth (see
+   * writeCloudflareWorkersConfig): the grant is on its way out, so the read
+   * path stops deriving oauth from it before it is destroyed — the window
+   * between the clear and the mode write can never read as oauth with nothing
+   * behind it. */
+  pendingOAuthGrantClear?: boolean | undefined;
   /** Set on the safe default returned when the on-disk file is unparsable
    * (CFW_CONFIG_CORRUPT); never persisted. */
   configError?: string | undefined;
@@ -524,6 +536,8 @@ async function readCloudflareWorkersConfigFile(): Promise<DeployConfig> {
       bindings: persistedCloudflareWorkersBindings(parsed.bindings),
       access: normalizeCloudflareWorkersAccess(parsed.access),
       customDomain: normalizeCloudflareWorkersCustomDomain(parsed.customDomain),
+      pendingOAuthGrant: parsed.pendingOAuthGrant === true,
+      pendingOAuthGrantClear: parsed.pendingOAuthGrantClear === true,
     };
   } catch (err) {
     if (isErrnoException(err) && err.code === 'ENOENT') return emptyCloudflareWorkersConfig();
@@ -576,12 +590,33 @@ async function liveCloudflareOAuthGrant(): Promise<StoredCloudflareOAuthToken | 
  * what disconnect does, and it clears the grant before resetting the mode, so
  * this derivation is never handed a stale grant to re-assert.
  *
+ * A credential TRANSITION in flight is decided by its durable marker before any
+ * of that derivation runs (see markCloudflareOAuthGrantPending and
+ * writeCloudflareWorkersConfig). The marker is written BEFORE the destructive
+ * half of the transition, so it is the only honest answer for the window in
+ * which the two files beside it disagree: a live grant whose config has not
+ * committed 'oauth' yet (the connect crash) is the authority, and a config
+ * leaving oauth decides token mode even while the grant is still on disk.
+ * Without it, the first window signs with a static token while the grant stays
+ * valid with no holder, and the second reports oauth with nothing behind it.
+ *
  * A config that reads as corrupt is returned untouched: it is already a distinct
  * degraded state whose recovery is a settings save, and the disconnect reset
  * documents that it reads as token mode. */
 export async function readCloudflareWorkersConfig(): Promise<DeployConfig> {
   const config = await readCloudflareWorkersConfigFile();
-  if (config.credentialMode === 'oauth' || config.configError) return config;
+  if (config.configError) return config;
+  if (config.pendingOAuthGrantClear) return { ...config, credentialMode: 'token' };
+  if (config.pendingOAuthGrant) {
+    // The grant the connect is storing is the authority from the instant the
+    // marker lands — the stored mode and any static token are what that write
+    // has not replaced yet. The grant's own clientId is still preferred (the
+    // same reason as the derivation below), read best-effort so a marker whose
+    // grant was cleared underneath it stays a read, not a new failure mode.
+    const grant = await liveCloudflareOAuthGrant();
+    return { ...config, credentialMode: 'oauth', clientId: grant?.clientId || config.clientId };
+  }
+  if (config.credentialMode === 'oauth') return config;
   // A static credential the user saved outranks the grant (see above), and it is
   // checked before the grant is even read, so a token-mode config neither pays
   // for nor depends on the OAuth token file.
@@ -671,16 +706,40 @@ export async function writeCloudflareWorkersConfig(input: Partial<DeployConfig>)
   // thing that can still mint access tokens, and nothing else would ever
   // revoke it — the refresh token stays valid on Cloudflare's side while
   // /auth/status keeps reporting the profile as connected, long after the
-  // deploys stopped using it. The clear runs BEFORE the mode write, the order
-  // disconnect uses, so the read-time derivation (liveCloudflareOAuthGrant)
-  // is never handed a live grant it would re-assert as oauth on the next read.
-  // It runs after the validations above, so a refused save never revokes a
-  // grant it did not leave.
+  // deploys stopped using it. The order below is what keeps a save that FAILS
+  // from destroying anything it cannot account for:
+  //
+  // 1. the intent, durably, while the credential is still there. From this
+  //    write on every read of the config is in token mode whatever the file's
+  //    stored mode says (readCloudflareWorkersConfig), so the window in which
+  //    the grant is gone and the file still reads 'oauth' with nothing behind
+  //    it cannot exist;
+  // 2. the destructive half — the grant goes off disk;
+  // 3. the mode the user chose, validated above (a token-mode save always has a
+  //    static token, so even this write failing leaves a working credential);
+  // 4. the revoke, LAST. A save that failed at 1 or 3 cannot have revoked a
+  //    grant its config still names. A failure at 3 is the one case that does
+  //    revoke: the marker has already settled that the config no longer names
+  //    oauth, and an unheld grant must not stay valid at Cloudflare.
+  //
+  // It runs after the validations above, so a refused save never gets here.
+  const cloudflareConfigFile = deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID);
   if (input?.credentialMode === 'token' && current.credentialMode === 'oauth') {
+    const intent: DeployConfig = { ...persistableCloudflareWorkersConfig(current), pendingOAuthGrantClear: true };
+    // A connect in flight is being abandoned by this transition.
+    delete intent.pendingOAuthGrant;
+    await writeDeployConfigFile(cloudflareConfigFile, intent);
     const displaced = await clearCloudflareOAuthToken(cloudflareOAuthTokensDir());
+    try {
+      await writeDeployConfigFile(cloudflareConfigFile, next);
+    } catch (err) {
+      if (displaced) await revokeClearedCloudflareGrant(displaced, next.clientId);
+      throw err;
+    }
     if (displaced) await revokeClearedCloudflareGrant(displaced, next.clientId);
+  } else {
+    await writeDeployConfigFile(cloudflareConfigFile, next);
   }
-  await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), next);
   return publicCloudflareWorkersConfig(next);
   });
 }
@@ -733,6 +792,54 @@ export async function writeCloudflareOAuthIdentity(input: { clientId: string; re
   });
 }
 
+/** Record the durable intent of an OAuth connect: the grant's write is about to
+ * land and its `credentialMode` commit comes second, so a crash between the two
+ * leaves a live grant beside a config that still says 'token' — and when that
+ * config also holds a static token, every deploy silently keeps signing with
+ * the static one while the grant stays valid with nobody holding it. Writing
+ * the marker FIRST makes the read path answer with the credential the connect
+ * is actually storing, from before the token exists until the commit lands.
+ * Cleared by commitCloudflareOAuthMode, by the settings PUT that takes the
+ * transition branch, and by every path that abandons the attempt
+ * (clearPendingCloudflareOAuthGrant). Refuses to run on a corrupt config file
+ * (CFW_CONFIG_CORRUPT), like the other partial mutations.
+ *
+ * Reads the FILE, not the derived config: what this writes back is the stored
+ * record plus the marker, never a mode the derivation inferred from the grant
+ * beside it. */
+export async function markCloudflareOAuthGrantPending(): Promise<void> {
+  return withCloudflareConfigMutation(async () => {
+    const current = await readCloudflareWorkersConfigFile();
+    refuseCloudflareWorkersConfigMutationIfCorrupt(current, 'record the pending OAuth grant');
+    const next: DeployConfig = { ...persistableCloudflareWorkersConfig(current), pendingOAuthGrant: true };
+    // The opposite intent cannot be pending at the same time: a connect
+    // supersedes a half-finished exit from oauth, and its own commit settles
+    // the mode.
+    delete next.pendingOAuthGrantClear;
+    await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), next);
+  });
+}
+
+/** Drop a pending-credential-transition marker without touching the mode: the
+ * paths that ABANDON an OAuth attempt (a guarded token write that lost its
+ * race, a config commit whose credential was restored or cleared) leave the
+ * config as they found it, minus the intent that attempt recorded. A marker
+ * left behind would make every later read answer 'oauth' with no credential
+ * behind it — deploys failing CFW_OAUTH_RECONNECT_REQUIRED while /auth/status
+ * reports a disconnected profile. A no-op when nothing is pending, and on a
+ * corrupt file (which cannot carry a marker and must not be rewritten). */
+export async function clearPendingCloudflareOAuthGrant(): Promise<void> {
+  return withCloudflareConfigMutation(async () => {
+    const current = await readCloudflareWorkersConfigFile();
+    if (!current.pendingOAuthGrant && !current.pendingOAuthGrantClear) return;
+    if (current.configError) return;
+    const next: DeployConfig = { ...persistableCloudflareWorkersConfig(current) };
+    delete next.pendingOAuthGrant;
+    delete next.pendingOAuthGrantClear;
+    await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), next);
+  });
+}
+
 /** Switch the Workers credential authority to OAuth — invoked only after the
  * OAuth token has been durably persisted, so a failed/cancelled flow leaves the
  * prior credential mode (and any static token) intact. When identity is given,
@@ -775,6 +882,11 @@ export async function commitCloudflareOAuthMode(identity?: { clientId: string; r
       next.clientId = identity.clientId;
       next.redirectUri = identity.redirectUri;
     }
+    // The mode this commit lands is what both markers stood in for: the
+    // connect is no longer pending (mode oauth is now durable) and any
+    // half-finished exit from oauth is settled by it.
+    delete next.pendingOAuthGrant;
+    delete next.pendingOAuthGrantClear;
     await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), next);
   });
 }
@@ -796,6 +908,11 @@ export async function resetCloudflareCredentialMode(): Promise<void> {
       return;
     }
     const next: DeployConfig = { ...persistableCloudflareWorkersConfig(current), credentialMode: 'token' };
+    // Disconnect abandons any connect in flight and any half-finished exit
+    // from oauth: the credential is off disk by the time this runs, so no
+    // marker may keep a read answering 'oauth' with nothing behind it.
+    delete next.pendingOAuthGrant;
+    delete next.pendingOAuthGrantClear;
     await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), next);
   });
 }

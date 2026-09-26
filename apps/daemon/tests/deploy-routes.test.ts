@@ -3487,6 +3487,82 @@ describe('deploy provider routes', () => {
     }
   });
 
+  it('a deploy that fails its Access perimeter records the verdict and the exposure it could not withdraw, and never settles the link on a plain 200', async () => {
+    const f = await workersSiblingFixture('failed-unprotected', { access: false });
+    configureCloudflareAccessPerimeterRetry({ attempts: 2, baseMs: 1 });
+    const isDisable = (c: { url: string; method: string }) =>
+      c.method === 'POST' && c.url.endsWith('/workers/scripts/' + f.scriptName + '/subdomain');
+    try {
+      const dataDir = process.env.OD_DATA_DIR;
+      if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+      const db = openDatabase(process.cwd(), { dataDir });
+      const metadataOf = (id: string) =>
+        (getDeploymentById(db, f.projectId, id)?.providerMetadata ?? {}) as Record<string, unknown>;
+
+      // A first, Access-OFF deploy of the file: its record owns the URL the
+      // failing deploy below will keep reporting.
+      await f.putConfig({ access: false });
+      const first = await f.deploy('a.html');
+      expect(first.status).toBe(200);
+      const record = (await first.json()) as { id: string; status: string; url: string };
+      expect(record.status).toBe('ready');
+      expect(record.url).toContain(f.scriptName);
+
+      // The workers.dev route is off (turned off from the dashboard since), so
+      // turning it on is THIS run's exposure. Access is on now and the URLs
+      // answer a plain 200 — ungated — while the withdrawal cannot complete:
+      // the disable is refused. The deploy fails with the route still public.
+      f.state.subdomainEnabled = false;
+      f.state.subdomainDisableMode = 'error';
+      f.state.headMode = 'plain';
+      await f.putConfig({ hostname: 'a.example.com', access: true });
+      expect((await f.deploy('a.html')).status).toBeGreaterThanOrEqual(400);
+      expect(f.state.subdomainEnabled).toBe(true);
+      // The hostname half of the withdrawal did land; the route half did not.
+      expect(f.state.routed).toEqual([]);
+
+      // The record the failure left: on the ACCESS path (so no later check can
+      // settle it with a reachability probe), carrying the coded verdict and
+      // the half of the exposure that is still public.
+      const metadata = metadataOf(record.id);
+      expect(metadata.accessProtected).toBe(true);
+      expect(metadata.accessVerified).toBe(false);
+      expect(metadata.check).toMatchObject({ ok: false, detail: 'CFW_ACCESS_UNVERIFIED' });
+      expect(metadata.unverifiedExposure).toEqual({
+        scriptName: f.scriptName,
+        subdomainEnabledByThisRun: true,
+      });
+
+      // The record's URL answers a plain 200 — the answer that used to become
+      // "Public link is ready." for the very deploy that proved it ungated. The
+      // check retries the withdrawal FIRST (a Cloudflare mutation the generic
+      // reachability path never makes) and stays failed while the route is on.
+      const before = f.state.cfCalls.length;
+      const checked = await f.checkLink(record.id);
+      expect(checked.status).toBe(200);
+      const stillExposed = (await checked.json()) as { status: string; statusMessage?: string; cloudflareWorkers?: Record<string, unknown> };
+      expect(stillExposed.status).toBe('failed');
+      expect(stillExposed.statusMessage).not.toContain('Public link is ready.');
+      expect(stillExposed.cloudflareWorkers?.check).toMatchObject({ ok: false, detail: 'CFW_ACCESS_UNVERIFIED' });
+      expect(f.state.cfCalls.slice(before).some(isDisable)).toBe(true);
+      expect(f.state.subdomainEnabled).toBe(true);
+
+      // Cloudflare accepts the disable now: the retry lands, and with the route
+      // off the URL no longer answers, so the record defers instead of claiming
+      // a ready link.
+      f.state.subdomainDisableMode = 'ok';
+      f.state.headMode = 'unreachable';
+      const checkedAgain = await f.checkLink(record.id);
+      expect(checkedAgain.status).toBe(200);
+      expect(((await checkedAgain.json()) as { status: string }).status).toBe('link-delayed');
+      expect(f.state.subdomainEnabled).toBe(false);
+      expect(metadataOf(record.id).unverifiedExposure).toBeUndefined();
+    } finally {
+      configureCloudflareAccessPerimeterRetry();
+      await f.cleanup();
+    }
+  });
+
   it('check-link refuses to withdraw a deferred deploy\'s exposure with 409 DEPLOY_IN_PROGRESS while a deploy of the script is in flight', async () => {
     const f = await workersSiblingFixture('deferred-singleflight', { access: true });
     configureCloudflareAccessPerimeterRetry({ attempts: 2, baseMs: 1 });

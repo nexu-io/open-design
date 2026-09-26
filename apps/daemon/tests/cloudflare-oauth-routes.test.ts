@@ -886,6 +886,71 @@ describe('cloudflare-oauth routes', () => {
     }
   });
 
+  it('a connect whose config cannot record the pending grant stores nothing and revokes the grant it was issued', async () => {
+    const dataDir = cloudflareOAuthTokensDir();
+    const configPath = deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID);
+    const realFetch = globalThis.fetch;
+    const revokes: string[] = [];
+    vi.stubGlobal('fetch', async (input: unknown, init?: unknown) => {
+      const url = String(input);
+      if (url.includes('oauth2/revoke')) {
+        revokes.push(String((init as RequestInit | undefined)?.body));
+        return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url.includes('oauth2/token')) {
+        return new Response(
+          JSON.stringify({ access_token: 'acc-pending', token_type: 'Bearer', refresh_token: 'ref-pending', expires_in: 3600 }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url.endsWith('/client/v4/user')) {
+        return new Response(JSON.stringify({ success: false }), { status: 403, headers: { 'content-type': 'application/json' } });
+      }
+      return realFetch(input as never, init as never);
+    });
+    try {
+      // A working credential is already stored; the failed connect must leave
+      // it exactly as it was.
+      await setCloudflareOAuthToken(dataDir, {
+        accessToken: 'acc-prior',
+        refreshToken: 'ref-prior',
+        tokenType: 'Bearer',
+        generation: 0,
+        savedAt: Date.now(),
+      });
+      const startResp = await fetch(`${app.baseUrl}/api/cloudflare/oauth/start`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ clientId: 'client-abc', redirectUri: 'http://127.0.0.1:56122/callback' }),
+      });
+      expect(startResp.status).toBe(200);
+      const { state } = (await startResp.json()) as { state: string };
+      // The config file is unparsable, so the connect's durable intent — the
+      // marker that makes a read answer with the grant this attempt is storing —
+      // cannot be recorded. Storing the grant anyway would put a live grant
+      // beside a config that keeps saying 'token' (and, with a static token,
+      // beside a deploy path that keeps signing with it), which is the state
+      // the marker exists to rule out: nothing is stored, and the grant this
+      // attempt was issued is revoked instead of left valid with no holder.
+      await writeFile(configPath, '{"clientId": "client-abc", "redirectUri": ', 'utf8');
+      const completeResp = await fetch(`${app.baseUrl}/api/cloudflare/oauth/complete`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ state, code: 'AUTHCODE' }),
+      });
+      expect(completeResp.status).toBe(400);
+      expect(((await completeResp.json()) as { error: string }).error).toMatch(/not valid JSON/);
+      expect((await getCloudflareOAuthToken(dataDir))?.refreshToken).toBe('ref-prior');
+      expect(revokes).toHaveLength(1);
+      expect(new URLSearchParams(revokes[0]!).get('token')).toBe('ref-pending');
+    } finally {
+      vi.unstubAllGlobals();
+      await rm(configPath, { force: true });
+      await clearCloudflareOAuthToken(dataDir);
+      await fetch(`${app.baseUrl}/api/cloudflare/oauth/cancel`, { method: 'POST' });
+    }
+  });
+
   it('clears the store rather than leaving a dead credential when the failed config commit cannot be rolled back', async () => {
     const dataDir = cloudflareOAuthTokensDir();
     const configPath = deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID);
@@ -938,10 +1003,12 @@ describe('cloudflare-oauth routes', () => {
       });
       expect(completeResp.status).toBe(400);
       expect(((await completeResp.json()) as { error: string }).error).toMatch(/not valid JSON/);
-      // The restore failed, so the token this attempt minted must NOT stay on
-      // disk: its grant is revoked below, and a stored-but-dead credential
-      // would report connected while every deploy on it failed at Cloudflare.
-      expect(await getCloudflareOAuthToken(dataDir)).toBeNull();
+      // The intent marker is written BEFORE the token, and a corrupt config
+      // refuses that write, so the connect fails before anything is stored: the
+      // prior working credential survives, and only this attempt's freshly
+      // minted grant is revoked. Nothing dead is left on disk to report
+      // connected while every deploy on it fails at Cloudflare.
+      expect(await getCloudflareOAuthToken(dataDir)).toMatchObject({ accessToken: 'acc-prior', refreshToken: 'ref-prior' });
       expect(revokes).toHaveLength(1);
       expect(new URLSearchParams(revokes[0]!).get('token')).toBe('ref-new');
     } finally {

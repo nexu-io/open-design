@@ -3,7 +3,7 @@ import type { RouteDeps } from '../server-context.js';
 import type { AuthorizeProjectRequest } from '../collab/project-request-authority.js';
 import { clientRequestIdFor } from '../http/client-request-id.js';
 import { classifyDeployFailure } from '../deploy/failure-detail.js';
-import { detachCloudflareWorkerDomain, getCloudflareWorkerDomain, isOwnedCustomDomain, listCloudflareZones, normalizeHostname, ownedCustomDomainsFromMetadata, pendingCustomDomainsFromMetadata, recordedCustomDomainFromMetadata, releasedCustomDomainsFromWorkersDeploy, remainingUnverifiedExposure, resolvedPendingCustomDomainsFromWorkersDeploy, resolveWorkerScriptName, retiredAccessAppIdFromWorkersDeploy, serializeUnverifiedExposure, unverifiedExposureFromMetadata, verifyCloudflareAccessPerimeter, vouchedCustomDomains, withdrawRecordedUnverifiedExposure, type CloudflareOwnedCustomDomain, type CloudflareUnverifiedExposure } from '../deploy/cloudflare-workers.js';
+import { detachCloudflareWorkerDomain, getCloudflareWorkerDomain, isOwnedCustomDomain, listCloudflareZones, mergeUnverifiedExposure, normalizeHostname, ownedCustomDomainsFromMetadata, pendingCustomDomainsFromMetadata, recordedCustomDomainFromMetadata, releasedCustomDomainsFromWorkersDeploy, remainingUnverifiedExposure, resolvedPendingCustomDomainsFromWorkersDeploy, resolveWorkerScriptName, retiredAccessAppIdFromWorkersDeploy, serializeUnverifiedExposure, unverifiedExposureFromMetadata, verifyCloudflareAccessPerimeter, vouchedCustomDomains, withdrawRecordedUnverifiedExposure, type CloudflareOwnedCustomDomain, type CloudflareUnverifiedExposure } from '../deploy/cloudflare-workers.js';
 import { getCloudflareAccessToken, pendingPublicLinkMessage } from '../deploy.js';
 import { proxyDispatcherRequestInit } from '../connectionTest.js';
 
@@ -64,6 +64,29 @@ function attachedCustomDomainsFromFailedWorkersDeploy(err: unknown): CloudflareO
   const attached = (err as { attachedCustomDomains?: unknown } | null)?.attachedCustomDomains;
   if (!Array.isArray(attached)) return [];
   return ownedCustomDomainsFromMetadata({ ownedCustomDomains: attached });
+}
+
+/** The Access verdict a failed Workers deploy reported: the provider annotates
+ * the error of a deploy whose perimeter check found an UNGATED URL (see
+ * markAccessUnverifiedFailure) with the record fields the finding must land as
+ * — `accessProtected`, the check verdict, and whatever exposure the withdrawal
+ * could not take back. Those are the same fields the link check writes when it
+ * reaches this verdict itself (failUnverified), so both paths leave the record
+ * in one state. The marker AND the coded verdict are both required: an error
+ * missing either says nothing about a perimeter, and a record must never be
+ * put on the Access path by a shape it does not have. */
+function accessUnverifiedFailureFromFailedWorkersDeploy(
+  err: unknown,
+): { check: Record<string, unknown>; exposure: CloudflareUnverifiedExposure | undefined } | undefined {
+  const source = err as { accessProtected?: unknown; check?: unknown; unverifiedExposure?: unknown } | null | undefined;
+  if (!source || source.accessProtected !== true) return undefined;
+  const check = source.check;
+  if (!check || typeof check !== 'object' || Array.isArray(check)) return undefined;
+  if ((check as Record<string, unknown>).detail !== 'CFW_ACCESS_UNVERIFIED') return undefined;
+  return {
+    check: check as Record<string, unknown>,
+    exposure: unverifiedExposureFromMetadata({ unverifiedExposure: source.unverifiedExposure }),
+  };
 }
 
 /** The stale owned hostnames a Workers deploy detached (`detachedCustomDomains`
@@ -723,7 +746,11 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
     const accessAppId = accessAppIdFromFailedWorkersDeploy(input.err);
     const attachedCustomDomains = attachedCustomDomainsFromFailedWorkersDeploy(input.err);
     const releasedCustomDomains = releasedCustomDomainsFromWorkersDeploy(input.err);
-    if (!accessAppId && attachedCustomDomains.length === 0 && releasedCustomDomains.length === 0) return;
+    // A deploy that failed its Access perimeter is a verdict, not ownership:
+    // the record has to carry it even when the attempt owned nothing new (a
+    // redeploy of an already-owned script), so it is its own reason to write.
+    const accessUnverified = accessUnverifiedFailureFromFailedWorkersDeploy(input.err);
+    if (!accessAppId && attachedCustomDomains.length === 0 && releasedCustomDomains.length === 0 && !accessUnverified) return;
     const { prior } = input;
     // The record may have moved on since `prior` was read: the attach
     // write-ahead (recordPendingWorkersCustomDomain) lands on it mid-deploy.
@@ -758,6 +785,30 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
     // gated the Worker reports; a failed deploy did not, and writing it here
     // would let the record pose as an Access deploy awaiting verification.
     if (gainsAccessApp) Object.assign(metadata, { accessAppId, createdByOpenDesign: true });
+    if (accessUnverified) {
+      // The deploy proved a public URL is NOT behind the gate. Same write the
+      // link check performs for that finding (failUnverified): the gate marker
+      // (so this record stays on the Access path — a status-blind verdict,
+      // never the generic reachability probe that reads the very 200 that
+      // proved the exposure as a ready link), the coded verdict, and only what
+      // the withdrawal could not take back.
+      Object.assign(metadata, {
+        accessProtected: true,
+        accessVerified: false,
+        check: accessUnverified.check,
+      });
+      delete metadata.accessVerificationDeferred;
+      const exposure = accessUnverified.exposure;
+      if (exposure) {
+        // MERGED with what the record already carried, never replacing it: an
+        // older exposure is a route or hostname that is still public, and this
+        // write is the record's only copy of it.
+        const merged = serializeUnverifiedExposure(
+          mergeUnverifiedExposure(unverifiedExposureFromMetadata(priorMetadata), exposure),
+        );
+        if (merged) metadata.unverifiedExposure = merged;
+      }
+    }
     if (newlyOwned.length > 0) metadata.ownedCustomDomains = [...priorOwned, ...newlyOwned];
     if (resolvesPending) {
       if (remainingPending.length > 0) metadata.pendingCustomDomains = remainingPending.map((hostname) => ({ hostname }));

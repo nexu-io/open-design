@@ -21,9 +21,11 @@ import type { Express } from 'express';
 
 import { proxyDispatcherRequestInit } from '../connectionTest.js';
 import {
+  clearPendingCloudflareOAuthGrant,
   cloudflareOAuthTokensDir,
   commitCloudflareOAuthMode,
   getCloudflareAccessToken,
+  markCloudflareOAuthGrantPending,
   readCloudflareWorkersConfig,
   resetCloudflareCredentialMode,
 } from '../deploy.js';
@@ -195,6 +197,21 @@ export function registerCloudflareRoutes(
   const wasGrantRevoked = (err: unknown): boolean =>
     typeof err === 'object' && err !== null && grantAlreadyRevoked.has(err);
 
+  // Best-effort drop of the durable connect intent (see
+  // markCloudflareOAuthGrantPending). Every path that abandons an attempt has to
+  // clear it — a marker left behind makes every later config read answer 'oauth'
+  // with no credential behind it — but a config file that cannot be written must
+  // not REPLACE the error that abandoned the attempt (the callers below revoke
+  // on the strength of that error, and a substituted one would revoke twice).
+  const clearPendingGrantMarker = async (): Promise<void> => {
+    try {
+      await clearPendingCloudflareOAuthGrant();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn('[cloudflare-oauth] could not clear the pending-connect marker; the next settings save settles the mode:', msg);
+    }
+  };
+
   const revokeDiscardedGrant = (tokenResp: CompleteCloudflareAuthResult, fetchImpl: typeof fetch): Promise<void> =>
     revokeGrantBestEffort(
       {
@@ -239,6 +256,14 @@ export function registerCloudflareRoutes(
     if (email) stored.email = email;
     const committed = await runCredentialMutation(async (): Promise<{ ok: boolean; superseded: StoredCloudflareOAuthToken | null }> => {
       if (attemptGeneration !== oauthAttemptGeneration) return { ok: false, superseded: null };
+      // The intent is durable BEFORE the credential it describes: from here on
+      // a config read answers with the grant this attempt is storing, so a
+      // crash between this write and the mode commit below can no longer leave
+      // a deploy signing with a static token while the grant stays valid with
+      // nobody holding it. A throw here (an unwritable or corrupt config file)
+      // fails the connect BEFORE anything is stored, which the caller's revoke
+      // of the freshly issued grant then cleans up.
+      await markCloudflareOAuthGrantPending();
       // The credential this write replaces comes back from the write itself,
       // read under the store lock. A separate read before the write would
       // race the refresh's compare-and-set: a refresh landing between the two
@@ -250,7 +275,12 @@ export function registerCloudflareRoutes(
         stored,
         () => attemptGeneration === oauthAttemptGeneration,
       );
-      if (!write.written) return { ok: false, superseded: null };
+      if (!write.written) {
+        // The guard lost its race: nothing was stored, so the intent this
+        // attempt recorded must not outlive it.
+        await clearPendingGrantMarker();
+        return { ok: false, superseded: null };
+      }
       const displaced = write.displaced;
       try {
         await commitCloudflareOAuthMode({ clientId: result.clientId, redirectUri: result.redirectUri });
@@ -288,6 +318,7 @@ export function registerCloudflareRoutes(
             );
           }
         }
+        await clearPendingGrantMarker();
         await revokeDiscardedGrant(result, fetchImpl);
         markGrantRevoked(err);
         throw err;
