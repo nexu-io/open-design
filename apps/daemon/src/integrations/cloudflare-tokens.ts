@@ -65,6 +65,22 @@ export interface CloudflareOAuthTokensFile {
    * cleared credential's generation is never reused by a later connect — a
    * stale compare-and-set from before the clear can't match a brand-new token. */
   lastGeneration?: number;
+  /** Grants a credential TRANSITION took out of `token` whose revoke has not
+   * been confirmed at Cloudflare yet (see clearCloudflareOAuthTokenForRevoke).
+   *
+   * The transition that leaves OAuth mode — a settings save switching the
+   * authority to a static token — used to record the grant it displaced only in
+   * the memory of the save that was running: the clear returned the record, and
+   * the revoke named it. A crash between the clear and the revoke (or between
+   * the clear and the mode write) then left the refresh token valid at
+   * Cloudflare with no file anywhere that named it: the store was empty, the
+   * config read token mode, and no later disconnect, connect or refresh could
+   * discover it to revoke. Recorded HERE, in the same locked write as the clear
+   * itself, it outlives the process; every OAuth mutation finishes it on the
+   * way past (settlePendingCloudflareOAuthGrantRevokes in deploy.ts) and every
+   * other write to this file carries it forward, so the only thing that can
+   * drop a handle is a confirmed revoke. */
+  pendingRevokes?: StoredCloudflareOAuthToken[];
 }
 
 const EMPTY: CloudflareOAuthTokensFile = {};
@@ -88,6 +104,22 @@ export function sanitizeCloudflareOAuthTokensFile(
   if (typeof raw.lastGeneration === 'number' && Number.isFinite(raw.lastGeneration)) {
     out.lastGeneration = raw.lastGeneration;
   }
+  // A handle whose accessToken no longer sanitizes is still a credential on
+  // disk (the same reason the clear recovers one): its refresh token is the
+  // live grant the handle exists to revoke, so recover it rather than drop it.
+  const pendingRevokes: StoredCloudflareOAuthToken[] = [];
+  if (Array.isArray(raw.pendingRevokes)) {
+    const seen = new Set<string>();
+    for (const entry of raw.pendingRevokes) {
+      const handle = sanitizeToken(entry) ?? recoveredDisplacedCredential({ token: entry });
+      if (!handle) continue;
+      const token = handle.refreshToken || handle.accessToken;
+      if (!token || seen.has(token)) continue;
+      seen.add(token);
+      pendingRevokes.push(handle);
+    }
+  }
+  if (pendingRevokes.length > 0) out.pendingRevokes = pendingRevokes;
   const tok = sanitizeToken(raw.token);
   if (tok) {
     out.token = tok;
@@ -257,6 +289,18 @@ export async function fsyncDirectory(dir: string): Promise<void> {
   }
 }
 
+/** The revoke handles a write to this file must carry forward: they name
+ * grants that are already off disk and still unrevoked, so a write that dropped
+ * them would be the leak they exist to prevent — the only thing allowed to
+ * remove one is a confirmed revoke (dropPendingCloudflareOAuthRevokes). */
+function carriedPendingRevokes(
+  file: CloudflareOAuthTokensFile,
+): Pick<CloudflareOAuthTokensFile, 'pendingRevokes'> {
+  return file.pendingRevokes && file.pendingRevokes.length > 0
+    ? { pendingRevokes: file.pendingRevokes }
+    : {};
+}
+
 async function writeTokensFile(
   dataDir: string,
   next: CloudflareOAuthTokensFile,
@@ -331,7 +375,7 @@ export async function setCloudflareOAuthToken(
     const file = await readCloudflareOAuthTokensFile(dataDir);
     const gen = nextLastGeneration(file);
     token.generation = gen;
-    await writeTokensFile(dataDir, { token, lastGeneration: gen });
+    await writeTokensFile(dataDir, { token, lastGeneration: gen, ...carriedPendingRevokes(file) });
   });
 }
 
@@ -354,7 +398,7 @@ export async function setCloudflareOAuthTokenIfGenerationMatches(
     if (!file.token || file.lastGeneration !== expectedGeneration) return false;
     const gen = nextLastGeneration(file);
     token.generation = gen;
-    await writeTokensFile(dataDir, { token, lastGeneration: gen });
+    await writeTokensFile(dataDir, { token, lastGeneration: gen, ...carriedPendingRevokes(file) });
     return true;
   });
 }
@@ -391,7 +435,7 @@ export async function setCloudflareOAuthTokenGuarded(
     const { raw, file } = await readCloudflareOAuthTokensFileWithRaw(dataDir);
     const gen = nextLastGeneration(file);
     token.generation = gen;
-    await writeTokensFile(dataDir, { token, lastGeneration: gen });
+    await writeTokensFile(dataDir, { token, lastGeneration: gen, ...carriedPendingRevokes(file) });
     return { written: true, displaced: file.token ?? recoveredDisplacedCredential(raw) };
   });
 }
@@ -452,7 +496,7 @@ export async function clearCloudflareOAuthToken(dataDir: string): Promise<Stored
     if (!(await tokensFileExists(dataDir))) return null;
     const { raw, file } = await readCloudflareOAuthTokensFileWithRaw(dataDir);
     const gen = nextLastGeneration(file);
-    await writeTokensFile(dataDir, { lastGeneration: gen });
+    await writeTokensFile(dataDir, { lastGeneration: gen, ...carriedPendingRevokes(file) });
     return file.token ?? recoveredDisplacedCredential(raw);
   });
 }
@@ -465,6 +509,80 @@ async function tokensFileExists(dataDir: string): Promise<boolean> {
     if ((err as { code?: string }).code === 'ENOENT') return false;
     throw err;
   }
+}
+
+/** Take the stored credential off disk AND record it as an unconfirmed revoke
+ * handle in the SAME locked write, returning the record. This is the clear a
+ * credential transition uses (the oauth->token switch): the destructive step
+ * and the durable intent to revoke are one atomic write, so no crash can leave
+ * the grant off disk with nothing that names it. The returned record is what
+ * the caller revokes; the handle it leaves behind is what a crash would.
+ *
+ * Keyed on the FILE existing, exactly as clearCloudflareOAuthToken is: a file
+ * whose record no longer sanitizes still carries a revokeable string in its
+ * bytes, and a transition that skipped it would leave that grant live. An
+ * otherwise-unusable file (no recoverable credential) records no handle and
+ * returns null — there is nothing to revoke.
+ *
+ * Handles already in the file are carried forward: they name grants an earlier
+ * transition took off disk and has not confirmed revoking, and this write is
+ * not the place to forget them. */
+export async function clearCloudflareOAuthTokenForRevoke(
+  dataDir: string,
+): Promise<StoredCloudflareOAuthToken | null> {
+  return withLock(dataDir, async () => {
+    if (!(await tokensFileExists(dataDir))) return null;
+    const { raw, file } = await readCloudflareOAuthTokensFileWithRaw(dataDir);
+    const displaced = file.token ?? recoveredDisplacedCredential(raw);
+    const gen = nextLastGeneration(file);
+    const carried = file.pendingRevokes ?? [];
+    const displacedToken = displaced ? displaced.refreshToken || displaced.accessToken : '';
+    const pendingRevokes = displacedToken
+      ? [displaced as StoredCloudflareOAuthToken, ...carried.filter((entry) => (entry.refreshToken || entry.accessToken) !== displacedToken)]
+      : carried;
+    await writeTokensFile(dataDir, {
+      lastGeneration: gen,
+      ...(pendingRevokes.length > 0 ? { pendingRevokes } : {}),
+    });
+    return displaced;
+  });
+}
+
+/** The grants a credential transition took off disk whose revoke is still
+ * unconfirmed. Empty when there is nothing owed, or no file at all. */
+export async function getPendingCloudflareOAuthRevokes(
+  dataDir: string,
+): Promise<StoredCloudflareOAuthToken[]> {
+  const file = await readCloudflareOAuthTokensFile(dataDir);
+  return file.pendingRevokes ?? [];
+}
+
+/** Drop the revoke handles whose grants are settled, leaving the credential and
+ * every other handle untouched. `settled` names tokens Cloudflare has answered
+ * about — an honored revoke, or an explicit refusal that means the token is
+ * already dead. Best-effort by contract: a file that cannot be written keeps
+ * the handles, and the next OAuth mutation retries them. */
+export async function dropPendingCloudflareOAuthRevokes(
+  dataDir: string,
+  settled: readonly string[],
+): Promise<void> {
+  if (settled.length === 0) return;
+  await withLock(dataDir, async () => {
+    if (!(await tokensFileExists(dataDir))) return;
+    const file = await readCloudflareOAuthTokensFile(dataDir);
+    const pending = file.pendingRevokes ?? [];
+    const remaining = pending.filter((entry) => {
+      const token = entry.refreshToken || entry.accessToken;
+      return !token || !settled.includes(token);
+    });
+    if (remaining.length === pending.length) return;
+    const gen = nextLastGeneration(file);
+    await writeTokensFile(dataDir, {
+      lastGeneration: gen,
+      ...(file.token ? { token: file.token } : {}),
+      ...(remaining.length > 0 ? { pendingRevokes: remaining } : {}),
+    });
+  });
 }
 
 /** True when the stored token is past its `expiresAt` (or within `skew`

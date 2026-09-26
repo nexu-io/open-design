@@ -14,7 +14,6 @@ import {
   readCloudflareWorkersConfig,
   readDeployConfig,
   SAVED_CLOUDFLARE_WORKERS_TOKEN_MASK,
-  writeCloudflareOAuthIdentity,
   writeCloudflareWorkersConfig,
 } from '../src/deploy.js';
 import {
@@ -92,21 +91,17 @@ describe('cloudflare-workers config', () => {
     }
   });
 
-  it('persists the OAuth identity without flipping the credential authority', async () => {
+  it('persists the OAuth identity only as part of the authority switch', async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), 'od-workers-config-'));
     const prior = process.env.OD_USER_STATE_DIR;
     process.env.OD_USER_STATE_DIR = dir;
     configureCloudflareWorkersDataDir(dir);
     try {
-      // The identity (clientId/redirectUri) is persisted, but credentialMode stays
-      // 'token' until commitCloudflareOAuthMode runs after token persistence.
-      const saved = await writeCloudflareOAuthIdentity({ clientId: 'client-123', redirectUri: 'http://127.0.0.1:56122/callback' });
-      expect(saved.clientId).toBe('client-123');
-      expect(saved.credentialMode).toBe('token');
-
       // The commit is the second half of the OAuth commit pair and refuses when
       // the store is empty, so the test stores the credential the connect route
-      // would have written first.
+      // would have written first. There is no write that records the identity on
+      // its own: the clientId and the mode it authorizes are one write, so a
+      // client is never persisted before the token that can use it.
       await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), {
         accessToken: 'oauth-access',
         tokenType: 'Bearer',
@@ -114,9 +109,10 @@ describe('cloudflare-workers config', () => {
         generation: 0,
         savedAt: Date.now(),
       });
-      await commitCloudflareOAuthMode();
+      await commitCloudflareOAuthMode({ clientId: 'client-123', redirectUri: 'http://127.0.0.1:56122/callback' });
       const raw = await readCloudflareWorkersConfig();
       expect(raw.clientId).toBe('client-123');
+      expect(raw.redirectUri).toBe('http://127.0.0.1:56122/callback');
       expect(raw.credentialMode).toBe('oauth');
 
       // OAuth mode is configured by account + client (no static token).
@@ -265,7 +261,7 @@ describe('cloudflare-workers config', () => {
   });
 
 
-  it('serializes the OAuth identity write with the mode commit (no lost update)', async () => {
+  it('serializes the mode commit with a settings save (no lost update)', async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), 'od-workers-config-'));
     const prior = process.env.OD_USER_STATE_DIR;
     process.env.OD_USER_STATE_DIR = dir;
@@ -281,14 +277,16 @@ describe('cloudflare-workers config', () => {
         savedAt: Date.now(),
       });
       // Both read-modify-writes start in the same tick. Without the mutex the
-      // identity write reads mode 'token', then overwrites the committed 'oauth'.
+      // save reads the mode the commit is about to replace and writes it back,
+      // losing the 'oauth' the connect just committed (or the script name the
+      // save carries). Whichever order the mutex picks, both changes survive.
       await Promise.all([
         commitCloudflareOAuthMode(),
-        writeCloudflareOAuthIdentity({ clientId: 'client-xyz', redirectUri: 'http://127.0.0.1:1/cb' }),
+        writeCloudflareWorkersConfig({ scriptName: 'my-site' }),
       ]);
       const raw = await readCloudflareWorkersConfig();
       expect(raw.credentialMode).toBe('oauth');
-      expect(raw.clientId).toBe('client-xyz');
+      expect(raw.scriptName).toBe('my-site');
       expect(raw.token).toBe('tok');
     } finally {
       process.env.OD_USER_STATE_DIR = prior;

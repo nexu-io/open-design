@@ -27,9 +27,6 @@ async function resolveCloudflareWorkersRouteToken(config: { token?: string | und
 // project: the Workers config is global, so a `scriptName` override applies to
 // every project, and two projects whose names slug identically also collide.
 const cloudflareWorkersDeploysInFlight = new Map<string, Promise<unknown>>();
-export function isCloudflareWorkersDeployInFlight(scriptName: string): boolean {
-  return cloudflareWorkersDeploysInFlight.has(scriptName);
-}
 async function withCloudflareWorkersDeploySingleFlight<T>(scriptName: string, run: () => Promise<T>): Promise<T> {
   if (cloudflareWorkersDeploysInFlight.has(scriptName)) {
     throw new DeployErrorLike('A Cloudflare Workers deploy of "' + scriptName + '" is already in progress.', 409, 'DEPLOY_IN_PROGRESS');
@@ -815,6 +812,15 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
       else delete metadata.pendingCustomDomains;
     }
     const now = Date.now();
+    // A failed attempt that carries the Access-perimeter verdict is a verdict
+    // about THIS deploy, not bookkeeping on the prior one. Inheriting the prior
+    // record's status and message left a redeploy that FAILED its perimeter
+    // reading 'ready' / "Public link is ready." while this very write landed the
+    // ungated verdict and the exposure it could not withdraw — the record
+    // contradicting itself, and disagreeing with the link check, which writes
+    // the identical finding as 'failed' with the error (failUnverified). Both
+    // fields describe the attempt that produced them.
+    const failureMessage = String((input.err as Error)?.message || input.err);
     try {
       upsertDeployment(db, {
         id: live?.id ?? prior?.id ?? randomUUID(),
@@ -825,8 +831,8 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
         deploymentId: prior?.deploymentId,
         deploymentCount: prior?.deploymentCount ?? 0,
         target: prior?.target ?? input.target,
-        status: prior?.status ?? 'failed',
-        statusMessage: prior ? prior.statusMessage : String((input.err as Error)?.message || input.err),
+        status: accessUnverified ? 'failed' : prior?.status ?? 'failed',
+        statusMessage: accessUnverified || !prior ? failureMessage : prior.statusMessage,
         reachableAt: prior?.reachableAt,
         providerMetadata: metadata,
         createdAt: prior?.createdAt ?? now,

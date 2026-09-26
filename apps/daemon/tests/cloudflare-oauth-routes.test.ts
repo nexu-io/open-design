@@ -14,6 +14,7 @@ import {
   configureCloudflareWorkersDataDir,
   deployConfigPath,
   readCloudflareWorkersConfig,
+  writeCloudflareWorkersConfig,
 } from '../src/deploy.js';
 import {
   clearCloudflareOAuthToken,
@@ -37,6 +38,11 @@ vi.mock('../src/integrations/cloudflare-oauth-server.js', () => ({
 // branch — a store broken enough to fail the restore would have failed the
 // original write first, so no real filesystem state gets there.
 const tokenStoreFault = vi.hoisted(() => ({ failSetOfAccessToken: '' }));
+// Armed by the connect-window test alone: it runs once, immediately AFTER the
+// guarded write stores a connect's grant — the instant a settings save can land
+// in the connect's window, with the grant on disk and its mode commit not yet
+// run.
+const tokenStoreHooks = vi.hoisted(() => ({ afterGuardedWrite: null as null | (() => Promise<void>) }));
 vi.mock('../src/integrations/cloudflare-tokens.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/integrations/cloudflare-tokens.js')>();
   return {
@@ -46,6 +52,19 @@ vi.mock('../src/integrations/cloudflare-tokens.js', async (importOriginal) => {
         throw new Error('EROFS: read-only file system');
       }
       return actual.setCloudflareOAuthToken(dataDir, token as Parameters<typeof actual.setCloudflareOAuthToken>[1]);
+    }),
+    setCloudflareOAuthTokenGuarded: vi.fn(async (
+      dataDir: string,
+      token: Parameters<typeof actual.setCloudflareOAuthTokenGuarded>[1],
+      guard: () => boolean,
+    ) => {
+      const write = await actual.setCloudflareOAuthTokenGuarded(dataDir, token, guard);
+      const hook = tokenStoreHooks.afterGuardedWrite;
+      if (hook) {
+        tokenStoreHooks.afterGuardedWrite = null;
+        await hook();
+      }
+      return write;
     }),
   };
 });
@@ -1077,6 +1096,88 @@ describe('cloudflare-oauth routes', () => {
       await rm(tokensPath, { recursive: true, force: true });
       await fetch(`${app.baseUrl}/api/cloudflare/oauth/cancel`, { method: 'POST' });
       await rm(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), { force: true });
+    }
+  });
+
+  it('a settings save that switches to token mode inside the connect window is not undone by the connect rollback', async () => {
+    const dataDir = cloudflareOAuthTokensDir();
+    const configPath = deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID);
+    const realFetch = globalThis.fetch;
+    const revokes: string[] = [];
+    vi.stubGlobal('fetch', async (input: unknown, init?: unknown) => {
+      const url = String(input);
+      if (url.includes('oauth2/revoke')) {
+        revokes.push(String((init as RequestInit | undefined)?.body));
+        return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url.includes('oauth2/token')) {
+        return new Response(
+          JSON.stringify({ access_token: 'acc-new', token_type: 'Bearer', refresh_token: 'ref-new', expires_in: 3600 }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url.endsWith('/client/v4/user')) {
+        return new Response(JSON.stringify({ success: false }), { status: 403, headers: { 'content-type': 'application/json' } });
+      }
+      return realFetch(input as never, init as never);
+    });
+    try {
+      await writeCloudflareWorkersConfig({ token: 'static-token', accountId: 'acct_test' });
+      // The credential this connect displaces, with NO clientId: the rollback's
+      // revoke has to fall back to the client this attempt authorized with.
+      await setCloudflareOAuthToken(dataDir, {
+        accessToken: 'acc-prior',
+        refreshToken: 'ref-prior',
+        tokenType: 'Bearer',
+        generation: 0,
+        savedAt: Date.now(),
+      });
+      const startResp = await fetch(`${app.baseUrl}/api/cloudflare/oauth/start`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ clientId: 'client-abc', redirectUri: 'http://127.0.0.1:56122/callback' }),
+      });
+      expect(startResp.status).toBe(200);
+      const { state } = (await startResp.json()) as { state: string };
+      // The user's settings save lands in the connect's window: the grant is on
+      // disk, the mode commit has not run, so the save reads the grant as the
+      // authority and takes the oauth->token transition — clearing the store and
+      // revoking the grant the connect just minted. The commit that follows
+      // therefore refuses (CFW_OAUTH_RECONNECT_REQUIRED), and the rollback must
+      // not put the pre-connect grant back beside a config that no longer names
+      // OAuth: that state reports a connected profile for a credential nothing
+      // names, with no later disconnect able to find it.
+      tokenStoreHooks.afterGuardedWrite = async () => {
+        await writeCloudflareWorkersConfig({ credentialMode: 'token', token: 'static-token' });
+      };
+      const completeResp = await fetch(`${app.baseUrl}/api/cloudflare/oauth/complete`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ state, code: 'AUTHCODE' }),
+      });
+      expect(completeResp.status).toBe(400);
+      // The commit refused because the grant it was the second half of is gone
+      // (the save's transition cleared it), not because anything was wrong with
+      // the credit the user just authorized.
+      expect(((await completeResp.json()) as { error: string }).error).toMatch(/Connect Cloudflare first/i);
+
+      const raw = await readCloudflareWorkersConfig();
+      expect(raw.credentialMode).toBe('token');
+      expect(raw.token).toBe('static-token');
+      // The store is left cleared, and the grant it displaced is revoked rather
+      // than restored — named by the client this attempt authorized with.
+      expect(await getCloudflareOAuthToken(dataDir)).toBeNull();
+      const displaced = revokes
+        .map((body) => new URLSearchParams(body))
+        .filter((form) => form.get('token') === 'ref-prior');
+      expect(displaced).toHaveLength(1);
+      expect(displaced[0]!.get('client_id')).toBe('client-abc');
+    } finally {
+      tokenStoreHooks.afterGuardedWrite = null;
+      vi.unstubAllGlobals();
+      await rm(configPath, { force: true });
+      await clearCloudflareOAuthToken(dataDir);
+      await fetch(`${app.baseUrl}/api/cloudflare/oauth/cancel`, { method: 'POST' });
     }
   });
 });

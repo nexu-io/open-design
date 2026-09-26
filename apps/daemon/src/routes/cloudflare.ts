@@ -167,11 +167,16 @@ export function registerCloudflareRoutes(
     grant: { refreshToken?: string; accessToken?: string; clientId?: string },
     fetchImpl: typeof fetch,
     what: string,
+    fallbackClientId?: string,
   ): Promise<void> => {
     const token = grant.refreshToken || grant.accessToken;
     if (!token) return;
     const tokenTypeHint = grant.refreshToken ? 'refresh_token' : 'access_token';
-    const clientId = (grant.clientId ?? '').trim();
+    // RFC 7009 §2.1: the revoke names the client the token was issued to, so
+    // the record's own id wins. `fallbackClientId` covers a record written
+    // before the identity was persisted — the caller passes the client this
+    // attempt authorized with.
+    const clientId = (grant.clientId ?? '').trim() || (fallbackClientId ?? '').trim();
     try {
       const ok = await revokeCloudflareToken({
         token,
@@ -239,6 +244,22 @@ export function registerCloudflareRoutes(
     return prev;
   };
 
+  // Whether the config still names OAuth as the credential authority, as the
+  // rollback of a failed mode commit has to know it. `null` is "the config
+  // could not be read" (an unparsable file, or an I/O error), which is NOT an
+  // answer that a credential transition landed: a settings PUT refuses to touch
+  // a corrupt file, so the rollback keeps its previous restore semantics there.
+  // Never throws: this gates a recovery path that must not gain a failure mode.
+  const cloudflareConfigAuthorityAfterFailedCommit = async (): Promise<boolean | null> => {
+    try {
+      const cfg = await readCloudflareWorkersConfig();
+      if (cfg.configError) return null;
+      return cfg.credentialMode === 'oauth';
+    } catch {
+      return null;
+    }
+  };
+
   const persistCredential = async (
     result: CompleteCloudflareAuthResult,
     attemptGeneration: number,
@@ -286,19 +307,59 @@ export function registerCloudflareRoutes(
         await commitCloudflareOAuthMode({ clientId: result.clientId, redirectUri: result.redirectUri });
         return { ok: true, superseded: supersededGrantOf(displaced, stored) };
       } catch (err) {
-        // The token write already landed but the config commit failed — restore
-        // the token it displaced so a previously working credential stays usable
-        // instead of leaving a token issued to the new client against a config
-        // that still names the old identity. The local state is settled FIRST
-        // (a crash during the revoke round-trip must not leave a soon-revoked
-        // token on disk), then the grant this attempt minted is revoked at
-        // Cloudflare.
+        // The token write already landed but the config commit failed. What the
+        // rollback may do with the credential it displaced is decided by the
+        // config, RE-READ here, not by the failure alone: the connect holds no
+        // config lock between its token write and this commit, so a settings
+        // save can land in that window and take the oauth->token transition —
+        // clearing the store and revoking the grant this attempt had just
+        // minted, which is exactly why the commit refused with
+        // CFW_OAUTH_RECONNECT_REQUIRED. Putting the displaced credential back
+        // there is the state this rollback exists to avoid, one step later: the
+        // config reads token mode while /auth/status reports the pre-connect
+        // profile as connected for a credential nothing names, and no later
+        // disconnect can find it to revoke. So a re-read that resolves to token
+        // mode leaves the store cleared and revokes the displaced grant instead.
+        //
+        // "Could not read" is not that answer (see
+        // cloudflareConfigAuthorityAfterFailedCommit) and keeps the restore:
+        // with the config unreadable, nothing proves a transition landed, and
+        // the API token issued to the new client must not be left against a
+        // config that still names the old identity.
+        //
+        // Either way the local state is settled FIRST (a crash during the revoke
+        // round-trip must not leave a soon-revoked token on disk), then the
+        // grant this attempt minted is revoked at Cloudflare.
         //
         // The restore can fail too (the store went unwritable underneath it).
         // Revoking the new grant with the new token still on disk would leave a
         // stored-but-dead credential: the status route reports connected, and
         // every deploy on it fails at Cloudflare. Clearing the store is the
         // honest end state — no credential is strictly better than a dead one.
+        const authority = await cloudflareConfigAuthorityAfterFailedCommit();
+        if (authority === false) {
+          // The transition this attempt lost to left the store empty; clearing
+          // again is the honest no-op that also covers a displaced record the
+          // save's own revoke could not account for.
+          try {
+            await clearCloudflareOAuthToken(dataDir);
+          } catch (clearErr) {
+            console.warn(
+              '[cloudflare-oauth] could not clear the credential left by the failed config commit:',
+              String((clearErr as Error)?.message || clearErr),
+            );
+          }
+          // The credential this attempt displaced belongs to the authority the
+          // config has just left, so it is revoked rather than restored — and
+          // revoked through the same best-effort helper every other abandoned
+          // grant goes through, with this attempt's client as the fallback id
+          // for a record written before the identity was persisted.
+          if (displaced) await revokeGrantBestEffort(displaced, fetchImpl, 'displaced', result.clientId);
+          await clearPendingGrantMarker();
+          await revokeDiscardedGrant(result, fetchImpl);
+          markGrantRevoked(err);
+          throw err;
+        }
         try {
           if (displaced) await setCloudflareOAuthToken(dataDir, displaced);
           else await clearCloudflareOAuthToken(dataDir);

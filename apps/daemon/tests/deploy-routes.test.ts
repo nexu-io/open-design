@@ -3577,7 +3577,17 @@ describe('deploy provider routes', () => {
       f.state.subdomainDisableMode = 'error';
       f.state.headMode = 'plain';
       await f.putConfig({ hostname: 'a.example.com', access: true });
-      expect((await f.deploy('a.html')).status).toBeGreaterThanOrEqual(400);
+      const failedDeploy = await f.deploy('a.html');
+      expect(failedDeploy.status).toBeGreaterThanOrEqual(400);
+      // The failed attempt carries the perimeter verdict, so the record may not
+      // keep the prior 'ready' / "Public link is ready." while this very write
+      // lands the ungated verdict and the exposure it could not withdraw. The
+      // link check writes the identical finding as 'failed' with the error, and
+      // the record must not disagree with it about one and the same deploy.
+      const failedRecord = getDeploymentById(db, f.projectId, record.id);
+      expect(failedRecord?.status).toBe('failed');
+      expect(failedRecord?.statusMessage).toContain('is not behind Cloudflare Access');
+      expect(failedRecord?.statusMessage).not.toContain('Public link is ready.');
       expect(f.state.subdomainEnabled).toBe(true);
       // The hostname half of the withdrawal did land; the route half did not.
       expect(f.state.routed).toEqual([]);

@@ -7,6 +7,7 @@ import { setCloudflareOAuthToken } from '../src/integrations/cloudflare-tokens.j
 import {
   CLOUDFLARE_ACCESS_PERIMETER_RETRY_DEFAULTS,
   CLOUDFLARE_API_TIMEOUT_MS,
+  CLOUDFLARE_LIST_MAX_PAGES,
   CLOUDFLARE_PROBE_TIMEOUT_MS,
   CLOUDFLARE_UPLOAD_TIMEOUT_BASE_MS,
   CLOUDFLARE_UPLOAD_TIMEOUT_MAX_MS,
@@ -283,6 +284,39 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
     expect(calls.some((c) => c[0].includes('/access/apps/app-page2') && c[1]?.method === 'PUT')).toBe(true);
     expect(calls.some((c) => c[0].endsWith('/access/apps') && c[1]?.method === 'POST')).toBe(false);
     expect(out.providerMetadata).toMatchObject({ accessAppId: 'app-page2' });
+  });
+
+  it('fails closed instead of reading a truncated Access apps list as "no app claims this Worker"', async () => {
+    const { calls, fn } = accessFetch();
+    // Every page is full of apps that do NOT claim this Worker, and no page
+    // reports totals, so only the shared page ceiling can stop the read. The
+    // lenient reader stops there and answers "no app claims this Worker" — and
+    // the POST that follows creates a SECOND app for a Worker that already has
+    // one (Cloudflare refuses the destination, after the assets upload is
+    // spent). A listing that was never read to its end proves nothing.
+    const paged = vi.fn(async (url: string, init?: RequestInit) => {
+      const method = (init?.method || 'GET').toUpperCase();
+      if (method === 'GET' && /\/access\/apps\?page=\d+/.test(url)) {
+        calls.push([url, init]);
+        const page = Number(new URL(url).searchParams.get('page'));
+        return jsonResponse({
+          success: true,
+          result: Array.from({ length: 100 }, (_, i) => ({
+            id: 'other-' + page + '-' + i,
+            name: 'Other ' + page + ' ' + i,
+            destinations: [{ type: 'worker', worker_id: 'tag-other-' + page + '-' + i }],
+          })),
+        });
+      }
+      return fn(url, init);
+    });
+    vi.stubGlobal('fetch', paged);
+    await expect(
+      deployToCloudflareWorkers({ ...base, access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } } }),
+    ).rejects.toMatchObject({ name: 'DeployError', code: 'CFW_LIST_TRUNCATED', status: 502 });
+    // The refusal lands before any create: no duplicate app was posted.
+    expect(calls.some((c) => c[0].endsWith('/access/apps') && c[1]?.method === 'POST')).toBe(false);
+    expect(calls.filter((c) => /\/access\/apps\?page=\d+/.test(c[0]))).toHaveLength(CLOUDFLARE_LIST_MAX_PAGES);
   });
 
   it('refuses to overwrite a user-managed Access app that claims the Worker', async () => {

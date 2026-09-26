@@ -22,10 +22,14 @@ import {
   publicCloudflareWorkersConfig,
   readCloudflareWorkersConfig,
   resetCloudflareCredentialMode,
-  writeCloudflareOAuthIdentity,
   writeCloudflareWorkersConfig,
 } from '../src/deploy.js';
-import { getCloudflareOAuthToken, setCloudflareOAuthToken } from '../src/integrations/cloudflare-tokens.js';
+import {
+  clearCloudflareOAuthTokenForRevoke,
+  getCloudflareOAuthToken,
+  getPendingCloudflareOAuthRevokes,
+  setCloudflareOAuthToken,
+} from '../src/integrations/cloudflare-tokens.js';
 
 async function withDataDir<T>(run: (dir: string) => Promise<T>): Promise<T> {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'od-workers-config-durability-'));
@@ -142,19 +146,19 @@ describe('Workers config corruption recovery', () => {
     });
   });
 
-  // The partial mutations (OAuth identity, mode commit, disconnect reset) spread
-  // the current config. After a corrupt read that is the EMPTY default plus the
-  // marker, so writing it would replace the user's recoverable file with
-  // nothing — and persist the marker. Only the explicit settings PUT above heals.
+  // The partial mutations (pending-grant marker, mode commit, disconnect reset)
+  // spread the current config. After a corrupt read that is the EMPTY default
+  // plus the marker, so writing it would replace the user's recoverable file
+  // with nothing — and persist the marker. Only the explicit settings PUT heals.
   describe('partial mutations on a corrupt file', () => {
     const CORRUPT = '{"token": "tok", "accountId": "acct_test", "scriptName": "keep-me", "bindings": [';
 
-    it('the OAuth identity write refuses with CFW_CONFIG_CORRUPT and leaves the file byte-for-byte intact', async () => {
+    it('the pending-grant marker write refuses with CFW_CONFIG_CORRUPT and leaves the file byte-for-byte intact', async () => {
       await withDataDir(async () => {
         vi.spyOn(console, 'error').mockImplementation(() => {});
         const file = deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID);
         await writeFile(file, CORRUPT, 'utf8');
-        await expect(writeCloudflareOAuthIdentity({ clientId: 'client-1', redirectUri: 'http://127.0.0.1:1/cb' }))
+        await expect(markCloudflareOAuthGrantPending())
           .rejects.toMatchObject({ status: 409, code: CLOUDFLARE_WORKERS_CONFIG_CORRUPT_CODE });
         expect(await readFile(file, 'utf8')).toBe(CORRUPT);
       });
@@ -192,8 +196,8 @@ describe('Workers config corruption recovery', () => {
         await writeFile(file, CORRUPT, 'utf8');
         await writeCloudflareWorkersConfig({ token: 'tok', accountId: 'acct_test', scriptName: 'healed' });
         await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), { accessToken: 'acc', tokenType: 'Bearer', generation: 0, savedAt: Date.now() });
-        await writeCloudflareOAuthIdentity({ clientId: 'client-1', redirectUri: 'http://127.0.0.1:1/cb' });
-        await commitCloudflareOAuthMode();
+        await markCloudflareOAuthGrantPending();
+        await commitCloudflareOAuthMode({ clientId: 'client-1', redirectUri: 'http://127.0.0.1:1/cb' });
         expect(JSON.parse(await readFile(file, 'utf8'))).toMatchObject({ scriptName: 'healed', clientId: 'client-1', credentialMode: 'oauth' });
         await resetCloudflareCredentialMode();
         const persisted = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>;
@@ -816,6 +820,122 @@ describe('credential mode is derived from a live OAuth grant', () => {
       expect(revokes).toHaveLength(1);
       expect(revokes[0]).toContain('token=ref-1');
       expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('rolling back the failed Cloudflare credential transition'));
+    });
+  });
+
+  it('a crash between the clear and the revoke leaves the grant named on disk, and the next OAuth mutation revokes it', async () => {
+    await withDataDir(async () => {
+      await writeCloudflareWorkersConfig({ token: 'static-token', accountId: 'acct_test' });
+      await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), {
+        accessToken: 'oauth-access',
+        refreshToken: 'ref-1',
+        tokenType: 'Bearer',
+        clientId: 'client-abc',
+        expiresAt: Date.now() + 3600_000,
+        generation: 1,
+        savedAt: Date.now(),
+      });
+      // The crash window, reproduced with the primitives the save itself uses:
+      // the clear (which records the revoke handle in the SAME write) landed,
+      // the mode write never did, and the process died before the revoke went
+      // out. What survives is exactly what a crash leaves: no credential in the
+      // store, a config that reads token mode, and one grant still valid at
+      // Cloudflare that only the handle names.
+      await clearCloudflareOAuthTokenForRevoke(cloudflareOAuthTokensDir());
+      await writeFile(
+        deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID),
+        JSON.stringify({ token: 'static-token', accountId: 'acct_test', credentialMode: 'oauth', pendingOAuthGrantClear: true }),
+        'utf8',
+      );
+      expect((await readCloudflareWorkersConfig()).credentialMode).toBe('token');
+      expect(await getCloudflareOAuthToken(cloudflareOAuthTokensDir())).toBeNull();
+      expect(await getPendingCloudflareOAuthRevokes(cloudflareOAuthTokensDir())).toHaveLength(1);
+
+      const revokes: string[] = [];
+      vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+        revokes.push(String(init?.body ?? ''));
+        return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
+      }));
+      // The debt is durable, not urgent: nothing reaches Cloudflare until
+      // something runs.
+      expect(revokes).toEqual([]);
+
+      // The next OAuth mutation finishes what the crash interrupted …
+      await resetCloudflareCredentialMode();
+      expect(revokes).toHaveLength(1);
+      expect(revokes[0]).toContain('token=ref-1');
+      expect(revokes[0]).toContain('client_id=client-abc');
+      // … and the handle goes with the confirmed revoke, so the next mutation
+      // does not repeat it.
+      expect(await getPendingCloudflareOAuthRevokes(cloudflareOAuthTokensDir())).toEqual([]);
+      await resetCloudflareCredentialMode();
+      expect(revokes).toHaveLength(1);
+    });
+  });
+
+  it('a revoke Cloudflare never answered keeps its handle for the next mutation to retry', async () => {
+    await withDataDir(async () => {
+      await writeCloudflareWorkersConfig({ token: 'static-token', accountId: 'acct_test' });
+      await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), {
+        accessToken: 'oauth-access',
+        refreshToken: 'ref-1',
+        tokenType: 'Bearer',
+        clientId: 'client-abc',
+        generation: 1,
+        savedAt: Date.now(),
+      });
+      await clearCloudflareOAuthTokenForRevoke(cloudflareOAuthTokensDir());
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      // A transport failure is not an answer: the grant is not known to be dead,
+      // so a handle that was dropped here would be a grant leaked for good.
+      vi.stubGlobal('fetch', vi.fn(async () => {
+        throw new Error('fetch failed');
+      }));
+      await resetCloudflareCredentialMode();
+      expect(warnSpy).toHaveBeenCalled();
+      expect(await getPendingCloudflareOAuthRevokes(cloudflareOAuthTokensDir())).toHaveLength(1);
+
+      const revokes: string[] = [];
+      vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+        revokes.push(String(init?.body ?? ''));
+        return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
+      }));
+      await resetCloudflareCredentialMode();
+      expect(revokes).toHaveLength(1);
+      expect(revokes[0]).toContain('token=ref-1');
+      expect(await getPendingCloudflareOAuthRevokes(cloudflareOAuthTokensDir())).toEqual([]);
+    });
+  });
+
+  it('a transition that lands settles the handle its own clear recorded, and settles it once', async () => {
+    await withDataDir(async () => {
+      await writeCloudflareWorkersConfig({ token: 'static-token', accountId: 'acct_test' });
+      await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), {
+        accessToken: 'oauth-access',
+        refreshToken: 'ref-1',
+        tokenType: 'Bearer',
+        clientId: 'client-abc',
+        expiresAt: Date.now() + 3600_000,
+        generation: 1,
+        savedAt: Date.now(),
+      });
+      await commitCloudflareOAuthMode();
+
+      const revokes: string[] = [];
+      vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+        revokes.push(String(init?.body ?? ''));
+        return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
+      }));
+      await writeCloudflareWorkersConfig({ credentialMode: 'token' });
+      expect(revokes).toHaveLength(1);
+      expect(revokes[0]).toContain('token=ref-1');
+      // The handle the clear recorded in the same write as the clear itself is
+      // retired by the revoke it was recorded for — never left for a later
+      // mutation to repeat.
+      expect(await getPendingCloudflareOAuthRevokes(cloudflareOAuthTokensDir())).toEqual([]);
+      expect(await getCloudflareOAuthToken(cloudflareOAuthTokensDir())).toBeNull();
+      expect((await readCloudflareWorkersConfig()).credentialMode).toBe('token');
     });
   });
 });

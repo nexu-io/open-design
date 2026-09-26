@@ -1033,6 +1033,7 @@ async function ensureCloudflareOtpIdentityProvider(config: WorkersDeployConfig):
 // Find the app that already claims this Worker so we can update it in place.
 async function findCloudflareAccessAppByWorker(config: WorkersDeployConfig, workerId: string): Promise<JsonObject | null> {
   const base = CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/access/apps';
+  const all: JsonObject[] = [];
   let page = 1;
   for (;;) {
     const resp = await fetchWithRetry(config,
@@ -1053,7 +1054,27 @@ async function findCloudflareAccessAppByWorker(config: WorkersDeployConfig, work
       return dests.some((d) => d?.type === 'worker' && d?.worker_id === workerId);
     });
     if (match) return match;
-    if (!cloudflareListHasMorePages(json, apps.length, page, 100)) return null;
+    // Only the repeats of an incoming page are dropped, never the whole page
+    // (see cloudflareListUnseenItems): an endpoint that ignores `page=` answers
+    // every page identically, and one whose app set shifts between requests can
+    // repeat SOME ids while still carrying new ones. A page with nothing new
+    // means the read is over — return null before the ceiling can be blamed.
+    const unseen = cloudflareListUnseenItems(all, apps);
+    if (apps.length > 0 && unseen.length === 0) return null;
+    all.push(...unseen);
+    // The LENIENT stop is not this one: it reads "the ceiling is where I stop"
+    // as "the list ended", and every caller below reads a missing app as "no app
+    // claims this Worker" — then POSTs a SECOND app for a Worker that already
+    // has one (Cloudflare refuses the destination, and the deploy fails after
+    // its script PUT). A listing that was never read to its end proves nothing
+    // about absence, so the ceiling fails closed instead, exactly as
+    // listCloudflareAllPagesStrict does for the other deploy-path reads. Asking
+    // cloudflareListReportsAnotherPage directly is what tells "the list ended"
+    // from "I stopped reading".
+    if (!cloudflareListReportsAnotherPage(json, apps.length, page, 100)) return null;
+    if (page >= CLOUDFLARE_LIST_MAX_PAGES) {
+      throw new DeployError('Cloudflare list too large to read completely.', 502, undefined, 'CFW_LIST_TRUNCATED');
+    }
     page += 1;
   }
 }
