@@ -2170,3 +2170,72 @@ describe('Cloudflare Workers request timeouts', () => {
     });
   });
 });
+
+// The OTP identity provider is an ACCOUNT-global resource, while the deploy's own
+// single-flight is keyed by script name — so two deploys of DIFFERENT scripts run
+// concurrently and both can miss the same list-then-create.
+describe('the OTP identity provider is account-scoped, not deploy-scoped', () => {
+  it('creates it once for two concurrent deploys of different scripts', async () => {
+    // Cloudflare does not dedupe identity providers by type, so a second POST
+    // leaves a duplicate "One-time PIN login" on the account, unseen.
+    const { calls, fn } = accessFetch({
+      scripts: { success: true, result: [
+        { id: 'site-one', tag: 'tag-site-one' },
+        { id: 'site-two', tag: 'tag-site-two' },
+      ] },
+    });
+    let created = false;
+    const wrapped = vi.fn(async (url: string, init?: RequestInit) => {
+      const method = (init?.method || 'GET').toUpperCase();
+      if (url.includes('/access/identity_providers')) {
+        calls.push([url, init]);
+        if (method === 'POST') {
+          created = true;
+          return jsonResponse({ success: true, result: { id: 'otp-new' } });
+        }
+        return jsonResponse({
+          success: true,
+          result: created ? [{ id: 'otp-new', type: 'onetimepin', name: 'One-time PIN login' }] : [],
+        });
+      }
+      return fn(url, init);
+    });
+    vi.stubGlobal('fetch', wrapped);
+    const out = await Promise.all([
+      deployToCloudflareWorkers({ ...base, projectName: 'Site One', access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } } }),
+      deployToCloudflareWorkers({ ...base, projectName: 'Site Two', access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } } }),
+    ]);
+    expect(out).toHaveLength(2);
+    // The account-scoped single-flight makes the second deploy's list run AFTER
+    // the first one's create, so it adopts rather than mints a duplicate.
+    expect(calls.filter((c) => c[0].includes('/access/identity_providers') && (c[1]?.method || 'GET').toUpperCase() === 'POST')).toHaveLength(1);
+  });
+
+  it('adopts an existing provider when its create is refused, keeping the account to one', async () => {
+    const { calls, fn } = accessFetch();
+    let lists = 0;
+    const wrapped = vi.fn(async (url: string, init?: RequestInit) => {
+      const method = (init?.method || 'GET').toUpperCase();
+      if (url.includes('/access/identity_providers')) {
+        calls.push([url, init]);
+        if (method === 'POST') {
+          return jsonResponse({ success: false, errors: [{ code: 10004, message: 'already exists' }] }, 400);
+        }
+        lists += 1;
+        return jsonResponse({
+          success: true,
+          result: lists === 1 ? [] : [{ id: 'otp-existing', type: 'onetimepin', name: 'One-time PIN login' }],
+        });
+      }
+      return fn(url, init);
+    });
+    vi.stubGlobal('fetch', wrapped);
+    await deployToCloudflareWorkers({ ...base, access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } } });
+    expect(lists).toBe(2);
+    // The adopted provider is what the Access app gets pinned to: the deploy
+    // carries on using the account's ONE provider rather than failing, or
+    // creating the duplicate whose id it would have pinned instead.
+    const appCreate = calls.find((c) => c[0].includes('/access/apps') && (c[1]?.method || '').toUpperCase() === 'POST');
+    expect(JSON.parse(String(appCreate?.[1]?.body ?? '{}'))).toMatchObject({ allowed_idps: ['otp-existing'] });
+  });
+});

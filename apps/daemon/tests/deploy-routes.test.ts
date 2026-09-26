@@ -11,6 +11,7 @@ import {
   commitCloudflareOAuthMode,
   configureCloudflareWorkersDataDir,
   deployConfigPath,
+  pendingPublicLinkMessage,
   VERCEL_PROVIDER_ID,
   SAVED_CLOUDFLARE_TOKEN_MASK,
 } from '../src/deploy.js';
@@ -3826,5 +3827,24 @@ describe('deploy provider routes', () => {
       prepareSpy.mockRestore();
       await f.cleanup();
     }
+  });
+});
+
+// The provider owns the "still preparing" sentence. It cannot be reached through
+// the check-link route today — every non-reachable verdict from
+// checkDeploymentUrl already carries a statusMessage of its own, so the `||`
+// fallback never fires — but it is a latent wrong-provider message and the
+// mapping is asserted directly here rather than through a path that cannot
+// exercise it.
+describe('pendingPublicLinkMessage', () => {
+  it('names the deployment\'s own provider for a Cloudflare Workers record', () => {
+    expect(pendingPublicLinkMessage(CLOUDFLARE_WORKERS_PROVIDER_ID)).toBe(
+      'Cloudflare Workers is still preparing the public link.',
+    );
+  });
+
+  it('keeps the Vercel sentence for Vercel and for anything unrecognized', () => {
+    expect(pendingPublicLinkMessage(VERCEL_PROVIDER_ID)).toBe('Vercel is still preparing the public link.');
+    expect(pendingPublicLinkMessage('some-future-provider')).toBe('Vercel is still preparing the public link.');
   });
 });

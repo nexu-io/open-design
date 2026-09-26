@@ -46,7 +46,7 @@ type DeployConfig = {
   clientId?: string | undefined;
   redirectUri?: string | undefined;
   scopes?: string[] | undefined;
-  bindings?: Array<{ type: string; name: string; bucketName?: string; databaseName?: string; id?: string }> | undefined;
+  bindings?: CloudflareWorkersConfigBinding[] | undefined;
   access?: { enabled: boolean; rule?: CloudflareWorkersAccessRule } | undefined;
   customDomain?: { hostname: string; zoneId: string } | undefined;
   /** Set on the safe default returned when the on-disk file is unparsable
@@ -345,49 +345,100 @@ function normalizeCloudflareWorkersAccessRule(rule: unknown): CloudflareWorkersA
 const CLOUDFLARE_WORKERS_BINDING_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const CLOUDFLARE_WORKERS_RESERVED_BINDING_NAMES = new Set(['ASSETS']);
 
+/** The binding types the OpenDesign config owns, and the fields each type owns.
+ * This mirrors the type->field map the settings UI renders
+ * (`apps/web/src/components/FileViewer.tsx`): its R2 branch edits `bucketName`,
+ * its D1 branch edits `id` / `databaseName`, and neither touches the other's. */
+export type CloudflareWorkersConfigBinding = {
+  type: string;
+  name: string;
+  bucketName?: string;
+  databaseName?: string;
+  id?: string;
+};
+
+/** Validate ONE config binding and reduce it to the fields its type owns.
+ *
+ * Throws `CFW_BINDINGS_INVALID` rather than dropping anything: an unsupported
+ * type is REJECTED, because silently dropping it deploys live with a binding the
+ * user asked for and did not get. Reducing by TYPE rather than by field presence
+ * is what stops `{type:'r2_bucket', bucketName:'x', id:'abc'}` from carrying that
+ * stray `id` into the live script PUT, after the assets upload has been spent. */
+function normalizeCloudflareWorkersBinding(entry: unknown, index: number): CloudflareWorkersConfigBinding {
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+    throw new DeployError('Cloudflare Workers binding #' + (index + 1) + ' must be an object.', 400, undefined, 'CFW_BINDINGS_INVALID');
+  }
+  const b = entry as JsonObject;
+  const type = typeof b.type === 'string' ? b.type.trim() : '';
+  const name = typeof b.name === 'string' ? b.name.trim() : '';
+  if (!type) throw new DeployError('Cloudflare Workers binding #' + (index + 1) + ' needs a string "type".', 400, undefined, 'CFW_BINDINGS_INVALID');
+  if (type !== 'r2_bucket' && type !== 'd1') {
+    throw new DeployError('Cloudflare Workers binding #' + (index + 1) + ' has unsupported type "' + type + '" (supported: r2_bucket, d1).', 400, undefined, 'CFW_BINDINGS_INVALID');
+  }
+  if (!CLOUDFLARE_WORKERS_BINDING_NAME.test(name)) {
+    throw new DeployError('Cloudflare Workers binding name "' + name + '" is invalid (letters, digits and underscores; cannot start with a digit).', 400, undefined, 'CFW_BINDINGS_INVALID');
+  }
+  if (CLOUDFLARE_WORKERS_RESERVED_BINDING_NAMES.has(name)) {
+    throw new DeployError('Cloudflare Workers binding name "' + name + '" is reserved for the static assets binding.', 400, undefined, 'CFW_BINDINGS_INVALID');
+  }
+  if (type === 'r2_bucket') {
+    const bucketName = typeof b.bucketName === 'string' ? b.bucketName.trim() : '';
+    if (!bucketName) {
+      throw new DeployError('Cloudflare Workers R2 binding "' + name + '" needs a bucketName.', 400, undefined, 'CFW_BINDINGS_INVALID');
+    }
+    return { type, name, bucketName };
+  }
+  const id = typeof b.id === 'string' ? b.id.trim() : '';
+  const databaseName = typeof b.databaseName === 'string' ? b.databaseName.trim() : '';
+  if (!id && !databaseName) {
+    throw new DeployError('Cloudflare Workers D1 binding "' + name + '" needs a databaseName or id.', 400, undefined, 'CFW_BINDINGS_INVALID');
+  }
+  return { type, name, ...(id ? { id } : {}), ...(databaseName ? { databaseName } : {}) };
+}
+
 /** Validate the Workers bindings a config carries. Throws a DeployError
  * (`CFW_BINDINGS_INVALID`) instead of letting a malformed entry TypeError at
  * deploy time after the assets were uploaded, or letting a user binding named
  * `ASSETS` collide with the injected assets binding. */
-export function normalizeCloudflareWorkersBindings(
-  value: unknown,
-): Array<{ type: string; name: string; bucketName?: string; databaseName?: string; id?: string }> | undefined {
+export function normalizeCloudflareWorkersBindings(value: unknown): CloudflareWorkersConfigBinding[] | undefined {
   if (value === undefined || value === null) return undefined;
   if (!Array.isArray(value)) {
     throw new DeployError('Cloudflare Workers bindings must be an array.', 400, undefined, 'CFW_BINDINGS_INVALID');
   }
   const seen = new Set<string>();
   return value.map((entry, index) => {
-    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
-      throw new DeployError('Cloudflare Workers binding #' + (index + 1) + ' must be an object.', 400, undefined, 'CFW_BINDINGS_INVALID');
+    const binding = normalizeCloudflareWorkersBinding(entry, index);
+    if (seen.has(binding.name)) {
+      throw new DeployError('Cloudflare Workers binding name "' + binding.name + '" is duplicated.', 400, undefined, 'CFW_BINDINGS_INVALID');
     }
-    const b = entry as JsonObject;
-    const type = typeof b.type === 'string' ? b.type.trim() : '';
-    const name = typeof b.name === 'string' ? b.name.trim() : '';
-    if (!type) throw new DeployError('Cloudflare Workers binding #' + (index + 1) + ' needs a string "type".', 400, undefined, 'CFW_BINDINGS_INVALID');
-    if (!CLOUDFLARE_WORKERS_BINDING_NAME.test(name)) {
-      throw new DeployError('Cloudflare Workers binding name "' + name + '" is invalid (letters, digits and underscores; cannot start with a digit).', 400, undefined, 'CFW_BINDINGS_INVALID');
-    }
-    if (CLOUDFLARE_WORKERS_RESERVED_BINDING_NAMES.has(name)) {
-      throw new DeployError('Cloudflare Workers binding name "' + name + '" is reserved for the static assets binding.', 400, undefined, 'CFW_BINDINGS_INVALID');
-    }
-    if (seen.has(name)) throw new DeployError('Cloudflare Workers binding name "' + name + '" is duplicated.', 400, undefined, 'CFW_BINDINGS_INVALID');
-    seen.add(name);
-    const out: { type: string; name: string; bucketName?: string; databaseName?: string; id?: string } = { type, name };
-    const bucketName = typeof b.bucketName === 'string' ? b.bucketName.trim() : '';
-    const databaseName = typeof b.databaseName === 'string' ? b.databaseName.trim() : '';
-    const id = typeof b.id === 'string' ? b.id.trim() : '';
-    if (bucketName) out.bucketName = bucketName;
-    if (databaseName) out.databaseName = databaseName;
-    if (id) out.id = id;
-    if (type === 'r2_bucket' && !bucketName) {
-      throw new DeployError('Cloudflare Workers R2 binding "' + name + '" needs a bucketName.', 400, undefined, 'CFW_BINDINGS_INVALID');
-    }
-    if (type === 'd1' && !databaseName && !id) {
-      throw new DeployError('Cloudflare Workers D1 binding "' + name + '" needs a databaseName or id.', 400, undefined, 'CFW_BINDINGS_INVALID');
-    }
-    return out;
+    seen.add(binding.name);
+    return binding;
   });
+}
+
+/** The persisted binding set, read back. Entries this build cannot understand are
+ * DROPPED rather than thrown: this gates a config READ that every Workers route
+ * depends on, so a hand-edited or older file must degrade to "fewer bindings"
+ * instead of bricking the settings panel. The write path above still rejects
+ * them — a value the user just typed is an error to report, not to swallow.
+ * Objects only, so a hand-written `[null]` cannot reach the client, where the
+ * settings normalizer calls `binding.name.trim()`. */
+function persistedCloudflareWorkersBindings(value: unknown): CloudflareWorkersConfigBinding[] {
+  if (!Array.isArray(value)) return [];
+  const out: CloudflareWorkersConfigBinding[] = [];
+  const seen = new Set<string>();
+  for (const entry of value) {
+    let binding: CloudflareWorkersConfigBinding;
+    try {
+      binding = normalizeCloudflareWorkersBinding(entry, out.length);
+    } catch {
+      continue;
+    }
+    if (seen.has(binding.name)) continue;
+    seen.add(binding.name);
+    out.push(binding);
+  }
+  return out;
 }
 
 /** Validate a persisted OAuth scope selection. An empty array clears the
@@ -470,7 +521,7 @@ async function readCloudflareWorkersConfigFile(): Promise<DeployConfig> {
       scopes: Array.isArray(parsed.scopes)
         ? parsed.scopes.filter((s: unknown): s is string => typeof s === 'string')
         : [],
-      bindings: Array.isArray(parsed.bindings) ? parsed.bindings : [],
+      bindings: persistedCloudflareWorkersBindings(parsed.bindings),
       access: normalizeCloudflareWorkersAccess(parsed.access),
       customDomain: normalizeCloudflareWorkersCustomDomain(parsed.customDomain),
     };
@@ -2634,6 +2685,17 @@ export async function waitForReachableDeploymentUrl(
     statusMessage:
       lastMessage || `${providerLabel} returned a deployment URL, but it is not reachable yet.`,
   };
+}
+
+/** The sentence for a link check whose probe returned no verdict of its own.
+ *
+ * The provider owns it: this fallback serves Vercel AND a Cloudflare Workers
+ * record whose Access is off, and one hard-coded "Vercel" sentence told Workers
+ * users about a provider that was never theirs. */
+export function pendingPublicLinkMessage(providerId: string): string {
+  return providerId === CLOUDFLARE_WORKERS_PROVIDER_ID
+    ? 'Cloudflare Workers is still preparing the public link.'
+    : 'Vercel is still preparing the public link.';
 }
 
 export async function checkDeploymentUrl(url: unknown, { timeoutMs = 8_000 }: { timeoutMs?: number } = {}): Promise<DeploymentUrlCheck> {

@@ -128,6 +128,44 @@ function cloudflareHeaders(token: string, extra: Record<string, string> = {}): R
 async function resolveConfigToken(config: Pick<WorkersDeployConfig, 'token'>): Promise<string> {
   return typeof config.token === 'function' ? config.token() : config.token;
 }
+// Account-scoped single-flight for the ensures that act on ACCOUNT-GLOBAL
+// resources: the Access one-time PIN identity provider, D1 databases and R2
+// buckets. The deploy's own single-flight is keyed by SCRIPT NAME, so two
+// deploys of DIFFERENT scripts run concurrently — and every one of those ensures
+// is a list-then-create, so both can miss. The loser then either aborts its
+// deploy on a 4xx "already exists" (D1/R2), or, for the identity provider,
+// successfully creates a SECOND "One-time PIN login": Cloudflare does not dedupe
+// identity providers by type, so the duplicates accumulate on the account
+// unseen.
+//
+// Unlike the script-keyed guard this one SERIALIZES instead of refusing: the two
+// deploys are legitimately unrelated, so the second must observe the first one's
+// result rather than fail.
+const cloudflareAccountEnsuresInFlight = new Map<string, Promise<unknown>>();
+
+async function withCloudflareAccountEnsureSingleFlight<T>(accountId: string, run: () => Promise<T>): Promise<T> {
+  const prior = cloudflareAccountEnsuresInFlight.get(accountId) ?? Promise.resolve();
+  // A predecessor's rejection is not this ensure's failure — the queued call
+  // must still run, and may well succeed — so the chain swallows it here.
+  const mine = prior.catch(() => undefined).then(run);
+  cloudflareAccountEnsuresInFlight.set(accountId, mine);
+  try {
+    return await mine;
+  } finally {
+    // Only the LAST waiter clears the key: an earlier settle must not drop a
+    // successor's promise, which would let a third caller jump the queue.
+    if (cloudflareAccountEnsuresInFlight.get(accountId) === mine) cloudflareAccountEnsuresInFlight.delete(accountId);
+  }
+}
+
+/** Whether a refused create is worth adopting rather than reporting: a 4xx means
+ * the resource may already exist, because a concurrent deploy of another script
+ * can have created it between this one's list and its POST. Auth failures are
+ * excluded — re-listing would fail identically, and the caller needs the real
+ * status (the identity-provider path maps 401/403 to a scope error). */
+function isAdoptableCreateConflict(status: number): boolean {
+  return status >= 400 && status < 500 && status !== 401 && status !== 403;
+}
 
 // Every authenticated call goes through here so the credential is resolved at
 // request time (see CloudflareTokenProvider), never captured once per deploy.
@@ -536,10 +574,13 @@ function workerMetadata(config: WorkersDeployConfig, assetsJwt?: string, runWork
     keep_bindings: ['secret_text', 'secret_key'],
   };
   const userBindings: JsonObject[] = (config.bindings || []).map((b) => {
-    const out: JsonObject = { type: b.type, name: b.name };
-    if (b.bucketName !== undefined) out.bucket_name = b.bucketName;
-    if (b.id !== undefined) out.id = b.id;
-    return out;
+    // Only the field the binding's TYPE owns. Emitting by field presence put
+    // `id` on an R2 binding, `bucket_name` on a D1 one, and both on anything
+    // else — a shape Cloudflare refuses on the live script PUT, long after the
+    // assets upload has been spent.
+    if (b.type === 'r2_bucket') return { type: b.type, name: b.name, ...(b.bucketName !== undefined ? { bucket_name: b.bucketName } : {}) };
+    if (b.type === 'd1') return { type: b.type, name: b.name, ...(b.id !== undefined ? { id: b.id } : {}) };
+    return { type: b.type, name: b.name };
   });
   const bindings = mergeWorkerBindings(userBindings, preservedBindings);
   if (assetsJwt !== undefined) {
@@ -883,12 +924,11 @@ async function getCloudflareWorkerTag(config: WorkersDeployConfig, scriptName: s
   return typeof script?.tag === 'string' ? script.tag : '';
 }
 
-// One-time PIN (OTP) is not auto-added to new Zero Trust orgs — the default is
-// the "Cloudflare" login (full Cloudflare account sign-in). To make the email
-// one-time code the sign-in method, register an `onetimepin` identity provider
-// and pin the app to it via `allowed_idps`.
-async function ensureCloudflareOtpIdentityProvider(config: WorkersDeployConfig): Promise<string> {
-  const base = CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/access/identity_providers';
+/** The account's one-time PIN identity provider id, or '' when the account has
+ * none. Strict about the list itself: a failed list throws, because reading it
+ * as "no provider" is exactly what makes the caller POST a duplicate. Only the
+ * adopt path, which is already handling a failure, swallows that throw. */
+async function findOnetimepinIdentityProvider(config: WorkersDeployConfig): Promise<string> {
   const providers = await listCloudflareAllPagesStrict(
     config,
     '/accounts/' + encodeURIComponent(config.accountId) + '/access/identity_providers',
@@ -896,34 +936,55 @@ async function ensureCloudflareOtpIdentityProvider(config: WorkersDeployConfig):
     'Cloudflare Access identity providers list',
   );
   const existing = providers.find((p) => p?.type === 'onetimepin');
-  if (existing && typeof existing.id === 'string') return existing.id;
-  const createResp = await fetchWithRetry(config,
-    base,
-    {
-      method: 'POST',
-      headers: await authHeaders(config, { 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ name: 'One-time PIN login', type: 'onetimepin', config: {} }),
-    },
-  );
-  const createJson = await readCloudflareJson(createResp);
-  if (!createResp.ok || createJson.success === false) {
-    // Only an auth failure means the token lacks the scope. A 5xx / 429 / 400
-    // is a transient or malformed-request failure and must keep its real
-    // status, so the client can retry it instead of sending the user to
-    // reconnect Cloudflare for a permission it already has.
-    if (createResp.status === 401 || createResp.status === 403) {
-      throw new DeployError(
-        'Cloudflare Access one-time PIN (OTP) login needs the "Identity Providers Write" permission. Reconnect Cloudflare to grant it, then redeploy.',
-        createResp.status,
-        undefined,
-        'CFW_ACCESS_OTP_SCOPE_REQUIRED',
-      );
+  return existing && typeof existing.id === 'string' ? existing.id : '';
+}
+
+// One-time PIN (OTP) is not auto-added to new Zero Trust orgs — the default is
+// the "Cloudflare" login (full Cloudflare account sign-in). To make the email
+// one-time code the sign-in method, register an `onetimepin` identity provider
+// and pin the app to it via `allowed_idps`.
+async function ensureCloudflareOtpIdentityProvider(config: WorkersDeployConfig): Promise<string> {
+  return withCloudflareAccountEnsureSingleFlight(config.accountId, async () => {
+    // This list is what makes a second deploy adopt the first one's provider
+    // instead of minting another; the single-flight above is what makes it run
+    // after that create rather than beside it.
+    const existingId = await findOnetimepinIdentityProvider(config);
+    if (existingId) return existingId;
+    const createResp = await fetchWithRetry(config,
+      CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/access/identity_providers',
+      {
+        method: 'POST',
+        headers: await authHeaders(config, { 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ name: 'One-time PIN login', type: 'onetimepin', config: {} }),
+      },
+    );
+    const createJson = await readCloudflareJson(createResp);
+    if (!createResp.ok || createJson.success === false) {
+      // Only an auth failure means the token lacks the scope. A 5xx / 429 / 400
+      // is a transient or malformed-request failure and must keep its real
+      // status, so the client can retry it instead of sending the user to
+      // reconnect Cloudflare for a permission it already has.
+      if (createResp.status === 401 || createResp.status === 403) {
+        throw new DeployError(
+          'Cloudflare Access one-time PIN (OTP) login needs the "Identity Providers Write" permission. Reconnect Cloudflare to grant it, then redeploy.',
+          createResp.status,
+          undefined,
+          'CFW_ACCESS_OTP_SCOPE_REQUIRED',
+        );
+      }
+      // A conflict means the provider may have been created between our list and
+      // our POST. Cloudflare does not dedupe identity providers by type, so
+      // POSTing again is how duplicates accumulate — adopt the existing one.
+      if (isAdoptableCreateConflict(createResp.status)) {
+        const adopted = await findOnetimepinIdentityProvider(config).catch(() => '');
+        if (adopted) return adopted;
+      }
+      throw cloudflareError(createJson, createResp.ok ? 502 : createResp.status, 'Cloudflare Access one-time PIN provider creation failed.');
     }
-    throw cloudflareError(createJson, createResp.ok ? 502 : createResp.status, 'Cloudflare Access one-time PIN provider creation failed.');
-  }
-  const created = (createJson.result ?? {}) as JsonObject;
-  if (typeof created.id === 'string') return created.id;
-  throw new DeployError('Cloudflare Access one-time PIN provider returned no id.', 502, undefined, 'CFW_ACCESS_CREATE_FAILED');
+    const created = (createJson.result ?? {}) as JsonObject;
+    if (typeof created.id === 'string') return created.id;
+    throw new DeployError('Cloudflare Access one-time PIN provider returned no id.', 502, undefined, 'CFW_ACCESS_CREATE_FAILED');
+  });
 }
 
 // An Access destination (a Worker tag) can belong to only one application —
@@ -2408,11 +2469,10 @@ export async function listCloudflareD1Databases(
     .filter((db) => db.name.length > 0 && db.id.length > 0);
 }
 
-/** Resolve a D1 database by human name, creating it when it does not exist.
- * Returns the database uuid a Workers binding needs. */
-export async function ensureCloudflareD1Database(config: WorkersDeployConfig, databaseName: string): Promise<string> {
-  // Exact-name filter + fail-closed list: a degraded `[]` here would POST a
-  // duplicate database instead of reusing the existing one.
+/** The uuid of an account's D1 database with this exact name, or '' when there is
+ * none. Strict about the list itself, for the reason in
+ * findOnetimepinIdentityProvider: a degraded `[]` would POST a duplicate. */
+async function findD1DatabaseIdByName(config: WorkersDeployConfig, databaseName: string): Promise<string> {
   const existing = await listCloudflareAllPagesStrict(
     config,
     '/accounts/' + encodeURIComponent(config.accountId) + '/d1/database?name=' + encodeURIComponent(databaseName),
@@ -2420,41 +2480,78 @@ export async function ensureCloudflareD1Database(config: WorkersDeployConfig, da
     'Cloudflare D1 database list',
   );
   const match = existing.find((db) => db?.name === databaseName && typeof db?.uuid === 'string' && db.uuid);
-  if (match) return String(match.uuid);
-  const resp = await fetchWithRetry(config,
-    CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/d1/database',
-    { method: 'POST', headers: await authHeaders(config, { 'Content-Type': 'application/json' }), body: JSON.stringify({ name: databaseName }) },
-  );
-  const json = await readCloudflareJson(resp);
-  if (!resp.ok || json.success === false) throw cloudflareError(json, resp.status, 'Cloudflare D1 database creation failed.');
-  const result = (json.result ?? {}) as JsonObject;
-  const uuid = typeof result.uuid === 'string' ? result.uuid : '';
-  // A create that answers without a uuid leaves nothing to bind. Fail here,
-  // before any asset upload, instead of forwarding `id: ''` into the script
-  // metadata and failing the live PUT after the uploads are spent.
-  if (!uuid) {
-    throw new DeployError(
-      'Cloudflare D1 database "' + databaseName + '" was created but the response carried no uuid to bind.',
-      502,
-      json,
-      'CFW_D1_CREATE_FAILED',
+  return match ? String(match.uuid) : '';
+}
+
+/** Resolve a D1 database by human name, creating it when it does not exist.
+ * Returns the database uuid a Workers binding needs. */
+export async function ensureCloudflareD1Database(config: WorkersDeployConfig, databaseName: string): Promise<string> {
+  return withCloudflareAccountEnsureSingleFlight(config.accountId, async () => {
+    // Exact-name filter + fail-closed list: a degraded `[]` here would POST a
+    // duplicate database instead of reusing the existing one.
+    const existingId = await findD1DatabaseIdByName(config, databaseName);
+    if (existingId) return existingId;
+    const resp = await fetchWithRetry(config,
+      CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/d1/database',
+      { method: 'POST', headers: await authHeaders(config, { 'Content-Type': 'application/json' }), body: JSON.stringify({ name: databaseName }) },
     );
-  }
-  return uuid;
+    const json = await readCloudflareJson(resp);
+    if (!resp.ok || json.success === false) {
+      // A conflict means a concurrent deploy of a DIFFERENT script created this
+      // database between our list and our POST. Re-list and adopt it rather than
+      // aborting a deploy whose only sin was race timing.
+      if (isAdoptableCreateConflict(resp.status)) {
+        const adopted = await findD1DatabaseIdByName(config, databaseName).catch(() => '');
+        if (adopted) return adopted;
+      }
+      throw cloudflareError(json, resp.status, 'Cloudflare D1 database creation failed.');
+    }
+    const result = (json.result ?? {}) as JsonObject;
+    const uuid = typeof result.uuid === 'string' ? result.uuid : '';
+    // A create that answers without a uuid leaves nothing to bind. Fail here,
+    // before any asset upload, instead of forwarding `id: ''` into the script
+    // metadata and failing the live PUT after the uploads are spent.
+    if (!uuid) {
+      throw new DeployError(
+        'Cloudflare D1 database "' + databaseName + '" was created but the response carried no uuid to bind.',
+        502,
+        json,
+        'CFW_D1_CREATE_FAILED',
+      );
+    }
+    return uuid;
+  });
+}
+
+/** Whether the account has an R2 bucket of this exact name. Strict about the
+ * list itself, for the reason in findOnetimepinIdentityProvider. */
+async function r2BucketExistsByName(config: WorkersDeployConfig, bucketName: string): Promise<boolean> {
+  const buckets = await listCloudflareR2Buckets(await resolveConfigToken(config), config.accountId, { strict: true, nameContains: bucketName, requestInit: config.requestInit });
+  return buckets.some((bucket) => bucket.name === bucketName);
 }
 
 /** Resolve an R2 bucket by name, creating it when it does not exist. The
  * bucket name is the identifier, so it is returned unchanged. */
 export async function ensureCloudflareR2Bucket(config: WorkersDeployConfig, bucketName: string): Promise<string> {
-  const existing = await listCloudflareR2Buckets(await resolveConfigToken(config), config.accountId, { strict: true, nameContains: bucketName, requestInit: config.requestInit });
-  if (existing.some((bucket) => bucket.name === bucketName)) return bucketName;
-  const resp = await fetchWithRetry(config,
-    CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/r2/buckets',
-    { method: 'POST', headers: await authHeaders(config, { 'Content-Type': 'application/json' }), body: JSON.stringify({ name: bucketName }) },
-  );
-  const json = await readCloudflareJson(resp);
-  if (!resp.ok || json.success === false) throw cloudflareError(json, resp.status, 'Cloudflare R2 bucket creation failed.');
-  return bucketName;
+  return withCloudflareAccountEnsureSingleFlight(config.accountId, async () => {
+    if (await r2BucketExistsByName(config, bucketName)) return bucketName;
+    const resp = await fetchWithRetry(config,
+      CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/r2/buckets',
+      { method: 'POST', headers: await authHeaders(config, { 'Content-Type': 'application/json' }), body: JSON.stringify({ name: bucketName }) },
+    );
+    const json = await readCloudflareJson(resp);
+    if (!resp.ok || json.success === false) {
+      // A conflict means a concurrent deploy of a DIFFERENT script created this
+      // bucket between our list and our POST. A bucket's name IS its identity,
+      // so adopting it means returning the name we already hold.
+      if (isAdoptableCreateConflict(resp.status)) {
+        const adopted = await r2BucketExistsByName(config, bucketName).catch(() => false);
+        if (adopted) return bucketName;
+      }
+      throw cloudflareError(json, resp.status, 'Cloudflare R2 bucket creation failed.');
+    }
+    return bucketName;
+  });
 }
 
 /** List an account's zones. A non-ok response or error resolves to an empty

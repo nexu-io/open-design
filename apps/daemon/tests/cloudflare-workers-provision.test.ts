@@ -632,3 +632,130 @@ describe('deployToCloudflareWorkers deploy log', () => {
     expect(steps).toContainEqual({ name: 'error', status: 'error', detail: 'script upload failed' });
   });
 });
+
+describe('account-scoped ensures serialize and adopt', () => {
+  const config = { token: 'tok-secret', accountId: 'acct_test' };
+
+  it('adopts an existing D1 database when the create is refused as a conflict', async () => {
+    // The list is empty on the first read and carries the database on the
+    // re-list: exactly the race an adopt path exists for.
+    let lists = 0;
+    const fn = vi.fn(async (url: string, init?: RequestInit) => {
+      const method = (init?.method || 'GET').toUpperCase();
+      if (method === 'POST' && url.includes('/d1/database')) {
+        return jsonResponse({ success: false, errors: [{ code: 10004, message: 'database already exists' }] }, 400);
+      }
+      if (url.includes('/d1/database')) {
+        lists += 1;
+        return jsonResponse({ success: true, result: lists === 1 ? [] : [{ name: 'my-db', uuid: 'db-existing' }] });
+      }
+      return jsonResponse({ success: true, result: {} });
+    });
+    vi.stubGlobal('fetch', fn);
+    await expect(ensureCloudflareD1Database(config, 'my-db')).resolves.toBe('db-existing');
+    expect(lists).toBe(2);
+  });
+
+  it('adopts an existing R2 bucket when the create is refused as a conflict', async () => {
+    let lists = 0;
+    const fn = vi.fn(async (url: string, init?: RequestInit) => {
+      const method = (init?.method || 'GET').toUpperCase();
+      if (method === 'POST' && url.includes('/r2/buckets')) {
+        return jsonResponse({ success: false, errors: [{ code: 10004, message: 'bucket already exists' }] }, 400);
+      }
+      if (url.includes('/r2/buckets')) {
+        lists += 1;
+        return jsonResponse({ success: true, result: { buckets: lists === 1 ? [] : [{ name: 'my-bucket' }] } });
+      }
+      return jsonResponse({ success: true, result: {} });
+    });
+    vi.stubGlobal('fetch', fn);
+    await expect(ensureCloudflareR2Bucket(config, 'my-bucket')).resolves.toBe('my-bucket');
+    expect(lists).toBe(2);
+  });
+
+  it('still reports the create failure when the re-list finds nothing to adopt', async () => {
+    const fn = vi.fn(async (url: string, init?: RequestInit) => {
+      const method = (init?.method || 'GET').toUpperCase();
+      if (method === 'POST' && url.includes('/d1/database')) {
+        return jsonResponse({ success: false, errors: [{ message: 'name is invalid' }] }, 400);
+      }
+      if (url.includes('/d1/database')) return jsonResponse({ success: true, result: [] });
+      return jsonResponse({ success: true, result: {} });
+    });
+    vi.stubGlobal('fetch', fn);
+    await expect(ensureCloudflareD1Database(config, 'my-db')).rejects.toMatchObject({ name: 'DeployError', status: 400 });
+  });
+
+  it('an auth refusal is never adopted, even though it is a 4xx', async () => {
+    let lists = 0;
+    const fn = vi.fn(async (url: string, init?: RequestInit) => {
+      const method = (init?.method || 'GET').toUpperCase();
+      if (method === 'POST' && url.includes('/d1/database')) {
+        return jsonResponse({ success: false, errors: [{ message: 'forbidden' }] }, 403);
+      }
+      if (url.includes('/d1/database')) {
+        lists += 1;
+        return jsonResponse({ success: true, result: [] });
+      }
+      return jsonResponse({ success: true, result: {} });
+    });
+    vi.stubGlobal('fetch', fn);
+    await expect(ensureCloudflareD1Database(config, 'my-db')).rejects.toMatchObject({ status: 403 });
+    // No re-list: a permission failure would fail identically, and the caller
+    // needs the real status rather than a masked one.
+    expect(lists).toBe(1);
+  });
+
+  it('serializes two concurrent ensures for one account onto a single create', async () => {
+    const calls: Call[] = [];
+    let listed = false;
+    const fn = vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push([url, init]);
+      const method = (init?.method || 'GET').toUpperCase();
+      if (method === 'POST' && url.includes('/d1/database')) {
+        return jsonResponse({ success: true, result: { uuid: 'db-uuid-123' } });
+      }
+      if (url.includes('/d1/database')) {
+        const result = listed ? [{ name: 'my-db', uuid: 'db-uuid-123' }] : [];
+        listed = true;
+        return jsonResponse({ success: true, result });
+      }
+      return jsonResponse({ success: true, result: {} });
+    });
+    vi.stubGlobal('fetch', fn);
+    const [a, b] = await Promise.all([
+      ensureCloudflareD1Database(config, 'my-db'),
+      ensureCloudflareD1Database(config, 'my-db'),
+    ]);
+    expect(a).toBe('db-uuid-123');
+    expect(b).toBe('db-uuid-123');
+    // Without the account-scoped single-flight both callers read an empty list
+    // and both POST — the loser aborting its deploy on "already exists".
+    const d1Calls = calls.filter((c) => c[0].includes('/d1/database'));
+    expect(d1Calls.filter((c) => (c[1]?.method || 'GET').toUpperCase() === 'POST')).toHaveLength(1);
+    expect(d1Calls).toHaveLength(3);
+  });
+
+  it('does not serialize ensures for different accounts', async () => {
+    const posts: string[] = [];
+    const fn = vi.fn(async (url: string, init?: RequestInit) => {
+      const method = (init?.method || 'GET').toUpperCase();
+      if (method === 'POST' && url.includes('/d1/database')) {
+        posts.push(url);
+        return jsonResponse({ success: true, result: { uuid: 'db-' + posts.length } });
+      }
+      if (url.includes('/d1/database')) return jsonResponse({ success: true, result: [] });
+      return jsonResponse({ success: true, result: {} });
+    });
+    vi.stubGlobal('fetch', fn);
+    await Promise.all([
+      ensureCloudflareD1Database({ token: 'tok-secret', accountId: 'acct_a' }, 'my-db'),
+      ensureCloudflareD1Database({ token: 'tok-secret', accountId: 'acct_b' }, 'my-db'),
+    ]);
+    // The key is the account, not a global lock: unrelated accounts still create
+    // side by side.
+    expect(posts).toHaveLength(2);
+    expect(posts[0]).toContain('acct_');
+  });
+});

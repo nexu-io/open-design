@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -7,6 +7,7 @@ import {
   CLOUDFLARE_WORKERS_PROVIDER_ID,
   commitCloudflareOAuthMode,
   configureCloudflareWorkersDataDir,
+  deployConfigPath,
   isDeployProviderId,
   publicCloudflareWorkersConfig,
   readCloudflareWorkersConfig,
@@ -194,6 +195,63 @@ describe('cloudflare-workers config', () => {
       await rm(dir, { recursive: true, force: true });
     }
   });
+
+  it('reduces each binding to the fields its type owns, and rejects an unknown type', async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'od-workers-config-'));
+    const prior = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = dir;
+    configureCloudflareWorkersDataDir(dir);
+    try {
+      // A field belonging to the OTHER type is dropped rather than forwarded.
+      // Carried by field presence it rode into the live script PUT, after the
+      // assets upload had already been spent.
+      await writeCloudflareWorkersConfig({
+        token: 'tok-secret',
+        accountId: 'acct_test',
+        bindings: [
+          { type: 'r2_bucket', name: 'BUCKET', bucketName: 'b', id: 'stray-id' },
+          { type: 'd1', name: 'DB', id: 'db-1', bucketName: 'stray-bucket' },
+        ],
+      });
+      expect((await readCloudflareWorkersConfig()).bindings).toEqual([
+        { type: 'r2_bucket', name: 'BUCKET', bucketName: 'b' },
+        { type: 'd1', name: 'DB', id: 'db-1' },
+      ]);
+
+      // An unsupported type is REJECTED, never silently dropped: dropping it
+      // would deploy live without a binding the user asked for and never got.
+      await expect(writeCloudflareWorkersConfig({ token: 'tok-secret', accountId: 'acct_test', bindings: [{ type: 'kv_namespace', name: 'CACHE' }] }))
+        .rejects.toMatchObject({ code: 'CFW_BINDINGS_INVALID' });
+    } finally {
+      process.env.OD_USER_STATE_DIR = prior;
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('drops entries it cannot understand when reading a hand-edited config', async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'od-workers-config-'));
+    const prior = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = dir;
+    configureCloudflareWorkersDataDir(dir);
+    try {
+      // Written by hand, so nothing validated it: a null entry, a bare string,
+      // an unknown type, and one usable binding. The read path must degrade to
+      // the set it understands — the settings panel calls `binding.name.trim()`
+      // on every entry it is handed, so a `[null]` surviving the read is a crash
+      // in the browser rather than a warning.
+      await writeCloudflareWorkersConfig({ token: 'tok-secret', accountId: 'acct_test', bindings: [] });
+      await writeFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), JSON.stringify({
+        token: 'tok-secret',
+        accountId: 'acct_test',
+        bindings: [null, 'nope', { type: 'kv_namespace', name: 'CACHE' }, { type: 'd1', name: 'DB', databaseName: 'my-db' }],
+      }));
+      expect((await readCloudflareWorkersConfig()).bindings).toEqual([{ type: 'd1', name: 'DB', databaseName: 'my-db' }]);
+    } finally {
+      process.env.OD_USER_STATE_DIR = prior;
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
 
   it('serializes the OAuth identity write with the mode commit (no lost update)', async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), 'od-workers-config-'));
@@ -434,17 +492,43 @@ describe('deployToCloudflareWorkers', () => {
   });
 
   it('lets the OpenDesign config win a binding-name collision with the script', async () => {
+    // The collision is by NAME across types: the script carries a foreign
+    // kv_namespace under the name the config gives its own R2 binding.
     const { calls, fn } = happyFetch({
-      settings: { success: true, result: { bindings: [{ type: 'plain_text', name: 'MODE', text: 'stale' }] } },
+      settings: { success: true, result: { bindings: [{ type: 'kv_namespace', name: 'BUCKET', namespace_id: 'kv-1' }] } },
     });
     vi.stubGlobal('fetch', fn);
     await deployToCloudflareWorkers({
       ...base,
-      config: { ...base.config, bindings: [{ type: 'plain_text', name: 'MODE' }] },
+      config: { ...base.config, bindings: [{ type: 'r2_bucket', name: 'BUCKET', bucketName: 'my-bucket' }] },
     });
     const meta = await metadataOf(calls.find((c) => c[1]?.method === 'PUT')!);
-    expect(meta.bindings).toEqual([{ name: 'ASSETS', type: 'assets' }, { type: 'plain_text', name: 'MODE' }]);
+    expect(meta.bindings).toEqual([{ name: 'ASSETS', type: 'assets' }, { type: 'r2_bucket', name: 'BUCKET', bucket_name: 'my-bucket' }]);
   });
+
+  it('emits only the field each binding type owns into the upload metadata', async () => {
+    const { calls, fn } = happyFetch();
+    vi.stubGlobal('fetch', fn);
+    await deployToCloudflareWorkers({
+      ...base,
+      config: {
+        ...base.config,
+        bindings: [
+          { type: 'r2_bucket', name: 'BUCKET', bucketName: 'my-bucket', id: 'stray-id' },
+          { type: 'd1', name: 'DB', id: 'db-uuid-1', bucketName: 'stray-bucket' },
+        ],
+      },
+    });
+    const meta = await metadataOf(calls.find((c) => c[1]?.method === 'PUT')!);
+    // `id` never reaches the R2 binding and `bucket_name` never reaches the D1
+    // one, which is the shape Cloudflare accepts on the live script PUT.
+    expect(meta.bindings).toEqual([
+      { name: 'ASSETS', type: 'assets' },
+      { type: 'r2_bucket', name: 'BUCKET', bucket_name: 'my-bucket' },
+      { type: 'd1', name: 'DB', id: 'db-uuid-1' },
+    ]);
+  });
+
 
   it('refuses the deploy when an existing script settings read fails, instead of replacing the binding set', async () => {
     // Upload metadata REPLACES the script's bindings, so a set that could not be

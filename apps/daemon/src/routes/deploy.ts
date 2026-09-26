@@ -4,7 +4,7 @@ import type { AuthorizeProjectRequest } from '../collab/project-request-authorit
 import { clientRequestIdFor } from '../http/client-request-id.js';
 import { classifyDeployFailure } from '../deploy/failure-detail.js';
 import { detachCloudflareWorkerDomain, getCloudflareWorkerDomain, isOwnedCustomDomain, listCloudflareZones, normalizeHostname, ownedCustomDomainsFromMetadata, pendingCustomDomainsFromMetadata, recordedCustomDomainFromMetadata, releasedCustomDomainsFromWorkersDeploy, remainingUnverifiedExposure, resolvedPendingCustomDomainsFromWorkersDeploy, resolveWorkerScriptName, retiredAccessAppIdFromWorkersDeploy, serializeUnverifiedExposure, unverifiedExposureFromMetadata, verifyCloudflareAccessPerimeter, vouchedCustomDomains, withdrawRecordedUnverifiedExposure, type CloudflareOwnedCustomDomain, type CloudflareUnverifiedExposure } from '../deploy/cloudflare-workers.js';
-import { getCloudflareAccessToken } from '../deploy.js';
+import { getCloudflareAccessToken, pendingPublicLinkMessage } from '../deploy.js';
 import { proxyDispatcherRequestInit } from '../connectionTest.js';
 
 export interface RegisterDeployRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'ids' | 'deploy' | 'projectStore'> {
@@ -1438,8 +1438,7 @@ export function registerDeploymentCheckRoutes(app: Express, ctx: RegisterDeploym
           status: result.reachable ? 'ready' : result.status || 'link-delayed',
           statusMessage: result.reachable
             ? 'Public link is ready.'
-            : result.statusMessage ||
-              'Vercel is still preparing the public link.',
+            : result.statusMessage || pendingPublicLinkMessage(existing.providerId),
           reachableAt: result.reachable ? now : existing.reachableAt,
           updatedAt: now,
         });
