@@ -462,9 +462,13 @@ export function registerCloudflareRoutes(
           // through the handle the guarded write recorded for it, under the
           // config lock, with this attempt's client as the fallback id for a
           // record written before the identity was persisted.
-          const settledMinted = await clearForRevokeAndSettle();
+          // The minted grant is already accounted for either way: clearForRevokeAndSettle
+          // named and settled it (on disk), or the transition that abandoned this attempt
+          // named it via its own handle. A second revoke here re-records the same token;
+          // a 400 for an already-revoked token can never settle, leaving a sticky handle
+          // every later OAuth mutation pays a 10s revoke round trip for.
+          await clearForRevokeAndSettle();
           await clearPendingGrantMarker();
-          if (!settledMinted) await revokeDiscardedGrant(result, fetchImpl);
           markGrantRevoked(err);
           throw err;
         }

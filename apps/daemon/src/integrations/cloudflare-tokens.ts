@@ -858,12 +858,13 @@ export function isCloudflareOAuthTokenExpired(
 }
 
 /** The TTL stamped on a record whose token-endpoint response carried no usable
- * `expires_in`. Deliberately shorter than every expiry skew the callers apply
- * (see isCloudflareOAuthTokenExpired), so the record reads as expired at the
- * very next call and refreshes again: when the endpoint does not say how long
- * the credential lives, re-refreshing is the recoverable answer and a record
- * that never expires is not. */
-export const CLOUDFLARE_OAUTH_UNKNOWN_EXPIRY_TTL_MS = 60_000;
+ * `expires_in`. It must sit ABOVE the expiry skew the callers apply
+ * (CLOUDFLARE_OAUTH_EXPIRY_SKEW_MS = 10 min in deploy.ts): below it, the record
+ * is already expired the instant it lands, and CloudflareTokenProvider — which
+ * re-resolves before EVERY request — refreshes on every single Cloudflare call
+ * instead of once more. 15 minutes gives one re-refresh per quarter-hour while a
+ * record that never expires is still avoided. */
+export const CLOUDFLARE_OAUTH_UNKNOWN_EXPIRY_TTL_MS = 15 * 60_000;
 
 /**
  * The `expiresAt` a stored record gets from a token-endpoint response.
@@ -894,7 +895,9 @@ export function cloudflareOAuthExpiresAt(input: {
   if (typeof input.expiresIn === 'number' && Number.isFinite(input.expiresIn) && input.expiresIn > 0) {
     return now + input.expiresIn * 1000;
   }
-  if (typeof input.priorExpiresAt === 'number' && Number.isFinite(input.priorExpiresAt)) {
+  // Inherit the prior expiry only while it is still in the FUTURE; an already
+  // lapsed one would stamp the rotated record as expired and loop the refresh.
+  if (typeof input.priorExpiresAt === 'number' && Number.isFinite(input.priorExpiresAt) && input.priorExpiresAt > now) {
     return input.priorExpiresAt;
   }
   return now + CLOUDFLARE_OAUTH_UNKNOWN_EXPIRY_TTL_MS;

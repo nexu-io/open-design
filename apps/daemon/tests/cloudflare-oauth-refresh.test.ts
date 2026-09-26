@@ -901,10 +901,11 @@ describe('refresh expiry fallback', () => {
     // Nothing usable anywhere: a conservative stamp, never `undefined`.
     expect(cloudflareOAuthExpiresAt({ expiresIn: undefined, now })).toBe(now + CLOUDFLARE_OAUTH_UNKNOWN_EXPIRY_TTL_MS);
     expect(cloudflareOAuthExpiresAt({ expiresIn: -1, now })).toBe(now + CLOUDFLARE_OAUTH_UNKNOWN_EXPIRY_TTL_MS);
-    // Inside every expiry skew the callers apply, so a record stamped with the
-    // fallback reads as expired at the NEXT call and refreshes again, instead of
-    // becoming a credential that never rotates.
-    expect(CLOUDFLARE_OAUTH_UNKNOWN_EXPIRY_TTL_MS).toBeLessThanOrEqual(CLOUDFLARE_OAUTH_EXPIRY_SKEW_MS);
+    // Above the expiry skew the callers apply, so a record stamped with the
+    // fallback lives one refresh interval (15 min) before reading as expired —
+    // the provider re-resolves before EVERY request, and a below-skew TTL made
+    // every single Cloudflare call re-refresh.
+    expect(CLOUDFLARE_OAUTH_UNKNOWN_EXPIRY_TTL_MS).toBeGreaterThan(CLOUDFLARE_OAUTH_EXPIRY_SKEW_MS);
   });
 
   it('a rotated record the token endpoint gave no expires_in for still expires', async () => {
@@ -942,10 +943,10 @@ describe('refresh expiry fallback', () => {
       // The record keeps a NUMERIC expiresAt: without one it would read as
       // non-expiring and this token would be served forever.
       expect(typeof stored?.expiresAt).toBe('number');
-      expect(stored?.expiresAt).toBe(priorExpiresAt);
-      // And it reads as expired, so the next call refreshes again rather than
-      // trusting a credential of unknown lifetime.
-      expect(isCloudflareOAuthTokenExpired(stored!, Date.now(), CLOUDFLARE_OAUTH_EXPIRY_SKEW_MS)).toBe(true);
+      // The lapsed prior expiry is NOT inherited (that would loop the refresh);
+      // the rotated record gets the conservative 15-min fallback instead.
+      expect(stored!.expiresAt).toBeGreaterThan(priorExpiresAt);
+      expect(isCloudflareOAuthTokenExpired(stored!, Date.now(), CLOUDFLARE_OAUTH_EXPIRY_SKEW_MS)).toBe(false);
     } finally {
       vi.unstubAllGlobals();
       await rm(dir, { recursive: true, force: true });
