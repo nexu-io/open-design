@@ -726,6 +726,10 @@ async function uploadWorkerScript(
   const preservedBindings = await readExistingWorkerBindings(config, scriptName, baseline.kind !== 'absent');
   let lastJson: JsonObject = {};
   let lastStatus = 502;
+  // A non-5xx, non-2xx answer is a definitive refusal: the script was not created.
+  // Tagged on the thrown error so the Access first-deploy caller can clear its
+  // write-ahead instead of annotating an exposure for a script that does not exist.
+  let refused = false;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const form = new FormData();
     const metadataJson = JSON.stringify(workerMetadata(config, assetsJwt, runWorkerFirst, preservedBindings));
@@ -759,7 +763,10 @@ async function uploadWorkerScript(
     lastJson = json;
     lastStatus = resp.status;
     const is5xx = resp.status >= 500 && resp.status < 600;
-    if (!is5xx) break;
+    if (!is5xx) {
+      refused = true;
+      break;
+    }
     let committed = false;
     try {
       committed = scriptCommittedSinceBaseline(baseline, await getCloudflareWorkerScript(config, scriptName));
@@ -769,7 +776,9 @@ async function uploadWorkerScript(
     if (committed) return { json: { success: true, result: { id: scriptName, committed_after_5xx: true } }, scriptCreatedByThisRun };
     if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 200 * 2 ** attempt));
   }
-  throw cloudflareError(lastJson, lastStatus, 'Cloudflare Workers script upload failed.');
+  const err = cloudflareError(lastJson, lastStatus, 'Cloudflare Workers script upload failed.');
+  if (refused) (err as { scriptNotCommitted?: boolean }).scriptNotCommitted = true;
+  throw err;
 }
 
 async function uploadWorkerVersion(config: WorkersDeployConfig, scriptName: string, moduleCode: string, assetsJwt: string, runWorkerFirst = false): Promise<string> {
@@ -2041,6 +2050,13 @@ export async function deployToCloudflareWorkers(input: {
    * so the next check-link's retained-exposure retry withdraws the route. A throw
    * here aborts the deploy before the script is created. */
   onBeforeScriptCreate?: ((scriptName: string) => Promise<void> | void) | undefined;
+  /** Write-ahead-clear hook, the mirror of onBeforeScriptCreate: invoked once the
+   * first-deploy script either gained its Access gate (so the write-ahead's
+   * unverified-exposure verdict is stale and must not survive to a failed-deploy
+   * bookkeeping that would read a gated Worker as ungated) or provably was never
+   * created (a non-5xx, non-timeout PUT refusal). The route drops the write-ahead's
+   * verdict keys from the live record. */
+  onScriptCreateGated?: ((scriptName: string) => Promise<void> | void) | undefined;
   /** The custom hostname a prior deployment recorded for display (see
    * recordedCustomDomainFromMetadata). A preview deploy carries it forward. */
   priorCustomDomain?: JsonObject | undefined;
@@ -2063,7 +2079,7 @@ async function deployToCloudflareWorkersWith(
   input: Parameters<typeof deployToCloudflareWorkers>[0],
   requestInit: WorkersRequestInit,
 ): Promise<CloudflareWorkersDeployResult> {
-  const { config, files, projectId = '', projectName = '', target = 'production', access, priorAccessAppId, customDomain, priorCustomDomain, priorUnverifiedExposure, onBeforeAttach, onBeforeDetach, onBeforeScriptCreate } = input ?? {};
+  const { config, files, projectId = '', projectName = '', target = 'production', access, priorAccessAppId, customDomain, priorCustomDomain, priorUnverifiedExposure, onBeforeAttach, onBeforeDetach, onBeforeScriptCreate, onScriptCreateGated } = input ?? {};
   const priorOwnedCustomDomains = input?.priorOwnedCustomDomains ?? [];
   const priorPendingCustomDomains = input?.priorPendingCustomDomains ?? [];
   const priorRetainedAccessAppIds = input?.priorRetainedAccessAppIds ?? [];
@@ -2142,6 +2158,9 @@ async function deployToCloudflareWorkersWith(
   // so the failed deploy records the exposure (accessProtected + the coded
   // check + the route still to withdraw) instead of orphaning it.
   let ungatedRouteScriptName = '';
+  // Whether the durable write-ahead (onBeforeScriptCreate) was persisted for this
+  // deploy, so the matching clear (onScriptCreateGated) runs only when it did.
+  let wroteScriptCreateAhead = false;
   try {
     // Validate the script name and the asset set BEFORE any resource is
     // created: an unviable deploy (bad script name, too many / oversized /
@@ -2363,9 +2382,25 @@ async function deployToCloudflareWorkersWith(
       // daemon killed between the PUT commit and the Access app create would
       // leave the Worker live and ungated with no record. Persist the exposure
       // verdict BEFORE the PUT so the next check-link can withdraw the route.
-      if (onBeforeScriptCreate) await onBeforeScriptCreate(scriptName);
+      if (onBeforeScriptCreate) {
+        await onBeforeScriptCreate(scriptName);
+        wroteScriptCreateAhead = true;
+      }
     }
-    const uploaded = await uploadWorkerScript(cfg, scriptName, moduleCode, completionJwt, isCustomModule);
+    let uploaded: Awaited<ReturnType<typeof uploadWorkerScript>>;
+    try {
+      uploaded = await uploadWorkerScript(cfg, scriptName, moduleCode, completionJwt, isCustomModule);
+    } catch (err) {
+      // A definitive non-5xx, non-timeout refusal means the script was NOT
+      // created: the write-ahead verdict and the in-memory marker are both stale
+      // (nothing is live, nothing to withdraw). Clear them so the catch does not
+      // record an ungated exposure for a non-existent script.
+      if ((err as { scriptNotCommitted?: boolean }).scriptNotCommitted) {
+        ungatedRouteScriptName = '';
+        if (wroteScriptCreateAhead && onScriptCreateGated) await onScriptCreateGated(scriptName);
+      }
+      throw err;
+    }
     const scriptCreatedByThisRun = uploaded.scriptCreatedByThisRun;
     steps.push({ name: 'script', status: 'done' });
     if (accessOn && !accessAppId && subdomain) {
@@ -2409,6 +2444,11 @@ async function deployToCloudflareWorkersWith(
     // The gate exists from here on (or Access is off): a refused hold-off above
     // has nothing left to expose, so the catch must not report one.
     ungatedRouteScriptName = '';
+    // The durable write-ahead verdict is now stale: the script is gated (or it
+    // never had a route to gate), so a later failed-deploy bookkeeping that reads
+    // the live record must not see the CFW_ACCESS_UNVERIFIED verdict this deploy
+    // wrote ahead of the PUT. Drop it once the gate is confirmed.
+    if (wroteScriptCreateAhead && onScriptCreateGated) await onScriptCreateGated(scriptName);
     // Reconcile the previously recorded app: delete it only when it is not the
     // app now governing this Worker AND it still points at this Worker (after a
     // scriptName change it protects the still-live old Worker — keep it).

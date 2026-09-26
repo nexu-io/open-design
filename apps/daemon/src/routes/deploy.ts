@@ -513,6 +513,48 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
       updatedAt: now,
     });
   }
+
+  /** Clear the write-ahead `recordWorkersScriptCreateExposure` persisted: once the
+   * first-deploy script has its Access gate (or provably was never created), the
+   * CFW_ACCESS_UNVERIFIED verdict and the exposure are stale and must not survive
+   * to a failed-deploy bookkeeping that would read a gated Worker as ungated (and
+   * withdraw its route) or a non-existent script as exposed. Drops the keys the
+   * write-ahead wrote, preserving everything else on the live record. */
+  function clearWorkersScriptCreateWriteAhead(input: {
+    projectId: string;
+    fileName: string;
+    target: 'preview' | 'production';
+  }): void {
+    const live = getDeployment(db, input.projectId, input.fileName, CLOUDFLARE_WORKERS_PROVIDER_ID);
+    if (!live) return;
+    const liveMetadata =
+      live.providerMetadata && typeof live.providerMetadata === 'object' && !Array.isArray(live.providerMetadata)
+        ? (live.providerMetadata as Record<string, unknown>)
+        : {};
+    const metadata: Record<string, unknown> = { ...liveMetadata };
+    delete metadata.accessProtected;
+    delete metadata.accessVerified;
+    delete metadata.accessVerificationDeferred;
+    delete metadata.check;
+    delete metadata.unverifiedExposure;
+    upsertDeployment(db, {
+      id: live.id,
+      projectId: input.projectId,
+      fileName: input.fileName,
+      providerId: CLOUDFLARE_WORKERS_PROVIDER_ID,
+      url: live.url,
+      deploymentId: live.deploymentId,
+      deploymentCount: live.deploymentCount,
+      target: live.target,
+      status: live.status,
+      statusMessage: live.statusMessage,
+      reachableAt: live.reachableAt,
+      providerMetadata: metadata,
+      createdAt: live.createdAt,
+      updatedAt: Date.now(),
+    });
+  }
+
   /** See forgetPendingWorkersHostnameAcrossRecords: resolves the write-ahead
    * for each hostname on every record that deployed `scriptName`. */
   function forgetPendingWorkersHostnames(hostnames: readonly string[], scriptName: string, configuredScriptName: string | undefined): void {
@@ -901,6 +943,19 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
     // gated the Worker reports; a failed deploy did not, and writing it here
     // would let the record pose as an Access deploy awaiting verification.
     if (gainsAccessApp) Object.assign(metadata, { accessAppId, createdByOpenDesign: true });
+    // Belt-and-braces for the first-deploy Access write-ahead: when the deploy
+    // created the gate (a `done` access-app step) but failed later WITHOUT the
+    // catch annotating an ungated exposure, the live record still carries the
+    // write-ahead's CFW_ACCESS_UNVERIFIED verdict. Strip it — the script is gated,
+    // so a later check-link must not read it as ungated and withdraw its route,
+    // and a failed deploy must not pose as an Access deploy awaiting verification.
+    if (!accessUnverified && accessAppId) {
+      delete metadata.accessProtected;
+      delete metadata.accessVerified;
+      delete metadata.accessVerificationDeferred;
+      delete metadata.check;
+      delete metadata.unverifiedExposure;
+    }
     if (accessUnverified) {
       // The deploy proved a public URL is NOT behind the gate. Same write the
       // link check performs for that finding (failUnverified): the gate marker
@@ -1116,6 +1171,15 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
                       fileName,
                       target,
                       scriptName,
+                    }),
+                  // Clear the write-ahead once the first-deploy script is gated (or
+                  // provably never created), so a later failure cannot read the
+                  // stale ungated verdict onto a gated (or non-existent) script.
+                  onScriptCreateGated: () =>
+                    clearWorkersScriptCreateWriteAhead({
+                      projectId: req.params.id,
+                      fileName,
+                      target,
                     }),
                   // Re-resolved per Cloudflare call (oauth: refreshed within the
                   // expiry skew), so a multi-minute deploy never outlives its token.
