@@ -480,7 +480,10 @@ describe('deployToCloudflareWorkers deploy log', () => {
     const fn = vi.fn(async (url: string, init?: RequestInit) => {
       calls.push([url, init]);
       const method = (init?.method || 'GET').toUpperCase();
-      if (method === 'HEAD') {
+      // The Access perimeter probe is a GET (its challenge-body heuristic needs
+      // a body); the Access-off readiness probe is a HEAD. Public deploy URLs
+      // are the only fetches that leave api.cloudflare.com.
+      if (method === 'HEAD' || !url.startsWith('https://api.cloudflare.com/')) {
         return options.accessProtected
           ? new Response('', { status: 302, headers: { location: 'https://acct-test.cloudflareaccess.com/cdn-cgi/access/login' } })
           : jsonResponse({}, 200);

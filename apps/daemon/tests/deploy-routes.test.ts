@@ -20,6 +20,11 @@ import { isAccessProtectedWorkersRecord, isRetainedUnverifiedExposure } from '..
 import { ensureProject } from '../src/projects.js';
 import { startServer } from '../src/server.js';
 
+// A fetch that leaves api.cloudflare.com is a probe of a PUBLIC deploy URL:
+// the Access perimeter probe (a GET — its challenge-body heuristic needs a
+// body) or the Access-off readiness probe (a HEAD).
+const isPublicProbeUrl = (url: string): boolean => !url.startsWith('https://api.cloudflare.com/');
+
 describe('deploy provider routes', () => {
   let server: http.Server;
   let baseUrl: string;
@@ -1953,7 +1958,7 @@ describe('deploy provider routes', () => {
         const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
         if (url.startsWith(baseUrl)) return realFetch(input, init);
         const method = (init?.method || 'GET').toUpperCase();
-        if (method === 'HEAD') {
+        if (method === 'HEAD' || isPublicProbeUrl(url)) {
           return new Response('', { status: 302, headers: { location: 'https://acct-test.cloudflareaccess.com/cdn-cgi/access/login' } });
         }
         if (url.endsWith('/workers/subdomain')) return json({ success: true, result: { subdomain: 'acct-test' } });
@@ -2181,7 +2186,7 @@ describe('deploy provider routes', () => {
         const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
         if (url.startsWith(baseUrl)) return realFetch(input, init);
         const method = (init?.method || 'GET').toUpperCase();
-        if (method === 'HEAD') {
+        if (method === 'HEAD' || isPublicProbeUrl(url)) {
           return new Response('', { status: 302, headers: { location: 'https://acct-test.cloudflareaccess.com/cdn-cgi/access/login' } });
         }
         if (url.endsWith('/workers/subdomain')) return json({ success: true, result: { subdomain: 'acct-test' } });
@@ -2641,7 +2646,7 @@ describe('deploy provider routes', () => {
         if (url.startsWith(baseUrl)) return realFetch(input, init);
         const method = (init?.method || 'GET').toUpperCase();
         cfCalls.push({ url, method });
-        if (method === 'HEAD') {
+        if (method === 'HEAD' || isPublicProbeUrl(url)) {
           return new Response('', { status: 302, headers: { location: 'https://acct-test.cloudflareaccess.com/cdn-cgi/access/login' } });
         }
         if (url.endsWith('/workers/subdomain')) return json({ success: true, result: { subdomain: 'acct-test' } });
@@ -2899,7 +2904,7 @@ describe('deploy provider routes', () => {
     const state = {
       routed: [] as Array<Record<string, string>>,
       attachMode: 'ok' as 'ok' | 'refused' | 'transport',
-      // What the public URLs answer to a HEAD: the Access login redirect, a
+      // What the public URLs answer to a probe: the Access login redirect, a
       // plain 200 (no gate), or no answer at all — one answer for every URL,
       // or a function choosing per URL.
       headMode: (options.access ? 'access' : 'plain') as HeadMode | ((url: string) => HeadMode),
@@ -2909,7 +2914,7 @@ describe('deploy provider routes', () => {
       // Consumed once: the next non-HEAD Cloudflare call awaits it before it
       // answers, holding a deploy at its first API call.
       hold: null as null | (() => Promise<void>),
-      // Consumed once: the next HEAD (a perimeter probe) awaits it before it
+      // Consumed once: the next probe awaits it before it
       // answers, holding a check-link inside its probe.
       headHold: null as null | (() => Promise<void>),
       // Whether turning the workers.dev route OFF (the exposure withdrawal)
@@ -2921,7 +2926,7 @@ describe('deploy provider routes', () => {
       if (url.startsWith(baseUrl)) return realFetch(input, init);
       const method = (init?.method || 'GET').toUpperCase();
       state.cfCalls.push({ url, method, dispatched: init?.dispatcher !== undefined });
-      if (method === 'HEAD') {
+      if (method === 'HEAD' || isPublicProbeUrl(url)) {
         if (state.headHold) {
           const headHold = state.headHold;
           state.headHold = null;
@@ -3184,7 +3189,7 @@ describe('deploy provider routes', () => {
       let checked = await f.checkLink(deployed.id);
       expect(checked.status).toBe(200);
       expect(((await checked.json()) as { status: string }).status).toBe('link-delayed');
-      expect(f.state.cfCalls.slice(before).every((c) => c.method === 'HEAD')).toBe(true);
+      expect(f.state.cfCalls.slice(before).every((c) => isPublicProbeUrl(c.url))).toBe(true);
       expect(f.state.subdomainEnabled).toBe(true);
 
       // The URLs now answer. workers.dev (the record's own `url`) challenges
@@ -3204,9 +3209,9 @@ describe('deploy provider routes', () => {
       expect(failed.reachableAt).toBeUndefined();
       expect(failed.statusMessage).toContain('https://a.example.com is not behind Cloudflare Access');
       expect(failed.cloudflareWorkers?.check).toMatchObject({ ok: false, detail: 'CFW_ACCESS_UNVERIFIED' });
-      const heads = f.state.cfCalls.slice(before).filter((c) => c.method === 'HEAD').map((c) => c.url);
-      expect(heads).toContain(deployed.url);
-      expect(heads).toContain('https://a.example.com');
+      const probed = f.state.cfCalls.slice(before).filter((c) => isPublicProbeUrl(c.url)).map((c) => c.url);
+      expect(probed).toContain(deployed.url);
+      expect(probed).toContain('https://a.example.com');
       expect(f.state.subdomainEnabled).toBe(false);
       expect(f.state.cfCalls.slice(before).some((c) => c.method === 'DELETE' && c.url.endsWith('/workers/domains/dom-a'))).toBe(true);
       expect(f.state.routed).toEqual([]);
@@ -3306,7 +3311,7 @@ describe('deploy provider routes', () => {
       expect(stillFailed.reachableAt).toBeUndefined();
       expect(stillFailed.statusMessage).toContain('is not behind Cloudflare Access');
       expect(stillFailed.cloudflareWorkers?.check).toMatchObject({ ok: false, detail: 'CFW_ACCESS_UNVERIFIED' });
-      expect(f.state.cfCalls.slice(before).every((c) => c.method === 'HEAD')).toBe(true);
+      expect(f.state.cfCalls.slice(before).every((c) => isPublicProbeUrl(c.url))).toBe(true);
 
       // No answer at all: the failed record is deferred, not promoted.
       f.state.headMode = 'unreachable';
@@ -3325,7 +3330,53 @@ describe('deploy provider routes', () => {
       expect(typeof ready.reachableAt).toBe('number');
       expect(ready.cloudflareWorkers).toMatchObject({ accessProtected: true });
       expect(ready.cloudflareWorkers?.check).toBeUndefined();
-      expect(f.state.cfCalls.slice(before).every((c) => c.method === 'HEAD')).toBe(true);
+      expect(f.state.cfCalls.slice(before).every((c) => isPublicProbeUrl(c.url))).toBe(true);
+    } finally {
+      configureCloudflareAccessPerimeterRetry();
+      await f.cleanup();
+    }
+  });
+
+  it('a preview deploy carries the production record\'s unwithdrawn exposure forward', async () => {
+    const f = await workersSiblingFixture('preview-exposure-carry', { access: true });
+    configureCloudflareAccessPerimeterRetry({ attempts: 2, baseMs: 1 });
+    try {
+      // a.html's production deploy defers: it turned the workers.dev route on
+      // and attached a.example.com, and no probe answered.
+      f.state.subdomainEnabled = false;
+      f.state.headMode = 'unreachable';
+      await f.putConfig({ hostname: 'a.example.com', access: true });
+      const deployed = (await (await f.deploy('a.html')).json()) as { id: string; status: string };
+      expect(deployed.status).toBe('link-delayed');
+      const dataDir = process.env.OD_DATA_DIR;
+      if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+      const db = openDatabase(process.cwd(), { dataDir });
+      const exposureOf = (id: string) =>
+        (getDeploymentById(db, f.projectId, id)?.providerMetadata as Record<string, unknown> | undefined)?.unverifiedExposure;
+      const productionExposure = {
+        scriptName: f.scriptName,
+        subdomainEnabledByThisRun: true,
+        detachableCustomDomains: [{ id: 'dom-a', hostname: 'a.example.com' }],
+      };
+      expect(exposureOf(deployed.id)).toEqual(productionExposure);
+
+      // b.html's PREVIEW deploy of the same script REPLACES its own record's
+      // metadata: the sibling's exposure has to ride along, or the check that
+      // must withdraw a route that IS public finds it recorded nowhere and
+      // leaves the Worker exposed.
+      f.state.headMode = 'access';
+      const preview = (await (await f.deploy('b.html', 'preview')).json()) as { id: string; status: string };
+      expect(preview.status).toBe('ready');
+      expect(exposureOf(preview.id)).toEqual(productionExposure);
+
+      // And it is still actionable from that record: the URLs answer ungated,
+      // so the check withdraws the workers.dev route and the hostname.
+      f.state.headMode = 'plain';
+      const checked = await f.checkLink(preview.id);
+      expect(checked.status).toBe(200);
+      expect(((await checked.json()) as { status: string }).status).toBe('failed');
+      expect(f.state.subdomainEnabled).toBe(false);
+      expect(f.state.routed).toEqual([]);
     } finally {
       configureCloudflareAccessPerimeterRetry();
       await f.cleanup();
@@ -3368,7 +3419,7 @@ describe('deploy provider routes', () => {
       expect(((await checked.json()) as { status: string }).status).toBe('failed');
       const calls = f.state.cfCalls.slice(before);
       const firstDisable = calls.findIndex(isDisable);
-      const firstProbe = calls.findIndex((c) => c.method === 'HEAD');
+      const firstProbe = calls.findIndex((c) => isPublicProbeUrl(c.url));
       expect(firstDisable).toBeGreaterThanOrEqual(0);
       expect(firstProbe).toBeGreaterThan(firstDisable);
       expect(f.state.subdomainEnabled).toBe(true);
@@ -3391,7 +3442,7 @@ describe('deploy provider routes', () => {
       before = f.state.cfCalls.length;
       checked = await f.checkLink(deployed.id);
       expect(checked.status).toBe(200);
-      expect(f.state.cfCalls.slice(before).every((c) => c.method === 'HEAD')).toBe(true);
+      expect(f.state.cfCalls.slice(before).every((c) => isPublicProbeUrl(c.url))).toBe(true);
     } finally {
       configureCloudflareAccessPerimeterRetry();
       await f.cleanup();
@@ -3642,9 +3693,9 @@ describe('deploy provider routes', () => {
       expect(checked.status).toBe(200);
       const ready = (await checked.json()) as { status: string; statusMessage?: string };
       expect(ready.status).toBe('ready');
-      const heads = f.state.cfCalls.slice(before).filter((c) => c.method === 'HEAD').map((c) => c.url);
-      expect(heads).toContain(preview.url);
-      expect(heads).not.toContain('https://a.example.com');
+      const probed = f.state.cfCalls.slice(before).filter((c) => isPublicProbeUrl(c.url)).map((c) => c.url);
+      expect(probed).toContain(preview.url);
+      expect(probed).not.toContain('https://a.example.com');
       // Nothing was withdrawn: the production hostname stays attached.
       expect(f.state.routed.map((d) => d.hostname)).toEqual(['a.example.com']);
     } finally {

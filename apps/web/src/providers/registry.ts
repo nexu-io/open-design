@@ -1949,9 +1949,15 @@ export async function fetchCloudflareWorkersOAuthStart(
     });
     if (!resp.ok) {
       const payload = (await resp.json().catch(() => null)) as
-        | { error?: { message?: string }; message?: string }
+        | { error?: string | { message?: string }; message?: string }
         | null;
-      throw new Error(payload?.error?.message || payload?.message || `Could not start Cloudflare sign-in (${resp.status})`);
+      // The daemon's Cloudflare routes answer a refusal with a bare STRING
+      // (`{ error: '<why>' }`); a couple of older shapes nest the message. Read
+      // the string form first — reading only the nested one turned every
+      // actionable refusal ("client ID is required", "not valid JSON") into the
+      // generic fallback.
+      const message = typeof payload?.error === 'string' ? payload.error : payload?.error?.message ?? payload?.message;
+      throw new Error(message || `Could not start Cloudflare sign-in (${resp.status})`);
     }
     return (await resp.json()) as WebCloudflareWorkersOAuthStartResponse;
   } catch (err) {

@@ -24,6 +24,7 @@ import {
   remainingUnverifiedExposure,
   retiredAccessAppIdFromWorkersDeploy,
   serializeUnverifiedExposure,
+  unverifiedExposureFromMetadata,
   verifyCloudflareAccessPerimeter,
   vouchedCustomDomains,
 } from '../src/deploy/cloudflare-workers.js';
@@ -53,6 +54,12 @@ afterEach(() => configureCloudflareAccessPerimeterRetry());
 
 type AccessOverrides = Record<string, unknown> & { head?: (url: string) => Response };
 
+// A fetch of a PUBLIC deploy URL rather than a Cloudflare API call: the Access
+// perimeter probe (a GET — its challenge-body heuristic needs a body) and the
+// Access-off readiness probe (a HEAD) are the only ones that leave
+// api.cloudflare.com.
+const isPublicProbe = (url: string): boolean => !url.startsWith('https://api.cloudflare.com/');
+
 function accessFetch(overrides: AccessOverrides = {}) {
   const calls: Call[] = [];
   // Apps created via POST are remembered so a later find-by-tag (the final
@@ -60,7 +67,7 @@ function accessFetch(overrides: AccessOverrides = {}) {
   const createdApps: Array<Record<string, unknown>> = [];
   const fn = vi.fn(async (url: string, init?: RequestInit) => {
     calls.push([url, init]);
-    if ((init?.method || 'GET').toUpperCase() === 'HEAD') {
+    if (isPublicProbe(url) || (init?.method || 'GET').toUpperCase() === 'HEAD') {
       // Public URLs of an Access-protected deploy answer with the login redirect.
       return overrides.head ? overrides.head(url) : accessRedirect();
     }
@@ -290,9 +297,9 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
     expect(createBody.destinations).toContainEqual({ type: 'public', uri: 'app.example.com' });
     // … and no covering PUT is needed after the attach: there is no window.
     expect(calls.some((c) => c[0].endsWith('/access/apps/app-123') && c[1]?.method === 'PUT')).toBe(false);
-    const heads = calls.filter((c) => c[1]?.method === 'HEAD').map((c) => c[0]);
-    expect(heads).toContain('https://my-site.acct-test.workers.dev');
-    expect(heads).toContain('https://app.example.com');
+    const probes = calls.filter((c) => isPublicProbe(c[0])).map((c) => c[0]);
+    expect(probes).toContain('https://my-site.acct-test.workers.dev');
+    expect(probes).toContain('https://app.example.com');
     expect(out.providerMetadata).toMatchObject({
       accessVerified: true,
       customDomain: { id: 'dom-1', hostname: 'app.example.com' },
@@ -884,7 +891,7 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
     expect(subdomainPosts.map((body) => body.enabled)).toEqual([true, false]);
     expect(calls.some((c) => c[1]?.method === 'DELETE' && c[0].endsWith('/workers/domains/dom-1'))).toBe(true);
     // Compensation runs only after the probes gave up, never before.
-    const lastProbe = calls.reduce((last, c, index) => (c[1]?.method === 'HEAD' ? index : last), -1);
+    const lastProbe = calls.reduce((last, c, index) => (isPublicProbe(c[0]) ? index : last), -1);
     const disablePos = calls.findIndex((c) => c[1]?.method === 'POST' && c[0].endsWith('/subdomain') && (JSON.parse(String(c[1]?.body)) as { enabled: boolean }).enabled === false);
     const detachPos = calls.findIndex((c) => c[1]?.method === 'DELETE' && c[0].endsWith('/workers/domains/dom-1'));
     expect(lastProbe).toBeGreaterThanOrEqual(0);
@@ -899,6 +906,41 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
       expect.objectContaining({ name: 'subdomain-disable', status: 'done' }),
       expect.objectContaining({ name: 'custom-domain-detach', status: 'done', detail: 'app.example.com' }),
     ]));
+  });
+
+  it('defers instead of withdrawing when the perimeter answers 5xx: an outage is not an exposure', async () => {
+    // The regression this pins: a 503 used to be classified as an ungated URL,
+    // so the deploy withdrew the workers.dev route and the hostname it had just
+    // attached — tearing down a working deploy over a Cloudflare outage.
+    const { calls, fn } = accessFetch({ head: () => new Response('', { status: 503 }) });
+    const wrapped = vi.fn(async (url: string, init?: RequestInit) => {
+      if ((init?.method || 'GET').toUpperCase() === 'GET' && url.endsWith('/workers/scripts/my-site/subdomain')) {
+        calls.push([url, init]);
+        return jsonResponse({ success: true, result: { enabled: false, previews_enabled: false } });
+      }
+      return fn(url, init);
+    });
+    vi.stubGlobal('fetch', wrapped);
+    const out = await deployToCloudflareWorkers({
+      ...base,
+      access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } },
+      customDomain: { hostname: 'app.example.com', zoneId: 'zone-1' },
+    });
+    expect(out.status).toBe('link-delayed');
+    expect(out.reachableAt).toBeUndefined();
+    expect(out.statusMessage).toMatch(/HTTP 503/);
+    // Nothing was withdrawn: the route stays on, the hostname stays attached.
+    const disabled = calls.some((c) => c[1]?.method === 'POST' && c[0].endsWith('/subdomain')
+      && (JSON.parse(String(c[1]?.body)) as { enabled?: boolean }).enabled === false);
+    expect(disabled).toBe(false);
+    expect(calls.some((c) => c[1]?.method === 'DELETE' && c[0].includes('/workers/domains/'))).toBe(false);
+    // The exposure stays recorded, so the link check can still withdraw it once
+    // the URLs answer for real.
+    expect(out.providerMetadata?.unverifiedExposure).toEqual({
+      scriptName: 'my-site',
+      subdomainEnabledByThisRun: true,
+      detachableCustomDomains: [{ id: 'dom-1', hostname: 'app.example.com' }],
+    });
   });
 
   it('turning workers.dev back off writes previews_enabled back as it was, instead of clobbering it', async () => {
@@ -950,7 +992,7 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
       .map((c) => JSON.parse(String(c[1]?.body)) as { enabled: boolean; previews_enabled: boolean });
     // Previews on, then back off — and the production route is left as it was.
     expect(subdomainPosts).toEqual([{ enabled: true, previews_enabled: true }, { enabled: true, previews_enabled: false }]);
-    const lastProbe = calls.reduce((last, c, index) => (c[1]?.method === 'HEAD' ? index : last), -1);
+    const lastProbe = calls.reduce((last, c, index) => (isPublicProbe(c[0]) ? index : last), -1);
     const disablePos = calls.findIndex((c) => c[1]?.method === 'POST' && c[0].endsWith('/workers/scripts/my-site/subdomain') && (JSON.parse(String(c[1]?.body)) as { previews_enabled: boolean }).previews_enabled === false);
     expect(disablePos).toBeGreaterThan(lastProbe);
     expect(caught?.steps).toContainEqual(expect.objectContaining({ name: 'previews-disable', status: 'done' }));
@@ -1064,7 +1106,7 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
   });
 
   it('keeps the attach and reports link-delayed, withdrawing nothing, when the perimeter probe gets no answer at all', async () => {
-    // DNS not propagated / certificate still issuing: the HEAD throws. That is
+    // DNS not propagated / certificate still issuing: the probe throws. That is
     // not an exposure — nothing proves the URL serves ungated — so the attach
     // and the workers.dev route stay and the verification is deferred.
     const { calls, fn } = accessFetch({ head: () => { throw new TypeError('fetch failed: getaddrinfo ENOTFOUND'); } });
@@ -1098,7 +1140,7 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
       .map((c) => (JSON.parse(String(c[1]?.body)) as { enabled: boolean }).enabled);
     expect(subdomainPosts).toEqual([true]);
     // Every URL was probed with the full retry budget before giving up.
-    expect(calls.filter((c) => c[1]?.method === 'HEAD').length).toBe(2 * 2);
+    expect(calls.filter((c) => isPublicProbe(c[0])).length).toBe(2 * 2);
   });
 
   it('an ungated answer on one URL still withdraws the exposure even when another URL is unreachable', async () => {
@@ -1286,7 +1328,7 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
       access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } },
     });
     expect(out.providerMetadata).toMatchObject({ accessVerified: true });
-    expect(calls.filter((c) => c[1]?.method === 'HEAD').length).toBe(2);
+    expect(calls.filter((c) => isPublicProbe(c[0])).length).toBe(2);
   });
 
   it('annotates a failure after the Access app was created with the app id, so the route can record it', async () => {
@@ -1359,6 +1401,42 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
     // Carrying ownership forward is bookkeeping only: a preview still never
     // touches custom-domain routing.
     expect(calls.some((c) => c[0].includes('/workers/domains') && c[1]?.method !== 'GET')).toBe(false);
+  });
+
+  it('a preview deploy carries the production record\'s unwithdrawn exposure forward', async () => {
+    const { fn } = accessFetch();
+    const wrapped = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes('/versions')) return jsonResponse({ success: true, result: { id: 'v12345678' } });
+      return fn(url, init);
+    });
+    vi.stubGlobal('fetch', wrapped);
+    const priorUnverifiedExposure = {
+      scriptName: 'my-site',
+      subdomainEnabledByThisRun: true,
+      detachableCustomDomains: [{ id: 'dom-1', hostname: 'app.example.com' }],
+    };
+    const out = await deployToCloudflareWorkers({
+      ...base,
+      target: 'preview',
+      access: { enabled: false },
+      priorUnverifiedExposure,
+    });
+    // This metadata REPLACES the record's. Dropping the exposure would leave a
+    // route that IS public recorded nowhere: the link check that must withdraw
+    // it would find nothing to act on.
+    expect(unverifiedExposureFromMetadata(out.providerMetadata)).toEqual(priorUnverifiedExposure);
+    expect(out.providerMetadata?.unverifiedExposure).toEqual(priorUnverifiedExposure);
+  });
+
+  it('a preview deploy with no prior exposure records none', async () => {
+    const { fn } = accessFetch();
+    const wrapped = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes('/versions')) return jsonResponse({ success: true, result: { id: 'v12345678' } });
+      return fn(url, init);
+    });
+    vi.stubGlobal('fetch', wrapped);
+    const out = await deployToCloudflareWorkers({ ...base, target: 'preview', access: { enabled: false } });
+    expect(out.providerMetadata).not.toHaveProperty('unverifiedExposure');
   });
 
   it('a preview deploy with no prior ownership records an empty owned list and no custom domain', async () => {
@@ -1552,7 +1630,7 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
     vi.stubGlobal('fetch', fn);
     await deployToCloudflareWorkers(base);
     const auths = calls
-      .filter((c) => (c[1]?.method || 'GET') !== 'HEAD' && !c[0].includes('/workers/assets/upload'))
+      .filter((c) => !isPublicProbe(c[0]) && !c[0].includes('/workers/assets/upload'))
       .map((c) => (c[1]?.headers as Record<string, string> | undefined)?.Authorization);
     expect(auths.length).toBeGreaterThan(0);
     expect(new Set(auths)).toEqual(new Set(['Bearer tok-secret']));
@@ -1688,6 +1766,56 @@ describe('verifyCloudflareAccessPerimeter', () => {
     expect(verdict.outcome).toBe('protected');
     expect(fn).toHaveBeenCalledTimes(2);
   });
+
+  it('classifies only a PROVEN non-gate answer as unprotected', async () => {
+    // 2xx serves the app itself; a 3xx that is not the Access login sends the
+    // visitor somewhere else. Both prove the gate is absent.
+    for (const status of [200, 302]) {
+      const fn = vi.fn(async () => new Response('', {
+        status,
+        headers: status === 302 ? { location: 'https://elsewhere.example/login' } : {},
+      }));
+      vi.stubGlobal('fetch', fn);
+      const verdict = await verifyCloudflareAccessPerimeter(['https://a.example.com'], {});
+      expect(verdict.outcome, 'HTTP ' + status).toBe('unprotected');
+      if (verdict.outcome === 'unprotected') expect(verdict.error.details).toMatchObject({ url: 'https://a.example.com', status });
+    }
+  });
+
+  it('defers on a 4xx/5xx that is not the Access challenge: an outage is not an exposure', async () => {
+    // A 404 while a hostname's route propagates, a 429 from the edge, a 503
+    // from a Worker that is erroring. Classifying any of them as ungated
+    // withdrew a working deploy's attach and workers.dev route over an outage.
+    for (const status of [404, 429, 500, 503]) {
+      const fn = vi.fn(async () => new Response('upstream error', { status }));
+      vi.stubGlobal('fetch', fn);
+      const verdict = await verifyCloudflareAccessPerimeter(['https://a.example.com'], {});
+      expect(verdict.outcome, 'HTTP ' + status).toBe('unreachable');
+      if (verdict.outcome === 'unreachable') {
+        expect(verdict.error.code).toBe('CFW_ACCESS_UNVERIFIED');
+        expect(verdict.error.message).toContain('HTTP ' + status);
+      }
+    }
+  });
+
+  it('reads the body of a 401/403: the Access login page is the gate, a bare refusal is not', async () => {
+    const login = vi.fn(async () => new Response('<html><title>Cloudflare Access</title></html>', { status: 403 }));
+    vi.stubGlobal('fetch', login);
+    expect((await verifyCloudflareAccessPerimeter(['https://a.example.com'], {})).outcome).toBe('protected');
+    const bare = vi.fn(async () => new Response('forbidden', { status: 401 }));
+    vi.stubGlobal('fetch', bare);
+    expect((await verifyCloudflareAccessPerimeter(['https://a.example.com'], {})).outcome).toBe('unreachable');
+  });
+
+  it('probes with GET, without following redirects, so the challenge body is readable', async () => {
+    const seen: Array<RequestInit | undefined> = [];
+    const fn = vi.fn(async (_url: string, init?: RequestInit) => { seen.push(init); return accessRedirect(); });
+    vi.stubGlobal('fetch', fn);
+    await verifyCloudflareAccessPerimeter(['https://a.example.com'], {});
+    expect(seen[0]?.method).toBe('GET');
+    expect(seen[0]?.redirect).toBe('manual');
+    expect(seen[0]?.signal).toBeInstanceOf(AbortSignal);
+  });
 });
 
 describe('Cloudflare Access redirect detection', () => {
@@ -1751,7 +1879,7 @@ describe('Cloudflare Workers proxy dispatcher', () => {
       config: { ...base.config, bindings: [{ type: 'r2_bucket', name: 'BUCKET', bucketName: 'assets' }] },
     });
     expect(withAccess.inits.some((c) => c.url.endsWith('/user'))).toBe(true);
-    expect(withAccess.inits.some((c) => c.init?.method === 'HEAD')).toBe(true);
+    expect(withAccess.inits.some((c) => isPublicProbe(c.url) && c.init?.method === 'GET')).toBe(true);
     expect(withAccess.inits.some((c) => c.url.includes('/r2/buckets'))).toBe(true);
     expectAllDispatched(withAccess.inits, 10);
     // Access off: the readiness HEAD is a different code path.
@@ -1782,16 +1910,16 @@ describe('Cloudflare Workers request timeouts', () => {
     expect(CLOUDFLARE_PROBE_TIMEOUT_MS).toBe(10_000);
   });
 
-  it('attaches an AbortSignal to every Cloudflare API call and every public HEAD probe of a deploy', async () => {
+  it('attaches an AbortSignal to every Cloudflare API call and every public probe of a deploy', async () => {
     const { calls, fn } = accessFetch();
     vi.stubGlobal('fetch', fn);
     const out = await deployToCloudflareWorkers({ ...base, access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } } });
     expect(out.status).toBe('ready');
     const api = calls.filter((c) => c[0].startsWith('https://api.cloudflare.com/'));
-    const heads = calls.filter((c) => c[1]?.method === 'HEAD');
+    const probes = calls.filter((c) => isPublicProbe(c[0]));
     expect(api.length).toBeGreaterThan(0);
-    expect(heads.length).toBeGreaterThan(0);
-    for (const [, init] of [...api, ...heads]) expect(init?.signal).toBeInstanceOf(AbortSignal);
+    expect(probes.length).toBeGreaterThan(0);
+    for (const [, init] of [...api, ...probes]) expect(init?.signal).toBeInstanceOf(AbortSignal);
   });
 
   it('attaches an AbortSignal to the Access-off readiness HEAD', async () => {
@@ -1822,7 +1950,7 @@ describe('Cloudflare Workers request timeouts', () => {
       .map((c) => (JSON.parse(String(c[1]?.body)) as { enabled: boolean }).enabled);
     expect(subdomainPosts).not.toContain(false);
     // The full retry budget was spent before deferring.
-    expect(calls.filter((c) => c[1]?.method === 'HEAD').length).toBe(2);
+    expect(calls.filter((c) => isPublicProbe(c[0])).length).toBe(2);
   });
 
   it('sizes the upload budget from the body: floor for a small body, per-MiB allowance for a large one, capped', () => {

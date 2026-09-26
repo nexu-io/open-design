@@ -315,6 +315,12 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
      * across the same records; vouched for by hostname like owned ones. */
     priorPendingCustomDomains: string[];
     priorCustomDomain: Record<string, unknown> | undefined;
+    /** The exposure a prior record deferred and could not withdraw (see
+     * unverifiedExposureFromMetadata). This record's own copy wins, a sibling's
+     * is the fallback — the same precedence as the fields above. A preview
+     * deploy carries it forward so the metadata replace cannot drop the only
+     * handle on a route that is still public. */
+    priorUnverifiedExposure: CloudflareUnverifiedExposure | undefined;
   } {
     const { prior } = input;
     const siblings = listDeploymentsByProvider(db, CLOUDFLARE_WORKERS_PROVIDER_ID)
@@ -333,6 +339,7 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
     const records: Array<{ providerMetadata?: any }> = prior ? [prior, ...siblings] : siblings;
     let priorAccessAppId: string | undefined;
     let priorCustomDomain: Record<string, unknown> | undefined;
+    let priorUnverifiedExposure: CloudflareUnverifiedExposure | undefined;
     const priorOwnedCustomDomains: CloudflareOwnedCustomDomain[] = [];
     const priorPendingCustomDomains: string[] = [];
     for (const record of records) {
@@ -341,6 +348,7 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
         priorAccessAppId = metadata.accessAppId;
       }
       if (!priorCustomDomain) priorCustomDomain = recordedCustomDomainFromMetadata(metadata);
+      if (!priorUnverifiedExposure) priorUnverifiedExposure = unverifiedExposureFromMetadata(metadata);
       for (const owned of ownedCustomDomainsFromMetadata(metadata)) {
         if (!priorOwnedCustomDomains.some((have) => have.hostname === owned.hostname && have.id === owned.id)) {
           priorOwnedCustomDomains.push(owned);
@@ -350,7 +358,7 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
         if (!priorPendingCustomDomains.includes(pending)) priorPendingCustomDomains.push(pending);
       }
     }
-    return { priorAccessAppId, priorOwnedCustomDomains, priorPendingCustomDomains, priorCustomDomain };
+    return { priorAccessAppId, priorOwnedCustomDomains, priorPendingCustomDomains, priorCustomDomain, priorUnverifiedExposure };
   }
 
   /**
@@ -666,14 +674,14 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
   // recorded as owned, even when the deploy that did so fails afterwards.
   //
   // - The Access app (created before the script PUT; the deploy can still fail
-  //   on the custom-domain attach, the perimeter HEAD on a hostname whose
+  //   on the custom-domain attach, the perimeter probe on a hostname whose
   //   certificate is still issuing, a 429-exhausted workers.dev enable).
   //   Without the record the next deploy finds an app it does not "own" and
   //   refuses with CFW_ACCESS_APP_FOREIGN forever, and turning Access off never
   //   retires it — the site stays gated by an app the UI says does not exist.
   // - The custom hostname (attached after the script PUT; the deploy can still
   //   fail on a stale-hostname detach, the final Access PUT, the perimeter
-  //   HEAD). Without the record the hostname is routed to the script but
+  //   probe). Without the record the hostname is routed to the script but
   //   classified FOREIGN: a later config change never detaches it and the
   //   detach route refuses it with CFW_DOMAIN_FOREIGN — the user's dropped
   //   hostname keeps serving the site with no way to remove it here.
@@ -873,6 +881,7 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
                   priorOwnedCustomDomains: workersOwnership?.priorOwnedCustomDomains,
                   priorPendingCustomDomains: workersOwnership?.priorPendingCustomDomains,
                   priorCustomDomain: workersOwnership?.priorCustomDomain,
+                  priorUnverifiedExposure: workersOwnership?.priorUnverifiedExposure,
                   // Write-ahead: the hostname is on the record as pending
                   // before the attach call goes out (see the invariant above).
                   onBeforeAttach: (hostname: string) =>

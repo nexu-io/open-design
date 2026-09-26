@@ -32,6 +32,24 @@ vi.mock('../src/integrations/cloudflare-oauth-server.js', () => ({
   })),
 }));
 
+// Armed by the failed-restore test alone: the rollback's write of the displaced
+// credential fails. That is the one way to reach the clear-instead-of-restore
+// branch — a store broken enough to fail the restore would have failed the
+// original write first, so no real filesystem state gets there.
+const tokenStoreFault = vi.hoisted(() => ({ failSetOfAccessToken: '' }));
+vi.mock('../src/integrations/cloudflare-tokens.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/integrations/cloudflare-tokens.js')>();
+  return {
+    ...actual,
+    setCloudflareOAuthToken: vi.fn(async (dataDir: string, token: { accessToken?: string }) => {
+      if (tokenStoreFault.failSetOfAccessToken && token?.accessToken === tokenStoreFault.failSetOfAccessToken) {
+        throw new Error('EROFS: read-only file system');
+      }
+      return actual.setCloudflareOAuthToken(dataDir, token as Parameters<typeof actual.setCloudflareOAuthToken>[1]);
+    }),
+  };
+});
+
 async function startApp(): Promise<{ baseUrl: string; close: () => Promise<void> }> {
   const app = express();
   app.use(express.json());
@@ -829,6 +847,75 @@ describe('cloudflare-oauth routes', () => {
     } finally {
       errorSpy.mockRestore();
       await rm(configPath, { force: true });
+    }
+  });
+
+  it('clears the store rather than leaving a dead credential when the failed config commit cannot be rolled back', async () => {
+    const dataDir = cloudflareOAuthTokensDir();
+    const configPath = deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const realFetch = globalThis.fetch;
+    const revokes: string[] = [];
+    vi.stubGlobal('fetch', async (input: unknown, init?: unknown) => {
+      const url = String(input);
+      if (url.includes('oauth2/revoke')) {
+        revokes.push(String((init as RequestInit | undefined)?.body));
+        return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url.includes('oauth2/token')) {
+        return new Response(
+          JSON.stringify({ access_token: 'acc-new', token_type: 'Bearer', refresh_token: 'ref-new', expires_in: 3600 }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url.endsWith('/client/v4/user')) {
+        return new Response(JSON.stringify({ success: false }), { status: 403, headers: { 'content-type': 'application/json' } });
+      }
+      return realFetch(input as never, init as never);
+    });
+    try {
+      // A working credential is already stored; the failed reconnect displaces it.
+      await setCloudflareOAuthToken(dataDir, {
+        accessToken: 'acc-prior',
+        refreshToken: 'ref-prior',
+        tokenType: 'Bearer',
+        generation: 0,
+        savedAt: Date.now(),
+      });
+      // Its restore is the one write that fails.
+      tokenStoreFault.failSetOfAccessToken = 'acc-prior';
+      const startResp = await fetch(`${app.baseUrl}/api/cloudflare/oauth/start`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ clientId: 'client-abc', redirectUri: 'http://127.0.0.1:56122/callback' }),
+      });
+      expect(startResp.status).toBe(200);
+      const { state } = (await startResp.json()) as { state: string };
+      // The config commit that follows the token write now fails: an unparsable
+      // config is exactly what commitCloudflareOAuthMode refuses to overwrite.
+      await writeFile(configPath, '{"clientId": "client-abc", "redirectUri": ', 'utf8');
+      const completeResp = await fetch(`${app.baseUrl}/api/cloudflare/oauth/complete`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ state, code: 'AUTHCODE' }),
+      });
+      expect(completeResp.status).toBe(400);
+      expect(((await completeResp.json()) as { error: string }).error).toMatch(/not valid JSON/);
+      // The restore failed, so the token this attempt minted must NOT stay on
+      // disk: its grant is revoked below, and a stored-but-dead credential
+      // would report connected while every deploy on it failed at Cloudflare.
+      expect(await getCloudflareOAuthToken(dataDir)).toBeNull();
+      expect(revokes).toHaveLength(1);
+      expect(new URLSearchParams(revokes[0]!).get('token')).toBe('ref-new');
+    } finally {
+      tokenStoreFault.failSetOfAccessToken = '';
+      vi.unstubAllGlobals();
+      errorSpy.mockRestore();
+      warnSpy.mockRestore();
+      await rm(configPath, { force: true });
+      await clearCloudflareOAuthToken(dataDir);
+      await fetch(`${app.baseUrl}/api/cloudflare/oauth/cancel`, { method: 'POST' });
     }
   });
 

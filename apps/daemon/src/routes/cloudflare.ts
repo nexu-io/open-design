@@ -259,12 +259,35 @@ export function registerCloudflareRoutes(
         // The token write already landed but the config commit failed — restore
         // the token it displaced so a previously working credential stays usable
         // instead of leaving a token issued to the new client against a config
-        // that still names the old identity. The local state is restored FIRST
+        // that still names the old identity. The local state is settled FIRST
         // (a crash during the revoke round-trip must not leave a soon-revoked
         // token on disk), then the grant this attempt minted is revoked at
         // Cloudflare.
-        if (displaced) await setCloudflareOAuthToken(dataDir, displaced);
-        else await clearCloudflareOAuthToken(dataDir);
+        //
+        // The restore can fail too (the store went unwritable underneath it).
+        // Revoking the new grant with the new token still on disk would leave a
+        // stored-but-dead credential: the status route reports connected, and
+        // every deploy on it fails at Cloudflare. Clearing the store is the
+        // honest end state — no credential is strictly better than a dead one.
+        try {
+          if (displaced) await setCloudflareOAuthToken(dataDir, displaced);
+          else await clearCloudflareOAuthToken(dataDir);
+        } catch (restoreErr) {
+          console.warn(
+            '[cloudflare-oauth] could not restore the credential a failed config commit displaced; clearing it instead:',
+            String((restoreErr as Error)?.message || restoreErr),
+          );
+          try {
+            await clearCloudflareOAuthToken(dataDir);
+          } catch (clearErr) {
+            // Nothing further to try: the grant is revoked below either way, so
+            // the record left behind is dead and a Reconnect replaces it.
+            console.error(
+              '[cloudflare-oauth] could not clear the credential left by the failed config commit:',
+              String((clearErr as Error)?.message || clearErr),
+            );
+          }
+        }
         await revokeDiscardedGrant(result, fetchImpl);
         markGrantRevoked(err);
         throw err;
