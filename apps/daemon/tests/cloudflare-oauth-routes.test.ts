@@ -63,6 +63,17 @@ vi.mock('../src/integrations/cloudflare-tokens.js', async (importOriginal) => {
       }
       return actual.setCloudflareOAuthToken(dataDir, token as Parameters<typeof actual.setCloudflareOAuthToken>[1]);
     }),
+    // The rollback's restore goes through the restore-and-drop write; the same
+    // fault reaches it.
+    restoreCloudflareOAuthTokenAndDropRevokes: vi.fn(async (dataDir: string, token: { accessToken?: string }) => {
+      if (tokenStoreFault.failSetOfAccessToken && token?.accessToken === tokenStoreFault.failSetOfAccessToken) {
+        throw new Error('EROFS: read-only file system');
+      }
+      return actual.restoreCloudflareOAuthTokenAndDropRevokes(
+        dataDir,
+        token as Parameters<typeof actual.restoreCloudflareOAuthTokenAndDropRevokes>[1],
+      );
+    }),
     setCloudflareOAuthTokenGuarded: vi.fn(async (
       dataDir: string,
       token: Parameters<typeof actual.setCloudflareOAuthTokenGuarded>[1],
@@ -621,7 +632,12 @@ describe('cloudflare-oauth routes', () => {
       expect(form.get('token_type_hint')).toBe('refresh_token');
       expect(form.get('client_id')).toBe('client-old');
       expect(storedAtRevoke).toBe('acc-new');
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('revoke of superseded grant failed'), expect.stringContaining('fetch failed'));
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('revoke of the displaced OAuth grant failed'), expect.stringContaining('fetch failed'));
+      // Cloudflare never confirmed, so the old grant stays NAMED: the guarded
+      // write recorded it as a handle in the write that displaced it, and the
+      // next OAuth mutation retries the revoke. A best-effort call that was the
+      // only record left the refresh token valid with no file naming it.
+      expect((await getPendingCloudflareOAuthRevokes(dataDir)).map((handle) => handle.refreshToken)).toEqual(['ref-old']);
     } finally {
       warnSpy.mockRestore();
       vi.unstubAllGlobals();
@@ -1111,6 +1127,78 @@ describe('cloudflare-oauth routes', () => {
       expect(new URLSearchParams(revokes[0]!).get('token')).toBe('ref-new');
     } finally {
       tokenStoreFault.failSetOfAccessToken = '';
+      vi.unstubAllGlobals();
+      errorSpy.mockRestore();
+      warnSpy.mockRestore();
+      await rm(configPath, { force: true });
+      await clearCloudflareOAuthToken(dataDir);
+      await fetch(`${app.baseUrl}/api/cloudflare/oauth/cancel`, { method: 'POST' });
+    }
+  });
+
+  it('a failed mode commit hands the displaced credential back with its revoke handle retired', async () => {
+    const dataDir = cloudflareOAuthTokensDir();
+    const configPath = deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const realFetch = globalThis.fetch;
+    const revokes: string[] = [];
+    vi.stubGlobal('fetch', async (input: unknown, init?: unknown) => {
+      const url = String(input);
+      if (url.includes('oauth2/revoke')) {
+        revokes.push(new URLSearchParams(String((init as RequestInit | undefined)?.body ?? '')).get('token') ?? '');
+        return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url.includes('oauth2/token')) {
+        return new Response(
+          JSON.stringify({ access_token: 'acc-new', token_type: 'Bearer', refresh_token: 'ref-new', expires_in: 3600 }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url.endsWith('/client/v4/user')) {
+        return new Response(JSON.stringify({ success: false }), { status: 403, headers: { 'content-type': 'application/json' } });
+      }
+      return realFetch(input as never, init as never);
+    });
+    try {
+      await writeCloudflareWorkersConfig({ token: 'static-token', accountId: 'acct_test' });
+      await setCloudflareOAuthToken(dataDir, {
+        accessToken: 'acc-prior',
+        refreshToken: 'ref-prior',
+        tokenType: 'Bearer',
+        clientId: 'client-abc',
+        generation: 0,
+        savedAt: Date.now(),
+      });
+      const startResp = await fetch(`${app.baseUrl}/api/cloudflare/oauth/start`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ clientId: 'client-abc', redirectUri: 'http://127.0.0.1:56122/callback' }),
+      });
+      expect(startResp.status).toBe(200);
+      const { state } = (await startResp.json()) as { state: string };
+      // The grant is stored — and the credential it displaced is named by the
+      // handle that write recorded — when the config goes unparsable underneath
+      // the mode commit, which refuses to overwrite it.
+      tokenStoreHooks.afterGuardedWrite = async () => {
+        await writeFile(configPath, '{"clientId": "client-abc", "redirectUri": ', 'utf8');
+      };
+      const completeResp = await fetch(`${app.baseUrl}/api/cloudflare/oauth/complete`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ state, code: 'AUTHCODE' }),
+      });
+      expect(completeResp.status).toBe(400);
+      // The prior credential is the store's again, and the handle that named it
+      // went in the SAME write: left behind, the next settle would revoke the
+      // grant the config names and the user is using.
+      expect(await getCloudflareOAuthToken(dataDir)).toMatchObject({ accessToken: 'acc-prior', refreshToken: 'ref-prior' });
+      expect(await getPendingCloudflareOAuthRevokes(dataDir)).toEqual([]);
+      // Only this attempt's freshly minted grant is revoked; the restored one
+      // is never touched.
+      expect(revokes).toEqual(['ref-new']);
+    } finally {
+      tokenStoreHooks.afterGuardedWrite = null;
       vi.unstubAllGlobals();
       errorSpy.mockRestore();
       warnSpy.mockRestore();

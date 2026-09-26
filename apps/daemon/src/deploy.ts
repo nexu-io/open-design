@@ -17,6 +17,7 @@ import {
   getCloudflareOAuthToken,
   getPendingCloudflareOAuthRevokes,
   isCloudflareOAuthTokenExpired,
+  recordPendingCloudflareOAuthRevoke,
   restoreCloudflareOAuthTokenAndDropRevokes,
   setCloudflareOAuthTokenIfGenerationMatches,
   type StoredCloudflareOAuthToken,
@@ -665,11 +666,15 @@ export async function readCloudflareWorkersConfig(): Promise<DeployConfig> {
 }
 
 export async function writeCloudflareWorkersConfig(input: Partial<DeployConfig>) {
+  return withCloudflareConfigMutation(async () => {
   // A settings save is an OAuth mutation like any other: a transition that
   // crashed before it could confirm the revoke it recorded settles here first,
   // so the grant dies on the first save after the crash instead of never.
+  // INSIDE the lock (see settleCloudflareOAuthGrantRevokes): a settle that ran
+  // ahead of the lock could revoke the handle a transition already inside it
+  // had just recorded, and then watch that transition's rollback restore the
+  // grant it killed.
   await settlePendingCloudflareOAuthGrantRevokes();
-  return withCloudflareConfigMutation(async () => {
   const current = await readCloudflareWorkersConfig();
   const tokenInput = typeof input?.token === 'string' ? input.token.trim() : '';
   // The authority switch to 'oauth' must not be reachable via a bare config PUT:
@@ -726,6 +731,17 @@ export async function writeCloudflareWorkersConfig(input: Partial<DeployConfig>)
   // perfectly alive, on nothing more than the user editing their settings.
   if (current.pendingOAuthGrant) next.pendingOAuthGrant = current.pendingOAuthGrant;
   if (current.pendingOAuthGrantClear) next.pendingOAuthGrantClear = current.pendingOAuthGrantClear;
+  // A save that chooses 'oauth' supersedes a half-finished exit from oauth —
+  // the rule markCloudflareOAuthGrantPending applies to a connect. The check
+  // above proved a grant is in the store, and the marker's whole purpose is to
+  // keep every read answering token mode while a grant is being taken OFF disk.
+  // Carried forward here, it persisted a record whose derived mode read 'token'
+  // while the response echoed 'oauth': configured:true on the settings surface
+  // over a config no deploy would sign OAuth with. A clear that a crash
+  // interrupted before its destructive half has nothing left to finish — the
+  // grant it was going to take off disk is the one this save names as the
+  // authority — and one that did run left an empty store the check refused.
+  if (input?.credentialMode === 'oauth') delete next.pendingOAuthGrantClear;
   // Persist exactly what the read path will see. The read path applies the same
   // normalizers, so an un-normalized write that reads back as `undefined` would
   // silently downgrade "Access on" / "custom domain" to "off" on the next deploy
@@ -817,11 +833,23 @@ export async function writeCloudflareWorkersConfig(input: Partial<DeployConfig>)
         // window this rollback exists to close: a crash between them, or a drop
         // that failed and was swallowed, stranded a restored credential on disk
         // with a pending handle still naming it.
-        if (displaced) await restoreCloudflareOAuthTokenAndDropRevokes(cloudflareOAuthTokensDir(), displaced);
-        const restored: DeployConfig = { ...persistableCloudflareWorkersConfig(current) };
-        delete restored.pendingOAuthGrant;
-        delete restored.pendingOAuthGrantClear;
-        await writeDeployConfigFile(cloudflareConfigFile, restored);
+        //
+        // The restore lands the grant only while its handle still names it. A
+        // handle that is gone means a settle confirmed the revoke — Cloudflare
+        // has killed the grant — and putting it back would name a dead
+        // credential as the authority. The intent marker from step 1 is then
+        // left standing: the config keeps reading token mode over an empty
+        // store, which is the crash state the branch condition above already
+        // re-enters and finishes on the next save.
+        const landed = displaced
+          ? await restoreCloudflareOAuthTokenAndDropRevokes(cloudflareOAuthTokensDir(), displaced)
+          : true;
+        if (landed) {
+          const restored: DeployConfig = { ...persistableCloudflareWorkersConfig(current) };
+          delete restored.pendingOAuthGrant;
+          delete restored.pendingOAuthGrantClear;
+          await writeDeployConfigFile(cloudflareConfigFile, restored);
+        }
       } catch (rollbackErr) {
         // The rollback itself failed, so no state is left to hand the grant
         // back to: a store the restored config no longer names must not keep
@@ -899,11 +927,12 @@ function refuseCloudflareWorkersConfigMutationIfCorrupt(current: DeployConfig, w
  * beside it. */
 export async function markCloudflareOAuthGrantPending(): Promise<string> {
   const attemptId = randomUUID();
-  // A reconnect is an OAuth mutation like any other (see
-  // writeCloudflareWorkersConfig): it settles a transition's unconfirmed revoke
-  // before it records its own intent.
-  await settlePendingCloudflareOAuthGrantRevokes();
   return withCloudflareConfigMutation(async () => {
+    // A reconnect is an OAuth mutation like any other (see
+    // writeCloudflareWorkersConfig): it settles a transition's unconfirmed
+    // revoke before it records its own intent — inside the lock, for the
+    // reason given there.
+    await settlePendingCloudflareOAuthGrantRevokes();
     const current = await readCloudflareWorkersConfigFile();
     refuseCloudflareWorkersConfigMutationIfCorrupt(current, 'record the pending OAuth grant');
     const next: DeployConfig = { ...persistableCloudflareWorkersConfig(current), pendingOAuthGrant: attemptId };
@@ -966,10 +995,6 @@ export async function commitCloudflareOAuthMode(
   identity?: { clientId: string; redirectUri: string },
   attemptId?: string,
 ): Promise<void> {
-  // The commit is the second half of a connect: it settles a transition's
-  // unconfirmed revoke on the way past, so a connect after a crashed exit from
-  // OAuth finishes that exit's debt rather than leaving it on disk forever.
-  await settlePendingCloudflareOAuthGrantRevokes();
   return withCloudflareConfigMutation(async () => {
     const current = await readCloudflareWorkersConfig();
     refuseCloudflareWorkersConfigMutationIfCorrupt(current, 'switch the credential mode to oauth');
@@ -1017,6 +1042,17 @@ export async function commitCloudflareOAuthMode(
     delete next.pendingOAuthGrant;
     delete next.pendingOAuthGrantClear;
     await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), next);
+    // The commit is the second half of a connect: it settles every unconfirmed
+    // revoke on the way past — a crashed exit from OAuth's debt, and the grant
+    // this connect's own token write displaced, which that write recorded as a
+    // handle in the same locked write (setCloudflareOAuthTokenGuarded). AFTER
+    // the mode lands, never before: until this write the displaced grant's fate
+    // is undecided — a commit that refuses hands it back to the connect route's
+    // rollback, which restores it as the live credential — and a settle ahead of
+    // the write revoked it first, so the rollback restored a grant Cloudflare
+    // had already killed. Still inside the lock, for the reason
+    // settleCloudflareOAuthGrantRevokes gives.
+    await settlePendingCloudflareOAuthGrantRevokes(identity?.clientId);
   });
 }
 
@@ -1264,34 +1300,6 @@ export const CLOUDFLARE_OAUTH_REFRESH_TIMEOUT_MS = 20_000;
 /** Bound on the best-effort revoke of a rotated grant nobody holds. */
 const CLOUDFLARE_OAUTH_REVOKE_TIMEOUT_MS = 10_000;
 
-/** Best-effort revoke of the grant a refresh rotated to but nobody will ever
- * hold: the compare-and-set persist lost, so the rotated refresh token is not
- * on disk anywhere, yet it stays valid on Cloudflare's side until revoked.
- * Never throws — the caller's outcome (adopt the newer record or demand a
- * reconnect) does not depend on Cloudflare answering here. */
-async function revokeSupersededRefreshGrant(
-  refreshed: Awaited<ReturnType<typeof refreshCloudflareToken>>,
-  clientId: string,
-): Promise<void> {
-  const token = refreshed.refresh_token ?? refreshed.access_token;
-  if (!token) return;
-  const proxyDispatcher = proxyDispatcherRequestInit(process.env);
-  try {
-    const { ok, status } = await revokeCloudflareToken({
-      token,
-      tokenTypeHint: refreshed.refresh_token ? 'refresh_token' : 'access_token',
-      clientId,
-      fetchImpl: (input, init) => fetch(input, { ...init, ...proxyDispatcher.requestInit }),
-      signal: AbortSignal.timeout(CLOUDFLARE_OAUTH_REVOKE_TIMEOUT_MS),
-    });
-    if (!ok) console.warn(`[cloudflare-oauth] revoke of the superseded refresh grant refused by Cloudflare (HTTP ${status})`);
-  } catch (err: unknown) {
-    console.warn('[cloudflare-oauth] revoke of the superseded refresh grant failed:', err instanceof Error ? err.message : String(err));
-  } finally {
-    await proxyDispatcher.close();
-  }
-}
-
 /** Best-effort revoke of the grant a credential-mode transition just took off
  * disk — the clear-then-revoke pair the disconnect route performs (see
  * POST /api/cloudflare/oauth/disconnect). The displaced record's own clientId
@@ -1403,6 +1411,21 @@ export async function settlePendingCloudflareOAuthGrantRevokes(
       err instanceof Error ? err.message : String(err),
     );
   }
+}
+
+/** settlePendingCloudflareOAuthGrantRevokes as a standalone OAuth mutation: the
+ * same settle, taken under the Workers-config mutation lock. Every settle has to
+ * run there, not only the ones that precede a config write. A settle outside
+ * the lock can read a handle a transition has JUST recorded, revoke it with a
+ * 2xx, and then watch that transition's rollback put the grant back as the live
+ * credential (restoreCloudflareOAuthTokenAndDropRevokes): the config then
+ * names a grant Cloudflare has already killed, the status surface reports a
+ * connection, and every deploy on it fails. Under the lock the settle observes
+ * the transition either whole or not at all. Callers already inside the lock
+ * use settlePendingCloudflareOAuthGrantRevokes directly — the lock is not
+ * re-entrant. */
+export async function settleCloudflareOAuthGrantRevokes(fallbackClientId?: string): Promise<void> {
+  return withCloudflareConfigMutation(() => settlePendingCloudflareOAuthGrantRevokes(fallbackClientId));
 }
 
 /** Run the read -> refresh -> persist sequence for a dataDir. The caller holds
@@ -1524,7 +1547,30 @@ async function refreshCloudflareOAuthAccessToken(
     // The store moved on (disconnect or reconnect) while the token endpoint
     // was rotating the grant. The record above is never written, so the
     // refresh token it carries would otherwise stay valid with no holder.
-    await revokeSupersededRefreshGrant(refreshed, clientId);
+    // Name it durably FIRST, under the token lock, and only then revoke it: a
+    // revoke that times out, answers 5xx, or never runs because the process
+    // dies here used to leave the rotated grant valid with no file naming it.
+    // The handle is retired only by a 2xx; otherwise the next OAuth mutation's
+    // settle retries it. Named by what the token endpoint actually issued, not
+    // by the record above — that one inherits the OLD refresh token when the
+    // response rotated none, and the old grant is the store's to account for.
+    const rotated: StoredCloudflareOAuthToken = {
+      accessToken: refreshed.access_token,
+      ...(refreshed.refresh_token ? { refreshToken: refreshed.refresh_token } : {}),
+      tokenType: stored.tokenType,
+      clientId,
+      generation: stored.generation,
+      savedAt: stored.savedAt,
+    };
+    try {
+      await recordPendingCloudflareOAuthRevoke(dataDir, rotated);
+    } catch (err: unknown) {
+      console.warn(
+        '[cloudflare-oauth] could not record the superseded refresh grant as a revoke handle:',
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+    if (await revokeClearedCloudflareGrant(rotated, clientId)) await dropCloudflareGrantRevokeHandle(rotated);
     const latest = await getCloudflareOAuthToken(dataDir);
     if (latest && !isCloudflareOAuthTokenExpired(latest, Date.now(), CLOUDFLARE_OAUTH_EXPIRY_SKEW_MS)) {
       // A reconnect wrote a newer, still-valid credential — adopt it rather

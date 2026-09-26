@@ -313,6 +313,51 @@ function carriedPendingRevokes(
     : {};
 }
 
+function pendingRevokesField(
+  handles: readonly StoredCloudflareOAuthToken[],
+): Pick<CloudflareOAuthTokensFile, 'pendingRevokes'> {
+  return handles.length > 0 ? { pendingRevokes: [...handles] } : {};
+}
+
+/** The revoke handles a write that LANDS a credential leaves behind. Two rules
+ * on top of the plain carry-forward:
+ *
+ * 1. A handle naming the credential being landed goes. A handle beside a live
+ *    credential it names is the one pair the store must never hold — the next
+ *    settle would revoke the grant the config names and the user is using. (A
+ *    provider that hands a reconnect the same refresh token an earlier attempt
+ *    recorded a handle for is how the pair arises.)
+ * 2. The credential the write displaces is recorded as a handle IN THIS WRITE
+ *    when its grant differs from the landed one. A reconnect used to hand the
+ *    displaced record back in memory only, and the sole revoke was one
+ *    best-effort call after the commit: a crash, a timeout, or a 5xx there left
+ *    the old refresh token valid at Cloudflare with no file naming it. The
+ *    same-refresh-token exclusion mirrors the connect route's supersededGrantOf:
+ *    a displaced record whose refresh token IS the landed one holds no grant of
+ *    its own to revoke.
+ *
+ * A displaced record written before the client identity was persisted is
+ * stamped with the landed credential's clientId — the fallback every revoke of
+ * it already applies (RFC 7009 §2.1 names the issuing client; a record that
+ * predates the identity write was issued to the client the config then named,
+ * which is the client the reconnect authorized with). */
+function pendingRevokesAfterLanding(
+  carried: readonly StoredCloudflareOAuthToken[],
+  displaced: StoredCloudflareOAuthToken | null,
+  landed: StoredCloudflareOAuthToken,
+): StoredCloudflareOAuthToken[] {
+  const nameOf = (entry: StoredCloudflareOAuthToken): string => entry.refreshToken || entry.accessToken;
+  const landedName = nameOf(landed);
+  const kept = carried.filter((entry) => nameOf(entry) !== landedName);
+  if (!displaced) return kept;
+  const displacedName = nameOf(displaced);
+  if (!displacedName || displacedName === landedName) return kept;
+  if (displaced.refreshToken && displaced.refreshToken === landed.refreshToken) return kept;
+  const handle: StoredCloudflareOAuthToken =
+    displaced.clientId || !landed.clientId ? displaced : { ...displaced, clientId: landed.clientId };
+  return [handle, ...kept.filter((entry) => nameOf(entry) !== displacedName)];
+}
+
 async function writeTokensFile(
   dataDir: string,
   next: CloudflareOAuthTokensFile,
@@ -387,7 +432,11 @@ export async function setCloudflareOAuthToken(
     const file = await readCloudflareOAuthTokensFile(dataDir);
     const gen = nextLastGeneration(file);
     token.generation = gen;
-    await writeTokensFile(dataDir, { token, lastGeneration: gen, ...carriedPendingRevokes(file) });
+    await writeTokensFile(dataDir, {
+      token,
+      lastGeneration: gen,
+      ...pendingRevokesField(pendingRevokesAfterLanding(file.pendingRevokes ?? [], null, token)),
+    });
   });
 }
 
@@ -410,7 +459,11 @@ export async function setCloudflareOAuthTokenIfGenerationMatches(
     if (!file.token || file.lastGeneration !== expectedGeneration) return false;
     const gen = nextLastGeneration(file);
     token.generation = gen;
-    await writeTokensFile(dataDir, { token, lastGeneration: gen, ...carriedPendingRevokes(file) });
+    await writeTokensFile(dataDir, {
+      token,
+      lastGeneration: gen,
+      ...pendingRevokesField(pendingRevokesAfterLanding(file.pendingRevokes ?? [], null, token)),
+    });
     return true;
   });
 }
@@ -445,10 +498,19 @@ export async function setCloudflareOAuthTokenGuarded(
     // null for it is what let a reconnect orphan the superseded grant (see
     // recoveredDisplacedCredential).
     const { raw, file } = await readCloudflareOAuthTokensFileWithRaw(dataDir);
+    const displaced = file.token ?? recoveredDisplacedCredential(raw);
     const gen = nextLastGeneration(file);
     token.generation = gen;
-    await writeTokensFile(dataDir, { token, lastGeneration: gen, ...carriedPendingRevokes(file) });
-    return { written: true, displaced: file.token ?? recoveredDisplacedCredential(raw) };
+    // The displaced grant is named by THIS write (see pendingRevokesAfterLanding):
+    // the caller may still revoke it eagerly once its commit lands, or hand it
+    // back through restoreCloudflareOAuthTokenAndDropRevokes if the commit does
+    // not, but from here on a file names it whatever the caller gets to do.
+    await writeTokensFile(dataDir, {
+      token,
+      lastGeneration: gen,
+      ...pendingRevokesField(pendingRevokesAfterLanding(file.pendingRevokes ?? [], displaced, token)),
+    });
+    return { written: true, displaced };
   });
 }
 
@@ -582,11 +644,21 @@ export async function clearCloudflareOAuthTokenForRevoke(
  * Handles for other grants are carried forward exactly as every other writer
  * carries them; this write retires only the handle naming the credential it
  * restores, matched on the same string every reader matches on
- * (`refreshToken || accessToken`). */
+ * (`refreshToken || accessToken`).
+ *
+ * Returns whether the store now SERVES the grant. It lands the credential only
+ * while a handle still names it: a handle that is gone means a settle confirmed
+ * the revoke while the transition that displaced the grant was still pending —
+ * Cloudflare has killed it — and putting it back would name a dead credential
+ * as the authority, which the status surface reports as connected and every
+ * deploy fails on. `true` also when the credential on disk already holds the
+ * grant (a reconnect handed the same refresh token back, so nothing was ever
+ * named). `false` leaves the store as it stands; the caller clears it, or leaves
+ * its transition's intent marker in place, rather than restoring. */
 export async function restoreCloudflareOAuthTokenAndDropRevokes(
   dataDir: string,
   token: StoredCloudflareOAuthToken,
-): Promise<void> {
+): Promise<boolean> {
   const restoredToken = token.refreshToken || token.accessToken;
   // A record with a blank `accessToken` is not a credential to put back (see
   // recoveredDisplacedCredential): the rollback is handing back a grant to
@@ -596,40 +668,47 @@ export async function restoreCloudflareOAuthTokenAndDropRevokes(
   // could never match. So this write keeps the store as it stands and leaves the
   // record NAMED: the pending handle the next settle revokes.
   const landable = token.accessToken !== '';
-  await withLock(dataDir, async () => {
+  return withLock(dataDir, async (): Promise<boolean> => {
     const file = await readCloudflareOAuthTokensFile(dataDir);
+    const live = file.token ? file.token.refreshToken || file.token.accessToken : '';
     if (!landable) {
       const named = file.pendingRevokes ?? [];
       // A serveable credential naming this grant is already the state this
       // write exists to produce, so there is nothing to add — and leaving a
       // handle beside a credential it names is the one pair the store must
       // never hold.
-      const live = file.token ? file.token.refreshToken || file.token.accessToken : '';
       if (
         !restoredToken ||
         live === restoredToken ||
         named.some((entry) => (entry.refreshToken || entry.accessToken) === restoredToken)
       ) {
-        return;
+        return Boolean(restoredToken) && live === restoredToken;
       }
       await writeTokensFile(dataDir, {
         ...(file.token ? { token: file.token } : {}),
         ...(file.lastGeneration !== undefined ? { lastGeneration: file.lastGeneration } : {}),
         pendingRevokes: [token, ...named],
       });
-      return;
+      return false;
+    }
+    const carried = file.pendingRevokes ?? [];
+    const named = Boolean(restoredToken) &&
+      carried.some((entry) => (entry.refreshToken || entry.accessToken) === restoredToken);
+    if (!named) {
+      // Nothing names this grant (see the docblock): either the credential on
+      // disk already holds it, or a settle confirmed its revoke while the
+      // transition was pending. Neither is a credential to put back.
+      return Boolean(restoredToken) && live === restoredToken;
     }
     const gen = nextLastGeneration(file);
-    const carried = file.pendingRevokes ?? [];
-    const pendingRevokes = restoredToken
-      ? carried.filter((entry) => (entry.refreshToken || entry.accessToken) !== restoredToken)
-      : carried;
+    const pendingRevokes = carried.filter((entry) => (entry.refreshToken || entry.accessToken) !== restoredToken);
     token.generation = gen;
     await writeTokensFile(dataDir, {
       token,
       lastGeneration: gen,
       ...(pendingRevokes.length > 0 ? { pendingRevokes } : {}),
     });
+    return true;
   });
 }
 
@@ -640,6 +719,53 @@ export async function getPendingCloudflareOAuthRevokes(
 ): Promise<StoredCloudflareOAuthToken[]> {
   const file = await readCloudflareOAuthTokensFile(dataDir);
   return file.pendingRevokes ?? [];
+}
+
+/** Record a grant nobody holds as a revoke handle, in one locked write that
+ * leaves the credential — and the FILE generation — exactly as they stand.
+ *
+ * This is the refresh path's counterpart to clearCloudflareOAuthTokenForRevoke:
+ * a refresh whose compare-and-set lost (a disconnect or a reconnect moved the
+ * store while the token endpoint was rotating the grant) holds a rotated
+ * refresh token that is on disk nowhere and valid at Cloudflare until revoked.
+ * One best-effort revoke used to be its only record; a crash, a timeout, or a
+ * 5xx there left it valid with no file naming it. Named HERE first, it survives
+ * the process, and the next OAuth mutation's settle finishes what the revoke
+ * that follows could not.
+ *
+ * The credential is carried under the same rules as
+ * dropPendingCloudflareOAuthRevokes — byte-identical, at the generation it had,
+ * a record that no longer sanitizes kept named rather than landed — because
+ * adding a handle replaces no credential, and moving the generation over an
+ * unchanged one would make a refresh in flight read itself as superseded. A
+ * grant the store still serves as its live credential is never named (a handle
+ * beside a credential it names is the pair the store must never hold), and a
+ * grant already named is not named twice. */
+export async function recordPendingCloudflareOAuthRevoke(
+  dataDir: string,
+  grant: StoredCloudflareOAuthToken,
+): Promise<void> {
+  const name = grant.refreshToken || grant.accessToken;
+  if (!name) return;
+  await withLock(dataDir, async () => {
+    const { raw, file } = await readCloudflareOAuthTokensFileWithRaw(dataDir);
+    const landed = file.token ?? null;
+    const recovered = landed ? null : recoveredDisplacedCredential(raw);
+    const live = landed ?? recovered;
+    if (live && (live.refreshToken || live.accessToken) === name) return;
+    const named = file.pendingRevokes ?? [];
+    if (named.some((entry) => (entry.refreshToken || entry.accessToken) === name)) return;
+    const recoveredName = recovered ? recovered.refreshToken || recovered.accessToken : '';
+    const handles = recovered
+      ? [recovered, ...named.filter((entry) => (entry.refreshToken || entry.accessToken) !== recoveredName), grant]
+      : [...named, grant];
+    const gen = live ? (file.lastGeneration ?? live.generation) : nextLastGeneration(file);
+    await writeTokensFile(dataDir, {
+      lastGeneration: gen,
+      ...(landed ? { token: landed } : {}),
+      pendingRevokes: handles,
+    });
+  });
 }
 
 /** Drop the revoke handles whose grants are settled, leaving the credential and

@@ -1497,3 +1497,123 @@ describe('credential writes that are not credential transitions', () => {
     });
   });
 });
+
+// Every settle runs under the Workers-config mutation lock. A settle that ran
+// AHEAD of the lock read the store while a transition inside the lock was
+// between its clear and its rollback: the grant was off disk and named by the
+// handle the clear recorded, so the settle revoked it — and then the rollback
+// put a grant Cloudflare had just killed back as the live credential.
+describe('settles run under the config mutation lock', () => {
+  it('a mutation that queues behind a failing transition cannot revoke the grant that transition rolls back', async () => {
+    await withDataDir(async (dir) => {
+      const tokens = cloudflareOAuthTokensDir();
+      await writeCloudflareWorkersConfig({ token: 'static-token', accountId: 'acct_test' });
+      await setCloudflareOAuthToken(tokens, {
+        accessToken: 'oauth-access',
+        refreshToken: 'ref-1',
+        tokenType: 'Bearer',
+        clientId: 'client-abc',
+        expiresAt: Date.now() + 3600_000,
+        generation: 1,
+        savedAt: Date.now(),
+      });
+      await commitCloudflareOAuthMode();
+
+      const revokes: string[] = [];
+      vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+        if (url.includes('oauth2/revoke')) revokes.push(new URLSearchParams(String(init?.body ?? '')).get('token') ?? '');
+        return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
+      }));
+      const probe = await open(path.join(dir, 'probe-settle-race'), 'w');
+      const proto = Object.getPrototypeOf(probe) as { writeFile: (data: unknown, enc?: string) => Promise<void> };
+      await probe.close();
+      const realWrite = proto.writeFile;
+      let concurrent = null as Promise<string> | null;
+      vi.spyOn(proto, 'writeFile').mockImplementation(async function (this: unknown, data: unknown, enc?: string) {
+        if (typeof data === 'string' && data.includes('"credentialMode": "token"')) {
+          // The other request arrives exactly here: the grant is off disk and
+          // named by its handle, the mode write is about to fail, and the
+          // rollback has not put the grant back yet. A settle that did not wait
+          // for the lock would read the handle now and revoke it.
+          concurrent = markCloudflareOAuthGrantPending();
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          throw new Error('EACCES: permission denied');
+        }
+        return realWrite.call(this, data, enc);
+      });
+
+      await expect(writeCloudflareWorkersConfig({ credentialMode: 'token' })).rejects.toThrow('EACCES');
+      await expect(concurrent!).resolves.toEqual(expect.any(String));
+      // The queued mutation settled AFTER the rollback, and found nothing owed:
+      // the grant it would have revoked is the live credential again.
+      expect(revokes).toEqual([]);
+      expect(await getCloudflareOAuthToken(tokens)).toMatchObject({ accessToken: 'oauth-access', refreshToken: 'ref-1' });
+      expect(await getPendingCloudflareOAuthRevokes(tokens)).toEqual([]);
+      const persisted = JSON.parse(await readFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), 'utf8')) as Record<string, unknown>;
+      expect(persisted.credentialMode).toBe('oauth');
+      expect(persisted.pendingOAuthGrant).toEqual(expect.any(String));
+      expect(persisted.pendingOAuthGrantClear).toBeUndefined();
+    });
+  });
+});
+
+// A settings PUT carrying credentialMode 'oauth' while pendingOAuthGrantClear is
+// set used to carry the marker forward: the response said oauth, the persisted
+// record read token mode (the marker decides every read), and the settings
+// surface reported configured:true over a config no deploy would sign OAuth with.
+describe('a save that chooses oauth over a half-finished exit from oauth', () => {
+  async function seedInterruptedExit(): Promise<string> {
+    const tokens = cloudflareOAuthTokensDir();
+    await writeCloudflareWorkersConfig({ token: 'static-token', accountId: 'acct_test', clientId: 'client-abc' });
+    await setCloudflareOAuthToken(tokens, {
+      accessToken: 'oauth-access',
+      refreshToken: 'ref-1',
+      tokenType: 'Bearer',
+      clientId: 'client-abc',
+      expiresAt: Date.now() + 3600_000,
+      generation: 1,
+      savedAt: Date.now(),
+    });
+    await commitCloudflareOAuthMode();
+    // A token-mode save crashed between its intent write and its clear: the
+    // marker is durable, and every read answers token mode.
+    const file = deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID);
+    const onDisk = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>;
+    await writeFile(file, JSON.stringify({ ...onDisk, pendingOAuthGrantClear: true }, null, 2), 'utf8');
+    expect((await readCloudflareWorkersConfig()).credentialMode).toBe('token');
+    return file;
+  }
+
+  it('drops pendingOAuthGrantClear, so the persisted config reads the mode the response reports', async () => {
+    await withDataDir(async () => {
+      const file = await seedInterruptedExit();
+      const response = await writeCloudflareWorkersConfig({ credentialMode: 'oauth' });
+      expect(response).toMatchObject({ credentialMode: 'oauth', configured: true });
+      expect((await readCloudflareWorkersConfig()).credentialMode).toBe('oauth');
+      const persisted = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>;
+      expect(persisted.credentialMode).toBe('oauth');
+      expect(persisted.pendingOAuthGrantClear).toBeUndefined();
+      // The grant the interrupted exit was going to take off disk is the
+      // authority this save named; nothing revokes it.
+      expect(await getCloudflareOAuthToken(cloudflareOAuthTokensDir())).toMatchObject({ refreshToken: 'ref-1' });
+    });
+  });
+
+  it('still refuses, marker intact, once the exit has taken the grant off disk', async () => {
+    await withDataDir(async () => {
+      const file = await seedInterruptedExit();
+      // The exit got as far as its clear: the store holds only the handle, and
+      // Cloudflare is not answering the settle.
+      await clearCloudflareOAuthTokenForRevoke(cloudflareOAuthTokensDir());
+      vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 503 })));
+      await expect(writeCloudflareWorkersConfig({ credentialMode: 'oauth' })).rejects.toMatchObject({
+        status: 400,
+        code: 'CFW_OAUTH_RECONNECT_REQUIRED',
+      });
+      const persisted = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>;
+      expect(persisted.pendingOAuthGrantClear).toBe(true);
+      expect((await readCloudflareWorkersConfig()).credentialMode).toBe('token');
+      expect((await getPendingCloudflareOAuthRevokes(cloudflareOAuthTokensDir())).map((handle) => handle.refreshToken)).toEqual(['ref-1']);
+    });
+  });
+});

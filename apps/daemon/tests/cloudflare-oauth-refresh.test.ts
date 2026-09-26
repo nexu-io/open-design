@@ -28,6 +28,7 @@ import {
   getCloudflareOAuthToken,
   getPendingCloudflareOAuthRevokes,
   isCloudflareOAuthTokenExpired,
+  recordPendingCloudflareOAuthRevoke,
   sanitizeCloudflareOAuthTokensFile,
   setCloudflareOAuthToken,
   setCloudflareOAuthTokenGuarded,
@@ -316,6 +317,9 @@ describe('refresh vs disconnect', () => {
       // The grant the endpoint rotated to was never persisted: nobody holds
       // `ref-2`, so it must not stay valid on Cloudflare's side.
       expect(revoked).toEqual(['ref-2']);
+      // The rotation was named as a handle before the revoke, and the 2xx
+      // retired it.
+      expect(await getPendingCloudflareOAuthRevokes(cloudflareOAuthTokensDir())).toEqual([]);
     } finally {
       vi.unstubAllGlobals();
       await rm(dir, { recursive: true, force: true });
@@ -537,6 +541,9 @@ describe('refresh vs a concurrent reconnect', () => {
       expect(await getCloudflareOAuthToken(dataDir)).toMatchObject({ accessToken: 'reconnected-fresh', refreshToken: 'ref-reconnected' });
       // The dropped rotation (`ref-2`) is revoked; the adopted grant is not touched.
       expect(revoked).toEqual(['ref-2']);
+      // The rotation was named as a handle before the revoke, and the 2xx
+      // retired it.
+      expect(await getPendingCloudflareOAuthRevokes(dataDir)).toEqual([]);
     } finally {
       vi.unstubAllGlobals();
       await rm(dir, { recursive: true, force: true });
@@ -571,6 +578,9 @@ describe('refresh vs a concurrent reconnect', () => {
       await expect(getCloudflareAccessToken()).rejects.toMatchObject({ status: 401, code: 'CFW_OAUTH_RECONNECT_REQUIRED' });
       expect(await getCloudflareOAuthToken(dataDir)).toMatchObject({ accessToken: 'reconnected-stale' });
       expect(revoked).toEqual(['ref-2']);
+      // The rotation was named as a handle before the revoke, and the 2xx
+      // retired it.
+      expect(await getPendingCloudflareOAuthRevokes(dataDir)).toEqual([]);
     } finally {
       vi.unstubAllGlobals();
       await rm(dir, { recursive: true, force: true });
@@ -608,7 +618,13 @@ describe('refresh vs a concurrent reconnect', () => {
     try {
       await expect(getCloudflareAccessToken()).resolves.toBe('reconnected-fresh');
       expect(revokeAttempted).toBe(true);
-      expect(warn).toHaveBeenCalledWith(expect.stringContaining('superseded refresh grant failed'), expect.any(String));
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('revoke of the displaced OAuth grant failed'), expect.any(String));
+      // Cloudflare never confirmed, so the rotated grant stays NAMED: the handle
+      // recorded under the token lock before the revoke is the one file that
+      // still says `ref-2` is live, and the next OAuth mutation retries it. The
+      // adopted credential is untouched beside it.
+      expect((await getPendingCloudflareOAuthRevokes(dataDir)).map((handle) => handle.refreshToken)).toEqual(['ref-2']);
+      expect(await getCloudflareOAuthToken(dataDir)).toMatchObject({ accessToken: 'reconnected-fresh', refreshToken: 'ref-reconnected' });
     } finally {
       warn.mockRestore();
       vi.unstubAllGlobals();
@@ -1125,10 +1141,135 @@ describe('setCloudflareOAuthTokenGuarded', () => {
         clientId: 'client-1',
         tokenType: 'Bearer',
       });
-      // The write still landed: the recovered record describes bytes now gone.
+      // The write still landed, and the recovered grant is no longer the
+      // store's credential — it is NAMED, as the handle this write recorded for
+      // it, so a settle revokes it instead of the bytes simply vanishing.
       expect(await getCloudflareOAuthToken(dir)).toMatchObject({ refreshToken: 'ref-second' });
       expect(JSON.parse(await readFile(file, 'utf8'))).toMatchObject({ lastGeneration: 4 });
-      expect(await readFile(file, 'utf8')).not.toContain('leaked-refresh');
+      expect((await getPendingCloudflareOAuthRevokes(dir)).map((handle) => handle.refreshToken)).toEqual(['leaked-refresh']);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  // The displaced grant used to come back in memory only; the sole revoke was
+  // one best-effort call after the commit, and a crash, a timeout, or a 5xx
+  // there left the old refresh token valid at Cloudflare with no file naming it.
+  it('records the credential it displaces as a revoke handle in the same write', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'od-cf-guarded-handle-'));
+    try {
+      await setCloudflareOAuthToken(dir, { ...token('first'), clientId: 'client-first' });
+      const write = await setCloudflareOAuthTokenGuarded(dir, { ...token('second'), clientId: 'client-second' }, () => true);
+      expect(write.written).toBe(true);
+      const handles = await getPendingCloudflareOAuthRevokes(dir);
+      expect(handles).toHaveLength(1);
+      // Named under the client that issued it, not the reconnect's.
+      expect(handles[0]).toMatchObject({ refreshToken: 'ref-first', clientId: 'client-first' });
+      expect(await getCloudflareOAuthToken(dir)).toMatchObject({ refreshToken: 'ref-second' });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not name a displaced record whose refresh token is the one being landed', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'od-cf-guarded-same-refresh-'));
+    try {
+      await setCloudflareOAuthToken(dir, token('same'));
+      // A provider that hands the same refresh token back: the displaced record
+      // holds no grant of its own, and a handle for it would name the live one.
+      const write = await setCloudflareOAuthTokenGuarded(dir, { ...token('same'), accessToken: 'acc-rotated' }, () => true);
+      expect(write.written).toBe(true);
+      expect(await getPendingCloudflareOAuthRevokes(dir)).toEqual([]);
+      expect(await getCloudflareOAuthToken(dir)).toMatchObject({ accessToken: 'acc-rotated', refreshToken: 'ref-same' });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('stamps a displaced record that predates the identity write with the landed credential\'s client', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'od-cf-guarded-client-fallback-'));
+    try {
+      await setCloudflareOAuthToken(dir, token('legacy'));
+      await setCloudflareOAuthTokenGuarded(dir, { ...token('next'), clientId: 'client-abc' }, () => true);
+      // RFC 7009 names the issuing client; a record written before the identity
+      // was persisted was issued to the client the reconnect authorized with —
+      // the same fallback every revoke of it applied.
+      expect(await getPendingCloudflareOAuthRevokes(dir)).toEqual([
+        expect.objectContaining({ refreshToken: 'ref-legacy', clientId: 'client-abc' }),
+      ]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('retires a carried handle that names the credential being landed', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'od-cf-guarded-retire-'));
+    try {
+      await setCloudflareOAuthToken(dir, token('a'));
+      await setCloudflareOAuthTokenGuarded(dir, token('b'), () => true);
+      expect((await getPendingCloudflareOAuthRevokes(dir)).map((handle) => handle.refreshToken)).toEqual(['ref-a']);
+      // A newer attempt is handed `ref-a` back. A handle beside a credential it
+      // names is the pair the store must never hold: the next settle would
+      // revoke the grant the config names.
+      await setCloudflareOAuthTokenGuarded(dir, { ...token('a'), accessToken: 'acc-a-again' }, () => true);
+      expect((await getPendingCloudflareOAuthRevokes(dir)).map((handle) => handle.refreshToken)).toEqual(['ref-b']);
+      expect(await getCloudflareOAuthToken(dir)).toMatchObject({ refreshToken: 'ref-a', accessToken: 'acc-a-again' });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('recordPendingCloudflareOAuthRevoke', () => {
+  const credential = (access: string, refresh: string): StoredCloudflareOAuthToken => ({
+    accessToken: access,
+    refreshToken: refresh,
+    tokenType: 'Bearer',
+    clientId: 'client-abc',
+    generation: 0,
+    savedAt: 1,
+  });
+
+  it('names a grant nobody holds without touching the credential or its generation', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'od-cf-record-handle-'));
+    const file = path.join(dir, 'cloudflare-oauth-tokens.json');
+    try {
+      await setCloudflareOAuthToken(dir, credential('acc-live', 'ref-live'));
+      const before = await readFile(file, 'utf8');
+      await recordPendingCloudflareOAuthRevoke(dir, credential('acc-rotated', 'ref-rotated'));
+      const after = JSON.parse(await readFile(file, 'utf8')) as { token: unknown; lastGeneration: number };
+      const prior = JSON.parse(before) as { token: unknown; lastGeneration: number };
+      // Adding a handle replaces no credential: a moved generation would make a
+      // refresh in flight read itself as superseded.
+      expect(after.token).toEqual(prior.token);
+      expect(after.lastGeneration).toBe(prior.lastGeneration);
+      expect((await getPendingCloudflareOAuthRevokes(dir)).map((handle) => handle.refreshToken)).toEqual(['ref-rotated']);
+      // Idempotent by name.
+      await recordPendingCloudflareOAuthRevoke(dir, credential('acc-rotated-again', 'ref-rotated'));
+      expect(await getPendingCloudflareOAuthRevokes(dir)).toHaveLength(1);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('never names the grant the store still serves', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'od-cf-record-live-'));
+    try {
+      await setCloudflareOAuthToken(dir, credential('acc-live', 'ref-live'));
+      await recordPendingCloudflareOAuthRevoke(dir, credential('acc-other', 'ref-live'));
+      expect(await getPendingCloudflareOAuthRevokes(dir)).toEqual([]);
+      expect(await getCloudflareOAuthToken(dir)).toMatchObject({ accessToken: 'acc-live' });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('names the grant against an empty store too', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'od-cf-record-empty-'));
+    try {
+      await recordPendingCloudflareOAuthRevoke(dir, credential('acc-rotated', 'ref-rotated'));
+      expect((await getPendingCloudflareOAuthRevokes(dir)).map((handle) => handle.refreshToken)).toEqual(['ref-rotated']);
+      expect(await getCloudflareOAuthToken(dir)).toBeNull();
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

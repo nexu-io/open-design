@@ -28,6 +28,7 @@ import {
   markCloudflareOAuthGrantPending,
   readCloudflareWorkersConfig,
   resetCloudflareCredentialMode,
+  settleCloudflareOAuthGrantRevokes,
 } from '../deploy.js';
 import {
   listCloudflareD1Databases,
@@ -55,7 +56,7 @@ import {
   clearCloudflareOAuthToken,
   cloudflareOAuthExpiresAt,
   getCloudflareOAuthToken,
-  setCloudflareOAuthToken,
+  restoreCloudflareOAuthTokenAndDropRevokes,
   setCloudflareOAuthTokenGuarded,
   type StoredCloudflareOAuthToken,
 } from '../integrations/cloudflare-tokens.js';
@@ -292,8 +293,8 @@ export function registerCloudflareRoutes(
     // connects; the deploy then falls back to a live lookup and fails closed.
     const email = await fetchCloudflareUserEmail(result.access_token, fetchImpl);
     if (email) stored.email = email;
-    const committed = await runCredentialMutation(async (): Promise<{ ok: boolean; superseded: StoredCloudflareOAuthToken | null }> => {
-      if (attemptGeneration !== oauthAttemptGeneration) return { ok: false, superseded: null };
+    const committed = await runCredentialMutation(async (): Promise<{ ok: boolean }> => {
+      if (attemptGeneration !== oauthAttemptGeneration) return { ok: false };
       // The intent is durable BEFORE the credential it describes: from here on
       // a config read answers with the grant this attempt is storing, so a
       // crash between this write and the mode commit below can no longer leave
@@ -320,12 +321,17 @@ export function registerCloudflareRoutes(
         // The guard lost its race: nothing was stored, so the intent this
         // attempt recorded must not outlive it.
         await clearPendingGrantMarker();
-        return { ok: false, superseded: null };
+        return { ok: false };
       }
+      // The write that displaced it also recorded it as a durable revoke handle
+      // (setCloudflareOAuthTokenGuarded), so from here on a file names the grant
+      // whatever this attempt gets to do: the commit below settles the handle
+      // once the mode has landed, and the rollback retires it by putting the
+      // credential back.
       const displaced = write.displaced;
       try {
         await commitCloudflareOAuthMode({ clientId: result.clientId, redirectUri: result.redirectUri }, attemptMarker);
-        return { ok: true, superseded: supersededGrantOf(displaced, stored) };
+        return { ok: true };
       } catch (err) {
         // The token write already landed but the config commit failed. What the
         // rollback may do with the credential it displaced is decided by the
@@ -373,7 +379,9 @@ export function registerCloudflareRoutes(
         if (markerNow !== null && markerNow !== attemptMarker) {
           const heldNow = await getCloudflareOAuthToken(dataDir).catch(() => null);
           if (displaced && (!heldNow || supersededGrantOf(displaced, heldNow))) {
-            await revokeGrantBestEffort(displaced, fetchImpl, 'displaced', result.clientId);
+            // Through the handle the guarded write recorded, under the config
+            // lock: retired only by a 2xx, retried by the next mutation.
+            await settleCloudflareOAuthGrantRevokes(result.clientId);
           }
           await revokeDiscardedGrant(result, fetchImpl);
           markGrantRevoked(err);
@@ -392,19 +400,27 @@ export function registerCloudflareRoutes(
             );
           }
           // The credential this attempt displaced belongs to the authority the
-          // config has just left, so it is revoked rather than restored — and
-          // revoked through the same best-effort helper every other abandoned
-          // grant goes through, with this attempt's client as the fallback id
-          // for a record written before the identity was persisted.
-          if (displaced) await revokeGrantBestEffort(displaced, fetchImpl, 'displaced', result.clientId);
+          // config has just left, so it is revoked rather than restored —
+          // through the handle the guarded write recorded for it, under the
+          // config lock, with this attempt's client as the fallback id for a
+          // record written before the identity was persisted.
+          await settleCloudflareOAuthGrantRevokes(result.clientId);
           await clearPendingGrantMarker();
           await revokeDiscardedGrant(result, fetchImpl);
           markGrantRevoked(err);
           throw err;
         }
         try {
-          if (displaced) await setCloudflareOAuthToken(dataDir, displaced);
-          else await clearCloudflareOAuthToken(dataDir);
+          // The restore retires the handle the guarded write recorded for the
+          // displaced credential in the SAME write that puts it back — left
+          // beside a credential it names, the next settle would revoke the grant
+          // the config names. It lands nothing when the handle is already gone
+          // (a settle confirmed the revoke while the commit was pending): a
+          // grant Cloudflare has killed is not a credential to hand back, so the
+          // store is cleared instead and a Reconnect replaces it.
+          if (!displaced || !(await restoreCloudflareOAuthTokenAndDropRevokes(dataDir, displaced))) {
+            await clearCloudflareOAuthToken(dataDir);
+          }
         } catch (restoreErr) {
           console.warn(
             '[cloudflare-oauth] could not restore the credential a failed config commit displaced; clearing it instead:',
@@ -428,10 +444,13 @@ export function registerCloudflareRoutes(
       }
     });
     // A reconnect that replaced a working credential leaves the OLD grant
-    // valid at Cloudflare with nobody holding it. Revoke it now that the new
-    // one is committed — best-effort and outside the mutation lock, so a slow
-    // revoke endpoint never blocks a concurrent disconnect.
-    if (committed.ok && committed.superseded) await revokeGrantBestEffort(committed.superseded, fetchImpl, 'superseded');
+    // valid at Cloudflare with nobody holding it. The guarded write recorded it
+    // as a durable revoke handle in the write that displaced it, and
+    // commitCloudflareOAuthMode settles that handle once the mode has landed —
+    // under the config lock, retired only by a 2xx, retried by the next OAuth
+    // mutation otherwise. One best-effort call here used to be the only revoke,
+    // and a crash, a timeout, or a 5xx left the old refresh token valid with no
+    // file naming it.
     return committed.ok;
   };
 
