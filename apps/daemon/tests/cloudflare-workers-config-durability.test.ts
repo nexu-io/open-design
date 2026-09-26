@@ -535,10 +535,13 @@ describe('credential mode is derived from a live OAuth grant', () => {
         generation: 1,
         savedAt: Date.now(),
       });
-      await markCloudflareOAuthGrantPending();
+      const attemptId = await markCloudflareOAuthGrantPending();
 
       const persisted = JSON.parse(await readFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), 'utf8')) as Record<string, unknown>;
-      expect(persisted.pendingOAuthGrant).toBe(true);
+      // The marker carries the attempt's id: it is an IDENTITY, not a flag, so
+      // the commit half of this connect can tell its own marker from one a
+      // later attempt wrote over it.
+      expect(persisted.pendingOAuthGrant).toBe(attemptId);
       // The stored mode flag is untouched — the marker is what decides.
       expect(persisted.credentialMode).toBe('token');
 
@@ -574,7 +577,7 @@ describe('credential mode is derived from a live OAuth grant', () => {
       });
       const persisted = JSON.parse(await readFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), 'utf8')) as Record<string, unknown>;
       expect(persisted.credentialMode).toBe('token');
-      expect(persisted.pendingOAuthGrant).toBe(true);
+      expect(persisted.pendingOAuthGrant).toEqual(expect.any(String));
     });
   });
 
@@ -936,6 +939,140 @@ describe('credential mode is derived from a live OAuth grant', () => {
       expect(await getPendingCloudflareOAuthRevokes(cloudflareOAuthTokensDir())).toEqual([]);
       expect(await getCloudflareOAuthToken(cloudflareOAuthTokensDir())).toBeNull();
       expect((await readCloudflareWorkersConfig()).credentialMode).toBe('token');
+    });
+  });
+
+  it('a revoke answer that is not a 2xx keeps its handle; only a 2xx retires it', async () => {
+    await withDataDir(async () => {
+      await writeCloudflareWorkersConfig({ token: 'static-token', accountId: 'acct_test' });
+      await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), {
+        accessToken: 'oauth-access',
+        refreshToken: 'ref-1',
+        tokenType: 'Bearer',
+        clientId: 'client-abc',
+        generation: 1,
+        savedAt: Date.now(),
+      });
+      await clearCloudflareOAuthTokenForRevoke(cloudflareOAuthTokensDir());
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      let answer = 503;
+      let revokeCalls = 0;
+      vi.stubGlobal('fetch', vi.fn(async () => {
+        revokeCalls += 1;
+        return new Response(null, { status: answer });
+      }));
+
+      // A 503/429 is the endpoint failing, and a 400 is Cloudflare declining to
+      // revoke a token it does not recognize — which includes one that is still
+      // live. Neither is an answer that the grant is dead, so neither may retire
+      // the only record that still names it: that is exactly how a transient
+      // 503 leaked a refresh token nobody could find again.
+      for (const status of [503, 429, 400]) {
+        answer = status;
+        await resetCloudflareCredentialMode();
+        expect(await getPendingCloudflareOAuthRevokes(cloudflareOAuthTokensDir())).toHaveLength(1);
+      }
+      expect(revokeCalls).toBe(3);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('refused by Cloudflare (HTTP 400)'));
+
+      answer = 200;
+      await resetCloudflareCredentialMode();
+      expect(revokeCalls).toBe(4);
+      expect(await getPendingCloudflareOAuthRevokes(cloudflareOAuthTokensDir())).toEqual([]);
+      // Retired by the revoke it was recorded for, so nothing repeats it.
+      await resetCloudflareCredentialMode();
+      expect(revokeCalls).toBe(4);
+    });
+  });
+
+  it('the oauth mode commit refuses an attempt whose marker is gone, even with a credential in the store', async () => {
+    await withDataDir(async () => {
+      await writeCloudflareWorkersConfig({ token: 'static-token', accountId: 'acct_test' });
+      const attemptId = await markCloudflareOAuthGrantPending();
+      // The connect's guarded token write lands AFTER something took the
+      // credential away and dropped the marker — the shape of the window the
+      // config lock cannot close, because that write runs outside it. A store
+      // holding a credential again is not this attempt's authority to record:
+      // the marker id is what says whether the intent still stands.
+      await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), {
+        accessToken: 'oauth-access',
+        refreshToken: 'ref-1',
+        tokenType: 'Bearer',
+        clientId: 'client-abc',
+        generation: 1,
+        savedAt: Date.now(),
+      });
+      await clearPendingCloudflareOAuthGrant();
+      expect(await getCloudflareOAuthToken(cloudflareOAuthTokensDir())).not.toBeNull();
+
+      await expect(commitCloudflareOAuthMode({ clientId: 'client-abc', redirectUri: 'http://127.0.0.1:1/cb' }, attemptId))
+        .rejects.toMatchObject({ status: 400, code: 'CFW_OAUTH_RECONNECT_REQUIRED' });
+
+      const persisted = JSON.parse(await readFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), 'utf8')) as Record<string, unknown>;
+      // Neither the mode nor the identity reached the file: the authority the
+      // save chose stands.
+      expect(persisted.credentialMode).toBe('token');
+      expect(persisted.clientId).not.toBe('client-abc');
+      expect((await readCloudflareWorkersConfig()).credentialMode).toBe('token');
+    });
+  });
+
+  it('a settings save that is not a transition carries the pending marker forward, so its connect can still commit', async () => {
+    await withDataDir(async () => {
+      await writeCloudflareWorkersConfig({ token: 'static-token', accountId: 'acct_test' });
+      const attemptId = await markCloudflareOAuthGrantPending();
+      const afterMark = JSON.parse(await readFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), 'utf8')) as Record<string, unknown>;
+      expect(afterMark.pendingOAuthGrant).toBe(attemptId);
+
+      // The user edits their settings while the connect is still storing its
+      // grant. The record a PUT writes REPLACES the one on disk, so the marker
+      // has to ride along: erasing it would make the connect's commit read as
+      // abandoned and refuse a connect that is still perfectly alive, over
+      // nothing more than the user renaming their script.
+      await writeCloudflareWorkersConfig({ accountId: 'acct_test', scriptName: 'renamed' });
+      const persisted = JSON.parse(await readFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), 'utf8')) as Record<string, unknown>;
+      expect(persisted.pendingOAuthGrant).toBe(attemptId);
+      expect(persisted.scriptName).toBe('renamed');
+
+      await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), {
+        accessToken: 'oauth-access',
+        refreshToken: 'ref-1',
+        tokenType: 'Bearer',
+        clientId: 'client-abc',
+        generation: 1,
+        savedAt: Date.now(),
+      });
+      await commitCloudflareOAuthMode({ clientId: 'client-abc', redirectUri: 'http://127.0.0.1:1/cb' }, attemptId);
+      expect((await readCloudflareWorkersConfig()).credentialMode).toBe('oauth');
+    });
+  });
+
+  it('a commit carrying an older attempt id refuses once a newer connect re-marked the config', async () => {
+    await withDataDir(async () => {
+      await writeCloudflareWorkersConfig({ token: 'static-token', accountId: 'acct_test' });
+      const first = await markCloudflareOAuthGrantPending();
+      const second = await markCloudflareOAuthGrantPending();
+      expect(second).not.toBe(first);
+      await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), {
+        accessToken: 'oauth-access',
+        refreshToken: 'ref-1',
+        tokenType: 'Bearer',
+        clientId: 'client-abc',
+        generation: 1,
+        savedAt: Date.now(),
+      });
+
+      // The newer attempt's token write and commit are the authority now, so the
+      // older one must not land its own mode over the credential it no longer
+      // owns — nor may it take the marker with it.
+      await expect(commitCloudflareOAuthMode(undefined, first))
+        .rejects.toMatchObject({ status: 400, code: 'CFW_OAUTH_RECONNECT_REQUIRED' });
+      const persisted = JSON.parse(await readFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), 'utf8')) as Record<string, unknown>;
+      expect(persisted.pendingOAuthGrant).toBe(second);
+
+      await commitCloudflareOAuthMode({ clientId: 'client-abc', redirectUri: 'http://127.0.0.1:1/cb' }, second);
+      expect((await readCloudflareWorkersConfig()).credentialMode).toBe('oauth');
     });
   });
 });

@@ -53,12 +53,19 @@ type DeployConfig = {
   bindings?: CloudflareWorkersConfigBinding[] | undefined;
   access?: { enabled: boolean; rule?: CloudflareWorkersAccessRule } | undefined;
   customDomain?: { hostname: string; zoneId: string } | undefined;
-  /** Durable intent of an OAuth connect whose grant write has landed but whose
-   * `credentialMode` commit has not (see markCloudflareOAuthGrantPending). The
-   * read path treats it as authoritative over both the stored mode and the
-   * static token beside it: that grant IS the credential the connect is
-   * storing, and signing with anything else leaves it valid with no holder. */
-  pendingOAuthGrant?: boolean | undefined;
+  /** The attempt id of an OAuth connect whose intent is recorded but whose
+   * `credentialMode` commit has not landed yet (see
+   * markCloudflareOAuthGrantPending). Any value means a connect is in flight,
+   * and the read path treats it as authoritative over both the stored mode and
+   * the static token beside it: that grant IS the credential the connect is
+   * storing, and signing with anything else leaves it valid with no holder.
+   *
+   * The VALUE names which attempt, which is what makes the marker an identity
+   * and not just a flag: only the commit that carries this id may land the mode
+   * over it, so a save that abandons the connect (dropping the marker) cannot
+   * be undone by the commit that was still in flight — see
+   * commitCloudflareOAuthMode. */
+  pendingOAuthGrant?: string | undefined;
   /** Durable intent of a credential transition OFF oauth (see
    * writeCloudflareWorkersConfig): the grant is on its way out, so the read
    * path stops deriving oauth from it before it is destroyed — the window
@@ -540,7 +547,10 @@ async function readCloudflareWorkersConfigFile(): Promise<DeployConfig> {
       bindings: persistedCloudflareWorkersBindings(parsed.bindings),
       access: normalizeCloudflareWorkersAccess(parsed.access),
       customDomain: normalizeCloudflareWorkersCustomDomain(parsed.customDomain),
-      pendingOAuthGrant: parsed.pendingOAuthGrant === true,
+      pendingOAuthGrant:
+        typeof parsed.pendingOAuthGrant === 'string' && parsed.pendingOAuthGrant.trim()
+          ? parsed.pendingOAuthGrant.trim()
+          : undefined,
       pendingOAuthGrantClear: parsed.pendingOAuthGrantClear === true,
     };
   } catch (err) {
@@ -701,6 +711,16 @@ export async function writeCloudflareWorkersConfig(input: Partial<DeployConfig>)
     access: input?.access !== undefined ? normalizeCloudflareWorkersAccess(input.access) : current.access,
     customDomain: input?.customDomain !== undefined ? normalizeCloudflareWorkersCustomDomain(input.customDomain) : current.customDomain,
   };
+  // The pending-credential markers are not part of the request, and `next`
+  // REPLACES the record that carries them: carry them forward. Only an
+  // abandonment may drop one — the oauth->token transition below, the
+  // disconnect reset, and clearPendingCloudflareOAuthGrant — because a connect's
+  // commit refuses to land its mode when the marker no longer names its attempt
+  // (commitCloudflareOAuthMode). A save that erased them would make every
+  // in-flight connect read as abandoned and refuse a commit that is still
+  // perfectly alive, on nothing more than the user editing their settings.
+  if (current.pendingOAuthGrant) next.pendingOAuthGrant = current.pendingOAuthGrant;
+  if (current.pendingOAuthGrantClear) next.pendingOAuthGrantClear = current.pendingOAuthGrantClear;
   // Persist exactly what the read path will see. The read path applies the same
   // normalizers, so an un-normalized write that reads back as `undefined` would
   // silently downgrade "Access on" / "custom domain" to "off" on the next deploy
@@ -758,6 +778,14 @@ export async function writeCloudflareWorkersConfig(input: Partial<DeployConfig>)
     delete intent.pendingOAuthGrant;
     await writeDeployConfigFile(cloudflareConfigFile, intent);
     const displaced = await clearCloudflareOAuthTokenForRevoke(cloudflareOAuthTokensDir());
+    // This save IS the abandonment the pending markers exist to record: the
+    // credential a connect in flight was storing is destroyed here, so the
+    // record written below must not carry that attempt's marker forward (the
+    // carry-forward above put it there). A marker that still names an attempt is
+    // what lets that attempt's commit land the mode — and landing oauth over
+    // this save would undo the authority the user just chose, over a credential
+    // this save has already revoked.
+    delete next.pendingOAuthGrant;
     try {
       await writeDeployConfigFile(cloudflareConfigFile, next);
     } catch (err) {
@@ -840,15 +868,22 @@ function refuseCloudflareWorkersConfigMutationIfCorrupt(current: DeployConfig, w
  * the static one while the grant stays valid with nobody holding it. Writing
  * the marker FIRST makes the read path answer with the credential the connect
  * is actually storing, from before the token exists until the commit lands.
- * Cleared by commitCloudflareOAuthMode, by the settings PUT that takes the
- * transition branch, and by every path that abandons the attempt
- * (clearPendingCloudflareOAuthGrant). Refuses to run on a corrupt config file
- * (CFW_CONFIG_CORRUPT), like the other partial mutations.
+ * Dropped by commitCloudflareOAuthMode, by the settings PUT that takes the
+ * transition branch, by the disconnect reset, and by every path that abandons
+ * the attempt (clearPendingCloudflareOAuthGrant). Refuses to run on a corrupt
+ * config file (CFW_CONFIG_CORRUPT), like the other partial mutations.
+ *
+ * Returns the id it recorded. That id is the attempt's identity, and it is the
+ * ONLY thing that lets the commit half of this connect tell "the marker is
+ * still mine" from "something destroyed the credential this marker stood for
+ * while my token write was in flight": the marker is a boolean-shaped flag no
+ * more, and the commit is handed this id to check against.
  *
  * Reads the FILE, not the derived config: what this writes back is the stored
  * record plus the marker, never a mode the derivation inferred from the grant
  * beside it. */
-export async function markCloudflareOAuthGrantPending(): Promise<void> {
+export async function markCloudflareOAuthGrantPending(): Promise<string> {
+  const attemptId = randomUUID();
   // A reconnect is an OAuth mutation like any other (see
   // writeCloudflareWorkersConfig): it settles a transition's unconfirmed revoke
   // before it records its own intent.
@@ -856,12 +891,13 @@ export async function markCloudflareOAuthGrantPending(): Promise<void> {
   return withCloudflareConfigMutation(async () => {
     const current = await readCloudflareWorkersConfigFile();
     refuseCloudflareWorkersConfigMutationIfCorrupt(current, 'record the pending OAuth grant');
-    const next: DeployConfig = { ...persistableCloudflareWorkersConfig(current), pendingOAuthGrant: true };
+    const next: DeployConfig = { ...persistableCloudflareWorkersConfig(current), pendingOAuthGrant: attemptId };
     // The opposite intent cannot be pending at the same time: a connect
     // supersedes a half-finished exit from oauth, and its own commit settles
     // the mode.
     delete next.pendingOAuthGrantClear;
     await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), next);
+    return attemptId;
   });
 }
 
@@ -898,8 +934,23 @@ export async function clearPendingCloudflareOAuthGrant(): Promise<void> {
  * persistCredential writes the token first — so a store with nothing in it means
  * the credential this commit is the second half of has been cleared or revoked
  * underneath it, and recording 'oauth' then names a mode with no credential
- * behind it. The connect route's rollback owns the failure semantics. */
-export async function commitCloudflareOAuthMode(identity?: { clientId: string; redirectUri: string }): Promise<void> {
+ * behind it. The connect route's rollback owns the failure semantics.
+ *
+ * `attemptId` is the id markCloudflareOAuthGrantPending recorded for THIS
+ * attempt, and passing it is what makes the empty-store check sufficient. The
+ * check alone cannot see the whole window: the connect's token write runs
+ * OUTSIDE the config lock, so a settings PUT can take the oauth->token
+ * transition (clearing the store, revoking the grant the connect minted, and
+ * dropping the marker) and the connect's guarded write can still land after it —
+ * the store then holds a credential again, and a commit that only asked "is
+ * anything stored?" would re-write credentialMode 'oauth' over the authority the
+ * user just chose. The marker id answers the question that actually matters:
+ * does the intent this attempt recorded still stand? A commit whose id is gone
+ * refuses, and the connect route's rollback owns the failure semantics. */
+export async function commitCloudflareOAuthMode(
+  identity?: { clientId: string; redirectUri: string },
+  attemptId?: string,
+): Promise<void> {
   // The commit is the second half of a connect: it settles a transition's
   // unconfirmed revoke on the way past, so a connect after a crashed exit from
   // OAuth finishes that exit's debt rather than leaving it on disk forever.
@@ -907,6 +958,20 @@ export async function commitCloudflareOAuthMode(identity?: { clientId: string; r
   return withCloudflareConfigMutation(async () => {
     const current = await readCloudflareWorkersConfig();
     refuseCloudflareWorkersConfigMutationIfCorrupt(current, 'switch the credential mode to oauth');
+    // The marker this attempt recorded has to still be the one on file. It is
+    // dropped by everything that destroys the credential the marker stands for
+    // — the oauth->token transition (which also revokes it), the disconnect
+    // reset, the abandonment paths — and overwritten by a newer connect, whose
+    // own commit is then the one that may land the mode. Landing it here would
+    // re-assert an authority that no longer holds this attempt's grant.
+    if (attemptId !== undefined && current.pendingOAuthGrant !== attemptId) {
+      throw new DeployError(
+        'Connect Cloudflare first — the OAuth attempt this mode switch belongs to was abandoned while its credential was being stored, so its grant is no longer the authority this config may record.',
+        400,
+        undefined,
+        'CFW_OAUTH_RECONNECT_REQUIRED',
+      );
+    }
     // The connect window is exactly when a settings PUT can read mode 'token' on
     // disk beside the live grant persistCredential has just written, derive
     // 'oauth' from that grant (readCloudflareWorkersConfig), and take the
@@ -940,6 +1005,18 @@ export async function commitCloudflareOAuthMode(identity?: { clientId: string; r
   });
 }
 
+/** The clientId the config currently names, read best-effort: the fallback a
+ * revoke handle recorded before the record carried its own identity needs, and
+ * it has to be read while the config still names it — the reset below is what
+ * stops it doing so. Never throws: this only ever feeds a best-effort revoke. */
+async function cloudflareConfigClientId(): Promise<string | undefined> {
+  try {
+    return ((await readCloudflareWorkersConfig()).clientId ?? '').trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Reset the credential authority back to a static token after disconnect,
  * bypassing the token validation in writeCloudflareWorkersConfig (a user who
  * only ever used OAuth has no static token to require). On a corrupt config
@@ -948,10 +1025,12 @@ export async function commitCloudflareOAuthMode(identity?: { clientId: string; r
  * reads as token mode, so the state this write would establish is the state
  * the daemon reports — while a write would erase the recoverable file. */
 export async function resetCloudflareCredentialMode(): Promise<void> {
-  // A disconnect settles a transition's unconfirmed revoke too: the user has
-  // just asked for the credential to be gone, and an orphaned grant is exactly
-  // what must not survive that.
-  await settlePendingCloudflareOAuthGrantRevokes();
+  // A disconnect settles the revokes recorded by every credential destruction
+  // before it — its own included: the user has just asked for the credential to
+  // be gone, and an orphaned grant is exactly what must not survive that. The
+  // settle drops a handle only on a revoke Cloudflare confirmed, so a grant
+  // whose revoke is still owed keeps the record that names it.
+  await settlePendingCloudflareOAuthGrantRevokes(await cloudflareConfigClientId());
   return withCloudflareConfigMutation(async () => {
     const current = await readCloudflareWorkersConfig();
     if (current.configError) {
@@ -1140,14 +1219,14 @@ async function revokeSupersededRefreshGrant(
   if (!token) return;
   const proxyDispatcher = proxyDispatcherRequestInit(process.env);
   try {
-    const ok = await revokeCloudflareToken({
+    const { ok, status } = await revokeCloudflareToken({
       token,
       tokenTypeHint: refreshed.refresh_token ? 'refresh_token' : 'access_token',
       clientId,
       fetchImpl: (input, init) => fetch(input, { ...init, ...proxyDispatcher.requestInit }),
       signal: AbortSignal.timeout(CLOUDFLARE_OAUTH_REVOKE_TIMEOUT_MS),
     });
-    if (!ok) console.warn('[cloudflare-oauth] revoke of the superseded refresh grant refused by Cloudflare');
+    if (!ok) console.warn(`[cloudflare-oauth] revoke of the superseded refresh grant refused by Cloudflare (HTTP ${status})`);
   } catch (err: unknown) {
     console.warn('[cloudflare-oauth] revoke of the superseded refresh grant failed:', err instanceof Error ? err.message : String(err));
   } finally {
@@ -1163,10 +1242,13 @@ async function revokeSupersededRefreshGrant(
  * identity was recorded. Never throws: the grant is already off disk, and the
  * mode the user chose does not depend on Cloudflare answering here.
  *
- * Returns whether the intent is SETTLED — Cloudflare was reached and answered,
- * either honoring the revoke or refusing the token as one it will not revoke
- * (already dead). A transport failure or a timeout answers false, which is what
- * keeps the durable handle on disk for the next OAuth mutation to retry. */
+ * Returns whether the intent is SETTLED, and only a 2xx is. A refusal
+ * (400 invalid_token) is not an answer that the grant is dead — Cloudflare
+ * declines to revoke tokens it does not recognize, which includes a token that
+ * is still live — and a 429 or a 5xx is the endpoint itself failing, so neither
+ * may be mistaken for "revoked". Anything but a 2xx, and any transport failure
+ * or timeout, answers false, which keeps the durable handle on disk as the one
+ * record that still names a live grant; the next OAuth mutation retries it. */
 async function revokeClearedCloudflareGrant(
   displaced: StoredCloudflareOAuthToken,
   fallbackClientId?: string,
@@ -1176,17 +1258,21 @@ async function revokeClearedCloudflareGrant(
   const clientId = (displaced.clientId ?? '').trim() || (fallbackClientId ?? '').trim();
   const proxyDispatcher = proxyDispatcherRequestInit(process.env);
   try {
-    const ok = await revokeCloudflareToken({
+    const { ok, status } = await revokeCloudflareToken({
       token,
       tokenTypeHint: displaced.refreshToken ? 'refresh_token' : 'access_token',
       ...(clientId ? { clientId } : {}),
       fetchImpl: (input, init) => fetch(input, { ...init, ...proxyDispatcher.requestInit }),
       signal: AbortSignal.timeout(CLOUDFLARE_OAUTH_REVOKE_TIMEOUT_MS),
     });
-    if (!ok) console.warn('[cloudflare-oauth] revoke of the grant a token-mode switch displaced was refused by Cloudflare');
-    return true;
+    // A non-2xx is NOT the answer the handle was recorded for. Returning true
+    // for one erased the only record of a grant that is still live — on a 503
+    // the handle was dropped and the refresh token stayed valid with nothing
+    // left anywhere that named it. The handle stays unless Cloudflare said 2xx.
+    if (!ok) console.warn(`[cloudflare-oauth] revoke of the displaced OAuth grant was refused by Cloudflare (HTTP ${status})`);
+    return ok;
   } catch (err: unknown) {
-    console.warn('[cloudflare-oauth] revoke of the grant a token-mode switch displaced failed:', err instanceof Error ? err.message : String(err));
+    console.warn('[cloudflare-oauth] revoke of the displaced OAuth grant failed:', err instanceof Error ? err.message : String(err));
     return false;
   } finally {
     await proxyDispatcher.close();
@@ -1224,9 +1310,10 @@ async function dropCloudflareGrantRevokeHandle(displaced: StoredCloudflareOAuthT
  *
  * `fallbackClientId` identifies the client for a handle recorded before the
  * record carried its own identity. Best-effort throughout: a handle whose
- * revoke cannot be completed (a transport failure) stays on disk for the next
- * mutation, and nothing here throws — the mutation it runs ahead of is the
- * caller's business, not this debt's. */
+ * revoke cannot be completed — a transport failure, a timeout, or any answer
+ * that is not a 2xx — stays on disk for the next mutation, and nothing here
+ * throws; the mutation it runs ahead of is the caller's business, not this
+ * debt's. */
 export async function settlePendingCloudflareOAuthGrantRevokes(
   fallbackClientId?: string,
 ): Promise<void> {

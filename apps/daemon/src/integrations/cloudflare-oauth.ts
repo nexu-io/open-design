@@ -363,16 +363,28 @@ export interface RevokeCloudflareTokenInput {
   signal?: AbortSignal;
 }
 
+/** What a revoke got back: whether Cloudflare honored it (a 2xx) and the
+ * status it answered with. The status is what separates the non-2xx cases — a
+ * 400 `invalid_token` for a token the endpoint will not revoke at all, a 429
+ * or a 5xx for an endpoint that is busy or broken — and a caller recording
+ * durable revoke intent must not treat those alike. */
+export interface RevokeCloudflareTokenResult {
+  ok: boolean;
+  status: number;
+}
+
 /**
- * RFC 7009 token revocation against Cloudflare. Resolves `true` on a 2xx and
- * `false` on any other status (a revocation endpoint answers 200 for an
- * already-invalid token, so a non-2xx is a real refusal). Throws only on a
- * transport failure so the caller can decide whether that blocks anything —
- * the disconnect route treats it as best-effort.
+ * RFC 7009 token revocation against Cloudflare. Resolves
+ * `{ ok: true, status }` on a 2xx and `{ ok: false, status }` on any other
+ * status — a revocation endpoint answers 200 for an already-invalid token —
+ * so the caller sees WHAT Cloudflare answered and not merely that it did not
+ * honor the revoke; only a 2xx means the grant is known to be dead. Throws on
+ * a transport failure, which is not an answer at all. Never throws for a
+ * non-2xx: the caller decides what a refusal or a transient failure owes.
  */
 export async function revokeCloudflareToken(
   input: RevokeCloudflareTokenInput,
-): Promise<boolean> {
+): Promise<RevokeCloudflareTokenResult> {
   const form = new URLSearchParams();
   form.set('token', input.token);
   if (input.tokenTypeHint) form.set('token_type_hint', input.tokenTypeHint);
@@ -386,5 +398,5 @@ export async function revokeCloudflareToken(
     body: form.toString(),
     ...(input.signal ? { signal: input.signal } : {}),
   });
-  return resp.ok;
+  return { ok: resp.ok, status: resp.status };
 }

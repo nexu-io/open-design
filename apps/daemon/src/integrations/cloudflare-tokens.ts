@@ -65,21 +65,24 @@ export interface CloudflareOAuthTokensFile {
    * cleared credential's generation is never reused by a later connect — a
    * stale compare-and-set from before the clear can't match a brand-new token. */
   lastGeneration?: number;
-  /** Grants a credential TRANSITION took out of `token` whose revoke has not
-   * been confirmed at Cloudflare yet (see clearCloudflareOAuthTokenForRevoke).
+  /** Grants a credential transition or a disconnect took out of `token` whose
+   * revoke has not been confirmed at Cloudflare yet (see
+   * clearCloudflareOAuthTokenForRevoke).
    *
    * The transition that leaves OAuth mode — a settings save switching the
-   * authority to a static token — used to record the grant it displaced only in
-   * the memory of the save that was running: the clear returned the record, and
-   * the revoke named it. A crash between the clear and the revoke (or between
-   * the clear and the mode write) then left the refresh token valid at
-   * Cloudflare with no file anywhere that named it: the store was empty, the
+   * authority to a static token — and the disconnect that wipes the credential
+   * outright both used to record the grant they displaced only in the memory of
+   * the request that was running: the clear returned the record, and the revoke
+   * named it. A crash between the clear and the revoke (or between the clear and
+   * the mode write), a revoke endpoint that timed out or answered 5xx, and a
+   * process that died right after the wipe all then left the refresh token valid
+   * at Cloudflare with no file anywhere that named it: the store was empty, the
    * config read token mode, and no later disconnect, connect or refresh could
    * discover it to revoke. Recorded HERE, in the same locked write as the clear
-   * itself, it outlives the process; every OAuth mutation finishes it on the
-   * way past (settlePendingCloudflareOAuthGrantRevokes in deploy.ts) and every
-   * other write to this file carries it forward, so the only thing that can
-   * drop a handle is a confirmed revoke. */
+   * itself, it outlives the process; every OAuth mutation finishes it on the way
+   * past (settlePendingCloudflareOAuthGrantRevokes in deploy.ts) and every other
+   * write to this file carries it forward, so the only thing that can drop a
+   * handle is a revoke Cloudflare confirmed. */
   pendingRevokes?: StoredCloudflareOAuthToken[];
 }
 
@@ -513,10 +516,12 @@ async function tokensFileExists(dataDir: string): Promise<boolean> {
 
 /** Take the stored credential off disk AND record it as an unconfirmed revoke
  * handle in the SAME locked write, returning the record. This is the clear a
- * credential transition uses (the oauth->token switch): the destructive step
- * and the durable intent to revoke are one atomic write, so no crash can leave
- * the grant off disk with nothing that names it. The returned record is what
- * the caller revokes; the handle it leaves behind is what a crash would.
+ * credential transition uses (the oauth->token switch) and the one a disconnect
+ * uses: the destructive step and the durable intent to revoke are one atomic
+ * write, so no crash — and no revoke that times out, answers 5xx, or is refused
+ * — can leave the grant off disk with nothing that names it. The returned
+ * record is what the caller may revoke eagerly; the handle it leaves behind is
+ * the record that survives a caller which never gets to.
  *
  * Keyed on the FILE existing, exactly as clearCloudflareOAuthToken is: a file
  * whose record no longer sanitizes still carries a revokeable string in its
