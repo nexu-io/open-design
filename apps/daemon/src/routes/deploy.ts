@@ -953,7 +953,7 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
             const failureContext = workersFailureContext;
             // One transaction for the whole failed-deploy bookkeeping: the
             // ownership record and every sibling rewrite land together.
-            db.transaction(() => {
+            const commitFailureBookkeeping = () => db.transaction(() => {
               recordOwnedResourcesFromFailedWorkersDeploy({ ...failureContext, err });
               // A stale hostname this attempt detached is gone from Cloudflare;
               // no record may keep vouching for it. Runs AFTER the ownership
@@ -976,6 +976,19 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
               const retiredAccessAppId = retiredAccessAppIdFromWorkersDeploy(err);
               if (retiredAccessAppId) forgetRetiredWorkersAccessApp(retiredAccessAppId);
             })();
+            try {
+              commitFailureBookkeeping();
+            } catch (bookkeepingErr) {
+              // A bookkeeping write failure (an unwritable or closed database, a
+              // project row removed underneath the deploy) must not REPLACE the
+              // failure the client is about to be told about: the ownership record
+              // is bookkeeping, the deploy error is the outcome. Log what could not
+              // be committed and rethrow the ORIGINAL error.
+              console.warn('[od] failed-deploy bookkeeping did not commit', JSON.stringify({
+                scriptName: workersScriptName,
+                error: String((bookkeepingErr as Error)?.message || bookkeepingErr),
+              }));
+            }
           }
           throw err;
         }
@@ -1117,6 +1130,9 @@ export function registerDeploymentCheckRoutes(app: Express, ctx: RegisterDeploym
    * `unreachable` from then on, and one `unprotected` URL is all the verdict
    * reports). Only what the retry reports gone leaves the record; the rest
    * stays recorded for the next check.
+   *
+   * Returns null when the record is gone by the time a verdict would land on
+   * it (deleted mid-probe); callers treat that as 404, never as a verdict.
    */
   async function checkAccessProtectedWorkersLink(existing: AccessProtectedWorkersRecord): Promise<unknown> {
     const metadata = existing.providerMetadata;
@@ -1382,6 +1398,15 @@ export function registerDeploymentCheckRoutes(app: Express, ctx: RegisterDeploym
         if (existing.providerId === CLOUDFLARE_WORKERS_PROVIDER_ID && isAccessProtectedWorkersRecord(existing)) {
           /** @type {import('@open-design/contracts').CheckDeploymentLinkResponse} */
           const body = await checkAccessProtectedWorkersLink(existing);
+          // The verdict lands on a re-read of the record, under the script's
+          // deploy single-flight: a row deleted while the probe was in flight (its
+          // project removed, the record replaced by another writer) comes back as
+          // null. Nothing is left to report a verdict about, and a 200 whose body is
+          // null is not a verdict — the client cannot tell it apart from a broken
+          // response.
+          if (!body) {
+            return sendApiError(res, 404, 'FILE_NOT_FOUND', 'deployment not found');
+          }
           return res.json(publicDeployment(body));
         }
         const checkUrl = stableCloudflareProjectName

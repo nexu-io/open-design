@@ -2026,6 +2026,119 @@ describe('deploy provider routes', () => {
     }
   });
 
+  it('a failed Workers deploy still reports the deploy error when its ownership bookkeeping cannot run', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-workers-bookkeeping-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    configureCloudflareWorkersDataDir(stateRoot);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const dataDir = process.env.OD_DATA_DIR;
+      if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+      const stamp = Date.now();
+      const projectId = `workers-bookkeeping-${stamp}`;
+      const scriptName = `bookkeeping-${stamp}`;
+      const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+      await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>Hello</h1>');
+      expect((await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: projectId, name: 'Workers bookkeeping', skillId: null, designSystemId: null }),
+      })).status).toBe(200);
+      // Access on: the attempt creates the Access app and then fails, which is
+      // exactly the failure shape whose ownership record the route persists.
+      expect((await fetch(`${baseUrl}/api/deploy/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          providerId: CLOUDFLARE_WORKERS_PROVIDER_ID,
+          token: 'tok',
+          accountId: 'acct_test',
+          scriptName,
+          access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } },
+        }),
+      })).status).toBe(200);
+
+      const db = openDatabase(process.cwd(), { dataDir });
+      // The deployments table goes unreadable mid-deploy: the failed-deploy
+      // bookkeeping reads the record it is about to rewrite, so the whole
+      // bookkeeping transaction fails.
+      const dbProto = Object.getPrototypeOf(db) as { prepare: (sql: string) => unknown };
+      const realPrepare = dbProto.prepare;
+      let bookkeepingReadsFail = false;
+      const prepareSpy = vi.spyOn(dbProto, 'prepare').mockImplementation(function (this: unknown, sql: string) {
+        if (bookkeepingReadsFail && /from deployments/i.test(sql)) throw new Error('database is locked (test)');
+        return realPrepare.call(this, sql);
+      });
+
+      const realFetch = globalThis.fetch;
+      const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+      const cloudflareDown = () => json({ success: false, errors: [{ message: 'cloudflare unavailable (test)' }] }, 500);
+      let release: () => void = () => {};
+      const held = new Promise<void>((resolve) => { release = resolve; });
+      let heldOnce = false;
+      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        const method = (init?.method || 'GET').toUpperCase();
+        if (method === 'HEAD') return new Response('', { status: 200 });
+        if (!heldOnce) {
+          // Hold the deploy at its first Cloudflare call, so the table can be
+          // taken out from under it while the deploy is still in flight.
+          heldOnce = true;
+          await held;
+        }
+        if (url.endsWith('/workers/subdomain')) return json({ success: true, result: { subdomain: 'acct-test' } });
+        if (url.includes('assets-upload-session')) return json({ success: true, result: { jwt: 'SESS', buckets: [] } });
+        if (method === 'GET' && url.includes('/workers/domains')) return json({ success: true, result: [] });
+        if (url.includes('/access/identity_providers')) return json({ success: true, result: [{ id: 'otp-1', type: 'onetimepin', name: 'One-time PIN login' }] });
+        // Everything from the Access app onwards fails: the app is created
+        // first, so the error carries the app id the route must record. A
+        // lookup is served (it is not the failure under test) — what fails is
+        // the attach PUT, and the workers.dev enable after it.
+        if (url.includes('/access/apps/')) {
+          if (method === 'PUT') return cloudflareDown();
+          return json({ success: true, result: { id: 'app-bookkeeping', destinations: [{ type: 'worker', worker_id: 'tag-b' }] } });
+        }
+        if (url.includes('/access/apps')) {
+          if (method === 'POST') return json({ success: true, result: { id: 'app-bookkeeping' } });
+          return json({ success: true, result: [] });
+        }
+        if (method === 'PUT' && url.endsWith('/workers/scripts/' + scriptName)) return json({ success: true, result: {} });
+        if (url.endsWith('/workers/scripts/' + scriptName + '/subdomain')) return cloudflareDown();
+        if (url.includes('/workers/scripts')) return json({ success: true, result: [{ id: scriptName, tag: 'tag-b' }] });
+        return json({ success: true, result: {} });
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      try {
+        const body = JSON.stringify({ fileName: 'index.html', providerId: CLOUDFLARE_WORKERS_PROVIDER_ID });
+        const deploying = fetch(`${baseUrl}/api/projects/${projectId}/deploy`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        bookkeepingReadsFail = true;
+        release();
+
+        const resp = await deploying;
+        prepareSpy.mockRestore();
+        expect(resp.status).toBeGreaterThanOrEqual(500);
+        const failureBody = await resp.json() as { error: { code: string; message: string } };
+        // The DEPLOY error reaches the client. Without the guard the bookkeeping
+        // failure replaces it — a generic error, which this route answers as a
+        // 400 carrying its own message.
+        expect(failureBody.error.message).toContain('cloudflare unavailable (test)');
+        expect(JSON.stringify(failureBody)).not.toContain('database is locked');
+        expect(warnSpy.mock.calls.some(([message]) => String(message).includes('failed-deploy bookkeeping'))).toBe(true);
+      } finally {
+        prepareSpy.mockRestore();
+        vi.unstubAllGlobals();
+      }
+    } finally {
+      warnSpy.mockRestore();
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
   it('a failed Workers deploy records the script it targeted, so a later deploy of a different script does not adopt its Access app', async () => {
     const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-workers-failed-scriptname-'));
     const priorStateRoot = process.env.OD_USER_STATE_DIR;
@@ -3385,6 +3498,47 @@ describe('deploy provider routes', () => {
       expect(checked.status).toBe(200);
       expect(((await checked.json()) as { status: string; statusMessage?: string }).statusMessage).not.toBe('Cloudflare Access is verified on every public link.');
       expect((await f.listDeployments()).find((d) => d.fileName === 'a.html')).toEqual(settledRecord);
+    } finally {
+      configureCloudflareAccessPerimeterRetry();
+      await f.cleanup();
+    }
+  });
+
+  it('check-link answers 404 FILE_NOT_FOUND when the record is deleted while its probe is in flight, instead of 200 with a null body', async () => {
+    const f = await workersSiblingFixture('deferred-record-gone', { access: true });
+    configureCloudflareAccessPerimeterRetry({ attempts: 2, baseMs: 1 });
+    try {
+      // The deploy defers: the public URL does not answer yet.
+      f.state.headMode = 'unreachable';
+      await f.putConfig({ access: true });
+      const deployResp = await f.deploy('a.html');
+      expect(deployResp.status).toBe(200);
+      const deployed = (await deployResp.json()) as { id: string; status: string };
+      expect(deployed.status).toBe('link-delayed');
+
+      const dataDir = process.env.OD_DATA_DIR;
+      if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+      const db = openDatabase(process.cwd(), { dataDir });
+
+      // The gate answers now, and the check-link is held inside its probe. The
+      // record goes away underneath it (a project delete cascades its
+      // deployments; any other writer that removes it looks the same), so the
+      // verdict's re-read under the single-flight finds nothing to land on.
+      f.state.headMode = 'access';
+      let release: () => void = () => {};
+      const held = new Promise<void>((resolve) => { release = resolve; });
+      f.state.headHold = () => held;
+      const checking = f.checkLink(deployed.id);
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      db.prepare('DELETE FROM deployments WHERE project_id = ? AND id = ?').run(f.projectId, deployed.id);
+      release();
+
+      const checked = await checking;
+      // A record that is gone is not a verdict: 404, never a 200 carrying null.
+      expect(checked.status).toBe(404);
+      expect(await checked.json()).toMatchObject({
+        error: { code: 'FILE_NOT_FOUND', message: 'deployment not found' },
+      });
     } finally {
       configureCloudflareAccessPerimeterRetry();
       await f.cleanup();

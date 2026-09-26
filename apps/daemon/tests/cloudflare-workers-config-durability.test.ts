@@ -209,3 +209,71 @@ describe('Workers config corruption recovery', () => {
     });
   });
 });
+
+describe('credential mode is derived from a live OAuth grant', () => {
+  it('reads oauth mode when a crash left a live grant behind a config that still says token', async () => {
+    await withDataDir(async () => {
+      // The OAuth commit writes the token first and the credential mode second
+      // (commitCloudflareOAuthMode), so a crash between the two leaves a live
+      // grant on disk while the config still says 'token'.
+      await writeCloudflareWorkersConfig({ token: 'static-token', accountId: 'acct_test' });
+      await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), {
+        accessToken: 'oauth-access',
+        tokenType: 'Bearer',
+        clientId: 'client-abc',
+        expiresAt: Date.now() + 3600_000,
+        generation: 1,
+        savedAt: Date.now(),
+      });
+      // The token is the authoritative record, so its presence decides the
+      // mode — without this the deploys would ignore the grant and fall back
+      // to the static token.
+      const config = await readCloudflareWorkersConfig();
+      expect(config).toMatchObject({ credentialMode: 'oauth', clientId: 'client-abc', token: 'static-token' });
+      // The settings surface reports the mode the deploys will actually use …
+      expect(publicCloudflareWorkersConfig(config)).toMatchObject({ credentialMode: 'oauth', configured: true });
+      // … and the credential resolver hands out the grant, not the static token.
+      await expect(getCloudflareAccessToken()).resolves.toBe('oauth-access');
+    });
+  });
+
+  it('an expired grant leaves the config in token mode and the static token in use', async () => {
+    await withDataDir(async () => {
+      await writeCloudflareWorkersConfig({ token: 'static-token', accountId: 'acct_test' });
+      await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), {
+        accessToken: 'stale-access',
+        tokenType: 'Bearer',
+        refreshToken: 'ref-1',
+        clientId: 'client-abc',
+        expiresAt: Date.now() - 1000,
+        generation: 1,
+        savedAt: Date.now(),
+      });
+      // A grant the resolver would have to refresh is not authority to change
+      // the mode: the refresh needs an identity the config may not carry yet.
+      expect((await readCloudflareWorkersConfig()).credentialMode).toBe('token');
+      await expect(getCloudflareAccessToken()).resolves.toBe('static-token');
+    });
+  });
+
+  it('a corrupt config still reads as token mode, even with a live grant on disk', async () => {
+    await withDataDir(async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      await writeFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), 'not json at all', 'utf8');
+      await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), {
+        accessToken: 'oauth-access',
+        tokenType: 'Bearer',
+        clientId: 'client-abc',
+        expiresAt: Date.now() + 3600_000,
+        generation: 1,
+        savedAt: Date.now(),
+      });
+      // A corrupt file is its own degraded state — its recovery is a settings
+      // save, and it must not gain a mode the file does not carry.
+      expect(await readCloudflareWorkersConfig()).toMatchObject({
+        credentialMode: 'token',
+        configError: CLOUDFLARE_WORKERS_CONFIG_CORRUPT_CODE,
+      });
+    });
+  });
+});

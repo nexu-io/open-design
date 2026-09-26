@@ -419,7 +419,7 @@ function emptyCloudflareWorkersConfig(): DeployConfig {
   };
 }
 
-export async function readCloudflareWorkersConfig(): Promise<DeployConfig> {
+async function readCloudflareWorkersConfigFile(): Promise<DeployConfig> {
   const file = deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID);
   try {
     const raw = await readFile(file, 'utf8');
@@ -458,6 +458,53 @@ export async function readCloudflareWorkersConfig(): Promise<DeployConfig> {
     if (isErrnoException(err) && err.code === 'ENOENT') return emptyCloudflareWorkersConfig();
     throw err;
   }
+}
+
+/** The live OAuth grant on disk, or null when there is none for the credential
+ * authority to be derived from: nothing stored, a stored token already within the
+ * expiry skew (the resolver would have to refresh it, and a refresh needs a client
+ * identity the config may not carry yet), or no configured data root. Never
+ * throws: it gates a config READ, which must not gain a new failure mode. */
+async function liveCloudflareOAuthGrant(): Promise<StoredCloudflareOAuthToken | null> {
+  try {
+    const current = await getCloudflareOAuthToken(cloudflareOAuthTokensDir());
+    if (!current) return null;
+    if (isCloudflareOAuthTokenExpired(current, Date.now(), CLOUDFLARE_OAUTH_EXPIRY_SKEW_MS)) return null;
+    return current;
+  } catch {
+    return null;
+  }
+}
+
+/** The Workers config with the credential authority resolved from what is
+ * actually on disk, not from the stored mode flag alone.
+ *
+ * The OAuth commit spans two files — the token first, the config's
+ * `credentialMode` second (see commitCloudflareOAuthMode) — so a crash between
+ * the two leaves a live grant on disk while the config still says 'token'.
+ * Reading 'token' there makes every deploy ignore the grant sitting next to it
+ * and fall back to a static API token a connect-only user never had, with
+ * nothing left that knows the grant is there to revoke. The TOKEN is the
+ * authoritative record (it carries its own clientId/redirectUri), so a present,
+ * usable grant decides the mode.
+ *
+ * A config that reads as corrupt is returned untouched: it is already a distinct
+ * degraded state whose recovery is a settings save, and the disconnect reset
+ * documents that it reads as token mode. */
+export async function readCloudflareWorkersConfig(): Promise<DeployConfig> {
+  const config = await readCloudflareWorkersConfigFile();
+  if (config.credentialMode === 'oauth' || config.configError) return config;
+  const grant = await liveCloudflareOAuthGrant();
+  if (!grant) return config;
+  return {
+    ...config,
+    credentialMode: 'oauth',
+    // The token's own clientId is authoritative for the connection it issued
+    // (refreshCloudflareOAuthAccessToken reads it the same way), so a config
+    // that never got the identity write still names the client that can refresh
+    // the grant, and reads as configured instead of as a broken connection.
+    clientId: grant.clientId || config.clientId,
+  };
 }
 
 export async function writeCloudflareWorkersConfig(input: Partial<DeployConfig>) {
