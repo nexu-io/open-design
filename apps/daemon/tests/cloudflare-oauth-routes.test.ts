@@ -568,7 +568,7 @@ describe('cloudflare-oauth routes', () => {
     }
   });
 
-  it('disconnect revokes the grant at Cloudflare (refresh token + client_id) before clearing the stored token', async () => {
+  it('disconnect clears the stored token and revokes the grant the clear displaced at Cloudflare (refresh token + client_id)', async () => {
     const dataDir = cloudflareOAuthTokensDir();
     const realFetch = globalThis.fetch;
     const revokes: Array<{ method: string | undefined; body: string }> = [];
@@ -601,9 +601,56 @@ describe('cloudflare-oauth routes', () => {
       expect(form.get('token')).toBe('ref-1');
       expect(form.get('token_type_hint')).toBe('refresh_token');
       expect(form.get('client_id')).toBe('client-abc');
-      // Revoke runs BEFORE the local wipe, so the token it names is the one on disk.
-      expect(tokenStillStoredAtRevoke).toBe(true);
+      // The wipe lands first; the revoke names the record the wipe displaced,
+      // read under the store lock — not a pre-read of the store that a
+      // concurrent refresh could have rotated past.
+      expect(tokenStillStoredAtRevoke).toBe(false);
       expect(await getCloudflareOAuthToken(dataDir)).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+      await clearCloudflareOAuthToken(dataDir);
+      await rm(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), { force: true });
+    }
+  });
+
+  it('disconnect revokes exactly the record its wipe displaced; a credential rotated in after the wipe is neither wiped nor revoked', async () => {
+    const dataDir = cloudflareOAuthTokensDir();
+    const realFetch = globalThis.fetch;
+    const revokes: string[] = [];
+    vi.stubGlobal('fetch', async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('oauth2/revoke')) {
+        revokes.push(String(init?.body));
+        // A refresh lands while the revoke round-trip is in flight. Keyed on
+        // a read taken BEFORE the wipe, the wipe that followed the revoke
+        // took this rotated record off disk unrevoked — an orphaned grant.
+        // Keyed on the displaced record, the wipe is already done and this
+        // write is a credential in its own right.
+        await setCloudflareOAuthToken(dataDir, {
+          accessToken: 'acc-2',
+          tokenType: 'Bearer',
+          refreshToken: 'ref-2',
+          clientId: 'client-abc',
+          generation: 0,
+          savedAt: Date.now(),
+        });
+        return new Response('', { status: 200 });
+      }
+      return realFetch(input as never, init as never);
+    });
+    try {
+      await setCloudflareOAuthToken(dataDir, {
+        accessToken: 'acc-1',
+        tokenType: 'Bearer',
+        refreshToken: 'ref-1',
+        clientId: 'client-abc',
+        generation: 0,
+        savedAt: Date.now(),
+      });
+      const resp = await fetch(`${app.baseUrl}/api/cloudflare/oauth/disconnect`, { method: 'POST' });
+      expect(resp.status).toBe(200);
+      expect(revokes.map((body) => new URLSearchParams(body).get('token'))).toEqual(['ref-1']);
+      expect(await getCloudflareOAuthToken(dataDir)).toMatchObject({ refreshToken: 'ref-2' });
     } finally {
       vi.unstubAllGlobals();
       await clearCloudflareOAuthToken(dataDir);

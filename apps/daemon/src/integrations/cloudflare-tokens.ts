@@ -332,38 +332,56 @@ export async function setCloudflareOAuthTokenIfGenerationMatches(
   });
 }
 
+/** The outcome of a guarded write: whether it landed and, when it did, the
+ * record it replaced. `displaced` is read INSIDE the store lock, in the same
+ * critical section as the write, so it is exactly the credential the write
+ * took off disk — a refresh whose compare-and-set landed just before the write
+ * shows up here as the rotated record, and one that lands after it fails its
+ * generation check. A caller that read the store before taking the lock could
+ * see neither, and would revoke (or restore) a record the store no longer
+ * holds while the rotated refresh token it does hold is orphaned. */
+export type GuardedCloudflareOAuthTokenWrite =
+  | { written: true; displaced: StoredCloudflareOAuthToken | null }
+  | { written: false };
+
 /** Guarded persist: write the token only if guard() still holds inside the
  * lock. Lets an OAuth attempt re-check its attempt generation at the last
  * instant so a concurrent cancel/disconnect (which bumps the generation)
- * aborts the write instead of leaving a stale credential behind. */
+ * aborts the write instead of leaving a stale credential behind. Returns the
+ * record the write displaced (see GuardedCloudflareOAuthTokenWrite). */
 export async function setCloudflareOAuthTokenGuarded(
   dataDir: string,
   token: StoredCloudflareOAuthToken,
   guard: () => boolean,
-): Promise<boolean> {
+): Promise<GuardedCloudflareOAuthTokenWrite> {
   return withLock(dataDir, async () => {
-    if (!guard()) return false;
+    if (!guard()) return { written: false };
     const file = await readCloudflareOAuthTokensFile(dataDir);
     const gen = nextLastGeneration(file);
     token.generation = gen;
     await writeTokensFile(dataDir, { token, lastGeneration: gen });
-    return true;
+    return { written: true, displaced: file.token ?? null };
   });
 }
 
 /** Atomically delete the stored Cloudflare OAuth token. Bumps the file
- * generation so a cleared credential's generation is never reused.
+ * generation so a cleared credential's generation is never reused. Returns
+ * the record the clear took off disk (null when none parsed out of the file),
+ * read inside the lock so a caller revoking it at Cloudflare names the
+ * credential the store actually held — not one a concurrent refresh has
+ * since rotated away (see GuardedCloudflareOAuthTokenWrite).
  *
  * Keyed on the FILE existing, not on a token parsing out of it: a corrupt or
  * hand-edited file that no longer sanitizes to a token can still carry a
  * refresh token or an access token in its bytes, and a disconnect that
  * skipped it would leave that credential on disk. */
-export async function clearCloudflareOAuthToken(dataDir: string): Promise<void> {
-  await withLock(dataDir, async () => {
-    if (!(await tokensFileExists(dataDir))) return;
+export async function clearCloudflareOAuthToken(dataDir: string): Promise<StoredCloudflareOAuthToken | null> {
+  return withLock(dataDir, async () => {
+    if (!(await tokensFileExists(dataDir))) return null;
     const file = await readCloudflareOAuthTokensFile(dataDir);
     const gen = nextLastGeneration(file);
     await writeTokensFile(dataDir, { lastGeneration: gen });
+    return file.token ?? null;
   });
 }
 

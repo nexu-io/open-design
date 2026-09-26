@@ -25,6 +25,7 @@ import {
   getCloudflareOAuthToken,
   sanitizeCloudflareOAuthTokensFile,
   setCloudflareOAuthToken,
+  setCloudflareOAuthTokenGuarded,
   setCloudflareOAuthTokenIfGenerationMatches,
   type StoredCloudflareOAuthToken,
 } from '../src/integrations/cloudflare-tokens.js';
@@ -938,6 +939,64 @@ describe('clearCloudflareOAuthToken', () => {
       expect(fs.existsSync(file)).toBe(false);
     } finally {
       errorSpy.mockRestore();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('hands back the record it displaced, read under the store lock, or null when none parsed', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'od-cf-clear-displaced-'));
+    try {
+      // Nothing stored: nothing displaced.
+      expect(await clearCloudflareOAuthToken(dir)).toBeNull();
+      await setCloudflareOAuthToken(dir, { accessToken: 'acc-1', tokenType: 'Bearer', refreshToken: 'ref-1', clientId: 'client-1', generation: 0, savedAt: 1 });
+      // The record the clear took off disk is what a disconnect revokes: the
+      // one the store held inside the clear's critical section.
+      const displaced = await clearCloudflareOAuthToken(dir);
+      expect(displaced).toMatchObject({ accessToken: 'acc-1', refreshToken: 'ref-1', clientId: 'client-1' });
+      expect(await getCloudflareOAuthToken(dir)).toBeNull();
+      // Cleared again: nothing displaced (the generation still bumps).
+      expect(await clearCloudflareOAuthToken(dir)).toBeNull();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('setCloudflareOAuthTokenGuarded', () => {
+  const token = (suffix: string): StoredCloudflareOAuthToken => ({
+    accessToken: 'acc-' + suffix,
+    tokenType: 'Bearer',
+    refreshToken: 'ref-' + suffix,
+    generation: 0,
+    savedAt: 1,
+  });
+
+  it('hands back the record it displaced, read in the same critical section as the write', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'od-cf-guarded-displaced-'));
+    try {
+      expect(await setCloudflareOAuthTokenGuarded(dir, token('first'), () => true)).toEqual({ written: true, displaced: null });
+      // A refresh whose compare-and-set lands before the write rotates the
+      // stored record. The write displaces the ROTATED record — the one a
+      // revoke must name — not the one a read taken before the lock saw.
+      const stale = await getCloudflareOAuthToken(dir);
+      expect(stale).toMatchObject({ refreshToken: 'ref-first' });
+      expect(await setCloudflareOAuthTokenIfGenerationMatches(dir, token('rotated'), stale!.generation!)).toBe(true);
+      const write = await setCloudflareOAuthTokenGuarded(dir, token('second'), () => true);
+      expect(write.written).toBe(true);
+      expect(write.written && write.displaced).toMatchObject({ refreshToken: 'ref-rotated' });
+      expect(await getCloudflareOAuthToken(dir)).toMatchObject({ refreshToken: 'ref-second' });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('writes nothing and displaces nothing once the guard no longer holds', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'od-cf-guarded-refused-'));
+    try {
+      await setCloudflareOAuthToken(dir, token('kept'));
+      expect(await setCloudflareOAuthTokenGuarded(dir, token('late'), () => false)).toEqual({ written: false });
+      expect(await getCloudflareOAuthToken(dir)).toMatchObject({ refreshToken: 'ref-kept' });
+    } finally {
       await rm(dir, { recursive: true, force: true });
     }
   });
