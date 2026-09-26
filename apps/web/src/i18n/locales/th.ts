@@ -3297,6 +3297,7 @@ export const th: Dict = {
   "fileViewer.shareUpdateHint": "ไฟล์นี้มีการเปลี่ยนแปลงใหม่ อัปเดตลิงก์เพื่อแชร์เวอร์ชันล่าสุด",
   "fileViewer.shareUpdateLink": "อัปเดตลิงก์",
   "fileViewer.signInToUpdate": "เข้าสู่ระบบเพื่ออัปเดต",
+  "fileViewer.signInToShare": "เข้าสู่ระบบเพื่อแชร์",
   "fileViewer.shareOutdatedSignInHint": "ไฟล์นี้มีการเปลี่ยนแปลงใหม่ เข้าสู่ระบบเพื่ออัปเดตหรือปิดลิงก์",
   "fileViewer.shareUpdateSuccess": "อัปเดตแล้ว ผู้เยี่ยมชมจะเห็นเวอร์ชันล่าสุดหลังรีเฟรช",
   "fileViewer.shareUpdateFailed": "อัปเดตไม่สำเร็จ ผู้เยี่ยมชมยังคงเห็นเวอร์ชันก่อนหน้า",

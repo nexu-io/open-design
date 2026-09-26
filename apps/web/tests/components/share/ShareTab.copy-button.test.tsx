@@ -50,7 +50,7 @@ describe('S0/S13 signed-out Share panel', () => {
     vi.stubGlobal('fetch', fetch);
     const input = props({ canPublishPublic: false, filePublished: false, publishedFileUrl: '' });
     render(<I18nProvider initial="en"><ShareTab {...input} /></I18nProvider>);
-    fireEvent.click(screen.getByRole('button', { name: /sign in/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'fileViewer.signInToShare' }));
     await waitFor(() => expect(fetch.mock.calls.filter(([url, init]) => String(url).endsWith('/api/integrations/vela/login') && init?.method === 'POST')).toHaveLength(1));
     fireEvent.click(screen.getByRole('button', { name: /cancel sign-in/i }));
     await waitFor(() => expect(fetch.mock.calls.filter(([url, init]) => String(url).endsWith('/api/integrations/vela/login/cancel') && init?.method === 'POST')).toHaveLength(1));
@@ -61,7 +61,7 @@ describe('S0/S13 signed-out Share panel', () => {
     const input = props({ canPublishPublic: false, filePublished: false, publishedFileUrl: '' });
     render(<I18nProvider><ShareTab {...input} /></I18nProvider>);
     expect(screen.getByText('fileViewer.publishFileRequiresWorkspace')).toBeVisible();
-    expect(screen.getByRole('button', { name: /sign in/i })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'fileViewer.signInToShare' })).toBeEnabled();
     expect(screen.queryByRole('switch', { name: 'fileViewer.linkAccessTitle' })).toBeNull();
     expect(input.publishCurrentFilePublic).not.toHaveBeenCalled();
   });

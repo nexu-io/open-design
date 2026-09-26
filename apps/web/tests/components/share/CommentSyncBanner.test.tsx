@@ -146,6 +146,10 @@ describe('CommentSyncBanner — restored branches', () => {
     renderBanner({ ...base, backfill: { state: 'failed', filePath: 'index.html', publicationRevision: 'resume-r2', retryable: true, reopened: true } });
     const retry = await screen.findByRole('button', { name: '重试' });
     expect(retry.className).toMatch(/retryError/);
+    // Round-3 audit (K5): the design's retry glyph precedes the label.
+    const glyph = retry.querySelector('svg[aria-hidden="true"] path');
+    expect(glyph).toHaveAttribute('d', 'M20 11a8 8 0 0 0-14.3-4.9L4 8M4 4v4h4M4 13a8 8 0 0 0 14.3 4.9L20 16m0 4v-4h-4');
+    expect(retry.firstElementChild?.tagName.toLowerCase()).toBe('svg');
   });
 
   it('keeps the plain (non-red) retry style for a retryable non-reopened backfill failure', async () => {

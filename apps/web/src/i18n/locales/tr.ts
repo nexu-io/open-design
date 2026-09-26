@@ -3297,6 +3297,7 @@ export const tr: Dict = {
   "fileViewer.shareUpdateHint": "Bu dosyada yeni değişiklikler var. En son sürümü paylaşmak için bağlantıyı güncelleyin.",
   "fileViewer.shareUpdateLink": "Bağlantıyı güncelle",
   "fileViewer.signInToUpdate": "Giriş yapıp güncelle",
+  "fileViewer.signInToShare": "Giriş yapıp paylaş",
   "fileViewer.shareOutdatedSignInHint": "Bu dosyada yeni değişiklikler var. Bağlantıyı güncellemek veya kapatmak için giriş yapın.",
   "fileViewer.shareUpdateSuccess": "Güncellendi. Ziyaretçiler sayfayı yenilediğinde en son sürümü görecek.",
   "fileViewer.shareUpdateFailed": "Güncelleme başarısız oldu. Ziyaretçiler hâlâ önceki sürümü görüyor.",

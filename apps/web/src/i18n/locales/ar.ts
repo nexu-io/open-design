@@ -3305,6 +3305,7 @@ export const ar: Dict = {
   "fileViewer.shareUpdateHint": "يحتوي الملف على تغييرات جديدة. حدّث الرابط لمشاركة أحدث إصدار.",
   "fileViewer.shareUpdateLink": "تحديث الرابط",
   "fileViewer.signInToUpdate": "سجّل الدخول للتحديث",
+  "fileViewer.signInToShare": "سجّل الدخول للمشاركة",
   "fileViewer.shareOutdatedSignInHint": "يحتوي هذا الملف على تغييرات جديدة. سجّل الدخول لتحديث الرابط أو إيقافه.",
   "fileViewer.shareUpdateSuccess": "تم التحديث. سيرى الزوار أحدث إصدار بعد تحديث الصفحة.",
   "fileViewer.shareUpdateFailed": "فشل التحديث. لا يزال الزوار يرون الإصدار السابق.",

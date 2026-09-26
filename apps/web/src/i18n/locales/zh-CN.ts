@@ -3469,6 +3469,7 @@ export const zhCN: Dict = {
   "fileViewer.shareUpdateHint": "文件有新改动。更新链接以分享最新版本。",
   "fileViewer.shareUpdateLink": "更新链接",
   "fileViewer.signInToUpdate": "登录后更新",
+  "fileViewer.signInToShare": "登录后分享",
   "fileViewer.shareOutdatedSignInHint": "文件有新改动，登录后可更新或关闭链接。",
   "fileViewer.shareUpdateSuccess": "已更新，访问者刷新后可看到最新版本",
   "fileViewer.shareUpdateFailed": "更新失败，访问者仍看到上一版",

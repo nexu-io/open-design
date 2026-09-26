@@ -42,61 +42,51 @@ describe('Owner S12 deployment menu layering', () => {
 });
 
 describe('Owner S12 deployment menu', () => {
-  it('keeps deployment items in the viewport beside an edge trigger without removing the link-access explanation', () => {
-    Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, value: 320 });
-    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 700 });
-    const selectVercel = vi.fn();
-    render(<><ShareMoreMenu label="More sharing options" items={[
-      { id: 'vercel', label: 'Deploy to Vercel', onSelect: selectVercel },
+  const rect = (left: number, top: number, width: number, height: number) => ({
+    x: left, y: top, left, top, right: left + width, bottom: top + height, width, height, toJSON: () => ({}),
+  });
+  function renderInHeader(onSelect = vi.fn()) {
+    render(<div data-testid="tools"><ShareMoreMenu label="More sharing options" items={[
+      { id: 'vercel', label: 'Deploy to Vercel', onSelect },
       { id: 'cloudflare', label: 'Deploy to Cloudflare Pages', onSelect: () => undefined },
-    ]} /><p>Link access details</p></>);
-    const trigger = screen.getByRole('button', { name: 'More sharing options' });
-    const triggerRect = vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue({
-      x: 10, y: 40, left: 10, top: 40, right: 30, bottom: 60, width: 20, height: 20,
-      toJSON: () => ({}),
-    });
+    ]} /><button type="button">Close</button></div>);
+    return { trigger: screen.getByRole('button', { name: 'More sharing options' }), tools: screen.getByTestId('tools') };
+  }
+
+  it('drops down under the trigger, right-aligned to the header tools, over the panel content', () => {
+    Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, value: 1440 });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 900 });
+    const selectVercel = vi.fn();
+    const { trigger, tools } = renderInHeader(selectVercel);
+    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue(rect(1236, 100, 20, 20));
+    vi.spyOn(tools, 'getBoundingClientRect').mockReturnValue(rect(1236, 100, 44, 20));
     fireEvent.click(trigger);
     const menu = screen.getByRole('menu');
-    expect(screen.getByRole('menuitem', { name: 'Deploy to Vercel' })).toBeVisible();
-    expect(screen.getByRole('menuitem', { name: 'Deploy to Cloudflare Pages' })).toBeVisible();
     expect(menu.style.position).toBe('fixed');
-    expect(Number.parseFloat(menu.style.left)).toBeGreaterThanOrEqual(8);
-    expect(Number.parseFloat(menu.style.left) + Number.parseFloat(menu.style.width)).toBeLessThanOrEqual(312);
-    expect(menu.style.left).toBe('34px');
-    expect(screen.getByText('Link access details')).toBeVisible();
+    expect(menu.style.top).toBe('126px');
+    // Right edge (left + 214) lands on the tools' right edge (1280).
+    expect(menu.style.left).toBe('1066px');
+    expect(menu.style.width).toBe('214px');
     fireEvent.click(screen.getByRole('menuitem', { name: 'Deploy to Vercel' }));
     expect(selectVercel).toHaveBeenCalledOnce();
     expect(trigger).toHaveFocus();
-    triggerRect.mockReturnValue({
-      x: 290, y: 40, left: 290, top: 40, right: 310, bottom: 60, width: 20, height: 20,
-      toJSON: () => ({}),
-    });
-    fireEvent.click(trigger);
-    expect(screen.getByRole('menu').style.left).toBe('72px');
   });
 
-  it('opens beside the panel instead of covering link-access copy when both sides fit', () => {
-    Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, value: 960 });
-    render(<><ShareMoreMenu label="More sharing options" items={[
-      { id: 'vercel', label: 'Deploy to Vercel', onSelect: () => undefined },
-      { id: 'cloudflare', label: 'Deploy to Cloudflare Pages', onSelect: () => undefined },
-    ]} /><p>Link access details</p></>);
-    const trigger = screen.getByRole('button', { name: 'More sharing options' });
-    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue({
-      x: 500, y: 40, left: 500, top: 40, right: 520, bottom: 60, width: 20, height: 20,
-      toJSON: () => ({}),
-    });
-    const explanation = screen.getByText('Link access details');
-    vi.spyOn(explanation, 'getBoundingClientRect').mockReturnValue({
-      x: 280, y: 65, left: 280, top: 65, right: 490, bottom: 90, width: 210, height: 25,
-      toJSON: () => ({}),
+  it('stays inside a narrow viewport and flips above when there is no room below', () => {
+    Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, value: 200 });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 130 });
+    const { trigger, tools } = renderInHeader();
+    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue(rect(140, 100, 20, 20));
+    vi.spyOn(tools, 'getBoundingClientRect').mockReturnValue(rect(140, 100, 44, 20));
+    const menuRect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect');
+    menuRect.mockImplementation(function (this: HTMLElement) {
+      return this.getAttribute('role') === 'menu' ? rect(0, 0, 184, 64) : rect(0, 0, 0, 0);
     });
     fireEvent.click(trigger);
     const menu = screen.getByRole('menu');
-    const menuLeft = Number.parseFloat(menu.style.left);
-    expect(menuLeft).toBeGreaterThanOrEqual(explanation.getBoundingClientRect().right + 4);
-    expect(menuLeft).toBe(524);
-    expect(menuLeft + Number.parseFloat(menu.style.width)).toBeLessThanOrEqual(952);
+    expect(menu.style.left).toBe('8px');
+    expect(menu.style.width).toBe('184px');
+    expect(menu.style.top).toBe('30px');
   });
 
   it('dismisses with Escape and outside pointer, restoring focus on Escape', () => {

@@ -49,21 +49,50 @@
 .signInPrimaryAction:focus-visible { outline: 2px solid #1677FF; outline-offset: 2px; }
 .signInPrimaryAction:global(.is-signing) { cursor: default; background: #5A5A5C; }
 
-/* S13: matches the design's `.secondary` button inside the update notice —
-   auto width, light-gray fill, not the dark full-width primary. */
+/* S0/S13: CloudSignInTip renders its label inside the rail's green pill
+   badge (`.entry-local-mode-tip__login-badge`, global). In the share panel the
+   design's buttons are plain text labels — no pill, no icon, inherited color. */
+.signInPrimaryAction :global(.entry-local-mode-tip__head),
+.signInSecondaryAction :global(.entry-local-mode-tip__head) {
+  display: contents;
+  color: inherit;
+}
+
+.signInPrimaryAction :global(.entry-local-mode-tip__login-badge),
+.signInSecondaryAction :global(.entry-local-mode-tip__login-badge) {
+  flex: none;
+  height: auto;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.signInPrimaryAction :global(.entry-local-mode-tip__login-badge) > svg,
+.signInSecondaryAction :global(.entry-local-mode-tip__login-badge) > svg {
+  display: none;
+}
+
+/* S13: the design's `.share-status-panel .notice .secondary` — fixed 88px,
+   borderless blue — same spec as .updateButton below. */
 .signInSecondaryAction {
   box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 5px;
-  flex: none;
+  flex: 0 0 88px;
+  width: 88px;
+  min-width: 88px;
   height: 32px;
-  padding: 0 10px;
+  padding: 0 12px;
   border: 0;
   border-radius: 6px;
-  background: #EDEDF0;
-  color: #333333;
+  background: #EDF3FF;
+  color: #245FCE;
   cursor: pointer;
   font-size: 12px;
   font-weight: 500;
@@ -71,9 +100,10 @@
   white-space: nowrap;
 }
 
-.signInSecondaryAction:hover:not(:global(.is-signing)) { background: #E3E3E7; }
-.signInSecondaryAction:focus-visible { outline: 2px solid #1677FF; outline-offset: 2px; }
-.signInSecondaryAction:global(.is-signing) { cursor: default; background: #E3E3E7; }
+.signInSecondaryAction:hover:not(:global(.is-signing)) { background: #E0EAFF; color: #194EAF; }
+.signInSecondaryAction:active:not(:global(.is-signing)) { background: #D3E1FF; color: #194EAF; }
+.signInSecondaryAction:focus-visible { outline: 2px solid #245FCE; outline-offset: 2px; }
+.signInSecondaryAction:global(.is-signing) { cursor: default; }
 
 /* S1/S4: link access heading and description. */
 .linkAccessHeading {
@@ -424,26 +454,26 @@ p.publishHint {
   cursor: text;
 }
 
-/* S5/S13: the copy row precedes a bordered `.notice` box — description on the
-   left, a `.secondary` action button on the right, matching the design's
-   inline row rather than the previous stacked full-width button. */
+/* S5/S13: `.share-status-panel .notice` — UNBOXED (no border, fill, or
+   padding): copy on the left, a fixed-width blue action on the right. */
 .updateNotice {
   box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 8px 8px 8px 10px;
-  border: 1px solid #EFEFEF;
-  border-radius: 6px;
-  background: #F7F7F7;
+  gap: 16px;
+  min-height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .updateNotice p {
   margin: 0;
   flex: 1;
   min-width: 0;
-  color: #666666;
+  color: #5C5C5C;
   font-size: 12px;
   line-height: 18px;
 }
@@ -454,21 +484,35 @@ button.updateButton {
   align-items: center;
   justify-content: center;
   gap: 5px;
-  flex: none;
+  flex: 0 0 88px;
+  width: 88px;
+  min-width: 88px;
   height: 32px;
-  padding: 0 10px;
+  padding: 0 12px;
   border: 0;
   border-radius: 6px;
-  background: #EDEDF0;
-  color: #333333;
+  background: #EDF3FF;
+  color: #245FCE;
   font-size: 12px;
   font-weight: 500;
   line-height: 18px;
   white-space: nowrap;
+  box-shadow: none;
 }
 
 button.updateButton:hover:not(:disabled) {
-  background: #E3E3E7;
+  background: #E0EAFF;
+  color: #194EAF;
+}
+
+button.updateButton:active:not(:disabled) {
+  background: #D3E1FF;
+  color: #194EAF;
+}
+
+button.updateButton:focus-visible {
+  outline: 2px solid #245FCE;
+  outline-offset: 2px;
 }
 
 .publishedLinkIcon {

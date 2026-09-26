@@ -3297,6 +3297,7 @@ export const hu: Dict = {
   "fileViewer.shareUpdateHint": "A fájl megváltozott. Frissítsd a hivatkozást a legújabb verzió megosztásához.",
   "fileViewer.shareUpdateLink": "Hivatkozás frissítése",
   "fileViewer.signInToUpdate": "Bejelentkezés a frissítéshez",
+  "fileViewer.signInToShare": "Bejelentkezés a megosztáshoz",
   "fileViewer.shareOutdatedSignInHint": "A fájl megváltozott. Jelentkezz be a hivatkozás frissítéséhez vagy kikapcsolásához.",
   "fileViewer.shareUpdateSuccess": "Frissítve. A látogatók frissítés után látják a legújabb verziót.",
   "fileViewer.shareUpdateFailed": "A frissítés sikertelen. A látogatók továbbra is az előző verziót látják.",

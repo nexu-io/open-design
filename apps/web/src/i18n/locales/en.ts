@@ -3319,6 +3319,7 @@ export const en: Dict = {
   "fileViewer.shareUpdateHint": "This file has new changes. Update the link to share the latest version.",
   "fileViewer.shareUpdateLink": "Update link",
   "fileViewer.signInToUpdate": "Sign in to update",
+  "fileViewer.signInToShare": "Sign in to share",
   "fileViewer.shareOutdatedSignInHint": "This file has new changes. Sign in to update or turn off the link.",
   "fileViewer.shareUpdateSuccess": "Updated. Visitors will see the latest version after refreshing.",
   "fileViewer.shareUpdateFailed": "Update failed. Visitors still see the previous version.",

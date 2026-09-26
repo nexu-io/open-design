@@ -3297,6 +3297,7 @@ export const ja: Dict = {
   "fileViewer.shareUpdateHint": "このファイルに新しい変更があります。リンクを更新して最新版を共有してください。",
   "fileViewer.shareUpdateLink": "リンクを更新",
   "fileViewer.signInToUpdate": "ログインして更新",
+  "fileViewer.signInToShare": "ログインして共有",
   "fileViewer.shareOutdatedSignInHint": "ファイルに新しい変更があります。ログインするとリンクを更新または停止できます。",
   "fileViewer.shareUpdateSuccess": "更新しました。訪問者は再読み込み後に最新版を確認できます。",
   "fileViewer.shareUpdateFailed": "更新に失敗しました。訪問者には引き続き前のバージョンが表示されます。",

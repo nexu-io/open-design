@@ -370,7 +370,13 @@ test('capture updated owner G1 portal and S12 deployment submenu',async({page})=
   await expect(submenu).toBeVisible();
   const bounds=await submenu.evaluate(el=>{const r=el.getBoundingClientRect();let node:Element|null=el;while(node&&node!==document.body)node=node.parentElement;const parent=el.parentElement;return {x:r.x,y:r.y,width:r.width,height:r.height,right:r.right,bottom:r.bottom,viewport:{width:innerWidth,height:innerHeight},parentOverflow:getComputedStyle(parent!).overflow,portal:node===document.body,zIndex:getComputedStyle(el).zIndex}});
   expect(bounds.portal,'deployment submenu must be in a body portal').toBe(true);
-  expect(bounds.right<=geometry.rect.x||bounds.x>=geometry.rect.x+geometry.rect.width,'submenu must sit outside the share panel').toBe(true);
+  // Design S12: drops down under "···", right-aligned to the header tool group
+  // (close button edge), layered over the share panel's own content.
+  const trigger=await more.evaluate(el=>{const r=el.getBoundingClientRect();const tools=el.parentElement!.parentElement!.getBoundingClientRect();return {bottom:r.bottom,toolsRight:tools.right};});
+  expect(bounds.y-trigger.bottom,'submenu must open just below the ··· trigger').toBeGreaterThanOrEqual(0);
+  expect(bounds.y-trigger.bottom,'submenu must open just below the ··· trigger').toBeLessThanOrEqual(10);
+  expect(Math.abs(bounds.right-trigger.toolsRight),'submenu right edge aligns with the header tools').toBeLessThanOrEqual(1);
+  expect(bounds.x>=geometry.rect.x&&bounds.right<=geometry.rect.right,'submenu must overlap the share panel, not fly out beside it').toBe(true);
   expect(await submenu.evaluate(el=>{const r=el.getBoundingClientRect();return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));}),'submenu must be hit-testable in front of the page').toBe(true);
   expect(bounds.x).toBeGreaterThanOrEqual(0);
   expect(bounds.right).toBeLessThanOrEqual(bounds.viewport.width);

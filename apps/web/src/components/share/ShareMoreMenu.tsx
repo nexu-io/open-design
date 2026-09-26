@@ -14,7 +14,7 @@ interface ShareMoreAction {
 
 const MENU_WIDTH = 214;
 const VIEWPORT_GUTTER = 8;
-const MENU_GAP = 4;
+const MENU_GAP = 6;
 
 /** Disclosure only: deployment, permissions and pending work remain owned by the host. */
 export function ShareMoreMenu({ label, items }: { label: string; items: readonly ShareMoreAction[] }) {
@@ -40,20 +40,16 @@ export function ShareMoreMenu({ label, items }: { label: string; items: readonly
       const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
       const maxWidth = Math.max(0, viewportWidth - VIEWPORT_GUTTER * 2);
       const width = Math.min(MENU_WIDTH, maxWidth);
-      const panel = root.current?.closest<HTMLElement>('.share-menu-popover')?.getBoundingClientRect() ?? anchor;
-      const rightSpace = viewportWidth - panel.right - VIEWPORT_GUTTER;
-      const leftSpace = panel.left - VIEWPORT_GUTTER;
-      // Place beside the whole share panel, not beside its header button: a
-      // button-relative left placement can put the portal underneath the panel.
-      const left = rightSpace >= width + MENU_GAP
-        ? panel.right + MENU_GAP
-        : leftSpace >= width + MENU_GAP
-          ? panel.left - width - MENU_GAP
-          : rightSpace >= leftSpace
-            ? Math.min(viewportWidth - width - VIEWPORT_GUTTER, panel.right + MENU_GAP)
-            : Math.max(VIEWPORT_GUTTER, panel.left - width - MENU_GAP);
+      // Design S12: a dropdown directly under the header "···", right-aligned
+      // to the header tool group (the close button's outer edge) and layered
+      // over the share panel's own content — not a flyout beside the panel.
+      const toolsRight = root.current?.parentElement?.getBoundingClientRect().right ?? anchor.right;
+      const left = Math.max(VIEWPORT_GUTTER, Math.min(toolsRight - width, viewportWidth - width - VIEWPORT_GUTTER));
       const menuHeight = menu.current?.getBoundingClientRect().height ?? 0;
-      const top = Math.max(VIEWPORT_GUTTER, Math.min(anchor.top, window.innerHeight - menuHeight - VIEWPORT_GUTTER));
+      const below = anchor.bottom + MENU_GAP;
+      const top = below + menuHeight + VIEWPORT_GUTTER <= window.innerHeight
+        ? below
+        : Math.max(VIEWPORT_GUTTER, anchor.top - MENU_GAP - menuHeight);
       setPosition({ position: 'fixed', left, top, width, maxWidth: `calc(100vw - ${VIEWPORT_GUTTER * 2}px)` });
     };
     placeMenu();

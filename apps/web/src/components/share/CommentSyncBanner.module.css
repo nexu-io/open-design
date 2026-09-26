@@ -9,8 +9,10 @@
   line-height: 18px;
   overflow-wrap: anywhere;
 }
+/* Inside ShareTab this is the design's unboxed `.share-status-panel .notice`:
+   flush with the panel's content edge, no border/fill/padding. */
 .backfillOnly {
-  margin: 4px 12px;
+  margin: 0;
   padding: 0;
   border: 0;
   border-radius: 0;
@@ -42,21 +44,35 @@
  @keyframes commentSyncSpin { to { transform: rotate(360deg); } }
  .login { margin-block-start: 4px; }
  .login button { text-decoration: underline; }
- .retryRow { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-block-start: 4px; }
- .retryRow p { flex: 1; }
+ .retryRow { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 36px; margin-block-start: 4px; }
+ .retryRow p { flex: 1; min-width: 0; }
+ .backfillOnly .retryRow p { color: #5c5c5c; }
+ /* Design `.share-status-panel .notice .secondary`: fixed 88px, icon + label. */
  .retry {
-  flex: none;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  flex: 0 0 88px;
+  width: 88px;
   min-width: 88px;
   height: 32px;
-  padding: 0 10px;
+  padding: 0 12px;
   border: none;
   border-radius: 6px;
-  background: #eaf1ff;
-  color: #2670e8;
+  background: #edf3ff;
+  color: #245fce;
   font-size: 12px;
   font-weight: 500;
+  line-height: 18px;
+  white-space: nowrap;
   cursor: pointer;
 }
+ .retry > svg { flex: 0 0 13px; width: 13px; height: 13px; }
+ .retry:hover:not(:disabled) { background: #e0eaff; color: #194eaf; }
+ .retry:active:not(:disabled) { background: #d3e1ff; color: #194eaf; }
+ .retry:focus-visible { outline: 2px solid #245fce; outline-offset: 2px; }
  .retry:disabled { opacity: 0.6; cursor: default; }
  .retryError { background: #fff0f0; color: #c9363e; }
  .retryError:hover:not(:disabled) { background: #ffe2e3; color: #b52a32; }

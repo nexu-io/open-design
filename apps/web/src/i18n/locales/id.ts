@@ -3297,6 +3297,7 @@ export const id: Dict = {
   "fileViewer.shareUpdateHint": "Berkas ini memiliki perubahan baru. Perbarui tautan untuk membagikan versi terbaru.",
   "fileViewer.shareUpdateLink": "Perbarui tautan",
   "fileViewer.signInToUpdate": "Masuk untuk memperbarui",
+  "fileViewer.signInToShare": "Masuk untuk berbagi",
   "fileViewer.shareOutdatedSignInHint": "File ini memiliki perubahan baru. Masuk untuk memperbarui atau menonaktifkan tautan.",
   "fileViewer.shareUpdateSuccess": "Diperbarui. Pengunjung akan melihat versi terbaru setelah memuat ulang.",
   "fileViewer.shareUpdateFailed": "Pembaruan gagal. Pengunjung masih melihat versi sebelumnya.",

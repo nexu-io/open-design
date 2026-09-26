@@ -41,6 +41,77 @@ function PublishProgressFrame({ value, label, children }: { value: number | null
   );
 }
 
+/** Keep copy/copied/copying icons and labels identical across every published state. */
+export function ShareCopyLinkIcon({ copying, copied }: { copying: boolean; copied: boolean }) {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox={!copying && copied ? '0 0 16 16' : '0 0 24 24'}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={copying ? 2 : 1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+      className={copying ? 'icon-spin' : copied ? styles.copiedIcon : undefined}
+    >
+      <path d={copying
+        ? 'M12 3a9 9 0 1 0 9 9'
+        : copied
+        ? 'm3 8 3 3 7-7'
+        : 'M10 13.5a5 5 0 0 0 7 .2l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 10.5a5 5 0 0 0-7-.2l-3 3a5 5 0 0 0 7 7l1.7-1.7'} />
+    </svg>
+  );
+}
+
+/**
+ * S3/S4/S5/S13/K5: the one published-link block (chain-icon URL row + dark
+ * copy button). Signed-in, signed-in-prompt, and the app-level signed-out
+ * fallback all render this so a published link never changes shape with
+ * session state.
+ */
+export function SharePublishedLinkControls({ url, copying, feedback, disabled = false, title, onCopy, t }: {
+  url: string;
+  copying: boolean;
+  feedback: 'copied' | 'failed' | null;
+  disabled?: boolean;
+  title?: string;
+  onCopy: () => void;
+  t: ReturnType<typeof useT>;
+}) {
+  const copied = !copying && feedback === 'copied';
+  return (
+    <div className={`chrome-publish-plain ${styles.publishedLink}`}>
+      <div className={`chrome-publish-url ${styles.publishedUrl}`} title={url}>
+        <RemixIcon name="link" size={12} className={styles.publishedLinkIcon} />
+        {url}
+      </div>
+      <div className={`chrome-publish-actions ${styles.publishedActions}`}>
+        <Button
+          type="button"
+          className={styles.copyButton}
+          disabled={disabled || copying}
+          aria-busy={copying || undefined}
+          title={title}
+          onClick={onCopy}
+        >
+          <ShareCopyLinkIcon copying={copying} copied={copied} />
+          {copying
+            ? t('fileViewer.copyingLink')
+            : copied
+            ? t('preview.shareCopied')
+            : t('fileViewer.copyShareLink')}
+        </Button>
+      </div>
+      {feedback === 'failed' ? (
+        <p className={styles.copyHint} role="status">{t('fileViewer.copyLinkManually')}</p>
+      ) : null}
+    </div>
+  );
+}
+
 export function ShareTab({
   menuOrigin,
   publicationStatus = null,
@@ -254,52 +325,15 @@ export function ShareTab({
                         </div>
                         ) : (
                         <>
-                        <div className={`chrome-publish-plain ${styles.publishedLink}`}>
-                          <div className={`chrome-publish-url ${styles.publishedUrl}`} title={publishedFileUrl}>
-                              <RemixIcon name="link" size={12} className={styles.publishedLinkIcon} />
-                              {publishedFileUrl}
-                            </div>
-                            <div className={`chrome-publish-actions ${styles.publishedActions}`}>
-                              <Button
-                                type="button"
-                                className={styles.copyButton}
-                                disabled={streaming || copyingLink}
-                                aria-busy={copyingLink || undefined}
-                                title={streaming ? t('fileViewer.shareAfterGenerationComplete') : undefined}
-                                onClick={() => {
-                                  void handleCopyPublishedFileLink();
-                                }}
-                              >
-                                <svg
-                                  width="13"
-                                  height="13"
-                                  viewBox={!copyingLink && publishLinkFeedback === 'copied' ? '0 0 16 16' : '0 0 24 24'}
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth={copyingLink ? 2 : 1.8}
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  aria-hidden="true"
-                                  focusable="false"
-                                  className={copyingLink ? 'icon-spin' : publishLinkFeedback === 'copied' ? styles.copiedIcon : undefined}
-                                >
-                                  <path d={copyingLink
-                                    ? 'M12 3a9 9 0 1 0 9 9'
-                                    : publishLinkFeedback === 'copied'
-                                    ? 'm3 8 3 3 7-7'
-                                    : 'M10 13.5a5 5 0 0 0 7 .2l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 10.5a5 5 0 0 0-7-.2l-3 3a5 5 0 0 0 7 7l1.7-1.7'} />
-                                </svg>
-                                {copyingLink
-                                  ? t('fileViewer.copyingLink')
-                                  : publishLinkFeedback === 'copied'
-                                  ? t('preview.shareCopied')
-                                  : t('fileViewer.copyShareLink')}
-                              </Button>
-                          </div>
-                          {publishLinkFeedback === 'failed' ? (
-                            <p className={styles.copyHint} role="status">{t('fileViewer.copyLinkManually')}</p>
-                          ) : null}
-                        </div>
+                        <SharePublishedLinkControls
+                          url={publishedFileUrl}
+                          copying={copyingLink}
+                          feedback={publishLinkFeedback}
+                          disabled={streaming}
+                          title={streaming ? t('fileViewer.shareAfterGenerationComplete') : undefined}
+                          onCopy={() => { void handleCopyPublishedFileLink(); }}
+                          t={t}
+                        />
                         {!canMutatePublicShare && canResumeUpdateAfterLogin ? (
                           <div className={styles.updateNotice}>
                             <p>{t('fileViewer.shareOutdatedSignInHint')}</p>
@@ -399,21 +433,21 @@ export function ShareTab({
                             <p className={styles.linkAccessDescription}>{t(canResumeUpdateAfterLogin ? 'fileViewer.shareOutdatedSignInHint' : 'fileViewer.publishFileRequiresWorkspace')}</p>
                           </div>
                           {filePublished && publishedFileUrl ? (
-                            <div className={styles.publishedLink}>
-                              <span className="chrome-publish-url" title={publishedFileUrl}>{publishedFileUrl}</span>
-                              <Button type="button" className={styles.copyButton} disabled={streaming || copyingLink}
-                                aria-busy={copyingLink || undefined}
-                                onClick={() => { void handleCopyPublishedFileLink(); }}>
-                                {copyingLink ? t('fileViewer.copyingLink') : publishLinkFeedback === 'copied' ? t('fileViewer.copied') : t('fileViewer.copyShareLink')}
-                              </Button>
-                            </div>
+                            <SharePublishedLinkControls
+                              url={publishedFileUrl}
+                              copying={copyingLink}
+                              feedback={publishLinkFeedback}
+                              disabled={streaming}
+                              onCopy={() => { void handleCopyPublishedFileLink(); }}
+                              t={t}
+                            />
                           ) : null}
                           {/* S0: the sole full-width primary action when nothing has
                               ever been shared. When a stale link is already shown above
                               (the filePublished branch just above), this instead plays
                               S13's secondary "sign in to update" role next to it. */}
                           <CloudSignInTip sharePrompt className={filePublished && publishedFileUrl ? styles.signInSecondaryAction : styles.signInPrimaryAction}
-                            actionLabel={canResumeUpdateAfterLogin ? t('fileViewer.signInToUpdate') : undefined}
+                            actionLabel={canResumeUpdateAfterLogin ? t('fileViewer.signInToUpdate') : t('fileViewer.signInToShare')}
                             onLoginSuccess={canResumeUpdateAfterLogin ? onUpdateLoginSuccess : undefined} />
                         </div>
                       )}

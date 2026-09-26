@@ -3297,6 +3297,7 @@ export const ko: Dict = {
   "fileViewer.shareUpdateHint": "이 파일에 새 변경 사항이 있습니다. 링크를 업데이트하여 최신 버전을 공유하세요.",
   "fileViewer.shareUpdateLink": "링크 업데이트",
   "fileViewer.signInToUpdate": "로그인 후 업데이트",
+  "fileViewer.signInToShare": "로그인 후 공유",
   "fileViewer.shareOutdatedSignInHint": "파일에 새 변경 사항이 있습니다. 로그인한 후 링크를 업데이트하거나 비활성화할 수 있습니다.",
   "fileViewer.shareUpdateSuccess": "업데이트되었습니다. 방문자가 새로고침하면 최신 버전을 볼 수 있습니다.",
   "fileViewer.shareUpdateFailed": "업데이트에 실패했습니다. 방문자에게는 여전히 이전 버전이 표시됩니다.",

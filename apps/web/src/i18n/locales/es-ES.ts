@@ -3305,6 +3305,7 @@ export const esES: Dict = {
   "fileViewer.shareUpdateHint": "Este archivo tiene cambios nuevos. Actualiza el enlace para compartir la última versión.",
   "fileViewer.shareUpdateLink": "Actualizar enlace",
   "fileViewer.signInToUpdate": "Iniciar sesión para actualizar",
+  "fileViewer.signInToShare": "Iniciar sesión para compartir",
   "fileViewer.shareOutdatedSignInHint": "Este archivo tiene cambios nuevos. Inicia sesión para actualizar o desactivar el enlace.",
   "fileViewer.shareUpdateSuccess": "Actualizado. Los visitantes verán la última versión al actualizar la página.",
   "fileViewer.shareUpdateFailed": "Error al actualizar. Los visitantes siguen viendo la versión anterior.",

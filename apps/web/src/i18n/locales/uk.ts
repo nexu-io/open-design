@@ -3297,6 +3297,7 @@ export const uk: Dict = {
   "fileViewer.shareUpdateHint": "У файлі є нові зміни. Оновіть посилання, щоб поділитися останньою версією.",
   "fileViewer.shareUpdateLink": "Оновити посилання",
   "fileViewer.signInToUpdate": "Увійти для оновлення",
+  "fileViewer.signInToShare": "Увійти й поділитися",
   "fileViewer.shareOutdatedSignInHint": "У файлі є нові зміни. Увійдіть, щоб оновити або вимкнути посилання.",
   "fileViewer.shareUpdateSuccess": "Оновлено. Відвідувачі побачать останню версію після оновлення сторінки.",
   "fileViewer.shareUpdateFailed": "Не вдалося оновити. Відвідувачі й далі бачать попередню версію.",

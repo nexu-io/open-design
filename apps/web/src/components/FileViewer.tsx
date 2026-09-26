@@ -13,6 +13,7 @@ import { useAfterExportShareGuide } from './share/useAfterExportShareGuide';
 import { useShareGuideAppUserId } from './share/useShareGuideAppUserId';
 import { useProjectShareHistory } from './share/useProjectShareHistory';
 import { notifyProjectShareHistoryChanged } from './share/share-publication-events';
+import { ShareFeedbackToast } from './share/ShareFeedbackToast';
 import { SharePanelHeader } from './share/SharePanelHeader';
 import { ShareMoreMenu } from './share/ShareMoreMenu';
 import shareEntryStyles from './share/ShareEntry.module.css';
@@ -18258,13 +18259,9 @@ function HtmlViewer({
                 />
               ) : null}
               {workspaceActive && updateToast ? (
-                <Toast
-                  className="od-toast-share-feedback"
+                <ShareFeedbackToast
                   message={t(updateToast === 'success' ? 'fileViewer.shareUpdateSuccess' : updateToast === 'failure' ? 'fileViewer.shareUpdateFailed' : 'fileViewer.shareUpdateUncertain')}
                   tone={updateToast === 'success' ? 'success' : 'error'}
-                  role={updateToast === 'success' ? 'status' : 'alert'}
-                  placement="top"
-                  portalToBody
                   ttlMs={updateToast === 'success' ? 2200 : 0}
                   actionLabel={updateToast === 'failure' ? t('fileViewer.shareUpdateRetry') : undefined}
                   onAction={updateToast === 'failure' ? () => { void updateCurrentFilePublic(); } : undefined}

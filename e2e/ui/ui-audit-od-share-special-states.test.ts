@@ -117,7 +117,8 @@ test('Owner-S13 keeps the old published link readable and copyable without a sig
   });
   await expect.poll(() => loginStatusReadsAfterSignOut).toBeGreaterThan(0);
   await expect(fileWorkspace).toHaveCount(0);
-  const oldLink = page.locator('code').filter({ hasText: publicUrl });
+  // Same published-link block as the signed-in panel (chain icon + URL row), not a bespoke <code>.
+  const oldLink = page.locator('.chrome-publish-plain .chrome-publish-url').filter({ hasText: publicUrl });
   await expect(oldLink).toHaveText(publicUrl);
   await expect(page.getByRole('switch', { name: /链接访问/ })).toBeDisabled();
   const loginToUpdate = page.getByRole('button', { name: /登录后更新/ });
@@ -125,6 +126,7 @@ test('Owner-S13 keeps the old published link readable and copyable without a sig
   await page.evaluate(() => { delete document.body.dataset.copiedUrl; });
   await page.getByRole('button', { name: /复制链接|复制分享链接/ }).click();
   await expect.poll(() => page.locator('body').getAttribute('data-copied-url')).toBe(publicUrl);
+  await expect(page.getByRole('button', { name: '已复制', exact: true })).toBeEnabled();
   await capture(page, 'S13', { projectId, conversationId, publication: { slug, status: 'active', url: publicUrl },
     signedOutProject: 'unlisted after auth refresh', workspaceScopeReadsAfterSignOut: scopeReadsAfterSignOut,
     interaction: 'Old authenticated link copied before and after real sign-out; file source unmounted; login-to-update visible, auth recovery not exercised',

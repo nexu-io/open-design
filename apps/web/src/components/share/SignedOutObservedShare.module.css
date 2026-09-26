@@ -9,6 +9,8 @@
 .panel {
   box-sizing: border-box;
   display: grid;
+  /* minmax(0, …) lets the long URL row ellipsize instead of widening the card. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   width: min(100%, 360px);
   padding: 20px;
@@ -24,50 +26,4 @@
   font-size: 16px;
   font-weight: 600;
   line-height: 24px;
-}
-
-.url {
-  display: block;
-  overflow: hidden;
-  padding: 8px 10px;
-  border: 1px solid #ededed;
-  border-radius: 6px;
-  color: #777;
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  user-select: text;
-}
-
-.copy {
-  width: 100%;
-  min-height: 32px;
-  background: #282828;
-  color: #fff;
-}
-
-.updateNotice {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  color: #888;
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.updateNotice p { margin: 0; }
-
-.signInAction {
-  flex: none;
-  padding: 6px 10px;
-  border-radius: 6px;
-  background: #f3f7ff;
-  color: #1677ff;
-  cursor: pointer;
-}
-
-.signInAction :global(.entry-local-mode-tip__login-badge) {
-  background: transparent;
-  color: inherit;
 }

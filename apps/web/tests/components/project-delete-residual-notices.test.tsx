@@ -21,7 +21,8 @@ it('renders real deletion failures as global Toast, queues each file, and never 
   render(<Harness />);
   await act(async () => fireEvent.click(screen.getByText('Delete')));
   const failure = screen.getByRole('alert');
-  expect(failure).toHaveClass('od-toast', 'tone-error', 'placement-top');
+  expect(failure).toHaveAttribute('data-tone', 'error');
+  expect(failure.parentElement).toBe(document.body);
   expect(within(failure).getByText(/manual\.html.*could not be stopped/i)).toBeVisible();
   expect(within(failure).getByRole('button', { name: 'Retry' })).toBeEnabled();
   expect(screen.queryByText('auto.html')).toBeNull();

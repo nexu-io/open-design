@@ -6,6 +6,15 @@ import { AmrLoginPill } from '../AmrLoginPill';
 import { useCommentSyncState } from './useCommentSyncState';
 import styles from './CommentSyncBanner.module.css';
 
+/** The design's `.notice .secondary` retry glyph (K5 and the backfill/align retry rows). */
+function RetryIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+      <path d="M20 11a8 8 0 0 0-14.3-4.9L4 8M4 4v4h4M4 13a8 8 0 0 0 14.3 4.9L20 16m0 4v-4h-4" />
+    </svg>
+  );
+}
+
 /**
  * Owner-side comment sync banner. Picks AT MOST ONE state to show, in this
  * priority order:
@@ -140,6 +149,7 @@ export function CommentSyncBanner({ projectId, workspaceContext, filePath, inclu
               onClick={() => void retryBackfill()}
               disabled={retrying}
             >
+              <RetryIcon />
               {t('preview.retry')}
             </button>
           ) : null}
@@ -156,6 +166,7 @@ export function CommentSyncBanner({ projectId, workspaceContext, filePath, inclu
       <div className={styles.banner} role="status">
         <p>{t('fileViewer.commentSync.alignFailedBody')}</p>
         <button type="button" className={styles.retry} onClick={() => void retryAlign()} disabled={retrying}>
+          <RetryIcon />
           {t('preview.retry')}
         </button>
       </div>

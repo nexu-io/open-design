@@ -4228,6 +4228,7 @@ export interface Dict {
   'fileViewer.shareUpdateHint': string;
   'fileViewer.shareUpdateLink': string;
   'fileViewer.signInToUpdate': string;
+  'fileViewer.signInToShare': string;
   'fileViewer.shareOutdatedSignInHint': string;
   'fileViewer.shareUpdateSuccess': string;
   'fileViewer.shareUpdateFailed': string;

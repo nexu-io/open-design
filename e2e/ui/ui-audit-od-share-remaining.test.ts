@@ -111,7 +111,7 @@ test('capture remaining OD share audit states from visible product UI', async ({
   await expect(update).toHaveAttribute('aria-busy', 'true');
   await capture(page, 'S6');
   finish();
-  await expect(page.getByRole('status').filter({ hasText: /已更新|updated/i })).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: '已更新，访问者刷新后可看到最新版本' })).toBeVisible();
   await capture(page, 'S6-OK');
 
   // Re-arm the real update affordance and fail that user action (not a
@@ -119,7 +119,11 @@ test('capture remaining OD share audit states from visible product UI', async ({
   await page.route(publishPath, route => route.request().method() === 'GET'
     ? route.fulfill({ json: { status: 'active', freshness: 'outdated', publication: { url: oldUrl, slug: 'prior-link', fileName: 'index.html' } } })
     : route.request().method() === 'POST'
-      ? route.fulfill({ status: 500, json: { error: { code: 'ui_audit_update_failed', message: 'Audit update failure' } } })
+      // A push-stage failure is the only one where the remote alias cannot
+      // have moved; that is the retryable S6-ERR state in the design. Other
+      // stages render the separate "outcome unknown" safety copy.
+      ? route.fulfill({ status: 500, json: { error: { code: 'ui_audit_update_failed', message: 'Audit update failure' },
+        failure: { stage: 'push', reason: 'upstream_http', upstreamStatus: 502 } } })
       : route.fallback());
   await page.reload();
   await page.getByTestId('artifact-card-publish-index.html').click();
@@ -127,7 +131,9 @@ test('capture remaining OD share audit states from visible product UI', async ({
   const retryUpdate = retryShare.getByRole('button', { name: /更新链接|Update link/ });
   await expect(retryUpdate).toBeVisible();
   await retryUpdate.click();
-  await expect(page.getByRole('alert')).toBeVisible();
+  const failure = page.getByRole('alert').filter({ hasText: '更新失败，访问者仍看到上一版' });
+  await expect(failure).toBeVisible();
+  await expect(failure.getByRole('button', { name: '重试', exact: true })).toBeVisible();
   await capture(page, 'S6-ERR');
 });
 

@@ -3305,6 +3305,7 @@ export const fa: Dict = {
   "fileViewer.shareUpdateHint": "این فایل تغییرات جدیدی دارد. پیوند را برای اشتراک‌گذاری آخرین نسخه به‌روزرسانی کنید.",
   "fileViewer.shareUpdateLink": "به‌روزرسانی پیوند",
   "fileViewer.signInToUpdate": "ورود برای به‌روزرسانی",
+  "fileViewer.signInToShare": "ورود برای اشتراک‌گذاری",
   "fileViewer.shareOutdatedSignInHint": "این فایل تغییرات جدیدی دارد. برای به‌روزرسانی یا غیرفعال کردن پیوند وارد شوید.",
   "fileViewer.shareUpdateSuccess": "به‌روزرسانی شد. بازدیدکنندگان پس از تازه‌سازی آخرین نسخه را می‌بینند.",
   "fileViewer.shareUpdateFailed": "به‌روزرسانی ناموفق بود. بازدیدکنندگان همچنان نسخه قبلی را می‌بینند.",

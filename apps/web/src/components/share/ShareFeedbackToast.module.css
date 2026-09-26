@@ -1,0 +1,128 @@
+/* Owner S6-OK / S6-ERR / S14-ERR global share toast. Values follow the final
+   design board (.board .toastwrap .toast): #202020 pill, 10px/16px padding,
+   12px/18px text, solid 16px status badge, underlined white text action. */
+.toast {
+  position: fixed;
+  top: 64px;
+  left: 50%;
+  z-index: 1800;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: min(560px, calc(100vw - 32px));
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: #202020;
+  color: #fff;
+  font-size: 12px;
+  line-height: 18px;
+  box-shadow: 0 6px 24px #1c1b1a12, 0 2px 6px #1c1b1a0a;
+  transform: translateX(-50%);
+  pointer-events: auto;
+  animation: enter 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.leaving {
+  animation: exit 140ms cubic-bezier(0.23, 1, 0.32, 1) forwards;
+}
+@keyframes enter {
+  from { opacity: 0; transform: translateX(-50%) translateY(-6px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+@keyframes exit {
+  from { opacity: 1; transform: translateX(-50%) translateY(0); }
+  to { opacity: 0; transform: translateX(-50%) translateY(-6px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast,
+  .leaving {
+    animation: none;
+  }
+}
+
+.badge {
+  display: inline-flex;
+  flex: 0 0 16px;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+.badge svg {
+  width: 11px;
+  height: 11px;
+}
+.success {
+  background: #4C9461;
+}
+.error {
+  background: #E5484D;
+}
+.loading {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.message {
+  overflow-wrap: anywhere;
+}
+.details {
+  color: #bdbdbd;
+  overflow-wrap: anywhere;
+}
+
+.action {
+  flex: none;
+  /* Override the global `button` 36px height / min-height from primitives.css. */
+  height: auto;
+  min-height: 0;
+  margin: 0;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.action:hover {
+  color: #e6e6e6;
+}
+
+.close {
+  display: flex;
+  flex: 0 0 20px;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  min-width: 0;
+  height: 20px;
+  min-height: 0;
+  margin: 0;
+  padding: 3px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #bdbdbd;
+  cursor: pointer;
+}
+.close:hover {
+  color: #fff;
+}
+.action:focus-visible,
+.close:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.7);
+  outline-offset: 2px;
+}

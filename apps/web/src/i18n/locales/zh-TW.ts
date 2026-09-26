@@ -3478,6 +3478,7 @@ export const zhTW: Dict = {
   "fileViewer.shareUpdateHint": "檔案有新變更。更新連結以分享最新版本。",
   "fileViewer.shareUpdateLink": "更新連結",
   "fileViewer.signInToUpdate": "登入後更新",
+  "fileViewer.signInToShare": "登入後分享",
   "fileViewer.shareOutdatedSignInHint": "檔案有新變更，登入後可更新或關閉連結。",
   "fileViewer.shareUpdateSuccess": "已更新，訪客重新整理後可看到最新版本",
   "fileViewer.shareUpdateFailed": "更新失敗，訪客仍看到上一版",
