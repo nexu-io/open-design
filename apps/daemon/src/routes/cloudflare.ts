@@ -53,7 +53,6 @@ import {
 } from '../integrations/cloudflare-oauth-server.js';
 import {
   clearCloudflareOAuthToken,
-  clearCloudflareOAuthTokenForRevoke,
   cloudflareOAuthExpiresAt,
   getCloudflareOAuthToken,
   setCloudflareOAuthToken,
@@ -751,20 +750,27 @@ export function registerCloudflareRoutes(
         await stopActiveListener();
         oauthAttemptGeneration += 1;
         pendingAuth.clear();
-        const dataDir = cloudflareOAuthTokensDir();
-        // The clear takes the record off disk AND records it as a durable revoke
-        // handle in the same locked write (clearCloudflareOAuthTokenForRevoke),
-        // read under the store lock — so the grant is named by a file from the
-        // instant it leaves the store, and the record a concurrent refresh may
-        // have rotated past is not what the wipe accounts for. The revoke itself
-        // is the settle below, which the reset runs BEFORE it rewrites the mode
-        // (so the clientId fallback is still there) and which drops the handle
-        // only on a revoke Cloudflare confirmed: a timeout, a 5xx, a refusal, or
-        // a process that dies right here leaves the handle for the next OAuth
-        // mutation instead of a refresh token nobody can find.
-        await clearCloudflareOAuthTokenForRevoke(dataDir);
-        // Reset the credential authority back to a static token so a disconnected
-        // profile doesn't keep reporting 'configured' with no live token.
+        // The reset owns the WHOLE transition off oauth, in the order the crash
+        // windows require: it records the token-mode intent while the credential
+        // is still on disk, then clears it — the clear takes the record off disk
+        // AND records it as a durable revoke handle in the same locked write
+        // (clearCloudflareOAuthTokenForRevoke), read under the store lock, so the
+        // grant is named by a file from the instant it leaves the store and a
+        // record a concurrent refresh rotated past is not what the wipe accounts
+        // for — then writes the mode, and only then revokes, naming the record
+        // the clear returned and dropping the handle only on a revoke Cloudflare
+        // confirmed. A timeout, a 5xx, a refusal, or a process that dies leaves
+        // the handle for the next OAuth mutation instead of a refresh token
+        // nobody can find.
+        //
+        // Clearing the store HERE instead put the destructive half ahead of the
+        // intent: the stored mode stayed 'oauth' beside an empty store for the
+        // whole revoke round trip (one attempt per handle, 10s timeout), and a
+        // crash in that window made it durable — the settings surface reporting
+        // configured:true while /auth/status reported disconnected, every deploy
+        // failing CFW_OAUTH_RECONNECT_REQUIRED, and no in-app remedy because
+        // Disconnect and Reconnect only render for a status that reads connected
+        // or expired.
         await resetCloudflareCredentialMode();
       });
       res.json({ ok: true });

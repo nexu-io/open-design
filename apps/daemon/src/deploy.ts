@@ -1017,47 +1017,90 @@ export async function commitCloudflareOAuthMode(
   });
 }
 
-/** The clientId the config currently names, read best-effort: the fallback a
- * revoke handle recorded before the record carried its own identity needs, and
- * it has to be read while the config still names it — the reset below is what
- * stops it doing so. Never throws: this only ever feeds a best-effort revoke. */
-async function cloudflareConfigClientId(): Promise<string | undefined> {
-  try {
-    return ((await readCloudflareWorkersConfig()).clientId ?? '').trim() || undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 /** Reset the credential authority back to a static token after disconnect,
  * bypassing the token validation in writeCloudflareWorkersConfig (a user who
  * only ever used OAuth has no static token to require). On a corrupt config
- * file the write is skipped rather than refused: the disconnect route has
- * already cleared the token by the time this runs, and a corrupt file already
- * reads as token mode, so the state this write would establish is the state
- * the daemon reports — while a write would erase the recoverable file. */
+ * file the mode write is skipped rather than refused — a corrupt file already
+ * reads as token mode, so the state that write would establish is the state the
+ * daemon reports, while a write would erase the recoverable file. The
+ * credential still goes off disk there: the user asked for it to be gone, and a
+ * config file that cannot be parsed says nothing about the token store.
+ *
+ * Disconnect is a credential transition OFF oauth like any other, and it runs
+ * in the order a settings save does (see writeCloudflareWorkersConfig above),
+ * for the same reason: the span between the credential leaving the store and
+ * the mode landing must not be a state a crash can freeze. Taking the
+ * credential off disk first — which is what the disconnect route did, before
+ * this function recorded anything — left the stored mode 'oauth' beside an
+ * empty store with nothing on disk marking the transition in flight. A crash, a
+ * SIGKILL, or a daemon stop during the revoke round trip (one attempt per
+ * handle, 10s timeout) then made that state durable: readCloudflareWorkersConfig
+ * fell through to the stored 'oauth', the settings surface reported
+ * configured:true while /auth/status reported disconnected, and every deploy
+ * failed CFW_OAUTH_RECONNECT_REQUIRED — with no in-app remedy, because the
+ * Disconnect and Reconnect buttons only render while the status reads connected
+ * or expired.
+ *
+ * 1. the intent, durably, while the credential is still there, so every read
+ *    from that write on answers token mode whatever the file's stored mode says
+ *    (readCloudflareWorkersConfig) — and so a later token-mode save re-enters
+ *    this transition to finish a clear a crash interrupted;
+ * 2. the destructive half — the grant goes off disk, and is recorded as a
+ *    durable revoke handle in the same locked write
+ *    (clearCloudflareOAuthTokenForRevoke), so the grant is named by a file from
+ *    the instant it leaves the store;
+ * 3. the mode the user chose, with both markers dropped: the mode is now the
+ *    durable statement, and the displaced credential is named by the revoke
+ *    handle rather than by a pending intent;
+ * 4. the revoke, LAST and only once the transition has landed, named by the
+ *    record the clear returned (RFC 7009 §2.1) rather than by a re-read of the
+ *    config — which is also what kept the revoke from being network-bound ahead
+ *    of the mode write. A revoke that times out, is refused, or answers 5xx
+ *    keeps its handle for the next OAuth mutation, as does a process that dies
+ *    here.
+ *
+ * Nothing rolls back on a failure after step 1: the user asked for the
+ * credential to be gone, and the marker written there keeps every read honest
+ * about that even when the steps behind it did not finish. */
 export async function resetCloudflareCredentialMode(): Promise<void> {
-  // A disconnect settles the revokes recorded by every credential destruction
-  // before it — its own included: the user has just asked for the credential to
-  // be gone, and an orphaned grant is exactly what must not survive that. The
-  // settle drops a handle only on a revoke Cloudflare confirmed, so a grant
-  // whose revoke is still owed keeps the record that names it.
-  await settlePendingCloudflareOAuthGrantRevokes(await cloudflareConfigClientId());
   return withCloudflareConfigMutation(async () => {
+    const cloudflareConfigFile = deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID);
     const current = await readCloudflareWorkersConfig();
     if (current.configError) {
       console.warn(
         `[deploy] ${CLOUDFLARE_WORKERS_CONFIG_CORRUPT_CODE}: leaving the unparsable Cloudflare Workers config untouched on disconnect; save the Workers settings to rewrite it.`,
       );
+      // A corrupt file cannot carry the intent marker, but the credential the
+      // user asked to destroy must still go, along with the revokes recorded by
+      // every credential destruction before it: an orphaned grant is exactly
+      // what must not survive a disconnect. The settle drops a handle only on a
+      // revoke Cloudflare confirmed, so a grant whose revoke is still owed keeps
+      // the record that names it.
+      const displacedOnCorruptConfig = await clearCloudflareOAuthTokenForRevoke(cloudflareOAuthTokensDir());
+      await settlePendingCloudflareOAuthGrantRevokes(displacedOnCorruptConfig?.clientId);
       return;
     }
+    // 1. The intent, while the credential is still on disk. Dropping
+    // pendingOAuthGrant abandons any connect in flight: this transition is about
+    // to destroy the credential that attempt is storing, and a commit still
+    // naming this attempt's marker would land oauth over the authority the user
+    // has just left (commitCloudflareOAuthMode).
+    const intent: DeployConfig = { ...persistableCloudflareWorkersConfig(current), pendingOAuthGrantClear: true };
+    delete intent.pendingOAuthGrant;
+    await writeDeployConfigFile(cloudflareConfigFile, intent);
+    // 2. The destructive half, recorded as a durable revoke handle in the same
+    // locked write, so a process that dies from here on leaves the grant named
+    // by a file on disk.
+    const displaced = await clearCloudflareOAuthTokenForRevoke(cloudflareOAuthTokensDir());
+    // 3. The mode the user chose. Both markers go: no marker may keep a read
+    // answering 'oauth' with nothing behind it, and none may keep answering
+    // token mode over a credential the next connect legitimately stores.
     const next: DeployConfig = { ...persistableCloudflareWorkersConfig(current), credentialMode: 'token' };
-    // Disconnect abandons any connect in flight and any half-finished exit
-    // from oauth: the credential is off disk by the time this runs, so no
-    // marker may keep a read answering 'oauth' with nothing behind it.
     delete next.pendingOAuthGrant;
     delete next.pendingOAuthGrantClear;
-    await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), next);
+    await writeDeployConfigFile(cloudflareConfigFile, next);
+    // 4. The revoke, named by the record the clear returned.
+    await settlePendingCloudflareOAuthGrantRevokes(displaced?.clientId);
   });
 }
 

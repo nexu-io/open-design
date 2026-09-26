@@ -683,6 +683,87 @@ describe('credential mode is derived from a live OAuth grant', () => {
     });
   });
 
+  it('the disconnect reset lands the token-mode config BEFORE revoking the grant it displaced', async () => {
+    await withDataDir(async () => {
+      await writeCloudflareWorkersConfig({ token: 'static-token', accountId: 'acct_test' });
+      await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), {
+        accessToken: 'oauth-access',
+        refreshToken: 'ref-1',
+        tokenType: 'Bearer',
+        clientId: 'client-abc',
+        expiresAt: Date.now() + 3600_000,
+        generation: 1,
+        savedAt: Date.now(),
+      });
+      await commitCloudflareOAuthMode();
+
+      // Read both files at the instant the revoke goes out. Disconnect used to
+      // take the credential off disk in the ROUTE, before the reset recorded that
+      // the config was leaving oauth — so for the whole revoke round trip the
+      // stored mode was still 'oauth' beside an empty store, with nothing on disk
+      // marking the transition in flight. A crash, a SIGKILL, or a daemon stop in
+      // that window made it durable: the settings surface reporting
+      // configured:true, /auth/status reporting disconnected, and every deploy
+      // failing CFW_OAUTH_RECONNECT_REQUIRED with no button left to press. The
+      // revoke may only go out once the transition has landed.
+      const atRevoke: Array<{ mode: unknown; pending: unknown; stored: boolean }> = [];
+      vi.stubGlobal('fetch', vi.fn(async () => {
+        const persisted = JSON.parse(await readFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), 'utf8')) as Record<string, unknown>;
+        atRevoke.push({
+          mode: persisted.credentialMode,
+          pending: persisted.pendingOAuthGrantClear,
+          stored: (await getCloudflareOAuthToken(cloudflareOAuthTokensDir())) !== null,
+        });
+        return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
+      }));
+
+      await resetCloudflareCredentialMode();
+      expect(atRevoke).toEqual([{ mode: 'token', pending: undefined, stored: false }]);
+    });
+  });
+
+  it('the disconnect reset records the token-mode intent while the credential is still on disk', async () => {
+    await withDataDir(async (dir) => {
+      await writeCloudflareWorkersConfig({ token: 'static-token', accountId: 'acct_test' });
+      await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), {
+        accessToken: 'oauth-access',
+        refreshToken: 'ref-1',
+        tokenType: 'Bearer',
+        clientId: 'client-abc',
+        expiresAt: Date.now() + 3600_000,
+        generation: 1,
+        savedAt: Date.now(),
+      });
+      await commitCloudflareOAuthMode();
+
+      const probe = await open(path.join(dir, 'probe-disconnect-intent'), 'w');
+      const proto = Object.getPrototypeOf(probe) as { writeFile: (data: unknown, enc?: string) => Promise<void> };
+      await probe.close();
+      const realWrite = proto.writeFile;
+      // The token store's write IS the destructive half: it takes the record off
+      // disk and records the revoke handle in the same locked write. The intent
+      // has to be durable by then — it is the only thing on disk that says the
+      // config is leaving oauth, and the whole span it covers is a state a crash
+      // would otherwise freeze as 'oauth' over an empty store.
+      const atStoreWrite: Array<{ mode: unknown; pending: unknown }> = [];
+      vi.spyOn(proto, 'writeFile').mockImplementation(async function (this: unknown, data: unknown, enc?: string) {
+        if (typeof data === 'string' && data.includes('"lastGeneration"')) {
+          const persisted = JSON.parse(await readFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), 'utf8')) as Record<string, unknown>;
+          atStoreWrite.push({ mode: persisted.credentialMode, pending: persisted.pendingOAuthGrantClear });
+        }
+        return realWrite.call(this, data, enc);
+      });
+      vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => ({}) } as unknown as Response)));
+
+      await resetCloudflareCredentialMode();
+      // The reset's FIRST write to the token store is the clear, and the intent
+      // is already on disk behind it. The stored mode is still 'oauth' — the
+      // marker is what makes every read answer token mode from here on, which is
+      // exactly what it is written before the destructive half for.
+      expect(atStoreWrite[0]).toEqual({ mode: 'oauth', pending: true });
+    });
+  });
+
   it('a save whose intent write fails destroys nothing and revokes nothing', async () => {
     await withDataDir(async (dir) => {
       await writeCloudflareWorkersConfig({ token: 'static-token', accountId: 'acct_test' });
