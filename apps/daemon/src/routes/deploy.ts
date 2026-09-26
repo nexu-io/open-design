@@ -3,7 +3,7 @@ import type { RouteDeps } from '../server-context.js';
 import type { AuthorizeProjectRequest } from '../collab/project-request-authority.js';
 import { clientRequestIdFor } from '../http/client-request-id.js';
 import { classifyDeployFailure } from '../deploy/failure-detail.js';
-import { detachCloudflareWorkerDomain, getCloudflareWorkerDomain, isOwnedCustomDomain, listCloudflareZones, normalizeHostname, ownedCustomDomainsFromMetadata, pendingCustomDomainsFromMetadata, recordedCustomDomainFromMetadata, releasedCustomDomainsFromWorkersDeploy, resolvedPendingCustomDomainsFromWorkersDeploy, resolveWorkerScriptName, retiredAccessAppIdFromWorkersDeploy, unverifiedExposureFromMetadata, verifyCloudflareAccessPerimeter, vouchedCustomDomains, withdrawRecordedUnverifiedExposure, type CloudflareOwnedCustomDomain } from '../deploy/cloudflare-workers.js';
+import { detachCloudflareWorkerDomain, getCloudflareWorkerDomain, isOwnedCustomDomain, listCloudflareZones, normalizeHostname, ownedCustomDomainsFromMetadata, pendingCustomDomainsFromMetadata, recordedCustomDomainFromMetadata, releasedCustomDomainsFromWorkersDeploy, remainingUnverifiedExposure, resolvedPendingCustomDomainsFromWorkersDeploy, resolveWorkerScriptName, retiredAccessAppIdFromWorkersDeploy, serializeUnverifiedExposure, unverifiedExposureFromMetadata, verifyCloudflareAccessPerimeter, vouchedCustomDomains, withdrawRecordedUnverifiedExposure, type CloudflareOwnedCustomDomain, type CloudflareUnverifiedExposure } from '../deploy/cloudflare-workers.js';
 import { getCloudflareAccessToken } from '../deploy.js';
 import { proxyDispatcherRequestInit } from '../connectionTest.js';
 
@@ -576,17 +576,34 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
         // counts, not just the requesting project's. A hostname a deploy wrote
         // ahead of its attach (pending) is vouched for by hostname: the attach
         // may have landed even though its record never did.
-        const owned = listDeploymentsByProvider(db, CLOUDFLARE_WORKERS_PROVIDER_ID)
-          .filter((record: WorkersDeploymentRecord) => {
-            try {
-              return workersRecordScriptName(record, config.scriptName || undefined) === domain.service;
-            } catch {
-              return false;
-            }
-          })
-          .flatMap((deployment: { providerMetadata?: unknown }) =>
-            vouchedCustomDomains(ownedCustomDomainsFromMetadata(deployment.providerMetadata), pendingCustomDomainsFromMetadata(deployment.providerMetadata)));
-        if (!isOwnedCustomDomain(domain, owned)) {
+        //
+        // The ownership check, the detach and the record rewrites run under
+        // the deploy single-flight of the script the hostname is routed to. A
+        // deploy of that script in flight attaches its hostname and writes it
+        // ahead onto its record; a detach racing it would read the records
+        // before the write-ahead lands (and refuse a hostname the deploy is
+        // about to vouch for), or detach the very attachment the deploy just
+        // made and then drop its write-ahead from every record. A deploy in
+        // flight is refused with 409 DEPLOY_IN_PROGRESS, like a check-link
+        // withdrawal, and a deploy arriving during the detach is refused the
+        // same way.
+        const outcome = await withCloudflareWorkersDeploySingleFlight(domain.service ?? '', async (): Promise<{ kind: 'foreign' } | { kind: 'detached'; deleted: boolean }> => {
+          const owned = listDeploymentsByProvider(db, CLOUDFLARE_WORKERS_PROVIDER_ID)
+            .filter((record: WorkersDeploymentRecord) => {
+              try {
+                return workersRecordScriptName(record, config.scriptName || undefined) === domain.service;
+              } catch {
+                return false;
+              }
+            })
+            .flatMap((deployment: { providerMetadata?: unknown }) =>
+              vouchedCustomDomains(ownedCustomDomainsFromMetadata(deployment.providerMetadata), pendingCustomDomainsFromMetadata(deployment.providerMetadata)));
+          if (!isOwnedCustomDomain(domain, owned)) return { kind: 'foreign' };
+          const deleted = await detachCloudflareWorkerDomain(cfg, req.params.domainId);
+          forgetDetachedWorkersHostname(domain);
+          return { kind: 'detached', deleted };
+        });
+        if (outcome.kind === 'foreign') {
           return sendApiError(
             res,
             409,
@@ -594,14 +611,15 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
             'Custom domain "' + (domain.hostname || domain.id) + '" was not attached by an OpenDesign deployment; refusing to detach it. Remove it in the Cloudflare dashboard instead.',
           );
         }
-        const deleted = await detachCloudflareWorkerDomain(cfg, req.params.domainId);
-        forgetDetachedWorkersHostname(domain);
-        res.json(deleted ? { ok: true } : { ok: true, deleted: false });
+        res.json(outcome.deleted ? { ok: true } : { ok: true, deleted: false });
       } finally {
         await proxyDispatcher.close();
       }
     } catch (err: any) {
-      const status = err instanceof DeployError ? err.status : 400;
+      // A single-flight refusal (409 DEPLOY_IN_PROGRESS) keeps its status and
+      // code so the client can retry after the deploy, instead of flattening
+      // into a generic 400.
+      const status = deployErrorStatus(err);
       sendApiError(res, status, deployErrorCodeFor(err, status), String(err?.message || err));
     }
   });
@@ -1046,114 +1064,163 @@ export function registerDeploymentCheckRoutes(app: Express, ctx: RegisterDeploym
     existing: WorkersDeploymentRecord & { providerId: string; cloudflareWorkers?: unknown },
     metadata: Record<string, unknown>,
   ): Promise<unknown> {
-    // `cloudflareWorkers` is the lifted view of the metadata; upsert folds it
-    // back over providerMetadata, so it must not ride along with a rewrite.
-    const { cloudflareWorkers: _lifted, ...record } = existing;
     const urls: string[] = [];
     const pushUrl = (url: string | undefined) => {
       if (url && !urls.includes(url)) urls.push(url);
     };
     pushUrl(existing.url);
-    const displayed = recordedCustomDomainFromMetadata(metadata);
-    if (displayed) pushUrl(typeof displayed.url === 'string' && displayed.url ? displayed.url : 'https://' + normalizeHostname(String(displayed.hostname)));
+    // The displayed `customDomain` is the PRODUCTION hostname the record
+    // carries for display; a preview deploy does not route it (previews serve
+    // on the preview URL only) and never verified it. Probing it for a
+    // preview record would judge the preview by a hostname it did not deploy:
+    // the production hostname answering ungated would fail a preview whose
+    // own URL is gated, and vice versa. Only a production record's verdict
+    // covers it.
+    if (existing.target !== 'preview') {
+      const displayed = recordedCustomDomainFromMetadata(metadata);
+      if (displayed) pushUrl(typeof displayed.url === 'string' && displayed.url ? displayed.url : 'https://' + normalizeHostname(String(displayed.hostname)));
+    }
+    const exposure = unverifiedExposureFromMetadata(metadata);
+    const scriptName = exposure?.scriptName ?? await deferredWorkersRecordScriptName(existing, metadata);
     const proxyDispatcher = proxyDispatcherRequestInit(process.env);
-    try {
-      const verdict = await verifyCloudflareAccessPerimeter(urls, proxyDispatcher.requestInit);
-      const now = Date.now();
-      if (verdict.outcome === 'protected') {
-        const next: Record<string, unknown> = { ...metadata, accessVerified: true };
-        delete next.accessVerificationDeferred;
-        delete next.unverifiedExposure;
-        return upsertDeployment(db, {
+
+    // Unprotected: the exposure THIS deploy created (recorded when it was
+    // deferred) is withdrawn before the failure lands on the record.
+    const failUnverified = async (
+      record: Omit<typeof existing, 'cloudflareWorkers'>,
+      recordMetadata: Record<string, unknown>,
+      recordExposure: CloudflareUnverifiedExposure | undefined,
+      error: { message: string; details?: unknown },
+      now: number,
+    ): Promise<unknown> => {
+      const steps: unknown[] = Array.isArray(recordMetadata.steps) ? [...recordMetadata.steps] : [];
+      const detachedCustomDomains: CloudflareOwnedCustomDomain[] = [];
+      // Until a withdrawal step reports success, the whole exposure is still
+      // the record's to withdraw.
+      let stillExposed: CloudflareUnverifiedExposure | undefined = recordExposure;
+      if (recordExposure) {
+        try {
+          const config = await readDeployConfig(CLOUDFLARE_WORKERS_PROVIDER_ID);
+          if (!config.accountId) throw new Error('Cloudflare account ID is not configured.');
+          const token = await resolveCloudflareWorkersRouteToken(config);
+          if (!token) throw new Error('Cloudflare API token is not configured.');
+          const withdrawn = await withdrawRecordedUnverifiedExposure(
+            { token: () => resolveCloudflareWorkersRouteToken(config), accountId: config.accountId, requestInit: proxyDispatcher.requestInit },
+            recordExposure,
+          );
+          steps.push(...withdrawn.steps);
+          detachedCustomDomains.push(...withdrawn.detachedCustomDomains);
+          stillExposed = remainingUnverifiedExposure(recordExposure, withdrawn);
+        } catch (withdrawErr) {
+          const detail = String((withdrawErr as Error)?.message || withdrawErr);
+          console.error('[od] Cloudflare Access unverified at link check; could not withdraw the recorded exposure: ' + detail);
+          steps.push({ name: 'access-withdraw', status: 'error', detail });
+        }
+      }
+      steps.push({ name: 'access-verify', status: 'error', detail: error.message });
+      const details = error.details as { status?: unknown } | undefined;
+      const next: Record<string, unknown> = {
+        ...recordMetadata,
+        accessVerified: false,
+        steps,
+        check: { status: typeof details?.status === 'number' ? details.status : undefined, ok: false, detail: 'CFW_ACCESS_UNVERIFIED' },
+      };
+      delete next.accessVerificationDeferred;
+      // Only what was actually withdrawn leaves the record. Every withdrawal
+      // step is best-effort (an `error` step, not a throw), so an exposure
+      // whose compensation failed — the workers.dev route still on, a
+      // hostname still attached — stays recorded for the next withdrawal to
+      // retry. Clearing it with the failure would leave the Worker public
+      // with nothing left that knows to take it back down.
+      const retained = stillExposed ? serializeUnverifiedExposure(stillExposed) : undefined;
+      if (retained) next.unverifiedExposure = retained;
+      else delete next.unverifiedExposure;
+      // This record's failure and the sibling rewrites commit as one set.
+      db.transaction(() => {
+        upsertDeployment(db, {
           ...record,
-          status: 'ready',
-          statusMessage: 'Cloudflare Access is verified on every public link.',
-          reachableAt: now,
+          status: 'failed',
+          statusMessage: error.message,
           providerMetadata: next,
           updatedAt: now,
         });
-      }
-      if (verdict.outcome === 'unreachable') {
-        return upsertDeployment(db, {
-          ...record,
-          status: 'link-delayed',
-          statusMessage: verdict.error.message,
-          providerMetadata: { ...metadata, accessVerified: false, accessVerificationDeferred: verdict.error.message },
-          updatedAt: now,
-        });
-      }
-      // Unprotected: the exposure THIS deploy created (recorded when it was
-      // deferred) is withdrawn before the failure lands on the record.
-      const exposure = unverifiedExposureFromMetadata(metadata);
-      const failUnverified = async (): Promise<unknown> => {
-        const steps: unknown[] = Array.isArray(metadata.steps) ? [...metadata.steps] : [];
-        const detachedCustomDomains: CloudflareOwnedCustomDomain[] = [];
-        if (exposure) {
-          try {
-            const config = await readDeployConfig(CLOUDFLARE_WORKERS_PROVIDER_ID);
-            if (!config.accountId) throw new Error('Cloudflare account ID is not configured.');
-            const token = await resolveCloudflareWorkersRouteToken(config);
-            if (!token) throw new Error('Cloudflare API token is not configured.');
-            const withdrawn = await withdrawRecordedUnverifiedExposure(
-              { token: () => resolveCloudflareWorkersRouteToken(config), accountId: config.accountId, requestInit: proxyDispatcher.requestInit },
-              exposure,
-            );
-            steps.push(...withdrawn.steps);
-            detachedCustomDomains.push(...withdrawn.detachedCustomDomains);
-          } catch (withdrawErr) {
-            const detail = String((withdrawErr as Error)?.message || withdrawErr);
-            console.error('[od] Cloudflare Access unverified at link check; could not withdraw the recorded exposure: ' + detail);
-            steps.push({ name: 'access-withdraw', status: 'error', detail });
-          }
+        // The hostnames withdrawn above are gone from Cloudflare: no record
+        // may keep vouching for them (this one included — hence after its
+        // rewrite).
+        for (const detached of detachedCustomDomains) {
+          forgetDetachedWorkersHostnameAcrossRecords(workersRecordStore, { id: detached.id ?? '', hostname: detached.hostname });
         }
-        steps.push({ name: 'access-verify', status: 'error', detail: verdict.error.message });
-        const details = verdict.error.details as { status?: unknown } | undefined;
-        const next: Record<string, unknown> = {
-          ...metadata,
-          accessVerified: false,
-          steps,
-          check: { status: typeof details?.status === 'number' ? details.status : undefined, ok: false, detail: 'CFW_ACCESS_UNVERIFIED' },
-        };
-        delete next.accessVerificationDeferred;
-        delete next.unverifiedExposure;
-        // This record's failure and the sibling rewrites commit as one set.
-        db.transaction(() => {
-          upsertDeployment(db, {
+      })();
+      return getDeploymentById(db, existing.projectId, existing.id);
+    };
+
+    try {
+      const verdict = await verifyCloudflareAccessPerimeter(urls, proxyDispatcher.requestInit);
+      // EVERY verdict lands under the script's deploy single-flight, against a
+      // RE-READ of the record. The probe above runs up to the perimeter budget
+      // (~15s) and a deploy of the script admitted meanwhile replaces the
+      // record; a verdict written over the `existing` snapshot would overwrite
+      // that deploy's result — promoting to `ready`, or re-deferring, a record
+      // the deploy has since settled. A deploy in flight is refused with 409
+      // DEPLOY_IN_PROGRESS instead of raced against (and a deploy arriving
+      // during the write is refused the same way); one that already finished
+      // is detected by the re-read, which hands back the settled record
+      // untouched. The unprotected withdrawal additionally mutates the
+      // script's Cloudflare resources (workers.dev route, attached hostnames)
+      // and rewrites every record of the script, exactly what a deploy does.
+      return await withCloudflareWorkersDeploySingleFlight(scriptName, async () => {
+        const fresh = getDeploymentById(db, existing.projectId, existing.id);
+        if (!fresh || !isDeferredWorkersAccessVerification(fresh)) return fresh;
+        // `cloudflareWorkers` is the lifted view of the metadata; upsert folds
+        // it back over providerMetadata, so it must not ride along with a
+        // rewrite.
+        const { cloudflareWorkers: _lifted, ...record } = fresh;
+        const freshMetadata: Record<string, unknown> = fresh.providerMetadata;
+        const now = Date.now();
+        if (verdict.outcome === 'protected') {
+          const next: Record<string, unknown> = { ...freshMetadata, accessVerified: true };
+          delete next.accessVerificationDeferred;
+          delete next.unverifiedExposure;
+          return upsertDeployment(db, {
             ...record,
-            status: 'failed',
-            statusMessage: verdict.error.message,
+            status: 'ready',
+            statusMessage: 'Cloudflare Access is verified on every public link.',
+            reachableAt: now,
             providerMetadata: next,
             updatedAt: now,
           });
-          // The hostnames withdrawn above are gone from Cloudflare: no record
-          // may keep vouching for them (this one included — hence after its
-          // rewrite).
-          for (const detached of detachedCustomDomains) {
-            forgetDetachedWorkersHostnameAcrossRecords(workersRecordStore, { id: detached.id ?? '', hostname: detached.hostname });
-          }
-        })();
-        return getDeploymentById(db, existing.projectId, existing.id);
-      };
-      if (!exposure) return failUnverified();
-      // The withdrawal mutates the script's Cloudflare resources (workers.dev
-      // route, attached hostnames) and rewrites every record of the script,
-      // exactly what a deploy of that script does. It therefore runs under the
-      // same per-script single-flight: a deploy in flight is refused with 409
-      // DEPLOY_IN_PROGRESS instead of raced against, and a deploy arriving
-      // during the withdrawal is refused the same way.
-      return withCloudflareWorkersDeploySingleFlight(exposure.scriptName, async () => {
-        // The record may have been settled by a deploy that finished between
-        // the probe above and the lock: only what is STILL recorded as this
-        // deploy's exposure is withdrawn.
-        const fresh = getDeploymentById(db, existing.projectId, existing.id);
-        if (!fresh || !isDeferredWorkersAccessVerification(fresh)) return fresh;
-        const freshExposure = unverifiedExposureFromMetadata(fresh.providerMetadata);
+        }
+        if (verdict.outcome === 'unreachable') {
+          return upsertDeployment(db, {
+            ...record,
+            status: 'link-delayed',
+            statusMessage: verdict.error.message,
+            providerMetadata: { ...freshMetadata, accessVerified: false, accessVerificationDeferred: verdict.error.message },
+            updatedAt: now,
+          });
+        }
+        // The record may carry a different deferral than the one probed (a
+        // deploy that finished between the probe and the lock and deferred
+        // again): only what is STILL recorded as this deploy's exposure is
+        // withdrawn.
+        const freshExposure = unverifiedExposureFromMetadata(freshMetadata);
         if (JSON.stringify(freshExposure) !== JSON.stringify(exposure)) return fresh;
-        return failUnverified();
+        return failUnverified(record, freshMetadata, freshExposure, verdict.error, now);
       });
     } finally {
       await proxyDispatcher.close();
     }
+  }
+
+  /** The script a deferred record deployed, for the deploy single-flight its
+   * verdict must take: the name it recorded, else resolved the way a deploy
+   * resolves it (the configured override, else its project's name). */
+  async function deferredWorkersRecordScriptName(existing: { projectId: string }, metadata: Record<string, unknown>): Promise<string> {
+    const recorded = metadata.scriptName;
+    if (typeof recorded === 'string' && recorded) return recorded;
+    const config = await readDeployConfig(CLOUDFLARE_WORKERS_PROVIDER_ID);
+    const project = getProject(db, existing.projectId);
+    return resolveWorkerScriptName(config.scriptName || undefined, project?.name || existing.projectId);
   }
 
   app.post(

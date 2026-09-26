@@ -21,7 +21,9 @@ import {
   pendingCustomDomainsFromMetadata,
   probeCloudflareWorkersCapabilities,
   releasedCustomDomainsFromWorkersDeploy,
+  remainingUnverifiedExposure,
   retiredAccessAppIdFromWorkersDeploy,
+  serializeUnverifiedExposure,
   verifyCloudflareAccessPerimeter,
   vouchedCustomDomains,
 } from '../src/deploy/cloudflare-workers.js';
@@ -1610,6 +1612,59 @@ describe('cloudflare access check-link classification', () => {
     const resp = new Response('<html>Cloudflare Access</html>', { status: 401 });
     expect(isCloudflareAccessProtectedResponse(resp, '<html>Cloudflare Access login</html>')).toBe(true);
     expect(isCloudflareAccessProtectedResponse(new Response('ok'), 'plain page')).toBe(false);
+  });
+});
+
+describe('remainingUnverifiedExposure', () => {
+  const full = {
+    scriptName: 'my-site',
+    subdomainEnabledByThisRun: true,
+    previewsEnabledByThisRun: true,
+    detachableCustomDomains: [{ id: 'dom-a', hostname: 'a.example.com' }, { hostname: 'b.example.com' }],
+  };
+
+  it('is empty once every step succeeded and every hostname was detached', () => {
+    const remaining = remainingUnverifiedExposure(full, {
+      steps: [{ name: 'previews-disable', status: 'done' }, { name: 'subdomain-disable', status: 'done' }],
+      detachedCustomDomains: [{ id: 'dom-a', hostname: 'a.example.com' }, { hostname: 'b.example.com' }],
+    });
+    expect(remaining).toBeUndefined();
+  });
+
+  it('keeps the workers.dev route when its disable step errored, and only the hostnames still attached', () => {
+    const remaining = remainingUnverifiedExposure(full, {
+      steps: [
+        { name: 'previews-disable', status: 'done' },
+        { name: 'subdomain-disable', status: 'error', detail: 'refused' },
+        { name: 'custom-domain-detach', status: 'done', detail: 'a.example.com' },
+        { name: 'custom-domain-detach', status: 'error', detail: 'b.example.com: refused' },
+      ],
+      detachedCustomDomains: [{ id: 'dom-a', hostname: 'a.example.com' }],
+    });
+    expect(remaining).toEqual({ scriptName: 'my-site', subdomainEnabledByThisRun: true, detachableCustomDomains: [{ hostname: 'b.example.com' }] });
+    expect(serializeUnverifiedExposure(remaining!)).toEqual({ scriptName: 'my-site', subdomainEnabledByThisRun: true, detachableCustomDomains: [{ hostname: 'b.example.com' }] });
+  });
+
+  it('keeps everything when no step reported success (the withdrawal never ran to a result)', () => {
+    expect(remainingUnverifiedExposure(full, { steps: [], detachedCustomDomains: [] })).toEqual(full);
+    // A step list that mentions the step without `done` is not success either.
+    expect(remainingUnverifiedExposure(
+      { scriptName: 'my-site', previewsEnabledByThisRun: true },
+      { steps: [{ name: 'previews-disable', status: 'error', detail: 'refused' }], detachedCustomDomains: [] },
+    )).toEqual({ scriptName: 'my-site', previewsEnabledByThisRun: true });
+  });
+
+  it('does not keep a flag the exposure never carried, even without a matching step', () => {
+    expect(remainingUnverifiedExposure(
+      { scriptName: 'my-site', detachableCustomDomains: [{ id: 'dom-a', hostname: 'a.example.com' }] },
+      { steps: [], detachedCustomDomains: [{ id: 'dom-a', hostname: 'a.example.com' }] },
+    )).toBeUndefined();
+  });
+
+  it('serializes only what is set, and nothing for an empty exposure', () => {
+    expect(serializeUnverifiedExposure({ scriptName: 'my-site' })).toBeUndefined();
+    expect(serializeUnverifiedExposure({ scriptName: 'my-site', detachableCustomDomains: [{ id: 'dom-a', hostname: 'a.example.com' }, { hostname: 'b.example.com' }] }))
+      .toEqual({ scriptName: 'my-site', detachableCustomDomains: [{ id: 'dom-a', hostname: 'a.example.com' }, { hostname: 'b.example.com' }] });
   });
 });
 

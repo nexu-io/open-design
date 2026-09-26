@@ -14,6 +14,7 @@ import {
   VERCEL_PROVIDER_ID,
   SAVED_CLOUDFLARE_TOKEN_MASK,
 } from '../src/deploy.js';
+import { getDeploymentById, openDatabase } from '../src/db.js';
 import { configureCloudflareAccessPerimeterRetry } from '../src/deploy/cloudflare-workers.js';
 import { isDeferredWorkersAccessVerification } from '../src/routes/deploy.js';
 import { ensureProject } from '../src/projects.js';
@@ -2795,6 +2796,12 @@ describe('deploy provider routes', () => {
       // Consumed once: the next non-HEAD Cloudflare call awaits it before it
       // answers, holding a deploy at its first API call.
       hold: null as null | (() => Promise<void>),
+      // Consumed once: the next HEAD (a perimeter probe) awaits it before it
+      // answers, holding a check-link inside its probe.
+      headHold: null as null | (() => Promise<void>),
+      // Whether turning the workers.dev route OFF (the exposure withdrawal)
+      // succeeds at Cloudflare.
+      subdomainDisableMode: 'ok' as 'ok' | 'error',
     };
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
@@ -2802,6 +2809,11 @@ describe('deploy provider routes', () => {
       const method = (init?.method || 'GET').toUpperCase();
       state.cfCalls.push({ url, method, dispatched: init?.dispatcher !== undefined });
       if (method === 'HEAD') {
+        if (state.headHold) {
+          const headHold = state.headHold;
+          state.headHold = null;
+          await headHold();
+        }
         const headMode = typeof state.headMode === 'function' ? state.headMode(url) : state.headMode;
         if (headMode === 'unreachable') throw new TypeError('fetch failed');
         return headMode === 'access'
@@ -2838,6 +2850,9 @@ describe('deploy provider routes', () => {
       if (url.endsWith('/workers/scripts/' + scriptName + '/subdomain')) {
         if (method === 'POST') {
           const body = JSON.parse(String(init?.body)) as { enabled?: unknown };
+          if (body.enabled === false && state.subdomainDisableMode === 'error') {
+            return json({ success: false, errors: [{ message: 'subdomain disable refused' }] }, 500);
+          }
           if (typeof body.enabled === 'boolean') state.subdomainEnabled = body.enabled;
         }
         return json({ success: true, result: { enabled: state.subdomainEnabled, previews_enabled: false } });
@@ -2873,7 +2888,7 @@ describe('deploy provider routes', () => {
       else process.env.OD_USER_STATE_DIR = priorStateRoot;
       await rm(stateRoot, { recursive: true, force: true });
     };
-    return { state, scriptName, putConfig, deploy, checkLink, detachRoute, listDeployments, cleanup };
+    return { state, projectId, scriptName, putConfig, deploy, checkLink, detachRoute, listDeployments, cleanup };
   }
   const scriptNameOf = (f: { scriptName: string }) => f.scriptName;
 
@@ -3188,6 +3203,204 @@ describe('deploy provider routes', () => {
       expect([200, 502]).toContain(finished.status);
       const after = await f.checkLink(deployed.id);
       expect(after.status).toBe(200);
+    } finally {
+      configureCloudflareAccessPerimeterRetry();
+      await f.cleanup();
+    }
+  });
+
+  it('check-link applies a protected verdict against a RE-READ of the record, so a deploy that settled it during the probe is not overwritten', async () => {
+    const f = await workersSiblingFixture('deferred-reread', { access: true });
+    configureCloudflareAccessPerimeterRetry({ attempts: 2, baseMs: 1 });
+    try {
+      f.state.headMode = 'unreachable';
+      await f.putConfig({ access: true });
+      const deployResp = await f.deploy('a.html');
+      expect(deployResp.status).toBe(200);
+      const deployed = (await deployResp.json()) as { id: string; status: string };
+      expect(deployed.status).toBe('link-delayed');
+
+      // The URLs now answer WITH the gate. A check-link is held inside its
+      // probe; meanwhile a deploy of the same file runs to completion and
+      // settles the record as `ready` with its own result.
+      f.state.headMode = 'access';
+      let release: () => void = () => {};
+      const held = new Promise<void>((resolve) => { release = resolve; });
+      f.state.headHold = () => held;
+      const checking = f.checkLink(deployed.id);
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      const redeploy = await f.deploy('a.html');
+      expect(redeploy.status).toBe(200);
+      const settled = (await redeploy.json()) as { id: string; status: string };
+      expect(settled.id).toBe(deployed.id);
+      expect(settled.status).toBe('ready');
+      const settledRecord = (await f.listDeployments()).find((d) => d.fileName === 'a.html');
+      expect(settledRecord?.status).toBe('ready');
+
+      // The probe's verdict (protected) arrives after the deploy finished. The
+      // record it snapshotted before the probe is stale: written back, it
+      // would replace the deploy's result with a promoted copy of the OLD
+      // deferred record. Re-read under the lock, the record is no longer a
+      // deferral and comes back untouched.
+      release();
+      const checked = await checking;
+      expect(checked.status).toBe(200);
+      expect(((await checked.json()) as { status: string; statusMessage?: string }).statusMessage).not.toBe('Cloudflare Access is verified on every public link.');
+      expect((await f.listDeployments()).find((d) => d.fileName === 'a.html')).toEqual(settledRecord);
+    } finally {
+      configureCloudflareAccessPerimeterRetry();
+      await f.cleanup();
+    }
+  });
+
+  it('check-link refuses to re-defer (unreachable verdict) with 409 DEPLOY_IN_PROGRESS while a deploy of the script is in flight', async () => {
+    const f = await workersSiblingFixture('deferred-unreachable-singleflight', { access: true });
+    configureCloudflareAccessPerimeterRetry({ attempts: 2, baseMs: 1 });
+    try {
+      f.state.headMode = 'unreachable';
+      await f.putConfig({ access: true });
+      const deployResp = await f.deploy('a.html');
+      expect(deployResp.status).toBe(200);
+      const deployed = (await deployResp.json()) as { id: string; status: string };
+      expect(deployed.status).toBe('link-delayed');
+
+      // Still no answer, and a deploy of the script is admitted and held at
+      // its first Cloudflare call. Even a verdict that only re-defers is a
+      // write over the record the deploy is about to replace: refused.
+      let release: () => void = () => {};
+      const held = new Promise<void>((resolve) => { release = resolve; });
+      f.state.hold = () => held;
+      const inflight = f.deploy('a.html');
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      const recordedBefore = (await f.listDeployments()).find((d) => d.fileName === 'a.html');
+      const refused = await f.checkLink(deployed.id);
+      expect(refused.status).toBe(409);
+      expect(await refused.json()).toMatchObject({ error: { code: 'DEPLOY_IN_PROGRESS' } });
+      expect((await f.listDeployments()).find((d) => d.fileName === 'a.html')).toEqual(recordedBefore);
+
+      release();
+      const finished = await inflight;
+      expect([200, 502]).toContain(finished.status);
+    } finally {
+      configureCloudflareAccessPerimeterRetry();
+      await f.cleanup();
+    }
+  });
+
+  it('the detach route refuses with 409 DEPLOY_IN_PROGRESS while a deploy of the hostname\'s script is in flight, and is admitted once it finished', async () => {
+    const f = await workersSiblingFixture('detach-singleflight');
+    try {
+      await f.putConfig({ hostname: 'a.example.com' });
+      expect((await f.deploy('a.html')).status).toBe(200);
+      expect(f.state.routed.map((d) => d.hostname)).toEqual(['a.example.com']);
+
+      // A deploy of the script is admitted and held at its first Cloudflare
+      // call; it attaches (and writes ahead) the very hostname a detach
+      // would remove.
+      let release: () => void = () => {};
+      const held = new Promise<void>((resolve) => { release = resolve; });
+      f.state.hold = () => held;
+      const inflight = f.deploy('a.html');
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      const before = f.state.cfCalls.length;
+      const refused = await f.detachRoute('dom-a');
+      expect(refused.status).toBe(409);
+      expect(await refused.json()).toMatchObject({ error: { code: 'DEPLOY_IN_PROGRESS' } });
+      // Nothing was detached and no record stopped vouching for the hostname.
+      expect(f.state.cfCalls.slice(before).some((c) => c.method === 'DELETE')).toBe(false);
+      expect(f.state.routed.map((d) => d.hostname)).toEqual(['a.example.com']);
+
+      release();
+      expect((await inflight).status).toBe(200);
+      expect(f.state.routed.map((d) => d.hostname)).toEqual(['a.example.com']);
+      const admitted = await f.detachRoute('dom-a');
+      expect(admitted.status).toBe(200);
+      expect(f.state.cfCalls.some((c) => c.method === 'DELETE' && c.url.endsWith('/workers/domains/dom-a'))).toBe(true);
+      expect(f.state.routed).toEqual([]);
+    } finally {
+      await f.cleanup();
+    }
+  });
+
+  it('check-link on a deferred PREVIEW deploy does not probe the production hostname the record carries for display', async () => {
+    const f = await workersSiblingFixture('deferred-preview', { access: true });
+    configureCloudflareAccessPerimeterRetry({ attempts: 2, baseMs: 1 });
+    try {
+      // a.html's production deploy attaches and verifies a.example.com.
+      await f.putConfig({ hostname: 'a.example.com', access: true });
+      expect((await f.deploy('a.html')).status).toBe(200);
+      expect(f.state.routed.map((d) => d.hostname)).toEqual(['a.example.com']);
+      // b.html's PREVIEW deploy carries that hostname forward for display,
+      // but does not route or verify it; its public URL does not answer yet.
+      f.state.headMode = 'unreachable';
+      const previewResp = await f.deploy('b.html', 'preview');
+      expect(previewResp.status).toBe(200);
+      const preview = (await previewResp.json()) as { id: string; status: string; url: string; target: string; cloudflareWorkers?: Record<string, unknown> };
+      expect(preview.status).toBe('link-delayed');
+      expect(preview.target).toBe('preview');
+      expect(preview.url).not.toBe('https://a.example.com');
+      expect(preview.cloudflareWorkers?.customDomain).toMatchObject({ hostname: 'a.example.com' });
+
+      // The preview URL answers WITH the gate; the production hostname
+      // answers a plain 200. The preview never deployed that hostname, so its
+      // verdict must not be judged by it: ready, and the hostname not probed.
+      f.state.headMode = (url) => (url === preview.url ? 'access' : 'plain');
+      const before = f.state.cfCalls.length;
+      const checked = await f.checkLink(preview.id);
+      expect(checked.status).toBe(200);
+      const ready = (await checked.json()) as { status: string; statusMessage?: string };
+      expect(ready.status).toBe('ready');
+      const heads = f.state.cfCalls.slice(before).filter((c) => c.method === 'HEAD').map((c) => c.url);
+      expect(heads).toContain(preview.url);
+      expect(heads).not.toContain('https://a.example.com');
+      // Nothing was withdrawn: the production hostname stays attached.
+      expect(f.state.routed.map((d) => d.hostname)).toEqual(['a.example.com']);
+    } finally {
+      configureCloudflareAccessPerimeterRetry();
+      await f.cleanup();
+    }
+  });
+
+  it('a failed check-link keeps the part of the exposure it could NOT withdraw recorded, and drops only what it did withdraw', async () => {
+    const f = await workersSiblingFixture('deferred-partial-withdraw', { access: true });
+    configureCloudflareAccessPerimeterRetry({ attempts: 2, baseMs: 1 });
+    try {
+      // This run turns the workers.dev route on and attaches a.example.com.
+      f.state.subdomainEnabled = false;
+      f.state.headMode = 'unreachable';
+      await f.putConfig({ hostname: 'a.example.com', access: true });
+      const deployResp = await f.deploy('a.html');
+      expect(deployResp.status).toBe(200);
+      const deployed = (await deployResp.json()) as { id: string; status: string };
+      expect(deployed.status).toBe('link-delayed');
+      expect(f.state.subdomainEnabled).toBe(true);
+      const dataDir = process.env.OD_DATA_DIR;
+      if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+      // The recorded exposure is not part of the public record (it is the
+      // route's own bookkeeping), so it is read from the daemon's database.
+      const db = openDatabase(process.cwd(), { dataDir });
+      const recordedExposure = () => (getDeploymentById(db, f.projectId, deployed.id)?.providerMetadata as Record<string, unknown> | undefined)?.unverifiedExposure;
+      expect(recordedExposure()).toEqual({
+        scriptName: f.scriptName,
+        subdomainEnabledByThisRun: true,
+        detachableCustomDomains: [{ id: 'dom-a', hostname: 'a.example.com' }],
+      });
+
+      // The URLs answer WITHOUT the gate. The withdrawal detaches the hostname
+      // but Cloudflare refuses to turn the workers.dev route back off.
+      f.state.headMode = 'plain';
+      f.state.subdomainDisableMode = 'error';
+      const checked = await f.checkLink(deployed.id);
+      expect(checked.status).toBe(200);
+      const failed = (await checked.json()) as { status: string; cloudflareWorkers?: { steps?: Array<Record<string, unknown>> } };
+      expect(failed.status).toBe('failed');
+      expect(failed.cloudflareWorkers?.steps).toContainEqual(expect.objectContaining({ name: 'subdomain-disable', status: 'error' }));
+      expect(failed.cloudflareWorkers?.steps).toContainEqual(expect.objectContaining({ name: 'custom-domain-detach', status: 'done', detail: 'a.example.com' }));
+      expect(f.state.routed).toEqual([]);
+      expect(f.state.subdomainEnabled).toBe(true);
+      // The route is still public and still this deploy's to take down: it
+      // stays recorded. The detached hostname does not.
+      expect(recordedExposure()).toEqual({ scriptName: f.scriptName, subdomainEnabledByThisRun: true });
     } finally {
       configureCloudflareAccessPerimeterRetry();
       await f.cleanup();

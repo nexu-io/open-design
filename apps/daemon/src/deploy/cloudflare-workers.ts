@@ -1235,16 +1235,47 @@ export type CloudflareUnverifiedExposure = {
 
 const UNVERIFIED_EXPOSURE_KEY = 'unverifiedExposure';
 
-function recordUnverifiedExposure(metadata: JsonObject, exposure: CloudflareUnverifiedExposure): void {
+/** The metadata form of an exposure (see unverifiedExposureFromMetadata for
+ * the inverse), or undefined when there is nothing left to withdraw. */
+export function serializeUnverifiedExposure(exposure: CloudflareUnverifiedExposure): JsonObject | undefined {
   const detachable = exposure.detachableCustomDomains ?? [];
-  if (!exposure.subdomainEnabledByThisRun && !exposure.previewsEnabledByThisRun && detachable.length === 0) return;
+  if (!exposure.subdomainEnabledByThisRun && !exposure.previewsEnabledByThisRun && detachable.length === 0) return undefined;
   const recorded: JsonObject = { scriptName: exposure.scriptName };
   if (exposure.subdomainEnabledByThisRun) recorded.subdomainEnabledByThisRun = true;
   if (exposure.previewsEnabledByThisRun) recorded.previewsEnabledByThisRun = true;
   if (detachable.length > 0) {
     recorded.detachableCustomDomains = detachable.map((domain) => (domain.id ? { id: domain.id, hostname: domain.hostname } : { hostname: domain.hostname }));
   }
-  metadata[UNVERIFIED_EXPOSURE_KEY] = recorded;
+  return recorded;
+}
+
+function recordUnverifiedExposure(metadata: JsonObject, exposure: CloudflareUnverifiedExposure): void {
+  const recorded = serializeUnverifiedExposure(exposure);
+  if (recorded) metadata[UNVERIFIED_EXPOSURE_KEY] = recorded;
+}
+
+/**
+ * What is STILL exposed after a withdrawal attempt: the part of `exposure`
+ * whose compensation did not succeed. The workers.dev route (or previews)
+ * stays listed unless its disable step reported `done`, and a hostname stays
+ * listed unless it is among the ones actually detached. Every step of the
+ * withdrawal is best-effort, so a caller that cleared the whole record on any
+ * outcome would drop the only handle on a route that is still public — with
+ * nothing left to retry. Undefined means everything was withdrawn.
+ */
+export function remainingUnverifiedExposure(
+  exposure: CloudflareUnverifiedExposure,
+  withdrawn: { steps: readonly DeployStep[]; detachedCustomDomains: readonly CloudflareOwnedCustomDomain[] },
+): CloudflareUnverifiedExposure | undefined {
+  const stepDone = (name: string): boolean => withdrawn.steps.some((step) => step.name === name && step.status === 'done');
+  const remaining: CloudflareUnverifiedExposure = { scriptName: exposure.scriptName };
+  if (exposure.subdomainEnabledByThisRun && !stepDone('subdomain-disable')) remaining.subdomainEnabledByThisRun = true;
+  if (exposure.previewsEnabledByThisRun && !stepDone('previews-disable')) remaining.previewsEnabledByThisRun = true;
+  const stillAttached = (exposure.detachableCustomDomains ?? []).filter(
+    (domain) => !withdrawn.detachedCustomDomains.some((detached) => detached.hostname === domain.hostname),
+  );
+  if (stillAttached.length > 0) remaining.detachableCustomDomains = stillAttached;
+  return serializeUnverifiedExposure(remaining) ? remaining : undefined;
 }
 
 /** The exposure a deferred deploy recorded (see CloudflareUnverifiedExposure),
