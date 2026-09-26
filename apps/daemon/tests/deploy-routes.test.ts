@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   CLOUDFLARE_PAGES_PROVIDER_ID,
   CLOUDFLARE_WORKERS_PROVIDER_ID,
+  cloudflareOAuthTokensDir,
   cloudflarePagesProjectNameForProject,
   commitCloudflareOAuthMode,
   configureCloudflareWorkersDataDir,
@@ -15,6 +16,7 @@ import {
   VERCEL_PROVIDER_ID,
   SAVED_CLOUDFLARE_TOKEN_MASK,
 } from '../src/deploy.js';
+import { setCloudflareOAuthToken } from '../src/integrations/cloudflare-tokens.js';
 import { getDeploymentById, openDatabase } from '../src/db.js';
 import { configureCloudflareAccessPerimeterRetry } from '../src/deploy/cloudflare-workers.js';
 import { hasAccessUnverifiedVerdict, isAccessProtectedWorkersRecord, isRetainedUnverifiedExposure } from '../src/routes/deploy.js';
@@ -1640,7 +1642,19 @@ describe('deploy provider routes', () => {
         body: JSON.stringify({ providerId: CLOUDFLARE_WORKERS_PROVIDER_ID, token: 'tok', accountId: 'acct_test' }),
       });
       expect(saveResp.status).toBe(200);
-      // Flip to oauth with no stored OAuth token: the credential resolver throws.
+      // Flip to oauth with a grant that is present but cannot refresh (expired,
+      // no refresh token). Committing the mode is legitimate — the store is not
+      // empty — and the credential resolver then throws, which is the propagation
+      // this test is about. (A commit over an EMPTY store is refused by
+      // commitCloudflareOAuthMode, so "oauth mode with nothing behind it" is no
+      // longer a state a settings save or a connect can drive the daemon into.)
+      await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), {
+        accessToken: 'oauth-access',
+        tokenType: 'Bearer',
+        expiresAt: Date.now() - 60_000,
+        generation: 0,
+        savedAt: Date.now() - 120_000,
+      });
       await commitCloudflareOAuthMode();
 
       // The resolver throws 401 CFW_OAUTH_RECONNECT_REQUIRED; the routes used to

@@ -547,7 +547,17 @@ function bindingsReadFailedError(cause?: unknown): DeployError {
  * the value-opaque secret types survive only because `keep_bindings` carries
  * them, which is exactly the half that does not help. Refuse the deploy
  * instead: a refused deploy is recoverable and says so, a replaced binding set
- * is neither. */
+ * is neither.
+ *
+ * The one non-ok answer that is evidence rather than ignorance is 404: the
+ * script is not there, so there are no bindings to carry. `scriptExists` comes
+ * from a pre-PUT read that degrades to `unknown` — never `absent` — when that
+ * read fails transiently, so a FIRST deploy can arrive here claiming a script
+ * that does not exist, and refusing it told the user to preserve a binding set
+ * that has never existed. Every other non-ok status (429, 5xx, transport) still
+ * refuses: those mean the set is unknown, not empty, which is the distinction
+ * this read exists to make. Whether the script exists is settled by the PUT
+ * that follows, not by this read. */
 async function readExistingWorkerBindings(
   config: WorkersDeployConfig,
   scriptName: string,
@@ -559,6 +569,10 @@ async function readExistingWorkerBindings(
       CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/workers/scripts/' + encodeURIComponent(scriptName) + '/settings',
       { method: 'GET', headers: await authHeaders(config) },
     );
+    // Checked before the body is parsed: a 404 from this endpoint means "no such
+    // script", and the status is the whole fact. Parsing first let a non-JSON
+    // 404 body turn that evidence back into an unreadable-set refusal.
+    if (resp.status === 404) return [];
     const json = await readCloudflareJson(resp);
     if (!resp.ok || json.success === false) throw bindingsReadFailedError();
     const result = (json.result ?? {}) as JsonObject;

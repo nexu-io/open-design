@@ -739,11 +739,37 @@ export async function writeCloudflareOAuthIdentity(input: { clientId: string; re
  * the config clientId/redirectUri are updated in the same write as the mode
  * switch, so a replacement client is never recorded before its token is.
  * Refuses to run on a corrupt config file (CFW_CONFIG_CORRUPT); the connect
- * route then rolls the token write back. */
+ * route then rolls the token write back.
+ *
+ * Refuses with CFW_OAUTH_RECONNECT_REQUIRED when the token store is empty. This
+ * write is only ever the SECOND half of the OAuth commit — the connect route's
+ * persistCredential writes the token first — so a store with nothing in it means
+ * the credential this commit is the second half of has been cleared or revoked
+ * underneath it, and recording 'oauth' then names a mode with no credential
+ * behind it. The connect route's rollback owns the failure semantics. */
 export async function commitCloudflareOAuthMode(identity?: { clientId: string; redirectUri: string }): Promise<void> {
   return withCloudflareConfigMutation(async () => {
     const current = await readCloudflareWorkersConfig();
     refuseCloudflareWorkersConfigMutationIfCorrupt(current, 'switch the credential mode to oauth');
+    // The connect window is exactly when a settings PUT can read mode 'token' on
+    // disk beside the live grant persistCredential has just written, derive
+    // 'oauth' from that grant (readCloudflareWorkersConfig), and take the
+    // oauth->token transition branch — clearing and revoking the grant the
+    // connect just minted. Writing 'oauth' anyway records the mode with nothing
+    // behind it: the settings surface reports configured:true while
+    // /auth/status reports disconnected, and every deploy fails
+    // CFW_OAUTH_RECONNECT_REQUIRED. Refuse instead, so the connect route's
+    // rollback stays the single owner of the failure semantics. This runs under
+    // the same mutation lock as the settings PUT's transition, so the two cannot
+    // interleave.
+    if (!(await getCloudflareOAuthToken(cloudflareOAuthTokensDir()))) {
+      throw new DeployError(
+        'Connect Cloudflare first — an OAuth token is required to switch credential mode to oauth.',
+        400,
+        undefined,
+        'CFW_OAUTH_RECONNECT_REQUIRED',
+      );
+    }
     const next: DeployConfig = { ...persistableCloudflareWorkersConfig(current), credentialMode: 'oauth' };
     if (identity) {
       next.clientId = identity.clientId;

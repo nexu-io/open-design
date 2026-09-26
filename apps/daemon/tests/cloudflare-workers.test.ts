@@ -5,6 +5,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   CLOUDFLARE_WORKERS_PROVIDER_ID,
+  cloudflareOAuthTokensDir,
   commitCloudflareOAuthMode,
   configureCloudflareWorkersDataDir,
   deployConfigPath,
@@ -22,6 +23,7 @@ import {
   resolveWorkerScriptName,
   deployToCloudflareWorkers,
 } from '../src/deploy/cloudflare-workers.js';
+import { setCloudflareOAuthToken } from '../src/integrations/cloudflare-tokens.js';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return { ok: status >= 200 && status < 300, status, json: async () => body } as unknown as Response;
@@ -102,6 +104,16 @@ describe('cloudflare-workers config', () => {
       expect(saved.clientId).toBe('client-123');
       expect(saved.credentialMode).toBe('token');
 
+      // The commit is the second half of the OAuth commit pair and refuses when
+      // the store is empty, so the test stores the credential the connect route
+      // would have written first.
+      await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), {
+        accessToken: 'oauth-access',
+        tokenType: 'Bearer',
+        clientId: 'client-123',
+        generation: 0,
+        savedAt: Date.now(),
+      });
       await commitCloudflareOAuthMode();
       const raw = await readCloudflareWorkersConfig();
       expect(raw.clientId).toBe('client-123');
@@ -260,6 +272,14 @@ describe('cloudflare-workers config', () => {
     configureCloudflareWorkersDataDir(dir);
     try {
       await writeCloudflareWorkersConfig({ token: 'tok', accountId: 'acct_test' });
+      // The mode commit refuses while the token store is empty (it is only ever
+      // the second half of the OAuth commit pair), so store a credential first.
+      await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), {
+        accessToken: 'oauth-access',
+        tokenType: 'Bearer',
+        generation: 0,
+        savedAt: Date.now(),
+      });
       // Both read-modify-writes start in the same tick. Without the mutex the
       // identity write reads mode 'token', then overwrites the committed 'oauth'.
       await Promise.all([
@@ -561,6 +581,28 @@ describe('deployToCloudflareWorkers', () => {
       expect(calls.some((c) => c[1]?.method === 'PUT')).toBe(false);
       vi.unstubAllGlobals();
     }
+  });
+
+  it('reads a 404 settings answer as "no script yet" instead of refusing a first deploy', async () => {
+    // A first deploy whose pre-PUT scripts list failed transiently arrives with
+    // scriptExists true — the baseline degrades to `unknown`, never `absent` —
+    // and the settings read for a script that does not exist answers 404.
+    // Refusing there asked the user to preserve a binding set that has never
+    // existed. The list entry carries no modified_on, which is the other way a
+    // baseline reads as `unknown`.
+    const { calls, fn } = happyFetch({
+      scripts: { success: true, result: [{ id: 'my-site', tag: 'tag-abc-123' }] },
+      settings: { success: false, errors: [{ message: 'script not found' }] },
+      settingsStatus: 404,
+    });
+    vi.stubGlobal('fetch', fn);
+    await deployToCloudflareWorkers(base);
+    // The read is attempted (the caller believed the script existed) and its
+    // 404 is read as evidence, not as an unreadable set: the deploy proceeds
+    // and carries nothing, because there is nothing to carry.
+    expect(calls.some((c) => c[0].endsWith('/settings'))).toBe(true);
+    const meta = await metadataOf(calls.find((c) => c[1]?.method === 'PUT')!);
+    expect(meta.bindings).toEqual([{ name: 'ASSETS', type: 'assets' }]);
   });
 
   it('carries the managed-only set without a settings read on a first deploy', async () => {

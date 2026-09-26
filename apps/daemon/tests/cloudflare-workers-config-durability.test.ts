@@ -445,4 +445,70 @@ describe('credential mode is derived from a live OAuth grant', () => {
       expect(fetchSpy).not.toHaveBeenCalled();
     });
   });
+
+  it('the oauth mode commit refuses when the store holds no credential', async () => {
+    await withDataDir(async () => {
+      // A config a connect is midway through committing: the identity write has
+      // landed and the token write has not (or something cleared it). Recording
+      // 'oauth' there names a mode with nothing behind it — configured:true on the
+      // settings surface while /auth/status reports disconnected, and every deploy
+      // failing CFW_OAUTH_RECONNECT_REQUIRED — so the commit refuses and leaves the
+      // connect route's rollback to own the outcome.
+      await writeCloudflareWorkersConfig({ token: 'static-token', accountId: 'acct_test' });
+      await expect(commitCloudflareOAuthMode({ clientId: 'client-1', redirectUri: 'http://127.0.0.1:1/cb' }))
+        .rejects.toMatchObject({ status: 400, code: 'CFW_OAUTH_RECONNECT_REQUIRED' });
+
+      const persisted = JSON.parse(await readFile(deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID), 'utf8')) as Record<string, unknown>;
+      // Neither the mode nor the identity it would have carried reached the file.
+      expect(persisted.credentialMode).toBe('token');
+      expect(persisted.clientId).not.toBe('client-1');
+      expect((await readCloudflareWorkersConfig()).credentialMode).toBe('token');
+    });
+  });
+
+  it('a settings PUT in the connect window cannot leave oauth mode with no credential behind it', async () => {
+    await withDataDir(async () => {
+      // The window the connect route cannot close on its own: persistCredential has
+      // written the grant and commitCloudflareOAuthMode has not yet recorded the
+      // mode, so the config on disk still says 'token' while readCloudflareWorkersConfig
+      // derives 'oauth' from the grant beside it. A settings PUT landing here takes
+      // the oauth->token transition branch and clears + revokes the grant the connect
+      // just minted. The commit that follows must then refuse rather than record a
+      // mode whose credential no longer exists.
+      await writeFile(
+        deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID),
+        JSON.stringify({ accountId: 'acct_test', credentialMode: 'token' }),
+        'utf8',
+      );
+      await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), {
+        accessToken: 'oauth-access',
+        refreshToken: 'ref-1',
+        tokenType: 'Bearer',
+        clientId: 'client-abc',
+        expiresAt: Date.now() + 3600_000,
+        generation: 1,
+        savedAt: Date.now(),
+      });
+      const revokes: string[] = [];
+      vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+        revokes.push(url);
+        return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
+      }));
+
+      // The user saves settings with their own static token, choosing token
+      // authority — the save that takes the transition branch.
+      const saved = await writeCloudflareWorkersConfig({ credentialMode: 'token', token: 'static-token' });
+      expect(saved.credentialMode).toBe('token');
+      expect(await getCloudflareOAuthToken(cloudflareOAuthTokensDir())).toBeNull();
+      expect(revokes).toHaveLength(1);
+
+      // The connect's commit runs with the credential it was the second half of
+      // already gone.
+      await expect(commitCloudflareOAuthMode({ clientId: 'client-abc', redirectUri: 'http://127.0.0.1:1/cb' }))
+        .rejects.toMatchObject({ status: 400, code: 'CFW_OAUTH_RECONNECT_REQUIRED' });
+      const raw = await readCloudflareWorkersConfig();
+      expect(raw.credentialMode).toBe('token');
+      expect(publicCloudflareWorkersConfig(raw).credentialMode).toBe('token');
+    });
+  });
 });
