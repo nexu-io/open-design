@@ -826,7 +826,14 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
           const owningRecords = listDeploymentsByProvider(db, CLOUDFLARE_WORKERS_PROVIDER_ID).filter((record: WorkersDeploymentRecord) => {
             const metadata = record.providerMetadata;
             if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return false;
-            return ownedCustomDomainsFromMetadata(metadata).some((entry) => entry.hostname === domain.hostname);
+            // A hostname vouched only by an attach write-ahead (pending) is owned
+            // for the ownership check and forgotten by the write-ahead below, so it
+            // must be re-vouched too — otherwise a DELETE failure strands it.
+            const vouched = vouchedCustomDomains(
+              ownedCustomDomainsFromMetadata(metadata),
+              pendingCustomDomainsFromMetadata(metadata),
+            );
+            return vouched.some((entry) => entry.hostname === domain.hostname);
           });
           // Write-ahead: forget the hostname across records BEFORE the DELETE, so a
           // crash between the two cannot leave records vouching for a hostname no

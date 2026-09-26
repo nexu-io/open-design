@@ -711,16 +711,18 @@ async function uploadWorkerScript(
   moduleCode: string,
   assetsJwt: string,
   runWorkerFirst = false,
+  knownAbsent = false,
 ): Promise<WorkerScriptUploadResult> {
   const url = CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/workers/scripts/' + encodeURIComponent(scriptName);
   const baseline = await readScriptModifiedBaseline(config, scriptName);
   // `absent` is the only baseline that proves creation: a script found
   // afterwards cannot be this run's. A failed pre-read stays `unknown` — it
   // proves nothing either way, and claiming creation would withdraw a route the
-  // user may already have had public. (`workerId === ''` carries the same fact
-  // on the Access path, but it is `''` for EVERY deploy with Access off, so it
-  // cannot be ORed in here without marking every such deploy's route as ours.)
-  const scriptCreatedByThisRun = baseline.kind === 'absent';
+  // user may already have had public. The Access path proves absence differently
+  // (a strict script-list that resolved an empty tag), so it passes `knownAbsent`
+  // to OR in that fact; `workerId === ''` on its own is `''` for every deploy
+  // with Access off, so it cannot be ORed in here unconditionally.
+  const scriptCreatedByThisRun = baseline.kind === 'absent' || knownAbsent;
   // Read ONCE, before the retry loop: what to carry is a property of the script
   // as this deploy found it, not of an attempt.
   const preservedBindings = await readExistingWorkerBindings(config, scriptName, baseline.kind !== 'absent');
@@ -2403,7 +2405,7 @@ async function deployToCloudflareWorkersWith(
     }
     let uploaded: Awaited<ReturnType<typeof uploadWorkerScript>>;
     try {
-      uploaded = await uploadWorkerScript(cfg, scriptName, moduleCode, completionJwt, isCustomModule);
+      uploaded = await uploadWorkerScript(cfg, scriptName, moduleCode, completionJwt, isCustomModule, accessOn && !accessAppId);
     } catch (err) {
       // A definitive non-5xx, non-timeout refusal means the script was NOT
       // created: the write-ahead verdict and the in-memory marker are both stale
