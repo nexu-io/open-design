@@ -22,6 +22,7 @@ import {
   probeCloudflareWorkersCapabilities,
   releasedCustomDomainsFromWorkersDeploy,
   retiredAccessAppIdFromWorkersDeploy,
+  verifyCloudflareAccessPerimeter,
   vouchedCustomDomains,
 } from '../src/deploy/cloudflare-workers.js';
 
@@ -1609,6 +1610,28 @@ describe('cloudflare access check-link classification', () => {
     const resp = new Response('<html>Cloudflare Access</html>', { status: 401 });
     expect(isCloudflareAccessProtectedResponse(resp, '<html>Cloudflare Access login</html>')).toBe(true);
     expect(isCloudflareAccessProtectedResponse(new Response('ok'), 'plain page')).toBe(false);
+  });
+});
+
+describe('verifyCloudflareAccessPerimeter', () => {
+  it('never reports an empty URL list as protected: zero probes is unreachable', async () => {
+    const fn = vi.fn(async () => accessRedirect());
+    vi.stubGlobal('fetch', fn);
+    const verdict = await verifyCloudflareAccessPerimeter([], {});
+    expect(verdict.outcome).toBe('unreachable');
+    if (verdict.outcome === 'unreachable') {
+      expect(verdict.error.code).toBe('CFW_ACCESS_UNVERIFIED');
+      expect(verdict.error.status).toBe(502);
+    }
+    expect(fn).not.toHaveBeenCalled();
+  });
+
+  it('reports protected only after every URL answered with the Access redirect', async () => {
+    const fn = vi.fn(async () => accessRedirect());
+    vi.stubGlobal('fetch', fn);
+    const verdict = await verifyCloudflareAccessPerimeter(['https://a.example.com', 'https://b.example.com'], {});
+    expect(verdict.outcome).toBe('protected');
+    expect(fn).toHaveBeenCalledTimes(2);
   });
 });
 

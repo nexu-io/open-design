@@ -1103,6 +1103,20 @@ async function probeCloudflareAccessPerimeterOnce(url: string, requestInit: Work
 // outranks any number of `unreachable` ones, because the caller withdraws on
 // `unprotected` only and merely defers on `unreachable`.
 export async function verifyCloudflareAccessPerimeter(urls: string[], requestInit: WorkersRequestInit): Promise<CloudflareAccessPerimeterVerdict> {
+  // Zero probes prove nothing: an empty list must never come back `protected`
+  // (the loop below would fall through to it). It is `unreachable`, so the
+  // caller defers rather than marks the deploy ready or withdraws anything.
+  if (urls.length === 0) {
+    return {
+      outcome: 'unreachable',
+      error: new DeployError(
+        'No public URL to verify Cloudflare Access against. The deploy was not marked ready.',
+        502,
+        { urls: [] },
+        'CFW_ACCESS_UNVERIFIED',
+      ),
+    };
+  }
   const { attempts, baseMs, maxDelayMs } = accessPerimeterRetry;
   let unreachable: CloudflareAccessPerimeterVerdict | null = null;
   for (const url of urls) {

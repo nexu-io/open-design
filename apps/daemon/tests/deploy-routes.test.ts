@@ -15,6 +15,7 @@ import {
   SAVED_CLOUDFLARE_TOKEN_MASK,
 } from '../src/deploy.js';
 import { configureCloudflareAccessPerimeterRetry } from '../src/deploy/cloudflare-workers.js';
+import { isDeferredWorkersAccessVerification } from '../src/routes/deploy.js';
 import { ensureProject } from '../src/projects.js';
 import { startServer } from '../src/server.js';
 
@@ -1999,6 +2000,12 @@ describe('deploy provider routes', () => {
           status: 'failed',
           cloudflareWorkers: { accessAppId: 'app-orphan', createdByOpenDesign: true },
         });
+        // Ownership only: the failed attempt never gated the Worker, so it
+        // must not pose as an Access deploy (which a link check could then
+        // "verify" and promote to ready).
+        expect((orphaned?.cloudflareWorkers as Record<string, unknown>).accessProtected).toBeUndefined();
+        expect((orphaned?.cloudflareWorkers as Record<string, unknown>).accessVerified).toBeUndefined();
+        expect(isDeferredWorkersAccessVerification({ status: String(orphaned?.status), providerMetadata: orphaned?.cloudflareWorkers })).toBe(false);
 
         // The retry updates OUR app in place instead of refusing it as foreign.
         const second = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
@@ -2785,6 +2792,9 @@ describe('deploy provider routes', () => {
       // The script's workers.dev route, as Cloudflare would report and store it.
       subdomainEnabled: true,
       cfCalls: [] as Array<{ url: string; method: string; dispatched: boolean }>,
+      // Consumed once: the next non-HEAD Cloudflare call awaits it before it
+      // answers, holding a deploy at its first API call.
+      hold: null as null | (() => Promise<void>),
     };
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
@@ -2797,6 +2807,11 @@ describe('deploy provider routes', () => {
         return headMode === 'access'
           ? new Response('', { status: 302, headers: { location: 'https://acct-test.cloudflareaccess.com/cdn-cgi/access/login' } })
           : new Response('', { status: 200 });
+      }
+      if (state.hold) {
+        const hold = state.hold;
+        state.hold = null;
+        await hold();
       }
       if (url.endsWith('/workers/subdomain')) return json({ success: true, result: { subdomain: 'acct-test' } });
       if (url.includes('assets-upload-session')) return json({ success: true, result: { jwt: 'SESS', buckets: [] } });
@@ -2850,7 +2865,7 @@ describe('deploy provider routes', () => {
     const listDeployments = async () => {
       const resp = await fetch(`${baseUrl}/api/projects/${projectId}/deployments`);
       expect(resp.status).toBe(200);
-      return ((await resp.json()) as { deployments: Array<{ fileName: string; cloudflareWorkers?: Record<string, unknown> }> }).deployments;
+      return ((await resp.json()) as { deployments: Array<{ fileName: string; status: string; cloudflareWorkers?: Record<string, unknown> }> }).deployments;
     };
     const cleanup = async () => {
       vi.unstubAllGlobals();
@@ -3090,6 +3105,89 @@ describe('deploy provider routes', () => {
       checked = await f.checkLink(deferred.id);
       expect(checked.status).toBe(200);
       expect(f.state.cfCalls.slice(before).every((c) => c.method === 'HEAD' || c.method === 'GET')).toBe(true);
+    } finally {
+      configureCloudflareAccessPerimeterRetry();
+      await f.cleanup();
+    }
+  });
+
+  it('classifies a record as a deferred Access verification only on the explicit deferral marker AND link-delayed status', () => {
+    // The marker deferAccessVerification writes, on the status the deploy
+    // reports with it.
+    expect(isDeferredWorkersAccessVerification({ status: 'link-delayed', providerMetadata: { accessVerified: false, accessProtected: true } })).toBe(true);
+    expect(isDeferredWorkersAccessVerification({ status: 'link-delayed', providerMetadata: { accessVerified: false } })).toBe(true);
+    // A FAILED deploy's ownership bookkeeping (accessAppId + createdByOpenDesign,
+    // no verification marker) is not a deferral: the link check must not be
+    // able to promote it to ready.
+    expect(isDeferredWorkersAccessVerification({ status: 'failed', providerMetadata: { accessAppId: 'app-1', createdByOpenDesign: true } })).toBe(false);
+    expect(isDeferredWorkersAccessVerification({ status: 'failed', providerMetadata: { accessProtected: true } })).toBe(false);
+    // The marker on any status other than link-delayed (a failed check, a
+    // hand-edited record) is not a deferral either.
+    expect(isDeferredWorkersAccessVerification({ status: 'failed', providerMetadata: { accessVerified: false } })).toBe(false);
+    expect(isDeferredWorkersAccessVerification({ status: 'ready', providerMetadata: { accessVerified: false } })).toBe(false);
+    // Missing marker (legacy record, or protected without deferral) is not one.
+    expect(isDeferredWorkersAccessVerification({ status: 'link-delayed', providerMetadata: { accessProtected: true } })).toBe(false);
+    expect(isDeferredWorkersAccessVerification({ status: 'link-delayed', providerMetadata: { accessVerified: true, accessProtected: true } })).toBe(false);
+    expect(isDeferredWorkersAccessVerification({ status: 'link-delayed', providerMetadata: undefined })).toBe(false);
+    expect(isDeferredWorkersAccessVerification({ status: 'link-delayed', providerMetadata: [] })).toBe(false);
+  });
+
+  it('check-link refuses to withdraw a deferred deploy\'s exposure with 409 DEPLOY_IN_PROGRESS while a deploy of the script is in flight', async () => {
+    const f = await workersSiblingFixture('deferred-singleflight', { access: true });
+    configureCloudflareAccessPerimeterRetry({ attempts: 2, baseMs: 1 });
+    try {
+      // A deferred deploy: this run turned the workers.dev route on and
+      // attached a.example.com; both are recorded as its exposure.
+      f.state.subdomainEnabled = false;
+      f.state.headMode = 'unreachable';
+      await f.putConfig({ hostname: 'a.example.com', access: true });
+      const deployResp = await f.deploy('a.html');
+      expect(deployResp.status).toBe(200);
+      const deployed = (await deployResp.json()) as { id: string; status: string };
+      expect(deployed.status).toBe('link-delayed');
+      expect(f.state.subdomainEnabled).toBe(true);
+      expect(f.state.routed.map((d) => d.hostname)).toEqual(['a.example.com']);
+
+      // The URLs now answer WITHOUT the gate, so a check-link would withdraw.
+      // A deploy of the same script is admitted first and held at its first
+      // Cloudflare call: the withdrawal must not race it.
+      f.state.headMode = 'plain';
+      let release: () => void = () => {};
+      const held = new Promise<void>((resolve) => { release = resolve; });
+      f.state.hold = () => held;
+      const inflight = f.deploy('a.html');
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      const before = f.state.cfCalls.length;
+      const recordedBefore = (await f.listDeployments()).find((d) => d.fileName === 'a.html');
+      expect(recordedBefore?.status).toBe('link-delayed');
+      const refused = await f.checkLink(deployed.id);
+      expect(refused.status).toBe(409);
+      expect(await refused.json()).toMatchObject({ error: { code: 'DEPLOY_IN_PROGRESS' } });
+      // Nothing was withdrawn: the probes ran, no route was turned off, no
+      // hostname detached, and the record is still the deferred one.
+      // (The held deploy's first, still-pending call may sit in the log; it is
+      // not a withdrawal either.)
+      const withdrawals = f.state.cfCalls.slice(before).filter((c) => c.method === 'DELETE' || (c.method === 'POST' && c.url.endsWith('/subdomain')));
+      expect(withdrawals).toEqual([]);
+      expect(f.state.subdomainEnabled).toBe(true);
+      expect(f.state.routed.map((d) => d.hostname)).toEqual(['a.example.com']);
+      // The deferral marker (`accessVerified: false`) lives in providerMetadata,
+      // which publicDeployment strips and the lifted `cloudflareWorkers` view
+      // does not carry; the public record is compared whole instead: still
+      // link-delayed, its access-verify step still the deferred one, and not
+      // rewritten by the refused check.
+      const recordedAfter = (await f.listDeployments()).find((d) => d.fileName === 'a.html');
+      expect(recordedAfter?.status).toBe('link-delayed');
+      expect(recordedAfter?.cloudflareWorkers?.steps).toContainEqual(expect.objectContaining({ name: 'access-verify', status: 'done', detail: expect.stringMatching(/^deferred: /) }));
+      expect(recordedAfter).toEqual(recordedBefore);
+
+      // Once the deploy is released and finishes, the single-flight is free
+      // again and a check-link is admitted.
+      release();
+      const finished = await inflight;
+      expect([200, 502]).toContain(finished.status);
+      const after = await f.checkLink(deployed.id);
+      expect(after.status).toBe(200);
     } finally {
       configureCloudflareAccessPerimeterRetry();
       await f.cleanup();
