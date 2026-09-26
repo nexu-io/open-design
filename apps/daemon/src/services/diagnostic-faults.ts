@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { RecentApiFailure } from '../http/api-failure-journal.js';
 import type { FaultEvidence } from './automatic-diagnostics.js';
 
@@ -80,6 +79,9 @@ export function diagnosticFaultFromLifecycle(
   };
 }
 
+/** One incident per API failure signature per device-hour. */
+export const API_FAULT_DEDUPE_WINDOW_MS = 3600_000;
+
 /** Route templates contain no user filenames, query strings or request bodies. */
 export function diagnosticFaultFromApi(failure: RecentApiFailure): FaultEvidence | null {
   if (failure.status < 400 || /\/(telemetry|diagnostics|objects|health)(?:\/|$)/.test(failure.path)) return null;
@@ -89,6 +91,11 @@ export function diagnosticFaultFromApi(failure: RecentApiFailure): FaultEvidence
   else if (/\/(export|preview|preview-url)(?:\/|$)/.test(failure.path)) kind = 'delivery_api_failure';
   else if (/\/(projects|conversations|files|upload|artifacts|live-artifacts)(?:\/|$)/.test(failure.path)) kind = 'workspace_api_failure';
   else return null;
-  return { sourceId: `api:${failure.requestId ?? randomUUID()}:${failure.code}`,
-    kind, at: Date.parse(failure.at), errorCode: failure.code, detail: failure };
+  const parsedAt = Date.parse(failure.at);
+  const at = Number.isFinite(parsedAt) ? parsedAt : Date.now();
+  // Keyed by signature, not request id: a polling caller that repeats one
+  // deterministic failure every few seconds must not become an incident each time.
+  const window = Math.floor(at / API_FAULT_DEDUPE_WINDOW_MS);
+  return { sourceId: `api:${kind}:${failure.method}:${failure.path}:${failure.status}:${failure.code}:${window}`,
+    kind, at, errorCode: failure.code, detail: failure };
 }

@@ -746,7 +746,7 @@ import {
   chatScrollForensicsBodyParser,
   chatScrollForensicsHandler,
 } from './diagnostics-client-evidence.js';
-import { DIAGNOSTICS_EXPORT_PATH } from '@open-design/diagnostics';
+import { DIAGNOSTIC_DELIVERY_LOG_PREFIX, DIAGNOSTICS_EXPORT_PATH } from '@open-design/diagnostics';
 import {
   createProjectArchiveStream,
   createBatchArchiveStream,
@@ -7892,7 +7892,7 @@ export async function startServer({
         runsDir: path.join(RUNTIME_DATA_DIR, 'runs'), dataDir: RUNTIME_DATA_DIR }, { agentId: '*' }),
       context: () => currentAppVersionInfo(),
       onDelivered: (incidentId, receipt, evidence) => {
-        console.info('[diagnostics] incident delivered', incidentId, JSON.parse(receipt).object_key);
+        console.info(DIAGNOSTIC_DELIVERY_LOG_PREFIX, incidentId, JSON.parse(receipt).object_key);
         void analyticsService.captureSafety({ eventName: 'diagnostic_bundle_uploaded',
           appVersion: currentAppVersion(), properties: { diagnostic_incident_id: incidentId,
             diagnostic_object_key: JSON.parse(receipt).object_key, run_id: evidence.runId,

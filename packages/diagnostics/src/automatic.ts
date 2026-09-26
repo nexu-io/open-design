@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdir, stat, writeFile } from 'node:fs/promises';
+import { mkdir, open, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Readable, Writable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -9,6 +9,12 @@ import { redactJsonText, redactJsonValue, type RedactionOptions } from './redact
 
 export const DIAGNOSTIC_CHUNK_BYTES = 4 * 1024 * 1024;
 export const DIAGNOSTIC_MAX_BYTES = 100 * 1024 * 1024;
+/**
+ * Prefix of the daemon's per-delivery receipt log line. Automatic bundles drop
+ * these lines: otherwise every upload re-ships the receipts of all earlier
+ * uploads and, on a busy device, they crowd the real log out of the tail.
+ */
+export const DIAGNOSTIC_DELIVERY_LOG_PREFIX = '[diagnostics] incident delivered';
 export interface AutomaticDiagnosticManifest {
   version: 1;
   incidentId: string;
@@ -21,6 +27,60 @@ export interface AutomaticDiagnosticSource extends LogSource {
   /** Bytes before the last consent boundary must never enter an automatic upload. */
   startOffset?: number;
   omitReason?: string;
+}
+
+/** Read the filtered tail with bounded memory, even for receipt-only or oversized lines. */
+async function readAutomaticTextTail(source: AutomaticDiagnosticSource, limit: number, signal?: AbortSignal): Promise<string> {
+  const file = await open(source.absolutePath, 'r');
+  try {
+    let position = (await file.stat()).size;
+    const start = Math.max(0, source.startOffset ?? 0);
+    const block = Buffer.alloc(64 * 1024);
+    const retained: Buffer[] = [];
+    let remaining = limit;
+    let pending: Buffer = Buffer.alloc(0);
+    let lineBytes = 0;
+    // Keep enough of an oversized line's beginning to recognize a receipt.
+    const pendingLimit = Math.max(limit, Buffer.byteLength(DIAGNOSTIC_DELIVERY_LOG_PREFIX));
+    function prepend(part: Buffer) {
+      lineBytes += part.length;
+      pending = Buffer.concat([part, pending]).subarray(0, pendingLimit);
+    }
+    function retainLine(): boolean {
+      if (!pending.toString('utf8').startsWith(DIAGNOSTIC_DELIVERY_LOG_PREFIX)) {
+        if (lineBytes > remaining) return false;
+        if (lineBytes > 0) retained.push(pending);
+        remaining -= lineBytes;
+      }
+      pending = Buffer.alloc(0);
+      lineBytes = 0;
+      return remaining > 0;
+    }
+    while (position > start) {
+      signal?.throwIfAborted();
+      const length = Math.min(block.length, position - start);
+      position -= length;
+      const { bytesRead } = await file.read(block, 0, length, position);
+      if (bytesRead !== length) throw new Error('log changed during collection');
+      let end = bytesRead;
+      for (let i = bytesRead - 1; i >= 0; i--) {
+        if (block[i] !== 0x0a) continue;
+        prepend(block.subarray(i + 1, end));
+        if (!retainLine()) return Buffer.concat(retained.reverse()).toString('utf8');
+        end = i + 1;
+      }
+      prepend(block.subarray(0, end));
+    }
+    // A consent boundary can fall inside a record; never export that fragment.
+    if (start === 0) retainLine();
+    else {
+      const { bytesRead } = await file.read(block, 0, 1, start - 1);
+      if (bytesRead === 1 && block[0] === 0x0a) retainLine();
+    }
+    return Buffer.concat(retained.reverse()).toString('utf8');
+  } finally {
+    await file.close();
+  }
 }
 
 /** Gzipped JSONL records, written sequentially to bounded chunks; no binary discovery. */
@@ -50,11 +110,18 @@ export async function buildAutomaticDiagnostics(input: {
       const limit = Math.min(source.tailBytes ?? DIAGNOSTIC_CHUNK_BYTES, DIAGNOSTIC_CHUNK_BYTES, remaining, available);
       if (available === 0) { notes.push({ name: source.name, reason: 'consent_boundary' }); continue; }
       if (limit <= 0) { notes.push({ name: source.name, reason: 'incident_size_limit' }); continue; }
-      const file = await collectLogSource({ ...source, tailBytes: limit }, input.redaction);
+      const file = source.kind === 'text'
+        ? await readAutomaticTextTail(source, limit, input.signal)
+          .then((content) => ({ content, error: false }))
+          .catch(() => ({ content: '', error: true }))
+        : await collectLogSource({ ...source, tailBytes: limit }, input.redaction);
+      input.signal?.throwIfAborted();
       if (file.error) { notes.push({ name: source.name, reason: 'source_unavailable' }); continue; }
       if (size > limit) notes.push({ name: source.name, reason: 'tail_truncated' });
       // Text logs can contain JSONL credentials: redact each complete JSON record structurally.
-      const content = String(file.content ?? '').split('\n').map((line) => redactJsonText(line, input.redaction)).join('\n');
+      const content = String(file.content ?? '').split('\n')
+        .filter((line) => !line.startsWith(DIAGNOSTIC_DELIVERY_LOG_PREFIX))
+        .map((line) => redactJsonText(line, input.redaction)).join('\n');
       const encoded = JSON.stringify({ type: 'file', name: source.name, content }) + '\n';
       const bytes = Buffer.byteLength(encoded);
       if (bytes > remaining) { notes.push({ name: source.name, reason: 'incident_size_limit' }); continue; }

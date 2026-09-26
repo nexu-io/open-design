@@ -1682,17 +1682,39 @@ export async function listActiveChatRuns(
 export async function listProjectRuns(
   workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<ChatRunStatusResponse[]> {
+  return (await listProjectRunsWithScope(workspaceContext)).runs;
+}
+
+/**
+ * The catalogue-wide listing, plus whether the daemon refused it outright.
+ *
+ * `scopeRequired` is the deterministic 400 `PROJECT_SCOPE_REQUIRED` answer once
+ * any run belongs to a Workspace-bound project. Asking again cannot change it,
+ * so interval pollers must stop instead of repeating the same failed request
+ * (each one was also captured as a diagnostic incident).
+ */
+export async function listProjectRunsWithScope(
+  workspaceContext?: WorkspaceCollabContext | null,
+): Promise<{ runs: ChatRunStatusResponse[]; scopeRequired: boolean }> {
   try {
     const resp = await fetch('/api/runs', {
       ...(workspaceContext
         ? { headers: workspaceProjectHeaders(workspaceContext) }
         : {}),
     });
-    if (!resp.ok) return [];
+    if (!resp.ok) {
+      const body = (await resp.json().catch(() => null)) as
+        | { error?: { code?: string } }
+        | null;
+      return {
+        runs: [],
+        scopeRequired: resp.status === 400 && body?.error?.code === 'PROJECT_SCOPE_REQUIRED',
+      };
+    }
     const body = (await resp.json()) as ChatRunListResponse;
-    return body.runs ?? [];
+    return { runs: body.runs ?? [], scopeRequired: false };
   } catch {
-    return [];
+    return { runs: [], scopeRequired: false };
   }
 }
 
