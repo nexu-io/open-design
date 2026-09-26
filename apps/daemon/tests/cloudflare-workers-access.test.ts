@@ -170,7 +170,11 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
       access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } },
     });
     const createPos = calls.findIndex((c) => c[0].endsWith('/access/apps') && c[1]?.method === 'POST');
-    const exposePos = calls.findIndex((c) => c[0].includes('/subdomain') && c[1]?.method === 'POST');
+    const subdomainPosts = calls
+      .map((c, index) => ({ c, index }))
+      .filter(({ c }) => c[0].includes('/subdomain') && c[1]?.method === 'POST');
+    const bodyAt = (c: Call) => JSON.parse(String(c[1]?.body)) as { enabled?: boolean };
+    const exposePos = subdomainPosts.find(({ c }) => bodyAt(c).enabled === true)?.index ?? -1;
     expect(createPos).toBeGreaterThanOrEqual(0);
     expect(exposePos).toBeGreaterThan(createPos);
 
@@ -920,6 +924,39 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
     ]));
   });
 
+  it('keeps a hostname whose domain id cannot be resolved as owned, instead of reporting it detached', async () => {
+    // The regression this pins: with no id to DELETE with the detach was skipped
+    // but the hostname was spliced out of attachedCustomDomains, pushed into
+    // releasedCustomDomains and recorded as a done detach. Three bookkeeping
+    // paths then agreed a hostname was gone while it stayed routed and public.
+    const { calls, fn } = accessFetch({
+      head: () => new Response('', { status: 200 }),
+      // The attach answers without an id, and the strict re-list resolves
+      // nothing for the hostname.
+      domains: { success: true, result: {} },
+      domainsList: { success: true, result: [] },
+    });
+    vi.stubGlobal('fetch', fn);
+    let caught: { code?: string; attachedCustomDomains?: unknown; releasedCustomDomains?: unknown; steps?: Array<{ name: string; status: string; detail?: string }> } | undefined;
+    try {
+      await deployToCloudflareWorkers({
+        ...base,
+        access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } },
+        customDomain: { hostname: 'app.example.com', zoneId: 'zone-1' },
+      });
+    } catch (err) {
+      caught = err as typeof caught;
+    }
+    expect(caught).toMatchObject({ name: 'DeployError', code: 'CFW_ACCESS_UNVERIFIED' });
+    // Nothing could be detached, so no DELETE went out …
+    expect(calls.some((c) => c[1]?.method === 'DELETE' && c[0].includes('/workers/domains/'))).toBe(false);
+    // … and the hostname is STILL routed and public: it stays owned, is not
+    // called released, and the step says so instead of claiming success.
+    expect(caught?.steps).toContainEqual({ name: 'custom-domain-detach', status: 'error', detail: 'app.example.com: could not resolve the domain id to detach' });
+    expect(caught?.attachedCustomDomains).toEqual([{ hostname: 'app.example.com' }]);
+    expect(caught?.releasedCustomDomains ?? []).not.toContain('app.example.com');
+  });
+
   it('defers instead of withdrawing when the perimeter answers 5xx: an outage is not an exposure', async () => {
     // The regression this pins: a 503 used to be classified as an ungated URL,
     // so the deploy withdrew the workers.dev route and the hostname it had just
@@ -988,9 +1025,10 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
     const subdomainPosts = calls
       .filter((c) => c[0].endsWith('/workers/scripts/my-site/subdomain') && c[1]?.method === 'POST')
       .map((c) => JSON.parse(String(c[1]?.body)) as { enabled: boolean });
-    // On, then back off: the route is this run's exposure even though the
-    // read-back (Cloudflare's creation default) said it was already on.
-    expect(subdomainPosts.map((body) => body.enabled)).toEqual([true, false]);
+    // Held off across the Access window, on once the app is in place, then back
+    // off: the route is this run's exposure even though the read-back
+    // (Cloudflare's creation default) said it was already on.
+    expect(subdomainPosts.map((body) => body.enabled)).toEqual([false, true, false]);
   });
 
   it('records the route Cloudflare assigned to a script this run created, so the link check can still act on it', async () => {
@@ -1021,10 +1059,17 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
       scriptName: 'my-site',
       subdomainEnabledByThisRun: true,
     });
-    expect(
-      calls.some((c) => c[1]?.method === 'POST' && c[0].endsWith('/workers/scripts/my-site/subdomain')
-        && (JSON.parse(String(c[1]?.body)) as { enabled?: boolean }).enabled === false),
-    ).toBe(false);
+    // Deferred, not withdrawn: the only `enabled:false` write is the hold-off
+    // window guard of a first deploy, which precedes the Access app create.
+    // Nothing was turned back off after the probes gave up.
+    const createPos = calls.findIndex((c) => c[0].endsWith('/access/apps') && c[1]?.method === 'POST');
+    const disables = calls
+      .map((c, index) => ({ c, index }))
+      .filter(({ c }) => c[1]?.method === 'POST' && c[0].endsWith('/workers/scripts/my-site/subdomain')
+        && (JSON.parse(String(c[1]?.body)) as { enabled?: boolean }).enabled === false)
+      .map(({ index }) => index);
+    expect(createPos).toBeGreaterThanOrEqual(0);
+    for (const position of disables) expect(position).toBeLessThan(createPos);
   });
 
   it('turning workers.dev back off writes previews_enabled back as it was, instead of clobbering it', async () => {
@@ -1882,18 +1927,27 @@ describe('verifyCloudflareAccessPerimeter', () => {
     expect(fn).toHaveBeenCalledTimes(2);
   });
 
-  it('classifies only a PROVEN non-gate answer as unprotected', async () => {
-    // 2xx serves the app itself; a 3xx that is not the Access login sends the
-    // visitor somewhere else. Both prove the gate is absent.
-    for (const status of [200, 302]) {
-      const fn = vi.fn(async () => new Response('', {
-        status,
-        headers: status === 302 ? { location: 'https://elsewhere.example/login' } : {},
-      }));
+  it('classifies only a 2xx as unprotected: a 3xx to a non-Access host proves nothing', async () => {
+    // A 2xx serves the app itself, which is the gate's absence proven.
+    const ok = vi.fn(async () => new Response('', { status: 200 }));
+    vi.stubGlobal('fetch', ok);
+    const served = await verifyCloudflareAccessPerimeter(['https://a.example.com'], {});
+    expect(served.outcome).toBe('unprotected');
+    if (served.outcome === 'unprotected') expect(served.error.details).toMatchObject({ url: 'https://a.example.com', status: 200 });
+
+    // A 3xx that is not the recognized Access login is NOT proof of absence: a
+    // custom Access login domain, an enterprise IdP or the app's own redirect
+    // answers exactly like this while the gate is doing its job. Reading it as
+    // ungated withdrew a working deploy's workers.dev route and hostname.
+    for (const status of [301, 302, 307, 308]) {
+      const fn = vi.fn(async () => new Response('', { status, headers: { location: 'https://elsewhere.example/login' } }));
       vi.stubGlobal('fetch', fn);
       const verdict = await verifyCloudflareAccessPerimeter(['https://a.example.com'], {});
-      expect(verdict.outcome, 'HTTP ' + status).toBe('unprotected');
-      if (verdict.outcome === 'unprotected') expect(verdict.error.details).toMatchObject({ url: 'https://a.example.com', status });
+      expect(verdict.outcome, 'HTTP ' + status).toBe('unreachable');
+      if (verdict.outcome === 'unreachable') {
+        expect(verdict.error.code).toBe('CFW_ACCESS_UNVERIFIED');
+        expect(verdict.error.message).toContain('HTTP ' + status);
+      }
     }
   });
 
@@ -1949,13 +2003,17 @@ describe('Cloudflare Access redirect detection', () => {
   });
 
   it('a redirect to a non-Access host that merely mentions cloudflareaccess.com does not verify the perimeter', async () => {
-    const { fn } = accessFetch({
+    const { calls, fn } = accessFetch({
       head: () => new Response('', { status: 302, headers: { location: 'https://evil.example/?cloudflareaccess.com' } }),
     });
     vi.stubGlobal('fetch', fn);
-    await expect(
-      deployToCloudflareWorkers({ ...base, access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } } }),
-    ).rejects.toMatchObject({ name: 'DeployError', code: 'CFW_ACCESS_UNVERIFIED' });
+    const out = await deployToCloudflareWorkers({ ...base, access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } } });
+    // Neither `protected` (the redirect left the Access host) nor `unprotected`
+    // (a 3xx proves nothing either way): the deploy defers with the gate
+    // unverified, and withdraws nothing.
+    expect(out.status).toBe('link-delayed');
+    expect(out.providerMetadata).toMatchObject({ accessVerified: false });
+    expect(calls.some((c) => c[1]?.method === 'DELETE' && c[0].includes('/workers/domains/'))).toBe(false);
   });
 });
 

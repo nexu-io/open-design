@@ -1188,9 +1188,11 @@ export type CloudflareAccessPerimeterVerdict =
    * a 404 while a route propagates, a 503 from an erroring Worker, a 429 from
    * the edge). An outage is not an exposure. */
   | { outcome: 'unreachable'; error: DeployError }
-  /** A PROVEN non-gate answer: 2xx (the URL serves the app) or a 3xx to
-   * somewhere that is not the Access login. This is the exposure the caller
-   * must withdraw. */
+  /** A PROVEN non-gate answer: a 2xx, which serves the app itself. This is the
+   * exposure the caller must withdraw. A 3xx to somewhere that is not the
+   * Access login is deliberately NOT here: a custom Access login domain, an
+   * enterprise IdP or the app's own redirect answers 3xx while the gate is
+   * doing its job, so a 3xx proves nothing and defers as `unreachable`. */
   | { outcome: 'unprotected'; error: DeployError };
 
 // The challenge body of a probe response, when there is one to read: a stub
@@ -1232,10 +1234,12 @@ async function probeCloudflareAccessPerimeterOnce(url: string, requestInit: Work
   const status = resp.status;
   const location = resp.headers?.get?.('location') || '';
   if (isCloudflareAccessRedirect(status, location)) return { outcome: 'protected' };
-  // 2xx serves the app itself; a 3xx that is not the Access login sends the
-  // visitor somewhere else entirely. Either one is the gate's absence proven,
-  // so both are the exposure the caller withdraws.
-  if (status < 400) {
+  // Only a 2xx proves the gate absent: it serves the app itself. A 3xx is NOT
+  // proof of anything — a custom Access login domain, an enterprise IdP or the
+  // app's own redirect answers 3xx while the gate is very much present, and
+  // reading one as ungated withdrew a working deploy's workers.dev route and
+  // hostname. It falls through to `unreachable`, which defers.
+  if (status < 300) {
     return {
       outcome: 'unprotected',
       error: new DeployError(
@@ -1329,7 +1333,10 @@ function deferAccessVerification(metadata: JsonObject, steps: DeployStep[], verd
 // step list; the perimeter error is what surfaces. A detached hostname is
 // dropped from `attachedCustomDomains` so the failed-deploy bookkeeping does
 // not record as owned an attachment that no longer exists, and added to
-// `releasedCustomDomains` so the route drops its attach write-ahead too.
+// `releasedCustomDomains` so the route drops its attach write-ahead too. A
+// hostname whose domain id cannot be resolved is NOT detached — it is still
+// routed and public — so it stays owned (and out of `releasedCustomDomains`)
+// and only the step records the failure.
 async function withdrawUnverifiedExposure(
   config: WorkersDeployConfig,
   input: {
@@ -1361,11 +1368,23 @@ async function withdrawUnverifiedExposure(
         const routed = await listCloudflareWorkerDomainsForScript(config, input.scriptName);
         domainId = routed.find((domain) => domain.hostname === attached.hostname)?.id ?? '';
       }
-      if (domainId) await detachCloudflareWorkerDomain(config, domainId);
-      const index = input.attachedCustomDomains.indexOf(attached);
-      if (index >= 0) input.attachedCustomDomains.splice(index, 1);
-      if (!input.releasedCustomDomains.includes(attached.hostname)) input.releasedCustomDomains.push(attached.hostname);
-      steps.push({ name: 'custom-domain-detach', status: 'done', detail: attached.hostname });
+      if (domainId) {
+        await detachCloudflareWorkerDomain(config, domainId);
+        const index = input.attachedCustomDomains.indexOf(attached);
+        if (index >= 0) input.attachedCustomDomains.splice(index, 1);
+        if (!input.releasedCustomDomains.includes(attached.hostname)) input.releasedCustomDomains.push(attached.hostname);
+        steps.push({ name: 'custom-domain-detach', status: 'done', detail: attached.hostname });
+      } else {
+        // No id on the attach response and none from the strict re-list: there
+        // is nothing to DELETE with, so the hostname is STILL ROUTED AND
+        // PUBLIC. Dropping it from `attachedCustomDomains` and calling it
+        // released would tell three bookkeeping paths (the error's attach list,
+        // the route's write-ahead, and the exposure record the link check
+        // reads) that a live hostname is gone — which is how an exposure gets
+        // forgotten. It stays owned; the step says what happened.
+        console.error(`[cloudflare-workers] Access unverified; could not resolve the domain id to detach ${attached.hostname}; it stays routed and is kept as owned`);
+        steps.push({ name: 'custom-domain-detach', status: 'error', detail: attached.hostname + ': could not resolve the domain id to detach' });
+      }
     } catch (err) {
       console.error(`[cloudflare-workers] Access unverified; could not detach ${attached.hostname} again: ${describe(err)}`);
       steps.push({ name: 'custom-domain-detach', status: 'error', detail: attached.hostname + ': ' + describe(err) });
@@ -1999,6 +2018,18 @@ async function deployToCloudflareWorkersWith(
     const uploaded = await uploadWorkerScript(cfg, scriptName, moduleCode, completionJwt, isCustomModule);
     const scriptCreatedByThisRun = uploaded.scriptCreatedByThisRun;
     steps.push({ name: 'script', status: 'done' });
+    if (accessOn && !accessAppId && subdomain) {
+      // First deploy: the PUT just CREATED the script, and Cloudflare assigns a
+      // workers.dev route at creation — which is why the read-back in
+      // enableWorkerSubdomain reports the route as already on for a script this
+      // run created. The route is therefore live and ungated from here until
+      // the Access app below exists (an IdP list, an app lookup and an app
+      // POST), so turn it off for that window; the enableWorkerSubdomain
+      // further down turns it back on once the app is in place. No account
+      // subdomain means no route to turn off — and nothing would turn it back
+      // on either — so the guard skips the call rather than write a no-op.
+      await disableWorkerSubdomain(cfg, scriptName);
+    }
     if (accessOn && !accessAppId) {
       // First deploy: the Worker now exists, so its tag is resolvable.
       const app = await createCloudflareAccessApp(cfg, { scriptName, rule: access!.rule!, includePreview: true, publicHostnames: prePutPublicHostnames, selfEmail, priorAccessAppId });
