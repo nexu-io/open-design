@@ -1160,6 +1160,64 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
     });
   });
 
+  it('a production redeploy that defers carries the prior record\'s exposure forward instead of dropping it', async () => {
+    // The regression this pins: production's `unreachable` branch recorded only
+    // what THIS run created. A redeploy that attached no new hostname and found
+    // the workers.dev route already on creates nothing, so that record was
+    // written with no `unverifiedExposure` key at all — and a route the earlier
+    // deferred deploy had left public was recorded nowhere, with the link check
+    // that must withdraw it holding nothing to act on.
+    const { calls, fn } = accessFetch({
+      head: () => new Response('', { status: 503 }),
+      scriptSubdomainGet: { success: true, result: { enabled: true, previews_enabled: false } },
+    });
+    vi.stubGlobal('fetch', fn);
+    const prior = {
+      scriptName: 'my-site',
+      subdomainEnabledByThisRun: true,
+      detachableCustomDomains: [{ id: 'dom-1', hostname: 'app.example.com' }],
+    };
+    const out = await deployToCloudflareWorkers({
+      ...base,
+      access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } },
+      priorUnverifiedExposure: prior,
+    });
+    expect(out.status).toBe('link-delayed');
+    // The carried half survives the metadata replace, which is what the merge
+    // is for: this run's own exposure is empty and used to write no key at all.
+    expect(unverifiedExposureFromMetadata(out.providerMetadata)).toEqual(prior);
+    expect(out.providerMetadata?.unverifiedExposure).toEqual(prior);
+    // Carrying it is bookkeeping only: nothing was withdrawn, nothing attached.
+    expect(calls.some((c) => c[1]?.method === 'DELETE' && c[0].includes('/workers/domains/'))).toBe(false);
+    expect(calls.some((c) => c[1]?.method === 'PUT' && c[0].endsWith('/workers/domains'))).toBe(false);
+  });
+
+  it('a production redeploy unions its own exposure with the carried one, keeping one handle per hostname', async () => {
+    // The harness reports the route OFF, so this run turns it on: its own
+    // exposure is the workers.dev route plus the hostname it attaches, and both
+    // must join the carried exposure rather than replace it.
+    const { calls, fn } = accessFetch({ head: () => new Response('', { status: 503 }) });
+    vi.stubGlobal('fetch', fn);
+    const merged = {
+      scriptName: 'my-site',
+      subdomainEnabledByThisRun: true,
+      detachableCustomDomains: [{ hostname: 'legacy.example.com' }, { id: 'dom-1', hostname: 'app.example.com' }],
+    };
+    const out = await deployToCloudflareWorkers({
+      ...base,
+      access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } },
+      customDomain: { hostname: 'app.example.com', zoneId: 'zone-1' },
+      priorUnverifiedExposure: {
+        scriptName: 'my-site',
+        subdomainEnabledByThisRun: true,
+        detachableCustomDomains: [{ hostname: 'legacy.example.com' }],
+      },
+    });
+    expect(out.status).toBe('link-delayed');
+    expect(out.providerMetadata?.unverifiedExposure).toEqual(merged);
+    expect(unverifiedExposureFromMetadata(out.providerMetadata)).toEqual(merged);
+  });
+
   it('turning workers.dev back off writes previews_enabled back as it was, instead of clobbering it', async () => {
     const { calls, fn } = accessFetch({ head: () => new Response('', { status: 200 }) });
     const wrapped = vi.fn(async (url: string, init?: RequestInit) => {

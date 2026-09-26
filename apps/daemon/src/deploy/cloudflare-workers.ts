@@ -303,9 +303,8 @@ function cloudflareListUnseenItems(collected: JsonObject[], incoming: JsonObject
 // The page size Cloudflare ACTUALLY applied (`result_info.per_page`) wins over
 // the one requested: an endpoint that clamps `per_page` to a smaller value
 // would otherwise look exhausted after a "short" first page.
-function cloudflareListHasMorePages(json: JsonObject, pageLength: number, page: number, perPage: number): boolean {
+function cloudflareListReportsAnotherPage(json: JsonObject, pageLength: number, page: number, perPage: number): boolean {
   if (pageLength === 0) return false;
-  if (page >= CLOUDFLARE_LIST_MAX_PAGES) return false;
   const info = (json.result_info ?? {}) as JsonObject;
   const totalPages = Number(info.total_pages);
   if (Number.isFinite(totalPages) && totalPages > 0) return page < totalPages;
@@ -316,6 +315,16 @@ function cloudflareListHasMorePages(json: JsonObject, pageLength: number, page: 
   const count = typeof info.count === 'number' ? info.count : NaN;
   if (Number.isFinite(count) && count >= 0) return count >= effectivePerPage;
   return pageLength >= effectivePerPage;
+}
+
+// The same question with the page ceiling applied — the LENIENT stop. Only the
+// picker-facing lists may end here early: they degrade to a partial list on
+// purpose. The strict deploy-path reader must tell "the list ended" from "I
+// stopped reading", so it asks cloudflareListReportsAnotherPage directly and
+// fails closed when the ceiling is what stopped it.
+function cloudflareListHasMorePages(json: JsonObject, pageLength: number, page: number, perPage: number): boolean {
+  if (page >= CLOUDFLARE_LIST_MAX_PAGES) return false;
+  return cloudflareListReportsAnotherPage(json, pageLength, page, perPage);
 }
 
 // Fail-closed variant for the deploy path: a list failure (429 exhausted, 5xx,
@@ -340,7 +349,20 @@ async function listCloudflareAllPagesStrict(config: WorkersDeployConfig, path: s
     const unseen = cloudflareListUnseenItems(all, result);
     if (result.length > 0 && unseen.length === 0) return all;
     all.push(...unseen);
-    if (!cloudflareListHasMorePages(json, result.length, page, perPage)) return all;
+    const more = cloudflareListReportsAnotherPage(json, result.length, page, perPage);
+    if (!more) return all;
+    // The ceiling is where the LENIENT reader stops, and this function is not
+    // it: returning the pages read so far hands every caller below a list that
+    // was never read to its end, and every one of them reads a missing item as
+    // "does not exist". A truncated scripts list reports an existing script as
+    // absent — the verdict that makes scriptCreatedByThisRun true, passes
+    // scriptExists=false to the bindings read, and lets the PUT replace the
+    // user's KV/queue/DurableObject/service/vars bindings with nothing. D1 and
+    // the Access IdP take the same wrong turn into a duplicate create. Fail
+    // closed instead: a read that did not finish proves nothing.
+    if (page >= CLOUDFLARE_LIST_MAX_PAGES) {
+      throw new DeployError('Cloudflare list too large to read completely.', 502, undefined, 'CFW_LIST_TRUNCATED');
+    }
     page += 1;
   }
 }
@@ -2319,14 +2341,24 @@ async function deployToCloudflareWorkersWith(
       if (verdict.outcome === 'unreachable') {
         accessDeferred = deferAccessVerification(metadata, steps, verdict);
         // What the link check may still have to withdraw (see check-link):
-        // the same set the in-deploy compensation above would have.
-        recordUnverifiedExposure(metadata, {
+        // the same set the in-deploy compensation above would have, MERGED with
+        // the exposure a prior record already carries and never replacing it —
+        // the rule mergeUnverifiedExposure documents, and the same merge the
+        // preview branch below applies. Production's metadata REPLACES the
+        // record's too, and this run's own set is empty whenever it attached no
+        // new hostname and found the workers.dev route already on: recording
+        // only that set writes no key at all, so a route or hostname a deferred
+        // deploy left public ends up recorded nowhere and the link check that
+        // must withdraw it holds nothing to act on. A merged hostname this run
+        // has already detached is harmless — withdrawUnverifiedExposure reads a
+        // 404 from the detach as done.
+        recordUnverifiedExposure(metadata, mergeUnverifiedExposure(priorUnverifiedExposure, {
           scriptName,
           subdomainEnabledByThisRun,
           detachableCustomDomains: configuredHostname && !configuredAlreadyAttached
             ? attachedCustomDomains.filter((domain) => domain.hostname === configuredHostname)
             : [],
-        });
+        }));
       } else {
         metadata.accessVerified = true;
       }

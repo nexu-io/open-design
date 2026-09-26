@@ -238,6 +238,47 @@ describe('ensureCloudflareD1Database', () => {
     expect(calls.filter((c) => c[0].includes('/d1/database')).length).toBe(100);
     expect(dbs).toHaveLength(100 * 100);
   });
+
+  it('fails closed instead of returning a truncated list when the shared page ceiling is reached', async () => {
+    const calls: Call[] = [];
+    const fn = vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push([url, init]);
+      const page = Number(new URL(url).searchParams.get('page'));
+      // Every page is full and carries ids never seen before, so only the
+      // ceiling can stop this read. The lenient reader stops there and answers
+      // with a partial list; the strict one must not.
+      return jsonResponse({ success: true, result: Array.from({ length: 100 }, (_, i) => ({ name: 'db-' + page + '-' + i, uuid: 'uuid-' + page + '-' + i })) });
+    });
+    vi.stubGlobal('fetch', fn);
+    // A list that was never read to its end proves nothing about absence. Read
+    // as a partial list it said "no such database", and the POST that followed
+    // was a DUPLICATE database the account then owns twice.
+    await expect(ensureCloudflareD1Database({ token: 'tok-secret', accountId: 'acct_test' }, 'my-db')).rejects.toMatchObject({
+      name: 'DeployError',
+      code: 'CFW_LIST_TRUNCATED',
+      status: 502,
+    });
+    expect(calls.some((c) => c[1]?.method === 'POST')).toBe(false);
+    expect(calls.filter((c) => c[0].includes('/d1/database') && (c[1]?.method || 'GET') === 'GET').length).toBe(CLOUDFLARE_LIST_MAX_PAGES);
+  });
+
+  it('still returns a list that legitimately ends at the ceiling, without reading exhaustion as truncation', async () => {
+    const calls: Call[] = [];
+    const fn = vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push([url, init]);
+      if ((init?.method || 'GET').toUpperCase() === 'POST') return jsonResponse({ success: true, result: { uuid: 'uuid-created' } });
+      const page = Number(new URL(url).searchParams.get('page'));
+      // Page 100 is SHORT and reports no totals: the list ends exactly at the
+      // ceiling. Truncation is a last page that is full, or that says it has
+      // more — this is neither, so the ordinary create path must still run.
+      const length = page === CLOUDFLARE_LIST_MAX_PAGES ? 1 : 100;
+      return jsonResponse({ success: true, result: Array.from({ length }, (_, i) => ({ name: 'db-' + page + '-' + i, uuid: 'uuid-' + page + '-' + i })) });
+    });
+    vi.stubGlobal('fetch', fn);
+    await expect(ensureCloudflareD1Database({ token: 'tok-secret', accountId: 'acct_test' }, 'my-db')).resolves.toBe('uuid-created');
+    expect(calls.filter((c) => c[0].includes('/d1/database') && (c[1]?.method || 'GET') === 'GET').length).toBe(CLOUDFLARE_LIST_MAX_PAGES);
+    expect(calls.some((c) => c[0].includes('/d1/database') && c[1]?.method === 'POST')).toBe(true);
+  });
 });
 
 describe('ensureCloudflareR2Bucket', () => {
@@ -322,6 +363,40 @@ describe('ensureCloudflareR2Bucket', () => {
 
 describe('deployToCloudflareWorkers ensure-on-bind', () => {
   const base = { config: { token: 'tok-secret', accountId: 'acct_test' }, files: [INDEX], projectName: 'My Site' };
+
+  it('never acts on the "does not exist" verdict a truncated scripts list used to produce', async () => {
+    const calls: Call[] = [];
+    const inner = makeFetch({}, calls);
+    const fn = vi.fn(async (url: string, init?: RequestInit) => {
+      const method = (init?.method || 'GET').toUpperCase();
+      if (method === 'GET' && url.includes('/workers/scripts?')) {
+        calls.push([url, init]);
+        const page = new URL(url).searchParams.get('page');
+        // A fresh id per page: every page is full and new, so the read stops
+        // where the ceiling stops it — with no script of ours ever seen.
+        return jsonResponse({ success: true, result: Array.from({ length: 100 }, (_, i) => ({ id: 'script-' + page + '-' + i, tag: 'tag-' + page + '-' + i })) });
+      }
+      if (method === 'GET' && url.endsWith('/workers/scripts/my-site/subdomain')) {
+        calls.push([url, init]);
+        // Cloudflare's creation default: the route reads as already on.
+        return jsonResponse({ success: true, result: { enabled: true, previews_enabled: false } });
+      }
+      return inner(url, init);
+    });
+    vi.stubGlobal('fetch', fn);
+    // A truncated list names no script of ours, and the old reader answered
+    // `null` — "absent" — for exactly that. Absent is what withdraws the route
+    // as this run's own exposure and what passes scriptExists=false to the
+    // bindings read, so the PUT replaces the user's KV/queue/DO/service/vars
+    // bindings with nothing. Neither may follow from a list never read to its
+    // end.
+    await deployToCloudflareWorkers(base).catch(() => undefined);
+    expect(calls.filter((c) => c[0].includes('/workers/scripts?')).length).toBe(CLOUDFLARE_LIST_MAX_PAGES);
+    const disabled = calls.some((c) => c[0].endsWith('/workers/scripts/my-site/subdomain')
+      && c[1]?.method === 'POST'
+      && (JSON.parse(String(c[1]?.body)) as { enabled?: boolean }).enabled === false);
+    expect(disabled).toBe(false);
+  });
 
   it('resolves a d1 binding before the script PUT and stamps the id into metadata', async () => {
     const calls: Call[] = [];
