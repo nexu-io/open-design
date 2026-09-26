@@ -572,6 +572,13 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
       if (!isDeployProviderId(providerId)) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'unsupported deploy provider');
       }
+      // Cloudflare Workers config is the most destructive single write: it can
+      // take the oauth→token transition (clearing and revoking the grant),
+      // replace the static token, disable Access, and change the custom domain.
+      // Same DNS-rebinding guard as the detach and check-link routes.
+      if (providerId === CLOUDFLARE_WORKERS_PROVIDER_ID && !isLocalSameOrigin(req, resolvedPortRef.current)) {
+        return res.status(403).json({ error: 'cross-origin request rejected' });
+      }
       /** @type {import('@open-design/contracts').DeployConfigResponse} */
       const body = await writeDeployConfig(providerId, input);
       res.json(body);
@@ -899,6 +906,13 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
     let stage: 'file_plan' | 'provider' = 'file_plan';
     try {
       const { fileName, providerId = VERCEL_PROVIDER_ID, cloudflarePages, target: rawTarget } = req.body || {};
+      // Cloudflare Workers deploy executes the config's mutations against
+      // Cloudflare (Access app create/delete, domain attach/detach, workers.dev
+      // toggles). Same DNS-rebinding guard as the detach, check-link and config
+      // routes; the CLI and the loopback origin are unaffected.
+      if (providerId === CLOUDFLARE_WORKERS_PROVIDER_ID && !isLocalSameOrigin(req, resolvedPortRef.current)) {
+        return res.status(403).json({ error: 'cross-origin request rejected' });
+      }
       // Omitted target defaults to production; any supplied value must be exact.
       if (rawTarget !== undefined && rawTarget !== 'preview' && rawTarget !== 'production') {
         return sendApiError(res, 400, 'BAD_REQUEST', 'invalid target: expected "preview" or "production"');
