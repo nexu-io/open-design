@@ -211,11 +211,40 @@ describe('Workers config corruption recovery', () => {
 });
 
 describe('credential mode is derived from a live OAuth grant', () => {
-  it('reads oauth mode when a crash left a live grant behind a config that still says token', async () => {
+  it('reads oauth mode when a crash left a live grant behind a config with no usable static token', async () => {
     await withDataDir(async () => {
       // The OAuth commit writes the token first and the credential mode second
       // (commitCloudflareOAuthMode), so a crash between the two leaves a live
-      // grant on disk while the config still says 'token'.
+      // grant on disk while the config still says 'token'. The config is written
+      // by hand because a connect-only user never had a static token, and the
+      // settings PUT (rightly) refuses to persist an empty one.
+      await writeFile(
+        deployConfigPath(CLOUDFLARE_WORKERS_PROVIDER_ID),
+        JSON.stringify({ accountId: 'acct_test', credentialMode: 'token' }),
+        'utf8',
+      );
+      await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), {
+        accessToken: 'oauth-access',
+        tokenType: 'Bearer',
+        clientId: 'client-abc',
+        expiresAt: Date.now() + 3600_000,
+        generation: 1,
+        savedAt: Date.now(),
+      });
+      // With no static credential to prefer, the grant is the only authority
+      // there is. Without this the deploys would sign with an empty token while
+      // the grant sat unused, with nothing left that knows it is there.
+      const config = await readCloudflareWorkersConfig();
+      expect(config).toMatchObject({ credentialMode: 'oauth', clientId: 'client-abc', token: '' });
+      // The settings surface reports the mode the deploys will actually use ...
+      expect(publicCloudflareWorkersConfig(config)).toMatchObject({ credentialMode: 'oauth', configured: true });
+      // ... and the credential resolver hands out the grant.
+      await expect(getCloudflareAccessToken()).resolves.toBe('oauth-access');
+    });
+  });
+
+  it('an explicit static token keeps the config in token mode while a live grant exists', async () => {
+    await withDataDir(async () => {
       await writeCloudflareWorkersConfig({ token: 'static-token', accountId: 'acct_test' });
       await setCloudflareOAuthToken(cloudflareOAuthTokensDir(), {
         accessToken: 'oauth-access',
@@ -225,15 +254,17 @@ describe('credential mode is derived from a live OAuth grant', () => {
         generation: 1,
         savedAt: Date.now(),
       });
-      // The token is the authoritative record, so its presence decides the
-      // mode — without this the deploys would ignore the grant and fall back
-      // to the static token.
+      // The user's own choice of authority outranks the grant beside it.
+      // Deriving oauth from any live grant made 'token' unreachable for as long
+      // as one existed: the selector flipped straight back on every read, so a
+      // user could not leave OAuth mode at all. Leaving is what disconnect does,
+      // and it clears the grant before resetting the mode, so nothing stale is
+      // left here to re-assert oauth.
       const config = await readCloudflareWorkersConfig();
-      expect(config).toMatchObject({ credentialMode: 'oauth', clientId: 'client-abc', token: 'static-token' });
-      // The settings surface reports the mode the deploys will actually use …
-      expect(publicCloudflareWorkersConfig(config)).toMatchObject({ credentialMode: 'oauth', configured: true });
-      // … and the credential resolver hands out the grant, not the static token.
-      await expect(getCloudflareAccessToken()).resolves.toBe('oauth-access');
+      expect(config).toMatchObject({ credentialMode: 'token', token: 'static-token' });
+      expect(publicCloudflareWorkersConfig(config)).toMatchObject({ credentialMode: 'token' });
+      // The deploy signs with the token the user chose, not the grant.
+      await expect(getCloudflareAccessToken()).resolves.toBe('static-token');
     });
   });
 

@@ -484,9 +484,14 @@ async function liveCloudflareOAuthGrant(): Promise<StoredCloudflareOAuthToken | 
  * the two leaves a live grant on disk while the config still says 'token'.
  * Reading 'token' there makes every deploy ignore the grant sitting next to it
  * and fall back to a static API token a connect-only user never had, with
- * nothing left that knows the grant is there to revoke. The TOKEN is the
- * authoritative record (it carries its own clientId/redirectUri), so a present,
- * usable grant decides the mode.
+ * nothing left that knows the grant is there to revoke. So a present, usable
+ * grant decides the mode, but only where the config has no static token of its
+ * own to prefer: an explicit token is the user's stated choice of authority and
+ * is never overruled. Deriving oauth from the grant regardless made 'token'
+ * unreachable for as long as a grant existed — the selector flipped straight
+ * back on every read, so a user could not leave OAuth mode at all. Leaving is
+ * what disconnect does, and it clears the grant before resetting the mode, so
+ * this derivation is never handed a stale grant to re-assert.
  *
  * A config that reads as corrupt is returned untouched: it is already a distinct
  * degraded state whose recovery is a settings save, and the disconnect reset
@@ -494,6 +499,10 @@ async function liveCloudflareOAuthGrant(): Promise<StoredCloudflareOAuthToken | 
 export async function readCloudflareWorkersConfig(): Promise<DeployConfig> {
   const config = await readCloudflareWorkersConfigFile();
   if (config.credentialMode === 'oauth' || config.configError) return config;
+  // A static credential the user saved outranks the grant (see above), and it is
+  // checked before the grant is even read, so a token-mode config neither pays
+  // for nor depends on the OAuth token file.
+  if (config.token) return config;
   const grant = await liveCloudflareOAuthGrant();
   if (!grant) return config;
   return {

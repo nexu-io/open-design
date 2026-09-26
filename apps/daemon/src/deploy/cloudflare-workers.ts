@@ -346,8 +346,13 @@ export function resolveWorkerScriptName(override: string | undefined, fallbackNa
   return cloudflareWorkersScriptNameForProject(fallbackName);
 }
 
+// `_worker.js` is the entry name a site opts into by writing it. A root
+// `worker.js` is NOT one: that is the conventional filename for a Web Worker a
+// page loads from its own HTML, so reading it as the entry module both dropped
+// the file from the asset manifest (it 404'd on the deployed site) and PUT a
+// Web Worker as the script's main module.
 function splitWorkerModule(files: WorkersFile[]): { moduleCode: string; assetFiles: WorkersFile[] } {
-  const entry = files.find((file) => file.file === '_worker.js' || file.file === 'worker.js');
+  const entry = files.find((file) => file.file === '_worker.js');
   if (entry) {
     return { moduleCode: Buffer.from(entry.data).toString('utf8'), assetFiles: files.filter((file) => file !== entry) };
   }
@@ -438,7 +443,71 @@ async function uploadAssetBuckets(
   return completionJwt;
 }
 
-function workerMetadata(config: WorkersDeployConfig, assetsJwt?: string, runWorkerFirst = false): JsonObject {
+/** Binding types OpenDesign owns: the assets binding it injects, plus the R2 and
+ * D1 bindings the config declares, which the deploy ensures and rewrites (a D1
+ * databaseName is resolved to an id). Upload metadata REPLACES the script's
+ * whole binding set, so naming only these types deleted every binding the user
+ * had added by any other means. */
+const WORKERS_MANAGED_BINDING_TYPES = new Set(['assets', 'r2_bucket', 'd1']);
+
+/** Carried across an upload by `keep_bindings` rather than by re-sending: the
+ * settings API redacts their values, so a re-sent entry would write "no value"
+ * instead of copying the one on the script. */
+const WORKERS_VALUE_OPAQUE_BINDING_TYPES = new Set(['secret_text', 'secret_key']);
+
+/** The bindings already on the script that OpenDesign does not manage, ready to
+ * be carried into the next upload's metadata. Entries whose shape cannot be
+ * understood are dropped rather than forwarded: a malformed entry fails the
+ * whole PUT, and one unreadable entry is not a reason to fail a deploy. */
+function preservedWorkerBindings(existing: unknown): JsonObject[] {
+  if (!Array.isArray(existing)) return [];
+  const out: JsonObject[] = [];
+  for (const entry of existing) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+    const binding = entry as JsonObject;
+    const type = typeof binding.type === 'string' ? binding.type : '';
+    const name = typeof binding.name === 'string' ? binding.name : '';
+    if (!type || !name) continue;
+    if (WORKERS_MANAGED_BINDING_TYPES.has(type)) continue;
+    if (WORKERS_VALUE_OPAQUE_BINDING_TYPES.has(type)) continue;
+    out.push(binding);
+  }
+  return out;
+}
+
+/** The config's own bindings first, then the carried ones that do not collide by
+ * name: the OpenDesign config is authoritative for the names it declares. */
+function mergeWorkerBindings(managed: JsonObject[], preserved: JsonObject[]): JsonObject[] {
+  const declared = new Set(managed.map((binding) => String(binding.name)));
+  return [...managed, ...preserved.filter((binding) => !declared.has(String(binding.name)))];
+}
+
+/** The bindings a PUT would otherwise delete. Best effort on purpose, the same
+ * fail-open shape as the modified_on baseline read beside it: a script that does
+ * not exist yet has none to carry (so the first-deploy path pays no extra call),
+ * and a read that fails says nothing about what the PUT should do, so neither
+ * may become a failed deploy. */
+async function readExistingWorkerBindings(
+  config: WorkersDeployConfig,
+  scriptName: string,
+  scriptExists: boolean,
+): Promise<JsonObject[]> {
+  if (!scriptExists) return [];
+  try {
+    const resp = await fetchWithRetry(config,
+      CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/workers/scripts/' + encodeURIComponent(scriptName) + '/settings',
+      { method: 'GET', headers: await authHeaders(config) },
+    );
+    const json = await readCloudflareJson(resp);
+    if (!resp.ok || json.success === false) return [];
+    const result = (json.result ?? {}) as JsonObject;
+    return preservedWorkerBindings(result.bindings);
+  } catch {
+    return [];
+  }
+}
+
+function workerMetadata(config: WorkersDeployConfig, assetsJwt?: string, runWorkerFirst = false, preservedBindings: JsonObject[] = []): JsonObject {
   const metadata: JsonObject = {
     main_module: 'index.js',
     compatibility_date: config.compatibilityDate || DEFAULT_COMPATIBILITY_DATE,
@@ -450,13 +519,14 @@ function workerMetadata(config: WorkersDeployConfig, assetsJwt?: string, runWork
     if (b.id !== undefined) out.id = b.id;
     return out;
   });
+  const bindings = mergeWorkerBindings(userBindings, preservedBindings);
   if (assetsJwt !== undefined) {
-    metadata.bindings = [{ name: 'ASSETS', type: 'assets' }, ...userBindings];
+    metadata.bindings = [{ name: 'ASSETS', type: 'assets' }, ...bindings];
     const assets: JsonObject = { jwt: assetsJwt };
     if (runWorkerFirst) assets.config = { run_worker_first: true };
     metadata.assets = assets;
-  } else if (userBindings.length > 0) {
-    metadata.bindings = userBindings;
+  } else if (bindings.length > 0) {
+    metadata.bindings = bindings;
   }
   return metadata;
 }
@@ -522,11 +592,14 @@ async function uploadWorkerScript(
 ): Promise<JsonObject> {
   const url = CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/workers/scripts/' + encodeURIComponent(scriptName);
   const baseline = await readScriptModifiedBaseline(config, scriptName);
+  // Read ONCE, before the retry loop: what to carry is a property of the script
+  // as this deploy found it, not of an attempt.
+  const preservedBindings = await readExistingWorkerBindings(config, scriptName, baseline.kind !== 'absent');
   let lastJson: JsonObject = {};
   let lastStatus = 502;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const form = new FormData();
-    const metadataJson = JSON.stringify(workerMetadata(config, assetsJwt, runWorkerFirst));
+    const metadataJson = JSON.stringify(workerMetadata(config, assetsJwt, runWorkerFirst, preservedBindings));
     form.append('metadata', new Blob([metadataJson], { type: 'application/json' }));
     form.append('index.js', new Blob([moduleCode], { type: 'application/javascript+module' }), 'index.js');
     const bodyBytes = Buffer.byteLength(metadataJson) + Buffer.byteLength(moduleCode);
@@ -557,8 +630,13 @@ async function uploadWorkerScript(
 }
 
 async function uploadWorkerVersion(config: WorkersDeployConfig, scriptName: string, moduleCode: string, assetsJwt: string, runWorkerFirst = false): Promise<string> {
+  // A version's metadata replaces its binding set the same way a PUT's does, and
+  // the preview URL serves that version: bindings dropped here are bindings the
+  // preview 500s on. The script exists by construction (a preview deploy
+  // requires a production one).
+  const preservedBindings = await readExistingWorkerBindings(config, scriptName, true);
   const form = new FormData();
-  const metadataJson = JSON.stringify(workerMetadata(config, assetsJwt, runWorkerFirst));
+  const metadataJson = JSON.stringify(workerMetadata(config, assetsJwt, runWorkerFirst, preservedBindings));
   form.append('metadata', new Blob([metadataJson], { type: 'application/json' }));
   form.append('index.js', new Blob([moduleCode], { type: 'application/javascript+module' }), 'index.js');
   const bodyBytes = Buffer.byteLength(metadataJson) + Buffer.byteLength(moduleCode);

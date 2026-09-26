@@ -268,6 +268,9 @@ describe('deployToCloudflareWorkers', () => {
       if (url.includes('/workers/scripts?')) {
         return jsonResponse(overrides.scripts ?? SCRIPTS_LIST);
       }
+      if (url.endsWith('/settings')) {
+        return jsonResponse(overrides.settings ?? { success: true, result: { bindings: [] } });
+      }
       if (url.includes('/workers/domains')) {
         if ((init?.method || 'GET').toUpperCase() === 'GET') return jsonResponse(overrides.domainsList ?? { success: true, result: [] });
         return jsonResponse(overrides.domains ?? { success: true, result: { id: 'dom-1' } });
@@ -323,20 +326,25 @@ describe('deployToCloudflareWorkers', () => {
     // The script's modified_on is read right before the PUT so a 5xx answer
     // can be checked against Cloudflare's own clock (never the daemon's).
     expect(urls[4]).toContain('/workers/scripts?');
-    expect(urls[5]).toContain('/workers/scripts/my-site');
-    expect(calls[5]![1]?.method).toBe('PUT');
+    // The script's current bindings are read before the PUT: upload metadata
+    // REPLACES the script's binding set, so whatever OpenDesign does not manage
+    // has to be carried into it.
+    expect(urls[5]).toContain('/workers/scripts/my-site/settings');
+    expect(calls[5]![1]?.method ?? 'GET').toBe('GET');
+    expect(urls[6]).toContain('/workers/scripts/my-site');
+    expect(calls[6]![1]?.method).toBe('PUT');
     // The workers.dev config is read before it is replaced.
-    expect(urls[6]).toContain('/workers/scripts/my-site/subdomain');
-    expect(calls[6]![1]?.method ?? 'GET').toBe('GET');
     expect(urls[7]).toContain('/workers/scripts/my-site/subdomain');
-    expect(calls[7]![1]?.method).toBe('POST');
+    expect(calls[7]![1]?.method ?? 'GET').toBe('GET');
+    expect(urls[8]).toContain('/workers/scripts/my-site/subdomain');
+    expect(calls[8]![1]?.method).toBe('POST');
     expect(out.url).toBe('https://my-site.acct-test.workers.dev');
 
     const uploadCall = calls[3]!;
     expect(uploadCall[1]?.headers).toMatchObject({ Authorization: 'Bearer SESS' });
     expect(uploadCall[1]?.headers).not.toMatchObject({ Authorization: 'Bearer tok-secret' });
 
-    const meta = await metadataOf(calls[5]!);
+    const meta = await metadataOf(calls[6]!);
     expect(meta.bindings).toEqual([{ name: 'ASSETS', type: 'assets' }]);
     expect(meta.keep_bindings).toEqual(['secret_text', 'secret_key']);
     expect(meta.assets).toEqual({ jwt: 'COMPLETION' });
@@ -365,6 +373,83 @@ describe('deployToCloudflareWorkers', () => {
     const modulePart = body.get('index.js');
     expect(modulePart).toBeInstanceOf(Blob);
     expect(await (modulePart as Blob).text()).toContain('new Response("ok")');
+  });
+
+  it('treats a root worker.js as a site asset, not as the Worker entry module', async () => {
+    // `worker.js` is the conventional filename for a Web Worker a page loads
+    // from its own HTML. Reading it as the entry module both dropped the file
+    // from the asset manifest (so it 404'd on the deployed site) and PUT a Web
+    // Worker as the script's main module.
+    const webWorker = { file: 'worker.js', data: Buffer.from('postMessage("from a Web Worker");') };
+    const { calls, fn } = happyFetch();
+    vi.stubGlobal('fetch', fn);
+    await deployToCloudflareWorkers({ ...base, files: [INDEX, webWorker] });
+    const sessionCall = calls.find((c) => c[0].includes('assets-upload-session'))!;
+    const sessionBody = JSON.parse(sessionCall[1]?.body as string) as { manifest: Record<string, unknown> };
+    expect(Object.keys(sessionBody.manifest)).toContain('/worker.js');
+    const putCall = calls.find((c) => c[1]?.method === 'PUT')!;
+    const modulePart = (putCall[1]?.body as FormData).get('index.js');
+    const moduleCode = await (modulePart as Blob).text();
+    expect(moduleCode).toContain('env.ASSETS.fetch');
+    expect(moduleCode).not.toContain('postMessage');
+  });
+
+  it('carries the non-OpenDesign bindings already on the script through the PUT', async () => {
+    const { calls, fn } = happyFetch({
+      settings: {
+        success: true,
+        result: {
+          bindings: [
+            { type: 'kv_namespace', name: 'CACHE', namespace_id: 'kv-1' },
+            { type: 'plain_text', name: 'MODE', text: 'prod' },
+            { type: 'durable_object_namespace', name: 'ROOMS', class_name: 'Room', script_name: 'my-site' },
+            { type: 'queue', name: 'JOBS', queue_name: 'jobs' },
+            { type: 'hyperdrive', name: 'PG', id: 'hd-1' },
+            { type: 'service', name: 'API', service: 'api-worker' },
+            { type: 'secret_text', name: 'API_KEY' },
+            { type: 'r2_bucket', name: 'STALE', bucket_name: 'old-bucket' },
+          ],
+        },
+      },
+    });
+    vi.stubGlobal('fetch', fn);
+    await deployToCloudflareWorkers(base);
+    const meta = await metadataOf(calls.find((c) => c[1]?.method === 'PUT')!);
+    expect(meta.bindings).toEqual([
+      { name: 'ASSETS', type: 'assets' },
+      { type: 'kv_namespace', name: 'CACHE', namespace_id: 'kv-1' },
+      { type: 'plain_text', name: 'MODE', text: 'prod' },
+      { type: 'durable_object_namespace', name: 'ROOMS', class_name: 'Room', script_name: 'my-site' },
+      { type: 'queue', name: 'JOBS', queue_name: 'jobs' },
+      { type: 'hyperdrive', name: 'PG', id: 'hd-1' },
+      { type: 'service', name: 'API', service: 'api-worker' },
+    ]);
+    // R2/D1 are OpenDesign's to decide (the deploy ensures and rewrites them), so
+    // a leftover of a managed type is dropped rather than duplicated, and the
+    // value-opaque secret types ride on keep_bindings instead.
+    expect(meta.keep_bindings).toEqual(['secret_text', 'secret_key']);
+  });
+
+  it('lets the OpenDesign config win a binding-name collision with the script', async () => {
+    const { calls, fn } = happyFetch({
+      settings: { success: true, result: { bindings: [{ type: 'plain_text', name: 'MODE', text: 'stale' }] } },
+    });
+    vi.stubGlobal('fetch', fn);
+    await deployToCloudflareWorkers({
+      ...base,
+      config: { ...base.config, bindings: [{ type: 'plain_text', name: 'MODE' }] },
+    });
+    const meta = await metadataOf(calls.find((c) => c[1]?.method === 'PUT')!);
+    expect(meta.bindings).toEqual([{ name: 'ASSETS', type: 'assets' }, { type: 'plain_text', name: 'MODE' }]);
+  });
+
+  it('deploys with only the managed bindings when the script settings read fails', async () => {
+    const { calls, fn } = happyFetch({ settings: { success: false, errors: [{ message: 'nope' }] } });
+    vi.stubGlobal('fetch', fn);
+    const out = await deployToCloudflareWorkers(base);
+    expect(out.status).toBe('ready');
+    const meta = await metadataOf(calls.find((c) => c[1]?.method === 'PUT')!);
+    expect(meta.bindings).toEqual([{ name: 'ASSETS', type: 'assets' }]);
   });
 
   it('preview uploads a version, never PUTs the live script, and enables previews without flipping production', async () => {
