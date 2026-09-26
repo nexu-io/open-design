@@ -79,6 +79,15 @@ function contentText(content: readonly ContentBlock[]): string {
   return text.join('');
 }
 
+/** Top-level reply text of an assistant message: `text` blocks only. Reasoning blocks are not the reply. */
+function messageText(content: readonly ContentBlock[]): string {
+  let text = '';
+  for (const block of content) {
+    if (block.type === 'text') text += block.text;
+  }
+  return text;
+}
+
 function resultStatus(reason: TurnEndReason | undefined): 'completed' | 'cancelled' | 'failed' {
   if (reason?.kind === 'completed' || reason?.kind === 'max-tokens') return 'completed';
   if (reason?.kind === 'aborted') return 'cancelled';
@@ -108,6 +117,23 @@ function resultError(reason: TurnEndReason | undefined): { code: string; message
 
 function terminalOutput(output: string): { output: string } | Record<string, never> {
   return output === '' ? {} : { output };
+}
+
+/**
+ * Reply text still owed to the host after one assistant/message interval.
+ *
+ * Invariant: the host sees the assistant's reply text exactly once.
+ * Streaming providers deliver it via assistant/chunk deltas and repeat the
+ * full text in the closing assistant/message; non-streaming providers deliver
+ * it only via assistant/message. When the streamed prefix and the message
+ * text diverge, the chunks already delivered win and nothing further is
+ * emitted.
+ */
+function unstreamedReplyText(streamed: string, message: string): string {
+  if (message === '') return '';
+  if (streamed === '') return message;
+  if (message.startsWith(streamed)) return message.slice(streamed.length);
+  return '';
 }
 
 function writeCancelledResult(output: Output, requestId: string, sessionId: string): void {
@@ -270,6 +296,7 @@ async function execute(
   let firstSeq = Number.POSITIVE_INFINITY;
   let turnEnd: SessionEvent<'turn/end'> | undefined;
   let assistantOutput = '';
+  let streamedSinceMessage = '';
   const setup = (agentCtx: Context) => {
     const selected: ModelSelectionRef = { current: selection, assembled: undefined };
     installModelSelection(agentCtx, selected);
@@ -280,6 +307,22 @@ async function execute(
     emitSessionEvent(output, request, selection.provider, selection.model, event);
     if (event.type === 'assistant/chunk' && event.data.chunk.type === 'text-delta') {
       assistantOutput += event.data.chunk.text;
+      streamedSinceMessage += event.data.chunk.text;
+    }
+    if (event.type === 'assistant/message') {
+      // Non-streaming providers (e.g. ollama-cloud) never emit assistant/chunk:
+      // the whole reply arrives in assistant/message, so deliver what streaming did not.
+      const reply = unstreamedReplyText(streamedSinceMessage, messageText(event.data.message.content));
+      streamedSinceMessage = '';
+      if (reply !== '') {
+        assistantOutput += reply;
+        writeFrame(output, {
+          v: 1,
+          type: 'text',
+          request_id: request.request_id,
+          content: reply,
+        });
+      }
     }
     if (event.type === 'turn/end') turnEnd = event;
   };
@@ -477,9 +520,11 @@ export const internals = {
   emitSessionEvent,
   execute,
   listModelCatalog,
+  messageText,
   requestProfileExit,
   resultStatus,
   resultError,
   serve,
   terminalOutput,
+  unstreamedReplyText,
 };
