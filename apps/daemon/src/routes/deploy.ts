@@ -505,11 +505,21 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
       check: { ok: false, detail: 'CFW_ACCESS_UNVERIFIED' },
     };
     delete metadata.accessVerificationDeferred;
+    const liveExposure = unverifiedExposureFromMetadata(liveMetadata);
+    // A DIFFERENT-script exposure the record already carries is its only handle
+    // on that script's still-public route. The write-ahead's single
+    // unverifiedExposure key cannot hold two scripts, so stash the prior exposure
+    // and let clearWorkersScriptCreateWriteAhead restore it once the write-ahead
+    // is dropped.
+    if (liveExposure && liveExposure.scriptName !== input.scriptName) {
+      const stashed = serializeUnverifiedExposure(liveExposure);
+      if (stashed) metadata.scriptCreateAheadPriorExposure = stashed;
+    }
     const merged = serializeUnverifiedExposure(
-      mergeUnverifiedExposure(unverifiedExposureFromMetadata(liveMetadata), {
-        scriptName: input.scriptName,
-        subdomainEnabledByThisRun: true,
-      }),
+      mergeUnverifiedExposure(
+        liveExposure && liveExposure.scriptName === input.scriptName ? liveExposure : undefined,
+        { scriptName: input.scriptName, subdomainEnabledByThisRun: true },
+      ),
     );
     if (merged) metadata.unverifiedExposure = merged;
     const now = Date.now();
@@ -553,7 +563,14 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
     delete metadata.accessVerified;
     delete metadata.accessVerificationDeferred;
     delete metadata.check;
-    delete metadata.unverifiedExposure;
+    // Restore the DIFFERENT-script exposure the write-ahead stashed, so the old
+    // script's still-public route is not dropped with the write-ahead's own.
+    if (metadata.scriptCreateAheadPriorExposure) {
+      metadata.unverifiedExposure = metadata.scriptCreateAheadPriorExposure;
+      delete metadata.scriptCreateAheadPriorExposure;
+    } else {
+      delete metadata.unverifiedExposure;
+    }
     upsertDeployment(db, {
       id: live.id,
       projectId: input.projectId,
