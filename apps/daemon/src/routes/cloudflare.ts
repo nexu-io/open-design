@@ -137,6 +137,27 @@ export function registerCloudflareRoutes(
   const { isLocalSameOrigin, resolvedPortRef } = ctx.http;
   const getResolvedPort = () => resolvedPortRef.current;
 
+  // Startup reconciliation: a crash between the guarded token write and the mode
+  // commit strands the connect marker (pendingOAuthGrant) and leaks the displaced
+  // grant's handle. No attempt can be in flight at daemon start, so finish the
+  // stranded connect (the derived mode reads 'oauth' when the grant is still live)
+  // or abandon it, then settle any handles the crash left unconfirmed.
+  void (async () => {
+    try {
+      const config = await readCloudflareWorkersConfig();
+      if (config.pendingOAuthGrant) {
+        if (config.credentialMode === 'oauth') {
+          await commitCloudflareOAuthMode(undefined, config.pendingOAuthGrant);
+        } else {
+          await clearPendingCloudflareOAuthGrant();
+        }
+      }
+      await settleCloudflareOAuthGrantRevokes();
+    } catch (err: unknown) {
+      console.error('[cloudflare-oauth] startup reconcile failed:', err instanceof Error ? err.message : String(err));
+    }
+  })();
+
   // Match the loopback listener's 30 min self-close timeout so the PKCE
   // state, the open :56122 socket, and the paste-back UI all expire together.
   const pendingAuth = new PendingAuthCache(30 * 60 * 1000);

@@ -714,7 +714,11 @@ async function uploadWorkerScript(
   knownAbsent = false,
 ): Promise<WorkerScriptUploadResult> {
   const url = CLOUDFLARE_API + '/accounts/' + encodeURIComponent(config.accountId) + '/workers/scripts/' + encodeURIComponent(scriptName);
-  const baseline = await readScriptModifiedBaseline(config, scriptName);
+  // When the Access path already proved absence (a strict script-list resolved no
+  // tag), skip the baseline re-read: an absent baseline makes a 5xx-that-committed
+  // provable (scriptCommittedSinceBaseline returns true once the script exists)
+  // instead of retrying a consumed JWT and reading the 4xx as a definitive refusal.
+  const baseline: ScriptModifiedBaseline = knownAbsent ? { kind: 'absent' } : await readScriptModifiedBaseline(config, scriptName);
   // `absent` is the only baseline that proves creation: a script found
   // afterwards cannot be this run's. A failed pre-read stays `unknown` — it
   // proves nothing either way, and claiming creation would withdraw a route the
@@ -732,6 +736,10 @@ async function uploadWorkerScript(
   // Tagged on the thrown error so the Access first-deploy caller can clear its
   // write-ahead instead of annotating an exposure for a script that does not exist.
   let refused = false;
+  // Once an attempt answered 5xx and the committed check could not PROVE the
+  // script was created, the outcome is ambiguous: a later non-5xx may be the
+  // consumed-JWT 4xx from a PUT that actually landed, not a definitive refusal.
+  let sawAmbiguous5xx = false;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const form = new FormData();
     const metadataJson = JSON.stringify(workerMetadata(config, assetsJwt, runWorkerFirst, preservedBindings));
@@ -766,7 +774,7 @@ async function uploadWorkerScript(
     lastStatus = resp.status;
     const is5xx = resp.status >= 500 && resp.status < 600;
     if (!is5xx) {
-      refused = true;
+      if (!sawAmbiguous5xx) refused = true;
       break;
     }
     let committed = false;
@@ -776,6 +784,7 @@ async function uploadWorkerScript(
       committed = false;
     }
     if (committed) return { json: { success: true, result: { id: scriptName, committed_after_5xx: true } }, scriptCreatedByThisRun };
+    sawAmbiguous5xx = true;
     if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 200 * 2 ** attempt));
   }
   const err = cloudflareError(lastJson, lastStatus, 'Cloudflare Workers script upload failed.');

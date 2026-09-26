@@ -1230,7 +1230,7 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
         scriptLists += 1;
         // Nothing exists until the PUT lands: both the Access tag lookup and
         // the modified_on baseline see an account with no such script.
-        return scriptLists <= 2
+        return scriptLists <= 1
           ? jsonResponse({ success: true, result: [] })
           : jsonResponse({ success: true, result: [{ id: 'my-site', tag: 'tag-abc-123' }] });
       }
@@ -1262,7 +1262,7 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
       if (method === 'GET' && url.includes('/workers/scripts?')) {
         calls.push([url, init]);
         scriptLists += 1;
-        return scriptLists <= 2
+        return scriptLists <= 1
           ? jsonResponse({ success: true, result: [] })
           : jsonResponse({ success: true, result: [{ id: 'my-site', tag: 'tag-abc-123' }] });
       }
@@ -1312,7 +1312,7 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
         scriptLists += 1;
         // Nothing exists until the PUT lands: the Access tag lookup and the
         // modified_on baseline both see an account with no such script.
-        return scriptLists <= 2
+        return scriptLists <= 1
           ? jsonResponse({ success: true, result: [] })
           : jsonResponse({ success: true, result: [{ id: 'my-site', tag: 'tag-abc-123' }] });
       }
