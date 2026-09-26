@@ -3,7 +3,7 @@ import type { RouteDeps } from '../server-context.js';
 import type { AuthorizeProjectRequest } from '../collab/project-request-authority.js';
 import { clientRequestIdFor } from '../http/client-request-id.js';
 import { classifyDeployFailure } from '../deploy/failure-detail.js';
-import { detachCloudflareWorkerDomain, getCloudflareWorkerDomain, isOwnedCustomDomain, listCloudflareZones, mergeUnverifiedExposure, normalizeHostname, ownedCustomDomainsFromMetadata, pendingCustomDomainsFromMetadata, recordedCustomDomainFromMetadata, releasedCustomDomainsFromWorkersDeploy, remainingUnverifiedExposure, resolvedPendingCustomDomainsFromWorkersDeploy, resolveWorkerScriptName, retainedAccessAppIdsFromMetadata, retiredAccessAppIdFromWorkersDeploy, serializeUnverifiedExposure, unverifiedExposureFromMetadata, verifyCloudflareAccessPerimeter, vouchedCustomDomains, withdrawRecordedUnverifiedExposure, type CloudflareOwnedCustomDomain, type CloudflareUnverifiedExposure } from '../deploy/cloudflare-workers.js';
+import { detachCloudflareWorkerDomain, getCloudflareWorkerDomain, isOwnedCustomDomain, listCloudflareZones, mergeUnverifiedExposure, normalizeHostname, ownedCustomDomainsFromMetadata, pendingCustomDomainsFromMetadata, recordedCustomDomainFromMetadata, releasedCustomDomainsFromWorkersDeploy, remainingUnverifiedExposure, resolvedPendingCustomDomainsFromWorkersDeploy, resolveWorkerScriptName, retainedAccessAppIdsFromMetadata, retainedCustomDomainsFromMetadata, retiredAccessAppIdFromWorkersDeploy, serializeUnverifiedExposure, unverifiedExposureFromMetadata, verifyCloudflareAccessPerimeter, vouchedCustomDomains, withdrawRecordedUnverifiedExposure, type CloudflareOwnedCustomDomain, type CloudflareUnverifiedExposure } from '../deploy/cloudflare-workers.js';
 import { getCloudflareAccessToken, pendingPublicLinkMessage } from '../deploy.js';
 import { proxyDispatcherRequestInit } from '../connectionTest.js';
 
@@ -351,6 +351,9 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
      * the next successful deploy drops the only handle on an app OpenDesign
      * created and still owns. */
     priorRetainedAccessAppIds: string[];
+    /** Hostnames the prior (project, file) record attached to a DIFFERENT script
+     * (after a scriptName change), still routed and still OpenDesign-owned. */
+    priorRetainedCustomDomains: CloudflareOwnedCustomDomain[];
     priorCustomDomain: Record<string, unknown> | undefined;
     /** The exposure a prior record deferred and could not withdraw (see
      * unverifiedExposureFromMetadata). This record's own copy wins, a sibling's
@@ -394,6 +397,7 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
     const priorOwnedCustomDomains: CloudflareOwnedCustomDomain[] = [];
     const priorPendingCustomDomains: string[] = [];
     const priorRetainedAccessAppIds: string[] = [];
+    const priorRetainedCustomDomains: CloudflareOwnedCustomDomain[] = [];
     for (const record of records) {
       const metadata = record.providerMetadata;
       if (!priorAccessAppId && typeof metadata?.accessAppId === 'string' && metadata.accessAppId) {
@@ -411,12 +415,21 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
         for (const pending of pendingCustomDomainsFromMetadata(metadata)) {
           if (!priorPendingCustomDomains.includes(pending)) priorPendingCustomDomains.push(pending);
         }
+      } else if (metadata) {
+        // The prior record names a DIFFERENT script (scriptName change): its owned
+        // hostnames belong to the old Worker, which is still routed. Retain them so
+        // a later detach is not refused as foreign.
+        for (const owned of ownedCustomDomainsFromMetadata(metadata)) {
+          if (!priorRetainedCustomDomains.some((have) => have.hostname === owned.hostname && have.id === owned.id)) {
+            priorRetainedCustomDomains.push(owned);
+          }
+        }
       }
       for (const retained of retainedAccessAppIdsFromMetadata(metadata)) {
         if (!priorRetainedAccessAppIds.includes(retained)) priorRetainedAccessAppIds.push(retained);
       }
     }
-    return { priorAccessAppId, priorOwnedCustomDomains, priorPendingCustomDomains, priorRetainedAccessAppIds, priorCustomDomain, priorUnverifiedExposure };
+    return { priorAccessAppId, priorOwnedCustomDomains, priorPendingCustomDomains, priorRetainedAccessAppIds, priorRetainedCustomDomains, priorCustomDomain, priorUnverifiedExposure };
   }
 
   /**
@@ -855,7 +868,12 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
             })
             .flatMap((deployment: { providerMetadata?: unknown }) =>
               vouchedCustomDomains(ownedCustomDomainsFromMetadata(deployment.providerMetadata), pendingCustomDomainsFromMetadata(deployment.providerMetadata)));
-          if (!isOwnedCustomDomain(domain, owned)) return { kind: 'foreign' };
+          // A hostname retained from a scriptName change is still OpenDesign-attached
+          // (to the prior Worker); the retaining record no longer names the script the
+          // hostname routes to, so it is vouched for separately.
+          const retained = listDeploymentsByProvider(db, CLOUDFLARE_WORKERS_PROVIDER_ID).flatMap((deployment: { providerMetadata?: unknown }) =>
+            retainedCustomDomainsFromMetadata(deployment.providerMetadata));
+          if (!isOwnedCustomDomain(domain, [...owned, ...retained])) return { kind: 'foreign' };
           // Capture the records that owned the hostname so a failed DELETE can
           // re-vouch them (see below). The write-ahead forgets first: a daemon
           // killed between the DELETE and the forget cannot leave records vouching
@@ -1208,6 +1226,7 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
                   priorOwnedCustomDomains: workersOwnership?.priorOwnedCustomDomains,
                   priorPendingCustomDomains: workersOwnership?.priorPendingCustomDomains,
                   priorRetainedAccessAppIds: workersOwnership?.priorRetainedAccessAppIds,
+                  priorRetainedCustomDomains: workersOwnership?.priorRetainedCustomDomains,
                   priorCustomDomain: workersOwnership?.priorCustomDomain,
                   priorUnverifiedExposure: workersOwnership?.priorUnverifiedExposure,
                   // Write-ahead: the hostname is on the record as pending

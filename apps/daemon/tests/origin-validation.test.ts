@@ -701,15 +701,12 @@ describe('isLocalSameOrigin: OD_ALLOWED_ORIGINS bypass for reverse-proxy deploym
   });
 });
 
-// Firefox and Chrome omit the Origin header on same-origin GET requests per
-// the Fetch spec. When the daemon runs behind a remote-access proxy whose
-// public hostname is listed in OD_ALLOWED_ORIGINS, those legitimate
-// same-origin GETs (e.g. /api/app-config) get rejected by the no-Origin
-// host check because hostname entries in OD_ALLOWED_ORIGINS are only
-// honored via the IP-literal subset in that branch. Sec-Fetch-Site is set
-// by the browser and cannot be modified by JavaScript, so a value of
-// "same-origin" is a trustworthy substitute for the missing Origin header.
-describe('isLocalSameOrigin: Sec-Fetch-Site fallback for no-Origin same-origin GETs', () => {
+// Issue #7041: Sec-Fetch-Site is set by the browser and cannot be forged by
+// JavaScript, but it is trivially forgeable by any non-browser client, so the
+// guard no longer trusts it as a substitute for a missing Origin header. A
+// no-Origin request whose Host is not local (or an IP-literal allow-listed
+// entry) is now rejected fail-closed, whatever Sec-Fetch-Site claims.
+describe('isLocalSameOrigin: no-Origin same-origin GETs fail closed (issue #7041)', () => {
   const ALLOWED = 'https://nas.example.ts.net';
   const previousAllowedOrigins = process.env.OD_ALLOWED_ORIGINS;
   const env: NodeJS.ProcessEnv = {
@@ -726,14 +723,14 @@ describe('isLocalSameOrigin: Sec-Fetch-Site fallback for no-Origin same-origin G
     else process.env.OD_ALLOWED_ORIGINS = previousAllowedOrigins;
   });
 
-  it('accepts a no-Origin request whose Host matches OD_ALLOWED_ORIGINS when Sec-Fetch-Site is same-origin', () => {
+  it('rejects a no-Origin request whose Host matches OD_ALLOWED_ORIGINS even when Sec-Fetch-Site is same-origin (forgeable, fail-closed)', () => {
     const req = {
       headers: {
         host: 'nas.example.ts.net',
         'sec-fetch-site': 'same-origin',
       },
     };
-    expect(isLocalSameOrigin(req, 7456, env)).toBe(true);
+    expect(isLocalSameOrigin(req, 7456, env)).toBe(false);
   });
 
   it('still rejects a no-Origin request whose Host matches the allow-list but Sec-Fetch-Site is cross-site', () => {

@@ -1986,6 +1986,39 @@ export function seedRetainedAccessAppIds(metadata: JsonObject, priorRetainedAcce
   else delete metadata.retainedAccessAppIds;
 }
 
+/** The hostnames a FINISHED record retains from a scriptName change: custom
+ * domains a prior deploy attached to the OLD Worker, still routed and still
+ * OpenDesign-owned, but no longer named by this record's `ownedCustomDomains`
+ * (which now describes the NEW script). Mirrors retainedAccessAppIds. */
+export function retainedCustomDomainsFromMetadata(metadata: unknown): CloudflareOwnedCustomDomain[] {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return [];
+  const value = (metadata as JsonObject).retainedCustomDomains;
+  if (!Array.isArray(value)) return [];
+  return ownedCustomDomainsFromMetadata({ ownedCustomDomains: value });
+}
+
+/** Seed a FINISHED record's `retainedCustomDomains`: prior retained hostnames
+ * plus whatever this run retained, minus any hostname now owned by THIS script
+ * (a rename back, or a hostname the new deploy attached). */
+export function seedRetainedCustomDomains(
+  metadata: JsonObject,
+  priorRetainedCustomDomains: readonly CloudflareOwnedCustomDomain[],
+  currentOwned: readonly CloudflareOwnedCustomDomain[],
+): void {
+  const governing = new Set(currentOwned.map((domain) => domain.hostname));
+  const retained: CloudflareOwnedCustomDomain[] = [];
+  for (const domain of [...priorRetainedCustomDomains, ...retainedCustomDomainsFromMetadata(metadata)]) {
+    if (!domain.hostname || governing.has(domain.hostname)) continue;
+    if (retained.some((kept) => kept.hostname === domain.hostname && kept.id === domain.id)) continue;
+    retained.push(domain);
+  }
+  if (retained.length > 0) {
+    metadata.retainedCustomDomains = retained.map((domain) => (domain.id ? { id: domain.id, hostname: domain.hostname } : { hostname: domain.hostname }));
+  } else {
+    delete metadata.retainedCustomDomains;
+  }
+}
+
 /** Everything a set of records vouches for: the recorded owned hostnames plus
  * every pending hostname not already among them, as hostname-only entries so
  * `isOwnedCustomDomain` matches a pending one by hostname. */
@@ -2053,6 +2086,10 @@ export async function deployToCloudflareWorkers(input: {
    * to be carried forward here — otherwise a successful redeploy drops the only
    * handle OpenDesign has on an app it created and still owns. */
   priorRetainedAccessAppIds?: readonly string[] | undefined;
+  /** Hostnames a prior record of this (project, file) attached to a DIFFERENT
+   * script (after a scriptName change), still routed and still OpenDesign-owned.
+   * Carried forward under `retainedCustomDomains` so they stay detachable. */
+  priorRetainedCustomDomains?: readonly CloudflareOwnedCustomDomain[] | undefined;
   customDomain?: { hostname: string; zoneId: string } | undefined;
   /** Custom hostnames a prior OpenDesign deployment attached (see
    * ownedCustomDomainsFromMetadata). Only these are reconciled by this deploy. */
@@ -2113,6 +2150,7 @@ async function deployToCloudflareWorkersWith(
   const priorOwnedCustomDomains = input?.priorOwnedCustomDomains ?? [];
   const priorPendingCustomDomains = input?.priorPendingCustomDomains ?? [];
   const priorRetainedAccessAppIds = input?.priorRetainedAccessAppIds ?? [];
+  const priorRetainedCustomDomains = input?.priorRetainedCustomDomains ?? [];
   const accountId = config?.accountId;
   if (!accountId) throw new DeployError('Cloudflare account ID is required.', 400, undefined, 'CFW_ACCOUNT_ID_REQUIRED');
   // Fail closed on the enabled-but-inert shape: `{enabled:true}` with no rule
@@ -2330,6 +2368,9 @@ async function deployToCloudflareWorkersWith(
       // The production record's retained handles ride along for the same reason
       // the ownership above does: this metadata REPLACES the record's.
       seedRetainedAccessAppIds(metadata, priorRetainedAccessAppIds);
+      // Carry the OLD Worker's hostnames forward (scriptName change) so they stay
+      // detachable through this record rather than reading as foreign.
+      seedRetainedCustomDomains(metadata, priorRetainedCustomDomains, ownedCustomDomainsFromMetadata(metadata));
       metadata.steps = steps;
       return {
         providerId: CLOUDFLARE_WORKERS_PROVIDER_ID,
@@ -2724,6 +2765,9 @@ async function deployToCloudflareWorkersWith(
     // Carried forward, not dropped: this metadata replaces the record's, and the
     // retire block above only ever ADDS to what the script's prior records held.
     seedRetainedAccessAppIds(metadata, priorRetainedAccessAppIds);
+    // Carry the OLD Worker's hostnames forward (scriptName change): they stay
+    // detachable through this record rather than reading as foreign.
+    seedRetainedCustomDomains(metadata, priorRetainedCustomDomains, ownedCustomDomainsFromMetadata(metadata));
     metadata.steps = steps;
     return {
       providerId: CLOUDFLARE_WORKERS_PROVIDER_ID,
