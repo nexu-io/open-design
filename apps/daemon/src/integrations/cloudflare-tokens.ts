@@ -664,6 +664,7 @@ export async function clearCloudflareOAuthTokenForRevoke(
 export async function restoreCloudflareOAuthTokenAndDropRevokes(
   dataDir: string,
   token: StoredCloudflareOAuthToken,
+  expectedCurrentToken?: string,
 ): Promise<boolean> {
   const restoredToken = token.refreshToken || token.accessToken;
   // A record with a blank `accessToken` is not a credential to put back (see
@@ -675,7 +676,7 @@ export async function restoreCloudflareOAuthTokenAndDropRevokes(
   // record NAMED: the pending handle the next settle revokes.
   const landable = token.accessToken !== '';
   return withLock(dataDir, async (): Promise<boolean> => {
-    const file = await readCloudflareOAuthTokensFile(dataDir);
+    const { raw, file } = await readCloudflareOAuthTokensFileWithRaw(dataDir);
     const live = file.token ? file.token.refreshToken || file.token.accessToken : '';
     if (!landable) {
       const named = file.pendingRevokes ?? [];
@@ -690,16 +691,37 @@ export async function restoreCloudflareOAuthTokenAndDropRevokes(
       ) {
         return Boolean(restoredToken) && live === restoredToken;
       }
+      // A record that no longer sanitizes (blank accessToken) but still carries
+      // a live refresh token in the raw bytes must not be erased: keep it NAMED
+      // beside the grant this write is handing back to revoke, exactly as
+      // dropPendingCloudflareOAuthRevokes does.
+      const landed = file.token ?? null;
+      const recovered = landed ? null : recoveredDisplacedCredential(raw);
+      const recoveredName = recovered ? recovered.refreshToken || recovered.accessToken : '';
+      const added = [token, ...named];
+      const handles = recovered
+        ? [recovered, ...added.filter((entry) => (entry.refreshToken || entry.accessToken) !== recoveredName)]
+        : added;
       await writeTokensFile(dataDir, {
-        ...(file.token ? { token: file.token } : {}),
+        ...(landed ? { token: landed } : {}),
         ...(file.lastGeneration !== undefined ? { lastGeneration: file.lastGeneration } : {}),
-        pendingRevokes: [token, ...named],
+        pendingRevokes: handles,
       });
       return false;
     }
     const carried = file.pendingRevokes ?? [];
     const named = Boolean(restoredToken) &&
       carried.some((entry) => (entry.refreshToken || entry.accessToken) === restoredToken);
+    // When the caller declares the credential it expects to still be on disk (a
+    // connect names the grant it just minted; a config rollback passes '' for
+    // an empty store), a DIFFERENT one means a concurrent write — a refresh
+    // rotation, or another connect — landed between the caller's read and this
+    // locked write. Clobbering that newcomer orphans it: no handle names it and
+    // the caller revokes its own grant, not the newcomer. Leave the store as it
+    // stands.
+    if (expectedCurrentToken !== undefined && file.token && live !== expectedCurrentToken) {
+      return false;
+    }
     if (!named) {
       // Nothing names this grant (see the docblock): either the credential on
       // disk already holds it, or a settle confirmed its revoke while the
@@ -737,16 +759,25 @@ export async function noteCloudflareOAuthRevokeRefusal(
   token: string,
 ): Promise<number> {
   return withLock(dataDir, async () => {
-    const file = await readCloudflareOAuthTokensFile(dataDir);
+    // Read with the RAW object: a record whose accessToken no longer sanitizes
+    // but still carries a live refresh token drops out of the typed shape, and
+    // a write carrying only file.token erases that grant from the bytes.
+    const { raw, file } = await readCloudflareOAuthTokensFileWithRaw(dataDir);
     const pending = file.pendingRevokes ?? [];
     const handle = pending.find((entry) => (entry.refreshToken || entry.accessToken) === token);
     if (!handle) return 0;
     const refusals = (handle.revokeRefusals ?? 0) + 1;
     handle.revokeRefusals = refusals;
+    const landed = file.token ?? null;
+    const recovered = landed ? null : recoveredDisplacedCredential(raw);
+    const recoveredName = recovered ? recovered.refreshToken || recovered.accessToken : '';
+    const handles = recovered
+      ? [recovered, ...pending.filter((entry) => (entry.refreshToken || entry.accessToken) !== recoveredName)]
+      : pending;
     await writeTokensFile(dataDir, {
-      ...(file.token ? { token: file.token } : {}),
+      ...(landed ? { token: landed } : {}),
       ...(file.lastGeneration !== undefined ? { lastGeneration: file.lastGeneration } : {}),
-      ...(pending.length > 0 ? { pendingRevokes: pending } : {}),
+      ...(handles.length > 0 ? { pendingRevokes: handles } : {}),
     });
     return refusals;
   });

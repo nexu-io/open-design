@@ -850,20 +850,13 @@ export async function writeCloudflareWorkersConfig(input: Partial<DeployConfig>)
         // re-enters and finishes on the next save.
         let landed = true;
         if (displaced) {
-          const live = await getCloudflareOAuthToken(cloudflareOAuthTokensDir());
-          const displacedKey = displaced.refreshToken || displaced.accessToken;
-          const liveKey = live ? live.refreshToken || live.accessToken : '';
-          // A DIFFERENT credential landed between this transition's clear and its
-          // rollback (a connect's guarded write, a refresh compare-and-set): the
-          // token lock is not the config lock. Restoring the displaced grant over
-          // it would orphan the live credential — no file and no handle names it.
-          // Skip the restore; the intent marker stays and the next save re-enters
-          // the transition to finish the clear and revoke.
-          if (live && displacedKey && liveKey !== displacedKey) {
-            landed = false;
-          } else {
-            landed = await restoreCloudflareOAuthTokenAndDropRevokes(cloudflareOAuthTokensDir(), displaced);
-          }
+          // The restore itself refuses (returns false) when a DIFFERENT credential
+          // landed between this transition's clear and its rollback: '' names the
+          // empty store this transition left, so any live credential is a newcomer
+          // and the check runs INSIDE the token lock (no read/write race). A refused
+          // restore leaves the intent marker standing; the next save re-enters the
+          // transition to finish the clear and revoke.
+          landed = await restoreCloudflareOAuthTokenAndDropRevokes(cloudflareOAuthTokensDir(), displaced, '');
         }
         if (landed) {
           const restored: DeployConfig = { ...persistableCloudflareWorkersConfig(current) };

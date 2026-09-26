@@ -2033,6 +2033,14 @@ export async function deployToCloudflareWorkers(input: {
    * (before the deploy result persists, up to ~15s later) does not leave
    * siblings vouching for a hostname no longer routed. */
   onBeforeDetach?: ((domain: { id: string; hostname: string }) => Promise<void> | void) | undefined;
+  /** Write-ahead hook, awaited immediately BEFORE the first-deploy script PUT
+   * when Access is on and no pre-PUT app could gate the Worker: Cloudflare turns
+   * the workers.dev route on at script creation, so a daemon killed between the
+   * PUT commit and the Access app create would leave a live, ungated Worker with
+   * no record. The route persists the unverified-exposure verdict before the PUT
+   * so the next check-link's retained-exposure retry withdraws the route. A throw
+   * here aborts the deploy before the script is created. */
+  onBeforeScriptCreate?: ((scriptName: string) => Promise<void> | void) | undefined;
   /** The custom hostname a prior deployment recorded for display (see
    * recordedCustomDomainFromMetadata). A preview deploy carries it forward. */
   priorCustomDomain?: JsonObject | undefined;
@@ -2055,7 +2063,7 @@ async function deployToCloudflareWorkersWith(
   input: Parameters<typeof deployToCloudflareWorkers>[0],
   requestInit: WorkersRequestInit,
 ): Promise<CloudflareWorkersDeployResult> {
-  const { config, files, projectId = '', projectName = '', target = 'production', access, priorAccessAppId, customDomain, priorCustomDomain, priorUnverifiedExposure, onBeforeAttach, onBeforeDetach } = input ?? {};
+  const { config, files, projectId = '', projectName = '', target = 'production', access, priorAccessAppId, customDomain, priorCustomDomain, priorUnverifiedExposure, onBeforeAttach, onBeforeDetach, onBeforeScriptCreate } = input ?? {};
   const priorOwnedCustomDomains = input?.priorOwnedCustomDomains ?? [];
   const priorPendingCustomDomains = input?.priorPendingCustomDomains ?? [];
   const priorRetainedAccessAppIds = input?.priorRetainedAccessAppIds ?? [];
@@ -2348,7 +2356,15 @@ async function deployToCloudflareWorkersWith(
     // live and ungated with no later step to annotate it. Record the script up
     // front so the catch reports the exposure; the Access create below clears it
     // once the gate exists.
-    if (accessOn && !accessAppId) ungatedRouteScriptName = scriptName;
+    if (accessOn && !accessAppId) {
+      ungatedRouteScriptName = scriptName;
+      // Durable write-ahead: Cloudflare turns the workers.dev route on at script
+      // creation, so the in-memory marker above only covers a thrown error — a
+      // daemon killed between the PUT commit and the Access app create would
+      // leave the Worker live and ungated with no record. Persist the exposure
+      // verdict BEFORE the PUT so the next check-link can withdraw the route.
+      if (onBeforeScriptCreate) await onBeforeScriptCreate(scriptName);
+    }
     const uploaded = await uploadWorkerScript(cfg, scriptName, moduleCode, completionJwt, isCustomModule);
     const scriptCreatedByThisRun = uploaded.scriptCreatedByThisRun;
     steps.push({ name: 'script', status: 'done' });

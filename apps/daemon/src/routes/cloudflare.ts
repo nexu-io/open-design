@@ -482,7 +482,7 @@ export function registerCloudflareRoutes(
           // grant Cloudflare has killed is not a credential to hand back, so the
           // store is cleared instead — the grant this attempt minted goes off
           // disk named by a handle — and a Reconnect replaces it.
-          if (!displaced || !(await restoreCloudflareOAuthTokenAndDropRevokes(dataDir, displaced))) {
+          if (!displaced || !(await restoreCloudflareOAuthTokenAndDropRevokes(dataDir, displaced, result.refresh_token || result.access_token))) {
             settledMinted = await clearForRevokeAndSettle();
           }
         } catch (restoreErr) {

@@ -461,6 +461,58 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
     forgetDetachedWorkersHostnameAcrossRecords(workersRecordStore, domain);
   }
 
+  /** Write-ahead for the first-deploy-with-Access script PUT: persist the
+   * unverified-exposure verdict BEFORE the PUT (which turns the workers.dev
+   * route on at creation), so a daemon killed between the PUT commit and the
+   * Access app create leaves a record the next check-link's retained-exposure
+   * retry withdraws. The verdict shape is the same one a failed deploy or the
+   * link check writes (failUnverified), so the record reads as a retained
+   * exposure immediately. A throw here aborts the deploy before the script is
+   * created — nothing on Cloudflare has changed yet. */
+  function recordWorkersScriptCreateExposure(input: {
+    projectId: string;
+    fileName: string;
+    target: 'preview' | 'production';
+    scriptName: string;
+  }): void {
+    const live = getDeployment(db, input.projectId, input.fileName, CLOUDFLARE_WORKERS_PROVIDER_ID);
+    const liveMetadata =
+      live?.providerMetadata && typeof live.providerMetadata === 'object' && !Array.isArray(live.providerMetadata)
+        ? (live.providerMetadata as Record<string, unknown>)
+        : {};
+    const metadata: Record<string, unknown> = {
+      ...liveMetadata,
+      scriptName: input.scriptName,
+      accessProtected: true,
+      accessVerified: false,
+      check: { ok: false, detail: 'CFW_ACCESS_UNVERIFIED' },
+    };
+    delete metadata.accessVerificationDeferred;
+    const merged = serializeUnverifiedExposure(
+      mergeUnverifiedExposure(unverifiedExposureFromMetadata(liveMetadata), {
+        scriptName: input.scriptName,
+        subdomainEnabledByThisRun: true,
+      }),
+    );
+    if (merged) metadata.unverifiedExposure = merged;
+    const now = Date.now();
+    upsertDeployment(db, {
+      id: live?.id ?? randomUUID(),
+      projectId: input.projectId,
+      fileName: input.fileName,
+      providerId: CLOUDFLARE_WORKERS_PROVIDER_ID,
+      url: live?.url ?? '',
+      deploymentId: live?.deploymentId,
+      deploymentCount: live?.deploymentCount ?? 0,
+      target: live?.target ?? input.target,
+      status: live?.status ?? 'failed',
+      statusMessage: live ? live.statusMessage : 'Cloudflare Workers deploy was interrupted before it finished.',
+      reachableAt: live?.reachableAt,
+      providerMetadata: metadata,
+      createdAt: live?.createdAt ?? now,
+      updatedAt: now,
+    });
+  }
   /** See forgetPendingWorkersHostnameAcrossRecords: resolves the write-ahead
    * for each hostname on every record that deployed `scriptName`. */
   function forgetPendingWorkersHostnames(hostnames: readonly string[], scriptName: string, configuredScriptName: string | undefined): void {
@@ -1053,6 +1105,18 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
                   // siblings vouching for a hostname no longer routed.
                   onBeforeDetach: (domain: { id: string; hostname: string }) =>
                     db.transaction(() => forgetDetachedWorkersHostname(domain))(),
+                  // Write-ahead for the first-deploy-with-Access PUT: the
+                  // unverified-exposure verdict lands on the record BEFORE the PUT
+                  // turns the workers.dev route on, so a daemon killed between the
+                  // PUT commit and the Access app create leaves a retained exposure
+                  // the next check-link withdraws.
+                  onBeforeScriptCreate: (scriptName: string) =>
+                    recordWorkersScriptCreateExposure({
+                      projectId: req.params.id,
+                      fileName,
+                      target,
+                      scriptName,
+                    }),
                   // Re-resolved per Cloudflare call (oauth: refreshed within the
                   // expiry skew), so a multi-minute deploy never outlives its token.
                   tokenProvider: () => resolveCloudflareWorkersRouteToken(workersConfig!),
