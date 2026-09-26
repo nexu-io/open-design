@@ -1019,12 +1019,17 @@ describe('clearCloudflareOAuthToken', () => {
       expect(afterPartial).not.toContain('leaked-refresh');
       expect(JSON.parse(afterPartial)).toEqual({ lastGeneration: 4 });
 
-      // Truncated JSON with an access token embedded is wiped too.
+      // Truncated JSON with an access token embedded is recovered as a revoke
+      // handle rather than wiped: erasing it would leave the grant revocable
+      // nowhere, so it stays NAMED and the next settle revokes it.
       await writeFile(file, '{"token":{"accessToken":"leaked-access"');
       await clearCloudflareOAuthToken(dir);
-      const afterCorrupt = await readFile(file, 'utf8');
-      expect(afterCorrupt).not.toContain('leaked-access');
-      expect(JSON.parse(afterCorrupt)).toEqual({ lastGeneration: 1 });
+      const afterCorrupt = JSON.parse(await readFile(file, 'utf8')) as {
+        lastGeneration: number;
+        pendingRevokes?: Array<{ accessToken?: string; refreshToken?: string }>;
+      };
+      expect(afterCorrupt.lastGeneration).toBe(1);
+      expect(afterCorrupt.pendingRevokes?.map((handle) => handle.accessToken)).toEqual(['leaked-access']);
 
       // No file: nothing is created.
       await rm(file, { force: true });

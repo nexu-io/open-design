@@ -235,21 +235,45 @@ async function readCloudflareOAuthTokensFileWithRaw(
       '[cloudflare-tokens] Corrupted JSON, returning empty:',
       e.message,
     );
-    // An unparsable file can still carry a live refresh/access token in its
-    // bytes; salvage those strings so a disconnect revokes the grant instead
-    // of wiping the file and leaving the credential usable at Cloudflare.
-    const field = (key: string): string | undefined => {
-      const match = new RegExp('"' + key + '"\\s*:\\s*"([^"\\\\]+)"').exec(text);
-      return match ? match[1] : undefined;
+    // An unparsable file can still carry live refresh/access tokens in its bytes
+    // — the live credential AND every pending revoke handle. Salvage EVERY
+    // occurrence into deduplicated revoke handles (rather than one token) so a
+    // later settle revokes them all: a file that held only handles must not have
+    // them erased by the next write, and a partial salvage that kept one token
+    // while dropping the rest would orphan the others.
+    const all = (key: string): string[] => {
+      const out: string[] = [];
+      const re = new RegExp('"' + key + '"\\s*:\\s*"([^"\\\\]+)"', 'g');
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(text)) !== null) {
+        const value = (m[1] ?? '').trim();
+        if (value) out.push(value);
+      }
+      return out;
     };
-    const salvaged = {
-      token: {
-        accessToken: field('accessToken'),
-        refreshToken: field('refreshToken'),
-        clientId: field('clientId'),
-      },
+    const clientIdMatch = new RegExp('"clientId"\\s*:\\s*"([^"\\\\]+)"').exec(text);
+    const clientId = clientIdMatch ? (clientIdMatch[1] ?? '').trim() : undefined;
+    const now = Date.now();
+    const seen = new Set<string>();
+    const handles: StoredCloudflareOAuthToken[] = [];
+    const push = (value: string, kind: 'refresh' | 'access'): void => {
+      if (seen.has(value)) return;
+      seen.add(value);
+      handles.push({
+        accessToken: kind === 'access' ? value : '',
+        ...(kind === 'refresh' ? { refreshToken: value } : {}),
+        tokenType: 'Bearer',
+        generation: 0,
+        savedAt: now,
+        ...(clientId ? { clientId } : {}),
+      });
     };
-    return { raw: salvaged, file: { ...EMPTY } };
+    for (const value of all('refreshToken')) push(value, 'refresh');
+    for (const value of all('accessToken')) push(value, 'access');
+    return {
+      raw: undefined,
+      file: handles.length > 0 ? { ...EMPTY, pendingRevokes: handles } : { ...EMPTY },
+    };
   }
   return { raw, file: sanitizeCloudflareOAuthTokensFile(raw) };
 }
@@ -729,8 +753,17 @@ export async function restoreCloudflareOAuthTokenAndDropRevokes(
       return Boolean(restoredToken) && live === restoredToken;
     }
     const gen = nextLastGeneration(file);
-    const pendingRevokes = carried.filter((entry) => (entry.refreshToken || entry.accessToken) !== restoredToken);
     token.generation = gen;
+    // Name the credential this write displaces — the connect's minted grant, or
+    // a recovered unsanitizable record — IN THIS WRITE, so a crash before the
+    // caller's eager revoke cannot orphan it. pendingRevokesAfterLanding drops the
+    // restored grant's own handle, never names the landed credential beside
+    // itself, and records the displaced one as a handle.
+    const pendingRevokes = pendingRevokesAfterLanding(
+      carried.filter((entry) => (entry.refreshToken || entry.accessToken) !== restoredToken),
+      file.token ?? recoveredDisplacedCredential(raw),
+      token,
+    );
     await writeTokensFile(dataDir, {
       token,
       lastGeneration: gen,

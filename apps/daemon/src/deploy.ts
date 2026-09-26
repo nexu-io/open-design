@@ -1418,6 +1418,10 @@ async function dropCloudflareGrantRevokeHandle(displaced: StoredCloudflareOAuthT
  * change on retry, so a handle that keeps getting one is dropped after this many
  * instead of paying a 10s round-trip on every OAuth mutation forever. */
 const CLOUDFLARE_OAUTH_REVOKE_MAX_REFUSALS = 3;
+/** The most revoke round-trips one settle performs, so a long handle queue does
+ * not block the settings PUT / disconnect / connect for N×10s during an outage.
+ * Handles past the budget are deferred to the next OAuth mutation. */
+const CLOUDFLARE_OAUTH_REVOKE_MAX_ATTEMPTS_PER_SETTLE = 3;
 
 export async function settlePendingCloudflareOAuthGrantRevokes(
   fallbackClientId?: string,
@@ -1435,23 +1439,31 @@ export async function settlePendingCloudflareOAuthGrantRevokes(
   }
   if (pending.length === 0) return;
   const settled: string[] = [];
+  let attempted = 0;
   for (const handle of pending) {
-    const result = await revokeClearedCloudflareGrant(handle, fallbackClientId);
     const token = handle.refreshToken || handle.accessToken;
+    if (!token) continue;
+    // A hard per-settle budget bounds the revoke drain, so a long handle queue
+    // (or a Cloudflare outage) cannot block the settings PUT / disconnect /
+    // connect for N×10s; the overflow is deferred to the next OAuth mutation.
+    if (attempted >= CLOUDFLARE_OAUTH_REVOKE_MAX_ATTEMPTS_PER_SETTLE) {
+      console.warn(`[cloudflare-oauth] deferred ${pending.length - attempted} pending revoke handle(s) to the next OAuth mutation (per-settle budget ${CLOUDFLARE_OAUTH_REVOKE_MAX_ATTEMPTS_PER_SETTLE})`);
+      break;
+    }
+    attempted += 1;
+    const result = await revokeClearedCloudflareGrant(handle, fallbackClientId);
     if (result.ok) {
-      if (token) settled.push(token);
+      settled.push(token);
     } else if (result.status === 400 || result.status === 401) {
       // A definitive client error (invalid_client / invalid_request) never
       // changes on retry. Retire the handle after a bounded number of refusals
       // instead of paying a 10s revoke round-trip on every OAuth mutation for a
       // token that can never be revoked this way. 429/5xx/transport keep
       // retrying.
-      const refusals = token
-        ? await noteCloudflareOAuthRevokeRefusal(dataDir, token).catch(() => 0)
-        : 0;
+      const refusals = await noteCloudflareOAuthRevokeRefusal(dataDir, token).catch(() => 0);
       if (refusals >= CLOUDFLARE_OAUTH_REVOKE_MAX_REFUSALS) {
         console.error(`[cloudflare-oauth] retiring an unretirable OAuth revoke handle (HTTP ${result.status}) after ${refusals} refusals`);
-        if (token) settled.push(token);
+        settled.push(token);
       }
     }
   }
