@@ -227,33 +227,31 @@ async function withLock<T>(dataDir: string, fn: () => Promise<T>): Promise<T> {
   }
 }
 
-/** Codes a platform answers when a directory cannot be opened or fsynced:
- * Windows refuses to open a directory for reading (EISDIR/EPERM) and some
- * filesystems reject fsync on a directory descriptor (EINVAL/ENOTSUP). None
- * of them mean the data-file flush that already happened was lost. */
-const DIRECTORY_SYNC_UNSUPPORTED = new Set(['EISDIR', 'EPERM', 'EINVAL', 'ENOTSUP']);
-
-function isDirectorySyncUnsupported(err: unknown): boolean {
-  return DIRECTORY_SYNC_UNSUPPORTED.has(String((err as { code?: unknown } | null)?.code));
-}
-
 /** Flush the directory entry a rename just landed. Syncing the temp file makes
  * its BYTES durable, but the rename itself is metadata of the parent directory,
  * and a power loss can still drop it — the old entry (or none) survives with
- * the new bytes orphaned. Best-effort: where the platform cannot open or fsync
- * a directory, the write stays exactly as durable as the data-file flush made it. */
+ * the new bytes orphaned.
+ *
+ * Fully best-effort BY CONSTRUCTION: the caller flushes the temp file's bytes
+ * and commits the rename BEFORE this runs, so the credential is already on
+ * disk. A directory that cannot be opened or synced — whether the platform
+ * simply does not support directory fsync (EISDIR/EPERM/EINVAL/ENOTSUP) or the
+ * filesystem answers a transient EIO — leaves the write exactly as durable as
+ * that data-file flush made it. Re-throwing here would read downstream as "the
+ * write failed" and trigger a destructive recovery (revoking a grant whose
+ * token is already on disk). Log and continue instead. */
 export async function fsyncDirectory(dir: string): Promise<void> {
   let handle: FileHandle;
   try {
     handle = await open(dir, 'r');
   } catch (err) {
-    if (isDirectorySyncUnsupported(err)) return;
-    throw err;
+    console.warn(`[cloudflare-tokens] directory fsync skipped for ${dir}: ${String((err as Error)?.message ?? err)}`);
+    return;
   }
   try {
     await handle.sync();
   } catch (err) {
-    if (!isDirectorySyncUnsupported(err)) throw err;
+    console.warn(`[cloudflare-tokens] directory fsync failed for ${dir}: ${String((err as Error)?.message ?? err)}`);
   } finally {
     await handle.close();
   }
