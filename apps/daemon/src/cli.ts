@@ -12287,6 +12287,14 @@ Flags that do not apply to a subcommand are rejected (exit 2), never ignored.`);
         process.exit(2);
       }
       body.credentialMode = mode;
+    } else if (flags.token !== undefined) {
+      // `--token` with no explicit mode IS the statement that the token is the
+      // authority. A stored token is only ever consulted in 'token' mode, so
+      // leaving the stored mode alone stored a token that no deploy used: a
+      // config reading 'oauth' over a dead refresh grant kept failing
+      // CFW_OAUTH_RECONNECT_REQUIRED with a valid token in the same file. The
+      // daemon's oauth->token transition revokes the displaced grant.
+      body.credentialMode = 'token';
     }
     if (flags.scopes !== undefined) body.scopes = parseCloudflareScopesFlag(flags.scopes);
     try {

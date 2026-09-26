@@ -11,6 +11,10 @@ import {
   type OpenDesignHostPreviewNavigationFailure,
 } from '@open-design/host';
 import { CenteredLoader } from './Loading';
+import {
+  isCloudflareWorkersAccessEmail,
+  parseCloudflareWorkersAccessEmails,
+} from './cloudflare-workers-access-emails';
 import { APP_CHROME_FILE_ACTIONS_ID, APP_CHROME_FILE_ACTIONS_SELECTOR } from './AppChromeHeader';
 import {
   commentSendCompleted,
@@ -14759,10 +14763,7 @@ function HtmlViewer({
     if (cloudflareWorkersAccessRuleKind === 'emails') {
       return {
         kind: 'emails',
-        emails: cloudflareWorkersAccessEmails
-          .split(',')
-          .map((item) => item.trim())
-          .filter(Boolean),
+        emails: parseCloudflareWorkersAccessEmails(cloudflareWorkersAccessEmails),
       };
     }
     if (cloudflareWorkersAccessRuleKind === 'emailDomain') {
@@ -14788,18 +14789,19 @@ function HtmlViewer({
 
   /**
    * What must hold before a Workers config is saved or deployed: an enabled
-   * Access rule names at least one subject (the daemon stores an empty rule
-   * as-is and Cloudflare rejects it at deploy, on the production path after
-   * the Worker is already live and unprotected), and every binding row has a
-   * name and the resource its type needs (Cloudflare rejects the metadata
-   * otherwise, with an error that does not point at the row).
+   * Access rule names at least one subject, each email entry a SINGLE address
+   * (a space-joined pair used to pass this check as one malformed address and
+   * fail at the Access app create, on the production path after the Worker is
+   * already live and unprotected), and every binding row has a name and the
+   * resource its type needs (Cloudflare rejects the metadata otherwise, with
+   * an error that does not point at the row).
    */
   function validateCloudflareWorkersForm() {
     if (cloudflareWorkersAccessEnabled) {
       const rule = buildCloudflareWorkersAccessRule();
       const ruleEmpty =
         (rule.kind === 'emails' &&
-          (rule.emails.length === 0 || rule.emails.some((email) => !email.includes('@')))) ||
+          (rule.emails.length === 0 || rule.emails.some((email) => !isCloudflareWorkersAccessEmail(email)))) ||
         (rule.kind === 'emailDomain' && !rule.emailDomain) ||
         (rule.kind === 'policy' && !rule.policyId);
       if (ruleEmpty) throw new Error(t('fileViewer.cloudflareWorkersAccessRuleRequired'));

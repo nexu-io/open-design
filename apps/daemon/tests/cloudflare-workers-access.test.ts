@@ -1051,6 +1051,61 @@ describe('deployToCloudflareWorkers access (fail-closed)', () => {
     });
   });
 
+  it('records the workers.dev route a first deploy created when the hold-off AND the Access app both fail', async () => {
+    // The first-deploy shape: the PUT creates the script, Cloudflare's creation
+    // default turns its workers.dev route ON, the best-effort hold-off is
+    // refused, and the Access app that would close the gate then fails. The
+    // deploy throws and the Worker stays public, so the error has to carry the
+    // exposure — without it the route records nothing, the record is not on the
+    // Access path, and the next check-link reads the route's plain 200 as a
+    // ready link: the very answer this attempt disproved.
+    const { calls, fn } = accessFetch();
+    let scriptPutLanded = false;
+    const wrapped = vi.fn(async (url: string, init?: RequestInit) => {
+      const method = (init?.method || 'GET').toUpperCase();
+      if (method === 'PUT' && url.endsWith('/workers/scripts/my-site')) scriptPutLanded = true;
+      // The script LIST is the only read behind both the Worker tag and the
+      // "did this run create it" baseline, so it is empty before the PUT (no
+      // tag: no app to create ahead of it) and populated after.
+      if (method === 'GET' && url.includes('/workers/scripts')) {
+        return jsonResponse(scriptPutLanded
+          ? { success: true, result: [{ id: 'my-site', tag: 'tag-abc-123' }] }
+          : { success: true, result: [] });
+      }
+      if (method === 'POST' && url.endsWith('/workers/scripts/my-site/subdomain')) {
+        const body = JSON.parse(String(init?.body)) as { enabled?: unknown };
+        if (body.enabled === false) {
+          calls.push([url, init]);
+          return jsonResponse({ success: false, errors: [{ message: 'subdomain disable refused' }] }, 500);
+        }
+      }
+      if (method === 'POST' && url.endsWith('/access/apps')) {
+        calls.push([url, init]);
+        return jsonResponse({ success: false, errors: [{ message: 'access create refused' }] }, 500);
+      }
+      return fn(url, init);
+    });
+    vi.stubGlobal('fetch', wrapped);
+    let caught: { accessProtected?: unknown; check?: unknown; unverifiedExposure?: unknown; steps?: Array<{ name: string; status: string; detail?: string }> } | undefined;
+    try {
+      await deployToCloudflareWorkers({
+        ...base,
+        access: { enabled: true, rule: { kind: 'emails', emails: ['a@b.c'] } },
+      });
+    } catch (err) {
+      caught = err as typeof caught;
+    }
+    expect(caught).toBeTruthy();
+    // Both halves are in the step log: the hold-off failed, and no Access app
+    // was ever created.
+    expect(caught?.steps).toContainEqual(expect.objectContaining({ name: 'subdomain-disable', status: 'error' }));
+    expect(caught?.steps?.some((step) => step.name === 'access-app')).toBe(false);
+    // The verdict the route records, and the route it still has to withdraw.
+    expect(caught?.accessProtected).toBe(true);
+    expect(caught?.check).toMatchObject({ ok: false, detail: 'CFW_ACCESS_UNVERIFIED' });
+    expect(caught?.unverifiedExposure).toEqual({ scriptName: 'my-site', subdomainEnabledByThisRun: true });
+  });
+
   it('attaches the preview exposure it could not withdraw, with the Access verdict, to the error', async () => {
     const { calls, fn } = accessFetch({ head: () => new Response('', { status: 200 }) });
     const wrapped = vi.fn(async (url: string, init?: RequestInit) => {

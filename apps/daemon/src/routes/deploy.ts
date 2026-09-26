@@ -786,7 +786,12 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
     );
     const resolvesPending = remainingPending.length !== pending.length;
     const gainsAccessApp = Boolean(accessAppId) && priorMetadata.accessAppId !== accessAppId;
-    if (!gainsAccessApp && newlyOwned.length === 0 && !resolvesPending) return;
+    // The Access verdict is its own reason to write, exactly as in the guard
+    // above: a FIRST deploy owns no app and no hostname yet, and a redeploy that
+    // changed neither still just proved a URL is ungated. Returning here dropped
+    // that finding — the record kept its prior state (a `ready` from the deploy
+    // before) while this attempt had proved the site public.
+    if (!gainsAccessApp && newlyOwned.length === 0 && !resolvesPending && !accessUnverified) return;
     const metadata: Record<string, unknown> = { ...priorMetadata, scriptName: input.scriptName };
     // Ownership only: the app exists and is ours (`accessAppId` +
     // `createdByOpenDesign`). `accessProtected` is what a deploy that actually

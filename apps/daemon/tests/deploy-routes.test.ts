@@ -3261,6 +3261,39 @@ describe('deploy provider routes', () => {
     }
   });
 
+  it('a redeploy that fails its Access perimeter records the verdict even when it owns nothing new', async () => {
+    // The failed attempt owns no app, no hostname and no write-ahead: the same
+    // script, the same Access app, no custom domain. The perimeter verdict is
+    // still a finding about THIS attempt, so the record has to carry it —
+    // otherwise the first deploy's "ready" stands, the record leaves the Access
+    // path, and the next check-link reads the plain 200 this attempt proved.
+    const f = await workersSiblingFixture('verdict-only', { access: true });
+    configureCloudflareAccessPerimeterRetry({ attempts: 1, baseMs: 1 });
+    try {
+      await f.putConfig({ access: true });
+      const first = await f.deploy('a.html');
+      expect(first.status).toBe(200);
+      expect(((await first.json()) as { status: string }).status).toBe('ready');
+
+      // The URL now answers a plain 200. This run turned nothing on — it did not
+      // create the script and the workers.dev route was already on — so what is
+      // left is the verdict, not an exposure of this run's to withdraw.
+      f.state.headMode = 'plain';
+      await f.deploy('a.html');
+
+      const record = (await f.listDeployments()).find((d) => d.fileName === 'a.html');
+      expect(record?.status).toBe('failed');
+      expect(record?.cloudflareWorkers).toMatchObject({
+        accessProtected: true,
+        check: { ok: false, detail: 'CFW_ACCESS_UNVERIFIED' },
+      });
+      expect(record?.cloudflareWorkers?.unverifiedExposure).toBeUndefined();
+    } finally {
+      configureCloudflareAccessPerimeterRetry();
+      await f.cleanup();
+    }
+  });
+
   it('classifies a record as Access-protected on the deploy marker alone, whatever its status', () => {
     // The marker only a deploy that gated the Worker writes — on the deferred
     // status, on a failed check's status, and on a verified ready record.

@@ -447,12 +447,31 @@ describe('od cloudflare CLI', () => {
     expect(result.stdout).toContain('credentialMode=oauth');
   });
 
-  it('config PUTs only the supplied fields when an update flag is present', async () => {
+  it('config PUTs only the supplied fields, and a bare --token asserts token mode', async () => {
     stub.setResponder(() => ({ status: 200, body: { providerId: 'cloudflare-workers', configured: true } }));
     const result = await runCli(['cloudflare', 'config', '--account-id', 'acct-1', '--token', 'tok-1', '--daemon-url', stub.baseUrl]);
     expect(result.code).toBe(0);
     expect(stub.requests[0]?.method).toBe('PUT');
-    expect(JSON.parse(stub.requests[0]?.body ?? '{}')).toEqual({ providerId: 'cloudflare-workers', accountId: 'acct-1', token: 'tok-1' });
+    // A stored token is only ever consulted in 'token' mode, so --token with no
+    // explicit mode must state it: leaving the stored mode alone stored a token
+    // no deploy used, and a config reading 'oauth' over a dead refresh grant
+    // kept failing CFW_OAUTH_RECONNECT_REQUIRED with a valid token in the same
+    // file.
+    expect(JSON.parse(stub.requests[0]?.body ?? '{}')).toEqual({ providerId: 'cloudflare-workers', accountId: 'acct-1', token: 'tok-1', credentialMode: 'token' });
+  });
+
+  it('config keeps an explicit credential mode, and asserts none without a token', async () => {
+    stub.setResponder(() => ({ status: 200, body: { providerId: 'cloudflare-workers', configured: true } }));
+    // An explicit mode is the user's decision, even alongside a token.
+    const oauth = await runCli(['cloudflare', 'config', '--token', 'tok-1', '--credential-mode', 'oauth', '--daemon-url', stub.baseUrl]);
+    expect(oauth.code).toBe(0);
+    expect(JSON.parse(stub.requests[0]?.body ?? '{}')).toEqual({ providerId: 'cloudflare-workers', token: 'tok-1', credentialMode: 'oauth' });
+
+    stub.requests.length = 0;
+    // No token: nothing to switch the mode for.
+    const accountOnly = await runCli(['cloudflare', 'config', '--account-id', 'acct-1', '--daemon-url', stub.baseUrl]);
+    expect(accountOnly.code).toBe(0);
+    expect(JSON.parse(stub.requests[0]?.body ?? '{}')).toEqual({ providerId: 'cloudflare-workers', accountId: 'acct-1' });
   });
 
   it('rejects flags that do not apply to the subcommand instead of silently ignoring them', async () => {

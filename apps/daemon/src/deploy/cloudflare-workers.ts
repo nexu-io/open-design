@@ -2033,6 +2033,16 @@ async function deployToCloudflareWorkersWith(
   // result AND on the error so every record still carrying that id stops
   // claiming the Worker is protected by an app that no longer exists.
   let retiredAccessAppId = '';
+  // The script name of a Worker this run created and then left live on the
+  // workers.dev route Cloudflare assigns at creation, with no Access app ever
+  // confirmed: the one failure shape that leaves a Worker public and ungated
+  // with nothing recorded anywhere. The PUT itself turns that route on, and the
+  // best-effort hold-off below is what takes it back for the window before the
+  // app exists — when the hold-off fails AND the app create then throws, the
+  // catch turns this into the same verdict markAccessUnverifiedFailure writes,
+  // so the failed deploy records the exposure (accessProtected + the coded
+  // check + the route still to withdraw) instead of orphaning it.
+  let ungatedRouteScriptName = '';
   try {
     // Validate the script name and the asset set BEFORE any resource is
     // created: an unviable deploy (bad script name, too many / oversized /
@@ -2264,6 +2274,9 @@ async function deployToCloudflareWorkersWith(
         const message = err instanceof Error ? err.message : String(err);
         console.error(`[cloudflare-workers] could not hold the workers.dev route off for ${scriptName} while the Access app is created: ${message}`);
         steps.push({ name: 'subdomain-disable', status: 'error', detail: message });
+        // As far as this deploy knows the route is still ON. If the Access app
+        // below never arrives, the catch records the exposure.
+        ungatedRouteScriptName = scriptName;
       }
     }
     if (accessOn && !accessAppId) {
@@ -2276,6 +2289,9 @@ async function deployToCloudflareWorkersWith(
       metadata.createdByOpenDesign = true;
       steps.push({ name: 'access-app', status: 'done', detail: app.appId });
     }
+    // The gate exists from here on (or Access is off): a refused hold-off above
+    // has nothing left to expose, so the catch must not report one.
+    ungatedRouteScriptName = '';
     // Reconcile the previously recorded app: delete it only when it is not the
     // app now governing this Worker AND it still points at this Worker (after a
     // scriptName change it protects the still-live old Worker — keep it).
@@ -2527,6 +2543,21 @@ async function deployToCloudflareWorkersWith(
     (err as { detachedCustomDomains?: CloudflareOwnedCustomDomain[] }).detachedCustomDomains = detachedCustomDomains;
     (err as { releasedCustomDomains?: string[] }).releasedCustomDomains = releasedCustomDomains;
     if (retiredAccessAppId) (err as { retiredAccessAppId?: string }).retiredAccessAppId = retiredAccessAppId;
+    // A Worker this run CREATED is live on the route Cloudflare turns on at
+    // creation and no Access app was ever confirmed: the deploy proved nothing
+    // gated it, and the hold-off that was supposed to take the route back for
+    // the window before the app existed did not land. Annotate the error as the
+    // perimeter verdict it is — the same fields markAccessUnverifiedFailure
+    // writes, and the same ones the link check writes when it reaches this
+    // verdict itself — so the route records the exposure and the next check
+    // withdraws the route, instead of reading its plain 200 as a ready link.
+    if (ungatedRouteScriptName && err instanceof Error) {
+      markAccessUnverifiedFailure(
+        err,
+        { scriptName: ungatedRouteScriptName, subdomainEnabledByThisRun: true },
+        { steps, detachedCustomDomains },
+      );
+    }
     throw err;
   }
 }
