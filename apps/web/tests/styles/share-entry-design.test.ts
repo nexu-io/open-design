@@ -2,9 +2,10 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import postcss from 'postcss';
 import { describe, expect, it } from 'vitest';
+import { readShareCss } from '../helpers/read-share-css';
 
 function declarations(selector: string): Record<string, string> {
-  const css = readFileSync(resolve('src/components/share/ShareEntry.module.css'), 'utf8');
+  const css = readShareCss(resolve('src/components/share/ShareEntry.module.css'));
   const root = postcss.parse(css);
   const result: Record<string, string> = {};
   root.walkRules(selector, rule => {

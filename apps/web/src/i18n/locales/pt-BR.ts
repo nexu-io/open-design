@@ -3284,6 +3284,7 @@ export const ptBR: Dict = {
   'fileViewer.publishFile': 'Publish file',
   'fileViewer.publishingFile': 'Criando link…',
   "fileViewer.uploadingFile": "Enviando",
+  "fileViewer.shareReopening": "Reabrindo…",
   "fileViewer.publishingContinuesOnClose": "Fechar este painel não interromperá o envio.",
   'fileViewer.unpublishFile': 'Parar de compartilhar',
   'fileViewer.shareEmptyStateTitle': 'Nada para compartilhar ainda',

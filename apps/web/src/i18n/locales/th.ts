@@ -3284,6 +3284,7 @@ export const th: Dict = {
   'fileViewer.publishFile': 'Publish file',
   'fileViewer.publishingFile': 'กำลังสร้างลิงก์…',
   "fileViewer.uploadingFile": "กำลังอัปโหลด",
+  "fileViewer.shareReopening": "กำลังเปิดใหม่…",
   "fileViewer.publishingContinuesOnClose": "การปิดแผงนี้จะไม่ขัดจังหวะการอัปโหลด",
   'fileViewer.unpublishFile': 'หยุดแชร์',
   'fileViewer.shareEmptyStateTitle': 'ยังไม่มีอะไรให้แชร์',

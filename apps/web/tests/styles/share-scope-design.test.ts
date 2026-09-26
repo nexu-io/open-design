@@ -2,17 +2,18 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import postcss from 'postcss';
 import { describe, expect, it } from 'vitest';
+import { readShareCss } from '../helpers/read-share-css';
 
 describe('S1-T2 scope menu container', () => {
   it('uses canvas spacing and elevation without changing the anchor', () => {
-    const css = postcss.parse(readFileSync(resolve('src/components/share/ShareTab.module.css'), 'utf8'));
+    const css = postcss.parse(readShareCss(resolve('src/components/share/ShareTab.module.css')));
     const values: Record<string, string> = {};
     css.walkRules('.panel :global(.chrome-access-options)', rule => {
       rule.walkDecls(decl => { values[decl.prop] = decl.value; });
     });
     expect(values).toMatchObject({
       'box-sizing': 'border-box', padding: '4px', display: 'flex', 'flex-direction': 'column', gap: '2px',
-      border: '1px solid #00000008', 'border-radius': '8px', background: '#FFFFFF',
+      border: '1px solid #00000008', 'border-radius': '8px', background: '#fff',
       'box-shadow': '0 6px 20px #00000012, 0 1px 4px #00000006',
     });
     for (const property of ['position', 'top', 'left', 'right']) expect(values).not.toHaveProperty(property);
@@ -21,7 +22,7 @@ describe('S1-T2 scope menu container', () => {
 
 describe('S1-T2 leading selection layout', () => {
   it('reserves one leading check column and fits translated labels', () => {
-    const css = postcss.parse(readFileSync(resolve('src/components/share/ShareTab.module.css'), 'utf8'));
+    const css = postcss.parse(readShareCss(resolve('src/components/share/ShareTab.module.css')));
     const values = (selector: string) => {
       const result: Record<string, string> = {};
       css.walkRules(selector, rule => { rule.walkDecls(decl => { result[decl.prop] = decl.value; }); });
@@ -37,7 +38,7 @@ describe('S1-T2 leading selection layout', () => {
 
 describe('S1-T2 scope option rows', () => {
   it('declares compact rows and neutral selected/hover feedback', () => {
-    const css = postcss.parse(readFileSync(resolve('src/components/share/ShareTab.module.css'), 'utf8'));
+    const css = postcss.parse(readShareCss(resolve('src/components/share/ShareTab.module.css')));
     const declarations = (selector: string) => {
       const values: Record<string, string> = {};
       css.walkRules(selector, rule => { rule.walkDecls(decl => { values[decl.prop] = decl.value; }); });
@@ -57,7 +58,7 @@ describe('S1-T2 scope option rows', () => {
 
 describe('S1-T/S4-T shared scope trigger', () => {
   it('places title and trigger in a canvas row and anchors the menu inward', () => {
-    const css = postcss.parse(readFileSync(resolve('src/components/share/ShareTab.module.css'), 'utf8'));
+    const css = postcss.parse(readShareCss(resolve('src/components/share/ShareTab.module.css')));
     const values = (selector: string) => {
       const result: Record<string, string> = {};
       css.walkRules(selector, rule => { rule.walkDecls(decl => { result[decl.prop] = decl.value; }); });
@@ -67,7 +68,7 @@ describe('S1-T/S4-T shared scope trigger', () => {
     expect(values('.panel :global(.chrome-access-options)')).toMatchObject({ 'inset-inline-start': 'auto', 'inset-inline-end': '0' });
   });
   it('adds the 20px section offset only when scope follows another section', () => {
-    const css = postcss.parse(readFileSync(resolve('src/components/share/ShareTab.module.css'), 'utf8'));
+    const css = postcss.parse(readShareCss(resolve('src/components/share/ShareTab.module.css')));
     const values: Record<string, string> = {};
     css.walkRules('.scopeHeading:not(:first-child)', rule => {
       rule.walkDecls(decl => { values[decl.prop] = decl.value; });
@@ -78,7 +79,7 @@ describe('S1-T/S4-T shared scope trigger', () => {
     });
   });
   it('removes only the legacy horizontal scope inset, preserving the anchor', () => {
-    const css = postcss.parse(readFileSync(resolve('src/components/share/ShareTab.module.css'), 'utf8'));
+    const css = postcss.parse(readShareCss(resolve('src/components/share/ShareTab.module.css')));
     const values: Record<string, string> = {};
     css.walkRules('.panel :global(.chrome-access-select)', rule => {
       rule.walkDecls(decl => { values[decl.prop] = decl.value; });
@@ -86,7 +87,7 @@ describe('S1-T/S4-T shared scope trigger', () => {
     expect(values).toEqual({ padding: '0', 'flex-shrink': '0' });
   });
   it('uses canvas scope heading typography without inheriting menu item insets', () => {
-    const css = postcss.parse(readFileSync(resolve('src/components/share/ShareTab.module.css'), 'utf8'));
+    const css = postcss.parse(readShareCss(resolve('src/components/share/ShareTab.module.css')));
     const values: Record<string, string> = {};
     css.walkRules('.panel :global(.share-menu-section-label--help)', rule => {
       rule.walkDecls(decl => { values[decl.prop] = decl.value; });
@@ -94,7 +95,7 @@ describe('S1-T/S4-T shared scope trigger', () => {
     expect(values).toMatchObject({ padding: '0', 'min-width': '0', 'overflow-wrap': 'anywhere', color: '#333333', 'font-size': '13px', 'line-height': '20px', 'font-weight': '500' });
   });
   it('hides decorative icons but preserves the busy slot and sizes the chevron', () => {
-    const css = postcss.parse(readFileSync(resolve('src/components/share/ShareTab.module.css'), 'utf8'));
+    const css = postcss.parse(readShareCss(resolve('src/components/share/ShareTab.module.css')));
     const declarations = (selector: string) => {
       const values: Record<string, string> = {};
       css.walkRules(selector, rule => { rule.walkDecls(decl => { values[decl.prop] = decl.value; }); });
@@ -105,7 +106,7 @@ describe('S1-T/S4-T shared scope trigger', () => {
     expect(declarations('.panel :global(.chrome-access-trigger > .share-menu-icon)')).not.toHaveProperty('display');
   });
   it('uses the compact canvas trigger only under ShareTab', () => {
-    const css = postcss.parse(readFileSync(resolve('src/components/share/ShareTab.module.css'), 'utf8'));
+    const css = postcss.parse(readShareCss(resolve('src/components/share/ShareTab.module.css')));
     const values: Record<string, string> = {};
     css.walkRules('.panel :global(.chrome-access-trigger)', rule => {
       rule.walkDecls(decl => { values[decl.prop] = decl.value; });

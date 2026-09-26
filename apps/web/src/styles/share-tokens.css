@@ -1,0 +1,100 @@
+/* Share-panel design tokens (2026 refactor, phase 2 item 5).
+   FIXED light values, deliberately NOT aliased to the app's dark-mode-aware
+   theme tokens (--text-strong, --accent, …): every share surface renders the
+   same literal palette today regardless of the app's light/dark theme (see
+   every capture under .tmp/ui-audit/refactor-baseline/Owner-*), and aliasing
+   to a theme token that flips value in dark mode (e.g. --text-strong:
+   #202020 light / #fafafa dark) would silently change that — a behavior
+   change no capture in this pass exercises or approves. Do not add a
+   `@media (prefers-color-scheme: dark)` or `[data-theme="dark"]` block for
+   these; that is a product decision this pass was explicitly told not to
+   make.
+
+   Declared once on `:root` (imported through apps/web/src/index.css, per
+   root AGENTS.md "Web CSS ownership" — no selectors added to index.css
+   itself) so every share surface inherits them through the normal CSS
+   cascade, including content portaled to document.body (ShareFeedbackToast,
+   the export/version-restored TopStackedToast, ShareMoreMenu's menu, the
+   share popover itself) — a portal moves DOM position, not cascade origin,
+   so no extra import is needed at any of those call sites. */
+:root {
+  /* Blacks — the primary "block" button and its states. Two historically
+     distinct near-blacks (O4): the share-panel button family's idle fill,
+     and the after-export guide's own dark-sm button fill; kept separate
+     rather than merged into one, since they never matched today. */
+  --share-ink: #29292B;
+  --share-ink-hover: #353535;
+  --share-ink-busy: #5A5A5C;
+  --share-ink-dark-sm: var(--share-surface-dark);
+  --share-ink-dark-sm-hover: #353535;
+
+  /* Blues — the 88px soft button (update link / sign-in-to-update / plain retry). */
+  --share-blue-bg: #EDF3FF;
+  --share-blue-fg: #245FCE;
+  --share-blue-bg-hover: #E0EAFF;
+  --share-blue-fg-hover: #194EAF;
+  --share-blue-bg-active: #D3E1FF;
+  --share-blue-fg-active: #194EAF;
+
+  /* Reds — the soft-error retry button (CommentSyncBanner K5). A different
+     red family than --share-error below (O7: two pre-existing, distinct
+     reds; unifying either is a visual change no capture approved). */
+  --share-red-bg: #fff0f0;
+  --share-red-fg: #c9363e;
+  --share-red-bg-hover: #ffe2e3;
+  --share-red-fg-hover: #b52a32;
+  --share-red-bg-active: #ffd3d5;
+  --share-red-fg-active: #a3222a;
+
+  /* ShareErrorRow's red (publish failure / too-large / retry-failed line). */
+  --share-error: #C94E4E;
+
+  /* Menu surface skin (item 4) — ShareMoreMenu's own popover and ShareTab's
+     `.chrome-access-options` scope listbox already matched byte-for-byte;
+     this is the single declaration of that shared shape. */
+  --share-menu-border: 1px solid #00000008;
+  --share-menu-radius: 8px;
+  --share-menu-bg: #fff;
+  --share-menu-shadow: 0 6px 20px #00000012, 0 1px 4px #00000006;
+  --share-menu-row-h: 28px;
+  --share-menu-row-color: #494949;
+  --share-menu-row-hover-bg: #F2F2F4;
+  --share-menu-row-hover-color: #1F1F1F;
+
+  /* Panel/card shadows. SignedOutObservedShare's standalone card and the
+     after-export guide card use slightly different alpha values today
+     (#00000010 vs #00000012) — kept as two tokens, not forced into one. */
+  --share-panel-shadow: 0 8px 28px #00000010, 0 2px 6px #00000006;
+  --share-guide-shadow: 0 8px 28px #00000012, 0 2px 6px #00000006;
+
+  /* Shared control sizing, repeated across every button/input in the panel. */
+  --share-control-h: 32px;
+  --share-radius: 6px;
+  --share-soft-btn-w: 88px;
+
+  /* Text greys. */
+  --share-text-strong: #333333;
+  --share-text-muted: #888888;
+  --share-text-faint: #999999;
+  --share-text-notice: #5C5C5C;
+  --share-text-dim: #858585;
+  --share-copied: #82D994;
+  --share-published-border: #E5E5E5;
+  --share-text-secondary: #666666;
+  --share-published-fg: var(--share-text-secondary);
+
+  /* Surfaces and states shared by several share surfaces. */
+  --share-white: #FFFFFF;
+  --share-canvas: #F6F6F6;
+  --share-surface-dark: #202020;
+  --share-toggle-on: #282828;
+  --share-track: #6E6E70;
+  --share-success: #4C9461;
+  --share-danger: #E5484D;
+  --share-focus: #1677FF;
+
+  /* Values used in exactly one place (e.g. the after-export guide's
+     decorative bubble illustration, share-entry hover tints) stay local to
+     their module: a token only earns its place once a second surface needs
+     the same value. */
+}

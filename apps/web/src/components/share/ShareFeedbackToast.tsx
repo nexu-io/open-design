@@ -12,8 +12,23 @@ import { createPortal } from 'react-dom';
 import { useT } from '../../i18n';
 import { Icon } from '../Icon';
 import styles from './ShareFeedbackToast.module.css';
+import { useTopToastStackIndex, TOP_TOAST_STACK_OFFSET_PX } from './toast-stack';
 
 export type ShareFeedbackTone = 'success' | 'error' | 'loading';
+
+// OD-1/item 5: every ShareFeedbackToast mounts fixed at the same `top: 64px`
+// (see the module CSS). That was fine for one toast at a time, but the
+// update-link toast, the deploy-result toasts, the workspace-share-guide
+// toast (all now the same component — see FileViewer's routing), AND the
+// generic top-placement `Toast` (export/version-restore toasts) can be
+// simultaneously true, and previously two toasts drew on top of each other.
+// `useTopToastStackIndex` is a shared external-store hook (./toast-stack)
+// that gives each mounted instance — of EITHER toast component — a stacking
+// index by registration order, so a second (or third) toast offsets downward
+// instead of overlapping. The first toast keeps `top: 64px` unchanged (no
+// inline style) so the common single-toast screenshots are byte-identical to
+// before this existed.
+const STACK_OFFSET_PX = TOP_TOAST_STACK_OFFSET_PX;
 
 export interface ShareFeedbackToastProps {
   tone: ShareFeedbackTone;
@@ -63,6 +78,7 @@ export function ShareFeedbackToast({
     };
   }, [message, details, ttlMs]);
 
+  const stackIndex = useTopToastStackIndex();
   const role = tone === 'error' ? 'alert' : 'status';
   const toast = (
     <div
@@ -70,12 +86,11 @@ export function ShareFeedbackToast({
       role={role}
       aria-live={role === 'alert' ? 'assertive' : 'polite'}
       data-tone={tone}
+      style={stackIndex > 0 ? { top: `calc(64px + ${stackIndex * STACK_OFFSET_PX}px)` } : undefined}
     >
       <span className={`${styles.badge} ${styles[tone]}`} aria-hidden>
         {tone === 'success' ? (
-          <svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <path d="m3 8 3 3 7-7" />
-          </svg>
+          <Icon name="share-check" size={11} strokeWidth={1.8} />
         ) : tone === 'error' ? '!' : <Icon name="spinner" size={11} />}
       </span>
       <span className={styles.text}>
@@ -88,9 +103,7 @@ export function ShareFeedbackToast({
         </button>
       ) : null}
       <button type="button" className={styles.close} onClick={onDismiss} aria-label={t('common.dismiss')}>
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-          <path d="m6 6 12 12M18 6 6 18" />
-        </svg>
+        <Icon name="share-close-thick" size={14} strokeWidth={1.6} />
       </button>
     </div>
   );

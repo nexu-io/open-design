@@ -2,7 +2,7 @@
 button.trigger {
   box-sizing: border-box;
   width: 20px; min-width: 0; height: 20px; padding: 3px;
-  border: 0; border-radius: 5px; background: transparent; color: #858585;
+  border: 0; border-radius: 5px; background: transparent; color: var(--share-text-dim);
   display: flex; align-items: center; justify-content: center;
 }
 .menu {
@@ -11,19 +11,23 @@ button.trigger {
      opened FROM INSIDE an already-open menu belongs above it — same rule as
      `.od-tooltip-layer[data-tooltip-context="menu"]` in primitives.css — so
      this must clear --z-menu, not sit at an unrelated literal below it
-     (S12: the deploy sub-menu was rendering under the share popover). */
+     (S12: the deploy sub-menu was rendering under the share popover).
+
+     Border/radius/background/shadow/padding/gap are the shared menu-surface
+     skin (item 4) — same tokens ShareTab.module.css's `.chrome-access-options`
+     reads, since the two already matched byte-for-byte. */
   position: fixed; inset-inline-end: auto; top: auto; z-index: calc(var(--z-menu) + 1);
   box-sizing: border-box; width: 214px; padding: 4px;
   display: flex; flex-direction: column; gap: 2px;
-  border: 1px solid #00000008; border-radius: 8px; background: #fff;
-  box-shadow: 0 6px 20px #00000012, 0 1px 4px #00000006;
+  border: var(--share-menu-border); border-radius: var(--share-menu-radius); background: var(--share-menu-bg);
+  box-shadow: var(--share-menu-shadow);
 }
 .menu[hidden] { display: none; }
 button.item {
   box-sizing: border-box; display: flex; align-items: center; justify-content: flex-start;
-  width: 100%; min-width: 0; height: 28px; padding: 0 8px; gap: 8px;
-  border: 0; border-radius: 4px; background: transparent; color: #494949;
+  width: 100%; min-width: 0; height: var(--share-menu-row-h); padding: 0 8px; gap: 8px;
+  border: 0; border-radius: 4px; background: transparent; color: var(--share-menu-row-color);
   font-size: 12px; font-weight: 500; line-height: normal; white-space: nowrap;
 }
-button.item:not(:disabled):hover, button.item:focus-visible { background: #F2F2F4; color: #1F1F1F; }
+button.item:not(:disabled):hover, button.item:focus-visible { background: var(--share-menu-row-hover-bg); color: var(--share-menu-row-hover-color); }
 button.item:disabled { opacity: 0.5; }

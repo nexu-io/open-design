@@ -4206,6 +4206,9 @@ export interface Dict {
    *  (recvqae7v8yMlk). */
   'fileViewer.publishingFile': string;
   'fileViewer.uploadingFile': string;
+  /** Publish button label while resuming a stopped share (OD-3: was a
+   *  hard-coded Chinese string, `publicationStatus === 'stopped'` branch). */
+  'fileViewer.shareReopening': string;
   'fileViewer.publishingContinuesOnClose': string;
   'fileViewer.unpublishFile': string;
   /** @deprecated Orphaned (recvqgif6Xa7Wb): rendered the "no team to share

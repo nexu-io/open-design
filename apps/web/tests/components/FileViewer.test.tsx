@@ -6476,9 +6476,11 @@ describe('FileViewer SVG artifacts', () => {
     // result block and in the social-share header; scope to the result block.
     const resultBlock = customDomainLabel.closest('.deploy-result-block') as HTMLElement;
     expect(within(resultBlock).getByText('https://demo.example.com')).toBeTruthy();
-    const deployToast = document.querySelector('.od-toast');
-    expect(deployToast?.className).toContain('tone-success');
-    expect(deployToast?.className).toContain('placement-top');
+    // Deploy result feedback renders through `ShareFeedbackToast` (already
+    // converted from the generic `Toast` before this pass — see its own
+    // "Item 5 (2026 refactor)" comment in FileViewer.tsx), not `.od-toast`.
+    const deployToast = document.querySelector('[data-tone="success"]');
+    expect(deployToast).not.toBeNull();
     expect(deployToast?.textContent).toContain('Deployment uploaded successfully');
     expect(deployToast?.textContent).toContain('Cloudflare Pages');
     expect(deployToast?.textContent).toContain('https://demo-pages.pages.dev');

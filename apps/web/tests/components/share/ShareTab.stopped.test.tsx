@@ -146,7 +146,10 @@ it('S9-R: a stopped-link switch requests resume-only, locks while pending, then 
   expect(JSON.parse(String(publicationRequests('POST')[0]?.[1]?.body))).toEqual({ mode: 'resume' });
   expect(toggle).toBeDisabled();
   expect(toggle).toHaveAttribute('aria-checked', 'false');
-  expect(screen.getByRole('menuitem', { name: '正在开启…' })).toBeDisabled();
+  // OD-3 (2026 refactor: item 6): was a hard-coded Chinese literal
+  // regardless of locale; now `fileViewer.shareReopening`, which this
+  // English-locale render resolves to "Reopening…".
+  expect(screen.getByRole('menuitem', { name: 'Reopening…' })).toBeDisabled();
   expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
   fireEvent.click(toggle);
   expect(publicationRequests('POST')).toHaveLength(1);

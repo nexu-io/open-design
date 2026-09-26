@@ -86,11 +86,22 @@ test('capture isolated OD share entry, progress and failure states',async({page}
   await expect(menu.locator('.chrome-publish-url')).toHaveText(url);
   await save(page,'G2','G2');
   await more.click();
-  await expect(page.getByRole('menu',{name:/更多分享方式|More sharing options/})).toBeVisible();
+  const moreMenu=page.getByRole('menu',{name:/更多分享方式|More sharing options/});
+  await expect(moreMenu).toBeVisible();
   await save(page,'S12','S12');
+  // Item 5: prove the share-tokens.css custom properties actually resolve at
+  // runtime (vitest here never loads real CSS, so this is Playwright-only).
+  // --share-menu-radius/--share-menu-shadow back ShareMoreMenu's popover
+  // (item 4's shared menu-surface skin).
+  const moreMenuStyle=await moreMenu.evaluate(el=>{const s=getComputedStyle(el);return {borderRadius:s.borderRadius,boxShadow:s.boxShadow};});
+  expect(moreMenuStyle.borderRadius).toBe('8px');
+  expect(moreMenuStyle.boxShadow).not.toBe('none');
   await page.keyboard.press('Escape');
   await page.evaluate(()=>{Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:()=>new Promise<void>(resolve=>window.addEventListener('ui-audit-release-copy',()=>resolve(),{once:true}))}});});
   const copy=menu.getByRole('button',{name:/复制链接|Copy share link/});
+  // --share-ink backs the primary ShareButton's idle fill (#29292B).
+  const copyStyle=await copy.evaluate(el=>getComputedStyle(el).backgroundColor);
+  expect(copyStyle).toBe('rgb(41, 41, 43)');
   await copy.click();
   await expect(menu.getByRole('button',{name:/复制中|Copying/})).toBeVisible();
   await save(page,'S4-C-pending','S4-C-pending');

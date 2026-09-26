@@ -3292,6 +3292,7 @@ export const de: Dict = {
   'fileViewer.publishFile': 'Publish file',
   'fileViewer.publishingFile': 'Link wird erstellt…',
   "fileViewer.uploadingFile": "Wird hochgeladen",
+  "fileViewer.shareReopening": "Wird erneut geöffnet…",
   "fileViewer.publishingContinuesOnClose": "Das Schließen dieses Bereichs unterbricht den Upload nicht.",
   'fileViewer.unpublishFile': 'Freigabe beenden',
   'fileViewer.shareEmptyStateTitle': 'Noch nichts zum Teilen',

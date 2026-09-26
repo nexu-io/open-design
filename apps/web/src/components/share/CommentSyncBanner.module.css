@@ -4,7 +4,7 @@
   border: 1px solid var(--border, #EFEFEF);
   border-radius: 6px;
   background: var(--bg-secondary, #F7F7F7);
-  color: var(--text-secondary, #666666);
+  color: var(--text-secondary, var(--share-text-secondary));
   font-size: 12px;
   line-height: 18px;
   overflow-wrap: anywhere;
@@ -20,7 +20,10 @@
 }
 .banner p { margin: 0; }
 .banner p + p { margin-block-start: 4px; }
- .title { font-weight: 600; color: var(--text, #333333); }
+ .title { font-weight: 600; color: var(--text, var(--share-text-strong)); }
+ /* No current production caller renders this (ShareTab's own progress bar
+    replaced K1/K4 there), but it is a tested, documented capability for a
+    future non-`backfillOnly` mount — see CommentSyncBanner.tsx. */
  .backfillProgress {
   display: flex;
   min-height: 36px;
@@ -29,7 +32,7 @@
   gap: 8px;
   border-radius: 6px;
   background: #29292d;
-  color: #fff;
+  color: var(--share-white);
   font-weight: 500;
 }
  .spinner {
@@ -37,44 +40,16 @@
   height: 12px;
   flex: none;
   border: 1.5px solid rgb(255 255 255 / 45%);
-  border-top-color: #fff;
+  border-top-color: var(--share-white);
   border-radius: 50%;
   animation: commentSyncSpin 0.8s linear infinite;
 }
  @keyframes commentSyncSpin { to { transform: rotate(360deg); } }
  .login { margin-block-start: 4px; }
  .login button { text-decoration: underline; }
- .retryRow { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 36px; margin-block-start: 4px; }
- .retryRow p { flex: 1; min-width: 0; }
- .backfillOnly .retryRow p { color: #5c5c5c; }
- /* Design `.share-status-panel .notice .secondary`: fixed 88px, icon + label. */
- .retry {
-  box-sizing: border-box;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  flex: 0 0 88px;
-  width: 88px;
-  min-width: 88px;
-  height: 32px;
-  padding: 0 12px;
-  border: none;
-  border-radius: 6px;
-  background: #edf3ff;
-  color: #245fce;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 18px;
-  white-space: nowrap;
-  cursor: pointer;
-}
- .retry > svg { flex: 0 0 13px; width: 13px; height: 13px; }
- .retry:hover:not(:disabled) { background: #e0eaff; color: #194eaf; }
- .retry:active:not(:disabled) { background: #d3e1ff; color: #194eaf; }
- .retry:focus-visible { outline: 2px solid #245fce; outline-offset: 2px; }
- .retry:disabled { opacity: 0.6; cursor: default; }
- .retryError { background: #fff0f0; color: #c9363e; }
- .retryError:hover:not(:disabled) { background: #ffe2e3; color: #b52a32; }
- .retryError:active:not(:disabled) { background: #ffd3d5; color: #a3222a; }
- .retryError:focus-visible { outline-color: #c9363e; }
+ /* .retryRow moved to ShareNoticeRow.module.css's .row (2026 refactor: item
+    3). .retrySpacing keeps this row's own top-margin, which is positioning
+    inside THIS banner, not part of the shared row layout. */
+ .retrySpacing { margin-block-start: 4px; }
+ /* .retry/.retryError moved into the shared `ShareButton`'s `soft`/
+    `soft-error` variants (2026 refactor: item 1) — ShareButton.module.css. */

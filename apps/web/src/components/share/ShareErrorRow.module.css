@@ -1,0 +1,23 @@
+/* O7/OD-4: shared red error row. Base typography matches ShareTab's former
+   `p.publishError` exactly (margin 0, #C94E4E, 12px/18px). `.hasIcon` adds the
+   icon layout; the icon-less variant (AfterExportShareGuide) stays a plain
+   block `<p>` so a single text child wraps exactly like the original
+   `.error` rule did. */
+.row {
+  margin: 0;
+  padding: 0;
+  color: var(--share-error);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.hasIcon {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.icon {
+  flex: none;
+  margin-top: 2px;
+}

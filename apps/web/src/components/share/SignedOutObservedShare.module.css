@@ -3,7 +3,7 @@
   min-height: 100%;
   place-items: center;
   padding: 24px;
-  background: #f6f6f6;
+  background: var(--share-canvas);
 }
 
 .panel {
@@ -15,15 +15,9 @@
   width: min(100%, 360px);
   padding: 20px;
   border-radius: 12px;
-  background: #fff;
-  box-shadow: 0 8px 28px #00000010, 0 2px 6px #00000006;
-  color: #333;
+  background: var(--share-white);
+  box-shadow: var(--share-panel-shadow);
+  color: var(--share-text-strong);
   text-align: start;
 }
 
-.title {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 24px;
-}

@@ -3284,6 +3284,7 @@ export const ja: Dict = {
   'fileViewer.publishFile': 'Publish file',
   'fileViewer.publishingFile': '作成中…',
   "fileViewer.uploadingFile": "アップロード中",
+  "fileViewer.shareReopening": "再公開中…",
   "fileViewer.publishingContinuesOnClose": "このパネルを閉じてもアップロードは中断されません。",
   'fileViewer.unpublishFile': '共有を停止',
   'fileViewer.shareEmptyStateTitle': '共有できるものがまだありません',

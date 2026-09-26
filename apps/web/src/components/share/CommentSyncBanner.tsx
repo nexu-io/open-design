@@ -3,16 +3,16 @@ import type { WorkspaceCollabContext } from '@open-design/contracts';
 import { useI18n } from '../../i18n';
 import { workspaceProjectHeaders } from '../../collab/workspace-identity';
 import { AmrLoginPill } from '../AmrLoginPill';
+import { Icon } from '../Icon';
 import { useCommentSyncState } from './useCommentSyncState';
+import { ShareNoticeRow } from './ShareNoticeRow';
+import { ShareErrorRow } from './ShareErrorRow';
+import { ShareButton } from './ShareButton';
 import styles from './CommentSyncBanner.module.css';
 
 /** The design's `.notice .secondary` retry glyph (K5 and the backfill/align retry rows). */
 function RetryIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
-      <path d="M20 11a8 8 0 0 0-14.3-4.9L4 8M4 4v4h4M4 13a8 8 0 0 0 14.3 4.9L20 16m0 4v-4h-4" />
-    </svg>
-  );
+  return <Icon name="share-retry" size={13} strokeWidth={1.8} />;
 }
 
 /**
@@ -109,8 +109,11 @@ export function CommentSyncBanner({ projectId, workspaceContext, filePath, inclu
   // K1 (first publish) and K4 (verified reopen) are both drawn by ShareTab's
   // OWN primary button now — a progress bar for K1, a busy button for K4 —
   // so a `backfillOnly` mount (ShareTab's) must not also stack this pill
-  // beneath it. A non-`backfillOnly` mount (none exists today, but the
-  // contract stays honest for a future one) still renders it here.
+  // beneath it. A non-`backfillOnly` mount has no current production call
+  // site, but it is a tested, documented capability of this component (see
+  // CommentSyncBanner.test.tsx's "restored branches" — 2026 refactor: item 4
+  // kept this instead of deleting it as production-unreachable, since doing
+  // so would have broken that contract test) — keep it rendering here.
   if (includeBackfill && state.backfill?.state === 'pending') {
     if (backfillOnly) return null;
     const pendingCopyKey = state.backfill.reopened === true
@@ -133,27 +136,31 @@ export function CommentSyncBanner({ projectId, workspaceContext, filePath, inclu
   if (includeBackfill && state.backfill?.state === 'failed') {
     return (
       <div className={backfillOnly ? `${styles.banner} ${styles.backfillOnly}` : styles.banner} role="status">
-        <div className={styles.retryRow}>
-          <p>{t(state.backfill.reopened === true
+        <ShareNoticeRow
+          className={styles.retrySpacing}
+          message={t(state.backfill.reopened === true
             ? (state.backfill.retryable
               ? 'fileViewer.commentSync.backfillReopenedRetryingBody'
               : 'fileViewer.commentSync.backfillReopenedTerminalBody')
             : (state.backfill.retryable
               ? 'fileViewer.commentSync.backfillRetryingBody'
-              : 'fileViewer.commentSync.backfillTerminalBody'))}</p>
-          {state.backfill.retryable ? (
-            <button
-              type="button"
-              className={state.backfill.reopened === true ? `${styles.retry} ${styles.retryError}` : styles.retry}
+              : 'fileViewer.commentSync.backfillTerminalBody'))}
+          action={state.backfill.retryable ? (
+            <ShareButton
+              variant={state.backfill.reopened === true ? 'soft-error' : 'soft'}
+              dimDisabled
               onClick={() => void retryBackfill()}
               disabled={retrying}
             >
               <RetryIcon />
               {t('preview.retry')}
-            </button>
-          ) : null}
-        </div>
-        {retryError ? <p role="alert">{t('fileViewer.commentSync.backfillFailedBody')}</p> : null}
+            </ShareButton>
+          ) : undefined}
+        />
+        {/* OD-4 (allowed visual change): this was an unstyled grey `<p role="alert">`;
+            it now uses the shared red-with-icon ShareErrorRow like every other
+            share-panel error. `.banner p { margin: 0 }` still governs its spacing. */}
+        {retryError ? <ShareErrorRow message={t('fileViewer.commentSync.backfillFailedBody')} role="alert" /> : null}
       </div>
     );
   }
@@ -164,10 +171,10 @@ export function CommentSyncBanner({ projectId, workspaceContext, filePath, inclu
     return (
       <div className={styles.banner} role="status">
         <p>{t('fileViewer.commentSync.alignFailedBody')}</p>
-        <button type="button" className={styles.retry} onClick={() => void retryAlign()} disabled={retrying}>
+        <ShareButton variant="soft" dimDisabled onClick={() => void retryAlign()} disabled={retrying}>
           <RetryIcon />
           {t('preview.retry')}
-        </button>
+        </ShareButton>
       </div>
     );
   }

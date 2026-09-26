@@ -1,20 +1,7 @@
-/* Chain-1/5 shared shell: the export panel uses the same anchored host, so
-   apply the canvas geometry only while this ShareTab is actually mounted. */
-:global(.chrome-share-menu--unified .chrome-unified-popover):has(.panel) {
-  box-sizing: border-box;
-  width: 360px;
-  min-width: 0;
-  max-width: calc(100vw - 32px);
-  padding: 16px 20px;
-  gap: 12px;
-  border: 1px solid #00000008;
-  border-radius: 12px;
-  background: #FFFFFF;
-  box-shadow: 0 8px 28px #00000010, 0 2px 6px #00000006;
-  font-size: 12px;
-  font-weight: 400;
-  color: #333333;
-}
+/* The popover's fixed-canvas skin while Share is mounted now lives in
+   shell.css as the explicit `.chrome-unified-popover--share` class the call
+   site sets (2026 refactor: item 2) — no longer a `:has(.panel)` structural
+   coupling to this module's own `.panel` class below. */
 
 /* S0/S13: signed-out explanation and existing Cloud login action. */
 .signInPrompt {
@@ -23,87 +10,12 @@
   gap: 14px;
 }
 
-/* S0: matches the design's full-width `.primary` share button exactly —
-   same spec as .copyButton below, just not a native <button> (CloudSignInTip
-   renders a role="button" section). */
-.signInPrimaryAction {
-  box-sizing: border-box;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  width: 100%;
-  height: 32px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: 6px;
-  background: #29292B;
-  color: #FFFFFF;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 18px;
-}
-
-.signInPrimaryAction:hover:not(:global(.is-signing)) { background: #353535; }
-.signInPrimaryAction:focus-visible { outline: 2px solid #1677FF; outline-offset: 2px; }
-.signInPrimaryAction:global(.is-signing) { cursor: default; background: #5A5A5C; }
-
-/* S0/S13: CloudSignInTip renders its label inside the rail's green pill
-   badge (`.entry-local-mode-tip__login-badge`, global). In the share panel the
-   design's buttons are plain text labels — no pill, no icon, inherited color. */
-.signInPrimaryAction :global(.entry-local-mode-tip__head),
-.signInSecondaryAction :global(.entry-local-mode-tip__head) {
-  display: contents;
-  color: inherit;
-}
-
-.signInPrimaryAction :global(.entry-local-mode-tip__login-badge),
-.signInSecondaryAction :global(.entry-local-mode-tip__login-badge) {
-  flex: none;
-  height: auto;
-  padding: 0;
-  border-radius: 0;
-  background: transparent;
-  color: inherit;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 18px;
-}
-
-.signInPrimaryAction :global(.entry-local-mode-tip__login-badge) > svg,
-.signInSecondaryAction :global(.entry-local-mode-tip__login-badge) > svg {
-  display: none;
-}
-
-/* S13: the design's `.share-status-panel .notice .secondary` — fixed 88px,
-   borderless blue — same spec as .updateButton below. */
-.signInSecondaryAction {
-  box-sizing: border-box;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  flex: 0 0 88px;
-  width: 88px;
-  min-width: 88px;
-  height: 32px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 6px;
-  background: #EDF3FF;
-  color: #245FCE;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 18px;
-  white-space: nowrap;
-}
-
-.signInSecondaryAction:hover:not(:global(.is-signing)) { background: #E0EAFF; color: #194EAF; }
-.signInSecondaryAction:active:not(:global(.is-signing)) { background: #D3E1FF; color: #194EAF; }
-.signInSecondaryAction:focus-visible { outline: 2px solid #245FCE; outline-offset: 2px; }
-.signInSecondaryAction:global(.is-signing) { cursor: default; }
+/* .signInPrimaryAction/.signInSecondaryAction moved into the shared
+   `ShareButton`'s `primary`/`soft` variants, and the CloudSignInTip-internal
+   markup overrides (entry-local-mode-tip__head/__login-badge) are gone
+   entirely — `ShareSignInButton` (OD-2, 2026 refactor: item 1) renders a
+   real `<button>` with its own plain-text label instead of nesting
+   CloudSignInTip's rail-pill markup inside a `<section role="button">`. */
 
 /* S1/S4: link access heading and description. */
 .linkAccessHeading {
@@ -112,16 +24,8 @@
   gap: 4px;
 }
 
-.linkAccessRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 28px;
-}
-
 .linkAccessLabel {
-  color: #333333;
+  color: var(--share-text-strong);
   font-size: 13px;
   font-weight: 500;
   line-height: 20px;
@@ -129,49 +33,16 @@
 
 .linkAccessDescription {
   margin: 0;
-  color: #888888;
+  color: var(--share-text-muted);
   font-size: 12px;
   line-height: 18px;
 }
 
-
-/* D-00 固定结构第二行 .toggle: 32×19 / r999 / 关 #D6D6D6 / 开 #282828, 滑块 15×15 白.
-   This IS the publish/unpublish control — board S4 has no separate "stop
-   sharing" button. The existing chrome-publish-button--ghost text button
-   stays (see the evidence file: removing it isn't licensed by this board
-   alone), but both controls read and act on the same `filePublished` state
-   through the same two handlers, so they can never disagree. */
-.linkAccessToggle {
-  flex: none;
-  width: 32px;
-  height: 19px;
-  padding: 2px;
-  border: none;
-  border-radius: 999px;
-  background: #D6D6D6;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  transition: background-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-
-.linkAccessToggle:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-.linkAccessToggleOn {
-  background: #282828;
-  justify-content: flex-end;
-}
-
-.linkAccessToggleThumb {
-  width: 15px;
-  height: 15px;
-  border-radius: 50%;
-  background: #FFFFFF;
-  box-shadow: 0 1px 2px #00000026;
-}
+/* linkAccessRow / linkAccessToggle / linkAccessToggleOn / linkAccessToggleThumb
+   moved to LinkAccessRow.module.css (2026 refactor: item 3) —
+   .linkAccessHeading/Label/Description stay here: the sign-in-prompt branch
+   below still uses them directly (it has no switch, so it never becomes a
+   LinkAccessRow). */
 
 /* S1-T/S4-T: scope explanation stays readable without hover or focus. */
 .scopeHeading {
@@ -196,7 +67,7 @@
 
 .scopeDescription {
   margin: 0;
-  color: #888888;
+  color: var(--share-text-muted);
   font-size: 12px;
   line-height: 18px;
 }
@@ -208,7 +79,7 @@
   min-width: 0;
   overflow-wrap: anywhere;
   padding: 0;
-  color: #333333;
+  color: var(--share-text-strong);
   font-size: 13px;
   font-weight: 500;
   line-height: 20px;
@@ -233,7 +104,7 @@
   gap: 8px;
   border: 0;
   border-radius: 5px;
-  background: #F6F6F6;
+  background: var(--share-canvas);
   color: #555555;
   font-size: 12px;
 }
@@ -249,7 +120,10 @@
   flex-shrink: 0;
 }
 
-/* S1-T2: canvas minimum width; grow for translations within the panel. */
+/* S1-T2: canvas minimum width; grow for translations within the panel.
+   Border/radius/shadow/padding/gap are the shared menu-surface skin (item 4)
+   — same tokens ShareMoreMenu.module.css's `.menu` reads, since the two
+   already matched byte-for-byte. */
 .panel :global(.chrome-access-options) {
   box-sizing: border-box;
   width: max-content;
@@ -261,23 +135,23 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  border: 1px solid #00000008;
-  border-radius: 8px;
-  background: #FFFFFF;
-  box-shadow: 0 6px 20px #00000012, 0 1px 4px #00000006;
+  border: var(--share-menu-border);
+  border-radius: var(--share-menu-radius);
+  background: var(--share-menu-bg);
+  box-shadow: var(--share-menu-shadow);
 }
 
 /* S1-T2 option-row skin; retain existing listbox anchoring and permission gates. */
 .panel :global(.chrome-access-options button) {
   box-sizing: border-box;
   grid-template-columns: 13px minmax(0, 1fr);
-  height: 28px;
-  min-height: 28px;
+  height: var(--share-menu-row-h);
+  min-height: var(--share-menu-row-h);
   padding: 0 8px;
   gap: 8px;
   border: 0;
   border-radius: 4px;
-  color: #494949;
+  color: var(--share-menu-row-color);
   font-size: 12px;
   font-weight: 500;
 }
@@ -303,13 +177,13 @@
 }
 
 .panel :global(.chrome-access-options button[aria-selected="true"]) {
-  background: #F2F2F4;
-  color: #1F1F1F;
+  background: var(--share-menu-row-hover-bg);
+  color: var(--share-menu-row-hover-color);
 }
 
 .panel :global(.chrome-access-options button:hover:not(:disabled)) {
-  background: #F2F2F4;
-  color: #1F1F1F;
+  background: var(--share-menu-row-hover-bg);
+  color: var(--share-menu-row-hover-color);
 }
 
 .panel:global(.chrome-unified-panel) {
@@ -317,97 +191,17 @@
   gap: 12px;
 }
 
-/* Publish/copy seam: outrank the shared Button base without changing stop/deploy. */
-button.copyButton {
-  box-sizing: border-box;
-  width: 100%;
-  height: 32px;
-  padding: 0 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  border: 0;
-  border-radius: 6px;
-  background: #29292B;
-  color: #FFFFFF;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 18px;
-}
-
-/* The generic Button hover must not wash the canvas's dark fill to white. */
-button.copyButton:hover:not(:disabled) {
-  background: #29292B;
-}
-
-/* Preserve the existing disabled theme feedback and native interaction. */
-button.copyButton:disabled {
-  background: var(--bg-subtle);
-  color: var(--text-faint);
-}
-
-/* Waiting is not an unavailable action: keep the canvas busy palette readable. */
-button.copyButton[aria-busy="true"]:disabled {
-  background: #5A5A5C;
-  color: #FFFFFF;
-  opacity: 1;
-}
-
-.copyButton > svg {
-  flex-shrink: 0;
-}
-
+/* .copyButton/.publishingButton moved into the shared `ShareButton`'s
+   `primary`/`transparentBusy` variant (2026 refactor: item 1) —
+   ShareButton.module.css. */
 .copiedIcon {
-  color: #82D994;
-}
-
-/* S2: native progress semantics under the existing disabled action, not a
-   second row. The upstream simulation still owns its value and lifetime. */
-.publishControl {
-  position: relative;
-  width: 100%;
-}
-
-.publishProgress {
-  position: absolute;
-  inset: 0;
-  appearance: none;
-  box-sizing: border-box;
-  width: 100%;
-  height: 32px;
-  margin: 0;
-  border: 0;
-  border-radius: 6px;
-  overflow: hidden;
-  background: #6E6E70;
-  pointer-events: none;
-}
-
-.publishProgress::-webkit-progress-bar {
-  background: #6E6E70;
-}
-
-.publishProgress::-webkit-progress-value {
-  background: #29292B;
-}
-
-.publishProgress::-moz-progress-bar {
-  background: #29292B;
-}
-
-button.copyButton.publishingButton:disabled {
-  position: relative;
-  background: transparent;
-  color: #FFFFFF;
-  opacity: 1;
-  gap: 6px;
+  color: var(--share-copied);
 }
 
 /* S2 help describes panel dismissal, not quitting the app. */
 p.publishHint {
   margin: 0;
-  color: #999999;
+  color: var(--share-text-faint);
   font-size: 10.5px;
   line-height: 17px;
 }
@@ -438,12 +232,12 @@ p.publishHint {
   box-sizing: border-box;
   position: relative;
   width: 100%;
-  height: 32px;
+  height: var(--share-control-h);
   padding: 0 9px 0 29px;
-  border: 1px solid #E5E5E5;
-  border-radius: 6px;
-  background: #FFFFFF;
-  color: #666666;
+  border: 1px solid var(--share-published-border);
+  border-radius: var(--share-radius);
+  background: var(--share-white);
+  color: var(--share-published-fg);
   font-family: inherit;
   font-size: 11px;
   line-height: 30px;
@@ -454,72 +248,14 @@ p.publishHint {
   cursor: text;
 }
 
-/* S5/S13: `.share-status-panel .notice` — UNBOXED (no border, fill, or
-   padding): copy on the left, a fixed-width blue action on the right. */
-.updateNotice {
-  box-sizing: border-box;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  min-height: 36px;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-}
-
-.updateNotice p {
-  margin: 0;
-  flex: 1;
-  min-width: 0;
-  color: #5C5C5C;
-  font-size: 12px;
-  line-height: 18px;
-}
-
-button.updateButton {
-  box-sizing: border-box;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  flex: 0 0 88px;
-  width: 88px;
-  min-width: 88px;
-  height: 32px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 6px;
-  background: #EDF3FF;
-  color: #245FCE;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 18px;
-  white-space: nowrap;
-  box-shadow: none;
-}
-
-button.updateButton:hover:not(:disabled) {
-  background: #E0EAFF;
-  color: #194EAF;
-}
-
-button.updateButton:active:not(:disabled) {
-  background: #D3E1FF;
-  color: #194EAF;
-}
-
-button.updateButton:focus-visible {
-  outline: 2px solid #245FCE;
-  outline-offset: 2px;
-}
+/* .updateButton moved into the shared `ShareButton`'s `soft` variant (2026
+   refactor: item 1) — ShareButton.module.css. */
 
 .publishedLinkIcon {
   position: absolute;
   left: 9px;
   top: 9px;
-  color: #888888;
+  color: var(--share-text-muted);
 }
 
 .publishedActions {
@@ -530,7 +266,7 @@ button.updateButton:focus-visible {
 
 .copyHint {
   margin: 0;
-  color: #888888;
+  color: var(--share-text-muted);
   font-size: 12px;
   line-height: 18px;
 }
@@ -538,74 +274,13 @@ button.updateButton:focus-visible {
 /* K1/K4: comment-sync-pending replaces the entire published-link block with
    a single indicator — a progress bar for the first-publish backfill (K1,
    `reopened` absent/false) or a busy primary button for a verified reopen
-   resync (K4, `reopened === true`). When CommentBackfillState carries a real,
-   measured `total`/`synced` (from published_comment_backfill_members), the
-   fill renders that percentage via `.syncProgressFillDeterminate`; an older
-   daemon that omits those fields keeps the indeterminate sweep below rather
-   than fabricating a number. */
+   resync (K4, `reopened === true`). The bar itself (.syncProgress*) moved to
+   ShareProgressButton.module.css (2026 refactor: item 4); this wrapper stays. */
 .syncStatus {
   display: grid;
 }
 
-.syncProgress {
-  position: relative;
-  box-sizing: border-box;
-  width: 100%;
-  height: 32px;
-  border-radius: 6px;
-  background: #6E6E70;
-  overflow: hidden;
-}
-
-.syncProgressFill {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: -35%;
-  width: 35%;
-  border-radius: inherit;
-  background: #29292B;
-  animation: shareSyncSweep 1.4s ease-in-out infinite;
-}
-
-@keyframes shareSyncSweep {
-  0% { left: -35%; }
-  50% { left: 65%; }
-  100% { left: -35%; }
-}
-
-/* Real measured progress (K1 with a known comment count): a plain static
-   fill anchored to the left edge, its width set inline per render. */
-.syncProgressFillDeterminate {
-  left: 0;
-  animation: none;
-}
-
-.syncProgressText {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  color: #FFFFFF;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-/* S7/S15 warning only; legacy renderer and deployment errors keep their styles. */
-p.publishError {
-  margin: 0;
-  padding: 0;
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  color: #C94E4E;
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.publishError > svg {
-  flex: none;
-  margin-top: 2px;
-}
+/* .publishError moved to ShareErrorRow.module.css's shared .row/.hasIcon/.icon
+   (2026 refactor: item 2) — used here for both a failed publish and the
+   S7/S15 pre-check "file too large" block; legacy renderer and deployment
+   errors keep their own styles. */

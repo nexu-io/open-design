@@ -3284,6 +3284,7 @@ export const pl: Dict = {
   'fileViewer.publishFile': 'Publish file',
   'fileViewer.publishingFile': 'Tworzenie linku…',
   "fileViewer.uploadingFile": "Przesyłanie",
+  "fileViewer.shareReopening": "Ponowne otwieranie…",
   "fileViewer.publishingContinuesOnClose": "Zamknięcie tego panelu nie przerwie przesyłania.",
   'fileViewer.unpublishFile': 'Zatrzymaj udostępnianie',
   'fileViewer.shareEmptyStateTitle': 'Nie ma jeszcze nic do udostępnienia',
