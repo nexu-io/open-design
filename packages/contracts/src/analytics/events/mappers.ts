@@ -197,6 +197,8 @@ export function agentIdToTracking(agentId: string | null | undefined): TrackingC
       return 'hermes';
     case 'kimi':
       return 'kimi_cli';
+    case 'kimchi':
+      return 'kimchi';
     case 'cursor-agent':
       return 'cursor_agent';
     case 'qwen':
