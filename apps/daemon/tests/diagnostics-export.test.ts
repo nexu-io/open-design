@@ -19,7 +19,9 @@ import type { SidecarRuntimeContext } from '@open-design/sidecar';
 import {
   STANDALONE_LAUNCH_WARNING,
   createDiagnosticsExportHandler,
+  resolveDaemonPreviousLogPath,
 } from '../src/diagnostics-export.js';
+import { createDaemonHealth } from '../src/services/daemon-health.js';
 
 interface MockResponse {
   status(code: number): MockResponse;
@@ -194,6 +196,39 @@ describe('diagnostics export handler — packaged (runtime) layout', () => {
   // `<namespaceRoot>/logs`. The old `resolveNamespaceRoot(base, namespace)`
   // resolved the daemon log to `<namespaceRoot>/runtime/<namespace>/logs/...`
   // → ENOENT, so the bundle silently captured nothing.
+  it('resolves the daemon previous.log that the bundle reads, and nothing without a sidecar runtime', () => {
+    const namespaceRoot = join(tmpdir(), 'namespaces', 'release-stable');
+    const runtime: SidecarRuntimeContext<LegacySidecarRuntimeLayout> = {
+      app: APP_KEYS.DAEMON,
+      base: join(namespaceRoot, 'runtime'),
+      mode: SIDECAR_MODES.RUNTIME,
+      namespace: 'release-stable',
+      source: SIDECAR_SOURCES.PACKAGED,
+    };
+    expect(resolveDaemonPreviousLogPath(runtime)).toBe(join(namespaceRoot, 'logs', APP_KEYS.DAEMON, 'previous.log'));
+    expect(resolveDaemonPreviousLogPath(null)).toBeNull();
+  });
+
+  it('bundles the daemon health checkpoint of this and the previous process', async () => {
+    const root = join(tmpdir(), `od-diag-health-${randomUUID()}`);
+    try {
+      const prior = createDaemonHealth({ dataRoot: root, instrumentProcess: false });
+      prior.markCleanShutdown();
+      const current = createDaemonHealth({ dataRoot: root, instrumentProcess: false });
+      const handler = createDiagnosticsExportHandler({ runtime: null, projectRoot: root, dataDir: root });
+      const res = mockResponse();
+      await handler({} as never, res as never, () => undefined);
+      expect(res.capturedStatus).toBe(200);
+      const zip = await JSZip.loadAsync(res.capturedPayload!);
+      const latest = JSON.parse(await zip.file('logs/diagnostics/daemon-health.latest.json')!.async('string'));
+      const previous = JSON.parse(await zip.file('logs/diagnostics/daemon-health.previous.json')!.async('string'));
+      expect(latest.bootId).toBe(current.bootId);
+      expect(previous).toMatchObject({ bootId: prior.bootId, state: 'clean_shutdown' });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('captures the daemon log from the real <namespaceRoot>/logs tree', async () => {
     const root = join(tmpdir(), `od-diag-${randomUUID()}`);
     const namespaceRoot = join(root, 'namespaces', 'release-stable');

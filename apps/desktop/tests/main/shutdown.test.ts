@@ -5,7 +5,11 @@ import { describe, expect, it, vi } from "vitest";
 
 // Execute the entry's actual shutdown declarations, substituting only Electron
 // and the sidecar cleanup boundary. This catches premature process.exit calls.
-function shutdownHarness() {
+function shutdownHarness(options: {
+  onRendererClosed?: () => void;
+  onRendererTransportQuiesced?: () => void;
+  onSidecarRetirementStarted?: () => void;
+} = {}) {
   const source = readFileSync(new URL("../../src/main/index.ts", import.meta.url), "utf8");
   const ast = ts.createSourceFile("index.ts", source, ts.ScriptTarget.Latest, true);
   const declarations: string[] = [];
@@ -30,8 +34,16 @@ function shutdownHarness() {
   visit(ast);
   let finishCleanup!: () => void;
   const cleanup = new Promise<void>((resolve) => { finishCleanup = resolve; });
-  const beforeShutdown = vi.fn(() => cleanup);
-  const close = vi.fn(async () => undefined);
+  const beforeShutdown = vi.fn(() => {
+    options.onSidecarRetirementStarted?.();
+    return cleanup;
+  });
+  const close = vi.fn(async () => {
+    options.onRendererClosed?.();
+  });
+  const quiesceRendererTransport = vi.fn(async () => {
+    options.onRendererTransportQuiesced?.();
+  });
   let beforeQuit!: (event: { preventDefault(): void }) => void;
   const quit = vi.fn();
   const on = (_event: string, listener: typeof beforeQuit) => { beforeQuit = listener; };
@@ -40,7 +52,7 @@ function shutdownHarness() {
   const recordLifecycle = vi.fn(async (_event: unknown) => undefined);
   const sandbox = {
     updater: { recordLifecycle },
-    options: { beforeShutdown }, desktop: { close }, app: { quit, on }, process: { exit },
+    options: { beforeShutdown, quiesceRendererTransport }, desktop: { close }, app: { quit, on }, process: { exit },
     updateScheduler: { stop: vi.fn() }, disposeMenu: vi.fn(), removeDiagnosticsIpc: vi.fn(),
     endDesktopSessionCleanly: endSession, sessionStatePath: "test-session", console: { info: vi.fn(), error: vi.fn() },
   };
@@ -48,7 +60,7 @@ function shutdownHarness() {
   const api = runInNewContext(`${code}\n({ shutdown, shutdownAndExit })`, sandbox) as {
     shutdown(): Promise<void>; shutdownAndExit(): void;
   };
-  return { ...api, beforeShutdown, close, quit, exit, endSession, finishCleanup, beforeQuit, recordLifecycle };
+  return { ...api, beforeShutdown, close, quiesceRendererTransport, quit, exit, endSession, finishCleanup, beforeQuit, recordLifecycle };
 }
 
 async function flushPromises() {
@@ -56,6 +68,59 @@ async function flushPromises() {
 }
 
 describe("desktop shutdown", () => {
+  it("[P0] quiesces the renderer before retiring runtime sidecars", async () => {
+    const h = shutdownHarness();
+    const pending = h.shutdown();
+
+    await flushPromises();
+
+    expect(h.close).toHaveBeenCalledTimes(1);
+    expect(h.beforeShutdown).toHaveBeenCalledTimes(1);
+    expect(h.close.mock.invocationCallOrder[0]).toBeLessThan(
+      h.quiesceRendererTransport.mock.invocationCallOrder[0]!,
+    );
+    expect(h.quiesceRendererTransport.mock.invocationCallOrder[0]).toBeLessThan(
+      h.beforeShutdown.mock.invocationCallOrder[0]!,
+    );
+    expect(h.recordLifecycle).toHaveBeenNthCalledWith(2, {
+      stage: "renderer_quiesced",
+      outcome: "completed",
+    });
+    // Electron main remains alive to finish sidecar cleanup and the deferred
+    // payload handoff after the request-producing renderer has gone away.
+    expect(h.quit).not.toHaveBeenCalled();
+    expect(h.exit).not.toHaveBeenCalled();
+
+    h.finishCleanup();
+    await pending;
+  });
+
+  it("[P0] emits no renderer request after runtime retirement begins", async () => {
+    let rendererCanRequest = true;
+    let staleOriginRequestCount = 0;
+    const h = shutdownHarness({
+      // Model a BrowserWindow.close() held by beforeunload: the transport
+      // barrier, not a cooperative page close, must stop stale-origin dials.
+      onRendererTransportQuiesced: () => {
+        rendererCanRequest = false;
+      },
+      onSidecarRetirementStarted: () => {
+        // Deterministic stand-in for the poll/SSE/resource request that used to
+        // hit the retired localhost origin during the sidecar grace window.
+        if (rendererCanRequest) staleOriginRequestCount += 1;
+      },
+    });
+
+    const pending = h.shutdown();
+    await flushPromises();
+
+    expect(staleOriginRequestCount).toBe(0);
+    expect(h.exit).not.toHaveBeenCalled();
+
+    h.finishCleanup();
+    await pending;
+  });
+
   it("does not exit early when quit is requested again during sidecar cleanup", async () => {
     const h = shutdownHarness();
     h.shutdownAndExit();
@@ -63,7 +128,7 @@ describe("desktop shutdown", () => {
     await flushPromises();
     expect(h.beforeShutdown).toHaveBeenCalledTimes(1);
     expect(h.exit).not.toHaveBeenCalled();
-    expect(h.close).not.toHaveBeenCalled();
+    expect(h.close).toHaveBeenCalledTimes(1);
     expect(h.endSession).not.toHaveBeenCalled();
     h.finishCleanup();
     await flushPromises();
@@ -102,6 +167,7 @@ describe("desktop shutdown", () => {
     expect(h.endSession).toHaveBeenCalledTimes(1);
     expect(h.recordLifecycle.mock.calls.map(([event]) => event)).toEqual([
       { stage: "shutdown_started", outcome: "started" },
+      { stage: "renderer_quiesced", outcome: "completed" },
       { stage: "shutdown_completed", outcome: "completed", repeated_quit_count: 1, duration_ms: expect.any(Number) },
     ]);
   });

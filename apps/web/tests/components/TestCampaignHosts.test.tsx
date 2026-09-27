@@ -315,7 +315,9 @@ describe("Test decisions at the existing host touchpoints", () => {
 		}
 	});
 
-	it("switches all Test placements together when the client language changes without changing deployment", async () => {
+	it.each(["zh-TW", "ko", "ja", "zh-CN"] as const)("uses app locale %s on first mount and language changes even when document lang stays English", async (initialLocale) => {
+		// Editors and initial HTML can leave this unrelated DOM attribute stale.
+		vi.spyOn(document.documentElement, "lang", "get").mockReturnValue("en");
 		const deployment = {
 			id: context.deploymentId,
 			activityId: "activity-four",
@@ -356,7 +358,7 @@ describe("Test decisions at the existing host touchpoints", () => {
 								...manifest,
 								placements: manifest.placements.map((p) => ({
 									...p,
-									locales: ["en", "ja", "zh-CN"],
+									locales: ["en", "en-US", "ja", "zh-CN", "zh-TW", "ko"],
 								})),
 							},
 						},
@@ -393,7 +395,7 @@ describe("Test decisions at the existing host touchpoints", () => {
 			);
 		}
 		render(
-			<I18nProvider initial="en">
+			<I18nProvider initial={initialLocale}>
 				<Controls />
 				<TestCampaignModal authenticated sessionSubject="account-a" />
 				<ProductionCampaignModal authenticated sessionSubject="account-a" />
@@ -407,7 +409,7 @@ describe("Test decisions at the existing host touchpoints", () => {
 				.sort();
 		const expected = (locale: string) =>
 			placements.map((key) => `${key}:${locale}`).sort();
-		await waitFor(() => expect(mountedTexts()).toEqual(expected("en")));
+		await waitFor(() => expect(mountedTexts()).toEqual(expected(initialLocale)));
 		// The modal records its impression one frame after it becomes visible. A
 		// language switch after that point continues the same presentation; it is
 		// not a new offer of an already-displayed activity.
@@ -420,11 +422,11 @@ describe("Test decisions at the existing host touchpoints", () => {
 		await waitFor(() => expect(mountedTexts()).toEqual(expected("ja")));
 		fireEvent.click(screen.getByText("Chinese"));
 		await waitFor(() => expect(mountedTexts()).toEqual(expected("zh-CN")));
-		for (const locale of ["en", "ja", "zh-CN"])
+		for (const locale of [initialLocale, "ja", "zh-CN"])
 			expect(
-				requests
+				[...new Set(requests
 					.filter((r) => r.locale === locale)
-					.map((r) => r.placement)
+					.map((r) => r.placement))]
 					.sort(),
 			).toEqual([...placements].sort());
 		// The presentation has been on screen long enough to be recorded as

@@ -79,6 +79,19 @@ export const AMR_CONSOLE_UPGRADE_INTENT = 'plan';
  */
 export const AMR_CONSOLE_AUTO_RECHARGE_INTENT = 'auto-recharge';
 
+/**
+ * The console's `billing=<intent>` value that means "open the manual top-up
+ * (充值) dialog on arrival". Product ruling 2026-09-23: the billing card's
+ * wallet row lands on the recharge dialog, not on the auto-recharge policy.
+ *
+ * ⚠️ NOT YET HONORED ON B: vela's console has the dialog
+ * (`components/commerce/recharge/personal-recharge-modal.tsx`, opened from the
+ * wallet route) but its deep-link effect only knows `plan`, `checkout`,
+ * `auto-recharge` and `portal_return`. Until B adds this intent the link
+ * degrades to the dashboard, the same place the row went before.
+ */
+export const AMR_CONSOLE_RECHARGE_INTENT = 'recharge';
+
 // The test entry moved off `vela.powerformer.net` onto
 // `open-design.powerformer.net/cloud` when vela cut the test Cloud domain over
 // (vela #1922 prepare, #1929 finalize). That host serves the test Landing page

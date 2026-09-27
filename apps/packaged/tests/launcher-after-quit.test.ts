@@ -138,6 +138,53 @@ describe("inspectExistingDesktopForLauncher", () => {
     }
   });
 
+  it("asks a restorable headless owner to become the desktop instead of restarting it", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-launcher-restorable-headless-"));
+    const deeplink = "opendesign://workspace/open";
+    const invoke = vi.fn(async () => ({ accepted: true }));
+    const stop = vi.fn(async () => sidecarStop(4321));
+    try {
+      await expect(inspectExistingDesktopForLauncher(stamp(), {
+        deeplinkUrl: deeplink,
+        getStatus: vi.fn(async (target: SidecarStamp) => {
+          if (target.mode !== "headless") throw new Error("runtime desktop absent");
+          return target.app === APP_KEYS.DESKTOP
+            ? { pid: 4321, restorable: true, state: "running", updatedAt: new Date().toISOString(), windowVisible: false }
+            : { state: "running", url: "http://127.0.0.1:1234" };
+        }) as never,
+        invoke: invoke as never,
+        paths: fakePaths(root),
+        stopSidecar: stop,
+      })).resolves.toEqual({ action: "exit", reason: "existing-focused" });
+      expect(invoke).toHaveBeenCalledWith({ ...stamp(), mode: "headless" }, "show", { deeplinkUrl: deeplink }, { timeoutMs: 800 });
+      expect(stop).not.toHaveBeenCalled();
+      expect(await readFile(join(root, "logs", "launcher", "after-quit.log"), "utf8")).toContain("action=restore reason=restorable-headless");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("replaces a restorable headless owner that does not answer SHOW", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-launcher-restorable-fallback-"));
+    const stop = vi.fn(async () => sidecarStop(4321));
+    try {
+      await expect(inspectExistingDesktopForLauncher(stamp(), {
+        getStatus: vi.fn(async (target: SidecarStamp) => {
+          if (target.mode !== "headless") throw new Error("runtime desktop absent");
+          return target.app === APP_KEYS.DESKTOP
+            ? { pid: 4321, restorable: true, state: "running", updatedAt: new Date().toISOString(), windowVisible: false }
+            : { state: "running", url: "http://127.0.0.1:1234" };
+        }) as never,
+        invoke: vi.fn(async () => { throw new Error("packaged desktop sidecar is not running"); }) as never,
+        paths: fakePaths(root),
+        stopSidecar: stop,
+      })).resolves.toEqual({ action: "continue", reason: "headless-owner" });
+      expect(stop).toHaveBeenCalledWith({ ...stamp(), mode: "headless" });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   it("reuses a healthy same-mode headless generation instead of restarting it", async () => {
     const root = await mkdtemp(join(tmpdir(), "od-launcher-existing-headless-"));
     const headlessStamp = { ...stamp(), mode: "headless" as const };

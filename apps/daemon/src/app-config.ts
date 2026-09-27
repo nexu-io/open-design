@@ -849,6 +849,31 @@ async function readAppConfigFileOnly(dataDir: string): Promise<AppConfigPrefs> {
 // Serialize concurrent writes to the same dataDir so the read-modify-write
 // cycle doesn't lose updates when two PUT requests overlap.
 const writeLocks = new Map<string, Promise<unknown>>();
+const configObservers = new Map<string, Set<() => void>>();
+export function observeAppConfig(dataDir: string, observer: () => void): () => void {
+  const observers = configObservers.get(dataDir) ?? new Set<() => void>();
+  observers.add(observer); configObservers.set(dataDir, observers);
+  return () => { observers.delete(observer); if (!observers.size) configObservers.delete(dataDir); };
+}
+
+/** Automatic content upload must fail closed on corrupt preferences instead of applying defaults. */
+export function automaticDiagnosticsConsent(dataDir: string): boolean {
+  try {
+    const raw: unknown = JSON.parse(readFileSync(configFile(dataDir), 'utf8'));
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return false;
+    const telemetry = (raw as Record<string, unknown>).telemetry;
+    if (telemetry !== undefined && (telemetry === null || typeof telemetry !== 'object' || Array.isArray(telemetry))) return false;
+    if (telemetry !== undefined) {
+      const value = telemetry as Record<string, unknown>;
+      return value.metrics === true && value.content === true;
+    }
+    const prefs = applyTelemetryDefaults(filterAllowedKeys(raw as Record<string, unknown>));
+    return prefs.telemetry?.metrics === true && prefs.telemetry?.content === true;
+  } catch (error) {
+    // A new installation has the same defaults as the existing telemetry settings.
+    return (error as NodeJS.ErrnoException).code === 'ENOENT';
+  }
+}
 
 export async function writeAppConfig(
   dataDir: string,
@@ -921,6 +946,9 @@ async function doWrite(
   const tmp = file + '.' + randomBytes(4).toString('hex') + '.tmp';
   await writeFile(tmp, JSON.stringify(normalizedNextWithoutRetiredAgents, null, 2), 'utf8');
   await rename(tmp, file);
+  for (const observer of configObservers.get(dataDir) ?? []) {
+    try { observer(); } catch { /* preference persistence must not depend on background consumers */ }
+  }
   const installationIdWasExplicitlyReset = Object.prototype.hasOwnProperty.call(partial, 'installationId')
     && (partial.installationId == null || (
       typeof existing.installationId === 'string'

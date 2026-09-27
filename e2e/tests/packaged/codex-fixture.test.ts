@@ -1,9 +1,10 @@
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { composeOdNextIntentResolutionTurnV1 } from '@open-design/contracts';
 import { createFakeAgentRuntimes } from '@/fake-agents';
 import {
   codexAppServerInvocationsCompleted,
@@ -11,6 +12,7 @@ import {
   PACKAGED_HOME_FIRST_RUN_PROMPT,
 } from '@/vitest/packaged-home-first-run';
 import { attachCodexAppServerSession } from '../../../apps/daemon/src/agent-protocol/codex-app-server/session.js';
+import { OdNextMachineProtocolStream } from '../../../apps/daemon/src/strategies/od-next/protocol.js';
 import {
   resolveDaemonOwnedOdNextExecutionPreflight,
   runExecutionPreflight,
@@ -112,12 +114,17 @@ describe('packaged Codex fixture transport', () => {
           expect(await closed).toEqual([0, null]);
           expect(session.completedSuccessfully()).toBe(true);
           const text = events.filter((event) => event.type === 'text_delta').map((event) => event.delta).join('');
+          const protocol = new OdNextMachineProtocolStream();
+          protocol.push(text);
+          const parsed = protocol.finish();
+          expect(parsed.issues).toEqual([]);
+          expect(parsed.runtimeState?.executionIntent).toBe('produce');
           if (index === 0) {
-            const contract = text.match(/<open-design-plan-contract>\s*([\s\S]*?)\s*<\/open-design-plan-contract>/)?.[1];
+            const contract = parsed.planContract;
             expect(contract).toBeTruthy();
             // The packaged daemon admits the built-in request input. A fake
             // plan must pass that real gate before its native continuation.
-            expect(runExecutionPreflight(resolveDaemonOwnedOdNextExecutionPreflight(JSON.parse(contract!))))
+            expect(runExecutionPreflight(resolveDaemonOwnedOdNextExecutionPreflight(contract!)))
               .toEqual({ status: 'passed', reasonCodes: [] });
           } else {
             expect(text).toContain(PACKAGED_HOME_FIRST_RUN_OUTPUT);
@@ -133,6 +140,52 @@ describe('packaged Codex fixture transport', () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it.each(['request', 'clarification'] as const)(
+    '[P0] resolves omitted Home execution intent without producing files or repeating the answer (%s)',
+    async (stage) => {
+      const root = await mkdtemp(join(tmpdir(), 'od-codex-fixture-'));
+      await createFakeAgentRuntimes({ root, runtimeIds: ['codex'] });
+      const before = await readdir(root);
+      const prompt = composeOdNextIntentResolutionTurnV1({
+        taskExecutionId: 'home-smoke-task', stage, taskRunIndex: 1,
+        sourceRunId: 'home-smoke-source', promptBundleSha256: 'a'.repeat(64),
+        sourceResultSha256: 'b'.repeat(64),
+        originalRequest: PACKAGED_HOME_FIRST_RUN_PROMPT, executionMode: 'simple',
+      });
+      const child = spawn(process.execPath, [join(root, 'codex-e2e.cjs'), 'app-server']);
+      const closed = once(child, 'close');
+      const events: Record<string, unknown>[] = [];
+      const protocol = new OdNextMachineProtocolStream();
+      const session = attachCodexAppServerSession({
+        child, cwd: root, prompt, sandboxMode: 'workspace-write',
+        resumeSessionId: 'fake-codex-session',
+        onAgentEvent: (event) => {
+          events.push(event);
+          if (event.type === 'text_delta' && typeof event.delta === 'string') protocol.push(event.delta);
+        },
+      });
+      try {
+        expect(await closed).toEqual([0, null]);
+        expect(session.completedSuccessfully()).toBe(true);
+        const parsed = protocol.finish();
+        expect(parsed).toMatchObject({
+          issues: [], visibleText: '',
+          runtimeState: {
+            route: 'full_plan', inputStage: stage, executionMode: 'simple',
+            executionIntent: 'produce', outcome: 'plan_ready', reasonCodes: [],
+          },
+        });
+        expect(parsed.planContract).toBeUndefined();
+        expect(events.some((event) => event.type === 'tool_use')).toBe(false);
+        expect(await readdir(root)).toEqual(before);
+      } finally {
+        if (child.exitCode == null && child.signalCode == null) child.kill();
+        await closed;
+        await rm(root, { recursive: true, force: true });
+      }
+    },
+  );
 
   it('[P0] keeps exec-json compatibility and rejects an app-server turn before initialization', async () => {
     const root = await mkdtemp(join(tmpdir(), 'od-codex-fixture-'));

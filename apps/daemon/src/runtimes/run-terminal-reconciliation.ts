@@ -20,6 +20,7 @@ import type { IntentRecoveryRunState } from '../strategies/od-next/intent-resolu
 import { reconcileStrategyTaskRunTerminal } from '../strategies/task-store.js';
 import { classifyRunFailure } from '../run-failure-classification.js';
 import { summarizeRunDiagnosticsForAnalytics } from '../run-diagnostics.js';
+import { readRunStorageAnalytics } from '../storage/run-storage-analytics.js';
 import { deriveRunErrorCode, runResultFromStatus } from '../run-result.js';
 import { runAskedUserQuestion } from './run-artifacts.js';
 import {
@@ -170,6 +171,21 @@ interface ReconciliationOptions {
     now: number,
   ) => Partial<DurableRunState> | null;
   finalizeTerminalLocally?: (run: DurableRunState, status: string, terminalAt: number) => void;
+}
+
+function replayStorageProperties(
+  db: ReconciliationOptions['db'],
+  state: DurableRunState,
+): Record<string, unknown> | null {
+  try {
+    const properties = readRunStorageAnalytics(db, {
+      runId: state.id,
+      assistantMessageId: state.assistantMessageId,
+    });
+    return Object.keys(properties).length > 0 ? properties : null;
+  } catch {
+    return null;
+  }
 }
 
 function appVersionForRun(state: DurableRunState, options: ReconciliationOptions): string {
@@ -640,6 +656,9 @@ export async function reconcileDurableRunTerminals(
           : {}),
       };
       Object.assign(properties, buildRunFinishedV4Aliases(properties, taskLineage));
+      // A run that died with its daemon never emitted storage fields, and it is
+      // the heaviest runs that die. Re-measure from SQLite for the emitted copy.
+      const storageProperties = replayStorageProperties(options.db, state);
       let captureResult: AnalyticsCaptureResult;
       try {
         captureResult = normalizeAnalyticsCaptureResult(
@@ -647,7 +666,7 @@ export async function reconcileDurableRunTerminals(
             eventName: 'run_finished',
             context: state.analyticsRecovery.context,
             appVersion: appVersionForRun(state, options),
-            properties,
+            properties: storageProperties ? { ...properties, ...storageProperties } : properties,
             insertId: `${state.analyticsRecovery.insertId}-finish`,
           })),
         );

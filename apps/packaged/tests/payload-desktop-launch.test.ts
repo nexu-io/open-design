@@ -77,6 +77,20 @@ describe("payload desktop delegation", () => {
     expect(plan?.args).not.toContain("--unrelated");
   });
 
+  it("carries launch-mode arguments so a delegated headless launch stays headless", () => {
+    const plan = planPackagedPayloadDesktopDelegation(fakeRuntime(false), {
+      currentPid: 4321,
+      extraArgs: ["--headless"],
+      forwardedArgs: ["Open Design", "--headless", "--unrelated"],
+      timeoutMs: 60_000,
+    });
+    // The payload re-derives its sidecar mode from its own argv, so the mode flag must arrive
+    // together with the delegated pointer that keeps its pre-armed attempt from reading as a failure.
+    expect(plan?.args.filter((arg) => arg === "--headless")).toEqual(["--headless"]);
+    expect(plan?.args).not.toContain("--unrelated");
+    expect(parseLauncherDelegatedArgs(plan?.args ?? [])).toEqual({ generation: 1, version: "1.2.3-beta.5" });
+  });
+
   it("omits the delegated pointer for a rollback delegation", () => {
     // A last-successful delegation is driven by rollback evidence in
     // attempt.json; marking it delegated (or re-arming) would let the spawned

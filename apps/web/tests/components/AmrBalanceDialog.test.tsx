@@ -1,8 +1,12 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { AmrBalanceDialog } from '../../src/components/AmrBalanceDialog';
+import {
+  AmrBalanceDialog,
+  WALLET_WATCH_INTERVAL_MS,
+  WALLET_WATCH_TIMEOUT_MS,
+} from '../../src/components/AmrBalanceDialog';
 import { resetWorkspaceContextCache } from '../../src/collab/useWorkspaceContext';
 import {
   workspaceContextFixture,
@@ -28,6 +32,7 @@ function directoryResponse(
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.restoreAllMocks();
   // The context hook caches at module scope; clear it so cases don't leak.
   resetWorkspaceContextCache();
@@ -355,5 +360,103 @@ describe('AmrBalanceDialog', () => {
       'https://open-design.ai/cloud/dashboard',
     );
     expect(target.searchParams.get('billing')).toBe('plan');
+  });
+
+  it('keeps one recovery preflight in flight and stops watching after ten minutes', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(window, 'open').mockImplementation(() => null);
+    const onResolved = vi.fn();
+    const workspaceContext = workspaceContextFixture({
+      workspaceId: 'ws-1',
+      workspaceMemberId: 'wm-1',
+      workspaceType: 'team',
+      role: 'owner',
+      permissions: {
+        canManageMembers: true,
+        canManageBilling: true,
+        canInviteMembers: true,
+        canManageAutoRecharge: true,
+        canShareProjects: true,
+        canWriteSyncedFiles: true,
+        canViewWorkspaceSettings: true,
+        canManageSharedResources: true,
+      },
+    });
+    const preflightUrls: string[] = [];
+    let resolveHungPreflight!: (response: Response) => void;
+    const hungPreflight = new Promise<Response>((resolve) => {
+      resolveHungPreflight = resolve;
+    });
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = String(input);
+      if (url.includes('includePreflight=1')) {
+        preflightUrls.push(url);
+        return hungPreflight;
+      }
+      if (url.includes('/api/workspace/billing')) {
+        return Promise.resolve(new Response(JSON.stringify({
+          summary: { workspaceId: 'ws-1', membershipTier: '' },
+        }), { status: 200, headers: { 'content-type': 'application/json' } }));
+      }
+      if (url.includes('/api/workspace/directory')) {
+        return Promise.resolve(directoryResponse('ws-1', 'wm-1', 'team'));
+      }
+      if (url.includes('/api/workspace/context')) {
+        return Promise.resolve(new Response(JSON.stringify({ context: workspaceContext }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }));
+      }
+      return Promise.reject(new Error(`unexpected fetch ${url}`));
+    });
+
+    render(
+      <AmrBalanceDialog
+        reason="insufficient"
+        modelId="model"
+        fundingScope={{
+          workspaceType: 'team',
+          workspaceId: 'ws-1',
+          workspaceMemberId: 'wm-1',
+        }}
+        balanceUsd="0.00"
+        profile="prod"
+        entrySource="chat_balance_gate_upgrade"
+        workspaceContext={workspaceContext}
+        metricsConsent={false}
+        installationId={null}
+        onClose={vi.fn()}
+        onResolved={onResolved}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('amr-balance-dialog-plans'));
+    expect(screen.getByTestId('amr-balance-dialog-watching')).toBeTruthy();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(WALLET_WATCH_INTERVAL_MS);
+    });
+    expect(preflightUrls).toHaveLength(1);
+    expect(preflightUrls[0]).toContain('includePreflight=1');
+    expect(preflightUrls[0]).toContain('modelId=model');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(WALLET_WATCH_INTERVAL_MS * 3);
+    });
+    expect(preflightUrls).toHaveLength(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(
+        WALLET_WATCH_TIMEOUT_MS - WALLET_WATCH_INTERVAL_MS * 4,
+      );
+    });
+    expect(preflightUrls).toHaveLength(1);
+    expect(screen.queryByTestId('amr-balance-dialog-watching')).toBeNull();
+
+    await act(async () => {
+      resolveHungPreflight(new Response('{}', { status: 503 }));
+      await hungPreflight;
+    });
+    expect(onResolved).not.toHaveBeenCalled();
   });
 });

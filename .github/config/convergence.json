@@ -12,6 +12,7 @@
       ".github/scripts/lib/config.py",
       ".github/scripts/lib/github.py",
       ".github/scripts/lib/r2.py",
+      ".github/scripts/lib/workload_products.py",
       ".github/actions/configure-ci-parallelism/",
       ".github/actions/setup-playwright/",
       ".github/actions/setup-workspace/",

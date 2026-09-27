@@ -302,6 +302,25 @@ export async function inspectExistingDesktopForLauncher(
     return { action: "continue", reason: "superseded-version" };
   }
 
+  if (status.windowVisible === false && status.restorable === true && stamp.mode !== HEADLESS_SIDECAR_MODE) {
+    // A managed headless owner becomes the desktop in place: its daemon, port
+    // and MCP clients stay. Fall back to replacing it if it cannot be reached.
+    try {
+      await invoke(
+        inspectedStamp,
+        SIDECAR_MESSAGES.SHOW,
+        options.deeplinkUrl == null ? {} : { deeplinkUrl: options.deeplinkUrl },
+        { timeoutMs: 800 },
+      );
+      await writeLauncherAfterQuitLog(options.paths, `inspect-found-existing namespace=${namespace} action=restore reason=restorable-headless`);
+      return { action: "exit", reason: "existing-focused" };
+    } catch (error) {
+      await writeLauncherAfterQuitLog(
+        options.paths,
+        `inspect-found-existing namespace=${namespace} restore=failed error=${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
   if (status.windowVisible === false) {
     const pid = typeof status.pid === "number" ? status.pid : null;
     if (stamp.mode === HEADLESS_SIDECAR_MODE && inspectedStamp.mode === HEADLESS_SIDECAR_MODE) {

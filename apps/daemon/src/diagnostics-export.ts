@@ -41,6 +41,7 @@ import {
   type DiagnosticsEvidence,
 } from './services/diagnostics-evidence.js';
 import { diagnosticId } from './services/diagnostics-environment.js';
+import { daemonHealthPaths } from './services/daemon-health.js';
 import { readVelaLoginStatus } from './integrations/vela.js';
 
 interface ResolvedDiagnosticsAgentEnvironment {
@@ -104,6 +105,7 @@ export interface DiagnosticsHandlerOptions {
   runsDir?: string | null;
   /** OpenDesign data dir (OD_DATA_DIR), used to locate the AMR OpenCode home. */
   dataDir?: string | null;
+  automaticUploadStatus?: () => Record<string, unknown>;
 }
 
 const TAIL_BYTES_PER_LOG = 4 * 1024 * 1024;
@@ -145,6 +147,32 @@ async function shouldListOptionalSource(path: string): Promise<boolean> {
     return true;
   } catch (error) {
     return (error as NodeJS.ErrnoException | null)?.code !== "ENOENT";
+  }
+}
+
+/**
+ * The daemon's rotated prior-session log (see `openLog` in
+ * apps/packaged/src/sidecars.ts), resolved exactly as the bundle does, or null
+ * for launchers that keep none (standalone `od`; tools-dev appends instead).
+ */
+export function resolveDaemonPreviousLogPath(
+  runtime: SidecarRuntimeContext<LegacySidecarRuntimeLayout> | null,
+): string | null {
+  if (runtime == null) return null;
+  try {
+    const namespaceRoot = resolveRuntimeNamespaceRoot({
+      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+      runtime,
+      runtimeMode: SIDECAR_MODES.RUNTIME,
+    });
+    const latest = resolveLogFilePath({
+      app: APP_KEYS.DAEMON,
+      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+      runtimeRoot: namespaceRoot,
+    });
+    return `${dirname(latest)}/previous.log`;
+  } catch {
+    return null;
   }
 }
 
@@ -236,6 +264,27 @@ function resolveDesktopCrashDumpsDir(runtime: SidecarRuntimeContext<LegacySideca
   return join(dirname(desktopLog), 'crashes');
 }
 
+/** Automatic uploads select the failing run and its runtime; manual exports remain broader. */
+export async function buildAutomaticDiagnosticSources(
+  options: DiagnosticsHandlerOptions,
+  incident: { runId?: string; agentId?: string },
+): Promise<LogSource[]> {
+  const sources: LogSource[] = [];
+  if (incident.runId && /^[A-Za-z0-9_-]{1,128}$/.test(incident.runId) && options.runsDir) {
+    sources.push({ name: `runs/${incident.runId}/events.jsonl`,
+      absolutePath: join(options.runsDir, incident.runId, 'events.jsonl'), kind: 'text', tailBytes: TAIL_BYTES_PER_LOG });
+  }
+  sources.push(...await buildSidecarLogSources(options.runtime));
+  if (incident.agentId) {
+    const environment = await resolveDiagnosticsAgentEnvironment(options.dataDir);
+    const agentSources = await buildAgentCliLogSources({ homeDir: homedir(), dataDir: options.dataDir ?? null,
+      amrOpenCodeHome: environment.amrOpenCodeHome, claudeConfigDir: environment.claudeConfigDir,
+      codexHome: environment.codexHome, xdgDataHome: environment.openCodeXdgDataHome ?? null });
+    sources.push(...agentSources.filter((source) => incident.agentId === '*' || source.name.startsWith(`agent-cli-logs/${incident.agentId}/`)));
+  }
+  return sources;
+}
+
 export function createDiagnosticsExportHandler(options: DiagnosticsHandlerOptions): RequestHandler {
   const evidence = options.evidence ?? getDiagnosticsEvidence() ?? createDiagnosticsEvidence();
   return async (_req, res) => {
@@ -263,6 +312,12 @@ export function createDiagnosticsExportHandler(options: DiagnosticsHandlerOption
         for (const [name, absolutePath] of [['latest', paths.current], ['previous', paths.previous]] as const) {
           if (await shouldListOptionalSource(absolutePath)) sources.push({
             name: `logs/diagnostics/environment-evidence.${name}.json`, absolutePath, kind: 'json', tailBytes: 256 * 1024,
+          });
+        }
+        const health = daemonHealthPaths(options.dataDir);
+        for (const [name, absolutePath] of [['latest', health.current], ['previous', health.previous]] as const) {
+          if (await shouldListOptionalSource(absolutePath)) sources.push({
+            name: `logs/diagnostics/daemon-health.${name}.json`, absolutePath, kind: 'json', tailBytes: 256 * 1024,
           });
         }
       }
@@ -306,6 +361,10 @@ export function createDiagnosticsExportHandler(options: DiagnosticsHandlerOption
         },
         sources,
         summaries: {
+          'automatic-log-upload.json': (() => {
+            try { return options.automaticUploadStatus?.() ?? { available: false }; }
+            catch { return { available: false, reason: 'status_unavailable' }; }
+          })(),
           'environment-evidence.json': evidence.snapshot(),
           // Renderer-side scene for the chat scroll freeze. Always written,
           // even when nothing was posted, so an empty slot reads as a stated

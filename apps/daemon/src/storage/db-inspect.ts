@@ -14,7 +14,7 @@
 // the on-disk file path. The function never opens a new
 // connection or mutates state.
 
-import { promises as fsp } from 'node:fs';
+import { promises as fsp, statSync } from 'node:fs';
 import type Database from 'better-sqlite3';
 
 type SqliteDb = Database.Database;
@@ -95,6 +95,50 @@ export async function inspectSqliteDatabase(input: {
     tables,
     generatedAt:   Date.now(),
   };
+}
+
+export interface SqlitePageStats {
+  pageSize:      number | null;
+  pageCount:     number | null;
+  freelistCount: number | null;
+  // Separate from sizeBytes above: WAL growth (checkpoint starvation) and
+  // main-file growth mean different things for storage diagnosis.
+  mainBytes:     number | null;
+  walBytes:      number | null;
+}
+
+/**
+ * Constant-cost storage snapshot for observability: three header-level
+ * pragmas plus two stats. Never scans a table (no count(*), no dbstat), so it
+ * is safe to call on startup and under memory pressure. Every field that
+ * cannot be read is null, never 0.
+ */
+export function readSqlitePageStats(input: { db: SqliteDb; file: string }): SqlitePageStats {
+  const { db, file } = input;
+  return {
+    pageSize:      readIntegerPragma(db, 'page_size'),
+    pageCount:     readIntegerPragma(db, 'page_count'),
+    freelistCount: readIntegerPragma(db, 'freelist_count'),
+    mainBytes:     statFileSizeSync(file),
+    walBytes:      statFileSizeSync(`${file}-wal`),
+  };
+}
+
+function readIntegerPragma(db: SqliteDb, name: 'page_size' | 'page_count' | 'freelist_count'): number | null {
+  try {
+    const value = Number(db.pragma(name, { simple: true }));
+    return Number.isSafeInteger(value) && value >= 0 ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function statFileSizeSync(path: string): number | null {
+  try {
+    return statSync(path).size;
+  } catch {
+    return null;
+  }
 }
 
 async function sumFileSizes(paths: ReadonlyArray<string>): Promise<number> {

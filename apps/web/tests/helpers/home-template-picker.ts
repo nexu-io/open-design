@@ -16,6 +16,8 @@ export async function pickHomeTemplate(id: string): Promise<void> {
     });
     return;
   }
+  // The click schedules the menu; it is not in the DOM on the next statement,
+  // so a synchronous read right after click races the React commit.
   // The first-visit default chip (原型) is seeded asynchronously once the
   // plugin catalog resolves; the resulting `activeChipId` change closes any
   // menu opened in the same window (TemplatePicker closes on active-chip

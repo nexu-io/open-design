@@ -98,7 +98,9 @@ jobs:
   daemon_unit_tests:
     name: Daemon tests (${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Includes checkout/install: prerelease.8 needed 13m27s for tests alone
+    # and exceeded 15m overall. Keep headroom for setup and runner variance.
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:

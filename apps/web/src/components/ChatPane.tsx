@@ -1,3 +1,4 @@
+import { reportExperienceEvent } from '../observability/experience-diagnostics';
 import { conversationMetaLabel } from '../runtime/chat/conversation-time';
 export { conversationMetaLabel } from '../runtime/chat/conversation-time';
 import { QuoteBar } from './chat/QuoteBar';
@@ -2442,6 +2443,15 @@ export function ChatPane({
       default: return cardDescription.text;
     }
   })();
+  useEffect(() => {
+    if (!displayError) return;
+    reportExperienceEvent('surface_view', { element: 'run_failed_toast',
+      error_code: failedRunErrorEvent?.code ?? 'visible_error',
+      run_id: retryAssistant?.runId, project_id: projectId,
+      conversation_id: activeConversationId,
+    });
+  }, [displayError, failedRunErrorEvent?.code, retryAssistant?.runId, projectId, activeConversationId]);
+
   const displayErrorTitle = accessErrorCopy
     ? t(accessErrorCopy.titleKey)
     : t(runFailureUi?.titleKey ?? 'chat.runError.title.generic', runFailureCopyVars);

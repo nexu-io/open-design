@@ -393,6 +393,33 @@ describe('od:// protocol transient retry', () => {
 
     expect(waits).toEqual([150, 300]);
   });
+
+  it('does not start another retry after runtime quiescence', async () => {
+    let calls = 0;
+    let quiesced = false;
+    const fetchImpl: typeof fetch = async () => {
+      calls += 1;
+      throw transientSocketError();
+    };
+
+    const response = await handleOdRequest(
+      new Request('od://app/api/workspace/directory'),
+      'http://127.0.0.1:17579/',
+      fetchImpl,
+      {
+        delay: async () => {
+          quiesced = true;
+        },
+        isQuiesced: () => quiesced,
+      },
+    );
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      error: 'OD_PROTOCOL_RUNTIME_RETIRING',
+    });
+    expect(calls).toBe(1);
+  });
 });
 
 /**
@@ -712,6 +739,51 @@ describe('od:// protocol target resolution', () => {
       'http://127.0.0.1:61424/_next/static/chunk-a.js',
       'http://127.0.0.1:52001/_next/static/chunk-b.js',
     ]);
+  });
+
+  it('does not dial the old origin after the renderer transport is quiesced', async () => {
+    vi.mocked(net.fetch).mockImplementation((async () =>
+      new Response('unexpected', { status: 200 })) as unknown as typeof net.fetch);
+
+    const control = registerOdProtocol(() => 'http://127.0.0.1:61424/');
+    const handler = registeredHandler();
+    control.quiesce();
+
+    const response = await handler(new Request('od://app/api/workspace/directory'));
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      error: 'OD_PROTOCOL_RUNTIME_RETIRING',
+    });
+    expect(vi.mocked(net.fetch)).not.toHaveBeenCalled();
+  });
+
+  it('aborts an in-flight old-origin request without retrying when quiesced', async () => {
+    const observedSignals: AbortSignal[] = [];
+    vi.mocked(net.fetch).mockImplementation(((request: Request) => {
+      observedSignals.push(request.signal);
+      return new Promise<Response>((_resolve, reject) => {
+        request.signal.addEventListener('abort', () => {
+          reject(new DOMException('runtime retiring', 'AbortError'));
+        }, { once: true });
+      });
+    }) as unknown as typeof net.fetch);
+
+    const control = registerOdProtocol(() => 'http://127.0.0.1:61424/');
+    const handler = registeredHandler();
+    const pending = handler(new Request('od://app/api/workspace/events'));
+    await Promise.resolve();
+
+    control.quiesce();
+    const response = await pending;
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      error: 'OD_PROTOCOL_RUNTIME_RETIRING',
+    });
+    expect(observedSignals).toHaveLength(1);
+    expect(observedSignals[0]?.aborted).toBe(true);
+    expect(vi.mocked(net.fetch)).toHaveBeenCalledTimes(1);
   });
 
   it('falls back to undici when net.fetch rejects a CSS-mask GET', async () => {
