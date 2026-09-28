@@ -23,7 +23,6 @@ describe('GET /api/strategies/od-next/rollout', () => {
     const app = express();
     app.use(express.json());
     registerStrategyRolloutRoutes(app, {
-      requireLocalDaemonRequest: (_req, _res, next) => next(),
       readOdNextPreference,
     });
     server = app.listen(0);
@@ -52,6 +51,21 @@ describe('GET /api/strategies/od-next/rollout', () => {
       requestedMode: 'active',
       requestedModeSource: 'app_config',
       effectiveMode: 'active',
+    });
+  });
+
+  it('serves status through a permitted reverse-proxy host and origin', async () => {
+    await start(async () => ({ odNextStrategyMode: 'active' }));
+    const response = await fetch(`${baseUrl}/api/strategies/od-next/rollout`, {
+      headers: {
+        host: 'alans-mac-mini.tailf77eb2.ts.net:7443',
+        origin: 'https://alans-mac-mini.tailf77eb2.ts.net:7443',
+      },
+    });
+    expect(response.status).toBe(200);
+    expect((await response.json() as { status: unknown }).status).toMatchObject({
+      requestedMode: 'active',
+      requestedModeSource: 'app_config',
     });
   });
 

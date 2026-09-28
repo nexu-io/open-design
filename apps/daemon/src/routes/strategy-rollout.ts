@@ -1,4 +1,4 @@
-import type { Express, RequestHandler } from 'express';
+import type { Express } from 'express';
 import type { OdNextRolloutControlResponse } from '@open-design/contracts';
 
 import {
@@ -22,7 +22,6 @@ import {
  * somebody asked.
  */
 export function registerStrategyRolloutRoutes(app: Express, deps: {
-  requireLocalDaemonRequest: RequestHandler;
   /**
    * The installation's saved OD Next preference. Injected rather than read
    * here so this route never resolves a daemon data path of its own, and so
@@ -32,7 +31,6 @@ export function registerStrategyRolloutRoutes(app: Express, deps: {
 }): void {
   app.get(
     '/api/strategies/od-next/rollout',
-    deps.requireLocalDaemonRequest,
     async (_req, res) => {
       const body: OdNextRolloutControlResponse = {
         status: readOdNextRolloutControlStatus(

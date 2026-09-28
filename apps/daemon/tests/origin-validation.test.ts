@@ -11,6 +11,7 @@ import {
   isLocalSameOrigin,
   isZeroConfigClipperLibraryRequest,
 } from '../src/origin-validation.js';
+import { registerStrategyRolloutRoutes } from '../src/routes/strategy-rollout.js';
 
 type TestRequestOptions = {
   origin?: string;
@@ -88,6 +89,9 @@ function makeTestApp(port: number, host = '127.0.0.1') {
   app.use(express.json());
   app.use('/api', createOriginMiddleware(port, host));
   app.get('/api/health', (_req, res) => res.json({ ok: true }));
+  registerStrategyRolloutRoutes(app, {
+    readOdNextPreference: async () => ({ odNextStrategyMode: 'active' }),
+  });
   app.get('/api/projects', (_req, res) => res.json({ projects: [] }));
   app.post('/api/active', (req, res) => {
     if (!isLocalSameOrigin(req, port)) {
@@ -386,6 +390,12 @@ describe('daemon origin validation middleware', () => {
         origin: 'https://od.example.com',
       });
       expect(res.status).toBe(200);
+      const rollout = await request(port, 'GET', '/api/strategies/od-next/rollout', {
+        origin: 'https://od.example.com',
+        headers: { host: '172.18.0.5:7457' },
+      });
+      expect(rollout.status).toBe(200);
+      expect(JSON.parse(rollout.body).status.effectiveMode).toBe('active');
     } finally {
       delete process.env.OD_ALLOWED_ORIGINS;
     }
@@ -396,6 +406,15 @@ describe('daemon origin validation middleware', () => {
   it('blocks cross-origin requests from external domains', async () => {
     const res = await request(port, 'GET', '/api/projects', {
       origin: 'http://evil.com',
+    });
+    expect(res.status).toBe(403);
+    expect(JSON.parse(res.body)).toEqual({ error: 'Cross-origin requests are not allowed' });
+  });
+
+  it('rejects a bad origin globally on the rollout status endpoint', async () => {
+    const res = await request(port, 'GET', '/api/strategies/od-next/rollout', {
+      origin: 'https://evil.example',
+      headers: { host: '172.18.0.5:7457' },
     });
     expect(res.status).toBe(403);
     expect(JSON.parse(res.body)).toEqual({ error: 'Cross-origin requests are not allowed' });
