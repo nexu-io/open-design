@@ -3,7 +3,7 @@ import type { RuntimeAgentDef } from '../types.js';
 
 export const kimchiAgentDef = {
     id: 'kimchi',
-    name: 'Kimchi CLI',
+    name: 'Kimchi',
     bin: 'kimchi',
     versionArgs: ['--version'],
     fetchModels: async (resolvedBin, env) =>

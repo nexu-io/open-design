@@ -432,7 +432,7 @@ the active-run staging implementation is in
   may expose its own reasoning-effort choices; OD validates and forwards only
   one of the choices advertised for that selected model.
 
-### 5.13 Kimchi CLI
+### 5.13 Kimchi
 
 - Invocation is `kimchi --mode acp`. ACP is a global output mode of the CLI
   rather than an `acp` subcommand (verified against kimchi 1.1.33), so the
