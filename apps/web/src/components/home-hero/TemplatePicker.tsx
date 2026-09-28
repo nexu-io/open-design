@@ -30,6 +30,7 @@ export function TemplatePicker({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const optionRefs = useRef(new Map<string, HTMLButtonElement>());
   const focusOptionRequestedRef = useRef(false);
+  const triggerTabNavigationRef = useRef(false);
   const lastFocusedOptionIdRef = useRef<string | null>(null);
   const menuId = useId();
   const active = templates.find((chip) => chip.id === activeChipId) ?? null;
@@ -95,7 +96,8 @@ export function TemplatePicker({
     return () => window.clearTimeout(timeout);
   }, [open, rovingChipId, templates]);
 
-  const openFromKeyboard = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+  const handleTriggerKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    triggerTabNavigationRef.current = event.key === 'Tab';
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
     event.preventDefault();
     if (disabled) return;
@@ -152,7 +154,12 @@ export function TemplatePicker({
       data-field-name="template"
       data-testid="home-hero-template-picker"
       onBlur={(event) => {
+        const tabbingFromTrigger = triggerTabNavigationRef.current;
+        triggerTabNavigationRef.current = false;
         if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
+        // Pointer opening leaves focus on the trigger; pending composer
+        // hydration can move it without dismissing the newly opened menu.
+        if (lastFocusedOptionIdRef.current === null && !focusOptionRequestedRef.current && !tabbingFromTrigger) return;
         lastFocusedOptionIdRef.current = null;
         close(false);
       }}
@@ -168,8 +175,9 @@ export function TemplatePicker({
         <button type="button" ref={triggerRef} className={styles.switcher}
           aria-label={t('homeHero.templatePicker.label')} aria-haspopup="listbox"
           aria-expanded={open} aria-controls={open ? menuId : undefined} disabled={disabled}
-          onKeyDown={openFromKeyboard}
+          onKeyDown={handleTriggerKeyDown}
           onClick={() => {
+            triggerTabNavigationRef.current = false;
             if (open) {
               close(false);
               return;

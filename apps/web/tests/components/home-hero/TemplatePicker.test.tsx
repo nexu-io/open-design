@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useLayoutEffect } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -268,6 +268,49 @@ describe('TemplatePicker', () => {
 
     expect(screen.queryByRole('listbox')).toBeNull();
     expect(document.activeElement).toBe(trigger);
+  });
+
+  it('keeps pointer selection available when pending host hydration focuses the editor', () => {
+    const onPick = vi.fn();
+    render(<><TemplatePicker templates={templates} activeChipId="web-clone" onPick={onPick} labelFor={labelFor} /><textarea aria-label="Prompt" /></>);
+    const trigger = triggerButton();
+    trigger.focus();
+    fireEvent.click(trigger);
+
+    act(() => screen.getByRole('textbox', { name: 'Prompt' }).focus());
+
+    fireEvent.click(screen.getByRole('option', { name: labelFor('deck') }));
+    expect(onPick).toHaveBeenCalledExactlyOnceWith(chipById('deck'));
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it.each([false, true])('dismisses a pointer-open menu on Tab from the trigger (shift: %s)', (shiftKey) => {
+    render(<><TemplatePicker templates={templates} activeChipId="deck" labelFor={labelFor} /><button type="button">Outside</button></>);
+    const trigger = triggerButton();
+    trigger.focus();
+    fireEvent.click(trigger);
+
+    expect(fireEvent.keyDown(trigger, { key: 'Tab', shiftKey })).toBe(true);
+    act(() => screen.getByRole('button', { name: 'Outside' }).focus());
+
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Outside' }));
+  });
+
+  it('keeps the menu open when Tab moves from the trigger into the selected option', () => {
+    render(<TemplatePicker templates={templates} activeChipId="deck" labelFor={labelFor} />);
+    const trigger = triggerButton();
+    trigger.focus();
+    fireEvent.click(trigger);
+    const selected = screen.getByRole('option', { name: labelFor('deck') });
+
+    expect(fireEvent.keyDown(trigger, { key: 'Tab' })).toBe(true);
+    act(() => selected.focus());
+
+    expect(screen.getByRole('listbox')).toBeTruthy();
+    expect(document.activeElement).toBe(selected);
+    expect(selected.tabIndex).toBe(0);
   });
 
   it('closes an open menu when loading disables the picker', () => {
