@@ -10,52 +10,72 @@ import { fileURLToPath } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { applyAppearanceToDocument } from '../../src/state/appearance';
+import {
+  applyAppearanceToDocument,
+  subscribeToSystemThemeChanges,
+} from '../../src/state/appearance';
 import { DEFAULT_CONFIG, loadConfig } from '../../src/state/config';
 import type { AppConfig } from '../../src/types';
 
 const STORAGE_KEY = 'open-design:config';
 const store = new Map<string, string>();
 
-vi.stubGlobal('localStorage', {
-  getItem: vi.fn((key: string) => store.get(key) ?? null),
-  setItem: vi.fn((key: string, value: string) => {
-    store.set(key, value);
-  }),
-  removeItem: vi.fn((key: string) => {
-    store.delete(key);
-  }),
-  clear: vi.fn(() => {
-    store.clear();
-  }),
+beforeEach(() => {
+  store.clear();
+  vi.stubGlobal('matchMedia', undefined);
+  vi.stubGlobal('localStorage', {
+    getItem: vi.fn((key: string) => store.get(key) ?? null),
+    setItem: vi.fn((key: string, value: string) => {
+      store.set(key, value);
+    }),
+    removeItem: vi.fn((key: string) => {
+      store.delete(key);
+    }),
+    clear: vi.fn(() => {
+      store.clear();
+    }),
+  });
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  document.documentElement.removeAttribute('data-theme');
+  for (const name of ['--accent', '--accent-strong', '--accent-soft', '--accent-tint', '--accent-hover']) {
+    document.documentElement.style.removeProperty(name);
+  }
 });
 
 function persist(config: Partial<AppConfig>): void {
   store.set(STORAGE_KEY, JSON.stringify(config));
 }
 
-/** Pretend the OS is in dark mode, the way a dark-desktop user's browser is. */
-function stubSystemPrefersDark(): void {
-  vi.stubGlobal(
-    'matchMedia',
-    vi.fn((query: string) => ({
-      matches: query.includes('prefers-color-scheme: dark'),
-      media: query,
-      onchange: null,
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      dispatchEvent: vi.fn(),
-    })),
-  );
+function stubSystemTheme(initialDark: boolean, legacy = false) {
+  let dark = initialDark;
+  const listeners = new Set<() => void>();
+  const mediaQuery = {
+    get matches() {
+      return dark;
+    },
+    media: '(prefers-color-scheme: dark)',
+    addEventListener: legacy
+      ? undefined
+      : vi.fn((_event: string, listener: () => void) => listeners.add(listener)),
+    removeEventListener: legacy
+      ? undefined
+      : vi.fn((_event: string, listener: () => void) => listeners.delete(listener)),
+    addListener: vi.fn((listener: () => void) => listeners.add(listener)),
+    removeListener: vi.fn((listener: () => void) => listeners.delete(listener)),
+  };
+  vi.stubGlobal('matchMedia', vi.fn(() => mediaQuery));
+  return {
+    change(nextDark: boolean) {
+      dark = nextDark;
+      for (const listener of listeners) listener();
+    },
+  };
 }
 
 describe('theme preference — persisted config', () => {
-  beforeEach(() => {
-    store.clear();
-  });
-
   it('defaults a fresh install to the light theme', () => {
     expect(DEFAULT_CONFIG.theme).toBe('light');
     expect(loadConfig().theme).toBe('light');
@@ -71,7 +91,7 @@ describe('theme preference — persisted config', () => {
   });
 
   it('preserves a persisted system theme even when the OS prefers dark', () => {
-    stubSystemPrefersDark();
+    stubSystemTheme(true);
     persist({ theme: 'system' });
 
     expect(loadConfig().theme).toBe('system');
@@ -88,10 +108,6 @@ describe('theme preference — persisted config', () => {
 });
 
 describe('theme preference — document', () => {
-  afterEach(() => {
-    document.documentElement.removeAttribute('data-theme');
-  });
-
   it('stamps an explicit dark or light preference on the root element', () => {
     applyAppearanceToDocument({ theme: 'dark', accentColor: '#059669' });
 
@@ -102,13 +118,37 @@ describe('theme preference — document', () => {
     expect(document.documentElement.getAttribute('data-theme')).toBe('light');
   });
 
-  it('removes data-theme for system preference', () => {
-    document.documentElement.setAttribute('data-theme', 'dark');
-    stubSystemPrefersDark();
+  it.each([true, false])('stamps the effective system theme when dark preference is %s', (dark) => {
+    stubSystemTheme(dark);
 
     applyAppearanceToDocument({ theme: 'system', accentColor: '#10B981' });
 
-    expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
+    expect(document.documentElement.getAttribute('data-theme')).toBe(dark ? 'dark' : 'light');
+  });
+
+  it('falls back to light when matchMedia is unavailable', () => {
+    applyAppearanceToDocument({ theme: 'system' });
+
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+    expect(() => subscribeToSystemThemeChanges(vi.fn())()).not.toThrow();
+  });
+
+  it.each([false, true])('updates with system changes and unsubscribes (legacy API: %s)', (legacy) => {
+    const system = stubSystemTheme(false, legacy);
+    const apply = vi.fn(() => applyAppearanceToDocument({ theme: 'system' }));
+    apply();
+    const unsubscribe = subscribeToSystemThemeChanges(apply);
+
+    system.change(true);
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+    system.change(false);
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+    expect(apply).toHaveBeenCalledTimes(3);
+
+    unsubscribe();
+    system.change(true);
+    expect(apply).toHaveBeenCalledTimes(3);
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
   });
 });
 
@@ -126,11 +166,6 @@ describe('theme preference — pre-hydration script', () => {
     new Function(match[1])();
   }
 
-  afterEach(() => {
-    document.documentElement.removeAttribute('data-theme');
-    store.clear();
-  });
-
   it('paints a persisted dark preference before hydration', () => {
     persist({ theme: 'dark' });
 
@@ -139,12 +174,41 @@ describe('theme preference — pre-hydration script', () => {
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
   });
 
-  it('removes data-theme before hydration for a persisted system preference', () => {
-    stubSystemPrefersDark();
+  it.each([true, false])('paints the effective system theme before hydration (dark: %s)', (dark) => {
+    stubSystemTheme(dark);
     persist({ theme: 'system' });
 
     runThemeInitScript();
 
-    expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
+    expect(document.documentElement.getAttribute('data-theme')).toBe(dark ? 'dark' : 'light');
+    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('');
+  });
+
+  it('falls back to light before hydration without matchMedia', () => {
+    persist({ theme: 'system' });
+
+    runThemeInitScript();
+
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+  });
+
+  it.each([undefined, 'invalid'])('paints light for a missing or invalid saved theme (%s)', (theme) => {
+    store.set(STORAGE_KEY, JSON.stringify({ theme }));
+
+    runThemeInitScript();
+
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+  });
+
+  it.each(['missing', 'malformed', 'inaccessible'])('paints light when storage is %s', (state) => {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    if (state === 'malformed') store.set(STORAGE_KEY, '{');
+    if (state === 'inaccessible') {
+      vi.stubGlobal('localStorage', { getItem: () => { throw new Error('Storage unavailable'); } });
+    }
+
+    runThemeInitScript();
+
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
   });
 });

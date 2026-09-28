@@ -50,6 +50,33 @@ export function resolveAppTheme(persisted?: unknown): AppTheme {
     : 'light';
 }
 
+export function resolveSystemTheme(): 'light' | 'dark' {
+  return typeof window !== 'undefined'
+    && typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-color-scheme: dark)').matches
+    ? 'dark'
+    : 'light';
+}
+
+export function resolveEffectiveTheme(theme?: unknown): 'light' | 'dark' {
+  const preference = resolveAppTheme(theme);
+  return preference === 'system' ? resolveSystemTheme() : preference;
+}
+
+/** Subscribe only while the app follows the system; return listener cleanup. */
+export function subscribeToSystemThemeChanges(onChange: () => void): () => void {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    return () => {};
+  }
+  const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+  if (typeof mediaQuery.addEventListener === 'function') {
+    mediaQuery.addEventListener('change', onChange);
+    return () => mediaQuery.removeEventListener('change', onChange);
+  }
+  mediaQuery.addListener(onChange);
+  return () => mediaQuery.removeListener(onChange);
+}
+
 export function applyAppearanceToDocument({
   theme,
   accentColor,
@@ -59,13 +86,8 @@ export function applyAppearanceToDocument({
 }): void {
   const root = document.documentElement;
   const resolvedTheme = resolveAppTheme(theme);
-  if (resolvedTheme === 'system') {
-    root.removeAttribute('data-theme');
-  } else {
-    root.setAttribute('data-theme', resolvedTheme);
-  }
-  // Keep the native desktop window appearance synchronized with the resolved
-  // app appearance when the host exposes this capability.
+  root.setAttribute('data-theme', resolveEffectiveTheme(resolvedTheme));
+  // Pass the saved preference so the native desktop window can follow the OS.
   getOpenDesignHost()?.appearance?.setTheme(resolvedTheme);
 
   const normalized = normalizeAccentColor(accentColor);

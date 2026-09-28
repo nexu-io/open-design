@@ -182,7 +182,10 @@ import {
   syncMediaProvidersToDaemon,
 } from './state/config';
 import { createSilentUpdatePreferenceWriter } from './state/silent-update-preference';
-import { applyAppearanceToDocument } from './state/appearance';
+import {
+  applyAppearanceToDocument,
+  subscribeToSystemThemeChanges,
+} from './state/appearance';
 import { isMacPlatform } from './utils/platform';
 import { randomUUID } from './utils/uuid';
 import { summarizeProjectNameFromPrompt } from './utils/projectName';
@@ -1907,6 +1910,18 @@ function AppInner() {
       accentColor: config.accentColor,
     });
   }, [config.theme, config.accentColor]);
+
+  useEffect(() => {
+    if (config.theme !== 'system') return;
+    return subscribeToSystemThemeChanges(() => {
+      const currentConfig = configRef.current;
+      if (currentConfig.theme !== 'system') return;
+      applyAppearanceToDocument({
+        theme: currentConfig.theme,
+        accentColor: currentConfig.accentColor,
+      });
+    });
+  }, [config.theme]);
 
   // Tell the daemon what the user is currently looking at, so the MCP
   // server can surface it as `get_active_context` to a coding agent in
