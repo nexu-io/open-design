@@ -862,7 +862,7 @@ const AGENT_SHORT_DESCRIPTIONS: Record<string, string> = {
   copilot: 'GitHub coding CLI',
   devin: 'Cognition terminal CLI',
   kimi: 'Moonshot Kimi CLI',
-  kimchi: 'Cast AI coding CLI',
+  kimchi: 'Kimchi by Cast AI official CLI',
   qoder: 'Alibaba coding CLI',
   pi: 'Inflection chat CLI',
   kiro: 'Kiro agent CLI',
