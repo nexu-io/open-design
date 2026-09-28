@@ -334,4 +334,188 @@ describe('@open-design/dsh-runtime protocol', () => {
     assert.equal(frames.at(-1)?.status, 'cancelled');
     assert.equal(frames.at(-1)?.error, undefined);
   });
+
+  // Executes one request against a fake agent whose followup replays the given
+  // OpenDesign session events through the handler execute() registers. Used to
+  // pin how the assistant's reply text reaches the host frames.
+  async function runExecute(
+    requestId: string,
+    events: ReadonlyArray<{ seq: number; type: string; data: unknown }>,
+  ): Promise<string[]> {
+    let onEvent: ((session: unknown, event: unknown) => void) | undefined;
+    const agentSession = { seq: 0, id: '' };
+    const handle = {
+      agent: {
+        session: agentSession,
+        whenIdle: async () => {},
+        followup: async () => {
+          for (const event of events) onEvent?.(agentSession, event);
+        },
+      },
+      dispose: async () => {},
+    };
+    const ctx = {
+      agentDefaultModel: {
+        currentSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }),
+      },
+      agents: {
+        create: async (options: { sessionId: string }) => {
+          agentSession.id = options.sessionId;
+          return handle;
+        },
+      },
+      on: (_name: string, handler: (session: unknown, event: unknown) => void) => {
+        onEvent = handler;
+        return () => {};
+      },
+      sessions: { flush: async () => {} },
+    };
+    const chunks: string[] = [];
+    await internals.execute(ctx as never, {
+      v: 1,
+      type: 'execute',
+      request_id: requestId,
+      cwd: '/project',
+      prompt: 'Reply with only: ok',
+      mcp_servers: [],
+    }, { write: (chunk: string) => chunks.push(chunk) }, () => {}, new AbortController().signal);
+    return chunks;
+  }
+
+  function parseFrames(chunks: string[]): Array<Record<string, unknown>> {
+    return chunks.map((chunk) => JSON.parse(chunk) as Record<string, unknown>);
+  }
+
+  test('carries a non-streamed assistant reply to the host', async () => {
+    const chunks = await runExecute('run-nonstreamed-reply', [
+      {
+        seq: 1,
+        type: 'assistant/message',
+        data: {
+          turn: 1,
+          step: 1,
+          message: {
+            role: 'assistant',
+            content: [
+              { type: 'reasoning', text: 'briefly considering' },
+              { type: 'text', text: 'ok' },
+            ],
+          },
+          usage: { inputTokens: 11, outputTokens: 2 },
+        },
+      },
+      { seq: 2, type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } },
+    ]);
+    const frames = parseFrames(chunks);
+    assert.deepEqual(
+      frames.filter((frame) => frame.type === 'text'),
+      [{ v: 1, type: 'text', request_id: 'run-nonstreamed-reply', content: 'ok' }],
+    );
+    assert.deepEqual(
+      frames.filter((frame) => frame.type === 'usage'),
+      [
+        {
+          v: 1,
+          type: 'usage',
+          request_id: 'run-nonstreamed-reply',
+          provider: 'deepseek-official',
+          model: 'deepseek-chat',
+          input_tokens: 11,
+          output_tokens: 2,
+        },
+      ],
+    );
+    const result = frames.at(-1);
+    assert.equal(result?.type, 'result');
+    assert.equal(result?.status, 'completed');
+    assert.equal(result?.output, 'ok');
+  });
+
+  test('does not repeat streamed text already delivered as chunks', async () => {
+    const chunks = await runExecute('run-streamed-dedupe', [
+      { seq: 1, type: 'assistant/chunk', data: { chunk: { type: 'text-delta', text: 'ok' } } },
+      {
+        seq: 2,
+        type: 'assistant/message',
+        data: {
+          turn: 1,
+          step: 1,
+          message: { role: 'assistant', content: [{ type: 'text', text: 'ok' }] },
+          usage: { inputTokens: 11, outputTokens: 2 },
+        },
+      },
+      { seq: 3, type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } },
+    ]);
+    const frames = parseFrames(chunks);
+    assert.deepEqual(
+      frames.filter((frame) => frame.type === 'text'),
+      [{ v: 1, type: 'text', request_id: 'run-streamed-dedupe', content: 'ok' }],
+    );
+    assert.equal(frames.at(-1)?.output, 'ok');
+  });
+
+  test('emits only the unstreamed remainder of a prefix message', async () => {
+    const chunks = await runExecute('run-streamed-remainder', [
+      { seq: 1, type: 'assistant/chunk', data: { chunk: { type: 'text-delta', text: 'ok' } } },
+      {
+        seq: 2,
+        type: 'assistant/message',
+        data: {
+          turn: 1,
+          step: 1,
+          message: { role: 'assistant', content: [{ type: 'text', text: 'ok!' }] },
+        },
+      },
+      { seq: 3, type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } },
+    ]);
+    const frames = parseFrames(chunks);
+    assert.deepEqual(
+      frames.filter((frame) => frame.type === 'text'),
+      [
+        { v: 1, type: 'text', request_id: 'run-streamed-remainder', content: 'ok' },
+        { v: 1, type: 'text', request_id: 'run-streamed-remainder', content: '!' },
+      ],
+    );
+    assert.equal(frames.at(-1)?.output, 'ok!');
+  });
+
+  test('keeps streamed chunks authoritative when the message diverges', async () => {
+    const chunks = await runExecute('run-streamed-divergence', [
+      { seq: 1, type: 'assistant/chunk', data: { chunk: { type: 'text-delta', text: 'ok' } } },
+      {
+        seq: 2,
+        type: 'assistant/message',
+        data: {
+          turn: 1,
+          step: 1,
+          message: { role: 'assistant', content: [{ type: 'text', text: 'nope' }] },
+        },
+      },
+      { seq: 3, type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } },
+    ]);
+    const frames = parseFrames(chunks);
+    assert.deepEqual(
+      frames.filter((frame) => frame.type === 'text'),
+      [{ v: 1, type: 'text', request_id: 'run-streamed-divergence', content: 'ok' }],
+    );
+    assert.equal(frames.at(-1)?.output, 'ok');
+  });
+
+  test('reply helpers follow the streamed-prefix invariant', () => {
+    assert.equal(
+      internals.messageText([
+        { type: 'reasoning', text: 'hmm' },
+        { type: 'text', text: 'ok' },
+        { type: 'text', text: '!' },
+      ] as never),
+      'ok!',
+    );
+    assert.equal(internals.messageText([{ type: 'reasoning', text: 'hmm' }] as never), '');
+    assert.equal(internals.messageText([] as never), '');
+    assert.equal(internals.unstreamedReplyText('', 'ok'), 'ok');
+    assert.equal(internals.unstreamedReplyText('ok', 'ok'), '');
+    assert.equal(internals.unstreamedReplyText('ok', 'ok!'), '!');
+    assert.equal(internals.unstreamedReplyText('ok', 'nope'), '');
+    assert.equal(internals.unstreamedReplyText('ok', ''), '');
+  });
 });
