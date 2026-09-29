@@ -61,17 +61,21 @@ describe('manual edit source patches', () => {
     expect(readManualEditFields(result.source, 'cta').text).toBe('Start');
   });
 
-  it('hides and restores a section without losing its inline layout', () => {
-    const source = baseSource.replace('color: red; padding: 8px;', 'display: flex; color: red; padding: 8px;');
-    const hidden = applyManualEditPatch(source, { kind: 'set-visibility', id: 'card', visible: false });
-    expect(hidden.ok).toBe(true);
-    expect(readManualEditOuterHtml(hidden.source, 'card')).toContain('display: none !important');
-    const restored = applyManualEditPatch(hidden.source, { kind: 'set-visibility', id: 'card', visible: true });
+  it('switches layout presets and restores the original inline layout', () => {
+    const source = baseSource.replace('color: red; padding: 8px;', 'display: flex; flex-direction: row; color: red; padding: 8px;');
+    const reverse = applyManualEditPatch(source, { kind: 'set-layout', id: 'card', layout: 'reverse' });
+    expect(reverse.ok).toBe(true);
+    expect(readManualEditOuterHtml(reverse.source, 'card')).toContain('flex-direction: row-reverse !important');
+    const grid = applyManualEditPatch(reverse.source, { kind: 'set-layout', id: 'card', layout: 'grid-2' });
+    expect(grid.ok).toBe(true);
+    expect(readManualEditOuterHtml(grid.source, 'card')).toContain('grid-template-columns: repeat(2, minmax(0, 1fr)) !important');
+    const restored = applyManualEditPatch(grid.source, { kind: 'set-layout', id: 'card', layout: 'original' });
     expect(restored.ok).toBe(true);
     const html = readManualEditOuterHtml(restored.source, 'card');
     expect(html).toContain('display: flex');
+    expect(html).toContain('flex-direction: row');
     expect(html).toContain('padding: 8px');
-    expect(html).not.toContain('data-od-tweaks-display');
+    expect(html).not.toContain('data-od-tweaks-layout');
   });
 
   it('updates link label and href', () => {
@@ -342,13 +346,13 @@ describe('manual edit source patches', () => {
     expect(readRuntimeOverrides(result.source).text?.['brand-system-title']).toBe('Component library');
   });
 
-  it('toggles a dynamic section through the runtime style override', () => {
-    const hidden = applyManualEditPatch(brandKitSource, { kind: 'set-visibility', id: 'brand-system-section', visible: false });
-    expect(hidden.ok).toBe(true);
-    expect(hidden.source).toContain('display: none !important');
-    const shown = applyManualEditPatch(hidden.source, { kind: 'set-visibility', id: 'brand-system-section', visible: true });
-    expect(shown.ok).toBe(true);
-    expect(shown.source).not.toContain('display: none !important');
+  it('switches a dynamic layout through runtime style overrides', () => {
+    const grid = applyManualEditPatch(brandKitSource, { kind: 'set-layout', id: 'brand-system-section', layout: 'grid-3' });
+    expect(grid.ok).toBe(true);
+    expect(grid.source).toContain('grid-template-columns: repeat(3, minmax(0, 1fr)) !important');
+    const original = applyManualEditPatch(grid.source, { kind: 'set-layout', id: 'brand-system-section', layout: 'original' });
+    expect(original.ok).toBe(true);
+    expect(original.source).not.toContain('grid-template-columns: repeat(3, minmax(0, 1fr)) !important');
   });
 
   it('hides dynamic brand-kit targets instead of reporting target not found on delete', () => {

@@ -1,4 +1,4 @@
-import { emptyManualEditStyles, MANUAL_EDIT_STYLE_PROPS, type ManualEditFields, type ManualEditPatch, type ManualEditStyles } from './types';
+import { emptyManualEditStyles, MANUAL_EDIT_STYLE_PROPS, type ManualEditFields, type ManualEditLayoutPreset, type ManualEditPatch, type ManualEditStyles } from './types';
 
 const MANUAL_EDIT_RUNTIME_OVERRIDES_ID = 'od-manual-edit-runtime-overrides';
 const MANUAL_EDIT_RUNTIME_APPLY_ID = 'od-manual-edit-runtime-apply';
@@ -158,8 +158,8 @@ export function applyManualEditPatch(source: string, patch: ManualEditPatch): Ma
   } else if (patch.kind === 'set-image') {
     el.setAttribute('src', patch.src);
     el.setAttribute('alt', patch.alt);
-  } else if (patch.kind === 'set-visibility') {
-    setElementVisibility(el as HTMLElement, patch.visible);
+  } else if (patch.kind === 'set-layout') {
+    setElementLayout(el as HTMLElement, patch.layout);
   } else if (patch.kind === 'set-style') {
     setInlineStyles(el as HTMLElement, patch.styles);
   } else if (patch.kind === 'set-attributes') {
@@ -293,8 +293,12 @@ function applyDynamicBrandKitPatch(doc: Document, patch: ManualEditPatch): { ok:
     setRuntimeStyleOverride(doc, patch.id, patch.styles);
     return { ok: true };
   }
-  if (patch.kind === 'set-visibility') {
-    setRuntimeStyleOverride(doc, patch.id, { display: patch.visible ? '' : 'none' });
+  if (patch.kind === 'set-layout') {
+    const styles: Partial<ManualEditStyles> = patch.layout === 'original' ? {}
+      : patch.layout === 'grid-2' || patch.layout === 'grid-3'
+        ? { display: 'grid', gridTemplateColumns: `repeat(${patch.layout === 'grid-2' ? 2 : 3}, minmax(0, 1fr))` }
+        : { display: 'flex', flexDirection: patch.layout === 'stack' ? 'column' : patch.layout === 'reverse' ? 'row-reverse' : 'row' };
+    setRuntimeStyleOverride(doc, patch.id, styles);
     return { ok: true };
   }
   if (patch.kind === 'remove-element') {
@@ -668,21 +672,43 @@ function setInlineStyles(el: HTMLElement, styles: Partial<ManualEditStyles>): vo
   }
 }
 
-function setElementVisibility(el: HTMLElement, visible: boolean): void {
-  const saved = 'data-od-tweaks-display';
-  const priority = 'data-od-tweaks-display-priority';
-  if (visible) {
-    el.style.setProperty('display', el.getAttribute(saved) ?? '', el.getAttribute(priority) ?? '');
-    if (!el.style.getPropertyValue('display')) el.style.removeProperty('display');
-    el.removeAttribute(saved);
-    el.removeAttribute(priority);
-    el.removeAttribute('hidden');
-  } else {
-    if (!el.hasAttribute(saved)) {
-      el.setAttribute(saved, el.style.getPropertyValue('display'));
-      el.setAttribute(priority, el.style.getPropertyPriority('display'));
+const LAYOUT_PROPERTIES = ['display', 'flex-direction', 'grid-template-columns'] as const;
+
+function setElementLayout(el: HTMLElement, layout: ManualEditLayoutPreset): void {
+  const snapshotAttr = 'data-od-tweaks-layout';
+  const modeAttr = 'data-od-tweaks-layout-mode';
+  if (layout === 'original') {
+    const snapshot = el.getAttribute(snapshotAttr);
+    if (!snapshot) return;
+    try {
+      const original = JSON.parse(snapshot) as Record<string, { value: string; priority: string }>;
+      for (const property of LAYOUT_PROPERTIES) {
+        const saved = original[property];
+        if (saved?.value) el.style.setProperty(property, saved.value, saved.priority);
+        else el.style.removeProperty(property);
+      }
+    } catch {
+      return;
     }
-    el.style.setProperty('display', 'none', 'important');
+    el.removeAttribute(snapshotAttr);
+    el.removeAttribute(modeAttr);
+    return;
+  }
+  if (!el.hasAttribute(snapshotAttr)) {
+    const original = Object.fromEntries(LAYOUT_PROPERTIES.map((property) => [property, {
+      value: el.style.getPropertyValue(property),
+      priority: el.style.getPropertyPriority(property),
+    }]));
+    el.setAttribute(snapshotAttr, JSON.stringify(original));
+  }
+  el.setAttribute(modeAttr, layout);
+  for (const property of LAYOUT_PROPERTIES) el.style.removeProperty(property);
+  if (layout === 'grid-2' || layout === 'grid-3') {
+    el.style.setProperty('display', 'grid', 'important');
+    el.style.setProperty('grid-template-columns', `repeat(${layout === 'grid-2' ? 2 : 3}, minmax(0, 1fr))`, 'important');
+  } else {
+    el.style.setProperty('display', 'flex', 'important');
+    el.style.setProperty('flex-direction', layout === 'stack' ? 'column' : layout === 'reverse' ? 'row-reverse' : 'row', 'important');
   }
 }
 

@@ -3980,16 +3980,21 @@ export interface Dict {
   'fileViewer.jsxModuleCta': string;
   'fileViewer.comment': string;
   'fileViewer.edit': string;
-  'fileViewer.contentTweaks': string;
+  'fileViewer.layoutTweaks': string;
   'contentTweaks.hint': string;
   'contentTweaks.copy': string;
-  'contentTweaks.sections': string;
+  'contentTweaks.layouts': string;
   'contentTweaks.emptyCopy': string;
-  'contentTweaks.emptySections': string;
+  'contentTweaks.emptyLayouts': string;
   'contentTweaks.apply': string;
+  'contentTweaks.layoutOriginal': string;
+  'contentTweaks.layoutStack': string;
+  'contentTweaks.layoutRow': string;
+  'contentTweaks.layoutReverse': string;
+  'contentTweaks.layoutGrid2': string;
+  'contentTweaks.layoutGrid3': string;
+
   'contentTweaks.saving': string;
-  'contentTweaks.show': string;
-  'contentTweaks.hide': string;
 
   'fileViewer.draw': string;
   'fileViewer.mark': string;

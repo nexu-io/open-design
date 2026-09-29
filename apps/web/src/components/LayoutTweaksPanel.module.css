@@ -27,9 +27,13 @@
 .editor input { min-width: 0; flex: 1; border: 1px solid var(--border-default, #ddd); border-radius: 6px; padding: 6px; background: transparent; color: inherit; }
 .editor button, .footer button { border: 1px solid var(--border-default, #ddd); background: transparent; color: inherit; border-radius: 6px; padding: 5px 8px; cursor: pointer; }
 .editor button:disabled, .footer button:disabled { opacity: .45; cursor: default; }
-.toggleRow { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--border-default, #ddd); }
-.toggleRow span { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.toggleRow input { flex: none; width: 16px; height: 16px; cursor: pointer; }
+.layoutRow { padding: 10px 0 12px; border-bottom: 1px solid var(--border-default, #ddd); }
+.layoutLabel { display: flex; align-items: baseline; gap: 8px; font-weight: 700; text-transform: capitalize; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.layoutLabel small { font-size: 10px; font-weight: 400; opacity: .65; text-transform: none; }
+.presetGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; margin-top: 8px; }
+.presetGrid button { border: 1px solid var(--border-default, #ddd); background: transparent; color: inherit; border-radius: 6px; padding: 7px 3px; cursor: pointer; }
+.presetGrid button.selected { border-color: #276b47; background: #e4f0e8; color: #16452d; font-weight: 700; }
+.presetGrid button:disabled { opacity: .55; cursor: default; }
 .empty { opacity: .65; }
 .footer { border-top: 1px solid var(--border-default, #ddd); flex-wrap: wrap; }
 .footer p { color: #b42318; width: 100%; margin: 0; }

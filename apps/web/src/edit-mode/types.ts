@@ -57,6 +57,7 @@ export interface ManualEditStyles {
   minHeight: string;
   gap: string;
   flexDirection: string;
+  gridTemplateColumns: string;
   justifyContent: string;
   alignItems: string;
   backgroundColor: string;
@@ -107,12 +108,14 @@ export interface ManualEditTarget {
   outerHtml: string;
 }
 
+export type ManualEditLayoutPreset = 'original' | 'stack' | 'row' | 'reverse' | 'grid-2' | 'grid-3';
+
 export type ManualEditPatch =
   | { id: string; kind: 'set-text'; value: string }
   | { id: string; kind: 'set-link'; text: string; href: string }
   | { id: string; kind: 'set-image'; src: string; alt: string }
   | { id: string; kind: 'remove-element' }
-  | { id: string; kind: 'set-visibility'; visible: boolean }
+  | { id: string; kind: 'set-layout'; layout: ManualEditLayoutPreset }
   | { kind: 'set-token'; token: string; value: string }
   | { id: string; kind: 'set-style'; styles: Partial<ManualEditStyles> }
   | { id: string; kind: 'set-attributes'; attributes: Record<string, string> }
@@ -205,7 +208,7 @@ export type ManualEditBridgeMessage =
 export const MANUAL_EDIT_STYLE_PROPS: readonly (keyof ManualEditStyles)[] = [
   'fontFamily', 'fontSize', 'fontWeight', 'color', 'textAlign', 'lineHeight', 'letterSpacing',
   'width', 'height', 'minHeight',
-  'gap', 'flexDirection', 'justifyContent', 'alignItems',
+  'gap', 'flexDirection', 'gridTemplateColumns', 'justifyContent', 'alignItems',
   'backgroundColor', 'opacity',
   'padding', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
   'margin', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft',
