@@ -31,7 +31,7 @@
 
 ## 什么是 OpenDesign
 
-🎨 **本地优先、开源的 Claude Design 替代品。** &nbsp;🖥️ **macOS 与 Windows 原生桌面应用。** &nbsp;⚡ **100+ 功能技能 + 独立渲染模板目录** · ✨ **151 个品牌级设计系统包** · 📦 **277 个开箱即用的插件。** &nbsp;🖼️ 可生成 **Web · 桌面 · 移动端原型**、**实时仪表盘 / 工件**、**演示文稿**、**图片**、**视频**，以及 **HyperFrames** 动态图形。🔒 沙箱 iframe 预览 · HTML / PDF / PPTX / MP4 导出。&nbsp;🤖 **运行于 DeepSeek Harness (`dsh`) · Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity 等 26 个不同的本地 CLI 可执行程序**，或通过 BYOK 接入任何 OpenAI 兼容端点。
+🎨 **本地优先、开源的 Claude Design 替代品。** &nbsp;🖥️ **macOS 与 Windows 原生桌面应用。** &nbsp;⚡ **100+ 功能技能 + 独立渲染模板目录** · ✨ **152 个品牌级设计系统包** · 📦 **278 个开箱即用的插件。** &nbsp;🖼️ 可生成 **Web · 桌面 · 移动端原型**、**实时仪表盘 / 工件**、**演示文稿**、**图片**、**视频**，以及 **HyperFrames** 动态图形。🔒 沙箱 iframe 预览 · HTML / PDF / PPTX / MP4 导出。&nbsp;🤖 **运行于 DeepSeek Harness (`dsh`) · Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity 等 26 个不同的本地 CLI 可执行程序**，或通过 BYOK 接入任何 OpenAI 兼容端点。
 
 OpenDesign 是这样一种产物：Anthropic 随 Claude Design 推出的 **Agent 原生**循环——发现需求、锁定方向、流式输出工件、评审、交付——不再封闭，而是变成了一个由**功能技能、渲染设计模板、设计系统和插件组成的文件系统**，你笔记本电脑上已有的编码 Agent 就能读取、编写和混搭。你的 CLI 变成设计引擎，你的笔记本变成工作坊，团队的 `DESIGN.md` 变成品牌契约。
 
@@ -224,7 +224,7 @@ OpenDesign 是这样一种产物：Anthropic 随 Claude Design 推出的 **Agent
 </tr>
 </table>
 
-**93 个可复刻提示词**位于 [`prompt-templates/`](../../prompt-templates/)——预览缩略图、完整提示词、目标模型、宽高比和来源归属。一键将需求放入编辑器。
+**106 个可复刻提示词**位于 [`prompt-templates/`](../../prompt-templates/)——预览缩略图、完整提示词、目标模型、宽高比和来源归属。一键将需求放入编辑器。
 
 ### 5 · 视频与 HyperFrames——Agent 原生动态图形
 
@@ -258,7 +258,7 @@ OpenDesign 是这样一种产物：Anthropic 随 Claude Design 推出的 **Agent
 OpenDesign (OD) 是开源替代品。同样的循环，同样的工件优先心智模型，没有任何锁定：
 
 - 🤖 **Agent 原生，不绑定模型。** 我们不发布 Agent。你 `PATH` 上已有的 `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi` 就是设计引擎。一键切换。
-- 🧠 **默认品牌级。** 每次渲染都把当前包的 `DESIGN.md` 作为核心品牌契约读取。仓库随附 151 个设计系统包；旧包可以仅含 `DESIGN.md`，新包还可加入 `manifest.json`、`tokens.css`、组件、资产和来源信息。放入文件夹，选择器自动识别。
+- 🧠 **默认品牌级。** 每次渲染都把当前包的 `DESIGN.md` 作为核心品牌契约读取。仓库随附 152 个设计系统包；旧包可以仅含 `DESIGN.md`，新包还可加入 `manifest.json`、`tokens.css`、组件、资产和来源信息。放入文件夹，选择器自动识别。
 - 🖥️ **本地优先，每一层都可 BYOK。** 原生桌面应用保持本地优先，不发生云端往返。在描述 daemon 数据路径之前，必须阅读仓库根目录 `AGENTS.md` 中的 **Daemon data directory contract**。
 - 🌍 **四个平面上可组合。** **插件**承载可运行的工作流 · 功能**技能**承载 Agent 行为 · **设计模板**承载渲染蓝图 · **设计系统**承载品牌。四者都采用可移植、可版本控制的目录，任何人都可以编写和发布。
 - 🔁 **刷新现有代码库。** 将 `git` 仓库 + `DESIGN.md` 交给 Agent，它就能将你的真实组件重构到品牌规范。专门的插件用于将 Figma / Pencil 工作流迁移到 React / Next.js / Vue 代码。
@@ -270,9 +270,9 @@ OpenDesign (OD) 是开源替代品。同样的循环，同样的工件优先心�
 |---|---|---|---|---|
 | 开源 | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
 | 自托管 / 桌面 | ❌ | ❌ | ❌ | **✅ macOS + Windows + Docker** |
-| Agent 原生（在 CLI 中运行） | 仅 Anthropic | ❌ | 仅云端 Agent | **✅ 25 CLI + BYOK** |
-| 品牌级 `DESIGN.md` | 私有 | Theme JSON | 有限 token | **✅ 151 系统随附** |
-| 技能 / 插件 / 模板 | 封闭 | 插件商店 | 封闭 | **✅ 100+ 功能技能 · 独立渲染模板目录 · 277 插件** |
+| Agent 原生（在 CLI 中运行） | 仅 Anthropic | ❌ | 仅云端 Agent | **✅ 26 CLI + BYOK** |
+| 品牌级 `DESIGN.md` | 私有 | Theme JSON | 有限 token | **✅ 152 系统随附** |
+| 技能 / 插件 / 模板 | 封闭 | 插件商店 | 封闭 | **✅ 100+ 功能技能 · 独立渲染模板目录 · 278 插件** |
 | HyperFrames (HTML→MP4) | ❌ | ❌ | ❌ | **✅ 一等公民** |
 | 将现有仓库刷新到品牌 | ❌ | ❌ | ❌ | **✅ 通过 Agent + `DESIGN.md`** |
 | 最低费用 | Pro / Max / Team | Pro / Org | Pro / Team | **BYOK · 任意兼容端点** |
@@ -289,7 +289,7 @@ OpenDesign (OD) 是开源替代品。同样的循环，同样的工件优先心�
 - **Windows**（x64）→ [**open-design.ai**](https://open-design.ai/) 或 [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 - **Linux**（AppImage，可选通道）→ [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 
-安装后：应用自动检测 `PATH` 上的所有编码 Agent CLI，加载 100+ 功能技能、独立渲染模板目录和 151 个设计系统包，打开后即可在入口视图中输入需求。
+安装后：应用自动检测 `PATH` 上的所有编码 Agent CLI，加载 100+ 功能技能、独立渲染模板目录和 152 个设计系统包，打开后即可在入口视图中输入需求。
 
 ### 🤖 安装到你的编码 Agent（无 UI）
 
@@ -411,7 +411,7 @@ od skills list --json
 
 ## 设计系统
 
-**151 个以 `DESIGN.md` 为核心的品牌级设计系统包**随仓库发布。旧包可以只有这份 Markdown 契约；新包还可包含 `manifest.json`、编译后的 `tokens.css`、组件样例、资源和来源证据。目录同时包含基于上游整理的系统与项目自有补充；[`design-systems/README.md`](../../design-systems/README.md) 记录了包结构与来源。切换系统 → 下次渲染即使用新 token。
+**152 个以 `DESIGN.md` 为核心的品牌级设计系统包**随仓库发布。旧包可以只有这份 Markdown 契约；新包还可包含 `manifest.json`、编译后的 `tokens.css`、组件样例、资源和来源证据。目录同时包含基于上游整理的系统与项目自有补充；[`design-systems/README.md`](../../design-systems/README.md) 记录了包结构与来源。切换系统 → 下次渲染即使用新 token。
 
 <details>
 <summary><b>完整目录（点击展开）</b></summary>
@@ -444,11 +444,11 @@ od skills list --json
 
 ## 插件
 
-**277 个官方插件和 183 个可混搭参考示例**位于 [`plugins/_official/`](../../plugins/_official/)。每个条目都是以 `open-design.json` 为核心的可移植插件目录，并带有类型所需的载荷，例如 Agent 工作流的 `SKILL.md`、媒体模板的 `template.json`，或设计系统条目的 `DESIGN.md`。直接跳转到分类浏览：
+**278 个官方插件和 183 个可混搭参考示例**位于 [`plugins/_official/`](../../plugins/_official/)。每个条目都是以 `open-design.json` 为核心的可移植插件目录，并带有类型所需的载荷，例如 Agent 工作流的 `SKILL.md`、媒体模板的 `template.json`，或设计系统条目的 `DESIGN.md`。直接跳转到分类浏览：
 
 | 分类 | 数量 | 内容 |
 |---|---|---|
-| [`scenarios/`](../../plugins/_official/scenarios/) | 13 | 完整设计方案——[`od-default`](../../plugins/_official/scenarios/od-default/)、[`od-design-refine`](../../plugins/_official/scenarios/od-design-refine/)、[`od-figma-migration`](../../plugins/_official/scenarios/od-figma-migration/)、[`od-code-migration`](../../plugins/_official/scenarios/od-code-migration/)、[`od-react-export`](../../plugins/_official/scenarios/od-react-export/)、[`od-nextjs-export`](../../plugins/_official/scenarios/od-nextjs-export/)、[`od-vue-export`](../../plugins/_official/scenarios/od-vue-export/)、[`od-media-generation`](../../plugins/_official/scenarios/od-media-generation/)、[`od-new-generation`](../../plugins/_official/scenarios/od-new-generation/)、[`od-tune-collab`](../../plugins/_official/scenarios/od-tune-collab/)、[`od-plugin-authoring`](../../plugins/_official/scenarios/od-plugin-authoring/), [`od-share-to-community`](../../plugins/_official/scenarios/od-share-to-community/), [`od-web-effect-extractor`](../../plugins/_official/scenarios/od-web-effect-extractor/) |
+| [`scenarios/`](../../plugins/_official/scenarios/) | 14 | 完整设计方案——[`od-default`](../../plugins/_official/scenarios/od-default/)、[`od-design-refine`](../../plugins/_official/scenarios/od-design-refine/)、[`od-figma-migration`](../../plugins/_official/scenarios/od-figma-migration/)、[`od-code-migration`](../../plugins/_official/scenarios/od-code-migration/)、[`od-react-export`](../../plugins/_official/scenarios/od-react-export/)、[`od-nextjs-export`](../../plugins/_official/scenarios/od-nextjs-export/)、[`od-vue-export`](../../plugins/_official/scenarios/od-vue-export/)、[`od-media-generation`](../../plugins/_official/scenarios/od-media-generation/)、[`od-new-generation`](../../plugins/_official/scenarios/od-new-generation/)、[`od-tune-collab`](../../plugins/_official/scenarios/od-tune-collab/)、[`od-plugin-authoring`](../../plugins/_official/scenarios/od-plugin-authoring/), [`od-share-to-community`](../../plugins/_official/scenarios/od-share-to-community/), [`od-web-effect-extractor`](../../plugins/_official/scenarios/od-web-effect-extractor/), [`od-next-strategy`](../../plugins/_official/scenarios/od-next-strategy/) |
 | [`image-templates/`](../../plugins/_official/image-templates/) | 45 | 一次性图片提示词——编辑、电影、产品、人像 |
 | [`video-templates/`](../../plugins/_official/video-templates/) | 63 | HyperFrames / Seedance / Veo 动态模板 |
 | [`design-systems/`](../../plugins/_official/design-systems/) | 143 | 品牌 `DESIGN.md` 包装为插件 |
@@ -543,7 +543,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
              ▼
    ┌──────────────────────────────────────────────────────────────────────┐
    │  Local runtime definitions come from runtimes/registry.ts;                 │
-   │  the base registry has 27 definitions (including byok-opencode),           │
+   │  the shipped registry has 27 definitions (including byok-opencode),       │
    │  backed by 26 distinct local CLI executables because byok-opencode shares │
    │  the OpenCode executable. See docs/agent-adapters.md.                     │
    │  组合功能技能或设计模板 + DESIGN.md，并将规范文件写入磁盘                   │
@@ -568,7 +568,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 
 - [x] 守护进程 + 26 个不同 CLI 可执行程序上的 27 个 runtime 定义 + 技能/设计模板注册中心 + 设计系统目录
 - [x] Web 应用 + 聊天 + 问题表单 + 5 方向选择器 + 待办进度 + 沙箱预览
-- [x] 100+ 功能技能 · 独立渲染模板目录 · 151 个设计系统包 · 5 视觉方向 · 5 设备外框
+- [x] 100+ 功能技能 · 独立渲染模板目录 · 152 个设计系统包 · 5 视觉方向 · 5 设备外框
 - [x] SQLite 支撑的项目 · 会话 · 消息 · 标签页 · 模板
 - [x] 多供应商 BYOK 代理（`/api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream`）+ SSRF 防护
 - [x] Claude Design ZIP 导入（`/api/import/claude-design`）

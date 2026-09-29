@@ -128,7 +128,7 @@ Functional Skill คือ capability ที่ agent เรียกใช้�
 
 ## เพิ่ม Design System ใหม่
 
-Design system ใหม่ใน repository คือ package ใต้ [`design-systems/<slug>/`](../../design-systems/) ไม่ใช่ Markdown file เดี่ยว. Systems ที่ bundle อยู่ทั้ง 151 ชุด migrate มาใช้ package contract ด้านล่างแล้ว. Daemon ยังรับ folder ที่มีเพียง `DESIGN.md` เพื่อ compatibility กับ content เก่าหรือ user-installed แต่ไม่ใช่ authoring target สำหรับ bundled system ใหม่. Catalog จะ scan ใหม่ทุก request `/api/design-systems`; หลังแก้ไขให้ refresh Design System surface โดยไม่ต้อง restart daemon.
+Design system ใหม่ใน repository คือ package ใต้ [`design-systems/<slug>/`](../../design-systems/) ไม่ใช่ Markdown file เดี่ยว. Systems ที่ bundle อยู่ทั้ง 152 ชุด migrate มาใช้ package contract ด้านล่างแล้ว. Daemon ยังรับ folder ที่มีเพียง `DESIGN.md` เพื่อ compatibility กับ content เก่าหรือ user-installed แต่ไม่ใช่ authoring target สำหรับ bundled system ใหม่. Catalog จะ scan ใหม่ทุก request `/api/design-systems`; หลังแก้ไขให้ refresh Design System surface โดยไม่ต้อง restart daemon.
 
 ### โครงสร้าง package ขั้นต่ำ
 
@@ -194,7 +194,7 @@ export const fooAgentDef = {
 } satisfies RuntimeAgentDef;
 ```
 
-Import definition เข้า [`runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts) และเพิ่มใน `BASE_AGENT_DEFS`; shared engine จะ detect บน `PATH`, แสดงใน picker และประกอบ invocation. Reuse `streamFormat` เดิมเมื่อ wire shape ตรงกัน. Wire format ใหม่จริง ๆ ต้องมี parser ใต้ [`apps/daemon/src/runtimes/`](../../apps/daemon/src/runtimes/) หรือ [`apps/daemon/src/agent-protocol/`](../../apps/daemon/src/agent-protocol/), parser tests และ dispatch branch ที่ตรงกันใน [`server.ts`](../../apps/daemon/src/server.ts).
+Import definition เข้า [`runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts) และเพิ่มใน `SHIPPED_AGENT_DEFS`; shared engine จะ detect บน `PATH`, แสดงใน picker และประกอบ invocation. Reuse `streamFormat` เดิมเมื่อ wire shape ตรงกัน. Wire format ใหม่จริง ๆ ต้องมี parser ใต้ [`apps/daemon/src/runtimes/`](../../apps/daemon/src/runtimes/) หรือ [`apps/daemon/src/agent-protocol/`](../../apps/daemon/src/agent-protocol/), parser tests และ dispatch branch ที่ตรงกันใน [`server.ts`](../../apps/daemon/src/server.ts).
 
 Bar สำหรับ merge:
 

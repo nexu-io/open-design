@@ -31,7 +31,7 @@
 
 ## OpenDesign nedir
 
-🎨 **Yerel öncelikli, açık kaynaklı Claude Design alternatifi.** &nbsp;🖥️ **macOS ve Windows için yerel masaüstü uygulaması.** &nbsp;⚡ **100+ işlevsel beceri + ayrı render şablonu kataloğu** · ✨ **151 tasarım sistemi paketi** · 📦 **277 kullanıma hazır eklenti.** &nbsp;🖼️ **web · masaüstü · mobil prototipler**, **canlı panolar / artifact'ler**, **sunum desteleri**, **görseller**, **video** ve ayrıca **HyperFrames** hareket grafikleri üretir. 🔒 Yalıtılmış iframe önizlemesi · HTML / PDF / PPTX / MP4 dışa aktarımı. &nbsp;🤖 **Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity ve 25 ayrı yerel CLI yürütülebilir dosyası üzerinde** veya BYOK ile herhangi bir OpenAI uyumlu uç noktada çalışır.
+🎨 **Yerel öncelikli, açık kaynaklı Claude Design alternatifi.** &nbsp;🖥️ **macOS ve Windows için yerel masaüstü uygulaması.** &nbsp;⚡ **100+ işlevsel beceri + ayrı render şablonu kataloğu** · ✨ **152 tasarım sistemi paketi** · 📦 **278 kullanıma hazır eklenti.** &nbsp;🖼️ **web · masaüstü · mobil prototipler**, **canlı panolar / artifact'ler**, **sunum desteleri**, **görseller**, **video** ve ayrıca **HyperFrames** hareket grafikleri üretir. 🔒 Yalıtılmış iframe önizlemesi · HTML / PDF / PPTX / MP4 dışa aktarımı. &nbsp;🤖 **Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity ve 26 ayrı yerel CLI yürütülebilir dosyası üzerinde** veya BYOK ile herhangi bir OpenAI uyumlu uç noktada çalışır.
 
 OpenDesign bu döngüyü ajanların okuyup yazabildiği bir **işlevsel beceriler, render tasarım şablonları, tasarım sistemleri ve eklentiler dosya sistemine** dönüştürür.
 
@@ -133,7 +133,7 @@ Bir projenin Studio alanında konuşma, üretilen dosyalar ve canlı önizleme a
 Kuru çalıştırma önizlemesi için `od mcp install <agent> --print` · kaldırmak için `--uninstall` · tam liste için `od mcp install --help`.
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 25 coding-agent CLIs OpenDesign supports — Claude Code · Codex · OpenCode · Hermes · Antigravity · Vela · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Amp · CodeBuddy · Mimo · AtomCode · Devin · Trae" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 26 coding-agent CLIs OpenDesign supports — DeepSeek Harness · Claude Code · Codex · OpenCode · Hermes · Antigravity · Vela · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Amp · CodeBuddy · Mimo · AtomCode · Devin · Trae" width="100%" />
 </p>
 
 **Kurulu CLI yok mu?** `POST /api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream` adresindeki BYOK proxy size aynı döngüyü verir (süreç başlatma yok) — `baseUrl` + `apiKey` + `model` yapıştırın; OpenAI, Anthropic, Azure OpenAI, Google Gemini, Ollama, LM Studio, vLLM veya herhangi bir OpenAI uyumlu uç nokta desteğiyle. Hedef bazlı SSRF koruması, daemon kenarında dahili IP'leri / link-local / CGNAT adreslerini engeller.
@@ -219,7 +219,7 @@ Her deste **HTML** (tek dosya, gömülü varlıklar), **PDF** (tarayıcı yazdı
 </tr>
 </table>
 
-**93 çoğaltmaya hazır komut** [`prompt-templates/`](../../prompt-templates/) içinde yer alır — önizleme küçük resimleri, tam komut metni, hedef model, en boy oranı ve kaynak atıfı. Tek tıkla composer'a bir özet bırakır.
+**106 çoğaltmaya hazır komut** [`prompt-templates/`](../../prompt-templates/) içinde yer alır — önizleme küçük resimleri, tam komut metni, hedef model, en boy oranı ve kaynak atıfı. Tek tıkla composer'a bir özet bırakır.
 
 ### 5 · Video ve HyperFrames — ajan-yerel hareket grafikleri
 
@@ -253,7 +253,7 @@ Her deste **HTML** (tek dosya, gömülü varlıklar), **PDF** (tarayıcı yazdı
 OpenDesign (OD) açık kaynaklı alternatiftir. Aynı döngü, aynı artifact öncelikli zihinsel model, hiçbir bağımlılık kilidi olmadan:
 
 - 🤖 **Ajan-yerel, modelden bağımsız.** Bir ajan sunmuyoruz. `PATH`'inizde zaten bulunan `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi` tasarım motorudur. Tek tıkla değiştirin.
-- 🧠 **Varsayılan olarak marka düzeyinde.** Her render etkin paketin `DESIGN.md` dosyasını temel marka sözleşmesi olarak okur. Depoda 151 tasarım sistemi paketi bulunur; eski paketler yalnızca `DESIGN.md` içerebilir, yenileri `manifest.json`, `tokens.css`, bileşenler, varlıklar ve provenance ekleyebilir. Bir klasör bırakın, seçici onu bulur.
+- 🧠 **Varsayılan olarak marka düzeyinde.** Her render etkin paketin `DESIGN.md` dosyasını temel marka sözleşmesi olarak okur. Depoda 152 tasarım sistemi paketi bulunur; eski paketler yalnızca `DESIGN.md` içerebilir, yenileri `manifest.json`, `tokens.css`, bileşenler, varlıklar ve provenance ekleyebilir. Bir klasör bırakın, seçici onu bulur.
 - 🖥️ **Yerel öncelikli, her katmanda BYOK.** Yerel masaüstü uygulamaları buluta gidip gelmeden yerel öncelikli kalır. Daemon veri yollarını açıklamadan önce kökteki `AGENTS.md` dosyasında **Daemon data directory contract** bölümünü MUTLAKA okuyun.
 - 🌍 **Dört düzlemde birleştirilebilir.** **Eklentiler** çalıştırılabilir iş akışları taşır · işlevsel **beceriler** ajan davranışını taşır · **tasarım şablonları** render planlarını taşır · **tasarım sistemleri** markayı taşır. Dördü de herkesin yazıp yayınlayabileceği taşınabilir, sürümlenebilir dizinler kullanır.
 - 🔁 **Mevcut bir kod tabanını yenileyin.** Ajana bir `git` deposu + `DESIGN.md` verin, gerçek bileşenlerinizi marka spesifikasyonuna göre yeniden düzenler. Özel eklentiler Figma / Pencil iş akışlarını React / Next.js / Vue koduna taşır.
@@ -265,9 +265,9 @@ OpenDesign (OD) açık kaynaklı alternatiftir. Aynı döngü, aynı artifact ö
 |---|---|---|---|---|
 | Açık kaynak | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
 | Kendi sunucunda barındırma / masaüstü | ❌ | ❌ | ❌ | **✅ macOS + Windows + Docker** |
-| Ajan-yerel (CLI'nizde çalışır) | Yalnızca Anthropic | ❌ | Yalnızca bulut ajanı | **✅ 25 CLI + BYOK** |
-| Marka düzeyinde `DESIGN.md` | Tescilli | Theme JSON | Sınırlı token | **✅ 151 sistem sunuluyor** |
-| Beceriler / eklentiler / şablonlar | Kapalı | Eklenti mağazası | Kapalı | **✅ 100+ işlevsel beceri · ayrı render şablonu kataloğu · 277 eklenti** |
+| Ajan-yerel (CLI'nizde çalışır) | Yalnızca Anthropic | ❌ | Yalnızca bulut ajanı | **✅ 26 CLI + BYOK** |
+| Marka düzeyinde `DESIGN.md` | Tescilli | Theme JSON | Sınırlı token | **✅ 152 sistem sunuluyor** |
+| Beceriler / eklentiler / şablonlar | Kapalı | Eklenti mağazası | Kapalı | **✅ 100+ işlevsel beceri · ayrı render şablonu kataloğu · 278 eklenti** |
 | HyperFrames (HTML→MP4) | ❌ | ❌ | ❌ | **✅ Birinci sınıf** |
 | Mevcut bir depoyu markaya yenileme | ❌ | ❌ | ❌ | **✅ ajan + `DESIGN.md` ile** |
 | Minimum faturalandırma | Pro / Max / Team | Pro / Org | Pro / Team | **BYOK · herhangi bir uyumlu uç nokta** |
@@ -284,7 +284,7 @@ OpenDesign'ı kullanmanın en hızlı yolu. Node yok, pnpm yok, klonlama yok.
 - **Windows** (x64) → [**open-design.ai**](https://open-design.ai/) veya [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 - **Linux** (AppImage, isteğe bağlı hat) → [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 
-Kurulumdan sonra: uygulama `PATH`'inizdeki her kodlama ajanı CLI'sini otomatik algılar, 100+ işlevsel beceriyi, ayrı render şablonu kataloğunu ve 151 tasarım sistemi paketini yükler ve giriş görünümünde bir özet yazmanıza olanak tanır.
+Kurulumdan sonra: uygulama `PATH`'inizdeki her kodlama ajanı CLI'sini otomatik algılar, 100+ işlevsel beceriyi, ayrı render şablonu kataloğunu ve 152 tasarım sistemi paketini yükler ve giriş görünümünde bir özet yazmanıza olanak tanır.
 
 ### 🤖 Kodlama ajanınıza kurun (UI yok)
 
@@ -406,7 +406,7 @@ Protokol ve dizin ayrımı → [`docs/skills-protocol.md`](../../docs/skills-pro
 
 ## Tasarım Sistemleri
 
-**`DESIGN.md` merkezli 151 tasarım sistemi paketi** depoyla birlikte gelir. Eski paketler yalnızca Markdown sözleşmesini içerebilir; yenileri `manifest.json`, derlenmiş `tokens.css`, bileşen fixture'ları, varlıklar ve kaynak kanıtı da taşıyabilir. Katalog upstream türevlerini ve projeye ait ekleri birleştirir; [`design-systems/README.md`](../../design-systems/README.md) paket biçimini ve kaynakları belgeler.
+**`DESIGN.md` merkezli 152 tasarım sistemi paketi** depoyla birlikte gelir. Eski paketler yalnızca Markdown sözleşmesini içerebilir; yenileri `manifest.json`, derlenmiş `tokens.css`, bileşen fixture'ları, varlıklar ve kaynak kanıtı da taşıyabilir. Katalog upstream türevlerini ve projeye ait ekleri birleştirir; [`design-systems/README.md`](../../design-systems/README.md) paket biçimini ve kaynakları belgeler.
 
 <details>
 <summary><b>Tam katalog (genişletmek için tıklayın)</b></summary>
@@ -439,11 +439,11 @@ Kütüphaneyi [`scripts/sync-design-systems.ts`](../../scripts/sync-design-syste
 
 ## Eklentiler
 
-**277 resmî eklenti ve 183 remixlenebilir örnek** [`plugins/_official/`](../../plugins/_official/) içindedir. Her giriş `open-design.json` ve türüne özgü payload ile tanımlanır: workflow için `SKILL.md`, medya şablonu için `template.json`, tasarım sistemi için `DESIGN.md`.
+**278 resmî eklenti ve 183 remixlenebilir örnek** [`plugins/_official/`](../../plugins/_official/) içindedir. Her giriş `open-design.json` ve türüne özgü payload ile tanımlanır: workflow için `SKILL.md`, medya şablonu için `template.json`, tasarım sistemi için `DESIGN.md`.
 
 | Kategori | Sayı | İçerik |
 |---|---|---|
-| [`scenarios/`](../../plugins/_official/scenarios/) | 13 | Eksiksiz tasarım senaryoları — [`od-default`](../../plugins/_official/scenarios/od-default/), [`od-design-refine`](../../plugins/_official/scenarios/od-design-refine/), [`od-figma-migration`](../../plugins/_official/scenarios/od-figma-migration/), [`od-code-migration`](../../plugins/_official/scenarios/od-code-migration/), [`od-react-export`](../../plugins/_official/scenarios/od-react-export/), [`od-nextjs-export`](../../plugins/_official/scenarios/od-nextjs-export/), [`od-vue-export`](../../plugins/_official/scenarios/od-vue-export/), [`od-media-generation`](../../plugins/_official/scenarios/od-media-generation/), [`od-new-generation`](../../plugins/_official/scenarios/od-new-generation/), [`od-tune-collab`](../../plugins/_official/scenarios/od-tune-collab/), [`od-plugin-authoring`](../../plugins/_official/scenarios/od-plugin-authoring/), [`od-share-to-community`](../../plugins/_official/scenarios/od-share-to-community/), [`od-web-effect-extractor`](../../plugins/_official/scenarios/od-web-effect-extractor/) |
+| [`scenarios/`](../../plugins/_official/scenarios/) | 14 | Eksiksiz tasarım senaryoları — [`od-default`](../../plugins/_official/scenarios/od-default/), [`od-design-refine`](../../plugins/_official/scenarios/od-design-refine/), [`od-figma-migration`](../../plugins/_official/scenarios/od-figma-migration/), [`od-code-migration`](../../plugins/_official/scenarios/od-code-migration/), [`od-react-export`](../../plugins/_official/scenarios/od-react-export/), [`od-nextjs-export`](../../plugins/_official/scenarios/od-nextjs-export/), [`od-vue-export`](../../plugins/_official/scenarios/od-vue-export/), [`od-media-generation`](../../plugins/_official/scenarios/od-media-generation/), [`od-new-generation`](../../plugins/_official/scenarios/od-new-generation/), [`od-tune-collab`](../../plugins/_official/scenarios/od-tune-collab/), [`od-plugin-authoring`](../../plugins/_official/scenarios/od-plugin-authoring/), [`od-share-to-community`](../../plugins/_official/scenarios/od-share-to-community/), [`od-web-effect-extractor`](../../plugins/_official/scenarios/od-web-effect-extractor/), [`od-next-strategy`](../../plugins/_official/scenarios/od-next-strategy/) |
 | [`image-templates/`](../../plugins/_official/image-templates/) | 45 | Tek seferlik görsel komutları — editöryel, sinematik, ürün, portre |
 | [`video-templates/`](../../plugins/_official/video-templates/) | 63 | HyperFrames / Seedance / Veo hareket şablonları |
 | [`design-systems/`](../../plugins/_official/design-systems/) | 143 | Eklenti olarak sarmalanmış marka `DESIGN.md` dosyaları |
@@ -537,8 +537,8 @@ Eklenti kayıt uç noktası: `GET /api/plugins`. Dizin genel bakışı → [`plu
              │ spawn(cli, [...], { cwd: managed project cwd })
              ▼
    ┌──────────────────────────────────────────────────────────────────┐
-   │  Base registry: 26 runtime definitions (including byok-opencode),       │
-   │  backed by 25 distinct local CLI executables because byok-opencode      │
+   │  Shipped registry: 27 runtime definitions (including byok-opencode),       │
+   │  backed by 26 distinct local CLI executables because byok-opencode      │
    │  shares the OpenCode executable.                                        │
    │  Composes a functional skill or design template + DESIGN.md; writes files │
    └──────────────────────────────────────────────────────────────────┘
@@ -560,9 +560,9 @@ Tam mimari → [`docs/architecture.md`](../../docs/architecture.md). Beceri prot
 
 ## Yol haritası
 
-- [x] Daemon + 25 ayrı CLI yürütülebilir dosyası üzerinde 26 runtime tanımı + beceri/şablon kayıtları + tasarım sistemi kataloğu
+- [x] Daemon + 26 ayrı CLI yürütülebilir dosyası üzerinde 27 runtime tanımı + beceri/şablon kayıtları + tasarım sistemi kataloğu
 - [x] Web uygulaması + sohbet + soru formu + 5 yönlü seçici + yapılacaklar ilerlemesi + yalıtılmış önizleme
-- [x] 100+ işlevsel beceri · ayrı render şablonu kataloğu · 151 tasarım sistemi paketi · 5 görsel yön · 5 cihaz çerçevesi
+- [x] 100+ işlevsel beceri · ayrı render şablonu kataloğu · 152 tasarım sistemi paketi · 5 görsel yön · 5 cihaz çerçevesi
 - [x] SQLite destekli projeler · konuşmalar · mesajlar · sekmeler · şablonlar
 - [x] Çok sağlayıcılı BYOK proxy (`/api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream`) + SSRF koruması
 - [x] Claude Design ZIP içe aktarma (`/api/import/claude-design`)

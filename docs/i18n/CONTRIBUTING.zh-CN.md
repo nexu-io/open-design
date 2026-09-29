@@ -127,7 +127,7 @@ od:
 
 ## 加一套 Design System
 
-仓库里的新 design system 是 [`design-systems/<slug>/`](../../design-systems/) 下的一个 package，不再是单独的 Markdown 文件。当前内置的 151 套系统已经全部迁移到下面的 package contract。为了兼容旧内容或用户安装内容，daemon 仍能发现只有 `DESIGN.md` 的 legacy 文件夹，但新内置系统不应再采用这种形态。Catalog 会在每次 `/api/design-systems` 请求时重新扫描；编辑后刷新 Design System 界面即可，不需要重启 daemon。
+仓库里的新 design system 是 [`design-systems/<slug>/`](../../design-systems/) 下的一个 package，不再是单独的 Markdown 文件。当前内置的 152 套系统已经全部迁移到下面的 package contract。为了兼容旧内容或用户安装内容，daemon 仍能发现只有 `DESIGN.md` 的 legacy 文件夹，但新内置系统不应再采用这种形态。Catalog 会在每次 `/api/design-systems` 请求时重新扫描；编辑后刷新 Design System 界面即可，不需要重启 daemon。
 
 ### 最小 package 结构
 
@@ -193,7 +193,7 @@ export const fooAgentDef = {
 } satisfies RuntimeAgentDef;
 ```
 
-把定义 import 到 [`runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts) 并加入 `BASE_AGENT_DEFS` 后，共用引擎会在 `PATH` 上检测它、在 picker 中展示，并构造调用参数。Wire shape 相同时复用已有的 `streamFormat`。真正新增一种 wire format 时，还要在 [`apps/daemon/src/runtimes/`](../../apps/daemon/src/runtimes/) 或 [`apps/daemon/src/agent-protocol/`](../../apps/daemon/src/agent-protocol/) 下添加 parser、parser tests，并在 [`server.ts`](../../apps/daemon/src/server.ts) 的 stream dispatch 中增加对应分支。
+把定义 import 到 [`runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts) 并加入 `SHIPPED_AGENT_DEFS` 后，共用引擎会在 `PATH` 上检测它、在 picker 中展示，并构造调用参数。Wire shape 相同时复用已有的 `streamFormat`。真正新增一种 wire format 时，还要在 [`apps/daemon/src/runtimes/`](../../apps/daemon/src/runtimes/) 或 [`apps/daemon/src/agent-protocol/`](../../apps/daemon/src/agent-protocol/) 下添加 parser、parser tests，并在 [`server.ts`](../../apps/daemon/src/server.ts) 的 stream dispatch 中增加对应分支。
 
 合并硬线：
 

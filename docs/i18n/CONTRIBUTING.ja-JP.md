@@ -128,7 +128,7 @@ Functional Skill は、タスク中にエージェントがユーザー入力へ
 
 ## 新しい Design System の追加
 
-リポジトリに追加する新しい Design System は [`design-systems/<slug>/`](../../design-systems/) 配下の package であり、単独の Markdown ファイルではありません。現在同梱される 151 システムはすべて下記の package contract に移行済みです。Daemon は古い内容やユーザーがインストールした内容との互換性のため `DESIGN.md` のみのフォルダも引き続き受け付けますが、新しい同梱システムの authoring target ではありません。Catalog は `/api/design-systems` リクエストごとに再走査されるため、編集後は Design System surface を refresh すればよく、daemon の再起動は不要です。
+リポジトリに追加する新しい Design System は [`design-systems/<slug>/`](../../design-systems/) 配下の package であり、単独の Markdown ファイルではありません。現在同梱される 152 システムはすべて下記の package contract に移行済みです。Daemon は古い内容やユーザーがインストールした内容との互換性のため `DESIGN.md` のみのフォルダも引き続き受け付けますが、新しい同梱システムの authoring target ではありません。Catalog は `/api/design-systems` リクエストごとに再走査されるため、編集後は Design System surface を refresh すればよく、daemon の再起動は不要です。
 
 ### 最小 package 構成
 
@@ -194,7 +194,7 @@ export const fooAgentDef = {
 } satisfies RuntimeAgentDef;
 ```
 
-定義を [`runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts) に import して `BASE_AGENT_DEFS` に追加すると、共有エンジンが `PATH` 上で検出し、ピッカーに表示して invocation を組み立てます。wire shape が一致する場合は既存の `streamFormat` を再利用してください。まったく新しい wire format には、[`apps/daemon/src/runtimes/`](../../apps/daemon/src/runtimes/) または [`apps/daemon/src/agent-protocol/`](../../apps/daemon/src/agent-protocol/) 配下の parser、parser test、そして [`server.ts`](../../apps/daemon/src/server.ts) の対応する dispatch branch も必要です。
+定義を [`runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts) に import して `SHIPPED_AGENT_DEFS` に追加すると、共有エンジンが `PATH` 上で検出し、ピッカーに表示して invocation を組み立てます。wire shape が一致する場合は既存の `streamFormat` を再利用してください。まったく新しい wire format には、[`apps/daemon/src/runtimes/`](../../apps/daemon/src/runtimes/) または [`apps/daemon/src/agent-protocol/`](../../apps/daemon/src/agent-protocol/) 配下の parser、parser test、そして [`server.ts`](../../apps/daemon/src/server.ts) の対応する dispatch branch も必要です。
 
 マージ基準：
 

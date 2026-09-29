@@ -128,7 +128,7 @@ Uma Skill funcional é uma capacidade que o agente invoca durante uma tarefa par
 
 ## Adicionando um novo Design System
 
-Um novo design system do repositório é um pacote sob [`design-systems/<slug>/`](../../design-systems/), não um arquivo Markdown isolado. Os 151 sistemas incluídos já usam o contrato de pacote abaixo. O daemon ainda aceita pastas apenas com `DESIGN.md` para compatibilidade com conteúdo antigo ou instalado pelo usuário, mas esse não é o formato para novos sistemas incluídos. O catálogo é reescaneado a cada requisição `/api/design-systems`: atualize a superfície Design System depois de editar, sem reiniciar o daemon.
+Um novo design system do repositório é um pacote sob [`design-systems/<slug>/`](../../design-systems/), não um arquivo Markdown isolado. Os 152 sistemas incluídos já usam o contrato de pacote abaixo. O daemon ainda aceita pastas apenas com `DESIGN.md` para compatibilidade com conteúdo antigo ou instalado pelo usuário, mas esse não é o formato para novos sistemas incluídos. O catálogo é reescaneado a cada requisição `/api/design-systems`: atualize a superfície Design System depois de editar, sem reiniciar o daemon.
 
 ### Layout mínimo do pacote
 
@@ -194,7 +194,7 @@ export const fooAgentDef = {
 } satisfies RuntimeAgentDef;
 ```
 
-Importe a definição em [`runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts) e adicione-a a `BASE_AGENT_DEFS`; o mecanismo compartilhado a detecta no `PATH`, mostra no picker e monta sua invocação. Reutilize um `streamFormat` existente quando o formato no wire coincidir. Um formato de wire realmente novo também exige um parser em [`apps/daemon/src/runtimes/`](../../apps/daemon/src/runtimes/) ou [`apps/daemon/src/agent-protocol/`](../../apps/daemon/src/agent-protocol/), testes do parser e um branch de dispatch correspondente em [`server.ts`](../../apps/daemon/src/server.ts).
+Importe a definição em [`runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts) e adicione-a a `SHIPPED_AGENT_DEFS`; o mecanismo compartilhado a detecta no `PATH`, mostra no picker e monta sua invocação. Reutilize um `streamFormat` existente quando o formato no wire coincidir. Um formato de wire realmente novo também exige um parser em [`apps/daemon/src/runtimes/`](../../apps/daemon/src/runtimes/) ou [`apps/daemon/src/agent-protocol/`](../../apps/daemon/src/agent-protocol/), testes do parser e um branch de dispatch correspondente em [`server.ts`](../../apps/daemon/src/server.ts).
 
 Barra para mergear:
 

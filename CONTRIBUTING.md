@@ -128,7 +128,7 @@ A functional skill is a capability the agent invokes during a task to work on us
 
 ## Adding a new Design System
 
-A new repository design system is a package under [`design-systems/<slug>/`](design-systems/), not a standalone Markdown file. All 151 bundled systems now use the package contract below. The daemon still accepts legacy `DESIGN.md`-only folders as a compatibility path for older or user-installed content, but do not author new bundled systems in that shape. The catalog is scanned on each `/api/design-systems` request, so refresh the Design System surface after editing; no daemon restart is required.
+A new repository design system is a package under [`design-systems/<slug>/`](design-systems/), not a standalone Markdown file. All 152 bundled systems now use the package contract below. The daemon still accepts legacy `DESIGN.md`-only folders as a compatibility path for older or user-installed content, but do not author new bundled systems in that shape. The catalog is scanned on each `/api/design-systems` request, so refresh the Design System surface after editing; no daemon restart is required.
 
 ### Minimum package layout
 
@@ -194,7 +194,7 @@ export const fooAgentDef = {
 } satisfies RuntimeAgentDef;
 ```
 
-Import the definition into [`runtimes/registry.ts`](apps/daemon/src/runtimes/registry.ts) and add it to `BASE_AGENT_DEFS`; the shared engine will detect it on `PATH`, expose it in the picker, and build its invocation. Reuse an existing `streamFormat` whenever the wire shape matches. A genuinely new wire format also needs a parser under [`apps/daemon/src/runtimes/`](apps/daemon/src/runtimes/) or [`apps/daemon/src/agent-protocol/`](apps/daemon/src/agent-protocol/), parser tests, and a matching dispatch branch in [`server.ts`](apps/daemon/src/server.ts).
+Import the definition into [`runtimes/registry.ts`](apps/daemon/src/runtimes/registry.ts) and add it to `SHIPPED_AGENT_DEFS`; the shared engine will detect it on `PATH`, expose it in the picker, and build its invocation. Reuse an existing `streamFormat` whenever the wire shape matches. A genuinely new wire format also needs a parser under [`apps/daemon/src/runtimes/`](apps/daemon/src/runtimes/) or [`apps/daemon/src/agent-protocol/`](apps/daemon/src/agent-protocol/), parser tests, and a matching dispatch branch in [`server.ts`](apps/daemon/src/server.ts).
 
 Bar for merging:
 

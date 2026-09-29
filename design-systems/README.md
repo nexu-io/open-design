@@ -4,7 +4,7 @@ Each subfolder is a portable design-system package. Selecting one from the
 Design System surface or a supported project-creation workflow composes its
 design context into the agent prompt.
 
-The bundled catalog currently contains **151 packages**. Every bundled package
+The bundled catalog currently contains **152 packages**. Every bundled package
 has the same minimum machine-readable shape:
 
 ```text

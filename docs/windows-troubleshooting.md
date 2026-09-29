@@ -142,11 +142,12 @@ Approve any packages that appear in the list (commonly `better-sqlite3`, `electr
 pnpm install
 ```
 
-> **Expected on Windows native:** `better-sqlite3` does not publish a win32
-> prebuilt binary for Node 24, so `pnpm install` compiles it from source with
-> node-gyp (often around two minutes). Install Visual Studio Build Tools 2022
-> or newer as described in step 4 *before* running `pnpm install`. Compilation
-> output by itself is not a Node-version incompatibility.
+> **Expected on Windows native:** the pinned `better-sqlite3@12.10.0` publishes
+> a win32 prebuilt binary for Node 24, so a normal `pnpm install` downloads it.
+> If the prebuilt download is unavailable or you explicitly request a source
+> build, the install falls back to node-gyp; in that case install Visual Studio
+> Build Tools 2022 and Python as described in step 4. Compilation output by
+> itself is not a Node-version incompatibility.
 
 ---
 

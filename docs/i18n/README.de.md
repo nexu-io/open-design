@@ -31,7 +31,7 @@
 
 ## Was ist OpenDesign
 
-🎨 **Die local-first, quelloffene Alternative zu Claude Design.** &nbsp;🖥️ **Native Desktop-App für macOS und Windows.** &nbsp;⚡ **100+ funktionale Skills + separater Rendering-Vorlagenkatalog** · ✨ **151 markenreife Designsystem-Pakete** · 📦 **277 sofort einsetzbare Plugins.** &nbsp;🖼️ Erzeugt **Web- · Desktop- · Mobile-Prototypen**, **Live-Dashboards / Artefakte**, **Präsentationen**, **Bilder**, **Videos** sowie **HyperFrames**-Motion-Graphics. 🔒 Sandboxed iframe-Vorschau · Export als HTML / PDF / PPTX / MP4. &nbsp;🤖 **Läuft auf Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity und 25 unterschiedlichen lokalen CLI-Programmen**, oder über BYOK an jedem OpenAI-kompatiblen Endpunkt.
+🎨 **Die local-first, quelloffene Alternative zu Claude Design.** &nbsp;🖥️ **Native Desktop-App für macOS und Windows.** &nbsp;⚡ **100+ funktionale Skills + separater Rendering-Vorlagenkatalog** · ✨ **152 markenreife Designsystem-Pakete** · 📦 **278 sofort einsetzbare Plugins.** &nbsp;🖼️ Erzeugt **Web- · Desktop- · Mobile-Prototypen**, **Live-Dashboards / Artefakte**, **Präsentationen**, **Bilder**, **Videos** sowie **HyperFrames**-Motion-Graphics. 🔒 Sandboxed iframe-Vorschau · Export als HTML / PDF / PPTX / MP4. &nbsp;🤖 **Läuft auf Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity und 26 unterschiedlichen lokalen CLI-Programmen**, oder über BYOK an jedem OpenAI-kompatiblen Endpunkt.
 
 OpenDesign ist das, was entsteht, wenn die **agent-native** Schleife, die Anthropic mit Claude Design eingeführt hat — das Briefing erkunden, die Richtung festlegen, das Artefakt streamen, kritisieren, ausliefern — nicht länger geschlossen ist und zu einem **Dateisystem aus funktionalen Skills, Rendering-Designvorlagen, Designsystemen und Plugins** wird, das die Coding-Agents, die schon auf deinem Laptop liegen, lesen, schreiben und neu kombinieren können. Dein CLI wird zur Design-Engine, dein Laptop zum Studio und die `DESIGN.md` deines Teams zum Markenvertrag.
 
@@ -133,7 +133,7 @@ Im Studio eines Projekts bleiben Unterhaltung, generierte Dateien und Live-Vorsc
 `od mcp install <agent> --print` für eine Trockenlauf-Vorschau · `--uninstall` zum Entfernen · vollständige Liste mit `od mcp install --help`.
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 25 coding-agent CLIs OpenDesign supports — Claude Code · Codex · OpenCode · Hermes · Antigravity · Vela · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Amp · CodeBuddy · Mimo · AtomCode · Devin · Trae" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 26 coding-agent CLIs OpenDesign supports — DeepSeek Harness · Claude Code · Codex · OpenCode · Hermes · Antigravity · Vela · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Amp · CodeBuddy · Mimo · AtomCode · Devin · Trae" width="100%" />
 </p>
 
 **Kein CLI installiert?** Der BYOK-Proxy unter `POST /api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream` gibt dir dieselbe Schleife (ohne Prozess-Spawn) — füge `baseUrl` + `apiKey` + `model` ein, mit Unterstützung für OpenAI, Anthropic, Azure OpenAI, Google Gemini, Ollama, LM Studio, vLLM oder jeden OpenAI-kompatiblen Endpunkt. Pro-Ziel-SSRF-Schutz blockiert interne IPs / Link-Local / CGNAT am Daemon-Rand.
@@ -219,7 +219,7 @@ Jedes Deck exportiert als **HTML** (einzelne Datei, eingebettete Assets), **PDF*
 </tr>
 </table>
 
-**93 sofort reproduzierbare Prompts** liegen in [`prompt-templates/`](../../prompt-templates/) — Vorschau-Miniaturen, vollständiger Prompt-Text, Zielmodell, Seitenverhältnis und Quellenangabe. Ein Klick legt ein Briefing in den Composer.
+**106 sofort reproduzierbare Prompts** liegen in [`prompt-templates/`](../../prompt-templates/) — Vorschau-Miniaturen, vollständiger Prompt-Text, Zielmodell, Seitenverhältnis und Quellenangabe. Ein Klick legt ein Briefing in den Composer.
 
 ### 5 · Video & HyperFrames — agent-native Motion-Graphics
 
@@ -253,7 +253,7 @@ Jedes Deck exportiert als **HTML** (einzelne Datei, eingebettete Assets), **PDF*
 OpenDesign (OD) ist die quelloffene Alternative. Dieselbe Schleife, dasselbe artefakt-zentrierte mentale Modell, ohne den Lock-in:
 
 - 🤖 **Agent-native, modellunabhängig.** Wir liefern keinen Agent. Die `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi`, die bereits in deinem `PATH` liegen, sind die Design-Engine. Mit einem Klick wechseln.
-- 🧠 **Markenreif von Haus aus.** Jedes Rendering liest die `DESIGN.md` des aktiven Pakets als zentralen Markenvertrag. 151 Designsystem-Pakete werden mit dem Repo ausgeliefert; ältere Pakete können nur aus `DESIGN.md` bestehen, neuere zusätzlich `manifest.json`, `tokens.css`, Komponenten, Assets und Herkunftsangaben enthalten. Lege einen Ordner ab, der Picker findet ihn.
+- 🧠 **Markenreif von Haus aus.** Jedes Rendering liest die `DESIGN.md` des aktiven Pakets als zentralen Markenvertrag. 152 Designsystem-Pakete werden mit dem Repo ausgeliefert; ältere Pakete können nur aus `DESIGN.md` bestehen, neuere zusätzlich `manifest.json`, `tokens.css`, Komponenten, Assets und Herkunftsangaben enthalten. Lege einen Ordner ab, der Picker findet ihn.
 - 🖥️ **Local-first, BYOK auf jeder Ebene.** Native Desktop-Apps bleiben local-first, ohne Cloud-Roundtrip. Bevor Sie Daemon-Datenpfade beschreiben, MÜSSEN Sie `AGENTS.md` im Repository-Stamm lesen, Abschnitt **Daemon data directory contract**.
 - 🌍 **Komponierbar auf vier Ebenen.** **Plugins** tragen lauffähige Workflows · funktionale **Skills** tragen Agent-Verhalten · **Designvorlagen** tragen Rendering-Blaupausen · **Designsysteme** tragen die Marke. Alle vier verwenden portable, versionierbare Verzeichnisse, die jeder erstellen und veröffentlichen kann.
 - 🔁 **Eine bestehende Codebasis auffrischen.** Übergib dem Agent ein `git`-Repo + `DESIGN.md`, und er refaktoriert deine echten Komponenten auf die Markenvorgabe. Dedizierte Plugins migrieren Figma- / Pencil-Workflows in React- / Next.js- / Vue-Code.
@@ -265,9 +265,9 @@ OpenDesign (OD) ist die quelloffene Alternative. Dieselbe Schleife, dasselbe art
 |---|---|---|---|---|
 | Open Source | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
 | Self-Hosting / Desktop | ❌ | ❌ | ❌ | **✅ macOS + Windows + Docker** |
-| Agent-native (läuft in deinem CLI) | Nur Anthropic | ❌ | Nur Cloud-Agent | **✅ 25 CLIs + BYOK** |
-| Markenreife `DESIGN.md` | Proprietär | Theme-JSON | Begrenzte Tokens | **✅ 151 Systeme ausgeliefert** |
-| Skills / Plugins / Vorlagen | Geschlossen | Plugin-Store | Geschlossen | **✅ 100+ funktionale Skills · separater Rendering-Vorlagenkatalog · 277 Plugins** |
+| Agent-native (läuft in deinem CLI) | Nur Anthropic | ❌ | Nur Cloud-Agent | **✅ 26 CLIs + BYOK** |
+| Markenreife `DESIGN.md` | Proprietär | Theme-JSON | Begrenzte Tokens | **✅ 152 Systeme ausgeliefert** |
+| Skills / Plugins / Vorlagen | Geschlossen | Plugin-Store | Geschlossen | **✅ 100+ funktionale Skills · separater Rendering-Vorlagenkatalog · 278 Plugins** |
 | HyperFrames (HTML→MP4) | ❌ | ❌ | ❌ | **✅ Vollwertig** |
 | Bestehendes Repo auf Marke auffrischen | ❌ | ❌ | ❌ | **✅ via Agent + `DESIGN.md`** |
 | Mindestabrechnung | Pro / Max / Team | Pro / Org | Pro / Team | **BYOK · jeder kompatible Endpunkt** |
@@ -284,7 +284,7 @@ Der schnellste Weg, OpenDesign zu nutzen. Kein Node, kein pnpm, kein Klonen.
 - **Windows** (x64) → [**open-design.ai**](https://open-design.ai/) oder [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 - **Linux** (AppImage, optionale Spur) → [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 
-Nach der Installation erkennt die App jedes Coding-Agent-CLI in deinem `PATH` und lädt 100+ funktionale Skills, den separaten Rendering-Vorlagenkatalog und 151 Designsystem-Pakete.
+Nach der Installation erkennt die App jedes Coding-Agent-CLI in deinem `PATH` und lädt 100+ funktionale Skills, den separaten Rendering-Vorlagenkatalog und 152 Designsystem-Pakete.
 
 ### 🤖 In deinen Coding-Agent installieren (keine UI)
 
@@ -406,7 +406,7 @@ Protokoll und Verzeichnisaufteilung → [`docs/skills-protocol.md`](../../docs/s
 
 ## Designsysteme
 
-**151 markenreife Designsystem-Pakete mit `DESIGN.md` als Kern** werden mit dem Repo ausgeliefert. Legacy-Pakete können nur diesen Markdown-Vertrag enthalten; neuere Pakete können zusätzlich `manifest.json`, kompiliertes `tokens.css`, Komponenten-Fixtures, Assets und Provenienzbelege tragen. Der Katalog mischt aus Upstreams abgeleitete Systeme mit projekteigenen Ergänzungen; [`design-systems/README.md`](../../design-systems/README.md) dokumentiert Paketform und Herkunft.
+**152 markenreife Designsystem-Pakete mit `DESIGN.md` als Kern** werden mit dem Repo ausgeliefert. Legacy-Pakete können nur diesen Markdown-Vertrag enthalten; neuere Pakete können zusätzlich `manifest.json`, kompiliertes `tokens.css`, Komponenten-Fixtures, Assets und Provenienzbelege tragen. Der Katalog mischt aus Upstreams abgeleitete Systeme mit projekteigenen Ergänzungen; [`design-systems/README.md`](../../design-systems/README.md) dokumentiert Paketform und Herkunft.
 
 <details>
 <summary><b>Vollständiger Katalog (zum Aufklappen klicken)</b></summary>
@@ -439,11 +439,11 @@ Importiere die Bibliothek erneut über [`scripts/sync-design-systems.ts`](../../
 
 ## Plugins
 
-**277 offizielle Plugins plus 183 remixbare Referenzbeispiele** liegen in [`plugins/_official/`](../../plugins/_official/). Jeder Eintrag ist ein portables Plugin-Verzeichnis mit `open-design.json` und dem typspezifischen Payload, etwa `SKILL.md` für Agent-Workflows, `template.json` für Medienvorlagen oder `DESIGN.md` für Designsystem-Einträge.
+**278 offizielle Plugins plus 183 remixbare Referenzbeispiele** liegen in [`plugins/_official/`](../../plugins/_official/). Jeder Eintrag ist ein portables Plugin-Verzeichnis mit `open-design.json` und dem typspezifischen Payload, etwa `SKILL.md` für Agent-Workflows, `template.json` für Medienvorlagen oder `DESIGN.md` für Designsystem-Einträge.
 
 | Kategorie | Anzahl | Inhalt |
 |---|---|---|
-| [`scenarios/`](../../plugins/_official/scenarios/) | 13 | Vollständige Design-Szenarien — [`od-default`](../../plugins/_official/scenarios/od-default/), [`od-design-refine`](../../plugins/_official/scenarios/od-design-refine/), [`od-figma-migration`](../../plugins/_official/scenarios/od-figma-migration/), [`od-code-migration`](../../plugins/_official/scenarios/od-code-migration/), [`od-react-export`](../../plugins/_official/scenarios/od-react-export/), [`od-nextjs-export`](../../plugins/_official/scenarios/od-nextjs-export/), [`od-vue-export`](../../plugins/_official/scenarios/od-vue-export/), [`od-media-generation`](../../plugins/_official/scenarios/od-media-generation/), [`od-new-generation`](../../plugins/_official/scenarios/od-new-generation/), [`od-tune-collab`](../../plugins/_official/scenarios/od-tune-collab/), [`od-plugin-authoring`](../../plugins/_official/scenarios/od-plugin-authoring/), [`od-share-to-community`](../../plugins/_official/scenarios/od-share-to-community/), [`od-web-effect-extractor`](../../plugins/_official/scenarios/od-web-effect-extractor/) |
+| [`scenarios/`](../../plugins/_official/scenarios/) | 14 | Vollständige Design-Szenarien — [`od-default`](../../plugins/_official/scenarios/od-default/), [`od-design-refine`](../../plugins/_official/scenarios/od-design-refine/), [`od-figma-migration`](../../plugins/_official/scenarios/od-figma-migration/), [`od-code-migration`](../../plugins/_official/scenarios/od-code-migration/), [`od-react-export`](../../plugins/_official/scenarios/od-react-export/), [`od-nextjs-export`](../../plugins/_official/scenarios/od-nextjs-export/), [`od-vue-export`](../../plugins/_official/scenarios/od-vue-export/), [`od-media-generation`](../../plugins/_official/scenarios/od-media-generation/), [`od-new-generation`](../../plugins/_official/scenarios/od-new-generation/), [`od-tune-collab`](../../plugins/_official/scenarios/od-tune-collab/), [`od-plugin-authoring`](../../plugins/_official/scenarios/od-plugin-authoring/), [`od-share-to-community`](../../plugins/_official/scenarios/od-share-to-community/), [`od-web-effect-extractor`](../../plugins/_official/scenarios/od-web-effect-extractor/), [`od-next-strategy`](../../plugins/_official/scenarios/od-next-strategy/) |
 | [`image-templates/`](../../plugins/_official/image-templates/) | 45 | One-Shot-Bild-Prompts — redaktionell, filmisch, Produkt, Porträt |
 | [`video-templates/`](../../plugins/_official/video-templates/) | 63 | HyperFrames- / Seedance- / Veo-Motion-Vorlagen |
 | [`design-systems/`](../../plugins/_official/design-systems/) | 143 | Marken-`DESIGN.md` als Plugins verpackt |
@@ -538,8 +538,8 @@ Plugin-Registry-Endpunkt: `GET /api/plugins`. Verzeichnisübersicht → [`plugin
              ▼
    ┌──────────────────────────────────────────────────────────────────┐
    │  Local runtime definitions come from runtimes/registry.ts;                 │
-   │  the base registry has 26 definitions (including byok-opencode),           │
-   │  backed by 25 distinct local CLI executables because byok-opencode shares │
+   │  the shipped registry has 27 definitions (including byok-opencode),       │
+   │  backed by 26 distinct local CLI executables because byok-opencode shares │
    │  the OpenCode executable. See docs/agent-adapters.md.                     │
    │  composes a functional skill or design template + DESIGN.md; writes files │
    └──────────────────────────────────────────────────────────────────┘
@@ -561,9 +561,9 @@ Vollständige Architektur → [`docs/architecture.md`](../../docs/architecture.m
 
 ## Roadmap
 
-- [x] Daemon + 26 Runtime-Definitionen über 25 unterschiedliche Coding-Agent-CLI-Programme + Skill-/Designvorlagen-Registries + Designsystem-Katalog
+- [x] Daemon + 27 Runtime-Definitionen über 26 unterschiedliche Coding-Agent-CLI-Programme + Skill-/Designvorlagen-Registries + Designsystem-Katalog
 - [x] Web-App + Chat + Frageformular + 5-Richtungs-Picker + To-do-Fortschritt + Sandboxed Vorschau
-- [x] 100+ funktionale Skills · separater Rendering-Vorlagenkatalog · 151 Designsystem-Pakete · 5 visuelle Richtungen · 5 Geräterahmen
+- [x] 100+ funktionale Skills · separater Rendering-Vorlagenkatalog · 152 Designsystem-Pakete · 5 visuelle Richtungen · 5 Geräterahmen
 - [x] SQLite-gestützte Projekte · Konversationen · Nachrichten · Tabs · Vorlagen
 - [x] Multi-Provider-BYOK-Proxy (`/api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream`) + SSRF-Schutz
 - [x] Claude Design ZIP-Import (`/api/import/claude-design`)

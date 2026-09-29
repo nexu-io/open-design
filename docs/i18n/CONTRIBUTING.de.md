@@ -126,7 +126,7 @@ Ein funktionaler Skill ist eine Fähigkeit, die der Agent während einer Aufgabe
 
 ## Ein neues Design System hinzufügen
 
-Ein neues Designsystem im Repository ist ein Paket unter [`design-systems/<slug>/`](../../design-systems/), keine einzelne Markdown-Datei. Alle 151 gebündelten Systeme verwenden inzwischen den Paketvertrag unten. Der Daemon akzeptiert für ältere oder benutzerinstallierte Inhalte weiterhin `DESIGN.md`-only-Ordner als Kompatibilitätspfad; neue gebündelte Systeme dürfen diese Legacy-Form nicht verwenden. Der Katalog wird bei jeder Anfrage an `/api/design-systems` neu gescannt: Aktualisieren Sie nach einer Änderung die Design-System-Oberfläche, ein Daemon-Neustart ist nicht nötig.
+Ein neues Designsystem im Repository ist ein Paket unter [`design-systems/<slug>/`](../../design-systems/), keine einzelne Markdown-Datei. Alle 152 gebündelten Systeme verwenden inzwischen den Paketvertrag unten. Der Daemon akzeptiert für ältere oder benutzerinstallierte Inhalte weiterhin `DESIGN.md`-only-Ordner als Kompatibilitätspfad; neue gebündelte Systeme dürfen diese Legacy-Form nicht verwenden. Der Katalog wird bei jeder Anfrage an `/api/design-systems` neu gescannt: Aktualisieren Sie nach einer Änderung die Design-System-Oberfläche, ein Daemon-Neustart ist nicht nötig.
 
 ### Minimales Paketlayout
 
@@ -192,7 +192,7 @@ export const fooAgentDef = {
 } satisfies RuntimeAgentDef;
 ```
 
-Importieren Sie die Definition in [`runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts) und fügen Sie sie zu `BASE_AGENT_DEFS` hinzu. Die gemeinsame Engine erkennt sie dann im `PATH`, zeigt sie im Picker und baut den Aufruf. Verwenden Sie ein bestehendes `streamFormat`, wenn die Wire-Struktur passt. Ein wirklich neues Wire-Format braucht außerdem einen Parser unter [`apps/daemon/src/runtimes/`](../../apps/daemon/src/runtimes/) oder [`apps/daemon/src/agent-protocol/`](../../apps/daemon/src/agent-protocol/), Parser-Tests und einen passenden Dispatch-Zweig in [`server.ts`](../../apps/daemon/src/server.ts).
+Importieren Sie die Definition in [`runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts) und fügen Sie sie zu `SHIPPED_AGENT_DEFS` hinzu. Die gemeinsame Engine erkennt sie dann im `PATH`, zeigt sie im Picker und baut den Aufruf. Verwenden Sie ein bestehendes `streamFormat`, wenn die Wire-Struktur passt. Ein wirklich neues Wire-Format braucht außerdem einen Parser unter [`apps/daemon/src/runtimes/`](../../apps/daemon/src/runtimes/) oder [`apps/daemon/src/agent-protocol/`](../../apps/daemon/src/agent-protocol/), Parser-Tests und einen passenden Dispatch-Zweig in [`server.ts`](../../apps/daemon/src/server.ts).
 
 Merge-Bar:
 
