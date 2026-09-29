@@ -112,7 +112,6 @@ import {
 } from '../strategies/od-next/task-input-snapshot.js';
 import {
   evaluateOdNextRollout,
-  odNextTaskTypeForProjectScenarioBinding,
   readOdNextRolloutPolicy,
   type OdNextRolloutDecision,
 } from '../strategies/od-next/rollout.js';
@@ -1627,7 +1626,16 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         Array.isArray((rolloutProject?.metadata as ContractProjectMetadata | undefined)?.contextPlugins)
         && (rolloutProject?.metadata as ContractProjectMetadata).contextPlugins!.length > 0
       );
-      const explicitExecutablePlugin = Boolean(
+      const officialTypeEntry = Boolean(defaultPluginId
+        && getInstalledPlugin(db, defaultPluginId)?.sourceKind === 'bundled'
+        && verifiedScenarioBinding?.pluginId === defaultPluginId
+        && (!suppliedPluginWasNamed || requestBody.pluginId === defaultPluginId)
+        && (!suppliedSnapshotWasNamed || requestBody.appliedPluginSnapshotId === rolloutProject?.appliedPluginSnapshotId));
+      const officialTemplateEntry = Boolean(selectedExamplePlugin?.sourceKind === 'bundled'
+        && verifiedExampleBinding
+        && (!suppliedPluginWasNamed || requestBody.pluginId === selectedExamplePlugin.id)
+        && (!suppliedSnapshotWasNamed || requestBody.appliedPluginSnapshotId === rolloutProject?.appliedPluginSnapshotId));
+      const explicitExecutablePlugin = !officialTypeEntry && !officialTemplateEntry && Boolean(
         suppliedSnapshotWasNamed
         || suppliedPluginWasNamed
         || (projectHasExplicitPin && !projectPinIsAutomaticDefault)
@@ -1645,21 +1653,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         explicitExecutablePlugin
         || suppliedContextPluginWasNamed
       );
-      // Read per request, not at boot: `odNextStrategyMode` is how a user opts
-      // this installation out of OD Next, and "configure it and it takes
-      // effect" has to mean the next run, not the next daemon restart.
-      //
-      // Deliberately uncaught. `readAppConfig` already answers `{}` for the
-      // states that mean "nothing configured" — no file, unparseable file — and
-      // only throws when the daemon genuinely cannot read its own config. That
-      // is not the same as an opt-out, and swallowing it would silently run the
-      // ordinary route (with no `agentCliEnv` either) while telling the
-      // operator the installation was never opted in.
+      // Subsequent requests use the current policy, including older conversations.
+      // In-flight physical runs and idempotent retries keep their frozen bundle.
       const rolloutAppConfig = await readAppConfig(RUNTIME_DATA_DIR);
       const rolloutPolicy = readOdNextRolloutPolicy(process.env, rolloutAppConfig);
-      const rolloutTaskType = previousStrategyTask
-        ? getSnapshot(db, previousStrategyTask.snapshotId)?.strategy?.selectedTaskProfile.taskType ?? null
-        : odNextTaskTypeForProjectScenarioBinding(verifiedStrategyBinding ?? verifiedScenarioBinding);
+      const rolloutTaskType = !explicitUserPlugin ? 'discovery' as const : null;
       const routeApplicability = explicitUserPlugin
         ? 'explicit_user' as const
         : rolloutTaskType && snapshotConversationId

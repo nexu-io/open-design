@@ -32,6 +32,8 @@ checking:
 - Spawning acceptance Children or performing formal acceptance of any kind.
 - Any fix round initiated on the basis of the checks above.
 
+Allowed production actions include generating media, waiting for its real completion, rendering the requested final file, and registering live artifacts. They finish production; they are not post-generation quality checks.
+
 Allowed actions, for boundary clarity: reading an existing artifact's source
 to continue editing it, and probing its technical form and design language,
 are Build inputs and outside this section's scope; routine code reading and

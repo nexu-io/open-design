@@ -1945,37 +1945,8 @@ export function HomeView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingChipRestore, pluginsLoading, plugins, active, pendingPluginUseHandoff]);
 
-  // Seed only the page's first untouched visit. Restored drafts and host
-  // handoffs own their selection; a later clear must not re-run this default.
-  const [defaultTypeSettled, setDefaultTypeSettled] = useState(false);
-  const defaultTypePending = ownsComposerDraft && !defaultTypeSettled && !active;
-  useEffect(() => {
-    if (!ownsComposerDraft || defaultTypeSettled) return;
-    if (active || promptHandoff || pendingPluginUseHandoff || hasPendingHomeChip(variant)) {
-      setDefaultTypeSettled(true);
-      return;
-    }
-    if (pluginsLoading || pendingChipRestore) return;
-    setDefaultTypeSettled(true);
-    const chip = findChip('prototype');
-    if (chip?.action.kind !== 'apply-scenario') return;
-    const action = chip.action;
-    const record = plugins.find((plugin) => plugin.id === action.pluginId);
-    // A missing catalog entry must not lock the composer or invent a plugin.
-    // Explicit picks continue to report the normal missing-scenario error.
-    if (!record) return;
-    void usePlugin(record, undefined, {
-      chipId: chip.id,
-      projectKind: chip.action.projectKind,
-      inputs: chip.action.inputs,
-      projectMetadata: chip.action.projectMetadata ?? null,
-      suppressPromptUpdate: true,
-      focusPrompt: false,
-      deferApply: true,
-    });
-    // usePlugin reads this render's catalog/context; it is not an effect trigger.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ownsComposerDraft, defaultTypeSettled, active, promptHandoff, pendingPluginUseHandoff, variant, pluginsLoading, pendingChipRestore, plugins]);
+  // Natural-language entry has no implicit task selection.
+  const defaultTypePending = false;
 
   function addPluginContext(record: InstalledPluginRecord, nextPrompt: string | null) {
     setSelectedPluginContexts((prev) => {

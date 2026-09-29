@@ -1,3 +1,5 @@
+import { DELIVERABLE_SKILLS, DELIVERABLE_PRODUCTION_ROUTES } from '@open-design/contracts';
+
 type Availability = { id: string; available: boolean };
 
 export interface OdNextIntakePreflightInput {
@@ -9,6 +11,7 @@ export interface OdNextIntakePreflightInput {
 }
 
 const DAEMON_OWNED_PRODUCTION_ROUTES = {
+  discovery: new Set(DELIVERABLE_PRODUCTION_ROUTES),
   prototype: new Set(['html', 'prototype-html']),
   ppt: new Set(['ppt-html', 'html', 'deck-html']),
   marketing: new Set(['marketing-html', 'html', 'image-html']),
@@ -16,6 +19,7 @@ const DAEMON_OWNED_PRODUCTION_ROUTES = {
 } as const;
 
 const DAEMON_OWNED_OUTPUT_KINDS = {
+  discovery: new Set(DELIVERABLE_SKILLS.flatMap(skill => skill.routes.map(route => route.kind))),
   prototype: new Set(['prototype', 'html', 'source']),
   ppt: new Set(['presentation', 'ppt', 'deck', 'html', 'source']),
   marketing: new Set(['image', 'marketing', 'html', 'source']),

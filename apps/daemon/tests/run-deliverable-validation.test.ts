@@ -60,6 +60,15 @@ describe('run deliverable validation', () => {
     expect((await validateRunDeliverable(input)).valid).toBe(false);
   });
 
+  it('accepts multiple Discovery outputs only when each touched candidate is readable', async () => {
+    const fixture = await projectFixture({ 'slides.html': '<main>Deck</main>', 'manual.html': '<main>Manual</main>' });
+    const input = { ...fixture, runStatus: 'succeeded' as const, artifactCount: 2,
+      touchedPaths: ['slides.html', 'manual.html'], allowIndependentOutput: true, allowMultipleOutputCandidates: true };
+    expect(await validateRunDeliverable(input)).toMatchObject({ valid: true, entryFile: 'manual.html' });
+    expect((await validateRunDeliverable({ ...input, touchedPaths: ['slides.html', 'missing.html'] })).valid).toBe(false);
+    expect((await validateRunDeliverable({ ...input, touchedPaths: ['slides.html', '../outside.html'] })).valid).toBe(false);
+  });
+
   it('keeps HTML as the entry when the current run integrates an image into a page', async () => {
     const fixture = await projectFixture({ 'index.html': '<img src="dog.png">', 'dog.png': 'image' });
     expect(await validateRunDeliverable({ ...fixture, runStatus: 'succeeded', artifactCount: 2,

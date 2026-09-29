@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { observeDiscoveryEvent } from './strategies/od-next/discovery-observation.js';
 
 import { usesProductionMarker, composeResumedRequest } from './strategies/od-next/request-resume.js';
 import { todoSnapshotHasUnfinishedWork } from '@open-design/contracts';
@@ -10609,7 +10610,8 @@ export async function startServer({
       && freeformDeckSignal === true;
     const isOdNextDeckRequest = odNextStrategyRecipe?.taskType === 'ppt'
       || odNextDeckIntent;
-    const hasSelectedDeckSeed = odNextStrategyRecipe?.taskType === 'ppt' && Boolean(
+    const inspectDeckScaffold = isOdNextDeckRequest || odNextStrategyRecipe?.taskType === 'discovery';
+    const hasSelectedDeckSeed = inspectDeckScaffold && Boolean(
       template?.files?.some((file) => /\.html?$/i.test(file.name))
       || /(?:^|\/)assets\/template\.html\b/i.test(skillBody ?? '')
       || frozenSkillPackage?.selections?.some((selection) =>
@@ -10619,7 +10621,7 @@ export async function startServer({
     );
     let hasExistingDeckArtifact = false;
     if (
-      odNextStrategyRecipe?.taskType === 'ppt'
+      inspectDeckScaffold
       && typeof projectId === 'string'
       && projectId
     ) {
@@ -10652,7 +10654,9 @@ export async function startServer({
           // resolves to null and adds no bytes.
           planToolNote: planToolNoteForRuntime(agentId, streamFormat),
           executionProfile: executionProfileFromStreamFormat(streamFormat),
-          deckIntent: odNextDeckIntent,
+          // Discovery reads the staged framework through the selected PPT Skill.
+          // Suppress the stable-context renderer's eager deck-intent fallback too.
+          deckIntent: odNextStrategyRecipe.taskType !== 'discovery' && odNextDeckIntent,
           deckFrameworkMode: odNextDeckFrameworkMode,
           metadata,
           template,
@@ -10936,6 +10940,17 @@ export async function startServer({
     }
     let persistedStrategyFinalText = strategyRunMapping?.finalText.text ?? null;
     const isOdNextInitialRun = Boolean(strategyTaskAtStart && isInitialStrategyTaskRun(strategyTaskAtStart, run.id));
+    let discoveryPromptRecorded = false;
+    const recordDiscoveryPromptDelivered = () => {
+      if (discoveryPromptRecorded || !strategyTaskAtStart?.promptBundle.text.includes('skill_name="discovery"')) return;
+      discoveryPromptRecorded = true;
+      const data = { type: 'skill_discovery_policy', skillId: 'deliverable-discovery',
+        injected: persistedStrategyFinalText?.includes('skill_name="discovery"') === true,
+        skillRoot: path.join(BUNDLED_PLUGINS_DIR, 'scenarios/od-next-strategy/assets/task-profiles'),
+        source: isOdNextInitialRun ? 'request' : 'production_continuation' };
+      observeDiscoveryEvent(run, { event: 'diagnostic', data });
+      design.runs.emit(run, 'diagnostic', data);
+    };
     const hasExplicitCurrentPrompt = Object.prototype.hasOwnProperty.call(
       chatBody,
       'currentPrompt',
@@ -12577,6 +12592,10 @@ export async function startServer({
       }
     };
     const send = (event, data) => {
+      recordRunTelemetry('skill discovery', () => {
+        if (event === 'agent') recordDiscoveryPromptDelivered();
+        observeDiscoveryEvent(run, { event, data });
+      });
       if (event === 'agent' && data?.type === 'usage') {
         physicalSessionUsage.observe(event, data);
       }
@@ -15933,7 +15952,7 @@ export async function startServer({
           lifecycle.mark('model_call_start');
           lifecycle.mark('stdin_write_start');
         },
-        onPromptSendEnd: () => lifecycle.mark('stdin_write_end'),
+        onPromptSendEnd: () => { lifecycle.mark('stdin_write_end'); recordRunTelemetry('discovery prompt', recordDiscoveryPromptDelivered); },
         onTurnComplete: () => clearFirstOutputWatchdog(),
       });
       acpSession = codexSession;
@@ -16785,6 +16804,7 @@ export async function startServer({
         await resolveRunArtifactOutcomeBeforeFinishAsync();
         const deliverableFinalization = await finalizeSuccessfulRunDeliverable({
           allowIndependentOutput: Boolean(strategyTaskAtStart),
+          allowMultipleOutputCandidates: run.strategyRolloutDecision?.taskType === 'discovery',
           ...(run.artifactOutcome?.diff && baselineEntryFile ? { baselineEntryFile } : {}),
           projectsRoot: PROJECTS_DIR,
           projectId: run.projectId ?? null,
@@ -17122,7 +17142,7 @@ export async function startServer({
       // The complete plain-text prompt became the child's stdin at spawn
       // (runtimes/agent-process.ts), so there is nothing left to write. A
       // spawn that failed (no PID) never received it.
-      if (typeof child.pid === 'number') recordPromptDeliveredAtSpawn(run, lifecycle);
+      if (typeof child.pid === 'number') { recordPromptDeliveredAtSpawn(run, lifecycle); recordRunTelemetry('discovery prompt', recordDiscoveryPromptDelivered); }
     } else if (writePromptToChildStdin && child.stdin) {
       const promptInputFormat = def.promptInputFormat ?? 'text';
       lifecycle.mark('model_call_start');
@@ -17130,6 +17150,7 @@ export async function startServer({
       const markStdinWriteEnd = (err?: Error | null) => {
         if (err) return;
         lifecycle.mark('stdin_write_end');
+        recordRunTelemetry('discovery prompt', recordDiscoveryPromptDelivered);
       };
       // Plain-text prompts never get here: they are delivered at spawn.
       // stream-json is the one prompt still pumped through a live pipe; a

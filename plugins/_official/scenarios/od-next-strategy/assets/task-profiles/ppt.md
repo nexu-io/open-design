@@ -208,3 +208,9 @@ Simple mode owns the full narrative. Complex mode may split complete
 chapters, each finishable independently, only after the story arc, data
 definitions, page grid, and Design Spec are frozen. Each package returns a
 complete ordered chapter, not disconnected individual pages.
+
+## Discovery scope
+
+Apply these requirements only to this output. Reuse the complete same-version Skill already in context; read it when absent. Companion deliverables follow their own Skills. Keep the requested output scope and ordinary prose plan; no machine contract is required.
+
+Before building an HTML deck, use the host deck protocol if it is already in context; otherwise read .od-frames/deck-framework.md. Preserve an existing deck or selected template scaffold using its compatibility guidance; use the canonical scaffold only for a new deck. These rules apply only to the PPT output.

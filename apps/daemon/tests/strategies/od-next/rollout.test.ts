@@ -17,12 +17,12 @@ function syntheticPolicy() {
 }
 
 describe('OD Next controlled rollout', () => {
-  it('owns all four artifact types by default, and honours a mode that was named', () => {
+  it('owns the legacy profiles and discovery by default, and honours a mode that was named', () => {
     const policy = readOdNextRolloutPolicy({ OD_NEXT_STRATEGY_ROLLOUT: 'active' });
     expect(policy).toMatchObject({
       requestedMode: 'active',
       requestedModeSource: 'env',
-      eligibleTaskTypes: ['prototype', 'ppt', 'marketing', 'hyperframes'],
+      eligibleTaskTypes: ['prototype', 'ppt', 'marketing', 'hyperframes', 'discovery'],
       productionActiveApproved: true,
       assignmentPercent: 100,
     });
@@ -42,7 +42,7 @@ describe('OD Next controlled rollout', () => {
     ]).toEqual(['prototype', 'ppt', 'marketing', 'hyperframes']);
     expect(odNextTaskTypeForProjectScenarioBinding({ provenance: 'explicit_user', taskProfile: 'prototype' })).toBeNull();
     expect(odNextTaskTypeForProjectScenarioBinding({ provenance: 'legacy_unknown', taskProfile: 'ppt' })).toBeNull();
-    for (const taskType of ['prototype', 'ppt', 'marketing', 'hyperframes'] as const) {
+    for (const taskType of ['prototype', 'ppt', 'marketing', 'hyperframes', 'discovery'] as const) {
       expect(evaluateOdNextRollout({
         policy,
         assignmentIdentity: `default:${taskType}`,
@@ -56,18 +56,12 @@ describe('OD Next controlled rollout', () => {
   });
 
   describe('choosing a mode for one installation', () => {
-    it('takes the saved mode when the environment names none', () => {
-      expect(readOdNextRolloutPolicy({}, { odNextStrategyMode: 'active' })).toMatchObject({
-        requestedMode: 'active',
-        requestedModeSource: 'app_config',
-      });
-      expect(readOdNextRolloutPolicy({}, { odNextStrategyMode: 'observe' }).requestedMode)
-        .toBe('observe');
-      // An empty variable is not a choice; it is how a shell exports nothing.
-      expect(readOdNextRolloutPolicy(
-        { OD_NEXT_STRATEGY_ROLLOUT: '  ' },
-        { odNextStrategyMode: 'active' },
-      )).toMatchObject({ requestedMode: 'active', requestedModeSource: 'app_config' });
+    it('retires all saved Labs preferences in favor of the rollout default', () => {
+      for (const saved of ['off', 'observe', 'active'] as const) {
+        expect(readOdNextRolloutPolicy({}, { odNextStrategyMode: saved })).toMatchObject({
+          requestedMode: 'active', requestedModeSource: 'default',
+        });
+      }
     });
 
     it('lets the environment pin a mode over the one the installation saved', () => {
@@ -109,33 +103,12 @@ describe('OD Next controlled rollout', () => {
       }
     });
 
-    it('keeps an installation that opted out off, whatever the default becomes', () => {
-      // The one guarantee the default owes users who were here before it
-      // flipped. It holds only because opting out stores `off` rather than
-      // clearing the key: a cleared key reads as unconfigured, and unconfigured
-      // is `active`. If this ever goes red because the switch was "simplified"
-      // into deleting the key, every opted-out installation was just switched
-      // back on without being asked.
-      expect(readOdNextRolloutPolicy({}, { odNextStrategyMode: 'off' })).toMatchObject({
-        requestedMode: 'off',
-        requestedModeSource: 'app_config',
-      });
-      expect(readOdNextRolloutPolicy({}, { odNextStrategyMode: 'observe' })).toMatchObject({
-        requestedMode: 'observe',
-        requestedModeSource: 'app_config',
-      });
-      // And the decision that follows has to actually leave the strategy
-      // unused: a preserved `off` that still evaluated to `active` would keep
-      // this guarantee only on paper.
+    it('admits discovery even when the retired Labs preference was off', () => {
       expect(evaluateOdNextRollout({
         policy: readOdNextRolloutPolicy({}, { odNextStrategyMode: 'off' }),
-        assignmentIdentity: 'project:conversation',
-        taskType: 'prototype',
-        agentId: 'codex',
-        agentVersion: 'codex-e2e 0.0.0',
-        sourceKind: 'bundled',
-        runtimeCapabilityVerified: true,
-      })).toMatchObject({ requestedMode: 'off', effectiveMode: 'off', eligible: false });
+        assignmentIdentity: 'project:conversation', taskType: 'discovery', agentId: 'amr',
+        agentVersion: '0.0.38', sourceKind: 'bundled', runtimeCapabilityVerified: true,
+      })).toMatchObject({ requestedMode: 'active', effectiveMode: 'active', eligible: true });
     });
 
     it('admits an eligible task on an installation that stayed on the default', () => {
@@ -167,11 +140,11 @@ describe('OD Next controlled rollout', () => {
           effectiveMode: 'active',
         });
       expect(readOdNextRolloutControlStatus({}, { odNextStrategyMode: 'off' }))
-        .toMatchObject({ requestedMode: 'off', requestedModeSource: 'app_config', effectiveMode: 'off' });
+        .toMatchObject({ requestedMode: 'active', requestedModeSource: 'default', effectiveMode: 'active' });
       expect(readOdNextRolloutControlStatus({}, { odNextStrategyMode: 'active' }))
         .toMatchObject({
           requestedMode: 'active',
-          requestedModeSource: 'app_config',
+          requestedModeSource: 'default',
           effectiveMode: 'active',
         });
       // Status takes no database, because there is no longer any stored state

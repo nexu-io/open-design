@@ -1739,7 +1739,7 @@ async function runMedia(args) {
     printMediaHelp();
     return;
   }
-  if (sub !== 'generate' && sub !== 'wait' && sub !== 'scaffold') {
+  if (sub !== 'generate' && sub !== 'wait' && sub !== 'scaffold' && sub !== 'models') {
     console.error(`unknown subcommand: od media ${sub}`);
     printMediaHelp();
     process.exit(1);
@@ -1747,6 +1747,15 @@ async function runMedia(args) {
 
   const idx = args.indexOf(sub);
   const subArgs = [...args.slice(0, idx), ...args.slice(idx + 1)];
+  if (sub === 'models') {
+    const flags = parseFlags(subArgs, { string: ['daemon-url'], boolean: ['json', 'help', 'h'] });
+    if (flags.help || flags.h) { printMediaHelp(); return; }
+    const daemonUrl = await cliDaemonUrl(flags);
+    const response = await fetch(`${daemonUrl.replace(/\/$/, '')}/api/media/models`);
+    if (!response.ok) throw new Error(`Media catalog request failed (${response.status})`);
+    console.log(JSON.stringify(await response.json()));
+    return;
+  }
   if (sub === 'wait') return runMediaWait(subArgs);
   if (sub === 'scaffold') return runMediaScaffold(subArgs);
   return runMediaGenerate(subArgs);
@@ -2245,7 +2254,8 @@ async function cliDaemonBaseUrl(flags) {
 }
 
 function printMediaHelp() {
-  console.log(`Usage: od media scaffold --composition-dir .hyperframes-cache/<id> [opts]
+  console.log(`Usage: od media models --json
+       od media scaffold --composition-dir .hyperframes-cache/<id> [opts]
        od media generate --surface <image|video|audio> --model <id> [opts]
        "$OD_NODE_BIN" "$OD_BIN" media generate --surface <image|video|audio> --model <id> [opts]
 

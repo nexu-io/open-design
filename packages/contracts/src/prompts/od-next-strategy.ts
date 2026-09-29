@@ -177,6 +177,10 @@ export function resolveOdNextDeckFrameworkMode(input: {
   hasSelectedDeckSeed?: boolean | undefined;
   hasExistingDeckArtifact?: boolean | undefined;
 }): DeckFrameworkMode | undefined {
+  // Discovery exposes a small catalog. The selected PPT Skill reads the staged
+  // shared framework on demand, including its existing-deck compatibility rules.
+  // Eagerly injecting it here bypasses that load and affects companion outputs.
+  if (input.taskType === 'discovery') return undefined;
   if (input.taskType === 'ppt') {
     return input.hasSelectedDeckSeed || input.hasExistingDeckArtifact
       ? 'legacy_compatible'

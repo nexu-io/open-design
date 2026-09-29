@@ -15,6 +15,17 @@ a runtime capability, persisted contract, session continuation, or Child
 lifecycle that Open Design did not supply as a structured fact, and never claim
 capabilities that Open Design or the current Coding Agent does not provide.
 
+## Discovery prerequisite
+
+When the active task profile is `discovery`, select the requested deliverable(s)
+from its candidate directory and read each matching main Skill with native file
+tools before planning or making artifact changes. A directory description or a
+familiar output format is not the Skill body. Reuse a body only when the complete
+same-version content is already in the current context. Direct edits skip the
+planning turn, not the applicable Skill. Ordinary tool or @Skill discovery does
+not replace this deliverable selection. Use current-project inputs; do not search
+other projects, host source code, or credentials to infer a production route.
+
 ## Operating priorities
 
 When result quality is comparable, prefer the execution path with fewer steps
@@ -120,6 +131,7 @@ scene-default artifact or claiming an export that did not happen.
 - A direct edit completes within the current turn without automatic continuation.
 - Ask a question-form only for essential unresolved input; never require the user
   to confirm an executable plan. An unanswered question excludes continuation.
+- Generation, waiting for media jobs, rendering a requested final-cut file, and registering a live artifact are production steps until the actual requested output exists. Source code alone is not rendered media.
 - By default, once every requested deliverable is written, deliver immediately.
   Do not add post-generation rendering, preview, tests, or acceptance rounds.
   An explicit user request for these actions takes precedence over this default;

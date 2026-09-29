@@ -1039,7 +1039,7 @@ process.exit(127);
     expect(task.continuedFromTaskExecutionId).toBe(first.strategyTask!.taskExecutionId);
   }, 45_000);
 
-  it('runs OD Next by default and leaves it on the next run once the installation opts out', async () => {
+  it('keeps Discovery active for subsequent requests despite a historical off preference', async () => {
     const fixture = await createPublicRolloutFixture('app-config-opt-out', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
@@ -1053,7 +1053,7 @@ process.exit(127);
     ));
     expect(beforeOptOut.strategyTask).toMatchObject({ inputStage: 'request', terminal: false });
     expect(await readDurableRunState(beforeOptOut.runId as string)).toMatchObject({
-      strategyRolloutDecision: { decisionClass: 'active', taskType: 'prototype' },
+      strategyRolloutDecision: { decisionClass: 'active', taskType: 'discovery' },
     });
     await fetch(
       `${started.url}/api/runs/${encodeURIComponent(beforeOptOut.runId as string)}/cancel`,
@@ -1092,17 +1092,17 @@ process.exit(127);
     const invocationsBefore = (await readProjectInvocations(fixture.logPath, fixture.projectId)).length;
     const afterOptOut = await postRun(started.url, publicRunRequest(
       fixture,
-      'Run after this installation opted out.',
+      'Create a 2-page PPT after this installation opted out.',
       'app-config-opt-out-after',
     ));
-    expect(afterOptOut.strategyTask).toBeUndefined();
-    expect(afterOptOut.pluginId).toBe('example-web-prototype');
+    expect(afterOptOut.strategyTask).toMatchObject({ inputStage: 'request' });
     await waitForRunTerminal(started.url, afterOptOut.runId as string);
     const ordinaryInvocations = (await readProjectInvocations(fixture.logPath, fixture.projectId))
       .slice(invocationsBefore);
     expect(ordinaryInvocations).toHaveLength(1);
-    expect(ordinaryInvocations[0]?.stdin).not.toContain('OD Next Strategy V2');
+    expect(ordinaryInvocations[0]?.stdin).toContain('skill_name="discovery"');
     expect(ordinaryInvocations[0]?.stdin).not.toContain('open-design.strategy-state/v2');
+    expect(ordinaryInvocations[0]?.stdin).not.toContain('Deck framework — DO NOT EDIT');
 
     // The operator-facing surface names the authority that decided, so the
     // person who just configured the mode can confirm theirs is the one in
@@ -1111,9 +1111,9 @@ process.exit(127);
     const status = await fetch(`${started.url}/api/strategies/od-next/rollout`);
     expect(status.status).toBe(200);
     expect((await status.json() as { status: unknown }).status).toMatchObject({
-      requestedMode: 'off',
-      requestedModeSource: 'app_config',
-      effectiveMode: 'off',
+      requestedMode: 'active',
+      requestedModeSource: 'default',
+      effectiveMode: 'active',
     });
     // Two full runs against a real server, plus config writes and a status
     // read — the heaviest case in this file, and the only one that drives more
@@ -1208,7 +1208,7 @@ process.exit(127);
     }
   });
 
-  it('routes the four approved automatic profiles while ordinary Image remains media-only', async () => {
+  it('converges official automatic and explicit task-type entries into Discovery', async () => {
     const fixture = await createPublicRolloutFixture('approved-profiles', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
@@ -1344,7 +1344,7 @@ process.exit(127);
         strategyRolloutDecision: {
           schemaVersion: 1,
           decisionClass: 'active',
-          taskType: candidate.taskProfile,
+          taskType: 'discovery',
           primaryReasonCode: 'od_next_rollout_eligible',
         },
       });
@@ -1428,7 +1428,7 @@ process.exit(127);
         strategyRolloutDecision: {
           schemaVersion: 1,
           decisionClass: 'active',
-          taskType: 'prototype',
+          taskType: 'discovery',
           primaryReasonCode: 'od_next_rollout_eligible',
         },
       });
@@ -1483,13 +1483,12 @@ process.exit(127);
       'Create an ordinary image.',
       'ordinary-image-default',
     ));
-    expect(imageRun.strategyTask).toBeUndefined();
-    expect(imageRun.pluginId).toBe('od-media-generation');
+    expect(imageRun.strategyTask).toMatchObject({ inputStage: 'request' });
     expect(await readDurableRunState(imageRun.runId as string)).toMatchObject({
       strategyRolloutDecision: {
         schemaVersion: 1,
-        decisionClass: 'not_applicable',
-        taskType: null,
+        decisionClass: 'active',
+        taskType: 'discovery',
       },
     });
     const imageStatus = await fetch(
@@ -1499,8 +1498,8 @@ process.exit(127);
     expect(await imageStatus.json()).toMatchObject({
       strategyRolloutDecision: {
         schemaVersion: 1,
-        decisionClass: 'not_applicable',
-        taskType: null,
+        decisionClass: 'active',
+        taskType: 'discovery',
       },
     });
     await waitForRunTerminal(started.url, imageRun.runId as string);
@@ -1529,13 +1528,12 @@ process.exit(127);
       'Create an ordinary image.',
       'ordinary-image-explicit',
     ));
-    expect(explicitImageRun.strategyTask).toBeUndefined();
-    expect(explicitImageRun.pluginId).toBe('od-media-generation');
+    expect(explicitImageRun.strategyTask).toMatchObject({ inputStage: 'request' });
     expect(await readDurableRunState(explicitImageRun.runId as string)).toMatchObject({
       strategyRolloutDecision: {
         schemaVersion: 1,
-        decisionClass: 'explicit_user',
-        taskType: null,
+        decisionClass: 'active',
+        taskType: 'discovery',
       },
     });
     await waitForRunTerminal(started.url, explicitImageRun.runId as string);
@@ -1570,7 +1568,7 @@ process.exit(127);
     expect(await readDurableRunState(created.runId as string)).toMatchObject({
       strategyRolloutDecision: {
         decisionClass: 'active',
-        taskType: 'prototype',
+        taskType: 'discovery',
       },
     });
     await fetch(`${started.url}/api/runs/${encodeURIComponent(created.runId as string)}/cancel`, {
@@ -1670,9 +1668,9 @@ process.exit(127);
     ]);
     expect(savedResult.stderr).toBe('');
     expect((JSON.parse(savedResult.stdout) as { status: unknown }).status).toMatchObject({
-      requestedMode: 'off',
-      requestedModeSource: 'app_config',
-      effectiveMode: 'off',
+      requestedMode: 'active',
+      requestedModeSource: 'default',
+      effectiveMode: 'active',
     });
 
     // The reset endpoint and its CLI subcommand are both gone, and gone the
@@ -2084,7 +2082,7 @@ process.exit(127);
     expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(1);
   });
 
-  it('never overrides explicit plugin, snapshot, or existing project-pin authority', async () => {
+  it('converges verified bundled task pins while protecting custom plugin and invalid snapshot authority', async () => {
     const fixture = await createPublicRolloutFixture(
       'authority',
       'design',
@@ -2106,15 +2104,17 @@ process.exit(127);
       started.url,
       publicRunRequest(fixture, 'Use the pinned default.', 'pinned-authority'),
     );
-    expect(pinned.strategyTask).toBeUndefined();
-    expect(pinned.pluginId).toBe('example-web-prototype');
+    expect(pinned.strategyTask).toMatchObject({ inputStage: 'request' });
+    await fetch(`${started.url}/api/runs/${encodeURIComponent(pinned.runId as string)}/cancel`, { method: 'POST' });
+    await waitForRunTerminal(started.url, pinned.runId as string);
 
     const explicitDefault = await postRun(started.url, {
       ...publicRunRequest(fixture, 'Use the explicit default.', 'explicit-default'),
       pluginId: 'example-web-prototype',
     });
-    expect(explicitDefault.strategyTask).toBeUndefined();
-    expect(explicitDefault.pluginId).toBe('example-web-prototype');
+    expect(explicitDefault.strategyTask).toMatchObject({ inputStage: 'request' });
+    await fetch(`${started.url}/api/runs/${encodeURIComponent(explicitDefault.runId as string)}/cancel`, { method: 'POST' });
+    await waitForRunTerminal(started.url, explicitDefault.runId as string);
 
     const invalidSnapshot = await fetch(`${started.url}/api/runs`, {
       method: 'POST',
@@ -2147,11 +2147,12 @@ process.exit(127);
       source: 'community-collision-fixture',
       trust: 'restricted',
     });
+    const collisionProject = await createProjectForScenario(started.url, 'collision-isolated', { kind: 'prototype' });
     const collidingId = await fetch(`${started.url}/api/runs`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        ...publicRunRequest(fixture, 'Use an explicit colliding id.', 'colliding-id'),
+        ...publicRunRequest(collisionProject, 'Use an explicit colliding id.', 'colliding-id'),
         pluginId: 'od-next-strategy',
       }),
     });
@@ -2160,7 +2161,7 @@ process.exit(127);
       error: { code: 'capabilities-required' },
     });
     expect((database().prepare('SELECT COUNT(*) AS count FROM strategy_task_executions').get() as { count: number }).count)
-      .toBe(strategyTaskCountAtStart);
+      .toBe(strategyTaskCountAtStart + 2);
 
     const restoredResult = await runOdCli([
       'project', 'restore-automatic-scenario', fixture.projectId,

@@ -54,6 +54,7 @@ export const OD_NEXT_LAYOUT_PRIMITIVES_MARKER = 'OD-LAYOUT-PRIMITIVES v1' as con
 export const OD_NEXT_MANAGED_RESOURCE_FILES: ReadonlyArray<string> = [
   ...Object.values(OD_NEXT_DEVICE_FRAME_FILES),
   OD_NEXT_LAYOUT_PRIMITIVES_FILE,
+  'deck-framework.md',
 ];
 
 /** Basename of a task resource when it is one the daemon stages, else null. */

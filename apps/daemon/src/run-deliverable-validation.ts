@@ -45,6 +45,8 @@ interface ValidateRunDeliverableInput {
   /** New marker tasks may deliver a separate file without changing the project entry.
    * Requires exact current-run touched paths; never enables project-wide inference. */
   allowIndependentOutput?: boolean;
+  /** Discovery may produce several independent files without one project entry. */
+  allowMultipleOutputCandidates?: boolean;
 }
 
 export function inferBaselineHtmlEntry(projectRoot: string, paths: Iterable<string>): string | undefined {
@@ -235,7 +237,19 @@ export async function validateRunDeliverable(
     || !['entry_missing', 'entry_not_touched', 'type_mismatch'].includes(primary.validation)) {
     return primary;
   }
-  return resolveDeliverable({ ...input, scope: 'run', independentOutput: true });
+  const independent = await resolveDeliverable({ ...input, scope: 'run', independentOutput: true });
+  if (!input.allowMultipleOutputCandidates || input.touchedPaths.length < 2) return independent;
+  // Validate every current-run candidate separately. A stable representative is
+  // used by the existing entry/syntax surface; it does not prove Query coverage
+  // or visual quality for the other deliverables and never changes project metadata.
+  const candidates = [...new Set(input.touchedPaths)].sort();
+  let representative: RunDeliverableValidationResult | undefined;
+  for (const candidate of candidates) {
+    const result = await resolveDeliverable({ ...input, touchedPaths: [candidate], scope: 'run', independentOutput: true });
+    if (!result.valid) return result;
+    representative ??= result;
+  }
+  return representative ?? independent;
 }
 
 async function resolveDeliverable(

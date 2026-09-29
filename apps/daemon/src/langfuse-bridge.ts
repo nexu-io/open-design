@@ -1,3 +1,4 @@
+import { discoveryObservationForRun } from './strategies/od-next/discovery-observation.js';
 import { codexTurnUsageFromEvents } from './observability/codex-turn-usage.js';
 import { enqueueObjectEvidence, taskObjectDeliveryEnabled, inheritFrozenAttachments, readObjectEvidence, enqueueFeedbackEvidence, drainEvidence } from './services/evidence-delivery.js';
 import { attachmentContext, buildEvalContext, evidenceMode } from './observability/eval-context.js';
@@ -1507,11 +1508,13 @@ export async function buildSafeRunQualityProjectionFromDaemon(
       },
       ...(run.strategyRolloutDecision ? { strategyRolloutDecision: run.strategyRolloutDecision } : {}),
       ...(run.promptTelemetry ? { promptTelemetry: run.promptTelemetry } : {}),
+      skillDiscovery: discoveryObservationForRun(run),
       ...(deliverableSyntax ? { deliverableSyntax } : {}),
     };
     const event = buildTracePayload(context)[0] as { body: { input?: unknown; output?: unknown; metadata: Record<string, unknown> } };
     opts.onTraceProjection({ input: event.body.input, output: event.body.output, metadata: {
       ...event.body.metadata,
+      ...discoveryObservationForRun(run),
       provider_reported_usage: analytics,
       provider_reported_usage_scope: run.agentId === 'codex' ? 'provider_session' : 'provider_run',
       input_truncated: Buffer.byteLength(context.message.prompt) > 64 * 1024,
@@ -1787,6 +1790,7 @@ export async function reportRunCompletedFromDaemon(
       ...(turn ? { turn } : {}),
       runtime,
       ...(run.promptTelemetry ? { promptTelemetry: run.promptTelemetry } : {}),
+      skillDiscovery: discoveryObservationForRun(run),
     };
     };
 

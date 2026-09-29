@@ -324,3 +324,9 @@ mode may split only when the general orchestration Skill's independent-output
 conditions are met, and only along independently deliverable feature loops,
 roles, or device surfaces after navigation, content locks, and the Design
 Spec are frozen. Do not split one interaction loop across Children.
+
+## Discovery scope
+
+Apply these requirements only to this output. Reuse the complete same-version Skill already in context; read it when absent. Companion deliverables follow their own Skills. Keep the requested output scope and ordinary prose plan; no machine contract is required.
+
+For handheld prototypes, use the appropriate existing shell in .od-frames/ (iphone.html, android.html, neutral.html) and read .od-frames/layout.css for layout primitives. Preserve existing artifacts and user-edited shells.
