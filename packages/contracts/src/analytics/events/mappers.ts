@@ -209,6 +209,8 @@ export function agentIdToTracking(agentId: string | null | undefined): TrackingC
       return 'pi';
     case 'kilo':
       return 'kilo';
+    case 'kimchi':
+      return 'kimchi';
     case 'kiro':
       return 'kiro';
     case 'vibe':

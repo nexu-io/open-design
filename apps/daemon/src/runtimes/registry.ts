@@ -24,6 +24,7 @@ import { antigravityAgentDef } from './defs/antigravity.js';
 import { codebuddyAgentDef } from './defs/codebuddy.js';
 import { reasonixAgentDef } from './defs/reasonix.js';
 import { mimoAgentDef } from './defs/mimo.js';
+import { kimchiAgentDef } from './defs/kimchi.js';
 import { atomcodeAgentDef } from './defs/atomcode.js';
 import { readLocalAgentProfileDefs as readLocalAgentProfileDefsFromFile } from './local-profiles.js';
 import type { RuntimeAgentDef } from './types.js';
@@ -64,6 +65,7 @@ export const SHIPPED_AGENT_DEFS: RuntimeAgentDef[] = [
   reasonixAgentDef,
   codebuddyAgentDef,
   mimoAgentDef,
+  kimchiAgentDef,
   atomcodeAgentDef,
 ];
 

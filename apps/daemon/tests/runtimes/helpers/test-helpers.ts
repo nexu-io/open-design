@@ -89,6 +89,7 @@ export const qoder = requireAgent('qoder');
 export const qwen = requireAgent('qwen');
 export const opencode = requireAgent('opencode');
 export const mimo = requireAgent('mimo');
+export const kimchi = requireAgent('kimchi');
 export const grokBuild = requireAgent('grok-build');
 export const aider = requireAgent('aider');
 export const antigravity = requireAgent('antigravity');

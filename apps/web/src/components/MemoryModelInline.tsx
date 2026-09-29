@@ -123,6 +123,7 @@ function chatProtocolFromAgent(
     || id === 'hermes'
     || id === 'cursor-agent'
     || id === 'qoder'
+    || id === 'kimchi'
   ) {
     return 'openai';
   }
