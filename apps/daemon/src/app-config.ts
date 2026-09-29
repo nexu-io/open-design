@@ -215,6 +215,9 @@ const AGENT_CLI_ENV_KEYS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ['aider', new Set(['AIDER_BIN'])],
   ['claude', new Set(['CLAUDE_CONFIG_DIR', 'CLAUDE_BIN', 'ANTHROPIC_BASE_URL', 'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'MMD_MODEL_ROUTES_FILE'])],
   ['codex', new Set(['CODEX_HOME', 'CODEX_BIN', 'OPENAI_BASE_URL', 'CODEX_API_KEY', 'OPENAI_API_KEY'])],
+  // Command Code reads its account from its own `login`, and accepts
+  // COMMAND_CODE_API_KEY in place of that account for headless runs.
+  ['command-code', new Set(['COMMAND_CODE_BIN', 'COMMAND_CODE_API_KEY'])],
   ['copilot', new Set(['COPILOT_BIN'])],
   ['cursor-agent', new Set(['CURSOR_AGENT_BIN'])],
   ['deepseek', new Set(['DEEPSEEK_BIN'])],

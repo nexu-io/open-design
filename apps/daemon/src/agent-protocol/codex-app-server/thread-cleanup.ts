@@ -49,6 +49,9 @@ export async function cleanupClosedCodexThread(opts: CodexThreadCleanupOptions):
       child = spawn(opts.command, [...opts.args], {
         cwd: opts.cwd, env: opts.env, stdio: ['pipe', 'pipe', 'pipe'], shell: false,
         detached: process.platform !== 'win32',
+        // Runs behind the user's back after a run closes; it must not open a
+        // console window (the resolved codex shim is a `.cmd` on Windows).
+        windowsHide: true,
         windowsVerbatimArguments: opts.windowsVerbatimArguments,
       });
     } catch (error) {

@@ -1057,6 +1057,9 @@ async function callLocalCli(provider, system, user, options) {
       stdio: ['pipe', 'pipe', 'pipe'],
       cwd,
       shell: false,
+      // Runs in the background between turns; the resolved agent CLI is a
+      // `.cmd` shim on Windows, so it must not open a console window.
+      windowsHide: true,
       windowsVerbatimArguments: invocation.windowsVerbatimArguments,
     });
 

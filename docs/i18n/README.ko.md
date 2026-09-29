@@ -133,7 +133,7 @@ OpenDesign의 핵심 워크플로를 빠르게 살펴봅니다. **Home**에서 �
 `od mcp install <agent> --print`로 드라이런 미리보기 · `--uninstall`로 제거 · 전체 목록은 `od mcp install --help`로 확인.
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 25 coding-agent CLIs OpenDesign supports — Claude Code · Codex · OpenCode · Hermes · Antigravity · Vela · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Amp · CodeBuddy · Mimo · AtomCode · Devin · Trae" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 26 coding-agent CLIs OpenDesign supports — Claude Code · Codex · Command Code · OpenCode · Hermes · Antigravity · Vela · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Amp · CodeBuddy · Mimo · AtomCode · Devin · Trae" width="100%" />
 </p>
 
 **CLI를 설치하지 않았다고요?** `POST /api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream`의 BYOK 프록시가 동일한 루프(프로세스 스폰 없이)를 제공합니다 — `baseUrl` + `apiKey` + `model`을 붙여넣기만 하면 되며, OpenAI, Anthropic, Azure OpenAI, Google Gemini, Ollama, LM Studio, vLLM 또는 OpenAI 호환 엔드포인트라면 무엇이든 지원합니다. 대상별 SSRF 보호가 데몬 경계에서 내부 IP / 링크 로컬 / CGNAT를 차단합니다.

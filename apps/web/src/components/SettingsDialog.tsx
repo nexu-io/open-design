@@ -856,6 +856,7 @@ const API_KEY_CONSOLE_LINKS: Record<ApiProtocol, { host: string; url: string }> 
 const AGENT_SHORT_DESCRIPTIONS: Record<string, string> = {
   claude: 'Anthropic official CLI',
   codex: 'OpenAI official CLI',
+  'command-code': 'Taste-learning coding CLI',
   'cursor-agent': 'Cursor command line',
   opencode: 'Open-source agent CLI',
   qwen: 'Qwen coding CLI',
