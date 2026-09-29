@@ -292,6 +292,7 @@ import type {
   PreviewCommentTarget,
 } from '../types';
 import { ManualEditPanel, emptyManualEditDraft, type ManualEditDraft } from './ManualEditPanel';
+import { ContentTweaksPanel } from './ContentTweaksPanel';
 import {
   applyManualEditPatch,
   isManualEditFullHtmlDocument,
@@ -3284,6 +3285,7 @@ function manualEditPatchKindToTracking(patch: ManualEditPatch): TrackingArtifact
     case 'remove-element': return 'element_remove';
     case 'set-token': return 'token';
     case 'set-style': return 'style';
+    case 'set-visibility': return 'style';
     case 'set-attributes': return 'attributes';
     case 'set-outer-html': return 'html';
     case 'set-full-source': return 'source';
@@ -8299,6 +8301,7 @@ function HtmlViewer({
   // for hint managing hint box state
   const [openHintBox, setOpenHintBox] = useState(true);
   const [manualEditMode, setManualEditModeRaw] = useState(false);
+  const [contentTweaksOpen, setContentTweaksOpen] = useState(false);
   const manualEditLiveStylesRef = useRef<Map<string, {
     styles: Partial<ManualEditStyles>;
     version: number;
@@ -9028,6 +9031,7 @@ function HtmlViewer({
     setCopiedDeployLink(null);
     setDeployPhase('idle');
     setManualEditModeRaw(false);
+    setContentTweaksOpen(false);
     manualEditLiveStylesRef.current.clear();
     manualEditPendingStyleRef.current = null;
     manualEditTextSessionIdRef.current = null;
@@ -12998,6 +13002,7 @@ function HtmlViewer({
     setManualEditSrcDocActive(false);
     manualEditPersistedDocumentRef.current = null;
     setManualEditMode(false);
+    setContentTweaksOpen(false);
     return true;
   }
 
@@ -14815,6 +14820,13 @@ function HtmlViewer({
     clearBoardComposer();
   }
 
+  function activateContentTweaksTool() {
+    if (viewerOnly || (!manualEditMode && !manualEditEntryAllowed)) return;
+    if (!manualEditMode) activateManualEditTool();
+    setContentTweaksOpen((open) => !open);
+    closeArtifactToolMenus();
+  }
+
   function activateManualEditTool() {
     if (viewerOnly || (!manualEditMode && !manualEditEntryAllowed)) return;
     fireArtifactToolbarClick('edit');
@@ -16018,7 +16030,7 @@ function HtmlViewer({
   const manualEditPageCardActive =
     manualEditMode && !selectedManualEditTarget && manualEditPageStylesOpen;
   const manualEditPanelActive =
-    manualEditMode && (!!selectedManualEditTarget || manualEditPageCardActive);
+    manualEditMode && !contentTweaksOpen && (!!selectedManualEditTarget || manualEditPageCardActive);
   const manualEditResetAvailable = selectedManualEditTarget ? manualEditDraftDirty : false;
   const manualEditPanel = manualEditPanelActive ? (
     <ManualEditPanel
@@ -16636,6 +16648,20 @@ function HtmlViewer({
               </button>
               <span className="viewer-toolbar-tool-divider" aria-hidden />
               <button
+                className={`viewer-action viewer-action-icon od-tooltip${contentTweaksOpen ? ' active' : ''}`}
+                type="button"
+                data-testid="content-tweaks-toggle"
+                data-tooltip={t('fileViewer.contentTweaks')}
+                data-tooltip-placement="bottom"
+                disabled={viewerOnly || (!manualEditMode && !manualEditEntryAllowed)}
+                title={t('fileViewer.contentTweaks')}
+                aria-label={t('fileViewer.contentTweaks')}
+                aria-pressed={contentTweaksOpen}
+                onClick={activateContentTweaksTool}
+              >
+                <RemixIcon name="equalizer-line" size={15} />
+              </button>
+              <button
                 className={`viewer-action viewer-action-icon od-tooltip${manualEditMode ? ' active' : ''}`}
                 type="button"
                 data-testid="manual-edit-mode-toggle"
@@ -16820,6 +16846,19 @@ function HtmlViewer({
                     >
                       <RemixIcon name="mark-pen-line" size={15} />
                       <span>{t('fileViewer.mark')}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`viewer-toolbar-more-item${contentTweaksOpen ? ' active' : ''}`}
+                      role="menuitem"
+                      disabled={viewerOnly || (!manualEditMode && !manualEditEntryAllowed)}
+                      onClick={() => {
+                        activateContentTweaksTool();
+                        setToolbarMoreOpen(false);
+                      }}
+                    >
+                      <RemixIcon name="equalizer-line" size={15} />
+                      <span>{t('fileViewer.contentTweaks')}</span>
                     </button>
                     <button
                       type="button"
@@ -17426,6 +17465,19 @@ function HtmlViewer({
             onMouseLeave={manualEditMode ? clearManualEditHover : undefined}
           >
             {manualEditPanel}
+            {manualEditMode && contentTweaksOpen ? (
+              <ContentTweaksPanel
+                targets={manualEditTargets}
+                onPatch={applyManualEdit}
+                onUndo={() => { void undoManualEdit(); }}
+                onRedo={() => { void redoManualEdit(); }}
+                canUndo={manualEditHistory.length > 0}
+                canRedo={manualEditUndone.length > 0}
+                busy={manualEditSaving}
+                error={manualEditError}
+                onClose={() => setContentTweaksOpen(false)}
+              />
+            ) : null}
             {manualEditHoverAffordance}
             {showDeckThumbnailRail && !deckThumbnailsCollapsed ? (
               <DeckThumbnailRail

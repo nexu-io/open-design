@@ -193,6 +193,30 @@ describe('FileViewer manual edit regressions', () => {
     expect(screen.getByTestId('manual-edit-hover-open')).toBeTruthy();
   });
 
+  it('opens native Content Tweaks and exposes copy and section toggles', async () => {
+    const source = '<!doctype html><html><body><main><h1 data-od-id="title">Old heading</h1><section data-od-id="features">Features</section></main></body></html>';
+    vi.stubGlobal('fetch', vi.fn(async () =>
+      new Response(source, { status: 200, headers: { 'Content-Type': 'text/html' } }),
+    ));
+    render(<FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()} liveHtml={source} />);
+    await enterManualEditMode();
+    fireEvent.click(screen.getByTestId('content-tweaks-toggle'));
+    const frame = await previewFrame();
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        data: { type: 'od-edit-targets', targets: [
+          { ...heroTarget(), id: 'title', tagName: 'h1', text: 'Old heading', fields: { text: 'Old heading' } },
+          { ...heroTarget(), id: 'features', tagName: 'section', kind: 'container', text: 'Features', fields: { text: 'Features' } },
+        ] },
+        source: frame.contentWindow,
+      }));
+    });
+    expect(screen.getByTestId('content-tweaks-panel')).toBeTruthy();
+    expect(screen.getByDisplayValue('Old heading')).toBeTruthy();
+    expect(screen.getByRole('checkbox')).toHaveProperty('checked', true);
+    expect(document.querySelector('.manual-edit-right')).toBeNull();
+  });
+
   it('opens the compact page-styles card when the empty canvas is clicked', async () => {
     const source = '<!doctype html><html><body><main data-od-id="hero">Hero</main></body></html>';
     vi.stubGlobal('fetch', vi.fn(async () =>

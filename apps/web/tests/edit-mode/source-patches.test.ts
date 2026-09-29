@@ -61,6 +61,19 @@ describe('manual edit source patches', () => {
     expect(readManualEditFields(result.source, 'cta').text).toBe('Start');
   });
 
+  it('hides and restores a section without losing its inline layout', () => {
+    const source = baseSource.replace('color: red; padding: 8px;', 'display: flex; color: red; padding: 8px;');
+    const hidden = applyManualEditPatch(source, { kind: 'set-visibility', id: 'card', visible: false });
+    expect(hidden.ok).toBe(true);
+    expect(readManualEditOuterHtml(hidden.source, 'card')).toContain('display: none !important');
+    const restored = applyManualEditPatch(hidden.source, { kind: 'set-visibility', id: 'card', visible: true });
+    expect(restored.ok).toBe(true);
+    const html = readManualEditOuterHtml(restored.source, 'card');
+    expect(html).toContain('display: flex');
+    expect(html).toContain('padding: 8px');
+    expect(html).not.toContain('data-od-tweaks-display');
+  });
+
   it('updates link label and href', () => {
     const result = applyManualEditPatch(baseSource, { kind: 'set-link', id: 'cta', text: 'Buy now', href: '/buy' });
 
@@ -327,6 +340,15 @@ describe('manual edit source patches', () => {
     expect(result.source).toContain('id="od-manual-edit-runtime-apply"');
     expect(result.source).toContain('if (el && el.textContent !== value) el.textContent = value');
     expect(readRuntimeOverrides(result.source).text?.['brand-system-title']).toBe('Component library');
+  });
+
+  it('toggles a dynamic section through the runtime style override', () => {
+    const hidden = applyManualEditPatch(brandKitSource, { kind: 'set-visibility', id: 'brand-system-section', visible: false });
+    expect(hidden.ok).toBe(true);
+    expect(hidden.source).toContain('display: none !important');
+    const shown = applyManualEditPatch(hidden.source, { kind: 'set-visibility', id: 'brand-system-section', visible: true });
+    expect(shown.ok).toBe(true);
+    expect(shown.source).not.toContain('display: none !important');
   });
 
   it('hides dynamic brand-kit targets instead of reporting target not found on delete', () => {

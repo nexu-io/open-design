@@ -158,6 +158,8 @@ export function applyManualEditPatch(source: string, patch: ManualEditPatch): Ma
   } else if (patch.kind === 'set-image') {
     el.setAttribute('src', patch.src);
     el.setAttribute('alt', patch.alt);
+  } else if (patch.kind === 'set-visibility') {
+    setElementVisibility(el as HTMLElement, patch.visible);
   } else if (patch.kind === 'set-style') {
     setInlineStyles(el as HTMLElement, patch.styles);
   } else if (patch.kind === 'set-attributes') {
@@ -289,6 +291,10 @@ function applyDynamicBrandKitPatch(doc: Document, patch: ManualEditPatch): { ok:
   if (!doc.getElementById('od-brand-payload')) return { ok: false };
   if (patch.kind === 'set-style') {
     setRuntimeStyleOverride(doc, patch.id, patch.styles);
+    return { ok: true };
+  }
+  if (patch.kind === 'set-visibility') {
+    setRuntimeStyleOverride(doc, patch.id, { display: patch.visible ? '' : 'none' });
     return { ok: true };
   }
   if (patch.kind === 'remove-element') {
@@ -659,6 +665,24 @@ function setInlineStyles(el: HTMLElement, styles: Partial<ManualEditStyles>): vo
     const cssName = camelToKebab(name);
     if (typeof value !== 'string' || value.trim() === '') el.style.removeProperty(cssName);
     else el.style.setProperty(cssName, value.trim());
+  }
+}
+
+function setElementVisibility(el: HTMLElement, visible: boolean): void {
+  const saved = 'data-od-tweaks-display';
+  const priority = 'data-od-tweaks-display-priority';
+  if (visible) {
+    el.style.setProperty('display', el.getAttribute(saved) ?? '', el.getAttribute(priority) ?? '');
+    if (!el.style.getPropertyValue('display')) el.style.removeProperty('display');
+    el.removeAttribute(saved);
+    el.removeAttribute(priority);
+    el.removeAttribute('hidden');
+  } else {
+    if (!el.hasAttribute(saved)) {
+      el.setAttribute(saved, el.style.getPropertyValue('display'));
+      el.setAttribute(priority, el.style.getPropertyPriority('display'));
+    }
+    el.style.setProperty('display', 'none', 'important');
   }
 }
 

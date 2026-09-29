@@ -112,6 +112,7 @@ export type ManualEditPatch =
   | { id: string; kind: 'set-link'; text: string; href: string }
   | { id: string; kind: 'set-image'; src: string; alt: string }
   | { id: string; kind: 'remove-element' }
+  | { id: string; kind: 'set-visibility'; visible: boolean }
   | { kind: 'set-token'; token: string; value: string }
   | { id: string; kind: 'set-style'; styles: Partial<ManualEditStyles> }
   | { id: string; kind: 'set-attributes'; attributes: Record<string, string> }
