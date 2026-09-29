@@ -10,6 +10,7 @@ describe('modelProviderIconSrc', () => {
     expect(modelProviderIconSrc('xai/grok-4')).toBe('/model-icons/x.svg');
     expect(modelProviderIconSrc('deepseek/deepseek-chat')).toBe('/agent-icons/deepseek.svg');
     expect(modelProviderIconSrc('qwen/qwen3-max')).toBe('/agent-icons/qwen.svg');
+    expect(modelProviderIconSrc('kimchi-dev/glm-5.3')).toBe('/agent-icons/kimchi.svg');
     expect(modelProviderIconSrc('openrouter/anthropic/claude-sonnet-4-5')).toBe(
       '/model-icons/openrouter.svg',
     );
