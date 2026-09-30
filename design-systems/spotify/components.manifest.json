@@ -241,8 +241,18 @@
       ],
       "elements": [],
       "tokenReferences": [
+        "--accent",
         "--accent-hover",
-        "--focus-ring"
+        "--accent-on",
+        "--border",
+        "--ease-standard",
+        "--fg",
+        "--focus-ring",
+        "--font-body",
+        "--motion-fast",
+        "--radius-sm",
+        "--space-2",
+        "--surface-warm"
       ]
     },
     {
@@ -267,7 +277,12 @@
       ],
       "elements": [],
       "tokenReferences": [
-        "--elev-raised"
+        "--ease-standard",
+        "--elev-raised",
+        "--motion-base",
+        "--radius-md",
+        "--space-4",
+        "--surface"
       ]
     },
     {
@@ -334,10 +349,12 @@
       ],
       "tokenReferences": [
         "--fg",
+        "--font-body",
         "--font-display",
         "--leading-tight",
         "--muted",
         "--text-2xl",
+        "--text-lg",
         "--text-sm"
       ]
     },
@@ -372,7 +389,16 @@
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
+        "--ease-standard",
+        "--fg",
+        "--motion-fast",
+        "--radius-sm",
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
+        "--space-3",
         "--space-4",
+        "--surface",
         "--surface-warm"
       ]
     }
