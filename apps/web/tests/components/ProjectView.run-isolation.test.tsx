@@ -2329,6 +2329,7 @@ describe('ProjectView conversation run isolation', () => {
         project.id,
         'conv-b',
         expect.anything(),
+        true,
       );
     });
     // The daemon GET is project-scoped for a Team share, so a comment whose
@@ -2358,6 +2359,7 @@ describe('ProjectView conversation run isolation', () => {
       project.id,
       'conv-b',
       expect.anything(),
+      true,
     ));
 
     fireEvent.click(screen.getByTestId('attach-first-comment'));

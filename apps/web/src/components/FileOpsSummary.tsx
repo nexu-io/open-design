@@ -14,7 +14,7 @@
  * future surfaces (sidebar, log export, etc.) without coupling to
  * AssistantMessage's render shape.
  */
-import { useId, useState } from 'react';
+import { useContext, useId, useState } from 'react';
 import { VisuallyHidden } from '@open-design/components';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
@@ -32,6 +32,8 @@ import type { ProjectFile } from '../types';
 import { Icon, type IconName } from './Icon';
 import { PixelLiquid } from './PixelLiquid';
 import { RemixIcon } from './RemixIcon';
+import shareEntryStyles from './share/ShareEntry.module.css';
+import { ArtifactPublicationContext } from './share/ArtifactPublicationContext';
 import { HtmlProjectCoverFrame } from './project-cover';
 import { AudioArtifact } from './chat/AudioArtifact';
 import { ARTIFACT_ANCHOR_ATTR, artifactAnchorId } from './chat/AnchoredMenuShell';
@@ -173,6 +175,7 @@ export function FileOpsSummary({
             name: entry.path,
             kind,
             pending: turnIsLive && entry.status === 'running',
+            sharePending: turnIsLive,
             revision: projectFiles?.find((file) => file.name === entry.path)?.mtime,
             ...(refTargets.get(entry.path) ?? {}),
           },
@@ -441,10 +444,12 @@ export interface ArtifactCardItem {
   name: string;
   kind: ArtifactCardKind;
   /** D37: the run is still writing this file — grey breathing placeholder and
-   *  no actions in the corner. The design sheet has no such state; product
-   *  asked for it on 2026-08-21 so a turn does not sit silent and then pop an
+   *  no preview/export actions. Share stays visible but disabled (A27).
+   *  Product asked for the placeholder on 2026-08-21 so a turn does not sit silent and then pop an
    *  artifact out of nowhere. */
   pending?: boolean;
+  /** Share waits for the whole generating turn, even if this file has finished. */
+  sharePending?: boolean;
   /**
    * 这一轮的**静态封面**:HTML / 原型 / slide / 文档是首屏截图,视频是**首帧**
    * (用户 2026-09-02:「视频这个东西,那看起来视频还是要快照一下首帧的」)。
@@ -566,7 +571,8 @@ function ArtifactCard({
   anchorScope: string;
 }) {
   const t = useT();
-  const { workspaceContext } = useProjectCollabContext();
+  const { workspaceContext, viewerOnly } = useProjectCollabContext();
+  const publishedFilePaths = useContext(ArtifactPublicationContext);
   // A static snapshot is an optimization, not the only representation of the
   // artifact. If it disappears or cannot be decoded, let the normal kind
   // specific rendering below take over (HTML uses the existing live-cover
@@ -584,7 +590,14 @@ function ArtifactCard({
   // Publish is an HTML-only affordance, so a `.png` card carries one button and
   // an `.html` card carries two. The row is flex/end aligned precisely so that
   // unevenness stays right-aligned instead of shifting the export button.
-  const canPublish = !pending && item.kind === 'html' && !!onPublish;
+  const showPublish = item.kind === 'html' && !!onPublish;
+  const shareStateUnknown = showPublish && publishedFilePaths === null;
+  const isPublished = showPublish && publishedFilePaths?.has(item.name) === true;
+  const shareDisabledTitle = viewerOnly
+    ? t('fileViewer.readonlySharedNoExport')
+    : pending || item.sharePending
+      ? t('fileViewer.shareAfterGenerationComplete')
+      : undefined;
   const needsFormatChoice = artifactExportNeedsFormatChoice(item.name);
 
   return (
@@ -698,13 +711,16 @@ function ArtifactCard({
           data-testid={`artifact-card-open-${item.name}`}
         />
       ) : null}
-      {pending ? null : (
-        <span className="artifact-card-acts">
-          {canPublish && onPublish ? (
+      {pending && !showPublish ? null : (
+        <span className={`artifact-card-acts${showPublish ? ` ${shareEntryStyles.cardActions}` : ''}`}>
+          {showPublish && onPublish ? (
             <button
               type="button"
-              className="artifact-card-act"
+              className={`artifact-card-act ${shareEntryStyles.card}${isPublished ? ` ${shareEntryStyles.cardPublished}` : ''}`}
               aria-haspopup="menu"
+              aria-label={shareStateUnknown ? `${t('chat.artifact.publish')} · ${t('chat.artifact.shareStatusUnknown')}` : undefined}
+              disabled={shareDisabledTitle !== undefined}
+              title={shareDisabledTitle}
               onClick={() => onPublish(item.name, artifactAnchorId('publish', item.name, anchorScope))}
               data-testid={`artifact-card-publish-${item.name}`}
               {...{ [ARTIFACT_ANCHOR_ATTR]: artifactAnchorId('publish', item.name, anchorScope) }}
@@ -712,11 +728,11 @@ function ArtifactCard({
               {/* OPEND-2559 supersedes PR7170's text-only share treatment:
                   reuse the same semantic glyph as the right-side Share action,
                   scaled by the card action's 12px icon-box rule. */}
-              <RemixIcon name="share-forward-line" size={12} />
-              {t('chat.artifact.publish')}
+              {isPublished ? <span aria-hidden="true">✓</span> : <RemixIcon name="share-forward-line" size={12} />}
+              <span className={shareEntryStyles.cardActionLabel}>{t(shareStateUnknown ? 'chat.artifact.shareStatusUnknown' : isPublished ? 'chat.artifact.published' : 'chat.artifact.publish')}</span>
             </button>
           ) : null}
-          {needsFormatChoice && onExport ? (
+          {pending ? null : needsFormatChoice && onExport ? (
             /* 多格式(今天等价于 HTML):把锚点交出去,由预览区把它本来那块
                导出菜单开在这枚按钮旁边 */
             <button
@@ -728,7 +744,7 @@ function ArtifactCard({
               {...{ [ARTIFACT_ANCHOR_ATTR]: artifactAnchorId('export', item.name, anchorScope) }}
             >
               <ArtifactExportIcon />
-              {t('chat.artifact.export')}
+              {showPublish ? <span className={shareEntryStyles.cardActionLabel}>{t('chat.artifact.export')}</span> : t('chat.artifact.export')}
             </button>
           ) : (
             /*

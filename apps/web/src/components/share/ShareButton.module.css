@@ -1,0 +1,131 @@
+/* Shared share-panel button (2026 refactor: item 1). See ShareButton.tsx.
+   Values read from ../../styles/share-tokens.css. `button.<variant>`
+   (element + class) deliberately outranks the shared `Button` base
+   (`packages/components/src/button.module.css`'s bare `.button`) by
+   specificity rather than relying on CSS import order — the same technique
+   `.copyButton`/`.updateButton` already used before this consolidation. */
+
+/* ---- primary — full-width 32px/6px block black (copyButton / signInPrimaryAction) ---- */
+button.primary {
+  box-sizing: border-box;
+  width: 100%;
+  height: var(--share-control-h);
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 0;
+  border-radius: var(--share-radius);
+  background: var(--share-ink);
+  color: var(--share-white);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  cursor: pointer;
+}
+button.primary > svg { flex-shrink: 0; }
+
+button.primary:hover:not(:disabled) { background: var(--share-ink-hover); }
+/* ShareTab's copyButton opts out of the lighten-on-hover above: its hover
+   target is itself (no visible change). */
+button.primary.noHoverLighten:hover:not(:disabled) { background: var(--share-ink); }
+
+button.primary:disabled {
+  background: var(--bg-subtle);
+  color: var(--text-faint);
+}
+
+/* Matches signInPrimaryAction's own focus ring — a third, one-off blue not
+   shared with the soft-button family below. */
+button.primary:focus-visible { outline: 2px solid var(--share-focus); outline-offset: 2px; }
+
+/* ShareTab-only busy states: solid busy fill (K4 "reopening", no live percent)
+   or fully transparent so ShareProgressButton's own `<progress>` shows
+   through (S2 uploading with a known percent). Neither applies unless the
+   caller sets `aria-busy` (ShareSignInButton never does). */
+button.primary[aria-busy="true"]:disabled {
+  background: var(--share-ink-busy);
+  color: var(--share-white);
+  opacity: 1;
+}
+button.primary.transparentBusy[aria-busy="true"]:disabled {
+  position: relative;
+  background: transparent;
+  color: var(--share-white);
+  opacity: 1;
+  gap: 6px;
+}
+
+/* CloudSignInTip's own `.is-signing` class stands in for `disabled` while
+   the login flow is mid-poll (ShareSignInButton, OD-2) — the shared flow
+   already drives this class, and toggling the native `disabled` attribute
+   mid-poll would drop focus from the button. */
+button.primary:global(.is-signing) { cursor: default; background: var(--share-ink-busy); }
+
+/* ---- soft — 88px/32px blue (updateButton / signInSecondaryAction / plain retry) ---- */
+button.soft {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  flex: 0 0 var(--share-soft-btn-w);
+  width: var(--share-soft-btn-w);
+  min-width: var(--share-soft-btn-w);
+  height: var(--share-control-h);
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--share-radius);
+  background: var(--share-blue-bg);
+  color: var(--share-blue-fg);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  white-space: nowrap;
+  box-shadow: none;
+}
+button.soft > svg { flex: 0 0 13px; width: 13px; height: 13px; }
+
+button.soft:hover:not(:disabled) { background: var(--share-blue-bg-hover); color: var(--share-blue-fg-hover); }
+button.soft:active:not(:disabled) { background: var(--share-blue-bg-active); color: var(--share-blue-fg-active); }
+button.soft:focus-visible { outline: 2px solid var(--share-blue-fg); outline-offset: 2px; }
+button.soft:global(.is-signing) { cursor: default; }
+
+/* CommentSyncBanner's retry is the only one of the three `soft` call sites
+   that ever dimmed while disabled; updateButton/signInSecondaryAction never
+   declared this and keep the shared Button's own disabled treatment. */
+button.soft.dimDisabled:disabled { opacity: 0.6; cursor: default; }
+
+/* ---- soft-error — CommentSyncBanner's reopened-K5 retry (red) ---- */
+button.softError {
+  background: var(--share-red-bg);
+  color: var(--share-red-fg);
+}
+button.softError:hover:not(:disabled) { background: var(--share-red-bg-hover); color: var(--share-red-fg-hover); }
+button.softError:active:not(:disabled) { background: var(--share-red-bg-active); color: var(--share-red-fg-active); }
+button.softError:focus-visible { outline-color: var(--share-red-fg); }
+
+/* ---- dark-sm — AfterExportShareGuide's "去分享" action ---- */
+button.darkSm {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 28px;
+  min-height: 0;
+  min-width: 0;
+  margin: 0;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--share-radius);
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 500;
+  white-space: nowrap;
+  background: var(--share-ink-dark-sm);
+  color: var(--share-white);
+}
+button.darkSm:hover:not(:disabled) { background: var(--share-ink-dark-sm-hover); }

@@ -47,7 +47,7 @@ function deployableHtmlFile(): ProjectFile {
  * and on submit, and reports the JSON body of the outgoing deploy POST back
  * to the caller so a test can assert what target the UI forwarded.
  */
-function mockDeployFetch(onDeployBody: (body: Record<string, unknown>) => void) {
+function mockDeployFetch(onDeployBody: (body: Record<string, unknown>) => void, failDeploy = false) {
   return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
     const method = init?.method || (input instanceof Request ? input.method : 'GET');
@@ -73,6 +73,7 @@ function mockDeployFetch(onDeployBody: (body: Record<string, unknown>) => void) 
     if (url === '/api/projects/project-1/deploy' && method === 'POST') {
       const body = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
       onDeployBody(body);
+      if (failDeploy) return new Response(JSON.stringify({ error: { message: 'S12 deployment unavailable' } }), { status: 503 });
       return new Response(JSON.stringify({
         id: 'cloudflare-deploy',
         projectId: 'project-1',
@@ -99,8 +100,10 @@ async function openCloudflareDeployModal(file: ProjectFile) {
   );
 
   // Deploy providers live on the Share panel ("publish online" is sharing),
-  // so reaching a provider takes Share button -> menu item.
+  // so reaching a provider takes Share -> More sharing options -> provider.
   fireEvent.click(screen.getByRole('button', { name: /^share$/i }));
+  expect(screen.queryByRole('menuitem', { name: /Deploy to Cloudflare Pages/i })).toBeNull();
+  fireEvent.click(await screen.findByRole('button', { name: 'More sharing options' }));
   fireEvent.click(await screen.findByRole('menuitem', { name: /Deploy to Cloudflare Pages/i }));
 
   const providerSelect = await screen.findByRole('combobox', { name: /Provider/i });
@@ -117,6 +120,34 @@ function clickDeploySubmitButton() {
 }
 
 describe('FileViewer deploy target selector', () => {
+  it.each([
+    ['vercel-self', /Deploy to Vercel/i],
+    ['cloudflare-pages', /Deploy to Cloudflare Pages/i],
+  ] as const)('opens the existing %s modal from the HTML share menu', async (providerId, label) => {
+    const fetchMock = mockDeployFetch(() => {});
+    vi.stubGlobal('fetch', fetchMock);
+    render(<FileViewer projectId="project-1" projectKind="prototype" file={deployableHtmlFile()}
+      liveHtml="<html><body>Hello</body></html>" />);
+    fireEvent.click(screen.getByRole('button', { name: /^share$/i }));
+    expect(screen.queryByRole('menuitem', { name: label })).toBeNull();
+    fireEvent.click(await screen.findByRole('button', { name: 'More sharing options' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: label }));
+    const select = await screen.findByRole('combobox', { name: /Provider/i });
+    await waitFor(() => expect(select).toHaveValue(providerId));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      `/api/deploy/config?providerId=${providerId}`,
+    ));
+  });
+
+  it('keeps deployment failure feedback in the existing modal', async () => {
+    vi.stubGlobal('fetch', mockDeployFetch(() => {}, true));
+    await openCloudflareDeployModal(deployableHtmlFile());
+    clickDeploySubmitButton();
+    expect(await screen.findByText('S12 deployment unavailable')).toBeVisible();
+    expect(screen.getByRole('combobox', { name: /Provider/i })).toHaveValue('cloudflare-pages');
+    expect(screen.getByRole('button', { name: /^Deploy$/i })).toBeEnabled();
+  });
+
   it('shows a deploy target selector defaulted to Production and forwards that default on deploy', async () => {
     let deployBody: Record<string, unknown> | null = null;
     vi.stubGlobal('fetch', mockDeployFetch((body) => { deployBody = body; }));

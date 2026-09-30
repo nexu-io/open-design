@@ -4,7 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { hash as blake3Hash } from 'blake3-wasm';
-import { listFiles, readProjectFile, validateProjectPath } from './projects.js';
+import { listFiles, readProjectFile, resolveProjectFilePath, validateProjectPath } from './projects.js';
+import type { EntryIndexConflict, EntryIndexConflictDetails, EntryIndexConflictReferrer } from '@open-design/contracts';
 import { findRealTagOffset, HTML_TAG_PATTERNS } from '@open-design/contracts/runtime/html-injection-points';
 
 export const VERCEL_PROVIDER_ID = 'vercel-self';
@@ -29,12 +30,30 @@ type CloudflarePagesConfigHints = {
   lastDomainPrefix?: string;
 };
 type DeployFile = { file: string; data: Buffer | Uint8Array | string; contentType?: string; sourcePath?: string };
-type DeployFilePlan = { entryPath: string; html: string; files: DeployFile[]; missing: string[]; invalid: string[] };
+type DeployFilePlan = {
+  entryPath: string;
+  html: string;
+  files: DeployFile[];
+  missing: string[];
+  invalid: string[];
+  /** Set when a walked reference resolves to the root index.html the entry is published as. */
+  indexConflict: EntryIndexConflict | null;
+};
+/** A reference found in a document, with where it sits for diagnostics. */
+type ReferenceSite = { ref: string; attribute: string; line?: number | undefined };
+/** A reference waiting in the walk queue: resolve `ref` against `base`; `from` is the containing file. */
+type PendingReference = ReferenceSite & { base: string; from: string };
+
+/** The entry page is always published at the site root under this name. */
+const PUBLISHED_ENTRY_PATH = 'index.html';
+const isHtmlPath = (p: string) => /\.html?$/i.test(p);
 type DeployOptions = {
   metadata?: unknown;
   hookScriptUrl?: string;
   providerId?: DeployProviderId;
   includeProjectFiles?: boolean;
+  /** Share URLs are mounted below a slug, unlike standalone deployment roots. */
+  assetUrlPolicy?: 'share-relative';
 };
 type CloudflarePagesDeploySelection = { zoneId: string; zoneName: string; domainPrefix: string; hostname: string };
 type CloudflareDnsRecord = JsonObject & { id?: string; type?: string; name?: string; content?: string; comment?: string };
@@ -234,95 +253,53 @@ function normalizeCloudflarePagesConfigHints(input: unknown, fallback: Cloudflar
   };
 }
 
-// Walk the entry HTML and any referenced CSS, producing the full set of
-// files that would be uploaded for a deploy along with the lists of
-// missing and invalid references. Does not throw on a partial result so
-// callers can distinguish between "ready to ship" and "ready except for
+// Walk the entry HTML and everything it references, producing the full set
+// of files that would be uploaded for a deploy along with the lists of
+// missing and invalid references. Referenced CSS and HTML documents are
+// parsed too (see `walkReferencedFiles`). Does not throw on a partial result
+// so callers can distinguish between "ready to ship" and "ready except for
 // these specific issues" without parsing an error string.
 export async function buildDeployFilePlan(projectsRoot: string, projectId: string, entryName: string, options: DeployOptions = {}): Promise<DeployFilePlan> {
   const entryPath = validateProjectPath(entryName);
-  if (!/\.html?$/i.test(entryPath)) {
+  if (!isHtmlPath(entryPath)) {
     throw new DeployError('Only HTML files can be deployed.', 400, undefined, 'NOT_HTML');
   }
 
   const entry = await readProjectFile(projectsRoot, projectId, entryPath, options.metadata);
   const html = entry.buffer.toString('utf8');
   const entryBase = path.posix.dirname(entryPath);
+  const share = options.assetUrlPolicy ? { outputBase: '.', entryPath } : undefined;
   const deployHtml = injectDeployHookScript(
-    rewriteEntryHtmlReferences(html, entryBase),
+    rewriteEntryHtmlReferences(html, entryBase, share),
     options.hookScriptUrl ?? process.env.OD_DEPLOY_HOOK_SCRIPT_URL,
   );
   const files = new Map<string, DeployFile>();
-  files.set('index.html', {
-    file: 'index.html',
+  files.set(PUBLISHED_ENTRY_PATH, {
+    file: PUBLISHED_ENTRY_PATH,
     data: Buffer.from(deployHtml, 'utf8'),
     contentType: entry.mime,
     sourcePath: entryPath,
   });
 
-  const visited = new Set<string>([entryPath]);
-  const missing: string[] = [];
-  const invalid: string[] = [];
-  const pending: { ref: string; base: string }[] = extractHtmlReferences(html).map((ref) => ({
-    ref,
-    base: entryBase,
-  }));
-
-  // Inline `<style>` blocks and `style="..."` attributes can reference
-  // background images, custom fonts, and stylesheets via @import. They
-  // are resolved relative to the entry HTML, same as src/href.
-  for (const ref of extractInlineCssReferences(html)) {
-    pending.push({ ref, base: entryBase });
-  }
-
   const supportingFiles = 'supportingFiles' in (entry.artifactManifest ?? {})
     ? ((entry.artifactManifest as { supportingFiles?: string[] }).supportingFiles ?? [])
     : [];
-  for (const manifestRef of supportingFiles) {
-    pending.push({ ref: manifestRef, base: entryBase });
-  }
+  const seeds: PendingReference[] = [
+    ...htmlDocumentReferences(html, entryBase, entryPath),
+    ...supportingFiles.map((ref) => ({
+      ref, attribute: 'artifact manifest supportingFiles', base: entryBase, from: entryPath,
+    })),
+  ];
 
-  while (pending.length > 0) {
-    const item = pending.shift();
-    if (!item) break;
-    const resolved = resolveReferencedPath(item.ref, item.base);
-    if (!resolved) continue;
-    let safePath;
-    try {
-      safePath = validateProjectPath(resolved);
-    } catch {
-      invalid.push(item.ref);
-      continue;
-    }
-    if (safePath === entryPath || visited.has(safePath)) continue;
-    visited.add(safePath);
-
-    let projectFile;
-    try {
-      projectFile = await readProjectFile(projectsRoot, projectId, safePath, options.metadata);
-    } catch (err) {
-      if (isErrnoException(err) && err.code === 'ENOENT') {
-        missing.push(safePath);
-        continue;
-      }
-      invalid.push(safePath);
-      continue;
-    }
-
-    files.set(safePath, {
-      file: safePath,
-      data: projectFile.buffer,
-      contentType: projectFile.mime,
-      sourcePath: safePath,
-    });
-
-    if (/\.css$/i.test(safePath)) {
-      const cssBase = path.posix.dirname(safePath);
-      for (const ref of extractCssReferences(projectFile.buffer.toString('utf8'))) {
-        pending.push({ ref, base: cssBase });
-      }
-    }
-  }
+  const { missing, invalid, conflictSites } = await walkReferencedFiles(seeds, {
+    projectsRoot,
+    projectId,
+    metadata: options.metadata,
+    entryPath,
+    entryRealPath: entry.path,
+    shareRewrite: Boolean(options.assetUrlPolicy),
+    files,
+  });
 
   if (options.includeProjectFiles) {
     await addVisibleProjectFilesToDeployPlan(files, {
@@ -338,11 +315,242 @@ export async function buildDeployFilePlan(projectsRoot: string, projectId: strin
     files: Array.from(files.values()),
     missing,
     invalid,
+    indexConflict: conflictSites.length
+      ? await entryIndexConflictFor(entryPath, conflictSites, { projectsRoot, projectId, metadata: options.metadata })
+      : null,
   };
+}
+
+/**
+ * Breadth-first walk over every project file reachable from `seeds`.
+ *
+ * Each dequeued reference resolves against the directory of the file that
+ * contains it. Readable files land in `files` under their logical project
+ * path; `.css` and `.html`/`.htm` files are additionally parsed for their own
+ * references, which join the queue (so iframes of iframes, and the
+ * stylesheets and images they use, are all shipped).
+ *
+ * Termination: a file is PARSED at most once per real path (`realpath`
+ * relative to the project root, as `readProjectFile` reports it). The project
+ * holds finitely many real files and each parse yields finitely many
+ * references, so finitely many references are ever queued, and each is
+ * dequeued exactly once. Logical-path dedupe (`visited`) alone is not enough:
+ * an in-project symlink such as `x -> .` makes `x/a.css`, `x/x/a.css`, ...
+ * distinct logical paths to one real file. A second logical path to an
+ * already-parsed file is still shipped (it is reachable at that URL) but
+ * contributes no new references. No depth or count cap is applied, so a
+ * legitimately deep project never loses files silently.
+ *
+ * Share mode (`shareRewrite`) rewrites each shipped HTML/CSS file so its
+ * references are relative to its own directory (root-absolute becomes
+ * relative; a reference to the entry becomes the published `index.html`).
+ * References are resolved against the directory the real file was first
+ * parsed in, so a second logical copy points at the files that parse shipped
+ * rather than at unshipped paths under the symlink. Standalone deploy keeps
+ * bytes unchanged, so such a copy's relative links resolve under the symlink.
+ *
+ * A reference that resolves to the root `index.html` while the entry is some
+ * other page, and that file exists and is not the entry itself, is recorded as
+ * a conflict site and never read: the entry owns that published path.
+ */
+async function walkReferencedFiles(
+  seeds: PendingReference[],
+  ctx: {
+    projectsRoot: string;
+    projectId: string;
+    metadata: unknown;
+    entryPath: string;
+    entryRealPath: string;
+    shareRewrite: boolean;
+    files: Map<string, DeployFile>;
+  },
+) {
+  const { entryPath, files } = ctx;
+  const visited = new Set<string>([entryPath]);
+  /** Real path -> directory its references were resolved against when parsed. */
+  const parsedDirByRealPath = new Map<string, string>([[ctx.entryRealPath, path.posix.dirname(entryPath)]]);
+  const missing: string[] = [];
+  const invalid: string[] = [];
+  const conflictSites: PendingReference[] = [];
+  const pending = [...seeds];
+  let rootIndex: Promise<'missing' | 'entry' | 'other'> | null = null;
+  const rootIndexStatus = () => (rootIndex ??= resolveProjectFilePath(ctx.projectsRoot, ctx.projectId, PUBLISHED_ENTRY_PATH, ctx.metadata)
+    .then((found) => (found.name === ctx.entryRealPath ? 'entry' as const : 'other' as const))
+    .catch((err: unknown) => (isErrnoException(err) && err.code === 'ENOENT' ? 'missing' as const : 'other' as const)));
+
+  for (let cursor = 0; cursor < pending.length; cursor += 1) {
+    const item = pending[cursor]!;
+    const resolved = resolveReferencedPath(item.ref, item.base);
+    if (!resolved) continue;
+    let safePath;
+    try {
+      safePath = validateProjectPath(resolved);
+    } catch {
+      invalid.push(item.ref);
+      continue;
+    }
+    if (safePath === PUBLISHED_ENTRY_PATH && entryPath !== PUBLISHED_ENTRY_PATH) {
+      const status = await rootIndexStatus();
+      // The same real file as the entry (symlink, case-insensitive disk) is
+      // just a self-reference; an absent file is an ordinary missing asset.
+      if (status === 'entry') continue;
+      if (status === 'other') {
+        conflictSites.push(item);
+        continue;
+      }
+    }
+    if (visited.has(safePath)) continue;
+    visited.add(safePath);
+
+    let projectFile;
+    try {
+      projectFile = await readProjectFile(ctx.projectsRoot, ctx.projectId, safePath, ctx.metadata);
+    } catch (err) {
+      if (isErrnoException(err) && err.code === 'ENOENT') {
+        missing.push(safePath);
+        continue;
+      }
+      invalid.push(safePath);
+      continue;
+    }
+
+    const file: DeployFile = {
+      file: safePath,
+      data: projectFile.buffer,
+      contentType: projectFile.mime,
+      sourcePath: safePath,
+    };
+    files.set(safePath, file);
+
+    const isHtml = isHtmlPath(safePath);
+    if (!isHtml && !/\.css$/i.test(safePath)) continue;
+    const text = projectFile.buffer.toString('utf8');
+    const dir = path.posix.dirname(safePath);
+    const parsedDir = parsedDirByRealPath.get(projectFile.path);
+    if (ctx.shareRewrite) {
+      const baseDir = parsedDir ?? dir;
+      const share = { outputBase: dir, entryPath };
+      file.data = Buffer.from(
+        isHtml ? rewriteEntryHtmlReferences(text, baseDir, share) : rewriteCssReferences(text, baseDir, share),
+        'utf8',
+      );
+    }
+    if (parsedDir !== undefined) continue;
+    parsedDirByRealPath.set(projectFile.path, dir);
+    pending.push(...(isHtml
+      ? htmlDocumentReferences(text, dir, safePath)
+      : cssReferenceSites(text, '', 1).map((site) => ({ ...site, base: dir, from: safePath }))));
+  }
+
+  return { missing, invalid, conflictSites };
+}
+
+/** References an HTML document loads: attributes plus inline CSS. */
+function htmlDocumentReferences(html: string, base: string, from: string): PendingReference[] {
+  return [...htmlReferenceSites(html), ...inlineCssReferenceSites(html)]
+    .map((site) => ({ ...site, base, from }));
+}
+
+const ENTRY_INDEX_SUGGESTED_BASENAME = 'home';
+
+async function entryIndexConflictFor(
+  entryPath: string,
+  sites: PendingReference[],
+  project: { projectsRoot: string; projectId: string; metadata: unknown },
+): Promise<EntryIndexConflict> {
+  const suggestedName = await freeRootHtmlName(project);
+  const referrers: EntryIndexConflictReferrer[] = [];
+  const seen = new Set<string>();
+  for (const site of sites) {
+    const reference = site.ref.trim();
+    const key = `${site.from}\0${reference}\0${site.attribute}\0${site.line ?? ''}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    referrers.push({
+      file: site.from,
+      reference,
+      attribute: site.attribute,
+      ...(site.line === undefined ? {} : { line: site.line }),
+      replacement: renamedIndexReference(reference, site.from, suggestedName),
+    });
+  }
+  return {
+    path: PUBLISHED_ENTRY_PATH,
+    entryPath,
+    referencedFrom: referrers[0]!.file,
+    referrers,
+    suggestedName,
+  };
+}
+
+async function freeRootHtmlName(project: { projectsRoot: string; projectId: string; metadata: unknown }) {
+  const candidateFor = (n: number) => (n === 1
+    ? `${ENTRY_INDEX_SUGGESTED_BASENAME}.html`
+    : `${ENTRY_INDEX_SUGGESTED_BASENAME}-${n}.html`);
+  // Only a naming hint: after this many taken names, suggest the next one
+  // unchecked rather than keep probing the filesystem.
+  const maxProbes = 100;
+  for (let n = 1; n <= maxProbes; n += 1) {
+    const candidate = candidateFor(n);
+    try {
+      await resolveProjectFilePath(project.projectsRoot, project.projectId, candidate, project.metadata);
+    } catch (err) {
+      if (isErrnoException(err) && err.code === 'ENOENT') return candidate;
+      // Unreadable for another reason: treat as taken and try the next name.
+    }
+  }
+  return candidateFor(maxProbes + 1);
+}
+
+/** `reference` (which resolves to the root index.html) pointed at `newName` instead. */
+function renamedIndexReference(reference: string, referrer: string, newName: string) {
+  const suffix = referenceSuffix(reference);
+  const target = reference.slice(0, reference.length - suffix.length);
+  if (/(^|\/)index\.html$/.test(target)) return `${target.replace(/index\.html$/, newName)}${suffix}`;
+  return `${path.posix.relative(path.posix.dirname(referrer), newName)}${suffix}`;
+}
+
+function entryIndexConflictMessage(conflict: EntryIndexConflict, action: 'share' | 'deploy') {
+  const verb = action === 'share' ? 'shared' : 'deployed';
+  return `"${conflict.referencedFrom}" references the project's root index.html, which collides with where the ${verb} page is published. `
+    + `Rename that index.html (e.g. ${conflict.suggestedName}) and update the reference, or ${action} index.html itself.`;
+}
+
+/**
+ * Adds the copy-to-agent instruction to a conflict. This is the only place the
+ * text is produced; the web UI and CLI display it verbatim.
+ */
+export function describeEntryIndexConflict(conflict: EntryIndexConflict, action: 'share' | 'deploy'): EntryIndexConflictDetails {
+  const noun = action === 'share' ? 'A share' : 'A deployment';
+  const lines = conflict.referrers.map((r) => (
+    `   - ${r.file}${r.line === undefined ? '' : ` line ${r.line}`}, ${r.attribute}: change "${r.reference}" to "${r.replacement}"`
+  ));
+  const agentPrompt = [
+    `Open Design cannot ${action} "${conflict.entryPath}" yet. ${noun} publishes the selected page as index.html at the top of the site, but the project also has its own root index.html that this page loads, so both would need the same address.`,
+    '',
+    'Please make these changes in the project:',
+    `1. Rename the project's root file "index.html" to "${conflict.suggestedName}". Do not rename or move any other file.`,
+    `2. Update each reference to the root index.html so it points at "${conflict.suggestedName}":`,
+    ...lines,
+    `3. Search the rest of the project for other references to the root index.html (for example <a href> links, JavaScript, or CSS) and point them at "${conflict.suggestedName}" as well.`,
+    '',
+    `After these changes, ${action} "${conflict.entryPath}" again.`,
+  ].join('\n');
+  return { ...conflict, agentPrompt };
+}
+
+export function entryIndexConflictError(conflict: EntryIndexConflict, action: 'share' | 'deploy') {
+  return { message: entryIndexConflictMessage(conflict, action), data: describeEntryIndexConflict(conflict, action) };
 }
 
 export async function buildDeployFileSet(projectsRoot: string, projectId: string, entryName: string, options: DeployOptions = {}) {
   const plan = await buildDeployFilePlan(projectsRoot, projectId, entryName, options);
+  // Checked before missing/invalid: the page loads a file that cannot be
+  // published at its own address, which is worse than a missing asset.
+  if (plan.indexConflict) {
+    const { message, data } = entryIndexConflictError(plan.indexConflict, 'deploy');
+    throw new DeployError(message, 409, data, 'ENTRY_INDEX_CONFLICT');
+  }
   if (plan.missing.length || plan.invalid.length) {
     const parts = [];
     if (plan.missing.length) parts.push(`missing: ${plan.missing.join(', ')}`);
@@ -1172,24 +1380,47 @@ export function cloudflarePagesAssetHash(file: Pick<DeployFile, 'file' | 'data'>
 }
 
 export function extractHtmlReferences(html: string) {
-  const refs: string[] = [];
+  return htmlReferenceSites(html).map((site) => site.ref);
+}
+
+function htmlReferenceSites(html: string): ReferenceSite[] {
+  const sites: ReferenceSite[] = [];
+  const lineOf = lineLocator(html);
   for (const tag of parseHtmlTags(html)) {
     const attrs = parseHtmlAttributes(tag.attrs);
+    const line = lineOf(tag.offset);
+    const push = (ref: string, attr: string) => sites.push({ ref, attribute: `<${tag.name} ${attr}>`, line });
     for (const name of ['src', 'poster']) {
       const value = attrs.get(name);
-      if (value) refs.push(value);
+      if (value) push(value, name);
     }
     const href = attrs.get('href');
-    if (href && shouldCollectHref(tag.name, attrs)) refs.push(href);
+    if (href && shouldCollectHref(tag.name, attrs)) push(href, 'href');
     const srcset = attrs.get('srcset');
     if (srcset) {
       for (const part of srcset.split(',')) {
         const url = part.trim().split(/\s+/)[0];
-        if (url) refs.push(url);
+        if (url) push(url, 'srcset');
       }
     }
   }
-  return refs;
+  return sites;
+}
+
+/** Maps a character offset in `source` to its 1-based line number. */
+function lineLocator(source: string) {
+  const starts = [0];
+  for (let i = source.indexOf('\n'); i !== -1; i = source.indexOf('\n', i + 1)) starts.push(i + 1);
+  return (offset: number) => {
+    let lo = 0;
+    let hi = starts.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (starts[mid]! <= offset) lo = mid;
+      else hi = mid - 1;
+    }
+    return lo + 1;
+  };
 }
 
 // Character classes scope the lazy match so unclosed url(((( or
@@ -1201,13 +1432,24 @@ const CSS_URL_REGEX = /url\(\s*(['"]?)([^)]*?)\1\s*\)/gi;
 const CSS_IMPORT_REGEX = /@import\s+(?:url\(\s*)?(['"])([^'"]*?)\1/gi;
 
 export function extractCssReferences(css: string) {
-  const refs: string[] = [];
+  return cssReferenceSites(css, '', 1).map((site) => site.ref);
+}
+
+/**
+ * url() / @import references in `css`. `context` prefixes the attribute label
+ * (e.g. `<style>`); `firstLine` is the line `css` starts on in its file.
+ */
+function cssReferenceSites(css: string, context: string, firstLine: number | undefined): ReferenceSite[] {
+  const sites: ReferenceSite[] = [];
+  const lineOf = lineLocator(css);
+  const label = (kind: string) => (context ? `${context} ${kind}` : kind);
+  const at = (offset: number) => (firstLine === undefined ? undefined : firstLine + lineOf(offset) - 1);
   const urlRe = new RegExp(CSS_URL_REGEX.source, CSS_URL_REGEX.flags);
   let match;
-  while ((match = urlRe.exec(css))) refs.push(match[2] ?? '');
+  while ((match = urlRe.exec(css))) sites.push({ ref: match[2] ?? '', attribute: label('url()'), line: at(match.index) });
   const importRe = new RegExp(CSS_IMPORT_REGEX.source, CSS_IMPORT_REGEX.flags);
-  while ((match = importRe.exec(css))) refs.push(match[2] ?? '');
-  return refs;
+  while ((match = importRe.exec(css))) sites.push({ ref: match[2] ?? '', attribute: label('@import'), line: at(match.index) });
+  return sites;
 }
 
 // Collect url() / @import references from inline `<style>` blocks and
@@ -1219,24 +1461,34 @@ export function extractCssReferences(css: string) {
 // comments is intentionally skipped, mirroring how extractHtmlReferences
 // treats those raw-text regions.
 export function extractInlineCssReferences(html: string) {
+  return inlineCssReferenceSites(html).map((site) => site.ref);
+}
+
+function inlineCssReferenceSites(html: string): ReferenceSite[] {
   const source = String(html);
-  const refs: string[] = [];
+  const sites: ReferenceSite[] = [];
   const skipRanges = htmlRawTextRanges(source);
+  const lineOf = lineLocator(source);
 
   const styleBlockRe = /<style\b[^<>]*>([\s\S]*?)<\/style\s*>/gi;
   let block;
   while ((block = styleBlockRe.exec(source))) {
     if (isOffsetInRanges(block.index, skipRanges)) continue;
-    refs.push(...extractCssReferences(block[1] ?? ''));
+    const contentOffset = block.index + block[0].indexOf('>') + 1;
+    sites.push(...cssReferenceSites(block[1] ?? '', '<style>', lineOf(contentOffset)));
   }
 
   for (const tag of parseHtmlTags(source)) {
     const attrs = parseHtmlAttributes(tag.attrs);
     const style = attrs.get('style');
-    if (style) refs.push(...extractCssReferences(style));
+    // Attribute values may not span the tag's own lines exactly; report the tag's line.
+    if (style) {
+      const line = lineOf(tag.offset);
+      sites.push(...cssReferenceSites(style, `<${tag.name} style>`, undefined).map((site) => ({ ...site, line })));
+    }
   }
 
-  return refs;
+  return sites;
 }
 
 // Rewrite url() / @import references inside a CSS string so that paths
@@ -1244,15 +1496,22 @@ export function extractInlineCssReferences(html: string) {
 // the deploy root. Mirrors `rewriteHtmlReference` for HTML attributes.
 // Uses the same hardened character classes as `extractCssReferences` so
 // extract and rewrite see the same set of references.
-export function rewriteCssReferences(css: string, baseDir: string) {
+type ShareReferenceRewrite = {
+  /** Directory the rewritten file is published in; references become relative to it. */
+  outputBase: string;
+  /** Source path of the shared entry, which is published as `index.html`. */
+  entryPath?: string;
+};
+
+export function rewriteCssReferences(css: string, baseDir: string, share?: ShareReferenceRewrite) {
   return String(css)
     .replace(CSS_URL_REGEX, (match, quote, value) => {
       if (!value) return match;
-      const rewritten = rewriteHtmlReference(value, baseDir);
+      const rewritten = rewriteHtmlReference(value, baseDir, share);
       return `url(${quote}${rewritten}${quote})`;
     })
     .replace(/(@import\s+)(['"])([^'"]*?)\2/gi, (_full, prefix, quote, value) => {
-      const rewritten = rewriteHtmlReference(value, baseDir);
+      const rewritten = rewriteHtmlReference(value, baseDir, share);
       return `${prefix}${quote}${rewritten}${quote}`;
     });
 }
@@ -1270,7 +1529,7 @@ export function resolveReferencedPath(raw: unknown, baseDir: string) {
   return path.posix.normalize(path.posix.join(baseDir || '.', withoutQuery));
 }
 
-export function rewriteEntryHtmlReferences(html: string, baseDir: string) {
+export function rewriteEntryHtmlReferences(html: string, baseDir: string, share?: ShareReferenceRewrite) {
   const source = String(html);
   // Compute raw-text ranges against the input first so the style-block
   // pre-pass can skip `<style>...</style>` text that lives inside a
@@ -1282,7 +1541,7 @@ export function rewriteEntryHtmlReferences(html: string, baseDir: string) {
     /(<style\b[^<>]*>)([\s\S]*?)(<\/style\s*>)/gi,
     (full, openTag, content, closeTag, offset) => {
       if (isOffsetInRanges(offset, inputRawTextRanges)) return full;
-      return `${openTag}${rewriteCssReferences(content, baseDir)}${closeTag}`;
+      return `${openTag}${rewriteCssReferences(content, baseDir, share)}${closeTag}`;
     },
   );
   // Re-derive raw-text ranges against the post-style HTML: rewriting can
@@ -1294,7 +1553,7 @@ export function rewriteEntryHtmlReferences(html: string, baseDir: string) {
     if (isOffsetInRanges(offset, rawTextRanges)) return tag;
     const tagName = String(rawName).toLowerCase();
     const attrs = parseHtmlAttributes(rawAttrs);
-    return `<${rawName}${rewriteHtmlAttributes(rawAttrs, tagName, attrs, baseDir)}>`;
+    return `<${rawName}${rewriteHtmlAttributes(rawAttrs, tagName, attrs, baseDir, share)}>`;
   });
 }
 
@@ -1348,11 +1607,20 @@ export function analyzeDeployPlan(input: {
   files: DeployFile[];
   missing?: string[];
   invalid?: string[];
+  indexConflict?: EntryIndexConflict | null;
 }): { warnings: JsonObject[]; totalBytes: number; totalFiles: number } {
   const { entryPath, html, files } = input;
   const missing = input.missing ?? [];
   const invalid = input.invalid ?? [];
   const acc: { warnings: JsonObject[]; seen: Set<string> } = { warnings: [], seen: new Set() };
+
+  if (input.indexConflict) {
+    pushUnique(acc, {
+      code: 'entry-index-conflict',
+      path: PUBLISHED_ENTRY_PATH,
+      message: entryIndexConflictMessage(input.indexConflict, 'deploy'),
+    });
+  }
 
   for (const ref of missing) {
     pushUnique(acc, {
@@ -1527,21 +1795,43 @@ function escapeHtmlAttribute(value: unknown) {
     .replace(/>/g, '&gt;');
 }
 
-function rewriteSrcset(raw: string, baseDir: string) {
+function rewriteSrcset(raw: string, baseDir: string, share?: ShareReferenceRewrite) {
+  if (share) {
+    // A comma inside a data URL is not a candidate separator. Collect the URL
+    // token first, then its descriptors, retaining untouched separators verbatim.
+    let cursor = 0;
+    let copied = 0;
+    let result = '';
+    while (cursor < raw.length) {
+      while (cursor < raw.length && /[\s,]/.test(raw[cursor]!)) cursor++;
+      const start = cursor;
+      while (cursor < raw.length && !/\s/.test(raw[cursor]!)) cursor++;
+      let end = cursor;
+      while (end > start && raw[end - 1] === ',') end--;
+      if (end > start) {
+        result += raw.slice(copied, start) + rewriteHtmlReference(raw.slice(start, end), baseDir, share);
+        copied = end;
+      }
+      if (end === cursor) {
+        while (cursor < raw.length && raw[cursor] !== ',') cursor++;
+      }
+    }
+    return result + raw.slice(copied);
+  }
   return String(raw)
     .split(',')
     .map((part) => {
       const trimmed = part.trim();
       if (!trimmed) return part;
       const pieces = trimmed.split(/\s+/);
-      const nextUrl = rewriteHtmlReference(pieces[0] ?? '', baseDir);
+      const nextUrl = rewriteHtmlReference(pieces[0] ?? '', baseDir, share);
       return [nextUrl, ...pieces.slice(1)].join(' ');
     })
     .join(', ');
 }
 
 function parseHtmlTags(html: string) {
-  const tags: { name: string; attrs: string }[] = [];
+  const tags: { name: string; attrs: string; offset: number }[] = [];
   const rawTextRanges = htmlRawTextRanges(html);
   const tagRe = /<([A-Za-z][A-Za-z0-9:-]*)([^<>]*?)>/g;
   let match;
@@ -1550,6 +1840,7 @@ function parseHtmlTags(html: string) {
     tags.push({
       name: String(match[1]).toLowerCase(),
       attrs: match[2] || '',
+      offset: match.index,
     });
   }
   return tags;
@@ -1594,11 +1885,11 @@ function parseHtmlAttributes(rawAttrs: string) {
   return attrs;
 }
 
-function rewriteHtmlAttributes(rawAttrs: string, tagName: string, attrs: Map<string, string>, baseDir: string) {
+function rewriteHtmlAttributes(rawAttrs: string, tagName: string, attrs: Map<string, string>, baseDir: string, share?: ShareReferenceRewrite) {
   const shouldRewriteHref = shouldCollectHref(tagName, attrs);
   return String(rawAttrs).replace(
     /([^\s"'<>/=]+)(\s*=\s*)("([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g,
-    (full, rawName, equals, rawValue, doubleQuoted, singleQuoted, unquoted) => {
+    (full, rawName, equals, _rawValue, doubleQuoted, singleQuoted, unquoted) => {
       const name = String(rawName).toLowerCase();
       if (
         name !== 'src' &&
@@ -1613,9 +1904,9 @@ function rewriteHtmlAttributes(rawAttrs: string, tagName: string, attrs: Map<str
 
       const value = doubleQuoted ?? singleQuoted ?? unquoted ?? '';
       let nextValue;
-      if (name === 'srcset') nextValue = rewriteSrcset(value, baseDir);
-      else if (name === 'style') nextValue = rewriteCssReferences(value, baseDir);
-      else nextValue = rewriteHtmlReference(value, baseDir);
+      if (name === 'srcset') nextValue = rewriteSrcset(value, baseDir, share);
+      else if (name === 'style') nextValue = rewriteCssReferences(value, baseDir, share);
+      else nextValue = rewriteHtmlReference(value, baseDir, share);
       if (doubleQuoted !== undefined) return `${rawName}${equals}"${nextValue}"`;
       if (singleQuoted !== undefined) return `${rawName}${equals}'${nextValue}'`;
       return `${rawName}${equals}${nextValue}`;
@@ -1638,13 +1929,20 @@ function shouldCollectHref(tagName: string, attrs: Map<string, string>) {
   ));
 }
 
-function rewriteHtmlReference(raw: string, baseDir: string) {
+function rewriteHtmlReference(raw: string, baseDir: string, share?: ShareReferenceRewrite) {
   if (typeof raw !== 'string') return raw;
   const trimmed = raw.trim();
-  if (!trimmed || trimmed.startsWith('/') || trimmed.startsWith('#')) return raw;
+  if (!trimmed || trimmed.startsWith('#') || (!share && trimmed.startsWith('/'))) return raw;
   const resolved = resolveReferencedPath(raw, baseDir);
   if (!resolved) return raw;
   const suffix = referenceSuffix(trimmed);
+  if (share) {
+    // Invalid package paths remain diagnostics, never normalize away escapes.
+    let target;
+    try { target = validateProjectPath(resolved); } catch { return raw; }
+    if (share.entryPath && target === share.entryPath) target = PUBLISHED_ENTRY_PATH;
+    return `${path.posix.relative(share.outputBase, target)}${suffix}`;
+  }
   return `${resolved}${suffix}`;
 }
 

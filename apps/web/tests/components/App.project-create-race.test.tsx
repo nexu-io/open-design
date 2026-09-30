@@ -828,10 +828,13 @@ function stubWorkspaceContext(
     'fetch',
     vi.fn(async (input: RequestInfo | URL) => {
       const pathname = new URL(String(input), 'http://d.local').pathname;
+      const shareProjectId = pathname.match(/^\/api\/projects\/([^/]+)\/share-state$/)?.[1];
       return {
         ok: true,
         json: async () =>
-          pathname.endsWith('/workspace/directory')
+          shareProjectId
+            ? { projectId: decodeURIComponent(shareProjectId), hasEverShared: false, bindingExists: false, publications: [] }
+            : pathname.endsWith('/workspace/directory')
             ? workspaceDirectoryFixture([workspaceContext(workspaceId, workspaceMemberId)])
             : pathname.endsWith('/workspace/context')
               ? workspaceContextPayload(workspaceId, workspaceMemberId)
@@ -2102,12 +2105,13 @@ describe('App project creation routing', () => {
   });
 
   it('removes a locally deleted project from workspace tabs and ignores a stale list', async () => {
+    stubWorkspaceContext('ws-1', 'wm-1');
+    mockedDeleteProject.mockResolvedValue(true);
     const initialProjects = deferred<Project[]>();
     const staleRefreshProjects = deferred<Project[]>();
     mockedListProjects
       .mockReturnValueOnce(initialProjects.promise)
-      .mockReturnValueOnce(staleRefreshProjects.promise)
-      .mockResolvedValue([]);
+      .mockResolvedValue([freshProject]);
 
     render(<App />);
 
@@ -2128,14 +2132,16 @@ describe('App project creation routing', () => {
     workspaceTabsHarness.projectIds.add('project-new');
     expect(workspaceTabsHarness.projectIds.has('project-new')).toBe(true);
 
+    const listCallsBeforeRefresh = mockedListProjects.mock.calls.length;
+    mockedListProjects.mockReturnValueOnce(staleRefreshProjects.promise);
     fireEvent.click(screen.getByRole('button', { name: 'Refresh projects' }));
-    expect(mockedListProjects).toHaveBeenCalledTimes(2);
+    expect(mockedListProjects.mock.calls.length).toBeGreaterThan(listCallsBeforeRefresh);
 
     fireEvent.click(screen.getByRole('button', { name: 'Back to projects' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Delete Fresh project' }));
 
     await waitFor(() => {
-      expect(mockedDeleteProject).toHaveBeenCalledWith('project-new', null);
+      expect(mockedDeleteProject).toHaveBeenCalledWith('project-new', expect.objectContaining({ workspaceId: 'ws-1', workspaceMemberId: 'wm-1' }), expect.any(Function));
       expect(screen.queryByTestId('entry-project-project-new')).toBeNull();
       expect(workspaceTabsHarness.projectIds.has('project-new')).toBe(false);
     });
@@ -2449,9 +2455,7 @@ describe('App project creation routing', () => {
     });
 
     expect(window.location.pathname).toBe(`/projects/${workspaceProject.id}`);
-    expect(screen.getByTestId('project-route-workspace-context').textContent).toBe(
-      'ws-1:wm-1',
-    );
+    expect(screen.getByTestId('workspace-tabs-active-project-workspace').textContent).toBe('ws-1');
   });
 
   it('uses a title hint only after loading the workspace-bound local row', async () => {

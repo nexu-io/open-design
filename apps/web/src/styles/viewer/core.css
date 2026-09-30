@@ -1708,6 +1708,15 @@
   flex-direction: column;
   overflow: hidden;
 }
+/* OP2: reason line under a read-only share-page comment's textarea. No
+   board color/size was given for this specific line; matches the app's
+   existing muted-caption convention (comment-side-time / commentSync). */
+.comment-popover-readonly-note {
+  margin: 6px 0 0;
+  color: #888888;
+  font-size: 11px;
+  line-height: 16px;
+}
 .comment-popover-body {
   flex: 1 1 auto;
   /* Without this a flex item refuses to shrink below its content height, which
@@ -2386,6 +2395,21 @@
   line-height: 1.45;
   word-break: break-word;
   white-space: pre-wrap;
+}
+.comment-side-body.is-clamped {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+.comment-side-expand {
+  align-self: flex-start;
+  padding: 2px 0 0;
+  border: 0;
+  background: transparent;
+  color: var(--comment-accent);
+  font: inherit;
+  cursor: pointer;
 }
 .comment-side-attachments {
   display: flex;

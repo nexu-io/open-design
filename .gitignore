@@ -1,4 +1,7 @@
 node_modules
+
+# Local validation output; retained on disk but never delivered as repository content.
+/evidence/
 dist/
 out/
 .next/

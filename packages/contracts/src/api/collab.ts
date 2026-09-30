@@ -15,6 +15,25 @@ import type {
 // the sync trigger. Single source of truth for the daemon routes, the web
 // CollabClient, and the `od collab` CLI so no surface re-declares these shapes.
 
+export interface ProjectShareHistoryResponse {
+  projectId: string;
+  /** Includes stopped bindings; absence of a local link is irrelevant. */
+  bindingExists: boolean;
+  hasEverShared: boolean;
+  publications: Array<{ sourceFilePath: string; slug: string; status: 'active' | 'stopped' }>;
+}
+
+export interface PublicFileStopRetryRequest {
+  projectId: string;
+  /** Original project-relative file identity; the project may already be deleted. */
+  filePath: string;
+  slug: string;
+}
+
+export interface PublicFileStopRetryResponse extends PublicFileStopRetryRequest {
+  status: 'stopped';
+}
+
 export type CollabMemberRole = 'owner' | 'admin' | 'member';
 
 /** Public single-file snapshot returned by the daemon publish routes. */
@@ -27,8 +46,10 @@ export interface PublicProjectFilePublication {
 export const PUBLIC_FILE_MANUAL_REVOKE_REQUIRED =
   'PUBLIC_FILE_MANUAL_REVOKE_REQUIRED' as const;
 
-/** Recovery data returned when a new public snapshot could not be persisted or redacted. */
-export interface PublicFileManualRevokeRequiredData extends PublicProjectFilePublication {
+/** Recovery data returned when a new public snapshot could not be persisted or redacted.
+ * `url` is `null` when no Viewer origin is configured; `slug` still stops it. */
+export interface PublicFileManualRevokeRequiredData extends Omit<PublicProjectFilePublication, 'url'> {
+  url: string | null;
   projectId: string;
 }
 
@@ -1065,9 +1086,11 @@ export interface CollabCloudMembersResponse {
  * `slideIndex`) plus the drift-ladder fields (`anchorState`/`anchoredVersion`/
  * `lastGoodPosition`) ride along so a synced comment keeps pointing at the same
  * element on the receiver. The stream carries the comment's full lifecycle: a
- * create/edit is pushed with the current `updatedAt` (receivers apply the newest
- * by `updatedAt`), and a delete is pushed as a tombstone (`deleted: true`) that
- * removes the comment by `id` on every receiver.
+ * create/edit is pushed with the current `updatedAt`, and a delete is pushed as
+ * a tombstone (`deleted: true`) that removes the comment by `id` on every
+ * receiver. Receivers order revisions of one comment by the cloud `seq` (a
+ * replayed `seq` never overwrites a later one); `updatedAt` is the business
+ * last-writer-wins check for a revision the receiver has not seen yet.
  */
 export interface CollabCloudComment {
   /**
@@ -1099,6 +1122,8 @@ export interface CollabCloudComment {
   seq: number;
   note: string;
   filePath: string;
+  /** Server-asserted alias identity for public-file relays; clients do not supply it. */
+  publicationSlug?: string;
   elementId: string;
   selector: string;
   label: string;
@@ -1127,6 +1152,47 @@ export interface CollabCloudComment {
    * comment as it last existed and should not be re-materialized.
    */
   deleted?: boolean;
+  /**
+   * Which identity the author holds — see `ShareAuthorKind`. Absent means
+   * `member`, which is what every comment written before the share page
+   * existed is.
+   *
+   * ## Why this had to widen before anything else
+   *
+   * This interface is the WIRE between daemons of different versions. A daemon
+   * that does not know a field drops it on receive, and `mergeSyncedComment`'s
+   * update path does not rewrite authorship afterwards — so a comment that
+   * round-trips through an older daemon loses these fields permanently, with
+   * nothing to recover them from. Widening the wire first is what keeps that
+   * from happening; the fields can then be populated at leisure.
+   *
+   * All three are optional for the same reason: an older daemon sends none of
+   * them and must keep working.
+   */
+  authorKind?: 'member' | 'user';
+  /**
+   * The author's account id when `authorKind` is `user`. Carried alongside
+   * `memberId` rather than replacing it: `memberId` stays required so an older
+   * daemon still has something to render.
+   */
+  authorAppUserId?: string;
+  /**
+   * Server-stamped display name for the author.
+   *
+   * It travels WITH the comment on purpose. The alternative — resolving the
+   * name from the team member directory at render time — would mean the share
+   * page needs to read that directory, and the directory exposes real names
+   * and roles. Sending the name with the comment keeps the two as separate
+   * channels, so showing an author's name never requires opening the roster.
+   */
+  authorDisplayName?: string;
+  /**
+   * Avatar colour seed, keyed on the ACCOUNT rather than the membership so one
+   * person is one colour whether they commented from the client or the share
+   * page. Display only — never an identity assertion, and never the basis for
+   * deciding whether a comment belongs to the viewer.
+   */
+  authorKey?: string;
 }
 
 /** POST /teams/:teamId/projects/:projectId/comments request body. */

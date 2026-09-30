@@ -111,6 +111,10 @@ describe("legacy payload desktop handoff", () => {
           : (lifecycleHoldObservations.push(isParentMonitorExitHeld()), { accepted: true }));
       await expect(executeLegacyPayloadDesktopHandoff(prepared, {
         confirmTimeoutMs: 100,
+        env: {
+          OD_SHARE_VIEWER_URL: "https://viewer.example.test",
+          OD_SHARE_VIEWER_URLS: JSON.stringify({ prod: "https://viewer.example.test" }),
+        },
         spawn: spawn as never,
         now: () => new Date("2026-07-15T02:00:00.000Z"),
         requestDesktop,
@@ -124,6 +128,11 @@ describe("legacy payload desktop handoff", () => {
         target: { generation: 2, version: value.version },
       });
 
+      // The replacement desktop derives its own share Viewer default from its
+      // channel; a value the daemon received must not reach it as an override.
+      const spawnedEnv = (spawn.mock.calls[0] as unknown as [{ env: NodeJS.ProcessEnv }])[0].env;
+      expect(spawnedEnv).not.toHaveProperty("OD_SHARE_VIEWER_URL");
+      expect(spawnedEnv).not.toHaveProperty("OD_SHARE_VIEWER_URLS");
       expect(spawn).toHaveBeenCalledWith(expect.objectContaining({
         command: value.payloadExecutablePath,
         resources: {

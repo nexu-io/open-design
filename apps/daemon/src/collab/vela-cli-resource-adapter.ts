@@ -326,7 +326,12 @@ function parseVersion(
 ): { version: number; versionId?: string } | null {
   const trimmed = stdout.trim();
   if (!trimmed) return null;
-  const parsed = JSON.parse(trimmed) as VelaVersionRecord;
+  let parsed: VelaVersionRecord;
+  try {
+    parsed = JSON.parse(trimmed) as VelaVersionRecord;
+  } catch {
+    throw new Error('vela resource response has invalid JSON');
+  }
   if (parsed.version == null) return null;
   if (typeof parsed.version !== 'number') {
     throw new Error('vela resource response has an invalid version');
@@ -340,6 +345,17 @@ function parseVersion(
     version: parsed.version,
     ...(versionId ? { versionId } : {}),
   };
+}
+
+/** The push wire ID identifies this upload; display version/ref are not identities. */
+export function parseVelaPushVersionId(stdout: string): string {
+  let parsed: unknown;
+  try { parsed = JSON.parse(stdout); } catch { /* Report no raw wire content. */ }
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+    && 'id' in parsed && typeof parsed.id === 'string' && parsed.id.trim()) {
+    return parsed.id;
+  }
+  throw new Error('vela push response has no immutable version id');
 }
 
 export function parseVelaResourceSnapshot(stdout: string): VelaResourceSnapshotRecord | null {

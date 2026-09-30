@@ -1,4 +1,6 @@
 export * from './common.js';
+export * from './runtime/annotated-selector.js';
+export * from './comment-target-title.js';
 export * from './errors.js';
 export * from './api/failure-detail.js';
 export * from './settings-nav.js';
@@ -22,6 +24,7 @@ export * from './api/context.js';
 export * from './api/connectors.js';
 export * from './api/comments.js';
 export * from './api/collab.js';
+export * from './api/share.js';
 export * from './api/project-sync.js';
 export * from './api/team-resources.js';
 export * from './api/touchpointOffline.js';
