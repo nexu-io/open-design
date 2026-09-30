@@ -1,4 +1,5 @@
 export const PROTOCOL_VERSION = 1 as const;
+export { resolveCompatibilityGeneration } from './compatibility.js';
 export const RUNTIME_NAME = 'open-design' as const;
 export const CAPABILITIES = {
   session_resume: true,
@@ -87,13 +88,14 @@ export function parseHostCommand(value: unknown): HostCommand {
   };
 }
 
-export function identityFrame(type: 'probe' | 'ready', pluginVersion: string) {
+export function identityFrame(type: 'probe' | 'ready', pluginVersion: string, compatibilityGeneration?: string | null) {
   return {
     v: PROTOCOL_VERSION,
     type,
     runtime: RUNTIME_NAME,
     protocol_version: PROTOCOL_VERSION,
     plugin_version: pluginVersion,
+    ...(compatibilityGeneration ? { compatibility_generation: compatibilityGeneration } : {}),
     capabilities: CAPABILITIES,
   };
 }
