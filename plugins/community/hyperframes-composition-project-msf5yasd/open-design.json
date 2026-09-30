@@ -1,0 +1,33 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "hyperframes-composition-project-msf5yasd",
+  "title": "HyperFrames Composition Project",
+  "version": "0.1.0",
+  "description": "Guides agents through creating and validating HyperFrames HTML compositions with the framework's required project conventions and workflows.",
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:read",
+      "fs:write",
+      "bash",
+      "network"
+    ]
+  }
+}
