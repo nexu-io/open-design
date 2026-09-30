@@ -392,6 +392,7 @@ export const fa: Dict = {
   'settings.onboardingCloudAlternative': 'از یک CLI محلی یا کلید API خودتان استفاده کنید',
   'settings.onboardingCloudRights': 'همهٔ حقوق محفوظ است.',
   'settings.onboardingCloudOr': 'یا',
+  'settings.onboardingCloudCancel': 'لغو و بازگشت به OpenDesign',
   'settings.onboardingGateTooltipNoRuntime': 'مراحل بعدی با هوش مصنوعی اجرا می‌شوند — برای ادامه یک روش اجرا انتخاب کنید.',
   'settings.onboardingGateTooltipAmr': 'مراحل بعدی با هوش مصنوعی اجرا می‌شوند — برای ادامه وارد OpenDesign Cloud شوید.',
   'settings.onboardingGateTooltipLocal': 'مراحل بعدی با هوش مصنوعی اجرا می‌شوند — برای ادامه یک CLI محلی در دسترس انتخاب کنید.',

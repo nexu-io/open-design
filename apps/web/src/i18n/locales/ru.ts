@@ -392,6 +392,7 @@ export const ru: Dict = {
   'settings.onboardingCloudAlternative': 'Использовать локальный CLI или свой ключ API',
   'settings.onboardingCloudRights': 'Все права защищены.',
   'settings.onboardingCloudOr': 'или',
+  'settings.onboardingCloudCancel': 'Отмена и возврат в OpenDesign',
   'settings.onboardingGateTooltipNoRuntime': 'Следующие шаги выполняются на ИИ — выберите способ запуска, чтобы продолжить.',
   'settings.onboardingGateTooltipAmr': 'Следующие шаги выполняются на ИИ — войдите в OpenDesign Cloud, чтобы продолжить.',
   'settings.onboardingGateTooltipLocal': 'Следующие шаги выполняются на ИИ — выберите доступный локальный CLI, чтобы продолжить.',

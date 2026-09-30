@@ -392,6 +392,7 @@ export const hu: Dict = {
   'settings.onboardingCloudAlternative': 'Helyi CLI vagy saját API-kulcs használata',
   'settings.onboardingCloudRights': 'Minden jog fenntartva.',
   'settings.onboardingCloudOr': 'vagy',
+  'settings.onboardingCloudCancel': 'Mégse és visszatérés az OpenDesignhoz',
   'settings.onboardingGateTooltipNoRuntime': 'A következő lépések MI-n futnak — válassz futtatókörnyezetet a folytatáshoz.',
   'settings.onboardingGateTooltipAmr': 'A következő lépések MI-n futnak — jelentkezz be az OpenDesign Cloud-be a folytatáshoz.',
   'settings.onboardingGateTooltipLocal': 'A következő lépések MI-n futnak — válassz egy elérhető helyi CLI-t a folytatáshoz.',
