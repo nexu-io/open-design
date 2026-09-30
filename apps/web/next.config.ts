@@ -199,7 +199,12 @@ const nextConfig: NextConfig = {
   env: {
     // Embedded in the client at build time. Packaged servers use the already
     // compiled client and need not retain source files to load this config.
-    NEXT_PUBLIC_CMS_HOST_RELEASE: existsSync(resolve(WEB_ROOT, 'src/components/touchpoint-component.ts'))
+    //
+    // Guard on the same root the reads below use. In the packaged layout this
+    // config is re-loaded from node_modules/@open-design/web, where
+    // resolveWorkspaceRoot() resolves to node_modules: a WEB_ROOT-relative guard
+    // would pass while every CMS_HOST_RELEASE_INPUTS read threw ENOENT.
+    NEXT_PUBLIC_CMS_HOST_RELEASE: existsSync(resolve(WORKSPACE_ROOT, CMS_HOST_RELEASE_INPUTS[0]))
       ? cmsHostReleaseFingerprint((file) => readFileSync(resolve(WORKSPACE_ROOT, file)))
       : undefined,
   },
