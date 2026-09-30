@@ -534,6 +534,7 @@ import { readOpenCodeServiceFailure } from './runtimes/opencode-log.js';
 import { applyOpenCodeEventPlugin } from './runtimes/opencode-event-plugin.js';
 import { createAgentStderrVisibilityFilter } from './amr-stderr-filter.js';
 import { createQoderStreamHandler } from './runtimes/qoder-stream.js';
+import { createCommandCodeStreamHandler } from './runtimes/command-code-stream.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
 import { importFigmaFromBytes } from './figma/figma-import.js';
 import { renderDesignSystemPreview } from './design-systems/preview.js';
@@ -15609,6 +15610,16 @@ export async function startServer({
       const qoder = createQoderStreamHandler(sendAgentEvent);
       child.stdout.on('data', (chunk) => qoder.feed(chunk));
       child.on('close', () => qoder.flush());
+    } else if (def.streamFormat === 'command-code-stream-json') {
+      // Same wiring as qoder: the parser reports through `sendAgentEvent` so
+      // the shared run bookkeeping (CLI-ready stamp, text-delta guards,
+      // `status.sessionId` capture, error classification) applies unchanged.
+      // Substantive-output tracking is on because a Command Code turn may
+      // deliver its artifact through tools with little or no final text.
+      trackingSubstantiveOutput = true;
+      const commandCode = createCommandCodeStreamHandler(sendAgentEvent);
+      child.stdout.on('data', (chunk) => commandCode.feed(chunk));
+      child.on('close', () => commandCode.flush());
     } else if (def.streamFormat === 'copilot-stream-json') {
       const copilot = createCopilotStreamHandler((ev) => {
         lastAgentEventPhase = summarizeAgentEventForInactivity(ev);

@@ -25,15 +25,17 @@ The implementation is split by responsibility:
   cancellation, and the compatibility `POST /api/chat` route. The current run
   execution pipeline is assembled in `apps/daemon/src/server.ts`.
 - `apps/daemon/src/runtimes/claude-stream.ts`, `json-event-stream.ts`,
-  `qoder-stream.ts`, and `apps/daemon/src/copilot-stream.ts` normalize
+  `qoder-stream.ts`, `command-code-stream.ts`, and
+  `apps/daemon/src/copilot-stream.ts` normalize
   runtime-specific structured output.
 - `apps/daemon/src/agent-protocol/` owns the shared JSON-line transport and the
   ACP and pi RPC protocol implementations.
 
 ## Registered Runtimes
 
-`BASE_AGENT_DEFS` in `apps/daemon/src/runtimes/registry.ts` currently contains
-26 built-in adapter definitions. `AGENT_DEFS` also appends valid local profiles
+`SHIPPED_AGENT_DEFS` in `apps/daemon/src/runtimes/registry.ts` currently lists
+28 built-in adapter definitions — 27 local CLI runtimes plus the `byok-opencode`
+profile. `AGENT_DEFS` also appends valid local profiles
 loaded by `readLocalAgentProfileDefs()`, so an installation can expose more
 entries than the built-in list.
 
@@ -44,6 +46,7 @@ entries than the built-in list.
 | `acp-json-rpc` | `amr`, `devin`, `hermes`, `trae-cli`, `kimi`, `kiro`, `kilo`, `vibe`, `reasonix` | `vela`, `devin`, `hermes`, `traecli`, `kimi`, `kiro-cli`, `kilo`, `vibe-acp`, `reasonix` |
 | `pi-rpc` | `pi` | `pi` |
 | `qoder-stream-json` | `qoder` | `qodercli` |
+| `command-code-stream-json` | `command-code` | `command-code` |
 | `copilot-stream-json` | `copilot` | `copilot` |
 | `plain` | `grok-build`, `qwen`, `deepseek`, `aider`, `antigravity`, `atomcode` | `grok`, `qwen`, `deepseek`, `aider`, `agy`, `atomcode` |
 
@@ -159,6 +162,7 @@ The run pipeline selects a handler from `streamFormat`:
 | `claude-stream-json` | `createClaudeStreamHandler()` in `runtimes/claude-stream.ts` |
 | `json-event-stream` | `createJsonEventStreamHandler()` in `runtimes/json-event-stream.ts`, parameterized by `eventParser` |
 | `qoder-stream-json` | `createQoderStreamHandler()` in `runtimes/qoder-stream.ts` |
+| `command-code-stream-json` | `createCommandCodeStreamHandler()` in `runtimes/command-code-stream.ts` |
 | `copilot-stream-json` | `createCopilotStreamHandler()` in `copilot-stream.ts` |
 | `pi-rpc` | `attachPiRpcSession()` from `agent-protocol/pi-rpc/` |
 | `acp-json-rpc` | `attachAcpSession()` from `agent-protocol/acp/` |
