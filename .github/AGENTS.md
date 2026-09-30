@@ -31,6 +31,7 @@ Business layer:
 - `ci.yml` is the main low-privilege PR, merge-queue, and manual validation gate (application merge bar only).
 - `ci.yml` should resolve runners, compose scope and convergence decisions in its Linux `plan` job, run validation, and produce typed handoff artifacts.
 - Docker image checks are standalone and outside the merge gate. Do not re-attach `docker-image.yml` to `Validate workspace`.
+- Stable Docker publication is also an independent reconciler: `release-stable.yml` publishes immutable version metadata and dispatches `release-stable-docker.yml`, but never waits for a Docker build. The independent workflow resolves the exact version metadata, calls `docker-image.yml` to converge the immutable version tag, then moves `latest` only when that version is still the authoritative stable release. Keep version retries idempotent and never infer a run's version from `stable/latest`.
 - Business workflows should not perform trusted writes to PR comments or branches when a capability workflow can do it.
 
 Atomic capability layer:
