@@ -354,6 +354,20 @@ function isSessionResumeExpiredText(text: string): boolean {
     /\bsession [\w-]+ not found\b/i.test(text);
 }
 
+// A lost race for the local credential-refresh lock, not a bad credential.
+//
+// Anchored on the contention itself — another holder, or a holder that died
+// mid-refresh — because that is what separates this from a genuinely unusable
+// token. An expired or replayed refresh token reads as "refresh token expired
+// / already used" and belongs to `authDetail`; those phrases are deliberately
+// not matched here. The trailing "or sign in again" in the agent's own message
+// is advice for the persistent case and is likewise not treated as evidence,
+// so a first occurrence cannot be laundered into a sign-in prompt.
+function isTransientCredentialRefreshText(text: string): boolean {
+  return /\banother [\w ]*process is refreshing it\b/i.test(text) ||
+    /\bexited mid-refresh\b/i.test(text);
+}
+
 function promptTooLargeDetail(text: string): TrackingRunFailureDetail | null {
   if (
     /\b(?:Payload Too Large|Request Entity Too Large|request entity too large|request body exceeds configured limit)\b/i.test(text) ||
@@ -1206,6 +1220,31 @@ function classifyRunFailureBase(
     return classification(
       'process_exit',
       'session_resume_expired',
+      'session_init',
+      true,
+      'retry',
+    );
+  }
+
+  // Concurrent refreshes of one stored OAuth credential: a second agent process
+  // (or a `claude login` run by hand) held the refresh lock, so this run's
+  // refresh aborted before a request was ever sent.
+  //
+  // Claimed ahead of every auth branch below on purpose. The agent's message
+  // ends "…or sign in again", and `auth` is fixed at `retryable: false` /
+  // `user_action: 'login'` — so reaching that verdict would tell the user to
+  // re-authenticate a credential that is perfectly valid, and strand the run.
+  // Claimed ahead of the `process_exit` fallbacks for the opposite reason:
+  // there it lands on `exit_nonzero`, which `transientSuppressedReason` refuses
+  // as a non-retryable category, which is how this surfaces today — a dead-end
+  // failure card for a condition the agent itself describes as transient.
+  //
+  // Nothing streamed and no tool ran at `session_init`, so the replay is safe
+  // and the side-effect gates in the retry policy stay satisfied.
+  if (isTransientCredentialRefreshText(text)) {
+    return classification(
+      'process_exit',
+      'credential_refresh_contention',
       'session_init',
       true,
       'retry',
