@@ -3338,6 +3338,37 @@ describe('ProjectView conversation run isolation', () => {
     }));
   });
 
+  it('sends a literal `default` model through a same-origin custom endpoint', async () => {
+    listMessages.mockResolvedValue([]);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }));
+
+    renderProjectView({
+      ...config,
+      mode: 'api',
+      apiProtocol: 'openai',
+      apiKey: 'sk-gateway',
+      baseUrl: 'https://api.openai.com/v1beta',
+      model: 'default',
+    });
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false));
+
+    fireEvent.click(screen.getByTestId('send-message'));
+
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    expect(streamViaDaemon).toHaveBeenCalledWith(expect.objectContaining({
+      agentId: 'byok-opencode',
+      byokProvider: expect.objectContaining({
+        protocol: 'openai',
+        baseUrl: 'https://api.openai.com/v1beta',
+        model: 'default',
+        requiresApiKey: true,
+      }),
+      model: 'default',
+    }));
+  });
+
   it('routes the keyless vLLM BYOK preset through OpenCode with provider metadata', async () => {
     listMessages.mockResolvedValue([]);
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }));

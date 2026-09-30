@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { isCustomByokBaseUrl } from '@open-design/contracts';
+
 import { agentCapabilities } from '../../src/runtimes/capabilities.js';
 import {
   BYOK_OPENCODE_API_KEY_ENV,
@@ -448,5 +450,103 @@ describe('byok-opencode runtime config', () => {
     const provider = (out?.config.provider as Record<string, { options?: Record<string, unknown> }> | undefined)
       ?.[BYOK_OPENCODE_PROVIDER_ID];
     expect(provider?.options).not.toHaveProperty('apiKey');
+  });
+
+  it('treats `default` as a sentinel only for the built-in protocol endpoints', () => {
+    expect(isCustomByokBaseUrl('openai', 'https://api.openai.com/v1')).toBe(false);
+    expect(isCustomByokBaseUrl('openai', 'https://api.openai.com')).toBe(false);
+    expect(isCustomByokBaseUrl('openai', 'https://gateway.internal/v1')).toBe(true);
+    expect(isCustomByokBaseUrl('openai', '')).toBe(false);
+    // Ollama Cloud normalizes to /v1, so both spellings stay built-in.
+    expect(isCustomByokBaseUrl('ollama', 'https://ollama.com')).toBe(false);
+    expect(isCustomByokBaseUrl('ollama', 'https://ollama.com/v1')).toBe(false);
+    expect(isCustomByokBaseUrl('ollama', 'https://ollama.com/api')).toBe(false);
+    expect(isCustomByokBaseUrl('ollama', '')).toBe(false);
+    // Deeper same-origin paths are preserved verbatim by the daemon, so
+    // they stay distinct custom endpoints rather than collapsing to root.
+    expect(isCustomByokBaseUrl('anthropic', 'https://api.anthropic.com/api/v1')).toBe(true);
+    expect(isCustomByokBaseUrl('ollama', 'https://ollama.com/api/v1')).toBe(true);
+    // Local Ollama/vLLM endpoints are custom gateways by definition.
+    expect(isCustomByokBaseUrl('ollama', 'http://127.0.0.1:11434/v1')).toBe(true);
+    expect(opencodeByokModelId('default')).toBeNull();
+    expect(opencodeByokModelId('default', { allowDefaultModel: true }))
+      .toBe('open-design-byok/default');
+  });
+
+  it('keeps the sentinel guard on Ollama Cloud but lifts it for local endpoints', () => {
+    expect(
+      buildOpenCodeByokProviderConfig(
+        { protocol: 'ollama', apiKey: 'dummy', baseUrl: 'https://ollama.com' },
+        'default',
+      ),
+    ).toBeNull();
+    expect(
+      buildOpenCodeByokProviderConfig(
+        { protocol: 'ollama', apiKey: '', baseUrl: 'http://127.0.0.1:11434' },
+        'default',
+      )?.modelId,
+    ).toBe('open-design-byok/default');
+  });
+
+  it('builds provider config for a literal `default` model on a custom base URL', () => {
+    const out = buildOpenCodeByokProviderConfig(
+      {
+        protocol: 'openai',
+        apiKey: 'sk-gateway',
+        baseUrl: 'https://llm.example.internal/v1',
+      },
+      'default',
+    );
+
+    expect(out?.modelId).toBe('open-design-byok/default');
+    expect(out?.config).toMatchObject({
+      provider: {
+        [BYOK_OPENCODE_PROVIDER_ID]: {
+          models: { default: { name: 'default' } },
+        },
+      },
+    });
+  });
+
+  it.each([
+    ['anthropic', 'https://api.anthropic.com/api'],
+    ['openai', 'https://api.openai.com/v1beta'],
+    ['google', 'https://generativelanguage.googleapis.com/v1'],
+    ['ollama', 'https://ollama.com/v1beta'],
+    ['senseaudio', 'https://api.senseaudio.cn/api'],
+    ['aihubmix', 'https://aihubmix.com'],
+  ] as const)(
+    'builds provider config for `default` on the %s same-origin custom endpoint',
+    (protocol, baseUrl) => {
+      expect(
+        buildOpenCodeByokProviderConfig(
+          { protocol, apiKey: 'test-key', baseUrl },
+          'default',
+        )?.modelId,
+      ).toBe('open-design-byok/default');
+    },
+  );
+
+  it('still rejects `default` on the protocol default endpoint', () => {
+    expect(
+      buildOpenCodeByokProviderConfig(
+        {
+          protocol: 'openai',
+          apiKey: 'sk-openai',
+          baseUrl: 'https://api.openai.com/v1',
+        },
+        'default',
+      ),
+    ).toBeNull();
+    expect(
+      buildOpenCodeByokProviderConfig(
+        {
+          protocol: 'anthropic',
+          apiKey: 'sk-ant',
+          baseUrl: 'https://api.anthropic.com/v1',
+        },
+        'DEFAULT',
+      ),
+    ).toBeNull();
   });
 });
