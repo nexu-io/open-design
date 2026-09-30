@@ -1547,8 +1547,8 @@ export function SettingsDialog({
     ReadonlySet<string>
   >(() => new Set());
   const previousInitialRef = useRef(initial);
-  // Accent only — the theme is a constant now that the app ships light-only.
   const lastSavedAppearanceRef = useRef({
+    theme: initial.theme,
     accentColor: resolveAccentColor(initial.accentColor),
   });
 
@@ -1564,9 +1564,10 @@ export function SettingsDialog({
 
   useEffect(() => {
     lastSavedAppearanceRef.current = {
+      theme: initial.theme,
       accentColor: resolveAccentColor(initial.accentColor),
     };
-  }, [initial.accentColor]);
+  }, [initial.theme, initial.accentColor]);
 
   useEffect(() => {
     const previousInitial = previousInitialRef.current;
@@ -3348,6 +3349,7 @@ export function SettingsDialog({
             committedClearedByokProviderKeyRef.current = null;
           }
           lastSavedAppearanceRef.current = {
+            theme: persistedSnapshot.theme,
             accentColor: resolveAccentColor(persistedSnapshot.accentColor),
           };
           // If a newer edit landed while the request was in flight,
@@ -3905,10 +3907,8 @@ export function SettingsDialog({
     integrations: { title: t('settings.mcpServerTitle'), subtitle: t('settings.mcpServerHint') },
     mcpClient: { title: t('settings.externalMcpTitle'), subtitle: t('settings.externalMcpHint') },
     language: { title: t('settings.language'), subtitle: t('settings.languageHint') },
-    // The theme setting is gone (the app ships light-only), so `appearance` has
-    // no copy of its own. It survives only as a legacy deep-link token that
-    // `normalizeSettingsSection` folds into General, so this entry can never be
-    // the active header — it exists to keep the Record exhaustive.
+    // `appearance` survives as a legacy deep-link token folded into General;
+    // this entry remains for the exhaustive Record.
     appearance: { title: t('settings.general'), subtitle: t('settings.generalHint') },
     critiqueTheater: {
       title: t('critiqueTheater.settingsNav'),
@@ -5972,6 +5972,30 @@ export function SettingsDialog({
                     </select>
                     <Icon name="chevron-down" size={14} />
                   </label>
+                </div>
+                <div className="settings-general-field">
+                  <span className="settings-general-label">{t('settings.appearance')}</span>
+                  <div className="seg-control" role="group" aria-label={t('settings.appearance')} style={{ '--seg-cols': 3 } as React.CSSProperties}>
+                    {([
+                      ['system', t('settings.themeSystem')],
+                      ['light', t('settings.themeLight')],
+                      ['dark', t('settings.themeDark')],
+                    ] as const).map(([theme, label]) => (
+                      <button
+                        key={theme}
+                        type="button"
+                        className={'seg-btn' + (cfg.theme === theme ? ' active' : '')}
+                        aria-pressed={cfg.theme === theme}
+                        onClick={() => {
+                          const next = { ...cfg, theme };
+                          setCfg(next);
+                          applyAppearanceToDocument(next);
+                        }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 

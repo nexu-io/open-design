@@ -182,7 +182,10 @@ import {
   syncMediaProvidersToDaemon,
 } from './state/config';
 import { createSilentUpdatePreferenceWriter } from './state/silent-update-preference';
-import { applyAppearanceToDocument } from './state/appearance';
+import {
+  applyAppearanceToDocument,
+  subscribeToSystemThemeChanges,
+} from './state/appearance';
 import { isMacPlatform } from './utils/platform';
 import { randomUUID } from './utils/uuid';
 import { summarizeProjectNameFromPrompt } from './utils/projectName';
@@ -1898,13 +1901,27 @@ function AppInner() {
   ]);
 
   // Stamp the app appearance onto the <html> element so CSS variables pick it
-  // up. The theme itself is a constant (light-only), but the accent still comes
-  // from config, and the stamp must be re-applied whenever that changes.
+  // up. Re-apply whenever the configured theme or accent changes.
   // useLayoutEffect (vs useEffect) fires before the browser paints, so no
   // 1-frame flash. Safe here because the component tree is ssr:false.
   useLayoutEffect(() => {
-    applyAppearanceToDocument({ accentColor: config.accentColor });
-  }, [config.accentColor]);
+    applyAppearanceToDocument({
+      theme: config.theme,
+      accentColor: config.accentColor,
+    });
+  }, [config.theme, config.accentColor]);
+
+  useEffect(() => {
+    if (config.theme !== 'system') return;
+    return subscribeToSystemThemeChanges(() => {
+      const currentConfig = configRef.current;
+      if (currentConfig.theme !== 'system') return;
+      applyAppearanceToDocument({
+        theme: currentConfig.theme,
+        accentColor: currentConfig.accentColor,
+      });
+    });
+  }, [config.theme]);
 
   // Tell the daemon what the user is currently looking at, so the MCP
   // server can surface it as `get_active_context` to a coding agent in
