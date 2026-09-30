@@ -728,6 +728,9 @@ describe('OD Next V2 prompt recipe', () => {
     expect(production).toContain('outcome completed');
     expect(production).toContain('reasonCodes []');
     expect(production).toContain('no Plan Contract block');
+    expect(production).toContain('write it in bounded chunks to a temporary non-runnable path');
+    expect(production).toContain('atomically move it to the final runnable name');
+    expect(production).toContain('never expose a partial root `index.html`');
     expect(production).not.toContain(recipe.coreStrategy);
     expect(production).not.toContain(recipe.generalOrchestration);
     expect(production).not.toContain(recipe.taskSkill);
