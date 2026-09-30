@@ -51,6 +51,8 @@ export function isStrategyIntentResolutionRun(task: StrategyTaskExecutionRecord,
 export function requiresStrategyIntentResolution(task: StrategyTaskExecutionRecord, parsed: OdNextMachineProtocolResult): boolean {
   if (task.intentResolution?.state !== 'unresolved' || parsed.runtimeState?.executionIntent !== undefined
     || !['request', 'clarification'].includes(task.inputStage) || task.route === 'direct_edit') return false;
+  // A same-run completion already wrote its deliverable: that is produce intent.
+  if ((parsed.runtimeState ?? parsed.repairRuntimeState)?.outcome === 'completed') return false;
   const plan = parsed.planContract ?? parsed.repairPlanContract;
   return (parsed.issues.length === 0 && parsed.runtimeState?.outcome === 'plan_ready' && Boolean(plan))
     || (parsed.issues.length > 0 && Boolean(plan) && task.planContractRepairAttempts === 0);

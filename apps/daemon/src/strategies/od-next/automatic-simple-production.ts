@@ -472,8 +472,12 @@ export function prepareAutomaticStrategyContinuation<
   const plan = input.parsed.planContract ?? input.parsed.repairPlanContract;
   if (planningOnly) return { result: finalize(), start: false };
 
+  // A same-run completion already built; a repair Run could only rebuild it.
+  const declaredSameRunCompletion =
+    (input.parsed.runtimeState ?? input.parsed.repairRuntimeState)?.outcome === 'completed';
   const repairCandidate =
     input.parsed.issues.length > 0
+    && !declaredSameRunCompletion
     && Boolean(plan)
     && (input.task.route === null || input.task.route === 'full_plan')
     && ['request', 'clarification'].includes(input.task.inputStage)
