@@ -168,6 +168,22 @@ describe("buildDockerArgs", () => {
     expect(args).toContain("ELECTRON_BUILDER_CACHE=/home/builder/.cache/electron-builder");
   });
 
+  it("sets CI=true so the inner pnpm install does not abort the modules-dir purge on a populated host tree", () => {
+    // Regression guard for ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY: a local
+    // developer tree mounts an existing node_modules the container pnpm wants to
+    // rebuild; without CI it refuses the purge with no TTY and the build fails.
+    const args = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
+    expect(args).toContain("CI=true");
+  });
+
+  it("points npm_execpath at the standalone container pnpm so nested runPnpm calls avoid corepack", () => {
+    // Regression guard for `spawn corepack ENOENT`: the builder:base image has no
+    // corepack, so createPackageManagerInvocation must resolve to the bootstrapped
+    // pnpm instead of the corepack fallback.
+    const args = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
+    expect(args).toContain("npm_execpath=/tmp/pnpm");
+  });
+
   it("passes the telemetry relay URL into containerized builds when configured", () => {
     const args = buildDockerArgs(
       {
@@ -343,12 +359,16 @@ describe("buildDockerArgs", () => {
     expect(last).toContain("--app-version '0.5.0-beta.1'\\''quoted'");
   });
 
-  it("exports OD_TOOLS_PACK_PNPM_BIN=/tmp/pnpm so the inner build's production install skips npm", () => {
+  it("does not export OD_TOOLS_PACK_PNPM_BIN so the assembled-app production install uses npm", () => {
+    // The container now exposes npm (pnpm-managed Node bin on PATH). A pnpm
+    // `--prod --no-lockfile` install over the file: tarballs dropped transitive
+    // deps (jszip's `setimmediate`) and the package crashed on boot, so the
+    // production install falls back to npm's full flat hoist.
     const args = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
     const envFlagIndex = args.findIndex(
-      (arg, i) => arg === "-e" && args[i + 1] === "OD_TOOLS_PACK_PNPM_BIN=/tmp/pnpm",
+      (arg, i) => arg === "-e" && args[i + 1]?.startsWith("OD_TOOLS_PACK_PNPM_BIN="),
     );
-    expect(envFlagIndex).toBeGreaterThan(-1);
+    expect(envFlagIndex).toBe(-1);
   });
 });
 
@@ -558,21 +578,23 @@ describe("resolveProductionInstallCommand", () => {
     });
   });
 
-  it("chains end-to-end with buildDockerArgs: docker exports OD_TOOLS_PACK_PNPM_BIN and the resolver returns the standalone pnpm install for that value", () => {
+  it("chains end-to-end with buildDockerArgs: the container omits OD_TOOLS_PACK_PNPM_BIN so the resolver returns the npm install", () => {
+    // The containerized build exposes npm on PATH and relies on it for the
+    // assembled-app production install (pnpm dropped transitive deps like
+    // jszip's `setimmediate`, crashing the packaged app on boot). So docker must
+    // NOT export OD_TOOLS_PACK_PNPM_BIN, and the resolver — reading the same
+    // (absent) env — must return npm.
     const dockerArgs = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
     const envFlagIndex = dockerArgs.findIndex(
       (arg, i) => arg === "-e" && dockerArgs[i + 1]?.startsWith("OD_TOOLS_PACK_PNPM_BIN="),
     );
-    expect(envFlagIndex).toBeGreaterThan(-1);
-    const envValue = dockerArgs[envFlagIndex + 1]?.split("=")[1];
-    expect(envValue).toBe("/tmp/pnpm");
+    expect(envFlagIndex).toBe(-1);
 
-    const resolved = resolveProductionInstallCommand({ OD_TOOLS_PACK_PNPM_BIN: envValue });
+    const resolved = resolveProductionInstallCommand({});
     expect(resolved).toEqual({
-      command: "/tmp/pnpm",
-      args: ["install", "--prod", "--no-lockfile", "--config.node-linker=hoisted"],
+      command: "npm",
+      args: ["install", "--omit=dev", "--no-package-lock"],
     });
-    expect(resolved.command).not.toBe("npm");
   });
 });
 
