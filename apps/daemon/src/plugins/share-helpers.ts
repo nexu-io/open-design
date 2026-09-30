@@ -43,7 +43,7 @@ export interface RunLike {
 }
 
 export interface RunWaiter {
-  wait(run: RunLike): Promise<{ status: string; cancelOrigin?: string | null }>;
+  wait(run: RunLike): Promise<{ status: string; cancelOrigin?: string | null; terminalAt?: number | null }>;
 }
 
 export interface SkillPluginCandidateLike {
@@ -267,11 +267,17 @@ export function reconcileAssistantMessageOnRunEnd(
   void runs
     .wait(run)
     .then((finalStatus) => {
+      // The waiter may resume after physical completion. Persist that completion
+      // instant before client PUTs encounter the message's monotonic watermark.
+      const endedAt = typeof finalStatus.terminalAt === 'number'
+        && Number.isFinite(finalStatus.terminalAt) && finalStatus.terminalAt >= 0
+        ? finalStatus.terminalAt
+        : Date.now();
       db.prepare(
         `UPDATE messages
             SET run_status = ?, ended_at = COALESCE(ended_at, ?)
           WHERE id = ? AND run_status IN ('queued', 'running')`,
-      ).run(finalStatus.status, Date.now(), run.assistantMessageId);
+      ).run(finalStatus.status, endedAt, run.assistantMessageId);
       // Who cancelled, recorded separately from the status latch above.
       // The latch only fires while the row is still queued/running, and the
       // client often writes `canceled` first (it stops its own stream); the
