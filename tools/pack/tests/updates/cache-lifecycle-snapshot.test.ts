@@ -80,4 +80,28 @@ describe("tools-pack updater cache lifecycle snapshot", () => {
       await rm(root, { force: true, recursive: true });
     }
   });
+
+  it("keeps the manual trigger a desktop cache clear writes", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-tools-pack-update-cache-manual-"));
+    try {
+      const config = makeConfig(root);
+      const updateRoot = join(config.roots.runtime.namespaceRoot, "updates");
+      await mkdir(join(updateRoot, "state"), { recursive: true });
+      await writeFile(join(updateRoot, "state", "cleanup.json"), `${JSON.stringify({
+        platform: "win32",
+        releases: [],
+        trigger: "manual",
+        updatedAt: "2026-06-08T00:00:00.000Z",
+        version: 1,
+      }, null, 2)}\n`, "utf8");
+
+      const snapshot = await readToolPackUpdateCacheLifecycleSnapshot(config);
+
+      expect(snapshot.descriptorExists).toBe(true);
+      expect(snapshot.summary?.lastTrigger).toBe("manual");
+      expect(snapshot.summary?.lastRunAt).toBe("2026-06-08T00:00:00.000Z");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
 });
