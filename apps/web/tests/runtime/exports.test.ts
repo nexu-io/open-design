@@ -26,7 +26,18 @@ import {
   sourceLooksLikeExportableDeck,
   sourceLooksLikeNavigableDeck,
 } from '../../src/runtime/exports';
+import { buildZip } from '../../src/runtime/zip';
 import { workspaceContextFixture } from '../helpers/workspace-context';
+
+/**
+ * A genuine ZIP built by the app's own writer, so archive fixtures carry a
+ * real central directory and EOCD rather than a hand-written signature
+ * prefix. `exportProjectAsZip` validates archive structure, and a prefix
+ * alone is not a valid archive.
+ */
+async function realZipBytes(name = 'index.html', content = 'archive-bytes'): Promise<ArrayBuffer> {
+  return buildZip([{ path: name, content }]).arrayBuffer();
+}
 
 describe('planDeckImageCapture (#4604 current-slide capture for runtime decks)', () => {
   it('whole-deck capture renders off-screen with no index (stitch all)', () => {
@@ -791,7 +802,7 @@ describe('binary project/design-system downloads', () => {
       if (url.endsWith('/export/html')) {
         return new Response('<!doctype html><p>exported</p>', { status: 200 });
       }
-      return new Response('archive-or-rendered-bytes', {
+      return new Response(await realZipBytes('mixed.html', 'archive-or-rendered-bytes'), {
         status: 200,
         headers: {
           'content-type': 'application/octet-stream',
@@ -978,7 +989,7 @@ describe('binary project/design-system downloads', () => {
   });
 
   it('fetches the design-system archive endpoint and downloads the daemon-named zip', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('PKzip-bytes', {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(await realZipBytes('ds.html', 'zip-bytes'), {
       status: 200,
       headers: {
         'content-type': 'application/zip',
@@ -1011,7 +1022,7 @@ describe('binary project/design-system downloads', () => {
   });
 
   it('downloads the backing project archive with the daemon filename', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('project-zip', {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(await realZipBytes('project.html', 'project-zip'), {
       status: 200,
       headers: {
         'content-type': 'application/zip',
@@ -1031,7 +1042,7 @@ describe('binary project/design-system downloads', () => {
   });
 
   it('passes an optional root when downloading a project subfolder archive', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('folder-zip', {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(await realZipBytes('folder.html', 'folder-zip'), {
       status: 200,
       headers: {
         'content-type': 'application/zip',
@@ -1720,5 +1731,331 @@ describe('exportAsImage', () => {
     expect(showSaveFilePicker).not.toHaveBeenCalled();
     expect(target?.method).toBe('download');
     expect(target?.filename).toBe('My-Design.png');
+  });
+});
+
+describe('exportProjectAsZip degraded-archive reporting (#8005)', () => {
+  let capturedBlob: Blob | undefined;
+  let capturedFilename: string | undefined;
+
+  beforeEach(() => {
+    capturedBlob = undefined;
+    capturedFilename = undefined;
+    vi.stubGlobal('URL', {
+      createObjectURL: (blob: Blob) => {
+        capturedBlob = blob;
+        return 'blob:test';
+      },
+      revokeObjectURL: () => {},
+    });
+    vi.stubGlobal('document', {
+      createElement: () => {
+        const anchor = { href: '', click: () => {} } as { href: string; download?: string; click: () => void };
+        Object.defineProperty(anchor, 'download', {
+          set(value: string) {
+            capturedFilename = value;
+          },
+          get() {
+            return capturedFilename ?? '';
+          },
+        });
+        return anchor;
+      },
+      body: { appendChild: () => {}, removeChild: () => {} },
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('reports a rejected archive response as degraded instead of resolving silently', async () => {
+    // Given: the archive route fails, exactly as it does behind a reverse
+    // proxy that forwards its own Basic credentials (#7819) — but equally for
+    // a 500, a missing project directory, or a transport error.
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => Response.json(
+      { error: { code: 'TOOL_TOKEN_MISSING', message: 'tool token is required' } },
+      { status: 401 },
+    )));
+
+    // When: the user picks "Download as .zip".
+    const result = await exportProjectAsZip({
+      projectId: 'project-a',
+      filePath: 'index.html',
+      fallbackHtml: '<main>rendered page</main>',
+      fallbackTitle: 'Degraded ZIP',
+    });
+
+    // Then: a ZIP is still delivered, but the caller is told it is the
+    // fallback artifact rather than the project tree, so the export is not
+    // reported to the user as a plain success.
+    expect(result).toBe('degraded');
+    expect(capturedBlob).toBeInstanceOf(Blob);
+    expect(capturedFilename).toBeTruthy();
+  });
+
+  it.each([
+    ['an empty 200 body', '', 200, { 'content-type': 'application/zip', 'content-disposition': 'attachment; filename="p.zip"' }],
+    ['a 200 HTML interstitial from a proxy', '<html><body>Gateway error</body></html>', 200, { 'content-type': 'text/html' }],
+    ['a 204 with no content', '', 204, {}],
+  ] as const)('treats %s as degraded rather than a successful archive', async (_label, body, status, headers) => {
+    // Given: the archive request "succeeds" but the body is not an archive.
+    // A 2xx alone is not proof: an authenticating proxy can answer with its
+    // own error page at 200, and a truncated transfer arrives as 0 bytes.
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(
+      status === 204 ? null : body,
+      { status, headers: headers as Record<string, string> },
+    )));
+
+    // When: the user picks "Download as .zip".
+    const result = await exportProjectAsZip({
+      projectId: 'project-a',
+      filePath: 'index.html',
+      fallbackHtml: '<main>rendered page</main>',
+      fallbackTitle: 'Not A Zip',
+    });
+
+    // Then: it is reported as degraded instead of handing over a .zip that
+    // holds an HTML error page or nothing at all.
+    expect(result).toBe('degraded');
+  });
+
+  it.each([
+    ['a two-byte body that is only the PK prefix', 'PK'],
+    ['a three-byte truncated signature', 'PK\x03'],
+    ['PK followed by the wrong signature bytes', 'PK\x01\x02rest'],
+    ['a text body that merely begins with PK', 'PKzip-bytes'],
+    ['a bare four-byte EOCD prefix', 'PK\x05\x06'],
+    ['a truncated local header with no central directory', 'PK\x03\x04payload'],
+    ['an archive truncated mid-central-directory', 'PK\x03\x04payloadPK\x01\x02truncated'],
+  ] as const)('rejects %s', async (_label, body) => {
+    // Given: a 200 whose body starts with PK but is not a ZIP. Checking only
+    // the first two bytes would let each of these through as an archive.
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(body, {
+      status: 200,
+      headers: { 'content-type': 'application/zip', 'content-disposition': 'attachment; filename="p.zip"' },
+    })));
+
+    // When: the export runs.
+    const result = await exportProjectAsZip({
+      projectId: 'project-a',
+      filePath: 'index.html',
+      fallbackHtml: '<main>rendered page</main>',
+      fallbackTitle: 'Partial Signature',
+    });
+
+    // Then: the full four-byte signature is required, so it is degraded.
+    expect(result).toBe('degraded');
+  });
+
+  it.each([
+    ['a single-entry archive', async () => realZipBytes('a.html', 'payload')],
+    ['an empty archive (bare 22-byte EOCD)', async () => new Uint8Array(22).fill(0).map((_v, i) => [0x50, 0x4b, 0x05, 0x06][i] ?? 0).buffer],
+  ] as const)('accepts %s', async (_label, makeBody) => {
+    const body = await makeBody();
+    // Given: a body carrying a real ZIP signature — both forms the daemon can
+    // produce, including the end-of-central-directory-only empty archive.
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(body, {
+      status: 200,
+      headers: { 'content-type': 'application/zip', 'content-disposition': 'attachment; filename="p.zip"' },
+    })));
+
+    // When / Then: the success path is untouched.
+    await expect(exportProjectAsZip({
+      projectId: 'project-a',
+      filePath: 'index.html',
+      fallbackHtml: '<main>rendered page</main>',
+      fallbackTitle: 'Real Zip',
+    })).resolves.toBeUndefined();
+  });
+
+  it.each([
+    ['its central-directory signature is damaged', (bytes: Uint8Array) => {
+      // Zero the PK\x01\x02 record signature, as a stream damaged in that
+      // region would. The EOCD still declares a plausible range, so a
+      // range-only check passes while a reader reports
+      // "expected 1 records in central dir, got 0".
+      for (let i = 0; i + 3 < bytes.length; i += 1) {
+        if (bytes[i] === 0x50 && bytes[i + 1] === 0x4b && bytes[i + 2] === 0x01 && bytes[i + 3] === 0x02) {
+          bytes[i] = 0; bytes[i + 1] = 0; bytes[i + 2] = 0; bytes[i + 3] = 0;
+          return;
+        }
+      }
+      throw new Error('fixture has no central-directory record to damage');
+    }],
+    ['the EOCD advertises a multi-volume archive', (bytes: Uint8Array) => {
+      // Flip "number of this disk" to 1. Every other field — entry count,
+      // directory range, each central header — is untouched, so only a disk
+      // check catches it. The archive stays readable in practice (JSZip and
+      // Python's zipfile both open it); the point is that the metadata
+      // declares a form this guard does not support, and no real producer
+      // emits it.
+      const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      for (let i = bytes.length - 22; i >= 0; i -= 1) {
+        if (bytes[i] === 0x50 && bytes[i + 1] === 0x4b && bytes[i + 2] === 0x05 && bytes[i + 3] === 0x06) {
+          view.setUint16(i + 4, 1, true);
+          return;
+        }
+      }
+      throw new Error('fixture has no EOCD to edit');
+    }],
+    ['the EOCD central directory starts on another disk', (bytes: Uint8Array) => {
+      const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      for (let i = bytes.length - 22; i >= 0; i -= 1) {
+        if (bytes[i] === 0x50 && bytes[i + 1] === 0x4b && bytes[i + 2] === 0x05 && bytes[i + 3] === 0x06) {
+          view.setUint16(i + 6, 1, true);
+          return;
+        }
+      }
+      throw new Error('fixture has no EOCD to edit');
+    }],
+    ['the per-disk entry count disagrees with the total', (bytes: Uint8Array) => {
+      const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      for (let i = bytes.length - 22; i >= 0; i -= 1) {
+        if (bytes[i] === 0x50 && bytes[i + 1] === 0x4b && bytes[i + 2] === 0x05 && bytes[i + 3] === 0x06) {
+          view.setUint16(i + 8, 2, true);
+          return;
+        }
+      }
+      throw new Error('fixture has no EOCD to edit');
+    }],
+    ['the EOCD over-declares its entry count', (bytes: Uint8Array) => {
+      // Claim two records where the directory holds one.
+      const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      for (let i = bytes.length - 22; i >= 0; i -= 1) {
+        if (bytes[i] === 0x50 && bytes[i + 1] === 0x4b && bytes[i + 2] === 0x05 && bytes[i + 3] === 0x06) {
+          view.setUint16(i + 8, 2, true);
+          view.setUint16(i + 10, 2, true);
+          return;
+        }
+      }
+      throw new Error('fixture has no EOCD to edit');
+    }],
+  ] as const)('treats an archive as degraded when %s', async (_label, damage) => {
+    // Given: a genuine archive from the app's own writer, then damaged.
+    const bytes = new Uint8Array(await realZipBytes('a.html', 'payload'));
+    damage(bytes);
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(bytes.slice(0), {
+      status: 200,
+      headers: { 'content-type': 'application/zip', 'content-disposition': 'attachment; filename="p.zip"' },
+    })));
+
+    // When: the export runs.
+    const result = await exportProjectAsZip({
+      projectId: 'project-a',
+      filePath: 'index.html',
+      fallbackHtml: '<main>rendered page</main>',
+      fallbackTitle: 'Damaged Directory',
+    });
+
+    // Then: an invalid or unsupported archive is not reported as a successful export.
+    expect(result).toBe('degraded');
+  });
+
+  it.each([
+    ['65,536 entries (count wraps to 0)', 65_536],
+    ['65,537 entries (count wraps to 1)', 65_537],
+  ] as const)('accepts a genuine archive of %s', async (_label, entryCount) => {
+    // Given: an archive large enough that the uint16 EOCD count wraps. JSZip —
+    // which the daemon uses to build project archives — and this app's own
+    // buildZip both truncate rather than emitting the Zip64 sentinel, so the
+    // declared count is the real total modulo 65,536. These archives are
+    // readable, so they must not be reported as degraded.
+    const entries = Array.from({ length: entryCount }, (_v, i) => ({ path: `f${i}`, content: '' }));
+    const archive = await buildZip(entries).arrayBuffer();
+
+    const tail = new Uint8Array(archive.slice(archive.byteLength - 22));
+    const declared = new DataView(tail.buffer).getUint16(10, true);
+    expect(declared).toBe(entryCount % 0x10000);
+    expect(declared).not.toBe(entryCount);
+
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(archive.slice(0), {
+      status: 200,
+      headers: { 'content-type': 'application/zip', 'content-disposition': 'attachment; filename="p.zip"' },
+    })));
+
+    // When / Then: the wrapped count is reconciled modulo 65,536.
+    await expect(exportProjectAsZip({
+      projectId: 'project-a',
+      filePath: 'index.html',
+      fallbackHtml: '<main>rendered page</main>',
+      fallbackTitle: 'Wrapped Count',
+    })).resolves.toBeUndefined();
+  }, 60_000);
+
+  it('still accepts a well-formed archive declaring the Zip64 sentinel count', async () => {
+    // Given: 0xffff means the real count lives in the Zip64 record, so no
+    // comparison is possible and structure alone decides.
+    const bytes = new Uint8Array(await realZipBytes('a.html', 'payload'));
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    for (let i = bytes.length - 22; i >= 0; i -= 1) {
+      if (bytes[i] === 0x50 && bytes[i + 1] === 0x4b && bytes[i + 2] === 0x05 && bytes[i + 3] === 0x06) {
+        view.setUint16(i + 8, 0xffff, true);
+        view.setUint16(i + 10, 0xffff, true);
+        break;
+      }
+    }
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(bytes.slice(0), {
+      status: 200,
+      headers: { 'content-type': 'application/zip', 'content-disposition': 'attachment; filename="p.zip"' },
+    })));
+
+    await expect(exportProjectAsZip({
+      projectId: 'project-a',
+      filePath: 'index.html',
+      fallbackHtml: '<main>rendered page</main>',
+      fallbackTitle: 'Zip64 Sentinel',
+    })).resolves.toBeUndefined();
+  });
+
+  it('resolves without a degraded marker when the archive succeeds', async () => {
+    // Given: the archive route returns the project tree. Build the archive
+    // ONCE and reuse those bytes for both the response and the assertion:
+    // buildZip() stamps a DOS timestamp with two-second resolution, so
+    // generating a second archive to compare against would fail whenever the
+    // two calls straddle a boundary.
+    const archive = await realZipBytes();
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(archive.slice(0), {
+      status: 200,
+      headers: {
+        'content-type': 'application/zip',
+        'content-disposition': 'attachment; filename="project.zip"',
+      },
+    })));
+
+    // When: the same export runs.
+    const result = await exportProjectAsZip({
+      projectId: 'project-a',
+      filePath: 'index.html',
+      fallbackHtml: '<main>rendered page</main>',
+      fallbackTitle: 'Real ZIP',
+    });
+
+    // Then: the success path is unchanged — no marker, real bytes downloaded.
+    expect(result).toBeUndefined();
+    expect(capturedFilename).toBe('project.zip');
+    expect(await capturedBlob?.arrayBuffer()).toEqual(archive);
+  });
+
+  it('reports a failed version export as degraded rather than passing off a client snapshot', async () => {
+    // Given: a version-scoped export whose fetch fails. Callers pass the
+    // selected version's own cached content as fallbackHtml, so the user gets
+    // the right version — but as a client-rendered snapshot rather than the
+    // server-rendered export that was requested.
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response('nope', { status: 500 })));
+
+    // When: the user exports a specific version as a ZIP.
+    const result = await exportProjectAsZip({
+      projectId: 'project-a',
+      filePath: 'index.html',
+      fallbackHtml: '<main>current content</main>',
+      fallbackTitle: 'Versioned ZIP',
+      versionId: 'version-7',
+    });
+
+    // Then: the substitution is reported instead of silently standing in.
+    expect(result).toBe('degraded');
+    expect(capturedBlob).toBeInstanceOf(Blob);
   });
 });
