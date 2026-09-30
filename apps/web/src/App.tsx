@@ -5727,6 +5727,7 @@ function AppInner() {
           onRenameProject={handleRenameProject}
           onDuplicateProject={handleDuplicateProject}
           onDeleteProject={handleDeleteProject}
+          onOpenProject={handleOpenProject}
         />
         {/* Avatar + credits keep their home-view spot (the top-right actions
             host inside the tabs chrome) while a project tab is open, even
