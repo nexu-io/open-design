@@ -4333,6 +4333,25 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   width: 10px;
   height: 10px;
 }
+.chat-conv-item-del {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition:
+    opacity 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.chat-conv-item:hover .chat-conv-item-del { opacity: 1; }
+.chat-conv-item-del:hover { background: var(--red-bg); color: var(--red); }
 
 /* ============================================================
    Scroll-to-bottom button (chat)
