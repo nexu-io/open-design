@@ -1,4 +1,4 @@
-import type { OpenDesignPlanContractV2 } from '@open-design/contracts';
+import { OdNextIntentResolutionResultSchema, type OpenDesignPlanContractV2 } from '@open-design/contracts';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -150,6 +150,39 @@ describe('OD Next machine protocol stream', () => {
     expect(result.issues.map((issue) => issue.code)).toContain(
       'od_next_protocol_plan_contract_duplicate',
     );
+  });
+
+  it('accepts a runtime state the reply repeated verbatim as one declaration', () => {
+    const stream = new OdNextMachineProtocolStream();
+    stream.push([
+      'summary',
+      machineBlock('open-design-plan-contract', plan),
+      machineBlock('open-design-runtime-state', state),
+      // Same declaration with keys reordered: still one decision, not two.
+      machineBlock('open-design-runtime-state', Object.fromEntries(Object.entries(state).reverse())),
+    ].join('\n'));
+    const result = stream.finish();
+
+    expect(result.runtimeState).toEqual(state);
+    expect(result.issues).toEqual([]);
+    expect(result.normalizations).toContain('od_next_protocol_runtime_state_duplicate_collapsed');
+  });
+
+  it('still refuses runtime states that disagree', () => {
+    const stream = new OdNextMachineProtocolStream();
+    stream.push([
+      machineBlock('open-design-plan-contract', plan),
+      machineBlock('open-design-runtime-state', { ...state, executionIntent: 'produce' }),
+      machineBlock('open-design-runtime-state', { ...state, executionIntent: 'produce', executionMode: null }),
+    ].join('\n'));
+    const result = stream.finish();
+
+    expect(result.runtimeState).toBeUndefined();
+    expect(result.issues.map((issue) => issue.code)).toContain('od_next_protocol_runtime_state_duplicate');
+    // Both blocks still say what the reply intends, which repair may carry forward.
+    expect(result.agreedDuplicateExecutionIntent).toBe('produce');
+    // The intent-resolution handoff validates this result strictly.
+    expect(() => OdNextIntentResolutionResultSchema.parse({ runId: 'run-1', parsed: result, toolUseCount: 0 })).not.toThrow();
   });
 
   it('keeps one schema-valid fenced contract only as a repair anchor', () => {

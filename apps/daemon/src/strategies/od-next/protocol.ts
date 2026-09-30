@@ -34,6 +34,12 @@ export interface OdNextMachineProtocolResult {
    */
   repairPlanContract?: OpenDesignPlanContractV2;
   repairRuntimeState?: StrategyRuntimeStateV2;
+  /**
+   * When Runtime State blocks disagree, the execution intent they all declare,
+   * if they do agree on it. It lets a serialization repair keep the reply's
+   * explicit intent without accepting either block as the declaration.
+   */
+  agreedDuplicateExecutionIntent?: StrategyRuntimeStateV2['executionIntent'];
   issues: OdNextProtocolIssue[];
   /**
    * Deterministic, meaning-preserving corrections applied before schema
@@ -138,6 +144,43 @@ function firstBalancedJsonObject(value: string): string | null {
   return null;
 }
 
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value !== null && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+/** The execution intent every block declares, when they all parse and agree on it. */
+function agreedExecutionIntent(blocks: CapturedBlock[]): StrategyRuntimeStateV2['executionIntent'] | undefined {
+  let agreed: StrategyRuntimeStateV2['executionIntent'] | undefined;
+  for (const block of blocks) {
+    const parsed = jsonValue(stripSingleJsonFence(block.body));
+    if (!parsed.ok || parsed.value === null || typeof parsed.value !== 'object') return undefined;
+    const intent = (parsed.value as { executionIntent?: unknown }).executionIntent;
+    if (intent !== 'produce' && intent !== 'plan_only') return undefined;
+    if (agreed !== undefined && intent !== agreed) return undefined;
+    agreed = intent;
+  }
+  return agreed;
+}
+
+/** The first block when every block is exactly wrapped and carries the same JSON value. */
+function identicalExactBlock(blocks: CapturedBlock[]): CapturedBlock | null {
+  let canonical: string | null = null;
+  for (const block of blocks) {
+    if (!block.exactOpen || !block.exactClose || block.tooLarge) return null;
+    const parsed = jsonValue(block.body.trim());
+    if (!parsed.ok) return null;
+    const next = canonicalJson(parsed.value);
+    if (canonical !== null && next !== canonical) return null;
+    canonical = next;
+  }
+  return blocks[0] ?? null;
+}
+
 function jsonValue(value: string): { ok: true; value: unknown } | { ok: false } {
   try {
     return { ok: true, value: JSON.parse(value) };
@@ -187,6 +230,7 @@ export class OdNextMachineProtocolStream {
   private readonly streamIssues: OdNextProtocolIssue[] = [];
   private readonly normalizations: string[] = [];
   private readonly visible: string[] = [];
+  private agreedDuplicateExecutionIntent: StrategyRuntimeStateV2['executionIntent'] | undefined;
   private finished = false;
 
   constructor(options: { maxMachineBlockBytes?: number } = {}) {
@@ -244,6 +288,7 @@ export class OdNextMachineProtocolStream {
       ...(runtime.strict ? { runtimeState: runtime.strict } : {}),
       ...(!plan.strict && plan.repair ? { repairPlanContract: plan.repair } : {}),
       ...(!runtime.strict && runtime.repair ? { repairRuntimeState: runtime.repair } : {}),
+      ...(this.agreedDuplicateExecutionIntent ? { agreedDuplicateExecutionIntent: this.agreedDuplicateExecutionIntent } : {}),
       issues,
     };
   }
@@ -412,14 +457,23 @@ export class OdNextMachineProtocolStream {
     type Parsed = T extends 'plan' ? OpenDesignPlanContractV2 : StrategyRuntimeStateV2;
     const blocks = this.blocks.filter((block) => block.kind === kind);
     const metadata = MACHINE[kind];
+    let block = blocks[0];
     if (blocks.length > 1) {
-      issues.push({
-        code: metadata.duplicateCode,
-        detail: `Expected at most one ${metadata.tag} block, received ${blocks.length}.`,
-      });
-      return {};
+      // A Runtime State repeated verbatim is one decision stated twice, not
+      // two competing declarations, so it carries no authority ambiguity.
+      // Plan Contracts and disagreeing states still fail closed.
+      const collapsed = kind === 'runtime' ? identicalExactBlock(blocks) : null;
+      if (!collapsed) {
+        if (kind === 'runtime') this.agreedDuplicateExecutionIntent = agreedExecutionIntent(blocks);
+        issues.push({
+          code: metadata.duplicateCode,
+          detail: `Expected at most one ${metadata.tag} block, received ${blocks.length}.`,
+        });
+        return {};
+      }
+      this.normalizations.push('od_next_protocol_runtime_state_duplicate_collapsed');
+      block = collapsed;
     }
-    const block = blocks[0];
     if (!block || block.tooLarge) return {};
     const schema = kind === 'plan'
       ? OpenDesignPlanContractV2Schema

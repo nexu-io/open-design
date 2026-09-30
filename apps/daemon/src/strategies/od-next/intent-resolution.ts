@@ -47,9 +47,15 @@ export function isStrategyIntentResolutionRun(task: StrategyTaskExecutionRecord,
   return task.runs.some(mapping => mapping.runId === runId && mapping.purpose === 'intent_resolution');
 }
 
-/** Missing intent is tolerated at the question boundary, never at the production boundary. */
+/**
+ * Missing intent is tolerated at the question boundary, never at the production boundary.
+ * Duplicate Runtime State blocks that all declare `produce` already state the intent, so
+ * they go straight to the one serialization repair. A `plan_only` agreement still asks,
+ * because only the supplemental turn can complete a planning-only task.
+ */
 export function requiresStrategyIntentResolution(task: StrategyTaskExecutionRecord, parsed: OdNextMachineProtocolResult): boolean {
   if (task.intentResolution?.state !== 'unresolved' || parsed.runtimeState?.executionIntent !== undefined
+    || parsed.agreedDuplicateExecutionIntent === 'produce'
     || !['request', 'clarification'].includes(task.inputStage) || task.route === 'direct_edit') return false;
   const plan = parsed.planContract ?? parsed.repairPlanContract;
   return (parsed.issues.length === 0 && parsed.runtimeState?.outcome === 'plan_ready' && Boolean(plan))

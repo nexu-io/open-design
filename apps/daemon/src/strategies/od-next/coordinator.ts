@@ -1101,7 +1101,8 @@ function tryBeginSerializationRepair(
     'od_next_protocol_machine_block_too_large',
     'od_next_protocol_plan_contract_duplicate',
     'od_next_protocol_plan_contract_invalid_schema',
-    'od_next_protocol_runtime_state_duplicate',
+    // A duplicated Runtime State that survives parsing disagrees with itself;
+    // with nothing written yet, asking for one declaration is a safe repair.
     'od_next_protocol_runtime_state_invalid_schema',
   ]);
   // A recovered Plan Contract is itself a Full Plan declaration, so an
@@ -1133,7 +1134,7 @@ function tryBeginSerializationRepair(
   }
   // A recovered serialization anchor cannot authorize production on its own.
   // New tasks must have adopted a strict intent or consumed the bounded supplement.
-  const explicitIntent = parsed.runtimeState?.executionIntent;
+  const explicitIntent = parsed.runtimeState?.executionIntent ?? parsed.agreedDuplicateExecutionIntent;
   if (current.executionIntent === 'plan_only' || explicitIntent === 'plan_only'
     || (current.intentResolution?.state !== 'resolved' && current.intentResolution && explicitIntent !== 'produce')) return null;
   const repairRun = input.repairRun;
