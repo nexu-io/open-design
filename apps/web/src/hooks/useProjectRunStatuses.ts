@@ -235,14 +235,14 @@ export function useProjectRunSummaries(
   const enabled = options?.enabled ?? true;
   // One subscription per id set, so the effect must not re-run just because
   // the caller rebuilt the array. Sorted + joined is the identity that matters.
-  const idsKey = useMemo(() => [...projectIds].sort().join(' '), [projectIds]);
+  const idsKey = useMemo(() => [...projectIds].sort().join('\u0000'), [projectIds]);
   const contextRef = useRef<WorkspaceCollabContext | null>(options?.workspaceContext ?? null);
   contextRef.current = options?.workspaceContext ?? null;
   const storeVersion = useSyncExternalStore(subscribeToStore, getVersion, getVersion);
 
   useEffect(() => {
     if (!enabled || !idsKey) return undefined;
-    const subscription: Subscription = { ids: idsKey.split(' '), contextRef };
+    const subscription: Subscription = { ids: idsKey.split('\u0000'), contextRef };
     addSubscription(subscription);
     return () => removeSubscription(subscription);
   }, [idsKey, enabled]);
@@ -250,7 +250,7 @@ export function useProjectRunSummaries(
   return useMemo(() => {
     if (!enabled || !idsKey) return EMPTY_SUMMARIES;
     const result = new Map<string, ProjectRunSummary>();
-    for (const projectId of idsKey.split(' ')) {
+    for (const projectId of idsKey.split('\u0000')) {
       const summary = summaries.get(projectId);
       if (summary) result.set(projectId, summary);
     }
