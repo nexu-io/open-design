@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b0f19"/>
+      <stop offset="100%" stop-color="#141c2e"/>
+    </linearGradient>
+    <linearGradient id="cyan-glow" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#818cf8"/>
+    </linearGradient>
+    <linearGradient id="card-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#0f172a" stop-opacity="0.9"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="500" fill="url(#bg-grad)"/>
+
+  <!-- Perspective Grid Lines -->
+  <g stroke="#38bdf8" stroke-opacity="0.15" stroke-width="1.2">
+    <line x1="400" y1="250" x2="100" y2="500"/>
+    <line x1="400" y1="250" x2="250" y2="500"/>
+    <line x1="400" y1="250" x2="400" y2="500"/>
+    <line x1="400" y1="250" x2="550" y2="500"/>
+    <line x1="400" y1="250" x2="700" y2="500"/>
+    
+    <line x1="160" y1="360" x2="640" y2="360"/>
+    <line x1="220" y1="420" x2="580" y2="420"/>
+    <line x1="280" y1="465" x2="520" y2="465"/>
+  </g>
+
+  <!-- Background Layer (Z = -300) -->
+  <g transform="translate(180, 80) scale(0.85)" opacity="0.45">
+    <rect width="520" height="220" rx="16" fill="#1e293b" stroke="#475569" stroke-width="1.5" stroke-dasharray="6 6"/>
+    <text x="30" y="40" fill="#94a3b8" font-family="-apple-system, sans-serif" font-size="14" font-weight="600" letter-spacing="2">BACKGROUND LAYER (Z = -300)</text>
+  </g>
+
+  <!-- Middle Layer (Z = 0) -->
+  <g transform="translate(200, 140)">
+    <rect width="400" height="230" rx="20" fill="url(#card-grad)" stroke="#38bdf8" stroke-width="1.8" stroke-opacity="0.6"/>
+    <circle cx="45" cy="45" r="16" fill="#38bdf8" fill-opacity="0.2"/>
+    <path d="M40 45 L44 49 L52 41" stroke="#38bdf8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <text x="75" y="44" fill="#f8fafc" font-family="-apple-system, sans-serif" font-size="16" font-weight="700">Camera Rig 2.5D</text>
+    <text x="75" y="60" fill="#94a3b8" font-family="-apple-system, sans-serif" font-size="12">Middle Layer (Z = 0) · preserve-3d</text>
+    
+    <!-- Waveform decorative -->
+    <path d="M40 130 Q 80 80, 120 130 T 200 130 T 280 130 T 360 130" fill="none" stroke="url(#cyan-glow)" stroke-width="3" stroke-linecap="round"/>
+    
+    <rect x="40" y="165" width="90" height="34" rx="8" fill="#38bdf8" fill-opacity="0.15" stroke="#38bdf8" stroke-width="1"/>
+    <text x="56" y="187" fill="#38bdf8" font-family="monospace" font-size="12" font-weight="600">pos.z: 0</text>
+
+    <rect x="145" y="165" width="110" height="34" rx="8" fill="#818cf8" fill-opacity="0.15" stroke="#818cf8" stroke-width="1"/>
+    <text x="160" y="187" fill="#818cf8" font-family="monospace" font-size="12" font-weight="600">rot.y: -4.0°</text>
+
+    <rect x="270" y="165" width="90" height="34" rx="8" fill="#10b981" fill-opacity="0.15" stroke="#10b981" stroke-width="1"/>
+    <text x="286" y="187" fill="#10b981" font-family="monospace" font-size="12" font-weight="600">fps: 30</text>
+  </g>
+
+  <!-- Foreground Layer (Z = +100) -->
+  <g transform="translate(140, 240) rotate(-2)">
+    <rect width="280" height="70" rx="14" fill="#0f172a" stroke="#818cf8" stroke-width="2" filter="drop-shadow(0 15px 25px rgba(0,0,0,0.6))"/>
+    <text x="24" y="32" fill="#c084fc" font-family="monospace" font-size="11" font-weight="700" letter-spacing="1">FOREGROUND (Z = +100)</text>
+    <text x="24" y="54" fill="#ffffff" font-family="-apple-system, sans-serif" font-size="15" font-weight="800">PARALLAX ACCENT</text>
+  </g>
+
+  <!-- Camera Frustum Indicator -->
+  <g transform="translate(620, 360)">
+    <circle cx="30" cy="30" r="28" fill="#38bdf8" fill-opacity="0.1" stroke="#38bdf8" stroke-width="1.5"/>
+    <path d="M22 25 L34 20 L34 40 L22 35 Z M34 26 L42 22 L42 38 L34 34 Z" fill="#38bdf8"/>
+    <text x="68" y="34" fill="#e2e8f0" font-family="-apple-system, sans-serif" font-size="12" font-weight="600">AE Camera Rig</text>
+  </g>
+</svg>
