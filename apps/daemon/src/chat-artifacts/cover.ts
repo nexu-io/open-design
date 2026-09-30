@@ -22,14 +22,15 @@
 //
 //   1. The entry HTML and every local dependency it references are read inside
 //      one window, and every file read is fingerprinted (size + mtime).
-//   2. The whole graph is inlined into ONE self-contained document. The result
-//      carries no relative URL that could resolve to a project file.
+//   2. Legacy renderers receive an inlined document. Capable renderers receive
+//      the original document and bounded immutable resources instead, so
+//      dynamic image URLs keep their browser semantics without live FS access.
 //   3. The window is re-verified at the end. Any drift — a write that landed
 //      while we were reading — voids the freeze instead of producing a document
 //      torn across two versions.
-//   4. The renderer is handed that document with NO `baseHref`. It loads from a
-//      `data:` URL, so even a render that starts minutes later has no address
-//      for the live workspace. It cannot read latest; there is nothing to read.
+//   4. The renderer gets NO live `baseHref`: either a data document or an
+//      isolated resource session serves only captured bytes. Delayed rendering
+//      has no address through which it may read the next turn's workspace.
 //
 // Step 4 is what makes the async render safe. Steps 1-3 are what make step 4
 // honest — a self-contained document assembled from a moving target would still
@@ -49,6 +50,8 @@ import { randomUUID } from 'node:crypto';
 
 import {
   DESKTOP_ARTIFACT_CAPTURE_ERROR_CODES,
+  DESKTOP_FROZEN_RESOURCE_LIMITS,
+  type DesktopFrozenResources,
   DESKTOP_ARTIFACT_CAPTURE_MODES,
   type DesktopExportArtifactInput,
   type DesktopExportArtifactResult,
@@ -59,6 +62,7 @@ import {
   type StandaloneAssetHandle,
 } from '../artifacts/standalone-html.js';
 import type { ChatArtifactCaptureDeps } from './capture.js';
+import { CoverResourceBudgetError, CoverResourceChangedError, CoverResourceCollector, CoverResourceUnsupportedError } from './cover-resources.js';
 import { mimeForArtifactPath } from './mime.js';
 import { chatArtifactPolicyForKind } from './policy.js';
 import { attachChatArtifactThumbnail } from './run-capture.js';
@@ -70,9 +74,12 @@ import {
   type ChatArtifactVideoFrameExtractor,
 } from './video-cover.js';
 
-export type ChatArtifactCoverRenderer = (
+export type ChatArtifactCoverRenderer = ((
   input: DesktopExportArtifactInput,
-) => Promise<DesktopExportArtifactResult>;
+) => Promise<DesktopExportArtifactResult>) & {
+  /** Checked before freezing; missing/failed discovery preserves legacy input. */
+  supportsFrozenResources?: () => Promise<boolean>;
+};
 
 /**
  * Wall clock the daemon gives one cover. The desktop renderer enforces its own
@@ -149,48 +156,69 @@ export async function freezeAndRenderChatArtifactCovers(
   const projectRoot = path.resolve(input.projectRoot);
   const pending: Array<{ row: MessageArtifactRow; render: DesktopExportArtifactInput }> = [];
   let videoFrames = 0;
+  const supportsResources = await input.renderer?.supportsFrozenResources?.().catch(() => false) ?? false;
+  const resources = supportsResources ? new CoverResourceCollector(projectRoot, {
+    ...DESKTOP_FROZEN_RESOURCE_LIMITS,
+    activeRawBytes: 2 * DESKTOP_FROZEN_RESOURCE_LIMITS.rawBytes,
+  }) : undefined;
 
-  for (const row of input.rows) {
-    if (wantsFrozenVideoFrame(row)) {
-      if (videoFrames >= CHAT_ARTIFACT_VIDEO_FRAME_MAX_PER_RUN) {
+  try {
+    for (const row of input.rows) {
+      if (wantsFrozenVideoFrame(row)) {
+        if (videoFrames >= CHAT_ARTIFACT_VIDEO_FRAME_MAX_PER_RUN) {
+          report.skipped += 1;
+          continue;
+        }
+        videoFrames += 1;
+        const outcome = await freezeVideoFrameCover(deps, projectRoot, row, input.videoFrameExtractor);
+        if (outcome === 'frozen') report.frozen += 1;
+        else report.failed += 1;
+        continue;
+      }
+      if (!wantsRenderedCover(row)) {
         report.skipped += 1;
         continue;
       }
-      videoFrames += 1;
-      const outcome = await freezeVideoFrameCover(deps, projectRoot, row, input.videoFrameExtractor);
-      if (outcome === 'frozen') report.frozen += 1;
-      else report.failed += 1;
-      continue;
-    }
-    if (!wantsRenderedCover(row)) {
-      report.skipped += 1;
-      continue;
-    }
-    // No renderer at all is not a failure of THIS turn — recording one would
-    // mark every HTML card in a web-only daemon as failed forever, which buries
-    // the real render failures the state is there to surface.
-    if (typeof input.renderer !== 'function' || pending.length >= CHAT_ARTIFACT_COVER_MAX_PER_RUN) {
-      report.skipped += 1;
-      continue;
+      // No renderer at all is not a failure of THIS turn — recording one would
+      // mark every HTML card in a web-only daemon as failed forever, which buries
+      // the real render failures the state is there to surface.
+      if (typeof input.renderer !== 'function' || pending.length >= CHAT_ARTIFACT_COVER_MAX_PER_RUN) {
+        report.skipped += 1;
+        continue;
+      }
+
+      const frozen = await freezeCoverDocument(projectRoot, row.labelAtCapture, resources);
+      if (!frozen.ok) {
+        recordCoverFailure(deps, row, frozen.failureCode);
+        report.failed += 1;
+        continue;
+      }
+      pending.push({ row, render: frozen.render });
+      report.frozen += 1;
     }
 
-    const frozen = await freezeCoverDocument(projectRoot, row.labelAtCapture);
-    if (!frozen.ok) {
-      recordCoverFailure(deps, row, frozen.failureCode);
-      report.failed += 1;
-      continue;
+    if (pending.length > 0 && typeof input.renderer === 'function') {
+      // Serial: the desktop renderer is one Electron window behind one IPC
+      // socket, so firing these in parallel would only queue them somewhere less
+      // observable.
+      const renderer = input.renderer;
+      const ownedRenderer: ChatArtifactCoverRenderer = async (renderInput) => {
+        const release = resources?.retain();
+        try { return await renderer(renderInput); }
+        finally { release?.(); }
+      };
+      // The outer cover budget does not cancel a renderer. Each actual call keeps
+      // its shared resource lease until it settles, even if the loop moves on.
+      void renderCoversSequentially(deps, ownedRenderer, pending, input.onRefsChanged)
+        .finally(() => resources?.release());
+    } else {
+      resources?.release();
     }
-    pending.push({ row, render: frozen.render });
-    report.frozen += 1;
+    return report;
+  } catch (error) {
+    resources?.release();
+    throw error;
   }
-
-  if (pending.length > 0 && typeof input.renderer === 'function') {
-    // Serial: the desktop renderer is one Electron window behind one IPC
-    // socket, so firing these in parallel would only queue them somewhere less
-    // observable.
-    void renderCoversSequentially(deps, input.renderer, pending, input.onRefsChanged);
-  }
-  return report;
 }
 
 /**
@@ -291,18 +319,23 @@ type FreezeOutcome =
 async function freezeCoverDocument(
   projectRoot: string,
   relativePath: string,
+  resources?: CoverResourceCollector,
 ): Promise<FreezeOutcome> {
   const entryAbsolute = resolveInsideProject(projectRoot, relativePath);
   if (!entryAbsolute) return { ok: false, failureCode: 'source_missing' };
 
   const witnesses = new Map<string, { size: number; mtimeMs: number }>();
+  const explicitPaths = new Set<string>();
   let html: string;
   try {
     const stat = await fs.promises.stat(entryAbsolute);
     witnesses.set(entryAbsolute, { size: stat.size, mtimeMs: stat.mtimeMs });
-    html = await fs.promises.readFile(entryAbsolute, 'utf8');
-  } catch {
-    return { ok: false, failureCode: 'source_missing' };
+    html = resources
+      ? (await resources.read(toProjectPath(relativePath), true)).buffer.toString('utf8')
+      : await fs.promises.readFile(entryAbsolute, 'utf8');
+  } catch (error) {
+    if (resources && (error instanceof CoverResourceBudgetError || error instanceof CoverResourceUnsupportedError)) return freezeCoverDocument(projectRoot, relativePath);
+    return { ok: false, failureCode: error instanceof CoverResourceChangedError ? 'source_changed' : 'source_missing' };
   }
 
   const readAsset = async (projectPath: string): Promise<StandaloneAssetHandle | null> => {
@@ -315,7 +348,10 @@ async function freezeCoverDocument(
       return null;
     }
     if (!stat.isFile()) return null;
-    const buffer = await fs.promises.readFile(absolute);
+    const buffer = resources
+      ? (await resources.read(projectPath)).buffer
+      : await fs.promises.readFile(absolute);
+    explicitPaths.add(projectPath);
     witnesses.set(absolute, { size: stat.size, mtimeMs: stat.mtimeMs });
     return {
       buffer,
@@ -332,6 +368,8 @@ async function freezeCoverDocument(
       readAsset,
     });
   } catch (err) {
+    if (resources && (err instanceof CoverResourceBudgetError || err instanceof CoverResourceUnsupportedError)) return freezeCoverDocument(projectRoot, relativePath);
+    if (err instanceof CoverResourceChangedError) return { ok: false, failureCode: 'source_changed' };
     // A graph that cannot be closed (a missing local dependency, a document
     // past the bundler's limits) has no dependency-complete freeze available.
     // Spec §6.3's fallback — render the live file immediately while its
@@ -340,6 +378,33 @@ async function freezeCoverDocument(
     // fingerprints the entry and leaves every dependency free to move.
     logCoverFailure(relativePath, err);
     return { ok: false, failureCode: 'dependencies_incomplete' };
+  }
+
+  let frozenResources: DesktopFrozenResources | undefined;
+  if (resources) {
+    try {
+      await resources.includeImagePool();
+      // Adapt app-local records without copying shared resource byte strings.
+      const candidate: DesktopFrozenResources = {
+        version: 1,
+        entryPath: toProjectPath(relativePath),
+        resources: resources.forDocument(toProjectPath(relativePath), explicitPaths),
+      };
+      if (Buffer.byteLength(JSON.stringify({ html, frozenResources: candidate }), 'utf8') > DESKTOP_FROZEN_RESOURCE_LIMITS.wireBytes) {
+        throw new CoverResourceBudgetError('cover resources exceed wire budget');
+      }
+      frozenResources = candidate;
+    } catch (error) {
+      if (!(error instanceof CoverResourceBudgetError)) {
+        logCoverFailure(relativePath, error);
+        return { ok: false, failureCode: error instanceof CoverResourceChangedError ? 'source_changed' : 'dependencies_incomplete' };
+      }
+      // Preserve the already-frozen legacy document for large/unrelated pools.
+      // Never re-read the live project when a background renderer starts.
+      logCoverFailure(relativePath, error);
+    }
+    const selectedPaths = new Set([toProjectPath(relativePath), ...explicitPaths, ...(frozenResources?.resources.map((item) => item.path) ?? [])]);
+    if (!await resources.verify(selectedPaths)) return { ok: false, failureCode: 'source_changed' };
   }
 
   for (const [absolute, expected] of witnesses) {
@@ -359,7 +424,8 @@ async function freezeCoverDocument(
       captureMode: DESKTOP_ARTIFACT_CAPTURE_MODES.FIRST_VIEWPORT_THUMBNAIL,
       deck: false,
       format: 'image',
-      html: bundled.html,
+      html: frozenResources ? html : bundled.html,
+      ...(frozenResources ? { frozenResources } : {}),
       imageFormat: 'png',
       title: path.posix.basename(toProjectPath(relativePath)) || 'artifact',
       // No baseHref, on purpose. See the module header: this is the last thing

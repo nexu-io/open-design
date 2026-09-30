@@ -1,4 +1,4 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -13,6 +13,8 @@ import {
 
 import { DECK_PAGE_SIZE, DECK_PRINT_CSS, inferPageSize, waitForPrintableContent } from "./pdf-export.js";
 import { bgraBitmapHasPaint, freezePageForStaticCapture, type StaticCaptureFreeze } from "./static-capture.js";
+import { createArtifactResourceSession, type ArtifactResourceSession } from "./artifact-resource-session.js";
+import { loadArtifactDocument } from "./deck-capture.js";
 import { findRealElementRange, findRealTagEnd, findRealTagOffset, HTML_TAG_PATTERNS } from '@open-design/contracts/runtime/html-injection-points';
 
 // Headless programmatic exporter for the `od export` CLI (PDF / image).
@@ -64,6 +66,7 @@ function captureModeOf(input: DesktopExportArtifactInput): DesktopArtifactCaptur
 export async function exportArtifact(
   input: DesktopExportArtifactInput,
 ): Promise<DesktopExportArtifactResult> {
+  const frozenDeadline = input.frozenResources ? Date.now() + THUMBNAIL_RENDER_BUDGET_MS : undefined;
   const captureMode = captureModeOf(input);
   const thumbnail = captureMode === DESKTOP_ARTIFACT_CAPTURE_MODES.FIRST_VIEWPORT_THUMBNAIL;
   if (thumbnail && input.format !== "image") {
@@ -79,16 +82,35 @@ export async function exportArtifact(
   const width = input.width ?? (thumbnail ? THUMBNAIL_VIEWPORT.width : input.deck ? 1920 : 1440);
   const height = input.height ?? (thumbnail ? THUMBNAIL_VIEWPORT.height : input.deck ? 1080 : 900);
 
-  const window = new BrowserWindow({
-    height,
-    show: false,
-    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
-    width,
-  });
-
+  let window: BrowserWindow | undefined;
+  let resources: ArtifactResourceSession | undefined;
   try {
+    if (input.frozenResources) resources = await createArtifactResourceSession(input);
+    window = new BrowserWindow({
+      height,
+      show: false,
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+        ...(resources ? { session: resources.session } : {}),
+      },
+      width,
+    });
     window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
     window.webContents.on("will-navigate", (event) => event.preventDefault());
+    if (resources && frozenDeadline !== undefined) {
+      // The renderer only needs output options now. Do not retain the large
+      // frozen payload in an asynchronous capture that may be cancelled.
+      const captureInput: DesktopExportArtifactInput = {
+        deck: input.deck,
+        format: input.format,
+        html: '',
+        title: input.title,
+        ...(input.imageFormat ? { imageFormat: input.imageFormat } : {}),
+      };
+      return await renderFrozenCover(window, resources.entryUrl, captureInput, { height, width }, frozenDeadline);
+    }
     await window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(buildDocument(input))}`);
 
     if (thumbnail) return await renderFirstViewportThumbnail(window, input, { height, width });
@@ -97,13 +119,69 @@ export async function exportArtifact(
     if (input.format === "pdf") return await renderPdf(window, input);
     return await renderImage(window, input);
   } catch (error) {
-    return { error: error instanceof Error ? error.message : String(error), ok: false };
+    return {
+      ...(error instanceof FrozenCoverTimeoutError ? { code: DESKTOP_ARTIFACT_CAPTURE_ERROR_CODES.RENDER_TIMEOUT } : {}),
+      error: error instanceof Error ? error.message : String(error),
+      ok: false,
+    };
   } finally {
-    if (!window.isDestroyed()) window.destroy();
+    try {
+      if (window && !window.isDestroyed()) window.destroy();
+    } finally {
+      await resources?.dispose();
+    }
   }
 }
 
 type Viewport = { height: number; width: number };
+
+class FrozenCoverTimeoutError extends Error {
+  constructor() { super(`frozen cover exceeded its ${THUMBNAIL_RENDER_BUDGET_MS}ms render budget`); }
+}
+
+/** One deadline covers document load AND capture, not a fresh budget per step. */
+async function renderFrozenCover(
+  window: BrowserWindow,
+  entryUrl: string,
+  input: DesktopExportArtifactInput,
+  viewport: Viewport,
+  deadline: number,
+): Promise<DesktopExportArtifactResult> {
+  let expired = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const assertActive = () => {
+    if (expired || Date.now() >= deadline) throw new FrozenCoverTimeoutError();
+  };
+  const rendering = (async () => {
+    assertActive();
+    await loadArtifactDocument(window, entryUrl);
+    assertActive();
+    return await renderFirstViewportThumbnail(window, input, viewport, { deadline, assertActive });
+  })();
+  // Cancelling the window normally rejects pending Chromium calls. If the
+  // deadline instead crosses the final asynchronous PNG write, remove that
+  // late file: no caller received a successful result and can clean it up.
+  void rendering.then(async (result) => {
+    if (expired && result.ok && result.path) await rm(result.path, { force: true });
+  }, () => undefined).catch(() => {
+    console.warn('[od-export] timed-out cover output cleanup failed');
+  });
+  try {
+    return await Promise.race([
+      rendering,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => {
+          expired = true;
+          reject(new FrozenCoverTimeoutError());
+        }, Math.max(0, deadline - Date.now()));
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+    // exportArtifact's finally now destroys this render's actual window and
+    // disposes its resource session before the failure reaches the caller.
+  }
+}
 
 /**
  * The chat card's static cover.
@@ -118,12 +196,15 @@ async function renderFirstViewportThumbnail(
   window: BrowserWindow,
   input: DesktopExportArtifactInput,
   viewport: Viewport,
+  frozenBudget?: { deadline: number; assertActive(): void },
 ): Promise<DesktopExportArtifactResult> {
   const startedAt = Date.now();
-  const remainingMs = () => Math.max(0, THUMBNAIL_RENDER_BUDGET_MS - (Date.now() - startedAt));
+  const deadline = frozenBudget?.deadline ?? startedAt + THUMBNAIL_RENDER_BUDGET_MS;
+  const remainingMs = () => Math.max(0, deadline - Date.now());
   let freeze: StaticCaptureFreeze | null = null;
   let attempts = 0;
   try {
+    frozenBudget?.assertActive();
     // Fixed, not derived: pinning the content box makes the capture rect below
     // mean the same thing on every platform, where the constructor's
     // width/height include the window frame.
@@ -136,12 +217,15 @@ async function renderFirstViewportThumbnail(
       // burn the budget.
       firstViewportOnly: true,
     });
+    frozenBudget?.assertActive();
     freeze = await freezePageForStaticCapture(window);
+    frozenBudget?.assertActive();
 
     const rect = { height: viewport.height, width: viewport.width, x: 0, y: 0 };
     for (let attempt = 0; attempt <= THUMBNAIL_BLANK_RETRY_LIMIT; attempt += 1) {
       attempts = attempt + 1;
       const image = await window.webContents.capturePage(rect);
+      frozenBudget?.assertActive();
       if (bgraBitmapHasPaint(image.toBitmap())) {
         return logThumbnail(await encodeCapture(image, input), {
           attempts,

@@ -9,6 +9,7 @@ import {
   turnEndedByAskingUser,
 } from '@open-design/contracts';
 import {
+  captureProcessSnapshot,
   collectProcessTreePids,
   listProcessSnapshots,
   stopProcesses,
@@ -2278,15 +2279,38 @@ export function createChatRunService({
         };
       }
 
-      const initialSnapshots = await listProcessSnapshots();
-      let enumerationVerified = initialSnapshots.length > 0;
+      let enumerationVerified = true;
+      let enumerationError = null;
+      const readTerminationSnapshots = async () => {
+        try {
+          // Windows discovery launches PowerShell. Give that owned query the
+          // same TERM + KILL allowance as this cleanup attempt, rather than
+          // leaving terminal publication blocked behind an unbounded child.
+          // Keep the existing non-Windows/no-pgid discovery contract unchanged.
+          const snapshots = process.platform === 'win32'
+            ? await captureProcessSnapshot({ timeoutMs: Math.max(1, termGraceMs + killGraceMs) })
+            : await listProcessSnapshots();
+          enumerationVerified &&= snapshots.length > 0;
+          return snapshots;
+        } catch (error) {
+          // An unknown process table is not proof of quiescence. Retain prior
+          // observations and still reap their owned PIDs below; an outer catch
+          // here would abandon already-discovered tools when a later scan fails.
+          enumerationVerified = false;
+          enumerationError = error instanceof Error ? error.message : String(error);
+          return [];
+        }
+      };
+      const initialSnapshots = await readTerminationSnapshots();
       let childExitedDuringGrace = childHasExited(child);
       if (gracefulWaitMs > 0) {
         childExitedDuringGrace = await waitForChildExit(child, gracefulWaitMs);
         if (!childExitedDuringGrace) closeRunStdin(run);
       }
-      const refreshedSnapshots = await listProcessSnapshots();
-      enumerationVerified &&= refreshedSnapshots.length > 0;
+      const refreshedSnapshots = await readTerminationSnapshots();
+      // Discovery may consume its whole budget after the captured child exits.
+      // Never turn a stale wrapper PID into a signal target after that exit.
+      if (process.platform === 'win32') childExitedDuringGrace ||= childHasExited(child);
       const snapshots = [...initialSnapshots, ...refreshedSnapshots];
       const pids = collectProcessTreePids(snapshots, [child.pid])
         .filter((pid) => !childExitedDuringGrace || pid !== child.pid);
@@ -2295,37 +2319,56 @@ export function createChatRunService({
         : [child.pid];
       const result = await stopProcesses(terminationPids, { termGraceMs, killGraceMs });
 
-      const verificationSnapshots = await listProcessSnapshots();
-      enumerationVerified &&= verificationSnapshots.length > 0;
+      // The captured child can exit during stop/discovery. Its old numeric PID
+      // must then stop seeding ownership, not merely be removed as a signal
+      // target: a reused PID may now own an unrelated new subtree.
+      const capturedOwnershipRoots = (roots) => process.platform === 'win32' && childHasExited(child)
+        ? roots.filter((pid) => pid !== child.pid)
+        : roots;
+      const recordAmbiguousExitedRootChildren = (observed, ownedPids) => {
+        if (process.platform !== 'win32' || !childHasExited(child)) return;
+        const owned = new Set(ownedPids);
+        if (observed.some((snapshot) => snapshot.ppid === child.pid && !owned.has(snapshot.pid))) {
+          // A late direct child could belong to the exited wrapper or to a new
+          // process reusing its PID. Do not signal an unproven tree, and do not
+          // turn that deliberate omission into a verified-cleanup claim.
+          enumerationVerified = false;
+          enumerationError ??= 'process ownership unavailable after child exit';
+        }
+      };
+      const verificationSnapshots = await readTerminationSnapshots();
       const livePids = new Set(verificationSnapshots.map((snapshot) => snapshot.pid));
       let remainingPids = collectProcessTreePids(
         [...snapshots, ...verificationSnapshots],
-        [child.pid, ...pids],
+        capturedOwnershipRoots([child.pid, ...pids]),
       ).filter((pid) => livePids.has(pid));
+      recordAmbiguousExitedRootChildren(verificationSnapshots, remainingPids);
       let forcedPids = result.forcedPids;
 
       // A wrapper may create one last descendant while handling SIGTERM. Reap
       // anything the post-escalation verification newly attaches to the
       // captured ownership tree, then verify once more before terminalizing.
-      if (enumerationVerified && remainingPids.length > 0) {
+      // An earlier unknown table keeps the final verdict conservative, but
+      // cannot prevent cleanup of descendants a later table positively found.
+      if ((enumerationVerified || process.platform === 'win32') && remainingPids.length > 0) {
         const followUp = await stopProcesses(remainingPids, {
           termGraceMs: 0,
           killGraceMs,
         });
         forcedPids = [...new Set([...forcedPids, ...followUp.forcedPids])];
-        const finalSnapshots = await listProcessSnapshots();
-        enumerationVerified &&= finalSnapshots.length > 0;
+        const finalSnapshots = await readTerminationSnapshots();
         const finalLivePids = new Set(finalSnapshots.map((snapshot) => snapshot.pid));
         remainingPids = collectProcessTreePids(
           [...snapshots, ...verificationSnapshots, ...finalSnapshots],
-          [...pids, ...remainingPids],
+          capturedOwnershipRoots([...pids, ...remainingPids]),
         ).filter((pid) => finalLivePids.has(pid));
+        recordAmbiguousExitedRootChildren(finalSnapshots, remainingPids);
       }
       return {
         quiescent: enumerationVerified && remainingPids.length === 0,
         forced: forcedPids.length > 0,
         remainingPids,
-        ...(!enumerationVerified ? { error: 'process enumeration unavailable' } : {}),
+        ...(!enumerationVerified ? { error: enumerationError ?? 'process enumeration unavailable' } : {}),
       };
     })().catch((error) => ({
       quiescent: false,

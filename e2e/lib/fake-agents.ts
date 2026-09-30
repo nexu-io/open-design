@@ -307,6 +307,16 @@ function completeCodexTurn(error) {
 async function emitRun(promptText) {
   if (emitted) return;
   emitted = true;
+  if (promptText.includes('Create the packaged thumbnail filter SVG fixture')) {
+    const fixture = join(__dirname, 'input');
+    const dir = projectDir(promptText);
+    await mkdir(join(dir, 'assets'), { recursive: true });
+    await writeFileFs(join(dir, 'assets', 'a.png'), readFileSync(join(fixture, 'a.png')));
+    await writeFileFs(join(dir, 'index.html'), readFileSync(join(fixture, 'index.html')));
+    recordInvocation('thumbnail-written', { projectDir: dir });
+    emitSuccess('Created index.html with the filter, input handler, SVG and local image.', false, false);
+    return;
+  }
   if (promptText.includes('Hold the daemon run open until canceled')) {
     // Stay running (busy) without ever emitting a terminal result, so a test
     // can queue a follow-up turn and interrupt it via send-now. Keep the event
@@ -1169,6 +1179,7 @@ async function createOrbitLiveArtifact() {
 }
 
 function failUnhandled(error) {
+  recordInvocation('unhandled', { error: error && error.stack ? error.stack : String(error) });
   process.stderr.write((error && error.stack ? error.stack : String(error)) + '\\n');
   process.exitCode = 1;
   exitSoon(1);
