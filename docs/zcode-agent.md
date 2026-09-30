@@ -76,6 +76,8 @@ Preferred path: **ZCode desktop → Settings → Models & Providers → add the 
 
 ### ⚠️ Known regression on ZCode ≥ 22.20.0 (observed 2026-09-30)
 
+Reported upstream as [zai-org/feedback#886](https://github.com/zai-org/feedback/issues/886).
+
 - **Upgrading ZCode resets `provider_config.json` to an empty skeleton**, dropping the personal provider rule. Symptom: every OpenDesign run fails in under ~6 s with `AGENT_EXECUTION_FAILED` / `zcode exited with code 1` / `Error: Model creation failed (traceId: …)` — while the agent still shows as *available* (the availability probe only checks the bridge chain).
 - **Re-adding the provider from the desktop UI may itself fail** with 「创建供应商失败：个人供应商配置格式无效」. Until that is fixed upstream, restore the file by hand — the following shape is CLI-verified against 0.16.9:
 
