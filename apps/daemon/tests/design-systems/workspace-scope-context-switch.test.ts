@@ -7,6 +7,7 @@ import type http from 'node:http';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { createActiveWorkspaceSelectionStore } from '../../src/collab/active-workspace-selection.js';
 import { startServer } from '../../src/server.js';
 
 type StartedServer = {
@@ -215,14 +216,15 @@ describe('resolveDesignSystemWorkspaceScope — stale local pins are never data-
   let shutdown: (() => Promise<void> | void) | undefined;
 
   beforeAll(async () => {
-    // A stale local pin exactly like a real leftover from a previous identity
-    // — `velaLogout` never clears this file (only a CONFIRMED member-removal
-    // does; see `resolvePinnedWorkspace` in vela-workspace-context.ts).
+    // A stale local pin exactly like a real leftover — `velaLogout` never
+    // clears this file (only a CONFIRMED member-removal does; see
+    // `resolvePinnedWorkspace` in vela-workspace-context.ts). Seeded through
+    // the store rather than by hand-writing JSON so the pin carries this
+    // process's identity stamp and is therefore genuinely readable: a record
+    // the store discards as foreign would satisfy the assertions below without
+    // ever reaching the gate they exist to test.
     const dataDir = process.env.OD_DATA_DIR!;
-    writeFileSync(
-      path.join(dataDir, 'workspace-selection.json'),
-      `${JSON.stringify({ workspaceId: 'ws-stale-pin' }, null, 2)}\n`,
-    );
+    await createActiveWorkspaceSelectionStore(dataDir).set('ws-stale-pin');
     // A design system claimed by the pinned workspace, seeded directly on
     // disk so this suite is independent of the other describe block's state.
     const dsDir = path.join(dataDir, 'design-systems', 'pinned-claim');
