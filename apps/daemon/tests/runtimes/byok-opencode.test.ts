@@ -10,6 +10,41 @@ import {
 import { byokOpenCodeAgentDef } from '../../src/runtimes/defs/byok-opencode.js';
 
 describe('byok-opencode runtime config', () => {
+  it('reuses the verified local OpenCode permission capability when the BYOK probe is unavailable', () => {
+    agentCapabilities.delete('byok-opencode');
+    agentCapabilities.set('opencode', { skipPermissions: true });
+    try {
+      expect(byokOpenCodeAgentDef.buildArgs('', [], [], { model: 'gpt-5.5' })).toEqual([
+        'run',
+        '--format',
+        'json',
+        '--dangerously-skip-permissions',
+        '-m',
+        'open-design-byok/gpt-5.5',
+      ]);
+    } finally {
+      agentCapabilities.delete('opencode');
+      agentCapabilities.delete('byok-opencode');
+    }
+  });
+
+  it('does not borrow the local capability when the BYOK probe explicitly rejects it', () => {
+    agentCapabilities.set('opencode', { skipPermissions: true });
+    agentCapabilities.set('byok-opencode', { skipPermissions: false });
+    try {
+      expect(byokOpenCodeAgentDef.buildArgs('', [], [], { model: 'gpt-5.5' })).toEqual([
+        'run',
+        '--format',
+        'json',
+        '-m',
+        'open-design-byok/gpt-5.5',
+      ]);
+    } finally {
+      agentCapabilities.delete('opencode');
+      agentCapabilities.delete('byok-opencode');
+    }
+  });
+
   it('gates non-interactive permission bypass on the installed OpenCode capability', () => {
     agentCapabilities.delete('byok-opencode');
     expect(byokOpenCodeAgentDef.helpArgs).toEqual(['run', '--help']);

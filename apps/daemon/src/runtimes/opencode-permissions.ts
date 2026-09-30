@@ -12,7 +12,18 @@ export const OPENCODE_PERMISSION_CAPABILITY = {
 } satisfies Pick<RuntimeAgentDef, 'helpArgs' | 'capabilityFlags'>;
 
 export function appendOpenCodePermissionBypass(args: string[], agentId: string): void {
-  if (agentCapabilities.get(agentId)?.skipPermissions) {
+  const capability = agentCapabilities.get(agentId)?.skipPermissions;
+  // BYOK OpenCode runs the same configured binary and asks it the same
+  // `opencode run --help` question as the local OpenCode adapter. Preserve a
+  // successful local probe if the separate BYOK probe is unavailable (for
+  // example, while the CLI is slow to start). An explicit BYOK `false` still
+  // wins: only an absent result may borrow the verified local capability.
+  const skipPermissions = capability ?? (
+    agentId === 'byok-opencode'
+      ? agentCapabilities.get('opencode')?.skipPermissions
+      : undefined
+  );
+  if (skipPermissions) {
     args.push(OPENCODE_SKIP_PERMISSIONS_FLAG);
   }
 }
