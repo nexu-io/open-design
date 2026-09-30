@@ -1,4 +1,4 @@
-import { splitOnOdCards, type OdCardSegment } from '@open-design/contracts';
+import { findOdCardClose, splitOnOdCards, type OdCardSegment } from '@open-design/contracts';
 import { computeSkipRanges, rangeContains, type Range } from '../../artifacts/markdown-context';
 
 function markdownCodeRanges(text: string): Range[] {
@@ -69,19 +69,20 @@ export function splitShellCards(text: string, live: boolean): OdCardSegment[] {
 
   while ((match = open.exec(text))) {
     if (rangeContains(codeRanges, viewIndex(match.index))) continue;
-    const close = /<\/od-card>/gi;
-    close.lastIndex = open.lastIndex;
-    const end = close.exec(text);
-    if (!end) {
+    // Shared JSON-aware boundary: a `</od-card>` quoted inside a payload string
+    // is data. While live, a marker still inside an open string keeps waiting.
+    const closeStart = findOdCardClose(text, open.lastIndex, { live });
+    if (closeStart === -1) {
       if (live) {
         appendText(text.slice(cursor, match.index));
         return result;
       }
       break;
     }
+    const blockEnd = closeStart + '</od-card>'.length;
     const retained = text.slice(cursor, match.index);
     appendText(retained);
-    const raw = text.slice(match.index, close.lastIndex);
+    const raw = text.slice(match.index, blockEnd);
     // Only the opening marker is classified by Markdown context. A real card's
     // JSON can itself quote markup/backticks; its payload must remain opaque.
     const decoded = splitOnOdCards(raw);
@@ -94,7 +95,7 @@ export function splitShellCards(text: string, live: boolean): OdCardSegment[] {
         else result.push(segment);
       }
     }
-    cursor = close.lastIndex;
+    cursor = blockEnd;
     open.lastIndex = cursor;
     if (parsed) {
       // A rendered card ends the Markdown render, so nothing before it can open
