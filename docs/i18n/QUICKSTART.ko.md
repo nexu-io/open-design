@@ -267,7 +267,7 @@ location /api/ {
 | 모드 | 선택값 | 요청이 흐르는 경로 |
 |---|---|---|
 | **Local CLI** (daemon이 에이전트를 감지하면 기본값) | "Local CLI" | 프론트엔드 → daemon `/api/chat` → `spawn(<agent>, ...)` → 구조화된 도구/파일 이벤트를 SSE로 전달 → 프로젝트 파일 → 미리보기. plain-stream CLI는 text-artifact 경로를 사용합니다. |
-| **API 모드** (대체 수단 / CLI 없음) | "Anthropic API" / "OpenAI API" / "Atlas Cloud" / "Azure OpenAI" / "Google Gemini" | 프론트엔드 → daemon `/api/proxy/{provider}/stream` → 프로바이더 SSE를 `delta/end/error`로 정규화 → `<artifact>` 파서 → 미리보기 |
+| **API 모드** (대체 수단 / CLI 없음) | "Anthropic API" / "OpenAI API" / "Atlas Cloud" / "Ofox" / "Azure OpenAI" / "Google Gemini" | 프론트엔드 → daemon `/api/proxy/{provider}/stream` → 프로바이더 SSE를 `delta/end/error`로 정규화 → `<artifact>` 파서 → 미리보기 |
 
 두 모드 모두 같은 파일 작업 공간과 샌드박스 미리보기에 도달하지만 인계 계약은 다릅니다. 파일 시스템을 사용할 수 있는 런타임은 정식 파일을 쓰며 소스를 `<artifact>`로 되풀이하지 않습니다. plain/텍스트 전용 및 BYOK 실행에는 파일 도구가 없으므로 완전한 HTML을 담은 `<artifact>`가 정식 결과물입니다. 실행 프로필은 런타임 전송 방식에서 선택됩니다.
 
