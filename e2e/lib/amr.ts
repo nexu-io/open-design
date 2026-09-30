@@ -200,7 +200,8 @@ if (argv[2] === 'model' && argv[3] === 'preset' && argv[4] === '--format' && arg
   exit(0);
 }
 
-if (argv[2] === 'model' && argv[3] === 'list' && argv[4] === '--format' && argv[5] === 'json') {
+// The daemon asks \`vela model list --all --format json\`; accept it with or without --all.
+if (argv[2] === 'model' && argv[3] === 'list' && argv.slice(4).join(' ').replace(/ ?--all/, '') === '--format json') {
   if (MODEL_LIST_INVALID_API_KEY) {
     stderr.write('Error: list Link models: API request failed with status 401: invalid_api_key\\n');
     exit(1);

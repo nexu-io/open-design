@@ -260,8 +260,6 @@ import {
 import {
   findKnownModel,
   getRememberedLiveModels,
-  preferFreshLiveModels,
-  rememberLiveModels,
   resolveDefaultModelFromOptions,
   resolveModelForAgent,
   resolveModelForServiceTier,
@@ -300,7 +298,7 @@ import {
   amrAccountFailureDetails,
   classifyAmrAccountFailureSignal,
 } from './integrations/vela-errors.js';
-import { amrModelLoadingCache } from './runtimes/amr-model-cache.js';
+import { AMR_DEFAULT_MODEL_CATALOG_WAIT_MS, amrModelLoadingCache, amrRunModels } from './runtimes/amr-model-cache.js';
 import {
   fetchVelaPresetModels,
   fetchVelaRemoteModelsWithRetry,
@@ -11979,17 +11977,20 @@ export async function startServer({
       // stored concrete session models from comparing against raw `default`.
       try {
         const resumeProbe = await resolveAmrModelProbe({ dataDir: RUNTIME_DATA_DIR, env: process.env, readAppConfig });
-        const resumeCatalog = await amrModelLoadingCache.get(resumeProbe.cacheKey, {
-          fetchPreset: () => fetchVelaPresetModels(resumeProbe.launchPath, resumeProbe.env),
-          fetchRemote: () => fetchVelaRemoteModelsWithRetry(resumeProbe.launchPath, resumeProbe.env),
-        });
-        const resumeLiveModels = preferFreshLiveModels(
-          resumeCatalog.models ?? [],
-          getRememberedLiveModels(def.id, requestedLiveModelScope),
-        );
-        const resumeModelIds = new Set(resumeLiveModels.map((c) => c?.id).filter(Boolean));
         const askedForDefault =
           typeof model !== 'string' || !model.trim() || model.trim().toLowerCase() === 'default';
+        const resumeFetchers = {
+          fetchPreset: () => fetchVelaPresetModels(resumeProbe.launchPath, resumeProbe.env),
+          fetchRemote: () => fetchVelaRemoteModelsWithRetry(resumeProbe.launchPath, resumeProbe.env),
+        };
+        // A `default` request resolves against the caller's own catalog; the
+        // preset seed is shared by every plan and would pick a model this
+        // caller may not be entitled to.
+        const resumeCatalog = askedForDefault && !hasDefaultModelEnvOverride
+          ? await amrModelLoadingCache.getAuthoritative(resumeProbe.cacheKey, resumeFetchers, AMR_DEFAULT_MODEL_CATALOG_WAIT_MS)
+          : await amrModelLoadingCache.get(resumeProbe.cacheKey, resumeFetchers);
+        const resumeLiveModels = amrRunModels(def.id, requestedLiveModelScope, resumeCatalog);
+        const resumeModelIds = new Set(resumeLiveModels.map((c) => c?.id).filter(Boolean));
         const defaultRunModel = resolveDefaultModelFromOptions(resumeLiveModels);
         if (
           !safeModel ||
@@ -13416,27 +13417,29 @@ export async function startServer({
       // AMR became unusable in packaged nightlies. Reusing the cache keeps that
       // blocking probe off the per-run hot path and degrades to preset instead
       // of fail-closing; vela's own `session/set_model` remains the final gate.
+      const userAskedForDefault =
+        typeof model !== 'string' ||
+        !model.trim() ||
+        model.trim().toLowerCase() === 'default';
       let liveModels = [];
       try {
         const probe = await resolveAmrModelProbe({ dataDir: RUNTIME_DATA_DIR, env: process.env, readAppConfig });
-        const catalog = await amrModelLoadingCache.get(probe.cacheKey, {
+        const fetchers = {
           fetchPreset: () => fetchVelaPresetModels(probe.launchPath, probe.env),
           fetchRemote: () => fetchVelaRemoteModelsWithRetry(probe.launchPath, probe.env),
-        });
-        liveModels = catalog.models ?? [];
+        };
+        const catalog = userAskedForDefault && !hasDefaultModelEnvOverride
+          ? await amrModelLoadingCache.getAuthoritative(probe.cacheKey, fetchers, AMR_DEFAULT_MODEL_CATALOG_WAIT_MS)
+          : await amrModelLoadingCache.get(probe.cacheKey, fetchers);
+        liveModels = amrRunModels(def.id, amrModelScope, catalog);
       } catch (error) {
         // Do not swallow silently: a probe failure here is exactly what made
         // the packaged AMR breakage undiagnosable (the old `catch {}` left no
         // trace in any log or diagnostics bundle). Record it and degrade to the
         // remembered catalog below.
         console.warn('[amr] model catalog preflight probe failed', error);
-        liveModels = [];
+        liveModels = getRememberedLiveModels(def.id, amrModelScope);
       }
-      const rememberedLiveModels = getRememberedLiveModels(def.id, amrModelScope);
-      if (liveModels.length > 0) {
-        rememberLiveModels(def.id, liveModels, amrModelScope);
-      }
-      liveModels = preferFreshLiveModels(liveModels, rememberedLiveModels);
       const liveModelIds = new Set(
         liveModels.map((candidate) => candidate?.id).filter(Boolean),
       );
@@ -13444,10 +13447,6 @@ export async function startServer({
       // concrete id via the agent-wide cached model order; if it still is not,
       // adopt the catalog's enabled default so the spawn layer always has a
       // usable real id.
-      const userAskedForDefault =
-        typeof model !== 'string' ||
-        !model.trim() ||
-        model.trim().toLowerCase() === 'default';
       const defaultRunModel = resolveDefaultModelFromOptions(liveModels);
       if (
         !safeModel ||
