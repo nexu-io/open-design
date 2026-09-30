@@ -125,6 +125,36 @@ describe('bundled OD Next Strategy V2 package', () => {
     expect(ruleCard).toContain('OD-LAYOUT-PRIMITIVES v1');
   });
 
+  it('bounds functional SVG icons without sizing content SVGs', () => {
+    const prototype = declaration.assets.taskProfiles.find((profile) => profile.taskType === 'prototype');
+    const ruleCard = readFileSync(`${pluginRoot}/assets/task-profiles/prototype.md`, 'utf8');
+    const primitives = readFileSync(`${pluginRoot}/assets/task-profiles/prototype/layout.css`, 'utf8');
+
+    expect(prototype?.version).toBe('2.3.1');
+    expect(prototype?.resources?.find((resource) => resource.path.endsWith('/layout.css'))?.version)
+      .toBe('1.1.0');
+    expect(ruleCard).toContain('### Bound functional icon geometry');
+    expect(ruleCard).toContain('`.od-icon`');
+    expect(ruleCard).toContain('`--od-icon-size`');
+    expect(ruleCard).toMatch(/`viewBox`[^.\n]*(?:does not|is not)[^.\n]*(?:size|geometry)/i);
+    expect(ruleCard).toMatch(/parent selectors?/i);
+    expect(ruleCard).toMatch(/content SVG/i);
+
+    const iconRule = primitives.match(/\.od-icon\s*\{([^}]*)\}/s)?.[1];
+    expect(iconRule).toBeDefined();
+    expect(iconRule).toMatch(/display:\s*inline-block/);
+    expect(iconRule).toMatch(/inline-size:\s*var\(--od-icon-size,\s*1em\)/);
+    expect(iconRule).toMatch(/block-size:\s*var\(--od-icon-size,\s*1em\)/);
+    expect(iconRule).toMatch(/flex:\s*none/);
+
+    // Sizing by parent context recreated the original blind spot: each new
+    // context can miss a selector. The staged primitive stays opt-in so charts,
+    // plans, diagrams, logos, and illustrations keep their own geometry.
+    const uncommented = primitives.replace(/\/\*[\s\S]*?\*\//g, '');
+    const selectors = Array.from(uncommented.matchAll(/([^{}]+)\{/g), (match) => match[1] ?? '');
+    expect(selectors.some((selector) => /(^|[^.#[:\w-])svg(?=$|[^\w-])/i.test(selector))).toBe(false);
+  });
+
   it('maps unknown project kinds to generic or blocked instead of guessing', () => {
     const mapping = readFileSync(
       `${pluginRoot}/${declaration.assets.taskProfileMapping.path.slice(2)}`,
