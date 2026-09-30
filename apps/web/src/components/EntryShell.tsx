@@ -140,6 +140,7 @@ import type { OnboardingEntry } from '../onboarding/onboarding-entry';
 import type { PluginUseAction } from './plugins-home/useActions';
 import { Icon } from './Icon';
 import { Button } from '@open-design/components';
+import styles from './EntryShell.module.css';
 import {
   defaultAgentModelId,
   effectiveAgentModelChoice,
@@ -481,6 +482,7 @@ interface Props {
   skillsLoading?: boolean;
   designSystemsLoading?: boolean;
   projectsLoading?: boolean;
+  projectsLoadFailed?: boolean;
   // Execution / model-switching context. Threaded down from `App` so the
   // top-bar `InlineModelSwitcher` can render the active mode/agent/model
   // and persist changes through the same callbacks the project view uses.
@@ -638,6 +640,7 @@ export function EntryShell({
   skillsLoading = false,
   designSystemsLoading = false,
   projectsLoading = false,
+  projectsLoadFailed = false,
   config,
   providerModelsCache: sharedProviderModelsCache,
   onProviderModelsCacheChange,
@@ -2093,7 +2096,20 @@ export function EntryShell({
               // which has its own loading state and restarts from empty
               // whenever the entry shell remounts (e.g. returning from a
               // project); wait for BOTH reads before calling the page empty.
-              projectsLoading || (projectSearchProjects.length === 0 && teamProjects.loading) ? (
+              !projectsLoading && projectSearchProjects.length === 0 && (projectsLoadFailed || teamProjects.error) ? (
+                <div className="entry-section">
+                  <header className="entry-section__head">
+                    <h1 className="entry-section__title">{t('entry.navDrafts')}</h1>
+                  </header>
+                  <div className={styles.projectListError} role="alert">
+                    <p>{t('entry.projectsLoadFailed')}</p>
+                    <Button onClick={() => {
+                      teamProjects.reload();
+                      void Promise.resolve(onProjectsRefresh?.()).catch(() => {});
+                    }}>{t('preview.retry')}</Button>
+                  </div>
+                </div>
+              ) : projectsLoading || (projectSearchProjects.length === 0 && teamProjects.loading) ? (
                 <div className="entry-section">
                   <CenteredLoader label={t('common.loading')} />
                 </div>

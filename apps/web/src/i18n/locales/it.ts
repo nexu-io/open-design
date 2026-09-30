@@ -855,6 +855,7 @@ export const it: Dict = {
   "entry.navDashboard": "Dashboard",
   "entry.blankDraftsTitle": "Start a private draft",
   "entry.blankDraftsDescription": "Create a project here first. It stays private until you move it into the team space.",
+  "entry.projectsLoadFailed": "Impossibile caricare i progetti. Riprova.",
   "entry.blankAllProjectsTitle": "No team projects yet",
   "entry.blankAllProjectsDescription": "Projects shared to the team will appear here for everyone in the workspace.",
   "entry.blankCreate": "New project",

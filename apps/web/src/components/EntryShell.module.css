@@ -1,0 +1,13 @@
+.projectListError {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 280px;
+  gap: 16px;
+  text-align: center;
+}
+
+.projectListError p {
+  margin: 0;
+}
