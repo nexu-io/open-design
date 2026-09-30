@@ -225,7 +225,12 @@ const AGENT_CLI_ENV_KEYS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ['kiro', new Set(['KIRO_BIN'])],
   ['kilo', new Set(['KILO_BIN'])],
   ['opencode', new Set(['OPENCODE_BIN'])],
-  ['pi', new Set(['PI_BIN'])],
+  // PI_CODING_AGENT_DIR is pi's own config-directory override (default
+  // `~/.pi/agent`), the same contract CLAUDE_CONFIG_DIR and CODEX_HOME carry
+  // for their CLIs. Without it here, a user isolating pi's config had the key
+  // dropped on every save and no way to keep it but a wrapper script that sets
+  // the variable and is pointed at by PI_BIN (issue #8093).
+  ['pi', new Set(['PI_BIN', 'PI_CODING_AGENT_DIR'])],
   ['qoder', new Set(['QODER_BIN'])],
   ['qwen', new Set(['QWEN_BIN'])],
   ['trae-cli', new Set(['TRAE_CLI_BIN'])],
