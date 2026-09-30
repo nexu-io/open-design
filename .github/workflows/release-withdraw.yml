@@ -1,0 +1,380 @@
+name: release-withdraw
+
+# Abandon a release that was CUT but never SHIPPED: undo `cut-release.yml`.
+#
+# This is not `release-rollback.yml`. That one retracts a release users already
+# have, by repointing `stable/latest`. This one is for the other case — the
+# branch exists, a prerelease is circulating internally, and the team decides
+# the version is not going out. Nothing reached stable, so there is no GitHub
+# Release and no tag to undo.
+#
+# `cut-release` does four things; this reverses each one, in the order that
+# leaves the least mess if a later step fails:
+#
+#   1. moved `prerelease/latest` (via the build its push triggered)
+#        -> repoint it at an older published prerelease, so internal validators
+#           stop auto-updating onto an abandoned package
+#   2. created the `backport release/vX.Y.Z` label
+#        -> delete it, so nobody labels a PR for a branch that is going away
+#   3. created and pushed `release/vX.Y.Z`
+#        -> delete the branch (its SHA is printed first; a deleted branch is
+#           recoverable by SHA)
+#   4. posted a Feishu "branch cut" card
+#        -> post the matching withdrawal card
+#
+# Deleting the branch needs the release App token: the `Protected branches
+# (preview/*, release/v*)` ruleset blocks `deletion`, and that App is one of its
+# two bypass actors. This is the same token `cut-release` creates the branch
+# with.
+#
+# `dry_run` defaults to TRUE here, unlike release-rollback. A withdrawal is
+# never the urgent case — nothing is bleeding, the release simply is not going
+# out — so the plan is worth one look before a branch is deleted.
+#
+# TRUST BOUNDARY — `workflow_dispatch` runs the workflow file from the dispatch
+# ref, so no check written here is a security control; the control is the repo's
+# dispatch permission plus the App private key. The main-ref assertion is an
+# operator guard rail that keeps a withdrawal reproducible from reviewed code.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Cut-but-unshipped version to withdraw, for example 0.25.0."
+        required: true
+        type: string
+      prerelease_to_version:
+        description: "Published prerelease to serve again, for example 0.24.1-prerelease.4. Required when prerelease/latest belongs to the withdrawn version."
+        required: false
+        type: string
+        default: ""
+      dry_run:
+        description: "Resolve and validate everything without deleting or writing."
+        required: false
+        type: boolean
+        default: true
+      notify_feishu:
+        description: "Post the withdrawal card to the release group."
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read # branch and label deletion go through the App token below
+
+concurrency:
+  # A withdrawal must not overlap the cut it is undoing, nor a stable publish
+  # that would move the pointers underneath it.
+  group: open-design-release-withdraw
+  cancel-in-progress: false
+
+jobs:
+  # No secrets, no App token. Everything rejectable without credentials is
+  # rejected here, and every condition exits 1 rather than skipping green — a
+  # withdrawal that quietly did nothing reads as "handled".
+  guard:
+    name: validate request
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Assert the dispatch ref is main
+        env:
+          DISPATCH_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          if [ "$DISPATCH_REF" != "refs/heads/main" ]; then
+            echo "::error::release-withdraw must be dispatched from main; got $DISPATCH_REF"
+            exit 1
+          fi
+
+      - name: Assert the version shapes are well formed
+        env:
+          PRERELEASE_TO: ${{ inputs.prerelease_to_version }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if ! printf '%s' "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::version must be a stable X.Y.Z; got '$VERSION'"
+            exit 1
+          fi
+          if [ -n "$PRERELEASE_TO" ]; then
+            if ! printf '%s' "$PRERELEASE_TO" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+-prerelease\.[0-9]+$'; then
+              echo "::error::prerelease_to_version must look like X.Y.Z-prerelease.N; got '$PRERELEASE_TO'"
+              exit 1
+            fi
+            case "$PRERELEASE_TO" in
+              "$VERSION"-*)
+                echo "::error::prerelease_to_version $PRERELEASE_TO belongs to the version being withdrawn"
+                exit 1
+                ;;
+            esac
+          fi
+
+      # The decisive refusal. A version that reached stable is not "cut but
+      # unshipped" — users have it, and pulling it back is release-rollback's
+      # job, not a branch deletion.
+      - name: Assert the version never shipped stable
+        env:
+          PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          served="$(curl -fsSL "$PUBLIC_ORIGIN/stable/latest/metadata.json?withdraw=$GITHUB_RUN_ID" | jq -r '.releaseVersion // empty')"
+          if [ -z "$served" ]; then
+            echo "::error::could not read the live stable pointer; refusing to withdraw blind"
+            exit 1
+          fi
+          echo "stable/latest currently serves $served"
+          if [ "$served" = "$VERSION" ]; then
+            echo "::error::$VERSION is the live stable release — use release-rollback to retract a shipped release, not release-withdraw"
+            exit 1
+          fi
+          if curl -fsSL -o /dev/null "$PUBLIC_ORIGIN/stable/versions/$VERSION/metadata.json" 2>/dev/null; then
+            echo "::error::$VERSION has published stable artifacts; it was shipped at some point and must not be withdrawn as an unshipped cut"
+            exit 1
+          fi
+
+  withdraw:
+    name: withdraw the cut
+    needs: guard
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/create-github-app-token@v2
+        id: app
+        with:
+          app-id: ${{ secrets.RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ steps.app.outputs.token }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      # checkout fetches only the ref it was given, so the release branch has no
+      # remote-tracking ref yet and every comparison below would silently have
+      # nothing to compare against.
+      - name: Fetch the release branch
+        env:
+          BRANCH: release/v${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "+refs/heads/main:refs/remotes/origin/main"
+          git fetch --no-tags origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" || true
+
+      # Everything the branch carries that main does not must be cut machinery.
+      # A human commit, or a fix backported here and nowhere else, would be
+      # destroyed by the deletion below — so refuse and let a person decide.
+      - name: Assert the branch holds nothing but cut commits
+        id: branch
+        env:
+          BRANCH: release/v${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if ! sha="$(git rev-parse --verify "origin/$BRANCH" 2>/dev/null)"; then
+            echo "::error::$BRANCH does not exist; nothing to withdraw"
+            exit 1
+          fi
+          echo "branch $BRANCH is at $sha"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+          # Authors allowed to have written a branch-only commit. cut-release
+          # commits the version bump as the release bot; the preview manifest
+          # refresh lands as open-design-bot.
+          foreign="$(git log "origin/$BRANCH" --not origin/main \
+            --format='%H %an' \
+            | grep -vE ' (open-design-bot|open-design-release-bot\[bot\])$' || true)"
+          if [ -n "$foreign" ]; then
+            echo "::error::$BRANCH carries commits that are not on main and not from the release bots:"
+            printf '%s\n' "$foreign"
+            echo "::error::deleting the branch would destroy them; resolve by hand"
+            exit 1
+          fi
+          echo "branch-only commits (all bot-authored):"
+          git log "origin/$BRANCH" --not origin/main --format='  %h %an  %s'
+
+      - name: Assert nobody is still working against the branch
+        env:
+          BRANCH: release/v${{ inputs.version }}
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          LABEL: backport release/v${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          open_prs="$(gh pr list --repo "$GITHUB_REPOSITORY" --base "$BRANCH" --state open --json number --jq 'length')"
+          if [ "$open_prs" != "0" ]; then
+            echo "::error::$open_prs open PR(s) still target $BRANCH; close or retarget them first"
+            gh pr list --repo "$GITHUB_REPOSITORY" --base "$BRANCH" --state open
+            exit 1
+          fi
+          labelled="$(gh pr list --repo "$GITHUB_REPOSITORY" --label "$LABEL" --state open --json number --jq 'length')"
+          if [ "$labelled" != "0" ]; then
+            echo "::error::$labelled open PR(s) still carry '$LABEL'; their authors expect that backport"
+            gh pr list --repo "$GITHUB_REPOSITORY" --label "$LABEL" --state open
+            exit 1
+          fi
+          echo "no open PRs target the branch and none carry the label"
+
+      # Internal validators auto-update on this channel, so they are sitting on
+      # the abandoned package right now. Detect rather than trust the input:
+      # the pointer must actually belong to the withdrawn version before we move
+      # it, and if it does, a target is mandatory.
+      - name: Resolve the prerelease pointer
+        id: pre
+        env:
+          PRERELEASE_TO: ${{ inputs.prerelease_to_version }}
+          PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          current="$(curl -fsSL "$PUBLIC_ORIGIN/prerelease/latest/metadata.json?withdraw=$GITHUB_RUN_ID" | jq -r '.releaseVersion // empty')"
+          echo "prerelease/latest currently serves ${current:-<none>}"
+          case "$current" in
+            "$VERSION"-prerelease.*) belongs=true;;
+            *) belongs=false;;
+          esac
+          if [ "$belongs" != "true" ]; then
+            echo "prerelease/latest does not belong to $VERSION; leaving it alone"
+            echo "rollback=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ -z "$PRERELEASE_TO" ]; then
+            echo "::error::prerelease/latest serves $current, which belongs to the withdrawn $VERSION, but prerelease_to_version is empty"
+            echo "::error::re-run naming a published prerelease to serve again, for example the newest one of the previous line"
+            exit 1
+          fi
+          {
+            echo "rollback=true"
+            echo "from=$current"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Setup pnpm
+        if: ${{ !inputs.dry_run && steps.pre.outputs.rollback == 'true' }}
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+
+      - name: Install dependencies
+        if: ${{ !inputs.dry_run && steps.pre.outputs.rollback == 'true' }}
+        run: pnpm install --frozen-lockfile
+
+      # Reuses the rollback planner, which re-checks that the target published
+      # completely, restores every platform manifest and updater feed, writes
+      # metadata.json last, and reads it all back.
+      - name: Repoint prerelease latest
+        if: ${{ !inputs.dry_run && steps.pre.outputs.rollback == 'true' }}
+        env:
+          RELEASE_BRANCH: main
+          RELEASE_CHANNEL: prerelease
+          RELEASE_COMMIT: ${{ github.sha }}
+          RELEASE_LAUNCHER_VERSION_MIN_PRERELEASE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_PRERELEASE }}
+          RELEASE_LAUNCHER_VERSION_MIN_STABLE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_STABLE }}
+          RELEASE_LAUNCHER_VERSION_MIN_URL_PRERELEASE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_URL_PRERELEASE }}
+          RELEASE_LAUNCHER_VERSION_MIN_URL_STABLE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_URL_STABLE }}
+          RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+          RELEASE_ROLLBACK_FROM_VERSION: ${{ steps.pre.outputs.from }}
+          RELEASE_ROLLBACK_TO_VERSION: ${{ inputs.prerelease_to_version }}
+          RELEASE_RUN_ATTEMPT: ${{ github.run_attempt }}
+          RELEASE_RUN_ID: ${{ github.run_id }}
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          RELEASE_STORAGE_REGION: auto
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+          RELEASE_WORKFLOW: release-withdraw
+        run: pnpm exec tools-release rollback-latest
+
+      # Before the branch: a lingering label invites a PR whose backport would
+      # then target a branch that no longer exists.
+      - name: Delete the backport label
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          LABEL: backport release/v${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if gh label list --repo "$GITHUB_REPOSITORY" --search "$LABEL" --json name --jq '.[].name' | grep -qxF "$LABEL"; then
+            gh label delete "$LABEL" --repo "$GITHUB_REPOSITORY" --yes
+            echo "deleted label '$LABEL'"
+          else
+            echo "label '$LABEL' is already gone"
+          fi
+
+      - name: Delete the release branch
+        if: ${{ !inputs.dry_run }}
+        env:
+          BRANCH: release/v${{ inputs.version }}
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          SHA: ${{ steps.branch.outputs.sha }}
+        run: |
+          set -euo pipefail
+          # Recorded before the delete so the branch can be restored:
+          #   git push origin <SHA>:refs/heads/<BRANCH>
+          echo "deleting $BRANCH (was $SHA — restore with: git push origin $SHA:refs/heads/$BRANCH)"
+          gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$BRANCH"
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+            echo "::error::$BRANCH still exists after the delete"
+            exit 1
+          fi
+          echo "$BRANCH is gone"
+
+      - name: Notify Feishu that the release was withdrawn
+        if: ${{ !inputs.dry_run && inputs.notify_feishu }}
+        env:
+          FEISHU_SIGN_SECRET: ${{ secrets.FEISHU_RELEASE_SIGN_SECRET }}
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_RELEASE_WEBHOOK }}
+          NOTICE_BODY: |
+            **本次发布取消**:`release/v${{ inputs.version }}` 分支与 `backport release/v${{ inputs.version }}` 标签均已删除。
+
+            **要回灌的修复先不用打 backport label 了** —— 下一轮切分支后会有新的 label。
+
+            **内部 Prerelease 通道**已退回 `${{ inputs.prerelease_to_version }}`;之前更到 `v${{ inputs.version }}` 预发包的同学,下次检查更新会回到这个版本。
+
+            正式版不受影响,仍然是当前线上版本。
+          NOTICE_TEMPLATE: "orange"
+          NOTICE_TITLE: "↩️ 已撤回 release v${{ inputs.version }}(本次不发布)"
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node --experimental-strip-types tools/release/src/notifications/feishu-notice.ts
+
+      - name: Publish the run summary
+        if: ${{ always() }}
+        env:
+          BRANCH_SHA: ${{ steps.branch.outputs.sha }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          PRERELEASE_FROM: ${{ steps.pre.outputs.from }}
+          PRERELEASE_ROLLBACK: ${{ steps.pre.outputs.rollback }}
+          PRERELEASE_TO: ${{ inputs.prerelease_to_version }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ "$DRY_RUN" = "true" ]; then
+            heading="Withdrawal plan for $VERSION (dry run — nothing was changed)"
+          else
+            heading="Withdrew $VERSION"
+          fi
+          {
+            echo "## $heading"
+            echo ""
+            echo "| Undone | What |"
+            echo "| --- | --- |"
+            if [ "$PRERELEASE_ROLLBACK" = "true" ]; then
+              echo "| \`prerelease/latest\` | \`$PRERELEASE_FROM\` → \`$PRERELEASE_TO\` |"
+            else
+              echo "| \`prerelease/latest\` | untouched — it does not serve $VERSION |"
+            fi
+            echo "| Label | \`backport release/v$VERSION\` |"
+            echo "| Branch | \`release/v$VERSION\` at \`$BRANCH_SHA\` |"
+            echo ""
+            echo "Restore the branch with \`git push origin $BRANCH_SHA:refs/heads/release/v$VERSION\`."
+            echo ""
+            echo "### Left for a person"
+            echo ""
+            echo "- [ ] Plane acceptance module \`$VERSION 验收\` — close or delete it if the cut created one."
+            echo "- [ ] The Feishu acceptance document for $VERSION, if one was published."
+            echo "- [ ] Immutable \`prerelease/versions/$VERSION-prerelease.*\` artifacts stay on R2 by design; nothing points at them any more."
+            echo "- [ ] The next \`cut-release\` bumps the minor of the highest remaining release branch, so $VERSION is free to be cut again."
+          } >> "$GITHUB_STEP_SUMMARY"
