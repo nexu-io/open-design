@@ -101,6 +101,10 @@ export function parseDshProfileRuntimeFrame(value: unknown): DshProfileRuntimeFr
       assertRequestFrame(frame);
       if (typeof frame.content !== 'string') throw new Error('content must be a string');
       break;
+    case 'tool_call_progress':
+      assertRequestFrame(frame);
+      stringField(frame, 'call_id');
+      break;
     case 'tool_call':
       assertRequestFrame(frame);
       stringField(frame, 'call_id');
