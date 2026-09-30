@@ -40,6 +40,7 @@ import {
   openFolderDialog,
   patchPreviewCommentSortKey,
   patchPreviewCommentStatus,
+  RAILWAY_PROVIDER_ID,
   updateDeployConfig,
   uploadProjectFiles,
   upsertPreviewComment,
@@ -2157,10 +2158,11 @@ describe('deploy provider registry helpers', () => {
     vi.unstubAllGlobals();
   });
 
-  it('recognizes Vercel and Cloudflare Pages provider ids only', () => {
+  it('recognizes valid deploy provider ids', () => {
     expect(isDeployProviderId(DEFAULT_DEPLOY_PROVIDER_ID)).toBe(true);
     expect(isDeployProviderId(CLOUDFLARE_PAGES_PROVIDER_ID)).toBe(true);
-    expect(isDeployProviderId('netlify')).toBe(false);
+    expect(isDeployProviderId('netlify')).toBe(true);
+    expect(isDeployProviderId('render')).toBe(true);
     expect(isDeployProviderId(null)).toBe(false);
   });
 
@@ -2380,5 +2382,80 @@ describe('deploy provider registry helpers', () => {
       () => { throw new Error('expected deploy to reject'); },
       (err: unknown) => expect((err as { code?: string }).code).toBe('HTTP_404'),
     );
+  });
+
+  it('sends Railway config and deploy requests with the Railway provider id', async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request, _init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof Request
+            ? input.url
+            : String(input);
+      if (url === '/api/deploy/config') {
+        return new Response(JSON.stringify({
+          providerId: RAILWAY_PROVIDER_ID,
+          configured: true,
+          tokenMask: 'saved-railway-token',
+          githubTokenMask: 'saved-github-token',
+          teamId: '',
+          teamSlug: '',
+          target: 'preview',
+        }), { status: 200 });
+      }
+      if (url === '/api/projects/project-1/deploy') {
+        return new Response(JSON.stringify({
+          id: 'deployment-row-1',
+          projectId: 'project-1',
+          fileName: 'index.html',
+          providerId: RAILWAY_PROVIDER_ID,
+          url: 'https://od-p1.up.railway.app',
+          deploymentId: 'service-1',
+          deploymentCount: 1,
+          target: 'preview',
+          status: 'link-delayed',
+          createdAt: 1,
+          updatedAt: 2,
+        }), { status: 200 });
+      }
+      return new Response('unexpected', { status: 500 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(updateDeployConfig({
+      providerId: RAILWAY_PROVIDER_ID,
+      token: 'railway-token',
+      githubToken: 'github-token',
+    })).resolves.toMatchObject({
+      providerId: RAILWAY_PROVIDER_ID,
+      tokenMask: 'saved-railway-token',
+      githubTokenMask: 'saved-github-token',
+    });
+
+    await expect(
+      deployProjectFile('project-1', 'index.html', RAILWAY_PROVIDER_ID),
+    ).resolves.toMatchObject({
+      providerId: RAILWAY_PROVIDER_ID,
+      deploymentId: 'service-1',
+      url: 'https://od-p1.up.railway.app',
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/deploy/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        providerId: RAILWAY_PROVIDER_ID,
+        token: 'railway-token',
+        githubToken: 'github-token',
+      }),
+    });
+    expect(fetchMock).toHaveBeenCalledWith('/api/projects/project-1/deploy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fileName: 'index.html',
+        providerId: RAILWAY_PROVIDER_ID,
+      }),
+    });
   });
 });
