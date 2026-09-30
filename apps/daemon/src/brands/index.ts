@@ -50,7 +50,15 @@ import { listFiles, readProjectFile, resolveProjectDir, writeProjectFile } from 
 import { brandFromDesignMd, sourceUrlForDesignMd } from './design-md-input.js';
 import { brandGuideMd, brandToDesignMd } from './design-md.js';
 import { reflowBrandToMemory } from './memory.js';
-import { brandSystemDir, rebuildSystem } from './system.js';
+import { rebuildSystem } from './system.js';
+import {
+  applyBundleMirror,
+  hashBundleContent,
+  planBundleMirror,
+  readBundleTarget,
+  type BundleFile,
+  type BundlePlan,
+} from './preserve.js';
 import { extractJsonBlock, validateBrand } from './validate.js';
 import { brandFromMaterial } from './provisional.js';
 import { prefetchBrand, prefetchFromHtml, type PrefetchResult } from './prefetch.js';
@@ -1354,6 +1362,8 @@ export async function finalizeBrand(
     throw new Error(`brand.json failed validation: ${errorMessage(err)}`);
   }
 
+  // Fingerprint the previous output before the copies below replace it.
+  const baseline = brandBundleBaseline(brandsRoot, id);
   // Pull the agent's downloaded assets into the brand workspace so the
   // deterministic builder and the design system see them.
   copyProjectDirToBrand(projectsRoot, projectId, brandsRoot, id, 'logos');
@@ -1363,7 +1373,7 @@ export async function finalizeBrand(
   const guideMd =
     (await readProjectTextOrNull(projectsRoot, projectId, 'BRAND.md')) ?? brandGuideMd(brand);
 
-  return finalizeBrandCore({ ...opts, id, projectId, meta, brand, guideMd });
+  return finalizeBrandCore({ ...opts, id, projectId, meta, brand, guideMd, baseline });
 }
 
 interface FinalizeBrandCoreOptions extends FinalizeBrandOptions {
@@ -1381,6 +1391,8 @@ interface FinalizeBrandCoreOptions extends FinalizeBrandOptions {
   abortSignal?: AbortSignal;
   /** Programmatic attempt that is allowed to commit terminal writes. */
   extractionAttemptId?: string;
+  /** Brand workspace fingerprints taken before the caller changed it. */
+  baseline?: Record<string, string>;
 }
 
 /**
@@ -1406,6 +1418,7 @@ async function finalizeBrandCore(opts: FinalizeBrandCoreOptions): Promise<BrandF
   } = opts;
 
   throwIfProgrammaticExtractionNotCurrent(opts);
+  const baseline = opts.baseline ?? brandBundleBaseline(brandsRoot, id);
   writeBrand(brandsRoot, id, brand);
   writeBrandGuide(brandsRoot, id, guideMd);
 
@@ -1463,13 +1476,23 @@ async function finalizeBrandCore(opts: FinalizeBrandCoreOptions): Promise<BrandF
   throwIfProgrammaticExtractionNotCurrent(opts);
 
   const body = brandToDesignMd(brand);
+  // Registration rewrites DESIGN.md, so decide who owns it before that.
+  const linkedDir = meta.designSystemId
+    ? userDesignSystemDir(userDesignSystemsRoot, meta.designSystemId)
+    : null;
+  const priorDesignMd = linkedDir ? readBundleTarget(linkedDir, 'DESIGN.md') : undefined;
+  const linkedPlan = linkedDir && priorDesignMd !== undefined
+    ? await planDesignSystemMirror(linkedDir, brandsRoot, id, body, baseline)
+    : null;
+  const keptDesignMd =
+    linkedPlan?.kept.includes('DESIGN.md') && priorDesignMd instanceof Buffer ? priorDesignMd : undefined;
   const summary = await registerBrandDesignSystem(userDesignSystemsRoot, meta.designSystemId, {
     title: brand.name,
     category: 'Brands',
     surface: 'web',
     status: 'published',
     artifactMode: 'agent-managed',
-    body,
+    body: keptDesignMd ? keptDesignMd.toString('utf8') : body,
     provenance: {
       ...(brand.description ? { companyBlurb: brand.description } : {}),
       sourceNotes: `Extracted from ${meta.sourceUrl}`,
@@ -1480,7 +1503,16 @@ async function finalizeBrandCore(opts: FinalizeBrandCoreOptions): Promise<BrandF
   });
   throwIfProgrammaticExtractionNotCurrent(opts);
   const designSystemId = summary.id;
-  syncBrandSystemToUserDesignSystem(userDesignSystemsRoot, designSystemId, brandsRoot, id, body);
+  await syncBrandSystemToUserDesignSystem({
+    plan: designSystemId === meta.designSystemId ? linkedPlan : null,
+    userDesignSystemsRoot,
+    designSystemId,
+    brandsRoot,
+    brandId: id,
+    designMd: body,
+    keptDesignMd,
+    baseline,
+  });
   throwIfProgrammaticExtractionNotCurrent(opts);
 
   const finalizeMetadata: ProjectMetadata = {
@@ -1501,6 +1533,7 @@ async function finalizeBrandCore(opts: FinalizeBrandCoreOptions): Promise<BrandF
     projectId,
     brand,
     metadata: finalizeMetadata,
+    baseline,
   });
   throwIfProgrammaticExtractionNotCurrent(opts);
 
@@ -1635,6 +1668,8 @@ export async function runProgrammaticExtraction(
   throwIfProgrammaticExtractionNotCurrent(opts);
   const brandDir = resolveBrandFile(brandsRoot, id, []);
   if (!brandDir) return null;
+  // Prefetch writes logos/ and prefetch/ into the workspace before finalize.
+  const baseline = brandBundleBaseline(brandsRoot, id);
 
   if (opts.designMd?.trim()) {
     throwIfProgrammaticExtractionNotCurrent(opts);
@@ -1647,7 +1682,7 @@ export async function runProgrammaticExtraction(
     if (brand) {
       const guideMd = brandGuideMd(brand);
       throwIfProgrammaticExtractionNotCurrent(opts);
-      const finalized = await finalizeBrandCore({ ...opts, brand, guideMd });
+      const finalized = await finalizeBrandCore({ ...opts, brand, guideMd, baseline });
       throwIfProgrammaticExtractionNotCurrent(opts);
       updateProject(opts.db, opts.projectId, {
         pendingPrompt: brandExtractionPrompt({
@@ -1684,7 +1719,7 @@ export async function runProgrammaticExtraction(
   const brand = brandFromMaterial(material, meta.sourceUrl);
   const guideMd = brandGuideMd(brand);
   throwIfProgrammaticExtractionNotCurrent(opts);
-  const finalized = await finalizeBrandCore({ ...opts, brand, guideMd });
+  const finalized = await finalizeBrandCore({ ...opts, brand, guideMd, baseline });
   throwIfProgrammaticExtractionNotCurrent(opts);
   updateProject(opts.db, opts.projectId, {
     pendingPrompt: brandExtractionPrompt({
@@ -1769,6 +1804,7 @@ export async function extractBrandFromHtml(
     extractionAttemptId,
   }) ?? { ...meta, status: 'extracting', extractionAttemptId, updatedAt: Date.now() };
 
+  const baseline = brandBundleBaseline(brandsRoot, id);
   const material = await prefetchFromHtml(opts.html, opts.css ?? '', baseUrl, brandDir);
   throwIfProgrammaticExtractionNotCurrent({ ...opts, extractionAttemptId });
   // This DOM was read out of the in-app browser tab AFTER the user cleared the
@@ -1791,6 +1827,7 @@ export async function extractBrandFromHtml(
     brand,
     guideMd,
     extractionAttemptId,
+    baseline,
   });
   throwIfProgrammaticExtractionNotCurrent({ ...opts, extractionAttemptId });
   // Flip the project to enrichment mode so a follow-up "AI Optimize" refines the
@@ -2095,6 +2132,52 @@ function copyProjectDirToBrand(
   copyDirectorySync(source, target);
 }
 
+// Brand workspace paths mirrored into each target.
+const PROJECT_BUNDLE_FILES = ['DESIGN.md', 'guide.md'];
+const PROJECT_BUNDLE_DIRS = ['system', 'logos', 'fonts', 'imagery', 'prefetch', 'context'];
+const DESIGN_SYSTEM_BUNDLE_FILES = ['DESIGN.md', 'brand.json'];
+const DESIGN_SYSTEM_BUNDLE_DIRS = ['system', 'logos', 'fonts', 'imagery', 'prefetch'];
+
+function isBundlePath(rel: string, files: string[], dirs: string[]): boolean {
+  return files.includes(rel) || dirs.some((dir) => rel.startsWith(`${dir}/`));
+}
+
+function brandBundleFiles(brandRoot: string, files: string[], dirs: string[]): BundleFile[] {
+  const out: BundleFile[] = [];
+  for (const rel of files) {
+    const content = readBundleTarget(brandRoot, rel);
+    if (content) out.push({ rel, content });
+  }
+  for (const dir of dirs) {
+    for (const file of collectFiles(path.join(brandRoot, dir))) {
+      out.push({ rel: `${dir}/${file.rel}`, content: fs.readFileSync(file.abs) });
+    }
+  }
+  return out;
+}
+
+/**
+ * Fingerprints of what the previous finalize mirrored, taken from the brand
+ * workspace before this finalize replaces it. DESIGN.md is not kept in the
+ * workspace, so it is re-derived from the previous brand.json with the current
+ * generator; a legacy DESIGN.md from an older generator is therefore kept.
+ */
+function brandBundleBaseline(brandsRoot: string, brandId: string): Record<string, string> {
+  const brandRoot = resolveBrandFile(brandsRoot, brandId, []);
+  if (!brandRoot) return {};
+  const baseline: Record<string, string> = {};
+  for (const file of brandBundleFiles(brandRoot, ['guide.md', 'brand.json'], PROJECT_BUNDLE_DIRS)) {
+    baseline[file.rel] = hashBundleContent(file.content);
+  }
+  const previous = readBrand(brandsRoot, brandId);
+  try {
+    if (previous) baseline['DESIGN.md'] = hashBundleContent(brandToDesignMd(previous));
+  } catch {
+    // A malformed legacy brand.json leaves DESIGN.md unrecorded, so it is kept.
+  }
+  return baseline;
+}
+
 async function syncBrandFilesToProject(input: {
   brandsRoot: string;
   projectsRoot: string;
@@ -2102,80 +2185,83 @@ async function syncBrandFilesToProject(input: {
   projectId: string;
   brand: Brand;
   metadata: ProjectMetadata;
+  baseline: Record<string, string>;
 }): Promise<void> {
   const brandRoot = resolveBrandFile(input.brandsRoot, input.brandId, []);
   if (!brandRoot) throw new Error(`invalid brand id: ${input.brandId}`);
   const write = async (name: string, body: string | Buffer) => {
     await writeProjectFile(input.projectsRoot, input.projectId, name, body, { overwrite: true }, input.metadata);
   };
+  // brand.json is the finalize input, so the validated copy always replaces it.
   await write('brand.json', JSON.stringify(input.brand, null, 2));
-  await write('DESIGN.md', brandToDesignMd(input.brand));
-  await writeOptionalFileToProject(input.projectsRoot, input.projectId, input.metadata, brandRoot, 'guide.md');
-  await copyDirectoryToProject(input.projectsRoot, input.projectId, input.metadata, brandSystemDir(input.brandsRoot, input.brandId), 'system');
-  await copyOptionalDirectoryToProject(input.projectsRoot, input.projectId, input.metadata, path.join(brandRoot, 'logos'), 'logos');
-  await copyOptionalDirectoryToProject(input.projectsRoot, input.projectId, input.metadata, path.join(brandRoot, 'fonts'), 'fonts');
-  await copyOptionalDirectoryToProject(input.projectsRoot, input.projectId, input.metadata, path.join(brandRoot, 'imagery'), 'imagery');
-  await copyOptionalDirectoryToProject(input.projectsRoot, input.projectId, input.metadata, path.join(brandRoot, 'prefetch'), 'prefetch');
-  await copyOptionalDirectoryToProject(input.projectsRoot, input.projectId, input.metadata, path.join(brandRoot, 'context'), 'context');
+  const plan = await planBundleMirror({
+    dir: resolveProjectDir(input.projectsRoot, input.projectId, input.metadata),
+    files: [
+      { rel: 'DESIGN.md', content: Buffer.from(brandToDesignMd(input.brand), 'utf8') },
+      ...brandBundleFiles(brandRoot, ['guide.md'], PROJECT_BUNDLE_DIRS),
+    ],
+    baseline: input.baseline,
+    isManaged: (rel) => isBundlePath(rel, PROJECT_BUNDLE_FILES, PROJECT_BUNDLE_DIRS),
+  });
+  await applyBundleMirror(plan, (file) => write(file.rel, file.content));
 }
 
-async function writeOptionalFileToProject(
-  projectsRoot: string,
-  projectId: string,
-  metadata: ProjectMetadata,
-  root: string,
-  rel: string,
-): Promise<void> {
-  const abs = path.join(root, rel);
-  if (!isFile(abs)) return;
-  await writeProjectFile(projectsRoot, projectId, rel, fs.readFileSync(abs), { overwrite: true }, metadata);
-}
-
-async function copyOptionalDirectoryToProject(
-  projectsRoot: string,
-  projectId: string,
-  metadata: ProjectMetadata,
-  sourceDir: string,
-  targetPrefix: string,
-): Promise<void> {
-  if (!isDirectory(sourceDir)) return;
-  await copyDirectoryToProject(projectsRoot, projectId, metadata, sourceDir, targetPrefix);
-}
-
-async function copyDirectoryToProject(
-  projectsRoot: string,
-  projectId: string,
-  metadata: ProjectMetadata,
-  sourceDir: string,
-  targetPrefix: string,
-): Promise<void> {
-  for (const file of collectFiles(sourceDir)) {
-    const projectPath = toPosixPath(path.join(targetPrefix, file.rel));
-    await writeProjectFile(projectsRoot, projectId, projectPath, fs.readFileSync(file.abs), { overwrite: true }, metadata);
-  }
-}
-
-function syncBrandSystemToUserDesignSystem(
-  userDesignSystemsRoot: string,
-  designSystemId: string,
+async function planDesignSystemMirror(
+  dir: string,
   brandsRoot: string,
   brandId: string,
   designMd: string,
-): void {
-  const dir = userDesignSystemDir(userDesignSystemsRoot, designSystemId);
-  if (!dir) throw new Error(`invalid design system id: ${designSystemId}`);
+  baseline: Record<string, string>,
+  overrides?: Record<string, undefined>,
+): Promise<BundlePlan> {
   const brandRoot = resolveBrandFile(brandsRoot, brandId, []);
   if (!brandRoot) throw new Error(`invalid brand id: ${brandId}`);
+  // Like the old copy, a directory the brand does not ship is left alone.
+  // Stale candidates come from disk, so manifest keys never reach the filesystem.
+  const prunable = DESIGN_SYSTEM_BUNDLE_DIRS
+    .filter((name) => isDirectory(path.join(brandRoot, name)))
+    .filter((name) => fs.lstatSync(path.join(dir, name), { throwIfNoEntry: false })?.isDirectory())
+    .flatMap((name) => collectFiles(path.join(dir, name)).map((file) => `${name}/${file.rel}`));
+  return planBundleMirror({
+    dir,
+    files: [
+      { rel: 'DESIGN.md', content: Buffer.from(designMd, 'utf8') },
+      ...brandBundleFiles(brandRoot, ['brand.json'], DESIGN_SYSTEM_BUNDLE_DIRS),
+    ],
+    baseline,
+    isManaged: (rel) => isBundlePath(rel, DESIGN_SYSTEM_BUNDLE_FILES, DESIGN_SYSTEM_BUNDLE_DIRS),
+    prunable,
+    ...(overrides ? { overrides } : {}),
+  });
+}
 
-  fs.writeFileSync(path.join(dir, 'DESIGN.md'), designMd, 'utf8');
-  copyDirectorySync(brandSystemDir(brandsRoot, brandId), path.join(dir, 'system'));
-  copyOptionalDirectorySync(path.join(brandRoot, 'logos'), path.join(dir, 'logos'));
-  copyOptionalDirectorySync(path.join(brandRoot, 'fonts'), path.join(dir, 'fonts'));
-  copyOptionalDirectorySync(path.join(brandRoot, 'imagery'), path.join(dir, 'imagery'));
-  copyOptionalDirectorySync(path.join(brandRoot, 'prefetch'), path.join(dir, 'prefetch'));
-  const brandJson = resolveBrandFile(brandsRoot, brandId, ['brand.json']);
-  if (brandJson && isFile(brandJson)) {
-    fs.copyFileSync(brandJson, path.join(dir, 'brand.json'));
+async function syncBrandSystemToUserDesignSystem(input: {
+  /** Plan made before registration, when the linked design system was reused. */
+  plan: BundlePlan | null;
+  userDesignSystemsRoot: string;
+  designSystemId: string;
+  brandsRoot: string;
+  brandId: string;
+  designMd: string;
+  keptDesignMd: Buffer | undefined;
+  baseline: Record<string, string>;
+}): Promise<void> {
+  const dir = userDesignSystemDir(input.userDesignSystemsRoot, input.designSystemId);
+  if (!dir) throw new Error(`invalid design system id: ${input.designSystemId}`);
+  // A design system created by this finalize only holds the DESIGN.md that
+  // registration just wrote, so plan it as absent.
+  const plan = input.plan
+    ?? await planDesignSystemMirror(dir, input.brandsRoot, input.brandId, input.designMd, input.baseline, {
+      'DESIGN.md': undefined,
+    });
+  await applyBundleMirror(plan, (file) => {
+    const target = path.join(dir, ...file.rel.split('/'));
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, file.content);
+  });
+  // Registration normalized DESIGN.md; leave the exact planned bytes behind.
+  if (readBundleTarget(dir, 'DESIGN.md') !== null) {
+    fs.writeFileSync(path.join(dir, 'DESIGN.md'), input.keptDesignMd ?? input.designMd);
   }
 }
 
@@ -2187,11 +2273,6 @@ function userDesignSystemDir(root: string, id: string): string | null {
   const target = path.resolve(base, dirId);
   if (target !== base && target.startsWith(`${base}${path.sep}`)) return target;
   return null;
-}
-
-function copyOptionalDirectorySync(sourceDir: string, targetDir: string): void {
-  if (!isDirectory(sourceDir)) return;
-  copyDirectorySync(sourceDir, targetDir);
 }
 
 function copyDirectorySync(sourceDir: string, targetDir: string): void {
