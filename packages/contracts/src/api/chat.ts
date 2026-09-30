@@ -35,7 +35,7 @@ import type {
   TrackingRunPosthogErrorType,
   TrackingRunMatureUnfinishedState,
 } from '../analytics/events.js';
-import type { StrategyTaskProjectionV2 } from '../plugins/strategy-v2.js';
+import type { StrategyInputStageV2, StrategyTaskProjectionV2 } from '../plugins/strategy-v2.js';
 import type { OdNextRolloutDecision } from './strategy-rollout.js';
 import type {
   DeliverableSyntaxRepairState,
@@ -1389,6 +1389,14 @@ export interface ChatMessage {
   /** Agent-visible text persisted with the blocked verdict; preferred notice
    *  copy when present (null when the gate left no visible text). */
   strategyTaskBlockedText?: string | null;
+  /**
+   * Stage of this turn's own Run within its strategy task: `request`,
+   * `clarification`, `contract_repair` or `production`. Together with
+   * `strategyTaskBlocked` it tells a turn refused before production, which
+   * ended with the agent's reply, from a production turn that stopped short of
+   * its build (see `strategyTaskRefusedBeforeProduction`).
+   */
+  strategyTaskInputStage?: StrategyInputStageV2;
   /**
    * True once this turn's strategy task settled `completed` — the daemon
    * verified both a succeeded process and the canonical deliverable on disk.

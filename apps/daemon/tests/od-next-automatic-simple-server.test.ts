@@ -2517,6 +2517,10 @@ process.exit(127);
     });
     expect(terminal.errorCode ?? null).toBeNull();
     expect(terminal.error ?? null).toBeNull();
+    // The planned build never started, so the turn did not stop with work
+    // undone even though its task list still names it.
+    expect(await readFile(terminal.eventsLogPath, 'utf8')).toContain('Deliver the runnable entry');
+    expect(terminal.endedWithUnfinishedWork).toBe(false);
     const records = (await readFile(terminal.eventsLogPath, 'utf8')).trim().split('\n')
       .map((line) => JSON.parse(line));
     expect(records.filter((event) => event.event === 'error')).toHaveLength(0);
@@ -2535,6 +2539,8 @@ process.exit(127);
     expect(messages.find((message) => message.runId === task.latestRunId)).toMatchObject({
       runStatus: 'succeeded',
       content: expect.stringContaining('Tell me what you would like to design'),
+      strategyTaskBlocked: true,
+      strategyTaskInputStage: 'request',
     });
     const [recovery] = await waitForRunAnalyticsRecoveries([task.latestRunId]);
     expect(recovery?.properties).toMatchObject({
@@ -3803,7 +3809,9 @@ function finish() {
     text = ${JSON.stringify(production)};
   } else if (!argv.includes('resume') && fs.existsSync(logPath + '.refused-request')) {
     // A planning turn that declines the request: the agent answers in prose,
-    // writes nothing, emits no machine block, and exits cleanly.
+    // writes nothing, emits no machine block, and exits cleanly. Its task list
+    // still names the build it planned.
+    staleTodoList = true;
     text = 'Hello! Tell me what you would like to design and I will plan it.';
   } else {
     text = ${JSON.stringify(initialRepair)};

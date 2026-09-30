@@ -2227,6 +2227,38 @@ describe('work completeness vs a settled OD Next verdict', () => {
     expect(run.endedWithUnfinishedWork).toBe(true);
   });
 
+  // The strategy gate refused the turn before production: the agent answered
+  // with its plan and exited cleanly, and the build steps on its list never
+  // started. A production turn refused the same way keeps the flag (above).
+  it.each(['request', 'clarification', 'contract_repair'] as const)(
+    'does not report unfinished work for a %s-stage turn of a refused task',
+    (inputStage) => {
+      const runs = createRuns();
+      const run = runs.create({ projectId: 'p1', conversationId: 'c1' }) as any;
+      run.lastTodoSnapshot = [{ content: '搭建落地页', status: 'pending' }];
+      run.strategyTask = {
+        ...completedStrategyTask(), inputStage, outcome: 'blocked', route: 'full_plan', executionMode: null,
+      };
+
+      runs.finish(run, 'succeeded', 0, null);
+
+      expect(run.endedWithUnfinishedWork).toBe(false);
+    },
+  );
+
+  it('still reports unfinished work for a refused planning turn the user stopped', () => {
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'p1', conversationId: 'c1' }) as any;
+    run.lastTodoSnapshot = [{ content: '搭建落地页', status: 'pending' }];
+    run.strategyTask = {
+      ...completedStrategyTask(), inputStage: 'request', outcome: 'blocked', route: 'full_plan', executionMode: null,
+    };
+
+    runs.finish(run, 'canceled', null, null);
+
+    expect(run.endedWithUnfinishedWork).toBe(true);
+  });
+
   it('still reports unfinished work for a non-strategy run', () => {
     const runs = createRuns();
     const run = runs.create({ projectId: 'p1', conversationId: 'c1' }) as any;

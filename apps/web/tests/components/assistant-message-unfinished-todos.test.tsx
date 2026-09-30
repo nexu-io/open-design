@@ -189,6 +189,60 @@ describe('AssistantMessage unfinished todo state', () => {
   });
 
   /*
+   * An OD Next planning turn the strategy gate refused before production: the
+   * agent answered with its plan, the Run exited cleanly, and the task list it
+   * wrote names build steps that never started. Nothing stopped this turn, so
+   * it reads as done and offers no continue button. A production turn the gate
+   * refused did stop with its build unfinished and keeps both.
+   */
+  it.each([
+    ['request', 'Done', false],
+    ['clarification', 'Done', false],
+    ['production', 'Stopped with unfinished work', true],
+  ] as const)('reads a %s-stage turn of a refused task as "%s"', (stage, label, offersContinue) => {
+    render(
+      <AssistantMessage
+        projectKind="prototype"
+        conversationId="conv-1"
+        message={{
+          ...messageWithEvents([
+            {
+              kind: 'tool_use',
+              id: 'todo-1',
+              name: 'TodoWrite',
+              input: {
+                todos: [
+                  { content: 'Plan the landing page', status: 'completed' },
+                  { content: 'Build the landing page', status: 'pending' },
+                ],
+              },
+            },
+            { kind: 'text', text: 'Here is the plan for the landing page.' },
+          ]),
+          content: 'Here is the plan for the landing page.',
+          runId: 'run-1',
+          runStatus: 'succeeded',
+          strategyTaskExecutionId: 'task-1',
+          strategyTaskRunIndex: stage === 'production' ? 1 : 0,
+          strategyTaskBlocked: true,
+          strategyTaskInputStage: stage,
+        }}
+        streaming={false}
+        projectId="project-1"
+        isLast
+        onContinueRemainingTasks={() => {}}
+      />,
+    );
+
+    const labels = document.querySelectorAll('[data-testid="assistant-label"]');
+    expect(labels).toHaveLength(1);
+    expect(labels[0]?.textContent).toBe(label);
+    expect(
+      document.querySelector('[data-testid="assistant-continue-remaining"]') !== null,
+    ).toBe(offersContinue);
+  });
+
+  /*
    * ⚠️ 这一条 2026-09-02 换过断言。
    *
    * 原来它要求**旧的**那一轮什么都不说,理由是「完成度归 composer 上方那张常驻
