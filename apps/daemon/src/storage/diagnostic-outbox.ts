@@ -9,6 +9,13 @@ export interface DiagnosticIncident {
   attempts: number; version: number; leaseUntil: number; nextAttemptAt: number;
   deliveredAt: number | null; receipt: string | null; reason: string | null;
 }
+/** An incident whose bundle left the queue without being delivered. */
+export interface DiagnosticLossReport {
+  incidentId: string; reason: string; runId: string | null; kind: string | null;
+  state: 'collect' | 'pending'; attempts: number; bytes: number; ageMs: number;
+}
+// Not delivery failures: the user withdrew consent, or the bundle was already delivered.
+const UNREPORTED_LOSS_REASONS = new Set(['consent_disabled', 'delivered_expired']);
 export const PENDING_MAX_AGE = 7 * 86400_000;
 export const DELIVERED_MAX_AGE = 86400_000;
 export const QUEUE_MAX_BYTES = 1024 ** 3;
@@ -34,7 +41,11 @@ export class DiagnosticOutbox {
       deliveredAt INTEGER, receipt TEXT, reason TEXT
     ); CREATE INDEX IF NOT EXISTS diagnostic_due ON incidents(state, nextAttemptAt);
     CREATE TABLE IF NOT EXISTS active_runs(id TEXT PRIMARY KEY, summary TEXT NOT NULL);
-    CREATE TABLE IF NOT EXISTS loss_counts(reason TEXT PRIMARY KEY, count INTEGER NOT NULL);`);
+    CREATE TABLE IF NOT EXISTS loss_counts(reason TEXT PRIMARY KEY, count INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS loss_reports(
+      incidentId TEXT PRIMARY KEY, reason TEXT NOT NULL, runId TEXT, kind TEXT, state TEXT NOT NULL,
+      attempts INTEGER NOT NULL, bytes INTEGER NOT NULL, ageMs INTEGER NOT NULL
+    );`);
   }
   enqueue(sourceId: string, summary: string, now = Date.now()): DiagnosticIncident {
     // Hash source identities so dropped records retain only a dedupe tombstone, not content.
@@ -117,10 +128,25 @@ export class DiagnosticOutbox {
     return this.db.prepare("UPDATE incidents SET nextAttemptAt=?, leaseUntil=0, reason=? WHERE id=? AND version=? AND state IN ('collect','pending')")
       .run(at, reason, item.id, item.version).changes === 1;
   }
-  discard(id: string, reason: string): void {
+  discard(id: string, reason: string, now = Date.now()): void {
+    // Keep what explains the loss before the content is scrubbed.
+    if (!UNREPORTED_LOSS_REASONS.has(reason)) {
+      this.db.prepare(`INSERT OR IGNORE INTO loss_reports(incidentId, reason, runId, kind, state, attempts, bytes, ageMs)
+        SELECT id, ?, json_extract(summary, '$.runId'), json_extract(summary, '$.kind'), state, attempts, bytes, max(0, ? - createdAt)
+        FROM incidents WHERE id=? AND state IN ('collect','pending') AND json_valid(summary)`).run(reason, now, id);
+    }
     const changed = this.db.prepare("UPDATE incidents SET state='discarded', summary='{}', manifest=NULL, bytes=0, receipt=NULL, deviceId=NULL, version=version+1, leaseUntil=0, reason=? WHERE id=? AND state != 'discarded'")
       .run(reason, id);
     if (changed.changes) this.db.prepare('INSERT INTO loss_counts(reason,count) VALUES (?,1) ON CONFLICT(reason) DO UPDATE SET count=count+1').run(reason);
+  }
+  /** Loss reports not yet handed out, oldest first; each is returned once. */
+  takeLossReports(limit = 50): DiagnosticLossReport[] {
+    return this.db.transaction(() => {
+      const rows = this.db.prepare('SELECT * FROM loss_reports ORDER BY rowid LIMIT ?').all(limit) as DiagnosticLossReport[];
+      const remove = this.db.prepare('DELETE FROM loss_reports WHERE incidentId=?');
+      for (const row of rows) remove.run(row.incidentId);
+      return rows;
+    }).immediate();
   }
   /** Returns directories to remove. Persist tombstones before deleting files so restart is safe. */
   prune(now = Date.now(), consent = true, reserveBytes = 0): string[] {
@@ -141,18 +167,19 @@ export class DiagnosticOutbox {
         if (!consent) reason = 'consent_disabled';
         else if (item.state === 'delivered' && now - item.deliveredAt! >= DELIVERED_MAX_AGE) reason = 'delivered_expired';
         else if (item.state !== 'delivered' && now - item.createdAt >= PENDING_MAX_AGE) reason = 'pending_expired';
-        if (reason) { this.discard(item.id, reason); removed.push(item.id); }
+        if (reason) { this.discard(item.id, reason, now); removed.push(item.id); }
         else { remaining += item.storedBytes; retained.push(item); }
       }
       // Delivered copies are expendable first, then oldest pending evidence.
       retained.sort((a, b) => Number(b.state === 'delivered') - Number(a.state === 'delivered') || a.createdAt - b.createdAt);
       for (const item of retained) {
         if (remaining + reserveBytes <= QUEUE_MAX_BYTES) break;
-        this.discard(item.id, 'capacity_evicted'); removed.push(item.id); remaining -= item.storedBytes;
+        this.discard(item.id, 'capacity_evicted', now); removed.push(item.id); remaining -= item.storedBytes;
       }
       // Keep reason counters and only a small recent dedupe window after content removal.
       // Tombstones must not become an unbounded second queue during a prolonged outage.
       this.db.prepare("DELETE FROM incidents WHERE id IN (SELECT id FROM incidents WHERE state='discarded' ORDER BY createdAt DESC LIMIT -1 OFFSET 1024)").run();
+      this.db.prepare('DELETE FROM loss_reports WHERE rowid IN (SELECT rowid FROM loss_reports ORDER BY rowid DESC LIMIT -1 OFFSET 1024)').run();
       return removed;
     }).immediate();
   }

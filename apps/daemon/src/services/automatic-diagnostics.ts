@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { userInfo } from 'node:os';
 import { buildAutomaticDiagnostics, DIAGNOSTIC_MAX_BYTES, redactJsonValue,
   type AutomaticDiagnosticManifest, type AutomaticDiagnosticSource, type LogSource } from '@open-design/diagnostics';
-import { DiagnosticOutbox, type DiagnosticIncident } from '../storage/diagnostic-outbox.js';
+import { DiagnosticOutbox, type DiagnosticIncident, type DiagnosticLossReport } from '../storage/diagnostic-outbox.js';
 import { DiagnosticRelay, DiagnosticRelayError, type DiagnosticDevice } from '../integrations/diagnostic-relay.js';
 import { DiagnosticConsentFence } from './diagnostic-consent.js';
 
@@ -19,8 +19,16 @@ interface Options {
   baselineSources?(): Promise<LogSource[]>;
   context?(): unknown;
   onDelivered?(incidentId: string, receipt: string, evidence: FaultEvidence): void;
+  /** A bundle left the queue undelivered, or is still failing after several attempts. */
+  onUndelivered?(report: DiagnosticUndeliveredReport): void;
   fetcher?: typeof fetch;
 }
+
+export interface DiagnosticUndeliveredReport extends DiagnosticLossReport {
+  outcome: 'discarded' | 'retrying';
+}
+/** Report a bundle still undelivered once, after this many failed attempts. */
+export const DIAGNOSTIC_RETRY_REPORT_ATTEMPTS = 3;
 
 export class AutomaticDiagnostics {
   readonly outbox: DiagnosticOutbox;
@@ -148,9 +156,27 @@ export class AutomaticDiagnostics {
     if (!this.outbox.bindDevice(item, device.device_id)) throw new DiagnosticRelayError('stale_incident');
     return device;
   }
+  private reportLosses(): void {
+    if (!this.options.onUndelivered) return;
+    try {
+      for (const report of this.outbox.takeLossReports()) this.options.onUndelivered({ ...report, outcome: 'discarded' });
+    } catch { /* a report is diagnostic only */ }
+  }
+  private reportRetrying(item: DiagnosticIncident, reason: string): void {
+    if (!this.options.onUndelivered || item.attempts !== DIAGNOSTIC_RETRY_REPORT_ATTEMPTS) return;
+    try {
+      const summary = JSON.parse(item.summary) as Partial<FaultEvidence>;
+      this.options.onUndelivered({ outcome: 'retrying', incidentId: item.id, reason,
+        runId: typeof summary.runId === 'string' ? summary.runId : null,
+        kind: typeof summary.kind === 'string' ? summary.kind : null,
+        state: item.state === 'collect' ? 'collect' : 'pending', attempts: item.attempts, bytes: item.bytes,
+        ageMs: Math.max(0, Date.now() - item.createdAt) });
+    } catch { /* a report is diagnostic only */ }
+  }
   private async drain(): Promise<void> {
     await this.consentBarrier;
     await this.cleanup();
+    this.reportLosses();
     if (!this.allowed()) return;
     if (!this.observedLogIdentities && this.options.baselineSources) {
       // Once per process, after the launcher has rotated this session's logs.
@@ -201,13 +227,15 @@ export class AutomaticDiagnostics {
         } else {
           const delay = Math.max(error instanceof DiagnosticRelayError ? error.retryAfterMs : 0,
             Math.min(3600_000, 1000 * 2 ** Math.min(item.attempts, 12)));
-          this.outbox.defer(item, Date.now() + delay, error instanceof DiagnosticRelayError ? error.code : 'collection_or_network_failure');
+          const reason = error instanceof DiagnosticRelayError ? error.code : 'collection_or_network_failure';
+          if (this.outbox.defer(item, Date.now() + delay, reason)) this.reportRetrying(item, reason);
         }
       } finally {
         clearInterval(heartbeat);
       }
     }
     await this.cleanup();
+    this.reportLosses();
   }
   async stop(): Promise<void> {
     if (this.stopped) return;

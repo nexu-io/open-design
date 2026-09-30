@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import { AutomaticDiagnostics } from '../src/services/automatic-diagnostics.js';
-import { DiagnosticOutbox } from '../src/storage/diagnostic-outbox.js';
+import { DiagnosticOutbox, PENDING_MAX_AGE } from '../src/storage/diagnostic-outbox.js';
 import { createDiagnosticRunObserver, diagnosticFaultFromRun } from '../src/services/diagnostic-faults.js';
 
 const cleanup: Array<() => Promise<void>> = [];
@@ -90,4 +90,47 @@ it('keeps the reason of a source known to be absent instead of a consent verdict
   const archive = Buffer.concat(readdirSync(dir).filter((n) => /^\d+$/.test(n)).sort((a, b) => +a - +b).map((n) => readFileSync(join(dir, n))));
   const collection = gunzipSync(archive).toString().trim().split('\n').map((l) => JSON.parse(l)).at(-1);
   expect(collection.notes).toEqual([{ name: 'agent-cli-logs/amr/opencode', reason: 'source_not_located' }]);
+});
+
+// A bundle that never leaves the device used to vanish without a trace: the
+// relay's permanent rejections, repeated transient failures and outbox expiry
+// were recorded only in the local outbox. Report each so a missing bundle can
+// be explained from analytics.
+function relayFailing(status: number) {
+  const reports: any[] = [];
+  const root = mkdtempSync(join(tmpdir(), 'od-auto-loss-'));
+  const fetcher = vi.fn(async () => new Response('{}', { status })) as unknown as typeof fetch;
+  const service = new AutomaticDiagnostics({ dataRoot: root, relayOrigin: 'https://relay.test', consent: () => true,
+    sources: async () => [], fetcher, onUndelivered: (report) => { reports.push(report); } });
+  cleanup.push(async () => { await service.stop(); rmSync(root, { recursive: true, force: true }); });
+  const due = (id: string) => { const item = service.outbox.get(id)!; service.outbox.defer(item, 0, 'test_due'); };
+  return { service, reports, due };
+}
+it('reports a bundle the relay permanently rejects, with its run', async () => {
+  const f = relayFailing(413);
+  const id = f.service.record({ sourceId: 'run:big', at: Date.now(), kind: 'terminal_failure', runId: 'run-big' })!;
+  await f.service.tick(); // collect
+  await f.service.tick(); // upload, rejected
+  expect(f.service.outbox.get(id)?.state).toBe('discarded');
+  expect(f.reports).toEqual([expect.objectContaining({
+    incidentId: id, outcome: 'discarded', reason: 'relay_413', runId: 'run-big', kind: 'terminal_failure',
+  })]);
+});
+it('reports once that a bundle is still undelivered after repeated transient failures', async () => {
+  const f = relayFailing(503);
+  const id = f.service.record({ sourceId: 'run:flaky', at: Date.now(), kind: 'terminal_failure', runId: 'run-flaky' })!;
+  await f.service.tick(); // collect (attempt 1)
+  for (let i = 0; i < 4; i++) { f.due(id); await f.service.tick(); } // uploads, attempts 2..5
+  expect(f.service.outbox.get(id)?.state).toBe('pending');
+  expect(f.reports).toEqual([expect.objectContaining({
+    incidentId: id, outcome: 'retrying', reason: 'relay_503', attempts: 3, runId: 'run-flaky',
+  })]);
+});
+it('reports a bundle that expired undelivered, keeping its run after the content is scrubbed', async () => {
+  const f = relayFailing(503);
+  const id = f.service.record({ sourceId: 'run:old', at: Date.now(), kind: 'terminal_failure', runId: 'run-old' })!;
+  f.service.outbox.prune(Date.now() + PENDING_MAX_AGE);
+  await f.service.tick();
+  expect(f.service.outbox.get(id)?.summary).toBe('{}');
+  expect(f.reports).toEqual([expect.objectContaining({ incidentId: id, outcome: 'discarded', reason: 'pending_expired', runId: 'run-old' })]);
 });

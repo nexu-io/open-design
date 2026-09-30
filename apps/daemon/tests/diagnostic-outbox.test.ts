@@ -54,3 +54,18 @@ it('expires pending incidents and evicts oldest content to enforce the byte budg
   expect(store.prune(PENDING_MAX_AGE + 1, true, 100)).toContain(first.id);
   expect(store.get(first.id)?.reason).toBe('capacity_evicted');
 });
+
+it('keeps a loss report for a lost bundle across restart and hands it out once', () => {
+  const { dir, store } = fixture();
+  const lost = store.enqueue('run:lost', '{"runId":"run-lost","kind":"terminal_failure"}', 1);
+  store.claim(2);
+  store.discard(lost.id, 'relay_413', 3);
+  const revoked = store.enqueue('run:revoked', '{"runId":"run-revoked","kind":"terminal_failure"}', 4);
+  store.discard(revoked.id, 'consent_disabled', 5);
+  store.close();
+  const reopened = new DiagnosticOutbox(dir); stores.push(reopened);
+  expect(reopened.takeLossReports()).toEqual([expect.objectContaining({
+    incidentId: lost.id, reason: 'relay_413', runId: 'run-lost', kind: 'terminal_failure', attempts: 1, state: 'collect', ageMs: 2,
+  })]);
+  expect(reopened.takeLossReports()).toEqual([]);
+});
