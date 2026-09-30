@@ -316,6 +316,7 @@ async function openByokRuntimeSetup() {
 
 afterEach(() => {
   cleanup();
+  vi.clearAllTimers();
   globalThis.fetch = originalFetch;
   globalThis.ResizeObserver = originalResizeObserver;
   vi.useRealTimers();
@@ -1714,6 +1715,9 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
       if (url.endsWith('/api/integrations/vela/login') && init?.method === 'POST') {
         return jsonResponse({ pid: 123 }, 202);
       }
+      if (url.endsWith('/api/integrations/vela/login/cancel') && init?.method === 'POST') {
+        return jsonResponse({ canceled: true, pids: [] });
+      }
       throw new Error(`unexpected fetch: ${url}`);
     });
     globalThis.fetch = fetchMock as typeof fetch;
@@ -1751,6 +1755,8 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     expect(screen.getByText('Signing in…')).toBeTruthy();
     expect(props.onCompleteOnboarding).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: /Cancel sign-in/i })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Cancel sign-in/i }));
+    await act(async () => {});
   });
 
   it('shows daemon startup errors when AMR sign-in fails immediately', async () => {

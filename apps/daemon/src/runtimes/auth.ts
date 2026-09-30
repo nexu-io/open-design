@@ -391,7 +391,7 @@ export const OWN_AGENT_COMMAND_NAMES: ReadonlySet<string> = new Set([
   'deepseek-harness', 'devin', 'dsh', 'grok', 'grok-build', 'hermes', 'kilo',
   'kimi', 'kiro', 'kiro-cli', 'mimo', 'opencode', 'opencode-cli', 'pi',
   'qoder', 'qodercli', 'qwen', 'reasonix', 'trae-cli', 'traecli', 'vela',
-  'vibe', 'vibe-acp',
+  'vibe', 'vibe-acp', 'zcode',
 ]);
 
 /**

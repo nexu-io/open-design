@@ -221,6 +221,7 @@ describe('server route inventory', () => {
       'POST /api/orbit/run',
       'POST /api/system/open-external',
       'POST /api/dialog/open-folder',
+      'POST /api/dialog/open-zcode-app',
       'POST /api/projects/:id/media/hyperframes/scaffold',
       'POST /api/tools/media/hyperframes/scaffold',
       'POST /api/projects/:id/media/generate',

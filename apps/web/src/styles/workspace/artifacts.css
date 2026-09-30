@@ -1859,6 +1859,31 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
 .agent-card-unavailable .agent-card-footer .agent-card-link--ghost {
   margin-left: auto;
 }
+/* ZCode is the only unavailable card with an additional labelled picker. Keep
+   its picker next to Install without changing the footer ordering of other
+   agent cards. */
+.agent-card-unavailable--zcode .agent-card-footer {
+  flex-wrap: nowrap;
+}
+.agent-card-unavailable--zcode .agent-card-footer > .agent-card-link--muted {
+  order: 1;
+}
+.agent-card-unavailable--zcode .agent-card-footer > .agent-card-link--ghost {
+  order: 2;
+  margin-left: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  height: 26px;
+  min-height: 26px;
+  padding: 0 10px;
+  box-sizing: border-box;
+  white-space: nowrap;
+}
+.agent-card-unavailable--zcode .agent-card-footer > .agent-card-link--zcode-picker {
+  margin-left: auto;
+}
 .agent-card-actions {
   display: flex;
   flex-wrap: wrap;

@@ -966,14 +966,16 @@ async function callLocalCli(provider, system, user, options) {
   }
 
   let configuredAgentEnv = {};
+  let zcodeAppPath: string | null = null;
   try {
     const appConfig = options?.dataDir ? await readAppConfig(options.dataDir) : {};
     configuredAgentEnv = agentCliEnvForAgent(appConfig.agentCliEnv, def.id);
+    zcodeAppPath = appConfig.zcodeAppPath ?? null;
   } catch {
     configuredAgentEnv = {};
   }
 
-  const launch = resolveAgentLaunch(def, configuredAgentEnv);
+  const launch = resolveAgentLaunch(def, configuredAgentEnv, { zcodeAppPath });
   if (!launch?.launchPath) {
     throw new Error(`${def.name} CLI is not installed or not on PATH`);
   }

@@ -61,7 +61,18 @@ afterEach(async () => {
       await new Promise<void>((resolve) => current.close(() => resolve()));
     }
   }
-  if (scratch) await rm(scratch, { recursive: true, force: true });
+  // The Vela stub is launched as a child process by the billing requests. On
+  // slower runners its final log write can race this teardown, so let fs.rm
+  // retry the transient ENOTEMPTY instead of turning an otherwise passing
+  // wiring test into a shard failure.
+  if (scratch) {
+    await rm(scratch, {
+      recursive: true,
+      force: true,
+      maxRetries: 5,
+      retryDelay: 50,
+    });
+  }
   scratch = null;
   for (const [key, value] of savedEnv) {
     if (value === undefined) delete process.env[key];
