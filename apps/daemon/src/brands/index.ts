@@ -17,7 +17,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import type {
   Brand,
@@ -58,6 +58,11 @@ import { BRAND_KIT_FILE, writeBrandKitPreview, type BrandKitStatus } from './kit
 import { normalizeBrandKitLocale } from './kit-i18n.js';
 import { selfHostGoogleFonts } from './fonts.js';
 import { adoptExistingLogos, ensureLogoFallback, type LogoFallbackFn, type LogoSlot } from './logo-fallback.js';
+import {
+  compareLogoFileNames,
+  compareLogoFileNamesByExtension,
+  isLikelyLogoAssetFileName,
+} from './logo-priority.js';
 import { ensureImageryFallback, type ImageryFallbackFn, type ImagerySlot } from './imagery-fallback.js';
 import { ensureBrandSeed, type SeedFallbackFn, type SeedSlot } from './seed-fallback.js';
 import {
@@ -1356,6 +1361,7 @@ export async function finalizeBrand(
 
   // Pull the agent's downloaded assets into the brand workspace so the
   // deterministic builder and the design system see them.
+  mirrorProjectLogoAssets(projectsRoot, projectId);
   copyProjectDirToBrand(projectsRoot, projectId, brandsRoot, id, 'logos');
   copyProjectDirToBrand(projectsRoot, projectId, brandsRoot, id, 'fonts');
   copyProjectDirToBrand(projectsRoot, projectId, brandsRoot, id, 'imagery');
@@ -1879,6 +1885,7 @@ export async function renderBrandPreviewIntoProject(
       brandId: id,
       brandSourceUrl: meta.sourceUrl,
     });
+    mirrorProjectLogoAssetsInDir(projectDir);
     const logoSlot = brandLogoSlot(brand.logo);
     if (!logoSlot.primary) {
       const adopted = adoptExistingLogos(path.join(projectDir, 'logos'), logoSlot);
@@ -2095,6 +2102,86 @@ function copyProjectDirToBrand(
   copyDirectorySync(source, target);
 }
 
+/**
+ * Agents sometimes save uploaded brand marks under `assets/` even though the
+ * brand kit expects logo candidates under `logos/`. Mirror obvious logo-like
+ * asset filenames into `logos/` before preview/finalize adoption runs. Keep the
+ * originals because `assets/` can still be part of the user's source evidence.
+ */
+function mirrorProjectLogoAssets(projectsRoot: string, projectId: string): void {
+  let projectDir: string;
+  try {
+    projectDir = resolveProjectDir(projectsRoot, projectId);
+  } catch {
+    return;
+  }
+  mirrorProjectLogoAssetsInDir(projectDir);
+}
+
+function mirrorProjectLogoAssetsInDir(projectDir: string): void {
+  const assetsDir = path.join(projectDir, 'assets');
+  if (!isDirectory(assetsDir)) return;
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(assetsDir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  const logoAssets = entries
+    .filter((entry) => entry.isFile() && isLikelyLogoAssetFileName(entry.name))
+    .map((entry) => entry.name)
+    // Stable copy order keeps hash-suffixed collision names reproducible.
+    .sort(compareLogoFileNames);
+  if (logoAssets.length === 0) return;
+
+  const logosDir = path.join(projectDir, 'logos');
+  fs.mkdirSync(logosDir, { recursive: true });
+  for (const name of logoAssets) {
+    const source = path.join(assetsDir, name);
+    const target = uniqueLogoAssetTarget(logosDir, name, source);
+    if (!target) continue;
+    try {
+      fs.copyFileSync(source, target);
+    } catch {
+      // Best-effort mirror; preview/finalize should not fail on one bad asset.
+    }
+  }
+}
+
+function uniqueLogoAssetTarget(logosDir: string, name: string, source: string): string | null {
+  const parsed = path.parse(name);
+  const safeBase = sanitizeLogoAssetBase(parsed.name);
+  const ext = parsed.ext.toLowerCase();
+  // Preserve existing logo files: same-content mirrors with the same sanitized
+  // base are skipped, while a different file with that base is appended instead
+  // of overwriting the user's prior logo evidence. Case variants are treated as
+  // collisions, but new mirrors keep the uploaded asset's original spelling.
+  const existing = matchingLogoAssetTargets(logosDir, safeBase, ext);
+  for (const target of existing) {
+    if (filesAreIdentical(source, target)) return null;
+  }
+  const preferred = path.join(logosDir, `${safeBase}${ext}`);
+  const preferredLower = preferred.toLowerCase();
+  if (!existing.some((target) => target.toLowerCase() === preferredLower) && !fs.existsSync(preferred)) return preferred;
+
+  const sourceHash = hashFile(source);
+  if (!sourceHash) return null;
+  const shortHash = sourceHash.slice(0, 12);
+  const hashed = path.join(logosDir, `${safeBase}-${shortHash}${ext}`);
+  if (!fs.existsSync(hashed)) return hashed;
+  if (filesAreIdentical(source, hashed)) return null;
+  for (let i = 2; i <= 99; i += 1) {
+    const counted = path.join(logosDir, `${safeBase}-${shortHash}-${i}${ext}`);
+    if (!fs.existsSync(counted)) return counted;
+    if (filesAreIdentical(source, counted)) return null;
+  }
+  return null;
+}
+
+function sanitizeLogoAssetBase(name: string): string {
+  return name.replace(/[^a-z0-9_-]+/giu, '-').replace(/^-+|-+$/g, '') || 'logo';
+}
+
 async function syncBrandFilesToProject(input: {
   brandsRoot: string;
   projectsRoot: string;
@@ -2274,12 +2361,12 @@ export async function removeBrand(
   return deleteBrandDir(brandsRoot, id);
 }
 
-const LOGO_EXT_PRIORITY = ['.svg', '.png', '.webp', '.jpg', '.jpeg', '.gif', '.ico'];
-
 /**
  * Absolute path to the brand's primary logo file, or null when none exists.
  * Prefers brand.logo.primary, then the first logo in `logos/` by extension
- * priority (vector/raster before icon).
+ * priority (vector/raster before icon). Name heuristics are intentionally only
+ * used while adopting an empty logo slot; raw path resolution preserves the
+ * older extension-first behavior.
  */
 export function resolveBrandLogoPath(brandsRoot: string, id: string): string | null {
   const brand = readBrand(brandsRoot, id);
@@ -2300,14 +2387,9 @@ export function resolveBrandLogoPath(brandsRoot: string, id: string): string | n
   }
   const ranked = names
     .filter((n) => isFile(path.join(logosDir, n)))
-    .sort((a, b) => extRank(a) - extRank(b) || a.localeCompare(b));
+    .sort(compareLogoFileNamesByExtension);
   const pick = ranked[0];
   return pick ? path.join(logosDir, pick) : null;
-}
-
-function extRank(name: string): number {
-  const i = LOGO_EXT_PRIORITY.indexOf(path.extname(name).toLowerCase());
-  return i === -1 ? LOGO_EXT_PRIORITY.length : i;
 }
 
 function isFile(p: string): boolean {
@@ -2316,6 +2398,81 @@ function isFile(p: string): boolean {
   } catch {
     return false;
   }
+}
+
+function filesAreIdentical(a: string, b: string): boolean {
+  let aFd: number | null = null;
+  let bFd: number | null = null;
+  try {
+    if (fs.statSync(a).size !== fs.statSync(b).size) return false;
+    aFd = fs.openSync(a, 'r');
+    bFd = fs.openSync(b, 'r');
+    const aBuf = Buffer.allocUnsafe(64 * 1024);
+    const bBuf = Buffer.allocUnsafe(64 * 1024);
+    while (true) {
+      const aRead = fs.readSync(aFd, aBuf, 0, aBuf.length, null);
+      const bRead = fs.readSync(bFd, bBuf, 0, bBuf.length, null);
+      if (aRead !== bRead) return false;
+      if (aRead === 0) return true;
+      if (!aBuf.subarray(0, aRead).equals(bBuf.subarray(0, bRead))) return false;
+    }
+  } catch {
+    return false;
+  } finally {
+    if (aFd !== null) {
+      try {
+        fs.closeSync(aFd);
+      } catch {}
+    }
+    if (bFd !== null) {
+      try {
+        fs.closeSync(bFd);
+      } catch {}
+    }
+  }
+}
+
+function hashFile(file: string): string | null {
+  let fd: number | null = null;
+  try {
+    fd = fs.openSync(file, 'r');
+    const hash = createHash('sha256');
+    const buffer = Buffer.allocUnsafe(64 * 1024);
+    while (true) {
+      const read = fs.readSync(fd, buffer, 0, buffer.length, null);
+      if (read === 0) break;
+      hash.update(buffer.subarray(0, read));
+    }
+    return hash.digest('hex');
+  } catch {
+    return null;
+  } finally {
+    if (fd !== null) {
+      try {
+        fs.closeSync(fd);
+      } catch {}
+    }
+  }
+}
+
+function matchingLogoAssetTargets(logosDir: string, safeBase: string, ext: string): string[] {
+  let names: string[];
+  try {
+    names = fs.readdirSync(logosDir);
+  } catch {
+    return [];
+  }
+  const normalizedBase = safeBase.toLowerCase();
+  const normalizedExt = ext.toLowerCase();
+  return names
+    .filter((name) => {
+      const parsed = path.parse(name);
+      if (parsed.ext.toLowerCase() !== normalizedExt) return false;
+      const stem = sanitizeLogoAssetBase(parsed.name).toLowerCase();
+      return stem === normalizedBase || stem.startsWith(`${normalizedBase}-`);
+    })
+    .map((name) => path.join(logosDir, name))
+    .filter(isFile);
 }
 
 function isDirectory(p: string): boolean {
