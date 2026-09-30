@@ -3624,6 +3624,13 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
   scroll-snap-align: start;
   display: flex;
   flex-direction: column;
+  /* height:auto releases the global button primitive's 36px clamp
+     (primitives.css) — thumb (58px) + name is ~90px tall, and the clamp
+     cropped it to 36px via overflow:hidden below. align-items:stretch
+     overrides the primitive's center so the thumb stays full-bleed in
+     column flow instead of shrinking to its content width. */
+  height: auto;
+  align-items: stretch;
   min-width: 0;
   padding: 0;
   border: 1px solid var(--border);
