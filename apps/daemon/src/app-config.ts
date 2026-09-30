@@ -656,19 +656,29 @@ function applyConfigValue(
     return;
   }
   if (key === 'odNextStrategyMode') {
-    // Reached with a non-mode value only on the READ path — a truncated file, a
-    // hand edit, a value written by some other version. It must not take the
-    // daemon down, and it must not read as unconfigured either: see
-    // OD_NEXT_MODE_WHEN_CONFIG_UNREADABLE. `null` is different and stays a
-    // delete, because clearing the key IS the deliberate way back to the
-    // default. The WRITE path never reaches here with a bad value —
-    // `assertWritableControlValues` refuses it first.
+    // Only the three modes are stored. Anything else is dropped, so the field
+    // reads as unconfigured and resolves to the default — which is `active`.
+    //
+    // A value reached here that is not a mode arrived on the READ path: a hand
+    // edit, a truncated file, a mode some other build spells differently. It is
+    // tempting to fail closed and call it `off`, and this did for a while. That
+    // is wrong about who it hits. OD Next is off for exactly one reason — the
+    // user saved `off` — and a value nobody can read is evidence of a broken
+    // field, not of a decision. Reading it as an opt-out turns "we could not
+    // read your choice" into "you chose to stay off" for installations that
+    // never chose anything, in a rollout whose whole purpose is the opposite.
+    //
+    // `null` and `undefined` are the same drop for a different reason: clearing
+    // the key IS the deliberate way back to the default.
+    //
+    // None of this weakens the API. The WRITE path never reaches here with a
+    // bad value — `assertWritableControlValues` refuses it with a 400 first, so
+    // a typo through `od config set` or the Labs switch stays a loud failure
+    // that leaves the saved mode untouched, rather than a silent reset.
     if (value === 'off' || value === 'observe' || value === 'active') {
       target[key] = value;
-    } else if (value === null || value === undefined) {
-      delete target[key];
     } else {
-      target[key] = OD_NEXT_MODE_WHEN_CONFIG_UNREADABLE;
+      delete target[key];
     }
     return;
   }
@@ -696,34 +706,6 @@ function applyConfigValue(
     return;
   }
 }
-
-/**
- * What this installation's OD Next preference reads as when the field is there
- * but cannot be understood.
- *
- * Scoped deliberately narrow: this covers `odNextStrategyMode` holding a value
- * that is not one of the modes — a hand edit, a typo, a mode some other version
- * writes. Something was configured and we cannot read it, and since flipping
- * the default made unconfigured mean `active`, dropping it would turn "we
- * cannot read your choice" into "you chose OD Next".
- *
- * It deliberately does NOT cover a config file that fails to parse at all, or
- * one whose body is not an object. Those reset every preference to its default
- * — agent, telemetry, everything — and singling this one out to resolve against
- * its default would be inconsistent with the rest of the file and would opt
- * installations out of a rollout they never declined. A broken file is not
- * evidence of an opt-out; it is evidence of a broken file, and the user has
- * lost the whole config either way.
- *
- * The narrow case still has the property worth having: a user who never opted
- * out is unaffected, because a readable config keeps its value and a fresh
- * install has no key at all.
- *
- * This is a claim about one field, not about the user, so it is deliberately
- * not reported as a distinct mode source: `readOdNextRolloutPolicy` sees a
- * saved `off` and says `app_config`, which is true — a config is what decided.
- */
-const OD_NEXT_MODE_WHEN_CONFIG_UNREADABLE = 'off' as const;
 
 function filterAllowedKeys(obj: Record<string, unknown>): AppConfigPrefs {
   const result: Record<string, unknown> = Object.create(null);

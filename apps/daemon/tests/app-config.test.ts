@@ -74,33 +74,44 @@ describe('app-config', () => {
       expect(cfg).toEqual({ telemetry: DEFAULT_TELEMETRY });
     });
 
-    // A file that cannot be parsed at all resets every preference, including
-    // this one, and that stays true. Singling out `odNextStrategyMode` to
-    // survive a broken file would opt installations out of a rollout they never
-    // declined — a broken file is evidence of a broken file, not of an opt-out.
-    // What does survive is a mode we can see and cannot read; see below.
-    describe('OD Next opt-out when the mode itself cannot be read', () => {
+    // OD Next is off for exactly one reason: the user saved `off`. Every other
+    // shape the field can take — absent, null, a typo, a value some other build
+    // wrote, a whole file that will not parse — means nobody's choice is
+    // legible here, and an illegible field is evidence of a broken field rather
+    // than of a decision. Reading any of them as an opt-out would switch off
+    // installations that never asked for it.
+    describe('OD Next mode when the field itself cannot be read', () => {
       const cases: Array<[string, unknown]> = [
         ['a mode this build does not recognise', 'Off'],
         ['a mode with a typo', 'acive'],
+        ['different casing of a real mode', 'OFF'],
+        ['an empty string', ''],
         ['a non-string mode', 1],
+        ['a boolean', true],
         ['an object where a mode belongs', { mode: 'off' }],
+        ['an array where a mode belongs', ['off']],
       ];
       for (const [label, value] of cases) {
-        it(`reads off, not the default, for ${label}`, async () => {
+        it(`reads as unconfigured for ${label}`, async () => {
           await writeFile(
             path.join(dataDir, 'app-config.json'),
             JSON.stringify({ odNextStrategyMode: value }),
           );
-          expect((await readAppConfig(dataDir)).odNextStrategyMode).toBe('off');
+          expect((await readAppConfig(dataDir)).odNextStrategyMode).toBeUndefined();
         });
       }
 
+      it('does not let one unusable key cost the user the rest of the file', async () => {
+        await writeFile(
+          path.join(dataDir, 'app-config.json'),
+          JSON.stringify({ agentId: 'codex', odNextStrategyMode: 'acive' }),
+        );
+        expect(await readAppConfig(dataDir)).toMatchObject({
+          agentId: 'codex',
+        });
+      });
+
       it('still reads as unconfigured when there is genuinely no config', async () => {
-        // The negative control that matters most for this rollout. Failing
-        // closed is only correct for a value we can see and cannot read; a
-        // fresh install has made no choice, and turning that into an opt-out
-        // would cancel the rollout instead of protecting it.
         expect((await readAppConfig(dataDir)).odNextStrategyMode).toBeUndefined();
       });
 
@@ -118,6 +129,9 @@ describe('app-config', () => {
       });
 
       it('keeps every readable mode exactly as saved', async () => {
+        // The one that actually protects an opt-out. A legible `off` is the
+        // only thing standing between a user who declined OD Next and the
+        // default, so it has to survive every read.
         for (const mode of ['off', 'observe', 'active'] as const) {
           await writeFile(
             path.join(dataDir, 'app-config.json'),
@@ -1306,39 +1320,37 @@ describe('app-config odNextStrategyMode', () => {
     await expect(readAppConfig(dataDir)).rejects.toThrow();
   });
 
-  it('reads a corrupted stored value as off rather than throwing', async () => {
+  it('reads a corrupted stored value as unconfigured rather than throwing', async () => {
     // The read path stays fail-soft — a hand-edited or truncated file must not
     // take the daemon down, and the rest of the config still comes through.
-    //
-    // What changed is which answer is safe. This assertion used to read
-    // `toBeUndefined()`, on the reasoning that "unconfigured is the safe answer
-    // (`off`)". That reasoning was true only while the default was `off`. With
-    // the default flipped, unconfigured is `active`, so the same fail-soft drop
-    // would hand OD Next to an installation whose stored choice we just failed
-    // to read. The mode now fails closed on its own; every other key keeps the
-    // ordinary fail-soft behaviour.
+    // The mode is dropped like any other unusable value, which puts the
+    // installation on the default rather than on an opt-out nobody typed.
     await writeFile(
       path.join(dataDir, 'app-config.json'),
       JSON.stringify({ agentId: 'codex', odNextStrategyMode: 'acive' }),
       'utf8',
     );
     const cfg = await readAppConfig(dataDir);
-    expect(cfg.odNextStrategyMode).toBe('off');
+    expect(cfg.odNextStrategyMode).toBeUndefined();
     expect(cfg.agentId).toBe('codex');
   });
 
-  it('keeps an opt-out through the whole chain when the saved mode goes unreadable', async () => {
-    // The join is where this guarantee actually lives, so assert it across the
-    // join rather than in either half. `readAppConfig` reads the file and
-    // `readOdNextRolloutPolicy` decides the mode; a mode that read as absent in
-    // the first would resolve to `active` in the second, and nothing in between
-    // would notice.
+  it('resolves the saved mode across the read/policy join', async () => {
+    // The join is where the answer actually lands, so assert it across the join
+    // rather than in either half. `readAppConfig` reads the file and
+    // `readOdNextRolloutPolicy` decides the mode; a disagreement between them
+    // is exactly what nothing in between would notice.
+    //
+    // A legible `off` is the one thing that keeps an installation off, and it
+    // has to survive the whole chain.
     await writeAppConfig(dataDir, { odNextStrategyMode: 'off' });
     expect(readOdNextRolloutPolicy({}, await readAppConfig(dataDir)))
       .toMatchObject({ requestedMode: 'off', requestedModeSource: 'app_config' });
 
-    // Same installation, same user, the mode rewritten to something this build
-    // cannot read — a hand edit, or a value some other version writes.
+    // Same installation, the mode rewritten to something this build cannot read
+    // — a hand edit, or a value some other version writes. Nobody's choice is
+    // legible any more, so the installation is on the default, not on an
+    // opt-out inferred from a value that means nothing.
     const saved = JSON.parse(
       await readFile(path.join(dataDir, 'app-config.json'), 'utf8'),
     ) as Record<string, unknown>;
@@ -1348,11 +1360,9 @@ describe('app-config odNextStrategyMode', () => {
       'utf8',
     );
     expect(readOdNextRolloutPolicy({}, await readAppConfig(dataDir)))
-      .toMatchObject({ requestedMode: 'off' });
+      .toMatchObject({ requestedMode: 'active', requestedModeSource: 'default' });
 
-    // And the negative control on the same chain: a fresh installation with no
-    // file must still reach the new default, or this guard has swallowed the
-    // rollout it was meant to protect.
+    // And the same answer for a fresh installation with no file at all.
     const fresh = await mkdtemp(path.join(tmpdir(), 'od-appconfig-fresh-'));
     try {
       expect(readOdNextRolloutPolicy({}, await readAppConfig(fresh)))
