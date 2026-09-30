@@ -475,22 +475,68 @@ if (!nativeProbeEnabled) process.exit(0);
 // prebuilt binary for a different ABI (e.g. after switching between Node 22 /
 // 24 / 25). When the addon fails to dlopen, pnpm rebuild handles the rebuild
 // using its own node-gyp lifecycle — no assumptions about where node-gyp lives.
-const req = createRequire(resolve(repoRoot, "apps/daemon/package.json"));
+// Try to actually use the native addon; merely requiring the JS wrapper
+// succeeds even when the binary is missing (e.g. after `pnpm install --ignore-scripts`).
+// Run the native probe in a fresh Node process so an incompatible or rebuilt
+// native addon cannot poison this postinstall process.
+function probeBetterSqlite3() {
+  const probeScript = `
+import { createRequire } from "node:module";
+import { resolve } from "node:path";
+
+const req = createRequire(${JSON.stringify(resolve(repoRoot, "apps/daemon/package.json"))});
+
+try {
+  const Database = req("better-sqlite3");
+  const db = new Database(":memory:");
+  const row = db.prepare("SELECT 1 AS ok").get();
+
+  if (row?.ok !== 1) {
+    throw new Error("better-sqlite3 probe query returned an unexpected result");
+  }
+  db.close();
+  process.exit(0);
+} catch (error) {
+  if (error?.code === "MODULE_NOT_FOUND") {
+    process.exit(2);
+  }
+
+  process.stderr.write(
+    error instanceof Error ? error.message : String(error),
+  );
+  process.exit(1);
+}
+`;
+
+  const result = spawnSync(
+    process.execPath,
+    ["--input-type=module", "-e", probeScript],
+    {
+      cwd: repoRoot,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+
+  return {
+    usable: result.status === 0,
+    missing: result.status === 2,
+    status: result.status,
+    signal: result.signal,
+    error: result.error,
+  };
+}
+
 let needsRebuild = false;
 const nativeProbeStartedAt = Date.now();
 const nativeProbeStarted = performance.now();
-try {
-  // Try to actually use the native addon; merely requiring the JS wrapper
-  // succeeds even when the binary is missing (e.g. after `pnpm install --ignore-scripts`).
-  const Database = req("better-sqlite3");
-  new Database(":memory:");
-} catch (e) {
-  // MODULE_NOT_FOUND means daemon deps aren't installed yet — not our problem.
-  // Any other error (missing binary, ERR_DLOPEN_FAILED, ABI mismatch, etc.) warrants a rebuild.
-  if (e?.code !== "MODULE_NOT_FOUND") {
-    needsRebuild = true;
-  }
+
+const nativeProbe = probeBetterSqlite3();
+
+if (!nativeProbe.usable && !nativeProbe.missing) {
+  needsRebuild = true;
 }
+
 recordTiming({
   durationMs: performance.now() - nativeProbeStarted,
   operation: "better-sqlite3-probe",
@@ -503,29 +549,46 @@ if (needsRebuild) {
   process.stdout.write(
     `postinstall: rebuilding better-sqlite3 for Node.js ${process.version}...\n`,
   );
+
   const rebuildStartedAt = Date.now();
   const rebuildStarted = performance.now();
+
   const rebuild = spawnSync(
     packageManager.command,
     [...packageManager.argsPrefix, "--filter", "@open-design/daemon", "rebuild", "better-sqlite3"],
     { cwd: repoRoot, stdio: "inherit" },
   );
+
+  const rebuildSucceeded = rebuild.error == null && rebuild.status === 0;
+
   recordTiming({
     durationMs: performance.now() - rebuildStarted,
     operation: "better-sqlite3-rebuild",
     startedAt: rebuildStartedAt,
-    status: rebuild.error == null && rebuild.status === 0 ? "success" : "failure",
+    status: rebuildSucceeded ? "success" : "failure",
   });
+
   receiptOperations.push({
     operation: "better-sqlite3-rebuild",
-    status: rebuild.error == null && rebuild.status === 0 ? "success" : "failure",
+    status: rebuildSucceeded ? "success" : "failure",
   });
+
   if (rebuild.error != null) throw rebuild.error;
+
   if (rebuild.status !== 0) {
-    process.stderr.write(
-      "postinstall: better-sqlite3 rebuild failed.\n" +
-        "Install build tools (python3, make, g++ or clang++) then run: pnpm install\n",
-    );
-    process.exit(rebuild.status ?? 1);
+    const postRebuildProbe = probeBetterSqlite3();
+
+    if (postRebuildProbe.usable) {
+      process.stderr.write(
+        `postinstall: better-sqlite3 rebuild exited with ${rebuild.status}, ` +
+          "but the native addon is usable; continuing.\n",
+      );
+    } else {
+      process.stderr.write(
+        "postinstall: better-sqlite3 rebuild failed and the native addon is still unusable.\n" +
+          "Install build tools (python3, make, g++ or clang++) then run: pnpm install\n",
+      );
+      process.exit(rebuild.status ?? 1);
+    }
   }
 }
