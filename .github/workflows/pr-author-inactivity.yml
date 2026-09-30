@@ -66,17 +66,18 @@ jobs:
             const REMINDER_MS = 72 * 60 * 60 * 1000;
             const CLOSE_MS = 120 * 60 * 60 * 1000;
             const DRY_RUN = String(context.payload.inputs?.dry_run || 'false').toLowerCase() === 'true';
+            // Every entry must exist in the repository's label registry. An
+            // unregistered name is an unreachable exemption branch, not a
+            // harmless leftover, so the pass asserts this set against the live
+            // registry before it touches a single PR.
             const NON_AUTHOR_BLOCKER_LABELS = new Set([
               'exempt-from-stale',
               'looper:worker-ready',
               'needs-design-review',
               'needs-maintainer-check',
-              'needs-maintainer-merge',
-              'needs-qa',
-              'needs-qa-validation',
               'needs-product-direction',
+              'needs-product-review',
               'needs-validation',
-              'ready-to-merge',
               'stale-pr/blocked',
               'stale-pr/maintainer-assisted',
             ]);
@@ -148,6 +149,34 @@ jobs:
 
             async function paginate(method, params) {
               return github.paginate(method, { per_page: 100, ...params });
+            }
+
+            // The exemption set is the only thing standing between a PR whose
+            // next actor is a maintainer and an automated close, so verify it
+            // against the live label registry before doing any work. An entry
+            // that is not registered can never match: continuing would treat
+            // an exempt PR as author-owned and remind or close it silently.
+            // The registry is read at run time rather than from a checked-in
+            // copy, because such a copy can drift from GitHub in exactly the
+            // way this assertion exists to catch.
+            const registeredLabels = new Set(
+              (
+                await paginate(github.rest.issues.listLabelsForRepo, {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                })
+              ).map((label) => label.name),
+            );
+            const unregisteredExemptionLabels = [...NON_AUTHOR_BLOCKER_LABELS].filter(
+              (label) => !registeredLabels.has(label),
+            );
+            if (unregisteredExemptionLabels.length > 0) {
+              core.setFailed(
+                `NON_AUTHOR_BLOCKER_LABELS names ${unregisteredExemptionLabels.length} label(s) missing from this repository's registry: ` +
+                  `${unregisteredExemptionLabels.join(', ')}. Register them, or remove them from the set. ` +
+                  'Refusing to remind or close any PR while the exemption set is incomplete.',
+              );
+              return;
             }
 
             const pulls = await paginate(github.rest.pulls.list, {
