@@ -83,6 +83,25 @@ describe('proxyDispatcherRequestInit', () => {
     vi.resetModules();
   });
 
+  it('gives direct provider probes their full connection-test timeout budget', async () => {
+    const proxySpy = vi.spyOn(platform, 'resolveSystemProxyEnv').mockReturnValue({});
+    const { providerDispatcherRequestInit } = await import('../src/connectionTest.js');
+
+    try {
+      const { close, requestInit } = providerDispatcherRequestInit(20_000, {});
+
+      expect(requestInit.dispatcher).toBeTruthy();
+      expect(directAgentConstructor).toHaveBeenCalledWith({
+        connectTimeout: 20_000,
+      });
+      expect(envHttpProxyAgentConstructor).not.toHaveBeenCalled();
+      expect(socks5ProxyAgentConstructor).not.toHaveBeenCalled();
+      await expect(close()).resolves.toBeUndefined();
+    } finally {
+      proxySpy.mockRestore();
+    }
+  });
+
   it('forwards agent timeout options into EnvHttpProxyAgent construction', async () => {
     const proxySpy = vi.spyOn(platform, 'resolveSystemProxyEnv').mockReturnValue({});
     const { proxyDispatcherRequestInit } = await import('../src/connectionTest.js');
