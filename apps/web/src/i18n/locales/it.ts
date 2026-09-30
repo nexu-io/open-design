@@ -3312,6 +3312,7 @@ export const it: Dict = {
   'fileViewer.exportSlideEta': 'Diapositiva {current}/{total} · ~{seconds}s rimanenti',
   'fileViewer.exportFailed': 'Esportazione non riuscita. Riprova.',
   'fileViewer.exportDone': 'Esportazione completata',
+  'fileViewer.exportDegradedZip': 'Esportazione completata, ma questo ZIP contiene solo la pagina renderizzata, non i file del progetto',
   'fileViewer.exportImageFailed': 'Acquisizione immagine non riuscita. Riprova o usa lo strumento screenshot del browser.',
   'fileViewer.exportImageModalSubtitle': 'Scegli un formato, poi scarica l\'anteprima corrente come immagine.',
   'fileViewer.exportImageFormatLabel': 'Formato',

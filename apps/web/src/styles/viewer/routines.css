@@ -306,6 +306,14 @@
     0 4px 14px rgba(0, 0, 0, 0.14),
     0 0 0 1px color-mix(in srgb, var(--danger, #cf222e) 12%, transparent);
 }
+.od-toast.tone-warning {
+  border: 1px solid color-mix(in srgb, var(--amber, #ff7528) 42%, var(--border));
+  background: color-mix(in srgb, var(--amber, #ff7528) 14%, var(--bg));
+  color: var(--text);
+  box-shadow:
+    0 4px 14px rgba(0, 0, 0, 0.14),
+    0 0 0 1px color-mix(in srgb, var(--amber, #ff7528) 12%, transparent);
+}
 .od-toast-body {
   display: flex;
   align-items: center;
@@ -322,6 +330,9 @@
 }
 .od-toast.tone-error .od-toast-icon {
   color: var(--danger, #cf222e);
+}
+.od-toast.tone-warning .od-toast-icon {
+  color: var(--amber, #ff7528);
 }
 .od-toast.tone-loading .od-toast-icon {
   color: var(--text-muted, #6e7781);
@@ -420,10 +431,19 @@
     border-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
     opacity 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.od-toast:not(.tone-success):not(.tone-error) .od-toast-close {
+.od-toast:not(.tone-success):not(.tone-error):not(.tone-warning) .od-toast-close {
   border-color: rgba(255, 255, 255, 0.24);
   background: rgba(255, 255, 255, 0.16);
   color: var(--bg, #fff);
+}
+/* The warning surface is a light amber tint in both themes, so the dark
+   toast's white disc reads as invisible on it (QA finding on #8134). Tint
+   the disc with the tone color instead, mirroring the success-anchor
+   treatment above. */
+.od-toast.tone-warning .od-toast-close {
+  border-color: color-mix(in srgb, var(--amber, #ff7528) 26%, transparent);
+  background: color-mix(in srgb, var(--amber, #ff7528) 10%, transparent);
+  color: var(--amber, #ff7528);
 }
 .od-toast.od-toast-browser-snapshot .od-toast-close {
   top: 8px;
@@ -442,9 +462,18 @@
   background: color-mix(in srgb, currentColor 8%, transparent);
   opacity: 1;
 }
-.od-toast:not(.tone-success):not(.tone-error) .od-toast-close:hover {
+.od-toast:not(.tone-success):not(.tone-error):not(.tone-warning) .od-toast-close:hover {
   border-color: rgba(255, 255, 255, 0.34);
   background: rgba(255, 255, 255, 0.24);
+}
+/* Warning toasts need their own hover: the amber resting disc above
+   (3-class specificity) would otherwise smother the generic currentColor
+   hover, leaving the close button with no visible hover feedback on the
+   light surface (QA follow-up on #8134). */
+.od-toast.tone-warning .od-toast-close:hover {
+  border-color: color-mix(in srgb, var(--amber, #ff7528) 34%, transparent);
+  background: color-mix(in srgb, var(--amber, #ff7528) 18%, transparent);
+  opacity: 1;
 }
 .od-toast-dismiss {
   margin-top: 8px;
