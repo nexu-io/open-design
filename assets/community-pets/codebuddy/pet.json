@@ -1,0 +1,11 @@
+{
+  "id": "codebuddy",
+  "displayName": "CodeBuddy",
+  "description": "A locked-face coding companion pet based on the approved reference photo, preserving the original face while animating the small robot body.",
+  "spritesheetPath": "spritesheet.webp",
+  "tags": [
+    "custom",
+    "locked-face"
+  ],
+  "source": "local-hatch-pet"
+}
