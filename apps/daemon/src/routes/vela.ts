@@ -495,6 +495,56 @@ function decodeProxyBody(
   return null;
 }
 
+/**
+ * The part of a caller's `accept-encoding` this proxy can read back.
+ *
+ * The daemon does not only pipe decision bodies: it reads them to store content
+ * and to rebuild a trimmed (`contentOmitted`) reply from what it holds. A reply
+ * framed in an encoding `decodeProxyBody` cannot open is echoed untouched, and
+ * for a trimmed reply that means handing the browser a decision with no content.
+ * Chromium advertises `zstd`, so forwarding its header verbatim let upstream
+ * pick exactly such an encoding. Every coding named here must be one
+ * `decodeProxyBody` decodes; q-values are kept, anything else is dropped.
+ */
+function decodableAcceptEncoding(value: string | string[] | undefined): string | null {
+  if (typeof value !== 'string') return null;
+  const kept = value
+    .split(',')
+    .map((part) => part.trim())
+    .filter((part) => {
+      const coding = part.split(';')[0]?.trim().toLowerCase();
+      return (
+        coding === 'gzip' ||
+        coding === 'x-gzip' ||
+        coding === 'deflate' ||
+        coding === 'br' ||
+        coding === 'identity'
+      );
+    });
+  return kept.length > 0 ? kept.join(', ') : null;
+}
+
+/**
+ * The whole budget a production decision gets from the runtime before the
+ * daemon answers from its own store instead (OPEND-3436 AC2).
+ *
+ * It has to run out BEFORE the browser gives up on the same request, which the
+ * web lifecycle does after 15s (`REQUEST_TIMEOUT_MS`, a budget for a whole
+ * round). The socket's 30s idle timeout ran out after it: the browser
+ * abandoned the attempt at 15s, `abortUpstream` then killed the upstream, and
+ * the offline replay that exists for exactly this case was never delivered —
+ * so a hung runtime hid a campaign whose schedule was still running.
+ *
+ * It is a deadline for the request as a whole, not an idle timeout, so neither
+ * a trickling upstream nor the one assembly retry can stretch it, and it only
+ * acts while nothing has been sent to the browser yet.
+ */
+const TOUCHPOINT_DECISION_BUDGET_MS = 10_000;
+
+/** A received refusal or redirect remains an answer even when its body is incomplete. */
+const touchpointStatusRefusesReplay = (status: number): boolean =>
+  (status < 200 || status >= 300) && (status < 500 || status >= 600);
+
 /** The daemon's own content-assembly parameters, which no browser ever sends. */
 const HELD_CONTENT_PARAMS = ['heldContentId', 'heldContentLocale'] as const;
 
@@ -624,6 +674,17 @@ function proxyTouchpointRuntimeRequest(
   };
   req.once('aborted', abortUpstream);
   res.once('close', abortUpstream);
+  if (contentKey && contentCache) {
+    // Destroying with an error routes into the ordinary unreachable path,
+    // which answers from the store when it can and with 502 when it cannot.
+    const budget = setTimeout(() => {
+      const pending = currentUpstream;
+      if (pending && !res.headersSent && !pending.destroyed)
+        pending.destroy(new Error('Touchpoint decision budget spent'));
+    }, TOUCHPOINT_DECISION_BUDGET_MS);
+    budget.unref?.();
+    res.once('close', () => clearTimeout(budget));
+  }
   /**
    * Answer from the daemon's own store because the runtime could not be
    * reached (OPEND-3436). Reports whether it did, so every caller can fall
@@ -651,6 +712,7 @@ function proxyTouchpointRuntimeRequest(
    * loop between a server that trims and a cache that cannot assemble.
    */
   const send = (held: HeldContentRef | null, fallback: boolean): void => {
+    const ticket = contentKey && contentCache ? contentCache.ticket(contentKey) : undefined;
     const attempt = new URL(target);
     if (held) {
       attempt.searchParams.set('heldContentId', held.heldContentId);
@@ -666,9 +728,9 @@ function proxyTouchpointRuntimeRequest(
     // refresh pulled the payload uncompressed — measured at 383KB against 214KB
     // for the same decision. Forward the caller's preference and hand its
     // `content-encoding` back, so the body stays labelled the way it is framed.
-    const acceptEncoding = req.headers['accept-encoding'];
-    if (typeof acceptEncoding === 'string' && acceptEncoding)
-      headers['accept-encoding'] = acceptEncoding;
+    // Only codings the daemon can read are forwarded; see `decodableAcceptEncoding`.
+    const acceptEncoding = decodableAcceptEncoding(req.headers['accept-encoding']);
+    if (acceptEncoding) headers['accept-encoding'] = acceptEncoding;
     if (body) {
       headers['content-type'] =
         typeof req.headers['content-type'] === 'string'
@@ -676,8 +738,56 @@ function proxyTouchpointRuntimeRequest(
           : 'application/json';
       headers['content-length'] = String(body.length);
     }
+    /**
+     * The status this attempt's upstream answered with, once it has answered.
+     *
+     * The decision budget and a broken-off body both surface as errors, and an
+     * error used to read as "the runtime was not reached" whatever had already
+     * arrived. For a 410 that meant replaying the very package the server had
+     * just withdrawn, as a 200, with the offline-replay header on it. Whether
+     * the runtime was reached is decided by the status line, so the failure
+     * handlers ask this instead of assuming.
+     */
+    let upstreamStatus: number | null = null;
+    let cutShortSettled = false;
+    /**
+     * Settles an attempt whose body ended in an error — the decision budget,
+     * a reset socket, a truncated stream — before it could be answered.
+     *
+     * An authoritative status is answered as itself, never from the store. A
+     * 410 also reclaims what the normal `end` path would have: its receipt is
+     * unreadable here, and `touchpointWithdrawalReclaims` already rules that
+     * an unreadable receipt is the whole deployment being withdrawn. The
+     * reclaim does not depend on anyone still listening; the withdrawal
+     * happened either way. No response or a transient 5xx keeps offline replay.
+     * An incomplete 2xx also keeps replay: its status grants no usable decision
+     * until the whole body can be validated, so the previous complete answer
+     * remains the only display authority the daemon has.
+     */
+    const settleCutShort = (): void => {
+      if (cutShortSettled) return;
+      cutShortSettled = true;
+      if (upstreamStatus !== null && touchpointStatusRefusesReplay(upstreamStatus)) {
+        if (upstreamStatus === 410 && contentKey && contentCache)
+          contentCache.forgetWithdrawn(contentKey, null);
+        if (res.headersSent) res.end();
+        else if (!callerGone && !res.writableEnded)
+          res.status(upstreamStatus).json({ error: 'touchpoint_runtime_response_incomplete' });
+        return;
+      }
+      if (res.headersSent) res.end();
+      // DNS failure, refused connection, reset socket, or this proxy's own
+      // timeout: the runtime was not reached, so the last thing it said is the
+      // best thing the daemon has.
+      else if (!answerFromCache('upstream_unreachable'))
+        res.status(502).json({ error: 'touchpoint_runtime_unavailable' });
+    };
     const transport = attempt.protocol === 'https:' ? https : http;
+    // Server time is captured before awaited reads; download time consumes its window.
+    const requestStarted = performance.now();
+    const requestElapsed = () => Math.max(0, performance.now() - requestStarted);
     const upstream = transport.request(attempt, { method: req.method, headers }, (upstreamRes) => {
+      upstreamStatus = upstreamRes.statusCode ?? null;
       const passThrough = () => {
         res.status(upstreamRes.statusCode ?? 502);
         res.setHeader('content-type', upstreamRes.headers['content-type'] ?? 'application/json');
@@ -761,9 +871,7 @@ function proxyTouchpointRuntimeRequest(
       upstreamRes.on('error', () => {
         if (answered) return;
         failed = true;
-        if (res.headersSent) res.end();
-        else if (!answerFromCache('upstream_unreachable'))
-          res.status(502).json({ error: 'touchpoint_runtime_unavailable' });
+        settleCutShort();
       });
       upstreamRes.on('data', (chunk: Buffer) => {
         if (answered) return;
@@ -847,7 +955,7 @@ function proxyTouchpointRuntimeRequest(
         }
         const decision = parsed as Record<string, unknown>;
         if (decision.contentOmitted !== true) {
-          contentCache.remember(contentKey, decision);
+          contentCache.remember(contentKey, decision, ticket, requestElapsed());
           res.status(200);
           res.setHeader('content-type', upstreamRes.headers['content-type'] ?? 'application/json');
           res.end(decoded);
@@ -858,7 +966,7 @@ function proxyTouchpointRuntimeRequest(
         // non-null by construction; rebuilding without it would rebuild from
         // whatever the record says NOW, which a concurrent full response for
         // the same placement may already have replaced.
-        const full = held ? contentCache.reassemble(contentKey, held, decision) : null;
+        const full = held ? contentCache.reassemble(contentKey, held, decision, ticket, requestElapsed()) : null;
         if (full) {
           res.status(200);
           res.setHeader('content-type', 'application/json');
@@ -876,14 +984,7 @@ function proxyTouchpointRuntimeRequest(
     upstream.setTimeout(30_000, () =>
       upstream.destroy(new Error('Touchpoint runtime request timed out')),
     );
-    upstream.on('error', () => {
-      if (res.headersSent) res.end();
-      // DNS failure, refused connection, reset socket, or this proxy's own
-      // timeout: the runtime was not reached, so the last thing it said is the
-      // best thing the daemon has.
-      else if (!answerFromCache('upstream_unreachable'))
-        res.status(502).json({ error: 'touchpoint_runtime_unavailable' });
-    });
+    upstream.on('error', settleCutShort);
     if (body) upstream.write(body);
     upstream.end();
   };

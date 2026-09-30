@@ -123,6 +123,7 @@ export type HoverTouchpointOverlayProps = Readonly<{
 	entry: WebTouchpointContent;
 	layer: WebTouchpointContent;
 	isAuthorized: () => boolean;
+	onFencedMount?: () => void;
 	mode?: "test" | "production";
 	onDiagnostic?: (code: string) => void;
 	onEntryVisible?: () => void;
@@ -142,6 +143,7 @@ export function HoverTouchpointOverlay({
 	entry,
 	layer,
 	isAuthorized,
+	onFencedMount,
 	mode = "production",
 	onDiagnostic,
 	onEntryVisible,
@@ -236,19 +238,21 @@ export function HoverTouchpointOverlay({
 			entryVerified?.dispose();
 			layerVerified?.dispose();
 		};
-		const abandon = () => cancelled || !isAuthorized();
+		const abandon = () => {
+			if (cancelled) return true;
+			if (isAuthorized()) return false;
+			onFencedMount?.();
+			dispose();
+			return true;
+		};
 		const mount = async () => {
 			try {
 				entryVerified = await verifyWebTouchpoint(entry);
-				if (abandon()) {
-					entryVerified.dispose();
-					return;
-				}
+				if (disposed) entryVerified.dispose();
+				if (abandon()) return;
 				layerVerified = await verifyWebTouchpoint(layer);
-				if (abandon()) {
-					layerVerified.dispose();
-					return;
-				}
+				if (disposed) layerVerified.dispose();
+				if (abandon()) return;
 				const Element = ensureWebTouchpointElement();
 				entryElement = entryRef.current as InstanceType<typeof Element> | null;
 				layerElement = layerRef.current as InstanceType<typeof Element> | null;
@@ -300,7 +304,7 @@ export function HoverTouchpointOverlay({
 			setReady(false);
 			dispose();
 		};
-	}, [close, dispatchEntryAction, dispatchLayerAction, elementReady, entry, entryActionIds, isAuthorized, layer, layerActionIds, mode, onDiagnostic]);
+	}, [close, dispatchEntryAction, dispatchLayerAction, elementReady, entry, entryActionIds, isAuthorized, layer, layerActionIds, mode, onDiagnostic, onFencedMount]);
 
 	useLayoutEffect(() => {
 		if (open && ready) refreshPosition();

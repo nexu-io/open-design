@@ -6,6 +6,7 @@ export const hu: Dict = {
   'billing.codingPlanPeriodHours': '{count} óra',
   'billing.codingPlanPeriodDays': '{count} nap',
   'billing.codingPlanRemainingPercent': '{percent}% maradt',
+  "campaign.testReplay": "Teszttevékenység újbóli megnyitása",
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

@@ -35,6 +35,7 @@ vi.mock(
 import { ProductionCampaignHover } from "../../src/components/ProductionCampaignHover";
 import { I18nProvider, useI18n } from "../../src/i18n";
 import { OpenDesignTouchpointElement } from "../../src/components/touchpoint-component";
+import * as touchpointComponent from "../../src/components/touchpoint-component";
 import { clearTestRuntimeSession, setTestRuntimeSession, type TestRuntimeSession } from "../../src/components/TestCampaignModal";
 
 const content = (placementKey: string) => ({
@@ -161,6 +162,40 @@ const pairedMultiPlacementManifest = {
 };
 
 describe("ProductionCampaignHover", () => {
+	it("restarts a hover entry fenced during verification after a same-key renewal", async () => {
+		useRealOverlay.current = true;
+		vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+		const rects = vi.spyOn(HTMLElement.prototype, "getClientRects").mockReturnValue({ length: 1, item: () => null } as unknown as DOMRectList);
+		const mount = vi.spyOn(OpenDesignTouchpointElement.prototype, "mount").mockImplementation(async function (this: OpenDesignTouchpointElement, entryUrl: string) {
+			const image = document.createElement("img");
+			image.src = entryUrl;
+			this.shadowRoot?.replaceChildren(image);
+		});
+		let resolveVerified!: (value: Awaited<ReturnType<typeof touchpointComponent.verifyWebTouchpoint>>) => void;
+		const verified = new Promise<Awaited<ReturnType<typeof touchpointComponent.verifyWebTouchpoint>>>((resolve) => { resolveVerified = resolve; });
+		const firstDispose = vi.fn();
+		const verify = vi.mocked(touchpointComponent.verifyWebTouchpoint).mockImplementationOnce(() => verified);
+		const fetchMock = vi.fn(async (url: string) => new Response(JSON.stringify(decision(url.includes("hover-entry") ? "opend.home.hover-entry" : "opend.home.hover-layer")), { status: 200 }));
+		vi.stubGlobal("fetch", fetchMock);
+		render(<ProductionCampaignHover authenticated sessionSubject="account-a" />);
+		const root = await screen.findByTestId("cms-hover-overlay-root");
+		await waitFor(() => expect(verify).toHaveBeenCalledTimes(1));
+		const originalTime = Date.now();
+		vi.setSystemTime(new Date(originalTime + 2 * 60_000));
+		await act(async () => {
+			resolveVerified({ entryUrl: "blob:first-entry", resourceUrls: new Map(), dispose: firstDispose });
+		});
+		expect(firstDispose).toHaveBeenCalledTimes(1);
+		expect(mount).not.toHaveBeenCalled();
+		vi.setSystemTime(new Date(originalTime));
+		act(() => { window.dispatchEvent(new Event("focus")); });
+		await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
+		await waitFor(() => expect(mount).toHaveBeenCalledTimes(2));
+		const entry = root.querySelector("opend-touchpoint");
+		await waitFor(() => expect(entry?.shadowRoot?.querySelector("img")).toHaveAttribute("src", "blob:version-opend.home.hover-entry"));
+		await waitFor(() => expect(entry).not.toHaveAttribute("hidden"));
+		rects.mockRestore();
+	});
 	it("keeps the real production overlay's Shadow DOM, Blob images, and expanded layer through periodic refreshes", async () => {
 		useRealOverlay.current = true;
 		vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
@@ -312,7 +347,7 @@ describe("ProductionCampaignHover", () => {
 		});
 		vi.stubGlobal("requestAnimationFrame", () => 0);
 		vi.stubGlobal("cancelAnimationFrame", () => {});
-		setTestRuntimeSession({ decisions: new Map([["opend.home.hover-entry", decision("opend.home.hover-entry")], ["opend.home.hover-layer", decision("opend.home.hover-layer")]]), isAuthorized: () => true } as unknown as TestRuntimeSession);
+		setTestRuntimeSession({ selectionKey: "hover-rerender", deployment: { id: "deployment-1", snapshotHash: "sha256:hover" }, context: { deploymentId: "deployment-1", scenario: "realtime", updatedAt: "2026-01-01T00:00:00.000Z" }, decisions: new Map([["opend.home.hover-entry", decision("opend.home.hover-entry")], ["opend.home.hover-layer", decision("opend.home.hover-layer")]]), isAuthorized: () => true } as unknown as TestRuntimeSession);
 		const { rerender } = render(<ProductionCampaignHover authenticated sessionSubject="account-a" />);
 		const root = await screen.findByTestId("cms-hover-overlay-root");
 		const [entry, layer] = Array.from(root.querySelectorAll<OpenDesignTouchpointElement>("opend-touchpoint"));

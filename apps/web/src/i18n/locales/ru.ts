@@ -6,6 +6,7 @@ export const ru: Dict = {
   'billing.codingPlanPeriodHours': '{count} ч',
   'billing.codingPlanPeriodDays': '{count} дн.',
   'billing.codingPlanRemainingPercent': 'Осталось {percent}%',
+  "campaign.testReplay": "Открыть тестовую активность снова",
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

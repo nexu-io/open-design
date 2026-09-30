@@ -27,11 +27,28 @@ export type ProductionTouchpointLoadResult =
 	| Readonly<{ kind: "no-decision" }>
 	| Readonly<{ kind: "revoked"; receipt: ProductionRuntimeRevocationReceipt }>;
 
+/**
+ * An explicit authentication or authorization refusal from the decision
+ * endpoint. It is an answer, never an outage: it neither enters offline
+ * fallback nor lets an earlier grant ride it out.
+ */
+const touchpointAuthorizationRefused = (detail: string) => detail === "http_401" || detail === "http_403";
+
 export class ProductionTouchpointLoadError extends Error {
 	/**
-	 * A 410 is the server's own withdrawal and must clear display authority even
-	 * when its receipt body is unreadable. Every other failure is transport or
-	 * protocol noise, which the shared lifecycle rides out on the existing lease.
+	 * Whether this failure ends display authority outright, as the server's
+	 * own withdrawal does.
+	 *
+	 * A 410 is that withdrawal and must clear display even when its receipt
+	 * body is unreadable. A 401 or 403 is the same kind of answer about the
+	 * ACCOUNT rather than the activity (OPEND-3436 AC9): the server has refused
+	 * this session, so nothing it granted earlier — least of all a lease the
+	 * offline fallback stretched to `endsAt` — may keep that session's campaign
+	 * on screen. Treating it as "try again later" is what let a rejected
+	 * account keep displaying from cache. See {@link touchpointAuthorizationRefused}.
+	 *
+	 * Every other failure is transport or protocol noise, which the shared
+	 * lifecycle rides out on the existing lease.
 	 */
 	readonly touchpointWithdrawal: boolean;
 	/**
@@ -62,7 +79,7 @@ export class ProductionTouchpointLoadError extends Error {
 	readonly touchpointServerError: boolean;
 	constructor(readonly detail: string) {
 		super("touchpoint_load_failed");
-		this.touchpointWithdrawal = detail === "http_410";
+		this.touchpointWithdrawal = detail === "http_410" || touchpointAuthorizationRefused(detail);
 		this.touchpointServerError = /^http_5\d\d$/u.test(detail);
 		this.touchpointOfflineFallback = detail === "network" || this.touchpointServerError;
 	}

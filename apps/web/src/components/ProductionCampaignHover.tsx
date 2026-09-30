@@ -4,7 +4,7 @@ import {
 	useTestRuntime,
 } from "./TestCampaignModal";
 import { useI18n } from "../i18n";
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import { getOpenDesignHost } from "@open-design/host";
 import {
 	emitWebTouchpointDiagnostic,
@@ -27,6 +27,7 @@ import {
 	resolveAuthorizationDeadline,
 	touchpointContentIdentity,
 	touchpointLeaseValue,
+	touchpointScheduleWindowMs,
 	type TouchpointLeaseValue,
 	type TouchpointLifecycleLoad,
 	useTouchpointLifecycle,
@@ -62,7 +63,7 @@ type ActiveHover = Readonly<{
 function validDecision(
 	value: unknown,
 	placementKey: string,
-): { valid: ValidDecision; validForMs: number } | null {
+): { valid: ValidDecision; validForMs: number; offlineValidForMs: number } | null {
 	if (!value || typeof value !== "object") return null;
 	const decision = value as RuntimeDecision;
 	const deadline = resolveAuthorizationDeadline(decision);
@@ -98,6 +99,7 @@ function validDecision(
 			actionIds: new Set(placement.staticActions.map((action) => action.id)),
 		},
 		validForMs: deadline - Date.parse(decision.serverTime),
+		offlineValidForMs: touchpointScheduleWindowMs(decision),
 	};
 }
 
@@ -109,6 +111,9 @@ export function ProductionCampaignHover({
 	sessionSubject: string | null;
 }) {
 	const testRuntime = useTestRuntime();
+	// A sibling entering or leaving the session must not rebuild this placement.
+	const testRuntimeRef = useRef(testRuntime);
+	testRuntimeRef.current = testRuntime;
 	const { locale } = useI18n();
 	const testEntry = testRuntime?.decisions.get(ENTRY_PLACEMENT);
 	const testLayer = testRuntime?.decisions.get(LAYER_PLACEMENT);
@@ -209,6 +214,8 @@ export function ProductionCampaignHover({
 				// the pair still rebuilds.
 				key: `${touchpointContentIdentity(entry.valid.decision)}:${layer.valid.decision.content.id}`,
 				validForMs: Math.min(entry.validForMs, layer.validForMs),
+				// The pair is only as scheduled as its shorter half.
+				offlineValidForMs: Math.min(entry.offlineValidForMs, layer.offlineValidForMs),
 				// Both halves, not either — see `productionTouchpointPairRecovery`,
 				// which also owns how the two recovery policies combine.
 				offlineRecovery:
@@ -234,19 +241,24 @@ export function ProductionCampaignHover({
 	const active = lifecycle.current;
 	// Renewing the same lease must not change the overlay mount identity.
 	const isTestAuthorized = useCallback(
-		() => testRuntime?.isAuthorized() === true,
-		[testRuntime],
+		() => testRuntimeRef.current?.isAuthorized(ENTRY_PLACEMENT) === true &&
+			testRuntimeRef.current.isAuthorized(LAYER_PLACEMENT),
+		[],
 	);
 	const isProductionAuthorized = useCallback(
 		() => lifecycle.isCurrent(lifecycle.generation),
 		[lifecycle.isCurrent, lifecycle.generation],
 	);
+	const onProductionFencedMount = useCallback(
+		() => lifecycle.reportFencedMount(lifecycle.generation),
+		[lifecycle.generation, lifecycle.reportFencedMount],
+	);
 	const onTestVisible = useCallback(
 		(decision: TestDecision, placementKey: TestCampaignPlacement) => {
-			if (testRuntime)
-				recordVisibleTestTouchpoint(testRuntime, decision, placementKey);
+			const runtime = testRuntimeRef.current;
+			if (runtime) recordVisibleTestTouchpoint(runtime, decision, placementKey);
 		},
-		[testRuntime],
+		[],
 	);
 	const onEntryVisible = useCallback(() => {
 		if (testEntry) onTestVisible(testEntry, ENTRY_PLACEMENT);
@@ -307,6 +319,7 @@ export function ProductionCampaignHover({
 			entry={active.entry.decision.content}
 			layer={active.layer.decision.content}
 			isAuthorized={isProductionAuthorized}
+			onFencedMount={onProductionFencedMount}
 			entryActionIds={active.entry.actionIds}
 			layerActionIds={active.layer.actionIds}
 			onDiagnostic={onDiagnostic}

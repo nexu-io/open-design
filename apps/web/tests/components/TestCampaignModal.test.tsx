@@ -30,6 +30,7 @@ import {
 	TestTouchpointMount,
 	useTestRuntime,
 } from "../../src/components/TestCampaignModal";
+import * as campaignNavigation from "../../src/components/touchpoint-navigation";
 import * as touchpointComponent from "../../src/components/touchpoint-component";
 import { OpenDesignTouchpointElement } from "../../src/components/touchpoint-component";
 
@@ -208,6 +209,16 @@ function TestCampaignHarness({
 	);
 }
 beforeEach(() => {
+	// jsdom cannot import the verified Blob entry. The modal is presented only
+	// once content has mounted, so stand in for a successful mount as the
+	// Production suite does; cases that exercise mount failures override it.
+	vi.spyOn(OpenDesignTouchpointElement.prototype, "mount").mockImplementation(
+		async function (this: OpenDesignTouchpointElement) {
+			this.shadowRoot?.replaceChildren(
+				document.createTextNode("Verified campaign"),
+			);
+		},
+	);
 	window.history.replaceState(null, "", "/?cmsTestControls=1");
 	(globalThis as CampaignHostGlobal).__openDesignCampaignTestHost = {
 		version: 2,
@@ -329,6 +340,29 @@ describe("CMS modal host cleanup", () => {
 });
 
 describe("TestCampaignModal host guards", () => {
+	it("reopens only after an explicit Test replay and never clears impression history", async () => {
+		const subject = "explicit-test-replay";
+		const key = `touchpoint-displayed:v1:${subject}:activity-1`;
+		localStorage.setItem(key, "1");
+		vi.spyOn(touchpointComponent, "verifyWebTouchpoint").mockResolvedValue({ entryUrl: "blob:test", resourceUrls: new Map(), dispose: vi.fn() } as never);
+		vi.spyOn(OpenDesignTouchpointElement.prototype, "mount").mockResolvedValue();
+		const decision = runtime() as TestDecision;
+		authorizeMount(decision);
+		render(<ProductionCampaignModal authenticated sessionSubject={subject} />);
+		expect(screen.queryByRole("dialog")).toBeNull();
+		fireEvent.click(screen.getByRole("button", { name: "Reopen test activity" }));
+		await screen.findByRole("dialog");
+		fireEvent.keyDown(document, { key: "Escape" });
+		await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+		expect(localStorage.getItem(key)).toBe("1");
+		fireEvent.click(screen.getByRole("button", { name: "Reopen test activity" }));
+		await screen.findByRole("dialog");
+		act(() => clearTestRuntimeSession());
+		expect(screen.queryByRole("button", { name: "Reopen test activity" })).toBeNull();
+		expect(screen.queryByRole("dialog")).toBeNull();
+		localStorage.removeItem(key);
+	});
+
 	it("closes a recorded open modal on a direct replacement deployment of the same activity", async () => {
 		const subject = "direct-redeployment-account";
 		const storageKey = `touchpoint-displayed:v1:${subject}:activity-1`;
@@ -686,6 +720,38 @@ describe("Test campaign decision and lifecycle guards", () => {
 		create.mockRestore();
 		revoke.mockRestore();
 	});
+	it("gives initial focus to the first control a user can reach, past hidden and unfocusable ones", async () => {
+		const { focusWebTouchpointModal } = await import(
+			"../../src/components/touchpoint-component"
+		);
+		const modal = document.createElement("div");
+		modal.tabIndex = -1;
+		const component = document.createElement("opend-touchpoint");
+		const shadow =
+			component.shadowRoot ?? component.attachShadow({ mode: "open" });
+		const hiddenInput = document.createElement("input");
+		hiddenInput.type = "hidden";
+		const collapsed = document.createElement("div");
+		collapsed.style.display = "none";
+		collapsed.append(document.createElement("button"));
+		const invisible = document.createElement("button");
+		invisible.style.visibility = "hidden";
+		const inertGroup = document.createElement("div");
+		inertGroup.inert = true;
+		inertGroup.append(document.createElement("button"));
+		const refusing = document.createElement("button");
+		refusing.focus = () => {};
+		const action = document.createElement("button");
+		shadow.append(hiddenInput, collapsed, invisible, inertGroup, refusing, action);
+		modal.append(component);
+		document.body.append(modal);
+		focusWebTouchpointModal(modal);
+		expect(shadow.activeElement).toBe(action);
+		action.remove();
+		focusWebTouchpointModal(modal);
+		expect(document.activeElement).toBe(modal);
+		modal.remove();
+	});
 	it("traps both directions across the mounted open ShadowRoot boundary", async () => {
 		const { trapWebTouchpointModalFocus } = await import(
 			"../../src/components/touchpoint-component"
@@ -706,7 +772,8 @@ describe("Test campaign decision and lifecycle guards", () => {
 			cancelable: true,
 		});
 		trapWebTouchpointModalFocus(forward, modal);
-		expect(forward.defaultPrevented).toBe(false);
+		expect(forward.defaultPrevented).toBe(true);
+		expect(shadow.activeElement).toBe(action);
 		action.focus();
 		const wrapForward = new KeyboardEvent("keydown", {
 			key: "Tab",
@@ -726,6 +793,32 @@ describe("Test campaign decision and lifecycle guards", () => {
 		trapWebTouchpointModalFocus(wrapReverse, modal);
 		expect(wrapReverse.defaultPrevented).toBe(true);
 		expect(shadow.activeElement).toBe(action);
+		modal.remove();
+	});
+	it("wraps Tab past controls that refuse focus in either direction", async () => {
+		const { trapWebTouchpointModalFocus } = await import("../../src/components/touchpoint-component");
+		const modal = document.createElement("div");
+		modal.tabIndex = -1;
+		const refusingFirst = document.createElement("button");
+		const first = document.createElement("button");
+		const last = document.createElement("button");
+		const refusingLast = document.createElement("button");
+		refusingFirst.focus = refusingLast.focus = () => {};
+		modal.append(refusingFirst, first, last, refusingLast);
+		document.body.append(modal);
+		last.focus();
+		const forward = new KeyboardEvent("keydown", { key: "Tab", cancelable: true });
+		trapWebTouchpointModalFocus(forward, modal);
+		expect(forward.defaultPrevented).toBe(true);
+		expect(document.activeElement).toBe(first);
+		const reverse = new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, cancelable: true });
+		trapWebTouchpointModalFocus(reverse, modal);
+		expect(reverse.defaultPrevented).toBe(true);
+		expect(document.activeElement).toBe(last);
+		first.remove();
+		last.remove();
+		trapWebTouchpointModalFocus(reverse, modal);
+		expect(document.activeElement).toBe(modal);
 		modal.remove();
 	});
 	it("never consumes a Test static target without an approved server event contract", async () => {
@@ -1121,5 +1214,98 @@ describe("Test runtime context generation", () => {
 		fireEvent.change(screen.getByLabelText("Test activity"), { target: { value: deployment.id } });
 		await waitFor(() => expect(screen.getByTestId("test-runtime-decision-count")).toHaveTextContent("4"));
 		expect(contextRequests(fetchMock)).toBe(2);
+	});
+
+	it("withdraws at once when one placement answers 410 while a sibling hangs", async () => {
+		const context = { deploymentId: "deployment-four", scenario: "realtime" as const, updatedAt: freshUpdatedAt };
+		const deployment = {
+			id: "deployment-four",
+			activityId: "activity-four",
+			snapshotHash: "sha256:four-snapshot",
+			snapshot: {
+				contentVersionId: "version-four-placement",
+				manifestHash: digest(JSON.stringify(allTestManifest)),
+				artifactHash: "sha256:four-artifact",
+				placementKeys: [...allTestPlacements],
+			},
+		};
+		((globalThis as CampaignHostGlobal).__openDesignCampaignTestHost as { client: { osLocale: string } }).client.osLocale = "zh-CN";
+		let withdrawn = false;
+		const hung: AbortSignal[] = [];
+		const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+			if (url.includes("acceptances")) return new Response(JSON.stringify({ id: "acceptance" }), { status: 201 });
+			if (url.includes("/production-runtime")) return new Response(null, { status: 404 });
+			if (init?.method === "POST") return new Response(JSON.stringify(context), { status: 201 });
+			if (url.includes("/deployments")) return new Response(JSON.stringify({ deployments: [deployment] }));
+			const placementKey = new URL(url, "http://127.0.0.1").searchParams.get("placementKey") as (typeof allTestPlacements)[number];
+			if (withdrawn && placementKey === "opend.home.campaign-modal")
+				return new Response(JSON.stringify({ error: "test_deployment_withdrawn" }), { status: 410 });
+			if (withdrawn)
+				return new Promise<Response>((_resolve, reject) => {
+					hung.push(init!.signal!);
+					init!.signal!.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")), { once: true });
+				});
+			return new Response(JSON.stringify({
+				...runtime(fourPlacementContent(placementKey)),
+				deploymentId: deployment.id,
+				placementKey,
+				activityId: deployment.activityId,
+				snapshotHash: deployment.snapshotHash,
+				artifactHash: deployment.snapshot.artifactHash,
+				manifestHash: deployment.snapshot.manifestHash,
+				requiredCapabilities: placementKey === "opend.home.campaign-modal" ? ["close", "static-action"] : placementKey === "opend.home.account-badge" ? ["static-action"] : ["hover", "static-action"],
+				testContext: { ...context, scheduleState: "active" as const },
+			}));
+		});
+		vi.stubGlobal("fetch", fetchMock);
+		vi.spyOn(touchpointComponent, "verifyWebTouchpoint").mockResolvedValue({ entryUrl: "blob:test-four-placement", resourceUrls: new Map(), dispose: vi.fn() } as never);
+		render(<><TestRuntimeProbe /><TestCampaignHarness authenticated /></>);
+		await screen.findByTestId("touchpoint-test-selector");
+		fireEvent.change(screen.getByLabelText("Test activity"), { target: { value: deployment.id } });
+		await waitFor(() => expect(screen.getByTestId("test-runtime-decision-count")).toHaveTextContent("4"));
+		withdrawn = true;
+		window.dispatchEvent(new Event("focus"));
+		// Well inside the lifecycle's 15-second request budget.
+		await waitFor(() => expect(screen.getByTestId("test-runtime-decision-count")).toHaveTextContent("0"));
+		expect(hung.length).toBeGreaterThan(0);
+		expect(hung.every((signal) => signal.aborted)).toBe(true);
+	});
+});
+
+
+describe("Test modal action dismissal", () => {
+	it.each(["success", "failure", "stale", "unmounted", "hover"] as const)("handles %s", async (outcome) => {
+		let dispatchAction!: (id: string) => Promise<void>;
+		vi.spyOn(touchpointComponent, "verifyWebTouchpoint").mockResolvedValue({
+			entryUrl: "blob:test-campaign", resourceUrls: new Map(), dispose: vi.fn(),
+		});
+		vi.spyOn(OpenDesignTouchpointElement.prototype, "mount").mockImplementation(
+			async (_entry, _digest, _context, _urls, _actions, options) => {
+				dispatchAction = options!.dispatchAction!;
+			},
+		);
+		Object.defineProperty(navigator, "userActivation", { configurable: true, value: { isActive: true } });
+		let finish!: (accepted: boolean) => void;
+		vi.spyOn(campaignNavigation, "navigateCampaignTarget").mockImplementationOnce(() =>
+			new Promise<boolean>((resolve) => { finish = resolve; }),
+		);
+		const decision = { ...runtime(), staticActions: [{ id: "plan", target: { kind: "https", url: "https://example.com" } }] } as TestDecision;
+		const placement = outcome === "hover" ? "opend.home.hover-entry" : "opend.home.campaign-modal";
+		decision.placementKey = placement;
+		decision.content = { ...decision.content, placementKey: placement, manifest: {
+			...decision.content.manifest, placements: [{ ...manifest.placements[0]!, key: placement, staticActions: decision.staticActions }],
+		} };
+		authorizeMount(decision);
+		const close = vi.fn();
+		const view = render(<TestTouchpointMount decision={decision} placementKey={placement} testId="action-mount" onVisible={vi.fn()} isAuthorized={() => true} requestClose={close} />);
+		await waitFor(() => expect(dispatchAction).toBeTypeOf("function"));
+		const completion = dispatchAction("plan").catch((error: Error) => error.message);
+		expect(close).not.toHaveBeenCalled();
+		if (outcome === "stale") authorizeMount({ ...decision });
+		if (outcome === "unmounted") view.unmount();
+		let result: unknown;
+		await act(async () => { finish(outcome !== "failure"); result = await completion; });
+		expect(close).toHaveBeenCalledTimes(outcome === "success" ? 1 : 0);
+		if (outcome === "failure") expect(result).toBe("touchpoint_action_denied");
 	});
 });

@@ -5,3 +5,8 @@
 .backdrop { position: fixed; inset: 0; display: grid; place-items: center; background: rgb(0 0 0 / 45%); z-index: 1000; }
 .modal { max-width: calc(100vw - 32px); max-height: calc(100vh - 32px); overflow: auto; background: transparent; }
 .modal > * { display: block; max-width: 100%; }
+/* Focused only as the trap's fallback when content has no control; it is not itself a control, so it paints no platform focus ring. */
+.modal:focus { outline: none; }
+
+.replay { position: fixed; right: 16px; bottom: 16px; z-index: 90; padding: 8px 12px; border: 1px solid var(--border, #d4d4d8); border-radius: 8px; background: var(--surface, #fff); color: var(--foreground, #111); font: inherit; font-size: 12px; cursor: pointer; }
+.replay:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }

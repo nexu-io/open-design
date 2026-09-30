@@ -232,9 +232,9 @@ const decisionUrl = () =>
  * `fetch` transparently decompresses, which would hide the difference between
  * a body this proxy forwarded still compressed and one it expanded itself.
  */
-const rawDecide = () =>
+const rawDecide = (headers: Record<string, string> = {}) =>
   new Promise<{ status: number; headers: IncomingHttpHeaders; body: Buffer }>((resolve, reject) => {
-    const request = httpRequest(decisionUrl(), (response) => {
+    const request = httpRequest(decisionUrl(), { headers }, (response) => {
       const chunks: Buffer[] = [];
       response.on('data', (chunk: Buffer) => chunks.push(chunk));
       response.on('end', () =>
@@ -422,6 +422,58 @@ describe('daemon touchpoint content assembly', () => {
       heldContentId: 'someone-elses',
       heldContentLocale: 'fr-FR',
     });
+  });
+
+  // Chromium 123+ (and so every Electron build the desktop app ships) advertises
+  // `zstd`, and Vela honours it. The trimmed reply is only a skeleton; if the
+  // daemon lets upstream pick an encoding it cannot read, it can neither see
+  // `contentOmitted` nor rebuild the content, and the browser is handed a
+  // decision with no content -- which it drops as a mismatch, so the campaign
+  // never shows after the first visit.
+  it('REGRESSION: rebuilds a trimmed reply when the browser advertises encodings the daemon cannot read', async () => {
+    // Node 24 ships zstd; the pinned @types/node predates it.
+    const zstd = zlib as typeof zlib & {
+      zstdCompressSync(input: Buffer): Buffer;
+      zstdDecompressSync(input: Buffer): Buffer;
+    };
+    const seen: Array<string | undefined> = [];
+    upstreamHandler = (req, res, held) => {
+      const accepted = String(req.headers['accept-encoding'] ?? '');
+      seen.push(req.headers['accept-encoding']);
+      const payload = Buffer.from(decisionPayload(FULL_RESPONSE, held));
+      res.setHeader('content-type', 'application/json');
+      if (/\bzstd\b/.test(accepted)) {
+        res.setHeader('content-encoding', 'zstd');
+        res.end(zstd.zstdCompressSync(payload));
+      } else if (/\bgzip\b/.test(accepted)) {
+        res.setHeader('content-encoding', 'gzip');
+        res.end(zlib.gzipSync(payload));
+      } else {
+        res.end(payload);
+      }
+    };
+    const browser = { 'accept-encoding': 'gzip, deflate, br, zstd' };
+    const readJson = (reply: { headers: IncomingHttpHeaders; body: Buffer }) => {
+      const encoding = reply.headers['content-encoding'];
+      const body =
+        encoding === 'gzip'
+          ? zlib.gunzipSync(reply.body)
+          : encoding === 'zstd'
+            ? zstd.zstdDecompressSync(reply.body)
+            : reply.body;
+      return JSON.parse(body.toString('utf8')) as Record<string, unknown>;
+    };
+
+    // Whichever caller first fills the store -- here one that only speaks
+    // gzip -- the next refresh is trimmed, and that is the reply the browser's
+    // own encoding preference must not make unreadable.
+    const cold = await rawDecide({ 'accept-encoding': 'gzip' });
+    const warm = await rawDecide(browser);
+
+    expect(calls[1]).toMatchObject({ heldContentId: 'version-1', heldContentLocale: LOCALE });
+    expect(readJson(cold)).toEqual(FULL_RESPONSE);
+    expect(readJson(warm)).toEqual(FULL_RESPONSE);
+    for (const value of seen) expect(value ?? '').not.toMatch(/zstd/);
   });
 
   // Before this route began reading bodies it forwarded them as a stream, so

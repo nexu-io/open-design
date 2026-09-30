@@ -6,6 +6,7 @@ export const ja: Dict = {
   'billing.codingPlanPeriodHours': '{count} 時間',
   'billing.codingPlanPeriodDays': '{count} 日間',
   'billing.codingPlanRemainingPercent': '残り {percent}%',
+  "campaign.testReplay": "テストアクティビティを再表示",
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

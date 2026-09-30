@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { emitWebTouchpointDiagnostic } from "./touchpoint-component";
+import { RETRY_BACKOFF_MS } from "./touchpoint-lifecycle";
 import type { TouchpointStaticAction } from "./touchpoint-static-actions";
 
 export const TEST_CAMPAIGN_PLACEMENTS = [
@@ -139,10 +140,21 @@ export function useTestDeploymentSelection({
 		let disposed = false;
 		let request: AbortController | null = null;
 		let timeout: ReturnType<typeof setTimeout> | undefined;
+		let retry: ReturnType<typeof setTimeout> | undefined;
+		let retryIndex = 0;
 		const cancel = () => {
 			request?.abort();
 			request = null;
 			clearTimeout(timeout);
+			clearTimeout(retry);
+		};
+		// A failed read on a fresh home mount must not leave the entry blank until the next poll.
+		const retrySoon = () => {
+			const delay = RETRY_BACKOFF_MS[retryIndex];
+			if (disposed || delay === undefined || navigator.onLine === false) return;
+			retryIndex += 1;
+			clearTimeout(retry);
+			retry = setTimeout(() => void refresh(), delay);
 		};
 		const refresh = async () => {
 			if (disposed || request || document.hidden) return;
@@ -156,6 +168,7 @@ export function useTestDeploymentSelection({
 				emitWebTouchpointDiagnostic({
 					code: "touchpoint_test_catalog_timeout",
 				});
+				retrySoon();
 			}, REQUEST_TIMEOUT_MS);
 			try {
 				const response = await fetch("/api/touchpoints/test-runtime/deployments", {
@@ -166,6 +179,7 @@ export function useTestDeploymentSelection({
 				if (!response.ok) throw new Error("touchpoint_test_catalog_failed");
 				const deployments = readDirectory(await response.json());
 				if (!current()) return;
+				retryIndex = 0;
 				setState((previous) => {
 					if (disposed) return previous;
 					const old =
@@ -190,13 +204,15 @@ export function useTestDeploymentSelection({
 					return { owner, deployments: stable, selected };
 				});
 			} catch (error) {
-				if (current())
+				if (current()) {
 					emitWebTouchpointDiagnostic({
 						code:
 							error instanceof Error
 								? error.message
 								: "touchpoint_test_catalog_failed",
 					});
+					retrySoon();
+				}
 			} finally {
 				if (request === controller) {
 					request = null;
