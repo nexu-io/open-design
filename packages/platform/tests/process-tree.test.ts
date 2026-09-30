@@ -232,3 +232,23 @@ describe("generation-fenced owned process trees", () => {
     expect(selectOwnedProcessTree([root], [child])).toEqual([]);
   });
 });
+
+describe("stopProcesses onSignal", () => {
+  it("reports only the PIDs a signal was delivered to", async () => {
+    const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
+    const livePid = child.pid as number;
+    const exited = new Promise((resolve) => child.once("exit", resolve));
+    // A PID far above any live one: process.kill answers ESRCH.
+    const gonePid = 2 ** 22 - 7;
+    const delivered: Array<[number, NodeJS.Signals]> = [];
+
+    await stopProcesses([livePid, gonePid], {
+      termGraceMs: 2000,
+      killGraceMs: 2000,
+      onSignal: (pid, signal) => delivered.push([pid, signal]),
+    });
+    await exited;
+
+    expect(delivered).toEqual([[livePid, "SIGTERM"]]);
+  });
+});

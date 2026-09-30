@@ -69,6 +69,8 @@ export function classifyChatRunCloseStatus(params: {
   code: number | null;
   signal: NodeJS.Signals | string | null;
   acpCleanCompletion: boolean;
+  /** The daemon began terminating this ACP attempt after its prompt completed. */
+  acpCompletionShutdownRequested?: boolean;
   artifactQuietShutdownRequested: boolean;
   turnCompletedCleanly: boolean;
   artifactProducedThisRun: boolean;
@@ -82,6 +84,10 @@ export function classifyChatRunCloseStatus(params: {
       (params.code === 130 && params.signal === null)
     );
   if (acpForcedShutdown) return 'succeeded';
+  // Once the daemon itself is shutting down a completed attempt, the exit
+  // status reflects that shutdown, not the turn: Windows reports a child
+  // killed by pid as code 1 with no signal.
+  if (params.acpCleanCompletion && params.acpCompletionShutdownRequested) return 'succeeded';
   const artifactQuietShutdown =
     params.artifactQuietShutdownRequested &&
     params.code === null &&
