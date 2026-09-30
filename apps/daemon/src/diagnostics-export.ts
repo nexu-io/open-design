@@ -1,6 +1,6 @@
-import { access } from 'node:fs/promises';
+import { access, open, realpath, stat } from 'node:fs/promises';
 import { homedir, userInfo } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 
 import type { RequestHandler } from 'express';
 
@@ -289,24 +289,121 @@ export function selectAmrRuntimeRunLines(runId: string): (lines: string[]) => st
   };
 }
 
+/** Keeps OpenCode log lines from `sinceMs` on; untimestamped lines follow the line before them. */
+export function selectOpenCodeLogLines(sinceMs: number): (lines: string[]) => string[] {
+  return (lines) => {
+    let keep = false;
+    return lines.filter((line) => {
+      const stamp = /^timestamp=(\S+)/.exec(line)?.[1];
+      if (stamp) {
+        const at = Date.parse(stamp);
+        keep = Number.isFinite(at) && at >= sinceMs;
+      }
+      return keep;
+    });
+  };
+}
+
+// Records of the session a run bound, each naming OpenCode's own log.
+interface AmrOpenCodeLogRecord { runId: string; logPath: string; at: number }
+const OPENCODE_LOG_WINDOW_MARGIN_MS = 5_000;
+const OPENCODE_LOG_SUFFIX = join('opencode', 'log', 'opencode.log');
+
+async function readTail(absolutePath: string, maxBytes: number): Promise<string> {
+  const handle = await open(absolutePath, 'r');
+  try {
+    const { size } = await handle.stat();
+    const length = Math.min(size, maxBytes);
+    const buffer = Buffer.alloc(length);
+    await handle.read(buffer, 0, length, size - length);
+    return buffer.toString('utf8');
+  } finally { await handle.close(); }
+}
+
+/**
+ * The real path of a named OpenCode log when it is a regular file inside the AMR
+ * home. Both sides are resolved through symlinks, because every later read
+ * follows them: a lexical check alone would let an in-tree link export any file.
+ */
+async function containedOpenCodeLog(named: string, realRoot: string): Promise<string | null> {
+  const lexical = resolve(named);
+  if (!lexical.endsWith(sep + OPENCODE_LOG_SUFFIX)) return null;
+  const real = await realpath(lexical).catch(() => null);
+  if (!real || !real.startsWith(realRoot) || !real.endsWith(sep + OPENCODE_LOG_SUFFIX)) return null;
+  const info = await stat(real).catch(() => null);
+  return info?.isFile() ? real : null;
+}
+
+/**
+ * OpenCode logs under a per-conversation AMR home the daemon cannot derive, so
+ * Vela names the log in its session records. Only regular files inside the AMR
+ * home are accepted; the runtime log never makes an arbitrary file collectable.
+ * A record without a valid time is skipped: the run's window in a shared log
+ * would be unknown.
+ */
+async function readAmrOpenCodeLogRecords(runtimeLog: string, amrRoot: string): Promise<AmrOpenCodeLogRecord[]> {
+  const text = await readTail(runtimeLog, TAIL_BYTES_PER_LOG).catch(() => '');
+  const realRootPath = await realpath(resolve(amrRoot)).catch(() => null);
+  if (!realRootPath) return [];
+  const realRoot = realRootPath + sep;
+  const contained = new Map<string, Promise<string | null>>();
+  const records: AmrOpenCodeLogRecord[] = [];
+  for (const line of text.split('\n')) {
+    let record: Record<string, unknown>;
+    try { record = JSON.parse(line) as Record<string, unknown>; } catch { continue; }
+    if (record.event !== 'opencode_session_created' && record.event !== 'opencode_session_loaded') continue;
+    if (typeof record.opencodeLogPath !== 'string') continue;
+    const at = typeof record.ts === 'string' ? Date.parse(record.ts) : NaN;
+    if (!Number.isFinite(at)) continue;
+    const named = record.opencodeLogPath;
+    if (!contained.has(named)) contained.set(named, containedOpenCodeLog(named, realRoot));
+    const logPath = await contained.get(named)!;
+    if (!logPath) continue;
+    records.push({ runId: typeof record.openDesignRunId === 'string' ? record.openDesignRunId : '', logPath, at });
+  }
+  return records;
+}
+
 async function buildAmrRuntimeLogSources(
   amrHome: string | null,
   incident: { runId?: string; agentId?: string },
   agentLogCount: number,
 ): Promise<AutomaticDiagnosticSource[]> {
   const name = 'agent-cli-logs/amr/agent-runtime.jsonl';
-  const absolutePath = join(amrHome ?? join(homedir(), '.amr'), 'logs', 'agent-runtime.jsonl');
+  const amrRoot = amrHome ?? join(homedir(), '.amr');
+  const absolutePath = join(amrRoot, 'logs', 'agent-runtime.jsonl');
   const exists = await access(absolutePath).then(() => true, () => false);
-  // The consent baseline needs the shared file itself; incidents only take their run's records.
-  if (incident.agentId === '*') return exists ? [{ name, absolutePath, kind: 'text' }] : [];
+  const openCodeLogs = exists ? await readAmrOpenCodeLogRecords(absolutePath, amrRoot) : [];
+  // The consent baseline needs the shared files themselves; incidents only take their run's lines.
+  if (incident.agentId === '*') {
+    if (!exists) return [];
+    const baseline: AutomaticDiagnosticSource[] = [{ name, absolutePath, kind: 'text' }];
+    const paths = [...new Set(openCodeLogs.map((record) => record.logPath))].slice(-64);
+    for (const [index, logPath] of paths.entries()) {
+      if (await access(logPath).then(() => true, () => false)) {
+        baseline.push({ name: `agent-cli-logs/amr/opencode-sessions/${index}/opencode.log`, absolutePath: logPath, kind: 'text' });
+      }
+    }
+    return baseline;
+  }
   const sources: AutomaticDiagnosticSource[] = [];
   if (!exists) sources.push({ name, absolutePath, kind: 'text', omitReason: 'source_not_found' });
   else if (!incident.runId) sources.push({ name, absolutePath, kind: 'text', omitReason: 'run_id_unavailable' });
   else sources.push({ name, absolutePath, kind: 'text', tailBytes: TAIL_BYTES_PER_LOG,
     selectLines: selectAmrRuntimeRunLines(incident.runId) });
-  // AMR keeps OpenCode session logs under per-conversation homes that are not located yet.
-  if (agentLogCount === 0) sources.push({ name: 'agent-cli-logs/amr/opencode', absolutePath: '', kind: 'text',
-    omitReason: 'source_not_located' });
+  // The run's session records name its OpenCode log; older Vela versions do not.
+  const runLogs = new Map<string, number>();
+  for (const record of openCodeLogs) {
+    if (!incident.runId || record.runId !== incident.runId) continue;
+    runLogs.set(record.logPath, Math.min(runLogs.get(record.logPath) ?? record.at, record.at));
+  }
+  for (const [index, [logPath, at]] of [...runLogs].entries()) {
+    sources.push({ name: index === 0 ? 'agent-cli-logs/amr/opencode.log' : `agent-cli-logs/amr/opencode.${index}.log`,
+      absolutePath: logPath, kind: 'text', tailBytes: TAIL_BYTES_PER_LOG,
+      selectLines: selectOpenCodeLogLines(at - OPENCODE_LOG_WINDOW_MARGIN_MS) });
+  }
+  if (runLogs.size === 0 && agentLogCount === 0) sources.push({ name: 'agent-cli-logs/amr/opencode', absolutePath: '',
+    kind: 'text', omitReason: 'source_not_located' });
   return sources;
 }
 
