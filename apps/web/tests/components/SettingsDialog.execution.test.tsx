@@ -887,6 +887,60 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     });
   });
 
+  it('lets a model whose default exceeds the cap re-enter that default', async () => {
+    // deepseek-v4-pro ships 384000, above MAX_MAX_TOKENS. With a fixed bound the
+    // field advertised that number as its placeholder but refused it as input,
+    // so an edit could not be undone through the control. See issue #8048.
+    const { onPersist } = renderSettingsDialog({ apiKey: 'sk-ant-test', model: 'deepseek-v4-pro' });
+
+    const maxTokensInput = screen.getByRole('spinbutton', { name: /Max tokens/ }) as HTMLInputElement;
+    expect(maxTokensInput.max).toBe('384000');
+
+    fireEvent.change(maxTokensInput, { target: { value: '64000' } });
+    await waitFor(() => {
+      const latestConfig = onPersist.mock.calls.at(-1)?.[0] as AppConfig | undefined;
+      expect(latestConfig?.maxTokens).toBe(64000);
+    });
+
+    fireEvent.change(maxTokensInput, { target: { value: '384000' } });
+    await waitFor(() => {
+      const latestConfig = onPersist.mock.calls.at(-1)?.[0] as AppConfig | undefined;
+      expect(latestConfig?.maxTokens).toBe(384000);
+    });
+
+    fireEvent.change(maxTokensInput, { target: { value: '384001' } });
+    await waitFor(() => {
+      const latestConfig = onPersist.mock.calls.at(-1)?.[0] as AppConfig | undefined;
+      expect(latestConfig?.maxTokens).toBeUndefined();
+    });
+  });
+
+  it('drops an override the newly selected model cannot accept', async () => {
+    // The model-aware bound means an override valid for one model can exceed
+    // the next model's ceiling. Without re-validating on model change the field
+    // would keep showing a number that `effectiveMaxTokens` silently discards,
+    // so Settings would claim one value while requests used another.
+    const { onPersist } = renderSettingsDialog({ apiKey: 'sk-ant-test', model: 'deepseek-v4-pro' });
+
+    const maxTokensInput = screen.getByRole('spinbutton', { name: /Max tokens/ }) as HTMLInputElement;
+    fireEvent.change(maxTokensInput, { target: { value: '300000' } });
+    await waitFor(() => {
+      const latestConfig = onPersist.mock.calls.at(-1)?.[0] as AppConfig | undefined;
+      expect(latestConfig?.maxTokens).toBe(300000);
+    });
+
+    fireEvent.click(screen.getByRole('combobox', { name: 'Model' }));
+    const modelPopover = screen.getByTestId('settings-byok-model-popover');
+    fireEvent.click(within(modelPopover).getByRole('option', { name: 'claude-sonnet-4-5' }));
+
+    await waitFor(() => {
+      const latestConfig = onPersist.mock.calls.at(-1)?.[0] as AppConfig | undefined;
+      expect(latestConfig?.model).toBe('claude-sonnet-4-5');
+      expect(latestConfig?.maxTokens).toBeUndefined();
+    });
+    expect(maxTokensInput.value).toBe('');
+  });
+
   it('lets Anthropic and Google users customize the default base URL', () => {
     renderSettingsDialog();
 
