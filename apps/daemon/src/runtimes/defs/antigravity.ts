@@ -248,6 +248,11 @@ export const antigravityAgentDef = {
     args.push('-p', prompt);
     return args;
   },
+  // No stdin: the prompt rides argv. Keep tight on Windows' CreateProcess
+  // command-line cap (~32 KB) so the pre-buildArgs budget guard fires
+  // before spawn, surfacing `AGENT_PROMPT_TOO_LARGE` instead of a raw
+  // `spawn ENAMETOOLONG` that gives no clue about the actual limit.
+  maxPromptArgBytes: 30_000,
   promptViaStdin: false,
   streamFormat: 'plain',
   installUrl: 'https://antigravity.google/cli',
