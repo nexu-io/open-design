@@ -119,6 +119,11 @@ export interface RunMediaTaskFailure {
   model?: string;
   /** When the host recorded the failure. */
   failedAt: number;
+  /** Explicit requested output target, normalized by the media writer. */
+  output?: string;
+  /** A later generation of the same target wrote real bytes in this run. */
+  recoveredByTaskId?: string;
+  recoveredAt?: number;
   /** The task's own classified error, verbatim — same shape the media task
    *  endpoints publish, so an error card needs no second vocabulary. */
   error: ProjectMediaTaskError;
