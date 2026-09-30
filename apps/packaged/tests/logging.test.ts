@@ -14,7 +14,8 @@
  * @see https://github.com/nexu-io/open-design/issues/895
  */
 
-import { mkdtempSync, rmSync } from 'node:fs';
+import { EventEmitter } from 'node:events';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -25,7 +26,9 @@ import {
   createPackagedDesktopLogger,
   createFatalUncaughtExceptionHandler,
   createFatalUnhandledRejectionHandler,
+  installStdioErrorGuard,
   isHarmlessSocketOptionError,
+  isHarmlessStdoutError,
   type PackagedDesktopLogger,
 } from '../src/logging.js';
 import type { PackagedNamespacePaths } from '../src/paths.js';
@@ -140,6 +143,185 @@ describe('isHarmlessSocketOptionError (issue #895)', () => {
     const error = new Error('') as NodeJS.ErrnoException;
     error.code = 'EINVAL';
     expect(isHarmlessSocketOptionError(error)).toBe(false);
+  });
+});
+
+/**
+ * Regression coverage for the packaged main-process EPIPE crash that
+ * surfaces the first time a renderer lifecycle handler calls
+ * `console.info(...)` in an Electron build with no controlling
+ * terminal. The wrapper installed by `createPackagedDesktopLogger`
+ * must swallow only the two known-safe stream-closure codes
+ * (`EPIPE`, `ERR_STREAM_DESTROYED`) and re-throw anything else, so
+ * real I/O failures are not silently dropped.
+ */
+describe('isHarmlessStdoutError (packaged console echo EPIPE guard)', () => {
+  it('matches an Error with code: EPIPE', () => {
+    const error = new Error('write EPIPE') as NodeJS.ErrnoException;
+    error.code = 'EPIPE';
+    expect(isHarmlessStdoutError(error)).toBe(true);
+  });
+
+  it('matches an Error with code: ERR_STREAM_DESTROYED', () => {
+    const error = new Error('stream destroyed') as NodeJS.ErrnoException;
+    error.code = 'ERR_STREAM_DESTROYED';
+    expect(isHarmlessStdoutError(error)).toBe(true);
+  });
+
+  it('does NOT match a bare Error that mentions "broken pipe" in its message but has no code', () => {
+    const error = new Error('broken pipe, write');
+    expect(isHarmlessStdoutError(error)).toBe(false);
+  });
+
+  it('does NOT match an unrelated errno like EACCES even if the message mentions pipes', () => {
+    const error = new Error('broken pipe while writing to log file') as NodeJS.ErrnoException;
+    error.code = 'EACCES';
+    expect(isHarmlessStdoutError(error)).toBe(false);
+  });
+
+  it('does NOT match non-objects (null, undefined, strings)', () => {
+    expect(isHarmlessStdoutError(null)).toBe(false);
+    expect(isHarmlessStdoutError(undefined)).toBe(false);
+    expect(isHarmlessStdoutError('EPIPE')).toBe(false);
+  });
+});
+
+describe('createPackagedDesktopLogger console echo EPIPE guard', () => {
+  it('swallows an EPIPE thrown by the original console.info echo and still records the call to the desktop log file', () => {
+    const root = mkdtempSync(join(tmpdir(), 'od-packaged-echo-epipe-'));
+    const previousEcho = process.env.OD_DESKTOP_LOG_ECHO;
+    // echo must be on (the default) for safeEcho to be in the path.
+    delete process.env.OD_DESKTOP_LOG_ECHO;
+    // Stub the host's console.info BEFORE constructing the logger so
+    // the factory captures the throwing original as `originalConsole.info`
+    // (the wrapper then calls safeEcho(originalConsole.info), which is
+    // the only place the EPIPE filter is applied — see issue #6964).
+    const epipe = new Error('write EPIPE') as NodeJS.ErrnoException;
+    epipe.code = 'EPIPE';
+    console.info = () => {
+      throw epipe;
+    };
+    const desktopLogPath = join(root, 'desktop.log');
+    try {
+      createPackagedDesktopLogger(makePaths(root, desktopLogPath));
+
+      // The wrapped call must NOT throw — the unwrapped version
+      // crashed the main process via an uncaught exception that
+      // propagated out of `Writable.write`.
+      expect(() =>
+        console.info('main window did-start-loading', { url: 'about:blank' }),
+      ).not.toThrow();
+
+      // The wrapper must have actually run (and called the file
+      // logger) — not the bare stub. If the wrapper had been
+      // bypassed, no record would land in the desktop log file.
+      const line = readFileSync(desktopLogPath, 'utf8');
+      expect(line).toContain('console.info');
+      expect(line).toContain('main window did-start-loading');
+    } finally {
+      if (previousEcho == null) {
+        delete process.env.OD_DESKTOP_LOG_ECHO;
+      } else {
+        process.env.OD_DESKTOP_LOG_ECHO = previousEcho;
+      }
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('still re-throws non-harmless errors thrown by the original console.error echo and records the call to the desktop log file', () => {
+    const root = mkdtempSync(join(tmpdir(), 'od-packaged-echo-other-'));
+    const previousEcho = process.env.OD_DESKTOP_LOG_ECHO;
+    delete process.env.OD_DESKTOP_LOG_ECHO;
+    // Same before/after ordering as the EPIPE case: stub the host's
+    // console.error BEFORE the factory so originalConsole.error
+    // captures the throwing stub.
+    const eacces = new Error('permission denied writing to log file') as NodeJS.ErrnoException;
+    eacces.code = 'EACCES';
+    console.error = () => {
+      throw eacces;
+    };
+    const desktopLogPath = join(root, 'desktop.log');
+    try {
+      createPackagedDesktopLogger(makePaths(root, desktopLogPath));
+
+      // The wrapper must surface non-harmless errors so real I/O
+      // failures are not silently dropped.
+      expect(() => console.error('fatal write failure')).toThrow(eacces);
+
+      // The wrapper must have actually run (and called the file
+      // logger BEFORE the echo) — proving the throw escaped via
+      // safeEcho, not via the bare stub.
+      const line = readFileSync(desktopLogPath, 'utf8');
+      expect(line).toContain('console.error');
+      expect(line).toContain('fatal write failure');
+    } finally {
+      if (previousEcho == null) {
+        delete process.env.OD_DESKTOP_LOG_ECHO;
+      } else {
+        process.env.OD_DESKTOP_LOG_ECHO = previousEcho;
+      }
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+// Regression coverage for the gap `safeEcho`'s try/catch cannot close:
+// a detached stdout/stderr pipe fails *asynchronously* (the stream
+// emits its own 'error' event, e.g. from `process.nextTick` during
+// internal `destroy()`), not as a synchronous throw from `.write()`.
+// Reproduced live on a packaged Windows build: the crash's stack trace
+// still showed `safeEcho`'s frames (because V8 fixes `.stack` at Error
+// *construction* time, not throw time), which made it look like the
+// try/catch had been bypassed when in fact it was never reached at all.
+describe('installStdioErrorGuard (async stdio pipe-closure guard)', () => {
+  function fakeStream(): NodeJS.WritableStream {
+    return new EventEmitter() as unknown as NodeJS.WritableStream;
+  }
+
+  it('swallows an EPIPE emitted asynchronously on the stream, not thrown synchronously', () => {
+    const stream = fakeStream();
+    installStdioErrorGuard([stream]);
+
+    const epipe = new Error('write EPIPE') as NodeJS.ErrnoException;
+    epipe.code = 'EPIPE';
+
+    // This is exactly what safeEcho's try/catch cannot see: nothing on
+    // the call stack, just an 'error' event firing on its own.
+    expect(() => (stream as unknown as EventEmitter).emit('error', epipe)).not.toThrow();
+  });
+
+  it('swallows an ERR_STREAM_DESTROYED emitted asynchronously on the stream', () => {
+    const stream = fakeStream();
+    installStdioErrorGuard([stream]);
+
+    const destroyed = new Error('stream destroyed') as NodeJS.ErrnoException;
+    destroyed.code = 'ERR_STREAM_DESTROYED';
+
+    expect(() => (stream as unknown as EventEmitter).emit('error', destroyed)).not.toThrow();
+  });
+
+  it('re-throws a non-harmless error emitted on the stream instead of silently dropping it', () => {
+    const stream = fakeStream();
+    installStdioErrorGuard([stream]);
+
+    const eacces = new Error('permission denied') as NodeJS.ErrnoException;
+    eacces.code = 'EACCES';
+
+    // EventEmitter re-throws synchronously out of emit() when an
+    // 'error' listener itself throws.
+    expect(() => (stream as unknown as EventEmitter).emit('error', eacces)).toThrow(eacces);
+  });
+
+  it('installs an independent guard per stream (stdout failure does not depend on stderr)', () => {
+    const stdout = fakeStream();
+    const stderr = fakeStream();
+    installStdioErrorGuard([stdout, stderr]);
+
+    const epipe = new Error('write EPIPE') as NodeJS.ErrnoException;
+    epipe.code = 'EPIPE';
+
+    expect(() => (stdout as unknown as EventEmitter).emit('error', epipe)).not.toThrow();
+    expect(() => (stderr as unknown as EventEmitter).emit('error', epipe)).not.toThrow();
   });
 });
 
