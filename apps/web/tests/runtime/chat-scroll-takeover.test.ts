@@ -14,10 +14,21 @@ import {
 import { FREEZE_WHEEL_COUNT } from '../../src/observability/chat-scroll-freeze-detector';
 import {
   CHAT_SCROLL_TAKEOVER_STORAGE_KEY,
+  OBSERVATION_SETTLE_MS,
   __resetChatScrollTakeoverForTest,
   chatScrollTakeoverEngaged,
   installChatScrollTakeover,
 } from '../../src/runtime/chat-scroll-takeover';
+import {
+  FROZEN,
+  LAYOUT_MAX,
+  buildChatLog,
+  decodeSafetyEvents,
+  scrolled,
+  stubGeometry,
+  wheelEvent,
+  type GeometryHandle,
+} from '../helpers/chat-scroll-fixture';
 
 /**
  * What these specs encode
@@ -32,14 +43,13 @@ import {
  *
  * So the JS write path is healthy and the wheel path is not. This module takes
  * the wheel over — `preventDefault` plus a programmatic write — but ONLY after
- * the probe has said the surface is frozen, and ONLY when an operator has
- * turned the switch on.
+ * the probe has said the surface is frozen, ONLY after its one-frame kick has
+ * been given a notch to prove itself and failed, and NOT when the user has
+ * pulled the `'0'` escape hatch.
  *
- * The switch is the load-bearing part. The probe has never been validated
- * against real-world false positives (its production event count is zero, and
- * that zero turns out to be a reporting bug rather than evidence of accuracy),
- * so an unproven detector is not allowed to change how scrolling feels for
- * everybody. Three specs below exist purely to pin "off means off".
+ * The kick and the observation have their own spec file
+ * (`chat-scroll-takeover-selfheal.test.ts`). This one is about the takeover
+ * proper: what the wheel does once JavaScript is answering it.
  *
  * jsdom performs no layout — `scrollHeight` / `clientHeight` are 0 for every
  * element it builds — so geometry is installed by hand, exactly as the freeze
@@ -62,100 +72,14 @@ function advanceClock(ms: number): void {
   clock += ms;
 }
 
-function sentEvents(): Array<{ event: string; properties: Record<string, unknown> }> {
-  return fetchMock.mock.calls.map((call) => {
-    const init = call[1] as RequestInit;
-    return JSON.parse(init.body as string) as {
-      event: string;
-      properties: Record<string, unknown>;
-    };
-  });
-}
-
 function eventsNamed(name: string): Array<Record<string, unknown>> {
-  return sentEvents()
+  return decodeSafetyEvents(fetchMock)
     .filter((e) => e.event === name)
     .map((e) => e.properties);
 }
 
-/** Scroll geometry jsdom refuses to compute, installed by hand. */
-interface GeometryHandle {
-  setTop(value: number): void;
-  setContent(value: number): void;
-  setViewport(value: number): void;
-  top(): number;
-  /** Every write the code under test made to `scrollTop`. */
-  writes: number[];
-}
-
-function stubGeometry(
-  el: HTMLElement,
-  initial: { scrollTop: number; scrollHeight: number; clientHeight: number },
-): GeometryHandle {
-  let top = initial.scrollTop;
-  let content = initial.scrollHeight;
-  let viewport = initial.clientHeight;
-  const writes: number[] = [];
-  Object.defineProperty(el, 'scrollTop', {
-    configurable: true,
-    get: () => top,
-    set: (value: number) => {
-      writes.push(value);
-      top = value;
-    },
-  });
-  Object.defineProperty(el, 'scrollHeight', { configurable: true, get: () => content });
-  Object.defineProperty(el, 'clientHeight', { configurable: true, get: () => viewport });
-  return {
-    setTop: (value) => {
-      top = value;
-    },
-    setContent: (value) => {
-      content = value;
-    },
-    setViewport: (value) => {
-      viewport = value;
-    },
-    top: () => top,
-    writes,
-  };
-}
-
-function buildChatLog(): HTMLElement {
-  const log = document.createElement('div');
-  log.className = 'chat-log';
-  log.setAttribute('data-testid', 'chat-log');
-  document.body.appendChild(log);
-  return log;
-}
-
-/** The measured failing surface: 1764px of real travel, wheel stuck at 91. */
-const FROZEN = { scrollTop: 91, scrollHeight: 2347, clientHeight: 583 } as const;
-const LAYOUT_MAX = FROZEN.scrollHeight - FROZEN.clientHeight;
-
-function scrolled(target: HTMLElement): void {
-  target.dispatchEvent(new Event('scroll', { bubbles: false }));
-}
-
-/** Dispatch one wheel notch and hand back the event, so the spec can ask whether it was consumed. */
-function wheelEvent(
-  target: HTMLElement,
-  deltaY: number,
-  init: { deltaMode?: number; ctrlKey?: boolean } = {},
-): WheelEvent {
-  const event = new WheelEvent('wheel', {
-    deltaY,
-    deltaMode: init.deltaMode ?? 0,
-    ctrlKey: init.ctrlKey ?? false,
-    bubbles: true,
-    cancelable: true,
-  });
-  target.dispatchEvent(event);
-  return event;
-}
-
-function turnSwitchOn(): void {
-  globalThis.localStorage.setItem(CHAT_SCROLL_TAKEOVER_STORAGE_KEY, '1');
+function pullEscapeHatch(): void {
+  globalThis.localStorage.setItem(CHAT_SCROLL_TAKEOVER_STORAGE_KEY, '0');
 }
 
 /**
@@ -164,9 +88,9 @@ function turnSwitchOn(): void {
  *
  * Exactly `FREEZE_WHEEL_COUNT` notches of 120px: four stalled notches asking
  * for 480px clears both bars the detector holds a report behind (four notches,
- * 240px). Stopping there matters — the takeover engages during the last
- * notch's frame, so a fifth would already be taken over and every spec below
- * would be reasoning about a log this module had moved.
+ * 240px). With the synchronous rAF used here the kick's restore frame has
+ * already run by the time this returns, so the module is waiting for its
+ * observation notch.
  */
 function driveToFreeze(log: HTMLElement): void {
   scrolled(log);
@@ -174,6 +98,13 @@ function driveToFreeze(log: HTMLElement): void {
     advanceClock(16);
     wheelEvent(log, 120);
   }
+}
+
+/** One natively-passed notch that moves nothing, then the settle window: the takeover engages. */
+function failTheObservation(log: HTMLElement): void {
+  const notch = wheelEvent(log, 120);
+  expect(notch.defaultPrevented).toBe(false);
+  vi.advanceTimersByTime(OBSERVATION_SETTLE_MS);
 }
 
 beforeEach(() => {
@@ -199,6 +130,7 @@ beforeEach(() => {
     rafSpy as unknown as typeof globalThis.requestAnimationFrame;
   globalThis.cancelAnimationFrame =
     cafSpy as unknown as typeof globalThis.cancelAnimationFrame;
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
   vi.spyOn(performance, 'now').mockImplementation(() => clock);
   globalThis.localStorage.clear();
   document.body.innerHTML = '';
@@ -209,6 +141,7 @@ beforeEach(() => {
 afterEach(() => {
   __resetChatScrollTakeoverForTest();
   __resetChatScrollFreezeForTest();
+  vi.useRealTimers();
   vi.restoreAllMocks();
   clearExceptionTrackingContext();
   globalThis.localStorage.clear();
@@ -222,11 +155,11 @@ afterEach(() => {
 // Off is off
 // ---------------------------------------------------------------------------
 
-describe('chat scroll takeover — the switch', () => {
-  it('costs no listener, no timer and no frame while the switch is off', () => {
-    // The whole justification for shipping this dark: an unproven detector must
-    // not be able to change scrolling for a user who never asked for it. "Off"
+describe('chat scroll takeover — the escape hatch', () => {
+  it("costs no listener, no timer and no frame while the hatch is pulled ('0')", () => {
+    // A user who opted out must not be able to tell this module exists. "Off"
     // therefore has to mean *nothing runs*, not "runs and decides not to act".
+    pullEscapeHatch();
     const log = buildChatLog();
     stubGeometry(log, FROZEN);
     const addOnLog = vi.spyOn(log, 'addEventListener');
@@ -250,9 +183,8 @@ describe('chat scroll takeover — the switch', () => {
     expect(chatScrollFreezeListenerCount()).toBe(0);
   });
 
-  it('does not take the wheel over when the probe calls a freeze and the switch is off', () => {
-    // THE guard this change is most likely to need. A false positive from the
-    // detector must be inert for everybody who has not opted in.
+  it('does not take the wheel over when the probe calls a freeze and the hatch is pulled', () => {
+    pullEscapeHatch();
     const log = buildChatLog();
     const geometry = stubGeometry(log, FROZEN);
     installChatScrollFreezeObserver();
@@ -261,21 +193,22 @@ describe('chat scroll takeover — the switch', () => {
     driveToFreeze(log);
     expect(eventsNamed('client_chat_scroll_frozen')).toHaveLength(1);
 
+    failTheObservation(log);
     const after = wheelEvent(log, 120);
     expect(after.defaultPrevented).toBe(false);
     expect(geometry.writes).toEqual([]);
     expect(chatScrollTakeoverEngaged()).toBe(false);
   });
 
-  it('does not take the wheel over before a freeze even when the switch is on', () => {
-    // The other half of the same risk: an opted-in user still scrolls
-    // natively until the probe has actually called it. If this ever goes red,
-    // the takeover is stealing healthy scrolling.
-    turnSwitchOn();
+  it('does not take the wheel over before a freeze, even though it is on by default', () => {
+    // The other half of the same risk: every user still scrolls natively until
+    // the probe has actually called it. If this ever goes red, the takeover is
+    // stealing healthy scrolling.
     const log = buildChatLog();
     const geometry = stubGeometry(log, { scrollTop: 0, scrollHeight: 2347, clientHeight: 583 });
     installChatScrollFreezeObserver();
     installChatScrollTakeover();
+    expect(chatScrollFreezeListenerCount()).toBe(1);
     scrolled(log);
 
     // A healthy scroller: every notch moves it, so no streak can accumulate.
@@ -289,6 +222,7 @@ describe('chat scroll takeover — the switch', () => {
     expect(eventsNamed('client_chat_scroll_frozen')).toHaveLength(0);
     expect(geometry.writes).toEqual([]);
     expect(chatScrollTakeoverEngaged()).toBe(false);
+    expect(log.style.willChange).toBe('');
   });
 });
 
@@ -296,22 +230,23 @@ describe('chat scroll takeover — the switch', () => {
 // Engaged behaviour
 // ---------------------------------------------------------------------------
 
-describe('chat scroll takeover — once the probe has called it frozen', () => {
-  function freezeWithSwitchOn(): { log: HTMLElement; geometry: GeometryHandle } {
-    turnSwitchOn();
+describe('chat scroll takeover — once the kick has failed to heal it', () => {
+  function freezeAndTakeOver(): { log: HTMLElement; geometry: GeometryHandle } {
     const log = buildChatLog();
     const geometry = stubGeometry(log, FROZEN);
     installChatScrollFreezeObserver();
     installChatScrollTakeover();
     driveToFreeze(log);
+    failTheObservation(log);
     return { log, geometry };
   }
 
   it('consumes the wheel and moves the log by the delta the wheel asked for', () => {
     // The red spec this change exists for: the compositor will not move the
     // log, the JS write path will, so the wheel is answered from JavaScript.
-    const { log, geometry } = freezeWithSwitchOn();
+    const { log, geometry } = freezeAndTakeOver();
     expect(eventsNamed('client_chat_scroll_frozen')).toHaveLength(1);
+    expect(eventsNamed('client_chat_scroll_heal')).toMatchObject([{ outcome: 'takeover' }]);
     expect(chatScrollTakeoverEngaged()).toBe(true);
 
     const event = wheelEvent(log, 120);
@@ -326,7 +261,7 @@ describe('chat scroll takeover — once the probe has called it frozen', () => {
     // was an option. It is the wrong one: a single trackpad flick carries both
     // signs, and splitting one gesture across a native path and a programmatic
     // one makes the two disagree about where the log is.
-    const { log, geometry } = freezeWithSwitchOn();
+    const { log, geometry } = freezeAndTakeOver();
     geometry.setTop(800);
 
     const event = wheelEvent(log, -120);
@@ -339,9 +274,8 @@ describe('chat scroll takeover — once the probe has called it frozen', () => {
     // Writing `scrollTop` from the handler would put a forced layout on the
     // input path and make a fast flick judder. One write per frame, carrying
     // the whole burst.
-    const { log, geometry } = freezeWithSwitchOn();
+    const { log, geometry } = freezeAndTakeOver();
     // No frame runs until we say so, so the notches have to accumulate.
-    rafSpy.mockImplementation(() => ++rafHandle);
     const callbacks: FrameRequestCallback[] = [];
     rafSpy.mockImplementation((cb: FrameRequestCallback) => {
       callbacks.push(cb);
@@ -379,7 +313,7 @@ describe('chat scroll takeover — once the probe has called it frozen', () => {
   it('normalises line and page wheels the way the detector does', () => {
     // `deltaMode` is 0 / 1 / 2 depending on device and OS. A line wheel that
     // moved 3 raw units must not move the log 3px.
-    const { log, geometry } = freezeWithSwitchOn();
+    const { log, geometry } = freezeAndTakeOver();
 
     wheelEvent(log, 3, { deltaMode: 1 });
     expect(geometry.writes).toEqual([FROZEN.scrollTop + 48]);
@@ -390,7 +324,7 @@ describe('chat scroll takeover — once the probe has called it frozen', () => {
   });
 
   it('clamps to the real layout extent instead of running off either end', () => {
-    const { log, geometry } = freezeWithSwitchOn();
+    const { log, geometry } = freezeAndTakeOver();
 
     wheelEvent(log, 99_999);
     expect(geometry.writes).toEqual([LAYOUT_MAX]);
@@ -403,7 +337,7 @@ describe('chat scroll takeover — once the probe has called it frozen', () => {
     // Every code block and tool-output box in a transcript is a scrollport.
     // `preventDefault` at the log would freeze all of them, which would be a
     // worse bug than the one being worked around.
-    const { log, geometry } = freezeWithSwitchOn();
+    const { log, geometry } = freezeAndTakeOver();
     const inner = document.createElement('pre');
     inner.style.overflowY = 'auto';
     stubGeometry(inner, { scrollTop: 0, scrollHeight: 900, clientHeight: 200 });
@@ -418,7 +352,7 @@ describe('chat scroll takeover — once the probe has called it frozen', () => {
   it('leaves a zoom gesture alone', () => {
     // ctrl+wheel is pinch-to-zoom on a trackpad. Consuming it would take page
     // zoom away from the user.
-    const { log, geometry } = freezeWithSwitchOn();
+    const { log, geometry } = freezeAndTakeOver();
 
     const event = wheelEvent(log, 120, { ctrlKey: true });
 
@@ -430,7 +364,7 @@ describe('chat scroll takeover — once the probe has called it frozen', () => {
     // At a real edge the native behaviour is to hand the wheel to whatever is
     // outside. Holding on to it there would trap the gesture inside a log that
     // has nothing left to give.
-    const { log, geometry } = freezeWithSwitchOn();
+    const { log, geometry } = freezeAndTakeOver();
     // Drive to the bottom through the takeover itself, so the edge it sees is
     // one it put the log at rather than one the spec asserted behind its back.
     wheelEvent(log, 99_999);
@@ -450,7 +384,7 @@ describe('chat scroll takeover — once the probe has called it frozen', () => {
     // nothing, and nothing ever re-reads the geometry that would let the next
     // one through — on a surface whose native path is broken. So a declined
     // wheel still asks for a frame, purely to take a fresh reading.
-    const { log, geometry } = freezeWithSwitchOn();
+    const { log, geometry } = freezeAndTakeOver();
     wheelEvent(log, 99_999);
     expect(geometry.top()).toBe(LAYOUT_MAX);
     geometry.writes.length = 0;
@@ -480,12 +414,12 @@ describe('chat scroll takeover — teardown', () => {
     // which is the one thing known to clear the stale ceiling. The replacement
     // must start out scrolling natively — otherwise one freeze would degrade
     // the surface for the rest of the session.
-    turnSwitchOn();
     const first = buildChatLog();
     const firstGeometry = stubGeometry(first, FROZEN);
     installChatScrollFreezeObserver();
     installChatScrollTakeover();
     driveToFreeze(first);
+    failTheObservation(first);
     expect(chatScrollTakeoverEngaged()).toBe(true);
 
     first.remove();
@@ -509,12 +443,12 @@ describe('chat scroll takeover — teardown', () => {
   });
 
   it('releases the wheel when the installer is torn down', () => {
-    turnSwitchOn();
     const log = buildChatLog();
     const geometry = stubGeometry(log, FROZEN);
     installChatScrollFreezeObserver();
     const teardown = installChatScrollTakeover();
     driveToFreeze(log);
+    failTheObservation(log);
     expect(chatScrollTakeoverEngaged()).toBe(true);
 
     teardown();

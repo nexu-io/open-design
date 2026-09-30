@@ -365,7 +365,7 @@ describe('the wheel-takeover switch, as this machine had it', () => {
     });
   });
 
-  it('carries the stored value verbatim when the takeover is armed', () => {
+  it('carries the stored value verbatim whatever it is', () => {
     localStorage.setItem(CHAT_SCROLL_TAKEOVER_STORAGE_KEY, '1');
     mountChatLog();
 
@@ -375,15 +375,16 @@ describe('the wheel-takeover switch, as this machine had it', () => {
     expect(capture.runtime.chatScrollTakeover.readable).toBe(true);
   });
 
-  it('keeps a value that does NOT arm the takeover distinguishable from absence', () => {
-    // 'true' reads like "on" to a human and arms nothing — exactly the
+  it('keeps the value that DISARMS the takeover distinguishable from absence', () => {
+    // Absent means on, '0' means off, and 'false' means on — exactly the
     // confusion a boolean field here would bake into the evidence.
-    localStorage.setItem(CHAT_SCROLL_TAKEOVER_STORAGE_KEY, 'true');
+    localStorage.setItem(CHAT_SCROLL_TAKEOVER_STORAGE_KEY, '0');
     mountChatLog();
+    expect(collectChatScrollForensics().runtime.chatScrollTakeover.rawValue).toBe('0');
 
-    const capture = collectChatScrollForensics();
-
-    expect(capture.runtime.chatScrollTakeover.rawValue).toBe('true');
+    localStorage.setItem(CHAT_SCROLL_TAKEOVER_STORAGE_KEY, 'false');
+    expect(collectChatScrollForensics().runtime.chatScrollTakeover.rawValue).toBe('false');
+    expect(collectChatScrollForensics().runtime.chatScrollTakeover.note).toMatch(/only '0'/);
   });
 
   it('says the switch is UNKNOWN, not off, when storage cannot be read', () => {
