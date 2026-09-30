@@ -56,9 +56,11 @@ interface Props {
   title?: string;
   /** Confirm-button label override; defaults to "Add". */
   confirmLabel?: string;
+  /** Temporarily preserves the current selection while its consumer cannot accept it. */
+  confirmDisabled?: boolean;
 }
 
-export function LibraryPicker({ onClose, onConfirm, title, confirmLabel }: Props) {
+export function LibraryPicker({ onClose, onConfirm, title, confirmLabel, confirmDisabled = false }: Props) {
   const t = useT();
   const [assets, setAssets] = useState<LibraryAsset[]>([]);
   const [loading, setLoading] = useState(true);
@@ -123,7 +125,7 @@ export function LibraryPicker({ onClose, onConfirm, title, confirmLabel }: Props
 
   async function confirm() {
     const picked = assets.filter((asset) => selected.has(asset.id));
-    if (picked.length === 0 || busy) return;
+    if (picked.length === 0 || busy || confirmDisabled) return;
     setBusy(true);
     try {
       await onConfirm(picked);
@@ -233,7 +235,7 @@ export function LibraryPicker({ onClose, onConfirm, title, confirmLabel }: Props
           <Button
             variant="primary"
             onClick={confirm}
-            disabled={count === 0 || busy}
+            disabled={count === 0 || busy || confirmDisabled}
             data-testid="library-picker-confirm"
           >
             {busy ? t('libraryPicker.loading') : confirmLabel ?? t('libraryPicker.add')}
