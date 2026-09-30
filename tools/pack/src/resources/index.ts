@@ -55,6 +55,12 @@ export const winResources = {
 export const linuxResources = {
   icon: join(resourcesRoot, "linux", "icon.png"),
   desktopTemplate: join(resourcesRoot, "linux", "open-design.desktop.template"),
+  // Debian-specific packaging assets, kept as files under a `debian/` directory
+  // (mirroring the Debian maintainer convention) instead of inline strings. These
+  // feed the `deb` target's fpm source=destination / --deb-changelog args.
+  debianCopyright: join(resourcesRoot, "linux", "debian", "copyright"),
+  debianChangelogTemplate: join(resourcesRoot, "linux", "debian", "changelog.template"),
+  debianLintianOverrides: join(resourcesRoot, "linux", "debian", "lintian-overrides"),
 } as const;
 
 const BUNDLED_RESOURCE_TREES = [

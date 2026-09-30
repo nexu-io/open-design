@@ -60,8 +60,11 @@ import {
   createLinuxDesktopLaunchEnv,
   inspectPackedLinuxApp,
   LINUX_APPIMAGE_EXECUTABLE_ARGS,
+  linuxBuildsAppImage,
+  linuxBundledFilePatterns,
   matchesAppImageProcess,
   renderDesktopTemplate,
+  resolveLinuxBuilderTargets,
   renderLinuxAppImageAppRun,
   renderLinuxPackagedMainEntry,
   resolveLinuxLifecycleMode,
@@ -166,6 +169,22 @@ describe("buildDockerArgs", () => {
     expect(args).toContain("HOME=/home/builder");
     expect(args).toContain("ELECTRON_CACHE=/home/builder/.cache/electron");
     expect(args).toContain("ELECTRON_BUILDER_CACHE=/home/builder/.cache/electron-builder");
+  });
+
+  it("sets CI=true so the inner pnpm install does not abort the modules-dir purge on a populated host tree", () => {
+    // Regression guard for ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY: a local
+    // developer tree mounts an existing node_modules the container pnpm wants to
+    // rebuild; without CI it refuses the purge with no TTY and the build fails.
+    const args = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
+    expect(args).toContain("CI=true");
+  });
+
+  it("points npm_execpath at the standalone container pnpm so nested runPnpm calls avoid corepack", () => {
+    // Regression guard for `spawn corepack ENOENT`: the builder:base image has no
+    // corepack, so createPackageManagerInvocation must resolve to the bootstrapped
+    // pnpm instead of the corepack fallback.
+    const args = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
+    expect(args).toContain("npm_execpath=/tmp/pnpm");
   });
 
   it("passes the telemetry relay URL into containerized builds when configured", () => {
@@ -343,12 +362,16 @@ describe("buildDockerArgs", () => {
     expect(last).toContain("--app-version '0.5.0-beta.1'\\''quoted'");
   });
 
-  it("exports OD_TOOLS_PACK_PNPM_BIN=/tmp/pnpm so the inner build's production install skips npm", () => {
+  it("does not export OD_TOOLS_PACK_PNPM_BIN so the assembled-app production install uses npm", () => {
+    // The container now exposes npm (pnpm-managed Node bin on PATH). A pnpm
+    // `--prod --no-lockfile` install over the file: tarballs dropped transitive
+    // deps (jszip's `setimmediate`) and the package crashed on boot, so the
+    // production install falls back to npm's full flat hoist.
     const args = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
     const envFlagIndex = args.findIndex(
-      (arg, i) => arg === "-e" && args[i + 1] === "OD_TOOLS_PACK_PNPM_BIN=/tmp/pnpm",
+      (arg, i) => arg === "-e" && args[i + 1]?.startsWith("OD_TOOLS_PACK_PNPM_BIN="),
     );
-    expect(envFlagIndex).toBeGreaterThan(-1);
+    expect(envFlagIndex).toBe(-1);
   });
 });
 
@@ -558,21 +581,23 @@ describe("resolveProductionInstallCommand", () => {
     });
   });
 
-  it("chains end-to-end with buildDockerArgs: docker exports OD_TOOLS_PACK_PNPM_BIN and the resolver returns the standalone pnpm install for that value", () => {
+  it("chains end-to-end with buildDockerArgs: the container omits OD_TOOLS_PACK_PNPM_BIN so the resolver returns the npm install", () => {
+    // The containerized build exposes npm on PATH and relies on it for the
+    // assembled-app production install (pnpm dropped transitive deps like
+    // jszip's `setimmediate`, crashing the packaged app on boot). So docker must
+    // NOT export OD_TOOLS_PACK_PNPM_BIN, and the resolver — reading the same
+    // (absent) env — must return npm.
     const dockerArgs = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
     const envFlagIndex = dockerArgs.findIndex(
       (arg, i) => arg === "-e" && dockerArgs[i + 1]?.startsWith("OD_TOOLS_PACK_PNPM_BIN="),
     );
-    expect(envFlagIndex).toBeGreaterThan(-1);
-    const envValue = dockerArgs[envFlagIndex + 1]?.split("=")[1];
-    expect(envValue).toBe("/tmp/pnpm");
+    expect(envFlagIndex).toBe(-1);
 
-    const resolved = resolveProductionInstallCommand({ OD_TOOLS_PACK_PNPM_BIN: envValue });
+    const resolved = resolveProductionInstallCommand({});
     expect(resolved).toEqual({
-      command: "/tmp/pnpm",
-      args: ["install", "--prod", "--no-lockfile", "--config.node-linker=hoisted"],
+      command: "npm",
+      args: ["install", "--omit=dev", "--no-package-lock"],
     });
-    expect(resolved.command).not.toBe("npm");
   });
 });
 
@@ -778,6 +803,96 @@ describe("resolveLinuxLifecycleMode", () => {
     expect(resolveLinuxLifecycleMode({}, "stop")).toBe("appimage");
     expect(resolveLinuxLifecycleMode({}, "uninstall")).toBe("appimage");
     expect(resolveLinuxLifecycleMode({}, "cleanup")).toBe("appimage");
+  });
+});
+
+describe("linuxBundledFilePatterns", () => {
+  // Paths as they appear in the assembled app, relative to its root.
+  const bundledCruft = [
+    "node_modules/@ffmpeg-installer/ffmpeg/index.js~",
+    "node_modules/@ffmpeg-installer/ffmpeg/lib/manifest.js~",
+    "node_modules/node-pty/prebuilds/win32-x64/pty.node",
+    "node_modules/node-pty/prebuilds/darwin-arm64/spawn-helper",
+    "node_modules/onnxruntime-node/bin/napi-v3/darwin/x64/libonnxruntime.1.21.1.dylib",
+    "node_modules/onnxruntime-node/bin/napi-v3/win32/arm64/onnxruntime_binding.node",
+    "node_modules/onnxruntime-node/bin/napi-v3/linux/x64/libonnxruntime_providers_cuda.so",
+    "node_modules/onnxruntime-node/bin/napi-v3/linux/x64/libonnxruntime_providers_tensorrt.so",
+  ];
+  const linuxX64Runtime = [
+    "node_modules/node-pty/prebuilds/linux-x64/pty.node",
+    "node_modules/onnxruntime-node/bin/napi-v3/linux/x64/onnxruntime_binding.node",
+    "node_modules/onnxruntime-node/bin/napi-v3/linux/x64/libonnxruntime.so.1",
+    "node_modules/onnxruntime-node/bin/napi-v3/linux/x64/libonnxruntime_providers_shared.so",
+    "node_modules/@ffmpeg-installer/ffmpeg/index.js",
+  ];
+
+  // Mirrors electron-builder's `files` semantics closely enough for these
+  // patterns: the last matching rule wins, `!` negates.
+  function bundled(patterns: string[], file: string): boolean {
+    let keep = false;
+    for (const pattern of patterns) {
+      const negated = pattern.startsWith("!");
+      const glob = negated ? pattern.slice(1) : pattern;
+      if (globMatches(glob, file)) keep = !negated;
+    }
+    return keep;
+  }
+  function expandBraces(glob: string): string[] {
+    const match = /\{([^{}]*)\}/.exec(glob);
+    if (!match) return [glob];
+    return match[1]
+      .split(",")
+      .flatMap((alt) => expandBraces(glob.slice(0, match.index) + alt + glob.slice(match.index + match[0].length)));
+  }
+  function globMatches(glob: string, file: string): boolean {
+    return expandBraces(glob).some((variant) => {
+      const source = variant
+        .split(/(\*\*\/|\*\*|\*)/)
+        .map((part) => (part === "**/" ? "(?:.*/)?" : part === "**" ? ".*" : part === "*" ? "[^/]*" : escape(part)))
+        .join("");
+      return new RegExp(`^${source}$`).test(file);
+    });
+  }
+  function escape(value: string): string {
+    return value.replace(/[.+^$()|[\]\\?]/g, "\\$&");
+  }
+
+  it("drops foreign-platform binaries, GPU providers and backup files on x64", () => {
+    const patterns = linuxBundledFilePatterns("x64");
+    for (const file of bundledCruft) expect(bundled(patterns, file), file).toBe(false);
+    for (const file of linuxX64Runtime) expect(bundled(patterns, file), file).toBe(true);
+    expect(bundled(patterns, "node_modules/onnxruntime-node/bin/napi-v3/linux/arm64/libonnxruntime.so.1")).toBe(false);
+  });
+
+  it("keeps the arm64 linux runtime and drops x64 when building on arm64", () => {
+    const patterns = linuxBundledFilePatterns("arm64");
+    expect(bundled(patterns, "node_modules/onnxruntime-node/bin/napi-v3/linux/arm64/libonnxruntime.so.1")).toBe(true);
+    expect(bundled(patterns, "node_modules/onnxruntime-node/bin/napi-v3/linux/x64/libonnxruntime.so.1")).toBe(false);
+    expect(bundled(patterns, "node_modules/onnxruntime-node/bin/napi-v3/linux/arm64/libonnxruntime_providers_cuda.so")).toBe(false);
+  });
+});
+
+describe("resolveLinuxBuilderTargets", () => {
+  it("maps deb to the electron-builder deb target", () => {
+    expect(resolveLinuxBuilderTargets("deb")).toEqual(["deb"]);
+  });
+
+  it("maps dir to an unpacked build", () => {
+    expect(resolveLinuxBuilderTargets("dir")).toEqual(["dir"]);
+  });
+
+  it("defaults appimage and all to AppImage", () => {
+    expect(resolveLinuxBuilderTargets("appimage")).toEqual(["AppImage"]);
+    expect(resolveLinuxBuilderTargets("all")).toEqual(["AppImage"]);
+  });
+});
+
+describe("linuxBuildsAppImage", () => {
+  it("is true only for appimage/all so deb and dir skip the AppRun wrapper", () => {
+    expect(linuxBuildsAppImage("appimage")).toBe(true);
+    expect(linuxBuildsAppImage("all")).toBe(true);
+    expect(linuxBuildsAppImage("deb")).toBe(false);
+    expect(linuxBuildsAppImage("dir")).toBe(false);
   });
 });
 
