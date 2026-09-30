@@ -54,7 +54,7 @@ describe('OPEND-2585 · 准备中那一屏的加载反馈', () => {
 
   it('用户刚选的那批附件当场就在屏幕上,不等上传', () => {
     const { getByTestId } = renderPending();
-    const row = getByTestId('pending-attachment-row');
+    const row = getByTestId('user-attachment-row');
     // 一个附件一张卡,一张不少
     expect(row.children).toHaveLength(STAGED.length);
     // 图片走本地字节(object URL),不是 `/api/projects/:id/raw` —— 上传还没开始

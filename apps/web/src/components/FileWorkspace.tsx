@@ -384,6 +384,8 @@ interface Props {
   materializationPending?: boolean;
   /** See DesignFilesPanel's `filesAuthoritative`. */
   filesAuthoritative?: boolean;
+  /** See DesignFilesPanel's `emptyLookBeforeFirstListing`. */
+  emptyLookBeforeFirstListing?: boolean;
   /** Optional override for the read-only notice text. */
   readonlyNotice?: string;
   /**
@@ -1400,6 +1402,7 @@ export function FileWorkspace({
   viewerOnly = false,
   materializationPending = false,
   filesAuthoritative = true,
+  emptyLookBeforeFirstListing = false,
   readonlyNotice,
   fileSyncBadge = null,
 }: Props) {
@@ -4379,6 +4382,7 @@ export function FileWorkspace({
             viewerOnly={viewerOnly}
             downloadPending={fileSyncBadge === 'downloading'}
             filesAuthoritative={filesAuthoritative}
+            emptyLookBeforeFirstListing={emptyLookBeforeFirstListing}
             rootDirName={rootDirName}
             reloading={reloading}
             running={runInFlight}

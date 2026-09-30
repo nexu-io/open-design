@@ -6,7 +6,7 @@
 // so the frame already reads as the project page, and start no project-owned
 // request while the project does not exist yet.
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -71,6 +71,24 @@ describe('ProjectCreationPendingView', () => {
     }
   });
 
+  it('draws the history control footprint and live-looking empty-state pills, all inert', () => {
+    renderPending();
+    // The frame's ChatPane portals its real history control into the dock,
+    // as it does under ProjectView, so the row does not gain a button at the
+    // hand-off; the dock is inert because no project exists yet.
+    const dock = screen.getByTestId('pending-chat-history-dock');
+    expect(within(dock).getByRole('button', { name: 'Conversation history' })).toBeTruthy();
+    expect(dock.hasAttribute('inert')).toBe(true);
+    // The workspace column is inert as a whole; its pills keep the live look
+    // DesignFilesPanel gives them instead of a disabled one.
+    const workspace = screen.getByRole('region', { name: 'Design Files' });
+    expect(workspace.hasAttribute('inert')).toBe(true);
+    const emptyState = within(workspace).getByTestId('pending-design-files-empty');
+    const ctas = within(emptyState).getAllByRole<HTMLButtonElement>('button');
+    expect(ctas).toHaveLength(5);
+    expect(ctas.every((cta) => !cta.disabled)).toBe(true);
+  });
+
   it('shows the sent prompt from the creation record alone, with no project-name header row', () => {
     renderPending();
 
@@ -78,7 +96,15 @@ describe('ProjectCreationPendingView', () => {
     expect(screen.queryByTestId('pending-project-title')).toBeNull();
     expect(document.querySelector('.chat-project-header')).toBeNull();
     expect(screen.getByText('Make a landing page for a coffee shop')).toBeTruthy();
-    expect(screen.getByText('Preparing...')).toBeTruthy();
+    // OPEND-3334: the chat column is the real ChatPane drawing the optimistic
+    // first turn: a user message and a running, empty assistant turn whose
+    // execution record says "Working".
+    const log = screen.getByTestId('chat-log');
+    expect(within(log).getAllByTestId('user-message')).toHaveLength(1);
+    const assistant = within(log).getByTestId('assistant-message');
+    expect(within(assistant).getByText('Working')).toBeTruthy();
+    expect(screen.queryByText('Preparing...')).toBeNull();
+    expect(within(log).queryByTestId('assistant-footer')).toBeNull();
   });
 
   it('lists staged attachments as user-message cards in send order', () => {
@@ -89,14 +115,17 @@ describe('ProjectCreationPendingView', () => {
       ],
     });
 
-    const row = screen.getByTestId('pending-attachment-row');
-    const cards = row.querySelectorAll('.msg-att-doc, .msg-att-img');
-    expect(Array.from(cards).map((card) => card.className)).toEqual(['msg-att-doc', 'msg-att-img']);
-    expect(cards[0]!.querySelector('.msg-att-base')?.textContent).toBe('brief');
-    expect(cards[0]!.querySelector('.msg-att-ext')?.textContent).toBe('.txt');
+    const row = screen.getByTestId('user-attachment-row');
+    const cards = within(row).getAllByRole<HTMLButtonElement>('button');
+    expect(cards).toEqual([
+      within(row).getByRole('button', { name: 'brief.txt' }),
+      within(row).getByRole('button', { name: 'mood.png' }),
+    ]);
+    expect(cards[0]!.textContent).toContain('brief');
+    expect(cards[0]!.textContent).toContain('.txt');
     expect(cards[1]!.querySelector('img')?.getAttribute('src')).toBe('blob:preview-1');
-    // The cards are labels, not openable files: nothing has been uploaded.
-    expect(row.querySelector('button')).toBeNull();
+    // Nothing has been uploaded, so no card can open a file.
+    expect(cards.every((card) => card.disabled)).toBe(true);
   });
 
   it('keeps image previews alive through a StrictMode double mount', () => {
@@ -115,7 +144,7 @@ describe('ProjectCreationPendingView', () => {
       </StrictMode>,
     );
 
-    const src = screen.getByTestId('pending-attachment-row').querySelector('img')?.getAttribute('src');
+    const src = screen.getByTestId('user-attachment-row').querySelector('img')?.getAttribute('src');
     expect(src).toBeTruthy();
     expect(createdUrls).toContain(src);
     expect(revokedUrls).not.toContain(src);
@@ -123,18 +152,17 @@ describe('ProjectCreationPendingView', () => {
     expect(revokedUrls.every((url) => createdUrls.includes(url))).toBe(true);
   });
 
-  it('renders the real composer as an inert, non-sendable shell', () => {
+  it('renders the real chat pane, inert as a whole', () => {
     renderPending();
 
-    const shell = screen.getByTestId('pending-chat-composer-shell');
-    // React 18 drops the boolean `inert` prop, so the view sets the attribute
+    const pane = screen.getByTestId('project-creation-pending-chat');
+    // React 18 drops the boolean `inert` prop, so ChatPane sets the attribute
     // on the node itself; the assertion is on the DOM, not on props.
-    expect(shell.hasAttribute('inert')).toBe(true);
-    expect(shell.getAttribute('aria-disabled')).toBe('true');
-    expect(shell.querySelector('.chat-composer, [data-testid="chat-composer"], form, textarea, [contenteditable]')).toBeTruthy();
-    // The send affordance is present so the frame matches ProjectView, but
-    // it can never fire: no project exists to send into.
-    expect((screen.getByTestId('chat-send') as HTMLButtonElement).disabled).toBe(true);
+    expect(pane.hasAttribute('inert')).toBe(true);
+    // jsdom measures no geometry, so the composer stays in the pane's slot
+    // here; in a browser it is portaled to a body-level layer that ChatPane
+    // marks inert as well.
+    expect(within(pane).getByRole('combobox')).toBeTruthy();
   });
 
   it('starts no project-owned request while the project is unconfirmed', async () => {
