@@ -46,7 +46,11 @@ import {
 } from '../library.js';
 import { reconcileLibrary, type ReconcileLibraryResult } from '../library-sync.js';
 import { fetchExternalBrandAsset } from '../brands/safe-fetch.js';
-import { ensureProjectSubdir } from '../projects.js';
+import {
+  ensureProjectSubdir,
+  invalidateImportedProjectFileList,
+  resolveProjectDir,
+} from '../projects.js';
 import {
   authorizeCreatedProjectWorkspace,
   bindCreatedProjectToWorkspace,
@@ -240,6 +244,7 @@ export function registerLibraryRoutes(app: Express, ctx: RegisterLibraryRoutesDe
         }
       }
     }
+    invalidateImportedProjectFileList(resolveProjectDir(PROJECTS_DIR, projectId, project.metadata));
     return elementRelPath ? { relPath, elementRelPath } : { relPath };
   }
 
