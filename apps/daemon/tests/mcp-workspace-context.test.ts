@@ -91,6 +91,44 @@ describe('resolveMcpWorkspaceContext', () => {
     expect(fetchMock).toHaveBeenCalledWith(`${base}/api/workspace/directory`, expect.anything());
   });
 
+  it('uses the active workspace across multiple team memberships', async () => {
+    const base = 'http://127.0.0.1:19003';
+    const first = item({
+      workspaceId: 'ws-team-a',
+      workspaceName: 'Team A',
+      workspaceType: 'team',
+      workspaceMemberId: 'mem-a',
+    });
+    const active = item({
+      workspaceId: 'ws-team-b',
+      workspaceName: 'Team B',
+      workspaceType: 'team',
+      workspaceMemberId: 'mem-b',
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            items: [first, active],
+            activeWorkspaceId: active.workspaceId,
+          }),
+          { status: 200 },
+        ),
+      ),
+    );
+
+    expect(await resolveMcpWorkspaceContext(base)).toEqual({
+      workspaceId: active.workspaceId,
+      workspaceMemberId: active.workspaceMemberId,
+      workspaceType: 'team',
+      headers: {
+        'x-od-workspace-id': active.workspaceId,
+        'x-od-workspace-member-id': active.workspaceMemberId,
+      },
+    });
+  });
+
   it('returns null on a directory outage (non-200)', async () => {
     vi.stubGlobal(
       'fetch',
