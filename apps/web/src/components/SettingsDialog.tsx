@@ -108,8 +108,8 @@ export {
   providerModelsCacheKey,
 } from './providerModelsCache';
 import {
-  MAX_MAX_TOKENS,
   MIN_MAX_TOKENS,
+  maxTokensUpperBound,
   modelMaxTokensDefault,
 } from '../state/maxTokens';
 import type {
@@ -2329,13 +2329,16 @@ export function SettingsDialog({
       return;
     }
     const value = Number(trimmed);
-    const nextMaxTokens =
-      Number.isInteger(value) &&
-      value >= MIN_MAX_TOKENS &&
-      value <= MAX_MAX_TOKENS
-        ? value
-        : undefined;
-    setCfg((c) => ({ ...c, maxTokens: nextMaxTokens }));
+    // The upper bound is model-aware, so read the model from current state
+    // rather than a closure: the same rule has to hold for whichever model is
+    // selected when the edit lands.
+    setCfg((c) => ({
+      ...c,
+      maxTokens:
+        Number.isInteger(value) && value >= MIN_MAX_TOKENS && value <= maxTokensUpperBound(c.model)
+          ? value
+          : undefined,
+    }));
   };
   const markAgentInstallIntent = () => {
     pendingAgentInstallRescanRef.current = true;
@@ -5659,7 +5662,7 @@ export function SettingsDialog({
                 <input
                   type="number"
                   min={MIN_MAX_TOKENS}
-                  max={MAX_MAX_TOKENS}
+                  max={maxTokensUpperBound(cfg.model)}
                   step={1}
                   placeholder={String(modelMaxTokensDefault(cfg.model))}
                   value={maxTokensInput}
