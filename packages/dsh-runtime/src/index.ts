@@ -79,6 +79,21 @@ function contentText(content: readonly ContentBlock[]): string {
   return text.join('');
 }
 
+type AssistantMessage = SessionEvent<'assistant/message'>['data']['message'];
+
+/**
+ * Visible text of a completed assistant message. Harness releases that no
+ * longer publish `assistant/chunk` deltas to profile subscribers carry the
+ * assistant's text here only.
+ */
+function assistantMessageText(message: AssistantMessage | undefined): string {
+  const text: string[] = [];
+  for (const block of message?.content ?? []) {
+    if (block.type === 'text') text.push(block.text);
+  }
+  return text.join('');
+}
+
 function resultStatus(reason: TurnEndReason | undefined): 'completed' | 'cancelled' | 'failed' {
   if (reason?.kind === 'completed' || reason?.kind === 'max-tokens') return 'completed';
   if (reason?.kind === 'aborted') return 'cancelled';
@@ -275,12 +290,31 @@ async function execute(
     installModelSelection(agentCtx, selected);
   };
   let disposeEvent = () => {};
+  let streamedSinceMessage = '';
   const onSessionEvent = (session: { id: unknown }, event: SessionEvent) => {
     if (String(session.id) !== String(sessionId) || event.seq < firstSeq) return;
-    emitSessionEvent(output, request, selection.provider, selection.model, event);
     if (event.type === 'assistant/chunk' && event.data.chunk.type === 'text-delta') {
       assistantOutput += event.data.chunk.text;
+      streamedSinceMessage += event.data.chunk.text;
     }
+    // Text normally arrives as `assistant/chunk` deltas, but Harness releases
+    // exist that publish only the completed `assistant/message`. Take the
+    // message text when the deltas did not already deliver it, otherwise the
+    // host records a finished turn with no output and fails the run.
+    if (event.type === 'assistant/message') {
+      const complete = assistantMessageText(event.data.message);
+      if (complete !== '' && complete !== streamedSinceMessage) {
+        writeFrame(output, {
+          v: 1,
+          type: 'text',
+          request_id: request.request_id,
+          content: complete,
+        });
+        assistantOutput += complete;
+      }
+      streamedSinceMessage = '';
+    }
+    emitSessionEvent(output, request, selection.provider, selection.model, event);
     if (event.type === 'turn/end') turnEnd = event;
   };
 
@@ -471,6 +505,7 @@ export function apply(ctx: Context): void {
 }
 
 export const internals = {
+  assistantMessageText,
   contentText,
   createCancellationLatch,
   errorFacts,
