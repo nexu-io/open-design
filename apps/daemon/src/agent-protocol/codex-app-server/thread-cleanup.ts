@@ -5,8 +5,10 @@ import type { CodexClosedThreadCleanup } from './session.js';
 
 /** Same measured compatibility floor used by the live session's archive path. */
 export function codexHistoryCapabilities(userAgent: unknown): { paginated: boolean; legacy: boolean } {
+  // Codex permits originators such as "Codex Desktop". Anchor the version to
+  // the first slash; OS/client suffixes must never supply the server version.
   const version = typeof userAgent === 'string'
-    ? /^[^/\s]+\/(\d+)\.(\d+)\.(\d+)(?:\s|$)/u.exec(userAgent) : null;
+    ? /^[^/\s][^/\r\n]*\/(\d+)\.(\d+)\.(\d+)(?:\s|$)/u.exec(userAgent) : null;
   if (!version) return { paginated: false, legacy: false };
   const [, major, minor, patch] = version;
   return {
