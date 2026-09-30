@@ -233,6 +233,19 @@ export interface RegisterPluginRoutesDeps {
       resourceType: string,
       resourceId: string,
     ) => WorkspaceResourceBindingRow | null | undefined;
+    ensureWorkspaceResource?: (
+      db: SqliteDbLike,
+      resourceType: string,
+      workspaceId: string,
+      resourceId: string,
+      envelope?: {
+        visibility?: 'personal' | 'team';
+        resourceState?: 'active' | 'deleted';
+        createdByWorkspaceMemberId?: string | null;
+        updatedByWorkspaceMemberId?: string | null;
+        syncState?: string;
+      },
+    ) => unknown;
     workspaceTeamPluginBindingAllowsRead?: (
       db: SqliteDbLike,
       workspaceId: string,
@@ -523,6 +536,8 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
     helpers.pluginUpload.single('file')(req, res, async (err: unknown) => {
       if (err) return helpers.sendMulterError(res, err);
       try {
+        const authority = await resolveWorkspaceAuthority(req, res);
+        if (authority === undefined) return;
         const file = req.file;
         if (!file?.buffer) {
           return res.status(400).json(pluginUploadFailure('file is required', 'BAD_REQUEST'));
@@ -531,6 +546,21 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
           file.buffer,
           `upload:zip:${helpers.decodeMultipartFilename(file.originalname || 'plugin.zip')}`,
         );
+        if (result.ok && result.plugin?.id && authority?.workspaceId) {
+          workspaceResources?.ensureWorkspaceResource?.(
+            db,
+            'plugin',
+            authority.workspaceId,
+            result.plugin.id,
+            {
+              visibility: 'personal',
+              resourceState: 'active',
+              createdByWorkspaceMemberId: authority.workspaceMemberId,
+              updatedByWorkspaceMemberId: authority.workspaceMemberId,
+              syncState: 'local_only',
+            },
+          );
+        }
         return res.status(result.ok ? 200 : 400).json(result);
       } catch (cause) {
         return res.status(400).json(pluginUploadFailure(cause));
@@ -541,6 +571,8 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
     helpers.pluginUpload.array('files', 500)(req, res, async (err: unknown) => {
       if (err) return helpers.sendMulterError(res, err);
       try {
+        const authority = await resolveWorkspaceAuthority(req, res);
+        if (authority === undefined) return;
         const files = Array.isArray(req.files)
           ? req.files as Array<{ buffer: Buffer; originalname: string }>
           : [];
@@ -551,6 +583,21 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
           files,
           req.body?.paths,
         );
+        if (result.ok && result.plugin?.id && authority?.workspaceId) {
+          workspaceResources?.ensureWorkspaceResource?.(
+            db,
+            'plugin',
+            authority.workspaceId,
+            result.plugin.id,
+            {
+              visibility: 'personal',
+              resourceState: 'active',
+              createdByWorkspaceMemberId: authority.workspaceMemberId,
+              updatedByWorkspaceMemberId: authority.workspaceMemberId,
+              syncState: 'local_only',
+            },
+          );
+        }
         return res.status(result.ok ? 200 : 400).json(result);
       } catch (cause) {
         return res.status(400).json(pluginUploadFailure(cause));
