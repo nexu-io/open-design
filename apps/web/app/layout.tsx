@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { I18nProvider } from '../src/i18n';
 import { AnalyticsProvider } from '../src/analytics/provider';
 import '@excalidraw/excalidraw/index.css';
+import '@xyflow/react/dist/base.css';
 import '../src/index.css';
 import '../src/styles/home/index.css';
 // These hosts render from the client-only App entry. Keep their layout CSS in

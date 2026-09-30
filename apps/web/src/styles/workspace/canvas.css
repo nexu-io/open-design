@@ -1,0 +1,261 @@
+/* -------- Project Canvas（#8230 自由画布 v1）------------------------- */
+/*
+ * 一块能平级塞多个 artifact、自由摆放对比的画布。底座是 React Flow
+ * (`@xyflow/react`)，这里做两件事：
+ *   1. 把 React Flow 自带的 `--xy-*` 变量（都 scoped 在 `.react-flow` 下、不
+ *      污染全局）重映射到本仓 tokens.css 的设计变量，light/dark 自动跟随；
+ *   2. 给自定义 artifact 节点、工具条、空板提示补上壳样式。
+ * 布局必需的结构规则由 `@xyflow/react/dist/base.css` 提供，在 layout.tsx 里与
+ * excalidraw 等第三方样式一并 import（早于 index.css 加载）；本文件只负责观感对齐。
+ */
+
+.project-canvas {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  background: var(--bg-app);
+  color: var(--text);
+}
+
+/* React Flow 的变量都挂在 `.react-flow` 上，覆盖时同样落在这个作用域，既能吃到
+   tokens 又不外溢到别的用到 xyflow 的地方。 */
+.project-canvas .react-flow {
+  --xy-background-color: var(--bg-app);
+  --xy-background-pattern-dots-color: var(--border-strong);
+  --xy-background-pattern-lines-color: var(--border-soft);
+  --xy-background-pattern-cross-color: var(--border-soft);
+
+  --xy-node-background-color: var(--bg-panel);
+  --xy-node-color: var(--text);
+  --xy-node-border: 1px solid var(--border);
+  --xy-node-border-radius: var(--radius-large);
+  --xy-node-boxshadow-hover: var(--shadow-sm);
+  --xy-node-boxshadow-selected: var(--shadow-md);
+
+  --xy-selection-background-color: var(--bg-fill-secondary);
+  --xy-selection-border: 1px dotted var(--border-strong);
+  --xy-resize-background-color: var(--accent);
+
+  --xy-controls-button-background-color: var(--bg-panel);
+  --xy-controls-button-background-color-hover: var(--bg-subtle);
+  --xy-controls-button-color: var(--text-muted);
+  --xy-controls-button-color-hover: var(--text);
+  --xy-controls-button-border-color: var(--border);
+  --xy-controls-box-shadow: var(--shadow-md);
+}
+
+.project-canvas-flow {
+  width: 100%;
+  height: 100%;
+}
+
+/* React Flow 的 Controls：靠 token 描边 + 圆角，贴齐面板观感。 */
+.project-canvas .react-flow__controls {
+  border-radius: var(--radius-medium);
+  overflow: hidden;
+  box-shadow: var(--shadow-md);
+}
+.project-canvas .react-flow__controls-button {
+  border-bottom: 1px solid var(--border);
+}
+
+/* -------- artifact 节点 ---------------------------------------------- */
+.canvas-node {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-large);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+.canvas-node.is-live {
+  border-color: var(--border-selected);
+  box-shadow: var(--shadow-md);
+}
+
+.canvas-node-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  flex: 0 0 auto;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--bg-elevated);
+}
+.canvas-node-title {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-12, 12px);
+  color: var(--text-muted);
+}
+
+.canvas-node-body {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg);
+}
+.canvas-node-body > .viewer {
+  width: 100%;
+  height: 100%;
+}
+
+/* 快照占位：未聚焦节点只画一张轻量卡，标出是哪个 artifact，不吃沙箱开销。 */
+.canvas-node-snapshot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: 12px;
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      var(--bg-fill-tertiary),
+      var(--bg-fill-tertiary) 8px,
+      transparent 8px,
+      transparent 16px
+    ),
+    var(--bg-panel);
+}
+.canvas-node-snapshot-label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-13, 13px);
+  color: var(--text-soft);
+}
+
+/* NodeToolbar 里的删除等按钮：图标钮，无文字。 */
+.canvas-node-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-medium);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.canvas-node-action:hover {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+
+/* -------- 画布工具条（undo/redo，Panel top-left）--------------------- */
+.project-canvas-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-medium);
+  background: color-mix(in srgb, var(--bg-panel) 92%, transparent);
+  -webkit-backdrop-filter: var(--material-thin-backdrop);
+  backdrop-filter: var(--material-thin-backdrop);
+  box-shadow: var(--shadow-sm);
+}
+.canvas-artifact-picker {
+  position: relative;
+}
+.canvas-artifact-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  width: min(280px, calc(100vw - 48px));
+  max-height: 280px;
+  padding: 4px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-medium);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-md);
+}
+.canvas-artifact-menu-item {
+  justify-content: flex-start;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 7px 8px;
+  color: var(--text);
+  font-size: var(--font-size-12, 12px);
+  font-weight: 500;
+}
+.canvas-artifact-menu-item span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.canvas-toolbar-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.canvas-toolbar-action:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.canvas-toolbar-action:disabled {
+  color: var(--text-faint);
+  cursor: default;
+}
+
+/* -------- 空板提示 --------------------------------------------------- */
+.project-canvas-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  pointer-events: none;
+  text-align: center;
+  padding: 24px;
+}
+.project-canvas-empty-title {
+  margin: 0;
+  font-size: var(--font-size-16, 16px);
+  color: var(--text);
+}
+.project-canvas-empty-hint {
+  margin: 0;
+  max-width: 360px;
+  font-size: var(--font-size-13, 13px);
+  color: var(--text-soft);
+}
+
+/* -------- 画布固定 tab chip ------------------------------------------ */
+/* 仿 design-system chip 的分量，读起来是「项目固定面」而非普通文件 tab。 */
+.ws-tab.project-canvas-tab {
+  font-weight: 600;
+  color: var(--text);
+}
+.ws-tab.project-canvas-tab.active {
+  background: var(--bg-subtle);
+}

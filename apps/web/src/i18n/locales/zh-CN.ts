@@ -3044,6 +3044,9 @@ export const zhCN: Dict = {
   "workspace.newTerminal": "新建终端",
   "workspace.newTerminalDescription": "在新标签页中打开项目目录的终端",
   "workspace.newBrowser": "新建浏览器",
+  "workspace.newCanvas": "新建画布",
+  "workspace.newCanvasDescription": "在自由画布上摆放多个 artifact，并排对比",
+  "workspace.canvasAddArtifact": "添加 artifact",
   "workspace.newBrowserDescription":
     "在新标签页中打开内置浏览器，用于参考站点和设计研究",
   "workspace.newSketchDescription":

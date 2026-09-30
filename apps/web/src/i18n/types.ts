@@ -3752,6 +3752,9 @@ export interface Dict {
   'workspace.newBrowser': string;
   'workspace.newBrowserDescription': string;
   'workspace.newSketchDescription': string;
+  'workspace.newCanvas': string;
+  'workspace.newCanvasDescription': string;
+  'workspace.canvasAddArtifact': string;
   'workspace.terminalStarting': string;
   'workspace.terminalStartingDescription': string;
   'workspace.terminalSessionEnded': string;
