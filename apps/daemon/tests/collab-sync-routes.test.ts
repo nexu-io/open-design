@@ -1877,6 +1877,98 @@ describe('collab sync routes', () => {
     expect(unpublish.status).toBe(200);
   });
 
+  it('publishes project-local HTML dependencies without exposing unrelated project files', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'od-public-file-assets-'));
+    tempDirs.push(dir);
+
+    await mkdir(path.join(dir, 'css'), { recursive: true });
+    await mkdir(path.join(dir, 'fonts'), { recursive: true });
+
+    const heroBytes = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
+    const fontBytes = Buffer.from([0x77, 0x4f, 0x46, 0x32]);
+
+    await writeFile(
+      path.join(dir, 'index.html'),
+      '<link rel="stylesheet" href="css/app.css"><img src="hero.jpg">',
+    );
+    await writeFile(path.join(dir, 'hero.jpg'), heroBytes);
+    await writeFile(
+      path.join(dir, 'css/app.css'),
+      '@font-face { font-family: Club; src: url("../fonts/club.woff2"); }',
+    );
+    await writeFile(path.join(dir, 'fonts/club.woff2'), fontBytes);
+    await writeFile(path.join(dir, 'private-notes.md'), 'must stay private');
+
+    vi.mocked(readVelaControlApiContext).mockReturnValue({
+      profile: 'test',
+      apiUrl: 'https://hub.example.test',
+      controlKey: 'ctrl-test',
+      user: null,
+      configMtimeMs: null,
+    });
+
+    let pushedHtml: string | null = null;
+    let pushedCss: string | null = null;
+    let pushedHero: Buffer | null = null;
+    let pushedFont: Buffer | null = null;
+    let privateIncluded = false;
+
+    vi.mocked(runVelaResourceCommand).mockImplementation(async (args) => {
+      if (args[0] === 'push') {
+        const pushedDir = String(args[3]);
+
+        pushedHtml = await readFile(path.join(pushedDir, 'index.html'), 'utf8');
+        pushedCss = await readFile(path.join(pushedDir, 'css/app.css'), 'utf8');
+        pushedHero = await readFile(path.join(pushedDir, 'hero.jpg'));
+        pushedFont = await readFile(path.join(pushedDir, 'fonts/club.woff2'));
+
+        try {
+          await readFile(path.join(pushedDir, 'private-notes.md'));
+          privateIncluded = true;
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        }
+
+        return JSON.stringify({ version: 1 });
+      }
+
+      if (args[0] === 'snapshot') {
+        return JSON.stringify({
+          slug: 'asset-slug',
+          name: 'index.html',
+          kind: 'project',
+          versionId: 'v1',
+          createdAt: new Date(1).toISOString(),
+        });
+      }
+
+      return JSON.stringify({ version: 1 });
+    });
+
+    const api = await startSyncServer(personalContextProvider(), {
+      resolveProjectDir: () => dir,
+      resolveSharedProject: async () => null,
+    });
+
+    const publish = await api.json('/api/projects/p1/files/index.html/publish-public', {
+      method: 'POST',
+    });
+
+    expect(publish.status).toBe(200);
+    expect(publish.body).toEqual({
+      url: 'https://hub.example.test/api/v1/public/snapshots/asset-slug/files/index.html',
+      slug: 'asset-slug',
+      fileName: 'index.html',
+    });
+
+    expect(pushedHtml).toContain('hero.jpg');
+    expect(pushedHtml).toContain('css/app.css');
+    expect(pushedCss).toContain('../fonts/club.woff2');
+    expect(pushedHero).toEqual(heroBytes);
+    expect(pushedFont).toEqual(fontBytes);
+    expect(privateIncluded).toBe(false);
+  });
+
   it('keeps public file ownership reads on request workspace A while ambient workspace B is active', async () => {
     const workspaceA = teamContext('workspace-a', 'member-a');
     const dir = await mkdtemp(path.join(tmpdir(), 'od-public-file-'));
