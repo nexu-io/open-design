@@ -169,16 +169,9 @@ async function resolveEntry(entry: CatalogueEntry): Promise<{
   resolvedPath?: string;
   launch?: { command: string; argsForDir: (resolvedDir: string) => string[] };
 }> {
-  if (entry.command) {
-    const resolved = await probeCommandOnPath(entry.command);
-    if (resolved) {
-      return {
-        available: true,
-        resolvedPath: resolved,
-        launch: { command: resolved, argsForDir: entry.commandArgs ?? ((resolvedDir) => [resolvedDir]) },
-      };
-    }
-  }
+  // On macOS, prefer macOpenBundle over CLI for entries that have both.
+  // This avoids launching agent-only CLI wrappers (e.g. Cursor's `cursor`)
+  // that exit 1 immediately instead of opening the editor (#6610).
   if (entry.macOpenBundle && process.platform === 'darwin') {
     const bundle = await probeMacBundle(entry.macOpenBundle);
     if (bundle) {
@@ -191,6 +184,16 @@ async function resolveEntry(entry: CatalogueEntry): Promise<{
             ? ((resolvedDir) => entry.macOpenArgs?.(bundle.name, resolvedDir) ?? ['-a', bundle.name, resolvedDir])
             : ((resolvedDir) => ['-a', bundle.name, resolvedDir]),
         },
+      };
+    }
+  }
+  if (entry.command) {
+    const resolved = await probeCommandOnPath(entry.command);
+    if (resolved) {
+      return {
+        available: true,
+        resolvedPath: resolved,
+        launch: { command: resolved, argsForDir: entry.commandArgs ?? ((resolvedDir) => [resolvedDir]) },
       };
     }
   }
