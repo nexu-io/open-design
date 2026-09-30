@@ -209,6 +209,16 @@ const REGISTRY: readonly Entry[] = [
     why: 'The canonical phrasing this whole class is measured against.',
   },
 
+  {
+    file: 'apps/daemon/src/prompts/media-contract.ts',
+    match: 'narrate failure',
+    chars: [84],
+    verdict: 'suppression-rule',
+    why: 'The empty/ambiguous poll rule forbids reading a missing or non-JSON '
+      + 'wait handoff as a failure: the loop keeps the previous cursor and '
+      + 'retries instead of reporting an outage.',
+  },
+
   // ---- W84's own fix. The other three rewrites no longer trip the detector
   // at all, so they are pinned by name in the instance suite at the bottom
   // rather than carried here as registry entries. ----
