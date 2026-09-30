@@ -289,4 +289,74 @@ describe('diagnoseClaudeCliFailure', () => {
     expect(diagnostic?.detail).toContain('OpenClaude endpoint configuration');
     expect(diagnostic?.detail).not.toContain('Claude Code');
   });
+
+  // Regression: Claude Code surfaces the exact string `Prompt is too long` when
+  // the assembled turn exceeds the upstream context window. Before this fix the
+  // daemon misclassified it as an auth failure (#6979), sending users to a
+  // credential fix when the real remedy was to reduce prompt size.
+  it('classifies `Prompt is too long` as a prompt-too-large failure, not auth (#6979)', () => {
+    const diagnostic = diagnoseClaudeCliFailure({
+      agentId: 'claude',
+      exitCode: 1,
+      stdoutTail: 'API Error: Prompt is too long.',
+    });
+
+    expect(diagnostic?.code).toBe('AGENT_PROMPT_TOO_LARGE');
+    expect(diagnostic?.message).toMatch(/prompt exceeds the supported context size/i);
+    expect(diagnostic?.detail).toMatch(/reduce the prompt length/i);
+    // A prompt that does not fit fails deterministically — retrying reproduces
+    // the same rejection, and every other AGENT_PROMPT_TOO_LARGE path
+    // (preflight + final classification) is non-retryable. The live SSE
+    // diagnostic must agree with those paths.
+    expect(diagnostic?.retryable).toBe(false);
+  });
+
+  it('still detects variant phrasings of prompt-too-large (#6979)', () => {
+    const inputs = [
+      { stdoutTail: 'Prompt is too long.' },
+      { stderrTail: 'prompt too large' },
+      { stdoutTail: 'Context window has been exceeded.' },
+      { stdoutTail: 'maximum context length of 200000 tokens exceeded' },
+      { stdoutTail: 'API Error: Context size has been exceeded.' },
+    ];
+    for (const input of inputs) {
+      const diagnostic = diagnoseClaudeCliFailure({
+        agentId: 'claude',
+        exitCode: 1,
+        ...input,
+      });
+      expect(diagnostic?.code, `expected ${input.stdoutTail || input.stderrTail} to be classified`).toBe('AGENT_PROMPT_TOO_LARGE');
+      // The live diagnostic must agree with the final prompt_too_large
+      // classification, which is non-retryable (retrying reproduces the
+      // same overflow).
+      expect(diagnostic?.retryable).toBe(false);
+    }
+  });
+
+  // Regression: a bare-substring scan for prompt-size phrases also matches
+  // ordinary assistant/tool payload that happens to discuss context limits
+  // (docs quotes, explanations of a prior size error). Such a frame carries no
+  // top-level error result, so treating its text as the terminal cause
+  // mislabels runs whose real failure is something else. Claude emits each
+  // phrase as a standalone terminal line, so matching requires the whole line.
+  it('does not treat prose mentions of prompt-size phrases as terminal cause', () => {
+    const inputs = [
+      // Assistant narration discussing a prior error in flowing prose.
+      { stdoutTail: 'The previous attempt failed because prompt is too long for the configured window.' },
+      { stderrTail: 'assistant: I reduced the request since the context window has been exceeded earlier.' },
+      // Docs-style sentence embedded mid-line with surrounding words.
+      { stdoutTail: 'Docs note: maximum context length errors occur when input tokens exceed the limit.' },
+    ];
+    for (const input of inputs) {
+      const diagnostic = diagnoseClaudeCliFailure({
+        agentId: 'claude',
+        exitCode: 1,
+        ...input,
+      });
+      expect(
+        diagnostic?.code,
+        `expected ${input.stdoutTail || input.stderrTail} NOT to be classified as prompt-too-large`,
+      ).not.toBe('AGENT_PROMPT_TOO_LARGE');
+    }
+  });
 });
