@@ -2,6 +2,7 @@ import { useExperienceError } from '../observability/use-experience-error';
 import { daemonErrorCodeProp, failureDetailProps } from '../analytics/failure-detail';
 import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent as ReactClipboardEvent, type CSSProperties, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import type { ArtifactExportFormat } from '../runtime/chat/artifact-export';
+import { ShareTab } from './share/ShareTab';
 import { AnchoredMenuShell } from './chat/AnchoredMenuShell';
 import { createPortal, flushSync } from 'react-dom';
 import { Button, Input, Select } from '@open-design/components';
@@ -240,6 +241,14 @@ import type {
   ProjectFile,
 } from '../types';
 import { Icon } from './Icon';
+import {
+  canDeleteComment,
+  canEditComment,
+  canSendCommentToAgent as canSendCommentToAgentPure,
+  commentAuthoredByViewer,
+  viewerIsProjectOwner,
+  type CommentAuthorityContext,
+} from '../comments/comment-authority';
 import { RemixIcon } from './RemixIcon';
 import { projectIsSharedWithWorkspace } from '../collab/project-shared-status';
 import { HandoffButton } from './HandoffButton';
@@ -351,7 +360,7 @@ const IMAGE_EXPORT_FORMAT_OPTIONS: Array<{
   { value: 'jpeg', label: 'JPEG', extension: '.jpg' },
   { value: 'webp', label: 'WebP', extension: '.webp' },
 ];
-type DeployProviderOption = {
+export type DeployProviderOption = {
   id: WebDeployProviderId;
   labelKey: 'fileViewer.vercelProvider' | 'fileViewer.cloudflarePagesProvider';
   tokenLink: string;
@@ -16131,25 +16140,19 @@ function HtmlViewer({
   // their own note; the author OR the project owner may delete it or send it to
   // the agent. The B lane enforces the same rules server-side.
   const myMemberId = collab.member?.memberId ?? null;
-  const iAmProjectOwner = collab.isOwner;
-  const commentAuthoredByMe = (comment: PreviewComment | null | undefined): boolean => {
-    // No persisted comment means this is the create flow: the draft belongs
-    // to the current viewer, including a read-only member/admin annotating
-    // someone else's shared project.
-    if (!comment) return true;
-    const authorId = comment?.authorMemberId ?? null;
-    // A legacy shared comment without an author is deliberately owner-only.
-    // Treating it as "mine" for every member made the client advertise a
-    // destructive action the daemon must reject. Personal/unshared comments
-    // retain their historical single-user behavior.
-    if (authorId == null) return !collab.enabled || iAmProjectOwner;
-    return authorId === myMemberId;
+  const commentAuthority: CommentAuthorityContext = {
+    viewerMemberId: myMemberId,
+    collabEnabled: collab.enabled,
+    isProjectOwner: collab.isOwner,
   };
+  const iAmProjectOwner = viewerIsProjectOwner(commentAuthority);
+  const commentAuthoredByMe = (comment: PreviewComment | null | undefined): boolean =>
+    commentAuthoredByViewer(comment, commentAuthority);
   const canSendCommentToAgent = (comment: PreviewComment | null | undefined): boolean =>
-    commentAuthoredByMe(comment) || iAmProjectOwner;
-  const canEditActiveComment = commentAuthoredByMe(activeComposerComment);
-  const canDeleteActiveComment = canEditActiveComment || iAmProjectOwner;
-  const canSendActiveComment = canEditActiveComment || iAmProjectOwner;
+    canSendCommentToAgentPure(comment, commentAuthority);
+  const canEditActiveComment = canEditComment(activeComposerComment, commentAuthority);
+  const canDeleteActiveComment = canDeleteComment(activeComposerComment, commentAuthority);
+  const canSendActiveComment = canSendCommentToAgentPure(activeComposerComment, commentAuthority);
   // The viewer's own author identity for the comment cards. Derived from the
   // workspace context this component ALREADY reads (see `workspaceContext`
   // above) — no extra request. Deliberately NOT `collab.member`, which is null
@@ -17037,265 +17040,41 @@ function HtmlViewer({
                     onAnchorHidden={closeDeployMenu}
                   >
                     {unifiedActionTab === 'share' && rawCanShare ? (
-                      <div className="chrome-unified-panel chrome-unified-panel--share">
-                      {/* Team-only, same as ReactComponentViewer's copy of this card above —
-                          see the comment there (recvq5bM78HWCE). */}
-                      {menuOrigin === 'toolbar' && workspaceContextHasTeamIdentity(workspaceContext) ? (
-                      <>
-                      {/* Access control gets the same section-label + row treatment as the
-                          publish / deploy / save tiers below; its explanation moves into the
-                          trailing "?" instead of a card sub-line. */}
-                      <div className="share-menu-section-label share-menu-section-label--help" role="presentation">
-                        <span>{t('fileViewer.workspaceShareTitle')}</span>
-                        <button
-                          type="button"
-                          className="share-menu-help od-tooltip"
-                          data-testid="workspace-access-help"
-                          aria-label={shareAccess === 'private'
-                            ? t('fileViewer.workspaceSharePrivateDescription')
-                            : t('fileViewer.workspaceShareWorkspaceDescription')}
-                          data-tooltip={shareAccess === 'private'
-                            ? t('fileViewer.workspaceSharePrivateDescription')
-                            : t('fileViewer.workspaceShareWorkspaceDescription')}
-                          data-tooltip-placement="top"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <RemixIcon name="question-line" size={14} />
-                        </button>
-                      </div>
-                      <div className="chrome-access-select">
-                          <button
-                            type="button"
-                            className="chrome-access-trigger"
-                            aria-haspopup="listbox"
-                            aria-expanded={shareAccessMenuOpen}
-                            disabled={shareAccessBusy || viewerOnly}
-                            onClick={() => setShareAccessMenuOpen((v) => !v)}
-                          >
-                            <span className="share-menu-icon">
-                              {/* recvqaVLC3MNaQ: same spinner-over-disabled fix as the
-                                  ReactComponentViewer copy of this card above. */}
-                              <RemixIcon
-                                name={
-                                  shareAccessBusy
-                                    ? 'loader-4-line'
-                                    : shareAccess === 'private'
-                                      ? 'lock-line'
-                                      : 'team-line'
-                                }
-                                size={16}
-                                className={shareAccessBusy ? 'icon-spin' : undefined}
-                              />
-                            </span>
-                            <span>
-                              {shareAccess === 'private'
-                                ? t('fileViewer.workspaceAccessPrivate')
-                                : t('fileViewer.workspaceAccessMembers')}
-                            </span>
-                            <RemixIcon name="arrow-down-s-line" size={16} />
-                          </button>
-                          {shareAccessMenuOpen ? (
-                            <div className="chrome-access-options" role="listbox">
-                              {([
-                                ['private', 'lock-line', t('fileViewer.workspaceAccessPrivate')],
-                                ['workspace', 'team-line', t('fileViewer.workspaceAccessMembers')],
-                              ] as const).map(([value, icon, label]) => (
-                                <button
-                                  key={value}
-                                  type="button"
-                                  role="option"
-                                  aria-selected={shareAccess === value}
-                                  className={shareAccess === value ? 'is-active' : undefined}
-                                  disabled={shareAccessBusy || viewerOnly}
-                                  onClick={() => void setWorkspaceShareAccess(value)}
-                                >
-                                  <span className="share-menu-icon"><RemixIcon name={icon} size={16} /></span>
-                                  <span>{label}</span>
-                                  {shareAccess === value ? <RemixIcon name="check-line" size={15} /> : null}
-                                </button>
-                              ))}
-                            </div>
-                          ) : null}
-                        </div>
-                      </>
-                      ) : null}
-                      {/* Publishing is a menu row like every other action in
-                          this panel (deploy, save-as-template): same section
-                          label, same icon + label row, with a trailing "?"
-                          whose tooltip explains reach and the single-file
-                          limitation. The published state swaps the row for the
-                          link block (content, not an action). */}
-                      {canPublishPublic ? (
-                      <>
-                      {/* The "?" lives on the section label, not inside the publish
-                          menuitem: activating it is a help-discovery gesture, and
-                          nesting it in the row would make that gesture publish a
-                          public link (no hover-only path exists on touch). Same
-                          structure as the workspace-access help above. */}
-                      <div className="share-menu-section-label share-menu-section-label--help" role="presentation">
-                        <span>{t('fileViewer.shareMenuPublishViaOd')}</span>
-                        <button
-                          type="button"
-                          className="share-menu-help od-tooltip"
-                          data-testid="publish-help"
-                          aria-label={t('fileViewer.publishSingleFileDescription')}
-                          data-tooltip={t('fileViewer.publishSingleFileDescription')}
-                          data-tooltip-placement="top"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <RemixIcon name="question-line" size={14} />
-                        </button>
-                      </div>
-                      {filePublished ? (
-                        <div className="chrome-publish-plain">
-                          <div className="chrome-publish-url" title={publishedFileUrl}>
-                              {publishedFileUrl}
-                            </div>
-                            <div className="chrome-publish-actions">
-                              <button
-                                type="button"
-                                className="chrome-publish-button"
-                                onClick={() => {
-                                  void copyPublishedFileLink();
-                                }}
-                              >
-                                <RemixIcon name="file-copy-line" size={14} />
-                                {publishLinkFeedback === 'copied'
-                                  ? t('fileViewer.copied')
-                                  : publishLinkFeedback === 'failed'
-                                    ? t('useEverywhere.copyFailed')
-                                    : t('fileViewer.copyShareLink')}
-                              </button>
-                              <button
-                                type="button"
-                                className="chrome-publish-button chrome-publish-button--ghost"
-                                disabled={publishingPublicFile}
-                                onClick={() => {
-                                  void unpublishCurrentFilePublic();
-                                }}
-                              >
-                                {t('fileViewer.unpublishFile')}
-                              </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          className="share-menu-item"
-                          role="menuitem"
-                          disabled={viewerOnly || publishingPublicFile}
-                          aria-busy={publishingPublicFile}
-                          title={viewerOnly ? viewerOnlyDisabledTitle : undefined}
-                          onClick={() => {
-                            void publishCurrentFilePublic();
-                          }}
-                        >
-                          <span className="share-menu-icon">
-                            <RemixIcon
-                              name={publishingPublicFile ? 'loader-4-line' : 'upload-cloud-2-line'}
-                              size={15}
-                              className={publishingPublicFile ? 'icon-spin' : undefined}
-                            />
-                          </span>
-                          <span>{publishingPublicFile ? t('fileViewer.publishingFile') : t('fileViewer.publishSingleFileTitle')}</span>
-                        </button>
-                      ) }
-                      {publishFailureKey ? (
-                        <p className="chrome-publish-error" role="status">
-                          {t(publishFailureKey)}
-                        </p>
-                      ) : null}
-                      </>
-                      ) : null}
-                      {menuOrigin === 'toolbar' ? (
-                        <>
-                          {/* Icons only for a clean link. Artifact-card Share is
-                              intentionally narrower: Quick Share above only. */}
-                          {activeProjectSocialShare && (shareableDeploymentUrl || publishedFileUrl) ? (
-                            <>
-                              <div className="share-menu-section-label" role="presentation">
-                                {t('socialShare.projectSection')}
-                              </div>
-                              <SocialShareGrid share={activeProjectSocialShare} />
-                            </>
-                          ) : null}
-                          <div className="share-menu-divider" />
-                          <div className="share-menu-section-label" role="presentation">
-                            {t('fileViewer.shareMenuPublishOnline')}
-                          </div>
-                          {DEPLOY_PROVIDER_OPTIONS.map((option) => (
-                            <button
-                              key={option.id}
-                              type="button"
-                              className="share-menu-item"
-                              role="menuitem"
-                              disabled={streaming || viewerOnly}
-                              title={
-                                viewerOnly
-                                  ? viewerOnlyDisabledTitle
-                                  : streaming
-                                    ? t('fileViewer.shareAfterGenerationComplete')
-                                    : undefined
-                              }
-                              onClick={() => {
-                                void openDeployModal(option.id);
-                              }}
-                            >
-                              <span className="share-menu-icon"><RemixIcon name={deployActionIconFor(option.id)} size={15} /></span>
-                              <span>{deployActionLabelFor(option.id)}</span>
-                            </button>
-                          ))}
-                          {sharePageUrl ? (
-                            <>
-                              <button
-                                type="button"
-                                className="share-menu-item"
-                                role="menuitem"
-                                disabled={!canCopyShareLink || viewerOnly}
-                                title={
-                                  viewerOnly
-                                    ? viewerOnlyDisabledTitle
-                                    : canCopyShareLink
-                                      ? undefined
-                                      : shareUnavailableHint
-                                }
-                                onClick={() => {
-                                  void copyShareLink(sharePageUrl);
-                                }}
-                              >
-                                <span className="share-menu-icon"><RemixIcon name="file-copy-line" size={15} /></span>
-                                <span>{copyShareLinkLabel}</span>
-                              </button>
-                              <button
-                                type="button"
-                                className="share-menu-item"
-                                role="menuitem"
-                                disabled={!canOpenSharePage || viewerOnly}
-                                title={
-                                  viewerOnly
-                                    ? viewerOnlyDisabledTitle
-                                    : canOpenSharePage
-                                      ? undefined
-                                      : shareLinkStatusHint || shareUnavailableHint
-                                }
-                                onClick={() => {
-                                  if (!canOpenSharePage) return;
-                                  window.open(sharePageUrl, '_blank', 'noopener');
-                                }}
-                              >
-                                <span className="share-menu-icon"><RemixIcon name="external-link-line" size={15} /></span>
-                                <span>{t('fileViewer.openSharePage')}</span>
-                              </button>
-                            </>
-                          ) : null}
-                          {sharePageUrl && (shareLinkStatusHint || shareUnavailableHint) ? (
-                            <div className="share-menu-section-label" role="presentation">
-                              {shareLinkStatusHint || shareUnavailableHint}
-                            </div>
-                          ) : null}
-                        </>
-                      ) : null}
-                      </div>
+                      <ShareTab
+                        menuOrigin={menuOrigin}
+                        workspaceContext={workspaceContext}
+                        t={t}
+                        shareAccess={shareAccess}
+                        shareAccessMenuOpen={shareAccessMenuOpen}
+                        shareAccessBusy={shareAccessBusy}
+                        viewerOnly={viewerOnly}
+                        setShareAccessMenuOpen={setShareAccessMenuOpen}
+                        setWorkspaceShareAccess={setWorkspaceShareAccess}
+                        canPublishPublic={canPublishPublic}
+                        filePublished={filePublished}
+                        publishedFileUrl={publishedFileUrl}
+                        copyPublishedFileLink={copyPublishedFileLink}
+                        publishLinkFeedback={publishLinkFeedback}
+                        publishingPublicFile={publishingPublicFile}
+                        unpublishCurrentFilePublic={unpublishCurrentFilePublic}
+                        viewerOnlyDisabledTitle={viewerOnlyDisabledTitle}
+                        publishCurrentFilePublic={publishCurrentFilePublic}
+                        publishFailureKey={publishFailureKey}
+                        activeProjectSocialShare={activeProjectSocialShare}
+                        shareableDeploymentUrl={shareableDeploymentUrl}
+                        DEPLOY_PROVIDER_OPTIONS={DEPLOY_PROVIDER_OPTIONS}
+                        streaming={streaming}
+                        openDeployModal={openDeployModal}
+                        deployActionIconFor={deployActionIconFor}
+                        deployActionLabelFor={deployActionLabelFor}
+                        sharePageUrl={sharePageUrl}
+                        canCopyShareLink={canCopyShareLink}
+                        shareUnavailableHint={shareUnavailableHint}
+                        copyShareLink={copyShareLink}
+                        copyShareLinkLabel={copyShareLinkLabel}
+                        canOpenSharePage={canOpenSharePage}
+                        shareLinkStatusHint={shareLinkStatusHint}
+                      />
                     ) : null}
                     {unifiedActionTab === 'export' && rawCanDownload ? (
                       <div className="chrome-unified-panel">

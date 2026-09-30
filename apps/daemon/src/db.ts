@@ -12,6 +12,8 @@ import type {
   ChatMessage,
   CollabCloudComment,
   OdNextDevicePlatformV1,
+  PreviewComment,
+  PreviewCommentAttachment,
   ProjectBrowserWorkspaceTab,
   ProjectTabsState,
 } from '@open-design/contracts';
@@ -22,6 +24,7 @@ import {
   stripArtifactFocusMarkers,
   stripDoneMarkers,
   stripNextStepMarkers,
+  asPreviewCommentAnchorState,
 } from '@open-design/contracts';
 import { migrateCollabSyncSnapshots } from './collab/sync-snapshot-store.js';
 import { migrateCommentRelayOutbox } from './collab/comment-relay-outbox.js';
@@ -562,6 +565,32 @@ function migrate(db: SqliteDb): void {
     db.exec(`ALTER TABLE preview_comments ADD COLUMN sort_key REAL`);
   }
   backfillPreviewCommentPinSeqAndSortKey(db);
+  // Author-union columns for share-page comments (an account with no team
+  // membership). They MUST be added here, after the two table-rebuild
+  // migrations above — migratePreviewCommentsSlideKey and
+  // migratePreviewCommentsAllowMultiplePerElement are CREATE + INSERT SELECT
+  // + DROP against an EXPLICIT column list, so a column added before them is
+  // silently dropped when an older database upgrades, taking its data with
+  // it. Two comments in this file already warn about that; this is the third
+  // set of columns to obey it.
+  //
+  // All nullable with no default: a comment written by a workspace member
+  // leaves every one of them NULL and is read exactly as it is today.
+  const previewCommentAuthorCols = db
+    .prepare(`PRAGMA table_info(preview_comments)`)
+    .all() as DbRow[];
+  if (!previewCommentAuthorCols.some((c: DbRow) => c.name === 'author_kind')) {
+    db.exec(`ALTER TABLE preview_comments ADD COLUMN author_kind TEXT`);
+  }
+  if (!previewCommentAuthorCols.some((c: DbRow) => c.name === 'author_app_user_id')) {
+    db.exec(`ALTER TABLE preview_comments ADD COLUMN author_app_user_id TEXT`);
+  }
+  if (!previewCommentAuthorCols.some((c: DbRow) => c.name === 'author_display_name')) {
+    db.exec(`ALTER TABLE preview_comments ADD COLUMN author_display_name TEXT`);
+  }
+  if (!previewCommentAuthorCols.some((c: DbRow) => c.name === 'author_key')) {
+    db.exec(`ALTER TABLE preview_comments ADD COLUMN author_key TEXT`);
+  }
   const deploymentCols = db.prepare(`PRAGMA table_info(deployments)`).all() as DbRow[];
   if (!deploymentCols.some((c: DbRow) => c.name === 'status')) {
     db.exec(`ALTER TABLE deployments ADD COLUMN status TEXT NOT NULL DEFAULT 'ready'`);
@@ -3721,6 +3750,8 @@ export function listPreviewComments(db: SqliteDb, projectId: string, conversatio
               slide_index AS slideIndex,
               anchor_state AS anchorState, anchored_version AS anchoredVersion,
               author_member_id AS authorMemberId, last_good_position_json AS lastGoodPositionJson,
+              author_kind AS authorKind, author_app_user_id AS authorAppUserId,
+              author_display_name AS authorDisplayName, author_key AS authorKey,
               pin_seq AS pinSeq, sort_key AS sortKey,
               note, status, created_at AS createdAt, updated_at AS updatedAt
          FROM preview_comments
@@ -3748,6 +3779,8 @@ export function listProjectPreviewComments(db: SqliteDb, projectId: string) {
               slide_index AS slideIndex,
               anchor_state AS anchorState, anchored_version AS anchoredVersion,
               author_member_id AS authorMemberId, last_good_position_json AS lastGoodPositionJson,
+              author_kind AS authorKind, author_app_user_id AS authorAppUserId,
+              author_display_name AS authorDisplayName, author_key AS authorKey,
               pin_seq AS pinSeq, sort_key AS sortKey,
               note, status, created_at AS createdAt, updated_at AS updatedAt
          FROM preview_comments
@@ -4440,6 +4473,8 @@ export function getPreviewComment(db: SqliteDb, projectId: string, conversationI
               slide_index AS slideIndex,
               anchor_state AS anchorState, anchored_version AS anchoredVersion,
               author_member_id AS authorMemberId, last_good_position_json AS lastGoodPositionJson,
+              author_kind AS authorKind, author_app_user_id AS authorAppUserId,
+              author_display_name AS authorDisplayName, author_key AS authorKey,
               pin_seq AS pinSeq, sort_key AS sortKey,
               note, status, created_at AS createdAt, updated_at AS updatedAt
          FROM preview_comments
@@ -4462,6 +4497,8 @@ export function getProjectPreviewComment(db: SqliteDb, projectId: string, id: st
               slide_index AS slideIndex,
               anchor_state AS anchorState, anchored_version AS anchoredVersion,
               author_member_id AS authorMemberId, last_good_position_json AS lastGoodPositionJson,
+              author_kind AS authorKind, author_app_user_id AS authorAppUserId,
+              author_display_name AS authorDisplayName, author_key AS authorKey,
               pin_seq AS pinSeq, sort_key AS sortKey,
               note, status, created_at AS createdAt, updated_at AS updatedAt
          FROM preview_comments
@@ -4471,10 +4508,34 @@ export function getProjectPreviewComment(db: SqliteDb, projectId: string, id: st
   return row ? normalizePreviewComment(row) : null;
 }
 
-function normalizePreviewComment(row: DbRow) {
+/**
+ * Row → `PreviewComment`. The return type is annotated ON PURPOSE.
+ *
+ * Without it, this function's shape is inferred from whatever it happens to
+ * build, and the routes hand the result onward through
+ * `saved as unknown as PreviewComment`. That pair means a field added to the
+ * contract but forgotten here does not fail typecheck — it is simply
+ * `undefined` for the whole DB→HTTP leg, everywhere, silently. Annotating the
+ * return makes the compiler the thing that notices instead of a reviewer.
+ */
+/**
+ * Every `PreviewComment` field, required but allowed to be `undefined`.
+ *
+ * `exactOptionalPropertyTypes` refuses `{ x: undefined }` for an `x?: T`, and
+ * this function builds every optional field explicitly. Stripping the `?` and
+ * widening with `| undefined` keeps the build honest AND makes it stricter
+ * than the plain contract type would: a field added to `PreviewComment` and
+ * forgotten here is a missing-property error, which is the whole point of
+ * annotating this function.
+ */
+type NormalizedPreviewComment = {
+  [K in keyof PreviewComment]-?: PreviewComment[K] | undefined;
+};
+
+function normalizePreviewComment(row: DbRow): PreviewComment {
   const podMembers = parseJsonOrUndef(row.podMembersJson);
   const normalizedPodMembers = Array.isArray(podMembers) ? podMembers : undefined;
-  return {
+  const normalized: NormalizedPreviewComment = {
     id: row.id,
     projectId: row.projectId,
     conversationId: row.conversationId,
@@ -4500,26 +4561,40 @@ function normalizePreviewComment(row: DbRow) {
     status: row.status,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
-    anchorState: typeof row.anchorState === 'string' ? row.anchorState : undefined,
+    anchorState: asPreviewCommentAnchorState(row.anchorState),
     anchoredVersion: Number.isFinite(row.anchoredVersion) ? row.anchoredVersion : undefined,
     authorMemberId: typeof row.authorMemberId === 'string' ? row.authorMemberId : undefined,
+    // A comment written by a workspace member leaves all four NULL and reads
+    // exactly as it did before these columns existed.
+    authorKind: row.authorKind === 'user' || row.authorKind === 'member' ? row.authorKind : undefined,
+    authorAppUserId:
+      typeof row.authorAppUserId === 'string' ? row.authorAppUserId : undefined,
+    authorDisplayName:
+      typeof row.authorDisplayName === 'string' ? row.authorDisplayName : undefined,
+    authorKey: typeof row.authorKey === 'string' ? row.authorKey : undefined,
     lastGoodPosition: parseJsonOrUndef(row.lastGoodPositionJson),
     pinSeq: Number.isFinite(row.pinSeq) ? row.pinSeq : undefined,
     sortKey: Number.isFinite(row.sortKey) ? row.sortKey : undefined,
   };
+  // Sound at runtime: an optional property holding `undefined` is what an
+  // absent property reads as. The cast only relaxes the explicit-undefined
+  // rule, never the key set or the value types.
+  return normalized as PreviewComment;
 }
 
-function normalizePreviewCommentAttachments(input: unknown) {
+function normalizePreviewCommentAttachments(input: unknown): PreviewCommentAttachment[] {
   if (!Array.isArray(input)) return [];
   return input
-    .map((item) => {
+    .map((item): PreviewCommentAttachment | null => {
       if (!item || typeof item !== 'object') return null;
       const path = typeof (item as DbRow).path === 'string' ? (item as DbRow).path.trim() : '';
       if (!path) return null;
       const rawName = typeof (item as DbRow).name === 'string' ? (item as DbRow).name.trim() : '';
       return { path, name: rawName || path.split('/').pop() || path };
     })
-    .filter(Boolean)
+    // `.filter(Boolean)` does not narrow, and the annotated return type is
+    // what makes that visible — the runtime was always dropping these.
+    .filter((item): item is PreviewCommentAttachment => item !== null)
     .slice(0, 20);
 }
 
