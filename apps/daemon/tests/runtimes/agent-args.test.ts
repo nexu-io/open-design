@@ -249,9 +249,46 @@ test('opencode pins its workspace to the project cwd', () => {
   assert.deepEqual(args, ['run', '--format', 'json', '--dir', '/projects/p1']);
 });
 
+test('opencode omits --dir when the installed build does not advertise it (v2)', () => {
+  // OpenCode v2 removed `--dir` from `run` and uses the spawn cwd as the
+  // project instead. The daemon already spawns with the project directory as
+  // the process cwd, so the flag must be omitted once the `--help` probe
+  // reports it missing — otherwise the spawn fails loudly on unknown flags.
+  agentCapabilities.set('opencode', { workspaceDir: false });
+  try {
+    const args = opencode.buildArgs('design a dashboard', [], [], {}, { cwd: '/projects/p1' });
+    assert.deepEqual(args, ['run', '--format', 'json']);
+  } finally {
+    agentCapabilities.delete('opencode');
+  }
+});
+
 test('opencode omits --dir for a run with no project directory', () => {
   const args = opencode.buildArgs('design a dashboard', [], [], {}, {});
   assert.equal(args.includes('--dir'), false);
+});
+
+test('opencode omits --variant when the installed build does not advertise it (v2)', () => {
+  // OpenCode v2 dropped `--variant` from `run`: it must be omitted once the
+  // `--help` probe reports it missing, even if a stale remembered catalog
+  // still lists variants for the model.
+  const previous = getRememberedLiveModels('opencode');
+  rememberLiveModels('opencode', [{
+    id: 'openai/gpt-5.6-sol',
+    label: 'openai/gpt-5.6-sol',
+    reasoningOptions: [{ id: 'high', label: 'high' }],
+  }]);
+  agentCapabilities.set('opencode', { variant: false });
+  try {
+    const args = opencode.buildArgs('', [], [], {
+      model: 'openai/gpt-5.6-sol',
+      reasoning: 'high',
+    });
+    assert.deepEqual(args, ['run', '--format', 'json', '-m', 'openai/gpt-5.6-sol']);
+  } finally {
+    agentCapabilities.delete('opencode');
+    rememberLiveModels('opencode', previous);
+  }
 });
 
 // Copilot reads the prompt from stdin when `-p` is omitted entirely
