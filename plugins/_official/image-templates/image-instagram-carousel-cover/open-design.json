@@ -1,0 +1,32 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-skill-instagram-carousel-cover",
+  "title": "Instagram Carousel Cover",
+  "version": "0.1.0",
+  "description": "A bright social-first cover with one architectural color hook, concise typography, and a clear carousel index.",
+  "license": "Apache-2.0",
+  "author": {"name": "OpenDesign", "url": "https://github.com/nexu-io/open-design"},
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/image-templates/image-instagram-carousel-cover",
+  "tags": ["image-skill", "first-party", "image", "instagram", "xiaohongshu", "carousel", "cover", "editorial"],
+  "compat": {"agentSkills": [{"path": "./SKILL.md"}]},
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {"type": "image", "poster": "./example.webp"},
+    "useCase": {
+      "query": "Create a 4:5 Instagram carousel cover using only these exact text strings: 'SUN / SHADOW', 'A COLOR STUDY', and '01 / 06'. Scene: a modern outdoor stairwell at hard midday sun, photographed like a 35mm point-and-shoot architecture editorial. Use a saturated cobalt-blue stucco wall, tangerine-orange metal stairs cutting diagonally upward, one large circular butter-yellow opening, and clean cyan sky. Cast precise geometric sunlight and shadow across the wall. Include one adult person in an off-white sleeveless outfit with red socks, caught mid-step and small enough to preserve the architecture as the hook. Set SUN / SHADOW in large condensed warm-white typography integrated into the cobalt wall with the slash in hot pink. Place A COLOR STUDY as a small black label inside the yellow circle and 01 / 06 as a compact red index. Preserve real stucco texture, scratched paint, sun-bleached edges, film grain, slight halation, and believable human anatomy. Keep the cover high-key, vivid, and instantly readable at feed size. No extra text, logo, watermark, dark moody grading, beige palette, pastel wash, neon glow, glossy 3D, impossible stairs, duplicate person, fake UI, or gibberish typography. Output only the finished cover.",
+      "exampleOutputs": [{"path": "./example.webp", "title": "Instagram Carousel Cover"}]
+    },
+    "inputs": [
+      {"name": "model", "label": "Model", "type": "select", "options": ["vela/gpt-image-2"], "default": "vela/gpt-image-2"},
+      {"name": "aspect", "label": "Aspect ratio", "type": "select", "options": ["1:1", "16:9", "9:16", "4:5", "3:2"], "default": "4:5"}
+    ],
+    "context": {"skills": [{"path": "./SKILL.md"}], "assets": ["./template.json", "./example.webp"]},
+    "pipeline": {"stages": [{"id": "generate", "atoms": ["media-image"]}]},
+    "capabilities": ["prompt:inject", "fs:write"]
+  }
+}
