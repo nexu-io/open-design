@@ -26,6 +26,51 @@ describe('apiProtocols table consistency', () => {
     }
   });
 
+  it('keeps retired Ollama Cloud models out of picker suggestions', () => {
+    // Verified against the live catalog (GET https://ollama.com/api/tags)
+    // on 2026-08-04: none of these ids are currently served by Ollama Cloud,
+    // so the picker must not offer them. The first three were the original
+    // confirmed retirements from issue #5788; the rest are the remaining
+    // hand-curated ids that had drifted out of the served catalog.
+    const retiredCloudModels = [
+      'cogito-2.1:671b',
+      'deepseek-v3.1:671b',
+      'deepseek-v3.2',
+      'devstral-2:123b',
+      'devstral-small-2:24b',
+      'gemini-3-flash-preview',
+      'gemma3:4b',
+      'gemma3:12b',
+      'gemma3:27b',
+      'glm-4.6',
+      'glm-4.7',
+      'glm-5',
+      'kimi-k2:1t',
+      'kimi-k2-thinking',
+      'kimi-k2.5',
+      'minimax-m2',
+      'minimax-m2.1',
+      'minimax-m2.5',
+      'ministral-3:3b',
+      'ministral-3:8b',
+      'ministral-3:14b',
+      'qwen3-coder:480b',
+      'qwen3-coder-next',
+      'qwen3-next:80b',
+      'qwen3-vl:235b',
+      'qwen3-vl:235b-instruct',
+      'rnj-1:8b',
+    ];
+    const ollamaCloudProvider = KNOWN_PROVIDERS.find(
+      (provider) => provider.protocol === 'ollama' && provider.baseUrl === 'https://ollama.com',
+    );
+
+    expect(ollamaCloudProvider?.preferredModels).toBeDefined();
+    for (const model of retiredCloudModels) {
+      expect(SUGGESTED_MODELS_BY_PROTOCOL.ollama).not.toContain(model);
+      expect(ollamaCloudProvider?.preferredModels).not.toContain(model);
+    }
+  });
   it('keeps the Atlas Cloud preset wired to OpenAI-compatible chat models', () => {
     const atlasCloudProvider = KNOWN_PROVIDERS.find(
       (provider) =>
