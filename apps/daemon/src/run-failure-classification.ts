@@ -431,6 +431,29 @@ function isByokOpenCodeProviderNotFoundText(
 }
 
 function modelUnavailableDetail(text: string): TrackingRunFailureDetail | null {
+  // Bedrock Converse rejects `document` blocks (PDF attachments) for models
+  // that do not take documents (Nova Micro, Qwen, DeepSeek V3 among others),
+  // while Anthropic and Nova Lite/Pro on the same provider accept them: a
+  // switch-model case. Bedrock has used two wordings for it: "doesn't support
+  // the document field for user messages" and, currently, "This model doesn't
+  // support documents."
+  if (/\bdoesn'?t support the document field\b|\bdocument field for user messages\b|\bdoesn'?t support documents\b/i.test(text)) {
+    return 'model_document_unsupported';
+  }
+  // Same provider, same shape for images: a text-only model on the Converse
+  // route (Nova Micro, Qwen3, DeepSeek) rejects an `image` block with "This
+  // model doesn't support the image content block that you provided". The
+  // model is reachable and works for text; switching models is the fix, so it
+  // takes the generic "doesn't support this task" switch-model card.
+  if (/\bdoesn'?t support the image content block\b/i.test(text)) {
+    return 'model_not_supported';
+  }
+  // OpenCode always streams. Bedrock's Llama models refuse tools on the
+  // streaming API ("This model doesn't support tool use in streaming mode"),
+  // so an agent run cannot proceed on them at all: switch model.
+  if (/\bdoesn'?t support tool use in streaming mode\b/i.test(text)) {
+    return 'model_not_supported';
+  }
   if (/\brequires a newer version of codex\b|\bunknown option [`'"]?--[\w-]+[`'"]?\b/i.test(text)) {
     return 'cli_version_incompatible';
   }

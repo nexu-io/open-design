@@ -661,7 +661,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     expect(screen.getByRole('tab', { name: 'Ollama Cloud' })).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'SenseAudio' })).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'AIHubMix' })).toBeTruthy();
-    expect(screen.queryByRole('tab', { name: 'AWS Bedrock' })).toBeNull();
+    expect(screen.getByRole('tab', { name: 'Amazon Bedrock' })).toBeTruthy();
     expect(screen.getByLabelText('Provider preset')).toBeTruthy();
     expect(screen.getByLabelText('Model')).toBeTruthy();
     const baseUrlInput = screen.getByLabelText('Base URL') as HTMLInputElement;
@@ -1187,6 +1187,57 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
         expect.any(Object),
       ),
     );
+  });
+
+  it('activates a Bedrock AWS-profile setup without an API key once the profile is named', async () => {
+    // Regression: the draft-notice preflight memo did not track awsAuthMode /
+    // awsProfile, so switching to profile mode kept reporting "API key
+    // required" and the form never read as complete.
+    const bedrockBaseUrl = 'https://bedrock-runtime.us-east-1.amazonaws.com';
+    const { onPersist } = renderSettingsDialog({
+      mode: 'daemon',
+      agentId: 'codex',
+      apiKey: '',
+      apiProtocol: 'bedrock',
+      baseUrl: bedrockBaseUrl,
+      apiProviderBaseUrl: bedrockBaseUrl,
+      model: 'global.anthropic.claude-sonnet-5',
+    });
+
+    fireEvent.click(screen.getByRole('tab', { name: /API providers.*API provider/i }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Amazon Bedrock' }));
+
+    // API-key mode with an empty key: incomplete, notice shown.
+    expect(screen.getByTestId('settings-byok-draft-notice')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'AWS profile' }));
+    // Profile mode with an empty profile: still incomplete.
+    expect(screen.getByTestId('settings-byok-draft-notice')).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText(/AWS profile name/), {
+      target: { value: 'team-dev' },
+    });
+
+    // No key anywhere: the profile is the credential, the form is complete.
+    expect(screen.queryByTestId('settings-byok-draft-notice')).toBeNull();
+    await waitForPersist(
+      onPersist,
+      expect.objectContaining({
+        mode: 'api',
+        apiProtocol: 'bedrock',
+        apiKey: '',
+        awsAuthMode: 'profile',
+        awsProfile: 'team-dev',
+        baseUrl: bedrockBaseUrl,
+        model: 'global.anthropic.claude-sonnet-5',
+      }),
+      {},
+    );
+    expect(onPersist.mock.calls.at(-1)?.[0].byokPendingProviderKey).toBeUndefined();
+
+    // Back to API-key mode: the key becomes required again.
+    fireEvent.click(screen.getByRole('button', { name: 'Bedrock API key' }));
+    expect(screen.getByTestId('settings-byok-draft-notice')).toBeTruthy();
   });
 
   it('keeps the last valid BYOK config active while an edited replacement is incomplete', async () => {
@@ -2689,6 +2740,73 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     expect(screen.queryByText('Authentication failed. Check your API key.')).toBeNull();
     expect(screen.queryByText('Ready to test')).toBeNull();
     expect(screen.getByRole('button', { name: 'Retry test' })).toBeTruthy();
+  });
+
+  it('drops a stale API-key auth failure when Bedrock switches to profile mode and reports profile failures inline', async () => {
+    // Regression: switching the Bedrock auth mode did not reset the test
+    // state, so a key-mode auth_failed stuck around in profile mode, where
+    // the API key field that carries it no longer exists. The user saw a
+    // bare "Retry test" with no reason.
+    const bedrockBaseUrl = 'https://bedrock-runtime.us-east-1.amazonaws.com';
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url !== '/api/test/connection') {
+        return new Response(JSON.stringify({ context: null, enabled: true, memories: [], extraction: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      const body = JSON.parse(String(init?.body ?? '{}')) as { apiKey?: string; awsProfile?: string };
+      if (body.awsProfile === 'team-dev') {
+        return new Response(
+          JSON.stringify({ ok: true, kind: 'success', latencyMs: 9, model: 'global.anthropic.claude-sonnet-5' }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return new Response(
+        JSON.stringify({ ok: false, kind: 'auth_failed', latencyMs: 12, model: 'global.anthropic.claude-sonnet-5' }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderSettingsDialog({
+      mode: 'api',
+      apiKey: 'ABSKstale',
+      apiProtocol: 'bedrock',
+      baseUrl: bedrockBaseUrl,
+      apiProviderBaseUrl: bedrockBaseUrl,
+      model: 'global.anthropic.claude-sonnet-5',
+    });
+
+    // Key mode: the failure lands on the API key field, as for every provider.
+    expect(await screen.findByText('Invalid API key.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Retry test' })).toBeTruthy();
+
+    // Profile mode with an unknown profile: the stale key failure is gone and
+    // the profile-mode failure is reported on the status line.
+    fireEvent.click(screen.getByRole('button', { name: 'AWS profile' }));
+    expect(screen.queryByText('Invalid API key.')).toBeNull();
+    fireEvent.change(screen.getByLabelText(/AWS profile name/), {
+      target: { value: 'expired-profile' },
+    });
+    expect(
+      await screen.findByText(
+        'Authentication failed. Check the AWS profile, or sign in with AWS SSO if its session has expired.',
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText('Authentication failed. Check your API key.')).toBeNull();
+
+    // A working profile clears it.
+    fireEvent.change(screen.getByLabelText(/AWS profile name/), {
+      target: { value: 'team-dev' },
+    });
+    expect(await screen.findByText(/Connected\. Replied in 9 ms/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Test' })).toBeTruthy();
+    const profileCalls = fetchMock.mock.calls
+      .filter(([input]) => input.toString() === '/api/test/connection')
+      .map(([, init]) => JSON.parse(String(init?.body ?? '{}')) as { apiKey?: string; awsProfile?: string });
+    expect(profileCalls.at(-1)).toMatchObject({ apiKey: '', awsProfile: 'team-dev' });
   });
 
   it('focuses the model field when the BYOK test returns model not found', async () => {

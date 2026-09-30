@@ -628,6 +628,22 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
     }
   }
 
+  // The chat runs on a BYOK vendor this extractor has no client for
+  // (today: Amazon Bedrock, whose credential is a bearer token or an AWS
+  // profile and whose endpoint depends on the model family). Stop here.
+  // Falling through to the env / media-config chain below would send the
+  // conversation to an unrelated vendor, which is the exact surprise the
+  // chat-byok branch exists to prevent. The caller records
+  // `skipped: no-provider`, so the Memory tab shows why nothing ran.
+  if (
+    chatProvider
+    && typeof chatProvider.provider === 'string'
+    && chatProvider.provider.trim()
+    && !PROVIDER_DEFAULTS[chatProvider.provider]
+  ) {
+    return null;
+  }
+
   if (process.env.ANTHROPIC_API_KEY) {
     return {
       kind: 'anthropic',
