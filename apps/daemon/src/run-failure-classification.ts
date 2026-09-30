@@ -298,10 +298,27 @@ function isBundledBinaryMissingText(text: string): boolean {
 const ENDPOINT_NEVER_REACHED_RE =
   /\b(ECONNREFUSED|ENETUNREACH|ENETDOWN|EHOSTUNREACH|ENOTFOUND|EAI_AGAIN|getaddrinfo|network unreachable|local connection failed)\b/i;
 
+/**
+ * A TLS handshake the peer cut, not a certificate the client rejected.
+ *
+ * Bun 1.3 (the OpenCode runtime behind AMR and BYOK) reports a peer that
+ * closes the connection mid-handshake as "unknown certificate verification
+ * error": the handshake failure carries a non-certificate error number, which
+ * falls through to the unknown branch of its X509 code map (bun-v1.3.14
+ * `src/boringssl_sys/boringssl.zig` getCertErrorFromNo). No certificate was
+ * checked; a proxy, firewall or antivirus cutting the connection produces it,
+ * and the reset flavor of the same cut is ECONNRESET. The Powerformer
+ * OpenCode fork retries it and reports "TLS handshake interrupted".
+ */
+const TLS_HANDSHAKE_CUT_RE =
+  /\b(unknown certificate verification error|UNKNOWN_CERTIFICATE_VERIFICATION_ERROR|TLS handshake interrupted)\b/i;
+
 function clientEnvironmentFailureDetail(text: string): TrackingRunFailureDetail | null {
   if (/\b(Windows Application Control|AppLocker)\b/i.test(text)) return 'host_policy_block';
   if (/\b(SQLite|WAL).*(?:I\/O|readonly|locked|corrupt|failed)\b/i.test(text)) return 'local_storage_failure';
-  if (/\b(certificate|CERT_|self[- ]signed|unable to verify)\b/i.test(text)) return 'certificate_failure';
+  if (!TLS_HANDSHAKE_CUT_RE.test(text) && /\b(certificate|CERT_|self[- ]signed|unable to verify)\b/i.test(text)) {
+    return 'certificate_failure';
+  }
   if (/\b(unsupported proxy protocol|proxy configuration)\b/i.test(text)) return 'proxy_configuration';
   if (ENDPOINT_NEVER_REACHED_RE.test(text)) return 'network_configuration';
   return null;
@@ -400,6 +417,7 @@ function clientRequestFailureDetail(text: string): TrackingRunFailureDetail | nu
 
 function isUpstreamDetailText(text: string): boolean {
   return isUpstreamClientErrorText(text) ||
+    TLS_HANDSHAKE_CUT_RE.test(text) ||
     /\b(stream disconnected before completion|(?:stream|upstream) idle timeout|no data received within configured window|response\.completed|Transport error: network error|Upstream request failed|websocket closed|socket connection was closed unexpectedly|tls handshake eof|Connection reset by (?:peer|server)|TLS close_notify|Broken pipe|remote host|远程主机强迫关闭|No route to host|Connection refused|ConnectionRefused|error sending request|Provider returned error|high demand|model is at capacity|selected model is at capacity|temporarily unavailable|upstream_error|http2: response body closed|peer closed connection|incomplete chunked read|Client network socket disconnected before secure TLS connection|Connection failed repeatedly|lost its connection to (?:the Anthropic API|the configured custom Anthropic endpoint)|Server error mid-response|empty or malformed response|Unexpected server error|Streaming response failed|Failed to process error response|AMR model catalog is (?:temporarily )?unavailable)\b/i
       .test(text);
 }
@@ -504,7 +522,7 @@ function upstreamDetail(text: string): TrackingRunFailureDetail {
   }
   if (/\bhigh demand|temporary errors|model is at capacity|selected model is at capacity\b/i.test(text)) return 'provider_high_demand';
   if (/\b(stream disconnected before completion|(?:stream|upstream) idle timeout|no data received within configured window|response\.completed|websocket closed|socket connection was closed unexpectedly|connection reset|ConnectionRefused|tls handshake eof|tls close_notify|broken pipe|peer closed connection|remote host|远程主机强迫关闭|http2: response body closed|incomplete chunked read|Client network socket disconnected before secure TLS connection|Connection failed repeatedly|lost its connection to (?:the Anthropic API|the configured custom Anthropic endpoint)|Server error mid-response|empty or malformed response|Streaming response failed)\b/i
-    .test(text)) {
+    .test(text) || TLS_HANDSHAKE_CUT_RE.test(text)) {
     return 'stream_disconnected';
   }
   if (isUpstreamClientErrorText(text)) return upstreamClientErrorDetail(text);
