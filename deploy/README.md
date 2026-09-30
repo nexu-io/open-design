@@ -92,6 +92,40 @@ The image intentionally does not bundle Claude/Codex/Gemini CLI binaries. Keep
 those outside the image, or build a separate private runtime layer if a server
 deployment needs local code-agent CLIs installed in the container.
 
+## Standalone OpenCode: self-contained image layer
+
+For a headless deployment that only needs the `opencode` or `byok-opencode`
+runtimes, you can skip host mounts entirely by building a custom image layer
+that installs `opencode-ai` directly into the container:
+
+```dockerfile
+FROM ghcr.io/nexu-io/od:latest
+USER root
+RUN npm install -g opencode-ai
+RUN opencode --version
+USER open-design
+```
+
+The daemon resolves these runtimes by checking `OPENCODE_BIN` first, then
+falling back to `opencode-cli` or `opencode` on `PATH`. Either expose the
+binary on `PATH` (a global npm install puts it there by default)
+or set the env var explicitly:
+
+```bash
+OPENCODE_BIN=/usr/local/bin/opencode
+```
+
+This is enough to run `opencode` and `byok-opencode` **without any Vela
+authentication** — no `VELA_RUNTIME_KEY`, `VELA_LINK_URL`, or Vela CLI login
+is required for these two runtimes. `VELA_OPENCODE_BIN` is a separate
+variable consumed only by the AMR/Vela runtime path; it does not affect
+`OPENCODE_BIN` resolution, and AMR still requires the Vela CLI and its own
+authentication regardless of this image layer.
+
+If you need other agent CLIs (Claude Code, Codex, …) alongside opencode, or
+want to reuse CLIs already installed on the host instead of baking them into
+the image, use the host-mount approach below instead.
+
 ## Linux: mounting host agent CLIs
 
 On Linux you can mount host-installed agent CLIs (Claude Code, opencode, Codex,
