@@ -193,6 +193,21 @@ export interface AttachAcpSessionOptions {
  * @returns A controller with `hasFatalError`, `getDurableSessionId`,
  *   `completedSuccessfully`, and `abort` methods.
  */
+/** Mirrors `RETRY_MAX_RETRIES` in the AMR OpenCode fork's session retry policy. */
+const AMR_STEP_RETRY_MAX_ATTEMPTS = 2;
+
+/**
+ * Link reports an upstream stream interruption as `[code=upstream_stream_interrupted]`;
+ * the fork retries the step with that message, or continues after completed tools
+ * with its own status text.
+ */
+function isAmrStreamInterruptionRetry(reason: string | undefined): boolean {
+  return !!reason && (
+    reason.startsWith('[code=upstream_stream_interrupted]') ||
+    reason.startsWith('Upstream stream interrupted')
+  );
+}
+
 export function attachAcpSession({
   child,
   prompt,
@@ -794,6 +809,16 @@ export function attachAcpSession({
           }
         : {}),
     });
+    if (name === 'model_retry' && isAmrStreamInterruptionRetry(stringField('reason'))) {
+      // The AMR OpenCode fork recovers an upstream stream interruption at step
+      // level (OPEND-3179). Show it with the in-place reconnect row Codex already
+      // uses; other model retries keep only their diagnostic.
+      send('agent', {
+        type: 'status',
+        label: 'agent_reconnecting',
+        detail: `${numberField('attempt') ?? 1}/${AMR_STEP_RETRY_MAX_ATTEMPTS}`,
+      });
+    }
     return true;
   };
 
