@@ -43,4 +43,22 @@ describe('apiProtocols table consistency', () => {
     expect(atlasCloudProvider?.preferredModels).toContain('qwen/qwen3.5-flash');
     expect(atlasCloudProvider?.preferredModels).toContain('deepseek-ai/deepseek-v4-flash');
   });
+
+  it('keeps the Requesty preset wired to OpenAI-compatible chat models', () => {
+    const requestyProvider = KNOWN_PROVIDERS.find(
+      (provider) =>
+        provider.protocol === 'openai' &&
+        provider.baseUrl === 'https://router.requesty.ai/v1',
+    );
+
+    expect(requestyProvider).toMatchObject({
+      label: 'Requesty',
+      apiKeyConsoleLink: {
+        host: 'app.requesty.ai',
+        url: 'https://app.requesty.ai/api-keys',
+      },
+    });
+    expect(requestyProvider?.preferredModels[0]).toBe('anthropic/claude-sonnet-4-5');
+    expect(requestyProvider?.preferredModels).toContain('openai/gpt-4o-mini');
+  });
 });

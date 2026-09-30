@@ -937,6 +937,28 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     );
   });
 
+  it('offers Requesty as an OpenAI-compatible gateway preset', () => {
+    renderSettingsDialog({
+      apiProtocol: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+      apiProviderBaseUrl: 'https://api.openai.com/v1',
+    });
+
+    fireEvent.click(screen.getByRole('tab', { name: 'OpenAI' }));
+    selectGatewayPreset('Requesty');
+
+    expect(screen.getByRole('combobox', { name: 'Model' }).textContent).toContain(
+      'anthropic/claude-sonnet-4-5',
+    );
+    expect((screen.getByLabelText('Base URL') as HTMLInputElement).value).toBe(
+      'https://router.requesty.ai/v1',
+    );
+    expect(screen.getByRole('link', { name: 'Get key ↗' }).getAttribute('href')).toBe(
+      'https://app.requesty.ai/api-keys',
+    );
+  });
+
   it('keeps Anthropic-compatible gateway presets selectable', () => {
     renderSettingsDialog();
 
