@@ -3201,6 +3201,8 @@ function injectDeckBridge(
   const script = `<script data-od-deck-bridge>(function(){
   var initialSlideIndex = ${safeInitialSlideIndex};
   var didRestoreInitialSlide = initialSlideIndex <= 0;
+  var initialSlideRestoreTimer = null;
+  var initialSlideRestoreDeadline = 0;
   // The framework branch's own listener source mentions navigation keys, so
   // without this marker the head-start registry hook would classify every
   // framework deck as artifact-keyboard-navigable.
@@ -3459,12 +3461,27 @@ function injectDeckBridge(
     }
     return -1;
   }
+  // display and opacity do not inherit through the CSS cascade, so a
+  // getComputedStyle() call on a candidate slide never reflects an
+  // ancestor's own display:none/opacity:0 (e.g. reveal.js hides
+  // non-present slides via display:none on the PARENT <section>, one
+  // level above the slide element itself). Walk up to document.body /
+  // document.documentElement, bounded the same way transformTrack() is,
+  // so any ancestor's own hidden state is caught.
+  function isRenderedHidden(el){
+    var node = el;
+    while (node && node !== document.body && node !== document.documentElement) {
+      try {
+        var cs = window.getComputedStyle(node);
+        if (cs.display === 'none' || cs.visibility === 'hidden' || cs.opacity === '0') return true;
+      } catch (_) {}
+      node = node.parentElement;
+    }
+    return false;
+  }
   function findActiveByVisibility(list){
     for (var i=0; i<list.length; i++) {
-      try {
-        var cs = window.getComputedStyle(list[i]);
-        if (cs.display !== 'none' && cs.visibility !== 'hidden' && cs.opacity !== '0') return i;
-      } catch (_) {}
+      if (!isRenderedHidden(list[i])) return i;
     }
     return -1;
   }
@@ -4006,11 +4023,33 @@ function injectDeckBridge(
     }
     attempt();
   }
+  function navigateViaReveal(list, action, index){
+    try {
+      var reveal = window.Reveal;
+      if (!reveal || typeof reveal.isReady !== 'function' || !reveal.isReady()) return false;
+      if (typeof reveal.getIndices !== 'function' || typeof reveal.slide !== 'function') return false;
+      var target = Math.max(0, Math.min(list.length - 1, action === 'go' ? index : targetFor(action, list)));
+      var section = list[target] && list[target].closest('.reveal .slides section');
+      if (!section) return false;
+      if (typeof reveal.isScrollView === 'function' && reveal.isScrollView()) {
+        var scrollPage = section.closest('.scroll-page');
+        if (!scrollPage) return false;
+        scrollPage.scrollIntoView({ block: 'start', behavior: 'instant' });
+      } else {
+        var coordinates = reveal.getIndices(section);
+        reveal.slide(coordinates.h, coordinates.v);
+      }
+      report();
+      return true;
+    } catch (_) { return false; }
+  }
   function go(action){
+    didRestoreInitialSlide = true;
     var navigationSequence = ++odNavigationSequence;
     var list = slides();
     if (!list.length) return;
     if (navigateViaDeckStage(list, action)) return;
+    if (navigateViaReveal(list, action)) return;
     if (isScrollDeck(list)) {
       scrollGo(Math.max(0, Math.min(list.length - 1, targetFor(action, list))));
       return;
@@ -4028,12 +4067,14 @@ function injectDeckBridge(
       setTimeout(report, 280);
     }, function(){ return navigationSequence === odNavigationSequence; });
   }
-  function gotoIndex(i){
+  function gotoIndex(i, restoringInitialSlide){
+    if (!restoringInitialSlide) didRestoreInitialSlide = true;
     var navigationSequence = ++odNavigationSequence;
     var list = slides();
     if (!list.length) return;
     var target = Math.max(0, Math.min(list.length - 1, i));
     if (navigateViaDeckStage(list, 'go', target)) return;
+    if (navigateViaReveal(list, 'go', target)) return;
     if (isScrollDeck(list)) { scrollGo(target); return; }
     if (activeIndex(list) === target) { report(); return; }
     // A thumbnail selection and the footer prev/next controls must enter the
@@ -4141,11 +4182,26 @@ function injectDeckBridge(
     return { active: activeIndex(list), count: list.length };
   };
   function restoreInitialSlide(){
+    clearTimeout(initialSlideRestoreTimer);
     if (didRestoreInitialSlide) { report(); return; }
     var list = slides();
     if (!list.length) return;
-    didRestoreInitialSlide = true;
-    gotoIndex(initialSlideIndex);
+    var target = Math.min(list.length - 1, initialSlideIndex);
+    if (activeIndex(list) === target) {
+      didRestoreInitialSlide = true;
+      report();
+      return;
+    }
+    // ponytail: retry for five seconds after load; use a runtime-ready event
+    // if authored decks need a longer asynchronous startup.
+    if (!initialSlideRestoreDeadline) initialSlideRestoreDeadline = Date.now() + 5000;
+    if (document.readyState === 'complete' && Date.now() >= initialSlideRestoreDeadline) {
+      didRestoreInitialSlide = true;
+      report();
+      return;
+    }
+    gotoIndex(target, true);
+    initialSlideRestoreTimer = setTimeout(restoreInitialSlide, 250);
   }
   var odSlideMessageBeforeIndex = -1;
   var odDeckBridgeInstallingMessageListener = false;
@@ -4222,6 +4278,7 @@ function injectDeckBridge(
     // have dispatched its first accepted key yet (the artifact can register on
     // document after the window probe), so returning early without cancelling
     // lets that stale request move the deck after the user's newer click.
+    didRestoreInitialSlide = true;
     odNavigationSequence += 1;
     var before = odSlideMessageBeforeIndex;
     odSlideMessageBeforeIndex = -1;
@@ -4268,7 +4325,10 @@ function injectDeckBridge(
   ownDeckButton('deck-prev', 'prev');
   ownDeckButton('deck-next', 'next');
   // Report once on load and on every scroll-end so the host stays in sync.
-  window.addEventListener('load', function(){ setTimeout(restoreInitialSlide, 200); });
+  window.addEventListener('load', function(){
+    initialSlideRestoreDeadline = Date.now() + 5000;
+    setTimeout(restoreInitialSlide, 200);
+  });
   document.addEventListener('scroll', function(){
     clearTimeout(window.__odReportT);
     window.__odReportT = setTimeout(report, 120);
@@ -4310,6 +4370,28 @@ function injectDeckBridge(
   // For class-toggle decks the deck's own keyboard handler updates classes
   // on the slide elements; an attribute observer translates that into the
   // host counter without depending on scroll events.
+  // Deduplicated union of every slide's ancestor chain up to (not
+  // including) document.body/document.documentElement, matching
+  // isRenderedHidden()'s reach exactly. Reveal.js-style decks toggle
+  // their visibility class on that ancestor (one level above the slide
+  // element), not on the slide element itself, so the plain per-slide
+  // observation below would never fire for them.
+  function visibilityAncestors(list){
+    var result = [];
+    function add(node){
+      if (!node) return;
+      for (var i=0; i<result.length; i++) if (result[i] === node) return;
+      result.push(node);
+    }
+    for (var i=0; i<list.length; i++) {
+      var node = list[i] && list[i].parentElement;
+      while (node && node !== document.body && node !== document.documentElement) {
+        add(node);
+        node = node.parentElement;
+      }
+    }
+    return result;
+  }
   function observeSlides(){
     var list = slides();
     if (!list.length) { setTimeout(observeSlides, 150); return; }
@@ -4327,6 +4409,10 @@ function injectDeckBridge(
       // track's style too.
       var track = transformTrack(list);
       if (track) mo.observe(track, { attributes: true, attributeFilter: ['style'] });
+      var visAncestors = visibilityAncestors(list);
+      for (var v = 0; v < visAncestors.length; v++) {
+        mo.observe(visAncestors[v], { attributes: true, attributeFilter: ['class', 'style', 'hidden', 'aria-hidden'] });
+      }
     } catch (e) {}
     setTimeout(restoreInitialSlide, 100);
   }
