@@ -887,6 +887,48 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     });
   });
 
+  it('lets a model with a default above the baseline re-enter its shipped value (#8048)', async () => {
+    const { onPersist } = renderSettingsDialog({ apiKey: 'sk-ant-test', model: 'deepseek-v4-pro' });
+
+    const maxTokensInput = screen.getByRole('spinbutton', { name: /Max tokens/ }) as HTMLInputElement;
+    expect(maxTokensInput.min).toBe(String(MIN_MAX_TOKENS));
+    // The accepted upper bound rises to the selected model's shipped
+    // default so the placeholder value round-trips through the control.
+    expect(maxTokensInput.max).toBe('384000');
+    expect(maxTokensInput.placeholder).toBe('384000');
+
+    // Edit once (any valid override), then clear back to the default…
+    fireEvent.change(maxTokensInput, { target: { value: '64000' } });
+    await waitFor(() => {
+      const latestConfig = onPersist.mock.calls.at(-1)?.[0] as AppConfig | undefined;
+      expect(latestConfig?.maxTokens).toBe(64000);
+    });
+
+    fireEvent.change(maxTokensInput, { target: { value: '' } });
+    await waitFor(() => {
+      const latestConfig = onPersist.mock.calls.at(-1)?.[0] as AppConfig | undefined;
+      expect(latestConfig?.maxTokens).toBeUndefined();
+    });
+
+    // …and re-enter the shipped 384000, which the control previously
+    // rejected even though the resolver shipped it as the default.
+    fireEvent.change(maxTokensInput, { target: { value: '384000' } });
+    await waitFor(() => {
+      const latestConfig = onPersist.mock.calls.at(-1)?.[0] as AppConfig | undefined;
+      expect(latestConfig?.maxTokens).toBe(384000);
+    });
+
+    // Values above the model-aware bound are still rejected.
+    fireEvent.change(maxTokensInput, { target: { value: '384001' } });
+    await waitFor(() => {
+      const latestConfig = onPersist.mock.calls.at(-1)?.[0] as AppConfig | undefined;
+      expect(latestConfig?.maxTokens).toBeUndefined();
+    });
+    expect(
+      onPersist.mock.calls.some(([config]) => (config as AppConfig).maxTokens === 384001),
+    ).toBe(false);
+  });
+
   it('lets Anthropic and Google users customize the default base URL', () => {
     renderSettingsDialog();
 
