@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Material 3 spacing, shape, and elevation</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%236750a4'/%3E%3Ctext x='32' y='41' text-anchor='middle' font-family='sans-serif' font-size='25' fill='white'%3EM3%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="preview.css">
+  <style>
+    .tokens { display: grid; grid-template-columns: 1.2fr .8fr; gap: 20px; }
+    .scale { display: grid; gap: 12px; }
+    .measure { display: grid; grid-template-columns: 64px 1fr; gap: 16px; align-items: center; }
+    .bar { height: 20px; border-radius: 4px; background: var(--md-sys-color-primary); }
+    .s4 { width: 16px; } .s8 { width: 32px; } .s12 { width: 48px; } .s16 { width: 64px; } .s24 { width: 96px; } .s32 { width: 128px; }
+    .shapes { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    .shape { min-height: 88px; display: grid; place-items: center; color: var(--md-sys-color-on-secondary-container); background: var(--md-sys-color-secondary-container); font: var(--md-sys-type-label-medium); }
+    .r4 { border-radius: 4px; } .r12 { border-radius: 12px; } .r24 { border-radius: 24px; box-shadow: var(--md-sys-elevation-2); } .full { border-radius: 999px; }
+    @media (max-width: 720px) { .tokens { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main class="preview-shell">
+    <p class="eyebrow">Spacing / geometry</p>
+    <h1>A 4px grid connects rhythm, touch, and shape</h1>
+    <p class="lede">The visible control may be small, but its interactive target remains at least 48px. Radius and elevation should communicate component role rather than decoration.</p>
+    <section class="tokens">
+      <article class="panel"><h2>Spacing scale</h2><div class="scale"><div class="measure"><span>4</span><span class="bar s4"></span></div><div class="measure"><span>8</span><span class="bar s8"></span></div><div class="measure"><span>12</span><span class="bar s12"></span></div><div class="measure"><span>16</span><span class="bar s16"></span></div><div class="measure"><span>24</span><span class="bar s24"></span></div><div class="measure"><span>32</span><span class="bar s32"></span></div></div></article>
+      <article class="panel"><h2>Shape roles</h2><div class="shapes"><div class="shape r4">utility</div><div class="shape r12">field</div><div class="shape r24">dialog</div><div class="shape full">chip</div></div></article>
+    </section>
+  </main>
+</body>
+</html>
