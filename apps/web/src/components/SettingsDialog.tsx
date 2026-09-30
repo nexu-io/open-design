@@ -851,6 +851,10 @@ const API_KEY_CONSOLE_LINKS: Record<ApiProtocol, { host: string; url: string }> 
     host: 'aws.amazon.com',
     url: 'https://aws.amazon.com/bedrock/',
   },
+  'opencode-go': {
+    host: 'opencode.ai',
+    url: 'https://opencode.ai/zen',
+  },
 };
 
 const AGENT_SHORT_DESCRIPTIONS: Record<string, string> = {

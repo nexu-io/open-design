@@ -1,4 +1,5 @@
 import type { ByokChatProviderConfig } from '@open-design/contracts';
+import { openCodeGoWireForModel, openCodeSessionHeaders } from '../integrations/opencode-go.js';
 
 export const BYOK_OPENCODE_AGENT_ID = 'byok-opencode';
 export const BYOK_OPENCODE_PROVIDER_ID = 'open-design-byok';
@@ -16,6 +17,7 @@ const DEFAULT_BASE_URL_BY_PROTOCOL: Record<ByokChatProviderConfig['protocol'], s
   ollama: 'https://ollama.com',
   senseaudio: 'https://api.senseaudio.cn',
   aihubmix: 'https://aihubmix.com/v1',
+  'opencode-go': 'https://opencode.ai/zen/go/v1',
 };
 
 type ProviderPackage =
@@ -42,6 +44,7 @@ export function opencodeByokModelId(model: string | null | undefined): string | 
 export function buildOpenCodeByokProviderConfig(
   provider: ByokChatProviderConfig | null | undefined,
   model: string | null | undefined,
+  options?: { sessionId?: string },
 ): OpenCodeByokProviderConfig | null {
   if (!provider || typeof provider !== 'object') return null;
   const protocol = provider.protocol;
@@ -65,11 +68,18 @@ export function buildOpenCodeByokProviderConfig(
   const modelId = opencodeByokModelId(rawModel);
   if (!modelId) return null;
 
+  // Stable per-conversation id for OpenCode Go routing/cache. Callers that
+  // already hold a conversation or run handle pass it in; otherwise a fresh
+  // UUID keeps the request routable.
+  const sessionId = options?.sessionId ?? null;
+
   const providerEntry = buildProviderEntry(
     protocol,
     baseUrl,
     provider.apiVersion,
     needsApiKey,
+    rawModel,
+    sessionId,
   );
   const config = {
     provider: {
@@ -179,10 +189,26 @@ function buildProviderEntry(
   baseUrl: string,
   apiVersion: string | undefined,
   includeApiKey: boolean,
+  modelId: string,
+  sessionId: string | null,
 ): { npm: ProviderPackage; options: Record<string, unknown> } {
   const apiKeyOption = includeApiKey
     ? { apiKey: `{env:${BYOK_OPENCODE_API_KEY_ENV}}` }
     : {};
+
+  // OpenCode Go rejects requests without `x-opencode-session` (MissingSessionID).
+  // Every other protocol ignores the extra header, so it is applied uniformly.
+  //
+  // The key is `headers`, not `extraHeaders`: OpenCode passes a provider's
+  // `options` verbatim to the AI SDK provider factory, and every package we
+  // emit here (@ai-sdk/openai, @ai-sdk/openai-compatible, @ai-sdk/anthropic,
+  // @ai-sdk/azure, @ai-sdk/google) declares `headers` in its settings type.
+  // `extraHeaders` is not a recognised setting, so the header was silently
+  // dropped on the run path while the raw-fetch callers stayed correct.
+  const openCodeSessionHeaderOptions = {
+    headers: openCodeSessionHeaders(sessionId),
+  };
+
   const usesAzureOpenAICompatiblePath =
     protocol === 'azure' && /\/openai\/v\d+(?:$|\/)/.test(safeUrlPathname(baseUrl));
   switch (protocol) {
@@ -192,6 +218,7 @@ function buildProviderEntry(
         options: {
           ...apiKeyOption,
           ...(baseUrl ? { baseURL: baseUrl } : {}),
+          ...openCodeSessionHeaderOptions,
         },
       };
     case 'azure':
@@ -204,6 +231,7 @@ function buildProviderEntry(
             ? {}
             : { useDeploymentBasedUrls: true }),
           ...apiVersionOption(apiVersion, usesAzureOpenAICompatiblePath),
+          ...openCodeSessionHeaderOptions,
         },
       };
     case 'google':
@@ -212,6 +240,7 @@ function buildProviderEntry(
         options: {
           ...apiKeyOption,
           ...(baseUrl ? { baseURL: baseUrl } : {}),
+          ...openCodeSessionHeaderOptions,
         },
       };
     case 'ollama':
@@ -220,6 +249,7 @@ function buildProviderEntry(
         options: {
           baseURL: baseUrl,
           ...apiKeyOption,
+          ...openCodeSessionHeaderOptions,
         },
       };
     case 'openai':
@@ -232,6 +262,7 @@ function buildProviderEntry(
           options: {
             ...apiKeyOption,
             ...(baseUrl ? { baseURL: baseUrl } : {}),
+            ...openCodeSessionHeaderOptions,
           },
         };
       }
@@ -240,6 +271,7 @@ function buildProviderEntry(
         options: {
           baseURL: baseUrl,
           ...apiKeyOption,
+          ...openCodeSessionHeaderOptions,
         },
       };
     case 'senseaudio':
@@ -249,8 +281,23 @@ function buildProviderEntry(
         options: {
           baseURL: baseUrl,
           ...apiKeyOption,
+          ...openCodeSessionHeaderOptions,
         },
       };
+    case 'opencode-go': {
+      // OpenCode Go fronts several wire protocols on one origin, chosen per
+      // model id (see openCodeGoWireForModel). The AI SDK appends the concrete
+      // path (/chat/completions, /messages, /responses) to `baseURL`.
+      const wire = openCodeGoWireForModel(modelId);
+      return {
+        npm: wire,
+        options: {
+          baseURL: baseUrl,
+          ...apiKeyOption,
+          ...openCodeSessionHeaderOptions,
+        },
+      };
+    }
   }
 }
 
