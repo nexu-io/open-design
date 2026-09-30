@@ -22,22 +22,28 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#f7f7f7',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#f7f7f7' },
+    { media: '(prefers-color-scheme: dark)', color: '#202020' },
+  ],
 };
 
 /**
  * Inline script that runs before React hydrates so the first paint already
  * carries the app's appearance — no flash of unstyled content.
  *
- * `data-theme` is pinned to `light` unconditionally, and deliberately OUTSIDE
- * the try/catch: OpenDesign ships light-only (product removed the theme
- * setting), and a stored `dark` / `system` from the old picker must never reach
- * the document. Every dark CSS rule is gated on the attribute being absent, so
- * a storage read that throws must still leave the attribute stamped.
- * Keep the accent variable mix ratios in sync with `accentVars()` in
- * `src/state/appearance.ts`; this script cannot import application modules.
+ * The persisted `theme` preference (`'light'` / `'dark'` / `'system'`) is
+ * resolved here and stamped on `<html data-theme>` before the first frame, so
+ * a dark user never sees a light flash. A `system` theme resolves against the
+ * OS immediately — React only re-stamps after hydration. The attribute is
+ * always stamped (light on any storage failure): every JS theme reader
+ * (`shiki`, `ConnectorLogo`, …) checks `data-theme` first and only falls back
+ * to `prefers-color-scheme` when it is absent, so an unstamped root would let
+ * a dark OS leak through before hydration. Keep the accent variable mix
+ * ratios in sync with `accentVars()` in `src/state/appearance.ts`; this
+ * script cannot import application modules.
  */
-const themeInitScript = `(function(){document.documentElement.setAttribute('data-theme','light');try{var c=JSON.parse(localStorage.getItem('open-design:config')||'{}');var a=typeof c.accentColor==='string'&&/^#[0-9a-fA-F]{6}$/.test(c.accentColor.trim())?c.accentColor.trim().toLowerCase():'#353535';if(c.configMigrationVersion!==3&&(a==='#87ea5c'||a==='#c96442'))a='#353535';var s=document.documentElement.style;s.setProperty('--accent',a);s.setProperty('--accent-strong','color-mix(in srgb, '+a+' 82%, var(--text-strong))');s.setProperty('--accent-soft','color-mix(in srgb, '+a+' 12%, var(--bg-subtle))');s.setProperty('--accent-tint','color-mix(in srgb, '+a+' 6%, var(--bg-panel))');s.setProperty('--accent-hover','color-mix(in srgb, '+a+' 86%, var(--text-strong))');}catch(e){}})();`;
+const themeInitScript = `(function(){try{var c=JSON.parse(localStorage.getItem('open-design:config')||'{}');var s=typeof c.theme==='string'?c.theme:'light';var t=s==='dark'?'dark':s==='system'&&window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t);var a=typeof c.accentColor==='string'&&/^#[0-9a-fA-F]{6}$/.test(c.accentColor.trim())?c.accentColor.trim().toLowerCase():'#353535';if(c.configMigrationVersion!==3&&(a==='#87ea5c'||a==='#c96442'))a='#353535';var st=document.documentElement.style;st.setProperty('--accent',a);st.setProperty('--accent-strong','color-mix(in srgb, '+a+' 82%, var(--text-strong))');st.setProperty('--accent-soft','color-mix(in srgb, '+a+' 12%, var(--bg-subtle))');st.setProperty('--accent-tint','color-mix(in srgb, '+a+' 6%, var(--bg-panel))');st.setProperty('--accent-hover','color-mix(in srgb, '+a+' 86%, var(--text-strong))');}catch(e){document.documentElement.setAttribute('data-theme','light');}})();`;
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (

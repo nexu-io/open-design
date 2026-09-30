@@ -358,11 +358,16 @@ classDiagram
 
 ## 7. 暗色策略
 
-产品当前**强制亮色**,且是产品裁决过的 —— `appearance.ts` 原文:
+**2026-09 更新**:强制亮色的旧契约已废止 —— 主题恢复为 light / dark / system
+用户偏好(`appearance.ts` 的 `normalizeAppTheme` / `resolveEffectiveTheme`,
+设置入口在 Settings › General 的 Theme 选择器;`force-light-theme.test.ts`
+更名为 `theme-preference.test.ts`)。本节保留当初的做法与理由,因为它们至今成立。
+
+产品此前**强制亮色**,且是产品裁决过的 —— `appearance.ts` 原文:
 
 > workspace surfaces have no dark tokens, so **a dark app is a broken app**
 
-链路:`layout.tsx` 预水合无条件写 `data-theme="light"` → `FORCED_APP_THEME='light'` → config 读时 coerce → 设置入口已删 → `force-light-theme.test.ts` 锁死。
+旧链路:`layout.tsx` 预水合无条件写 `data-theme="light"` → `FORCED_APP_THEME='light'` → config 读时 coerce → 设置入口已删 → `force-light-theme.test.ts` 锁死。
 
 **本次做法**:新组件一律消费 `--chat-*` 语义层,**不直连全局 token、不写 `[data-theme]` 分支**。亮暗两个作用域都定义、暂时同值。设计出暗色方案时只改这一段映射,组件零改动,且不推翻产品裁决。
 

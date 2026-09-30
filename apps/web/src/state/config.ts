@@ -13,9 +13,9 @@ import type {
 import { resolveFixedOriginBaseUrl } from './apiProtocols';
 import {
   DEFAULT_ACCENT_COLOR,
-  FORCED_APP_THEME,
+  DEFAULT_APP_THEME,
   normalizeAccentColor,
-  resolveAppTheme,
+  normalizeAppTheme,
 } from './appearance';
 import {
   DEFAULT_FAILURE_SOUND_ID,
@@ -91,7 +91,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   skillId: null,
   designSystemId: null,
   onboardingCompleted: false,
-  theme: FORCED_APP_THEME,
+  theme: DEFAULT_APP_THEME,
   accentColor: DEFAULT_ACCENT_COLOR,
   mediaProviders: {},
   composio: {},
@@ -714,17 +714,14 @@ export function loadConfig(): AppConfig {
       agentCliEnv: { ...(parsed.agentCliEnv ?? {}) },
       agentCliEnvIntent: { ...(parsed.agentCliEnvIntent ?? {}) },
       accentColor: normalizeAccentColor(parsed.accentColor) ?? DEFAULT_CONFIG.accentColor,
-      // Coerce on read, not just on default: the theme setting is gone, but
-      // 'dark' / 'system' is still on disk in every install that ever used it.
-      theme: resolveAppTheme(parsed.theme),
+      // The theme is a preference again, but the persisted value still has to
+      // be shape-checked on read — an old install may carry anything here.
+      theme: normalizeAppTheme(parsed.theme),
       pet: normalizePet(parsed.pet),
       notifications: normalizeNotifications(parsed.notifications),
       orbit: normalizeOrbit(parsed.orbit),
     };
-    // A stored `dark` / `system` theme is dead data now that the app ships
-    // light-only. Flag it so the coerced value is written back once and the old
-    // preference stops existing on disk, instead of being re-coerced forever.
-    let migratedConfig = parsed.theme != null && parsed.theme !== FORCED_APP_THEME;
+    let migratedConfig = false;
     const parsedMigrationVersion =
       typeof parsed.configMigrationVersion === 'number'
         ? parsed.configMigrationVersion
