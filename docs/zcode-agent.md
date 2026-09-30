@@ -127,7 +127,7 @@ Works: text turns and multi-turn conversations (context preserved via `--resume`
 
 Gaps (v1 of the bridge):
 
-- **No live token streaming.** Frames are emitted when each turn completes, because `zcode -p --json` returns one final object. The chat UI shows the turn result at once rather than typing deltas.
+- **No live token streaming.** Frames are emitted when each turn completes, because `zcode -p --json` returns one final object. The chat UI shows the turn result at once rather than typing deltas. The turn-long silence also trips OpenDesign's stall watchdog on long runs — see the first entry of §6.
 - **Fresh conversation = fresh ZCode session.** A new OpenDesign conversation spawns a new bridge process; ZCode context does not carry across conversations (only within one).
 - **OpenDesign's media MCP is not injected** into the ZCode child process.
 - **Per-turn latency.** Each turn boots a fresh CLI process (~25k-token composed system prompt, plugin MCP connect skipped via a temporary config swap that is restored byte-for-byte after launch). Measured on Windows: ~28–37 s per headless turn, inside the Settings connection-test budget with headroom; design runs are minutes-long, so the fixed overhead is not the dominant cost.
@@ -137,6 +137,7 @@ Gaps (v1 of the bridge):
 - **Icons.** Local profiles carry no icon payload, and the agent card resolves icons from `public/agent-icons/<id>.<ext>` gated by a compiled extension map — an unknown profile id renders a letter avatar. `deploy-icon.mjs` deploys the official icon and patches that map across the installed web bundles; it must be re-run after an OpenDesign update (the map lives in compiled chunks).
 - **Provider selection.** ZCode resolves its model provider from its own config files; if the desktop app was used to switch providers, headless children inherit that choice. The installer pins the environment to the detected Coding Plan provider so a stray personal-provider entry cannot hijack design runs. See §4 for the required personal-provider rule and the upgrade-reset regression.
 - **Failure backoff.** ZCode's built-in provider applies an exponential lease/backoff after failed calls; repeated failed connection tests can make later attempts fail fast. `reset-provider-backoff.mjs` in the bridge repo clears the stale lease — reach for it before concluding anything is broken.
+- **Stall watchdog vs. silent long turns.** The daemon kills a run after **600 s with no new agent stdout**. A no-streaming bridge is silent for the entire turn, so any generation longer than ~10 minutes (full-page design runs routinely are) is killed mid-flight with `Agent stalled without emitting any new output for 600s` — the child was working, not hung. Observed 2026-09-30: four consecutive design runs died at exactly the watchdog window; the fix is a turn-level heartbeat that re-emits a `system/status: working` frame (the frame the daemon already maps to status events) every 45 s while a turn is in flight. Bridge ≥ 1.1 ships this; the equivalent shim for other single-final-JSON CLIs is a periodic status frame, not faster generation.
 
 ## 7. Path to a native adapter
 
