@@ -30,6 +30,7 @@ import {
   toolPackSidecarStamp,
 } from "./config/sidecar-stamps.js";
 import { domToPptxBundleResource } from "./dom-to-pptx-resource.js";
+import { productionInstallEnv } from "./production-install.js";
 import { copyBundledResourceTrees, linuxResources, packBundledDshRuntime } from "./resources/index.js";
 import { copyOptionalVelaCliBinary } from "./vela-cli.js";
 import { electronBuilderVersionForAppVersion, readRuntimeAppVersion } from "./versioning/index.js";
@@ -428,7 +429,7 @@ async function runPnpm(
   });
 }
 
-export type ProductionInstallCommand = { command: string; args: string[] };
+export type ProductionInstallCommand = { command: string; args: string[]; env: NodeJS.ProcessEnv };
 
 // Picks the package manager used to materialize the assembled-app node_modules
 // during writeAssembledApp. The default (`npm`) preserves host behavior for
@@ -440,21 +441,27 @@ export type ProductionInstallCommand = { command: string; args: string[] };
 // electron-builder packs node_modules the same way it does for npm-installed
 // trees.
 export function resolveProductionInstallCommand(env: NodeJS.ProcessEnv): ProductionInstallCommand {
+  const installEnv = productionInstallEnv(env);
   const pnpmBin = env[PRODUCTION_INSTALL_PNPM_BIN_ENV];
   if (pnpmBin != null && pnpmBin.length > 0) {
     return {
       command: pnpmBin,
       args: ["install", "--prod", "--no-lockfile", "--config.node-linker=hoisted"],
+      env: installEnv,
     };
   }
-  return { command: "npm", args: ["install", "--omit=dev", "--no-package-lock"] };
+  return {
+    command: "npm",
+    args: ["install", "--omit=dev", "--no-package-lock"],
+    env: installEnv,
+  };
 }
 
 async function runProductionInstall(appRoot: string): Promise<void> {
-  const { command, args } = resolveProductionInstallCommand(process.env);
+  const { command, args, env } = resolveProductionInstallCommand(process.env);
   await execFileAsync(command, args, {
     cwd: appRoot,
-    env: process.env,
+    env,
   });
 }
 
