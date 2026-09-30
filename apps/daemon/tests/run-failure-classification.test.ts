@@ -2757,3 +2757,32 @@ describe('S30 region rejection stays separate from client and host failures', ()
     });
   });
 });
+
+// OPEND-3527: the error event OpenCode's parser builds from a provider verdict.
+describe('OpenCode provider verdicts (OPEND-3527)', () => {
+  it.each([
+    ['rate limit', 'OPENCODE_RATE_LIMIT_FRAME', { failure_category: 'rate_limit', failure_detail: 'rate_limit_429', retryable: true }],
+    ['context overflow', 'OPENCODE_CONTEXT_OVERFLOW_FRAME', { failure_category: 'prompt_too_large', retryable: false }],
+    ['insufficient funds', 'OPENCODE_INSUFFICIENT_FUNDS_FRAME', { failure_detail: 'hard_quota', retryable: false }],
+  ] as const)('classifies a %s by the provider verdict, not as a network error', async (_label, name, expected) => {
+    const { createJsonEventStreamHandler } = await import('../src/runtimes/json-event-stream.js');
+    const frames = await import('./fixtures/opencode-provider-error-frames.js') as Record<string, unknown>;
+    const events: Array<{ type: string; message?: string; retryable?: boolean }> = [];
+    createJsonEventStreamHandler('opencode', (event) => { events.push(event as never); }).feed(`${JSON.stringify(frames[name])}\n`);
+    const [parsed] = events;
+    const failure = classifyForAgent('opencode', 'AGENT_EXECUTION_FAILED', parsed!.message!,
+      [errorEvent('AGENT_EXECUTION_FAILED', parsed!.message!, parsed!.retryable)]);
+    expect(failure).toMatchObject(expected);
+    expect(failure?.failure_detail).not.toBe('network_error');
+  });
+
+  it('keeps a provider client error the provider marked final out of the retried network bucket', () => {
+    const message = 'Provider returned error (HTTP 400): Invalid parameter: tools[3].function.name';
+    expect(classifyForAgent('opencode', 'AGENT_EXECUTION_FAILED', message,
+      [errorEvent('AGENT_EXECUTION_FAILED', message, false)])).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'upstream_client_error',
+      retryable: false,
+    });
+  });
+});

@@ -212,7 +212,7 @@ function isHardQuotaText(text: string): boolean {
   // `RESOURCE_EXHAUSTED` catches the same log when the phrase portion is
   // truncated or arrives separately — it is the gRPC status code that
   // Antigravity uses exclusively for per-model quota exhaustion.
-  return /\b(session limit|usage limit|limit reached|quota exceeded|quota reached|exceeded your current quota|billing (?:hard )?limit|insufficient[ _-]?(?:quota|credit|credits|funds)|out of credits|no payment method|requires more credits|can only afford)\b|DAILY_LIMIT_EXCEEDED|RESOURCE_EXHAUSTED|用户额度不足|额度不足|预扣费额度失败/i
+  return /\b(session limit|usage limit|limit reached|quota exceeded|quota reached|exceeded your current quota|billing (?:hard )?limit|insufficient[ _-]?(?:quota|credit|credits|funds)|insufficient account funds|out of credits|no payment method|requires more credits|can only afford)\b|DAILY_LIMIT_EXCEEDED|RESOURCE_EXHAUSTED|用户额度不足|额度不足|预扣费额度失败/i
     .test(text);
 }
 
@@ -367,7 +367,7 @@ function promptTooLargeDetail(text: string): TrackingRunFailureDetail | null {
   // long`; keep it here as a fallback for persisted or legacy failures that
   // do not carry the structured AGENT_PROMPT_TOO_LARGE code.
   if (
-    /\b(context window|context size (?:has been )?exceeded|prompt too large|prompt is too long|request_too_large|maximum context|too many tokens|input.*too large|request (?:body )?exceeds configured limit|output token maximum|maximum output tokens|CLAUDE_CODE_MAX_OUTPUT_TOKENS|exceeds the safe size|composed prompt exceeds|prompt token count .* exceeds|maximum context length|context too large|prefill context too large|reduce the length of (?:the )?(?:messages|input prompt)|request \(\d+ tokens\) exceeds the available context size|n_keep:\s*\d+\s*>=\s*n_ctx)\b/i.test(text)
+    /\b(context window|context size (?:has been )?exceeded|prompt too large|prompt is too long|request_too_large|maximum context|too many tokens|input.*too large|request (?:body )?exceeds configured limit|output token maximum|maximum output tokens|CLAUDE_CODE_MAX_OUTPUT_TOKENS|exceeds the safe size|composed prompt exceeds|prompt token count .* exceeds|maximum context length|context too large|prefill context too large|reduce the length of (?:the )?(?:messages|input prompt)|request \(\d+ tokens\) exceeds the available context size|n_keep:\s*\d+\s*>=\s*n_ctx|longer than the model's context length|context_length_exceeded)\b/i.test(text)
   ) {
     return 'prompt_too_large';
   }
@@ -405,7 +405,7 @@ function isUpstreamDetailText(text: string): boolean {
 }
 
 function isUpstreamClientErrorText(text: string): boolean {
-  return /\b(statusCode[\"']?\s*:\s*(?:400|403|404)|400 Bad Request|403 Forbidden|404 Not Found|404 page not found|Not Found:\s*(?:404 page not found|Not Found)|NotFoundError|OpenAIException - \{\"detail\":\"Not Found\"\}|API Error:\s*(?:400|403)\b|Invalid Responses API request|Country, region, or territory not supported|gateway or proxy|validation error|literal_error|Invalid input|Type validation failed|data did not match any variant of untagged enum InputParam)\b/i
+  return /\(HTTP (?:400|403|404|422)\)|\b(statusCode[\"']?\s*:\s*(?:400|403|404)|400 Bad Request|403 Forbidden|404 Not Found|404 page not found|Not Found:\s*(?:404 page not found|Not Found)|NotFoundError|OpenAIException - \{\"detail\":\"Not Found\"\}|API Error:\s*(?:400|403)\b|Invalid Responses API request|Country, region, or territory not supported|gateway or proxy|validation error|literal_error|Invalid input|Type validation failed|data did not match any variant of untagged enum InputParam)\b/i
     .test(text);
 }
 
