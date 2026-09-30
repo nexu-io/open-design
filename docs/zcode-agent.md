@@ -15,7 +15,7 @@ The bridge lives in the community repo [`paceyw/zcode-opendesign-bridge`](https:
 | Spawns one long-lived process speaking `claude-stream-json` over stdio, forwards user turns mid-session | `zcode -p "<prompt>" --json` is one-shot: prints a **single final JSON object** (`sessionId`, `response`, `usage`) and exits | Stays alive, reads user turns from stdin, spawns one headless ZCode child per turn, replays the final JSON as `system/init` / `assistant` / `result` frames |
 | Follow-up turns continue the native session | Sessions resume via `--resume <sessionId>` | Captures `sessionId` from each turn's result and appends `--resume` on the next |
 | Composed prompts can reach tens of KB (skill bodies, design briefs) | Windows `CreateProcess` command-line cap (~32 KB) turns oversized argv into `ENAMETOOLONG` | Writes long prompts to a temp file and passes `--attach <file>`, keeping argv small |
-| Availability probe runs the profile `bin` with `--version` | The CLI itself is `node zcode.cjs`, several versions deep in the desktop install | Answers `--version` itself so the profile appears in **Your CLIs** without the real CLI on PATH |
+| Availability probe runs `bin` + the profile's `versionArgs` | The CLI itself is `node zcode.cjs`, several versions deep in the desktop install | The profile points `versionArgs` at the bridge (§2), so detection runs the bridge's `--version` — which exits non-zero when the pinned CLI path is missing. Availability therefore validates the bridge and the CLI install, not merely that `node` is on PATH |
 
 ## 2. The local profile
 
@@ -30,16 +30,22 @@ The bridge lives in the community repo [`paceyw/zcode-opendesign-bridge`](https:
       "baseAgent": "claude",
       "bin": "node",
       "args": ["C:/Users/<you>/.open-design/zcode-cc.mjs"],
+      "versionArgs": ["C:/Users/<you>/.open-design/zcode-cc.mjs", "--version"],
       "models": ["GLM-5.3"],
       "defaultModel": "GLM-5.3",
-      "env": { }
+      "env": {
+        "OD_ZCODE_CJS": "C:/Users/<you>/AppData/Local/Programs/ZCode/resources/glm/zcode.cjs"
+      }
     }
   ]
 }
 ```
 
-- `bin` must be a bare PATH-resolvable name (`node`) on Windows; the bridge path carries the version-specific ZCode CLI location inside `env` so the profile survives CLI updates after re-running the installer.
+- `bin` must be a bare PATH-resolvable name (`node`); the daemon's probe does not resolve absolute-path `bin` values on Windows.
+- `versionArgs` must point at the bridge. Profile `args` is only prepended inside `buildArgs` (turns); the availability probe runs `bin` + `versionArgs` alone. Without this key the profile inherits Claude's `--version`, so detection executes plain `node --version` — a missing bridge or a stale, version-pinned CLI path still shows the agent as available and then fails at connection test or first run.
+- `OD_ZCODE_CJS` (env, **required**) carries the version-specific `zcode.cjs` location inside the desktop install; the bridge exits when it is unset or the file is gone, and the same check backs the `--version` probe above. The path is release-directory-pinned, so re-run `install.mjs` after a ZCode desktop update.
 - The profile advertises a single model: ZCode's headless mode runs the Coding Plan's configured default model, so a multi-entry model list would be misleading.
+- This snippet shows the minimal shape, not copy-complete configuration — the installer also sets the provider-config env pair and keeps paths current. Prefer `install.mjs` over hand-copying.
 - Restart the desktop app after editing the file — profiles are read at daemon startup.
 
 ## 3. Install
@@ -54,7 +60,7 @@ node install.mjs        # installs the bridge to ~/.open-design/, writes/updates
 node deploy-icon.mjs    # optional: official ZCode icon for the agent card (see §5)
 ```
 
-`install.mjs` is idempotent — re-run it after a ZCode desktop update (its internal CLI path is version-pinned).
+`install.mjs` is idempotent and writes the complete profile — probe `versionArgs`, required `env`, provider config — so prefer it over assembling the profile by hand. Re-run it after a ZCode desktop update (its internal CLI path is version-pinned).
 
 ## 4. What works, and the known gaps
 
@@ -75,4 +81,4 @@ Gaps (v1 of the bridge):
 
 ## 6. Path to a native adapter
 
-Per [§1 of `agent-adapters.md`](agent-adapters.md), a native ZCode def would be one file in `runtimes/defs/` plus a registry entry — **if** the CLI grows a streaming headless output mode (a `claude-stream-json`-shaped `--output-format`, or a documented JSONL event stream that would justify a new `streamFormat` parser). Until ZCode exposes one, the single-final-JSON shape is why this recipe ships a bridge instead of a def, and why the bridge cannot stream tokens. Discussion of a first-party def belongs in an issue on this repository; the bridge is the community stopgap.
+Per [§1 of `agent-adapters.md`](agent-adapters.md), a native ZCode def would be one file in `runtimes/defs/` plus a registry entry — **if** the CLI grows a streaming headless output mode (a `claude-stream-json`-shaped `--output-format`, or a documented JSONL event stream that would justify a new `streamFormat` parser). First-party work is already tracked upstream: #4692 tracks the native ZCode runtime (implementation in #4819), and #5074 tracks Windows-native ZCode discovery. Until those land, the single-final-JSON shape is why this recipe ships a bridge instead of a def, and why the bridge cannot stream tokens; the bridge is the community stopgap in the meantime.
