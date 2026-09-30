@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   agentIdToTracking,
+  byokProtocolToTracking,
   feedbackAgentProviderIdToTracking,
 } from '../src/analytics/events.js';
 
@@ -26,5 +27,16 @@ describe('agentIdToTracking', () => {
     // feedbackAgentProviderIdToTracking falls through to agentIdToTracking
     // for non-BYOK agents, so AMR assistant feedback must also be `amr`.
     expect(feedbackAgentProviderIdToTracking('amr')).toBe('amr');
+  });
+
+  it("keeps the native aimlapi BYOK protocol's own identity instead of folding into other", () => {
+    // Regression: adding 'aimlapi' to ByokChatProtocol without registering it
+    // here made every AI/ML API selection/run report as unknown/other,
+    // hiding rollout and error-rate breakdowns for this provider (#7461
+    // review finding).
+    expect(byokProtocolToTracking('aimlapi')).toBe('aimlapi');
+    // apiProtocolAgentId() (apps/web/src/utils/apiProtocol.ts) emits
+    // 'aimlapi-api' as the feedback agent id for this protocol.
+    expect(feedbackAgentProviderIdToTracking('aimlapi-api')).toBe('aimlapi');
   });
 });

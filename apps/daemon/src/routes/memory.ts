@@ -1,5 +1,6 @@
 import type { Express } from 'express';
-import { MEMORY_TYPES } from '@open-design/contracts';
+import { MEMORY_EXTRACTION_PROVIDERS, MEMORY_TYPES } from '@open-design/contracts';
+import type { ExtractMemoryRequest, MemoryExtractionProvider } from '@open-design/contracts';
 import type { RouteDeps } from '../server-context.js';
 
 import {
@@ -45,8 +46,6 @@ type MemoryType =
   | 'reference'
   | 'profile'
   | 'rule';
-type MemoryExtractionProvider = 'anthropic' | 'openai' | 'azure' | 'google' | 'ollama';
-
 interface MemoryExtractionPatch {
   provider: MemoryExtractionProvider;
   model?: string;
@@ -82,6 +81,35 @@ function asRecord(value: unknown): UnknownRecord {
   return value && typeof value === 'object' ? (value as UnknownRecord) : {};
 }
 
+/** Parse and validate `ExtractMemoryRequest['chatProvider']` off an untyped
+ *  request body. Strips the surface to the five fields `pickProvider()`
+ *  actually consumes and validates `provider` against the shared
+ *  MEMORY_EXTRACTION_PROVIDERS list; an unknown/missing provider (or a
+ *  non-object `rawChat`) returns null so a malformed payload can't override
+ *  the env / media-config fallback chain. Exported standalone so this
+ *  validation is unit-testable without standing up the Express route. */
+export function parseExtractChatProvider(
+  rawChat: unknown,
+): ExtractMemoryRequest['chatProvider'] | null {
+  if (!rawChat || typeof rawChat !== 'object') return null;
+  const chatConfig = rawChat as UnknownRecord;
+  const provider = chatConfig.provider;
+  if (
+    typeof provider !== 'string'
+    || !(MEMORY_EXTRACTION_PROVIDERS as readonly string[]).includes(provider)
+  ) {
+    return null;
+  }
+  return {
+    provider: provider as (typeof MEMORY_EXTRACTION_PROVIDERS)[number],
+    apiKey: typeof chatConfig.apiKey === 'string' ? chatConfig.apiKey : '',
+    baseUrl: typeof chatConfig.baseUrl === 'string' ? chatConfig.baseUrl : '',
+    apiVersion:
+      typeof chatConfig.apiVersion === 'string' ? chatConfig.apiVersion : '',
+    model: typeof chatConfig.model === 'string' ? chatConfig.model : '',
+  };
+}
+
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
@@ -96,12 +124,14 @@ function isMemoryType(value: unknown): value is MemoryType {
 }
 
 function isExtractionProvider(value: unknown): value is MemoryExtractionProvider {
+  // Sourced from the shared contract (MEMORY_EXTRACTION_PROVIDERS) so this
+  // guard can't drift narrower than MemoryExtractionProvider itself — a
+  // protocol the type admits but this guard omits would be rejected here as
+  // an 'invalid extraction provider', so the user could not save an override
+  // for a vendor the extractor actually supports.
   return (
-    value === 'anthropic'
-    || value === 'openai'
-    || value === 'azure'
-    || value === 'google'
-    || value === 'ollama'
+    typeof value === 'string'
+    && (MEMORY_EXTRACTION_PROVIDERS as readonly string[]).includes(value)
   );
 }
 
@@ -560,34 +590,8 @@ export function registerMemoryRoutes(app: Express, ctx: RegisterMemoryRoutesDeps
       const changed = hasAssistant
         ? []
         : await extractFromMessage(RUNTIME_DATA_DIR, userMessage);
-      // BYOK chat config — only forwarded by the web app for API-mode
-      // chats. We strip the surface to the five fields pickProvider()
-      // actually consumes and validate the provider against the four
-      // shapes the extractor speaks; an unknown / missing provider
-      // means "let the legacy chain decide" so a malformed payload
-      // can't override the env / media-config fallbacks.
-      const rawChat = body.chatProvider;
-      let chatProvider = null;
-      if (rawChat && typeof rawChat === 'object') {
-        const chatConfig = rawChat as UnknownRecord;
-        const provider = chatConfig.provider;
-        if (
-          provider === 'anthropic'
-          || provider === 'openai'
-          || provider === 'azure'
-          || provider === 'google'
-          || provider === 'ollama'
-        ) {
-          chatProvider = {
-            provider,
-            apiKey: typeof chatConfig.apiKey === 'string' ? chatConfig.apiKey : '',
-            baseUrl: typeof chatConfig.baseUrl === 'string' ? chatConfig.baseUrl : '',
-            apiVersion:
-              typeof chatConfig.apiVersion === 'string' ? chatConfig.apiVersion : '',
-            model: typeof chatConfig.model === 'string' ? chatConfig.model : '',
-          };
-        }
-      }
+      // BYOK chat config — only forwarded by the web app for API-mode chats.
+      const chatProvider = parseExtractChatProvider(body.chatProvider);
       const chatModel =
         typeof body.chatModel === 'string' && body.chatModel.trim()
           ? body.chatModel.trim()
