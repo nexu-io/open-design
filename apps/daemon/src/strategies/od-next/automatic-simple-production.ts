@@ -258,6 +258,7 @@ export function prepareAutomaticSimpleProductionRun<
     taskExecutionId: task.taskExecutionId,
     taskRunIndex: task.runs.length,
     planContractHash: task.planContractHash,
+    executionMode: 'simple',
     hostProtocolKey,
     ...(input.locale ? { locale: input.locale } : {}),
   });
@@ -526,6 +527,7 @@ export function prepareAutomaticStrategyContinuation<
           taskExecutionId: input.task.taskExecutionId,
           taskRunIndex: input.task.runs.length,
           planContractHash: strategyPlanContractHash(input.parsed.planContract!),
+          executionMode: input.parsed.planContract!.fullPlan.executionMode,
           hostProtocolKey: hostProtocolKey!,
           ...(input.locale ? { locale: input.locale } : {}),
           ...(nativeBuildPackageBindings.length > 0
