@@ -745,7 +745,7 @@ export async function generateMedia(args: {
       suggestedExt = result.suggestedExt;
     } else if (def.provider === 'hyperframes' && surface === 'video') {
       // HyperFrames is templated by the agent (it reads the vendored
-      // skill at skills/hyperframes/SKILL.md and writes a composition
+      // skill at design-templates/hyperframes/SKILL.md and writes a composition
       // HTML based on the user's prompt). But the actual `npx
       // hyperframes render` step runs HERE in the daemon process, not
       // in the agent's shell. Reason: the agent's shell on macOS
@@ -3858,7 +3858,7 @@ async function renderFalVideo(ctx: MediaContext, credentials: ProviderConfig, on
 // ---------------------------------------------------------------------------
 // Provider: HyperFrames — local HTML→MP4 renderer (heygen-com/hyperframes).
 //
-// The agent does the creative work: it reads skills/hyperframes/SKILL.md,
+// The agent does the creative work: it reads design-templates/hyperframes/SKILL.md,
 // writes a composition (`hyperframes.json` + `meta.json` + `index.html`,
 // with a GSAP timeline) into a hidden cache dir under the project, then
 // dispatches here with `--composition-dir <relative-path>`.

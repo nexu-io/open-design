@@ -3,7 +3,7 @@
 // `pipeline_stage_*` discriminator tags.
 //
 // This module only assembles the wire payloads. The actual broadcast to a
-// run's SSE stream goes through `apps/daemon/src/runs.ts`'s `emit(run,
+// run's SSE stream goes through `apps/daemon/src/runtimes/runs.ts`'s `emit(run,
 // event, data)` helper, kept decoupled from this file so tests can swap
 // the sink for an in-memory recorder.
 
