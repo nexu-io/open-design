@@ -79,6 +79,66 @@ export function buildPreviewBaseHrefBridge(
       }, '*');
     } catch (_) {}
   });
+  // The containment base points at the minted preview scope, not at this
+  // document, and a fragment-only href resolves against the base URI. Left
+  // alone, an href of "#section" becomes a cross-document GET on the scope
+  // directory -- a path the daemon does not serve -- and the preview is
+  // replaced by a 404 body. Only this base creates that mismatch, so the
+  // interception is gated on it still governing the document.
+  function fragmentTarget(href){
+    var id = href.slice(1);
+    if (!id) return document.documentElement;
+    try {
+      id = decodeURIComponent(id);
+    } catch {}
+    var byId = document.getElementById(id);
+    if (byId) return byId;
+    var named = document.getElementsByName ? document.getElementsByName(id)[0] : null;
+    return named || null;
+  }
+  function onFragmentClick(ev){
+    if (ev.defaultPrevented || ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
+    if (!document.querySelector('base[data-od-project-preview-base]')) return;
+    var origin = ev.target;
+    var link = origin && origin.closest ? origin.closest('a[href]') : null;
+    if (!link || link.hasAttribute('download')) return;
+    // The reserved target _self is ASCII case-insensitive, so target="_SELF"
+    // is same-context too and must not fall through to base-resolved
+    // navigation.
+    var linkTarget = String(link.getAttribute('target') || '').toLowerCase();
+    if (linkTarget && linkTarget !== '_self') return;
+    var href = link.getAttribute('href');
+    if (!href || href.charAt(0) !== '#') return;
+    // Claimed even when the id resolves to nothing: the alternative is the
+    // same cross-document GET, which answers 404 and unloads the artifact.
+    ev.preventDefault();
+    var target = fragmentTarget(href);
+    if (!target) return;
+    if (target === document.documentElement) {
+      window.scrollTo(0, 0);
+      return;
+    }
+    target.scrollIntoView({ behavior: 'auto', block: 'start' });
+  }
+  // Registered LAST, not first. Bubbling alone is not enough: this bridge is
+  // injected right after <head> opens, so a window listener added here would
+  // precede every authored one on the same target, and listeners on one target
+  // run in registration order. Deferring to a task after DOMContentLoaded puts
+  // it behind both synchronous scripts and their DOM-ready handlers, so an
+  // artifact that delegates fragment clicks on window still wins. A task, not
+  // a microtask: a microtask checkpoint runs between DOMContentLoaded
+  // listeners, which would still land ahead of an artifact handler registered
+  // by a later one.
+  function installFragmentFallback(){
+    window.addEventListener('click', onFragmentClick, false);
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function(){
+      setTimeout(installFragmentFallback, 0);
+    });
+  } else {
+    setTimeout(installFragmentFallback, 0);
+  }
   announce();
 })();</script>`;
 }
