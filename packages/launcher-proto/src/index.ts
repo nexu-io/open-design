@@ -394,6 +394,56 @@ export function resolveLauncherVersionPaths(request: LauncherVersionRequest): La
   };
 }
 
+/**
+ * Name of the version-independent alias the launcher keeps inside a namespace
+ * root: `<namespaceRoot>/current` -> `versions/<activeVersion>`.
+ *
+ * Every release is staged under a versioned directory, so the absolute path of
+ * the running app changes on every update. The alias gives scripts, automation
+ * and the desktop updater a path that stays put; the packaged launcher
+ * re-points it atomically whenever an activation is confirmed.
+ */
+export const LAUNCHER_STABLE_ALIAS = "current";
+
+export type LauncherStableEntryRequest = LauncherRootRequest & {
+  /** Bundle name at the install path, e.g. `Open Design.app`. */
+  appBundleName: string;
+};
+
+export type LauncherStableEntryPaths = {
+  /** `<namespaceRoot>/current` — the alias, re-pointed on every activation. */
+  aliasPath: string;
+  /** `<aliasPath>/payload/<appBundleName>` — the app reached through the alias. */
+  appPath: string;
+  /** `<aliasPath>/payload`. */
+  payloadRoot: string;
+};
+
+export function resolveLauncherStableEntryPaths(request: LauncherStableEntryRequest): LauncherStableEntryPaths {
+  const paths = resolveLauncherPaths(request);
+  const aliasPath = assertUnderRoot(paths.root, join(paths.namespaceRoot, LAUNCHER_STABLE_ALIAS));
+  const payloadRoot = assertUnderRoot(paths.root, join(aliasPath, "payload"));
+  return {
+    aliasPath,
+    appPath: assertUnderRoot(paths.root, join(payloadRoot, request.appBundleName)),
+    payloadRoot,
+  };
+}
+
+/**
+ * True when `candidate` is an app inside a `versions/<version>/payload`
+ * directory owned by the launcher. Used to tell a launcher-managed alias apart
+ * from a symlink the user (or another tool) happens to have put at the install
+ * path — only the former may keep payload-update eligibility.
+ */
+export function isLauncherPayloadAppPath(paths: LauncherPaths, candidate: string): boolean {
+  const root = resolve(paths.root);
+  const target = resolve(candidate);
+  if (target !== root && !target.startsWith(`${root}${sep}`)) return false;
+  if (!target.startsWith(`${resolve(paths.versionsRoot)}${sep}`)) return false;
+  return target.includes(`${sep}payload${sep}`);
+}
+
 function normalizePointer(value: LauncherVersionPointer | null): LauncherVersionPointer | null {
   if (value == null) return null;
   const version = normalizeLauncherVersion(value.version);

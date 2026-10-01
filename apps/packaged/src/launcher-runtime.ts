@@ -4,6 +4,7 @@ import { basename, dirname, join, resolve, sep } from "node:path";
 
 import {
   LAUNCHER_SCHEMA_VERSION,
+  LAUNCHER_STABLE_ALIAS,
   compareLauncherVersions,
   type LauncherChannel,
   type LauncherDesktopHandoffDescriptor,
@@ -15,6 +16,7 @@ import {
   normalizeLauncherChannel,
   normalizeLauncherVersion,
   resolveLauncherPaths,
+  resolveLauncherStableEntryPaths,
   resolveLauncherVersionPaths,
   selectLauncherRuntimeTarget,
   validateLauncherDesktopHandoffDescriptor,
@@ -710,8 +712,6 @@ export type StableLaunchEntryResult = {
   payloadAppPath: string | null;
 };
 
-const STABLE_VERSION_ALIAS = "current";
-
 async function replaceSymlink(target: string, linkPath: string): Promise<boolean> {
   const temporary = `${linkPath}.${process.pid}.${Date.now()}.tmp`;
   await rm(temporary, { force: true, recursive: true });
@@ -743,18 +743,27 @@ export async function syncStableLaunchEntry(
     root: runtime.launcherPaths.root,
     version,
   });
-  const aliasPath = join(runtime.launcherPaths.namespaceRoot, STABLE_VERSION_ALIAS);
+  const installedLaunchPath = runtime.installedLaunchPath;
+  const stablePaths =
+    installedLaunchPath != null && installedLaunchPath.endsWith(".app")
+      ? resolveLauncherStableEntryPaths({
+          appBundleName: basename(installedLaunchPath),
+          channel: runtime.launcherPaths.channel,
+          namespace: runtime.launcherPaths.namespace,
+          root: runtime.launcherPaths.root,
+        })
+      : null;
+  const aliasPath = stablePaths?.aliasPath ?? join(runtime.launcherPaths.namespaceRoot, LAUNCHER_STABLE_ALIAS);
   const aliasTarget = resolve(versionPaths.versionRoot);
   if ((await readlink(aliasPath).catch(() => null)) !== aliasTarget) {
     await mkdir(dirname(aliasPath), { recursive: true });
     await replaceSymlink(aliasTarget, aliasPath);
   }
 
-  const installedLaunchPath = runtime.installedLaunchPath;
-  if (installedLaunchPath == null || !installedLaunchPath.endsWith(".app")) {
+  if (installedLaunchPath == null || stablePaths == null) {
     return { aliasPath, launchPathStatus: "skipped-no-launch-path", payloadAppPath: null };
   }
-  const payloadAppPath = join(aliasPath, "payload", basename(installedLaunchPath));
+  const payloadAppPath = stablePaths.appPath;
   const entry = await lstat(installedLaunchPath).catch(() => null);
   if (entry == null) {
     await mkdir(dirname(installedLaunchPath), { recursive: true }).catch(() => undefined);

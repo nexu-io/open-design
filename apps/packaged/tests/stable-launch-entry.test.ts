@@ -1,8 +1,8 @@
-import { lstat, mkdir, mkdtemp, readlink, rm } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readlink, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 
-import { resolveLauncherPaths } from "@open-design/launcher-proto";
+import { isLauncherPayloadAppPath, resolveLauncherPaths } from "@open-design/launcher-proto";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { PackagedLauncherRuntime } from "../src/launcher-runtime.js";
@@ -118,6 +118,33 @@ describe.skipIf(process.platform !== "darwin")("stable launch entry", () => {
     expect(await readlink(second.aliasPath as string)).toBe(
       join(secondRuntime.launcherPaths.versionsRoot, "0.24.1"),
     );
+  });
+
+  it("links to a payload path the updater contract recognises", async () => {
+    const root = await createRoot();
+    const installedLaunchPath = join(root, "Applications", "Open Design.app");
+    await mkdir(join(root, "Applications"), { recursive: true });
+    const runtime = fakeRuntime({ installedLaunchPath, root, version: "0.24.1" });
+    await mkdir(join(runtime.launcherPaths.versionsRoot, "0.24.1", "payload", "Open Design.app"), {
+      recursive: true,
+    });
+
+    const result = await syncStableLaunchEntry(runtime);
+
+    // `hasValidLauncherPayloadContext` accepts the entry only when it resolves
+    // to a `versions/<version>/payload/...` path inside the launcher root.
+    const resolved = await realpath(installedLaunchPath);
+    expect(resolved.startsWith(await realpath(runtime.launcherPaths.versionsRoot))).toBe(true);
+    expect(resolved).toContain(`${sep}payload${sep}`);
+    // The updater compares against `realpath`-ed roots (launcher root can sit
+    // under a symlinked prefix such as /var -> /private/var on macOS).
+    const resolvedPaths = {
+      ...runtime.launcherPaths,
+      root: await realpath(runtime.launcherPaths.root),
+      versionsRoot: await realpath(runtime.launcherPaths.versionsRoot),
+    };
+    expect(isLauncherPayloadAppPath(resolvedPaths, resolved)).toBe(true);
+    expect(result.payloadAppPath).toBe(join(result.aliasPath as string, "payload", "Open Design.app"));
   });
 
   it("never replaces a real installed bundle", async () => {
