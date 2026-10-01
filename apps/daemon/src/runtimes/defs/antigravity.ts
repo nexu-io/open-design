@@ -10,18 +10,20 @@ import { dirname, join } from 'node:path';
 
 import { DEFAULT_MODEL_OPTION } from './shared.js';
 import { agentCapabilities } from '../capabilities.js';
-import type { RuntimeAgentDef } from '../types.js';
+import type { RuntimeAgentDef, RuntimeModelOption } from '../types.js';
 
 const ANTIGRAVITY_SKIP_PERMISSIONS_FLAG = '--dangerously-skip-permissions';
 
-// `agy` v1.0.3 still has no `--model` flag (upstream issue #35), but the
-// TUI's Switch-Model picker writes the choice to its settings.json, and
-// every `agy -p` invocation re-reads that file on startup — verified by
-// capturing the `--log-file` line `Propagating selected model override to
-// backend: label="<model>"`. So we can route OD's model picker through
-// settings.json: when the user picks a concrete model in Settings, the
-// daemon writes the label into agy's settings.json right before spawn,
-// and the resulting print-mode run uses that model.
+// `agy` shipped without a programmatic model surface until v1.2 added
+// both a `--model` flag and a `models` subcommand (upstream issue #35).
+// Model *selection* still routes through settings.json rather than the
+// flag: the TUI's Switch-Model picker writes the choice there, every
+// `agy -p` invocation re-reads that file on startup — verified by
+// capturing the `--log-file` line `Propagating selected model override
+// to backend: label="<model>"` — and the path keeps working on agy
+// builds that predate `--model`. When the user picks a concrete model
+// in Settings, the daemon writes the label into agy's settings.json
+// right before spawn, and the resulting print-mode run uses that model.
 //
 // Two ids the picker exposes are special:
 //   - 'default'         : leave settings.json untouched, so agy keeps
@@ -37,10 +39,38 @@ const ANTIGRAVITY_SKIP_PERMISSIONS_FLAG = '--dangerously-skip-permissions';
 // `availableModels` cache miss + empty print-mode output, which surfaces
 // to the user as a generic "empty response" error.
 //
-// The 8 model labels mirror what `Switch Model` in agy's TUI lists for
-// consumer-tier accounts as of 2026-05-28. The set is small and stable
-// enough to ship statically until upstream adds a programmatic
-// `agy models` subcommand (also tracked under issue #35).
+// The live catalog comes from `agy models` via `listModels` below;
+// `fallbackModels` mirrors the `agy models` output of v1.2.14
+// (2026-10-01) for the picker when the probe cannot run (older CLI,
+// offline). Keep it a verbatim copy of the label column — see
+// parseAgyModels for why the id is the label and not the slug.
+
+// `agy models` prints a "Fetching available models..." progress line
+// followed by one TSV row per model:
+//
+//   gemini-3.8-flash-high\tGemini 3.8 Flash (High)
+//
+// Rows are keyed by the *label*, not the slug, because OD's antigravity
+// model id IS the display label: `writeAntigravityModelSelection`
+// persists `options.model` verbatim into settings.json (where agy
+// accepts either form), and `waitForAgyToReadModel` greps the
+// `--log-file` for `label="<model id>"` to release the model lock early.
+// Emitting the slug as id would still resolve, but agy logs the resolved
+// label, so the watcher would never match `label="<slug>"` and every
+// model-locked run would hold the lock until process exit.
+export function parseAgyModels(stdout: string): RuntimeModelOption[] | null {
+  const seen = new Set<string>();
+  const models: RuntimeModelOption[] = [];
+  for (const rawLine of stdout.split('\n')) {
+    const separator = rawLine.indexOf('\t');
+    if (separator < 0) continue;
+    const label = rawLine.slice(separator + 1).trim();
+    if (!label || seen.has(label)) continue;
+    seen.add(label);
+    models.push({ id: label, label });
+  }
+  return models.length > 0 ? [DEFAULT_MODEL_OPTION, ...models] : null;
+}
 const ANTIGRAVITY_SETTINGS_PATH = join(
   homedir(),
   '.gemini',
@@ -178,13 +208,27 @@ export const antigravityAgentDef = {
   capabilityFlags: {
     [ANTIGRAVITY_SKIP_PERMISSIONS_FLAG]: 'skipPermissions',
   },
+  // `agy models` fetches the live catalog over the network (~2s warm,
+  // slower cold); 15s matches the listModels budget the other defs with
+  // remote fetches use (opencode et al).
+  listModels: {
+    args: ['models'],
+    parse: parseAgyModels,
+    timeoutMs: 15_000,
+  },
   fallbackModels: [
     DEFAULT_MODEL_OPTION,
+    { id: 'Gemini 3.8 Flash (High)', label: 'Gemini 3.8 Flash (High)' },
+    { id: 'Gemini 3.8 Flash (Medium)', label: 'Gemini 3.8 Flash (Medium)' },
+    { id: 'Gemini 3.8 Flash (Low)', label: 'Gemini 3.8 Flash (Low)' },
+    { id: 'Gemini 3.7 Flash (High)', label: 'Gemini 3.7 Flash (High)' },
+    { id: 'Gemini 3.7 Flash (Medium)', label: 'Gemini 3.7 Flash (Medium)' },
+    { id: 'Gemini 3.7 Flash (Low)', label: 'Gemini 3.7 Flash (Low)' },
+    { id: 'Gemini 3.6 Flash (High)', label: 'Gemini 3.6 Flash (High)' },
+    { id: 'Gemini 3.6 Flash (Medium)', label: 'Gemini 3.6 Flash (Medium)' },
+    { id: 'Gemini 3.6 Flash (Low)', label: 'Gemini 3.6 Flash (Low)' },
     { id: 'Gemini 3.1 Pro (High)', label: 'Gemini 3.1 Pro (High)' },
     { id: 'Gemini 3.1 Pro (Low)', label: 'Gemini 3.1 Pro (Low)' },
-    { id: 'Gemini 3.5 Flash (High)', label: 'Gemini 3.5 Flash (High)' },
-    { id: 'Gemini 3.5 Flash (Medium)', label: 'Gemini 3.5 Flash (Medium)' },
-    { id: 'Gemini 3.5 Flash (Low)', label: 'Gemini 3.5 Flash (Low)' },
     {
       id: 'Claude Sonnet 4.6 (Thinking)',
       label: 'Claude Sonnet 4.6 (Thinking)',
