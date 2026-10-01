@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { access, lstat, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { access, lstat, mkdir, readFile, readlink, realpath, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve, sep } from "node:path";
 
 import {
@@ -673,4 +673,110 @@ export async function confirmPackagedLauncherRuntime(runtime: PackagedLauncherRu
   }
   await rm(runtime.launcherPaths.attemptsPath, { force: true });
   await writeJsonFile(runtime.launcherPaths.runtimePath, next);
+  await syncStableLaunchEntry(runtime).catch(() => undefined);
+}
+
+/**
+ * Stable, version-independent launch entry (issues #7264 / #8549).
+ *
+ * Every release is staged under `versions/<version>/payload/...`, so the
+ * absolute path of the running app changes on every update: Dock tiles,
+ * Spotlight/Launchpad registrations, and any script or integration that
+ * remembers a path drift out of date, and relaunching through the canonical
+ * install path silently regresses to whatever version was installed on day
+ * one.
+ *
+ * Once an activation is confirmed we therefore maintain:
+ *   1. `namespaces/<ns>/current` -> `versions/<active>` — re-pointed
+ *      atomically on every update, so scripts and MCP/automation integrations
+ *      get a path that never moves;
+ *   2. `install.json` launchPath as a symlink to `current/payload/<App>.app`
+ *      when that path is absent or is already a symlink. An existing *real*
+ *      bundle is never replaced here — that needs user consent and belongs to
+ *      the obsolete-installed-outer retirement flow.
+ */
+export type StableLaunchEntryStatus =
+  | "linked"
+  | "skipped-existing-install"
+  | "skipped-no-launch-path"
+  | "skipped-no-version"
+  | "skipped-non-darwin"
+  | "unchanged"
+  | "updated";
+
+export type StableLaunchEntryResult = {
+  aliasPath: string | null;
+  launchPathStatus: StableLaunchEntryStatus;
+  payloadAppPath: string | null;
+};
+
+const STABLE_VERSION_ALIAS = "current";
+
+async function replaceSymlink(target: string, linkPath: string): Promise<boolean> {
+  const temporary = `${linkPath}.${process.pid}.${Date.now()}.tmp`;
+  await rm(temporary, { force: true, recursive: true });
+  try {
+    await symlink(target, temporary, "dir");
+    await rename(temporary, linkPath);
+    return true;
+  } catch {
+    await rm(temporary, { force: true, recursive: true }).catch(() => undefined);
+    return false;
+  }
+}
+
+export async function syncStableLaunchEntry(
+  runtime: PackagedLauncherRuntime,
+): Promise<StableLaunchEntryResult> {
+  const version = runtime.targetVersion ?? runtime.descriptor.active?.version ?? null;
+  const skipped = (launchPathStatus: StableLaunchEntryStatus): StableLaunchEntryResult => ({
+    aliasPath: null,
+    launchPathStatus,
+    payloadAppPath: null,
+  });
+  if (version == null) return skipped("skipped-no-version");
+  if (process.platform !== "darwin") return skipped("skipped-non-darwin");
+
+  const versionPaths = resolveLauncherVersionPaths({
+    channel: runtime.launcherPaths.channel,
+    namespace: runtime.launcherPaths.namespace,
+    root: runtime.launcherPaths.root,
+    version,
+  });
+  const aliasPath = join(runtime.launcherPaths.namespaceRoot, STABLE_VERSION_ALIAS);
+  const aliasTarget = resolve(versionPaths.versionRoot);
+  if ((await readlink(aliasPath).catch(() => null)) !== aliasTarget) {
+    await mkdir(dirname(aliasPath), { recursive: true });
+    await replaceSymlink(aliasTarget, aliasPath);
+  }
+
+  const installedLaunchPath = runtime.installedLaunchPath;
+  if (installedLaunchPath == null || !installedLaunchPath.endsWith(".app")) {
+    return { aliasPath, launchPathStatus: "skipped-no-launch-path", payloadAppPath: null };
+  }
+  const payloadAppPath = join(aliasPath, "payload", basename(installedLaunchPath));
+  const entry = await lstat(installedLaunchPath).catch(() => null);
+  if (entry == null) {
+    await mkdir(dirname(installedLaunchPath), { recursive: true }).catch(() => undefined);
+    return {
+      aliasPath,
+      launchPathStatus: (await replaceSymlink(payloadAppPath, installedLaunchPath))
+        ? "linked"
+        : "skipped-existing-install",
+      payloadAppPath,
+    };
+  }
+  if (!entry.isSymbolicLink()) {
+    return { aliasPath, launchPathStatus: "skipped-existing-install", payloadAppPath };
+  }
+  if ((await readlink(installedLaunchPath).catch(() => null)) === payloadAppPath) {
+    return { aliasPath, launchPathStatus: "unchanged", payloadAppPath };
+  }
+  return {
+    aliasPath,
+    launchPathStatus: (await replaceSymlink(payloadAppPath, installedLaunchPath))
+      ? "updated"
+      : "skipped-existing-install",
+    payloadAppPath,
+  };
 }
