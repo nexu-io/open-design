@@ -122,14 +122,19 @@ export function createProjectStorageMirror(
         }
         if (entries.length > 0) return;
         const remote = await adapter.listFiles(projectId);
+        // Stage every object before materializing any: a partial S3 read
+        // failure must not leave a half-written local tree (all-or-nothing
+        // restore). Each path is confined to the project tree here — a hostile
+        // or corrupt store must never be able to materialize outside localDir.
+        const staged: { rel: string; body: Buffer }[] = [];
         for (const entry of remote) {
-          // Confine restores to the project tree: a hostile or corrupt store
-          // must never be able to materialize a path outside localDir.
           const rel = String(entry.path || '').replace(/\\/g, '/');
           if (!rel || rel.startsWith('/') || rel.split('/').some((seg) => seg === '..' || seg === '.')) {
             continue;
           }
-          const body = await adapter.readFile(projectId, rel);
+          staged.push({ rel, body: await adapter.readFile(projectId, rel) });
+        }
+        for (const { rel, body } of staged) {
           const target = path.join(localDir, rel);
           await fsp.mkdir(path.dirname(target), { recursive: true });
           await fsp.writeFile(target, body);
