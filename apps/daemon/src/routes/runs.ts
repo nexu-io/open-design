@@ -1764,6 +1764,21 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         : typeof requestBody.agentId === 'string' && requestBody.agentId
         ? requestBody.agentId
         : null;
+    // #7040 — cheap early gate: reject obviously source-less requests BEFORE
+    // the first agent-detection block so an empty body never pays the
+    // multi-second detectAgents probe. Raw fields only; the normalized/resolved
+    // gate below stays the authoritative check for ambiguous-but-plausible
+    // sources. A named plugin snapshot counts as a plugin source.
+    const rawHasPrompt =
+      (typeof requestBody.currentPrompt === 'string' && requestBody.currentPrompt.trim().length > 0)
+      || (typeof requestBody.message === 'string' && requestBody.message.trim().length > 0);
+    const rawHasAttachments = Array.isArray(requestBody.attachments) && requestBody.attachments.length > 0;
+    const rawHasPlugin =
+      (typeof requestBody.pluginId === 'string' && requestBody.pluginId.trim().length > 0)
+      || (typeof requestBody.appliedPluginSnapshotId === 'string' && requestBody.appliedPluginSnapshotId.trim().length > 0);
+    if (!rawHasPrompt && !rawHasAttachments && !rawHasPlugin) {
+      return sendApiError(res, 400, 'VALIDATION_FAILED', 'run requires a non-empty message, attachments, or a plugin');
+    }
     if (!effectiveAgentId) {
       try {
         const appCfg = await readAppConfig(RUNTIME_DATA_DIR);
@@ -2296,18 +2311,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         }
         throw err;
       }
-    }
-    // #7040 — cheap early gate: reject obviously source-less requests BEFORE
-    // agent detection so an empty body never pays the multi-second detectAgents
-    // probe. Raw fields only; the normalized/resolved gate below stays the
-    // authoritative check for ambiguous-but-plausible sources.
-    const rawHasPrompt =
-      (typeof requestBody.currentPrompt === 'string' && requestBody.currentPrompt.trim().length > 0)
-      || (typeof requestBody.message === 'string' && requestBody.message.trim().length > 0);
-    const rawHasAttachments = Array.isArray(requestBody.attachments) && requestBody.attachments.length > 0;
-    const rawHasPlugin = typeof requestBody.pluginId === 'string' && requestBody.pluginId.trim().length > 0;
-    if (!rawHasPrompt && !rawHasAttachments && !rawHasPlugin) {
-      return sendApiError(res, 400, 'VALIDATION_FAILED', 'run requires a non-empty message, attachments, or a plugin');
     }
     if (typeof meta.agentId !== 'string' || !meta.agentId) {
       try {
