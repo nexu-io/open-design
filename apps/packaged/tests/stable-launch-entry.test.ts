@@ -20,6 +20,12 @@ async function createRoot(): Promise<string> {
   return root;
 }
 
+/** The active version's staged directory — always present in real activations. */
+async function seedVersion(root: string, version: string): Promise<void> {
+  const paths = resolveLauncherPaths({ channel: "stable", namespace: "release-stable", root });
+  await mkdir(join(paths.versionsRoot, version), { recursive: true });
+}
+
 function fakeRuntime(options: {
   installedLaunchPath: string | null;
   root: string;
@@ -88,6 +94,7 @@ describe.skipIf(process.platform !== "darwin")("stable launch entry", () => {
   it("links the installed launch path to the aliased payload when it is absent", async () => {
     const root = await createRoot();
     const installedLaunchPath = join(root, "Applications", "Open Design.app");
+    await seedVersion(root, "0.24.1");
     const runtime = fakeRuntime({ installedLaunchPath, root, version: "0.24.1" });
 
     const result = await syncStableLaunchEntry(runtime);
@@ -104,6 +111,8 @@ describe.skipIf(process.platform !== "darwin")("stable launch entry", () => {
     const root = await createRoot();
     const installedLaunchPath = join(root, "Applications", "Open Design.app");
     await mkdir(join(root, "Applications"), { recursive: true });
+    await seedVersion(root, "0.24.0");
+    await seedVersion(root, "0.24.1");
 
     const firstRuntime = fakeRuntime({ installedLaunchPath, root, version: "0.24.0" });
     const first = await syncStableLaunchEntry(firstRuntime);
@@ -147,10 +156,51 @@ describe.skipIf(process.platform !== "darwin")("stable launch entry", () => {
     expect(result.payloadAppPath).toBe(join(result.aliasPath as string, "payload", "Open Design.app"));
   });
 
+  it("fails loudly instead of publishing an entry it could not verify", async () => {
+    const root = await createRoot();
+    const installedLaunchPath = join(root, "Applications", "Open Design.app");
+    await mkdir(join(root, "Applications"), { recursive: true });
+    const runtime = fakeRuntime({ installedLaunchPath, root, version: "0.24.1" });
+    // A real, non-empty directory sits where the alias belongs: `rename()`
+    // cannot replace it. Reporting success here would be the false-success path
+    // — the install path would get linked while `current` is still stale.
+    await mkdir(join(runtime.launcherPaths.namespaceRoot, "current", "Contents"), { recursive: true });
+
+    const result = await syncStableLaunchEntry(runtime);
+
+    expect(result.launchPathStatus).toBe("failed");
+    expect(result.payloadAppPath).toBeNull();
+    expect((await lstat(join(runtime.launcherPaths.namespaceRoot, "current"))).isDirectory()).toBe(true);
+    // The install path must stay untouched.
+    await expect(lstat(installedLaunchPath)).rejects.toThrow();
+  });
+
+  it("does not report a stale alias as unchanged", async () => {
+    const root = await createRoot();
+    const installedLaunchPath = join(root, "Applications", "Open Design.app");
+    await mkdir(join(root, "Applications"), { recursive: true });
+    const stale = fakeRuntime({ installedLaunchPath, root, version: "0.24.0" });
+    await mkdir(join(stale.launcherPaths.versionsRoot, "0.24.0"), { recursive: true });
+    await syncStableLaunchEntry(stale);
+    // Alias still on 0.24.0 but the runtime has moved on; the link at the
+    // install path already has the right *text*, so only the alias check can
+    // catch this.
+    await mkdir(join(stale.launcherPaths.versionsRoot, "0.24.1"), { recursive: true });
+    const dangling = fakeRuntime({ installedLaunchPath, root, version: "0.24.1" });
+
+    const result = await syncStableLaunchEntry(dangling);
+
+    expect(result.launchPathStatus).not.toBe("failed");
+    expect(await readlink(result.aliasPath as string)).toBe(
+      join(dangling.launcherPaths.versionsRoot, "0.24.1"),
+    );
+  });
+
   it("never replaces a real installed bundle", async () => {
     const root = await createRoot();
     const installedLaunchPath = join(root, "Applications", "Open Design.app");
     await mkdir(join(installedLaunchPath, "Contents", "MacOS"), { recursive: true });
+    await seedVersion(root, "0.24.1");
     const runtime = fakeRuntime({ installedLaunchPath, root, version: "0.24.1" });
 
     const result = await syncStableLaunchEntry(runtime);

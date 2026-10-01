@@ -444,6 +444,21 @@ export function isLauncherPayloadAppPath(paths: LauncherPaths, candidate: string
   return target.includes(`${sep}payload${sep}`);
 }
 
+/**
+ * The `<version>` segment an app path under `versions/` belongs to, or null
+ * when it is not a launcher payload app at all. Lets a caller prove an alias
+ * resolves to the *active* version rather than any version that happens to
+ * still be on disk — a stale alias is otherwise indistinguishable from a
+ * current one by path shape alone.
+ */
+export function launcherPayloadAppVersion(paths: LauncherPaths, candidate: string): string | null {
+  if (!isLauncherPayloadAppPath(paths, candidate)) return null;
+  const versionsRoot = resolve(paths.versionsRoot);
+  const relative = resolve(candidate).slice(versionsRoot.length + 1);
+  const version = relative.split(sep)[0] ?? "";
+  return version.length > 0 ? version : null;
+}
+
 function normalizePointer(value: LauncherVersionPointer | null): LauncherVersionPointer | null {
   if (value == null) return null;
   const version = normalizeLauncherVersion(value.version);

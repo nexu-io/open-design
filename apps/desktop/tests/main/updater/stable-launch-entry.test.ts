@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -96,6 +96,12 @@ const METADATA = {
   },
 };
 
+/** `runtime.json` is the only record of which version the launcher activated. */
+async function activeVersion(root: string): Promise<string> {
+  const raw: unknown = JSON.parse(await readFile(join(namespaceRoot(root), "runtime.json"), "utf8"));
+  return (raw as { active: { version: string } }).active.version;
+}
+
 /** The decision `updater.ts` makes on every check, minus the network fetch. */
 async function nextUpdateCheck(config: ReturnType<typeof updaterConfig>) {
   const launcherPayloadContextValid = await hasValidLauncherPayloadContext(config);
@@ -124,7 +130,9 @@ describe("launcher stable entry vs. payload-update eligibility", () => {
 
     const config = updaterConfig({ launcherLaunchPath: installedLaunchPath, root });
 
-    expect(await isManagedLauncherStableEntry(config)).toBe(true);
+    expect(await isManagedLauncherStableEntry(config, await activeVersion(root))).toBe(true);
+    // Without the active version there is no proof, so it stays rejected.
+    expect(await isManagedLauncherStableEntry(config)).toBe(false);
     const check = await nextUpdateCheck(config);
     expect(check.launcherPayloadContextValid).toBe(true);
     expect(check.reinstallRequirement).toBeUndefined();
@@ -167,7 +175,28 @@ describe("launcher stable entry vs. payload-update eligibility", () => {
 
     const config = updaterConfig({ launcherLaunchPath: installedLaunchPath, root });
 
-    expect(await isManagedLauncherStableEntry(config)).toBe(false);
+    expect(await isManagedLauncherStableEntry(config, await activeVersion(root))).toBe(false);
+    const check = await nextUpdateCheck(config);
+    expect(check.launcherPayloadContextValid).toBe(false);
+    expect(check.selected.ok && check.selected.candidate.artifact.type).toBe("dmg");
+  });
+
+  it("rejects a stale alias that still points at the superseded version", async () => {
+    const root = await createRoot();
+    await seedLauncher(root, "0.24.0");
+    const aliasAppPath = await linkStableEntry(root, "0.24.0");
+    const installedLaunchPath = join(root, "Applications", APP);
+    await mkdir(join(root, "Applications"), { recursive: true });
+    await symlink(aliasAppPath, installedLaunchPath, "dir");
+
+    // A half-finished activation: runtime.json already names 0.24.1, but the
+    // alias was never re-pointed. Path shape alone cannot tell this apart from
+    // a healthy entry — only the active version can.
+    await seedLauncher(root, "0.24.1");
+
+    const config = updaterConfig({ launcherLaunchPath: installedLaunchPath, root });
+
+    expect(await isManagedLauncherStableEntry(config, await activeVersion(root))).toBe(false);
     const check = await nextUpdateCheck(config);
     expect(check.launcherPayloadContextValid).toBe(false);
     expect(check.selected.ok && check.selected.candidate.artifact.type).toBe("dmg");
@@ -184,7 +213,7 @@ describe("launcher stable entry vs. payload-update eligibility", () => {
 
     const config = updaterConfig({ launcherLaunchPath: installedLaunchPath, root });
 
-    expect(await isManagedLauncherStableEntry(config)).toBe(false);
+    expect(await isManagedLauncherStableEntry(config, await activeVersion(root))).toBe(false);
     expect(await resolveInstalledOuterVersion(config)).toBe("0.20.0");
     const check = await nextUpdateCheck(config);
     expect(check.launcherPayloadContextValid).toBe(true);

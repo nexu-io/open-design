@@ -698,6 +698,7 @@ export async function confirmPackagedLauncherRuntime(runtime: PackagedLauncherRu
  *      the obsolete-installed-outer retirement flow.
  */
 export type StableLaunchEntryStatus =
+  | "failed"
   | "linked"
   | "skipped-existing-install"
   | "skipped-no-launch-path"
@@ -723,6 +724,20 @@ async function replaceSymlink(target: string, linkPath: string): Promise<boolean
     await rm(temporary, { force: true, recursive: true }).catch(() => undefined);
     return false;
   }
+}
+
+/**
+ * True only when the alias provably resolves to `versionRoot`. Path equality is
+ * not enough: the link can be missing, can point at the previous version, or
+ * can be shadowed by a real directory, and `rename` over those shapes can fail
+ * silently from the caller's point of view.
+ */
+async function aliasResolvesTo(aliasPath: string, versionRoot: string): Promise<boolean> {
+  const [alias, target] = await Promise.all([
+    realpath(aliasPath).catch(() => null),
+    realpath(versionRoot).catch(() => null),
+  ]);
+  return alias != null && target != null && alias === target;
 }
 
 export async function syncStableLaunchEntry(
@@ -755,9 +770,17 @@ export async function syncStableLaunchEntry(
       : null;
   const aliasPath = stablePaths?.aliasPath ?? join(runtime.launcherPaths.namespaceRoot, LAUNCHER_STABLE_ALIAS);
   const aliasTarget = resolve(versionPaths.versionRoot);
-  if ((await readlink(aliasPath).catch(() => null)) !== aliasTarget) {
+  if (!(await aliasResolvesTo(aliasPath, aliasTarget))) {
     await mkdir(dirname(aliasPath), { recursive: true });
-    await replaceSymlink(aliasTarget, aliasPath);
+    const replaced = await replaceSymlink(aliasTarget, aliasPath);
+    // Both the rename and the resulting link are verified. Falling through on
+    // either failure would link the install path (or report it `unchanged`)
+    // while `current` still resolves to the previous version — leaving the Dock
+    // launching a stale payload against current data, which is the mismatch
+    // this entry exists to prevent.
+    if (!replaced || !(await aliasResolvesTo(aliasPath, aliasTarget))) {
+      return { aliasPath, launchPathStatus: "failed", payloadAppPath: null };
+    }
   }
 
   if (installedLaunchPath == null || stablePaths == null) {

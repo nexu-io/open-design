@@ -6,6 +6,7 @@ import {
   LAUNCHER_SCHEMA_VERSION,
   compareLauncherVersions,
   isLauncherPayloadAppPath,
+  launcherPayloadAppVersion,
   resolveLauncherPaths,
   resolveLauncherStableEntryPaths,
   validateLauncherRuntimeDescriptor,
@@ -422,10 +423,16 @@ export async function fetchJson(fetchImpl: typeof globalThis.fetch, url: string)
  * a Homebrew-style link, a link to a different build) is still rejected below:
  * we cannot prove where it points, so the installer is the safe route.
  */
-export async function isManagedLauncherStableEntry(config: DesktopUpdaterConfig): Promise<boolean> {
+export async function isManagedLauncherStableEntry(
+  config: DesktopUpdaterConfig,
+  activeVersion: string | null = null,
+): Promise<boolean> {
   if (config.launcherRoot == null || config.launcherLaunchPath == null || config.namespace == null) {
     return false;
   }
+  // No active version means no proof: the alias could still be pointing at a
+  // superseded payload, which is exactly the state we must not trust.
+  if (activeVersion == null) return false;
   try {
     const launchEntry = await lstat(config.launcherLaunchPath);
     if (!launchEntry.isSymbolicLink()) return false;
@@ -450,7 +457,12 @@ export async function isManagedLauncherStableEntry(config: DesktopUpdaterConfig)
       realpath(paths.versionsRoot),
     ]);
     const resolvedPaths = { ...paths, root: rootTarget, versionsRoot: versionsTarget };
-    return launchTarget === stableTarget && isLauncherPayloadAppPath(resolvedPaths, stableTarget);
+    if (launchTarget !== stableTarget || !isLauncherPayloadAppPath(resolvedPaths, stableTarget)) return false;
+    // The alias must resolve to the ACTIVE version. A stale `current` (an
+    // activation that failed half way) is still a payload path under the
+    // launcher root, so path shape alone would accept it and keep an old
+    // payload eligible for updates.
+    return launcherPayloadAppVersion(resolvedPaths, stableTarget) === activeVersion;
   } catch {
     return false;
   }
@@ -461,15 +473,15 @@ export async function hasValidLauncherPayloadContext(config: DesktopUpdaterConfi
     return false;
   }
   try {
+    const runtime = await readJsonStrict<LauncherRuntimeDescriptor>(config.launcherRuntimePath);
+    validateLauncherRuntimeDescriptor(runtime, { channel: config.channel, namespace: config.namespace });
     await access(config.launcherLaunchPath);
     const launcherTarget = await lstat(config.launcherLaunchPath);
     if (launcherTarget.isSymbolicLink()) {
-      if (!(await isManagedLauncherStableEntry(config))) return false;
+      if (!(await isManagedLauncherStableEntry(config, runtime.active?.version ?? null))) return false;
     } else if (!launcherTarget.isFile() && !launcherTarget.isDirectory()) {
       return false;
     }
-    const runtime = await readJsonStrict<LauncherRuntimeDescriptor>(config.launcherRuntimePath);
-    validateLauncherRuntimeDescriptor(runtime, { channel: config.channel, namespace: config.namespace });
     return true;
   } catch {
     return false;
