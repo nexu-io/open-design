@@ -1053,6 +1053,47 @@ const CATALOGUE: CuratedSkill[] = [
     upstream: 'https://github.com/MiniMax-AI/skills',
     attribution: 'Curated from the MiniMax AI team.',
   },
+
+  // -------------------------------------------------------------------------
+  // Design ops & forms (Owl-Listener designer-skills)
+  // -------------------------------------------------------------------------
+  {
+    id: 'form-design',
+    description:
+      'Design a form end to end — field order, grouping, validation, and completion. Use when the artifact is a form, from single-field inputs to multi-step flows.',
+    triggers: ['form design', 'design form', 'form validation', 'multi-step form', 'form layout'],
+    mode: 'prototype',
+    category: 'web-artifacts',
+    upstream: 'https://github.com/Owl-Listener/designer-skills/tree/main/interaction-design/skills/form-design',
+    attribution: 'Curated from Owl-Listener designer-skills (MIT).',
+  },
+
+  // -------------------------------------------------------------------------
+  // Interface polish & anti-slop (single-purpose upstreams)
+  // -------------------------------------------------------------------------
+  {
+    id: 'make-interfaces-feel-better',
+    description:
+      'Design-engineering polish for interfaces: concentric border radius, optical alignment, shadows vs borders, interruptible animations, icon stroke weight and states, tabular numbers, hit areas. Use when building UI components, reviewing frontend code, or fixing a surface that feels off.',
+    triggers: ['make it feel better', 'feels off', 'concentric border radius', 'optical alignment', 'tabular numbers', 'icon stroke weight'],
+    mode: 'prototype',
+    category: 'creative-direction',
+    upstream: 'https://github.com/jakubkrehel/make-interfaces-feel-better',
+    attribution: 'Curated from @jakubkrehel (MIT).',
+  },
+  {
+    id: 'hallmark',
+    description:
+      'Anti-AI-slop page design: picks a macrostructure from 21 page shapes, applies a theme, runs slop-test gates plus a pre-emit self-critique. Verbs: default build, hallmark audit (ranked punch list, no edits), hallmark redesign, hallmark study (extract design DNA from a screenshot or URL). Use for non-generic landing pages and redesigns.',
+    triggers: ['hallmark', 'hallmark audit', 'hallmark redesign', 'hallmark study', 'anti-ai-slop page'],
+    mode: 'prototype',
+    category: 'creative-direction',
+    upstream: 'https://github.com/nutlope/hallmark',
+    attribution: 'Curated from @nutlope (MIT).',
+    catalogueOnlyNote:
+      'OpenDesign ships this entry as discovery metadata only. The upstream theme catalog, reference files, and study/redesign workflows are not bundled here; install the upstream skill to run the full workflow.',
+  },
+
 ];
 
 function buildBody(s: CuratedSkill): string {
