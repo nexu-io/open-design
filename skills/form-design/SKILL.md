@@ -9,7 +9,7 @@ triggers:
   - "multi-step form"
   - "form layout"
 od:
-  mode: prototype
+  mode: utility
   category: web-artifacts
   upstream: "https://github.com/Owl-Listener/designer-skills/tree/main/interaction-design/skills/form-design"
 ---

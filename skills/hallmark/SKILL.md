@@ -9,7 +9,7 @@ triggers:
   - "hallmark study"
   - "anti-ai-slop page"
 od:
-  mode: prototype
+  mode: utility
   category: creative-direction
   upstream: "https://github.com/nutlope/hallmark"
 ---

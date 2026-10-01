@@ -10,7 +10,7 @@ triggers:
   - "tabular numbers"
   - "icon stroke weight"
 od:
-  mode: prototype
+  mode: utility
   category: creative-direction
   upstream: "https://github.com/jakubkrehel/make-interfaces-feel-better"
 ---
