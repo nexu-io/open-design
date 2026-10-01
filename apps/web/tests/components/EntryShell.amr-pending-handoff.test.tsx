@@ -294,14 +294,7 @@ describe('OPEND-2614 · Home send hands off before the AMR gate', () => {
   });
 });
 
-/**
- * OPEND-3300 / 3309 · a wallet the shell already knows is empty is answered on
- * Home, before the hand-off: the rail's 额度 reading for the exact send scope
- * is `$0`, so the dialog opens on the click tick with no frame and no create.
- * One background confirmation runs behind it; only a non-blocking answer (the
- * projection was stale) moves the send onto the ordinary hand-off path.
- */
-describe('OPEND-3300 · an empty in-memory wallet blocks on Home before the hand-off', () => {
+describe('zero wallet never bypasses the ordinary scoped preflight hand-off', () => {
   let billingReads = 0;
 
   beforeEach(() => {
@@ -359,34 +352,27 @@ describe('OPEND-3300 · an empty in-memory wallet blocks on Home before the hand
     await new Promise((resolve) => { setTimeout(resolve, 0); });
   }
 
-  it('still empty on confirmation: dialog on Home, no hand-off, dismiss leaves the draft', async () => {
+  it('confirmed sign-out still rolls back the pending frame and preserves the draft', async () => {
     const h = harness('amr');
-    h.setGate({ kind: 'hard', reason: 'insufficient', snapshot: emptyWallet() });
+    h.setGate({ kind: 'hard', reason: 'signed_out', snapshot: { ...emptyWallet(), status: 'signed_out' } });
     await waitForWalletInMemory();
     await submitHome('Design a pricing page.');
     await screen.findByTestId('amr-balance-dialog');
-    // The frame never opened: nothing to roll back, nothing created.
-    expect(h.onBeginProjectCreation).not.toHaveBeenCalled();
-    // Exactly one background confirmation, started with the dialog.
-    await waitFor(() => expect(mockedCheckAmrBalanceGate).toHaveBeenCalledTimes(1));
-    fireEvent.click(screen.getByTestId('amr-balance-dialog-dismiss'));
-    await waitFor(() => expect(screen.queryByTestId('amr-balance-dialog')).toBeNull());
-    expect(h.onBeginProjectCreation).not.toHaveBeenCalled();
+    expect(h.onBeginProjectCreation).toHaveBeenCalledTimes(1);
     expect(h.onCreateProject).not.toHaveBeenCalled();
-    expect(h.rollback).not.toHaveBeenCalled();
-    expect(h.calls).toEqual(['gate']);
+    fireEvent.click(screen.getByTestId('amr-balance-dialog-dismiss'));
+    await waitFor(() => expect(h.rollback).toHaveBeenCalledTimes(1));
+    expect(h.calls).toEqual(['begin', 'gate', 'rollback:']);
   });
 
-  it('confirmation reads a fundable wallet: the dialog closes itself and the ordinary hand-off follows', async () => {
+  it('zero wallet proceeds without a preliminary dialog or duplicate preflight', async () => {
     const h = harness('amr');
     await waitForWalletInMemory();
     await submitHome('Draft a landing page.');
-    // The stale projection said $0, so the dialog opened on Home first …
     await waitFor(() => expect(mockedCheckAmrBalanceGate).toHaveBeenCalledTimes(1));
-    // … and the confirmation (allow) moved the send onto the normal path.
     await waitFor(() => expect(h.onCreateProject).toHaveBeenCalledTimes(1));
     expect(screen.queryByTestId('amr-balance-dialog')).toBeNull();
-    expect(h.calls).toEqual(['gate', 'begin', 'gate', 'create']);
+    expect(h.calls).toEqual(['begin', 'gate', 'create']);
     expect(h.onCreateProject.mock.calls[0]?.[0]).toMatchObject({
       optimisticProjectId: 'optimistic-2614',
     });
@@ -418,7 +404,7 @@ describe('OPEND-3300 · local Team authority on a $0 Home send', () => {
   });
 
   it.each(['member', 'admin'] as const)(
-    'shows the owner top-up dialog for a Team %s with $0 on Home',
+    'does not show a wallet-only block for Team %s with $0',
     async (role) => {
       const workspace: WorkspaceCollabContext = {
         workspaceId: 'ws-team-3300',
@@ -478,13 +464,13 @@ describe('OPEND-3300 · local Team authority on a $0 Home send', () => {
       }) as typeof fetch;
 
       const h = harness('amr');
-      h.setGate({ kind: 'hard', reason: 'insufficient', snapshot: emptyWallet() });
       await waitFor(() => expect(billingReads).toBeGreaterThan(0));
       await new Promise((resolve) => { setTimeout(resolve, 0); });
       await submitHome('Design the onboarding flow.');
-      await screen.findByTestId('amr-balance-owner-dialog');
+      await waitFor(() => expect(h.onCreateProject).toHaveBeenCalledTimes(1));
+      expect(screen.queryByTestId('amr-balance-owner-dialog')).toBeNull();
       expect(screen.queryByTestId('amr-balance-dialog')).toBeNull();
-      expect(h.onBeginProjectCreation).not.toHaveBeenCalled();
+      expect(h.onBeginProjectCreation).toHaveBeenCalledTimes(1);
       const contextCall = vi.mocked(globalThis.fetch).mock.calls.find(
         ([input]) => String(input).endsWith('/api/workspace/context'),
       );

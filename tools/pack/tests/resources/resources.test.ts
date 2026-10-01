@@ -41,6 +41,64 @@ async function pinnedVelaCliVersion(): Promise<string> {
 }
 
 /**
+ * Help output for the two `vela billing` subcommands packaging gates on, as
+ * the pinned CLI actually prints them.
+ */
+function velaBillingHelp(args: readonly string[]): { stderr: string; stdout: string } {
+  if (args[1] === "preflight") {
+    return {
+      stderr: "",
+      stdout: [
+        "Preview member Coding Plan and wallet funding (advisory)",
+        "",
+        "Usage:",
+        "  vela billing preflight [flags]",
+        "",
+        "Flags:",
+        '      --format string         output format: text or json (default "text")',
+        "  -h, --help                  help for preflight",
+        "      --model string          public model id or name",
+        "      --workspace-id string   workspace id (required)",
+      ].join("\n"),
+    };
+  }
+  return {
+    stderr: "",
+    stdout: [
+      "Usage:",
+      "  vela billing workspace-snapshot [flags]",
+      "      --workspace-id string",
+      "      --format string",
+    ].join("\n"),
+  };
+}
+
+/**
+ * What a pre-0.1.4 CLI prints for `billing preflight --help`: cobra has no
+ * such subcommand, so it falls back to the parent `billing` help and still
+ * exits 0. Packaging cannot detect the gap from exit status alone, which is
+ * why the coding plan gate matches on help markers.
+ */
+const VELA_BILLING_PARENT_HELP = [
+  "Show Vela billing information",
+  "",
+  "Usage:",
+  "  vela billing [command]",
+  "",
+  "Available Commands:",
+  "  checkout           Create a team subscription checkout session",
+  "  summary            Show subscription and credit balance summary",
+  "  team-catalog       Show team workspace billing plan catalog",
+  "  workspace-balance  Show the balance for one explicit workspace",
+  "  workspace-snapshot Show one authoritative Workspace billing snapshot",
+  "",
+  "Flags:",
+  "  -h, --help   help for billing",
+  "",
+  'Use "vela billing [command] --help" for more information about a command.',
+].join("\n");
+
+/**
  * Help output as current Vela prints it: `--authorize-only` made `stageDir`
  * optional, so the usage line reads `[stageDir]`. Every flag the daemon drives
  * is still there — the capability is unchanged, only the usage shape moved.
@@ -53,15 +111,7 @@ async function velaCliCommandWithOptionalStageDir(
     return { stderr: "", stdout: `${await pinnedVelaCliVersion()}\n` };
   }
   if (args[0] === "billing") {
-    return {
-      stderr: "",
-      stdout: [
-        "Usage:",
-        "  vela billing workspace-snapshot [flags]",
-        "      --workspace-id string",
-        "      --format string",
-      ].join("\n"),
-    };
+    return velaBillingHelp(args);
   }
   return {
     stderr: "",
@@ -90,15 +140,7 @@ async function velaCliCommandWithoutStageDir(
     return { stderr: "", stdout: `${await pinnedVelaCliVersion()}\n` };
   }
   if (args[0] === "billing") {
-    return {
-      stderr: "",
-      stdout: [
-        "Usage:",
-        "  vela billing workspace-snapshot [flags]",
-        "      --workspace-id string",
-        "      --format string",
-      ].join("\n"),
-    };
+    return velaBillingHelp(args);
   }
   return {
     stderr: "",
@@ -121,15 +163,7 @@ async function matchingVelaCliCommand(
     return { stderr: "", stdout: `${await pinnedVelaCliVersion()}\n` };
   }
   if (args[0] === "billing") {
-    return {
-      stderr: "",
-      stdout: [
-        "Usage:",
-        "  vela billing workspace-snapshot [flags]",
-        "      --workspace-id string",
-        "      --format string",
-      ].join("\n"),
-    };
+    return velaBillingHelp(args);
   }
   return {
     stderr: "",
@@ -425,6 +459,69 @@ describe("copyOptionalVelaCliBinary", () => {
           },
         }),
       ).rejects.toThrow(/workspace billing snapshot/i);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("rejects a strict build when Vela lacks the coding plan preflight", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-vela-preflight-"));
+    const source = join(root, "source", "vela");
+    const resourceRoot = join(root, "resources", "open-design");
+    const expectedVersion = await pinnedVelaCliVersion();
+
+    try {
+      await mkdir(join(root, "source"), { recursive: true });
+      await writeFile(source, "#!/bin/sh\nexit 0\n", "utf8");
+      await writeFakeOpenCodeCompanion(source);
+
+      await expect(
+        copyOptionalVelaCliBinary({
+          env: { OPEN_DESIGN_VELA_CLI_BIN: source },
+          platform: "mac",
+          requireBundled: true,
+          resourceRoot,
+          runCommand: async (_binary, args) => {
+            if (args[0] === "--version") {
+              return { stderr: "", stdout: `${expectedVersion}\n` };
+            }
+            if (args[0] === "team-projects") {
+              return matchingVelaCliCommand(source, args);
+            }
+            if (args[1] === "preflight") {
+              return { stderr: "", stdout: VELA_BILLING_PARENT_HELP };
+            }
+            return velaBillingHelp(args);
+          },
+        }),
+      ).rejects.toThrow(
+        /coding plan preflight capability markers: preflight, --workspace-id, --model/i,
+      );
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("accepts a Vela CLI that exposes the coding plan preflight", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-vela-preflight-ok-"));
+    const source = join(root, "source", "vela");
+    const resourceRoot = join(root, "resources", "open-design");
+
+    try {
+      await mkdir(join(root, "source"), { recursive: true });
+      await writeFile(source, "#!/bin/sh\nexit 0\n", "utf8");
+      await writeFakeOpenCodeCompanion(source);
+
+      const copied = await copyOptionalVelaCliBinary({
+        env: { OPEN_DESIGN_VELA_CLI_BIN: source },
+        platform: "mac",
+        requireBundled: true,
+        resourceRoot,
+        runCommand: matchingVelaCliCommand,
+      });
+
+      expect(copied?.target).toBe(join(resourceRoot, "bin", "vela"));
+      await expect(access(join(resourceRoot, "bin", "vela"))).resolves.toBeUndefined();
     } finally {
       await rm(root, { force: true, recursive: true });
     }

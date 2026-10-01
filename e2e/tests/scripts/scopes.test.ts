@@ -30,6 +30,53 @@ function plan(context: "pr" | "merge-queue" | "full", files: string[] = []): Pla
 }
 
 describe("workflow scope planner", () => {
+  test("selects existing workloads only for explicitly scoped manual runs", () => {
+    const temporaryRoot = mkdtempSync(path.join(tmpdir(), "scope-selection-"));
+    try {
+      const eventPath = path.join(temporaryRoot, "event.json");
+      const planPath = path.join(temporaryRoot, "plan.json");
+      writeFileSync(eventPath, JSON.stringify({ inputs: { ci_mode: "full" } }));
+      const env = { ...process.env, GITHUB_EVENT_NAME: "workflow_dispatch",
+        GITHUB_EVENT_PATH: eventPath, GITHUB_REPOSITORY: "example/repo",
+        CI_WORKLOADS: "platform_build,platform_tests" };
+      execFileSync("python3", [script, "github-output", "--output", planPath], { cwd: repoRoot, env });
+      const result = JSON.parse(readFileSync(planPath, "utf8"));
+      expect(Object.entries(result.enabled).filter(([, enabled]) => enabled).map(([id]) => id).sort())
+        .toEqual(["platform_build", "platform_tests"]);
+      expect(result.source).toBe("workflow_dispatch:selected");
+      const invalid = spawnSync("python3", [script, "github-output"], {
+        cwd: repoRoot, env: { ...env, CI_WORKLOADS: "typo" }, encoding: "utf8",
+      });
+      expect(invalid.status).toBe(2);
+      expect(invalid.stderr).toContain("unknown workload");
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("keeps aggregate manual selections compatible with shard-level workload identities", () => {
+    const temporaryRoot = mkdtempSync(path.join(tmpdir(), "scope-selection-alias-"));
+    try {
+      const eventPath = path.join(temporaryRoot, "event.json");
+      const planPath = path.join(temporaryRoot, "plan.json");
+      writeFileSync(eventPath, JSON.stringify({ inputs: { ci_mode: "full" } }));
+      const env = { ...process.env, GITHUB_EVENT_NAME: "workflow_dispatch",
+        GITHUB_EVENT_PATH: eventPath, GITHUB_REPOSITORY: "example/repo",
+        CI_WORKLOADS: "daemon_unit_tests,ui_p0,web_workspace_tests" };
+      execFileSync("python3", [script, "github-output", "--output", planPath], { cwd: repoRoot, env });
+      const result = JSON.parse(readFileSync(planPath, "utf8"));
+      expect(Object.entries(result.enabled).filter(([, enabled]) => enabled).map(([id]) => id).sort())
+        .toEqual([
+          "daemon_unit_1", "daemon_unit_2", "daemon_unit_3", "daemon_unit_4",
+          "ui_p0_entry_settings", "ui_p0_project_collab", "ui_p0_project_runtime",
+          "ui_p0_project_workspace", "ui_p0_project_workspace_editor", "ui_p0_workspace_restoration",
+          "web_workspace_1", "web_workspace_2",
+        ]);
+      expect(result.selection).toEqual(["daemon_unit_tests", "ui_p0", "web_workspace_tests"]);
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
   test("keeps the JSON matrices aligned with the business-owned suite topology", () => {
     expect(plan("full").matrices).toEqual({ ui_p0: uiP0CiMatrix, visual: visualCiMatrix });
   });
@@ -60,15 +107,15 @@ describe("workflow scope planner", () => {
   test("routes representative PR changes without importing the workspace", () => {
     expect(plan("pr", ["apps/web/src/App.tsx"])).toMatchObject({
       scopes: { web_tests_required: true, ui_p0_validation_required: true, visual_validation_required: true },
-      enabled: { web_workspace_tests: true, e2e_vitest: true, ui_p0: true, playwright_visual: true },
+      enabled: { web_workspace_1: true, web_workspace_2: true, e2e_vitest: true, ui_p0_entry_settings: true, playwright_visual: true },
     });
     expect(plan("pr", ["apps/desktop/src/main.ts"])).toMatchObject({
       scopes: { tools_dev_tests_required: true, tools_pack_tests_required: true },
-      enabled: { windows_tools_pack_payload_tests: false, ui_p0: false, playwright_critical: false },
+      enabled: { windows_tools_pack_payload_tests: false, ui_p0_entry_settings: false, playwright_critical: false },
     });
     expect(plan("pr", ["tools/pack/src/win/payload.ts"])).toMatchObject({
       scopes: { tools_pack_tests_required: true, windows_tools_pack_payload_tests_required: true },
-      enabled: { windows_tools_pack_payload_tests: true, ui_p0: false, playwright_critical: false },
+      enabled: { windows_tools_pack_payload_tests: true, ui_p0_entry_settings: false, playwright_critical: false },
     });
     expect(plan("pr", ["tools/pack/src/launcher/layout.ts"])).toMatchObject({
       scopes: { tools_pack_tests_required: true, windows_tools_pack_payload_tests_required: true },
@@ -93,7 +140,7 @@ describe("workflow scope planner", () => {
     });
     expect(plan("pr", ["docs/spec.md"])).toMatchObject({
       scopes: { workspace_validation_required: false },
-      enabled: { preflight: true, workspace_unit_tests: true, ui_p0: false },
+      enabled: { preflight: true, workspace_unit_tests: true, ui_p0_entry_settings: false },
     });
   });
 
@@ -117,6 +164,8 @@ describe("workflow scope planner", () => {
       ".github/scripts/convergence.py",
       ".github/scripts/runners.py",
       ".github/scripts/handoff.py",
+      ".github/scripts/template.py",
+      ".github/templates/merge-queue/ci-failure.md",
       ".github/scripts/lib/config.py",
       ".github/scripts/lib/github.py",
       ".github/scripts/lib/r2.py",
@@ -163,7 +212,10 @@ describe("workflow scope planner", () => {
       trace: { escalations: [] },
     });
     expect(plan("merge-queue", ["apps/daemon/src/server.ts"])).toMatchObject({
-      enabled: { daemon_unit_tests: true, e2e_vitest: true, ui_p0: true, web_workspace_tests: false },
+      enabled: {
+        daemon_unit_1: true, daemon_unit_2: true, daemon_unit_3: true, daemon_unit_4: true,
+        e2e_vitest: true, ui_p0_entry_settings: true, web_workspace_1: false, web_workspace_2: false,
+      },
       trace: { escalations: [] },
     });
     expect(plan("merge-queue", ["apps/desktop/src/main.ts"])).toMatchObject({
@@ -200,6 +252,8 @@ describe("workflow scope planner", () => {
     const workflow = readFileSync(path.join(repoRoot, ".github/workflows/ci.yml"), "utf8");
     expect(workflow).toContain("python3 .github/scripts/scopes.py github-output");
     expect(workflow).not.toContain("scripts/scopes.ts");
+    expect(workflow).toContain("  ui_p0:\n    name: ${{ matrix.name }}");
+    expect(workflow).not.toContain("name: UI P0 (${{ matrix.name }})");
     const windowsPayload = workflow.slice(
       workflow.indexOf("  windows_tools_pack_payload_tests:"),
       workflow.indexOf("  web_workspace_tests:"),

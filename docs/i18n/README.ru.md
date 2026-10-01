@@ -1,13 +1,11 @@
-<h1 align="center">OpenDesign: открытая альтернатива Claude Design</h1>
+<h1 align="center">OpenDesign: первое совместное рабочее пространство с дизайн-агентами</h1>
 
-> ⚡ **[OpenDesign Cloud — официальный сервис моделей.](https://open-design.ai/zh/pricing/)** Одно пополнение открывает доступ к агентным и графическим моделям в OpenDesign: GPT, Claude и DeepSeek для агентов; GPT Image 2.0, Seedream 5.0 Pro и Nano Banana 2.0 для изображений.
->
-> 🚀 **[DeepSeek V4 Flash и V4 Pro уже доступны.](https://open-design.ai/zh/pricing/)** Используйте передовой интеллект для прототипов, презентаций, дизайн-систем и повседневных агентных задач. Участники OpenDesign могут пользоваться обеими моделями без ограничений две недели прямо в приложении.
+> ✨ **[Представляем OpenDesign Go](https://open-design.ai/pricing/)**. Go Plan стоит от 8 долларов в первый месяц и включает ежемесячные кредиты для более чем 10 моделей, в том числе GPT-6.1 Sol, GPT-6 Luna, DeepSeek V4.1 Flash, GLM-5.3 Flash-X и MiMo V2.6 Flash. Все персональные тарифы включают доступ к API для Codex, Claude Code, DSH, OpenCode и других инструментов.
 >
 > 🧩 **[DeepSeek Harness теперь поддерживается.](https://open-design.ai/zh/agents/deepseek-harness-design/)** Подключите официальный Agent Harness `dsh` от DeepSeek к OpenDesign как нативную среду выполнения со структурированным мышлением, вызовами инструментов, поиском моделей, отменой и возобновлением сессии. Созданные файлы остаются в рабочем процессе OpenDesign для живого предпросмотра и передачи результата.
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Баннер OpenDesign: заголовок &quot;Открытая альтернатива Claude Design&quot; на фоне классической сцены с колоннами, фигурами в тогах и цифровым кодом, а также карточками статистики по дизайн-системам, плагинам, кодинг-агентам и медиапровайдерам" width="100%" />
+  <img src="../../docs/assets/readme-hero-design-agent.webp" alt="OpenDesign: первое совместное рабочее пространство с дизайн-агентами" width="100%" />
 </p>
 
 <p align="center">
@@ -31,79 +29,65 @@
 
 ## Что такое OpenDesign
 
-🎨 **Открытая альтернатива Claude Design.** &nbsp;🖥️ **Локальное по умолчанию нативное десктопное приложение для macOS и Windows.** &nbsp;⚡ **100+ функциональных навыков + отдельный каталог шаблонов рендеринга** · ✨ **151 пакет дизайн-систем** · 📦 **277 плагинов.** &nbsp;🤖 **Работает через 25 различных локальных исполняемых CLI**, либо на любом OpenAI-совместимом эндпоинте через BYOK.
+OpenDesign — **совместное рабочее пространство с дизайн-агентами**. Начните с описания задачи и используйте привычного агента для разработки или OpenDesign Cloud, чтобы создать прототип в соответствии с вашей дизайн-системой. Поделитесь им с командой, соберите отзывы и попросите агента доработать результат в том же проекте.
 
-OpenDesign превращает этот цикл в **файловую систему функциональных навыков, шаблонов рендеринга, дизайн-систем и плагинов**, которую агенты могут читать, писать и ремиксовать.
-
-Это также **альтернатива Figma для эпохи агентов** — вместо того чтобы двигать пиксели на холсте, она поставляет одностраничные артефакты в настоящем CSS, настоящих шрифтах, настоящих компонентах, экспортируемые сразу в HTML / PDF / PPTX / MP4 — уже оформленные вашей дизайн-системой, уже запускаемые внутри агента, которым вы пользуетесь каждый день.
+Этот процесс открыт и расширяем. Как **открытая альтернатива Claude Design**, OpenDesign распространяется по лицензии Apache 2.0: команды могут изучать и адаптировать навыки, шаблоны, дизайн-системы и плагины под свои процессы.
 
 
 ---
 
 ## Обзор продукта
 
-Краткий обзор основного рабочего процесса OpenDesign. Начните с брифа на **Home**, найдите переиспользуемые навыки в **Plugins** и превратите брендовые материалы в **Design System**. Затем перейдите в **Studio** проекта, чтобы создавать и совершенствовать прототипы, презентации, мобильные приложения, изображения, документы и HyperFrame в одном месте.
-
 ### Основные страницы
 
 <table>
 <tr>
-<td valign="top">
-<img src="../../docs/screenshots/product-tour/home.png" alt="Home" /><br/>
-<sub><b>Home</b> — Выберите тип артефакта, введите бриф и задайте дизайн-систему, рабочий каталог и модель перед началом работы.</sub>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/home-workspace-2026-09-30-220844.png"><img src="../../docs/screenshots/product-tour/home-workspace-2026-09-30-220844.png" alt="Home — Начните с описания задачи или примера." width="500" /></a><br/>
+<sub><b>Home</b> — Начните с описания задачи или примера.</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/all-projects-2026-09-30-220900.webp"><img src="../../docs/screenshots/product-tour/all-projects-2026-09-30-220900.webp" alt="All projects — Вернитесь к дизайн-системам, медиафайлам и прототипам." width="500" /></a><br/>
+<sub><b>All projects</b> — Вернитесь к дизайн-системам, медиафайлам и прототипам.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/design-systems-stripe-2026-09-30-220910.png"><img src="../../docs/screenshots/product-tour/design-systems-stripe-2026-09-30-220910.png" alt="Design Systems — Изучайте фирменные материалы и дорабатывайте их с агентом." width="500" /></a><br/>
+<sub><b>Design Systems</b> — Изучайте фирменные материалы и дорабатывайте их с агентом.</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/plugins-skills-2026-09-30-220917.png"><img src="../../docs/screenshots/product-tour/plugins-skills-2026-09-30-220917.png" alt="Plugins — Находите навыки и запускайте их через Try it." width="500" /></a><br/>
+<sub><b>Plugins</b> — Находите навыки и запускайте их через Try it.</sub>
 </td>
 </tr>
 </table>
+
+### Studio — создание и доработка в одном проекте
 
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/plugins.png" alt="Plugins" /><br/>
-<sub><b>Plugins</b> — Просматривайте официальные навыки по категориям, ищите по каталогу и запускайте рабочий процесс с помощью <code>Try it</code>.</sub>
+<img src="../../docs/screenshots/product-tour/studio-prototype-2026.webp" alt="Prototype — Создавайте и улучшайте интерактивные сайты вместе с агентом и просматривайте результат в реальном времени." /><br/>
+<sub><b>Prototype</b> — Создавайте и улучшайте интерактивные сайты вместе с агентом и просматривайте результат в реальном времени.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/design-system.png" alt="Design System" /><br/>
-<sub><b>Design System</b> — Извлеките и уточните визуальный язык бренда, просмотрите результат и продолжайте создавать с ним в том же рабочем пространстве.</sub>
+<img src="../../docs/screenshots/product-tour/studio-slides-2026.png" alt="Slides — Создавайте презентации, проверяйте слайды и заметки докладчика, затем экспортируйте результат." /><br/>
+<sub><b>Slides</b> — Создавайте презентации, проверяйте слайды и заметки докладчика, затем экспортируйте результат.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/product-tour/studio-image-2026.webp" alt="Image — Создавайте изображения из переписки, проверяйте результат, затем скачивайте или открывайте его." /><br/>
+<sub><b>Image</b> — Создавайте изображения из переписки, проверяйте результат, затем скачивайте или открывайте его.</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/studio-hyperframes-2026.mp4"><img src="../../docs/screenshots/product-tour/studio-hyperframes-poster-2026.png" alt="HyperFrames — Создавайте анимированную графику с агентом и экспортируйте её в MP4." /></a><br/>
+<sub><b>HyperFrames</b> — Создавайте анимированную графику с агентом и экспортируйте её в MP4. <a href="../../docs/screenshots/product-tour/studio-hyperframes-2026.mp4">Смотреть видео</a>.</sub>
 </td>
 </tr>
 </table>
 
-### Studio — множество типов артефактов в одном проекте
-
-В Studio проекта беседа, созданные файлы и живой предпросмотр остаются вместе для шести типов артефактов:
-
-<table>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-prototype.png" alt="Прототип" /><br/>
-<sub><b>Прототип</b> — Создавайте или реконструируйте веб-интерфейсы, проверяйте отрендеренную страницу и продолжайте итерации с агентом на месте.</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-deck.png" alt="Презентация" /><br/>
-<sub><b>Презентация</b> — Создавайте многостраничные презентации, проверяйте миниатюры и заметки докладчика и экспортируйте готовый результат.</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-mobile-app.png" alt="Мобильное приложение" /><br/>
-<sub><b>Мобильное приложение</b> — Создавайте и улучшайте мобильные интерфейсы в предпросмотре устройства, сохраняя рядом беседу, выходные файлы и следующие действия.</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-image.png" alt="Изображение" /><br/>
-<sub><b>Изображение</b> — Создавайте визуальные материалы из беседы проекта, просматривайте результат в полном размере, затем скачивайте или открывайте его.</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-document.png" alt="Документ" /><br/>
-<sub><b>Документ</b> — Создавайте отточенные многостраничные руководства и редакционные документы, проверяйте макет и экспортируйте или делитесь готовым результатом.</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-hyperframe.png" alt="HyperFrame" /><br/>
-<sub><b>HyperFrame</b> — Создавайте управляемую кодом анимационную графику, просматривайте анимацию в Studio и экспортируйте готовое видео.</sub>
-</td>
-</tr>
-</table>
 ---
 
 ## Совместимость с платформами

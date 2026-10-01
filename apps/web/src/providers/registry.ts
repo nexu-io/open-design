@@ -107,6 +107,7 @@ import {
   currentWorkspaceAccountGeneration,
 } from '../collab/workspace-identity';
 import { PublicFilePublishError } from '../collab/public-file-publish';
+import { clientRequestIdHeaders, withDaemonFailure } from '../analytics/failure-detail';
 
 /**
  * `coalescedGet` ttl for reads that may only JOIN a request still on the wire.
@@ -1877,6 +1878,7 @@ export async function deployProjectFile(
   cloudflarePages?: WebCloudflarePagesDeploySelection,
   target?: 'preview' | 'production',
   workspaceContext?: WorkspaceCollabContext | null,
+  requestId?: string,
 ): Promise<WebDeployProjectFileResponse> {
   const body = {
     fileName,
@@ -1889,12 +1891,13 @@ export async function deployProjectFile(
     headers: {
       'Content-Type': 'application/json',
       ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
+      ...clientRequestIdHeaders(requestId),
     },
     body: JSON.stringify(body),
   });
   if (!resp.ok) {
     const payload = (await resp.json().catch(() => null)) as
-      | { error?: { message?: string; code?: string }; code?: string; message?: string }
+      | { error?: { message?: string; code?: string; failure?: unknown }; code?: string; message?: string }
       | null;
     const message = payload?.error?.message || payload?.message || `Deploy failed (${resp.status})`;
     // Preserve a queryable failure code for analytics (`deployErrorCode` reads
@@ -1908,7 +1911,9 @@ export async function deployProjectFile(
     // one code.
     const rawCode = payload?.error?.code || payload?.code;
     const code = rawCode && !GENERIC_DEPLOY_ENVELOPE_CODES.has(rawCode) ? rawCode : `HTTP_${resp.status}`;
-    throw Object.assign(new Error(message), { code });
+    throw withDaemonFailure(Object.assign(new Error(message), { code }), {
+      failure: payload?.error?.failure,
+    });
   }
   return (await resp.json()) as WebDeployProjectFileResponse;
 }
@@ -1942,6 +1947,7 @@ export async function publishProjectFilePublic(
   projectId: string,
   fileName: string,
   workspaceContext?: WorkspaceCollabContext | null,
+  requestId?: string,
 ): Promise<WebPublicProjectFileResponse> {
   // Carry the active workspace identity so the daemon's `canShareProjectsForRequest`
   // gate (apps/daemon/src/routes/collab-sync.ts) reads the real permission bit
@@ -1951,7 +1957,14 @@ export async function publishProjectFilePublic(
     `/api/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(fileName)}/publish-public`,
     {
       method: 'POST',
-      ...(workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : {}),
+      ...(workspaceContext || requestId
+        ? {
+            headers: {
+              ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
+              ...clientRequestIdHeaders(requestId),
+            },
+          }
+        : {}),
     },
   );
   if (!resp.ok) {
@@ -1959,6 +1972,7 @@ export async function publishProjectFilePublic(
       | {
           error?: { code?: unknown; message?: unknown; data?: unknown } | string;
           message?: unknown;
+          failure?: unknown;
         }
       | null;
     const structuredError = payload?.error && typeof payload.error === 'object'
@@ -1980,13 +1994,16 @@ export async function publishProjectFilePublic(
     const recoveryData = code === PUBLIC_FILE_MANUAL_REVOKE_REQUIRED
       ? parsePublicFileManualRevokeData(structuredError?.data)
       : undefined;
-    throw new PublicFilePublishError(
-      errorMessage || `Publish failed (${resp.status})`,
-      resp.status,
-      code,
-      recoveryData?.projectId === projectId && recoveryData.fileName === fileName
-        ? recoveryData
-        : undefined,
+    throw withDaemonFailure(
+      new PublicFilePublishError(
+        errorMessage || `Publish failed (${resp.status})`,
+        resp.status,
+        code,
+        recoveryData?.projectId === projectId && recoveryData.fileName === fileName
+          ? recoveryData
+          : undefined,
+      ),
+      { failure: payload?.failure, daemonErrorCode: code },
     );
   }
   return (await resp.json()) as WebPublicProjectFileResponse;
@@ -2022,6 +2039,7 @@ export async function unpublishProjectFilePublic(
   fileName: string,
   slug: string,
   workspaceContext?: WorkspaceCollabContext | null,
+  requestId?: string,
 ): Promise<{ ok: true; slug: string; fileName: string }> {
   const resp = await fetch(
     `/api/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(fileName)}/publish-public`,
@@ -2030,13 +2048,14 @@ export async function unpublishProjectFilePublic(
       headers: {
         'content-type': 'application/json',
         ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
+        ...clientRequestIdHeaders(requestId),
       },
       body: JSON.stringify({ slug }),
     },
   );
   if (!resp.ok) {
     const payload = (await resp.json().catch(() => null)) as
-      | { error?: { message?: string } | string; message?: string }
+      | { error?: { message?: string; code?: unknown } | string; message?: string; failure?: unknown }
       | null;
     const errorMessage =
       typeof payload?.error === 'object'
@@ -2044,7 +2063,10 @@ export async function unpublishProjectFilePublic(
         : typeof payload?.error === 'string'
           ? payload.error
           : payload?.message;
-    throw new Error(errorMessage || `Unpublish failed (${resp.status})`);
+    throw withDaemonFailure(new Error(errorMessage || `Unpublish failed (${resp.status})`), {
+      failure: payload?.failure,
+      daemonErrorCode: typeof payload?.error === 'object' ? payload.error.code : payload?.error,
+    });
   }
   return (await resp.json()) as { ok: true; slug: string; fileName: string };
 }

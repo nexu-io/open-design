@@ -3,10 +3,11 @@ import type {
   TestRuntimeAcceptanceRequest,
   TestRuntimeContextRequest,
 } from '@open-design/contracts/api/touchpointTestRuntime';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import dns from 'node:dns';
 import http from 'node:http';
 import https from 'node:https';
+import zlib from 'node:zlib';
 
 import {
   applyAgentLaunchEnv,
@@ -60,6 +61,18 @@ import {
   fetchVelaRemoteModelsWithRetry,
 } from '../runtimes/defs/amr.js';
 import { classifyAmrAccountFailure } from '../integrations/vela-errors.js';
+import {
+  createTouchpointContentCache,
+  MAX_CONTENT_BYTES,
+  type HeldContentRef,
+  type TouchpointContentCache,
+  type TouchpointContentKey,
+} from './touchpoint-content-cache.js';
+import {
+  touchpointStatusIsTransient,
+  TOUCHPOINT_OFFLINE_REPLAY_HEADER,
+  type TouchpointOfflineReplayReason,
+} from '@open-design/contracts/api/touchpointOffline';
 
 const AMR_API_PROXY_PREFIX = '/api/integrations/vela/api-proxy';
 const VELA_MESSAGE_CENTER_PREFIX = '/api/integrations/vela/message-center';
@@ -436,11 +449,100 @@ function proxyVelaMessageCenterRequest(
   upstream.end();
 }
 
+/**
+ * The largest upstream body this proxy will hold in memory to assemble content.
+ *
+ * Assembly is the only reason this route reads a body instead of forwarding it,
+ * and it can only ever produce a package the browser's own budget accepts
+ * (`MAX_CONTENT_BYTES`, mirrored by the web host). A body that cannot fit that
+ * budget is un-assemblable by construction, so holding it buys nothing and
+ * costs the daemon its memory — and, through the synchronous decompressors
+ * below, its event loop, which for a privileged local process means the whole
+ * app stops. Past this ceiling the route degrades back to what it replaced: a
+ * stream. Base64 inflates resource bytes by 4/3 and the decision carries
+ * manifest and metadata around them, hence the headroom.
+ */
+const MAX_BUFFERED_DECISION_BYTES = 4 * MAX_CONTENT_BYTES;
+
+/**
+ * Decode an upstream body the daemon has to read rather than forward.
+ *
+ * Returns `null` for an encoding this build cannot decode, and for one whose
+ * decoded size passes `maxOutputBytes`. Both mean the same thing to the caller
+ * — "hand the original bytes back untouched" — because reading the body is an
+ * optimization, never a precondition for answering the browser. Refusing on
+ * size matters because compression ratios are unbounded: a 200KB reply can name
+ * 200MB of output, and without a limit zlib allocates every byte of it before
+ * anyone downstream is in a position to say no.
+ */
+function decodeProxyBody(
+  body: Buffer,
+  encoding: string | undefined,
+  maxOutputBytes: number,
+): Buffer | null {
+  const label = (encoding ?? '').trim().toLowerCase();
+  // zlib raises ERR_BUFFER_TOO_LARGE instead of expanding past this, so the
+  // refusal costs nothing and the catch below turns it into the normal path.
+  const limits = { maxOutputLength: maxOutputBytes };
+  try {
+    if (!label || label === 'identity') return body.byteLength <= maxOutputBytes ? body : null;
+    if (label === 'gzip' || label === 'x-gzip') return zlib.gunzipSync(body, limits);
+    if (label === 'deflate') return zlib.inflateSync(body, limits);
+    if (label === 'br') return zlib.brotliDecompressSync(body, limits);
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+/** The daemon's own content-assembly parameters, which no browser ever sends. */
+const HELD_CONTENT_PARAMS = ['heldContentId', 'heldContentLocale'] as const;
+
+/**
+ * The (placementKey, locale) a production decision request is about, or `null`
+ * when this request is not one the daemon may assemble content for.
+ *
+ * A caller that already carries either held-content parameter is passed through
+ * untouched: the daemon never rewrites someone else's conditional request.
+ */
+function touchpointContentKeyForRequest(url: URL, scope: string): TouchpointContentKey | null {
+  if (HELD_CONTENT_PARAMS.some((param) => url.searchParams.has(param))) return null;
+  const placementKey = url.searchParams.get('placementKey');
+  const locale = url.searchParams.get('locale');
+  return placementKey && locale ? { scope, placementKey, locale } : null;
+}
+
+/**
+ * Which (environment, account) a cached package belongs to (OPEND-3436).
+ *
+ * The account is named by a digest of the control key rather than by
+ * `user.id`, and that is deliberate. The control key IS the credential this
+ * environment issued to this account, so two accounts can never collide and a
+ * signed-out daemon can never read a signed-in one's packages. `user.id` would
+ * be the more natural identifier and is the wrong one here: it is populated on
+ * some of the paths that build a control context and `null` on others, so a
+ * single account would flip between two scopes depending on which read
+ * answered — and a flip means a cache that is silently never hit.
+ *
+ * The cost is that rotating the key orphans that account's packages. That is
+ * one refetch, on a path the user is already reauthenticating through, and it
+ * fails in the safe direction.
+ */
+function touchpointCacheScope(context: {
+  profile?: string;
+  apiUrl: string;
+  controlKey: string;
+}): string {
+  const account = createHash('sha256').update(context.controlKey).digest('hex');
+  return `${context.profile ?? ''}\u0000${context.apiUrl}\u0000${account}`;
+}
+
 function proxyTouchpointRuntimeRequest(
   req: Request,
   res: Response,
-  context: { apiUrl: string; controlKey?: string },
+  context: { profile?: string; apiUrl: string; controlKey?: string },
   runtime: 'test' | 'production',
+  contentCache?: TouchpointContentCache,
 ): void {
   // Express retains the mounted path for these route patterns, so normalize
   // it before applying the strict suffix allowlist.
@@ -481,46 +583,313 @@ function proxyTouchpointRuntimeRequest(
     return;
   }
   const body = req.method === 'POST' ? velaProxyRequestBody(req) : null;
-  const headers: Record<string, string> = {
-    accept: 'application/json',
-    authorization: `Bearer ${context.controlKey}`,
+  // Content assembly applies to exactly one route: the read-only production
+  // decision. Everything else keeps the verbatim streaming path.
+  const contentKey =
+    contentCache && runtime === 'production' && req.method === 'GET' && suffix === '/production'
+      ? touchpointContentKeyForRequest(
+          target,
+          touchpointCacheScope({ ...context, controlKey: context.controlKey }),
+        )
+      : null;
+
+  const controlKey = context.controlKey;
+  /**
+   * A caller that walked away takes its upstream request with it.
+   *
+   * The browser's own per-attempt budget is shorter than this proxy's, so an
+   * abandoned attempt would otherwise stay alive here: still downloading, still
+   * buffering, and still writing the assembly record that a later, LIVE request
+   * is about to rebuild from. `res.headersSent` does not catch it, because an
+   * attempt aborted before a single byte went out has sent no headers. Nobody
+   * reads an orphan's response; its side effects are the whole problem, and
+   * they stretch the window for crossing two campaigns from one round trip to
+   * the caller's entire budget.
+   *
+   * One request is in flight at a time -- the assembly fallback replaces it
+   * rather than adding to it -- so a single mutable reference covers both.
+   */
+  let currentUpstream: http.ClientRequest | null = null;
+  /**
+   * Set when the caller walked away, so the failure handlers below can tell an
+   * upstream that died from an upstream this proxy killed. Without it, an
+   * aborted attempt reaches the offline path and spends a disk read rebuilding
+   * a megabyte-scale package for a response nobody will ever read.
+   */
+  let callerGone = false;
+  const abortUpstream = (): void => {
+    callerGone = true;
+    const pending = currentUpstream;
+    if (pending && !res.writableEnded && !pending.destroyed) pending.destroy();
   };
-  // Touchpoint decisions carry base64 content and run to megabytes, and this
-  // proxy pipes the upstream body through verbatim. Building the request
-  // headers from scratch dropped the caller's `accept-encoding`, so every
-  // refresh pulled the payload uncompressed — measured at 383KB against 214KB
-  // for the same decision. Forward the caller's preference and hand its
-  // `content-encoding` back, so the body stays labelled the way it is framed.
-  const acceptEncoding = req.headers['accept-encoding'];
-  if (typeof acceptEncoding === 'string' && acceptEncoding)
-    headers['accept-encoding'] = acceptEncoding;
-  if (body) {
-    headers['content-type'] =
-      typeof req.headers['content-type'] === 'string'
-        ? req.headers['content-type']
-        : 'application/json';
-    headers['content-length'] = String(body.length);
-  }
-  const transport = target.protocol === 'https:' ? https : http;
-  const upstream = transport.request(target, { method: req.method, headers }, (upstreamRes) => {
-    res.status(upstreamRes.statusCode ?? 502);
-    res.setHeader('content-type', upstreamRes.headers['content-type'] ?? 'application/json');
-    // Without this the client would decode gzip bytes as JSON. It is set only
-    // when upstream actually encoded, so an unencoded reply is unaffected.
-    const contentEncoding = upstreamRes.headers['content-encoding'];
-    if (typeof contentEncoding === 'string' && contentEncoding)
-      res.setHeader('content-encoding', contentEncoding);
-    pipeProxyStreamWithGuard(upstreamRes, res, () => res.destroy());
-  });
-  upstream.setTimeout(30_000, () =>
-    upstream.destroy(new Error('Touchpoint runtime request timed out')),
-  );
-  upstream.on('error', () => {
-    if (!res.headersSent) res.status(502).json({ error: 'touchpoint_runtime_unavailable' });
-    else res.end();
-  });
-  if (body) upstream.write(body);
-  upstream.end();
+  req.once('aborted', abortUpstream);
+  res.once('close', abortUpstream);
+  /**
+   * Answer from the daemon's own store because the runtime could not be
+   * reached (OPEND-3436). Reports whether it did, so every caller can fall
+   * through to exactly the behaviour it had before this feature existed.
+   *
+   * The store decides whether there is anything to say: it holds the server's
+   * own schedule, retires a package whose window has closed, and refuses one
+   * that has not opened. This function only carries the answer.
+   */
+  const answerFromCache = (reason: TouchpointOfflineReplayReason): boolean => {
+    if (!contentKey || !contentCache || callerGone || res.headersSent || res.writableEnded)
+      return false;
+    const replayed = contentCache.replayOffline(contentKey, reason);
+    if (!replayed) return false;
+    res.status(200);
+    res.setHeader('content-type', 'application/json');
+    res.setHeader(TOUCHPOINT_OFFLINE_REPLAY_HEADER, '1');
+    res.end(Buffer.from(JSON.stringify(replayed), 'utf8'));
+    return true;
+  };
+  /**
+   * `fallback` is the one retry the assembly path is allowed: a trimmed reply
+   * the daemon cannot rebuild is re-asked as today's full request. Clearing it
+   * on that retry is what keeps the guarantee bounded — the daemon can never
+   * loop between a server that trims and a cache that cannot assemble.
+   */
+  const send = (held: HeldContentRef | null, fallback: boolean): void => {
+    const attempt = new URL(target);
+    if (held) {
+      attempt.searchParams.set('heldContentId', held.heldContentId);
+      attempt.searchParams.set('heldContentLocale', held.heldContentLocale);
+    }
+    const headers: Record<string, string> = {
+      accept: 'application/json',
+      authorization: `Bearer ${controlKey}`,
+    };
+    // Touchpoint decisions carry base64 content and run to megabytes, and this
+    // proxy pipes the upstream body through verbatim. Building the request
+    // headers from scratch dropped the caller's `accept-encoding`, so every
+    // refresh pulled the payload uncompressed — measured at 383KB against 214KB
+    // for the same decision. Forward the caller's preference and hand its
+    // `content-encoding` back, so the body stays labelled the way it is framed.
+    const acceptEncoding = req.headers['accept-encoding'];
+    if (typeof acceptEncoding === 'string' && acceptEncoding)
+      headers['accept-encoding'] = acceptEncoding;
+    if (body) {
+      headers['content-type'] =
+        typeof req.headers['content-type'] === 'string'
+          ? req.headers['content-type']
+          : 'application/json';
+      headers['content-length'] = String(body.length);
+    }
+    const transport = attempt.protocol === 'https:' ? https : http;
+    const upstream = transport.request(attempt, { method: req.method, headers }, (upstreamRes) => {
+      const passThrough = () => {
+        res.status(upstreamRes.statusCode ?? 502);
+        res.setHeader('content-type', upstreamRes.headers['content-type'] ?? 'application/json');
+        // Without this the client would decode gzip bytes as JSON. It is set only
+        // when upstream actually encoded, so an unencoded reply is unaffected.
+        const contentEncoding = upstreamRes.headers['content-encoding'];
+        if (typeof contentEncoding === 'string' && contentEncoding)
+          res.setHeader('content-encoding', contentEncoding);
+        pipeProxyStreamWithGuard(upstreamRes, res, () => res.destroy());
+      };
+      if (!contentKey || !contentCache) {
+        passThrough();
+        return;
+      }
+      // Reading the body is what makes assembly possible, so this route buffers
+      // instead of piping. Whatever the daemon cannot read or rebuild is handed
+      // back exactly as upstream framed it.
+      const chunks: Buffer[] = [];
+      let size = 0;
+      let failed = false;
+      let streaming = false;
+      let answered = false;
+      const forward = (chunk: Buffer): void => {
+        if (!chunk.byteLength) return;
+        if (!res.write(chunk)) {
+          upstreamRes.pause();
+          res.once('drain', () => upstreamRes.resume());
+        }
+      };
+      /**
+       * Assembly gives up the moment the body stops being assemblable.
+       *
+       * From here the route is the pipe it was before content assembly existed:
+       * what is already buffered goes out first, the rest is forwarded chunk by
+       * chunk against the socket's own backpressure, and the daemon's memory
+       * stays bounded by `MAX_BUFFERED_DECISION_BYTES`. Degrading rather than
+       * refusing keeps this to a single WAN fetch, and the browser cannot tell
+       * the difference: it gets the same bytes, framed the same way.
+       */
+      const degradeToStreaming = (): void => {
+        streaming = true;
+        res.status(upstreamRes.statusCode ?? 502);
+        res.setHeader('content-type', upstreamRes.headers['content-type'] ?? 'application/json');
+        const contentEncoding = upstreamRes.headers['content-encoding'];
+        if (typeof contentEncoding === 'string' && contentEncoding)
+          res.setHeader('content-encoding', contentEncoding);
+        const buffered = Buffer.concat(chunks, size);
+        chunks.length = 0;
+        size = 0;
+        forward(buffered);
+      };
+      /**
+       * What a status licenses is not a function of how big its body is.
+       *
+       * Degrading to streaming sends headers, and sending headers retires the
+       * status block in the `end` handler below. So a 410 that outgrew the
+       * buffer would never reclaim — the browser clears the screen while the
+       * stored package survives its own withdrawal, ready to replay the next
+       * time the daemon cannot reach the runtime — and an oversized 5xx would
+       * be forwarded instead of answered from cache, which is precisely the
+       * outage this route exists to survive.
+       *
+       * Neither decision needs the bytes. A body this size is by construction
+       * one no revocation receipt can be read out of, and
+       * `touchpointWithdrawalReclaims` already rules that an unreadable receipt
+       * is the whole deployment being withdrawn.
+       *
+       * Returns whether the response has been answered from cache, in which
+       * case the rest of the upstream body has no reader left.
+       */
+      const settleOversizedStatus = (): boolean => {
+        const status = upstreamRes.statusCode ?? 502;
+        if (status === 410 && contentKey && contentCache) {
+          contentCache.forgetWithdrawn(contentKey, null);
+          // The 410 itself still goes to the browser, exactly as upstream
+          // framed it. Deciding what to do with it is not this proxy's job.
+          return false;
+        }
+        return touchpointStatusIsTransient(status) && answerFromCache('upstream_unavailable');
+      };
+      upstreamRes.on('error', () => {
+        if (answered) return;
+        failed = true;
+        if (res.headersSent) res.end();
+        else if (!answerFromCache('upstream_unreachable'))
+          res.status(502).json({ error: 'touchpoint_runtime_unavailable' });
+      });
+      upstreamRes.on('data', (chunk: Buffer) => {
+        if (answered) return;
+        if (streaming) {
+          forward(chunk);
+          return;
+        }
+        chunks.push(chunk);
+        size += chunk.length;
+        if (size <= MAX_BUFFERED_DECISION_BYTES) return;
+        if (settleOversizedStatus()) {
+          // Answered from cache. Keeping the rest would put the daemon's memory
+          // back above the ceiling for a body nobody will read.
+          answered = true;
+          chunks.length = 0;
+          size = 0;
+          upstreamRes.destroy();
+          return;
+        }
+        degradeToStreaming();
+      });
+      upstreamRes.on('end', () => {
+        if (answered) return;
+        if (streaming) {
+          res.end();
+          return;
+        }
+        if (failed || res.headersSent) return;
+        const raw = Buffer.concat(chunks, size);
+        chunks.length = 0;
+        const echo = () => {
+          res.status(upstreamRes.statusCode ?? 502);
+          res.setHeader('content-type', upstreamRes.headers['content-type'] ?? 'application/json');
+          const contentEncoding = upstreamRes.headers['content-encoding'];
+          if (typeof contentEncoding === 'string' && contentEncoding)
+            res.setHeader('content-encoding', contentEncoding);
+          res.end(raw);
+        };
+        const decoded = decodeProxyBody(
+          raw,
+          upstreamRes.headers['content-encoding'] as string | undefined,
+          MAX_BUFFERED_DECISION_BYTES,
+        );
+        const status = upstreamRes.statusCode ?? 502;
+        if (status !== 200) {
+          // A withdrawal is the server exercising its authority, and the one
+          // answer that licenses destroying a stored package. Which 410s do so
+          // is `touchpointWithdrawalReclaims`, stated once in the contract so
+          // the daemon and the browser cannot disagree about what a 410 means.
+          // The 410 itself is forwarded either way — deciding what the browser
+          // does with it is not this proxy's job.
+          if (status === 410 && contentKey && contentCache) {
+            let body: unknown = null;
+            try {
+              if (decoded) body = JSON.parse(decoded.toString('utf8'));
+            } catch {
+              body = null;
+            }
+            contentCache.forgetWithdrawn(contentKey, body);
+          }
+          // 5xx is "temporarily unavailable", which is a transport condition
+          // wearing a status code. Everything else — 401, 403, 404, 410 — is an
+          // answer, and a cache may never overrule one.
+          else if (touchpointStatusIsTransient(status) && answerFromCache('upstream_unavailable'))
+            return;
+        }
+        if (!decoded || status !== 200) {
+          echo();
+          return;
+        }
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(decoded.toString('utf8'));
+        } catch {
+          echo();
+          return;
+        }
+        if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+          echo();
+          return;
+        }
+        const decision = parsed as Record<string, unknown>;
+        if (decision.contentOmitted !== true) {
+          contentCache.remember(contentKey, decision);
+          res.status(200);
+          res.setHeader('content-type', upstreamRes.headers['content-type'] ?? 'application/json');
+          res.end(decoded);
+          return;
+        }
+        // `held` is the pair this attempt offered upstream. Upstream only trims
+        // a reply the daemon asked it to trim, so on the trimmed path it is
+        // non-null by construction; rebuilding without it would rebuild from
+        // whatever the record says NOW, which a concurrent full response for
+        // the same placement may already have replaced.
+        const full = held ? contentCache.reassemble(contentKey, held, decision) : null;
+        if (full) {
+          res.status(200);
+          res.setHeader('content-type', 'application/json');
+          res.end(Buffer.from(JSON.stringify(full), 'utf8'));
+          return;
+        }
+        // The one thing that must never happen is a campaign that does not show
+        // because a cache went bad. Ask again the way today's daemon asks, with
+        // no held content, and answer from that.
+        if (fallback) send(null, false);
+        else echo();
+      });
+    });
+    currentUpstream = upstream;
+    upstream.setTimeout(30_000, () =>
+      upstream.destroy(new Error('Touchpoint runtime request timed out')),
+    );
+    upstream.on('error', () => {
+      if (res.headersSent) res.end();
+      // DNS failure, refused connection, reset socket, or this proxy's own
+      // timeout: the runtime was not reached, so the last thing it said is the
+      // best thing the daemon has.
+      else if (!answerFromCache('upstream_unreachable'))
+        res.status(502).json({ error: 'touchpoint_runtime_unavailable' });
+    });
+    if (body) upstream.write(body);
+    upstream.end();
+  };
+
+  const held = contentKey && contentCache ? contentCache.held(contentKey) : null;
+  send(held, held !== null);
 }
 
 export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): void {
@@ -528,6 +897,10 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
   const onCredentialStateObserved =
     deps.onCredentialStateObserved ?? (() => undefined);
   const { RUNTIME_DATA_DIR } = deps.paths;
+  // Daemon-owned data, so it hangs off the resolved runtime data root like every
+  // other daemon path (AGENTS.md "Daemon data directory contract"). Two
+  // namespaces therefore get two roots and cannot see each other's content.
+  const touchpointContentCache = createTouchpointContentCache(RUNTIME_DATA_DIR);
   const { readAppConfig } = deps.appConfig;
   const getPublicBaseUrl = deps.http.getPublicBaseUrl ?? ((req: Request) => {
     const proto = req.protocol || 'http';
@@ -788,10 +1161,11 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
             res,
             { ...context, apiUrl: target.origin },
             'production',
+            touchpointContentCache,
           );
           return;
         }
-        proxyTouchpointRuntimeRequest(req, res, context, 'production');
+        proxyTouchpointRuntimeRequest(req, res, context, 'production', touchpointContentCache);
       } catch {
         res.status(502).json({ error: 'touchpoint_runtime_unavailable' });
       }

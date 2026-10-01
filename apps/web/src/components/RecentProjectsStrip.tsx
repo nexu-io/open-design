@@ -1,3 +1,4 @@
+import { reportProjectFailure } from '../observability/experience-diagnostics';
 // Horizontal "Recent projects" rail for the Home view.
 //
 // Mirrors the strip Lovart shows under its hero: a small set of
@@ -635,6 +636,10 @@ export function RecentProjectsStrip({
       workspaceContext?.displayName,
     ],
   );
+
+  useEffect(() => {
+    for (const { project } of visibleProjects) reportProjectFailure(project, 'recent_projects');
+  }, [visibleProjects]);
   const menuContainerRef = useRef<HTMLDivElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const renameTitleId = useId();

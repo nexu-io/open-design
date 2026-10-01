@@ -1,13 +1,11 @@
-<h1 align="center">OpenDesign: 오픈소스 Claude Design 대안</h1>
+<h1 align="center">OpenDesign: 최초의 협업형 디자인 에이전트 워크스페이스</h1>
 
-> ⚡ **[OpenDesign Cloud — 공식 모델 서비스.](https://open-design.ai/zh/pricing/)** 한 번 충전하면 OpenDesign 안에서 에이전트 모델과 이미지 모델을 함께 사용할 수 있습니다. 에이전트용 GPT, Claude, DeepSeek와 이미지용 GPT Image 2.0, Seedream 5.0 Pro, Nano Banana 2.0을 지원합니다.
->
-> 🚀 **[DeepSeek V4 Flash와 V4 Pro를 사용할 수 있습니다.](https://open-design.ai/zh/pricing/)** 프로토타입, 덱, 디자인 시스템, 일상적인 에이전트 작업에 최상급 지능을 활용하세요. OpenDesign 회원은 앱에서 두 모델을 2주 동안 무제한으로 사용할 수 있습니다.
+> ✨ **[OpenDesign Go 소개](https://open-design.ai/pricing/)**. Go Plan은 첫 달 8달러부터 시작하며, 매월 다음을 포함한 10개 이상의 모델에 사용할 수 있는 크레딧이 제공됩니다: GPT-6.1 Sol, GPT-6 Luna, DeepSeek V4.1 Flash, GLM-5.3 Flash-X 및 MiMo V2.6 Flash. 모든 개인 플랜에는 Codex, Claude Code, DSH, OpenCode 등에서 사용할 수 있는 API 액세스가 포함됩니다.
 >
 > 🧩 **[DeepSeek Harness를 지원합니다.](https://open-design.ai/zh/agents/deepseek-harness-design/)** DeepSeek 공식 `dsh` Agent Harness를 OpenDesign의 네이티브 런타임으로 연결하고 구조화된 사고, 도구 호출, 모델 검색, 취소, 세션 재개를 사용할 수 있습니다. 생성된 파일은 라이브 미리보기와 전달을 위해 OpenDesign 워크플로 안에 유지됩니다.
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="OpenDesign hero banner" width="100%" />
+  <img src="../../docs/assets/readme-hero-design-agent.webp" alt="OpenDesign: 최초의 협업형 디자인 에이전트 워크스페이스" width="100%" />
 </p>
 
 <p align="center">
@@ -31,79 +29,65 @@
 
 ## OpenDesign란
 
-🎨 **로컬 우선의 오픈소스 Claude Design 대안.** &nbsp;🖥️ **macOS와 Windows용 네이티브 데스크톱 앱.** &nbsp;⚡ **100개 이상의 기능 스킬 + 별도 렌더링 템플릿 카탈로그** · ✨ **151개의 디자인 시스템 패키지** · 📦 **바로 쓸 수 있는 277개의 플러그인.** &nbsp;🖼️ **웹 · 데스크톱 · 모바일 프로토타입**, **라이브 대시보드 / 아티팩트**, **덱**, **이미지**, **비디오**, 그리고 **HyperFrames** 모션 그래픽을 생성합니다. 🔒 샌드박스 iframe 미리보기 · HTML / PDF / PPTX / MP4 내보내기. &nbsp;🤖 **25개의 고유한 로컬 CLI 실행 파일에서 실행**되며, BYOK를 통해 OpenAI 호환 엔드포인트라면 무엇이든 사용할 수 있습니다.
+OpenDesign은 **협업형 디자인 에이전트 워크스페이스**입니다. 작업 내용을 설명하고 평소 사용하는 코딩 에이전트나 OpenDesign Cloud로 디자인 시스템에 맞는 프로토타입을 만드세요. 팀과 공유해 피드백을 받은 뒤 같은 프로젝트에서 에이전트와 계속 다듬을 수 있습니다.
 
-OpenDesign는 그 루프를 에이전트가 읽고 쓸 수 있는 **기능 스킬 · 렌더링 디자인 템플릿 · 디자인 시스템 · 플러그인의 파일시스템**으로 만듭니다.
-
-또한 이것은 **에이전트 시대를 위한 Figma 대안**입니다 — 캔버스 위에서 픽셀을 밀어 옮기는 대신, 실제 CSS, 실제 폰트, 실제 컴포넌트로 된 단일 페이지 아티팩트를 HTML / PDF / PPTX / MP4로 곧바로 내보내 전달합니다 — 이미 당신의 디자인 시스템으로 빚어졌고, 이미 당신이 매일 쓰는 에이전트 안에서 실행 가능한 상태로요.
+이 워크플로는 개방적이고 확장 가능합니다. **오픈소스 Claude Design 대안**인 OpenDesign은 Apache 2.0 라이선스로 제공되며, 팀은 스킬, 디자인 템플릿, 디자인 시스템, 플러그인을 살펴보고 자신의 프로세스에 맞게 수정할 수 있습니다.
 
 
 ---
 
 ## 제품 둘러보기
 
-OpenDesign의 핵심 워크플로를 빠르게 살펴봅니다. **Home**에서 브리프를 입력하고, **Plugins**에서 재사용 가능한 스킬을 찾고, 브랜드 참고 자료를 **Design System**으로 전환하세요. 그런 다음 프로젝트의 **Studio**에서 프로토타입, 덱, 모바일 앱, 이미지, 문서, HyperFrame을 한곳에서 만들고 다듬을 수 있습니다.
-
 ### 핵심 페이지
 
 <table>
 <tr>
-<td valign="top">
-<img src="../../docs/screenshots/product-tour/home.png" alt="Home" /><br/>
-<sub><b>Home</b> — 아티팩트 유형을 선택하고 브리프를 입력한 다음 시작 전에 디자인 시스템, 작업 디렉터리, 모델을 설정합니다.</sub>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/home-workspace-2026-09-30-220844.png"><img src="../../docs/screenshots/product-tour/home-workspace-2026-09-30-220844.png" alt="Home — 작업 설명이나 예시로 시작하세요." width="500" /></a><br/>
+<sub><b>Home</b> — 작업 설명이나 예시로 시작하세요.</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/all-projects-2026-09-30-220900.webp"><img src="../../docs/screenshots/product-tour/all-projects-2026-09-30-220900.webp" alt="All projects — 디자인 시스템, 미디어, 프로토타입을 다시 찾아보세요." width="500" /></a><br/>
+<sub><b>All projects</b> — 디자인 시스템, 미디어, 프로토타입을 다시 찾아보세요.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/design-systems-stripe-2026-09-30-220910.png"><img src="../../docs/screenshots/product-tour/design-systems-stripe-2026-09-30-220910.png" alt="Design Systems — 브랜드 자산을 살펴보고 에이전트와 함께 다듬으세요." width="500" /></a><br/>
+<sub><b>Design Systems</b> — 브랜드 자산을 살펴보고 에이전트와 함께 다듬으세요.</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/plugins-skills-2026-09-30-220917.png"><img src="../../docs/screenshots/product-tour/plugins-skills-2026-09-30-220917.png" alt="Plugins — 스킬을 찾고 Try it으로 실행하세요." width="500" /></a><br/>
+<sub><b>Plugins</b> — 스킬을 찾고 Try it으로 실행하세요.</sub>
 </td>
 </tr>
 </table>
+
+### Studio — 한 프로젝트에서 제작하고 다듬기
 
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/plugins.png" alt="Plugins" /><br/>
-<sub><b>Plugins</b> — 공식 스킬을 카테고리별로 살펴보고 카탈로그를 검색한 뒤 <code>Try it</code>으로 워크플로를 시작합니다.</sub>
+<img src="../../docs/screenshots/product-tour/studio-prototype-2026.webp" alt="Prototype — 에이전트와 인터랙티브 웹 경험을 만들고 다듬으며 실시간으로 미리 보세요." /><br/>
+<sub><b>Prototype</b> — 에이전트와 인터랙티브 웹 경험을 만들고 다듬으며 실시간으로 미리 보세요.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/design-system.png" alt="Design System" /><br/>
-<sub><b>Design System</b> — 브랜드의 시각 언어를 추출하고 다듬은 뒤 결과를 미리 보고 같은 워크스페이스에서 계속 제작합니다.</sub>
+<img src="../../docs/screenshots/product-tour/studio-slides-2026.png" alt="Slides — 슬라이드와 발표자 노트를 검토하면서 자료를 만들고 완료되면 내보내세요." /><br/>
+<sub><b>Slides</b> — 슬라이드와 발표자 노트를 검토하면서 자료를 만들고 완료되면 내보내세요.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/product-tour/studio-image-2026.webp" alt="Image — 대화에서 시각 자료를 생성하고 결과를 확인한 뒤 다운로드하거나 여세요." /><br/>
+<sub><b>Image</b> — 대화에서 시각 자료를 생성하고 결과를 확인한 뒤 다운로드하거나 여세요.</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/studio-hyperframes-2026.mp4"><img src="../../docs/screenshots/product-tour/studio-hyperframes-poster-2026.png" alt="HyperFrames — 에이전트와 모션 그래픽을 만들고 MP4로 내보내세요." /></a><br/>
+<sub><b>HyperFrames</b> — 에이전트와 모션 그래픽을 만들고 MP4로 내보내세요. <a href="../../docs/screenshots/product-tour/studio-hyperframes-2026.mp4">동영상 보기</a>.</sub>
 </td>
 </tr>
 </table>
 
-### Studio — 한 프로젝트의 다양한 아티팩트
-
-프로젝트의 Studio에서는 대화, 생성 파일, 라이브 미리보기가 여섯 가지 아티팩트 유형에 걸쳐 한곳에 유지됩니다.
-
-<table>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-prototype.png" alt="프로토타입" /><br/>
-<sub><b>프로토타입</b> — 웹 경험을 생성하거나 재구성하고 렌더링된 페이지를 확인하며 그 자리에서 에이전트와 반복 작업합니다.</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-deck.png" alt="덱" /><br/>
-<sub><b>덱</b> — 여러 슬라이드로 된 프레젠테이션을 만들고 썸네일과 발표자 노트를 검토한 뒤 준비되면 내보냅니다.</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-mobile-app.png" alt="모바일 앱" /><br/>
-<sub><b>모바일 앱</b> — 디바이스 미리보기에서 모바일 인터페이스를 생성하고 다듬으며 대화, 출력 파일, 다음 단계 작업을 옆에 유지합니다.</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-image.png" alt="이미지" /><br/>
-<sub><b>이미지</b> — 프로젝트 대화에서 시각 자료를 생성하고 결과를 전체 크기로 미리 본 뒤 다운로드하거나 엽니다.</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-document.png" alt="문서" /><br/>
-<sub><b>문서</b> — 완성도 높은 여러 페이지 가이드와 편집 문서를 만들고 렌더링된 레이아웃을 확인한 뒤 내보내거나 공유합니다.</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-hyperframe.png" alt="HyperFrame" /><br/>
-<sub><b>HyperFrame</b> — 코드 기반 모션 그래픽을 만들고 Studio 안에서 애니메이션을 미리 본 뒤 완성된 영상을 내보냅니다.</sub>
-</td>
-</tr>
-</table>
 ---
 
 ## 플랫폼 호환성

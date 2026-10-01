@@ -46,6 +46,10 @@
       "types": "./dist/api/research.d.ts",
       "default": "./dist/api/research.mjs"
     },
+    "./api/touchpointOffline": {
+      "types": "./dist/api/touchpointOffline.d.ts",
+      "default": "./dist/api/touchpointOffline.mjs"
+    },
     "./api/touchpointTestRuntime": {
       "types": "./dist/api/touchpointTestRuntime.d.ts",
       "default": "./dist/api/touchpointTestRuntime.mjs"

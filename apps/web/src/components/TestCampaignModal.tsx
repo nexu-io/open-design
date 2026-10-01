@@ -15,6 +15,7 @@ import {
 	requireCampaignAction,
 } from "./touchpoint-navigation";
 import {
+	TEST_MAX_AUTHORIZATION_MS,
 	type TouchpointLifecycleLoad,
 	resolveAuthorizationDeadline,
 	useTouchpointLifecycle,
@@ -197,14 +198,6 @@ function supportsHost(authenticated: boolean): boolean {
 		authenticated &&
 		host?.version === OPEN_DESIGN_HOST_VERSION &&
 		host.client.type === "desktop"
-	);
-}
-
-export function readCampaignHostLocale(): string {
-	return (
-		document.documentElement.lang.trim() ||
-		getOpenDesignHost()?.client.osLocale?.trim() ||
-		"en-US"
 	);
 }
 
@@ -415,7 +408,9 @@ export function TestTouchpointMount({
 			placementKey,
 			staticActions: decision.staticActions,
 			mode: "test",
-			locale: readCampaignHostLocale(),
+			// The runtime decision carries the locale requested by app i18n.
+			// Global DOM language can be overwritten by an embedded editor.
+			locale: decision.content.locale,
 			isCurrent: authorized,
 			dispatchAction: async (id) => {
 				requireCampaignAction(await dispatchTestCampaignAction(decision, id));
@@ -629,7 +624,7 @@ export function TestCampaignModal({
 							serverTime,
 							validForMs: 0,
 						};
-					const deadline = resolveAuthorizationDeadline(decision, 60_000, true);
+					const deadline = resolveAuthorizationDeadline(decision, TEST_MAX_AUTHORIZATION_MS);
 					if (deadline === null) throw new Error("realtime_test_runtime_required");
 					return {
 						placementKey,

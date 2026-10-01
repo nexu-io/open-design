@@ -2,6 +2,7 @@
  * @module analytics/events/result-events
  * *_result event prop types (run, feedback, settings, packaged).
  */
+import type { ApiFailureReason, ApiFailureStage } from '../../api/failure-detail.js';
 import type {
   AnalyticsAttributionQuality,
   AnalyticsDistributionMechanism,
@@ -1042,12 +1043,25 @@ export interface SketchExportResultProps {
 
 export type TrackingDeployProvider = 'vercel' | 'cloudflare_pages';
 
+// Optional failure detail copied from the daemon's closed-token `failure`
+// field (see packages/contracts/src/api/failure-detail.ts). Present only on
+// failed attempts whose daemon response carried it; `error_code` keeps its
+// original meaning and values, so these fields only add resolution.
+export interface TrackingFailureDetailProps {
+  failed_stage?: ApiFailureStage;
+  failure_reason?: ApiFailureReason;
+  // HTTP status / error code returned by the upstream service (Vela API or
+  // deploy provider), when the daemon could read one.
+  upstream_status?: number;
+  upstream_error_code?: string;
+}
+
 // Fired from the deploy modal when a real publish attempt resolves — NOT when
 // the modal merely opens (that path is `artifact_export_result` with
 // export_format vercel/cloudflare_pages and only means "popover opened").
 // `result` is 'success' once the provider accepts the deploy (the link may
 // still be delayed/protected), 'failed' on a hard error or missing config.
-export interface ArtifactDeployResultProps {
+export interface ArtifactDeployResultProps extends TrackingFailureDetailProps {
   page_name: 'artifact';
   area: 'deploy_modal';
   artifact_id: string;
@@ -1072,7 +1086,7 @@ export interface ArtifactDeployResultProps {
 // for publish, or removal is confirmed for unpublish), regardless of whether a
 // newer request superseded this one in the UI. Clicking the publish button
 // reports separately as ui_click element 'publish_file'.
-export interface ArtifactPublishResultProps {
+export interface ArtifactPublishResultProps extends TrackingFailureDetailProps {
   page_name: 'artifact';
   area: 'share_option_popover';
   artifact_id: string;
@@ -1085,6 +1099,10 @@ export interface ArtifactPublishResultProps {
   publish_duration_ms: number;
   project_id: string;
   project_kind: TrackingProjectKind | null;
+  // The daemon's own error code (e.g. PUBLIC_FILE_PUBLISH_UNAVAILABLE,
+  // WORKSPACE_PROJECT_PUBLISH_DENIED) that `error_code` folds into
+  // 'publish_failed'. Token-shaped; absent when the daemon sent none.
+  daemon_error_code?: string;
 }
 
 // Outcome of an HTML file version restore from the version history modal.

@@ -1,13 +1,11 @@
-<h1 align="center">OpenDesign：開源的 Claude Design 替代方案</h1>
+<h1 align="center">OpenDesign：首個協作式設計 Agent 工作區</h1>
 
-> ⚡ **[OpenDesign Cloud——官方模型服務。](https://open-design.ai/zh/pricing/)** 一次儲值，即可在 OpenDesign 中使用 Agent 與圖像模型：GPT、Claude 與 DeepSeek Agent 模型，以及 GPT Image 2.0、Seedream 5.0 Pro 與 Nano Banana 2.0 圖像模型。
->
-> 🚀 **[DeepSeek V4 Flash 與 V4 Pro 現已上線。](https://open-design.ai/zh/pricing/)** 將頂級智慧用於原型、簡報、設計系統與日常 Agent 任務。OpenDesign 會員可直接在應用程式內無限量使用兩週。
+> ✨ **[全新推出 OpenDesign Go](https://open-design.ai/pricing/)**。Go Plan 方案首月 8 美元起，每月提供可用於 10 多款模型的額度，包括 GPT-6.1 Sol、GPT-6 Luna、DeepSeek V4.1 Flash、GLM-5.3 Flash-X 與 MiMo V2.6 Flash. 所有個人方案均提供 API 存取，可用於 Codex、Claude Code、DSH、OpenCode 等工具。
 >
 > 🧩 **[現已支援 DeepSeek Harness。](https://open-design.ai/zh/agents/deepseek-harness-design/)** 將 DeepSeek 官方 `dsh` Agent Harness 作為原生執行環境接入 OpenDesign，支援結構化思考、工具呼叫、模型探索、取消與工作階段恢復；生成檔案仍留在 OpenDesign 工作流程中供即時預覽與交付。
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="OpenDesign hero banner" width="100%" />
+  <img src="../../docs/assets/readme-hero-design-agent.webp" alt="OpenDesign：首個協作式設計 Agent 工作區" width="100%" />
 </p>
 
 <p align="center">
@@ -31,79 +29,65 @@
 
 ## 什麼是 OpenDesign
 
-🎨 **本地優先、開源的 Claude Design 替代方案。** &nbsp;🖥️ **macOS 與 Windows 的原生桌面應用程式。** &nbsp;⚡ **100+ 個功能 skills + 獨立渲染範本型錄** · ✨ **151 套品牌級設計系統套件** · 📦 **277 個開箱即用的外掛。** &nbsp;🖼️ 可生成 **網頁 · 桌面 · 行動裝置原型**、**即時儀表板／artifacts**、**簡報**、**圖片**、**影片**，外加 **HyperFrames** 動態圖像。🔒 沙箱化 iframe 預覽 · 支援 HTML / PDF / PPTX / MP4 匯出。 &nbsp;🤖 **可在 Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity 等 25 個不同的本地 CLI 可執行檔上執行**，或透過 BYOK 接上任何相容 OpenAI 的端點。
+OpenDesign 是**協作式設計 Agent 工作區**。從需求簡述開始，使用你熟悉的程式設計 Agent 或 OpenDesign Cloud，建立符合設計系統的原型。與團隊分享並蒐集回饋，再讓 Agent 在同一個專案中繼續完善。
 
-OpenDesign 是這樣誕生的：當 Anthropic 隨 Claude Design 推出的那套 **agent 原生** 迴圈——釐清需求、鎖定方向、串流產出 artifact、評析、交付——不再封閉，而是化為一個由 **功能 skills、渲染設計範本、設計系統與外掛組成的檔案系統**，讓你筆電上既有的編碼 agent 都能讀取、寫入、再混搭。你的 CLI 成為設計引擎，你的筆電成為工作室，而你團隊的 `DESIGN.md` 則成為品牌契約。
-
-它同時也是 **agent 時代的 Figma 替代方案**——不必在畫布上推動像素，而是以真實 CSS、真實字型、真實元件交付單頁 artifact，直接匯出成 HTML / PDF / PPTX / MP4——這些產出早已由你的設計系統塑形，也早已能在你每天使用的 agent 中執行。
+這套工作流程開放且可擴充。作為 **Claude Design 的開源替代方案**，OpenDesign 採用 Apache 2.0 授權；團隊可以檢視並依自身流程調整技能、設計範本、設計系統與外掛。
 
 
 ---
 
 ## 產品導覽
 
-快速了解 OpenDesign 的核心工作流程：從 **Home** 輸入需求，在 **Plugins** 中探索可重複使用的技能，並把品牌參考資料沉澱為 **Design System**；進入任一專案的 **Studio** 後，即可在一處建立並迭代原型、簡報、行動應用程式、圖片、文件與 HyperFrame。
-
 ### 核心頁面
 
 <table>
 <tr>
-<td valign="top">
-<img src="../../docs/screenshots/product-tour/home.png" alt="Home" /><br/>
-<sub><b>Home</b> — 選擇產物類型並輸入需求，再設定設計系統、工作目錄與模型，即可開始創作。</sub>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/home-workspace-2026-09-30-220844.png"><img src="../../docs/screenshots/product-tour/home-workspace-2026-09-30-220844.png" alt="Home — 從需求簡述或範例開始。" width="500" /></a><br/>
+<sub><b>Home</b> — 從需求簡述或範例開始。</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/all-projects-2026-09-30-220900.webp"><img src="../../docs/screenshots/product-tour/all-projects-2026-09-30-220900.webp" alt="All projects — 重新開啟設計系統、媒體與原型專案。" width="500" /></a><br/>
+<sub><b>All projects</b> — 重新開啟設計系統、媒體與原型專案。</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/design-systems-stripe-2026-09-30-220910.png"><img src="../../docs/screenshots/product-tour/design-systems-stripe-2026-09-30-220910.png" alt="Design Systems — 檢視品牌素材，並與 Agent 一起完善。" width="500" /></a><br/>
+<sub><b>Design Systems</b> — 檢視品牌素材，並與 Agent 一起完善。</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/plugins-skills-2026-09-30-220917.png"><img src="../../docs/screenshots/product-tour/plugins-skills-2026-09-30-220917.png" alt="Plugins — 尋找技能，透過 Try it 啟動。" width="500" /></a><br/>
+<sub><b>Plugins</b> — 尋找技能，透過 Try it 啟動。</sub>
 </td>
 </tr>
 </table>
+
+### Studio——在同一個專案中創作與完善
 
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/plugins.png" alt="Plugins" /><br/>
-<sub><b>Plugins</b> — 依類別瀏覽官方技能、搜尋目錄，並透過 <code>Try it</code> 直接啟動工作流程。</sub>
+<img src="../../docs/screenshots/product-tour/studio-prototype-2026.webp" alt="Prototype — 與 Agent 一起建立並反覆調整互動式網頁，即時預覽成果。" /><br/>
+<sub><b>Prototype</b> — 與 Agent 一起建立並反覆調整互動式網頁，即時預覽成果。</sub>
 </td>
 <td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/design-system.png" alt="Design System" /><br/>
-<sub><b>Design System</b> — 擷取並完善品牌視覺語言，預覽結果，再在同一個工作區中繼續創作。</sub>
+<img src="../../docs/screenshots/product-tour/studio-slides-2026.png" alt="Slides — 製作簡報、檢查投影片與講者備註，完成後匯出。" /><br/>
+<sub><b>Slides</b> — 製作簡報、檢查投影片與講者備註，完成後匯出。</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/product-tour/studio-image-2026.webp" alt="Image — 從對話中生成視覺素材，檢視成果，再下載或開啟。" /><br/>
+<sub><b>Image</b> — 從對話中生成視覺素材，檢視成果，再下載或開啟。</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/studio-hyperframes-2026.mp4"><img src="../../docs/screenshots/product-tour/studio-hyperframes-poster-2026.png" alt="HyperFrames — 與 Agent 一起製作動態圖形並匯出 MP4。" /></a><br/>
+<sub><b>HyperFrames</b> — 與 Agent 一起製作動態圖形並匯出 MP4。 <a href="../../docs/screenshots/product-tour/studio-hyperframes-2026.mp4">觀看影片</a>.</sub>
 </td>
 </tr>
 </table>
 
-### Studio——一個專案中的多種產物
-
-進入某個專案的 Studio，對話、生成檔案與即時預覽會圍繞六種產物集中在同一個工作區：
-
-<table>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-prototype.png" alt="原型" /><br/>
-<sub><b>原型</b> — 生成或重建 Web 體驗，查看渲染後的頁面，並在原處繼續與 Agent 迭代。</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-deck.png" alt="簡報" /><br/>
-<sub><b>簡報</b> — 建立多頁簡報，檢查縮圖與講者備註，完成後直接匯出。</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-mobile-app.png" alt="行動應用程式" /><br/>
-<sub><b>行動應用程式</b> — 在裝置預覽中生成並打磨行動介面，旁邊同步保留對話、輸出檔案與後續操作。</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-image.png" alt="圖片" /><br/>
-<sub><b>圖片</b> — 從專案對話中生成視覺素材，以全尺寸預覽結果，然後下載或開啟。</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-document.png" alt="文件" /><br/>
-<sub><b>文件</b> — 建立精緻的多頁指南與編輯型文件，檢查渲染版面，完成後匯出或分享。</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-hyperframe.png" alt="HyperFrame" /><br/>
-<sub><b>HyperFrame</b> — 建立程式碼驅動的動態圖形，在 Studio 中預覽動畫，並匯出最終影片。</sub>
-</td>
-</tr>
-</table>
 ---
 
 ## 平台相容性

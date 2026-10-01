@@ -1,122 +1,28 @@
-// Pre-run balance gate for the OpenDesign Cloud agent. There is exactly ONE
-// balance that changes anything: $0.
-//
-//   HARD  — the run cannot possibly succeed: the account is signed out, or the
-//           wallet balance is definitively <= $0. The send is blocked and the
-//           subscription dialog is the only way forward (plus dismiss), and the
-//           project page also lights the in-conversation upgrade card.
-//   EMPTY_NOT_BLOCKED — the wallet is definitively <= $0 but the hard block
-//           stood down (see `hardBlockMustStandDown`). The run starts and Vela
-//           decides at admission; the $0 card still shows, because the wallet
-//           really is empty.
-//
-// **There is no low-balance tier.** A positive balance — $1.20 included — is an
-// `allow` and produces nothing: no card, no dialog, no delay. Product ruled the
-// soft tier away on 2026-09-07 looking at its own screenshot: 「这个要不先不要
-// 了,跟产品说了一下,不要这个了」, and scoped it on the follow-up: 「余额为零
-// 的那个卡片要显示的,并且也要弹窗的」. Recorded as T66 in
-// `specs/current/chat-panel-decisions-sheet.md`, which overturns the low-balance
-// halves of T51 / T52 / T53.
-//
-// ⚠️ Do NOT bring the tier back by lowering a threshold constant to 0 — that
-// leaves the concept alive in a shape nobody can see. There is no warning line
-// here on purpose; `AMR_LOW_BALANCE_WARN_USD` was deleted, not zeroed.
-//
-// ⚠️ This is about the SEND GATE only. The card a run that DIED on money leaves
-// behind is a different producer (`amrInsufficientBalanceFailure` in
-// `ProjectView`) and is deliberately kept — T61 calls it 「那一轮为什么停下来的
-// 凭据」, and its archived reading may well be positive.
-//
-// Legacy account-scoped reads fail open when unavailable. Every explicitly
-// workspace-scoped run fails closed when its exact member epoch cannot be proven:
-// falling back to the account wallet would make the preflight disagree with
-// the final daemon spawn authority.
-
 import type {
   AmrWalletSnapshot,
   WorkspaceCollabContext,
   WorkspaceBillingResponse,
+  WorkspaceBillingPreflight,
 } from '@open-design/contracts';
 import { fetchAmrWalletSnapshot } from '../providers/daemon';
-import { resolveAmrPlan } from './amr-low-balance-plan';
 
-/**
- * Hard-block line (USD): at or below this the wallet cannot fund any part of
- * a run, so starting one only manufactures a mid-run
- * AMR_INSUFFICIENT_BALANCE failure.
- */
+// Wallet balance is display data, not proof that a run cannot be funded.
+// Coding Plan, free models and automatic recharge are decided by Link.
 export const AMR_HARD_BLOCK_BALANCE_USD = 0;
-
-/*
- * There is deliberately NO low-balance warning line here.
- *
- * `AMR_LOW_BALANCE_WARN_USD = 2` used to sit at this spot and split a positive
- * balance into 「够用」 and 「快没了」. Product retired that whole tier on
- * 2026-09-07 (T66), so the constant is gone rather than set to 0: a zeroed
- * threshold would keep the branch, the tier name and the reader's belief that
- * a second line still exists somewhere. It does not. The draft's 「额度不足 ·
- * < 5 美金」 state and T52's $2 deviation from it are both moot — that state
- * no longer ships. Do not reintroduce either one without a new ruling.
- */
-
 export type AmrBalanceGateResult =
   | { kind: 'allow' }
   | { kind: 'unavailable' }
-  | { kind: 'hard'; reason: 'insufficient'; snapshot: AmrWalletSnapshot }
-  | { kind: 'hard'; reason: 'signed_out'; snapshot: AmrWalletSnapshot }
-  /**
-   * The wallet is definitively empty, but the hard block stood down — see
-   * {@link hardBlockMustStandDown}. The run is NOT blocked (Vela decides at
-   * admission) and no dialog opens, yet the $0 card still shows: the wallet
-   * really is empty, and that is the one thing this surface exists to say.
-   *
-   * ⚠️ This is not the retired soft tier wearing a new name. It is reachable
-   * only at `balance <= AMR_HARD_BLOCK_BALANCE_USD`; a positive balance can
-   * never produce it.
-   */
+  | { kind: 'hard'; reason: 'insufficient' | 'signed_out'; snapshot: AmrWalletSnapshot }
   | { kind: 'empty_not_blocked'; snapshot: AmrWalletSnapshot };
 
 export const HOME_AMR_BALANCE_RETRY_DELAYS_MS = [400, 1_200] as const;
 
-/**
- * Verdict from a wallet reading the shell ALREADY HOLDS — the same number the
- * rail's 额度 pill is showing — so an empty wallet can be answered on the
- * click tick, before the optimistic project frame opens and before any
- * request leaves the page (OPEND-3300 / OPEND-3309).
- *
- * Only a definitive `<= $0` reading produces a verdict. A positive, missing,
- * or unparseable reading returns null: the send takes the ordinary path
- * (frame first, then the network gate), which is where a "just topped up"
- * wallet and a workspace with no projection yet are decided.
- *
- * The caller must pass the reading for the EXACT scope the send will run in
- * (see `workspaceBillingBalanceUsd`), never an account number for a team send.
- * The in-memory verdict is a first answer, not the last one: the caller keeps
- * one background confirmation in flight and lets only a non-blocking
- * confirmation move the user forward.
- */
+/** A cached wallet alone cannot prove that a task is unfunded. */
 export function amrBalanceGateFromMemory(
-  balanceUsd: string | null | undefined,
-  options: { profile?: string | null; updatedAt?: string | null } = {},
-): Extract<AmrBalanceGateResult, { kind: 'hard'; reason: 'insufficient' }> | null {
-  const raw = balanceUsd?.trim();
-  if (raw == null || raw === '') return null;
-  const balance = Number(raw);
-  if (!Number.isFinite(balance) || balance > AMR_HARD_BLOCK_BALANCE_USD) return null;
-  return {
-    kind: 'hard',
-    reason: 'insufficient',
-    snapshot: {
-      status: 'available',
-      profile: options.profile?.trim() || 'default',
-      user: null,
-      balanceUsd: raw,
-      updatedAt: options.updatedAt ?? null,
-      fetchedAt: new Date().toISOString(),
-      stale: false,
-      source: 'vela_api',
-    },
-  };
+  _balanceUsd: string | null | undefined,
+  _options: { profile?: string | null; updatedAt?: string | null } = {},
+): null {
+  return null;
 }
 
 /**
@@ -163,10 +69,7 @@ export function isAmrBalanceGateScope(value: unknown): value is AmrBalanceGateSc
  */
 export function amrBalanceGateScopeForWorkspaceContext(
   context:
-    | Pick<
-        WorkspaceCollabContext,
-        'workspaceType' | 'workspaceId' | 'workspaceMemberId'
-      >
+    | Pick<WorkspaceCollabContext, 'workspaceType' | 'workspaceId' | 'workspaceMemberId'>
     | null
     | undefined,
 ): AmrBalanceGateScope | undefined {
@@ -195,9 +98,7 @@ export function amrBalanceGateScopesMatch(
 
 /** Parse a definitive balance from a snapshot; null when the answer is
  * indefinite (missing/unavailable/unparseable — those must fail open). */
-export function amrWalletBalanceUsd(
-  snapshot: AmrWalletSnapshot | null | undefined,
-): number | null {
+export function amrWalletBalanceUsd(snapshot: AmrWalletSnapshot | null | undefined): number | null {
   if (!snapshot || snapshot.status !== 'available') return null;
   // Trim before the emptiness check: Number(' ') is 0, so an untrimmed
   // whitespace-only balance would read as a definitive $0 and block instead
@@ -216,111 +117,37 @@ export function amrWalletBalanceInsufficient(
   return balance != null && balance <= AMR_HARD_BLOCK_BALANCE_USD;
 }
 
-/**
- * Whether this run's plan tier is UNKNOWABLE from the client.
- *
- * This is the one surviving reason the hard block stands down, and it is a
- * statement about our own read, not about the user: we could not resolve a tier
- * at all, so we have no basis for a definitive block and Vela decides at
- * admission instead (product 2026-09-06, 「放,具体由远程兜底」). It is the
- * half of `cf00c80bd1` that outlived the ruling below.
- *
- * What used to live here — and is now GONE — was the other half: `!isFreeAmrPlan`,
- * "any tier other than the literal string `free` may fund this run outside the
- * wallet". Two things were wrong with it at once. Narrowly, `isFreeAmrPlan`
- * matches `'free'` exactly, so `basic` counted as "not free" and a Basic
- * subscriber at $0 was treated like an unlimited Max one. Broadly, the premise
- * itself was overturned: product ruled 2026-09-06 that the out-of-credits matrix
- * governs Personal workspaces too (product doc 四、升级情况 lists Free / Basic /
- * Plus / Pro AND Max as tiers that see the blocked treatment at $0), so a
- * readable paid tier is no longer a reason to let an empty wallet through.
- * Recorded as T55 in `specs/current/chat-panel-decisions-sheet.md`.
- *
- * The asymmetry that made the old predicate ask the FREE question is why this
- * one asks about readability instead: "free" and "paid" are not complements, and
- * an unreadable tier is neither. Only the unreadable case may fail open.
- */
-async function amrPlanTierUnreadable(
-  snapshot: AmrWalletSnapshot,
-): Promise<boolean> {
-  return (await resolveAmrPlan(snapshot)) == null;
-}
-
-/**
- * Whether the HARD tier — and ONLY the hard tier — must stand down for this
- * run, because something other than the wallet may fund it.
- *
- * Scope note (OPEND-2600, then T66). This question used to be asked ahead of the
- * whole gate and answered with a whole-gate `allow`, which also deleted the
- * low-balance reminder for every subscriber between $0 and the warning line:
- * the reported Pro account at $1.79 got no card at all. Standing down is only
- * ever about NOT BLOCKING. Since T66 retired the low-balance tier outright there
- * is no second branch left for it to swallow, but the placement still matters
- * for the reason below.
- *
- * Latency note (red line). The plan read is a network roundtrip, and it must not
- * land on a send path that was going to succeed. Call this ONLY once the balance
- * is already at or below the hard-block line — the one case that was always
- * going to block, and is therefore already allowed to wait. A positive balance
- * must reach `allow` without ever asking for a plan.
- *
- * Scope note 2 (T55, product 2026-09-06). The only surviving reason to stand
- * down is that the tier could not be read at all — see
- * {@link amrPlanTierUnreadable}. A readable paid tier no longer stands down,
- * because the out-of-credits matrix governs Personal workspaces too.
- *
- * Standing down produces `empty_not_blocked`, not `allow`: the run proceeds, but
- * the wallet is still empty and the card still says so.
- */
-async function hardBlockMustStandDown(
-  snapshot: AmrWalletSnapshot,
-  modelId: string | null | undefined,
-): Promise<boolean> {
-  if (!modelId?.trim()) return false;
-  return amrPlanTierUnreadable(snapshot);
-}
-
-/**
- * Decide whether an OpenDesign Cloud run may start. Fast path first: the
- * daemon-cached snapshot answers without an upstream roundtrip, so healthy
- * balances start with no added latency. Only a hard-block answer is confirmed
- * against the live wallet (refresh=1) — the cache may predate a recharge or
- * subscription, and a just-topped-up user must never be hard-blocked. A
- * positive cached balance is taken at face value: since T66 nothing above $0
- * changes the outcome, so there is nothing a refresh could tell us.
- */
 async function fetchWorkspaceWalletSnapshot(
   scope: AmrBalanceGateScope,
   accountSnapshot: AmrWalletSnapshot | null,
-): Promise<AmrWalletSnapshot | null> {
+  options: { modelId?: string | null; includePreflight?: boolean } = {},
+): Promise<(AmrWalletSnapshot & { preflight: WorkspaceBillingPreflight | null }) | null> {
   const workspaceId = scope.workspaceId.trim();
   const workspaceMemberId = scope.workspaceMemberId.trim();
   if (!workspaceId || !workspaceMemberId) return null;
+  const includePreflight = options.includePreflight === true;
+  const modelId = includePreflight ? options.modelId?.trim() : undefined;
   const response = await fetch(
-    `/api/workspace/billing?scope=workspace&workspaceId=${encodeURIComponent(workspaceId)}&freshness=authoritative`,
+    `/api/workspace/billing?scope=workspace&workspaceId=${encodeURIComponent(workspaceId)}&freshness=authoritative${includePreflight ? '&includePreflight=1' : ''}${modelId ? `&modelId=${encodeURIComponent(modelId)}` : ''}`,
     { cache: 'no-store' },
   );
   if (!response.ok) return null;
   const body = (await response.json()) as WorkspaceBillingResponse;
   const runtime = body.workspaceRuntime;
   const authoritativeRead = body.authoritativeWorkspaceRead;
-  const hardExpiresAt = runtime?.hardExpiresAt
-    ? Date.parse(runtime.hardExpiresAt)
-    : Number.NaN;
+  const hardExpiresAt = runtime?.hardExpiresAt ? Date.parse(runtime.hardExpiresAt) : Number.NaN;
   if (
-    (
-      !runtime ||
-      !authoritativeRead ||
-      runtime.workspaceId !== workspaceId ||
-      runtime.workspaceMemberId !== workspaceMemberId ||
-      runtime.status !== 'fresh' ||
-      !runtime.observedAt ||
-      !Number.isFinite(hardExpiresAt) ||
-      hardExpiresAt <= Date.now() ||
-      authoritativeRead.workspaceId !== workspaceId ||
-      authoritativeRead.workspaceMemberId !== workspaceMemberId ||
-      authoritativeRead.observedAt !== runtime.observedAt
-    )
+    !runtime ||
+    !authoritativeRead ||
+    runtime.workspaceId !== workspaceId ||
+    runtime.workspaceMemberId !== workspaceMemberId ||
+    runtime.status !== 'fresh' ||
+    !runtime.observedAt ||
+    !Number.isFinite(hardExpiresAt) ||
+    hardExpiresAt <= Date.now() ||
+    authoritativeRead.workspaceId !== workspaceId ||
+    authoritativeRead.workspaceMemberId !== workspaceMemberId ||
+    authoritativeRead.observedAt !== runtime.observedAt
   ) {
     return null;
   }
@@ -334,6 +161,13 @@ async function fetchWorkspaceWalletSnapshot(
     return null;
   }
   return {
+    preflight:
+      body.preflight?.workspaceId === workspaceId &&
+      body.preflight.workspaceMemberId === workspaceMemberId &&
+      body.preflight.modelId === (modelId || null) &&
+      Math.abs(Date.now() - Date.parse(body.preflight.generatedAt)) < 60_000
+        ? body.preflight
+        : null,
     status: 'available',
     profile: accountSnapshot?.profile ?? 'default',
     user: accountSnapshot?.user ?? null,
@@ -395,110 +229,64 @@ export async function fetchAmrBalanceCardWalletSnapshot(
 
 async function checkWorkspaceBalanceGate(
   scope: AmrBalanceGateScope,
-  modelId?: string | null,
 ): Promise<AmrBalanceGateResult> {
-  // The URL carries the selected workspace identity. The daemon authorizes
-  // that exact directory membership and returns a v2 identity-stamped wallet.
-  // Start it alongside the cached account snapshot: the latter preserves the
-  // existing signed-out confirmation and profile-aware recovery links, but no
-  // longer sits in front of the authoritative Workspace read.
-  let [accountSnapshot, workspaceSnapshot] = await Promise.all([
+  const [accountSnapshot, workspaceSnapshot] = await Promise.all([
     fetchAmrWalletSnapshot().catch(() => null),
     fetchWorkspaceWalletSnapshot(scope, null).catch(() => null),
   ]);
   if (accountSnapshot?.status === 'signed_out') {
-    const freshAccount = await fetchAmrWalletSnapshot({ refresh: true }).catch(() => null);
-    if (freshAccount?.status === 'signed_out') {
-      return {
-        kind: 'hard',
-        reason: 'signed_out',
-        snapshot: freshAccount,
-      };
-    }
-    accountSnapshot = freshAccount;
+    const fresh = await fetchAmrWalletSnapshot({ refresh: true }).catch(() => null);
+    if (fresh?.status === 'signed_out')
+      return { kind: 'hard', reason: 'signed_out', snapshot: fresh };
   }
-  if (workspaceSnapshot && accountSnapshot) {
-    workspaceSnapshot = {
-      ...workspaceSnapshot,
-      profile: accountSnapshot.profile,
-      user: accountSnapshot.user,
-    };
-  }
-  const balance = amrWalletBalanceUsd(workspaceSnapshot);
-  if (balance == null) return { kind: 'unavailable' };
-  if (balance <= AMR_HARD_BLOCK_BALANCE_USD) {
-    // The out-of-credits matrix governs Personal workspaces too (T55), so a
-    // readable tier — free or paid — blocks here just like a team's does. The
-    // Personal branch survives for the one case that still fails open: a tier
-    // we could not read at all, where Vela decides at admission. Team wallets
-    // never stand down even then: a member's personal plan does not fund their
-    // team's runs, and the account tier is not the team's tier to begin with.
-    const standsDown =
-      scope.workspaceType === 'personal'
-      && (await hardBlockMustStandDown(workspaceSnapshot!, modelId));
-    if (!standsDown) {
-      return {
-        kind: 'hard',
-        reason: 'insufficient',
-        snapshot: workspaceSnapshot!,
-      };
-    }
-    // Not blocked, but an empty wallet is still worth saying.
-    return { kind: 'empty_not_blocked', snapshot: workspaceSnapshot! };
-  }
-  // Anything above $0 is simply allowed. T66 retired the low-balance tier, so
-  // there is no second comparison here and no plan read on this path.
+  // Preserve exact-member authority. Older CLI responses have no preflight;
+  // lack of quota evidence must never become a wallet-only hard block.
+  if (!workspaceSnapshot) return { kind: 'unavailable' };
   return { kind: 'allow' };
 }
 
 export async function checkAmrBalanceGate(
   scope?: AmrBalanceGateScope,
-  modelId?: string | null,
+  _modelId?: string | null,
 ): Promise<AmrBalanceGateResult> {
   try {
-    if (scope) {
-      return await checkWorkspaceBalanceGate(scope, modelId);
-    }
+    if (scope) return await checkWorkspaceBalanceGate(scope);
     const cached = await fetchAmrWalletSnapshot().catch(() => null);
-    const cachedBalance = amrWalletBalanceUsd(cached);
-    const cachedHardCandidate =
-      cached?.status === 'signed_out' ||
-      (cachedBalance != null && cachedBalance <= AMR_HARD_BLOCK_BALANCE_USD);
-    // Above the hard line (or indefinite): nothing here can block and, since
-    // T66, nothing here has anything to say either. No plan read, no refresh —
-    // this is the latency-red-line path and it must stay a pure cache hit.
-    if (!cachedHardCandidate) return { kind: 'allow' };
-    // Hard-block candidate (signed out or empty): confirm against the live
-    // wallet before blocking — the cache may predate a sign-in or recharge.
-    const fresh = await fetchAmrWalletSnapshot({ refresh: true }).catch(() => null);
-    if (fresh == null) return { kind: 'allow' };
-    // Signed-out is decided from the LOCAL profile read, so it is definitive
-    // even though the snapshot carries an explanatory `signed_out` error —
-    // check it before the stale/error guard below.
-    if (fresh.status === 'signed_out') {
-      return { kind: 'hard', reason: 'signed_out', snapshot: fresh };
+    if (cached?.status === 'signed_out') {
+      const fresh = await fetchAmrWalletSnapshot({ refresh: true }).catch(() => null);
+      if (fresh?.status === 'signed_out')
+        return { kind: 'hard', reason: 'signed_out', snapshot: fresh };
     }
-    // A failed refresh hands back the PREVIOUS cached snapshot flagged
-    // `stale: true` (plus an upstream/network `error`). That is not a fresh
-    // definitive answer, so it must not confirm a hard block — a user who
-    // just topped up while the wallet endpoint hiccuped would be stranded.
-    if (fresh.stale || fresh.error != null) return { kind: 'allow' };
-    const freshBalance = amrWalletBalanceUsd(fresh);
-    if (freshBalance == null) return { kind: 'allow' };
-    if (freshBalance <= AMR_HARD_BLOCK_BALANCE_USD) {
-      return (await hardBlockMustStandDown(fresh, modelId))
-        ? { kind: 'empty_not_blocked', snapshot: fresh }
-        : { kind: 'hard', reason: 'insufficient', snapshot: fresh };
-    }
-    // A cache that read empty but refreshes to a positive balance is just an
-    // allow now — the refresh proved there is money, and how much is not a
-    // question this gate asks any more (T66).
+    // An unscoped legacy account cannot prove which pool will fund the run.
     return { kind: 'allow' };
   } catch {
-    // Unscoped legacy checks retain fail-open behavior. Every explicit
-    // workspace, personal or team, must prove its exact member-scoped wallet.
-    return scope
-      ? { kind: 'unavailable' }
-      : { kind: 'allow' };
+    return scope ? { kind: 'unavailable' } : { kind: 'allow' };
   }
+}
+
+/** Recovery needs positive evidence, unlike the advisory send gate. */
+export async function hasAmrFundingRecovered(
+  scope?: AmrBalanceGateScope,
+  modelId?: string | null,
+): Promise<boolean> {
+  if (!scope) {
+    const snapshot = await fetchAmrWalletSnapshot({ refresh: true }).catch(() => null);
+    return Boolean(
+      snapshot && !snapshot.stale && !snapshot.error && (amrWalletBalanceUsd(snapshot) ?? 0) > 0,
+    );
+  }
+  const snapshot = await fetchWorkspaceWalletSnapshot(scope, null, {
+    modelId,
+    includePreflight: true,
+  }).catch(() => null);
+  if (!snapshot) return false;
+  if (snapshot.preflight) {
+    const { funding, modelCovered, codingPlan } = snapshot.preflight;
+    return funding === 'wallet' || Boolean(
+      funding === 'coding_plan' && modelCovered === true && codingPlan?.eligible &&
+      codingPlan.windows?.length > 0 && codingPlan.windows.every((window) =>
+        /^\d+$/.test(window.remainingCredits) && BigInt(window.remainingCredits) > 0n),
+    );
+  }
+  return (amrWalletBalanceUsd(snapshot) ?? 0) > 0;
 }

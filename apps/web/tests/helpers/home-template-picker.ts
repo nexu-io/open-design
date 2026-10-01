@@ -17,7 +17,12 @@ export async function pickHomeTemplate(id: string): Promise<void> {
     return;
   }
   fireEvent.click(homeTemplateTrigger());
-  const option = screen.getByTestId('home-hero-template-menu').querySelector(`[data-chip="${id}"]`);
+  // The click schedules the menu; it is not in the DOM on the next statement.
+  // A synchronous `getByTestId` here reads the tree before React has committed
+  // the open state, so it passes only while the render happens to win that
+  // tick. `findByTestId` waits for the commit the click asked for.
+  const menu = await screen.findByTestId('home-hero-template-menu');
+  const option = menu.querySelector(`[data-chip="${id}"]`);
   expect(option, `creation type ${id} is available in the dropdown`).not.toBeNull();
   fireEvent.click(option!);
 }

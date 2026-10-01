@@ -27,6 +27,7 @@ function compile(name: string, entry = false): string {
 }
 const entryCode = compile("index", true);
 const helperCode = compile("launcher-after-quit");
+const managedHeadlessCode = compile("managed-headless");
 function evaluate(code: string, modules: Record<string, unknown>, globals: Record<string, unknown> = {}) {
   const exports: Record<string, unknown> = {};
   runInNewContext(code, {
@@ -106,8 +107,10 @@ async function scenario(platform: "darwin" | "win32", channel: "stable" | "prere
     ...launcherProto.buildLauncherAfterQuitArgs({ targetPid: 4242, timeoutMs: 1000 }),
     ...launcherProto.buildLauncherDelegatedArgs({ generation: 8, version }),
   ])];
+  const entryProcess = { argv, env: {}, platform };
+  modules["./managed-headless.js"] = evaluate(managedHeadlessCode, modules, { process: entryProcess });
   try {
-    const entry = evaluate(entryCode, modules, { process: { argv, env: {}, platform } }) as { main: () => Promise<void> };
+    const entry = evaluate(entryCode, modules, { process: entryProcess }) as { main: () => Promise<void> };
     const running = entry.main().catch(error => { if (error !== selected) throw error; });
     // Hold the old instance until the wait is armed or the new entry exits.
     // This exposes the bad ordering without a scheduler-dependent sleep.

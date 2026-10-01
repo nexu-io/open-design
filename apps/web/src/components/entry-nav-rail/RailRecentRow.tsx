@@ -1,3 +1,4 @@
+import { reportProjectFailure } from '../../observability/experience-diagnostics';
 // One row of the nav rail's 最近项目 list: the project name, a hover preview
 // that floats out to the right of the rail, and a ⋮ menu.
 //
@@ -136,6 +137,7 @@ export function RailRecentRow({
   project,
   workspaceContext,
   runStatus,
+  runId,
   ownedBySelf = true,
   shared = false,
   moveToTeamAvailable = false,
@@ -154,6 +156,7 @@ export function RailRecentRow({
    *  run the user has not opened since, the unread dot at the row's end
    *  (OPEND-3133) — and nothing else. */
   runStatus?: ProjectDisplayStatus;
+  runId?: string;
   /** The daemon's canMutate is privileged-or-self-created and 403s the rest,
    *  so a row someone else shared keeps its mutations disabled with the same
    *  explanation the project cards give (`recentProjects.ownOnlyMutation`). */
@@ -178,6 +181,10 @@ export function RailRecentRow({
   onDelete?: (project: Project) => void;
 }) {
   const t = useT();
+  useEffect(() => {
+    if (runStatus) reportProjectFailure({ id: project.id,
+      status: { value: runStatus, runId, updatedAt: project.status?.updatedAt } }, 'recent_rail');
+  }, [project.id, project.status?.updatedAt, runStatus, runId]);
   const hoverCover = useProjectHoverCover(project, workspaceContext);
   const { resolveCover } = hoverCover;
   // Where the portalled preview should sit, measured off the row at hover time.

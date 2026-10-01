@@ -188,7 +188,14 @@ export function createMcpDaemonTarget(options: RunMcpOptions): {
         // A failed write is ambiguous: the daemon may have committed it before
         // the transport broke. Refresh the target for the next request, but do
         // not replay a mutation and risk duplicate projects/runs/files.
-        return first;
+        if (recoveredUrl === firstUrl) return first;
+        return errorResult([
+          ...first.content.map((item) => item.text),
+          `OpenDesign restarted its local service while "${name}" was in progress `
+            + '(for example because the app switched to its desktop window), '
+            + 'so this change may or may not have been applied. '
+            + 'Check the current state before retrying; the service is available again.',
+        ].join('\n\n'));
       }
       return await invoke(recoveredUrl);
     },

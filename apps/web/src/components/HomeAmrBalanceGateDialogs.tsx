@@ -1,3 +1,4 @@
+import type { AmrBalanceGateScope } from '../runtime/amr-balance-gate';
 import type { AmrWalletSnapshot } from '@open-design/contracts';
 
 import { AmrBalanceDialog } from './AmrBalanceDialog';
@@ -11,6 +12,8 @@ import { AmrOwnerTopUpDialog } from './chat/AmrOwnerTopUpDialog';
  */
 export interface HomeAmrBalanceGateBlock {
   reason: 'insufficient' | 'signed_out';
+  modelId?: string | null;
+  fundingScope?: AmrBalanceGateScope;
   /**
    * 哪一张弹窗 —— 身份的分支(规格 §6.V)。
    *
@@ -52,6 +55,8 @@ export function HomeAmrBalanceGateDialogs({ block, metricsConsent, installationI
   return (
     <AmrBalanceDialog
       reason={block.reason}
+      modelId={block.modelId}
+      fundingScope={block.fundingScope}
       balanceUsd={block.snapshot.balanceUsd}
       profile={block.snapshot.profile}
       entrySource="home_balance_gate_upgrade"

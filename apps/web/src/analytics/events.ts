@@ -1,3 +1,4 @@
+import { reportExperienceEvent } from '../observability/experience-diagnostics';
 // Typed track* helpers for the v2 analytics schema. Each helper accepts a
 // strongly typed props payload (from @open-design/contracts/analytics) and
 // forwards it through the loosely typed `track()` from AnalyticsProvider.
@@ -210,6 +211,7 @@ function send<T extends object>(
   props: T,
   options?: TrackOptions,
 ): void {
+  reportExperienceEvent(event, props as unknown as Record<string, unknown>);
   track(event, props as unknown as Record<string, unknown>, options);
 }
 
@@ -1217,8 +1219,9 @@ export function trackArtifactDeployResult(
 export function trackArtifactPublishResult(
   track: Track,
   props: ArtifactPublishResultProps,
+  options?: { requestId?: string },
 ): void {
-  send(track, 'artifact_publish_result', props);
+  send(track, 'artifact_publish_result', props, options);
 }
 
 export function trackFileVersionRestoreResult(

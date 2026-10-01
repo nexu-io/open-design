@@ -20,9 +20,14 @@ import {
 import {
 	emitProductionTouchpointLoadDiagnostic,
 	loadProductionTouchpointDecision,
+	productionTouchpointPairRecovery,
+	productionTouchpointRecovery,
 } from "./production-touchpoint-loader";
 import {
 	resolveAuthorizationDeadline,
+	touchpointContentIdentity,
+	touchpointLeaseValue,
+	type TouchpointLeaseValue,
 	type TouchpointLifecycleLoad,
 	useTouchpointLifecycle,
 } from "./touchpoint-lifecycle";
@@ -31,7 +36,6 @@ import { requireCampaignAction } from "./touchpoint-navigation";
 
 const ENTRY_PLACEMENT = "opend.home.hover-entry";
 const LAYER_PLACEMENT = "opend.home.hover-layer";
-const MAX_LEASE_MS = 5 * 60_000;
 const supportedCapabilities = new Set(["hover", "static-action"]);
 type RuntimeDecision = Readonly<{
 	activityId: string;
@@ -46,7 +50,7 @@ type RuntimeDecision = Readonly<{
 	staticActions: TouchpointStaticAction[];
 }>;
 type ValidDecision = Readonly<{
-	decision: RuntimeDecision;
+	decision: TouchpointLeaseValue<RuntimeDecision>;
 	actionIds: ReadonlySet<string>;
 }>;
 type ActiveHover = Readonly<{
@@ -61,7 +65,7 @@ function validDecision(
 ): { valid: ValidDecision; validForMs: number } | null {
 	if (!value || typeof value !== "object") return null;
 	const decision = value as RuntimeDecision;
-	const deadline = resolveAuthorizationDeadline(decision, MAX_LEASE_MS);
+	const deadline = resolveAuthorizationDeadline(decision);
 	if (
 		!decision.activityId ||
 		!decision.touchpointDecisionId ||
@@ -86,9 +90,11 @@ function validDecision(
 		!touchpointStaticActionsMatch(decision.staticActions, placement.staticActions)
 	)
 		return null;
+	// `validForMs` is computed from the response's own timing, and only then is
+	// the timing dropped: what the lease keeps is content identity.
 	return {
 		valid: {
-			decision,
+			decision: touchpointLeaseValue(decision),
 			actionIds: new Set(placement.staticActions.map((action) => action.id)),
 		},
 		validForMs: deadline - Date.parse(decision.serverTime),
@@ -162,7 +168,7 @@ export function ProductionCampaignHover({
 			]);
 			const matches = (
 				loaded: typeof entryLoaded,
-				decision: RuntimeDecision | undefined,
+				decision: TouchpointLeaseValue<RuntimeDecision> | undefined,
 			) =>
 				loaded.kind === "revoked" &&
 				decision &&
@@ -193,8 +199,23 @@ export function ProductionCampaignHover({
 			return {
 				kind: "decision",
 				value: { entry: entry.valid, layer: layer.valid, sessionSubject },
-				key: `${entry.valid.decision.activityId}:${entry.valid.decision.deploymentId}:${entry.valid.decision.content.id}:${entry.valid.decision.touchpointDecisionId}:${layer.valid.decision.touchpointDecisionId}`,
+				// The pair is refused above unless both halves agree on activity and
+				// deployment, so one `touchpointContentIdentity` covers those for
+				// both. The layer's own content version is NOT implied by the
+				// entry's — whether a deployment always hands both placements the
+				// same `content.id` is a server-side property this side cannot
+				// check — and it was previously tracked only by accident, through
+				// the layer's credential. Name it, so a layer swapped underneath
+				// the pair still rebuilds.
+				key: `${touchpointContentIdentity(entry.valid.decision)}:${layer.valid.decision.content.id}`,
 				validForMs: Math.min(entry.validForMs, layer.validForMs),
+				// Both halves, not either — see `productionTouchpointPairRecovery`,
+				// which also owns how the two recovery policies combine.
+				offlineRecovery:
+					productionTouchpointPairRecovery(
+						productionTouchpointRecovery(entryLoaded.offlineReplay),
+						productionTouchpointRecovery(layerLoaded.offlineReplay),
+					) ?? undefined,
 			};
 		},
 		[locale, sessionSubject],
@@ -208,6 +229,7 @@ export function ProductionCampaignHover({
 		identity: enabled ? JSON.stringify([sessionSubject, locale]) : null,
 		load,
 		onError,
+		offlineFallback: true,
 	});
 	const active = lifecycle.current;
 	// Renewing the same lease must not change the overlay mount identity.

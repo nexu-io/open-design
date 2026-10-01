@@ -8,6 +8,7 @@
       ".github/scripts/lib/config.py",
       ".github/scripts/lib/github.py",
       ".github/scripts/lib/r2.py",
+      ".github/scripts/lib/workload_products.py",
       ".github/workflows/convergence-exact.atom.yml",
       ".github/workflows/release-exact.yml"
     ],

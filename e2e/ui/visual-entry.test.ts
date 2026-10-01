@@ -31,16 +31,16 @@ test('[P2] captures the onboarding cloud sign-in surface', async ({ page }) => {
   // Cloud stays primary while identity-independent Local Agent and BYOK setup
   // remain available directly from the signed-out landing.
   await expect(
-    page.getByRole('heading', { name: /Sign in to OpenDesign|登录 OpenDesign/i }),
+    page.getByRole('heading', { name: /Welcome to OpenDesign|欢迎使用 OpenDesign/i }),
   ).toBeVisible({ timeout: T.medium });
   await expect(
-    page.getByRole('button', { name: /Sign in to OpenDesign|登录 OpenDesign/i }),
+    page.getByRole('button', { name: /Sign in \/ Sign up|登录 \/ 注册/i }),
   ).toBeVisible();
   await expect(
-    page.getByRole('button', { name: /Local (coding )?agent|本地 (Coding )?Agent/i }),
+    page.getByRole('button', { name: /Local AI|本地 AI/i }),
   ).toBeVisible();
   await expect(
-    page.getByRole('button', { name: /Bring your own key|使用自己的 Key|自己的模型 Key/i }),
+    page.getByRole('button', { name: /API Key|API 密钥/i }),
   ).toBeVisible();
   await waitForVisualFonts(page);
 

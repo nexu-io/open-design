@@ -11,21 +11,8 @@ export type PlanUnlimitedTier = 'go' | 'plus' | 'pro' | 'max';
  */
 const TIER_ORDER: readonly PlanUnlimitedTier[] = ['max', 'pro', 'plus', 'go'];
 
-/**
- * The Personal Coding Plan tier a raw Vela plan id belongs to, or null for
- * `free`, an unresolved billing response, and every Team plan.
- *
- * Team is excluded on evidence, not on tidiness. "Team plans are paid too" is
- * the wrong test; the question is whether the plan funds usage without
- * touching the wallet, and vela's schema answers no: in-plan usage is recorded
- * through the `coding_plan` billing mode, constrained to
- * `membership_tier_snapshot = ANY (ARRAY['go','plus','pro','max'])`, so a Team
- * workspace never produces a zero-charge call. `team_basic` is seats-only on
- * top of that (`monthly_credits_per_seat = 0` in the seeded catalog).
- *
- * The tier is read off the id's SEGMENTS rather than by substring: substring
- * matching is what made an earlier plan rule answer `plus` for "Team Plus",
- * which is exactly the confusion this function must not repeat.
+/** Legacy label helper only. This never establishes model coverage or quota.
+ * Team seats have Coding Plan pools too; exact eligibility comes from preflight.
  */
 export function planUnlimitedTier(
   rawTier: string | null | undefined,
@@ -33,6 +20,5 @@ export function planUnlimitedTier(
   const normalized = normalize(rawTier);
   if (!normalized) return null;
   const segments = new Set(normalized.split(/[_\-\s]+/).filter(Boolean));
-  if (segments.has('team')) return null;
   return TIER_ORDER.find((tier) => segments.has(tier)) ?? null;
 }

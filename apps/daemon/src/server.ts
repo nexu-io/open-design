@@ -732,16 +732,21 @@ import {
   validateTarget as validateRoutineTarget,
 } from './routines.js';
 import { buildMcpInstallPayload } from './mcp-install-info.js';
+import { createDiagnosticsExportHandler, buildAutomaticDiagnosticSources, resolveDaemonPreviousLogPath } from './diagnostics-export.js';
+import { AutomaticDiagnostics } from './services/automatic-diagnostics.js';
+import { createDiagnosticRunObserver, diagnosticFaultFromApi, diagnosticFaultFromLifecycle } from './services/diagnostic-faults.js';
+import { diagnosticRelayUrl } from './integrations/diagnostic-relay.js';
+import { automaticDiagnosticsConsent, observeAppConfig } from './app-config.js';
+import { observeApiFailures } from './http/api-failure-journal.js';
 import { configureDiagnosticsEvidence } from './services/diagnostics-evidence.js';
 import { beginDaemonHealthSession } from './services/daemon-health.js';
 import { readSqlitePageStats } from './storage/db-inspect.js';
-import { createDiagnosticsExportHandler, resolveDaemonPreviousLogPath } from './diagnostics-export.js';
 import {
   CHAT_SCROLL_FORENSICS_PATH,
   chatScrollForensicsBodyParser,
   chatScrollForensicsHandler,
 } from './diagnostics-client-evidence.js';
-import { DIAGNOSTICS_EXPORT_PATH } from '@open-design/diagnostics';
+import { DIAGNOSTIC_DELIVERY_LOG_PREFIX, DIAGNOSTICS_EXPORT_PATH } from '@open-design/diagnostics';
 import {
   createProjectArchiveStream,
   createBatchArchiveStream,
@@ -999,6 +1004,7 @@ import {
 } from './collab/workspace-billing-runtime.js';
 import {
   AUTHORITATIVE_PROJECT_PRESENCE_CAPABILITY,
+  CODING_PLAN_USAGE_EVENTS_CAPABILITY,
   startHubEventsSubscriber,
   WORKSPACE_DIRECTORY_EVENTS_CAPABILITY,
 } from './collab/hub-events-subscriber.js';
@@ -3827,6 +3833,7 @@ export async function startServer({
   const fetchFreshBackgroundWorkspaceDirectory =
     workspaceDirectoryAuthority.backgroundFresh;
   let workspaceHubSubscriptions: WorkspaceHubSubscriptionManager | null = null;
+  const quotaHealthyConnections = new Set<string>();
   const verifyExplicitWorkspaceRequestContext = async (input: {
     req: any;
     requireTeam?: boolean;
@@ -4103,6 +4110,7 @@ export async function startServer({
     ...configuredAmrEnv(),
   });
   const resetWorkspaceIdentityCaches = (): void => {
+    quotaHealthyConnections.clear();
     workspaceDirectoryAuthority.resetIdentity();
     workspaceExactAuthorityCache.resetIdentity();
     workspaceExactContextCache.resetIdentity();
@@ -5786,6 +5794,9 @@ export async function startServer({
     onWorkspaceSwitched: (workspaceId) => warmWorkspaceDigestFaces(workspaceId),
     fetchBilling: accountBillingSummary.read,
     billingRuntime: workspaceBillingRuntime,
+    quotaRealtimeHealthy: (workspaceId) => quotaHealthyConnections.has(
+      directoryConnectionKey(workspaceId, currentWorkspaceDirectoryIdentity()),
+    ),
     fetchBillingCatalog: (workspaceId) => fetchVelaBillingCatalog(workspaceId, {
       configuredEnv: configuredAmrEnv(),
     }),
@@ -5988,6 +5999,18 @@ export async function startServer({
       readVelaControlApiContext,
       configuredAmrEnv(),
     );
+  const setQuotaRealtimeHealthy = (workspaceId: string, identityKey: string, healthy: boolean) => {
+    const key = directoryConnectionKey(workspaceId, identityKey);
+    const previous = quotaHealthyConnections.has(key);
+    if (healthy) quotaHealthyConnections.add(key);
+    else quotaHealthyConnections.delete(key);
+    if (previous !== healthy && identityKey === currentWorkspaceDirectoryIdentity()) {
+      emitWorkspaceEvent(workspaceId, {
+        type: 'billing-changed',
+        at: Date.now(),
+      });
+    }
+  };
   const syncWorkspaceDirectoryRealtimeHealth = (): void => {
     const currentIdentity = currentWorkspaceDirectoryIdentity();
     workspaceDirectoryAuthority.setRealtimeHealthy(
@@ -6067,6 +6090,7 @@ export async function startServer({
           directoryConnectionIdentities.delete(subscribedWorkspaceId);
         }
         if (identityKey) {
+          setQuotaRealtimeHealthy(subscribedWorkspaceId, identityKey, false);
           directoryHealthyConnections.delete(
             directoryConnectionKey(subscribedWorkspaceId, identityKey),
           );
@@ -6101,6 +6125,11 @@ export async function startServer({
       const connectionKey = directoryConnectionKey(
         exactWorkspaceId,
         exactIdentityKey,
+      );
+      setQuotaRealtimeHealthy(
+        exactWorkspaceId,
+        exactIdentityKey,
+        healthy && capabilities.includes(CODING_PLAN_USAGE_EVENTS_CAPABILITY),
       );
       if (
         healthy
@@ -6440,6 +6469,16 @@ export async function startServer({
           // billing member projection even when no billing event accompanies
           // the roster mutation.
           workspaceBillingRuntime.reconnect(subscribedWorkspaceId);
+          break;
+        case 'coding-plan-usage-changed':
+          if (!event.workspaceId || !event.workspaceMemberId || !event.eventId) break;
+          emitWorkspaceEvent(event.workspaceId, {
+            type: 'coding-plan-usage-changed',
+            workspaceId: event.workspaceId,
+            workspaceMemberId: event.workspaceMemberId,
+            eventId: event.eventId,
+            at: Date.now(),
+          });
           break;
         case 'billing-changed':
           accountBillingSummary.invalidate(accountBillingInvalidationToken(event));
@@ -7804,11 +7843,21 @@ export async function startServer({
   // follow-up — see reconcile decision log.
   // (legacy POST /api/projects body deleted — see registerProjectRoutes below.)
 
+  let automaticDiagnostics: AutomaticDiagnostics | null = null;
   const telemetry = registerTelemetryRoutes(app, {
     dataDir: RUNTIME_DATA_DIR,
     namespace: runtime?.namespace,
     readAppConfig,
     writeAppConfig,
+    onClientExperience: (evidence) => automaticDiagnostics?.record({
+      sourceId: `client:${evidence.occurrenceId}`, kind: evidence.category,
+      at: Date.now(), runId: evidence.runId, projectId: evidence.projectId,
+      conversationId: evidence.conversationId, errorCode: evidence.errorCode, detail: evidence,
+    }) ?? null,
+    onHostFault: (event, properties) => automaticDiagnostics?.record({
+      sourceId: `host:${event}:${typeof properties.previous_session_id === 'string' ? properties.previous_session_id : randomUUID()}`,
+      kind: event, at: Date.now(), detail: properties,
+    }) ?? null,
   });
   const resolvedAppVersionInfo = normalizeTelemetryAppVersionInfo(
     await telemetry.resolveAppVersion(),
@@ -7832,6 +7881,32 @@ export async function startServer({
       readRunTelemetrySinkConfig(process.env, configuredAmrEnv()),
     ),
   );
+  try {
+    automaticDiagnostics = new AutomaticDiagnostics({
+      dataRoot: RUNTIME_DATA_DIR,
+      relayOrigin: diagnosticRelayUrl(process.env),
+      consent: () => automaticDiagnosticsConsent(RUNTIME_DATA_DIR),
+      sources: (incident) => buildAutomaticDiagnosticSources({ runtime, projectRoot: PROJECT_ROOT,
+        runsDir: path.join(RUNTIME_DATA_DIR, 'runs'), dataDir: RUNTIME_DATA_DIR }, incident),
+      baselineSources: () => buildAutomaticDiagnosticSources({ runtime, projectRoot: PROJECT_ROOT,
+        runsDir: path.join(RUNTIME_DATA_DIR, 'runs'), dataDir: RUNTIME_DATA_DIR }, { agentId: '*' }),
+      context: () => currentAppVersionInfo(),
+      onDelivered: (incidentId, receipt, evidence) => {
+        console.info(DIAGNOSTIC_DELIVERY_LOG_PREFIX, incidentId, JSON.parse(receipt).object_key);
+        void analyticsService.captureSafety({ eventName: 'diagnostic_bundle_uploaded',
+          appVersion: currentAppVersion(), properties: { diagnostic_incident_id: incidentId,
+            diagnostic_object_key: JSON.parse(receipt).object_key, run_id: evidence.runId,
+            fault_kind: evidence.kind } }).catch(() => {});
+      },
+    });
+    automaticDiagnostics.start();
+  } catch { console.warn('[diagnostics] local outbox unavailable'); }
+  const stopDiagnosticConfigObserver = observeAppConfig(RUNTIME_DATA_DIR, () => automaticDiagnostics?.consentChanged());
+  const stopDiagnosticApiObserver = observeApiFailures((failure) => {
+    const fault = diagnosticFaultFromApi(failure);
+    if (fault) automaticDiagnostics?.record(fault);
+  });
+  const observeDiagnosticRun = createDiagnosticRunObserver();
   const stopEvidenceDelivery = startEvidenceDelivery(RUNTIME_DATA_DIR);
   const strategyWriteEvidence = createStrategyRunWriteEvidenceRecorder(db);
   const codexThreadCleanupOwner = createCodexThreadCleanupOwner();
@@ -7845,7 +7920,25 @@ export async function startServer({
       // each event is emitted, so the finalization verdict (retry safety gate,
       // artifact_count, close-status artifactProducedThisRun) does not depend on
       // early tool_use/artifact events surviving the run.events ring buffer.
+      onDiagnosticLifecycle: (run, kind, at, errorType) => {
+        const incidentId = automaticDiagnostics?.record(diagnosticFaultFromLifecycle(run, kind, at, errorType));
+        if (incidentId) run.diagnosticIncidentIds = [...new Set([...(run.diagnosticIncidentIds ?? []), incidentId])].slice(-100);
+      },
       onEventEmitted: (run, record) => {
+        if (record.event === 'start') automaticDiagnostics?.trackRun(run.id, {
+          sourceId: `run:${run.id}:interrupted:${run.manualResumeAttemptCount ?? 0}:${record.timestamp}`,
+          kind: 'active_run', at: record.timestamp, runId: run.id, agentId: run.agentId,
+          projectId: run.projectId, conversationId: run.conversationId,
+        });
+        const fault = observeDiagnosticRun(run, record);
+        if (fault) {
+          const incidentId = automaticDiagnostics?.record(fault);
+          if (incidentId) run.diagnosticIncidentIds = [...new Set([...(run.diagnosticIncidentIds ?? []), incidentId])].slice(-100);
+        }
+        if (record.event === 'end') automaticDiagnostics?.finishRun(run.id);
+        if (record.event === 'run_retry_finished' && record.data?.retry_result === 'success') {
+          automaticDiagnostics?.recovered(run.id, record.timestamp);
+        }
         if (!run.sideEffectLedger) run.sideEffectLedger = createRunSideEffectLedger();
         foldEventIntoRunSideEffectLedger(run.sideEffectLedger, record);
         strategyWriteEvidence.observeToolStream(run);
@@ -8261,6 +8354,7 @@ export async function startServer({
       projectRoot: PROJECT_ROOT,
       runsDir: path.join(RUNTIME_DATA_DIR, 'runs'),
       dataDir: RUNTIME_DATA_DIR,
+      automaticUploadStatus: () => automaticDiagnostics?.outbox.diagnostics() ?? { available: false },
     }),
   );
 
@@ -17964,6 +18058,9 @@ export async function startServer({
     // work below.
     let messageEventPayloadHeal: MessageEventPayloadHealHandle | null = null;
     const cleanupDaemonBackgroundWork = () => {
+      stopDiagnosticConfigObserver();
+      stopDiagnosticApiObserver();
+      void automaticDiagnostics?.stop();
       daemonHealth?.markCleanShutdown();
       daemonHealth?.stop();
       void messageEventPayloadHeal?.stop();

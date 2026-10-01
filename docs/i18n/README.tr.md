@@ -1,13 +1,11 @@
-<h1 align="center">OpenDesign: Açık kaynaklı Claude Design alternatifi</h1>
+<h1 align="center">OpenDesign: ilk iş birliğine dayalı tasarım ajanı çalışma alanı</h1>
 
-> ⚡ **[OpenDesign Cloud — resmî model servisi.](https://open-design.ai/zh/pricing/)** Tek bir yüklemeyle OpenDesign içinde hem agent hem de görsel modelleri kullanın: agent'lar için GPT, Claude ve DeepSeek; görseller için GPT Image 2.0, Seedream 5.0 Pro ve Nano Banana 2.0.
->
-> 🚀 **[DeepSeek V4 Flash ve V4 Pro artık kullanılabilir.](https://open-design.ai/zh/pricing/)** Prototipler, sunumlar, tasarım sistemleri ve günlük agent görevlerinde üst düzey zekâyı kullanın. OpenDesign üyeleri her iki modeli de uygulama içinde iki hafta boyunca sınırsız kullanabilir.
+> ✨ **[OpenDesign Go ile tanışın](https://open-design.ai/pricing/)**. Go Plan ilk ay 8 ABD dolarından başlar ve aşağıdakiler dahil 10'dan fazla model için aylık kredi sunar: GPT-6.1 Sol, GPT-6 Luna, DeepSeek V4.1 Flash, GLM-5.3 Flash-X ve MiMo V2.6 Flash. Tüm bireysel planlar Codex, Claude Code, DSH, OpenCode ve diğer araçlar için API erişimi içerir.
 >
 > 🧩 **[DeepSeek Harness artık destekleniyor.](https://open-design.ai/zh/agents/deepseek-harness-design/)** DeepSeek'in resmî `dsh` Agent Harness'ini yapılandırılmış düşünme, araç çağrıları, model keşfi, iptal ve oturum devam ettirme özellikleriyle OpenDesign'a yerel bir runtime olarak bağlayın. Üretilen dosyalar canlı önizleme ve teslimat için OpenDesign iş akışında kalır.
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="OpenDesign hero banner" width="100%" />
+  <img src="../../docs/assets/readme-hero-design-agent.webp" alt="OpenDesign: ilk iş birliğine dayalı tasarım ajanı çalışma alanı" width="100%" />
 </p>
 
 <p align="center">
@@ -31,79 +29,65 @@
 
 ## OpenDesign nedir
 
-🎨 **Yerel öncelikli, açık kaynaklı Claude Design alternatifi.** &nbsp;🖥️ **macOS ve Windows için yerel masaüstü uygulaması.** &nbsp;⚡ **100+ işlevsel beceri + ayrı render şablonu kataloğu** · ✨ **151 tasarım sistemi paketi** · 📦 **277 kullanıma hazır eklenti.** &nbsp;🖼️ **web · masaüstü · mobil prototipler**, **canlı panolar / artifact'ler**, **sunum desteleri**, **görseller**, **video** ve ayrıca **HyperFrames** hareket grafikleri üretir. 🔒 Yalıtılmış iframe önizlemesi · HTML / PDF / PPTX / MP4 dışa aktarımı. &nbsp;🤖 **Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity ve 25 ayrı yerel CLI yürütülebilir dosyası üzerinde** veya BYOK ile herhangi bir OpenAI uyumlu uç noktada çalışır.
+OpenDesign, **iş birliğine dayalı bir tasarım ajanı çalışma alanıdır**. Bir proje özetiyle başlayın; alıştığınız kodlama ajanını veya OpenDesign Cloud'u kullanarak tasarım sisteminize uygun bir prototip oluşturun. Ekibinizle paylaşın, geri bildirim toplayın ve ajanınızın aynı projede çalışmayı geliştirmesine izin verin.
 
-OpenDesign bu döngüyü ajanların okuyup yazabildiği bir **işlevsel beceriler, render tasarım şablonları, tasarım sistemleri ve eklentiler dosya sistemine** dönüştürür.
-
-Aynı zamanda **ajan çağı için Figma alternatifidir** — bir tuval üzerinde piksel itmek yerine, gerçek CSS, gerçek yazı tipleri, gerçek bileşenlerle tek sayfalık artifact'ler sunar, doğrudan HTML / PDF / PPTX / MP4 olarak dışa aktarılır — tasarım sisteminiz tarafından zaten şekillendirilmiş, her gün kullandığınız ajanın içinde zaten çalıştırılabilir halde.
+Bu iş akışı açık ve genişletilebilir. **Açık kaynaklı Claude Design alternatifi** olan OpenDesign, Apache 2.0 lisansıyla sunulur; ekipler becerileri, tasarım şablonlarını, tasarım sistemlerini ve eklentileri inceleyip kendi süreçlerine uyarlayabilir.
 
 
 ---
 
 ## Ürün turu
 
-OpenDesign'ın temel iş akışına hızlı bir bakış. **Home** üzerinde bir brief ile başlayın, **Plugins** içinde yeniden kullanılabilir becerileri keşfedin ve marka referanslarını bir **Design System** haline getirin. Ardından prototipleri, sunumları, mobil uygulamaları, görselleri, belgeleri ve HyperFrame'leri tek yerde oluşturmak ve geliştirmek için bir projenin **Studio** alanına girin.
-
 ### Temel sayfalar
 
 <table>
 <tr>
-<td valign="top">
-<img src="../../docs/screenshots/product-tour/home.png" alt="Home" /><br/>
-<sub><b>Home</b> — Bir artifact türü seçin, brief'i girin ve başlamadan önce tasarım sistemini, çalışma dizinini ve modeli ayarlayın.</sub>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/home-workspace-2026-09-30-220844.png"><img src="../../docs/screenshots/product-tour/home-workspace-2026-09-30-220844.png" alt="Home — Bir proje özeti veya örnekle başlayın." width="500" /></a><br/>
+<sub><b>Home</b> — Bir proje özeti veya örnekle başlayın.</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/all-projects-2026-09-30-220900.webp"><img src="../../docs/screenshots/product-tour/all-projects-2026-09-30-220900.webp" alt="All projects — Tasarım sistemlerinize, medyaya ve prototiplere geri dönün." width="500" /></a><br/>
+<sub><b>All projects</b> — Tasarım sistemlerinize, medyaya ve prototiplere geri dönün.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/design-systems-stripe-2026-09-30-220910.png"><img src="../../docs/screenshots/product-tour/design-systems-stripe-2026-09-30-220910.png" alt="Design Systems — Marka varlıklarını inceleyin ve bir ajanla geliştirin." width="500" /></a><br/>
+<sub><b>Design Systems</b> — Marka varlıklarını inceleyin ve bir ajanla geliştirin.</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/plugins-skills-2026-09-30-220917.png"><img src="../../docs/screenshots/product-tour/plugins-skills-2026-09-30-220917.png" alt="Plugins — Becerileri bulun ve Try it ile başlatın." width="500" /></a><br/>
+<sub><b>Plugins</b> — Becerileri bulun ve Try it ile başlatın.</sub>
 </td>
 </tr>
 </table>
+
+### Studio — tek projede oluşturun ve geliştirin
 
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/plugins.png" alt="Plugins" /><br/>
-<sub><b>Plugins</b> — Resmî becerilere kategoriye göre göz atın, katalogda arama yapın ve <code>Try it</code> ile bir iş akışı başlatın.</sub>
+<img src="../../docs/screenshots/product-tour/studio-prototype-2026.webp" alt="Prototype — Ajanınızla etkileşimli web deneyimleri oluşturup geliştirin ve canlı önizleyin." /><br/>
+<sub><b>Prototype</b> — Ajanınızla etkileşimli web deneyimleri oluşturup geliştirin ve canlı önizleyin.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/design-system.png" alt="Design System" /><br/>
-<sub><b>Design System</b> — Bir markanın görsel dilini çıkarıp geliştirin, sonucu önizleyin ve aynı workspace içinde onunla üretmeye devam edin.</sub>
+<img src="../../docs/screenshots/product-tour/studio-slides-2026.png" alt="Slides — Sunumlar oluşturun, slaytları ve konuşmacı notlarını inceleyip dışa aktarın." /><br/>
+<sub><b>Slides</b> — Sunumlar oluşturun, slaytları ve konuşmacı notlarını inceleyip dışa aktarın.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/product-tour/studio-image-2026.webp" alt="Image — Sohbetten görsel varlıklar üretin, sonucu inceleyip indirin veya açın." /><br/>
+<sub><b>Image</b> — Sohbetten görsel varlıklar üretin, sonucu inceleyip indirin veya açın.</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/studio-hyperframes-2026.mp4"><img src="../../docs/screenshots/product-tour/studio-hyperframes-poster-2026.png" alt="HyperFrames — Ajanınızla hareketli grafikler oluşturun ve MP4 olarak dışa aktarın." /></a><br/>
+<sub><b>HyperFrames</b> — Ajanınızla hareketli grafikler oluşturun ve MP4 olarak dışa aktarın. <a href="../../docs/screenshots/product-tour/studio-hyperframes-2026.mp4">Videoyu izleyin</a>.</sub>
 </td>
 </tr>
 </table>
 
-### Studio — tek projede birçok artifact türü
-
-Bir projenin Studio alanında konuşma, üretilen dosyalar ve canlı önizleme altı artifact türü boyunca bir arada kalır:
-
-<table>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-prototype.png" alt="Prototip" /><br/>
-<sub><b>Prototip</b> — Web deneyimleri üretin veya yeniden oluşturun, render edilen sayfayı inceleyin ve agent ile yerinde yineleyin.</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-deck.png" alt="Sunum" /><br/>
-<sub><b>Sunum</b> — Çok slaytlı sunumlar oluşturun, küçük resimleri ve konuşmacı notlarını inceleyin ve hazır olduğunda dışa aktarın.</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-mobile-app.png" alt="Mobil uygulama" /><br/>
-<sub><b>Mobil uygulama</b> — Bir cihaz önizlemesinde mobil arayüzler üretip geliştirin; konuşma, çıktı dosyaları ve sonraki adımlar yanında kalsın.</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-image.png" alt="Görsel" /><br/>
-<sub><b>Görsel</b> — Proje konuşmasından görsel varlıklar üretin, sonucu tam boyutta önizleyin, ardından indirin veya açın.</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-document.png" alt="Belge" /><br/>
-<sub><b>Belge</b> — Özenli çok sayfalı kılavuzlar ve editoryal belgeler oluşturun, render edilen düzeni inceleyin ve hazır olduğunda dışa aktarın veya paylaşın.</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-hyperframe.png" alt="HyperFrame" /><br/>
-<sub><b>HyperFrame</b> — Kodla yönlendirilen hareketli grafikler oluşturun, animasyonu Studio içinde önizleyin ve tamamlanan videoyu dışa aktarın.</sub>
-</td>
-</tr>
-</table>
 ---
 
 ## Platform Uyumluluğu
