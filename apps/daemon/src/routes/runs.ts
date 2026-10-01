@@ -1772,7 +1772,9 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     const rawHasPrompt =
       (typeof requestBody.currentPrompt === 'string' && requestBody.currentPrompt.trim().length > 0)
       || (typeof requestBody.message === 'string' && requestBody.message.trim().length > 0);
-    const rawHasAttachments = Array.isArray(requestBody.attachments) && requestBody.attachments.length > 0;
+    const rawHasAttachments =
+      (Array.isArray(requestBody.attachments) && requestBody.attachments.length > 0)
+      || (Array.isArray(requestBody.commentAttachments) && requestBody.commentAttachments.length > 0);
     const rawHasPlugin =
       (typeof requestBody.pluginId === 'string' && requestBody.pluginId.trim().length > 0)
       || (typeof requestBody.appliedPluginSnapshotId === 'string' && requestBody.appliedPluginSnapshotId.trim().length > 0);
