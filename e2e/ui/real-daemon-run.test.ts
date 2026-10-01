@@ -394,6 +394,15 @@ test('[P0] local OD Next public canaries project blocked and canceled terminal m
 });
 
 test('[P0] OD Next app-config switch takes effect immediately and rejects invalid modes atomically', async ({ page }) => {
+  // OD_NEXT_STRATEGY_ROLLOUT deliberately outranks the saved
+  // odNextStrategyMode (resolveRequestedMode in
+  // apps/daemon/src/strategies/od-next/rollout.ts), so this case is about the
+  // app-config being the deciding authority. With the env var exported the
+  // source is always 'env' and the assertion below can never hold.
+  test.skip(
+    Boolean(process.env.OD_NEXT_STRATEGY_ROLLOUT),
+    'the rollout env outranks the saved app-config mode by design',
+  );
   const readRollout = async () => {
     const response = await page.request.get('/api/strategies/od-next/rollout');
     expect(response.ok(), await response.text()).toBeTruthy();
