@@ -281,6 +281,7 @@ export const FR_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   supabase: 'Alternative Firebase open-source. Thème dark émeraude, code-first.',
   superhuman: 'Client email rapide. UI dark premium, keyboard-first, glow violet.',
   tesla: 'Automobile électrique. Réduction radicale, photographie full-viewport, presque aucune UI.',
+  terracotta: 'Éditorial terre cuite cuit au soleil. Surfaces crème chaudes, encre serif, un accent terracotta.',
   theverge:
     'Média tech éditorial. Accents acid mint et ultraviolet, display Manuka, story tiles façon rave flyer.',
   'together-ai': 'Infrastructure IA open-source. Technique, design proche blueprint.',

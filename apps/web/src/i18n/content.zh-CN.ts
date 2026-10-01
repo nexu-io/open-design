@@ -1062,6 +1062,7 @@ export const ZH_CN_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   'stripe': '支付基础设施。标志性紫色渐变、300 字重的优雅感。',
   'supabase': '开源的 Firebase 替代方案。深翡翠绿主题，以代码为先。',
   'superhuman': '高速邮件客户端。高端深色 UI、键盘优先、紫色光晕。',
+  'terracotta': '阳光晒就的陶土编辑风。暖奶油面、衬线墨、一点陶土色点缀。',
   'tesla': '电动汽车。极致做减法、满视口摄影、近乎隐形的 UI。',
   'tetris': '经典方块游戏风格设计，色彩活泼、展示字体粗壮、布局紧凑且充满活力。',
   'theverge': '科技编辑媒体。酸性薄荷绿与紫外线点缀色、Manuka 展示字体、锐舞传单式的故事卡片。',
