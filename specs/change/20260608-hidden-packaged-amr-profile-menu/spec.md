@@ -47,9 +47,9 @@ Profile among `local`, `test`, and `prod` while reusing the same bundled Vela
 - The glossary defines **AMR Environment Profile** as the target AMR service
   environment a packaged runtime is configured to use, and separates it from
   release channel, account status, and app identity. Source:
-  `CONTEXT.md:75-77`.
+  `GLOSSARY.md:75-77`.
 - The glossary states that AMR Environment Profile is independent from Open
-  Design release channel identity. Source: `CONTEXT.md:93-97`.
+  Design release channel identity. Source: `GLOSSARY.md:93-97`.
 - Desktop main already has a centralized native menu builder in
   `installDesktopMenu`, with App/File, Edit, View, Window, and Help menus.
   Source: `apps/desktop/src/main/index.ts:185-291`.
@@ -137,7 +137,7 @@ Profile among `local`, `test`, and `prod` while reusing the same bundled Vela
 
 ### Key References
 
-- `CONTEXT.md`
+- `GLOSSARY.md`
 - `/private/tmp/open-design-amr-profile-packaged-handoff.md`
 - `apps/desktop/src/main/index.ts`
 - `apps/packaged/src/index.ts`
@@ -176,7 +176,7 @@ or the Vela / AMR CLI binary.
   `apps/packaged/AGENTS.md` "Owns"; `apps/AGENTS.md` "Active apps".
 - Decision: The menu changes only the **AMR Environment Profile**, not Open
   Design release channel identity, app identity, AMR account status, or CLI
-  binary selection. Source: `CONTEXT.md:75-77,93-97`;
+  binary selection. Source: `GLOSSARY.md:75-77,93-97`;
   `apps/daemon/src/app-config.ts:157-165`.
 - Decision: The Develop menu visibility is process-local and resets to hidden
   on desktop restart. The shortcut toggles only the current Electron process's

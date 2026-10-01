@@ -40,7 +40,7 @@ on `/api/agents` for the AMR model list.
 
 - Do not remove the existing generic `fallback` model mechanism.
 - Do not remove `/api/agents` AMR model fields in this change.
-- Do not add new glossary terms to `CONTEXT.md`.
+- Do not add new glossary terms to `GLOSSARY.md`.
 - Do not implement a broader generic runtime model endpoint.
 - Do not change AMR execution away from `vela agent run`.
 
