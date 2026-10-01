@@ -1046,6 +1046,7 @@ export const PL_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   'retro': 'Projekt w stylu retro z typografią inspirowaną vintage, kontrastowymi paletami retro i nostalgicznymi elementami wizualnymi.',
   'revolut': 'Bankowość cyfrowa. Elegancki ciemny interfejs, gradientowe karty, fintechowa precyzja.',
   'runwayml': 'Generowanie wideo przez AI. Filmowy ciemny interfejs, układ bogaty w multimedia.',
+  'riso': 'Zabawna estetyka risografii. Ciepły papier, głęboki różowy akcent, federalna niebieska struktura.',
   'sanity': 'Bezgłowy CMS. Czerwony akcent, edytorski układ skupiony na treści.',
   'sentry': 'Monitorowanie błędów. Ciemny dashboard, duża gęstość danych, różowo-fioletowy akcent.',
   'shadcn': 'Projekt inspirowany shadcn/ui z minimalistycznymi, czystymi komponentami, monochromatyczną paletą i wzorcami utility-first.',

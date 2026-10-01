@@ -1046,6 +1046,7 @@ export const HU_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   'retro': 'Retró dizájn vintage-ihlette tipográfiával, nagy kontrasztú retró palettákkal és nosztalgikus vizuális elemekkel.',
   'revolut': 'Digitális banki szolgáltatás. Elegáns sötét felület, színátmenetes kártyák, fintech precizitás.',
   'runwayml': 'AI videógenerálás. Filmszerű sötét felület, médiagazdag elrendezés.',
+  'riso': 'Játékos rizográf esztétika. Meleg papír, mély rózsaszín akcentus, szövetségi kék szerkezet.',
   'sanity': 'Headless CMS. Vörös akcentus, tartalom-központú szerkesztőségi elrendezés.',
   'sentry': 'Hibamonitorozás. Sötét műszerfal, adatsűrű, rózsaszín-lila akcentus.',
   'shadcn': 'Shadcn/ui-ihlette dizájn minimális, letisztult komponensekkel, monokróm palettával és utility-first mintázatokkal.',
