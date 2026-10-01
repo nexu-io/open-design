@@ -1046,6 +1046,7 @@ export const ID_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   'retro': 'Desain nostalgia dengan tipografi bergaya vintage, palet retro kontras tinggi, dan elemen visual yang membangkitkan kenangan.',
   'revolut': 'Perbankan digital. Antarmuka gelap yang ramping, kartu gradien, presisi fintech.',
   'runwayml': 'Pembuatan video AI. UI gelap sinematik, tata letak kaya media.',
+  'riso': 'Estetika risograf yang playful. Kertas hangat, aksen merah muda pekat, struktur biru federal.',
   'sanity': 'CMS headless. Aksen merah, tata letak editorial yang mengutamakan konten.',
   'sentry': 'Pemantauan eror. Dashboard gelap, padat data, aksen pink-ungu.',
   'shadcn': 'Desain bergaya Shadcn/ui dengan komponen minimal yang bersih, palet monokrom, dan pola utility-first.',

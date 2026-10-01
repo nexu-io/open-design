@@ -1046,6 +1046,7 @@ export const ES_ES_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   'retro': 'Diseño nostálgico con tipografía de inspiración vintage, paletas retro de alto contraste y elementos visuales evocadores.',
   'revolut': 'Banca digital. Interfaz oscura y elegante, tarjetas en degradado, precisión fintech.',
   'runwayml': 'Generación de vídeo con IA. Interfaz oscura cinematográfica, diseño rico en contenido multimedia.',
+  'riso': 'Estética risográfica lúdica. Papel cálido, acento rosa profundo, estructura azul federal.',
   'sanity': 'CMS headless. Acento rojo, diseño editorial que prioriza el contenido.',
   'sentry': 'Monitorización de errores. Panel oscuro, denso en datos, acento rosa-púrpura.',
   'shadcn': 'Diseño de inspiración Shadcn/ui con componentes mínimos y limpios, paleta monocroma y patrones utility-first.',
