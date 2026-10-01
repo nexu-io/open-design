@@ -1764,6 +1764,23 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         : typeof requestBody.agentId === 'string' && requestBody.agentId
         ? requestBody.agentId
         : null;
+    // #7040 — cheap early gate: reject obviously source-less requests BEFORE
+    // the first agent-detection block so an empty body never pays the
+    // multi-second detectAgents probe. Raw fields only; the normalized/resolved
+    // gate below stays the authoritative check for ambiguous-but-plausible
+    // sources. A named plugin snapshot counts as a plugin source.
+    const rawHasPrompt =
+      (typeof requestBody.currentPrompt === 'string' && requestBody.currentPrompt.trim().length > 0)
+      || (typeof requestBody.message === 'string' && requestBody.message.trim().length > 0);
+    const rawHasAttachments =
+      (Array.isArray(requestBody.attachments) && requestBody.attachments.length > 0)
+      || (Array.isArray(requestBody.commentAttachments) && requestBody.commentAttachments.length > 0);
+    const rawHasPlugin =
+      (typeof requestBody.pluginId === 'string' && requestBody.pluginId.trim().length > 0)
+      || (typeof requestBody.appliedPluginSnapshotId === 'string' && requestBody.appliedPluginSnapshotId.trim().length > 0);
+    if (!rawHasPrompt && !rawHasAttachments && !rawHasPlugin) {
+      return sendApiError(res, 400, 'VALIDATION_FAILED', 'run requires a non-empty message, attachments, or a plugin');
+    }
     if (!effectiveAgentId) {
       try {
         const appCfg = await readAppConfig(RUNTIME_DATA_DIR);
@@ -2577,6 +2594,13 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       attachments: ReturnType<typeof seededUserMessageAttachmentFields>;
       turnMetadata: ReturnType<typeof seededUserMessageTurnMetadataFields>;
     } | null = null;
+    // Normalized attachment fields — the same seed source the user-message
+    // seeding below uses, so the promptless-run gate judges exactly the
+    // values that survive normalization (not raw request fields).
+    const normalizedAttachments = seededUserMessageAttachmentFields(meta);
+    const hasSeedableAttachmentMetadata =
+      (normalizedAttachments.attachments?.length ?? 0) > 0 ||
+      (normalizedAttachments.commentAttachments?.length ?? 0) > 0;
     if (
       typeof meta.conversationId === 'string' &&
       meta.conversationId &&
@@ -2599,9 +2623,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         ? resolveProjectDir(PROJECTS_DIR, meta.projectId, runProject.metadata)
         : null;
       const seededAttachments = seededUserMessageAttachmentFields(meta, projectRoot);
-      const hasSeedableAttachmentMetadata =
-        (seededAttachments.attachments?.length ?? 0) > 0 ||
-        (seededAttachments.commentAttachments?.length ?? 0) > 0;
       const originalCurrentPrompt = requestBody.currentPrompt;
       const originalMessage = requestBody.message;
       const promptForUserMessage =
@@ -2623,6 +2644,22 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           ),
         };
       }
+    }
+    // #7040 — reject promptless runs before a run row is minted. The gate
+    // judges the values that actually survive normalization and resolution:
+    // the effective prompt (plugin runs get meta.message replaced by the
+    // rendered brief), the normalized attachment seed, and the resolved
+    // plugin snapshot. Raw request fields alone never pass this gate.
+    const hasPrompt =
+      (typeof meta.message === 'string' && meta.message.trim().length > 0)
+      || (typeof requestBody.currentPrompt === 'string' && requestBody.currentPrompt.trim().length > 0);
+    if (!hasPrompt && !hasSeedableAttachmentMetadata && !resolvedSnapshot?.ok) {
+      return sendApiError(
+        res,
+        400,
+        'VALIDATION_FAILED',
+        'run requires a non-empty message, attachments, or a plugin',
+      );
     }
     const seedRunUserMessage = () => {
       if (!runUserSeed) return;
