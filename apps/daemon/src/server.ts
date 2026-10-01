@@ -138,6 +138,7 @@ import {
   resolveSafeProjectAttachments,
   resolveSafePromptImagePaths,
   resolveOdNextRequestUserPrompt,
+  resolveWebChatAttachmentsForAcp,
   excludeAcpImagePathsAlreadyDeliveredAsResources,
   selectPromptImagePaths,
 } from './runtimes/chat-prompt-inputs.js';
@@ -204,6 +205,7 @@ export {
   resolveResearchCommandContract,
   resolveSafeProjectAttachments,
   resolveSafePromptImagePaths,
+  resolveWebChatAttachmentsForAcp,
   excludeAcpImagePathsAlreadyDeliveredAsResources,
   selectPromptImagePaths,
 } from './runtimes/chat-prompt-inputs.js';
@@ -11255,6 +11257,14 @@ export async function startServer({
     const safeAttachments = !odNextTaskInputSnapshot && cwd
       ? resolveSafeProjectAttachments(cwd, attachments)
       : [];
+    const webChatAcpTransport = resolveWebChatAttachmentsForAcp(
+      cwd,
+      safeAttachments,
+      {
+        enabled: !odNextTaskInputSnapshot && def.acpImagePathFormat === 'file-url',
+        mimePolicy: def.acpResourceMimePolicy ?? 'generic-image',
+      },
+    );
     run.projectAttachmentPaths = odNextTaskInputSnapshot
       ? odNextTaskInputSnapshot.attachmentReferences
       : safeAttachments;
@@ -12321,7 +12331,7 @@ export async function startServer({
           promptImagePaths,
           odNextTaskInputSnapshot.attachmentPaths,
         )
-      : promptImagePaths;
+      : [...promptImagePaths, ...webChatAcpTransport.imagePaths];
     const taskConfigPendingFact = isOdNextInitialRun
       ? odNextTaskInputSnapshot?.taskConfigText ?? ''
       : '';
@@ -15720,7 +15730,10 @@ export async function startServer({
               : 'unknown',
         },
         imagePaths: def.supportsImagePaths ? acpPromptImagePaths : [],
-        resourcePaths: odNextTaskInputSnapshot?.attachmentPaths ?? [],
+        resourcePaths: odNextTaskInputSnapshot?.attachmentPaths
+          ?? webChatAcpTransport.resourcePaths,
+        imagePathFormat: def.acpImagePathFormat ?? 'path',
+        resourceMimePolicy: def.acpResourceMimePolicy ?? 'generic-image',
         mcpServers,
         envFormat: def.acpMcpEnvFormat ?? 'array',
         // Lets the session withhold stdio MCP servers from agent builds that
@@ -15735,6 +15748,7 @@ export async function startServer({
         ...(def.resumesSessionViaAcpLoad === true && agentResumePromptPolicy.resumeSessionId
           ? { resumeSessionId: agentResumePromptPolicy.resumeSessionId }
           : {}),
+        captureSessionIdAsDurable: def.acpSessionIdIsDurable === true,
         nativeContinuation: forceInternalResume ? pendingNativeSessionContinue?.amrContinuation : null,
         onCliReady: () => noteCliReadyAt(),
         onSessionInit: () => noteSessionInitDoneAt(),
