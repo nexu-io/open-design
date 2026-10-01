@@ -60,6 +60,12 @@ const PACKAGED_CHILD_ENV_ALLOWLIST = [
   "http_proxy",
   "https_proxy",
   "no_proxy",
+  // The chat-run inactivity watchdog resolves inside the daemon, so this operator
+  // override — documented as "that env wins" on `RuntimeAgentDef.inactivityTimeoutMs`
+  // — only works if the packaged daemon actually receives it (#8548). Named here
+  // rather than passed through wholesale: the allowlist stays the boundary, and
+  // only variables opted in by name are inherited.
+  "OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS",
   "OD_ALLOWED_INTERNAL_HOSTS",
 ] as const;
 
