@@ -6,11 +6,15 @@ import type { RequestHandler } from 'express';
 
 import {
   buildAgentCliLogSources,
+  buildAgentSessionSources,
   buildDiagnosticsZip,
   buildRunEventLogSources,
   DIAGNOSTICS_CONTENT_TYPE,
   DIAGNOSTICS_FILENAME_PREFIX,
   diagnosticsFileName,
+  readRunAgentSession,
+  selectAgentSessionLines,
+  type AgentSessionAgent,
   type AutomaticDiagnosticSource,
   type LogSource,
 } from '@open-design/diagnostics';
@@ -332,6 +336,59 @@ export async function buildAutomaticDiagnosticSources(
       const amrLogs = selected.filter((source) => source.name.startsWith('agent-cli-logs/amr/')).length;
       sources.push(...await buildAmrRuntimeLogSources(environment.amrHome, incident, amrLogs));
     }
+    if (isSessionAgent(incident.agentId) && incident.runId && options.runsDir) {
+      sources.push(...await buildRunAgentSessionSources(join(options.runsDir, incident.runId, 'events.jsonl'),
+        incident.agentId, environment));
+    }
+  }
+  return sources;
+}
+
+const SESSION_AGENTS: readonly AgentSessionAgent[] = ['claude', 'codex'];
+function isSessionAgent(agentId: string | undefined): agentId is AgentSessionAgent {
+  return SESSION_AGENTS.includes(agentId as AgentSessionAgent);
+}
+
+/**
+ * The run's own Claude Code / Codex session record (main agent and subagents),
+ * limited to the run's time span. A missing record is reported, not dropped.
+ */
+async function buildRunAgentSessionSources(
+  eventsPath: string,
+  agent: AgentSessionAgent,
+  environment: ResolvedDiagnosticsAgentEnvironment,
+): Promise<AutomaticDiagnosticSource[]> {
+  const placeholder = (omitReason: string): AutomaticDiagnosticSource[] =>
+    [{ name: `agent-sessions/${agent}`, absolutePath: '', kind: 'text', omitReason }];
+  const session = await readRunAgentSession(eventsPath);
+  if (!session) return placeholder('session_id_unavailable');
+  const found = await buildAgentSessionSources(session, {
+    homeDir: homedir(), agents: [agent],
+    claudeConfigDir: environment.claudeConfigDir, codexHome: environment.codexHome,
+  });
+  if (found.length === 0) return placeholder('source_not_located');
+  const selectLines = selectAgentSessionLines(session.startMs, session.endMs);
+  return found.map(({ agent: _agent, ...source }) => ({ ...source, selectLines }));
+}
+
+/** Native Claude Code / Codex sessions of the runs the export includes, one entry per file. */
+async function buildExportedRunSessionSources(
+  runEventSources: LogSource[],
+  environment: ResolvedDiagnosticsAgentEnvironment,
+): Promise<LogSource[]> {
+  const seen = new Set<string>();
+  const sources: LogSource[] = [];
+  for (const runSource of runEventSources) {
+    const session = await readRunAgentSession(runSource.absolutePath);
+    if (!session) continue;
+    const found = await buildAgentSessionSources(session, {
+      homeDir: homedir(), claudeConfigDir: environment.claudeConfigDir, codexHome: environment.codexHome,
+    });
+    for (const { agent: _agent, ...source } of found) {
+      if (seen.has(source.absolutePath)) continue;
+      seen.add(source.absolutePath);
+      sources.push(source);
+    }
   }
   return sources;
 }
@@ -348,6 +405,7 @@ export function createDiagnosticsExportHandler(options: DiagnosticsHandlerOption
       const sources = [
         ...(await buildSidecarLogSources(options.runtime)),
         ...runEventSources,
+        ...(await buildExportedRunSessionSources(runEventSources, agentEnvironment)),
         ...(await buildAgentCliLogSources({
           homeDir: home,
           dataDir: options.dataDir ?? null,
