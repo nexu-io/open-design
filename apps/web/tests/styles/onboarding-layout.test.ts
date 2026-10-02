@@ -47,17 +47,15 @@ describe('onboarding layout styles', () => {
     expect(benefitsBlock).not.toMatch(/(?:^|[;\n])\s*flex-wrap:\s*nowrap\s*;/);
   });
 
-  it('centers intrinsic-width activation retry controls', () => {
-    const actionsBlock = cssDeclarations(
-      '.onboarding-cloud__activation .amr-login-activation__actions',
-    );
-    const openBlock = cssDeclarations(
-      '.onboarding-cloud__activation .amr-login-activation__open',
-    );
-    const dismissBlock = cssDeclarations('.onboarding-cloud__activation-dismiss');
+  // The sign-in fallback is one centered line of text with an inline link,
+  // not a card — the pending state keeps a single focal CTA.
+  it('renders the activation fallback as a centered inline line', () => {
+    const lineBlock = cssDeclarations('.onboarding-cloud__activation');
+    const linkBlock = cssDeclarations('.onboarding-cloud__activation-link');
 
-    expect(actionsBlock).toMatch(/(?:^|[;\n])\s*justify-content:\s*center\s*;/);
-    expect(openBlock).toMatch(/(?:^|[;\n])\s*flex:\s*0\s+0\s+auto\s*;/);
-    expect(dismissBlock).toMatch(/(?:^|[;\n])\s*flex:\s*0\s+0\s+auto\s*;/);
+    expect(lineBlock).toMatch(/(?:^|[;\n])\s*justify-content:\s*center\s*;/);
+    expect(lineBlock).toMatch(/(?:^|[;\n])\s*flex-wrap:\s*wrap\s*;/);
+    expect(lineBlock).not.toMatch(/(?:^|[;\n])\s*(?:border|background)\s*:/);
+    expect(linkBlock).toMatch(/(?:^|[;\n])\s*text-decoration:\s*underline\s*;/);
   });
 });

@@ -1696,9 +1696,19 @@ export function SettingsDialog({
   const [amrCardStatus, setAmrCardStatus] = useState<VelaLoginStatus | null>(null);
   const [amrCardStatusReady, setAmrCardStatusReady] = useState(false);
   const amrCardSignedIn = isAmrSessionAuthenticated(amrCardStatus);
+  // Picking OpenDesign while signed out only selects it inside Settings:
+  // writing `agentId: 'amr'` without a session trips App's "cloud identity
+  // rejected" guard, which bounces the user to onboarding. The selected card
+  // offers sign-in instead, and the choice is committed once a session
+  // exists — from whichever surface observed it first.
+  const [amrPendingSelect, setAmrPendingSelect] = useState(false);
+  useEffect(() => {
+    if (!amrPendingSelect || !isAmrSessionAuthenticated(amrCardStatus)) return;
+    setAmrPendingSelect(false);
+    setCfg((c) => ({ ...c, agentId: 'amr' }));
+  }, [amrPendingSelect, amrCardStatus]);
   const [amrWalletSnapshot, setAmrWalletSnapshot] = useState<AmrWalletSnapshot | null>(null);
   const [amrWalletReady, setAmrWalletReady] = useState(false);
-  const [hoveredAgentCardId, setHoveredAgentCardId] = useState<string | null>(null);
   const [providerTestState, setProviderTestState] = useState<TestState>({
     status: 'idle',
   });
@@ -1727,7 +1737,6 @@ export function SettingsDialog({
     if (!hasAmrAgent) {
       setAmrCardStatus(null);
       setAmrCardStatusReady(false);
-      setHoveredAgentCardId(null);
       return;
     }
     let cancelled = false;
@@ -4519,8 +4528,13 @@ export function SettingsDialog({
                 // here and the callout was showing spuriously.
                 <div className="settings-cloud-signin-callout">
                   <div>
-                    <strong>{t('settings.cloudCalloutTitle')}</strong>
-                    <p>{t('settings.cloudCalloutBody')}</p>
+                    <strong className="settings-cloud-signin-callout__title">
+                      <span className="settings-cloud-signin-callout__title-icon" aria-hidden>
+                        <Icon name="sparkles" size={12} />
+                      </span>
+                      {t('entry.cloudCreditsTitle')}
+                    </strong>
+                    <p>{t('entry.cloudCreditsBody')}</p>
                   </div>
                   {/* Same device-auth flow as the 授权 button on the OpenDesign
                       agent card below — the AMR/vela session IS the cloud
@@ -4533,8 +4547,9 @@ export function SettingsDialog({
                     hideSignedInStatus
                     initialStatus={amrCardStatus}
                     skipInitialRefresh
-                    signInLabel={t('settings.cloudCalloutButton')}
+                    signInLabel={t('entry.cloudCreditsCta')}
                     signInIcon="log-in"
+                    revealPendingCancelAction
                     amrEntrySourceDetail="settings_cloud_callout"
                     metricsConsent={cfg.telemetry?.metrics === true}
                     installationId={cfg.installationId}
@@ -4680,7 +4695,9 @@ export function SettingsDialog({
                       <div className="agent-grid agent-grid-installed">
                         {installedAgents.map((a) => {
                           const needsSetup = deepSeekHarnessNeedsSetup(a);
-                          const active = !needsSetup && cfg.agentId === a.id;
+                          const active =
+                            !needsSetup
+                            && (amrPendingSelect ? a.id === 'amr' : cfg.agentId === a.id);
                           const running =
                             active && agentTestState.status === 'running';
                           const isAmrAgent = a.id === 'amr';
@@ -4811,12 +4828,10 @@ export function SettingsDialog({
                               ? canUpgradeFromPlanTier(amrCardResolvedPlan) &&
                                 Boolean(workspaceContext?.permissions?.canManageBilling)
                               : false;
+                          // Cancel stays visible for the whole pending sign-in,
+                          // matching the Settings callout button above.
                           const amrRevealPendingCancelAction =
-                            isAmrAgent &&
-                            active &&
-                            hoveredAgentCardId === a.id &&
-                            !amrCardSignedIn &&
-                            amrCardStatus?.loginInFlight === true;
+                            isAmrAgent && active && !amrCardSignedIn;
                           const cardEl = (
                             <div
                               key={a.id}
@@ -4826,16 +4841,9 @@ export function SettingsDialog({
                                 'agent-card agent-card-installed' +
                                 (active ? ' active' : '') +
                                 (needsSetup ? ' agent-card-needs-setup' : '') +
-                                (amrHighlighted ? ' agent-card--amr-highlight' : '')
+                                (amrHighlighted ? ' agent-card--amr-highlight' : '') +
+                                (isAmrAgent && !amrCardSignedIn ? ' agent-card--amr-signed-out' : '')
                               }
-                              onMouseEnter={() => {
-                                if (!isAmrAgent || !active) return;
-                                setHoveredAgentCardId(a.id);
-                              }}
-                              onMouseLeave={() => {
-                                if (hoveredAgentCardId !== a.id) return;
-                                setHoveredAgentCardId(null);
-                              }}
                             >
                               <div className="agent-card-main">
                                 <button
@@ -4865,6 +4873,13 @@ export function SettingsDialog({
                                         },
                                       );
                                     }
+                                    // Until a session is confirmed (including before the
+                                    // first status read lands), only select it here.
+                                    if (isAmrAgent && !amrCardSignedIn) {
+                                      setAmrPendingSelect(true);
+                                      return;
+                                    }
+                                    setAmrPendingSelect(false);
                                     setCfg((c) => ({ ...c, agentId: a.id }));
                                   }}
                                   aria-pressed={active}
@@ -4982,7 +4997,10 @@ export function SettingsDialog({
                                 {isAmrAgent ? (
                                   active && amrCardStatusReady ? (
                                     <span
-                                      className="amr-auth-anchor"
+                                      className={
+                                        'amr-auth-anchor'
+                                        + (amrCardSignedIn ? '' : ' amr-auth-anchor--sign-in')
+                                      }
                                       onMouseEnter={() => setAmrCoachmarkDismissed(true)}
                                     >
                                       {amrCoachmarkArmed &&
@@ -5039,12 +5057,18 @@ export function SettingsDialog({
                                         </button>
                                       ) : null}
                                       <AmrLoginPill
-                                        className="agent-card-amr-auth"
+                                        className={
+                                          'agent-card-amr-auth'
+                                          + (amrCardSignedIn
+                                            ? ''
+                                            : ' settings-cloud-signin-callout__button')
+                                        }
                                         hideSignedOutStatus
                                         hideSignedInStatus
                                         initialStatus={amrCardStatus}
                                         skipInitialRefresh
-                                        signInLabel={t('settings.amrAuthorize')}
+                                        signInLabel={t('entry.cloudCreditsCta')}
+                                        signInIcon="log-in"
                                         showConsoleAction={amrCardSignedIn}
                                         iconOnlySignOut
                                         amrEntrySourceDetail="settings_amr_authorize"

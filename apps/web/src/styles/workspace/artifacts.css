@@ -1199,6 +1199,24 @@
   font-size: 14px;
   font-weight: 600;
 }
+/* Same sparkle chip as the home rail's free-credits card, so both entry
+   points open with the same mark. */
+.settings-cloud-signin-callout strong.settings-cloud-signin-callout__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.settings-cloud-signin-callout__title-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-pill, 999px);
+  background: color-mix(in srgb, var(--brand) 40%, var(--brand-soft));
+  color: var(--brand-text);
+}
 .settings-cloud-signin-callout p {
   margin: 4px 0 0;
   color: var(--text-muted);
@@ -1668,6 +1686,12 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
   align-self: flex-start;
   margin: 13px 16px 0 8px;
 }
+/* Signed out, the card's sign-in wears the callout button's solid pill
+   (taller than the account pills), so drop it to sit centered on the
+   32px logo + name row instead of hugging the card's top edge. */
+.amr-auth-anchor.amr-auth-anchor--sign-in {
+  margin-top: 22px;
+}
 .amr-coachmark {
   position: absolute;
   /* Horizontally centered on the button, sitting low — the hand's fingertip
@@ -1782,7 +1806,11 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
 }
 /* One continuous fill for the whole active card — header + model config share
    it, so there is no tone seam between the two halves (they are one module). */
-.agent-card-installed.active {
+/* The hover variant matters: `.agent-card.active:hover` above repaints a flat
+   fill, and a gradient can't transition to it, so hovering the selected card
+   snapped its tone (a visible flash). Keep the same fill on hover. */
+.agent-card-installed.active,
+.agent-card-installed.active:hover:not(.disabled) {
   background:
     linear-gradient(
       180deg,
@@ -2282,6 +2310,53 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
   cursor: default;
   opacity: 0.62;
 }
+/* Pending sign-in inside the solid callout pill (Settings callout + the
+   OpenDesign card): "Signing in…" and Cancel share the callout's green ink,
+   split by a hairline, so both surfaces read identically. */
+.settings-cloud-signin-callout__button .amr-account-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.settings-cloud-signin-callout__button .amr-account-control__status,
+.agent-card-amr-auth.settings-cloud-signin-callout__button .amr-account-control__status {
+  max-width: none;
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  opacity: 0.72;
+}
+.settings-cloud-signin-callout__button .amr-account-control__status-text {
+  overflow: visible;
+  text-overflow: clip;
+}
+/* Hover variants included: the flatten rule's `:hover:not(:disabled)`
+   outranks a plain selector and would drop the divider, shrinking the pill. */
+.settings-cloud-signin-callout__button .amr-account-control--signing-in .amr-account-control__action,
+.settings-cloud-signin-callout__button .amr-account-control--signing-in .amr-account-control__action:hover:not(:disabled),
+.agent-card-amr-auth.settings-cloud-signin-callout__button .amr-account-control--signing-in .amr-account-control__action,
+.agent-card-amr-auth.settings-cloud-signin-callout__button .amr-account-control--signing-in .amr-account-control__action:hover:not(:disabled) {
+  padding-left: 10px;
+  border-left: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+  border-radius: 0;
+}
+/* Signed-out card sign-in wears the callout's solid pill (see
+   .settings-cloud-signin-callout__button); flatten the card's own action
+   chrome so only that outer shell paints, as the callout does. */
+.agent-card-amr-auth.settings-cloud-signin-callout__button .amr-account-control__action,
+.agent-card-amr-auth.settings-cloud-signin-callout__button .amr-account-control__action:hover:not(:disabled) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  font: inherit;
+}
 .agent-card-amr-auth .amr-account-control--error {
   width: 100%;
   flex-wrap: wrap;
@@ -2391,6 +2466,13 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
   /* Transparent: the card owns one continuous fill (see the active-card rule),
      so the header and this model section read as a single module with no seam. */
   background: transparent;
+}
+/* Signed out, the OpenDesign header has only its name row (no email /
+   balance line), so the header's min-height already leaves room under the
+   logo; the usual top padding on top of that left the model section floating.
+   Tighten it so logo→MODEL roughly matches the card's top inset. */
+.agent-card--amr-signed-out .agent-card-config {
+  padding-top: 4px;
 }
 .agent-card-config select,
 .agent-card-config input,

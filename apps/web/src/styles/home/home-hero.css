@@ -1347,6 +1347,10 @@
   border-radius: var(--radius);
   background: var(--bg-panel);
   box-shadow: var(--shadow-lg, 0 14px 36px rgba(0, 0, 0, 0.14));
+  /* Opening upward from the composer, the picker can reach the desktop
+     window's draggable title strip (`.app-chrome-header`, top 44px). Without
+     this, clicks on its tabs inside that strip drag the window instead. */
+  -webkit-app-region: no-drag;
 }
 /* When hosted in the shared CaretFloatingLayer portal (position:fixed,
    width owned by the layer), the picker becomes a static, full-width
