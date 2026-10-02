@@ -28,6 +28,7 @@ import {
   fetchPluginExampleHtml,
   fetchPluginAssetText,
   fetchPluginPreviewHtml,
+  fetchPromptTemplates,
   fetchProjectDesignSystemPackageAudit,
   fetchProjectFiles,
   fetchProjectFileText,
@@ -45,6 +46,26 @@ import {
   upsertPreviewComment,
   writeProjectTextFileDetailed,
 } from '../../src/providers/registry';
+
+describe('prompt-template catalog loading', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('distinguishes an empty successful catalog from a failed request', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response('unavailable', { status: 503 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ promptTemplates: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchPromptTemplates()).resolves.toBeNull();
+    await expect(fetchPromptTemplates()).resolves.toEqual([]);
+  });
+});
 
 describe('skill operation diagnostics', () => {
   afterEach(() => {
