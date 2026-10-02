@@ -7,6 +7,7 @@ import {
   extractPlainStreamArtifacts,
   persistPlainStreamArtifacts,
   plainStdoutFromRunEvents,
+  textDeltaFromRunEvents,
 } from '../../src/runtimes/plain-stream.js';
 import { listFiles, writeProjectFile } from '../../src/projects.js';
 
@@ -148,6 +149,21 @@ describe('plain stream artifact extraction', () => {
     expect(artifacts[0]?.content).toBe('<!doctype html><html></html>');
   });
 
+  it('reconstructs text deltas from agent run events', () => {
+    const text = textDeltaFromRunEvents([
+      { event: 'status', data: { type: 'status', label: 'running' } },
+      { event: 'agent', data: { type: 'text_delta', delta: 'Hello ' } },
+      { event: 'stdout', data: { chunk: 'ignored' } },
+      { event: 'agent', data: { type: 'text_delta', delta: '<artifact identifier="app" type="text/html"><h1>App</h1></artifact>' } },
+    ]);
+
+    expect(text).toBe('Hello <artifact identifier="app" type="text/html"><h1>App</h1></artifact>');
+    const artifacts = extractPlainStreamArtifacts(text);
+    expect(artifacts).toHaveLength(1);
+    expect(artifacts[0]?.identifier).toBe('app');
+    expect(artifacts[0]?.content).toBe('<h1>App</h1>');
+  });
+
   it('extracts artifact tags inside indented backtick examples to match web markdown context', () => {
     const artifacts = extractPlainStreamArtifacts([
       '- Literal example:\n',
@@ -227,5 +243,41 @@ describe('plain stream artifact extraction', () => {
     expect(artifacts).toHaveLength(1);
     expect(artifacts[0]?.fileName).toBe('real.html');
     expect(artifacts[0]?.content).toBe('<!doctype html><html><body>Real</body></html>');
+  });
+
+  it('reconstructs artifact list and byte offsets from plain stdout without duplication', () => {
+    const chunk1 = 'Intro\n<artifact identifier="app" type="text/html"><!doctype html><html><body>App</body></html></artifact>\n';
+    const chunk2 = 'Outro text\n';
+    const fullStream = chunk1 + chunk2;
+
+    const head = fullStream;
+    const totalBytes = fullStream.length;
+    const events = [
+      { event: 'stdout', data: { chunk: chunk1 } },
+      { event: 'stdout', data: { chunk: chunk2 } },
+    ];
+    const tail = plainStdoutFromRunEvents(events);
+    expect(tail).toBe(fullStream);
+
+    // Total bytes must match single stream length so tailStart is exactly 0
+    const tailStart = Math.max(0, totalBytes - tail.length);
+    expect(tailStart).toBe(0);
+
+    let artifacts: ReturnType<typeof extractPlainStreamArtifacts>;
+    if (head.length === 0) {
+      artifacts = extractPlainStreamArtifacts(tail);
+    } else if (tailStart <= head.length) {
+      const stitched = head + tail.slice(head.length - tailStart);
+      artifacts = extractPlainStreamArtifacts(stitched);
+    } else {
+      artifacts = [
+        ...extractPlainStreamArtifacts(head),
+        ...extractPlainStreamArtifacts(tail),
+      ];
+    }
+
+    expect(artifacts).toHaveLength(1);
+    expect(artifacts[0]?.identifier).toBe('app');
+    expect(artifacts[0]?.content).toBe('<!doctype html><html><body>App</body></html>');
   });
 });
