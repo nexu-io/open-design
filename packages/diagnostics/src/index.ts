@@ -47,3 +47,14 @@ export {
   buildAgentCliLogSources,
   type AgentCliLogOptions,
 } from "./agent-logs.js";
+
+export {
+  AGENT_SESSION_TAIL_BYTES,
+  buildAgentSessionSources,
+  readRunAgentSession,
+  selectAgentSessionLines,
+  type AgentSessionAgent,
+  type AgentSessionLookupOptions,
+  type AgentSessionSource,
+  type RunAgentSession,
+} from "./agent-sessions.js";
