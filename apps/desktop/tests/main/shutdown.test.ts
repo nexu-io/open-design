@@ -49,18 +49,20 @@ function shutdownHarness(options: {
   const on = (_event: string, listener: typeof beforeQuit) => { beforeQuit = listener; };
   const exit = vi.fn();
   const endSession = vi.fn();
+  const recordHostEvent = vi.fn();
   const recordLifecycle = vi.fn(async (_event: unknown) => undefined);
   const sandbox = {
     updater: { recordLifecycle },
     options: { beforeShutdown, quiesceRendererTransport }, desktop: { close }, app: { quit, on }, process: { exit },
     updateScheduler: { stop: vi.fn() }, disposeMenu: vi.fn(), removeDiagnosticsIpc: vi.fn(),
-    endDesktopSessionCleanly: endSession, sessionStatePath: "test-session", console: { info: vi.fn(), error: vi.fn() },
+    endDesktopSessionCleanly: endSession, recordDesktopHostEvent: recordHostEvent,
+    sessionStatePath: "test-session", console: { info: vi.fn(), error: vi.fn() },
   };
   const code = ts.transpileModule(declarations.join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
   const api = runInNewContext(`${code}\n({ shutdown, shutdownAndExit })`, sandbox) as {
     shutdown(): Promise<void>; shutdownAndExit(): void;
   };
-  return { ...api, beforeShutdown, close, quiesceRendererTransport, quit, exit, endSession, finishCleanup, beforeQuit, recordLifecycle };
+  return { ...api, beforeShutdown, close, quiesceRendererTransport, quit, exit, endSession, finishCleanup, beforeQuit, recordLifecycle, recordHostEvent };
 }
 
 async function flushPromises() {
@@ -68,6 +70,17 @@ async function flushPromises() {
 }
 
 describe("desktop shutdown", () => {
+  it("records one quit request before cleanup, however often quit is asked for", async () => {
+    const h = shutdownHarness();
+    void h.shutdown();
+    void h.shutdown();
+    await flushPromises();
+    expect(h.recordHostEvent).toHaveBeenCalledTimes(1);
+    expect(h.recordHostEvent).toHaveBeenCalledWith({ stateFilePath: "test-session" }, { kind: "quit-requested" });
+    expect(h.beforeShutdown).toHaveBeenCalledTimes(1);
+    h.finishCleanup();
+  });
+
   it("[P0] quiesces the renderer before retiring runtime sidecars", async () => {
     const h = shutdownHarness();
     const pending = h.shutdown();
