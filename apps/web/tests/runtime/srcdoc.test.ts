@@ -600,7 +600,48 @@ describe('buildSrcdoc', () => {
       { type: 'od:comment-mode', enabled: true, mode: 'picker' },
       { type: 'od:inspect-mode', enabled: true },
     ]);
+    // The child bridge may report ready before its iframe fires load.
+    received.length = 0;
+    frame?.dispatchEvent(new dom.window.Event('load'));
+    expect(frame?.hasAttribute('data-od-project-frame')).toBe(false);
+    expect(received).toContainEqual({ type: 'od:url-selection-bridge-probe' });
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: { type: 'od:url-selection-bridge-ready', href: 'http://preview.local/api/projects/project-1/preview/scope-1/child.html' },
+      source: childWindow,
+    }));
+    expect(frame?.hasAttribute('data-od-project-frame')).toBe(true);
     dom.window.close();
+  });
+
+  it('repositions cached child comment targets on parent scroll and drops them on child reload', async () => {
+    const base = 'http://preview.local/api/projects/project-1/preview/scope-1/';
+    const dom = new JSDOM(buildSrcdoc('<iframe src="child.html"></iframe>', {
+      baseHref: base, commentBridge: true,
+    }), { pretendToBeVisual: true, runScripts: 'dangerously', url: `${base}root.html` });
+    try {
+      await new Promise<void>((resolve) => dom.window.addEventListener('load', () => resolve()));
+      const frame = dom.window.document.querySelector('iframe')!;
+      const child = frame.contentWindow!;
+      Object.defineProperty(frame, 'clientWidth', { value: 100 });
+      Object.defineProperty(frame, 'clientHeight', { value: 100 });
+      let frameY = 200;
+      frame.getBoundingClientRect = () => ({ x: 20, y: frameY, width: 50, height: 50 } as DOMRect);
+      const messages: Array<{ type: string; targets?: Array<{ elementId: string; position: { y: number } }> }> = [];
+      dom.window.parent.postMessage = (message) => messages.push(message);
+      const dispatch = (data: unknown) => dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data, source: child }));
+      dispatch({ type: 'od:url-selection-bridge-ready', href: `${base}child.html` });
+      const id = `frame:${encodeURIComponent(JSON.stringify(['child.html', 'hero']))}`;
+      const latest = () => messages.filter((message) => message.type === 'od:comment-targets').at(-1)?.targets?.find((target) => target.elementId === id);
+      dispatch({ type: 'od:comment-targets', targets: [{ elementId: 'hero', selector: '#hero', position: { x: 10, y: 20, width: 30, height: 40 } }] });
+      await vi.waitFor(() => expect(latest()?.position).toEqual({ x: 25, y: 210, width: 15, height: 20 }));
+      frameY = 100;
+      dom.window.document.dispatchEvent(new dom.window.Event('scroll'));
+      await vi.waitFor(() => expect(latest()?.position.y).toBe(110));
+      frame.dispatchEvent(new dom.window.Event('load'));
+      await vi.waitFor(() => expect(latest()).toBeUndefined());
+    } finally {
+      dom.window.close();
+    }
   });
 
   it('preserves descendant metadata, hover point, and slide index through a nested relay', () => {

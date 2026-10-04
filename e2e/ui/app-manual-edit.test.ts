@@ -267,50 +267,37 @@ test('[P0] Inspect reaches a project child declared as an unquoted root-relative
   await expectFileSource(page, projectId, 'slides/child.html', ['font-size: 22px']);
 });
 
-test('[P0] Inspect reaches and saves to a project file a static frame self-navigated to (#7008 review: nettee)', async ({ page }) => {
+test('[P0] Inspect rejects self-navigated files and recovers on the declared child', async ({ page }) => {
   test.setTimeout(60_000);
-  // #7008 review (nettee): a statically declared iframe's parent src
-  // attribute never updates when the CHILD navigates itself (an internal
-  // link, a window.location assignment) -- only the child's own ready ping
-  // reports its real live path. The host's write-authorization set used to
-  // be built purely from the root document's literal <iframe src> markup,
-  // so Comment/Inspect on the SECOND slide (reached only via this
-  // self-navigation, never declared as its own <iframe src>) was silently
-  // rejected even after the relay itself correctly identified it. This
-  // exercises the full path end to end: self-navigate via a real link click
-  // inside the child, then select and persist an edit on the NEW page.
+  // The host authorizes literal iframe src paths. A child's ready ping cannot
+  // grant write access to another file, even when it is in the same project.
   await routeMockAgents(page);
-  const projectId = await createEmptyProject(page, 'Self-navigated slide save');
-  const root = '<!doctype html><html><body><iframe title="child" src="slide-1.html"></iframe></body></html>';
+  const projectId = await createEmptyProject(page, 'Self-navigated slide authorization');
   const slideOne = '<!doctype html><html><body><h1 data-od-id="title-one">Slide One</h1></body></html>';
   const slideTwo = '<!doctype html><html><body><h1 data-od-id="title-two">Slide Two</h1></body></html>';
   await seedProjectFile(page, projectId, 'slide-1.html', slideOne);
   await seedProjectFile(page, projectId, 'slide-2.html', slideTwo);
-  await seedHtmlArtifact(page, projectId, 'root.html', root);
+  await seedHtmlArtifact(page, projectId, 'root.html', '<!doctype html><html><body><iframe title="child" src="slide-1.html"></iframe></body></html>');
   await page.goto(`/projects/${projectId}/files/root.html`);
   await openDesignFile(page, 'root.html');
   await page.getByTestId('inspect-mode-toggle').click();
-
   const nested = artifactPreviewFrame(page).frameLocator('iframe[title="child"]');
-  await expect(nested.getByRole('heading', { name: 'Slide One' })).toBeVisible();
   await expect(nested.locator('html[data-od-inspect-mode]')).toHaveCount(1);
-
-  // The child navigates ITSELF via a window.location assignment -- the
-  // same <iframe> element's src attribute is never touched by the parent.
-  // (A real <a href> click would work in a real browser too, but Inspect
-  // mode's own click interception -- by design -- captures clicks inside
-  // the child to select elements rather than letting them navigate, so a
-  // link click isn't a faithful way to trigger this in the test itself.)
   await nested.locator('html').evaluate(() => { window.location.href = 'slide-2.html'; });
   await expect(nested.getByRole('heading', { name: 'Slide Two' })).toBeVisible();
   await expect(nested.locator('html[data-od-inspect-mode]')).toHaveCount(1);
-
   await nested.locator('[data-od-id="title-two"]').click();
-  await expect(page.getByTestId('inspect-panel')).toBeVisible();
+  await expectStableCount(() => page.getByTestId('inspect-panel').count(), 0);
+
+  await nested.locator('html').evaluate(() => { window.location.href = 'slide-1.html'; });
+  await expect(nested.getByRole('heading', { name: 'Slide One' })).toBeVisible();
+  await expect(nested.locator('html[data-od-inspect-mode]')).toHaveCount(1);
+  await nested.locator('[data-od-id="title-one"]').click();
+  await expect(page.getByTestId('inspect-panel')).toContainText(`frame:${encodeURIComponent(JSON.stringify(['slide-1.html', 'title-one']))}`);
   await page.getByTestId('inspect-font-size').fill('26');
   await page.getByTestId('inspect-save').click();
-  await expectFileSource(page, projectId, 'slide-2.html', ['font-size: 26px']);
-  await expectFileSourceExcludes(page, projectId, 'slide-1.html', ['data-od-inspect-overrides']);
+  await expectFileSource(page, projectId, 'slide-1.html', ['font-size: 26px']);
+  await expectFileSourceExcludes(page, projectId, 'slide-2.html', ['data-od-inspect-overrides']);
 });
 
 test('[P0] unsaved nested Inspect edit survives toggling Inspect off and back on', async ({ page }) => {
@@ -433,16 +420,25 @@ test('[P0] duplicate data-od-id in sibling project frames stay independently add
   await expect(frameTwo.locator('html[data-od-inspect-mode]')).toHaveCount(1);
 
   await frameOne.locator('[data-od-id="title"]').click();
-  await expect(page.getByTestId('inspect-panel')).toBeVisible();
+  await expect(page.getByTestId('inspect-panel')).toContainText(`frame:${encodeURIComponent(JSON.stringify(['slide-one.html', 'title']))}`);
   await page.getByTestId('inspect-font-size').fill('40');
-  await page.getByTestId('inspect-save').click();
+  // Save reloads the root preview. Wait for that navigation before selecting
+  // the sibling, otherwise the click can land in the document being replaced.
+  await Promise.all([
+    page.waitForEvent('framenavigated', (frame) => frame.parentFrame() === page.mainFrame() && frame.url() === 'about:srcdoc'),
+    page.getByTestId('inspect-save').click(),
+  ]);
   await expectFileSource(page, projectId, 'slide-one.html', ['font-size: 40px']);
   await expectFileSourceExcludes(page, projectId, 'slide-two.html', ['data-od-inspect-overrides']);
 
+  // The floating panel covers the right-hand sibling at this viewport size.
+  await page.getByRole('button', { name: 'Close inspect' }).click();
+  await expect(page.getByTestId('inspect-panel')).toHaveCount(0);
   // Same local data-od-id in the sibling frame must resolve to its own
   // element, not the one just edited in slide-one.
+  await expect(frameTwo.locator('html[data-od-inspect-mode]')).toHaveCount(1);
   await frameTwo.locator('[data-od-id="title"]').click();
-  await expect(page.getByTestId('inspect-panel')).toBeVisible();
+  await expect(page.getByTestId('inspect-panel')).toContainText(`frame:${encodeURIComponent(JSON.stringify(['slide-two.html', 'title']))}`);
   await page.getByTestId('inspect-font-size').fill('24');
   await page.getByTestId('inspect-save').click();
   await expectFileSource(page, projectId, 'slide-two.html', ['font-size: 24px']);
@@ -502,15 +498,19 @@ test('[P0] nested child hover overlay aligns at 150 percent host zoom with ifram
   await page.getByTestId('board-mode-toggle').click();
   const nested = artifactPreviewFrame(page).frameLocator('iframe[title="scaled child"]');
   const target = nested.locator('[data-od-id="target"]');
+  await expect(nested.locator('html[data-od-comment-mode]')).toHaveCount(1);
+  await expect(artifactPreviewFrame(page).locator('iframe[title="scaled child"]')).toHaveAttribute('data-od-project-frame', '');
   await target.hover();
   const overlay = page.getByTestId('comment-target-overlay');
   await expect(overlay).toBeVisible();
-  const [targetBox, overlayBox] = await Promise.all([target.boundingBox(), overlay.boundingBox()]);
-  expect(targetBox).not.toBeNull();
-  expect(overlayBox).not.toBeNull();
-  for (const key of ['x', 'y', 'width', 'height'] as const) {
-    expect(Math.abs(targetBox![key] - overlayBox![key])).toBeLessThanOrEqual(4);
-  }
+  // Hover traverses the root before the child's relayed message arrives.
+  await expect(overlay).toContainText(`frame:${encodeURIComponent(JSON.stringify(['child.html', 'target']))}`);
+  await expect.poll(async () => {
+    const [targetBox, overlayBox] = await Promise.all([target.boundingBox(), overlay.boundingBox()]);
+    if (!targetBox || !overlayBox) return Infinity;
+    return Math.max(...(['x', 'y', 'width', 'height'] as const)
+      .map((key) => Math.abs(targetBox[key] - overlayBox[key])));
+  }).toBeLessThanOrEqual(4);
   // v1 deliberately excludes rotation/skew; this covers axis-aligned scale only.
 });
 
@@ -525,7 +525,7 @@ test('[P0] forged nested Inspect identity cannot select or write an unlisted pro
   await openDesignFile(page, 'root.html');
   await page.getByTestId('inspect-mode-toggle').click();
   const forgedId = `frame:${encodeURIComponent(JSON.stringify(['unrelated.html', 'target']))}`;
-  await artifactPreviewFrame(page).locator('body').evaluate((elementId) => {
+  await artifactPreviewFrame(page).locator('body').evaluate((_body, elementId) => {
     window.parent.postMessage({
       type: 'od:comment-target', elementId, selector: '[data-od-id="target"]',
       label: 'forged', text: 'forged', position: { x: 1, y: 1, width: 20, height: 20 },
@@ -551,8 +551,7 @@ test('[P0] child element comment re-anchors after root reload', async ({ page })
   await expect(page.getByTestId('comment-popover')).toBeVisible();
   await page.getByTestId('comment-popover-input').fill('Child anchored comment');
   await page.getByTestId('comment-popover').getByRole('button', { name: /^Comment$/ }).click();
-  await page.getByTestId('comment-panel-toggle').click();
-  await expect(page.getByTestId('comment-side-panel')).toContainText('Child anchored comment');
+  await expect(page.getByTestId('comment-panel-toggle')).toContainText('1');
   await page.reload();
   await waitForLoadingToClear(page);
   await expect(page.getByTestId('board-mode-toggle')).toBeVisible();
@@ -561,14 +560,15 @@ test('[P0] child element comment re-anchors after root reload', async ({ page })
   const reloadedChild = artifactPreviewFrame(page).frameLocator('iframe[title="comment child"]');
   await expect(reloadedChild.getByRole('heading', { name: 'Child Hero' })).toBeVisible();
   await expect(reloadedChild.locator('html[data-od-comment-mode]')).toHaveCount(1);
+  await page.getByTestId('comment-panel-toggle').click();
   const childTargetId = `frame:${encodeURIComponent(JSON.stringify(['child.html', 'child-hero']))}`;
   await expect(page.getByTestId(`comment-saved-marker-${childTargetId}`)).toHaveAttribute('data-anchor-state', 'anchored');
 });
 
-test('[P0] self-navigated child comment stays authorized after re-navigating past a root reload', async ({ page }) => {
+test('[P0] comments reject self-navigated files and re-anchor on the declared child after reload', async ({ page }) => {
   test.setTimeout(60_000);
   await routeMockAgents(page);
-  const projectId = await createEmptyProject(page, 'Self-navigated comment re-anchor');
+  const projectId = await createEmptyProject(page, 'Self-navigated comment authorization');
   await seedProjectFile(page, projectId, 'slide-1.html', '<!doctype html><html><body><h2 data-od-id="one">One</h2></body></html>');
   await seedProjectFile(page, projectId, 'slide-2.html', '<!doctype html><html><body><h2 data-od-id="two">Two</h2></body></html>');
   await seedHtmlArtifact(page, projectId, 'root.html', '<!doctype html><html><body><iframe title="comment child" src="slide-1.html"></iframe></body></html>');
@@ -579,30 +579,28 @@ test('[P0] self-navigated child comment stays authorized after re-navigating pas
   await expect(nested.locator('html[data-od-comment-mode]')).toHaveCount(1);
   await nested.locator('html').evaluate(() => { window.location.href = 'slide-2.html'; });
   await expect(nested.getByRole('heading', { name: 'Two' })).toBeVisible();
+  await expect(nested.locator('html[data-od-comment-mode]')).toHaveCount(1);
   await nested.locator('[data-od-id="two"]').click();
+  await expectStableCount(() => page.getByTestId('comment-popover').count(), 0);
+
+  await nested.locator('html').evaluate(() => { window.location.href = 'slide-1.html'; });
+  await expect(nested.getByRole('heading', { name: 'One' })).toBeVisible();
+  await expect(nested.locator('html[data-od-comment-mode]')).toHaveCount(1);
+  await nested.locator('[data-od-id="one"]').click();
   await expect(page.getByTestId('comment-popover')).toBeVisible();
-  await page.getByTestId('comment-popover-input').fill('Self-navigated comment');
+  await page.getByTestId('comment-popover-input').fill('Declared child comment');
   await page.getByTestId('comment-popover').getByRole('button', { name: /^Comment$/ }).click();
   await expect(page.getByTestId('comment-panel-toggle')).toContainText('1');
-  await page.getByTestId('comment-panel-toggle').click();
-  await expect(page.getByTestId('comment-side-panel')).toContainText('Self-navigated comment');
-  // A plain reload restarts the child at its declared static src (slide-1.html) --
-  // there is no server-side persistence of "this frame's last live path", so a
-  // comment anchored on a self-navigated path is authorized again only once the
-  // child re-navigates there, exactly like the first time. This re-navigation
-  // step is what's actually guaranteed by the STATIC_FRAME_PATHS/liveFramePaths
-  // design; asserting the comment survives reload with no re-navigation would
-  // test a persistence guarantee this PR does not implement.
   await page.reload();
   await waitForLoadingToClear(page);
   await page.getByTestId('board-mode-toggle').click();
   const reloadedChild = artifactPreviewFrame(page).frameLocator('iframe[title="comment child"]');
   await expect(reloadedChild.getByRole('heading', { name: 'One' })).toBeVisible();
-  await reloadedChild.locator('html').evaluate(() => { window.location.href = 'slide-2.html'; });
-  await expect(reloadedChild.getByRole('heading', { name: 'Two' })).toBeVisible();
-  await expect(page.getByTestId('comment-panel-toggle')).toContainText('1');
+  await expect(reloadedChild.locator('html[data-od-comment-mode]')).toHaveCount(1);
   await page.getByTestId('comment-panel-toggle').click();
-  await expect(page.getByTestId('comment-side-panel')).toContainText('Self-navigated comment');
+  await expect(page.getByTestId('comment-side-panel')).toContainText('Declared child comment');
+  const childTargetId = `frame:${encodeURIComponent(JSON.stringify(['slide-1.html', 'one']))}`;
+  await expect(page.getByTestId(`comment-saved-marker-${childTargetId}`)).toHaveAttribute('data-anchor-state', 'anchored');
 });
 
 test('[P0] manual edit mode preserves the current page in a multi-page mobile app', async ({ page }) => {
@@ -1246,7 +1244,9 @@ test('[P1] first-loop onboarding completes once after a successful artifact expo
 
   await routeMockAgents(page);
   const projectId = await createEmptyProject(page, 'First loop export smoke');
-  await seedHtmlArtifact(page, projectId, 'first-loop-export.html', manualEditHtml());
+  // This test verifies export completion analytics; use a self-contained
+  // artifact so the standalone bundler has no missing image dependencies.
+  await seedHtmlArtifact(page, projectId, 'first-loop-export.html', '<!doctype html><html><body><h1>First loop export</h1></body></html>');
   await page.addInitScript(
     ({ id }) => {
       window.sessionStorage.setItem(

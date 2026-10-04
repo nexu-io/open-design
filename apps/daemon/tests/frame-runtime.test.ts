@@ -134,14 +134,18 @@ describe('URL preview nested-frame bridges', () => {
   it('resyncs a ready direct child and routes frame Inspect commands without a scroll-bridge ReferenceError', () => {
     const listeners: Array<(event: { data?: unknown; source?: unknown }) => void> = [];
     const received: unknown[] = [];
+    let frameLoad = () => {};
+    let resize = () => {};
+    let frameY = 0;
+    let projectFrameMarked = false;
     const childWindow = { postMessage: (message: unknown) => received.push(message) };
     const frame = {
       contentWindow: childWindow,
       src: 'child.html',
       getAttribute(name: string) { return name === 'src' ? 'child.html' : null; },
-      addEventListener() {},
-      toggleAttribute() {},
-      getBoundingClientRect() { return { x: 0, y: 0, width: 100, height: 100 }; },
+      addEventListener(type: string, listener: () => void) { if (type === 'load') frameLoad = listener; },
+      toggleAttribute(name: string, enabled: boolean) { if (name === 'data-od-project-frame') projectFrameMarked = enabled; },
+      getBoundingClientRect() { return { x: 0, y: frameY, width: 100, height: 100 }; },
       clientWidth: 100,
       clientHeight: 100,
     };
@@ -156,7 +160,9 @@ describe('URL preview nested-frame bridges', () => {
       body: { querySelectorAll: () => [], attributes: [] },
       head: { appendChild() {} },
       scrollingElement: { scrollLeft: 0, scrollTop: 0 },
-      querySelectorAll(selector: string) { return selector === 'iframe' ? [frame] : []; },
+      querySelectorAll(selector: string) {
+        return selector === 'iframe' || (selector === 'iframe[data-od-project-frame]' && projectFrameMarked) ? [frame] : [];
+      },
       querySelector() { return null; },
       createElement() { return { setAttribute() {}, textContent: '', isConnected: true }; },
       addEventListener() {},
@@ -169,6 +175,7 @@ describe('URL preview nested-frame bridges', () => {
       parent: { postMessage: (message: unknown) => parentMessages.push(message) },
       addEventListener(type: string, listener: (event: { data?: unknown; source?: unknown }) => void) {
         if (type === 'message') listeners.push(listener);
+        if (type === 'resize') resize = () => listener({});
       },
       requestAnimationFrame(callback: () => void) { callback(); return 1; },
       setTimeout(callback: () => void) { callback(); return 1; },
@@ -198,6 +205,25 @@ describe('URL preview nested-frame bridges', () => {
       { type: 'od:comment-mode', enabled: true, mode: 'picker' },
       { type: 'od:inspect-mode', enabled: true },
     ]);
+    received.length = 0;
+    frameLoad();
+    expect(projectFrameMarked).toBe(false);
+    expect(received).toEqual([{ type: 'od:url-selection-bridge-probe' }]);
+    dispatch({ type: 'od:url-selection-bridge-ready', href: 'http://preview.local/api/projects/project-1/preview/scope-1/child.html' }, childWindow);
+    expect(projectFrameMarked).toBe(true);
+    parentMessages.length = 0;
+    dispatch({ type: 'od:comment-targets', targets: [{ elementId: 'hero', selector: '[data-od-id="hero"]', position: { x: 10, y: 20, width: 30, height: 40 } }] }, childWindow);
+    expect(parentMessages).toContainEqual({ type: 'od:comment-targets', targets: [expect.objectContaining({
+      elementId: `frame:${encodeURIComponent(JSON.stringify(['child.html', 'hero']))}`,
+      position: { x: 10, y: 20, width: 30, height: 40 },
+    })] });
+
+    frameY = 100;
+    parentMessages.length = 0;
+    resize();
+    expect(parentMessages).toContainEqual({ type: 'od:comment-targets', targets: [expect.objectContaining({
+      position: { x: 10, y: 120, width: 30, height: 40 },
+    })] });
 
     received.length = 0;
     dispatch({

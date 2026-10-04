@@ -944,12 +944,17 @@ ${COMMENT_IDENTITY_HELPERS}
   // fix regardless of caching.
   var frameUnavailable = new WeakSet();
   var frameLoadListeners = new WeakSet();
+  var childTargets = new WeakMap();
   function observeFrameLoad(frame){
     if (!frame || frameLoadListeners.has(frame)) return;
     frameLoadListeners.add(frame);
     frame.addEventListener('load', function(){
       try { liveFramePaths.delete(frame); } catch (_) {}
       try { frameUnavailable.add(frame); } catch (_) {}
+      childTargets.delete(frame);
+      schedulePostTargets();
+      markProjectFrames();
+      try { frame.contentWindow && frame.contentWindow.postMessage({ type: 'od:url-selection-bridge-probe' }, '*'); } catch (_) {}
     });
   }
   function projectFramePath(frame){
@@ -1044,9 +1049,39 @@ ${COMMENT_IDENTITY_HELPERS}
     var frames = document.querySelectorAll('iframe[data-od-project-frame]');
     for (var i = 0; i < frames.length; i++) try { frames[i].contentWindow && frames[i].contentWindow.postMessage(data, '*'); } catch (_) {}
   }
+  function safeRelayPosition(position, frame){
+    if (!position || !Number.isFinite(Number(position.x)) || !Number.isFinite(Number(position.y)) ||
+      !Number.isFinite(Number(position.width)) || !Number.isFinite(Number(position.height))) return null;
+    var rect = frame.getBoundingClientRect();
+    var width = Number(frame.clientWidth || 0);
+    var height = Number(frame.clientHeight || 0);
+    if (!(width > 0) || !(height > 0)) return null;
+    var sx = rect.width / width;
+    var sy = rect.height / height;
+    return { x: Math.round(rect.x + Number(position.x) * sx), y: Math.round(rect.y + Number(position.y) * sy),
+      width: Math.round(Number(position.width) * sx), height: Math.round(Number(position.height) * sy) };
+  }
   function relayProjectFrameSelection(ev){
     if (!active()) return;
     var data = ev && ev.data;
+    if (data && data.type === 'od:comment-targets' && Array.isArray(data.targets)) {
+      var targetFrame = projectFrameForSource(ev.source);
+      if (!targetFrame) return;
+      var targetPath = projectFramePath(targetFrame);
+      var targets = [];
+      for (var t = 0; t < data.targets.length; t++) {
+        var item = data.targets[t];
+        if (!item || !item.elementId || !item.selector || !item.position) continue;
+        var id = projectFrameTargetId(targetPath, String(item.elementId));
+        if (!id || !safeRelayPosition(item.position, targetFrame)) continue;
+        targets.push({ elementId: id, selector: String(item.selector), label: String(item.label || ''),
+          text: String(item.text || ''), position: item.position,
+          htmlHint: String(item.htmlHint || ''), style: item.style || null });
+      }
+      childTargets.set(targetFrame, { path: targetPath, src: targetFrame.getAttribute('src') || '', targets: targets });
+      schedulePostTargets();
+      return;
+    }
     if (data && data.type === 'od:comment-leave') {
       // Carries no target identity — the pointer simply left whatever it was
       // over. Relay as-is once the sender is confirmed a real project frame.
@@ -1057,17 +1092,14 @@ ${COMMENT_IDENTITY_HELPERS}
     if (!data || !allowed[data.type] || !data.position || !data.elementId || !data.selector) return;
     var frame = projectFrameForSource(ev.source);
     if (!frame) return;
-    var rect = frame.getBoundingClientRect();
-    var width = Number(frame.clientWidth || 0), height = Number(frame.clientHeight || 0);
-    if (!(width > 0) || !(height > 0)) return;
     var path = projectFramePath(frame);
     var targetId = path && projectFrameTargetId(path, String(data.elementId));
     if (!targetId) return;
-    var position = data.position;
-    if (![position.x, position.y, position.width, position.height].every(function(v){ return Number.isFinite(Number(v)); })) return;
+    var position = safeRelayPosition(data.position, frame);
+    if (!position) return;
     var message = { type: data.type, elementId: targetId, localElementId: String(data.elementId), framePath: path,
       selector: String(data.selector), label: typeof data.label === 'string' ? data.label : '', text: typeof data.text === 'string' ? data.text : '',
-      position: { x: Math.round(rect.x + Number(position.x) * rect.width / width), y: Math.round(rect.y + Number(position.y) * rect.height / height), width: Math.round(Number(position.width) * rect.width / width), height: Math.round(Number(position.height) * rect.height / height) },
+      position: position,
       htmlHint: typeof data.htmlHint === 'string' ? data.htmlHint : '', style: data.style || null };
     if (data.clickedDescendant && typeof data.clickedDescendant === 'object') message.clickedDescendant = { label: typeof data.clickedDescendant.label === 'string' ? data.clickedDescendant.label : '', text: typeof data.clickedDescendant.text === 'string' ? data.clickedDescendant.text : '' };
     if (data.hoverPoint && Number.isFinite(Number(data.hoverPoint.x)) && Number.isFinite(Number(data.hoverPoint.y))) message.hoverPoint = { x: Math.round(Number(data.hoverPoint.x)), y: Math.round(Number(data.hoverPoint.y)) };
@@ -1307,6 +1339,18 @@ ${COMMENT_IDENTITY_HELPERS}
       if (item && !seen[item.elementId]) {
         seen[item.elementId] = true;
         items.push(item);
+      }
+    }
+    var frames = document.querySelectorAll('iframe[data-od-project-frame]');
+    for (var f = 0; f < frames.length; f++) {
+      var cached = childTargets.get(frames[f]);
+      if (!cached || cached.path !== projectFramePath(frames[f]) || cached.src !== (frames[f].getAttribute('src') || '')) continue;
+      // Child coordinates stay local in the cache; parent scroll/resize can
+      // move the frame without causing the child to publish another list.
+      for (var n = 0; n < cached.targets.length; n++) {
+        var item = cached.targets[n];
+        var position = safeRelayPosition(item.position, frames[f]);
+        if (position) items.push(Object.assign({}, item, { position: position }));
       }
     }
     return items;
@@ -1620,6 +1664,7 @@ ${COMMENT_IDENTITY_HELPERS}
         var declaredPath = projectFramePathFromHref(readyFrame.src);
         if (declaredPath && declaredPath === readyFramePath) frameUnavailable.delete(readyFrame);
       } catch (_) {}
+      markProjectFrames();
       try { ev.source.postMessage({ type: 'od:comment-mode', enabled: commentEnabled, mode: mode }, '*'); } catch (_) {}
       try { ev.source.postMessage({ type: 'od:inspect-mode', enabled: inspectEnabled }, '*'); } catch (_) {}
       // #7008: a replay that arrived before this child mounted (or before it
