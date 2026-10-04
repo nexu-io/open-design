@@ -1896,12 +1896,19 @@ function injectSelectionBridge(
   // fix regardless of caching.
   var frameUnavailable = new WeakSet();
   var frameLoadListeners = new WeakSet();
+  var childTargets = new WeakMap();
   function observeFrameLoad(frame){
     if (!frame || frameLoadListeners.has(frame)) return;
     frameLoadListeners.add(frame);
     frame.addEventListener('load', function(){
       try { liveFramePaths.delete(frame); } catch (_) {}
       try { frameUnavailable.add(frame); } catch (_) {}
+      childTargets.delete(frame);
+      schedulePostTargets();
+      markProjectFrames();
+      // The child's first ready ping can precede iframe load; ask the loaded
+      // document to confirm again before restoring pointer events.
+      try { frame.contentWindow && frame.contentWindow.postMessage({ type: 'od:url-selection-bridge-probe' }, '*'); } catch (_) {}
     });
   }
   function projectFramePath(frame){
@@ -2020,6 +2027,23 @@ function injectSelectionBridge(
   function relayProjectFrameSelection(ev){
     if (!active()) return;
     var data = ev && ev.data;
+    if (data && data.type === 'od:comment-targets' && Array.isArray(data.targets)) {
+      var targetFrame = projectFrameForSource(ev.source);
+      if (!targetFrame) return;
+      var targetPath = projectFramePath(targetFrame);
+      var targets = [];
+      for (var t = 0; t < data.targets.length; t++) {
+        var item = data.targets[t];
+        if (!item || !item.elementId || !item.selector) continue;
+        var id = projectFrameTargetId(targetPath, String(item.elementId));
+        if (!id || !safeRelayPosition(item.position, targetFrame)) continue;
+        targets.push({ elementId: id, selector: String(item.selector), label: String(item.label || ''),
+          text: String(item.text || ''), position: item.position, htmlHint: String(item.htmlHint || ''), style: item.style || null });
+      }
+      childTargets.set(targetFrame, { path: targetPath, src: targetFrame.getAttribute('src') || '', targets: targets });
+      schedulePostTargets();
+      return;
+    }
     if (data && data.type === 'od:comment-leave') {
       // Carries no target identity — the pointer simply left whatever it was
       // over. Relay as-is once the sender is confirmed a real project frame.
@@ -2342,6 +2366,18 @@ function meaningfulDomFallbackTarget(el) {
       if (item && !seen[item.elementId]) {
         seen[item.elementId] = true;
         items.push(item);
+      }
+    }
+    var frames = document.querySelectorAll('iframe[data-od-project-frame]');
+    for (var f = 0; f < frames.length; f++) {
+      var cached = childTargets.get(frames[f]);
+      if (!cached || cached.path !== projectFramePath(frames[f]) || cached.src !== (frames[f].getAttribute('src') || '')) continue;
+      // Child coordinates stay local in the cache; parent scroll/resize can
+      // move the frame without causing the child to publish another list.
+      for (var n = 0; n < cached.targets.length; n++) {
+        var item = cached.targets[n];
+        var position = safeRelayPosition(item.position, frames[f]);
+        if (position) items.push(Object.assign({}, item, { position: position }));
       }
     }
     return items;
@@ -2853,6 +2889,7 @@ function meaningfulDomFallbackTarget(el) {
         var declaredPath = projectFramePathFromHref(readyFrame.src);
         if (declaredPath && declaredPath === readyFramePath) frameUnavailable.delete(readyFrame);
       } catch (_) {}
+      markProjectFrames();
       try { ev.source.postMessage({ type: 'od:comment-mode', enabled: commentEnabled, mode: mode }, '*'); } catch (_) {}
       try { ev.source.postMessage({ type: 'od:inspect-mode', enabled: inspectEnabled }, '*'); } catch (_) {}
       // #7008: a replay that arrived before this child mounted (or before it
