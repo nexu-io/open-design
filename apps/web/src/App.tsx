@@ -176,6 +176,7 @@ import {
   mergeDaemonConfig,
   mergeDaemonMediaProviders,
   saveConfig,
+  shouldSyncBootConfigToDaemon,
   shouldSyncLocalMediaProvidersToDaemon,
   syncComposioConfigToDaemon,
   syncConfigToDaemon,
@@ -2301,7 +2302,12 @@ function AppInner() {
         // Migrate localStorage prefs to daemon on first boot with the new
         // endpoint. If daemon already had values the merge above used them;
         // writing back is idempotent and keeps both sides in sync.
-        void syncConfigToDaemon(next);
+        // Skip when the daemon read failed or was aborted: the local copy is
+        // non-authoritative in that case and must not overwrite daemon-owned
+        // values like the telemetry opt-out (#8560).
+        if (shouldSyncBootConfigToDaemon(daemonConfig)) {
+          void syncConfigToDaemon(next);
+        }
         latestPersistedConfigRef.current = next;
         setConfig(next);
 

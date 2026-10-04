@@ -4,6 +4,7 @@ import {
   BYOK_PROVIDER_PRESETS,
   DEFAULT_CONFIG,
   defaultKnownProviderModel,
+  fetchDaemonConfig,
   fetchMediaProvidersFromDaemon,
   isStoredMediaProviderEntryEmpty,
   isStoredMediaProviderEntryPresent,
@@ -12,6 +13,7 @@ import {
   mergeDaemonConfig,
   mergeDaemonMediaProviders,
   saveConfig,
+  shouldSyncBootConfigToDaemon,
   shouldSyncLocalMediaProvidersToDaemon,
   syncComposioConfigToDaemon,
   syncConfigToDaemon,
@@ -1608,5 +1610,46 @@ describe('saveConfig', () => {
       claude: { apiKeyOverride: true },
       codex: { apiKeyOverride: true },
     });
+  });
+});
+
+describe('boot config sync guard (#8560)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.stubGlobal('fetch', originalFetch);
+  });
+
+  it('makes no PUT when the daemon config GET is aborted', async () => {
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      if (String(url) === '/api/app-config') {
+        throw new DOMException('The operation was aborted.', 'AbortError');
+      }
+      return new Response('{}', { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    // Same sequence as the boot hydration in App.tsx: fetch, merge, decide.
+    const daemonConfig = await fetchDaemonConfig();
+    expect(daemonConfig).toBeNull();
+
+    const localConfig: AppConfig = { ...DEFAULT_CONFIG };
+    const next = mergeDaemonConfig(localConfig, daemonConfig);
+    // The merge keeps the local copy unchanged when the daemon read failed,
+    // so no daemon-owned value is fabricated locally either.
+    expect(next.telemetry).toEqual(localConfig.telemetry);
+
+    if (shouldSyncBootConfigToDaemon(daemonConfig)) {
+      await syncConfigToDaemon(next);
+    }
+
+    const puts = fetchMock.mock.calls.filter((args) => args[1]?.method === 'PUT');
+    expect(puts).toHaveLength(0);
+    // The aborted GET is the only request; daemon-owned values stay untouched.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats a failed daemon read as non-authoritative', () => {
+    expect(shouldSyncBootConfigToDaemon(null)).toBe(false);
+    expect(shouldSyncBootConfigToDaemon({ telemetry: { metrics: false } })).toBe(true);
   });
 });
