@@ -2951,43 +2951,14 @@ To register this server into a coding agent's own config automatically:
 // byte the same command. Falls back to a minimal `od mcp --daemon-url`
 // spec when the daemon is unreachable.
 //
-// Opts into conventional per-channel IPC discovery (daemon-url.ts) — unlike
-// every other `od` subcommand, a bare terminal invocation of `mcp install
-// <agent>` against a packaged install has no other way to find the running
-// daemon, since OD_SIDECAR_IPC_PATH is only ever stamped into the packaged
-// app's own spawned children. See issue #6424.
-//
-// Uses resolveDaemonUrlDetailed(), not the plain-string resolveDaemonUrl(),
-// specifically because this function is about to fetch AND PERSIST whatever
-// comes back at the resolved URL. When discovery is ambiguous (more than
-// one packaged channel simultaneously live, see daemon-url.ts), this
-// returns `null` instead of any spec at all — see the doc comment below for
-// why even the inert-looking self-reinvocation fallback isn't safe to
-// persist in that case.
-//
-// Returns `null` (never throws) when discovery is ambiguous; the caller
-// (runMcpInstall) must treat that as "refuse the whole install", not fall
-// through to any other spec.
+// MCP installation can discover packaged sidecars from a plain terminal.
+// Refuse ambiguous discovery before fetching or persisting any launch spec.
 async function resolveMcpLaunchSpec(flags) {
   const { url: rawBase, ambiguous } = await resolveDaemonUrlDetailed({
     flagUrl: flags?.['daemon-url'],
     allowConventionalIpcDiscovery: true,
   });
   if (ambiguous) {
-    // Skipping the /api/mcp/install-info fetch (see below) only prevents
-    // the INSTALL-TIME response from being persisted -- it does nothing
-    // about what gets baked into the config for every LATER run. The
-    // self-reinvocation fallback below writes `--daemon-url <base>` into
-    // the persisted agent config; ensureMcpDaemonUrl (mcp-bootstrap.ts)
-    // treats an explicit --daemon-url as authoritative and skips
-    // rediscovery entirely on every subsequent `od mcp` spawn. Baking in
-    // the legacy default port here would mean any daemon that later
-    // happens to own that port -- a dev instance, a leftover process, a
-    // different packaged channel -- silently receives the MCP traffic
-    // from then on, even though THIS install explicitly refused to choose
-    // between the live channels. The only way to make "refuse to guess"
-    // actually hold end-to-end is to refuse to persist anything at all.
-    // See the #6425 review discussion.
     return null;
   }
   const base = rawBase.replace(/\/$/, '');
@@ -3018,23 +2989,7 @@ async function resolveMcpLaunchSpec(flags) {
   };
 }
 
-// Runtime env values this process's own invocation carries that a
-// self-reinvocation spec must also carry, or a later run of the persisted
-// command silently drops behavior this exact process depends on. There is
-// no live daemon to ask for its authoritative values on this fallback path
-// (that's the whole reason it's the fallback), so the best available
-// signal is what this process itself already inherited:
-//
-// - ELECTRON_RUN_AS_NODE=1: in a packaged build, process.execPath here is
-//   Electron, not a bundled Node binary. Without this flag on the spawned
-//   process too, Electron launches the GUI app instead of running
-//   daemon-cli.mjs as plain Node.
-// - OD_DATA_DIR: pins the spawned `od mcp` to the same data root this
-//   process resolved. Without it, `od mcp` falls back to `<cwd>/.od/...`,
-//   which is the read-only macOS app bundle for packaged installs and
-//   trips EPERM (issue #848, see the matching comment in
-//   mcp-install-info.ts's buildMcpInstallPayload — the normal, non-fallback
-//   /api/mcp/install-info path already preserves both of these).
+// Preserve the current interpreter mode and explicit daemon data root on fallback.
 function selfReinvocationRuntimeEnv() {
   const env = {};
   if (process.env.OD_DATA_DIR) env.OD_DATA_DIR = process.env.OD_DATA_DIR;
