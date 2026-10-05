@@ -57,3 +57,19 @@ describe("deploy/Dockerfile content directories", () => {
     expect(runtime).toMatch(/^COPY --from=build [^\n]*\/app\/data \.\/data$/m);
   });
 });
+
+// `next build` type-checks apps/web in a worker that outgrows V8's default heap
+// ceiling, which is at most 2 GB on hosts with less than 15 GiB of RAM. CI's
+// 16 GB runners get 4 GB and never fail; an 8 GiB Docker Desktop VM does. The
+// build stage raises the ceiling the way tools/pack does (#8212).
+describe("deploy/Dockerfile web build heap", () => {
+  it("raises the V8 heap ceiling for the web build without dropping inherited NODE_OPTIONS", async () => {
+    const content = await readFile(dockerfile, "utf8");
+    const { build } = stageSections(content);
+
+    // Ours first, so an inherited --max-old-space-size still wins (Node keeps the last one).
+    expect(build).toMatch(
+      /^\s*NODE_OPTIONS="--max-old-space-size=4096 \$\{NODE_OPTIONS:-\}" pnpm --filter @open-design\/web build(?=\s)/m,
+    );
+  });
+});
