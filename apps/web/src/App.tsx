@@ -119,7 +119,7 @@ import {
   RUNS_CHANGED_EVENT,
   fetchAmrModels,
   fetchVelaLoginStatus,
-  listProjectRuns,
+  listProjectRunsWithScope,
   type VelaLoginStatus,
 } from './providers/daemon';
 import {
@@ -4091,18 +4091,21 @@ function AppInner() {
     }
 
     let cancelled = false;
+    let id: number | undefined;
     const refresh = async () => {
-      const runs = await listProjectRuns();
+      const { runs, scopeRequired } = await listProjectRunsWithScope();
       if (cancelled) return;
+      // A deterministic PROJECT_SCOPE_REQUIRED will not change on retry.
+      if (scopeRequired) window.clearInterval(id);
       setPetTaskCenter(buildPetTaskCenter(projects, runs));
     };
     const handleRunsChanged = () => {
       void refresh();
     };
 
+    id = window.setInterval(refresh, 2000);
     void refresh();
     window.addEventListener(RUNS_CHANGED_EVENT, handleRunsChanged);
-    const id = window.setInterval(refresh, 2000);
     return () => {
       cancelled = true;
       window.removeEventListener(RUNS_CHANGED_EVENT, handleRunsChanged);

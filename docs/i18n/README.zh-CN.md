@@ -1,13 +1,11 @@
-<h1 align="center">OpenDesign：The open-source Claude Design alternative</h1>
+<h1 align="center">OpenDesign：首个协作式设计 Agent 工作区</h1>
 
-> ⚡ **[OpenDesign Cloud——官方模型服务。](https://open-design.ai/zh/pricing/)** 一次充值，即可在 OpenDesign 里直接使用 Agent 与图像模型：GPT、Claude 与 DeepSeek Agent 模型，以及 GPT Image 2.0、Seedream 5.0 Pro 与 Nano Banana 2.0 图像模型。
->
-> 🚀 **[DeepSeek V4 Flash 与 V4 Pro 现已上线。](https://open-design.ai/zh/pricing/)** 面向原型、演示文稿、设计系统与日常 Agent 任务，直接使用顶级智能。OpenDesign 会员可在应用内无限量使用两周。
+> ✨ **[全新推出 OpenDesign Go](https://open-design.ai/pricing/)**。Go Plan 套餐首月 8 美元起，每月提供可用于 10 多款模型的额度，包括 GPT-6.1 Sol、GPT-6 Luna、DeepSeek V4.1 Flash、GLM-5.3 Flash-X 和 MiMo V2.6 Flash. 所有个人套餐均提供 API 接入，可用于 Codex、Claude Code、DSH、OpenCode 等工具。
 >
 > 🧩 **[现已支持 DeepSeek Harness。](https://open-design.ai/zh/agents/deepseek-harness-design/)** 将 DeepSeek 官方 `dsh` Agent Harness 作为原生运行时接入 OpenDesign，支持结构化思考、工具调用、模型发现、取消与会话恢复；生成文件仍进入 OpenDesign 的实时预览与交付流程。
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="OpenDesign hero banner" width="100%" />
+  <img src="../../docs/assets/readme-hero-design-agent.webp" alt="OpenDesign：首个协作式设计 Agent 工作区" width="100%" />
 </p>
 
 <p align="center">
@@ -31,76 +29,61 @@
 
 ## 什么是 OpenDesign
 
-🎨 **本地优先、开源的 Claude Design 替代品。** &nbsp;🖥️ **macOS 与 Windows 原生桌面应用。** &nbsp;⚡ **100+ 功能技能 + 独立渲染模板目录** · ✨ **151 个品牌级设计系统包** · 📦 **277 个开箱即用的插件。** &nbsp;🖼️ 可生成 **Web · 桌面 · 移动端原型**、**实时仪表盘 / 工件**、**演示文稿**、**图片**、**视频**，以及 **HyperFrames** 动态图形。🔒 沙箱 iframe 预览 · HTML / PDF / PPTX / MP4 导出。&nbsp;🤖 **运行于 DeepSeek Harness (`dsh`) · Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity 等 26 个不同的本地 CLI 可执行程序**，或通过 BYOK 接入任何 OpenAI 兼容端点。
+OpenDesign 是**协作式设计 Agent 工作区**。从需求描述出发，使用你熟悉的编程 Agent 或 OpenDesign Cloud，创建符合设计系统的原型。与团队分享并收集反馈，再让 Agent 在同一个项目中继续完善。
 
-OpenDesign 是这样一种产物：Anthropic 随 Claude Design 推出的 **Agent 原生**循环——发现需求、锁定方向、流式输出工件、评审、交付——不再封闭，而是变成了一个由**功能技能、渲染设计模板、设计系统和插件组成的文件系统**，你笔记本电脑上已有的编码 Agent 就能读取、编写和混搭。你的 CLI 变成设计引擎，你的笔记本变成工作坊，团队的 `DESIGN.md` 变成品牌契约。
-
-它也是 **Agent 时代的 Figma 替代品**——不再在画布上推像素，而是用真实 CSS、真实字体、真实组件交付单页工件，直接导出 HTML / PDF / PPTX / MP4——已经由你的设计系统塑形，已经可以在你日常使用的 Agent 中运行。
+这套工作流开放且可扩展。作为 **Claude Design 的开源替代方案**，OpenDesign 采用 Apache 2.0 许可证；团队可以查看并按自己的流程调整技能、设计模板、设计系统和插件。
 
 
 ---
 
 ## 产品速览
 
-快速看懂 OpenDesign 的核心工作流：从 **Home** 输入需求，在 **Plugins** 中探索可复用技能，并把品牌参考沉淀为 **Design System**；进入任一项目的 **Studio** 后，即可在一处创建和迭代原型、演示文稿、移动应用、图片、文档与 HyperFrame。
-
 ### 核心页面
 
 <table>
 <tr>
-<td valign="top">
-<img src="../../docs/screenshots/product-tour/home.png" alt="OpenDesign Home 页，包含产物类型、需求输入、模型选择和示例" /><br/>
-<sub><b>Home</b>——选择产物类型并输入需求，再设定设计系统、工作目录与模型，即可开始创作。</sub>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/home-workspace-2026-09-30-220844.png"><img src="../../docs/screenshots/product-tour/home-workspace-2026-09-30-220844.png" alt="Home — 从需求描述或示例开始。" width="500" /></a><br/>
+<sub><b>Home</b> — 从需求描述或示例开始。</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/all-projects-2026-09-30-220900.webp"><img src="../../docs/screenshots/product-tour/all-projects-2026-09-30-220900.webp" alt="All projects — 重新打开设计系统、媒体和原型项目。" width="500" /></a><br/>
+<sub><b>All projects</b> — 重新打开设计系统、媒体和原型项目。</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/design-systems-stripe-2026-09-30-220910.png"><img src="../../docs/screenshots/product-tour/design-systems-stripe-2026-09-30-220910.png" alt="Design Systems — 查看品牌素材，并与 Agent 一起完善。" width="500" /></a><br/>
+<sub><b>Design Systems</b> — 查看品牌素材，并与 Agent 一起完善。</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/plugins-skills-2026-09-30-220917.png"><img src="../../docs/screenshots/product-tour/plugins-skills-2026-09-30-220917.png" alt="Plugins — 查找技能，通过 Try it 启动。" width="500" /></a><br/>
+<sub><b>Plugins</b> — 查找技能，通过 Try it 启动。</sub>
 </td>
 </tr>
 </table>
 
-<table>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/plugins.png" alt="OpenDesign Plugins 页的官方技能目录" /><br/>
-<sub><b>Plugins</b>——按类别浏览官方技能、搜索目录，并通过 <code>Try it</code> 直接启动工作流。</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/design-system.png" alt="OpenDesign Studio 中的 Shopify 设计系统预览" /><br/>
-<sub><b>Design System</b>——提取并完善品牌视觉语言，预览结果，再在同一工作区中继续创作。</sub>
-</td>
-</tr>
-</table>
-
-### Studio——一个项目里的多种产物
-
-进入某个项目的 Studio，对话、生成文件与实时预览会围绕六种产物集中在同一工作区：
+### Studio——在同一个项目中创作和完善
 
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-prototype.png" alt="OpenDesign Studio 中的 Web 原型预览" /><br/>
-<sub><b>原型</b>——生成或重建 Web 体验，查看渲染后的页面，并在原处继续与 Agent 迭代。</sub>
+<img src="../../docs/screenshots/product-tour/studio-prototype-2026.webp" alt="Prototype — 与 Agent 一起构建和迭代交互式网页，并实时预览。" /><br/>
+<sub><b>Prototype</b> — 与 Agent 一起构建和迭代交互式网页，并实时预览。</sub>
 </td>
 <td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-deck.png" alt="OpenDesign Studio 中的多页演示文稿预览" /><br/>
-<sub><b>演示文稿</b>——创建多页演示文稿，检查缩略图与演讲者备注，完成后直接导出。</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-mobile-app.png" alt="OpenDesign Studio 中的移动应用预览" /><br/>
-<sub><b>移动应用</b>——在设备预览中生成和打磨移动界面，旁边同步保留对话、输出文件与后续操作。</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-image.png" alt="OpenDesign Studio 中的生成图片预览" /><br/>
-<sub><b>图片</b>——从项目对话中生成视觉素材，全尺寸预览结果，然后下载或打开。</sub>
+<img src="../../docs/screenshots/product-tour/studio-slides-2026.png" alt="Slides — 制作演示文稿、查看幻灯片和演讲者备注，完成后导出。" /><br/>
+<sub><b>Slides</b> — 制作演示文稿、查看幻灯片和演讲者备注，完成后导出。</sub>
 </td>
 </tr>
 <tr>
 <td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-document.png" alt="OpenDesign Studio 中的多页文档预览" /><br/>
-<sub><b>文档</b>——创建精致的多页指南与编辑型文档，检查渲染布局，完成后导出或分享。</sub>
+<img src="../../docs/screenshots/product-tour/studio-image-2026.webp" alt="Image — 从对话中生成视觉素材，查看结果，再下载或打开。" /><br/>
+<sub><b>Image</b> — 从对话中生成视觉素材，查看结果，再下载或打开。</sub>
 </td>
 <td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-hyperframe.png" alt="OpenDesign Studio 中的 HyperFrame 动态图形预览" /><br/>
-<sub><b>HyperFrame</b>——创建代码驱动的动态图形，在 Studio 中预览动画，并导出最终视频。</sub>
+<a href="../../docs/screenshots/product-tour/studio-hyperframes-2026.mp4"><img src="../../docs/screenshots/product-tour/studio-hyperframes-poster-2026.png" alt="HyperFrames — 与 Agent 一起制作动态图形并导出 MP4。" /></a><br/>
+<sub><b>HyperFrames</b> — 与 Agent 一起制作动态图形并导出 MP4。 <a href="../../docs/screenshots/product-tour/studio-hyperframes-2026.mp4">观看视频</a>.</sub>
 </td>
 </tr>
 </table>

@@ -31,6 +31,20 @@ it.each([
 ])('captures the existing API failure for %s', (path, kind) => {
   expect(diagnosticFaultFromApi({ at: new Date().toISOString(), method: 'POST', path, status: 500, code: 'INTERNAL_ERROR', retryable: false })?.kind).toBe(kind);
 });
+it('collapses a repeating API failure into one incident per signature and hour', () => {
+  const failure = (at: string, overrides: Record<string, unknown> = {}) => diagnosticFaultFromApi({
+    at, method: 'GET', path: '/api/runs', status: 400, code: 'PROJECT_SCOPE_REQUIRED', retryable: false,
+    requestId: `req-${at}`, ...overrides,
+  });
+  const first = failure('2026-09-25T10:00:01.000Z');
+  expect(failure('2026-09-25T10:00:03.000Z')?.sourceId).toBe(first?.sourceId);
+  expect(failure('2026-09-25T10:59:59.000Z')?.sourceId).toBe(first?.sourceId);
+  expect(failure('2026-09-25T11:00:00.000Z')?.sourceId).not.toBe(first?.sourceId);
+  expect(failure('2026-09-25T10:00:05.000Z', { code: 'WORKSPACE_PROJECT_PERMISSION_DENIED', status: 403 })?.sourceId)
+    .not.toBe(first?.sourceId);
+  expect(failure('2026-09-25T10:00:05.000Z', { path: '/api/runs/:id' })?.sourceId).not.toBe(first?.sourceId);
+  expect(first?.detail).toMatchObject({ requestId: 'req-2026-09-25T10:00:01.000Z' });
+});
 it.each(['/api/telemetry', '/api/diagnostics/export', '/api/objects/batch', '/api/health'])('does not recursively capture infrastructure route %s', (path) => {
   expect(diagnosticFaultFromApi({ at: new Date().toISOString(), method: 'POST', path, status: 500, code: 'INTERNAL_ERROR', retryable: false })).toBeNull();
 });

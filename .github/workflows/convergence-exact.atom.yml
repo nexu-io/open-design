@@ -52,7 +52,7 @@ jobs:
         if: ${{ steps.artifact.outputs.found == 'true' }}
         uses: actions/download-artifact@v8
         with:
-          name: ${{ steps.artifact.outputs.name }}
+          artifact-ids: ${{ steps.artifact.outputs.id }}
           run-id: ${{ github.event.workflow_run.id }}
           path: ${{ runner.temp }}/handoff-convergence
           github-token: ${{ github.token }}
@@ -60,6 +60,8 @@ jobs:
       - name: Validate exact producing run and control plane
         if: ${{ steps.artifact.outputs.found == 'true' }}
         id: trust
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: >-
           python3 .github/scripts/convergence.py
           --config .github/config/convergence-exact.json

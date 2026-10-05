@@ -1,15 +1,13 @@
 <div dir="rtl">
 
-<h1 align="center">OpenDesign: البديل مفتوح المصدر لـ Claude Design</h1>
+<h1 align="center">OpenDesign: أول مساحة عمل تعاونية لوكلاء التصميم</h1>
 
-> ⚡ **[‏OpenDesign Cloud — خدمة النماذج الرسمية.](https://open-design.ai/zh/pricing/)** شحنة واحدة لاستخدام نماذج الوكلاء والصور داخل OpenDesign: ‏GPT وClaude وDeepSeek للوكلاء؛ وGPT Image 2.0 وSeedream 5.0 Pro وNano Banana 2.0 للصور.
->
-> 🚀 **[أصبح DeepSeek V4 Flash وV4 Pro متاحين الآن.](https://open-design.ai/zh/pricing/)** استخدم ذكاءً من الطراز الأول للنماذج الأولية والعروض التقديمية وأنظمة التصميم ومهام الوكلاء اليومية. يمكن لأعضاء OpenDesign استخدام النموذجين بلا حدود لمدة أسبوعين مباشرة داخل التطبيق.
+> ✨ **[نقدّم OpenDesign Go](https://open-design.ai/pricing/)**. تبدأ خطة Go Plan من 8 دولارات في الشهر الأول، مع رصيد شهري لأكثر من 10 نماذج، منها GPT-6.1 Sol وGPT-6 Luna وDeepSeek V4.1 Flash وGLM-5.3 Flash-X وMiMo V2.6 Flash. تشمل جميع الخطط الفردية الوصول إلى واجهة API لاستخدامها مع Codex وClaude Code وDSH وOpenCode وغيرها.
 >
 > 🧩 **[أصبح DeepSeek Harness مدعومًا الآن.](https://open-design.ai/zh/agents/deepseek-harness-design/)** صِل Agent Harness الرسمي `dsh` من DeepSeek بـ OpenDesign كبيئة تشغيل أصلية، مع التفكير المنظم واستدعاءات الأدوات واكتشاف النماذج والإلغاء واستئناف الجلسات. تبقى الملفات الناتجة ضمن سير عمل OpenDesign للمعاينة الحية والتسليم.
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="OpenDesign hero banner" width="100%" />
+  <img src="../../docs/assets/readme-hero-design-agent.webp" alt="OpenDesign: أول مساحة عمل تعاونية لوكلاء التصميم" width="100%" />
 </p>
 
 <p align="center">
@@ -33,79 +31,65 @@
 
 ## ما هو OpenDesign
 
-🎨 **البديل مفتوح المصدر القائم على الجهاز المحلي أولًا لـ Claude Design.** &nbsp;🖥️ **تطبيق سطح مكتب أصلي لنظامي macOS وWindows.** &nbsp;⚡ **أكثر من 100 مهارة وظيفية + كتالوج منفصل لقوالب التصيير** · ✨ **151 حزمة نظام تصميم** · 📦 **277 إضافة جاهزة للاستخدام.** &nbsp;🖼️ يولّد **نماذج أولية للويب · سطح المكتب · الجوال**، و**لوحات معلومات / مخرجات حية**، و**عروضًا تقديمية**، و**صورًا**، و**فيديو**، إضافة إلى رسوميات حركية بـ **HyperFrames**. 🔒 معاينة iframe معزولة · تصدير بصيغ HTML / PDF / PPTX / MP4. &nbsp;🤖 **يعمل على 25 ملف CLI تنفيذيًا محليًا متميزًا**، أو أي نقطة نهاية متوافقة مع OpenAI عبر BYOK.
+OpenDesign **مساحة عمل تعاونية لوكلاء التصميم**. ابدأ بوصف موجز، ثم استخدم وكيل البرمجة الذي تعرفه أو OpenDesign Cloud لإنشاء نموذج أولي متوافق مع نظام التصميم لديك. شاركه مع فريقك، واجمع الملاحظات، ودع الوكيل يحسّنه داخل المشروع نفسه.
 
-‏OpenDesign يحوّل الحلقة إلى **نظام ملفات من المهارات الوظيفية وقوالب التصيير وأنظمة التصميم والإضافات** يستطيع الوكلاء قراءته والكتابة عليه وإعادة مزجه.
-
-كما أنه **بديل Figma لعصر الوكلاء** — فبدلًا من تحريك البكسلات على لوحة رسم، يسلّم مخرجات من صفحة واحدة بـ CSS حقيقي وخطوط حقيقية ومكونات حقيقية، تُصدَّر مباشرة إلى HTML / PDF / PPTX / MP4 — مصاغة مسبقًا وفق نظام التصميم لديك، وقابلة للتشغيل مباشرة داخل الوكيل الذي تستخدمه كل يوم.
+سير العمل هذا مفتوح وقابل للتوسعة. وبصفته **بديلاً مفتوح المصدر لـ Claude Design**، يتوفر OpenDesign بترخيص Apache 2.0، ويتيح للفرق فحص المهارات وقوالب التصميم وأنظمة التصميم والإضافات وتكييفها مع طريقة عملها.
 
 
 ---
 
 ## جولة في المنتج
 
-نظرة سريعة على سير العمل الأساسي في OpenDesign. ابدأ بموجز من **الصفحة الرئيسية**، واستكشف المهارات القابلة لإعادة الاستخدام في **الإضافات**، وحوّل مراجع العلامة التجارية إلى **نظام تصميم**. ثم ادخل إلى **الاستوديو** في أي مشروع لإنشاء النماذج الأولية والعروض التقديمية وتطبيقات الجوال والصور والمستندات وHyperFrames وتحسينها في مكان واحد.
-
 ### الصفحات الأساسية
 
 <table>
 <tr>
-<td valign="top">
-<img src="../../docs/screenshots/product-tour/home.png" alt="الصفحة الرئيسية" /><br/>
-<sub><b>الصفحة الرئيسية</b> — اختر نوع المخرَج، وأدخل الموجز، وحدد نظام التصميم ودليل العمل والنموذج قبل البدء.</sub>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/home-workspace-2026-09-30-220844.png"><img src="../../docs/screenshots/product-tour/home-workspace-2026-09-30-220844.png" alt="Home — ابدأ بوصف موجز أو مثال." width="500" /></a><br/>
+<sub><b>Home</b> — ابدأ بوصف موجز أو مثال.</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/all-projects-2026-09-30-220900.webp"><img src="../../docs/screenshots/product-tour/all-projects-2026-09-30-220900.webp" alt="All projects — عُد إلى أنظمة التصميم والوسائط والنماذج الأولية." width="500" /></a><br/>
+<sub><b>All projects</b> — عُد إلى أنظمة التصميم والوسائط والنماذج الأولية.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/design-systems-stripe-2026-09-30-220910.png"><img src="../../docs/screenshots/product-tour/design-systems-stripe-2026-09-30-220910.png" alt="Design Systems — افحص أصول العلامة التجارية وحسّنها بمساعدة وكيل." width="500" /></a><br/>
+<sub><b>Design Systems</b> — افحص أصول العلامة التجارية وحسّنها بمساعدة وكيل.</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/plugins-skills-2026-09-30-220917.png"><img src="../../docs/screenshots/product-tour/plugins-skills-2026-09-30-220917.png" alt="Plugins — اعثر على المهارات وشغّلها عبر Try it." width="500" /></a><br/>
+<sub><b>Plugins</b> — اعثر على المهارات وشغّلها عبر Try it.</sub>
 </td>
 </tr>
 </table>
+
+### Studio — الإنشاء والتحسين في مشروع واحد
 
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/plugins.png" alt="الإضافات" /><br/>
-<sub><b>الإضافات</b> — تصفح المهارات الرسمية حسب الفئة، وابحث في الكتالوج، وابدأ سير عمل عبر <code>Try it</code>.</sub>
+<img src="../../docs/screenshots/product-tour/studio-prototype-2026.webp" alt="Prototype — أنشئ تجارب ويب تفاعلية وحسّنها مع وكيلك وشاهد معاينة مباشرة." /><br/>
+<sub><b>Prototype</b> — أنشئ تجارب ويب تفاعلية وحسّنها مع وكيلك وشاهد معاينة مباشرة.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/design-system.png" alt="نظام التصميم" /><br/>
-<sub><b>نظام التصميم</b> — استخرج اللغة البصرية للعلامة التجارية وحسّنها، وعاين النتيجة، ثم واصل الإنشاء بها في مساحة العمل نفسها.</sub>
+<img src="../../docs/screenshots/product-tour/studio-slides-2026.png" alt="Slides — أنشئ عروضًا تقديمية وراجع الشرائح وملاحظات المتحدث، ثم صدّرها." /><br/>
+<sub><b>Slides</b> — أنشئ عروضًا تقديمية وراجع الشرائح وملاحظات المتحدث، ثم صدّرها.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/product-tour/studio-image-2026.webp" alt="Image — أنشئ عناصر مرئية من المحادثة وراجع النتيجة، ثم نزّلها أو افتحها." /><br/>
+<sub><b>Image</b> — أنشئ عناصر مرئية من المحادثة وراجع النتيجة، ثم نزّلها أو افتحها.</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/studio-hyperframes-2026.mp4"><img src="../../docs/screenshots/product-tour/studio-hyperframes-poster-2026.png" alt="HyperFrames — أنشئ رسومات متحركة مع وكيلك وصدّرها بصيغة MP4." /></a><br/>
+<sub><b>HyperFrames</b> — أنشئ رسومات متحركة مع وكيلك وصدّرها بصيغة MP4. <a href="../../docs/screenshots/product-tour/studio-hyperframes-2026.mp4">شاهد الفيديو</a>.</sub>
 </td>
 </tr>
 </table>
 
-### الاستوديو — أنواع متعددة من المخرجات في مشروع واحد
-
-داخل استوديو المشروع، تبقى المحادثة والملفات الناتجة والمعاينة الحية معًا عبر ستة أنواع من المخرجات:
-
-<table>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-prototype.png" alt="النموذج الأولي" /><br/>
-<sub><b>النموذج الأولي</b> — أنشئ تجارب الويب أو أعد بناءها، وافحص الصفحة المعروضة، وكرّر العمل مع الوكيل في المكان نفسه.</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-deck.png" alt="العرض التقديمي" /><br/>
-<sub><b>العرض التقديمي</b> — أنشئ عروضًا تقديمية متعددة الشرائح، وراجع الصور المصغرة وملاحظات المتحدث، ثم صدّرها عند الجاهزية.</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-mobile-app.png" alt="تطبيق الجوال" /><br/>
-<sub><b>تطبيق الجوال</b> — أنشئ واجهات الجوال وحسّنها في معاينة الجهاز، مع إبقاء المحادثة وملفات الإخراج والإجراءات التالية بجانبها.</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-image.png" alt="الصورة" /><br/>
-<sub><b>الصورة</b> — أنشئ أصولًا بصرية من محادثة المشروع، وعاين النتيجة بالحجم الكامل، ثم نزّلها أو افتحها.</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-document.png" alt="المستند" /><br/>
-<sub><b>المستند</b> — أنشئ أدلة متعددة الصفحات ومستندات تحريرية مصقولة، وافحص التخطيط المعروض، ثم صدّرها أو شاركها عند الجاهزية.</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-hyperframe.png" alt="HyperFrame" /><br/>
-<sub><b>HyperFrame</b> — أنشئ رسومًا متحركة موجهة بالبرمجة، وعاين الحركة داخل الاستوديو، ثم صدّر الفيديو النهائي.</sub>
-</td>
-</tr>
-</table>
 ---
 
 ## توافق المنصات

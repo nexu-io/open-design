@@ -1,13 +1,11 @@
-<h1 align="center">OpenDesign : l'alternative open source à Claude Design</h1>
+<h1 align="center">OpenDesign : le premier espace de travail collaboratif avec des agents de design</h1>
 
-> ⚡ **[OpenDesign Cloud — le service de modèles officiel.](https://open-design.ai/zh/pricing/)** Une seule recharge pour utiliser des modèles d'agents et d'images dans OpenDesign : GPT, Claude et DeepSeek pour les agents ; GPT Image 2.0, Seedream 5.0 Pro et Nano Banana 2.0 pour les images.
->
-> 🚀 **[DeepSeek V4 Flash et V4 Pro sont maintenant disponibles.](https://open-design.ai/zh/pricing/)** Mettez une intelligence de premier plan au service des prototypes, présentations, systèmes de design et tâches quotidiennes des agents. Les membres OpenDesign peuvent utiliser les deux modèles sans limite pendant deux semaines, directement dans l'application.
+> ✨ **[Découvrez OpenDesign Go](https://open-design.ai/pricing/)**. Le Go Plan démarre à 8 $ le premier mois, avec des crédits mensuels utilisables sur plus de 10 modèles, dont GPT-6.1 Sol, GPT-6 Luna, DeepSeek V4.1 Flash, GLM-5.3 Flash-X et MiMo V2.6 Flash. Tous les forfaits individuels incluent un accès API pour Codex, Claude Code, DSH, OpenCode et d'autres outils.
 >
 > 🧩 **[DeepSeek Harness est maintenant pris en charge.](https://open-design.ai/zh/agents/deepseek-harness-design/)** Connectez l'Agent Harness officiel `dsh` de DeepSeek à OpenDesign en tant que runtime natif, avec raisonnement structuré, appels d'outils, découverte des modèles, annulation et reprise de session. Les fichiers générés restent dans le workflow OpenDesign pour la prévisualisation en direct et la livraison.
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Bannière OpenDesign — le titre &quot;L’alternative open source à Claude Design&quot; sur une scène de colonnes et de personnages drapés devant un fond de code, avec des cartes présentant les systèmes de design, les plugins, les agents de code et les fournisseurs média" width="100%" />
+  <img src="../../docs/assets/readme-hero-design-agent.webp" alt="OpenDesign : le premier espace de travail collaboratif avec des agents de design" width="100%" />
 </p>
 
 <p align="center">
@@ -31,79 +29,65 @@
 
 ## Qu'est-ce qu'OpenDesign
 
-🎨 **L'alternative open source à Claude Design.** &nbsp;🖥️ **Application de bureau native et local-first pour macOS et Windows.** &nbsp;⚡ **Skills composables, systèmes de design `DESIGN.md` fidèles à votre marque et plugins prêts à l'emploi.** &nbsp;🖼️ Génère des **prototypes web · bureau · mobile**, des **tableaux de bord / artefacts en direct**, des **présentations**, des **images**, de la **vidéo**, ainsi que des motion graphics **HyperFrames**. 🔒 Aperçu en iframe sandboxée · export HTML / PDF / PPTX / MP4. &nbsp;🤖 **Fonctionne avec DeepSeek Harness (`dsh`) · Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Amp · Hermes · Kimi · Antigravity et 26 exécutables CLI locaux distincts**, ou tout point de terminaison compatible OpenAI via BYOK.
+OpenDesign est **un espace de travail collaboratif avec des agents de design**. Partez d'un brief, puis utilisez votre agent de code habituel ou OpenDesign Cloud pour créer un prototype fidèle à votre système de design. Partagez-le avec votre équipe, recueillez ses retours et laissez l'agent l'améliorer dans le même projet.
 
-OpenDesign ouvre la boucle **agent-native** proposée par Anthropic avec Claude Design — comprendre le brief, fixer la direction, générer l'artefact en continu, le critiquer et le livrer — en la transformant en un **système de fichiers de skills fonctionnels, de modèles de rendu, de systèmes de design et de plugins**. Les agents de code déjà installés sur votre ordinateur peuvent les lire, les écrire et les remixer. Votre CLI devient le moteur de design, votre ordinateur le studio et le `DESIGN.md` de votre équipe le contrat de marque.
-
-C'est aussi l'**alternative à Figma pour l'ère des agents** — au lieu de déplacer des pixels sur un canevas, il livre des artefacts d'une seule page en CSS réel, en polices réelles, en composants réels, exportés directement en HTML / PDF / PPTX / MP4 — déjà façonnés par votre système de design, déjà exécutables au sein de l'agent que vous utilisez chaque jour.
+Ce processus est ouvert et extensible. En tant qu'**alternative open source à Claude Design**, OpenDesign est sous licence Apache 2.0 et met à disposition des compétences, des modèles, des systèmes de design et des plugins que les équipes peuvent examiner et adapter à leurs méthodes.
 
 
 ---
 
 ## Visite du produit
 
-Un aperçu rapide du workflow principal d'OpenDesign. Commencez sur **Home** avec un brief, explorez les skills réutilisables dans **Plugins** et transformez les références de marque en **Design System**. Entrez ensuite dans le **Studio** d'un projet pour créer et affiner prototypes, présentations, applications mobiles, images, documents et HyperFrames au même endroit.
-
 ### Pages principales
 
 <table>
 <tr>
-<td valign="top">
-<img src="../../docs/screenshots/product-tour/home.png" alt="Page d’accueil OpenDesign avec types d’artefacts, champ de brief, sélecteur de modèle et exemples" /><br/>
-<sub><b>Home</b> — Choisissez un type d'artefact, saisissez un brief, puis définissez le système de design, le répertoire de travail et le modèle avant de commencer.</sub>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/home-workspace-2026-09-30-220844.png"><img src="../../docs/screenshots/product-tour/home-workspace-2026-09-30-220844.png" alt="Home — Partez d&#x27;un brief ou d&#x27;un exemple." width="500" /></a><br/>
+<sub><b>Home</b> — Partez d&#x27;un brief ou d&#x27;un exemple.</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/all-projects-2026-09-30-220900.webp"><img src="../../docs/screenshots/product-tour/all-projects-2026-09-30-220900.webp" alt="All projects — Retrouvez vos systèmes de design, médias et prototypes." width="500" /></a><br/>
+<sub><b>All projects</b> — Retrouvez vos systèmes de design, médias et prototypes.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/design-systems-stripe-2026-09-30-220910.png"><img src="../../docs/screenshots/product-tour/design-systems-stripe-2026-09-30-220910.png" alt="Design Systems — Examinez les ressources de marque et améliorez-les avec un agent." width="500" /></a><br/>
+<sub><b>Design Systems</b> — Examinez les ressources de marque et améliorez-les avec un agent.</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/plugins-skills-2026-09-30-220917.png"><img src="../../docs/screenshots/product-tour/plugins-skills-2026-09-30-220917.png" alt="Plugins — Trouvez des compétences et lancez-les avec Try it." width="500" /></a><br/>
+<sub><b>Plugins</b> — Trouvez des compétences et lancez-les avec Try it.</sub>
 </td>
 </tr>
 </table>
+
+### Studio — créer et améliorer dans un même projet
 
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/plugins.png" alt="Page Plugins d’OpenDesign présentant le catalogue de skills officiels" /><br/>
-<sub><b>Plugins</b> — Parcourez les skills officiels par catégorie, recherchez dans le catalogue et lancez un workflow avec <code>Try it</code>.</sub>
+<img src="../../docs/screenshots/product-tour/studio-prototype-2026.webp" alt="Prototype — Créez et améliorez des expériences web interactives avec votre agent et un aperçu en direct." /><br/>
+<sub><b>Prototype</b> — Créez et améliorez des expériences web interactives avec votre agent et un aperçu en direct.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/design-system.png" alt="Aperçu du système de design Shopify dans le Studio OpenDesign" /><br/>
-<sub><b>Design System</b> — Extrayez et affinez le langage visuel d'une marque, prévisualisez le résultat et continuez à créer avec lui dans le même espace de travail.</sub>
+<img src="../../docs/screenshots/product-tour/studio-slides-2026.png" alt="Slides — Créez des présentations, vérifiez les diapositives et les notes, puis exportez-les." /><br/>
+<sub><b>Slides</b> — Créez des présentations, vérifiez les diapositives et les notes, puis exportez-les.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/product-tour/studio-image-2026.webp" alt="Image — Générez des visuels depuis la conversation, examinez le résultat, puis téléchargez-le ou ouvrez-le." /><br/>
+<sub><b>Image</b> — Générez des visuels depuis la conversation, examinez le résultat, puis téléchargez-le ou ouvrez-le.</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/studio-hyperframes-2026.mp4"><img src="../../docs/screenshots/product-tour/studio-hyperframes-poster-2026.png" alt="HyperFrames — Créez des animations graphiques avec votre agent et exportez-les en MP4." /></a><br/>
+<sub><b>HyperFrames</b> — Créez des animations graphiques avec votre agent et exportez-les en MP4. <a href="../../docs/screenshots/product-tour/studio-hyperframes-2026.mp4">Voir la vidéo</a>.</sub>
 </td>
 </tr>
 </table>
 
-### Studio — de nombreux types d'artefacts dans un seul projet
-
-Dans le Studio d'un projet, la conversation, les fichiers générés et la prévisualisation en direct restent réunis pour six types d'artefacts :
-
-<table>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-prototype.png" alt="Aperçu d’un prototype web dans le Studio OpenDesign" /><br/>
-<sub><b>Prototype</b> — Générez ou reconstruisez des expériences web, inspectez la page rendue et itérez sur place avec l'agent.</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-deck.png" alt="Aperçu d’une présentation de plusieurs diapositives dans le Studio OpenDesign" /><br/>
-<sub><b>Présentation</b> — Créez des présentations de plusieurs diapositives, examinez les miniatures et les notes du présentateur, puis exportez lorsqu'elles sont prêtes.</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-mobile-app.png" alt="Aperçu d’un artefact d’application mobile dans le Studio OpenDesign" /><br/>
-<sub><b>Application mobile</b> — Générez et peaufinez des interfaces mobiles dans un aperçu d'appareil, avec la conversation, les fichiers de sortie et les prochaines étapes à côté.</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-image.png" alt="Aperçu d’une image générée dans le Studio OpenDesign" /><br/>
-<sub><b>Image</b> — Générez des ressources visuelles depuis la conversation du projet, prévisualisez le résultat en taille réelle, puis téléchargez-le ou ouvrez-le.</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-document.png" alt="Aperçu d’un document multipage dans le Studio OpenDesign" /><br/>
-<sub><b>Document</b> — Créez des guides multipages et des documents éditoriaux soignés, vérifiez la mise en page rendue, puis exportez ou partagez.</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-hyperframe.png" alt="Aperçu d’une animation HyperFrame dans le Studio OpenDesign" /><br/>
-<sub><b>HyperFrame</b> — Créez des motion graphics pilotés par le code, prévisualisez l'animation dans Studio et exportez la vidéo finale.</sub>
-</td>
-</tr>
-</table>
 ---
 
 ## Compatibilité des plateformes

@@ -1,13 +1,11 @@
-<h1 align="center">OpenDesign: ทางเลือกโอเพนซอร์สแทน Claude Design</h1>
+<h1 align="center">OpenDesign: พื้นที่ทำงานร่วมกับเอเจนต์ออกแบบแห่งแรก</h1>
 
-> ⚡ **[OpenDesign Cloud — บริการโมเดลอย่างเป็นทางการ.](https://open-design.ai/zh/pricing/)** เติมเงินครั้งเดียวเพื่อใช้ทั้งโมเดล Agent และโมเดลภาพใน OpenDesign: GPT, Claude และ DeepSeek สำหรับ Agent; GPT Image 2.0, Seedream 5.0 Pro และ Nano Banana 2.0 สำหรับภาพ
->
-> 🚀 **[DeepSeek V4 Flash และ V4 Pro พร้อมใช้งานแล้ว.](https://open-design.ai/zh/pricing/)** ใช้ความสามารถระดับสูงกับ prototype, deck, design system และงาน Agent ประจำวัน สมาชิก OpenDesign ใช้ทั้งสองโมเดลแบบไม่จำกัดได้สองสัปดาห์ภายในแอป
+> ✨ **[ขอแนะนำ OpenDesign Go](https://open-design.ai/pricing/)** — แพ็กเกจ Go Plan เริ่มต้นที่ 8 ดอลลาร์สหรัฐในเดือนแรก พร้อมเครดิตรายเดือนสำหรับโมเดลมากกว่า 10 รุ่น ได้แก่ GPT-6.1 Sol, GPT-6 Luna, DeepSeek V4.1 Flash, GLM-5.3 Flash-X และ MiMo V2.6 Flash. แพ็กเกจส่วนบุคคลทุกแบบมีสิทธิ์ใช้ API กับ Codex, Claude Code, DSH, OpenCode และเครื่องมืออื่น ๆ
 >
 > 🧩 **[รองรับ DeepSeek Harness แล้ว.](https://open-design.ai/zh/agents/deepseek-harness-design/)** เชื่อมต่อ `dsh` Agent Harness อย่างเป็นทางการของ DeepSeek เป็น runtime แบบ native ใน OpenDesign พร้อม structured thinking, tool calls, model discovery, cancellation และ session resume ไฟล์ที่สร้างยังอยู่ใน workflow ของ OpenDesign เพื่อ live preview และส่งมอบ
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="OpenDesign hero banner" width="100%" />
+  <img src="../../docs/assets/readme-hero-design-agent.webp" alt="OpenDesign: พื้นที่ทำงานร่วมกับเอเจนต์ออกแบบแห่งแรก" width="100%" />
 </p>
 
 <p align="center">
@@ -31,79 +29,65 @@
 
 ## OpenDesign คืออะไร
 
-🎨 **ทางเลือก Claude Design แบบ local-first และโอเพนซอร์ส.** &nbsp;🖥️ **แอป desktop native สำหรับ macOS และ Windows.** &nbsp;⚡ **functional skills 100+ รายการ + rendering-template catalog แยกต่างหาก** · ✨ **design-system packages ระดับแบรนด์ 151 ชุด** · 📦 **plugin พร้อมใช้ 277 ตัว.** &nbsp;🖼️ สร้าง **prototype สำหรับ web · desktop · mobile**, **live dashboard / artifact**, **deck**, **image**, **video** และ motion graphics ด้วย **HyperFrames**. 🔒 preview ผ่าน sandboxed iframe · export เป็น HTML / PDF / PPTX / MP4. &nbsp;🤖 **รันบน Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Amp · Hermes · Kimi · Antigravity และ local CLI executable ที่ไม่ซ้ำกัน 25 ตัว**, หรือ endpoint ที่เข้ากันได้กับ OpenAI ผ่าน BYOK.
+OpenDesign คือ**พื้นที่ทำงานร่วมกับเอเจนต์ออกแบบ** เริ่มจากบรีฟ แล้วใช้เอเจนต์เขียนโค้ดที่คุณคุ้นเคยหรือ OpenDesign Cloud สร้างต้นแบบที่สอดคล้องกับระบบดีไซน์ของคุณ แชร์ให้ทีมรับชมและรวบรวมข้อเสนอแนะ ก่อนให้เอเจนต์ปรับปรุงงานต่อในโปรเจกต์เดิม
 
-OpenDesign คือสิ่งที่เกิดขึ้นเมื่อ loop แบบ **agent-native** ที่ Anthropic เปิดตัวกับ Claude Design — ค้นหา brief, ล็อก direction, stream artifact, critique, deliver — เลิกเป็นระบบปิด แล้วกลายเป็น **filesystem ของ functional skills, rendering design templates, design systems และ plugins** ที่ coding agent บน laptop ของคุณอ่าน เขียน และ remix ได้. CLI ของคุณกลายเป็น design engine, laptop ของคุณกลายเป็น studio, และ `DESIGN.md` ของทีมกลายเป็น brand contract.
-
-มันยังเป็น **ทางเลือกแทน Figma สำหรับยุค agent** ด้วย แทนที่จะขยับ pixel บน canvas ระบบจะส่งมอบ artifact หน้าเดียวที่เป็น CSS จริง, font จริง, component จริง และ export ตรงเป็น HTML / PDF / PPTX / MP4 โดยถูก shape ด้วย design system ของคุณแล้ว และรันได้ใน agent ที่คุณใช้ทุกวัน.
+เวิร์กโฟลว์นี้เปิดกว้างและขยายได้ ในฐานะ**ทางเลือกโอเพนซอร์สแทน Claude Design** OpenDesign ใช้สัญญาอนุญาต Apache 2.0 ทีมงานจึงตรวจสอบและปรับทักษะ เทมเพลต ระบบดีไซน์ และปลั๊กอินให้เข้ากับกระบวนการของตนได้
 
 
 ---
 
 ## ทัวร์ผลิตภัณฑ์
 
-ดู workflow หลักของ OpenDesign แบบรวดเร็ว เริ่มที่ **Home** ด้วย brief, ค้นหา skill ที่นำกลับมาใช้ซ้ำได้ใน **Plugins** และเปลี่ยนข้อมูลอ้างอิงแบรนด์ให้เป็น **Design System** จากนั้นเข้า **Studio** ของ project เพื่อสร้างและปรับปรุง prototype, deck, mobile app, image, document และ HyperFrame ได้ในที่เดียว
-
 ### หน้าหลัก
 
 <table>
 <tr>
-<td valign="top">
-<img src="../../docs/screenshots/product-tour/home.png" alt="Home" /><br/>
-<sub><b>Home</b> — เลือกประเภท artifact, ใส่ brief และกำหนด design system, working directory กับ model ก่อนเริ่มงาน</sub>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/home-workspace-2026-09-30-220844.png"><img src="../../docs/screenshots/product-tour/home-workspace-2026-09-30-220844.png" alt="Home — เริ่มจากบรีฟหรือตัวอย่าง" width="500" /></a><br/>
+<sub><b>Home</b> — เริ่มจากบรีฟหรือตัวอย่าง</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/all-projects-2026-09-30-220900.webp"><img src="../../docs/screenshots/product-tour/all-projects-2026-09-30-220900.webp" alt="All projects — กลับไปดูระบบดีไซน์ สื่อ และต้นแบบ" width="500" /></a><br/>
+<sub><b>All projects</b> — กลับไปดูระบบดีไซน์ สื่อ และต้นแบบ</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/design-systems-stripe-2026-09-30-220910.png"><img src="../../docs/screenshots/product-tour/design-systems-stripe-2026-09-30-220910.png" alt="Design Systems — ดูองค์ประกอบแบรนด์แล้วปรับปรุงร่วมกับเอเจนต์" width="500" /></a><br/>
+<sub><b>Design Systems</b> — ดูองค์ประกอบแบรนด์แล้วปรับปรุงร่วมกับเอเจนต์</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/plugins-skills-2026-09-30-220917.png"><img src="../../docs/screenshots/product-tour/plugins-skills-2026-09-30-220917.png" alt="Plugins — ค้นหาทักษะและเปิดใช้ด้วย Try it" width="500" /></a><br/>
+<sub><b>Plugins</b> — ค้นหาทักษะและเปิดใช้ด้วย Try it</sub>
 </td>
 </tr>
 </table>
+
+### Studio — สร้างและปรับปรุงในโปรเจกต์เดียว
 
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/plugins.png" alt="Plugins" /><br/>
-<sub><b>Plugins</b> — เรียกดู skill อย่างเป็นทางการตามหมวดหมู่ ค้นหาใน catalog และเริ่ม workflow ด้วย <code>Try it</code></sub>
+<img src="../../docs/screenshots/product-tour/studio-prototype-2026.webp" alt="Prototype — สร้างและปรับปรุงเว็บแบบโต้ตอบกับเอเจนต์ พร้อมดูตัวอย่างสด" /><br/>
+<sub><b>Prototype</b> — สร้างและปรับปรุงเว็บแบบโต้ตอบกับเอเจนต์ พร้อมดูตัวอย่างสด</sub>
 </td>
 <td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/design-system.png" alt="Design System" /><br/>
-<sub><b>Design System</b> — ดึงและปรับแต่งภาษาภาพของแบรนด์ preview ผลลัพธ์ และสร้างงานต่อด้วยระบบเดียวกันใน workspace เดียว</sub>
+<img src="../../docs/screenshots/product-tour/studio-slides-2026.png" alt="Slides — สร้างงานนำเสนอ ตรวจสไลด์และบันทึกผู้พูด แล้วส่งออกเมื่อพร้อม" /><br/>
+<sub><b>Slides</b> — สร้างงานนำเสนอ ตรวจสไลด์และบันทึกผู้พูด แล้วส่งออกเมื่อพร้อม</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/product-tour/studio-image-2026.webp" alt="Image — สร้างภาพจากบทสนทนา ตรวจผลลัพธ์ แล้วดาวน์โหลดหรือเปิด" /><br/>
+<sub><b>Image</b> — สร้างภาพจากบทสนทนา ตรวจผลลัพธ์ แล้วดาวน์โหลดหรือเปิด</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/studio-hyperframes-2026.mp4"><img src="../../docs/screenshots/product-tour/studio-hyperframes-poster-2026.png" alt="HyperFrames — สร้างโมชั่นกราฟิกกับเอเจนต์และส่งออกเป็น MP4" /></a><br/>
+<sub><b>HyperFrames</b> — สร้างโมชั่นกราฟิกกับเอเจนต์และส่งออกเป็น MP4 <a href="../../docs/screenshots/product-tour/studio-hyperframes-2026.mp4">ดูวิดีโอ</a>.</sub>
 </td>
 </tr>
 </table>
 
-### Studio — artifact หลายชนิดใน project เดียว
-
-ใน Studio ของ project การสนทนา ไฟล์ที่สร้าง และ live preview จะอยู่รวมกันสำหรับ artifact หกประเภท:
-
-<table>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-prototype.png" alt="Prototype" /><br/>
-<sub><b>Prototype</b> — สร้างหรือจำลอง web experience ตรวจสอบหน้าที่ render แล้ว และทำงานวนซ้ำกับ Agent ได้ในจุดเดียว</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-deck.png" alt="Deck" /><br/>
-<sub><b>Deck</b> — สร้าง presentation หลายสไลด์ ตรวจสอบ thumbnail และ speaker notes แล้ว export เมื่อพร้อม</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-mobile-app.png" alt="Mobile app" /><br/>
-<sub><b>Mobile app</b> — สร้างและขัดเกลา mobile interface ใน device preview โดยมีการสนทนา ไฟล์ output และ next-step actions อยู่ข้างกัน</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-image.png" alt="Image" /><br/>
-<sub><b>Image</b> — สร้าง visual asset จากการสนทนาใน project, preview ผลลัพธ์แบบเต็มขนาด แล้วดาวน์โหลดหรือเปิดไฟล์</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-document.png" alt="Document" /><br/>
-<sub><b>Document</b> — สร้าง guide หลายหน้าและ editorial document ที่ขัดเกลาแล้ว ตรวจสอบ layout ที่ render และ export หรือ share เมื่อพร้อม</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-hyperframe.png" alt="HyperFrame" /><br/>
-<sub><b>HyperFrame</b> — สร้าง motion graphics ที่ควบคุมด้วย code, preview animation ใน Studio และ export วิดีโอที่เสร็จแล้ว</sub>
-</td>
-</tr>
-</table>
 ---
 
 ## ความเข้ากันได้ของแพลตฟอร์ม

@@ -10,7 +10,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from lib.github import GitHubError, append_outputs, event_payload, unique_run_artifact
+from lib.github import GitHubError, append_outputs, event_payload, latest_run_artifact
 
 SCHEMA_VERSION = 1
 KINDS = {"comment", "autofix", "report", "convergence"}
@@ -305,8 +305,12 @@ def write_convergence(root: Path, handoff_id: str, candidate: dict[str, Any]) ->
 
 def resolve_run_artifact(kind: str, handoff_id: str, run_id: int, repository: str) -> None:
     name = artifact_name(kind, handoff_id)
-    artifact = unique_run_artifact(repository, run_id, name)
-    append_outputs({"found": str(artifact is not None).lower(), "name": name if artifact else ""})
+    artifact = latest_run_artifact(repository, run_id, name)
+    append_outputs({
+        "found": str(artifact is not None).lower(),
+        "id": str(artifact["id"]) if artifact else "",
+        "name": name if artifact else "",
+    })
 
 
 

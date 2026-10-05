@@ -497,14 +497,24 @@ function RailRecentSection({
   const recentListRef = useRef<HTMLUListElement>(null);
   // Keep the full catalog navigable, but poll only rows intersecting its
   // scrollport. The list's existing height cap bounds the status request set.
-  // `null` until the observer has reported once; never reset on a catalog
-  // hand-over, so a re-render cannot blank the rows' glyphs.
-  const [visibleProjectIds, setVisibleProjectIds] = useState<string[] | null>(null);
+  // Visibility belongs to a particular identity and catalog. An empty catalog
+  // removes the list DOM without unmounting this component, so an observer
+  // callback cannot be relied on to retire the previous catalog's IDs.
+  const visibilityScope = JSON.stringify([
+    workspaceIdentityCacheKey(workspaceContext ?? null),
+    items.map((project) => project.id).sort(),
+  ]);
+  const [visibleProjects, setVisibleProjects] = useState<{
+    scope: string;
+    ids: string[];
+  } | null>(null);
   useEffect(() => {
     const list = recentListRef.current;
     if (!open || !list || typeof IntersectionObserver === 'undefined') return;
+    let active = true;
     const visible = new Set<string>();
     const observer = new IntersectionObserver((entries) => {
+      if (!active) return;
       for (const entry of entries) {
         const id = (entry.target as HTMLElement).dataset.projectId;
         if (!id) continue;
@@ -512,22 +522,28 @@ function RailRecentSection({
         else visible.delete(id);
       }
       const next = [...visible].sort();
-      setVisibleProjectIds((prev) =>
-        prev && prev.length === next.length && prev.every((id, index) => id === next[index])
+      setVisibleProjects((prev) =>
+        prev?.scope === visibilityScope
+          && prev.ids.length === next.length
+          && prev.ids.every((id, index) => id === next[index])
           ? prev
-          : next);
+          : { scope: visibilityScope, ids: next });
     }, { root: list });
     for (const row of list.children) observer.observe(row);
-    return () => observer.disconnect();
-  }, [items, open]);
+    return () => {
+      active = false;
+      observer.disconnect();
+    };
+  }, [items, open, visibilityScope]);
   // Until the observer has spoken, ask for the head of the list — the rows the
   // cap shows on a desktop window — in the same commit that paints them
   // (OPEND-2762). The observer's first report lands a frame later, and waiting
   // for it is what left the rows a round trip ahead of their glyphs.
   const runStatusProjectIds = useMemo(
-    () => visibleProjectIds
-      ?? items.slice(0, RECENT_STATUS_HEAD_ROWS).map((project) => project.id),
-    [visibleProjectIds, items],
+    () => visibleProjects?.scope === visibilityScope
+      ? visibleProjects.ids
+      : items.slice(0, RECENT_STATUS_HEAD_ROWS).map((project) => project.id),
+    [visibleProjects, visibilityScope, items],
   );
   const runStatusByProjectId = useProjectRunStatuses(runStatusProjectIds, {
     enabled: open,

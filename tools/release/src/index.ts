@@ -119,6 +119,13 @@ cli
   });
 
 cli
+  .command("rollback-latest", "Repoint a channel's latest pointer at an already-published version")
+  .action(async () => {
+    const { rollbackLatestFromEnv } = await import("./storage/rollback-latest.ts");
+    await rollbackLatestFromEnv();
+  });
+
+cli
   .command("summary-metadata", "Write a release metadata summary")
   .action(async () => {
     await import("./storage/summary-metadata.ts");

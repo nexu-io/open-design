@@ -1,13 +1,11 @@
-<h1 align="center">OpenDesign: la alternativa de código abierto a Claude Design</h1>
+<h1 align="center">OpenDesign: el primer espacio de trabajo colaborativo con agentes de diseño</h1>
 
-> ⚡ **[OpenDesign Cloud — el servicio oficial de modelos.](https://open-design.ai/zh/pricing/)** Una sola recarga permite usar modelos de agentes y de imagen dentro de OpenDesign: GPT, Claude y DeepSeek para agentes; GPT Image 2.0, Seedream 5.0 Pro y Nano Banana 2.0 para imágenes.
->
-> 🚀 **[DeepSeek V4 Flash y V4 Pro ya están disponibles.](https://open-design.ai/zh/pricing/)** Usa inteligencia de primer nivel para prototipos, presentaciones, sistemas de diseño y tareas cotidianas de agentes. Los miembros de OpenDesign pueden usar ambos modelos sin límites durante dos semanas, directamente en la aplicación.
+> ✨ **[Presentamos OpenDesign Go](https://open-design.ai/pricing/)**. El Go Plan empieza en 8 USD durante el primer mes e incluye créditos mensuales para más de 10 modelos, entre ellos GPT-6.1 Sol, GPT-6 Luna, DeepSeek V4.1 Flash, GLM-5.3 Flash-X y MiMo V2.6 Flash. Todos los planes personales incluyen acceso a la API para Codex, Claude Code, DSH, OpenCode y más.
 >
 > 🧩 **[DeepSeek Harness ya es compatible.](https://open-design.ai/zh/agents/deepseek-harness-design/)** Conecta el Agent Harness oficial `dsh` de DeepSeek como runtime nativo de OpenDesign, con pensamiento estructurado, llamadas a herramientas, descubrimiento de modelos, cancelación y reanudación de sesiones. Los archivos generados permanecen en el flujo de OpenDesign para previsualización en vivo y entrega.
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="OpenDesign hero banner" width="100%" />
+  <img src="../../docs/assets/readme-hero-design-agent.webp" alt="OpenDesign: el primer espacio de trabajo colaborativo con agentes de diseño" width="100%" />
 </p>
 
 <p align="center">
@@ -31,79 +29,65 @@
 
 ## Qué es OpenDesign
 
-🎨 **La alternativa de código abierto y local-first a Claude Design.** &nbsp;🖥️ **App de escritorio nativa para macOS y Windows.** &nbsp;⚡ **Más de 100 skills funcionales + catálogo independiente de plantillas de renderizado** · ✨ **151 paquetes de sistemas de diseño** · 📦 **277 plugins listos para usar.** &nbsp;🖼️ Genera **prototipos web · escritorio · móvil**, **dashboards / artefactos en vivo**, **presentaciones**, **imágenes**, **video**, además de gráficos en movimiento con **HyperFrames**. 🔒 Vista previa en iframe en entorno aislado · exportación a HTML / PDF / PPTX / MP4. &nbsp;🤖 **Funciona sobre Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity y 25 ejecutables CLI locales distintos**, o cualquier endpoint compatible con OpenAI mediante BYOK.
+OpenDesign es **un espacio de trabajo colaborativo con agentes de diseño**. Empieza con una descripción del proyecto y usa tu agente de programación habitual u OpenDesign Cloud para crear un prototipo fiel a tu sistema de diseño. Compártelo con tu equipo, recoge comentarios y deja que el agente lo perfeccione en el mismo proyecto.
 
-OpenDesign es lo que obtienes cuando ese bucle deja de estar cerrado y se convierte en un **sistema de archivos de skills funcionales, plantillas de renderizado, sistemas de diseño y plugins** que tus agentes pueden leer, escribir y remezclar.
-
-También es la **alternativa a Figma para la era de los agentes**: en lugar de empujar píxeles en un lienzo, entrega artefactos de una sola página en CSS real, fuentes reales, componentes reales, exportados directamente a HTML / PDF / PPTX / MP4 — ya moldeados por tu sistema de diseño, ya ejecutables dentro del agente que usas cada día.
+Ese flujo de trabajo es abierto y ampliable. Como **alternativa de código abierto a Claude Design**, OpenDesign tiene licencia Apache 2.0 y ofrece habilidades, plantillas, sistemas de diseño y plugins que los equipos pueden examinar y adaptar a su propio proceso.
 
 
 ---
 
 ## Recorrido por el producto
 
-Un vistazo rápido al flujo de trabajo principal de OpenDesign. Comienza en **Home** con un brief, explora skills reutilizables en **Plugins** y convierte referencias de marca en un **Design System**. Después entra en el **Studio** de un proyecto para crear y perfeccionar prototipos, presentaciones, aplicaciones móviles, imágenes, documentos y HyperFrames en un solo lugar.
-
 ### Páginas principales
 
 <table>
 <tr>
-<td valign="top">
-<img src="../../docs/screenshots/product-tour/home.png" alt="Home" /><br/>
-<sub><b>Home</b> — Elige un tipo de artefacto, introduce un brief y define el sistema de diseño, el directorio de trabajo y el modelo antes de empezar.</sub>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/home-workspace-2026-09-30-220844.png"><img src="../../docs/screenshots/product-tour/home-workspace-2026-09-30-220844.png" alt="Home — Empieza con una descripción o un ejemplo." width="500" /></a><br/>
+<sub><b>Home</b> — Empieza con una descripción o un ejemplo.</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/all-projects-2026-09-30-220900.webp"><img src="../../docs/screenshots/product-tour/all-projects-2026-09-30-220900.webp" alt="All projects — Vuelve a tus sistemas de diseño, contenidos multimedia y prototipos." width="500" /></a><br/>
+<sub><b>All projects</b> — Vuelve a tus sistemas de diseño, contenidos multimedia y prototipos.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/design-systems-stripe-2026-09-30-220910.png"><img src="../../docs/screenshots/product-tour/design-systems-stripe-2026-09-30-220910.png" alt="Design Systems — Examina los recursos de marca y mejóralos con un agente." width="500" /></a><br/>
+<sub><b>Design Systems</b> — Examina los recursos de marca y mejóralos con un agente.</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/plugins-skills-2026-09-30-220917.png"><img src="../../docs/screenshots/product-tour/plugins-skills-2026-09-30-220917.png" alt="Plugins — Encuentra habilidades y ejecútalas con Try it." width="500" /></a><br/>
+<sub><b>Plugins</b> — Encuentra habilidades y ejecútalas con Try it.</sub>
 </td>
 </tr>
 </table>
+
+### Studio: crea y perfecciona en un mismo proyecto
 
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/plugins.png" alt="Plugins" /><br/>
-<sub><b>Plugins</b> — Explora los skills oficiales por categoría, busca en el catálogo e inicia un flujo de trabajo con <code>Try it</code>.</sub>
+<img src="../../docs/screenshots/product-tour/studio-prototype-2026.webp" alt="Prototype — Crea y perfecciona experiencias web interactivas con tu agente y una vista previa en directo." /><br/>
+<sub><b>Prototype</b> — Crea y perfecciona experiencias web interactivas con tu agente y una vista previa en directo.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/design-system.png" alt="Design System" /><br/>
-<sub><b>Design System</b> — Extrae y perfecciona el lenguaje visual de una marca, previsualiza el resultado y sigue creando con él en el mismo espacio de trabajo.</sub>
+<img src="../../docs/screenshots/product-tour/studio-slides-2026.png" alt="Slides — Prepara presentaciones, revisa las diapositivas y las notas del ponente y exporta el resultado." /><br/>
+<sub><b>Slides</b> — Prepara presentaciones, revisa las diapositivas y las notas del ponente y exporta el resultado.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/product-tour/studio-image-2026.webp" alt="Image — Genera recursos visuales desde la conversación, revisa el resultado y descárgalo o ábrelo." /><br/>
+<sub><b>Image</b> — Genera recursos visuales desde la conversación, revisa el resultado y descárgalo o ábrelo.</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/studio-hyperframes-2026.mp4"><img src="../../docs/screenshots/product-tour/studio-hyperframes-poster-2026.png" alt="HyperFrames — Crea gráficos animados con tu agente y expórtalos a MP4." /></a><br/>
+<sub><b>HyperFrames</b> — Crea gráficos animados con tu agente y expórtalos a MP4. <a href="../../docs/screenshots/product-tour/studio-hyperframes-2026.mp4">Ver el vídeo</a>.</sub>
 </td>
 </tr>
 </table>
 
-### Studio — muchos tipos de artefactos en un proyecto
-
-En el Studio de un proyecto, la conversación, los archivos generados y la vista previa en vivo permanecen juntos para seis tipos de artefactos:
-
-<table>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-prototype.png" alt="Prototipo" /><br/>
-<sub><b>Prototipo</b> — Genera o reconstruye experiencias web, revisa la página renderizada e itera con el agente sin salir del lugar.</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-deck.png" alt="Presentación" /><br/>
-<sub><b>Presentación</b> — Crea presentaciones de varias diapositivas, revisa miniaturas y notas del presentador y exporta cuando estén listas.</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-mobile-app.png" alt="Aplicación móvil" /><br/>
-<sub><b>Aplicación móvil</b> — Genera y perfecciona interfaces móviles en una vista previa de dispositivo, con la conversación, los archivos de salida y los siguientes pasos al lado.</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-image.png" alt="Imagen" /><br/>
-<sub><b>Imagen</b> — Genera recursos visuales desde la conversación del proyecto, previsualiza el resultado a tamaño completo y luego descárgalo o ábrelo.</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-document.png" alt="Documento" /><br/>
-<sub><b>Documento</b> — Crea guías de varias páginas y documentos editoriales pulidos, revisa el diseño renderizado y exporta o comparte cuando estén listos.</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/product-tour/studio-hyperframe.png" alt="HyperFrame" /><br/>
-<sub><b>HyperFrame</b> — Crea gráficos animados controlados por código, previsualiza la animación en Studio y exporta el vídeo terminado.</sub>
-</td>
-</tr>
-</table>
 ---
 
 ## Compatibilidad de plataformas

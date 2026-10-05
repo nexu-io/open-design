@@ -288,8 +288,8 @@ async function runScopesPrint(eventName: string, eventPayload: unknown, changedF
     run_playwright_critical: value.enabled.playwright_critical,
     run_playwright_visual: value.enabled.playwright_visual,
     run_preflight: value.enabled.preflight,
-    run_ui_p0: value.enabled.ui_p0,
-    run_web_workspace_tests: value.enabled.web_workspace_tests,
+    run_ui_p0: Object.entries(value.enabled).some(([id, enabled]) => id.startsWith("ui_p0_") && enabled),
+    run_web_workspace_tests: [1, 2].some((shard) => value.enabled[`web_workspace_${shard}`]),
     run_windows_tools_pack_payload_tests: value.enabled.windows_tools_pack_payload_tests,
     run_workspace_unit_tests: value.enabled.workspace_unit_tests,
   };
@@ -541,9 +541,10 @@ describe("packaged smoke workflow", () => {
   });
 
   it("[P2] surfaces a merge-queue needs-validation ejection as a PR comment handoff", async () => {
-    const [ciWorkflow, commentWorkflow] = await Promise.all([
+    const [ciWorkflow, commentWorkflow, needsValidationTemplate] = await Promise.all([
       readFile(ciWorkflowPath, "utf8"),
       readFile(commentWorkflowPath, "utf8"),
+      readFile(join(workspaceRoot, ".github/templates/merge-queue/needs-validation.md"), "utf8"),
     ]);
 
     const mergePolicy = sectionBetween(ciWorkflow, "  merge_policy:", "  validate:");
@@ -554,7 +555,8 @@ describe("packaged smoke workflow", () => {
     expect(mergePolicy).toContain("needs: [plan, runners]");
     expect(mergePolicy).toContain("if: ${{ github.event_name == 'merge_group' }}");
     expect(mergePolicy).toContain("fromJSON(needs.runners.outputs.runs_on).control");
-    expect(mergePolicy).toContain("<!-- merge-queue-needs-validation -->");
+    expect(mergePolicy).toContain("merge-queue/needs-validation.md");
+    expect(needsValidationTemplate).toContain("<!-- merge-queue-needs-validation -->");
     expect(mergePolicy).toContain("emit_ejection_notice");
     expect(mergePolicy).toContain(
       "if: ${{ failure() && steps.merge_blocking_label_gate.outputs.comment_created == 'true' }}",
@@ -590,7 +592,10 @@ describe("packaged smoke workflow", () => {
   });
 
   it("[P2] surfaces a merge-queue CI failure ejection as a PR comment handoff", async () => {
-    const ciWorkflow = await readFile(ciWorkflowPath, "utf8");
+    const [ciWorkflow, failureTemplate] = await Promise.all([
+      readFile(ciWorkflowPath, "utf8"),
+      readFile(join(workspaceRoot, ".github/templates/merge-queue/ci-failure.md"), "utf8"),
+    ]);
     const mergePolicy = sectionBetween(ciWorkflow, "  merge_policy:", "  validate:");
     const validate = sectionBetween(ciWorkflow, "  validate:", "  runtime_summary:");
 
@@ -603,7 +608,8 @@ describe("packaged smoke workflow", () => {
 
     // Producer: merge-group only, only after the gate has already failed, unable to change the
     // gate result, and uploaded on the failure path exactly like the label notice.
-    expect(validate).toContain("<!-- merge-queue-ci-failure -->");
+    expect(validate).toContain("merge-queue/ci-failure.md");
+    expect(failureTemplate).toContain("<!-- merge-queue-ci-failure -->");
     expect(validate).toContain("if: ${{ failure() && github.event_name == 'merge_group' }}");
     expect(validate).toContain("continue-on-error: true");
     expect(validate).toContain(
@@ -853,10 +859,11 @@ else { process.stderr.write("unexpected gh call: " + args + "\\n"); process.exit
   });
 
   it("[P1] routes configured contributors into an independent maintainer merge block", async () => {
-    const [routingWorkflow, ciWorkflow, inactivityWorkflow] = await Promise.all([
+    const [routingWorkflow, ciWorkflow, inactivityWorkflow, maintainerTemplate] = await Promise.all([
       readFile(contributorMaintainerCheckWorkflowPath, "utf8"),
       readFile(ciWorkflowPath, "utf8"),
       readFile(prAuthorInactivityWorkflowPath, "utf8"),
+      readFile(join(workspaceRoot, ".github/templates/merge-queue/needs-maintainer-check.md"), "utf8"),
     ]);
     const trigger = sectionBetween(routingWorkflow, "on:", "\npermissions:");
 
@@ -876,7 +883,8 @@ else { process.stderr.write("unexpected gh call: " + args + "\\n"); process.exit
 
     expect(ciWorkflow).toContain("Block merge while a merge-blocking label is present");
     expect(ciWorkflow).toContain("grep -qx 'needs-maintainer-check'");
-    expect(ciWorkflow).toContain("<!-- merge-queue-needs-maintainer-check -->");
+    expect(ciWorkflow).toContain("merge-queue/needs-maintainer-check.md");
+    expect(maintainerTemplate).toContain("<!-- merge-queue-needs-maintainer-check -->");
     expect(ciWorkflow).toContain("needs-maintainer-check-pr-$pr");
     expect(inactivityWorkflow).toContain("'needs-maintainer-check'");
   });
@@ -1375,9 +1383,12 @@ process.stdin.on("end", () => {
     const validate = sectionBetween(workflow, "  validate:", "  runtime_summary:");
 
     expect(workflow).toContain("ci_mode:");
-    expect(plan).toContain("run: ${{ steps.convergence.outputs.run }}");
+    expect(plan).toContain("run: ${{ steps.gate.outputs.run }}");
     expect(plan).toContain("scopes: ${{ steps.scopes.outputs.scopes }}");
-    expect(workflow).toContain("fromJSON(needs.plan.outputs.run).ui_p0");
+    expect(plan).toContain("github.event_name == 'merge_group'");
+    expect(plan).toContain("github.event.pull_request.head.repo.full_name == github.repository");
+    expect(plan).toContain("&& 'enforce' || 'shadow'");
+    expect(workflow).toContain("needs.plan.outputs.ui_p0_count != '0'");
     expect(validate).toContain("[$run | to_entries[] | select(.value) | .key]");
 
     await expect(runScopesPrint("workflow_dispatch", { inputs: { ci_mode: "hot" } }, ["apps/web/src/app/page.tsx"])).resolves.toMatchObject({
@@ -1553,9 +1564,9 @@ process.stdin.on("end", () => {
     const daemonTests = sectionBetween(workflow, "  daemon_unit_tests:", "  windows_tools_pack_payload_tests:");
     const validate = sectionBetween(workflow, "  validate:", "  runtime_summary:");
 
-    expect(daemonTests).toContain("if: ${{ fromJSON(needs.plan.outputs.run).daemon_unit_tests }}");
+    expect(daemonTests).toContain("if: ${{ needs.plan.outputs.daemon_count != '0' }}");
     expect(daemonTests).toContain("fail-fast: false");
-    expect(daemonTests).toContain("shard: [1, 2, 3, 4]");
+    expect(daemonTests).toContain("matrix: ${{ fromJSON(needs.plan.outputs.daemon_matrix) }}");
     expect(daemonTests).toContain("pnpm --filter @open-design/daemon test --shard=${{ matrix.shard }}/4");
     expect(validate).toContain("- daemon_unit_tests");
     expect(validate).toContain("[$run | to_entries[] | select(.value) | .key]");
@@ -1786,19 +1797,24 @@ process.stdin.on("end", () => {
     expect(runners).toContain("python3 .github/scripts/runners.py");
     expect(plan).toContain("needs: [runners]");
     expect(plan).toContain("fromJSON(needs.runners.outputs.runs_on).control");
+    expect(plan).toContain("daemon_matrix: ${{ steps.convergence.outputs.daemon_matrix }}");
+    expect(plan).toContain("web_matrix: ${{ steps.convergence.outputs.web_matrix }}");
+    expect(plan).toContain("ui_p0_matrix: ${{ steps.convergence.outputs.ui_p0_matrix }}");
+    expect(plan).toContain("Project workload decisions onto CI jobs");
     expect(staticGate).toContain("needs: [plan, runners]");
     expect(staticGate).toContain("fromJSON(needs.runners.outputs.runs_on).control");
     expect(workspaceUnitTests).toContain("fromJSON(needs.runners.outputs.runs_on).workspace_unit");
     expect(workspaceUnitTests).toContain("toJSON(fromJSON(needs.runners.outputs.runs_on).workspace_unit)");
     expect(daemonUnitTests).toContain("fromJSON(needs.runners.outputs.runs_on).workspace_unit");
     expect(daemonUnitTests).toContain("toJSON(fromJSON(needs.runners.outputs.runs_on).workspace_unit)");
+    expect(daemonUnitTests).toContain("matrix: ${{ fromJSON(needs.plan.outputs.daemon_matrix) }}");
     expect(webWorkspaceTests).toContain("fromJSON(needs.runners.outputs.runs_on).js_hot");
     expect(webWorkspaceTests).toContain("toJSON(fromJSON(needs.runners.outputs.runs_on).js_hot)");
     expect(webWorkspaceTests).not.toContain('"od-persistent-ci"');
     // Pin two-way vitest sharding so a later YAML edit cannot collapse the split or restore the
     // monolithic `pnpm --filter @open-design/web test` command while this suite still passes.
     expect(webWorkspaceTests).toContain("fail-fast: false");
-    expect(webWorkspaceTests).toContain("shard: [1, 2]");
+    expect(webWorkspaceTests).toContain("matrix: ${{ fromJSON(needs.plan.outputs.web_matrix) }}");
     expect(webWorkspaceTests).toContain(
       "pnpm --filter @open-design/web exec vitest run -c vitest.config.ts --maxWorkers=2 --shard=${{ matrix.shard }}/2",
     );
@@ -1810,10 +1826,14 @@ process.stdin.on("end", () => {
     expect(uiP0).toContain("fromJSON(needs.runners.outputs.runs_on).ui_p0");
     expect(uiP0).toContain("fromJSON(needs.runners.outputs.runs_on).ui_p0_heavy");
     expect(uiP0).toContain("matrix.shard == 'project-collab'");
+    expect(uiP0).toContain("matrix: ${{ fromJSON(needs.plan.outputs.ui_p0_matrix) }}");
+    expect(uiP0).toContain("if: ${{ needs.plan.outputs.ui_p0_count != '0' }}");
+    expect(uiP0).toContain("fromJSON(needs.runners.outputs.runs_on).ui_p0_heavy");
+    expect(uiP0).toContain("matrix.shard == 'project-collab'");
     expect(uiP0).toContain(
       "toJSON(matrix.shard == 'project-collab' && fromJSON(needs.runners.outputs.runs_on).ui_p0_heavy || fromJSON(needs.runners.outputs.runs_on).ui_p0)",
     );
-    expect(uiP0).toContain("include: ${{ fromJSON(needs.plan.outputs.ui_p0_matrix) }}");
+    expect(uiP0).toContain("matrix: ${{ fromJSON(needs.plan.outputs.ui_p0_matrix) }}");
     expect(uiP0CiMatrix.map((entry) => entry.name)).toEqual([
       "entry-settings",
       "project-workspace",
@@ -2212,11 +2232,20 @@ process.stdin.on("end", () => {
     expect(handoffScript).toContain('"report"');
     expect(handoffScript).toContain('"convergence"');
     expect(convergenceWorkflow).toContain("handoff.py resolve-run-artifact convergence ci-results");
+    expect(convergenceWorkflow).toContain("workflow_call:");
+    expect(convergenceWorkflow).toContain("github.event.workflow_run.conclusion)");
+    expect(convergenceWorkflow).toContain("fromJSON('[\"success\", \"failure\"]')");
     expect(convergenceWorkflow).toContain("Checkout trusted convergence code");
     expect(convergenceWorkflow).toContain("convergence.py admit");
+    expect(convergenceWorkflow).toContain("convergence.py --config \"$CONVERGENCE_CONFIG\" admit --isolated");
     expect(convergenceWorkflow).toContain("python3 .github/scripts/convergence.py publish");
+    expect(convergenceWorkflow).toContain("publish --isolated");
     expect(convergenceWorkflow).toContain("convergence.py stage-products");
     expect(convergenceWorkflow).toContain("convergence.py storage-status");
+    expect(convergenceWorkflow).toContain("artifact-ids: ${{ steps.artifact.outputs.id }}");
+    expect(convergenceWorkflow).toContain("name: ${{ steps.artifact.outputs.name }}");
+    expect(ciWorkflow).toContain("uses: ./.github/workflows/convergence.atom.yml");
+    expect(ciWorkflow).toContain("name: '[validate] Restored platform package'");
     expect(convergenceWorkflow).toContain("CLOUDFLARE_R2_WORKLOAD_RESULTS_AK");
     expect(convergenceWorkflow).not.toContain("gh api");
     expect(convergenceWorkflow).not.toContain("jq");
