@@ -206,7 +206,7 @@ test('[P0] manual edit inspector previews and persists page and selected element
   await expect(actionMenu.getByRole('menuitem', { name: /Export as PDF/i })).toBeVisible();
 });
 
-test('[P0] nested Inspect merges and resets a persisted child rule without changing root', async ({ page }) => {
+test('[P0] nested Inspect merges and resets a persisted child rule without changing root', async ({ page }, testInfo) => {
   test.setTimeout(60_000);
   await routeMockAgents(page);
   const projectId = await createEmptyProject(page, 'Nested inspect safety');
@@ -216,7 +216,10 @@ test('[P0] nested Inspect merges and resets a persisted child rule without chang
   await seedHtmlArtifact(page, projectId, 'root.html', root);
   await page.goto(`/projects/${projectId}/files/root.html`);
   await openDesignFile(page, 'root.html');
+  await expect(artifactPreview(page)).toHaveAttribute('data-od-render-mode', 'url-load');
+  await testInfo.attach('url-preview-entry', { body: await page.screenshot(), contentType: 'image/png' });
   await page.getByTestId('inspect-mode-toggle').click();
+  await expect(artifactPreview(page)).toHaveAttribute('data-od-render-mode', 'srcdoc');
   const nested = artifactPreviewFrame(page).frameLocator('iframe[title="child"]');
   await expect(nested.getByRole('heading', { name: 'Child Hero' })).toBeVisible();
   // The child can finish installing its daemon bridge after the root's first
@@ -225,10 +228,14 @@ test('[P0] nested Inspect merges and resets a persisted child rule without chang
   await expect(nested.locator('html[data-od-inspect-mode]')).toHaveCount(1);
   await nested.locator('[data-od-id="hero"]').click();
   await expect(page.getByTestId('inspect-panel')).toBeVisible();
+  await expect(page.getByTestId('inspect-panel')).toContainText(`frame:${encodeURIComponent(JSON.stringify(['child.html', 'hero']))}`);
+  await nested.locator('[data-od-id="hero"]').hover();
+  await testInfo.attach('srcdoc-inspect-child', { body: await page.screenshot(), contentType: 'image/png' });
   await page.getByTestId('inspect-font-size').fill('20');
   await page.getByTestId('inspect-save').click();
   await expectFileSource(page, projectId, 'child.html', ['color: #123456', 'font-weight: 700', 'font-size: 20px']);
   expect(await (await page.request.get(`/api/projects/${projectId}/files/root.html`)).text()).toBe(root);
+  await testInfo.attach('srcdoc-inspect-saved', { body: await page.screenshot(), contentType: 'image/png' });
   await page.getByRole('button', { name: /Reset element/i }).click();
   await page.getByTestId('inspect-save').click();
   await expectFileSourceExcludes(page, projectId, 'child.html', ['data-od-inspect-overrides']);
@@ -536,34 +543,45 @@ test('[P0] forged nested Inspect identity cannot select or write an unlisted pro
   expect(await (await page.request.get(`/api/projects/${projectId}/files/unrelated.html`)).text()).toBe(unrelated);
 });
 
-test('[P0] child element comment re-anchors after root reload', async ({ page }) => {
-  test.setTimeout(60_000);
-  await routeMockAgents(page);
-  const projectId = await createEmptyProject(page, 'Nested comment re-anchor');
-  await seedProjectFile(page, projectId, 'child.html', '<!doctype html><html><body><h2 data-od-id="child-hero">Child Hero</h2></body></html>');
-  await seedHtmlArtifact(page, projectId, 'root.html', '<!doctype html><html><body><iframe title="comment child" src="child.html"></iframe></body></html>');
-  await page.goto(`/projects/${projectId}/files/root.html`);
-  await openDesignFile(page, 'root.html');
-  await page.getByTestId('board-mode-toggle').click();
-  const nested = artifactPreviewFrame(page).frameLocator('iframe[title="comment child"]');
-  await expect(nested.locator('html[data-od-comment-mode]')).toHaveCount(1);
-  await nested.locator('[data-od-id="child-hero"]').click();
-  await expect(page.getByTestId('comment-popover')).toBeVisible();
-  await page.getByTestId('comment-popover-input').fill('Child anchored comment');
-  await page.getByTestId('comment-popover').getByRole('button', { name: /^Comment$/ }).click();
-  await expect(page.getByTestId('comment-panel-toggle')).toContainText('1');
-  await page.reload();
-  await waitForLoadingToClear(page);
-  await expect(page.getByTestId('board-mode-toggle')).toBeVisible();
-  await page.getByTestId('board-mode-toggle').click();
-  await expect(page.getByTestId('comment-panel-toggle')).toContainText('1');
-  const reloadedChild = artifactPreviewFrame(page).frameLocator('iframe[title="comment child"]');
-  await expect(reloadedChild.getByRole('heading', { name: 'Child Hero' })).toBeVisible();
-  await expect(reloadedChild.locator('html[data-od-comment-mode]')).toHaveCount(1);
-  await page.getByTestId('comment-panel-toggle').click();
-  const childTargetId = `frame:${encodeURIComponent(JSON.stringify(['child.html', 'child-hero']))}`;
-  await expect(page.getByTestId(`comment-saved-marker-${childTargetId}`)).toHaveAttribute('data-anchor-state', 'anchored');
-});
+for (const transport of ['url', 'srcdoc'] as const) {
+  test(`[P0] child element comment re-anchors after root reload (${transport})`, async ({ page }, testInfo) => {
+    test.setTimeout(60_000);
+    await routeMockAgents(page);
+    const projectId = await createEmptyProject(page, 'Nested comment re-anchor');
+    await seedProjectFile(page, projectId, 'child.html', '<!doctype html><html><body><h2 data-od-id="child-hero">Child Hero</h2></body></html>');
+    // Root-relative project assets require srcDoc URL normalization.
+    const childSrc = transport === 'srcdoc' ? '/child.html' : 'child.html';
+    await seedHtmlArtifact(page, projectId, 'root.html', `<!doctype html><html><body><iframe title="comment child" src="${childSrc}"></iframe></body></html>`);
+    await page.goto(`/projects/${projectId}/files/root.html`);
+    await openDesignFile(page, 'root.html');
+    const renderMode = transport === 'url' ? 'url-load' : 'srcdoc';
+    await expect(artifactPreview(page)).toHaveAttribute('data-od-render-mode', renderMode);
+    await testInfo.attach(`${transport}-comment-entry`, { body: await page.screenshot(), contentType: 'image/png' });
+    await page.getByTestId('board-mode-toggle').click();
+    const nested = artifactPreviewFrame(page).frameLocator('iframe[title="comment child"]');
+    await expect(nested.locator('html[data-od-comment-mode]')).toHaveCount(1);
+    await nested.locator('[data-od-id="child-hero"]').click();
+    await expect(page.getByTestId('comment-popover')).toBeVisible();
+    await expect(artifactPreview(page)).toHaveAttribute('data-od-render-mode', renderMode);
+    await testInfo.attach(`${transport}-comment-child`, { body: await page.screenshot(), contentType: 'image/png' });
+    await page.getByTestId('comment-popover-input').fill('Child anchored comment');
+    await page.getByTestId('comment-popover').getByRole('button', { name: /^Comment$/ }).click();
+    await expect(page.getByTestId('comment-panel-toggle')).toContainText('1');
+    await page.reload();
+    await waitForLoadingToClear(page);
+    await expect(page.getByTestId('board-mode-toggle')).toBeVisible();
+    await page.getByTestId('board-mode-toggle').click();
+    await expect(page.getByTestId('comment-panel-toggle')).toContainText('1');
+    const reloadedChild = artifactPreviewFrame(page).frameLocator('iframe[title="comment child"]');
+    await expect(reloadedChild.getByRole('heading', { name: 'Child Hero' })).toBeVisible();
+    await expect(reloadedChild.locator('html[data-od-comment-mode]')).toHaveCount(1);
+    await page.getByTestId('comment-panel-toggle').click();
+    const childTargetId = `frame:${encodeURIComponent(JSON.stringify(['child.html', 'child-hero']))}`;
+    await expect(page.getByTestId(`comment-saved-marker-${childTargetId}`)).toHaveAttribute('data-anchor-state', 'anchored');
+    await expect(artifactPreview(page)).toHaveAttribute('data-od-render-mode', renderMode);
+    await testInfo.attach(`${transport}-comment-reloaded`, { body: await page.screenshot(), contentType: 'image/png' });
+  });
+}
 
 test('[P0] comments reject self-navigated files and re-anchor on the declared child after reload', async ({ page }) => {
   test.setTimeout(60_000);
