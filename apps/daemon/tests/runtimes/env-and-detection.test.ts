@@ -306,6 +306,34 @@ test('spawnEnvForAgent emits httpx-compatible bypasses for Python runtimes', () 
   }
 });
 
+test('spawnEnvForAgent keeps httpx IPv6 loopback bare after sandbox finalization', () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'od-agent-env-sandbox-httpx-proxy-'));
+  try {
+    const env = spawnEnvForAgent(
+      'kimi',
+      {
+        OD_DATA_DIR: dataDir,
+        OD_SANDBOX_MODE: '1',
+        PATH: '/usr/bin',
+        HTTP_PROXY: 'http://system-http:7890',
+        // Reproduce the bracketed loopback value present before sandbox finalization.
+        NO_PROXY: 'localhost,127.0.0.1,[::1],fe80::/10,10.0.0.0/8',
+      },
+      {},
+      {},
+    );
+
+    const expectedNoProxy = 'localhost,127.0.0.1,::1,10.0.0.0/8';
+    assert.equal(env.HOME, join(dataDir, 'sandbox', 'agent-home'));
+    assert.equal(env.NO_PROXY, expectedNoProxy);
+    if (process.platform !== 'win32') {
+      assert.equal(env.no_proxy, expectedNoProxy);
+    }
+  } finally {
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
 test('spawnEnvForAgent resolves system proxy env for each default agent launch', () => {
   const proxySpy = vi.spyOn(platform, 'resolveSystemProxyEnv').mockReturnValue({
     HTTPS_PROXY: 'http://system-https:7891',

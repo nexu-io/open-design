@@ -104,7 +104,6 @@ export function spawnEnvForAgent(
     baseEnv,
     expandedConfiguredEnv,
   );
-  applyAgentProxyCompatibility(agentId, env);
   if (agentId === 'amr') {
     Object.assign(env, amrVelaProfileEnv(env));
     Object.assign(env, amrAnalyticsIdentityEnv(env));
@@ -151,13 +150,13 @@ export function spawnEnvForAgent(
       const opencodeBin = resolveAmrOpenCodeExecutable(env);
       if (opencodeBin) env.VELA_OPENCODE_BIN = opencodeBin;
     }
-    return finalizeRuntimeEnv(env, sandboxRuntime);
+    return finalizeRuntimeEnv(agentId, env, sandboxRuntime);
   }
   if (agentId === 'claude') {
-    return finalizeRuntimeEnv(env, sandboxRuntime);
+    return finalizeRuntimeEnv(agentId, env, sandboxRuntime);
   }
   if (agentId === 'codex') {
-    return finalizeRuntimeEnv(env, sandboxRuntime);
+    return finalizeRuntimeEnv(agentId, env, sandboxRuntime);
   }
   if (agentId === 'opencode' || agentId === 'byok-opencode') {
     stripKeysCaseInsensitive(env, [
@@ -177,7 +176,7 @@ export function spawnEnvForAgent(
     if (!env.OPENCODE_DISABLE_PROJECT_CONFIG?.trim()) {
       env.OPENCODE_DISABLE_PROJECT_CONFIG = 'true';
     }
-    return finalizeRuntimeEnv(env, sandboxRuntime);
+    return finalizeRuntimeEnv(agentId, env, sandboxRuntime);
   }
   if (agentId === 'mimo') {
     stripKeysCaseInsensitive(env, [
@@ -193,9 +192,9 @@ export function spawnEnvForAgent(
     if (!env.MIMOCODE_DISABLE_PROJECT_CONFIG?.trim()) {
       env.MIMOCODE_DISABLE_PROJECT_CONFIG = 'true';
     }
-    return finalizeRuntimeEnv(env, sandboxRuntime);
+    return finalizeRuntimeEnv(agentId, env, sandboxRuntime);
   }
-  return finalizeRuntimeEnv(env, sandboxRuntime);
+  return finalizeRuntimeEnv(agentId, env, sandboxRuntime);
 }
 
 export function openDesignAmrRunAttempt(input: {
@@ -308,11 +307,13 @@ function reapplySandboxRuntimeEnv(
 }
 
 function finalizeRuntimeEnv(
+  agentId: string,
   env: NodeJS.ProcessEnv,
   sandboxRuntime: SandboxRuntimeConfig | null,
 ): NodeJS.ProcessEnv {
   const finalizedEnv = reapplySandboxRuntimeEnv(env, sandboxRuntime);
   applyWindowsUserCacheEnv(finalizedEnv);
+  applyAgentProxyCompatibility(agentId, finalizedEnv);
   return finalizedEnv;
 }
 
