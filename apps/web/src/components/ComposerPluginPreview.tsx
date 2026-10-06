@@ -36,6 +36,10 @@ function pluginKindLabel(
   switch (slug) {
     case 'prototype':
       return t('homeHero.chip.prototype');
+    case 'document':
+      return t('homeHero.chip.document');
+    case 'webgl':
+      return t('homeHero.chip.webgl');
     case 'live-artifact':
       return t('homeHero.chip.liveArtifact');
     case 'deck':

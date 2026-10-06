@@ -1,14 +1,23 @@
 // Phase 4 / spec §23.3.5 — bundled plugin boot walker.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import Database from 'better-sqlite3';
 import { migratePlugins } from '../src/plugins/persistence.js';
-import { listInstalledPlugins, upsertInstalledPlugin } from '../src/plugins/registry.js';
+import {
+  getInstalledPlugin,
+  listInstalledPlugins,
+  resolvePluginFolder,
+  upsertInstalledPlugin,
+} from '../src/plugins/registry.js';
 import type { InstalledPluginRecord } from '@open-design/contracts';
 import { registerBundledPlugins } from '../src/plugins/bundled.js';
+import {
+  applyPlugin,
+  InternalBundledStrategyApplyError,
+} from '../src/plugins/apply.js';
 
 let db: Database.Database;
 let tmpRoot: string;
@@ -42,6 +51,71 @@ afterEach(async () => {
 });
 
 describe('registerBundledPlugins', () => {
+  it('keeps the real inactive OD Next strategy out of catalog and ordinary apply', async () => {
+    const source = path.resolve(
+      import.meta.dirname,
+      '../../../plugins/_official/scenarios/od-next-strategy',
+    );
+    const folder = path.join(tmpRoot, 'scenarios', 'od-next-strategy');
+    await cp(source, folder, { recursive: true });
+
+    const resolved = await resolvePluginFolder({
+      folder,
+      folderId: 'od-next-strategy',
+      sourceKind: 'bundled',
+      source: folder,
+      trust: 'bundled',
+    });
+    expect(resolved.ok).toBe(true);
+    if (!resolved.ok) throw new Error(resolved.errors.join('; '));
+
+    // Simulate a row left by an older build. The real catalog owner hides it
+    // immediately, generic apply refuses it, and the next bundled walk prunes
+    // it instead of refreshing it as a public plugin.
+    upsertInstalledPlugin(db, resolved.record);
+    expect(getInstalledPlugin(db, 'od-next-strategy')).not.toBeNull();
+    expect(listInstalledPlugins(db).map((plugin) => plugin.id)).not.toContain(
+      'od-next-strategy',
+    );
+    expect(() => applyPlugin({
+      plugin: resolved.record,
+      inputs: {},
+      registry: {
+        skills: [],
+        designSystems: [],
+        craft: [],
+        atoms: [],
+        scenarios: [],
+      },
+    })).toThrow(InternalBundledStrategyApplyError);
+
+    const result = await registerBundledPlugins({ db, bundledRoot: tmpRoot });
+    expect(result.registered).toEqual([]);
+    expect(result.pruned).toContain('od-next-strategy');
+    expect(getInstalledPlugin(db, 'od-next-strategy')).toBeNull();
+  });
+
+  it('validates strategy declarations only after bundled provenance and fails closed', async () => {
+    const folder = path.join(tmpRoot, 'scenarios', 'broken-strategy');
+    await mkdir(folder, { recursive: true });
+    const manifest = JSON.parse(SAMPLE_MANIFEST('broken-strategy')) as {
+      od: Record<string, unknown>;
+    };
+    manifest.od['strategy'] = {
+      schema: 'open-design.bundled-strategy/v2',
+      id: 'od-next-strategy',
+    };
+    await writeFile(path.join(folder, 'open-design.json'), JSON.stringify(manifest));
+    await writeFile(path.join(folder, 'SKILL.md'), SAMPLE_SKILL('broken-strategy'));
+
+    const result = await registerBundledPlugins({ db, bundledRoot: tmpRoot });
+    expect(result.registered).toEqual([]);
+    expect(result.warnings).toEqual([
+      expect.stringContaining('bundled strategy broken-strategy failed to parse'),
+    ]);
+    expect(listInstalledPlugins(db)).toEqual([]);
+  });
+
   it('registers every <bundledRoot>/<tier>/<id>/ folder under source_kind=bundled', async () => {
     // Build a layout with one atom + one scenario:
     //   <bundledRoot>/atoms/discovery-question-form/{open-design.json,SKILL.md}

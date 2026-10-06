@@ -11,6 +11,7 @@ import {
   insertProject,
   getConversation,
   listConversations,
+  listConversationsAwaitingInput,
   listLatestConversationRunStatuses,
   listLatestProjectRunStatuses,
   listProjectsAwaitingInput,
@@ -59,21 +60,42 @@ function seedProject(db: Database.Database, projectId: string, runStatus = 'succ
   return `${projectId}-conversation`;
 }
 
+// A renderable question-form body — JSON with a non-empty `questions` array.
+// Awaiting-input is a *renderable* form latch, so every fixture that should
+// latch has to carry a body the parser can actually render, not a bare tag.
+const RENDERABLE_BODY = '{"questions":[{"id":"surface","label":"Which surface?"}]}';
+
+function form(id: string): string {
+  return `<question-form id="${id}">${RENDERABLE_BODY}</question-form>`;
+}
+
 function addMessage(
   db: Database.Database,
   conversationId: string,
   id: string,
   role: 'user' | 'assistant',
   content: string,
+  createdAt?: number,
 ) {
-  upsertMessage(db, conversationId, { id, role, content });
+  upsertMessage(db, conversationId, {
+    id,
+    role,
+    content,
+    ...(createdAt === undefined ? {} : { createdAt }),
+  });
 }
 
 test('unanswered structured question marks project as awaiting input', () => {
   const db = createDb();
   const conversationId = seedProject(db, 'project-a');
 
-  addMessage(db, conversationId, 'assistant-question', 'assistant', 'Need one choice\n<question-form id="q1">');
+  addMessage(
+    db,
+    conversationId,
+    'assistant-question',
+    'assistant',
+    `Need one choice\n<question-form id="q1">${RENDERABLE_BODY}</question-form>`,
+  );
 
   assert.deepEqual([...listProjectsAwaitingInput(db)], ['project-a']);
 });
@@ -84,7 +106,13 @@ test('ask-question alias of question-form also marks project as awaiting input',
 
   // <ask-question> is an accepted alias for <question-form>; an alias-form
   // turn must mark the project awaiting input just like the canonical tag.
-  addMessage(db, conversationId, 'assistant-question', 'assistant', 'Need one choice\n<ask-question id="q1">');
+  addMessage(
+    db,
+    conversationId,
+    'assistant-question',
+    'assistant',
+    `Need one choice\n<ask-question id="q1">${RENDERABLE_BODY}</ask-question>`,
+  );
 
   assert.deepEqual([...listProjectsAwaitingInput(db)], ['project-a-alias']);
 });
@@ -93,7 +121,7 @@ test('user reply after structured question clears awaiting input', () => {
   const db = createDb();
   const conversationId = seedProject(db, 'project-b');
 
-  addMessage(db, conversationId, 'assistant-question', 'assistant', '<question-form id="q1">');
+  addMessage(db, conversationId, 'assistant-question', 'assistant', form('q1'));
   addMessage(db, conversationId, 'user-answer', 'user', 'Here is my answer');
 
   assert.equal(listProjectsAwaitingInput(db).has('project-b'), false);
@@ -103,9 +131,9 @@ test('latest structured question form wins across assistant turns', () => {
   const db = createDb();
   const conversationId = seedProject(db, 'project-c');
 
-  addMessage(db, conversationId, 'assistant-question-1', 'assistant', '<question-form id="q1">');
+  addMessage(db, conversationId, 'assistant-question-1', 'assistant', form('q1'));
   addMessage(db, conversationId, 'user-answer', 'user', 'answered');
-  addMessage(db, conversationId, 'assistant-question-2', 'assistant', '<question-form id="q2">');
+  addMessage(db, conversationId, 'assistant-question-2', 'assistant', form('q2'));
 
   assert.equal(listProjectsAwaitingInput(db).has('project-c'), true);
 });
@@ -117,6 +145,105 @@ test('plain text question does not mark awaiting input', () => {
   addMessage(db, conversationId, 'assistant-question', 'assistant', 'Can you clarify the color palette?');
 
   assert.equal(listProjectsAwaitingInput(db).has('project-d'), false);
+});
+
+// The production regression (OD Next strategy turn, PR #7016): the agent said
+// it had nothing to ask and still wrote the literal marker as a declaration
+// line — unclosed, prose instead of JSON. Nothing renders, so there is no form
+// for the user to answer, yet the substring match latched the project on
+// `Needs input` with no exit but a user message that will never come.
+const STRAY_MARKER = '策略判断信息充足，将直接进入生产。\n\n<question-form> 无需提出';
+
+test('an unrenderable question-form marker does not latch awaiting input', () => {
+  const db = createDb();
+  const conversationId = seedProject(db, 'project-stray');
+
+  addMessage(db, conversationId, 'assistant-stray', 'assistant', STRAY_MARKER);
+
+  assert.equal(listProjectsAwaitingInput(db).has('project-stray'), false);
+  assert.equal(listConversationsAwaitingInput(db).has(conversationId), false);
+});
+
+test('a closed question-form block with a prose body does not latch awaiting input', () => {
+  const db = createDb();
+  const conversationId = seedProject(db, 'project-prose-body');
+
+  addMessage(
+    db,
+    conversationId,
+    'assistant-prose-body',
+    'assistant',
+    'Nothing to ask.\n<question-form>无需提出</question-form>',
+  );
+
+  assert.equal(listProjectsAwaitingInput(db).has('project-prose-body'), false);
+});
+
+// The invariant a naive post-filter of the query's result rows would break.
+// The query picks the NEWEST form-bearing assistant message per partition and
+// then asks whether a user message followed it. If a stray marker arrives after
+// a genuine unanswered form, dropping the winning row must not drop the
+// project: the real, still-unanswered form is what the user is looking at.
+test('a stray marker after an unanswered form keeps the project awaiting input', () => {
+  const db = createDb();
+  const conversationId = seedProject(db, 'project-stray-after-form');
+
+  addMessage(db, conversationId, 'assistant-real-form', 'assistant', form('real'));
+  addMessage(db, conversationId, 'assistant-stray', 'assistant', STRAY_MARKER);
+
+  assert.equal(listProjectsAwaitingInput(db).has('project-stray-after-form'), true);
+  assert.equal(listConversationsAwaitingInput(db).has(conversationId), true);
+});
+
+// Mirror of the above with the answer present: a stray marker emitted after the
+// user already answered the real form must not re-latch the project.
+test('a stray marker after an answered form leaves awaiting input clear', () => {
+  const db = createDb();
+  const conversationId = seedProject(db, 'project-stray-after-answer');
+
+  addMessage(db, conversationId, 'assistant-real-form', 'assistant', form('real'));
+  addMessage(db, conversationId, 'user-answer', 'user', 'Operator console.');
+  addMessage(db, conversationId, 'assistant-stray', 'assistant', STRAY_MARKER);
+
+  assert.equal(listProjectsAwaitingInput(db).has('project-stray-after-answer'), false);
+});
+
+// Partition semantics: the winner is chosen per project across ALL of its
+// conversations, and the "was it answered" check runs against the winning
+// message's OWN conversation.
+test('the newest renderable form across a project decides awaiting input', () => {
+  const db = createDb();
+  const firstConversationId = seedProject(db, 'project-two-conversations');
+  insertConversation(db, {
+    id: 'project-two-conversations-second',
+    projectId: 'project-two-conversations',
+    title: null,
+    createdAt: 1,
+    updatedAt: 1,
+  });
+
+  addMessage(db, firstConversationId, 'first-form', 'assistant', form('first'), 1_000);
+  addMessage(
+    db,
+    'project-two-conversations-second',
+    'second-form',
+    'assistant',
+    form('second'),
+    2_000,
+  );
+  addMessage(db, 'project-two-conversations-second', 'second-answer', 'user', 'answered', 3_000);
+
+  // The newest form-bearing message lives in the answered conversation, so the
+  // project is not awaiting input even though the first conversation's form has
+  // no reply. This pins the pre-existing per-project partition semantics: the
+  // winner is chosen across ALL conversations, and the "was it answered" check
+  // runs against the winning message's OWN conversation.
+  assert.equal(listProjectsAwaitingInput(db).has('project-two-conversations'), false);
+  assert.equal(listConversationsAwaitingInput(db).has(firstConversationId), true);
+  assert.equal(
+    listConversationsAwaitingInput(db).has('project-two-conversations-second'),
+    false,
+  );
 });
 
 test('conversation latest run follows assistant message position', () => {
@@ -328,9 +455,9 @@ test('only succeeded statuses are overridden by awaiting input', () => {
   const canceledConversationId = seedProject(db, 'project-canceled', 'canceled');
   const runningConversationId = seedProject(db, 'project-running', 'running');
 
-  addMessage(db, failedConversationId, 'failed-question', 'assistant', '<question-form id="failed">');
-  addMessage(db, canceledConversationId, 'canceled-question', 'assistant', '<question-form id="canceled">');
-  addMessage(db, runningConversationId, 'running-question', 'assistant', '<question-form id="running">');
+  addMessage(db, failedConversationId, 'failed-question', 'assistant', form('failed'));
+  addMessage(db, canceledConversationId, 'canceled-question', 'assistant', form('canceled'));
+  addMessage(db, runningConversationId, 'running-question', 'assistant', form('running'));
 
   const awaiting = listProjectsAwaitingInput(db);
   const runStatuses = listLatestProjectRunStatuses(db);

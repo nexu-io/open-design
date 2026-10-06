@@ -1,3 +1,4 @@
+import { renderPackagedMainEntry } from "../launcher/packaged-entry.js";
 import { readFile } from "node:fs/promises";
 
 import type { ToolPackConfig } from "../config/index.js";
@@ -23,6 +24,7 @@ export const WIN_PREBUNDLE_ENTRYPOINTS_DIR_NAME = "prebundle-entrypoints";
 // (issue #4638). A stale `12.9.0` pin here vs `12.10.0` on disk did exactly
 // that. Keep every entry equal to the daemon's corresponding exact pin.
 export const WIN_PREBUNDLE_RUNTIME_DEPENDENCIES = {
+  "@ffmpeg-installer/ffmpeg": "1.1.0",
   "better-sqlite3": "12.10.0",
   "blake3-wasm": "2.1.5",
   "hyperframes": "0.8.1",
@@ -35,14 +37,13 @@ export const WIN_STANDALONE_PREBUNDLE_EXCLUDED_INTERNAL_PACKAGES = [
   "@open-design/desktop",
   "@open-design/launcher-proto",
   "@open-design/packaged",
-  "@open-design/sidecar",
   "@open-design/sidecar-proto",
   "@open-design/web",
 ] as const;
 
 export const WIN_PREBUNDLE_POLICIES = {
   packagedMain: {
-    externals: ["electron"],
+    externals: ["@open-design/sidecar", "electron"],
     forbiddenInputs: [
       "/apps/web/",
       "/node_modules/@open-design/web/",
@@ -54,9 +55,10 @@ export const WIN_PREBUNDLE_POLICIES = {
     label: "packaged main",
   },
   daemonCli: {
-    externals: ["better-sqlite3", "blake3-wasm", "hyperframes", "node-pty"],
+    externals: ["@ffmpeg-installer/ffmpeg", "@open-design/sidecar", "better-sqlite3", "blake3-wasm", "hyperframes", "node-pty"],
     forbiddenInputs: [
       "/node_modules/@open-design/daemon/",
+      "/node_modules/@ffmpeg-installer/ffmpeg/",
       "/node_modules/better-sqlite3/",
       "/node_modules/blake3-wasm/",
       "/node_modules/electron/",
@@ -70,9 +72,10 @@ export const WIN_PREBUNDLE_POLICIES = {
     label: "daemon cli",
   },
   daemonSidecar: {
-    externals: ["better-sqlite3", "blake3-wasm", "hyperframes", "node-pty"],
+    externals: ["@ffmpeg-installer/ffmpeg", "@open-design/sidecar", "better-sqlite3", "blake3-wasm", "hyperframes", "node-pty"],
     forbiddenInputs: [
       "/node_modules/@open-design/daemon/",
+      "/node_modules/@ffmpeg-installer/ffmpeg/",
       "/node_modules/better-sqlite3/",
       "/node_modules/blake3-wasm/",
       "/node_modules/electron/",
@@ -86,7 +89,7 @@ export const WIN_PREBUNDLE_POLICIES = {
     label: "daemon sidecar",
   },
   webSidecar: {
-    externals: [],
+    externals: ["@open-design/sidecar"],
     forbiddenInputs: [
       "/node_modules/next/",
       "/node_modules/openai/",
@@ -142,7 +145,5 @@ export async function assertWinPrebundleMetafile(options: {
 }
 
 export function renderWinPackagedMainEntry(usePrebundle: boolean): string {
-  return usePrebundle
-    ? 'import("./prebundled/packaged-main.mjs").catch((error) => {\n  console.error("packaged entry failed", error);\n  process.exit(1);\n});\n'
-    : 'import("@open-design/packaged").catch((error) => {\n  console.error("packaged entry failed", error);\n  process.exit(1);\n});\n';
+  return renderPackagedMainEntry(usePrebundle);
 }

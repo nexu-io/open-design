@@ -85,6 +85,8 @@ describe('ChatPane starter prompts', () => {
 
     expect(screen.queryByText('chat.startTitle')).toBeNull();
     expect(screen.queryByText('chat.example1Title')).toBeNull();
+    // 这条**故意**按类名查:它钉的是 #5517 删掉的那块 DOM 不许回来 ——
+    // 被删的东西不会有 testid,类名就是它本身,换成别的钩子反而钉不住。
     expect(document.querySelector('.chat-examples')).toBeNull();
   });
 });

@@ -2,8 +2,9 @@
  * @module analytics/events/mappers
  * Enum mapping helpers (code <-> CSV wire format).
  */
+import { HYPERFRAMES_VIDEO_MODEL } from '../../api/projects.js';
 import type { AnalyticsConfigureGlobals, TrackingConfigureAvailability, TrackingConfigureType, TrackingRuntimeType } from '../public-params.js';
-import type { TrackingArtifactKind, TrackingByokProviderId, TrackingCliProviderId, TrackingExecutionMode, TrackingFeedbackProviderId, TrackingFidelity, TrackingFileSizeBucket, TrackingFileType, TrackingNewProjectTab, TrackingProjectKind } from './shared-enums.js';
+import type { TrackingArtifactKind, TrackingByokProviderId, TrackingCliProviderId, TrackingExecutionMode, TrackingFeedbackProviderId, TrackingFidelity, TrackingFileSizeBucket, TrackingFileType, TrackingHarness, TrackingNewProjectTab, TrackingProjectKind } from './shared-enums.js';
 import type { TrackingSessionMode, TrackingSettingsArea } from './ui-click.js';
 // ---- Enum mapping helpers (code ↔ CSV wire format) -----------------------
 
@@ -22,11 +23,10 @@ export function sessionModeToTracking(
 // Code `ProjectKind` from packages/contracts/src/api/projects.ts:
 //   'prototype' | 'deck' | 'template' | 'other' | 'brand' | 'image' | 'video' | 'audio'
 // Discriminates HyperFrames from generic AI video. A HyperFrames project is
-// stored as `kind: 'video'` with `metadata.videoModel === 'hyperframes-html'`
+// stored as `kind: 'video'` with `metadata.videoModel === HYPERFRAMES_VIDEO_MODEL`
 // (the local HTML→MP4 renderer); callers pass that videoModel through so the
 // analytics layer can split it out into its own `project_kind`. See the
 // `'hyperframes'` member docblock on `TrackingProjectKind`.
-const HYPERFRAMES_VIDEO_MODEL = 'hyperframes-html';
 
 // Discriminators read off a project's persisted `metadata` to split the coarse
 // product `kind` into the finer analytics `project_kind` (so a created
@@ -80,6 +80,8 @@ export function projectKindToTracking(
       return 'audio';
     case 'brand':
       return 'brand';
+    case 'orbit':
+      return 'orbit';
     case 'live-artifact':
     case 'live_artifact':
       return 'live_artifact';
@@ -114,6 +116,19 @@ export function projectKindFromMetadataToTracking(
     platform: metadata?.platform,
     platformTargets: metadata?.platformTargets,
   });
+}
+
+// Projects created before `metadata.kind` was persisted are prototype projects.
+// Keep that legacy fallback in the shared contract so web and daemon events do
+// not split the same project between `prototype` and a null cohort.
+export function projectKindFromMetadataToTrackingOrLegacyDefault(
+  metadata: Parameters<typeof projectKindFromMetadataToTracking>[0],
+): TrackingProjectKind {
+  const tracked = projectKindFromMetadataToTracking(metadata);
+  if (tracked) return tracked;
+  // Only a genuinely absent kind is a legacy prototype. Persisted but unknown
+  // values are explicit data and must not silently corrupt the prototype cohort.
+  return metadata?.kind == null ? 'prototype' : 'other';
 }
 
 // Code `CreateTab` from apps/web/src/components/NewProjectPanel.tsx:
@@ -194,6 +209,34 @@ export function agentIdToTracking(agentId: string | null | undefined): TrackingC
       return 'pi';
     case 'kilo':
       return 'kilo';
+    case 'kiro':
+      return 'kiro';
+    case 'vibe':
+      return 'vibe';
+    case 'amp':
+      return 'amp';
+    case 'aider':
+      return 'aider';
+    case 'trae-cli':
+      return 'trae_cli';
+    case 'grok-build':
+      return 'grok_build';
+    case 'antigravity':
+      return 'antigravity';
+    case 'codebuddy':
+      return 'codebuddy';
+    case 'reasonix':
+      return 'reasonix';
+    case 'mimo':
+      return 'mimo';
+    case 'atomcode':
+      return 'atomcode';
+    case 'byok-opencode':
+      return 'byok_opencode';
+    case 'deepseek':
+      return 'deepseek';
+    case 'deepseek-harness':
+      return 'deepseek_harness';
     case 'amr':
       return 'amr';
     default:
@@ -295,11 +338,16 @@ export function settingsSectionToTracking(
       return 'memory';
     case 'privacy':
       return 'privacy';
+    case 'labs':
+      return 'labs';
     case 'notifications':
       return 'notifications';
     case 'externalMcp':
       return 'external_mcp';
     default:
+      // Unmapped sections fall back to the execution area for dashboard
+      // continuity. Anything user-reachable belongs in a case above:
+      // landing here silently inflates the execution-mode funnel.
       return 'configure_execution_mode';
   }
 }
@@ -485,3 +533,62 @@ export function normalizeCustomReason(
 ): string {
   return (text ?? '').trim();
 }
+
+/**
+ * Project a run's rollout decision onto the two analytics fields.
+ *
+ * Structural input on purpose: this file stays free of the strategy contract,
+ * and a test can hand it a literal. A run with no decision at all (every run
+ * before the strategy existed, and every run on an install that never opted in)
+ * reports nothing rather than guessing `ordinary` — absent and "took the
+ * ordinary route" are different facts and the dashboard should be able to tell
+ * them apart.
+ */
+/**
+ * The OD Next gate that refused a turn, for `run_finished`.
+ *
+ * `run_finished.result` is derived from the PHYSICAL run status, and a refused
+ * OD Next turn normally exits 0 with a complete reply on screen — so this whole
+ * class of failure reported `result: 'success'` while the user was looking at a
+ * red card, and nothing queryable disagreed.
+ *
+ * Only a TERMINAL `blocked` projection counts. A task still running may block
+ * later or may not, and a `completed` / `canceled` one refused nothing; either
+ * would make the field mean "an OD Next task passed through here", which is
+ * what `harness` already says.
+ *
+ * `reasonCodes[0]` deliberately, not the whole list: it is the same value the
+ * failure card keys on and the same one the daemon logs, so the metric and the
+ * thing the user saw cannot drift apart.
+ */
+export function odNextBlockedAnalyticsFromStrategyTask(
+  strategyTask: {
+    terminal?: boolean;
+    outcome?: string;
+    // `| undefined` explicitly: the daemon compiles with
+    // `exactOptionalPropertyTypes`, where an optional property and one that may
+    // hold `undefined` are different types, and its projection is the latter.
+    blockedContext?: { reasonCodes?: readonly string[] | undefined } | null | undefined;
+  } | null | undefined,
+): { od_next_blocked_reason_code?: string } {
+  if (strategyTask?.terminal !== true) return {};
+  if (strategyTask.outcome !== 'blocked') return {};
+  const primary = strategyTask.blockedContext?.reasonCodes?.[0];
+  return typeof primary === 'string' && primary
+    ? { od_next_blocked_reason_code: primary }
+    : {};
+}
+
+export function harnessAnalyticsFromRolloutDecision(
+  decision: { effectiveMode?: string; primaryReasonCode?: string } | null | undefined,
+): { harness?: TrackingHarness; harness_fallback_reason?: string } {
+  if (!decision || typeof decision.effectiveMode !== 'string') return {};
+  if (decision.effectiveMode === 'active') return { harness: 'od_next' };
+  return {
+    harness: 'ordinary',
+    ...(typeof decision.primaryReasonCode === 'string' && decision.primaryReasonCode
+      ? { harness_fallback_reason: decision.primaryReasonCode }
+      : {}),
+  };
+}
+

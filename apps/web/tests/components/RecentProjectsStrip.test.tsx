@@ -220,15 +220,18 @@ describe('RecentProjectsStrip', () => {
   it('turns a script-activated deck into a deterministic visible first-page cover', () => {
     const cover = deckPreviewSrcDoc(`<!doctype html>
       <html><head><style>
-        #stage { position: fixed; top: 50%; left: 50%; width: 1920px; height: 1080px }
+        .deck-shell { position: fixed; transform: translateX(1400px) }
+        .deck-stage { position: relative; width: 1920px; height: 1080px; transform: scale(.6) }
         .slide { display: none; opacity: 0; visibility: hidden }
         .slide.active,
         .slide.is-active { display: flex; opacity: 1; visibility: visible }
         [data-anim] { opacity: 0; transform: translateY(24px) }
       </style></head><body>
-        <div id="stage">
-          <section class="slide orange"><h1 data-anim="fade-up">Launch</h1></section>
-          <section class="slide dark"><h1>Details</h1></section>
+        <div class="deck-shell">
+          <div class="deck-stage">
+            <section class="slide orange"><h1 data-anim="fade-up">Launch</h1></section>
+            <section class="slide dark"><h1>Details</h1></section>
+          </div>
         </div>
         <script>document.querySelector('.slide').classList.add('is-active')</script>
       </body></html>`);
@@ -238,11 +241,35 @@ describe('RecentProjectsStrip', () => {
       /<section class="slide orange active is-active" data-od-cover-slide(?:="")?>/,
     );
     expect(cover).toContain('[data-od-cover-slide] > *');
-    expect(cover).toContain(':where(body *):has(> [data-od-cover-slide])');
+    expect(cover).toMatch(
+      /\.deck-shell,\s*\.deck-stage,\s*:where\(body \*\):has\(> \[data-od-cover-slide\]\)\s*\{[^}]*display: block !important/s,
+    );
     expect(cover).toContain('transform-origin: 0 0 !important');
     expect(cover).toContain('[data-od-cover-slide] [data-anim]');
     expect(cover).toContain('opacity: 1 !important');
     expect(cover).toContain('.slide:not([data-od-cover-slide])');
+  });
+
+  it('marks the first real slide when a style comment contains a slide tag example', () => {
+    const cover = deckPreviewSrcDoc(`<!doctype html>
+      <html><head><style>
+        /* Put content inside <section class="slide"> bodies. */
+        .slide { display: none }
+        .slide.active { display: grid }
+      </style></head><body>
+        <div class="deck-shell"><div class="deck-stage">
+          <section class="slide s-title active"><h1>Real cover</h1></section>
+          <section class="slide s-details"><h2>Details</h2></section>
+        </div></div>
+      </body></html>`);
+
+    expect(cover).toContain('inside <section class="slide"> bodies');
+    expect(cover).toMatch(
+      /<section class="slide s-title active is-active" data-od-cover-slide(?:="")?>/,
+    );
+    expect(cover).not.toContain(
+      'inside <section class="slide active is-active" data-od-cover-slide> bodies',
+    );
   });
 
   it('lets a 16:9 project cover determine its grid-card height without a taller minimum', () => {
@@ -1187,7 +1214,10 @@ describe('recvqabp2Uy23r — shared badge grid overlay vs list inline', () => {
     const badge = screen.getByText('Shared').closest('.recent-projects__card-badge');
     expect(badge).not.toBeNull();
     expect(badge?.classList.contains('recent-projects__card-badge--inline')).toBe(false);
-    expect(badge?.closest('.recent-projects__card-thumb')).not.toBeNull();
+    // Anchored on the CARD (beside the ⋯ menu anchor), not inside the thumb:
+    // the thumb scales on hover (#7635) and would carry the badge with it.
+    expect(badge?.closest('.recent-projects__card-thumb')).toBeNull();
+    expect(badge?.closest('.recent-projects__card')).not.toBeNull();
   });
 
   it('renders the shared badge inline next to the name in list view', () => {
@@ -1200,7 +1230,8 @@ describe('recvqabp2Uy23r — shared badge grid overlay vs list inline', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'List view' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sort projects · View mode' }));
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'List view' }));
 
     const badge = screen.getByText('Shared').closest('.recent-projects__card-badge');
     expect(badge).not.toBeNull();
@@ -1222,14 +1253,15 @@ describe('recvqabp2Uy23r — shared badge grid overlay vs list inline', () => {
   });
 });
 
-describe('recvqbipG9QDTt — Recent Projects filter needs a visible clear entry', () => {
+describe('recvqbipG9QDTt — a narrowing type filter stays visible and resettable', () => {
   // RecentProjectsStrip mounts once per host view and stays alive across
   // EntryShell tab switches — Home's instance in particular is only ever
   // hidden via `content-visibility`, never unmounted — so kindFilter /
-  // ownerFilter state survives a round trip through another tab with no
-  // visible sign anything is filtered. A filter that now matches zero
-  // projects reads as "my projects disappeared" instead of "a filter is on".
-  it('shows no clear-filters entry while the default (unfiltered) view is showing', () => {
+  // ownerFilter state survives a round trip through another tab. The cue is
+  // the filter trigger printing the picked value, and the reset is picking
+  // "Any type" back; OPEND-3107 keeps the row at the Demo's three controls,
+  // so there is no separate clear chip to look for.
+  it('prints the picked type on the trigger once the filter hides every project, and Any type restores the grid', () => {
     render(
       <RecentProjectsStrip
         projects={[project({ id: 'project-1', name: 'Only Project' })]}
@@ -1238,31 +1270,21 @@ describe('recvqbipG9QDTt — Recent Projects filter needs a visible clear entry'
       />,
     );
 
-    expect(screen.queryByTestId('recent-projects-clear-filters')).toBeNull();
-  });
-
-  it('surfaces a clear-filters entry once the type filter hides every project, and restores the grid on click', () => {
-    render(
-      <RecentProjectsStrip
-        projects={[project({ id: 'project-1', name: 'Only Project' })]}
-        onOpen={() => {}}
-        heading="All projects"
-      />,
-    );
-
-    // Every project here falls back to the 'prototype' card category
-    // (projectCategory's default), so filtering to Media leaves zero
+    // Every project here falls back to the 'prototype' filter bucket
+    // (projectKindFilterCategory's default), so filtering to Image leaves zero
     // matches — exactly the "did my projects disappear?" scenario reported.
     fireEvent.click(screen.getByRole('button', { name: 'Any type' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Media' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Image' }));
 
     expect(screen.queryByText('Only Project')).toBeNull();
-    const clearButton = screen.getByTestId('recent-projects-clear-filters');
+    expect(screen.queryByTestId('recent-projects-clear-filters')).toBeNull();
+    const trigger = screen.getByRole('button', { name: 'Image' });
+    expect(trigger.classList.contains('recent-projects__filter')).toBe(true);
 
-    fireEvent.click(clearButton);
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole('button', { name: 'Any type' }));
 
     expect(screen.getByText('Only Project')).toBeTruthy();
-    expect(screen.queryByTestId('recent-projects-clear-filters')).toBeNull();
     expect(screen.getByRole('button', { name: 'Any type' })).toBeTruthy();
   });
 });

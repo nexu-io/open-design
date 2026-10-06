@@ -55,6 +55,15 @@ interface Props {
 }
 
 type SourceFilter = 'all' | 'user' | 'built-in';
+type SkillSource = Exclude<SourceFilter, 'all'>;
+
+const SOURCE_FILTERS = ['user', 'built-in'] as const satisfies readonly SkillSource[];
+
+function getSkillSource(skill: Pick<SkillSummary, 'source'>): SkillSource {
+  // Older or alternate registry responses may omit source. Skills without
+  // explicit user ownership are built-in and should stay in that bucket.
+  return skill.source ?? 'built-in';
+}
 
 interface DraftState {
   name: string;
@@ -248,18 +257,40 @@ export function SkillsSection({ cfg, setCfg, onSkillsRefresh, onSkillsChanged }:
       if (categoryFilter !== 'all' && s.category !== categoryFilter) continue;
       if (!skillMatchesSearch(s, searchQuery, locale)) continue;
       counts.set('all', (counts.get('all') ?? 0) + 1);
-      if (s.source === 'user' || s.source === 'built-in') {
-        counts.set(s.source, (counts.get(s.source) ?? 0) + 1);
-      }
+      const source = getSkillSource(s);
+      counts.set(source, (counts.get(source) ?? 0) + 1);
     }
     return counts;
   }, [skills, modeFilter, categoryFilter, searchQuery, locale]);
+
+  const sourceCatalogCounts = useMemo(() => {
+    const counts = new Map<SkillSource, number>([
+      ['user', 0],
+      ['built-in', 0],
+    ]);
+    for (const skill of skills) {
+      const source = getSkillSource(skill);
+      counts.set(source, (counts.get(source) ?? 0) + 1);
+    }
+    return counts;
+  }, [skills]);
+
+  // Do not leave the select pointing at a source that disappeared after a
+  // refresh (for example, when the last user skill is deleted).
+  useEffect(() => {
+    if (
+      sourceFilter !== 'all'
+      && (sourceCatalogCounts.get(sourceFilter) ?? 0) === 0
+    ) {
+      setSourceFilter('all');
+    }
+  }, [sourceCatalogCounts, sourceFilter]);
 
   const modeOptions = useMemo(() => {
     const modes = new Set(skills.map((s) => s.mode));
     const counts = new Map<string, number>();
     for (const s of skills) {
-      if (sourceFilter !== 'all' && s.source !== sourceFilter) continue;
+      if (sourceFilter !== 'all' && getSkillSource(s) !== sourceFilter) continue;
       if (categoryFilter !== 'all' && s.category !== categoryFilter) continue;
       if (!skillMatchesSearch(s, searchQuery, locale)) continue;
       counts.set(s.mode, (counts.get(s.mode) ?? 0) + 1);
@@ -272,7 +303,8 @@ export function SkillsSection({ cfg, setCfg, onSkillsRefresh, onSkillsChanged }:
   const modeAllCount = useMemo(
     () =>
       skills.filter((s) => {
-        if (sourceFilter !== 'all' && s.source !== sourceFilter) return false;
+        if (sourceFilter !== 'all' && getSkillSource(s) !== sourceFilter)
+          return false;
         if (categoryFilter !== 'all' && s.category !== categoryFilter)
           return false;
         return skillMatchesSearch(s, searchQuery, locale);
@@ -295,7 +327,7 @@ export function SkillsSection({ cfg, setCfg, onSkillsRefresh, onSkillsChanged }:
       const cat = s.category;
       if (typeof cat !== 'string' || !cat) continue;
       if (modeFilter !== 'all' && s.mode !== modeFilter) continue;
-      if (sourceFilter !== 'all' && s.source !== sourceFilter) continue;
+      if (sourceFilter !== 'all' && getSkillSource(s) !== sourceFilter) continue;
       if (!skillMatchesSearch(s, searchQuery, locale)) continue;
       counts.set(cat, (counts.get(cat) ?? 0) + 1);
     }
@@ -308,7 +340,8 @@ export function SkillsSection({ cfg, setCfg, onSkillsRefresh, onSkillsChanged }:
     () =>
       skills.filter((s) => {
         if (modeFilter !== 'all' && s.mode !== modeFilter) return false;
-        if (sourceFilter !== 'all' && s.source !== sourceFilter) return false;
+        if (sourceFilter !== 'all' && getSkillSource(s) !== sourceFilter)
+          return false;
         return skillMatchesSearch(s, searchQuery, locale);
       }).length,
     [skills, modeFilter, sourceFilter, searchQuery, locale],
@@ -317,7 +350,7 @@ export function SkillsSection({ cfg, setCfg, onSkillsRefresh, onSkillsChanged }:
   const filteredSkills = useMemo(() => {
     return skills.filter((s) => {
       if (modeFilter !== 'all' && s.mode !== modeFilter) return false;
-      if (sourceFilter !== 'all' && s.source !== sourceFilter) return false;
+      if (sourceFilter !== 'all' && getSkillSource(s) !== sourceFilter) return false;
       if (categoryFilter !== 'all' && s.category !== categoryFilter)
         return false;
       return skillMatchesSearch(s, searchQuery, locale);
@@ -423,7 +456,7 @@ export function SkillsSection({ cfg, setCfg, onSkillsRefresh, onSkillsChanged }:
 
   const requestEdit = useCallback(
     (skill: SkillSummary) => {
-      if (skill.source === 'built-in') {
+      if (getSkillSource(skill) === 'built-in') {
         setConfirmBuiltInEditId(skill.id);
         setConfirmDeleteId(null);
         return;
@@ -654,8 +687,9 @@ export function SkillsSection({ cfg, setCfg, onSkillsRefresh, onSkillsChanged }:
               <option value="all">
                 {t('settings.libraryAll')} ({sourceCounts.get('all') ?? 0})
               </option>
-              {(['user', 'built-in'] as const).map((s) => {
+              {SOURCE_FILTERS.map((s) => {
                 const count = sourceCounts.get(s) ?? 0;
+                if ((sourceCatalogCounts.get(s) ?? 0) === 0) return null;
                 return (
                   <option key={s} value={s}>
                     {s} ({count})
@@ -824,11 +858,11 @@ function SkillRow({
   const summaryName = localizeSkillName(locale, skill) || skill.id;
   const summaryDescription = localizeSkillDescription(locale, skill);
   const isTeamMirror = skill.teamSynced === true;
-  const canDelete = skill.source === 'user' && !isTeamMirror;
+  const canDelete = getSkillSource(skill) === 'user' && !isTeamMirror;
   // Editing a built-in skill does not modify it in place — it writes a
   // user-owned shadow copy. Frame the affordance as creating a user override
   // so the built-in → user transition is not a surprise.
-  const isBuiltIn = skill.source !== 'user';
+  const isBuiltIn = getSkillSource(skill) !== 'user';
   return (
     <div
       className={`skills-row${enabled ? '' : ' skills-row-disabled'}${

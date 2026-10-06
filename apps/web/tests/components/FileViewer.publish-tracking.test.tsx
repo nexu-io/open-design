@@ -111,9 +111,14 @@ function renderProjectFileViewer(
 }
 
 function stubFetch(
-  options: { publishStatus?: number; publishBody?: unknown; unpublishStatus?: number } = {},
+  options: {
+    publishStatus?: number;
+    publishBody?: unknown;
+    unpublishStatus?: number;
+    unpublishBody?: unknown;
+  } = {},
 ) {
-  const { publishStatus = 200, publishBody, unpublishStatus = 200 } = options;
+  const { publishStatus = 200, publishBody, unpublishStatus = 200, unpublishBody } = options;
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString();
     if (url.includes('/api/workspace/context')) {
@@ -130,9 +135,10 @@ function stubFetch(
       }
       if (init?.method === 'DELETE') {
         const body =
-          unpublishStatus === 200
+          unpublishBody ??
+          (unpublishStatus === 200
             ? { ok: true, slug: 'slug-1', fileName: 'index.html' }
-            : { error: { message: 'WORKSPACE_IDENTITY_REQUIRED' } };
+            : { error: { message: 'WORKSPACE_IDENTITY_REQUIRED' } });
         return new Response(JSON.stringify(body), { status: unpublishStatus });
       }
       return new Response(JSON.stringify({ publication: null }), { status: 200 });
@@ -215,6 +221,12 @@ beforeEach(() => {
   analytics.track.mockReset();
   analytics.newRequestId.mockClear();
 });
+
+function trackedOptions(name: string): unknown[] {
+  return analytics.track.mock.calls
+    .filter(([event]) => event === name)
+    .map(([, , options]) => options);
+}
 
 describe('publish flow analytics', () => {
   it('reports the publish click, the success result, and the copy-link click', async () => {
@@ -436,5 +448,90 @@ describe('publish flow analytics', () => {
         artifact_kind: 'html',
       }),
     );
+  });
+});
+
+// Additive failure detail: `error_code` keeps its two values, and the daemon's
+// own code plus its closed-token `failure` classification ride along as new
+// optional props. The attempt's request id goes both to the daemon (header) and
+// to the event (`request_id` via track options) so a failure log line can be
+// joined to its event.
+describe('publish failure detail analytics', () => {
+  const daemonFailure = {
+    error: 'PUBLIC_FILE_PUBLISH_UNAVAILABLE',
+    failure: {
+      stage: 'push',
+      reason: 'upstream_http',
+      upstreamStatus: 503,
+      upstreamCode: 'resource_hub_unavailable',
+    },
+  };
+
+  it('adds the daemon code and failure detail to a failed publish without changing error_code', async () => {
+    const fetchMock = stubFetch({ publishStatus: 502, publishBody: daemonFailure });
+    fireEvent.click(await openPublishPanel());
+
+    await waitFor(() => {
+      expect(trackedEvents('artifact_publish_result')).toContainEqual(
+        expect.objectContaining({
+          action: 'publish',
+          result: 'failed',
+          error_code: 'publish_failed',
+          daemon_error_code: 'PUBLIC_FILE_PUBLISH_UNAVAILABLE',
+          failed_stage: 'push',
+          failure_reason: 'upstream_http',
+          upstream_status: 503,
+          upstream_error_code: 'resource_hub_unavailable',
+        }),
+      );
+    });
+    expect(trackedOptions('artifact_publish_result')).toContainEqual({ requestId: 'request-publish-1' });
+    const publishCall = fetchMock.mock.calls.find(
+      ([url, init]) => String(url).includes('publish-public') && init?.method === 'POST',
+    );
+    expect(new Headers(publishCall?.[1]?.headers).get('x-od-request-id')).toBe('request-publish-1');
+  });
+
+  it('drops a failure detail that is not made of known tokens', async () => {
+    stubFetch({
+      publishStatus: 502,
+      publishBody: { error: 'PUBLIC_FILE_PUBLISH_UNAVAILABLE', failure: { stage: 'push', reason: 'see /Users/me/secret' } },
+    });
+    fireEvent.click(await openPublishPanel());
+
+    await waitFor(() => {
+      expect(trackedEvents('artifact_publish_result')).toContainEqual(
+        expect.objectContaining({ result: 'failed', error_code: 'publish_failed' }),
+      );
+    });
+    const [failed] = trackedEvents('artifact_publish_result');
+    expect(failed).toMatchObject({ daemon_error_code: 'PUBLIC_FILE_PUBLISH_UNAVAILABLE' });
+    expect(failed).not.toHaveProperty('failed_stage');
+    expect(failed).not.toHaveProperty('failure_reason');
+  });
+
+  it('adds failure detail to a failed unpublish', async () => {
+    stubFetch({
+      unpublishStatus: 502,
+      unpublishBody: {
+        error: 'PUBLIC_FILE_UNPUBLISH_UNAVAILABLE',
+        failure: { stage: 'redact', reason: 'timeout' },
+      },
+    });
+    fireEvent.click(await openPublishPanel());
+    fireEvent.click(await screen.findByRole('button', { name: UNPUBLISH_ROW }));
+
+    await waitFor(() => {
+      expect(trackedEvents('artifact_publish_result')).toContainEqual(
+        expect.objectContaining({
+          action: 'unpublish',
+          result: 'failed',
+          error_code: 'publish_failed',
+          daemon_error_code: 'PUBLIC_FILE_UNPUBLISH_UNAVAILABLE',
+          failed_stage: 'redact',
+          failure_reason: 'timeout',
+        }),
+      );
+    });
   });
 });

@@ -3,11 +3,11 @@
 // Each `taskKind` enum value (new-generation / code-migration /
 // figma-migration / tune-collab) maps to exactly one *canonical* bundled
 // `od.kind: 'scenario'` plugin under `plugins/_official/scenarios/`.
-// The daemon's bundled boot walker registers all sibling scenarios; the
+// The daemon's bundled boot walker registers public sibling scenarios; the
 // canonical winner per taskKind is selected by `collectBundledScenarios`
-// using the `od-<taskKind>` id rule, so additional scenarios (e.g.
-// `od-media-generation`) can ride along without hijacking the
-// pipeline-fallback.
+// using the `od-<taskKind>` id rule. Internal strategy packages may ship in
+// the same tree but stay outside the installed-plugin catalog until their
+// dedicated activation owner proves a content binding.
 
 import path from 'node:path';
 import url from 'node:url';
@@ -50,11 +50,19 @@ const SIBLINGS = new Map<string, { taskKind: string }>([
   ['od-vue-export',       { taskKind: 'tune-collab' }],
 ]);
 
+const INTERNAL = new Map<string, { taskKind: string }>([
+  ['od-next-strategy', { taskKind: 'new-generation' }],
+]);
+
 describe('plugins/_official/scenarios roster', () => {
   it('contains every canonical scenario folder (plus the documented siblings)', async () => {
     const entries = await readdir(scenariosRoot, { withFileTypes: true });
     const dirs = entries.filter((e) => e.isDirectory()).map((e) => e.name).sort();
-    const expected = [...CANONICAL.keys(), ...SIBLINGS.keys()].sort();
+    const expected = [
+      ...CANONICAL.keys(),
+      ...SIBLINGS.keys(),
+      ...INTERNAL.keys(),
+    ].sort();
     expect(dirs).toEqual(expected);
   });
 
@@ -88,6 +96,23 @@ describe('plugins/_official/scenarios roster', () => {
       // Sibling scenarios MUST NOT use the canonical id, otherwise the
       // pipeline-fallback dedupe rule (`id === od-<taskKind>`) would
       // mis-select the sibling as the canonical winner.
+      expect(folder).not.toBe(`od-${expected.taskKind}`);
+    });
+  }
+
+  for (const [folder, expected] of INTERNAL) {
+    it(`${folder} ships an internal strategy declaration without becoming a fallback`, async () => {
+      const manifestPath = path.join(scenariosRoot, folder, 'open-design.json');
+      const skillPath = path.join(scenariosRoot, folder, 'SKILL.md');
+      expect((await stat(manifestPath)).isFile()).toBe(true);
+      expect((await stat(skillPath)).isFile()).toBe(true);
+      const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+      expect(manifest.od.kind).toBe('scenario');
+      expect(manifest.od.taskKind).toBe(expected.taskKind);
+      expect(manifest.od.strategy).toMatchObject({
+        schema: 'open-design.bundled-strategy/v2',
+        id: 'od-next-strategy',
+      });
       expect(folder).not.toBe(`od-${expected.taskKind}`);
     });
   }

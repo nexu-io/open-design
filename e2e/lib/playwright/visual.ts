@@ -1,5 +1,6 @@
 import { expect } from '@playwright/test';
 import type { Locator, Page, Route } from '@playwright/test';
+import type { Project } from '@open-design/contracts';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fulfillAgentsRoute } from './mock-factory.js';
@@ -120,7 +121,7 @@ const VISUAL_PROJECTS = [
     createdAt: 1_700_000_000_000,
     updatedAt: 1_700_000_050_000,
     metadata: { kind: 'prototype' },
-    status: { label: 'Ready', tone: 'success' },
+    status: { value: 'succeeded' },
   },
   {
     id: 'visual-project-brand-kit',
@@ -130,11 +131,11 @@ const VISUAL_PROJECTS = [
     createdAt: 1_700_000_100_000,
     updatedAt: 1_700_000_150_000,
     metadata: { kind: 'image' },
-    status: { label: 'Needs input', tone: 'warning' },
+    status: { value: 'awaiting_input' },
   },
 ] as const;
 
-type VisualProject = (typeof VISUAL_PROJECTS)[number];
+export type VisualProject = Project;
 
 /** The single conversation every workspace capture opens into. */
 const VISUAL_CONVERSATION = {
@@ -710,14 +711,32 @@ export async function waitForVisualProjects(page: Page, projects: readonly Visua
     return;
   }
 
-  await expect(
-    page.getByTestId('recent-projects-strip').getByText(projects[0]?.name ?? '', { exact: true }),
-  ).toBeVisible();
+  // Home carries the catalog in the rail's 最近项目 section on both branches
+  // (#7635 / OPEND-2683, local half closed by OPEND-3140); the strip is the
+  // 项目 page's grid, kept here for callers that wait on that page. The rail is
+  // collapsed by default, so its rows are attached rather than visible.
+  const name = projects[0]?.name ?? '';
+  const stripRow = page.getByTestId('recent-projects-strip').getByText(name, { exact: true });
+  const railRow = page.getByTestId('entry-nav-recent-item').filter({ hasText: name }).first();
+  await expect(stripRow.or(railRow).first()).toBeAttached();
 }
 
 export async function gotoVisualHome(page: Page): Promise<void> {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await waitForVisualReady(page);
+}
+
+/**
+ * The 项目 page (`/drafts`): where the browsable catalogue — RecentProjectsStrip
+ * with its cards and covers — lives on both branches now that Home carries no
+ * grid (OPEND-2683 / OPEND-3140). Without a workspace the page lists every
+ * local project.
+ */
+export async function gotoVisualProjectsPage(page: Page): Promise<void> {
+  await page.goto('/drafts', { waitUntil: 'domcontentloaded' });
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.xlong });
+  await expect(page).toHaveURL(/\/drafts$/, { timeout: T.medium });
+  await expect(page.getByTestId('recent-projects-strip')).toBeVisible({ timeout: T.medium });
 }
 
 export async function gotoVisualWorkspace(page: Page): Promise<void> {

@@ -301,6 +301,9 @@
 }
 
 /* --- lightbox ------------------------------------------------------------ */
+/* DELIBERATE exception to the app's one scrim (--scrim-tint / --scrim-backdrop,
+   styles/material.css): this is a LIGHTBOX. A near-opaque dark ground is what
+   lifts the image off the page; the shared light scrim would wash it out. */
 .lightbox {
   position: fixed;
   inset: 0;

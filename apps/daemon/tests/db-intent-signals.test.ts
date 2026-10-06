@@ -51,7 +51,7 @@ describe('conversation intent-signal latch', () => {
 
   it('reads all-false for a fresh row, a missing row, and unparsable JSON', () => {
     const db = seed();
-    const none = { deck: false, media: false, platform: false };
+    const none = { deck: false, media: false, platform: false, devicePlatform: null };
     expect(readConversationIntentSignals(db, 'conv-1')).toEqual(none);
     expect(readConversationIntentSignals(db, 'conv-does-not-exist')).toEqual(none);
     db.prepare(`UPDATE conversations SET intent_signals_json = ? WHERE id = ?`).run(
@@ -63,76 +63,78 @@ describe('conversation intent-signal latch', () => {
 
   it('merges monotonically: a later latch never clears or clobbers earlier bits', () => {
     const db = seed();
-    const t1 = latchConversationIntentSignals(db, 'conv-1', {
-      deck: true,
-      media: false,
-      platform: false,
-    });
-    expect(t1).toEqual({ deck: true, media: false, platform: false });
+    const t1 = latchConversationIntentSignals(db, 'conv-1', { deck: true, media: false, platform: false, devicePlatform: null });
+    expect(t1).toEqual({ deck: true, media: false, platform: false, devicePlatform: null });
 
     // A different single signal on a later turn must MERGE with the stored
     // deck bit, not replace the blob with { media: true } only.
-    const t2 = latchConversationIntentSignals(db, 'conv-1', {
-      deck: false,
-      media: true,
-      platform: false,
-    });
-    expect(t2).toEqual({ deck: true, media: true, platform: false });
+    const t2 = latchConversationIntentSignals(db, 'conv-1', { deck: false, media: true, platform: false, devicePlatform: null });
+    expect(t2).toEqual({ deck: true, media: true, platform: false, devicePlatform: null });
 
     // An all-false turn (history trimmed / no vocabulary) changes nothing.
-    const t3 = latchConversationIntentSignals(db, 'conv-1', {
-      deck: false,
-      media: false,
-      platform: false,
-    });
-    expect(t3).toEqual({ deck: true, media: true, platform: false });
-    expect(readConversationIntentSignals(db, 'conv-1')).toEqual({
-      deck: true,
-      media: true,
-      platform: false,
-    });
+    const t3 = latchConversationIntentSignals(db, 'conv-1', { deck: false, media: false, platform: false, devicePlatform: null });
+    expect(t3).toEqual({ deck: true, media: true, platform: false, devicePlatform: null });
+    expect(readConversationIntentSignals(db, 'conv-1')).toEqual({ deck: true, media: true, platform: false, devicePlatform: null });
   });
 
   it('merges across two separate connections to the same database file', () => {
     const db = seed();
-    latchConversationIntentSignals(db, 'conv-1', {
-      deck: true,
-      media: false,
-      platform: false,
-    });
+    latchConversationIntentSignals(db, 'conv-1', { deck: true, media: false, platform: false, devicePlatform: null });
 
     // Second, independent connection (stand-in for another writer): latching
     // media must observe and keep the deck bit persisted by the first.
     const second = new Database(path.join(tempDir, 'app.sqlite'));
     try {
-      const merged = latchConversationIntentSignals(second as never, 'conv-1', {
-        deck: false,
-        media: true,
-        platform: false,
-      });
-      expect(merged).toEqual({ deck: true, media: true, platform: false });
+      const merged = latchConversationIntentSignals(second as never, 'conv-1', { deck: false, media: true, platform: false, devicePlatform: null });
+      expect(merged).toEqual({ deck: true, media: true, platform: false, devicePlatform: null });
     } finally {
       second.close();
     }
-    expect(readConversationIntentSignals(db, 'conv-1')).toEqual({
-      deck: true,
-      media: true,
-      platform: false,
-    });
+    expect(readConversationIntentSignals(db, 'conv-1')).toEqual({ deck: true, media: true, platform: false, devicePlatform: null });
   });
 
   it('skips persistence for a conversationId without a row (fresh detection passthrough)', () => {
     const db = seed();
-    const effective = latchConversationIntentSignals(db, 'conv-ghost', {
-      deck: true,
-      media: false,
-      platform: false,
-    });
-    expect(effective).toEqual({ deck: true, media: false, platform: false });
-    expect(readConversationIntentSignals(db, 'conv-ghost')).toEqual({
-      deck: false,
-      media: false,
-      platform: false,
-    });
+    const effective = latchConversationIntentSignals(db, 'conv-ghost', { deck: true, media: false, platform: false, devicePlatform: null });
+    expect(effective).toEqual({ deck: true, media: false, platform: false, devicePlatform: null });
+    expect(readConversationIntentSignals(db, 'conv-ghost')).toEqual({ deck: false, media: false, platform: false, devicePlatform: null });
+  });
+});
+
+describe('conversation device-platform latch', () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(path.join(os.tmpdir(), 'od-device-platform-'));
+  });
+
+  afterEach(() => {
+    closeDatabase();
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('keeps the first resolved handheld platform for the conversation', () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    const now = Date.now();
+    insertProject(db, { id: 'proj-1', name: 'P', createdAt: now, updatedAt: now });
+    insertConversation(db, { id: 'conv-1', projectId: 'proj-1', title: 'C', createdAt: now, updatedAt: now });
+    const off = { deck: false, media: false, platform: false };
+
+    // Turn 1 names iOS; turn 2 ("make the button blue") names nothing; turn 3
+    // names Android — the shell quoted into the stable context must not flip.
+    expect(latchConversationIntentSignals(db, 'conv-1', { ...off, devicePlatform: 'ios' }))
+      .toEqual({ ...off, devicePlatform: 'ios' });
+    expect(latchConversationIntentSignals(db, 'conv-1', { ...off, devicePlatform: null }))
+      .toEqual({ ...off, devicePlatform: 'ios' });
+    expect(latchConversationIntentSignals(db, 'conv-1', { ...off, devicePlatform: 'android' }))
+      .toEqual({ ...off, devicePlatform: 'ios' });
+    expect(readConversationIntentSignals(db, 'conv-1')).toEqual({ ...off, devicePlatform: 'ios' });
+
+    // Pre-existing rows without the key, and garbage values, read as null.
+    db.prepare(`UPDATE conversations SET intent_signals_json = ? WHERE id = ?`).run(
+      JSON.stringify({ deck: true, devicePlatform: 'watch' }),
+      'conv-1',
+    );
+    expect(readConversationIntentSignals(db, 'conv-1')).toEqual({ ...off, deck: true, devicePlatform: null });
   });
 });

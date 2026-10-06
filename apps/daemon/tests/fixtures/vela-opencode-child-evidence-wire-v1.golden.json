@@ -1,0 +1,332 @@
+[
+  {
+    "id": 1,
+    "jsonrpc": "2.0",
+    "result": {
+      "agentCapabilities": {
+        "extensions": {
+          "vela.opencode.child_agent_lifecycle": {
+            "schemaVersion": 1
+          }
+        },
+        "loadSession": true,
+        "promptCapabilities": {
+          "resourceLink": true,
+          "text": true
+        }
+      },
+      "agentInfo": {
+        "name": "Vela OpenCode",
+        "version": "1.2.3"
+      },
+      "protocolVersion": 1
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "method": "session/update",
+    "params": {
+      "sessionId": "acp-session",
+      "update": {
+        "childSessionId": "child-completed",
+        "evidenceId": "7c4326c77664192a3de56484d5965af5d506a513af23d737b99c4ea79b3a39dd",
+        "extension": "vela.opencode.child_agent_lifecycle",
+        "lifecycleCompleteness": "complete",
+        "model": "model-completed",
+        "parentSessionId": "root",
+        "phase": "start",
+        "prompt": {
+          "availability": "hash_only",
+          "bytes": 14,
+          "sha256": "8db48f703b9d061c3eae2dbfa93d3469ba4b353be98aee97ee5ac73c6bd8f557"
+        },
+        "provider": "amr",
+        "role": "explore",
+        "schemaVersion": 1,
+        "sessionUpdate": "child_agent_lifecycle",
+        "sourceEvidence": ["root_task_metadata", "session.created"],
+        "startedAtMs": 1786665600000,
+        "status": "running",
+        "timingEvidence": "source_timestamp",
+        "toolCallId": "task-completed",
+        "usage": {
+          "availability": "unavailable",
+          "completeness": "unavailable"
+        }
+      }
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "method": "session/update",
+    "params": {
+      "sessionId": "acp-session",
+      "update": {
+        "childSessionId": "child-completed",
+        "endedAtMs": 1786665600100,
+        "evidenceId": "9995f564f78de7749755a9830ab5c91d4a08d75b29c8dfd23511bf4035d795c6",
+        "extension": "vela.opencode.child_agent_lifecycle",
+        "lifecycleCompleteness": "complete",
+        "model": "model-completed",
+        "parentSessionId": "root",
+        "phase": "end",
+        "prompt": {
+          "availability": "hash_only",
+          "bytes": 14,
+          "sha256": "8db48f703b9d061c3eae2dbfa93d3469ba4b353be98aee97ee5ac73c6bd8f557"
+        },
+        "provider": "amr",
+        "role": "explore",
+        "schemaVersion": 1,
+        "sessionUpdate": "child_agent_lifecycle",
+        "sourceEvidence": [
+          "child_session_status",
+          "root_task_metadata",
+          "session.created"
+        ],
+        "startedAtMs": 1786665600000,
+        "status": "completed",
+        "timingEvidence": "bridge_observed",
+        "toolCallId": "task-completed",
+        "usage": {
+          "availability": "available",
+          "cacheReadTokens": 3,
+          "cacheWriteTokens": 1,
+          "completeness": "complete",
+          "inputTokens": 11,
+          "outputTokens": 7,
+          "reasoningTokens": 2,
+          "source": "child_step_finish",
+          "totalTokens": 18
+        }
+      }
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "method": "session/update",
+    "params": {
+      "sessionId": "acp-session",
+      "update": {
+        "childSessionId": "child-failed",
+        "evidenceId": "26c08d8b98e8bc07769d30d9bfa295283f8e42c3b1fdd7f118e38faa258ec896",
+        "extension": "vela.opencode.child_agent_lifecycle",
+        "lifecycleCompleteness": "complete",
+        "model": "model-failed",
+        "parentSessionId": "root",
+        "phase": "start",
+        "prompt": {
+          "availability": "hash_only",
+          "bytes": 11,
+          "sha256": "294c5e5454ef6101b1961d4d44285e82ebed51c1fab0650b91f21d55845333e1"
+        },
+        "provider": "amr",
+        "role": "explore",
+        "schemaVersion": 1,
+        "sessionUpdate": "child_agent_lifecycle",
+        "sourceEvidence": ["root_task_metadata", "session.created"],
+        "startedAtMs": 1786665601000,
+        "status": "running",
+        "timingEvidence": "source_timestamp",
+        "toolCallId": "task-failed",
+        "usage": {
+          "availability": "unavailable",
+          "completeness": "unavailable"
+        }
+      }
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "method": "session/update",
+    "params": {
+      "sessionId": "acp-session",
+      "update": {
+        "childSessionId": "child-failed",
+        "endedAtMs": 1786665601100,
+        "evidenceId": "148e528c73bb8f11f24583be6bcd14a5cf876e17534d0d93d60d3e4756572b98",
+        "extension": "vela.opencode.child_agent_lifecycle",
+        "lifecycleCompleteness": "complete",
+        "model": "model-failed",
+        "parentSessionId": "root",
+        "phase": "end",
+        "prompt": {
+          "availability": "hash_only",
+          "bytes": 11,
+          "sha256": "294c5e5454ef6101b1961d4d44285e82ebed51c1fab0650b91f21d55845333e1"
+        },
+        "provider": "amr",
+        "role": "explore",
+        "schemaVersion": 1,
+        "sessionUpdate": "child_agent_lifecycle",
+        "sourceEvidence": [
+          "child_session_error",
+          "root_task_metadata",
+          "session.created"
+        ],
+        "startedAtMs": 1786665601000,
+        "status": "failed",
+        "timingEvidence": "bridge_observed",
+        "toolCallId": "task-failed",
+        "usage": {
+          "availability": "unavailable",
+          "completeness": "unavailable"
+        }
+      }
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "method": "session/update",
+    "params": {
+      "sessionId": "acp-session",
+      "update": {
+        "childSessionId": "child-cancelled",
+        "evidenceId": "0252a794cd1dc08061bf8c87a111c6b8c81c669d105d483e3a41e52e32d01c65",
+        "extension": "vela.opencode.child_agent_lifecycle",
+        "lifecycleCompleteness": "complete",
+        "model": "model-cancelled",
+        "parentSessionId": "root",
+        "phase": "start",
+        "prompt": {
+          "availability": "hash_only",
+          "bytes": 14,
+          "sha256": "f1782f4a7ed718470bdb7a65e058dd39153efd128020664fc085b1d9da37507a"
+        },
+        "provider": "amr",
+        "role": "explore",
+        "schemaVersion": 1,
+        "sessionUpdate": "child_agent_lifecycle",
+        "sourceEvidence": ["root_task_metadata", "session.created"],
+        "startedAtMs": 1786665602000,
+        "status": "running",
+        "timingEvidence": "source_timestamp",
+        "toolCallId": "task-cancelled",
+        "usage": {
+          "availability": "unavailable",
+          "completeness": "unavailable"
+        }
+      }
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "method": "session/update",
+    "params": {
+      "sessionId": "acp-session",
+      "update": {
+        "childSessionId": "child-cancelled",
+        "endedAtMs": 1786665602100,
+        "evidenceId": "ac921bc5019d03f2f8616d4a9e8d21a6b62348277f2858aff731cc9d7efe5aca",
+        "extension": "vela.opencode.child_agent_lifecycle",
+        "lifecycleCompleteness": "complete",
+        "model": "model-cancelled",
+        "parentSessionId": "root",
+        "phase": "end",
+        "prompt": {
+          "availability": "hash_only",
+          "bytes": 14,
+          "sha256": "f1782f4a7ed718470bdb7a65e058dd39153efd128020664fc085b1d9da37507a"
+        },
+        "provider": "amr",
+        "role": "explore",
+        "schemaVersion": 1,
+        "sessionUpdate": "child_agent_lifecycle",
+        "sourceEvidence": [
+          "child_session_status",
+          "opencode_export_message_snapshot",
+          "root_task_metadata",
+          "session.created"
+        ],
+        "startedAtMs": 1786665602000,
+        "status": "cancelled",
+        "timingEvidence": "bridge_observed",
+        "toolCallId": "task-cancelled",
+        "usage": {
+          "availability": "available",
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0,
+          "completeness": "partial",
+          "inputTokens": 4,
+          "outputTokens": 3,
+          "reasoningTokens": 0,
+          "source": "opencode_export_message_snapshot",
+          "totalTokens": 7
+        }
+      }
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "method": "session/update",
+    "params": {
+      "sessionId": "acp-session",
+      "update": {
+        "childSessionId": "child-timed_out",
+        "evidenceId": "3bdca90b5278a1beca76056c388412910d19484d304feba3146654aebbe4b5f0",
+        "extension": "vela.opencode.child_agent_lifecycle",
+        "lifecycleCompleteness": "complete",
+        "model": "model-timed_out",
+        "parentSessionId": "root",
+        "phase": "start",
+        "prompt": {
+          "availability": "hash_only",
+          "bytes": 14,
+          "sha256": "02e61600a8343bde2c4b13dacb6f885f779cf6c6dc7f19580155996751d223a5"
+        },
+        "provider": "amr",
+        "role": "explore",
+        "schemaVersion": 1,
+        "sessionUpdate": "child_agent_lifecycle",
+        "sourceEvidence": ["root_task_metadata", "session.created"],
+        "startedAtMs": 1786665603000,
+        "status": "running",
+        "timingEvidence": "source_timestamp",
+        "toolCallId": "task-timed_out",
+        "usage": {
+          "availability": "unavailable",
+          "completeness": "unavailable"
+        }
+      }
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "method": "session/update",
+    "params": {
+      "sessionId": "acp-session",
+      "update": {
+        "childSessionId": "child-timed_out",
+        "endedAtMs": 1786665603100,
+        "evidenceId": "298b11442a8b8e8af49d71a61846e65ea5f464cea7fc61c1b43301f0fe12e4b8",
+        "extension": "vela.opencode.child_agent_lifecycle",
+        "lifecycleCompleteness": "partial",
+        "model": "model-timed_out",
+        "parentSessionId": "root",
+        "phase": "end",
+        "prompt": {
+          "availability": "hash_only",
+          "bytes": 14,
+          "sha256": "02e61600a8343bde2c4b13dacb6f885f779cf6c6dc7f19580155996751d223a5"
+        },
+        "provider": "amr",
+        "role": "explore",
+        "schemaVersion": 1,
+        "sessionUpdate": "child_agent_lifecycle",
+        "sourceEvidence": [
+          "parent_prompt_timeout",
+          "root_task_metadata",
+          "session.created"
+        ],
+        "startedAtMs": 1786665603000,
+        "status": "timed_out",
+        "timingEvidence": "bridge_observed",
+        "toolCallId": "task-timed_out",
+        "usage": {
+          "availability": "unavailable",
+          "completeness": "unavailable"
+        }
+      }
+    }
+  }
+]

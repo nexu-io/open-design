@@ -50,6 +50,27 @@ describe('parseWhatsNewDocument', () => {
     expect(content?.locales?.['zh-CN']?.title).toBe('设计系统同步');
   });
 
+  it('preserves and trims configured CTA labels through the document parser', () => {
+    const { content } = parseWhatsNewDocument({
+      ...DOC,
+      ctaLabel: ' View Arena ',
+      locales: { 'zh-CN': { ctaLabel: ' 查看评测站 ' } },
+    });
+    expect(content).toMatchObject({
+      ctaLabel: 'View Arena',
+      locales: { 'zh-CN': { ctaLabel: '查看评测站' } },
+    });
+  });
+
+  it.each(['', '   ', 42, null])('drops an invalid optional CTA label (%j) without hiding content', (ctaLabel) => {
+    const { content } = parseWhatsNewDocument({
+      ...DOC, ctaLabel, locales: { 'zh-CN': { title: '设计系统同步', ctaLabel } },
+    });
+    expect(content?.title).toBe(DOC.title);
+    expect(content).not.toHaveProperty('ctaLabel');
+    expect(content?.locales?.['zh-CN']).toEqual({ title: '设计系统同步' });
+  });
+
   it('rejects a document without an id (no show-once key)', () => {
     const { id, content } = parseWhatsNewDocument({ ...DOC, id: '' });
     expect(id).toBeNull();

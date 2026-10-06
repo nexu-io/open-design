@@ -200,6 +200,37 @@ export function parseDaemonLogTail(logText: string): {
   return out;
 }
 
+// Bounds for the raw-tail fallback below. 40 lines is enough to carry a thrown
+// stack plus the lines around it; 4000 chars is the hard cap — 2x ERROR_STACK_MAX
+// because for this bucket the tail is the ONLY signal (there is no parsed error
+// and no stack worth sending), while still staying far under the 16 KiB we read
+// off disk so a chatty daemon cannot balloon the payload.
+const LOG_TAIL_SAMPLE_MAX_LINES = 40;
+const LOG_TAIL_SAMPLE_MAX = 4000;
+
+// The fallback for logs `parseDaemonLogTail` cannot name.
+//
+// Production (14 days to 2026-08-22): the single largest startup-failure bucket
+// is macOS `daemon-start` — 968 events across 293 people — where the daemon
+// exits code=1, the native module IS present, and error_code / missing_module /
+// daemon_error all come back null. The reason was printed in a log tail we had
+// already read and then discarded, because the parser only names shapes we
+// already know. Shipping the tail itself turns that bucket from undiagnosable
+// into readable.
+//
+// Scrub BEFORE truncating so no username can survive in the slice, and keep the
+// END of the tail: it is chronological, so the fatal line sits nearest the exit
+// (the same reasoning that makes parseDaemonLogTail take the LAST match).
+export function buildDaemonLogTailSample(logText: string): string | null {
+  const lines = logText.split(/\r?\n/);
+  while (lines.length > 0 && (lines[lines.length - 1] ?? "").trim() === "") lines.pop();
+  if (lines.length === 0) return null;
+  const scrubbed = scrubUserPaths(lines.slice(-LOG_TAIL_SAMPLE_MAX_LINES).join("\n"));
+  if (scrubbed.length <= LOG_TAIL_SAMPLE_MAX) return scrubbed;
+  const dropped = scrubbed.length - LOG_TAIL_SAMPLE_MAX;
+  return `…[+${dropped} chars]${scrubbed.slice(-LOG_TAIL_SAMPLE_MAX)}`;
+}
+
 // Reduce `syscall` to the bare operation token.
 //
 // Node does NOT guarantee this is only the operation name: a failed
@@ -431,6 +462,12 @@ export async function reportStartupFailure(
     let errorCode: string | undefined;
     let missingModule: string | undefined;
     let daemonError: string | undefined;
+    // Only populated when the parse above found NOTHING (see
+    // buildDaemonLogTailSample). Narrow on purpose: when we can already name the
+    // cause, the raw tail is bytes and privacy surface for no new information,
+    // and keeping it narrow makes the field itself a signal — its presence means
+    // "this log defeated the parser".
+    let daemonLogTail: string | null = null;
     if (classification.logPath) {
       const tail = await (deps.readLogTail ?? defaultReadLogTail)(classification.logPath);
       if (tail) {
@@ -438,6 +475,9 @@ export async function reportStartupFailure(
         errorCode = parsed.errorCode;
         missingModule = parsed.missingModule;
         daemonError = parsed.daemonError;
+        if (!errorCode && !missingModule && !daemonError) {
+          daemonLogTail = buildDaemonLogTailSample(tail);
+        }
       }
     }
     const rawMessage =
@@ -487,6 +527,7 @@ export async function reportStartupFailure(
       daemon_error: daemonError
         ? truncateForTelemetry(scrubUserPaths(daemonError), ERROR_MESSAGE_MAX)
         : null,
+      daemon_log_tail: daemonLogTail,
       sys_code: sys.code,
       sys_errno: sys.errno,
       sys_syscall: sys.syscall,

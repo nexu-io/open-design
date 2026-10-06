@@ -32,6 +32,7 @@ import {
   type RegistryRoots,
 } from './registry.js';
 import type { InstalledPluginRecord, MarketplaceTrust } from '@open-design/contracts';
+import { inspectBundledStrategyProvenanceV2 } from './strategy-provenance.js';
 
 type SqliteDb = Database.Database;
 
@@ -230,6 +231,20 @@ async function registerOne(args: {
   });
   if (!probe.ok) {
     args.warnings.push(`bundled plugin ${args.folderId} failed to parse: ${probe.errors.join('; ')}`);
+    return;
+  }
+  const strategy = inspectBundledStrategyProvenanceV2(probe.record);
+  if (strategy.kind !== 'none') {
+    // Strategy packages are shipped bytes, not ordinary plugins. Until a
+    // hash-gated activation owner exists, keeping the id out of `present`
+    // both prevents first-boot registration and prunes a row left by an
+    // earlier build that treated the package as a catalog scenario.
+    args.seenFolderIds.delete(folderId);
+    if (strategy.kind === 'invalid') {
+      args.warnings.push(
+        `bundled strategy ${args.folderId} failed to parse: ${strategy.errors.join('; ')}`,
+      );
+    }
     return;
   }
   let record = withMarketplaceProvenance(probe.record, args.input.marketplaceProvenance);

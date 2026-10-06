@@ -11,13 +11,14 @@ import {
   DIAGNOSTICS_CONTENT_TYPE,
   DIAGNOSTICS_FILENAME_PREFIX,
   diagnosticsFileName,
+  type AutomaticDiagnosticSource,
   type LogSource,
 } from '@open-design/diagnostics';
 import {
   APP_KEYS,
   OPEN_DESIGN_SIDECAR_CONTRACT,
   SIDECAR_MODES,
-  type SidecarStamp,
+  type LegacySidecarRuntimeLayout,
 } from '@open-design/sidecar-proto';
 import {
   resolveLogFilePath,
@@ -26,13 +27,26 @@ import {
 } from '@open-design/sidecar';
 
 import { readCurrentAppVersionInfo } from './app-version.js';
+import {
+  CHAT_SCROLL_FORENSICS_SUMMARY_FILE,
+  buildChatScrollForensicsSummary,
+} from './diagnostics-client-evidence.js';
 import { agentCliEnvForAgent, readAppConfig } from './app-config.js';
 import { spawnEnvForAgent } from './agents.js';
 import { collectBrowserUseDiscoveryFacts } from './browser/index.js';
 import { readRecentApiFailures } from './http/api-failure-journal.js';
+import {
+  createDiagnosticsEvidence,
+  diagnosticsEvidencePaths,
+  getDiagnosticsEvidence,
+  type DiagnosticsEvidence,
+} from './services/diagnostics-evidence.js';
+import { diagnosticId } from './services/diagnostics-environment.js';
+import { daemonHealthPaths } from './services/daemon-health.js';
 import { readVelaLoginStatus } from './integrations/vela.js';
 
 interface ResolvedDiagnosticsAgentEnvironment {
+  amrHome: string | null;
   amrOpenCodeHome: string | null;
   amrConfiguredEnv: Record<string, string>;
   claudeConfigDir: string | null;
@@ -48,6 +62,7 @@ async function resolveDiagnosticsAgentEnvironment(
   dataDir: string | null | undefined,
 ): Promise<ResolvedDiagnosticsAgentEnvironment> {
   const empty: ResolvedDiagnosticsAgentEnvironment = {
+    amrHome: null,
     amrOpenCodeHome: null,
     amrConfiguredEnv: {},
     claudeConfigDir: null,
@@ -68,6 +83,7 @@ async function resolveDiagnosticsAgentEnvironment(
       return trimmed && trimmed.length > 0 ? trimmed : null;
     };
     return {
+      amrHome: clean(envFor('amr').AMR_HOME),
       amrOpenCodeHome: clean(envFor('amr').OPENCODE_TEST_HOME),
       amrConfiguredEnv: agentCliEnvForAgent(appConfig.agentCliEnv, 'amr'),
       claudeConfigDir: clean(envFor('claude').CLAUDE_CONFIG_DIR),
@@ -84,14 +100,16 @@ async function resolveDiagnosticsAgentEnvironment(
 }
 
 export interface DiagnosticsHandlerOptions {
+  evidence?: DiagnosticsEvidence;
   /** Sidecar runtime context, present when daemon is launched via tools-dev or packaged sidecar. */
-  runtime: SidecarRuntimeContext<SidecarStamp> | null;
+  runtime: SidecarRuntimeContext<LegacySidecarRuntimeLayout> | null;
   /** Project root used to derive crash-report match strings. */
   projectRoot: string;
   /** Directory containing per-run event logs at <runsDir>/<runId>/events.jsonl. */
   runsDir?: string | null;
   /** OpenDesign data dir (OD_DATA_DIR), used to locate the AMR OpenCode home. */
   dataDir?: string | null;
+  automaticUploadStatus?: () => Record<string, unknown>;
 }
 
 const TAIL_BYTES_PER_LOG = 4 * 1024 * 1024;
@@ -136,8 +154,34 @@ async function shouldListOptionalSource(path: string): Promise<boolean> {
   }
 }
 
+/**
+ * The daemon's rotated prior-session log (see `openLog` in
+ * apps/packaged/src/sidecars.ts), resolved exactly as the bundle does, or null
+ * for launchers that keep none (standalone `od`; tools-dev appends instead).
+ */
+export function resolveDaemonPreviousLogPath(
+  runtime: SidecarRuntimeContext<LegacySidecarRuntimeLayout> | null,
+): string | null {
+  if (runtime == null) return null;
+  try {
+    const namespaceRoot = resolveRuntimeNamespaceRoot({
+      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+      runtime,
+      runtimeMode: SIDECAR_MODES.RUNTIME,
+    });
+    const latest = resolveLogFilePath({
+      app: APP_KEYS.DAEMON,
+      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+      runtimeRoot: namespaceRoot,
+    });
+    return `${dirname(latest)}/previous.log`;
+  } catch {
+    return null;
+  }
+}
+
 async function buildSidecarLogSources(
-  runtime: SidecarRuntimeContext<SidecarStamp> | null,
+  runtime: SidecarRuntimeContext<LegacySidecarRuntimeLayout> | null,
 ): Promise<LogSource[]> {
   if (runtime == null) return [];
   // In packaged builds `runtime.base` is `<namespaceRoot>/runtime`, so the log
@@ -209,7 +253,7 @@ async function buildSidecarLogSources(
 // The desktop relocates Electron's crashDumps to `<logs/desktop>/crashes` (see
 // apps/desktop/src/main/crash-diagnostics.ts) so the minidumps live inside the
 // same log tree this export already collects. Derive that dir the same way.
-function resolveDesktopCrashDumpsDir(runtime: SidecarRuntimeContext<SidecarStamp> | null): string | null {
+function resolveDesktopCrashDumpsDir(runtime: SidecarRuntimeContext<LegacySidecarRuntimeLayout> | null): string | null {
   if (runtime == null) return null;
   const namespaceRoot = resolveRuntimeNamespaceRoot({
     contract: OPEN_DESIGN_SIDECAR_CONTRACT,
@@ -224,7 +268,76 @@ function resolveDesktopCrashDumpsDir(runtime: SidecarRuntimeContext<SidecarStamp
   return join(dirname(desktopLog), 'crashes');
 }
 
+/**
+ * AMR's runtime log (`$AMR_HOME/logs/agent-runtime.jsonl`) is shared by every run.
+ * `opencode_session_created` carries the Open Design run id; later records such as
+ * `opencode_event_stream_failure` only carry the OpenCode session id. Keep this run's
+ * records and its sessions' records until another run takes a session over.
+ */
+export function selectAmrRuntimeRunLines(runId: string): (lines: string[]) => string[] {
+  return (lines) => {
+    const sessions = new Set<string>();
+    return lines.filter((line) => {
+      let record: Record<string, unknown>;
+      try { record = JSON.parse(line) as Record<string, unknown>; } catch { return false; }
+      const session = typeof record.opencodeSessionId === 'string' ? record.opencodeSessionId : '';
+      if (record.event === 'opencode_session_created' && session) {
+        if (record.openDesignRunId === runId) sessions.add(session); else sessions.delete(session);
+      }
+      return record.openDesignRunId === runId || (session !== '' && sessions.has(session));
+    });
+  };
+}
+
+async function buildAmrRuntimeLogSources(
+  amrHome: string | null,
+  incident: { runId?: string; agentId?: string },
+  agentLogCount: number,
+): Promise<AutomaticDiagnosticSource[]> {
+  const name = 'agent-cli-logs/amr/agent-runtime.jsonl';
+  const absolutePath = join(amrHome ?? join(homedir(), '.amr'), 'logs', 'agent-runtime.jsonl');
+  const exists = await access(absolutePath).then(() => true, () => false);
+  // The consent baseline needs the shared file itself; incidents only take their run's records.
+  if (incident.agentId === '*') return exists ? [{ name, absolutePath, kind: 'text' }] : [];
+  const sources: AutomaticDiagnosticSource[] = [];
+  if (!exists) sources.push({ name, absolutePath, kind: 'text', omitReason: 'source_not_found' });
+  else if (!incident.runId) sources.push({ name, absolutePath, kind: 'text', omitReason: 'run_id_unavailable' });
+  else sources.push({ name, absolutePath, kind: 'text', tailBytes: TAIL_BYTES_PER_LOG,
+    selectLines: selectAmrRuntimeRunLines(incident.runId) });
+  // AMR keeps OpenCode session logs under per-conversation homes that are not located yet.
+  if (agentLogCount === 0) sources.push({ name: 'agent-cli-logs/amr/opencode', absolutePath: '', kind: 'text',
+    omitReason: 'source_not_located' });
+  return sources;
+}
+
+/** Automatic uploads select the failing run and its runtime; manual exports remain broader. */
+export async function buildAutomaticDiagnosticSources(
+  options: DiagnosticsHandlerOptions,
+  incident: { runId?: string; agentId?: string },
+): Promise<AutomaticDiagnosticSource[]> {
+  const sources: AutomaticDiagnosticSource[] = [];
+  if (incident.runId && /^[A-Za-z0-9_-]{1,128}$/.test(incident.runId) && options.runsDir) {
+    sources.push({ name: `runs/${incident.runId}/events.jsonl`,
+      absolutePath: join(options.runsDir, incident.runId, 'events.jsonl'), kind: 'text', tailBytes: TAIL_BYTES_PER_LOG });
+  }
+  sources.push(...await buildSidecarLogSources(options.runtime));
+  if (incident.agentId) {
+    const environment = await resolveDiagnosticsAgentEnvironment(options.dataDir);
+    const agentSources = await buildAgentCliLogSources({ homeDir: homedir(), dataDir: options.dataDir ?? null,
+      amrOpenCodeHome: environment.amrOpenCodeHome, claudeConfigDir: environment.claudeConfigDir,
+      codexHome: environment.codexHome, xdgDataHome: environment.openCodeXdgDataHome ?? null });
+    const selected = agentSources.filter((source) => incident.agentId === '*' || source.name.startsWith(`agent-cli-logs/${incident.agentId}/`));
+    sources.push(...selected);
+    if (incident.agentId === 'amr' || incident.agentId === '*') {
+      const amrLogs = selected.filter((source) => source.name.startsWith('agent-cli-logs/amr/')).length;
+      sources.push(...await buildAmrRuntimeLogSources(environment.amrHome, incident, amrLogs));
+    }
+  }
+  return sources;
+}
+
 export function createDiagnosticsExportHandler(options: DiagnosticsHandlerOptions): RequestHandler {
+  const evidence = options.evidence ?? getDiagnosticsEvidence() ?? createDiagnosticsEvidence();
   return async (_req, res) => {
     try {
       const versionInfo = await readCurrentAppVersionInfo().catch(() => null);
@@ -244,6 +357,21 @@ export function createDiagnosticsExportHandler(options: DiagnosticsHandlerOption
           xdgDataHome: agentEnvironment.openCodeXdgDataHome ?? process.env.XDG_DATA_HOME ?? null,
         })),
       ];
+      await evidence.refresh();
+      if (options.dataDir) {
+        const paths = diagnosticsEvidencePaths(options.dataDir);
+        for (const [name, absolutePath] of [['latest', paths.current], ['previous', paths.previous]] as const) {
+          if (await shouldListOptionalSource(absolutePath)) sources.push({
+            name: `logs/diagnostics/environment-evidence.${name}.json`, absolutePath, kind: 'json', tailBytes: 256 * 1024,
+          });
+        }
+        const health = daemonHealthPaths(options.dataDir);
+        for (const [name, absolutePath] of [['latest', health.current], ['previous', health.previous]] as const) {
+          if (await shouldListOptionalSource(absolutePath)) sources.push({
+            name: `logs/diagnostics/daemon-health.${name}.json`, absolutePath, kind: 'json', tailBytes: 256 * 1024,
+          });
+        }
+      }
       const username = safeUsername();
       const crashDumpsDir = resolveDesktopCrashDumpsDir(options.runtime);
 
@@ -284,6 +412,24 @@ export function createDiagnosticsExportHandler(options: DiagnosticsHandlerOption
         },
         sources,
         summaries: {
+          'automatic-log-upload.json': (() => {
+            try { return options.automaticUploadStatus?.() ?? { available: false }; }
+            catch { return { available: false, reason: 'status_unavailable' }; }
+          })(),
+          'environment-evidence.json': evidence.snapshot(),
+          // Renderer-side scene for the chat scroll freeze. Always written,
+          // even when nothing was posted, so an empty slot reads as a stated
+          // fact instead of a missing file. See diagnostics-client-evidence.ts.
+          [CHAT_SCROLL_FORENSICS_SUMMARY_FILE]: {
+            ...buildChatScrollForensicsSummary(),
+            app: {
+              version: versionInfo?.version ?? null,
+              channel: versionInfo?.channel ?? null,
+              packaged: versionInfo?.packaged ?? null,
+              platform: versionInfo?.platform ?? null,
+              arch: versionInfo?.arch ?? null,
+            },
+          },
           'recent-api-failures.json': {
             retainedLimit: 100,
             privacy:
@@ -300,6 +446,7 @@ export function createDiagnosticsExportHandler(options: DiagnosticsHandlerOption
                 );
                 return {
                   profile: status.profile,
+                  userId: diagnosticId(status.user?.id),
                   loggedIn: status.loggedIn,
                   sessionState: status.sessionState,
                   credentialRevision: status.credentialRevision,

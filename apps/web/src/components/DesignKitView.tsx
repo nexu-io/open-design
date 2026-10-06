@@ -1980,8 +1980,8 @@ export function DesignKitView(props: DesignKitViewProps) {
 
 // Compact "More" overflow dropdown for the sticky header. Renders grouped
 // action items (icon + full label) so every action stays legible instead of
-// crowding the header as an anonymous icon-only square. Mirrors the
-// EntryHelpMenu popover pattern: click-outside + Escape to dismiss.
+// crowding the header as an anonymous icon-only square. Uses the standard
+// popover pattern: click-outside + Escape to dismiss.
 // Exported so the Design Systems tab can tuck its secondary toolbar actions
 // (download / make-default / delete) into the same ⋯ menu.
 export function HeaderActionsMenu({

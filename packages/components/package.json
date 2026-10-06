@@ -29,6 +29,7 @@
   "devDependencies": {
     "@testing-library/react": "16.3.2",
     "@types/react": "18.3.28",
+    "@types/react-dom": "18.3.7",
     "esbuild": "0.28.0",
     "jsdom": "29.1.1",
     "react": "18.3.1",

@@ -4,6 +4,7 @@ import type { AgentModelOption } from '../types';
 import { useT } from '../i18n';
 import { Icon } from './Icon';
 import { modelProviderIconSrc } from './modelProviderIcon';
+import { anchorSelectionInView } from './pickerSelectionAnchor';
 import {
   getModelCostTier,
   getModelCapabilityTag,
@@ -100,6 +101,30 @@ export function modelCompany(id: string): { key: string; name: string } {
   const key = (slash > 0 ? id.slice(0, slash) : id.split('-')[0] ?? id).toLowerCase();
   const name = MODEL_COMPANY_NAMES[key] ?? (key ? key.charAt(0).toUpperCase() + key.slice(1) : id);
   return { key, name };
+}
+
+/**
+ * Model name with the company token dropped — what the composer's model rows
+ * and chip show (`claude-fable-5` → `fable-5`, `deepseek-v4-pro` → `v4-pro`).
+ * The brand mark rendered beside the name already says which company it is, so
+ * repeating it in text only spends width on the shared half of every row.
+ *
+ * Only a recognised company token is dropped, and only when what remains still
+ * starts with a letter: ids whose leading token IS the model family (`gpt-5`,
+ * `o3`) would otherwise collapse to `5` / nothing. Anything else — BYOK
+ * `provider/model` ids, unknown vendors, prose labels — is returned untouched.
+ */
+export function modelVersionLabel(
+  id: string,
+  label?: string | null,
+): string {
+  const text = label ?? id;
+  const { key } = modelCompany(id);
+  if (!Object.prototype.hasOwnProperty.call(MODEL_COMPANY_NAMES, key)) return text;
+  const prefix = `${key}-`;
+  if (!text.toLowerCase().startsWith(prefix)) return text;
+  const rest = text.slice(prefix.length);
+  return /^[A-Za-z]/.test(rest) ? rest : text;
 }
 
 interface ModelCompanyGroup {
@@ -430,6 +455,22 @@ export const SearchableModelSelect = forwardRef<
     }
   }, [open]);
 
+  // Land the opened list on the model in effect (OPEND-2812) instead of on the
+  // top of the catalog. Once per open: the popover re-measures on scroll and
+  // resize, and re-anchoring there would yank the list back out from under a
+  // user who is browsing it. `popoverStyle` is a dependency because the popover
+  // does not mount until the first measurement lands.
+  const selectionAnchoredRef = useRef(false);
+  useLayoutEffect(() => {
+    if (!open) {
+      selectionAnchoredRef.current = false;
+      return;
+    }
+    if (selectionAnchoredRef.current || !popoverRef.current) return;
+    selectionAnchoredRef.current = true;
+    anchorSelectionInView(popoverRef.current, '[data-selected="true"]');
+  }, [open, popoverStyle]);
+
   /** One option row — shared by the flat list and the two-level browse's
    *  models pane, so cost-tier / capability-tag / upgrade-lock affordances
    *  render identically in either layout. `index` only needs to be unique
@@ -461,7 +502,9 @@ export const SearchableModelSelect = forwardRef<
         ) : null}
         <span className="model-select-searchable__option-copy">
           <span className="model-select-searchable__option-label">
-            <span id={optionLabelId}>{option.label}</span>
+            <span id={optionLabelId}>
+              {groupByCompany ? modelVersionLabel(option.id, option.label) : option.label}
+            </span>
           </span>
           {costLabel ? (
             <span className="model-select-searchable__option-meta" id={optionCostId}>
@@ -570,7 +613,15 @@ export const SearchableModelSelect = forwardRef<
       >
         <span className="model-select-searchable__value">
           <span className="model-select-searchable__value-label">
-            {selectedOption?.label ?? ''}
+            {/* Same name the option rows show, so the readout cannot say
+                `deepseek-v4-pro` about a row that called itself `v4-pro`.
+                Outside the company-grouped catalog the label IS the id the
+                request will carry (BYOK), so it stays verbatim. */}
+            {selectedOption
+              ? groupByCompany
+                ? modelVersionLabel(selectedOption.id, selectedOption.label)
+                : selectedOption.label
+              : ''}
           </span>
           {selectedTagLabel ? (
             <span
@@ -653,6 +704,10 @@ export const SearchableModelSelect = forwardRef<
                               type="button"
                               className={`model-select-searchable__company${isActive ? ' is-active' : ''}${hasSelected ? ' has-selected' : ''}`}
                               data-testid={`model-company-${group.key}`}
+                              /* The company rail scrolls too — mark the one
+                                 holding the selection so opening anchors both
+                                 panes on it, not just the models pane. */
+                              data-selected={hasSelected ? 'true' : undefined}
                               onMouseEnter={() => setHoverCompany(group.key)}
                               onFocus={() => setHoverCompany(group.key)}
                               onClick={() => setHoverCompany(group.key)}

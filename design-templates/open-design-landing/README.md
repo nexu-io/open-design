@@ -115,5 +115,4 @@ This design template replaces the older `editorial-collage` skill:
 ## See also
 
 - [`design-systems/atelier-zero/DESIGN.md`](../../design-systems/atelier-zero/DESIGN.md) — colors, type, motion tokens.
-- [`apps/landing-page/`](../../apps/landing-page/) — Astro static site that mirrors this template’s markup at deploy time.
 - [`design-templates/open-design-landing-deck/`](../open-design-landing-deck/) — sibling template that produces a slide deck in the same visual language.

@@ -1,0 +1,108 @@
+{
+  "fixtureKind": "sanitized_real",
+  "runtime": "claude-code",
+  "cliVersion": "2.1.233 (Claude Code)",
+  "adapterVersion": "od-claude-stream-json/v1",
+  "anonymizationVersion": "od-runtime-evidence/v1",
+  "evidenceReview": "open_design_best_effort",
+  "recordingDigest": "sha256:5681a9a211562e119efc470b6846a4be8b3ee822f4e15f8967c19871e69c9b8b",
+  "note": "Open Design local replay of the exact Claude 2.1.233 Agent stream shape. Prompt bodies, outputs, paths, credentials, and provider identifiers are omitted.",
+  "cases": [
+    {
+      "caseId": "main_run",
+      "minimumEvidence": "L0",
+      "outcome": "passed",
+      "evidence": {
+        "sessionId": "session-success",
+        "runtimeReportedVersion": "2.1.233",
+        "rootTerminal": "completed",
+        "rootStopReason": "end_turn",
+        "rootError": false
+      }
+    },
+    {
+      "caseId": "tool",
+      "minimumEvidence": "L1",
+      "outcome": "passed",
+      "evidence": {
+        "sessionId": "session-success",
+        "toolName": "Agent",
+        "toolUseId": "agent-success",
+        "subagentType": "general-purpose",
+        "childInputHash": "sha256:214e12c8009d68bc9c9b9be4941e92da66057c723ee374603b2ced434b65347a",
+        "childInputBytes": 21
+      }
+    },
+    {
+      "caseId": "child_success",
+      "minimumEvidence": "L2",
+      "outcome": "passed",
+      "evidence": {
+        "sessionId": "session-success",
+        "toolUseId": "agent-success",
+        "childAgentId": "child-success",
+        "terminalSource": "user.tool_result",
+        "childTerminal": "completed",
+        "usageSource": "provider_stream",
+        "usageComplete": true
+      }
+    },
+    {
+      "caseId": "child_failure_parent_recovers",
+      "minimumEvidence": "L2",
+      "outcome": "passed",
+      "evidence": {
+        "sessionId": "session-failure",
+        "toolUseId": "agent-failure",
+        "childStartedOrder": 1,
+        "childFailedOrder": 2,
+        "parentCompletedOrder": 3,
+        "childTerminal": "failed",
+        "parentTerminal": "completed",
+        "parentError": false
+      }
+    },
+    {
+      "caseId": "cancel",
+      "minimumEvidence": "L0",
+      "outcome": "passed",
+      "nativeChildTerminal": "unavailable",
+      "evidence": {
+        "sessionId": "session-cancel",
+        "toolUseId": "agent-cancel",
+        "childStarted": true,
+        "hostRunStatus": "canceled",
+        "hostSignal": "SIGINT",
+        "collectorTerminal": "canceled"
+      }
+    },
+    {
+      "caseId": "timeout",
+      "minimumEvidence": "L0",
+      "outcome": "passed",
+      "nativeChildTerminal": "unavailable",
+      "evidence": {
+        "sessionId": "session-timeout",
+        "toolUseId": "agent-timeout",
+        "childStarted": true,
+        "hostRunStatus": "failed",
+        "terminalTrigger": "inactivity_watchdog",
+        "collectorTerminal": "failed",
+        "terminationReason": "timeout"
+      }
+    },
+    {
+      "caseId": "resume",
+      "minimumEvidence": "L0",
+      "outcome": "passed",
+      "evidence": {
+        "priorSessionId": "session-success",
+        "resumedSessionId": "session-success",
+        "priorToolUseId": "agent-success",
+        "resumeToolUseId": "agent-resume",
+        "resumeChildAgentId": "child-resume",
+        "resumeTerminal": "completed"
+      }
+    }
+  ]
+}

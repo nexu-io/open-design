@@ -35,6 +35,13 @@ export function execAgentFile(
         },
   );
   return execFileP(invocation.command, invocation.args, {
+    // `timeout` alone is not a settle guarantee. execFile only *signals* on
+    // expiry, and the promise settles on 'close' — which needs the child to
+    // actually exit. A CLI that traps SIGTERM therefore leaves a probe pending
+    // forever, and callers that await one before a Run can start park with it.
+    // These are read-only metadata probes, so there is nothing to flush: kill
+    // them outright. Listed before the spread so a caller can still choose.
+    killSignal: 'SIGKILL',
     ...options,
     cwd: options.cwd ?? os.tmpdir(),
     windowsVerbatimArguments: invocation.windowsVerbatimArguments,

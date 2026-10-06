@@ -13,7 +13,56 @@ import { join } from "node:path";
 
 import { LOCK_DIR, PARTIAL_DIR, STATE_DIR, STORE_KIND, STORE_SCHEMA_VERSION, STORE_SENTINEL } from "./constants.js";
 import { MANAGED_DOWNLOAD_ERROR_CODES, ManagedDownloadError } from "./errors.js";
-import { directoryIsEmpty, readJson, writeJson } from "./fs-io.js";
+import { readJson, writeJson } from "./fs-io.js";
+
+/**
+ * @internal Filesystem-browser artifacts the OS drops into any directory it
+ * renders, independent of anything this package does. Their mere presence
+ * must never be treated as "not empty": Finder writes .DS_Store the moment a
+ * managed base is viewed even once, and Explorer does the same with
+ * Thumbs.db/desktop.ini. Mirrors apps/desktop's isOsManagedRootArtifact —
+ * duplicated rather than shared since apps/desktop depends on this package,
+ * not the reverse.
+ *
+ * Matched by name only — callers MUST additionally confirm the entry is a
+ * plain file via {@link verifiedOsManagedRootArtifacts} before trusting a
+ * match. A directory or symlink squatting on one of these names must still
+ * be treated as real content, not waved through as harmless OS litter.
+ */
+const OS_MANAGED_ROOT_ARTIFACTS = new Set([".DS_Store", "Thumbs.db", "desktop.ini", ".localized"]);
+
+/**
+ * @internal Whether `name` is a benign, OS-managed root artifact that should
+ * never count as real content when deciding whether a directory is claimable.
+ */
+function isOsManagedRootArtifact(name: string): boolean {
+  return OS_MANAGED_ROOT_ARTIFACTS.has(name);
+}
+
+/**
+ * @internal Resolves which of `entries` (direct children of `basePath`) are
+ * genuine OS-managed artifacts: name-matched AND a plain file, not a
+ * directory or symlink. A name match alone is not enough — see {@link
+ * isOsManagedRootArtifact}. An entry that disappears or fails to stat
+ * between `readdir` and this check is treated as unverified (excluded),
+ * which fails closed into the existing rejection path rather than silently
+ * trusting it. Mirrors apps/desktop's verifiedOsManagedRootArtifacts.
+ */
+async function verifiedOsManagedRootArtifacts(basePath: string, entries: string[]): Promise<Set<string>> {
+  const candidates = entries.filter((entry) => isOsManagedRootArtifact(entry));
+  if (candidates.length === 0) return new Set();
+  const verified = await Promise.all(
+    candidates.map(async (entry) => {
+      try {
+        const entryStat = await lstat(join(basePath, entry));
+        return entryStat.isFile() && !entryStat.isSymbolicLink() ? entry : null;
+      } catch {
+        return null;
+      }
+    }),
+  );
+  return new Set(verified.filter((entry): entry is string => entry != null));
+}
 
 /**
  * @internal On-disk ownership marker written at the root of a managed base.
@@ -84,7 +133,10 @@ export async function ensureManagedBase(basePath: string): Promise<void> {
   const sentinelPath = join(basePath, STORE_SENTINEL);
   const sentinel = await readJson<unknown>(sentinelPath);
   if (sentinel == null) {
-    if (!(await directoryIsEmpty(basePath))) {
+    const entries = await readdir(basePath);
+    const osArtifacts = await verifiedOsManagedRootArtifacts(basePath, entries);
+    const content = entries.filter((name) => !osArtifacts.has(name));
+    if (content.length > 0) {
       throw new ManagedDownloadError(MANAGED_DOWNLOAD_ERROR_CODES.STORE_NOT_OWNED, `download base is not empty and has no ownership marker: ${basePath}`);
     }
     await writeSentinel(basePath);

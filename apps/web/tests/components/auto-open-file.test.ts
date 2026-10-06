@@ -295,6 +295,35 @@ describe('selectAutoOpenProducedArtifact', () => {
 describe('selectAutoOpenTurnArtifact', () => {
   const TURN_START = 1_000_000;
 
+  it('prefers a newly created HTML over an older HTML rewritten later in the same edit turn', () => {
+    const before = new Set(['english.html']);
+    const english = {
+      name: 'english.html', path: 'english.html', kind: 'html', mtime: TURN_START + 20_000,
+    };
+    const chinese = {
+      name: 'chinese.html', path: 'chinese.html', kind: 'html', mtime: TURN_START + 10_000,
+    };
+
+    // OPEND-2537's real run created chinese.html, then rewrote english.html.
+    // Both appeared in authoritative artifactPaths; mtime-only tie-breaking
+    // reopened the old English file after the new Chinese file briefly focused.
+    const turnPick = selectAutoOpenTurnArtifact(
+      [chinese, english],
+      [english, chinese],
+      { turnStartedAt: TURN_START, preTurnFileNames: before },
+    );
+    expect(turnPick).toBe('chinese.html');
+
+    // ProjectView performs one final rank pass after merging trace-touched
+    // files with the turn pick. That pass must preserve the same new-file
+    // preference, or it steals focus back and makes the right card's Publish /
+    // Export action look unresponsive (OPEND-2538).
+    expect(selectAutoOpenProducedArtifact(
+      [english, chinese],
+      { preTurnFileNames: before },
+    )).toBe('chinese.html');
+  });
+
   it('opens a pre-existing HTML file the turn rewrote in place (plan regeneration)', () => {
     // Plan-mode loop: plan → generate → edit plan → regenerate. The second
     // generation rewrites index.html, so the name diff (produced) is empty.
@@ -485,5 +514,104 @@ describe('selectAutoOpenTurnArtifact', () => {
 
       expect(result).toBe('index.html');
     });
+  });
+});
+
+// OPEND-2588 (adjacent defect): media candidates do not always carry a `kind`.
+// ProjectView's `provenTraceTouchedFiles()` builds candidates straight from the
+// agent's own Write/Edit tool paths — `{ name, path, mtime }` and nothing else
+// — so on that path an image scored rank 0 and was silently declined, and the
+// turn's only deliverable never opened. The html and markdown predicates in the
+// same module already fall back to the extension for exactly this reason;
+// media was the one that did not.
+describe('media preview candidates without a kind field', () => {
+  it('auto-opens an image identified only by its extension', () => {
+    const result = selectAutoOpenProducedArtifact([
+      { name: 'hero.png', path: 'hero.png', mtime: 1 },
+    ]);
+
+    expect(result).toBe('hero.png');
+  });
+
+  it.each([
+    'shot.jpg',
+    'shot.jpeg',
+    'loop.gif',
+    'card.webp',
+    'card.avif',
+    'launch.mp4',
+    'clip.mov',
+    'clip.webm',
+    'vo.mp3',
+    'vo.wav',
+    'vo.m4a',
+  ])('auto-opens %s identified only by its extension', (name) => {
+    const result = selectAutoOpenProducedArtifact([{ name, path: name, mtime: 1 }]);
+
+    expect(result).toBe(name);
+  });
+
+  it('still prefers html over an extension-identified image', () => {
+    const result = selectAutoOpenProducedArtifact([
+      { name: 'hero.png', path: 'hero.png', mtime: 30 },
+      { name: 'index.html', path: 'index.html', mtime: 10 },
+    ]);
+
+    expect(result).toBe('index.html');
+  });
+
+  // Reverse control 1: the fallback must recognise media, not everything. A
+  // non-media extension with no `kind` stays declined, exactly as it is today.
+  it('leaves a non-media file with no kind alone', () => {
+    const result = selectAutoOpenProducedArtifact([
+      { name: 'notes.txt', path: 'notes.txt', mtime: 1 },
+    ]);
+
+    expect(result).toBeNull();
+  });
+
+  it('leaves a deck with no kind alone', () => {
+    const result = selectAutoOpenProducedArtifact([
+      { name: 'deck.pptx', path: 'deck.pptx', mtime: 1 },
+    ]);
+
+    expect(result).toBeNull();
+  });
+
+  // Reverse control 2: the daemon's `kindFor` files `.svg` and root-level
+  // `sketch-*` rasters under 'sketch', not image/video/audio. The extension
+  // fallback stands in for `kindFor` when the field is missing, so it has to
+  // reach the same verdict — otherwise a user-drawn sketch would start
+  // stealing the preview on the paths where `kind` is absent.
+  it('leaves an svg with no kind alone (the daemon files it as a sketch)', () => {
+    const result = selectAutoOpenProducedArtifact([
+      { name: 'logo.svg', path: 'logo.svg', mtime: 1 },
+    ]);
+
+    expect(result).toBeNull();
+  });
+
+  it('leaves a sketch raster export with no kind alone', () => {
+    const result = selectAutoOpenProducedArtifact([
+      { name: 'sketch-1.png', path: 'sketch-1.png', mtime: 1 },
+    ]);
+
+    expect(result).toBeNull();
+  });
+
+  // The trace path is the one that actually produces kind-less candidates, so
+  // pin the shape it emits: `{ name, path, mtime }` from
+  // ProjectView.provenTraceTouchedFiles.
+  it('selects an image from a turn whose candidates all came from the write trace', () => {
+    const result = selectAutoOpenTurnArtifact(
+      [],
+      [
+        { name: 'hero.png', path: 'hero.png', mtime: 1 },
+        { name: 'context.txt', path: 'context.txt', mtime: 2 },
+      ],
+      { turnStartedAt: 1 },
+    );
+
+    expect(result).toBe('hero.png');
   });
 });

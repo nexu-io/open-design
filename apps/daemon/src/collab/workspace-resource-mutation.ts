@@ -467,6 +467,24 @@ export function workspaceResourceAccess(
 } {
   const frozen = wp.resourceState === 'frozen' || wp.resourceState === 'deleted' || isWorkspaceResourceLocked(ctx);
   const selfCreated = wp.createdByWorkspaceMemberId != null && wp.createdByWorkspaceMemberId === ctx.workspaceMemberId;
+  /*
+   * ⚠️ 下面这两行是「创建者可写 / 非创建者只读」的全部实现,改动前先读完。
+   *
+   * 项目页那条本地快路径(`project-workspace-scope.ts` 的
+   * `resolveLocalProjectWorkspaceScope`)**故意**把 `role` 钉成 `'member'`
+   * —— 它的契约就是「不查成员目录」。于是在那条路径上 `privileged` 恒为
+   * false,`canMutate` 退化成 `selfCreated`,只读态才成立。
+   *
+   * 两个后果值得记住:
+   * 1. 谁要是「修好」那个硬编码,让 role 变成真实角色,工作区 owner 就对
+   *    工作区里每一个项目都可写(包括不是他建的)—— 只读态静默消失。
+   * 2. 只读态在首屏渲染路径上。用户 2026-09-07 的原话:「不能等半天错误的
+   *    身份模型再显示正确的」。所以这条链**不许改成等 `/api/workspace/context`
+   *    或任何网络请求**,先渲染错的再纠正同样算回退。
+   *
+   * 需要真实角色的场合(例如付款入口该不该给)必须另取权威工作区身份,
+   * 不要从这里的 ctx 反推。
+   */
   const privileged = ctx.role === 'owner' || ctx.role === 'admin';
   const canMutate = !frozen && ctx.canWriteSyncedFiles && ctx.memberStatus === 'active' && (privileged || selfCreated);
   // Sharing is the one mutation that must ALSO work on an unattributed

@@ -1,6 +1,6 @@
 import type { Server } from 'node:http';
 import { randomUUID } from 'node:crypto';
-import { access, chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { access, chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -37,6 +37,8 @@ const EXTERNAL_ENV_KEYS = [
   'OPEN_DESIGN_TELEMETRY_RELAY_URL',
   'POSTHOG_KEY',
   'POSTHOG_HOST',
+  'OD_NEXT_STRATEGY_ROLLOUT',
+  'OD_CODEX_TRANSPORT',
   ...CODEX_AUTH_OR_ENDPOINT_ENV_KEYS,
 ] as const;
 
@@ -116,6 +118,12 @@ describe('Codex configured-model capability preflight', () => {
     );
 
     isolateExternalProcessEnv();
+    // This fixture emits Codex's legacy `exec --json` event stream. Keep this
+    // success-path case on the transport whose protocol it implements;
+    // app-server protocol coverage belongs to the dedicated transport suites.
+    process.env.OD_CODEX_TRANSPORT = 'exec-json';
+    // The preflight fixture emits a plain reply without the OD Next task protocol.
+    process.env.OD_NEXT_STRATEGY_ROLLOUT = 'off';
     started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
     await putConfig(started.url, {
       agentId: 'codex',
@@ -131,6 +139,9 @@ describe('Codex configured-model capability preflight', () => {
 
     expect(finished.status).toBe('succeeded');
     await expect(pathExists(spawnMarker)).resolves.toBe(true);
+    const spawnArgs = JSON.parse(await readFile(spawnMarker, 'utf8')) as string[];
+    expect(spawnArgs[0]).toBe('exec');
+    expect(spawnArgs).toContain('--json');
   });
 
   it('does not overwrite cancellation while the version probe is in flight', async () => {
@@ -153,6 +164,10 @@ describe('Codex configured-model capability preflight', () => {
     );
 
     isolateExternalProcessEnv();
+    // This test owns the ordinary Codex model-capability probe. Keep the
+    // independent OD Next rollout probe out of the way so cancellation still
+    // races the exact preflight boundary named by the test.
+    process.env.OD_NEXT_STRATEGY_ROLLOUT = 'off';
     started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
     await putConfig(started.url, {
       agentId: 'codex',

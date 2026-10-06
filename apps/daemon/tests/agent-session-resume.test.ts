@@ -13,6 +13,7 @@ import {
   upsertMessage,
 } from '../src/db.js';
 import {
+  createPhysicalAgentSessionUsageTracker,
   computeIncludeStable,
   hashStableInstructions,
   isAgentResumeFailure,
@@ -26,6 +27,25 @@ import {
   resolveAgentResumeFailurePolicy,
   resolveAgentResumePromptPolicy,
 } from '../src/agent-session-resume.js';
+
+describe('physical agent session usage', () => {
+  it('does not leak usage across sessions and retains it for an exact-session continuation', () => {
+    const attemptA = createPhysicalAgentSessionUsageTracker();
+    attemptA.observe('agent', {
+      type: 'usage',
+      usage: { input_tokens: 12, output_tokens: 3 },
+    });
+    expect(attemptA.inputTokens()).toBe(12);
+
+    const differentSessionAttempt = createPhysicalAgentSessionUsageTracker();
+    expect(differentSessionAttempt.inputTokens()).toBeNull();
+
+    const forcedSameSessionContinuation = createPhysicalAgentSessionUsageTracker(
+      attemptA.inputTokens(),
+    );
+    expect(forcedSameSessionContinuation.inputTokens()).toBe(12);
+  });
+});
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -99,6 +119,28 @@ describe('resolveAgentResumeContext', () => {
     expect(ctx.invalidationReason).toBeNull();
   });
 
+  it('exposes stored input usage only as resume observability context', () => {
+    const db = seed();
+    seedMessage(db, 'asst-1', 'assistant');
+    upsertAgentSession(db, {
+      conversationId: 'conv-1',
+      agentId: 'claude',
+      sessionId: 'sess-A',
+      lastMessageId: 'asst-1',
+      model: null,
+      cwd: null,
+      lastInputTokens: 123_456,
+    });
+
+    const ctx = resolveAgentResumeContext(db, {
+      conversationId: 'conv-1',
+      agentId: 'claude',
+    });
+
+    expect(ctx.isResuming).toBe(true);
+    expect(ctx.storedInputTokens).toBe(123_456);
+  });
+
   it('still resumes when only the current run placeholder is newer (normal follow-up)', () => {
     const db = seed();
     seedMessage(db, 'asst-1', 'assistant');
@@ -146,6 +188,64 @@ describe('resolveAgentResumeContext', () => {
     });
     expect(ctx.isResuming).toBe(false);
     expect(ctx.invalidationReason).toBe('cwd_changed');
+  });
+
+  it('resumes the stored session when the same turn is re-run', () => {
+    // A daemon-internal restart can re-enter startChatRun with the SAME
+    // assistant placeholder after that placeholder was already persisted as the
+    // session cursor (post-tool recovery writes it, and
+    // `nativeSessionContinuePending` is consumed once — a later safe-retry
+    // restart arrives without it). The cursor filter already means to admit the
+    // stored cursor itself, but the `id != <current>` clause excludes it first,
+    // so a live session was abandoned and the transcript re-seeded even though
+    // nothing had advanced. For an OD Next continuation this is worse than a
+    // cold turn: the non-request stage refuses to re-seed and blocks the task.
+    const db = seed();
+    seedMessage(db, 'asst-1', 'assistant', 'failed');
+    upsertAgentSession(db, {
+      conversationId: 'conv-1',
+      agentId: 'claude',
+      sessionId: 'sess-A',
+      lastMessageId: 'asst-1',
+      model: null,
+      cwd: null,
+      stablePromptHash: null,
+    });
+    const ctx = resolveAgentResumeContext(db, {
+      conversationId: 'conv-1',
+      agentId: 'claude',
+      currentAssistantMessageId: 'asst-1',
+    });
+    expect(ctx.invalidationReason).toBeNull();
+    expect(ctx.isResuming).toBe(true);
+    expect(ctx.resumeSessionId).toBe('sess-A');
+  });
+
+  it('still reseeds when the same turn is re-run but the conversation advanced', () => {
+    // Guards the fix above against being "simplified" into an unconditional
+    // cursor match: if another agent completed a turn while this run was
+    // suspended, the stored session never saw it and must NOT be reused.
+    const db = seed();
+    seedMessage(db, 'asst-1', 'assistant', 'failed');
+    upsertAgentSession(db, {
+      conversationId: 'conv-1',
+      agentId: 'claude',
+      sessionId: 'sess-A',
+      lastMessageId: 'asst-1',
+      model: null,
+      cwd: null,
+      stablePromptHash: null,
+    });
+    // A different agent finished a later turn in the meantime.
+    seedMessage(db, 'user-2', 'user');
+    seedMessage(db, 'asst-later', 'assistant');
+    const ctx = resolveAgentResumeContext(db, {
+      conversationId: 'conv-1',
+      agentId: 'claude',
+      currentAssistantMessageId: 'asst-1',
+    });
+    expect(ctx.invalidationReason).toBe('conversation_advanced');
+    expect(ctx.isResuming).toBe(false);
   });
 
   it('reseeds (conversation_advanced) when another agent completed a turn in between', () => {
@@ -571,9 +671,28 @@ describe('isAmrOpencodeEventStreamResumeFailure', () => {
     ).toBe(true);
   });
 
+  it('keeps compaction continuation out of destructive reseed', () => {
+    expect(
+      isAmrOpencodeEventStreamResumeFailure(
+        'json-rpc id 4: opencode event stream: opencode compaction continuation ended before prompt completion',
+      ),
+    ).toBe(false);
+    expect(
+      isAmrOpencodeEventStreamResumeFailure(
+        'opencode compaction continuation ended before prompt completion',
+      ),
+    ).toBe(false);
+  });
+
   it('ignores unrelated AMR/opencode output', () => {
     expect(isAmrOpencodeEventStreamResumeFailure('opencode auth failed')).toBe(false);
     expect(isAmrOpencodeEventStreamResumeFailure('')).toBe(false);
+    // A compaction that merely RAN is not a compaction that died. The phrase
+    // has to name the EOF, or every successful compaction log line would send
+    // the turn through a cold re-seed.
+    expect(
+      isAmrOpencodeEventStreamResumeFailure('opencode compaction continuation started'),
+    ).toBe(false);
   });
 });
 
@@ -678,5 +797,38 @@ describe('resolveAgentResumeFailurePolicy', () => {
       autoReseedFullTranscript: false,
       reason: null,
     });
+  });
+
+  it('never reseeds a compaction continuation failure', () => {
+    expect(
+      resolveAgentResumeFailurePolicy({
+        agentId: 'amr',
+        stderr:
+          'json-rpc id 4: opencode event stream: opencode compaction continuation ended before prompt completion',
+        stdout: '',
+        isResuming: true,
+        resumeSessionId: 'ses-old',
+      }),
+    ).toEqual({
+      resumeFailed: false,
+      clearStaleSession: false,
+      autoReseedFullTranscript: false,
+      reason: null,
+    });
+  });
+
+  it('leaves a compaction EOF on a create turn alone', () => {
+    // The gate that keeps this from becoming a general retry: no stored handle
+    // was being continued, so there is nothing stale to clear and nothing to
+    // re-seed — the turn already ran from scratch.
+    expect(
+      resolveAgentResumeFailurePolicy({
+        agentId: 'amr',
+        stderr: 'opencode compaction continuation ended before prompt completion',
+        stdout: '',
+        isResuming: false,
+        resumeSessionId: null,
+      }).resumeFailed,
+    ).toBe(false);
   });
 });

@@ -1,5 +1,8 @@
 import { expect, test } from '@/playwright/suite';
-import { applyStandardMocks } from '@/playwright/mock-factory';
+import {
+  applyStandardMocks,
+  routeSignedOutVelaStatus,
+} from '@/playwright/mock-factory';
 import { mockAmrPersonalWorkspace } from '@/playwright/amr';
 import { ensureRailOpen } from '@/playwright/rail';
 import { T } from '@/timeouts';
@@ -14,9 +17,12 @@ const RECENT_PROJECTS = Array.from({ length: 6 }, (_, i) => ({
 }));
 
 // Regression boundary: the desktop update-ready prompt and the home composer's
-// model picker can be open at the same time. The updater now lives in the nav
-// rail, but it must still paint above the raised composer card and its popover
-// wherever those independently positioned surfaces overlap.
+// model picker can be open at the same time. Signed in with the rail on
+// screen, the updater rides the account row at the foot of the entry rail and
+// its prompt flies out beside the rail, bottom-aligned, so it never runs past
+// the window edge; in a compact window (rail auto-collapsed) and signed out it
+// keeps the top-right cluster and stays clear of the raised composer card and
+// its popover.
 
 test.beforeEach(async ({ page }) => {
   await applyStandardMocks(page);
@@ -79,17 +85,21 @@ test.beforeEach(async ({ page }) => {
 });
 
 for (const direction of ['ltr', 'rtl'] as const) {
-  test(`[P1] signed-in ${direction.toUpperCase()} update prompt opens below the standalone rocket within the viewport`, async ({
+  test(`[P1] signed-in ${direction.toUpperCase()} compact window keeps the rocket top-right and opens the prompt below it within the viewport`, async ({
     page,
   }) => {
+    // Below 1080px the entry layout auto-collapses the rail, and the account
+    // row that normally carries the rocket goes off screen with it — so the
+    // rocket falls back to its top-right home here.
     await mockAmrPersonalWorkspace(page);
     await page.setViewportSize({ width: 700, height: 600 });
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
-    await expect(page.getByTestId('entry-nav-account')).toBeVisible();
+    await expect(page.getByTestId('entry-top-right-github')).toBeVisible();
     await page.locator('html').evaluate((element, dir) => element.setAttribute('dir', dir), direction);
 
     const updaterButton = page.getByTestId('entry-nav-updater');
+    await expect(updaterButton.locator('xpath=ancestor::*[contains(@class, "entry-top-right-cluster")]')).toHaveCount(1);
     await updaterButton.click();
     const popup = page.getByTestId('updater-popup');
     await expect(popup).toBeVisible();
@@ -123,29 +133,96 @@ for (const direction of ['ltr', 'rtl'] as const) {
       geometry!.viewportWidth,
     );
   });
+
+  test(`[P1] signed-in ${direction.toUpperCase()} wide window parks the rocket on the rail account row and flies the prompt out beside it`, async ({
+    page,
+  }) => {
+    await mockAmrPersonalWorkspace(page);
+    // Wide enough to keep the rail on screen, short enough that a prompt
+    // growing downward from the foot of the rail would leave the viewport.
+    await page.setViewportSize({ width: 1200, height: 600 });
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
+    await ensureRailOpen(page);
+    await expect(page.getByTestId('entry-nav-account')).toBeVisible();
+    await page.locator('html').evaluate((element, dir) => element.setAttribute('dir', dir), direction);
+
+    // The rocket rides the account row at the foot of the rail, after the
+    // avatar and the message-centre bell.
+    const updaterButton = page.locator('.entry-nav-rail__account-dock .entry-nav-rail__account').getByTestId('entry-nav-updater');
+    await expect(updaterButton).toBeVisible();
+    await updaterButton.click();
+    const popup = page.getByTestId('updater-popup');
+    await expect(popup).toBeVisible();
+
+    const geometry = await page.evaluate(() => {
+      const rocket = document.querySelector('[data-testid="entry-nav-updater"]');
+      const host = rocket?.closest('.entry-updater-menu');
+      const prompt = document.querySelector('[data-testid="updater-popup"]');
+      if (rocket == null || host == null || prompt == null) return null;
+      const rocketRect = rocket.getBoundingClientRect();
+      const hostRect = host.getBoundingClientRect();
+      const promptRect = prompt.getBoundingClientRect();
+      return {
+        rocketLeft: rocketRect.left,
+        rocketRight: rocketRect.right,
+        rocketTop: rocketRect.top,
+        hostBottom: hostRect.bottom,
+        promptTop: promptRect.top,
+        promptBottom: promptRect.bottom,
+        promptLeft: promptRect.left,
+        promptRight: promptRect.right,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+      };
+    });
+
+    expect(geometry, 'updater rocket and prompt must both be measurable').not.toBeNull();
+    // Bottom-anchored to its host, growing upward: a top-anchored panel at the
+    // foot of the rail grew down past the window edge. The entry animation
+    // may still be settling, so the check is a band rather than a pixel.
+    expect(
+      geometry!.promptBottom,
+      'prompt must not hang below the rocket host',
+    ).toBeLessThanOrEqual(geometry!.hostBottom + 12);
+    expect(geometry!.promptTop, 'prompt must grow upward from the rocket').toBeLessThan(
+      geometry!.rocketTop,
+    );
+    if (direction === 'ltr') {
+      expect(geometry!.promptLeft, 'prompt must open to the right of the rocket').toBeGreaterThan(
+        geometry!.rocketRight,
+      );
+    } else {
+      expect(geometry!.promptRight, 'prompt must open to the left of the rocket').toBeLessThan(
+        geometry!.rocketLeft,
+      );
+    }
+    expect(geometry!.promptTop, 'prompt must stay inside the viewport top edge').toBeGreaterThanOrEqual(0);
+    expect(geometry!.promptBottom, 'prompt must stay inside the viewport bottom edge').toBeLessThanOrEqual(
+      geometry!.viewportHeight,
+    );
+    expect(geometry!.promptLeft, 'prompt must stay inside the viewport left edge').toBeGreaterThanOrEqual(0);
+    expect(geometry!.promptRight, 'prompt must stay inside the viewport right edge').toBeLessThanOrEqual(
+      geometry!.viewportWidth,
+    );
+  });
 }
 
-test('[P1] update ready prompt paints above the composer and its agent picker', async ({ page }) => {
-  test.fail(
-    true,
-    'The rail-hosted updater prompt currently paints behind the raised Home composer in compact windows.',
-  );
-  // In the current rail host the prompt grows upward from the footer. A compact
-  // desktop window puts it across the centered composer and model popover.
+test('[P1] signed-out update prompt stays clear of the composer and its agent picker', async ({ page }) => {
+  await routeSignedOutVelaStatus(page);
   await page.setViewportSize({ width: 700, height: 600 });
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
   await expect(page.getByTestId('home-hero')).toBeVisible();
 
-  // The updater host moved into the nav rail footer with the entry topbar's
-  // removal (#5517); the collapsed rail is inert, so expand it first. Open the
-  // control with the keyboard because this stacking test intentionally models
-  // the signed-out shell, whose Cloud sign-in card overlaps the footer pointer
-  // target. Updater pointer actionability is covered by its component tests.
-  await ensureRailOpen(page);
-  const updaterButton = page.getByTestId('entry-nav-updater');
-  await updaterButton.focus();
-  await page.keyboard.press('Enter');
+  // Signed-out has no account capsule, but the updater keeps the same
+  // top-right cluster home and remains directly actionable.
+  await expect(page.getByTestId('entry-nav-account')).toHaveCount(0);
+  const updaterButton = page
+    .locator('.entry-top-right-cluster')
+    .getByTestId('entry-nav-updater');
+  await expect(updaterButton).toBeVisible();
+  await updaterButton.click();
   const popup = page.getByTestId('updater-popup');
   await expect(popup).toBeVisible();
 
@@ -159,81 +236,34 @@ test('[P1] update ready prompt paints above the composer and its agent picker', 
   await expect(page.getByTestId('inline-model-switcher-popover')).toBeVisible();
   await expect(popup).toBeVisible();
 
-  // Require real overlap now that both surfaces are present so the stacking
-  // assertion cannot pass on separated geometry.
-  await expect
-    .poll(async () =>
-      page.evaluate(() => {
-        const popupEl = document.querySelector('[data-testid="updater-popup"]');
-        const card = document.querySelector('.home-hero__input-card');
-        const popover = document.querySelector('[data-testid="inline-model-switcher-popover"]');
-        if (popupEl == null || card == null || popover == null) return Number.NaN;
-        const popupRect = popupEl.getBoundingClientRect();
-        return Math.max(
-          ...[card, popover].map((element) => {
-            const rect = element.getBoundingClientRect();
-            const width = Math.min(popupRect.right, rect.right) - Math.max(popupRect.left, rect.left);
-            const height = Math.min(popupRect.bottom, rect.bottom) - Math.max(popupRect.top, rect.top);
-            return width > 0 && height > 0 ? width * height : 0;
-          }),
-        );
-      }),
-    )
-    .toBeGreaterThan(0);
   await expect(page.getByTestId('inline-model-switcher-popover')).toBeVisible();
   await expect(popup).toBeVisible();
 
-  // The prompt is a dialog: it must be the topmost element wherever the
-  // raised composer card or its agent-picker popover overlaps it. With the
-  // stacking bug, `elementFromPoint` resolves to composer/picker content
-  // instead of the prompt.
-  const probe = await page.evaluate(() => {
+  // Moving the signed-out updater from the rail footer to the top-right cluster
+  // removes the old collision altogether. Keep the geometry assertion after
+  // both surfaces open so a future repositioning cannot silently put the
+  // prompt back across the composer or its popover.
+  const overlapAreas = await page.evaluate(() => {
     const popupEl = document.querySelector('[data-testid="updater-popup"]');
     const overlays = [
       document.querySelector('.home-hero__input-card'),
       document.querySelector('[data-testid="inline-model-switcher-popover"]'),
     ];
     if (popupEl == null || overlays.some((el) => el == null)) {
-      return { ready: false, overlapArea: 0, samples: [] };
+      return null;
     }
     const p = popupEl.getBoundingClientRect();
-    let overlapArea = 0;
-    const samples: { x: number; y: number; insidePopup: boolean; hit: string }[] = [];
-    for (const overlay of overlays) {
+    return overlays.map((overlay) => {
       const r = (overlay as Element).getBoundingClientRect();
-      const left = Math.max(p.left, r.left);
-      const right = Math.min(p.right, r.right);
-      const top = Math.max(p.top, r.top);
-      const bottom = Math.min(p.bottom, r.bottom);
-      if (right - left < 4 || bottom - top < 4) continue;
-      overlapArea += (right - left) * (bottom - top);
-      for (const fx of [0.25, 0.5, 0.75]) {
-        for (const fy of [0.25, 0.5, 0.75]) {
-          const x = Math.round(left + (right - left) * fx);
-          const y = Math.round(top + (bottom - top) * fy);
-          const hit = document.elementFromPoint(x, y);
-          samples.push({
-            x,
-            y,
-            insidePopup: hit?.closest('[data-testid="updater-popup"]') != null,
-            hit:
-              hit instanceof HTMLElement
-                ? hit.className.toString().slice(0, 60) || hit.tagName
-                : (hit?.tagName ?? 'null'),
-          });
-        }
-      }
-    }
-    return { ready: true, overlapArea, samples };
+      const width = Math.min(p.right, r.right) - Math.max(p.left, r.left);
+      const height = Math.min(p.bottom, r.bottom) - Math.max(p.top, r.top);
+      return width > 0 && height > 0 ? width * height : 0;
+    });
   });
 
-  expect(probe.ready, 'popup, composer card, and agent picker must all be present').toBe(true);
-  // Geometry precondition: the composer surfaces actually reach under the
-  // prompt — otherwise this test would pass without exercising the stack.
-  expect(probe.overlapArea, 'composer must overlap the prompt area').toBeGreaterThan(0);
-  const leaks = probe.samples.filter((sample) => !sample.insidePopup);
   expect(
-    leaks,
-    `Composer content paints over the update prompt at: ${JSON.stringify(leaks)}`,
-  ).toEqual([]);
+    overlapAreas,
+    'popup, composer card, and agent picker must all be measurable',
+  ).not.toBeNull();
+  expect(overlapAreas, 'signed-out updater prompt must stay clear of composer surfaces').toEqual([0, 0]);
 });

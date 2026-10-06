@@ -45,6 +45,7 @@ function renderPanel(files: ProjectFile[]) {
   return render(
     <DesignFilesPanel
       projectId="test-project"
+      projectKind="prototype"
       files={files}
       liveArtifacts={[]}
       onRefreshFiles={vi.fn()}

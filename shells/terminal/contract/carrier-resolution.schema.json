@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nexu.io/contracts/terminal/carrier-resolution-v1.schema.json",
+  "title": "Terminal carrier resolution v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "shell", "target", "installRoot", "manifestFile", "runtime"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "shell": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "version", "digest"],
+      "properties": {
+        "type": {"const": "terminal"},
+        "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+        "digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "target": {"enum": ["darwin-arm64", "darwin-x64", "win32-x64"]},
+    "installRoot": {"type": "string", "minLength": 1},
+    "manifestFile": {"type": "string", "minLength": 1},
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "executablePath", "digest"],
+      "properties": {
+        "name": {"const": "node"},
+        "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+        "executablePath": {"type": "string", "minLength": 1},
+        "digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    }
+  }
+}

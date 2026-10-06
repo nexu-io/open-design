@@ -31,17 +31,17 @@ Packaged runtime state is namespace-scoped under `.tmp/tools-pack/runtime/mac/na
 - `cache/` is reserved for namespace-local packaged cache state.
 - `user-data/` is the Electron/Chromium `userData` root, with `user-data/session/` used for `sessionData`.
 
-Finder/manual launches cannot carry argv stamps on the root desktop process. To keep process fallback safe,
-`apps/packaged` writes `runtime/desktop-root.json` with the desktop stamp, PID, executable path, app path, and log path.
-`tools-pack mac stop` trusts that marker only when namespace/stamp/PID/command validation passes; otherwise it reports the
-unmanaged/not-owned reason instead of killing unknown processes.
+Every packaged root registers the exact five-field sidecar stamp
+(`channel / namespace / source / mode / app`) in its own argv. Direct OS
+launches register during packaged startup; tools-pack launches receive the same
+stamp through the sidecar launch atomic. No identity file participates in
+discovery or ownership.
 
-### `tools-pack mac stop` validation
-
-- If the marker is absent, stop reports `not-running`.
-- If the marker PID is gone, stop reports `not-running` and clears the stale marker.
-- If the marker PID was reused by an unrelated process, stop reports `unmanaged`.
-- If the marker namespace, stamp, runtime root, or command does not match the current namespace, stop reports `unmanaged`.
+`tools-pack mac stop` scans exact argv stamps for desktop, Web, and daemon across
+both tools-pack and direct packaged sources, requests private graceful teardown,
+waits for every captured generation to exit, and then force-stops only the
+still-matching process trees. Cleanup and uninstall refuse to remove artifacts
+while any captured generation remains alive.
 
 This keeps `stop` from killing processes outside the current namespace.
 
@@ -130,8 +130,8 @@ Headless mode targets environments without a display (WSL2, headless servers, CI
 `--headless` makes `install`, `start`, `stop`, `uninstall`, and `cleanup` operate on the headless entry (`@open-design/packaged/dist/headless.mjs`) instead of the AppImage. Headless mode runs daemon + web without Electron.
 
 - `install --headless` writes a shell launcher at `~/.local/bin/open-design-headless-<namespace>` that bakes in the namespace and resource paths. The launcher is self-contained, but the assembled app directory at those paths must remain in place — don't move it after install.
-- `start --headless` spawns the headless process directly, redirects stdout/stderr to `logs/desktop/latest.log`, and waits up to 95s (35s for identity marker + 60s for web URL) before returning.
-- `stop --headless` reads `runtime/headless-root.json` (separate from the AppImage path's `runtime/desktop-root.json`), validates the marker's packaged desktop stamp and namespace root, sends a graceful SHUTDOWN over IPC, then terminates the process tree. The separate marker prevents headless stop/cleanup from claiming a menu-launched AppImage; unlike AppImage stop, it does not perform the AppImage-specific process-command check.
+- `start --headless` launches through the sidecar atomic and waits up to 95s for private status readiness.
+- `stop --headless` terminally stops the exact `mode=headless` argv stamp. The mode field keeps it disjoint from the AppImage desktop without identity files or public IPC paths.
 - `inspect --headless` returns status only. Eval and screenshot require AppImage mode because there is no Electron renderer in headless mode.
 - `uninstall --headless` removes the headless launcher after a safe stop.
 - `cleanup --headless` stops the headless process before removing namespace output/runtime roots.

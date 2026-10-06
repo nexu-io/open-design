@@ -1,6 +1,6 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, sep } from "node:path";
+import { dirname, join, sep } from "node:path";
 
 import {
   LAUNCHER_SCHEMA_VERSION,
@@ -12,6 +12,7 @@ import { describe, expect, it } from "vitest";
 import type { PackagedConfig } from "../src/config.js";
 import {
   confirmPackagedLauncherRuntime,
+  sameExecutablePath,
   type PackagedLauncherRuntime,
   resolvePackagedLauncherRuntime,
 } from "../src/launcher-runtime.js";
@@ -38,7 +39,158 @@ function fakeConfig(root: string, appVersion = "1.2.3-beta.4"): PackagedConfig {
   };
 }
 
+async function writeActiveMacPayloadFixture(
+  root: string,
+  config: PackagedConfig,
+  telemetryRelayUrl?: string,
+): Promise<void> {
+  const version = "1.2.3-beta.5";
+  const versionPaths = resolveLauncherVersionPaths({
+    channel: "beta",
+    namespace: config.namespace,
+    root,
+    version,
+  });
+  const appRoot = join(versionPaths.payloadRoot, "Open Design Beta.app");
+  const resourcesPath = join(appRoot, "Contents", "Resources");
+  await mkdir(join(appRoot, "Contents", "MacOS"), { recursive: true });
+  await mkdir(resourcesPath, { recursive: true });
+  await writeFile(join(appRoot, "Contents", "MacOS", "Open Design Beta"), "");
+  await writeFile(
+    join(resourcesPath, "open-design-config.json"),
+    `${JSON.stringify({
+      appVersion: version,
+      ...(telemetryRelayUrl == null ? {} : { telemetryRelayUrl }),
+      webOutputMode: "server",
+    })}\n`,
+  );
+  await writeFile(
+    versionPaths.manifestPath,
+    `${JSON.stringify({
+      channel: "beta",
+      entry: {
+        cwd: "payload/Open Design Beta.app",
+        executable: "payload/Open Design Beta.app/Contents/MacOS/Open Design Beta",
+      },
+      namespace: config.namespace,
+      payloadRoot: "payload",
+      platform: "darwin",
+      schemaVersion: LAUNCHER_SCHEMA_VERSION,
+      version,
+    })}\n`,
+  );
+  const namespaceRoot = join(
+    root,
+    "launcher",
+    "channels",
+    "beta",
+    "namespaces",
+    config.namespace,
+  );
+  await mkdir(namespaceRoot, { recursive: true });
+  await writeFile(
+    join(namespaceRoot, "runtime.json"),
+    `${JSON.stringify({
+      active: { generation: 1, version },
+      channel: "beta",
+      lastSuccessful: { generation: 0, version: config.appVersion },
+      namespace: config.namespace,
+      schemaVersion: LAUNCHER_SCHEMA_VERSION,
+    })}\n`,
+  );
+}
+
 describe("resolvePackagedLauncherRuntime", () => {
+  it.each(["present", "missing", "undeclared"] as const)(
+    "uses only the selected payload's daemon CLI (%s), never the installed outer CLI",
+    async (state) => {
+      const root = await mkdtemp(join(tmpdir(), "od-payload-cli-"));
+      try {
+        const config = fakeConfig(root);
+        config.daemonCliEntry = join(root, "installed", "old-daemon-cli.mjs");
+        await writeActiveMacPayloadFixture(root, config);
+        const versionPaths = resolveLauncherVersionPaths({
+          channel: "beta", namespace: config.namespace, root, version: "1.2.3-beta.5",
+        });
+        const resources = join(versionPaths.payloadRoot, "Open Design Beta.app", "Contents", "Resources");
+        const cli = join(resources, "app", "prebundled", "daemon", "daemon-cli.mjs");
+        if (state === "present") {
+          await mkdir(dirname(cli), { recursive: true });
+          await writeFile(cli, "// selected payload CLI");
+        }
+        const configPath = join(resources, "open-design-config.json");
+        const raw = JSON.parse(await readFile(configPath, "utf8"));
+        if (state !== "undeclared") raw.daemonCliEntryRelative = "app/prebundled/daemon/daemon-cli.mjs";
+        await writeFile(configPath, JSON.stringify(raw));
+        const runtime = await resolvePackagedLauncherRuntime(config, resolvePackagedNamespacePaths(config));
+        expect(runtime.source).toBe("payload");
+        expect(runtime.config.daemonCliEntry).toBe(state === "present" ? cli : null);
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it("recognizes the same executable through a symlinked root", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-packaged-executable-identity-"));
+    try {
+      const physicalRoot = join(root, "physical");
+      const aliasRoot = join(root, "alias");
+      const executable = join(physicalRoot, "Open Design.app", "Contents", "MacOS", "Open Design");
+      await mkdir(dirname(executable), { recursive: true });
+      await writeFile(executable, "");
+      await symlink(physicalRoot, aliasRoot, "dir");
+
+      await expect(sameExecutablePath(
+        join(aliasRoot, "Open Design.app", "Contents", "MacOS", "Open Design"),
+        executable,
+      )).resolves.toBe(true);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it.each([
+    {
+      expected: "https://relay.payload.example/v1",
+      name: "uses a payload relay when the historical outer has none",
+      outer: null,
+      payload: "https://relay.payload.example/v1",
+    },
+    {
+      expected: "https://relay.payload.example/v2",
+      name: "lets a payload relay replace the historical outer relay",
+      outer: "https://relay.outer.example/v1",
+      payload: "https://relay.payload.example/v2",
+    },
+    {
+      expected: "https://relay.outer.example/v1",
+      name: "inherits the historical outer relay when the payload omits it",
+      outer: "https://relay.outer.example/v1",
+      payload: undefined,
+    },
+    {
+      expected: "https://relay.outer.example/v1",
+      name: "inherits the historical outer relay when the payload relay is blank",
+      outer: "https://relay.outer.example/v1",
+      payload: "   ",
+    },
+  ] as const)("$name", async ({ expected, outer, payload }) => {
+    const root = await mkdtemp(join(tmpdir(), "od-packaged-launcher-relay-"));
+    try {
+      const config = { ...fakeConfig(root), telemetryRelayUrl: outer };
+      const paths = resolvePackagedNamespacePaths(config);
+      await writeActiveMacPayloadFixture(root, config, payload);
+
+      const runtime = await resolvePackagedLauncherRuntime(config, paths);
+
+      expect(runtime.source).toBe("payload");
+      expect(runtime.config.telemetryRelayUrl).toBe(expected);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   it("initializes launcher runtime state without replacing the current installed package", async () => {
     const root = await mkdtemp(join(tmpdir(), "od-packaged-launcher-runtime-"));
     try {

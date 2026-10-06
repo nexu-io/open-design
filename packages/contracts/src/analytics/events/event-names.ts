@@ -25,10 +25,14 @@ export type AnalyticsEventName =
   | 'mcp_tool_finished'
   // Paid media provider request outcome and bounded response retry.
   | 'media_generation_result'
+  // Chat artifact snapshot capture outcome per finished run. Daemon-only;
+  // `source_changed_count` is the correctness alarm inside it.
+  | 'chat_artifact_capture_result'
   // Packaged updater lifecycle
   | 'update_install_result'
   | 'update_check_result'
   | 'update_apply_observed'
+  | 'update_lifecycle_observed'
   // Packaged startup failure — emitted by the packaged MAIN process (not the
   // daemon) when daemon/web sidecars die before reporting status, i.e. the
   // pre-daemon crash class that produces zero telemetry today (issue #4638).
@@ -42,6 +46,7 @@ export type AnalyticsEventName =
   | 'context_link_result'
   | 'speaker_notes_save_result'
   // Artifact
+  | 'artifact_edit_result'
   | 'artifact_export_result'
   | 'artifact_deploy_result'
   | 'artifact_publish_result'
@@ -65,11 +70,17 @@ export type AnalyticsEventName =
   | 'assistant_feedback_reason_submit'
   // Settings
   | 'settings_view'
+  // Labs experiment opt-in / opt-out (generic across experiments).
+  | 'labs_item_toggled'
   | 'settings_cli_test_result'
   | 'settings_byok_test_result'
   | 'settings_byok_models_fetch_result'
   | 'byok_preflight_blocked'
   | 'settings_connector_auth_result'
+  // Fleet health for locally installed agent CLIs. Detection is the only stage
+  // that learns an installed CLI cannot actually be used; without this, the
+  // only way we hear about it is a user filing a report with a diagnostics zip.
+  | 'agent_detect_diagnostic'
   // AMR (hosted model) account auth result.
   | 'amr_auth_stage'
   | 'amr_auth_result'

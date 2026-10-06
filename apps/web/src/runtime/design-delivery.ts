@@ -1,4 +1,8 @@
 import type { ChatSessionMode } from '@open-design/contracts';
+import {
+  containsQuestionFormAsk,
+  containsUnrenderableQuestionForm,
+} from '../artifacts/question-form';
 import type { AgentEvent, ChatMessage } from '../types';
 import { hasFileMutationToolUse } from './file-ops';
 import { unfinishedTodosFromEvents } from './todos';
@@ -39,8 +43,15 @@ export function isRetryableAssistantTerminalFailure(
   );
 }
 
+/**
+ * A bare open-tag scan is not enough: a turn that needed no clarification can
+ * narrate its decision straight into a `<question-form>` tag, and treating
+ * that prose as an ask latches the turn to `awaiting_input` no matter what it
+ * delivered. Share the form protocol's own body precondition instead of
+ * growing a second regex here.
+ */
 function asksForUserInput(content: string): boolean {
-  return /<(?:question-form|ask-question)\b/i.test(content);
+  return containsQuestionFormAsk(content);
 }
 
 function isIntermediateDesignTurn(
@@ -92,6 +103,7 @@ export function resolveDesignDeliveryOutcome(
     return 'delivered';
   }
   if (input.persistenceFailed) return 'delivery_failed';
+  if (containsUnrenderableQuestionForm(input.content)) return 'no_result';
   if (!hasFileMutationToolUse(input.events) && input.content.trim().length > 0) {
     return 'report_only';
   }

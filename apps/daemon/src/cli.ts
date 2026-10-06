@@ -13,11 +13,12 @@ import { DESIGN_SYSTEMS_USAGE, isDesignSystemsHelpArg } from './cli-help/index.j
 import { BRAND_USAGE, isBrandHelpArg } from './cli-help/index.js';
 import { parseDesignSystemRenameArgs } from './design-systems/rename-args.js';
 import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
+import { runDeliverableSyntaxToolCli } from './tools-deliverable-syntax-cli.js';
 import { splitResearchSubcommand } from './research/cli-args.js';
 import { resolveDaemonUrl } from './daemon-url.js';
-import { requestJsonIpc } from '@open-design/sidecar';
-import { SIDECAR_ENV, SIDECAR_MESSAGES } from '@open-design/sidecar-proto';
-import { EXPORT_FORMATS, EXPORT_IMAGE_FORMATS } from '@open-design/contracts';
+import { SidecarFactory } from '@open-design/sidecar';
+import { APP_KEYS, SIDECAR_MESSAGES } from '@open-design/sidecar-proto';
+import { EXPORT_FORMATS, EXPORT_IMAGE_FORMATS, mediaFailureNextStep } from '@open-design/contracts';
 import type { ArtifactLintFinding, LintArtifactCliResultEnvelope, LintArtifactResponse, LintFailOn } from '@open-design/contracts';
 import { buildExportCliRequestBody, buildExportCliResultEnvelope, resolveExportCliDeckMode } from './export-cli-request.js';
 import { exportRoutePath } from './export-cli-routing.js';
@@ -245,18 +246,20 @@ const MESSAGE_CENTER_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 const PROJECT_STRING_FLAGS = new Set([
   'daemon-url', 'name', 'skill', 'design-system', 'plugin', 'metadata-json',
   'pending-prompt', 'project', 'conversation', 'message', 'prompt',
-  'prompt-file', 'path', 'dir', 'as', 'url',
+  'prompt-file', 'task-execution', 'path', 'dir', 'as', 'url',
+  'client-request-id',
   'agent', 'model', 'service-tier', 'snapshot-id', 'inputs', 'grant-caps', 'editor',
   'title', 'label', 'against', 'seed-from', 'fork-after', 'mode',
-  'source',
+  'source', 'out',
 ]);
 const PROJECT_RESOURCE_STRING_FLAGS = new Set([
   ...PROJECT_STRING_FLAGS,
   'workspace',
   'workspace-member',
 ]);
-const PROJECT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'follow']);
+const PROJECT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'follow', 'thumbnail']);
 const WORKSPACE_STRING_FLAGS = new Set([
+  'model',
   'daemon-url', 'workspace', 'view', 'visibility', 'owner', 'project',
   'member', 'role', 'email', 'app-user', 'lifecycle-state',
   'member-status', 'can-share-projects', 'can-write-synced-files',
@@ -348,6 +351,8 @@ const BRAND_BOOLEAN_FLAGS = new Set([
 ]);
 const AGENT_STRING_FLAGS = new Set(['daemon-url']);
 const AGENT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
+const STRATEGY_STRING_FLAGS = new Set(['daemon-url']);
+const STRATEGY_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 // Hoisted because `runAutomation` is reachable through the top-of-file
 // SUBCOMMAND_MAP dispatch, which runs during module evaluation —
 // any `const` declared further down would still be in TDZ when
@@ -397,6 +402,7 @@ const SUBCOMMAND_MAP = {
   brand: runBrand,
   brands: runBrand,
   project: runProject,
+  strategy: runStrategy,
   workspace: runWorkspace,
   automation: runAutomation,
   automations: runAutomation,
@@ -425,6 +431,90 @@ const SUBCOMMAND_MAP = {
   library: runLibrary,
   figma: runFigma,
 };
+
+function printStrategyHelp() {
+  console.log(`Usage:
+  od strategy rollout status [--json] [--daemon-url <url>]
+
+Report which OD Next mode this daemon is running and which authority chose it.
+
+OD Next runs by default; this installation opts out of it here:
+
+  od config set odNextStrategyMode off       Opt out; takes effect next run.
+  od config set odNextStrategyMode active    Opt back in.
+
+Status names the authority in effect (env / app_config / default), which the
+mode alone does not: leaving it unset and saving 'off' produce opposite routes.
+
+Options:
+  --json                   Emit the daemon response as JSON.
+  --daemon-url <url>       Override the Open Design daemon HTTP base.`);
+}
+
+function printStrategyRolloutStatus(status) {
+  console.log(`Strategy\t${status.strategyId}`);
+  console.log(`Scope\t${status.scope}`);
+  console.log(`Requested mode\t${status.requestedMode}`);
+  if (status.requestedModeSource) console.log(`Requested by\t${status.requestedModeSource}`);
+  console.log(`Effective mode\t${status.effectiveMode}`);
+}
+
+async function runStrategy(args) {
+  if (
+    args.length === 0
+    || args[0] === 'help'
+    || args.includes('--help')
+    || args.includes('-h')
+  ) {
+    printStrategyHelp();
+    process.exit(args.length === 0 ? 2 : 0);
+  }
+  const [area, action = 'status', ...rest] = args;
+  // `reset` cleared the stop latch, and the latch is gone: nothing can disable
+  // OD Next for an installation any more except that installation saving `off`.
+  // Named here rather than left to the usage dump, because it has shipped in
+  // every release since 0.21.0 and an operator who scripted it deserves to be
+  // told what happened rather than shown a list it is missing from.
+  //
+  // It fails instead of succeeding as a no-op. The command meant "recover this
+  // machine's rollout"; reporting success for a recovery that neither happened
+  // nor can happen is the same lie the latch itself told, and this release is
+  // removing that lie rather than relocating it.
+  if (area === 'rollout' && action === 'reset') {
+    console.error(
+      'od strategy rollout reset was removed: the daemon-instance stop latch it '
+      + 'cleared no longer exists, so there is nothing to reset.\n'
+      + 'OD Next now runs unless this installation opts out. To opt out:\n'
+      + '  od config set odNextStrategyMode off\n'
+      + 'To check which authority decides the mode:\n'
+      + '  od strategy rollout status',
+    );
+    process.exit(2);
+  }
+  if (area !== 'rollout' || action !== 'status') {
+    printStrategyHelp();
+    process.exit(2);
+  }
+  const flags = parseFlags(rest, {
+    string: STRATEGY_STRING_FLAGS,
+    boolean: STRATEGY_BOOLEAN_FLAGS,
+  });
+  const base = (await cliDaemonUrl(flags)).replace(/\/$/, '');
+  const readStatus = async () => {
+    let response;
+    try {
+      response = await fetch(`${base}/api/strategies/od-next/rollout`);
+    } catch (error) {
+      surfaceFetchError(error, base);
+      process.exit(3);
+    }
+    if (!response.ok) return structuredHttpFailure(response);
+    return response.json();
+  };
+  const payload = await readStatus();
+  if (flags.json) return process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+  printStrategyRolloutStatus(payload.status);
+}
 
 function printAgentHelp() {
   console.log(`Usage: od agent setup deepseek-harness [options]
@@ -763,6 +853,16 @@ if (argv[0] === 'tools' && argv[1] === 'live-artifacts') {
       process.stderr.write(`${JSON.stringify({ ok: false, error: { message } })}\n`);
       process.exitCode = 1;
     });
+} else if (argv[0] === 'tools' && argv[1] === 'deliverable-syntax') {
+  runDeliverableSyntaxToolCli(argv.slice(2))
+    .then(({ exitCode }) => {
+      process.exitCode = exitCode;
+    })
+    .catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      process.stderr.write(`${JSON.stringify({ ok: false, error: { message } })}\n`);
+      process.exitCode = 1;
+    });
 } else if (argv[0] === 'tools' && argv[1] === 'connectors') {
   runConnectorsToolCli(argv.slice(2))
     .then(({ exitCode }) => {
@@ -863,6 +963,9 @@ function printRootHelp() {
 
   od tools live-artifacts <create|list|update|refresh> [options]
       Manage live artifacts through daemon wrapper commands.
+
+  od tools deliverable-syntax check [--json]
+      Check the current deliverable syntax through the daemon wrapper.
 
   od tools directions [--id <id> | --label <label>] [--json]
       List the built-in design directions, or print one direction's full
@@ -1623,7 +1726,7 @@ Output is JSON only on stdout:
 Flags:
   --query        Required search query.
   --max-sources  Optional source cap. Defaults to 5, clamped to Tavily's max.
-  --daemon-url   Local daemon URL. Defaults to OD_DAEMON_URL, OD_SIDECAR_IPC_PATH discovery, or http://127.0.0.1:7456.`);
+  --daemon-url   Local daemon URL. Defaults to OD_DAEMON_URL, inherited sidecar discovery, or http://127.0.0.1:7456.`);
 }
 
 // ---------------------------------------------------------------------------
@@ -1716,6 +1819,10 @@ async function runMediaGenerate(rawArgs) {
     console.error(err.message);
     printMediaHelp();
     process.exit(2);
+  }
+  if (flags.help || flags.h) {
+    printMediaHelp();
+    return;
   }
 
   const daemonUrl = await cliDaemonUrl(flags);
@@ -1810,11 +1917,19 @@ async function runMediaGenerate(rawArgs) {
   });
 }
 
+// A dispatch that never produced a media task still has to answer "so what
+// now?" -- the caller reads the same `nextStep` here as it does off a failed
+// task snapshot, so one branch in the agent covers both shapes.
 async function exitWithMediaError(error, exitCode) {
   const safeError = {
     code: error.code,
     message: error.message,
     ...(typeof error.retryable === 'boolean' ? { retryable: error.retryable } : {}),
+    nextStep: mediaFailureNextStep({
+      code: error.code,
+      message: error.message,
+      retryable: typeof error.retryable === 'boolean' ? error.retryable : undefined,
+    }),
   };
   process.stderr.write(JSON.stringify({ error: safeError }) + '\n');
   await flushStreamsAndExit(exitCode);
@@ -2259,7 +2374,7 @@ every iteration.
 
 Options:
   --daemon-url <url>   OpenDesign daemon HTTP base URL. Resolution
-                       order: this flag, OD_DAEMON_URL, OD_SIDECAR_IPC_PATH,
+                       order: this flag, OD_DAEMON_URL, inherited sidecar status,
                        then http://127.0.0.1:7456. Each new MCP spawn
                        discovers the live daemon URL at startup, so
                        MCP client configs stay valid across daemon
@@ -2271,6 +2386,14 @@ Options:
                        before calls and safely retries reads when the
                        daemon changes ports, so an existing task can
                        survive an OpenDesign restart.
+
+Environment:
+  OD_MCP_STDIO_IDLE_EXIT_MS
+                       Milliseconds without MCP activity before this
+                       stdio process exits. Defaults to 1800000 (30
+                       minutes), is capped at 86400000 (24 hours), and
+                       can be set to 0 to keep the process alive until
+                       the MCP client disconnects.
 
 Tools exposed:
   list_projects                  list every OpenDesign project
@@ -3126,7 +3249,7 @@ async function runMarketplace(args) {
                                                               Update the marketplace trust tier.
 
 Common options:
-  --daemon-url <url>   OpenDesign daemon HTTP base (default OD_DAEMON_URL, OD_SIDECAR_IPC_PATH discovery, or http://127.0.0.1:7456).
+  --daemon-url <url>   OpenDesign daemon HTTP base (default OD_DAEMON_URL, inherited sidecar discovery, or http://127.0.0.1:7456).
   --json               Emit raw JSON (suitable for scripts).`);
     process.exit(args.length === 0 ? 2 : 0);
   }
@@ -6022,7 +6145,7 @@ function printUiHelp() {
                                                      Pre-answer a surface so the run never broadcasts it.
 
 Common options:
-  --daemon-url <url>   OpenDesign daemon HTTP base (default OD_DAEMON_URL, OD_SIDECAR_IPC_PATH discovery, or http://127.0.0.1:7456).
+  --daemon-url <url>   OpenDesign daemon HTTP base (default OD_DAEMON_URL, inherited sidecar discovery, or http://127.0.0.1:7456).
   --workspace <id>     Explicit Workspace id for a bound project or run.
   --workspace-member <id>
                        Explicit Workspace member id for a bound project or run.
@@ -6080,7 +6203,7 @@ function printPluginHelp() {
   od plugin whoami [--host github.com]     Show the gh account used for publishing.
 
 Common options:
-  --daemon-url <url>   OpenDesign daemon HTTP base (default OD_DAEMON_URL, OD_SIDECAR_IPC_PATH discovery, or http://127.0.0.1:7456).
+  --daemon-url <url>   OpenDesign daemon HTTP base (default OD_DAEMON_URL, inherited sidecar discovery, or http://127.0.0.1:7456).
   --json               Emit raw JSON (suitable for scripts) instead of human-readable output.
 
 Installs support local folders, github:owner/repo refs, HTTPS .tgz archives,
@@ -6886,6 +7009,9 @@ async function runProject(args) {
                     [--design-system <id>] [--json]
   od project list                         List projects.
   od project info <id>                    Print one project.
+  od project restore-automatic-scenario <id> [--json]
+                                          Restore the daemon-selected default
+                                          scenario with a snapshot CAS guard.
   od project delete <id>                  Delete a project.
   od project revoke-public-link <id> --path <file> --url <public-url>
                     Revoke a public file link whose local publication record
@@ -6898,6 +7024,16 @@ async function runProject(args) {
   od project handoff <id> --conversation <id> --api-key <key> --model <model>
                     [--base-url <url>] [--max-tokens <n>]
                     Synthesize a resume-conversation handoff prompt.
+  od project artifact-snapshot list --project <id> --conversation <id>
+                    --message <id> [--json]
+                    List one chat message's artifact refs — which version each
+                    card shows and which one clicking it opens.
+  od project artifact-snapshot inspect <snapshotId> --project <id> [--json]
+                    Print one immutable snapshot's metadata (digest, size,
+                    capture state, lineage).
+  od project artifact-snapshot export <snapshotId> --project <id> --out <path>
+                    [--thumbnail] [--json]
+                    Write a snapshot's exact historical bytes to a local file.
 
 Common options:
   --daemon-url <url>   OpenDesign daemon HTTP base.
@@ -6989,6 +7125,30 @@ Common options:
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');
       return;
     }
+    case 'restore-automatic-scenario': {
+      const id = positionalArgs(rest, PROJECT_RESOURCE_STRING_FLAGS)[0];
+      if (!id) {
+        console.error('Usage: od project restore-automatic-scenario <id> [--json]');
+        process.exit(2);
+      }
+      const infoResponse = await fetch(`${base}/api/projects/${encodeURIComponent(id)}`, {
+        headers: workspaceHeaders,
+      });
+      if (!infoResponse.ok) return structuredHttpFailure(infoResponse, 'project-not-found');
+      const info = await infoResponse.json();
+      const data = await postJsonToDaemon(
+        base,
+        `/api/projects/${encodeURIComponent(id)}/scenario/restore-automatic`,
+        { expectedCurrentSnapshotId: info.project?.appliedPluginSnapshotId ?? null },
+        workspaceHeaders,
+      );
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      console.log(
+        `[project] automatic scenario ${data.changed ? 'restored' : 'already active'} `
+        + `${data.scenarioBinding?.pluginId ?? '-'}@${data.scenarioBinding?.snapshotId ?? '-'}`,
+      );
+      return;
+    }
     case 'revoke-public-link': {
       const id = positionalArgs(rest, PROJECT_RESOURCE_STRING_FLAGS)[0];
       const filePath = typeof flags.path === 'string' ? flags.path.trim() : '';
@@ -7065,6 +7225,23 @@ Common options:
             code:    'capabilities-required',
             message: data.error.message,
             data:    data.error.data,
+          });
+        }
+        // The daemon bounds create preparation (15s by default) and answers
+        // 504 PROJECT_CREATE_PREPARATION_TIMEOUT without committing anything.
+        // Surface that code the same way the Web does so an embedding agent
+        // can retry the identical request instead of parsing a log line.
+        if (flags.json && typeof data?.error?.code === 'string') {
+          return exitWithStructuredError({
+            code:    data.error.code,
+            message: typeof data.error.message === 'string'
+              ? data.error.message
+              : `POST /api/projects failed: ${resp.status}`,
+            data:    {
+              status:    resp.status,
+              retryable: data.error.retryable === true,
+              ...(data.error.details !== undefined ? { details: data.error.details } : {}),
+            },
           });
         }
         console.error(`POST /api/projects failed: ${resp.status} ${JSON.stringify(data)}`);
@@ -7225,6 +7402,95 @@ Common options:
       console.log(`[project] opened ${id} in ${editor} (${data.path ?? ''})`);
       return;
     }
+    // Chat artifact snapshots. The UI reads these through the same endpoints;
+    // this is the embeddability half of the dual-track rule, so an external
+    // agent can inspect and export a turn's exact bytes without the web app.
+    case 'artifact-snapshot': {
+      const action = rest[0];
+      const projectId = String(flags.project ?? '').trim();
+      if (!projectId) {
+        console.error('od project artifact-snapshot requires --project <id>');
+        process.exit(2);
+      }
+      const scope = `/api/projects/${encodeURIComponent(projectId)}`;
+      if (action === 'list') {
+        const conversationId = String(flags.conversation ?? '').trim();
+        const messageId = String(flags.message ?? '').trim();
+        if (!conversationId || !messageId) {
+          console.error('od project artifact-snapshot list requires --conversation <id> --message <id>');
+          process.exit(2);
+        }
+        const resp = await fetch(
+          `${base}${scope}/conversations/${encodeURIComponent(conversationId)}`
+            + `/messages/${encodeURIComponent(messageId)}/artifacts`,
+          { headers: workspaceHeaders },
+        );
+        if (!resp.ok) return structuredHttpFailure(resp);
+        const data = await resp.json();
+        if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+        const artifacts = data?.artifacts ?? [];
+        if (artifacts.length === 0) {
+          console.log('No artifact refs on this message.');
+          return;
+        }
+        for (const ref of artifacts) {
+          console.log(
+            // No `opens:` column: every card opens the workspace's latest
+            // file, so printing it per row would only imply it varies.
+            `${ref.label}\t${ref.kind}\tshows:${ref.displayPolicy}`
+              + `\t${ref.snapshotState}\t${ref.snapshotId ?? '-'}`,
+          );
+        }
+        return;
+      }
+      if (action === 'inspect') {
+        const snapshotId = String(rest[1] ?? '').trim();
+        if (!snapshotId) {
+          console.error('od project artifact-snapshot inspect requires <snapshotId>');
+          process.exit(2);
+        }
+        const resp = await fetch(
+          `${base}${scope}/chat-artifact-snapshots/${encodeURIComponent(snapshotId)}`,
+          { headers: workspaceHeaders },
+        );
+        if (!resp.ok) return structuredHttpFailure(resp);
+        const data = await resp.json();
+        if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+        const snapshot = data?.snapshot ?? {};
+        console.log(`${snapshot.id}\t${snapshot.kind}\t${snapshot.state}`);
+        console.log(`  captured from: ${snapshot.sourcePathAtCapture}`);
+        console.log(`  digest:        ${snapshot.contentDigest ?? '-'}`);
+        console.log(`  bytes:         ${snapshot.byteSize ?? '-'}`);
+        if (snapshot.failureCode) console.log(`  failure:       ${snapshot.failureCode}`);
+        return;
+      }
+      if (action === 'export') {
+        const snapshotId = String(rest[1] ?? '').trim();
+        const out = String(flags.out ?? '').trim();
+        if (!snapshotId || !out) {
+          console.error('od project artifact-snapshot export requires <snapshotId> --out <path>');
+          process.exit(2);
+        }
+        const which = flags.thumbnail ? 'thumbnail' : 'content';
+        const resp = await fetch(
+          `${base}${scope}/chat-artifact-snapshots/${encodeURIComponent(snapshotId)}/${which}`,
+          { headers: workspaceHeaders },
+        );
+        if (!resp.ok) return structuredHttpFailure(resp);
+        const buffer = Buffer.from(await resp.arrayBuffer());
+        writeFileSync(out, buffer);
+        if (flags.json) {
+          return process.stdout.write(
+            JSON.stringify({ snapshotId, out, byteSize: buffer.byteLength }, null, 2) + '\n',
+          );
+        }
+        console.log(`[project] wrote ${buffer.byteLength} bytes to ${out}`);
+        return;
+      }
+      console.error('usage: od project artifact-snapshot <list|inspect|export> …');
+      process.exit(2);
+      return;
+    }
     default:
       console.error(`unknown subcommand: od project ${sub}`);
       process.exit(2);
@@ -7241,7 +7507,7 @@ async function runWorkspace(args) {
   od workspace projects batch-delete --workspace <id> --member <id> --project <id> [--project <id> ...] [--json]
   od workspace projects batch-move --workspace <id> --member <id> --visibility personal|team --project <id> [--project <id> ...] [--json]
   od workspace members list --workspace <id> --member <id> [--json]
-  od workspace billing [--workspace-type personal|team --workspace <id>] [--json]
+  od workspace billing [--workspace-type personal|team --workspace <id>] [--model <id>] [--json]
 
 Common options:
   --daemon-url <url>   OpenDesign daemon HTTP base.
@@ -7321,16 +7587,17 @@ Common options:
     if (
       (workspaceType && workspaceType !== 'personal' && workspaceType !== 'team') ||
       (workspaceType && !workspaceId) ||
-      (!workspaceType && workspaceId)
+      (!workspaceType && workspaceId) ||
+      (flags.model && !workspaceId)
     ) {
       console.error(
-        'Usage: od workspace billing [--workspace-type personal|team --workspace <id>] [--json]',
+        'Usage: od workspace billing [--workspace-type personal|team --workspace <id>] [--model <id>] [--json]',
       );
       process.exit(2);
     }
     const billingPath =
       workspaceType
-        ? `/api/workspace/billing?scope=workspace&workspaceId=${encodeURIComponent(workspaceId)}`
+        ? `/api/workspace/billing?scope=workspace&workspaceId=${encodeURIComponent(workspaceId)}&includePreflight=1${typeof flags.model === 'string' ? `&modelId=${encodeURIComponent(flags.model)}` : ''}`
         : '/api/workspace/billing?scope=account';
     const data = await workspaceContextRequest(billingPath);
     if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
@@ -7349,6 +7616,12 @@ Common options:
       console.log(`Account credits:\t${summary.totalAvailableCredits}`);
       console.log(`  Account plan credits:\t${summary.subscriptionCredits}`);
       console.log(`  Account top-up credits:\t${summary.rechargeCredits}`);
+    }
+    if (data?.preflight) {
+      console.log(`Expected funding: ${data.preflight.funding} (gateway decides final admission)`);
+      for (const window of data.preflight.codingPlan.windows) {
+        console.log(`Coding Plan ${window.durationSeconds}s: ${window.remainingCredits}/${window.limitCredits} credits remaining; resets ${window.resetsAt ?? 'not started yet'}`);
+      }
     }
     const balanceUsd = workspaceBalance?.balanceUsd ?? summary?.balanceUsd;
     if (balanceUsd != null) {
@@ -7516,13 +7789,22 @@ async function runRun(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
   od run start --project <projectId> [--conversation <id>] [--message "<text>"]
-               [--plugin <id>] [--inputs <json>] [--grant-caps a,b]
+               [--prompt-file <path|->] [--task-execution <id>]
+               [--client-request-id <id>]
+               [--skill <id>[,<id>]] [--plugin <id>] [--inputs <json>] [--grant-caps a,b]
                [--agent claude|codex|opencode] [--model <id>] [--service-tier <id>]
                [--workspace <id> --workspace-member <id>] [--follow] [--json]
   od run redesign [--path <folder>] [--message "<text>" | --prompt-file <path|->]
                [--agent claude] [--model <id>] [--service-tier <id>] [--follow] [--json]
   od run watch  <runId>                     ND-JSON event stream on stdout.
   od run cancel <runId>                     Request cancellation.
+  od run steer  <runId> [--message "<text>" | --prompt-file <path|->] [--json]
+                                            Push a message into the turn that is
+                                            STILL RUNNING (「引导对话」) instead of
+                                            cancelling and resending. Only agents
+                                            whose CLI keeps stdin open mid-turn
+                                            can take it; the rest refuse with
+                                            RUN_STEERING_UNSUPPORTED.
   od run continue <runId> [--follow]        Continue a resumable failed run.
   od run list   [--project <id>]            List recent runs.
   od run info   <runId>                     One run's status.
@@ -7555,7 +7837,8 @@ Common options:
       if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
       const runs = data?.runs ?? [];
       for (const r of runs) {
-        console.log(`${r.id}\t${r.status}\tproject=${r.projectId ?? '-'}\tplugin=${r.pluginId ?? '-'}`);
+        const task = r.strategyTask;
+        console.log(`${r.id}\t${r.status}\tproject=${r.projectId ?? '-'}\tplugin=${r.pluginId ?? '-'}${task ? `\ttask=${task.taskExecutionId}\tactive=${task.activeRunId}\toutcome=${task.outcome}` : ''}`);
       }
       return;
     }
@@ -7593,6 +7876,9 @@ Common options:
       console.log(`workspace\t${storage.kind ?? '-'}\t${storage.baseDir ?? '-'}`);
       console.log(`provenance\t${provenance?.kind ?? '-'}\twriteback=${provenance?.writeback ?? '-'}`);
       console.log(`project\t${data?.project?.id ?? '-'}\tfiles=${data?.project?.fileCount ?? 0}`);
+      if (data?.strategyTask) {
+        console.log(`task\t${data.strategyTask.taskExecutionId}\tactive=${data.strategyTask.activeRunId}\toutcome=${data.strategyTask.outcome}`);
+      }
       const artifacts = Array.isArray(data?.artifacts) ? data.artifacts : [];
       for (const artifact of artifacts) {
         console.log(`artifact\t${artifact.file ?? '-'}\t${artifact.kind ?? '-'}\t${artifact.title ?? '-'}`);
@@ -7610,7 +7896,44 @@ Common options:
         headers: workspaceHeaders,
       });
       if (!resp.ok) return structuredHttpFailure(resp, 'run-not-found');
-      console.log(`[run] cancelled ${id}`);
+      const data = await resp.json();
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      const canceledRun = data?.run ?? {};
+      console.log(`[run] cancelled ${canceledRun.id ?? id}`);
+      if (canceledRun.strategyTask) {
+        console.log(`task\t${canceledRun.strategyTask.taskExecutionId}\tactive=${canceledRun.strategyTask.activeRunId}\toutcome=${canceledRun.strategyTask.outcome}`);
+      }
+      return;
+    }
+    // B11 「引导对话」. The dual of `cancel`: the turn is NOT stopped, the text is
+    // written onto the agent child's still-open stdin so the model reads it
+    // mid-turn. Long instructions go through --prompt-file <path|-> so a
+    // heredoc / jq pipeline stays clean (same contract as `od automation`).
+    case 'steer': {
+      const id = positionalArgs(rest, PROJECT_RESOURCE_STRING_FLAGS)[0];
+      const text = (
+        (typeof flags.message === 'string' && flags.message.length > 0
+          ? flags.message
+          : await readPromptFromFlags(flags)) ?? ''
+      ).trim();
+      if (!id || !text) {
+        console.error(
+          'Usage: od run steer <runId> --message "<text>" [--json]\n'
+          + '       od run steer <runId> --prompt-file <path|-> [--json]',
+        );
+        process.exit(2);
+      }
+      const resp = await fetch(`${base}/api/runs/${encodeURIComponent(id)}/steer`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...workspaceHeaders },
+        body: JSON.stringify({ text }),
+      });
+      if (!resp.ok) return structuredHttpFailure(resp, 'run-not-found');
+      const data = await resp.json();
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      // Clean stdout stays machine-chainable; the hint goes to stderr.
+      process.stderr.write('[run] delivered into the running turn — the agent keeps its work\n');
+      console.log(`${id}\t${data?.messageId ?? ''}\t${data?.run?.status ?? '-'}`);
       return;
     }
     case 'continue': {
@@ -7651,6 +7974,12 @@ Common options:
         projectId: status.projectId,
         conversationId: status.conversationId,
         message,
+        // This message is a continuation directive, not a self-contained
+        // request, and this command ships no transcript with it. Declaring that
+        // lets the daemon — the only layer that knows whether the stored
+        // session survived its model/cwd/cursor guard — decide whether to send
+        // the directive alone or reseed the original request alongside it.
+        resumeContinuation: true,
         analyticsHints: { entryFrom: 'resume_continue' },
         ...(status.agentId ? { agentId: status.agentId } : {}),
       };
@@ -7742,7 +8071,14 @@ Common options:
       const message = await readRunMessageFromFlags(flags);
       if (message) body.message = message;
       if (flags.plugin) body.pluginId = flags.plugin;
-      if (flags.skill) body.skillId = flags.skill;
+      if (flags.skill) {
+        const selectedSkillIds = splitCommaSeparatedIds(flags.skill);
+        if (selectedSkillIds.length === 1) body.skillId = selectedSkillIds[0];
+        if (selectedSkillIds.length > 1) {
+          body.skillId = selectedSkillIds[0];
+          body.skillIds = selectedSkillIds;
+        }
+      }
       if (flags['design-system']) body.designSystemId = flags['design-system'];
       if (flags.agent) body.agentId = flags.agent;
       if (flags.model) body.model = flags.model;
@@ -7757,6 +8093,8 @@ Common options:
         body.grantCaps = String(flags['grant-caps']).split(',').map((c) => c.trim()).filter(Boolean);
       }
       if (flags['snapshot-id']) body.appliedPluginSnapshotId = flags['snapshot-id'];
+      if (flags['task-execution']) body.taskExecutionId = flags['task-execution'];
+      if (flags['client-request-id']) body.clientRequestId = flags['client-request-id'];
       const resp = await fetch(`${base}/api/runs`, {
         method:  'POST',
         headers: { 'content-type': 'application/json', ...workspaceHeaders },
@@ -7797,36 +8135,60 @@ Common options:
 // Stream the SSE events at /api/runs/:id/events as ND-JSON on stdout.
 // Each line is one event: { event, data } so a code agent can parse it
 // without needing an SSE library.
-async function streamRunEvents(base, runId, workspaceHeaders = {}) {
-  const resp = await fetch(`${base}/api/runs/${encodeURIComponent(runId)}/events`, {
-    headers: { accept: 'text/event-stream', ...workspaceHeaders },
-  });
-  if (!resp.ok || !resp.body) {
-    console.error(`run watch failed: ${resp.status}`);
-    process.exit(1);
-  }
-  const reader = resp.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
+async function streamRunEvents(base, initialRunId, workspaceHeaders = {}) {
+  let runId = initialRunId;
+  const visited = new Set();
   while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const blocks = buffer.split('\n\n');
-    buffer = blocks.pop() ?? '';
-    for (const block of blocks) {
-      const lines = block.split('\n');
-      const eventLine = lines.find((l) => l.startsWith('event: '));
-      const dataLine  = lines.find((l) => l.startsWith('data: '));
-      const event = eventLine ? eventLine.slice('event: '.length) : 'message';
-      const dataRaw = dataLine ? dataLine.slice('data: '.length) : '';
-      let parsed;
-      try { parsed = JSON.parse(dataRaw); } catch { parsed = dataRaw; }
-      process.stdout.write(JSON.stringify({ event, data: parsed }) + '\n');
-      if (event === 'end') {
-        return;
+    if (visited.has(runId)) {
+      console.error(`run watch failed: cyclic strategy task chain at ${runId}`);
+      process.exit(1);
+    }
+    visited.add(runId);
+    const resp = await fetch(`${base}/api/runs/${encodeURIComponent(runId)}/events`, {
+      headers: { accept: 'text/event-stream', ...workspaceHeaders },
+    });
+    if (!resp.ok || !resp.body) {
+      console.error(`run watch failed: ${resp.status}`);
+      process.exit(1);
+    }
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let nextRunId = null;
+    let ended = false;
+    while (!ended) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const blocks = buffer.split('\n\n');
+      buffer = blocks.pop() ?? '';
+      for (const block of blocks) {
+        const lines = block.split('\n');
+        const eventLine = lines.find((l) => l.startsWith('event: '));
+        const dataLines = lines
+          .filter((line) => line.startsWith('data: '))
+          .map((line) => line.slice('data: '.length));
+        const event = eventLine ? eventLine.slice('event: '.length) : 'message';
+        const dataRaw = dataLines.join('\n');
+        let parsed;
+        try { parsed = JSON.parse(dataRaw); } catch { parsed = dataRaw; }
+        process.stdout.write(JSON.stringify({ event, data: parsed }) + '\n');
+        if (event !== 'end') continue;
+        const task = parsed?.strategyTask;
+        if (task && task.terminal !== true) {
+          const candidate = task.activeRunId !== runId
+            ? task.activeRunId
+            : task.nextRunId;
+          if (typeof candidate === 'string' && candidate.length > 0 && candidate !== runId) {
+            nextRunId = candidate;
+          }
+        }
+        ended = true;
+        break;
       }
     }
+    if (!nextRunId) return;
+    runId = nextRunId;
   }
 }
 
@@ -8253,15 +8615,11 @@ async function readStdinUtf8() {
 }
 
 async function mintCliImportToken(baseDir) {
-  const socketPath = process.env[SIDECAR_ENV.IPC_PATH];
-  if (typeof socketPath !== 'string' || socketPath.length === 0) return null;
+  const client = SidecarFactory.connectInherited();
+  if (client == null) return null;
   let result;
   try {
-    result = await requestJsonIpc(
-      socketPath,
-      { type: SIDECAR_MESSAGES.MINT_IMPORT_TOKEN, input: { baseDir } },
-      { timeoutMs: 800 },
-    );
+    result = await client.invoke(APP_KEYS.DAEMON, SIDECAR_MESSAGES.MINT_IMPORT_TOKEN, { baseDir }, { timeoutMs: 800 });
   } catch {
     return null;
   }
@@ -9296,14 +9654,14 @@ async function runLibraryList(name, args) {
   const flags = parseFlags(rest, { string: LIBRARY_STRING_FLAGS, boolean: LIBRARY_BOOLEAN_FLAGS });
   const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
   const apiPath = name === 'design-systems' ? '/api/design-systems' : `/api/${name}`;
-  const designSystemWorkspaceHeaders = name === 'design-systems'
+  const workspaceHeaders = name === 'design-systems' || name === 'skills'
     ? workspaceHeadersFromExplicitFlags(flags) ?? {}
     : undefined;
   switch (sub) {
     case 'list': {
       const resp = await fetch(`${base}${apiPath}`, {
-        ...(designSystemWorkspaceHeaders
-          ? { headers: designSystemWorkspaceHeaders }
+        ...(workspaceHeaders
+          ? { headers: workspaceHeaders }
           : {}),
       });
       if (!resp.ok) return structuredHttpFailure(resp);
@@ -9323,8 +9681,8 @@ async function runLibraryList(name, args) {
         process.exit(2);
       }
       const resp = await fetch(`${base}${apiPath}/${encodeURIComponent(id)}`, {
-        ...(designSystemWorkspaceHeaders
-          ? { headers: designSystemWorkspaceHeaders }
+        ...(workspaceHeaders
+          ? { headers: workspaceHeaders }
           : {}),
       });
       if (!resp.ok) return structuredHttpFailure(resp);
@@ -9347,8 +9705,8 @@ async function runSkills(args) {
   if (!args[0] || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
   od skill install <https://github.com/owner/repo|github:owner/repo|https://…tar.gz|https://…tgz> [--json]
-  od skill list
-  od skill show <id>
+  od skill list [--workspace <id> --workspace-member <id>]
+  od skill show <id> [--workspace <id> --workspace-member <id>]
   od skill uninstall <id>
 
 \`od skills …\` remains an alias for compatibility.`);
@@ -10977,7 +11335,7 @@ function describeAutomationTargetForCli(target) {
   return 'new-project';
 }
 
-function splitAutomationIds(value) {
+function splitCommaSeparatedIds(value) {
   if (typeof value !== 'string' || value.trim().length === 0) return [];
   const seen = new Set();
   const out = [];
@@ -10991,10 +11349,10 @@ function splitAutomationIds(value) {
 }
 
 function automationContextFromFlags(flags) {
-  const skillIds = splitAutomationIds(flags.skill);
-  const pluginIds = splitAutomationIds(flags.plugin);
-  const mcpServerIds = splitAutomationIds(flags.mcp);
-  const connectorIds = splitAutomationIds(flags.connector);
+  const skillIds = splitCommaSeparatedIds(flags.skill);
+  const pluginIds = splitCommaSeparatedIds(flags.plugin);
+  const mcpServerIds = splitCommaSeparatedIds(flags.mcp);
+  const connectorIds = splitCommaSeparatedIds(flags.connector);
   const context = {
     ...(skillIds.length > 0 ? { skillIds } : {}),
     ...(pluginIds.length > 0 ? { pluginIds } : {}),
@@ -11530,7 +11888,7 @@ async function runAutomation(args) {
         enabled: !flags.disabled,
       };
       const context = automationContextFromFlags(flags);
-      const skillIds = splitAutomationIds(flags.skill);
+      const skillIds = splitCommaSeparatedIds(flags.skill);
       if (skillIds.length > 0) body.skillId = skillIds[0];
       if (context) body.context = context;
       if (flags.agent) body.agentId = String(flags.agent);
@@ -11581,7 +11939,7 @@ async function runAutomation(args) {
       if (flags.enabled) patch.enabled = true;
       const context = automationContextFromFlags(flags);
       if (context) {
-        const skillIds = splitAutomationIds(flags.skill);
+        const skillIds = splitCommaSeparatedIds(flags.skill);
         if (skillIds.length > 0) patch.skillId = skillIds[0];
         patch.context = context;
       }

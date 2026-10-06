@@ -1,0 +1,1283 @@
+import type {
+  OpenDesignPlanContractV2,
+  StrategyRuntimeStateV2,
+} from '@open-design/contracts';
+import {
+  AppliedStrategyBindingV2Schema,
+  OD_NEXT_AGENT_DECLARED_BLOCK_REASON,
+  OD_NEXT_RUNTIME_STATE_SCHEMA,
+  StrategyRuntimeStateV2Schema,
+  composeOdNextStrategyContinuationV2,
+} from '@open-design/contracts';
+import type Database from 'better-sqlite3';
+
+import { getSnapshot } from '../../plugins/snapshots.js';
+import { countRenderableQuestionForms, scanQuestionForms } from '../../question-form-detect.js';
+import {
+  compareAndTransitionStrategyTaskExecution,
+  getStrategyTaskExecution,
+  strategyPlanContractHash,
+  type StrategyTaskBlockedContext,
+  type StrategyTaskExecutionRecord,
+  type StrategyTaskOutcome,
+} from '../task-store.js';
+import type { OdNextMachineProtocolStream } from './protocol.js';
+import { recordStrategyRunWriteEvidence, readStrategyTaskWriteEvidence } from './intent-resolution-store.js';
+import {
+  decideStrategyRequestRoute,
+  runExecutionPreflight,
+  runIntakePreflight,
+  type OdNextDirectEditEligibility,
+  type OdNextExecutionPreflightInput,
+  type OdNextIntakePreflightInput,
+} from './resolver.js';
+
+type SqliteDb = Database.Database;
+
+export type OdNextCoordinatorReasonCode =
+  | 'od_next_route_already_locked'
+  | 'od_next_route_not_locked'
+  | 'od_next_task_not_found'
+  | 'od_next_task_not_running'
+  | 'od_next_task_run_mismatch'
+  | 'od_next_protocol_route_mismatch'
+  | 'od_next_protocol_stage_mismatch'
+  | 'od_next_protocol_execution_mode_mismatch'
+  | 'od_next_protocol_plan_contract_missing'
+  | 'od_next_protocol_plan_contract_unexpected'
+  | 'od_next_clarification_form_missing'
+  | 'od_next_clarification_form_ambiguous'
+  | 'od_next_clarification_form_unexpected'
+  | 'od_next_clarification_answer_missing'
+  | 'od_next_clarification_repeated'
+  | 'od_next_question_form_unterminated'
+  | 'od_next_question_form_unrenderable'
+  | 'od_next_contract_repair_semantic_drift'
+  | 'od_next_contract_repair_tool_use_forbidden'
+  | 'od_next_plan_task_profile_mismatch'
+  | 'od_next_plan_snapshot_mismatch'
+  | 'od_next_plan_strategy_version_mismatch'
+  | 'od_next_plan_strategy_package_hash_mismatch'
+  | 'od_next_plan_selected_agent_mismatch'
+  | 'od_next_preflight_execution_facts_missing'
+  | 'od_next_physical_run_not_succeeded'
+  | 'od_next_canonical_deliverable_invalid';
+
+export class OdNextCoordinatorError extends Error {
+  constructor(
+    message: string,
+    readonly reasonCodes: string[],
+  ) {
+    super(message);
+    this.name = 'OdNextCoordinatorError';
+  }
+}
+
+export interface OdNextCoordinatorResult {
+  action:
+    | 'running'
+    | 'awaiting_clarification'
+    | 'contract_repair'
+    | 'plan_ready'
+    | 'completed'
+    | 'blocked'
+    | 'canceled';
+  task: StrategyTaskExecutionRecord;
+  visibleText: string;
+  reasonCodes: string[];
+  decisionSummary?: OpenDesignPlanContractV2['decisionSummary'];
+  instruction?:
+    | {
+        stage: 'clarification';
+        nativeSessionResume: true;
+        answer: string;
+      }
+    | {
+        stage: 'contract_repair';
+        nativeSessionResume: true;
+        serializationIssue: string;
+      };
+}
+
+function requireTask(db: SqliteDb, taskExecutionId: string): StrategyTaskExecutionRecord {
+  const task = getStrategyTaskExecution(db, taskExecutionId);
+  if (!task) {
+    throw new OdNextCoordinatorError(
+      `Unknown OD Next task execution ${taskExecutionId}.`,
+      ['od_next_task_not_found'],
+    );
+  }
+  return task;
+}
+
+function uniqueReasonCodes(values: ReadonlyArray<string>): string[] {
+  return [...new Set(values)];
+}
+
+/**
+ * Run the request-stage Intake Preflight WITHOUT locking a route.
+ *
+ * Product spec 3.1 makes the main Agent the party that decides Direct Edit vs
+ * Full Plan, and it can only decide once it has read the request. The daemon
+ * therefore leaves `route` null through the request turn — a state both the
+ * task store and the projection contract model explicitly — and adopts the
+ * Agent's declaration when the turn comes back. Callers that already know the
+ * route keep using `prepareStrategyRequest`.
+ */
+/**
+ * The reason codes a blocked turn is attributed with: whatever the caller
+ * established, plus any question-form marker violation the visible text
+ * carries.
+ */
+function blockedReasonCodesFor(
+  visibleText: string,
+  reasonCodes: readonly string[],
+): string[] {
+  return uniqueReasonCodes([
+    ...reasonCodes,
+    ...questionFormMarkerReasonCodes(visibleText),
+  ]);
+}
+
+/**
+ * The attribution a task settling on `blocked` must carry, shaped to spread
+ * into a transition.
+ *
+ * `blockedContext` is the only durable answer to "why did this stop": the chat
+ * error card, the diagnostics export, and every later triage read it and have
+ * nothing else to fall back on. Three paths settle a task on `blocked`, and
+ * until OPEND-2565 only `blockTask` recorded anything —`prepareStrategyRequest`
+ * computed its reason codes and returned them to its caller without persisting
+ * them, and `finalizeStrategyPlanningResult` passed an agent-declared `blocked`
+ * straight through, dropping the agent's own written explanation with it. Both
+ * reached the client as an anonymous failure, which is exactly what the field
+ * report on Design Harness saw.
+ *
+ * A non-blocked outcome spreads to nothing on purpose: a task that did not
+ * block must not carry a blocked context, and the accepted-turn tests pin that.
+ */
+function blockedAttribution(
+  outcome: StrategyTaskOutcome,
+  visibleText: string,
+  reasonCodes: readonly string[],
+): { blockedContext: StrategyTaskBlockedContext } | Record<string, never> {
+  if (outcome !== 'blocked') return {};
+  return {
+    blockedContext: {
+      reasonCodes: blockedReasonCodesFor(visibleText, reasonCodes),
+      visibleText: visibleText.length > 0 ? visibleText : null,
+    },
+  };
+}
+
+/** One log line per blocked task, whichever path settled it. */
+function logStrategyTaskBlocked(
+  current: StrategyTaskExecutionRecord,
+  runId: string,
+  reasonCodes: readonly string[],
+): void {
+  console.warn('[od-next-task] blocked', {
+    taskExecutionId: current.taskExecutionId,
+    runId,
+    inputStage: current.inputStage,
+    reasonCodes: [...reasonCodes],
+  });
+}
+
+export function prepareStrategyIntake(db: SqliteDb, input: {
+  taskExecutionId: string;
+  intake: OdNextIntakePreflightInput;
+  execution?: OdNextExecutionPreflightInput;
+}): { ok: boolean; reasonCodes: string[] } {
+  const current = requireTask(db, input.taskExecutionId);
+  if (
+    current.route !== null
+    || current.inputStage !== 'request'
+    || current.runs.length !== 1
+  ) {
+    throw new OdNextCoordinatorError(
+      'OD Next routes each new logical task exactly once.',
+      ['od_next_route_already_locked'],
+    );
+  }
+  if (current.outcome !== 'running') {
+    throw new OdNextCoordinatorError(
+      'Only a running request can be routed.',
+      ['od_next_task_not_running'],
+    );
+  }
+  // The Agent may still choose Direct Edit, the one route that Builds on the
+  // request stage, so execution facts are validated up front when available.
+  const reasonCodes = uniqueReasonCodes([
+    ...runIntakePreflight(input.intake).reasonCodes,
+    ...(input.execution ? runExecutionPreflight(input.execution).reasonCodes : []),
+  ]);
+  return { ok: reasonCodes.length === 0, reasonCodes };
+}
+
+export function prepareStrategyRequest(db: SqliteDb, input: {
+  taskExecutionId: string;
+  preference: 'auto' | 'direct_edit' | 'full_plan';
+  directEdit: OdNextDirectEditEligibility;
+  intake: OdNextIntakePreflightInput;
+  execution?: OdNextExecutionPreflightInput;
+  updatedAt?: number;
+}): OdNextCoordinatorResult {
+  const current = requireTask(db, input.taskExecutionId);
+  if (
+    current.route !== null
+    || current.inputStage !== 'request'
+    || current.runs.length !== 1
+  ) {
+    throw new OdNextCoordinatorError(
+      'OD Next routes each new logical task exactly once.',
+      ['od_next_route_already_locked'],
+    );
+  }
+  if (current.outcome !== 'running') {
+    throw new OdNextCoordinatorError(
+      'Only a running request can be routed.',
+      ['od_next_task_not_running'],
+    );
+  }
+  const route = decideStrategyRequestRoute({
+    preference: input.preference,
+    routeLocked: false,
+    buildStarted: false,
+    directEdit: input.directEdit,
+  });
+  const preflight = runIntakePreflight(input.intake);
+  const preflightCodes = route.route === 'direct_edit'
+    ? preflight.reasonCodes.filter(
+      (code) => code !== 'od_next_preflight_native_continuation_unverified',
+    )
+    : preflight.reasonCodes;
+  const executionCodes = route.route === 'direct_edit'
+    ? input.execution
+      ? runExecutionPreflight(input.execution).reasonCodes
+      : ['od_next_preflight_execution_facts_missing']
+    : [];
+  const blockingCodes = [...preflightCodes, ...executionCodes];
+  const reasonCodes = uniqueReasonCodes([...route.reasonCodes, ...blockingCodes]);
+  const outcome: StrategyTaskOutcome = blockingCodes.length > 0 ? 'blocked' : 'running';
+  if (outcome === 'blocked') {
+    logStrategyTaskBlocked(current, current.latestRunId, reasonCodes);
+  }
+  const task = compareAndTransitionStrategyTaskExecution(db, {
+    taskExecutionId: current.taskExecutionId,
+    expectedRevision: current.revision,
+    to: {
+      route: route.route,
+      inputStage: 'request',
+      outcome,
+      executionMode: route.executionMode,
+    },
+    // The router already knows why it refused; without this the codes lived
+    // only in the value returned to the caller (OPEND-2565).
+    ...blockedAttribution(outcome, '', reasonCodes),
+    ...(input.updatedAt === undefined ? {} : { updatedAt: input.updatedAt }),
+  });
+  return {
+    action: task.outcome === 'blocked' ? 'blocked' : 'running',
+    task,
+    visibleText: '',
+    reasonCodes,
+  };
+}
+
+export function beginStrategyClarification(db: SqliteDb, input: {
+  taskExecutionId: string;
+  sourceRunId: string;
+  nextRunId: string;
+  answer: string;
+  updatedAt?: number;
+}): OdNextCoordinatorResult {
+  const current = requireTask(db, input.taskExecutionId);
+  if (
+    current.route !== 'full_plan'
+    || current.inputStage !== 'request'
+    || current.outcome !== 'clarification_required'
+    || current.clarificationCount !== 0
+  ) {
+    throw new OdNextCoordinatorError(
+      'The task is not awaiting its one allowed clarification answer.',
+      ['od_next_clarification_repeated'],
+    );
+  }
+  if (input.sourceRunId !== current.latestRunId) {
+    throw new OdNextCoordinatorError(
+      'The clarification must continue from the latest task Run.',
+      ['od_next_task_run_mismatch'],
+    );
+  }
+  const answer = input.answer.trim();
+  if (!answer) {
+    throw new OdNextCoordinatorError(
+      'A clarification continuation requires the user answer.',
+      ['od_next_clarification_answer_missing'],
+    );
+  }
+  const finalText = composeOdNextStrategyContinuationV2({
+    stage: 'clarification',
+    nativeSessionResume: true,
+    taskExecutionId: current.taskExecutionId,
+    taskRunIndex: current.runs.length,
+    ...(current.executionIntent ? { executionIntent: current.executionIntent } : {}),
+    answer,
+  });
+  const task = compareAndTransitionStrategyTaskExecution(db, {
+    taskExecutionId: current.taskExecutionId,
+    expectedRevision: current.revision,
+    to: {
+      route: 'full_plan',
+      inputStage: 'clarification',
+      outcome: 'running',
+      executionMode: null,
+    },
+    nextRun: {
+      runId: input.nextRunId,
+      sourceRunId: input.sourceRunId,
+      finalText,
+    },
+    ...(input.updatedAt === undefined ? {} : { updatedAt: input.updatedAt }),
+  });
+  return {
+    action: 'running',
+    task,
+    visibleText: '',
+    reasonCodes: [],
+    instruction: { stage: 'clarification', nativeSessionResume: true, answer },
+  };
+}
+
+export function finalizeStrategyPlanningTurn(db: SqliteDb, input: {
+  taskExecutionId: string;
+  runId: string;
+  protocol: OdNextMachineProtocolStream;
+  repairRun?: { runId: string; sourceRunId: string; finalText: string };
+  toolUseCount?: number;
+  resultSourceRunId?: string;
+  executionPreflight?: OdNextExecutionPreflightInput;
+  completionEvidence?: {
+    physicalStatus: 'succeeded' | 'failed' | 'canceled';
+    deliverableValid: boolean;
+    filesWritten?: number;
+    filesWrittenUnknown?: boolean;
+    filesWrittenSource?: 'filesystem' | 'tool_stream' | 'unknown';
+  };
+  productionEnforcementReasonCodes?: readonly string[];
+  updatedAt?: number;
+}): OdNextCoordinatorResult {
+  return finalizeStrategyPlanningResult(db, {
+    ...input,
+    parsed: input.protocol.finish(),
+  });
+}
+
+export function finalizeStrategyPlanningResult(db: SqliteDb, input: {
+  taskExecutionId: string;
+  runId: string;
+  parsed: ReturnType<OdNextMachineProtocolStream['finish']>;
+  repairRun?: { runId: string; sourceRunId: string; finalText: string };
+  toolUseCount?: number;
+  resultSourceRunId?: string;
+  executionPreflight?: OdNextExecutionPreflightInput;
+  completionEvidence?: {
+    physicalStatus: 'succeeded' | 'failed' | 'canceled';
+    deliverableValid: boolean;
+    filesWritten?: number;
+    filesWrittenUnknown?: boolean;
+    filesWrittenSource?: 'filesystem' | 'tool_stream' | 'unknown';
+  };
+  productionEnforcementReasonCodes?: readonly string[];
+  updatedAt?: number;
+}): OdNextCoordinatorResult {
+  const current = requireTask(db, input.taskExecutionId);
+  if (current.outcome !== 'running') {
+    throw new OdNextCoordinatorError(
+      'Only the active running task stage can accept agent output.',
+      ['od_next_task_not_running'],
+    );
+  }
+  if (current.latestRunId !== input.runId) {
+    throw new OdNextCoordinatorError(
+      'Agent output must belong to the latest physical Run.',
+      ['od_next_task_run_mismatch'],
+    );
+  }
+
+  if (input.resultSourceRunId !== undefined && (current.intentResolution?.state !== 'resolved'
+    || current.intentResolution.runId !== input.runId || current.intentResolution.sourceRunId !== input.resultSourceRunId)) {
+    throw new OdNextCoordinatorError('Agent output must belong to the latest physical Run.', ['od_next_task_run_mismatch']);
+  }
+  if (current.intentResolution) {
+    const filesWritten = input.completionEvidence?.filesWritten;
+    recordStrategyRunWriteEvidence(db, {
+      taskExecutionId: current.taskExecutionId, runId: input.resultSourceRunId ?? input.runId,
+      filesWritten: filesWritten ?? 0,
+      unknown: filesWritten === undefined || input.completionEvidence?.filesWrittenUnknown === true,
+      source: input.completionEvidence?.filesWrittenSource ?? (filesWritten === undefined ? 'unknown' : 'tool_stream'),
+    });
+  }
+  const parsed = input.parsed;
+  // Recorded for every turn, blocked or accepted, and never used to decide the
+  // verdict — see `questionFormMarkerReasonCodes`.
+  const markerCodes = questionFormMarkerReasonCodes(parsed.visibleText);
+  if (markerCodes.length > 0) {
+    console.warn('[od-next-task] question form marker unrenderable', {
+      taskExecutionId: current.taskExecutionId,
+      runId: input.runId,
+      inputStage: current.inputStage,
+      route: current.route,
+      reasonCodes: markerCodes,
+      visibleTextLength: parsed.visibleText.length,
+    });
+  }
+  if (parsed.normalizations.length > 0) {
+    console.info('[od-next-task] protocol normalized', {
+      taskExecutionId: input.taskExecutionId,
+      runId: input.runId,
+      normalizations: parsed.normalizations,
+    });
+  }
+  const protocolCodes = uniqueReasonCodes(parsed.issues.map((issue) => issue.code));
+  let state = parsed.runtimeState;
+  if (protocolCodes.length > 0) {
+    const inferred = inferClarificationRuntimeState(current, parsed)
+      ?? inferDirectEditCompletionRuntimeState(current, parsed, input.completionEvidence)
+      ?? inferProductionCompletionRuntimeState(current, parsed, input.completionEvidence);
+    if (inferred) {
+      console.info('[od-next-task] runtime state inferred', {
+        taskExecutionId: current.taskExecutionId,
+        runId: input.runId,
+        outcome: inferred.outcome,
+      });
+      state = inferred;
+    } else {
+      const plan = parsed.planContract ?? parsed.repairPlanContract;
+      const bindingCodes = plan ? validatePlanBinding(db, current, plan) : [];
+      const repair = tryBeginSerializationRepair(db, current, input, parsed, protocolCodes);
+      if (repair) return repair;
+      const blockedCodes = [
+        ...reattributeUndeclaredTurn(
+          current,
+          parsed,
+          protocolCodes,
+          input.completionEvidence,
+        ),
+        ...bindingCodes,
+      ];
+      logOdNextMachineContractGap(current, input.runId, parsed, blockedCodes);
+      return blockTask(
+        db,
+        current,
+        parsed.visibleText,
+        blockedCodes,
+        input.updatedAt,
+      );
+    }
+  }
+  if (!state) {
+    logOdNextMachineContractGap(
+      current,
+      input.runId,
+      parsed,
+      ['od_next_protocol_runtime_state_missing'],
+    );
+    return blockTask(
+      db,
+      current,
+      parsed.visibleText,
+      ['od_next_protocol_runtime_state_missing'],
+      input.updatedAt,
+    );
+  }
+  const adopted = adoptHostInputStage(current, state);
+  if (adopted.normalized) {
+    console.info('[od-next-task] protocol normalized', {
+      taskExecutionId: current.taskExecutionId,
+      runId: input.runId,
+      normalizations: ['od_next_protocol_input_stage_normalized'],
+      declaredInputStage: state.inputStage,
+      inputStage: current.inputStage,
+    });
+  }
+  state = adopted.state;
+  if (current.executionIntent === 'plan_only' && state.executionIntent === 'produce') {
+    return blockTask(
+      db, current, parsed.visibleText, ['od_next_protocol_execution_intent_mismatch'], input.updatedAt,
+    );
+  }
+  const declaredIntent = state.executionIntent;
+  const executionIntent = current.executionIntent === 'plan_only'
+    ? 'plan_only'
+    : state.executionIntent ?? 'produce';
+  // Older providers may still serialize a valid plan_ready contract. For a
+  // task already constrained to planning, that is the delivered plan, not
+  // authorization for another physical production Run.
+  state = {
+    ...state,
+    executionIntent,
+    ...(executionIntent === 'plan_only' && state.outcome === 'plan_ready'
+      ? { outcome: 'completed' as const }
+      : {}),
+  };
+  const reasonCodes = validateAcceptedTurn(db, current, state, parsed.planContract, parsed.visibleText, {
+    toolUseCount: input.toolUseCount ?? 0,
+    ...(input.executionPreflight ? { executionPreflight: input.executionPreflight } : {}),
+    ...(input.completionEvidence ? { completionEvidence: input.completionEvidence } : {}),
+    ...(input.productionEnforcementReasonCodes
+      ? { productionEnforcementReasonCodes: input.productionEnforcementReasonCodes }
+      : {}),
+  });
+  if (reasonCodes.length > 0) {
+    logOdNextMachineContractGap(current, input.runId, parsed, reasonCodes);
+    return blockTask(db, current, parsed.visibleText, reasonCodes, input.updatedAt);
+  }
+
+  if (current.route === null) {
+    console.info('[od-next-task] route adopted from agent', {
+      taskExecutionId: current.taskExecutionId,
+      runId: input.runId,
+      route: state.route,
+      executionMode: state.executionMode,
+    });
+  }
+  // An agent may declare `blocked` itself — it is the turn that knows a task
+  // ran out of clarification budget, and it writes that reasoning out for the
+  // user. Carry both here: this transition used to pass the verdict through
+  // and drop the attribution, so the chat could only say "the strategy task
+  // could not continue" over an explanation the agent had already written
+  // (OPEND-2565).
+  const acceptedReasonCodes = uniqueReasonCodes([...state.reasonCodes, ...markerCodes]);
+  if (state.outcome === 'blocked') {
+    logStrategyTaskBlocked(current, input.runId, acceptedReasonCodes);
+  }
+  const task = compareAndTransitionStrategyTaskExecution(db, {
+    taskExecutionId: current.taskExecutionId,
+    expectedRevision: current.revision,
+    to: {
+      route: state.route,
+      inputStage: state.inputStage,
+      outcome: state.outcome,
+      executionMode: state.executionMode,
+      ...(declaredIntent !== undefined || current.executionIntent !== undefined ? { executionIntent } : {}),
+    },
+    ...blockedAttribution(
+      state.outcome,
+      parsed.visibleText,
+      acceptedReasonCodes.length > 0
+        ? acceptedReasonCodes
+        : [OD_NEXT_AGENT_DECLARED_BLOCK_REASON],
+    ),
+    ...(parsed.planContract ? { planContract: parsed.planContract } : {}),
+    ...(input.updatedAt === undefined ? {} : { updatedAt: input.updatedAt }),
+  });
+  return {
+    action: state.outcome === 'clarification_required'
+      ? 'awaiting_clarification'
+      : state.outcome,
+    task,
+    visibleText: parsed.visibleText,
+    reasonCodes: acceptedReasonCodes,
+    ...(parsed.planContract
+      ? { decisionSummary: parsed.planContract.decisionSummary }
+      : {}),
+  };
+}
+
+/**
+ * Deterministically recover the one runtime state a compliant clarification
+ * turn could have declared. A first Full-Plan request turn that renders
+ * exactly one question form and no machine block has exactly one valid
+ * protocol meaning — outcome clarification_required with an unlocked
+ * execution mode — so the daemon accepts it instead of dead-ending the task,
+ * and stamps the inference into the state's reasonCodes for attribution.
+ * Anything ambiguous (a recovered plan block, extra or missing forms, a later
+ * stage, a spent clarification budget) stays fail-closed.
+ */
+/**
+ * Is this turn shaped like a Direct Edit that delivered but never declared it?
+ *
+ * Exported so the Run finisher knows it must resolve canonical-deliverable
+ * evidence for such a turn: without a `completed` Runtime State the evidence is
+ * otherwise never computed, and the inference below can only accept *verified*
+ * physical delivery.
+ *
+ * Deliberately stricter than the clarification inference: it requires an
+ * entirely unrouted first turn (`route === null`). Once `full_plan` is locked
+ * the request stage is planning-only, so build output there is a violation to
+ * report, never a completion to infer.
+ */
+/**
+ * Did the turn emit NO machine block at all — as opposed to emitting one badly?
+ *
+ * True only when the absent Runtime State is the sole protocol issue and the
+ * parser recovered nothing, neither strictly nor as a repair anchor. A
+ * malformed, duplicated or schema-invalid block fails this check: such a turn
+ * did declare something, its remedy is different, and it is the only shape the
+ * one allowed serialization repair can anchor on.
+ *
+ * Shared precondition for the completion inferences below and for
+ * `reattributeUndeclaredTurn`.
+ */
+function turnEmittedNoMachineBlock(
+  parsed: ReturnType<OdNextMachineProtocolStream['finish']> | null | undefined,
+): parsed is ReturnType<OdNextMachineProtocolStream['finish']> {
+  if (!parsed) return false;
+  const issueCodes = [...new Set(parsed.issues.map((issue) => issue.code))];
+  if (
+    issueCodes.length !== 1
+    || issueCodes[0] !== 'od_next_protocol_runtime_state_missing'
+  ) return false;
+  return !(
+    parsed.planContract
+    || parsed.repairPlanContract
+    || parsed.runtimeState
+    || parsed.repairRuntimeState
+  );
+}
+
+/**
+ * Did the turn answer in prose only — no machine block of any kind, and nothing
+ * to ask?
+ *
+ * The shared precondition for every completion inference below. A turn that
+ * emitted a malformed block, a recoverable anchor, or a question form is
+ * saying something the host must not overwrite; only total silence leaves the
+ * declaration genuinely absent.
+ */
+function turnDeclaredNothing(
+  parsed: ReturnType<OdNextMachineProtocolStream['finish']> | null | undefined,
+): parsed is ReturnType<OdNextMachineProtocolStream['finish']> {
+  if (!turnEmittedNoMachineBlock(parsed)) return false;
+  // A question form means the agent wanted to ask, not to finish.
+  return countRenderableQuestionForms(parsed.visibleText) === 0;
+}
+
+/**
+ * Name the gate a block-less turn actually hit, instead of the gate that
+ * happened to notice it first.
+ *
+ * Every turn that emits no machine block lands on
+ * `od_next_protocol_runtime_state_missing`, because the parser raises that
+ * issue before `validateAcceptedTurn` — the function that owns the precise
+ * clarification gates — is ever reached. So a clarification turn that answered
+ * the user's answers with ANOTHER question form was filed under the generic
+ * name, and `od_next_clarification_repeated` could never appear for it, even
+ * though the declared variant of the identical failure reports exactly that.
+ *
+ * That is not cosmetic. `reasonCodes[0]` is the code the web client shows the
+ * user, the key the failure card matches on, and the analytics bucket, so the
+ * generic name merges "the agent kept asking" into the same bucket as "the
+ * agent forgot the block" and leaves the user with a code that explains
+ * nothing.
+ *
+ * ATTRIBUTION ONLY — the verdict does not move and must not. The clarification
+ * stage admits `plan_ready` (which needs a Plan Contract this turn never
+ * carried), `blocked` or `canceled`, so the turn is fail-closed either way;
+ * this only renames the block.
+ *
+ * Fail-closed on ambiguity: it fires only for a turn that declared nothing at
+ * all, and only when a form actually rendered. The repeat predicate is the same
+ * one `validateAcceptedTurn` applies to a turn that rendered an unrequested
+ * form, so the declared and undeclared shapes of one failure cannot drift
+ * apart. A first request turn — where a form is the expected thing to emit, and
+ * `inferClarificationRuntimeState` already accepts the unambiguous case — keeps
+ * the parser's own code.
+ */
+function reattributeUndeclaredTurn(
+  task: StrategyTaskExecutionRecord,
+  parsed: ReturnType<OdNextMachineProtocolStream['finish']>,
+  protocolCodes: string[],
+  completionEvidence?: {
+    physicalStatus: 'succeeded' | 'failed' | 'canceled';
+    deliverableValid: boolean;
+  },
+): string[] {
+  if (!turnEmittedNoMachineBlock(parsed)) return protocolCodes;
+  if (countRenderableQuestionForms(parsed.visibleText) > 0) {
+    if (task.clarificationCount === 0 && task.inputStage !== 'clarification') {
+      return protocolCodes;
+    }
+    return ['od_next_clarification_repeated'];
+  }
+  // The turn was SHAPED like a completion the host may infer, and the
+  // inference above still declined it. Both inference helpers gate on exactly
+  // two things — the shape, which just held, and the evidence — so the
+  // evidence is what refused, and it is a host fact the user can act on
+  // ("nothing was produced this round") while the parser's own code is not
+  // ("a marker is missing"). Naming it first puts the acting cause in
+  // `reasonCodes[0]`, the slot the failure card and the analytics bucket read.
+  //
+  // The parser's code is kept behind it: `blocked_reason_codes_json` is the
+  // durable record of what the turn actually wrote, and a later triage that
+  // cannot tell "declared badly" from "declared nothing" has lost the one
+  // distinction that decides whether a serialization repair was ever possible.
+  if (
+    !odNextTurnMayInferDirectEditCompletion(task, parsed)
+    && !odNextTurnMayInferProductionCompletion(task, parsed)
+  ) {
+    return protocolCodes;
+  }
+  const evidenceCodes = [
+    ...(completionEvidence?.physicalStatus !== 'succeeded'
+      ? ['od_next_physical_run_not_succeeded']
+      : []),
+    ...(completionEvidence?.deliverableValid !== true
+      ? ['od_next_canonical_deliverable_invalid']
+      : []),
+  ];
+  if (evidenceCodes.length === 0) return protocolCodes;
+  return [...evidenceCodes, ...protocolCodes];
+}
+
+export function odNextTurnMayInferDirectEditCompletion(
+  task: { route: string | null; inputStage: string; clarificationCount: number },
+  parsed: ReturnType<OdNextMachineProtocolStream['finish']> | null | undefined,
+): boolean {
+  if (!turnDeclaredNothing(parsed)) return false;
+  return task.route === null
+    && task.inputStage === 'request'
+    && task.clarificationCount === 0;
+}
+
+/**
+ * Is this an undeclared PRODUCTION completion?
+ *
+ * Production is only ever entered from a locked Full Plan, and its schema
+ * admits no non-terminal outcome — `StrategyRuntimeStateV2` refuses a
+ * production state that is not a task-chain terminal. So a production turn that
+ * ran the frozen plan, delivered a canonical entry Open Design resolved itself,
+ * and then answered in prose has exactly one thing it could have declared.
+ *
+ * Refusing it discarded a finished multi-page deliverable that was already
+ * sitting in the project, and the blocked verdict then latched OD Next off for
+ * the whole daemon. The route and execution mode are read from the locked task,
+ * never guessed.
+ */
+export function odNextTurnMayInferProductionCompletion(
+  task: { route: string | null; inputStage: string; executionMode: string | null },
+  parsed: ReturnType<OdNextMachineProtocolStream['finish']> | null | undefined,
+): boolean {
+  if (!turnDeclaredNothing(parsed)) return false;
+  return task.inputStage === 'production'
+    && task.route === 'full_plan'
+    // Simple only. The inference rests on Open Design having resolved the
+    // evidence the agent failed to declare, and for a simple plan that evidence
+    // IS the canonical deliverable. A complex plan additionally owes verified
+    // native Child lifecycle — the thing that makes it complex — which no
+    // deliverable check can stand in for. Inferring completion there certified
+    // Children nobody observed: an AMR complex Run whose Vela build ships no
+    // child-lifecycle producer reported `knownChildCount: 0` and still landed
+    // `completed`, walking straight past `evaluateOdNextComplexChildEvidence`.
+    // A complex turn that declares nothing keeps blocking.
+    && task.executionMode === 'simple';
+}
+
+/**
+ * Recover a Direct Edit completion the agent performed but failed to declare.
+ *
+ * Observed on real runs: the agent writes the canonical deliverable correctly —
+ * `validateRunDeliverable` verifies this Run changed the entry or a linked page —
+ * then answers in prose without emitting a single machine block. The turn is
+ * refused, the logical task lands terminal-`blocked`, and the user is shown a
+ * generic failure even though the artifact they asked for is sitting in their
+ * project. No repair path can rescue it either: `tryBeginSerializationRepair`
+ * needs a recovered Plan Contract to anchor on, and this turn produced none.
+ *
+ * The declaration is missing, but the *fact* it would have declared is proven
+ * by evidence Open Design resolved itself, which is stronger than the agent's
+ * own word. This mirrors `inferClarificationRuntimeState`, which already infers
+ * a state from a renderable question form.
+ *
+ * Fail-closed: any anchor, any second issue code, any locked route, a spent
+ * clarification budget, a question form, a non-succeeded process, or an
+ * unresolved canonical deliverable all decline the inference and let the turn
+ * block as before.
+ */
+function inferProductionCompletionRuntimeState(
+  current: StrategyTaskExecutionRecord,
+  parsed: ReturnType<OdNextMachineProtocolStream['finish']>,
+  completionEvidence: {
+    physicalStatus: 'succeeded' | 'failed' | 'canceled';
+    deliverableValid: boolean;
+  } | undefined,
+): StrategyRuntimeStateV2 | null {
+  if (!odNextTurnMayInferProductionCompletion(current, parsed)) return null;
+  if (
+    completionEvidence?.physicalStatus !== 'succeeded'
+    || completionEvidence.deliverableValid !== true
+  ) return null;
+  return {
+    schema: OD_NEXT_RUNTIME_STATE_SCHEMA,
+    route: 'full_plan',
+    inputStage: 'production',
+    outcome: 'completed',
+    executionMode: current.executionMode,
+    reasonCodes: ['od_next_protocol_runtime_state_inferred'],
+  };
+}
+
+function inferDirectEditCompletionRuntimeState(
+  current: StrategyTaskExecutionRecord,
+  parsed: ReturnType<OdNextMachineProtocolStream['finish']>,
+  completionEvidence: {
+    physicalStatus: 'succeeded' | 'failed' | 'canceled';
+    deliverableValid: boolean;
+  } | undefined,
+): StrategyRuntimeStateV2 | null {
+  if (!odNextTurnMayInferDirectEditCompletion(current, parsed)) return null;
+  if (
+    completionEvidence?.physicalStatus !== 'succeeded'
+    || completionEvidence.deliverableValid !== true
+  ) return null;
+  return {
+    schema: OD_NEXT_RUNTIME_STATE_SCHEMA,
+    route: 'direct_edit',
+    inputStage: 'request',
+    outcome: 'completed',
+    executionMode: 'simple',
+    reasonCodes: ['od_next_protocol_runtime_state_inferred'],
+  };
+}
+
+function inferClarificationRuntimeState(
+  current: StrategyTaskExecutionRecord,
+  parsed: ReturnType<OdNextMachineProtocolStream['finish']>,
+): StrategyRuntimeStateV2 | null {
+  const issueCodes = [...new Set(parsed.issues.map((issue) => issue.code))];
+  if (
+    issueCodes.length !== 1
+    || issueCodes[0] !== 'od_next_protocol_runtime_state_missing'
+  ) return null;
+  if (
+    (current.route !== null && current.route !== 'full_plan')
+    || current.inputStage !== 'request'
+    || current.clarificationCount > 0
+    || parsed.planContract
+    || parsed.repairPlanContract
+    || parsed.runtimeState
+    || parsed.repairRuntimeState
+  ) return null;
+  if (countRenderableQuestionForms(parsed.visibleText) !== 1) return null;
+  return {
+    schema: OD_NEXT_RUNTIME_STATE_SCHEMA,
+    route: 'full_plan',
+    inputStage: 'request',
+    outcome: 'clarification_required',
+    executionMode: null,
+    reasonCodes: ['od_next_protocol_runtime_state_inferred'],
+  };
+}
+
+/**
+ * Reason codes a turn earns for *writing* the `<question-form>` markup in a
+ * shape that can never render — an unterminated marker, or a closed block whose
+ * body is not a form.
+ *
+ * The invariant: the clarification markup is a host-parsed contract, so any
+ * occurrence of it either renders a form or is a violation. The renderable
+ * count alone cannot express that. A turn that declared no clarification and
+ * still wrote `<question-form> 无需提出——…` scored `forms === 0`, matched none of
+ * the clarification branches in `validateAcceptedTurn`, and was accepted with
+ * an empty reason-code list — the daemon's only record of a real contract break
+ * was the raw prose it handed straight to the UI.
+ *
+ * Deliberately kept OUT of `validateAcceptedTurn`: every code that function
+ * returns blocks the turn (`finalizeStrategyPlanningResult` calls `blockTask`
+ * on a non-empty list). A stray marker on an otherwise valid planning turn must
+ * still reach production, so these codes are attribution, never a gate.
+ */
+function questionFormMarkerReasonCodes(
+  visibleText: string,
+): OdNextCoordinatorReasonCode[] {
+  const scan = scanQuestionForms(visibleText);
+  const codes: OdNextCoordinatorReasonCode[] = [];
+  if (scan.unterminated) codes.push('od_next_question_form_unterminated');
+  if (scan.unrenderable > 0) codes.push('od_next_question_form_unrenderable');
+  return codes;
+}
+
+/**
+ * Give a Runtime State the input stage the daemon itself issued the turn at,
+ * when the agent's declaration disagrees with it and the corrected state is a
+ * valid declaration for that stage.
+ *
+ * The stage is host-owned truth: the daemon chose it, wrote it into the
+ * continuation wrapper (`stage="clarification"`), and holds it on the task. An
+ * agent that writes a different value has told the host nothing it did not
+ * already know — the same footing as the execution mode a clarification turn
+ * predicts, which the parser already discards as authority-free
+ * (`OdNextMachineProtocolStream.normalizeMachineValue`).
+ *
+ * The case that made this necessary (OPEND-2954): the user answered the one
+ * clarification round, the agent returned a complete, correctly bound Full Plan,
+ * and its Runtime State said `inputStage: "request"` — the value every example
+ * in the protocol reference shows. `validateAcceptedTurn` refused the turn on
+ * that field alone, `blockTask` made the task terminal, and a plan that passed
+ * every other gate never reached production. Nothing could rescue it: the
+ * serialization repair only anchors on parser issues, and this was not one.
+ *
+ * Fail-closed where the field DOES carry meaning. The contract keys its
+ * stage/outcome/mode rules on `inputStage`, so the corrected state is re-run
+ * through the schema; a state the host's stage cannot admit (a second
+ * `clarification_required`, a `plan_ready` at production) keeps the agent's own
+ * value, and the mismatch is reported as before. The decision is recorded as a
+ * normalization, never as a reason code: a reason code would displace the
+ * agent's own attribution on a declared `blocked`.
+ */
+function adoptHostInputStage(
+  task: StrategyTaskExecutionRecord,
+  state: StrategyRuntimeStateV2,
+): { state: StrategyRuntimeStateV2; normalized: boolean } {
+  if (state.inputStage === task.inputStage) return { state, normalized: false };
+  const corrected = StrategyRuntimeStateV2Schema.safeParse({
+    ...state,
+    inputStage: task.inputStage,
+  });
+  if (!corrected.success) return { state, normalized: false };
+  return { state: corrected.data, normalized: true };
+}
+
+function validateAcceptedTurn(
+  db: SqliteDb,
+  task: StrategyTaskExecutionRecord,
+  state: StrategyRuntimeStateV2,
+  plan: OpenDesignPlanContractV2 | undefined,
+  visibleText: string,
+  input: {
+    toolUseCount: number;
+    executionPreflight?: OdNextExecutionPreflightInput;
+    completionEvidence?: {
+      physicalStatus: 'succeeded' | 'failed' | 'canceled';
+      deliverableValid: boolean;
+      filesWritten?: number;
+    filesWrittenUnknown?: boolean;
+    filesWrittenSource?: 'filesystem' | 'tool_stream' | 'unknown';
+    };
+    productionEnforcementReasonCodes?: readonly string[];
+  },
+): string[] {
+  const reasonCodes: string[] = [];
+  // An unrouted request turn is the one place the Agent owns the route
+  // (spec 3.1). Once the chain has a route, it is locked for every later turn.
+  if (task.route !== null && state.route !== task.route) {
+    reasonCodes.push('od_next_protocol_route_mismatch');
+  }
+  // Reached only when `adoptHostInputStage` declined: the agent's stage
+  // disagrees with the host's AND the host's stage cannot admit this outcome.
+  if (state.inputStage !== task.inputStage) reasonCodes.push('od_next_protocol_stage_mismatch');
+  if (task.executionMode && state.executionMode !== task.executionMode) {
+    reasonCodes.push('od_next_protocol_execution_mode_mismatch');
+  }
+  if (state.route === 'direct_edit' && state.executionMode !== 'simple') {
+    reasonCodes.push('od_next_protocol_execution_mode_mismatch');
+  }
+
+  const planningOnly = state.executionIntent === 'plan_only';
+  if (planningOnly && (state.route !== 'full_plan' || !['request', 'clarification'].includes(state.inputStage))) {
+    reasonCodes.push('od_next_protocol_execution_intent_mismatch');
+  }
+  const forms = countRenderableQuestionForms(visibleText);
+  if (state.outcome === 'clarification_required') {
+    if (planningOnly && input.completionEvidence?.filesWritten !== undefined
+      && input.completionEvidence.filesWritten !== 0) {
+      reasonCodes.push('od_next_planning_files_changed');
+    }
+    if (forms === 0) reasonCodes.push('od_next_clarification_form_missing');
+    if (forms > 1) reasonCodes.push('od_next_clarification_form_ambiguous');
+    if (task.clarificationCount > 0 || task.inputStage !== 'request') {
+      reasonCodes.push('od_next_clarification_repeated');
+    }
+  } else if (forms > 0) {
+    reasonCodes.push(
+      task.clarificationCount > 0 || task.inputStage === 'clarification'
+        ? 'od_next_clarification_repeated'
+        : 'od_next_clarification_form_unexpected',
+    );
+  }
+
+  if (state.outcome === 'plan_ready') {
+    if (!plan) reasonCodes.push('od_next_protocol_plan_contract_missing');
+    if (!input.executionPreflight) {
+      reasonCodes.push('od_next_preflight_execution_facts_missing');
+    } else {
+      reasonCodes.push(...runExecutionPreflight(input.executionPreflight).reasonCodes);
+    }
+    reasonCodes.push(...(input.productionEnforcementReasonCodes ?? []));
+  } else if (plan && !(planningOnly && state.outcome === 'completed')) {
+    reasonCodes.push('od_next_protocol_plan_contract_unexpected');
+  }
+  if (plan && state.executionMode !== plan.fullPlan.executionMode) {
+    reasonCodes.push('od_next_protocol_execution_mode_mismatch');
+  }
+  if (plan) reasonCodes.push(...validatePlanBinding(db, task, plan));
+  if (
+    task.inputStage === 'contract_repair'
+    && input.toolUseCount > 0
+  ) {
+    reasonCodes.push('od_next_contract_repair_tool_use_forbidden');
+  }
+  if (
+    task.inputStage === 'contract_repair'
+    && task.planContractHash
+    && plan
+    && strategyPlanContractHash(plan) !== task.planContractHash
+  ) {
+    reasonCodes.push('od_next_contract_repair_semantic_drift');
+  }
+  if (state.outcome === 'completed') {
+    if (input.completionEvidence?.physicalStatus !== 'succeeded') {
+      reasonCodes.push('od_next_physical_run_not_succeeded');
+    }
+    if (planningOnly) {
+      if (!visibleText.trim()) reasonCodes.push('od_next_planning_answer_missing');
+      if (input.completionEvidence?.filesWritten !== 0
+        || (task.intentResolution && readStrategyTaskWriteEvidence(db, task.taskExecutionId).some(evidence => evidence.unknown || evidence.filesWritten !== 0))) reasonCodes.push('od_next_planning_files_changed');
+    } else {
+      if (input.completionEvidence?.deliverableValid !== true) {
+        reasonCodes.push('od_next_canonical_deliverable_invalid');
+      }
+      reasonCodes.push(...(input.productionEnforcementReasonCodes ?? []));
+    }
+  }
+  return uniqueReasonCodes(reasonCodes);
+}
+
+/**
+ * Report WHY a turn could not be accepted, not just that it was refused.
+ *
+ * `[od-next-task] blocked` carries only reason codes, which cannot distinguish
+ * "the agent emitted a malformed block" from "the agent emitted no block at
+ * all" — the two have completely different remedies, and only the first is
+ * eligible for the one allowed serialization repair. The presence map plus the
+ * parser's own structural details close that gap.
+ *
+ * Issue details are parser-authored strings about wrapper/tag shape; no model
+ * prose, Prompt body, or user content reaches this log. Lengths are bounded
+ * anyway so a pathological detail cannot flood the daemon log.
+ */
+function logOdNextMachineContractGap(
+  current: StrategyTaskExecutionRecord,
+  runId: string,
+  parsed: ReturnType<OdNextMachineProtocolStream['finish']>,
+  reasonCodes: readonly string[],
+): void {
+  console.warn('[od-next-task] machine contract gap', {
+    taskExecutionId: current.taskExecutionId,
+    runId,
+    inputStage: current.inputStage,
+    route: current.route,
+    reasonCodes: [...reasonCodes],
+    emitted: {
+      runtimeState: Boolean(parsed.runtimeState),
+      planContract: Boolean(parsed.planContract),
+      repairRuntimeState: Boolean(parsed.repairRuntimeState),
+      repairPlanContract: Boolean(parsed.repairPlanContract),
+      visibleTextLength: parsed.visibleText.length,
+    },
+    normalizations: parsed.normalizations,
+    issues: parsed.issues.slice(0, 8).map((issue) => ({
+      code: issue.code,
+      detail: issue.detail?.slice(0, 240),
+    })),
+  });
+}
+
+function tryBeginSerializationRepair(
+  db: SqliteDb,
+  current: StrategyTaskExecutionRecord,
+  input: {
+    repairRun?: { runId: string; sourceRunId: string; finalText: string };
+    toolUseCount?: number;
+    executionPreflight?: OdNextExecutionPreflightInput;
+    updatedAt?: number;
+  },
+  parsed: ReturnType<OdNextMachineProtocolStream['finish']>,
+  protocolCodes: string[],
+): OdNextCoordinatorResult | null {
+  const nonRepairable = new Set([
+    'od_next_protocol_machine_block_too_large',
+    'od_next_protocol_plan_contract_duplicate',
+    'od_next_protocol_plan_contract_invalid_schema',
+    'od_next_protocol_runtime_state_duplicate',
+    'od_next_protocol_runtime_state_invalid_schema',
+  ]);
+  // A recovered Plan Contract is itself a Full Plan declaration, so an
+  // as-yet-unrouted first turn qualifies; the repair transition locks
+  // `full_plan` below.
+  if (
+    (current.route !== null && current.route !== 'full_plan')
+    || !['request', 'clarification'].includes(current.inputStage)
+    || protocolCodes.some((code) => nonRepairable.has(code))
+  ) return null;
+  if (current.planContractRepairAttempts > 0) return null;
+  const plan = parsed.planContract ?? parsed.repairPlanContract;
+  if (!plan) return null;
+  if (validatePlanBinding(db, current, plan).length > 0) return null;
+  if (
+    !input.executionPreflight
+    || runExecutionPreflight(input.executionPreflight).status !== 'passed'
+  ) return null;
+  const recoveredState = parsed.runtimeState ?? parsed.repairRuntimeState;
+  if (recoveredState) {
+    // The anchor is the same declaration the strict path validates, so it gets
+    // the same host-owned stage before its stage is compared.
+    const stateCodes = validateRepairAnchorState(
+      current,
+      adoptHostInputStage(current, recoveredState).state,
+      plan,
+    );
+    if (stateCodes.length > 0) return null;
+  }
+  // A recovered serialization anchor cannot authorize production on its own.
+  // New tasks must have adopted a strict intent or consumed the bounded supplement.
+  const explicitIntent = parsed.runtimeState?.executionIntent;
+  if (current.executionIntent === 'plan_only' || explicitIntent === 'plan_only'
+    || (current.intentResolution?.state !== 'resolved' && current.intentResolution && explicitIntent !== 'produce')) return null;
+  const repairRun = input.repairRun;
+  if (!repairRun) return null;
+  if (repairRun.sourceRunId !== current.latestRunId) return null;
+
+  // Lock the recovered semantic plan/mode before entering repair, then claim
+  // the repair Run. The outer immediate transaction makes the two existing
+  // Task06 CAS writes one atomic coordinator decision; the transition schema
+  // can therefore truthfully require repair to preserve an already-locked
+  // execution mode.
+  const persistRepair = db.transaction(() => {
+    const locked = compareAndTransitionStrategyTaskExecution(db, {
+      taskExecutionId: current.taskExecutionId,
+      expectedRevision: current.revision,
+      to: {
+        route: 'full_plan',
+        inputStage: current.inputStage,
+        outcome: 'running',
+        executionMode: plan.fullPlan.executionMode,
+        ...(explicitIntent ? { executionIntent: explicitIntent } : {}),
+      },
+      planContract: plan,
+      ...(input.updatedAt === undefined ? {} : { updatedAt: input.updatedAt }),
+    });
+    return compareAndTransitionStrategyTaskExecution(db, {
+      taskExecutionId: locked.taskExecutionId,
+      expectedRevision: locked.revision,
+      to: {
+        route: 'full_plan',
+        inputStage: 'contract_repair',
+        outcome: 'running',
+        executionMode: plan.fullPlan.executionMode,
+      },
+      nextRun: repairRun,
+      ...(input.updatedAt === undefined ? {} : { updatedAt: input.updatedAt }),
+    });
+  });
+  const task = persistRepair.immediate();
+  return {
+    action: 'contract_repair',
+    task,
+    visibleText: parsed.visibleText,
+    reasonCodes: protocolCodes,
+    decisionSummary: plan.decisionSummary,
+    instruction: {
+      stage: 'contract_repair',
+      nativeSessionResume: true,
+      serializationIssue: protocolCodes.join(', '),
+    },
+  };
+}
+
+function validateRepairAnchorState(
+  task: StrategyTaskExecutionRecord,
+  state: StrategyRuntimeStateV2,
+  plan: OpenDesignPlanContractV2,
+): string[] {
+  const reasonCodes: string[] = [];
+  // The repair anchor may arrive on a still-unrouted first turn; the repair
+  // transition locks `full_plan` right after this check.
+  if (task.route !== null && state.route !== task.route) {
+    reasonCodes.push('od_next_protocol_route_mismatch');
+  }
+  if (state.inputStage !== task.inputStage) reasonCodes.push('od_next_protocol_stage_mismatch');
+  if (state.outcome !== 'plan_ready') reasonCodes.push('od_next_protocol_plan_contract_unexpected');
+  if (state.executionMode !== plan.fullPlan.executionMode) {
+    reasonCodes.push('od_next_protocol_execution_mode_mismatch');
+  }
+  return reasonCodes;
+}
+
+function validateTaskProfileBinding(
+  db: SqliteDb,
+  task: StrategyTaskExecutionRecord,
+  plan: OpenDesignPlanContractV2,
+): string[] {
+  const snapshot = getSnapshot(db, task.snapshotId);
+  const binding = AppliedStrategyBindingV2Schema.safeParse(snapshot?.strategy);
+  if (
+    !binding.success
+    || plan.taskProfile.taskType !== binding.data.selectedTaskProfile.taskType
+    || plan.taskProfile.taskProfileVersion !== binding.data.selectedTaskProfile.version
+  ) {
+    return ['od_next_plan_task_profile_mismatch'];
+  }
+  return [];
+}
+
+function validatePlanBinding(
+  db: SqliteDb,
+  task: StrategyTaskExecutionRecord,
+  plan: OpenDesignPlanContractV2,
+): string[] {
+  const reasonCodes: string[] = [];
+  if (plan.strategy.snapshotId !== task.snapshotId) {
+    reasonCodes.push('od_next_plan_snapshot_mismatch');
+  }
+  if (plan.strategy.version !== task.strategyVersion) {
+    reasonCodes.push('od_next_plan_strategy_version_mismatch');
+  }
+  if (plan.strategy.packageHash !== task.strategyPackageHash) {
+    reasonCodes.push('od_next_plan_strategy_package_hash_mismatch');
+  }
+  if (plan.runManifest.selectedAgentId !== task.selectedAgentId) {
+    reasonCodes.push('od_next_plan_selected_agent_mismatch');
+  }
+  reasonCodes.push(...validateTaskProfileBinding(db, task, plan));
+  return uniqueReasonCodes(reasonCodes);
+}
+
+export function blockTask(
+  db: SqliteDb,
+  current: StrategyTaskExecutionRecord,
+  visibleText: string,
+  reasonCodes: string[],
+  updatedAt?: number,
+): OdNextCoordinatorResult {
+  // A turn that never produced a usable route cannot have proven Direct Edit
+  // eligibility, so it settles on the spec's fallback route (3.2: "or cannot
+  // be safely judged as Direct Edit") rather than failing to record at all.
+  const route = current.route ?? 'full_plan';
+  // A turn blocked for another reason still gets its marker violation recorded:
+  // `blocked_reason_codes_json` is the only durable attribution channel the task
+  // store has, and blocking is where the consequence stops — a blocked task no
+  // longer disables OD Next for anything but itself.
+  const blockedReasonCodes = blockedReasonCodesFor(visibleText, reasonCodes);
+  logStrategyTaskBlocked(current, current.latestRunId, blockedReasonCodes);
+  const task = compareAndTransitionStrategyTaskExecution(db, {
+    taskExecutionId: current.taskExecutionId,
+    expectedRevision: current.revision,
+    to: {
+      route,
+      inputStage: current.inputStage,
+      outcome: 'blocked',
+      executionMode: current.executionMode,
+    },
+    ...blockedAttribution('blocked', visibleText, reasonCodes),
+    ...(updatedAt === undefined ? {} : { updatedAt }),
+  });
+  return {
+    action: 'blocked',
+    task,
+    visibleText,
+    reasonCodes: blockedReasonCodes,
+  };
+}

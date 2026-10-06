@@ -8,6 +8,10 @@ const CLAUDE_FALLBACK_MODELS = [
   { id: 'sonnet', label: 'Sonnet (alias)' },
   { id: 'opus', label: 'Opus (alias)' },
   { id: 'haiku', label: 'Haiku (alias)' },
+  { id: 'fable', label: 'Fable (alias)' },
+  { id: 'claude-opus-5', label: 'claude-opus-5' },
+  { id: 'claude-sonnet-5', label: 'claude-sonnet-5' },
+  { id: 'claude-fable-5', label: 'claude-fable-5' },
   { id: 'claude-opus-4-5', label: 'claude-opus-4-5' },
   { id: 'claude-sonnet-4-5', label: 'claude-sonnet-4-5' },
   { id: 'claude-haiku-4-5', label: 'claude-haiku-4-5' },
@@ -35,7 +39,18 @@ export const claudeAgentDef = {
       // subcommand, so we probe `claude -p --help` instead of `claude --help`.
       // Fixes issue #430: --add-dir never detected because it wasn't in global help.
       '--include-partial-messages': 'partialMessages',
+      '--forward-subagent-text': 'forwardSubagentText',
+      '--agents': 'customAgents',
       '--add-dir': 'addDir',
+    },
+    // `--thinking-display` is a real option but it is hidden from both
+    // `claude --help` and `claude -p --help`, so the capabilityFlags scan
+    // above cannot detect it. Probe it by value-rejection instead.
+    hiddenCapabilityFlags: {
+      probeArgsPrefix: ['-p'],
+      flags: {
+        '--thinking-display': 'thinkingDisplay',
+      },
     },
     // `claude` has no list-models subcommand. Prefer local mmd/MMS routes
     // when present so proxy-backed Claude-compatible models appear in the
@@ -63,8 +78,48 @@ export const claudeAgentDef = {
       if (caps.partialMessages) {
         args.push('--include-partial-messages');
       }
+      // Extended-thinking text is withheld unless the request carries a
+      // thinking `display` mode. Claude Code only resolves one for an
+      // interactive TUI (via the `showThinkingSummaries` setting) or when
+      // `--thinking-display` is passed explicitly; a headless
+      // `-p --output-format stream-json` session resolves it to `undefined`,
+      // keeps the `redact-thinking` beta on the API request, and every
+      // `thinking_delta` arrives with `thinking: ""`. Asking for `summarized`
+      // is what makes the model's reasoning observable at all.
+      if (caps.thinkingDisplay) {
+        args.push('--thinking-display', 'summarized');
+      }
+      if (runtimeContext.observeNativeChildBehavior === true) {
+        if (!caps.forwardSubagentText) {
+          throw new TypeError(
+            'Claude native Child behavior observation requires advertised --forward-subagent-text support.',
+          );
+        }
+        args.push('--forward-subagent-text');
+      }
       if (options.model && options.model !== 'default') {
         args.push('--model', options.model);
+      }
+      const nativeBindings = runtimeContext.nativeBuildPackageBindings ?? [];
+      if (nativeBindings.length > 0) {
+        if (!caps.customAgents) {
+          throw new TypeError(
+            'Claude native Build Package execution requires advertised --agents support.',
+          );
+        }
+        if (
+          new Set(nativeBindings.map(({ nativeAgentHandle }) => nativeAgentHandle)).size
+            !== nativeBindings.length
+        ) {
+          throw new TypeError('Claude native Build Package handles must be unique.');
+        }
+        args.push('--agents', JSON.stringify(Object.fromEntries(nativeBindings.map((binding) => [
+          binding.nativeAgentHandle,
+          {
+            description: 'Execute one daemon-bound OD Next Build Package.',
+            prompt: 'Execute only the task supplied by the parent Agent. Do not spawn another subagent.',
+          },
+        ]))));
       }
       const dirs = (extraAllowedDirs || []).filter(
         (d) => typeof d === 'string' && d.length > 0,

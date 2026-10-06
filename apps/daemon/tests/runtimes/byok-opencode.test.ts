@@ -37,6 +37,28 @@ describe('byok-opencode runtime config', () => {
     }
   });
 
+  it.each(['openai', 'anthropic', 'google', 'azure', 'ollama', 'senseaudio', 'aihubmix'] as const)(
+    'allows images from attachments and Read tools for unknown %s models',
+    (protocol) => {
+      const out = buildOpenCodeByokProviderConfig(
+        { protocol, apiKey: 'test-key', baseUrl: 'https://provider.example/v1' },
+        'new-custom-model',
+      );
+
+      expect(out?.config).toMatchObject({
+        provider: {
+          [BYOK_OPENCODE_PROVIDER_ID]: {
+            models: {
+              'new-custom-model': {
+                modalities: { input: ['text', 'image'], output: ['text'] },
+              },
+            },
+          },
+        },
+      });
+    },
+  );
+
   it('prefixes raw BYOK models with the run-scoped OpenCode provider id', () => {
     expect(opencodeByokModelId('gpt-4o-mini')).toBe('open-design-byok/gpt-4o-mini');
     expect(opencodeByokModelId('open-design-byok/gpt-4o-mini')).toBe('open-design-byok/gpt-4o-mini');

@@ -16,6 +16,8 @@ import {
   type DesktopExportArtifactResult,
   type DesktopExportPdfInput,
   type DesktopExportPdfResult,
+  type DesktopRenderFramesInput,
+  type DesktopRenderFramesResult,
   type DesktopRenderSlidesInput,
   type DesktopRenderSlidesResult,
   type DesktopUpdateStatusSnapshot,
@@ -31,11 +33,16 @@ import type {
 } from "@open-design/host";
 
 import { renderDeckSlides } from "./deck-capture.js";
+import { renderDeterministicFrames } from "./frame-capture.js";
 import { openFirstPartyMailto } from "./mailto-open.js";
 import { openValidatedDirectory } from "./open-path.js";
 import { exportArtifact as exportArtifactFromHtml } from "./artifact-export.js";
 import { createElectronPdfTarget, exportPdfFromHtml, savePrintReadyDocumentAsPdf } from "./pdf-export.js";
-import { SPLASH_VIDEO_DATA_URL } from "./splash-video.js";
+import {
+  SPLASH_PIXEL_SCAN_MARKUP,
+  SPLASH_PIXEL_SCAN_STYLE,
+  splashPixelScanScript,
+} from "./splash-pixel-scan.js";
 import { RendererCrashLoopBreaker } from "./renderer-crash-loop.js";
 import type { PrintReadyPdfOptions } from "./pdf-export.js";
 import type { DesktopUpdater } from "./updater.js";
@@ -286,11 +293,11 @@ export function isRendererFailureHttpStatus(httpResponseCode: number): boolean {
 const PENDING_POLL_MS = 120;
 const RUNNING_POLL_MS = 2000;
 // Minimum time the light splash window stays on screen before we reveal the main
-// window. It is sized to outlast the ~1.7s clip so the brand animation always
-// plays through. The splash is shown immediately and in parallel with the
-// daemon/web boot (see the packaged entry), so this time overlaps startup rather
-// than adding to it; the <video> holds on its final frame (it does not loop)
-// while the runtime finishes coming up. See `createSplashWindow`.
+// window. It is sized so the pixel-scan wordmark's first entrance sweep (2.6s,
+// see `splash-pixel-scan.ts`) is well under way before the hand-off. The splash
+// is shown immediately and in parallel with the daemon/web boot (see the
+// packaged entry), so this time overlaps startup rather than adding to it; the
+// sweep loops while the runtime finishes coming up. See `createSplashWindow`.
 const MIN_SPLASH_MS = 2000;
 // While the splash is up, the real web app loads in a hidden main window. We
 // reveal it only once the web bundle reports it has actually mounted (it sets
@@ -387,6 +394,7 @@ export type DesktopRuntime = {
   exportArtifact(input: DesktopExportArtifactInput): Promise<DesktopExportArtifactResult>;
   exportPdf(input: DesktopExportPdfInput): Promise<DesktopExportPdfResult>;
   openUpdateDialog(request: OpenDesignHostUpdaterOpenDialogRequest): void;
+  renderFrames(input: DesktopRenderFramesInput): Promise<DesktopRenderFramesResult>;
   renderSlides(input: DesktopRenderSlidesInput): Promise<DesktopRenderSlidesResult>;
   screenshot(input: DesktopScreenshotInput): Promise<DesktopScreenshotResult>;
   show(): void;
@@ -447,6 +455,7 @@ export type DesktopRuntimeOptions = {
    */
   rendererLogPath?: string | null;
   requestQuit?: () => void;
+  onMainWindowReady?: () => void;
   /**
    * Optional pre-created splash window. The packaged entry creates the splash
    * BEFORE awaiting the daemon/web sidecars so the brand animation is on screen
@@ -778,19 +787,19 @@ const MAC_WINDOW_CHROME =
     ? ({
         titleBarStyle: "hiddenInset" as const,
         // y centers the 12px traffic-light circles on the tab strip's midline.
-        // The base `.workspace-tabs-chrome.app-chrome-header` rule in apps/web
-        // shell.css says 44px, but every real window wraps the tab bar in
-        // `.workspace-shell` (see App.tsx), and `.workspace-shell
-        // .workspace-tabs-chrome.app-chrome-header` in viewer/routines.css
-        // overrides it to 52px (10px above the tab + 32px tab + 10px below) —
-        // confirmed via getBoundingClientRect() against a live desktop window,
-        // not by reading the CSS alone, since that 44px rule reads as "the"
-        // rule until you check what actually wins. Midline is 52 / 2 = 26, so
-        // the circles' top edge is 26 - 6 = 20. A prior pass "corrected" this
-        // to y: 16 off the un-overridden 44px rule, which is what actually
-        // reintroduced the misalignment — don't repeat that without first
-        // measuring the live header height.
-        trafficLightPosition: { x: 12, y: 20 },
+        // Every real window wraps the tab bar in `.workspace-shell` (see
+        // App.tsx), so the rule that wins is `.workspace-shell
+        // .workspace-tabs-chrome.app-chrome-header` in apps/web
+        // viewer/routines.css — 44px since OPEND-3111 (6px above the 32px
+        // controls + 6px below), matching the base `.workspace-tabs-chrome
+        // .app-chrome-header` rule in shell.css and the `.workspace-shell`
+        // grid row. Midline is 44 / 2 = 22, so the circles' top edge is
+        // 22 - 6 = 16. Before changing this, measure the live header with
+        // getBoundingClientRect() against a desktop window — the CSS has
+        // carried a stale override before, and the offset must follow what
+        // actually renders. apps/web/tests/styles/top-chrome-height.test.ts
+        // pins the 44 on the web side; window-chrome.test.ts pins this 16.
+        trafficLightPosition: { x: 12, y: 16 },
         // Frosted-glass window: the desktop wallpaper blurs through the whole
         // window (NSVisualEffectView). The web shell keeps html/body
         // transparent in desktop mode (see apps/web app-wash.css) so the
@@ -926,10 +935,12 @@ const MAC_WINDOW_CHROME_CSS = `
   }
 `;
 
-// Light-background startup splash shown while the web runtime boots. It plays
-// the brand intro clip once and then holds on its final settled logo frame until
-// the main window is ready. The clip is embedded as a base64 data URL so it
-// renders identically in dev and in packaged builds (see `splash-video.ts`).
+// Light-background startup splash shown while the web runtime boots. It runs the
+// Home hero's pixel-scan wordmark — the same shader, ported to plain WebGL and
+// inlined (logo art included) because the splash is up before any HTTP origin
+// exists (see `splash-pixel-scan.ts`). The sweep LOOPS: boots vary from two
+// seconds to a cold minute, and a clip that plays once leaves the rest of that
+// wait on a frozen frame.
 function createPendingHtml(): string {
   const start = splashStagePayload("starting");
   const initialPct = Math.max(0, Math.min(100, Math.round((start.step / start.total) * 100)));
@@ -951,13 +962,7 @@ function createPendingHtml(): string {
         display: flex;
         justify-content: center;
       }
-      video {
-        background: #f2f4f5;
-        height: auto;
-        max-height: 100%;
-        max-width: 100%;
-        width: auto;
-      }
+${SPLASH_PIXEL_SCAN_STYLE}
       .boot-stage {
         bottom: 56px;
         color: #7a838a;
@@ -1010,14 +1015,7 @@ function createPendingHtml(): string {
     </style>
   </head>
   <body>
-    <video
-      id="splash"
-      autoplay
-      muted
-      playsinline
-      disablepictureinpicture
-      src="${SPLASH_VIDEO_DATA_URL}"
-    ></video>
+${SPLASH_PIXEL_SCAN_MARKUP}
     <div class="boot-progress" aria-hidden="true">
       <div class="boot-progress-fill" id="boot-progress-fill" data-pct="${initialPct}" style="width: ${initialPct}%;"></div>
     </div>
@@ -1025,17 +1023,7 @@ function createPendingHtml(): string {
       <span class="boot-stage-step" id="boot-stage-step">${start.step}/${start.total}</span><span id="boot-stage-text">${start.label}</span><span class="boot-dots" aria-hidden="true"><span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>
     </div>
     <script>
-      (function () {
-        var video = document.getElementById("splash");
-        if (!video) return;
-        var play = function () {
-          var attempt = video.play();
-          if (attempt && typeof attempt.catch === "function") attempt.catch(function () {});
-        };
-        video.addEventListener("loadedmetadata", function () { video.currentTime = 0; });
-        video.addEventListener("loadeddata", play);
-        play();
-      })();
+${splashPixelScanScript()}
       // Accepts the structured { step, total, label } payload (and tolerates a
       // bare label string for back-compat). The step counter + progress bar give
       // a slow cold boot a sense of how far along it is; the bar only ever grows
@@ -2845,9 +2833,10 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     // The web bundle is loading in the hidden main window from here on; let
     // the splash status line reflect that final phase while we poll for mount.
     setSplashStage(splash, "workspace");
+    let mounted = false;
     const deadline = Date.now() + WEB_MOUNT_REVEAL_TIMEOUT_MS;
     while (!stopped && !window.isDestroyed() && Date.now() < deadline) {
-      const mounted = await window.webContents
+      mounted = await window.webContents
         .executeJavaScript(`document.documentElement.getAttribute("data-od-app-mounted") === "1"`, true)
         .catch(() => false);
       if (mounted === true) break;
@@ -2861,6 +2850,11 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     const remaining = MIN_SPLASH_MS - (Date.now() - splashStartedAt);
     if (remaining > 0) await delay(remaining);
     revealMainWindow();
+    // A timeout/crash fallback can also reveal a window. Only a mounted,
+    // healthy app is a successful updater desktop observation.
+    if (mounted && !rendererFailed && revealed && !window.isDestroyed()) {
+      try { options.onMainWindowReady?.(); } catch {}
+    }
   };
 
   const schedule = (delayMs: number) => {
@@ -3078,6 +3072,9 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       window.webContents.send(UPDATER_OPEN_DIALOG_EVENT, request);
       window.show();
       window.focus();
+    },
+    renderFrames(input) {
+      return renderDeterministicFrames(input);
     },
     renderSlides(input) {
       return renderDeckSlides(input);

@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { homeTemplateTrigger } from '../helpers/home-template-picker';
 //
 // Scenario-card rail coverage.
 //   - The default create rail renders illustrated scenario cards carrying a
@@ -42,6 +43,10 @@ vi.mock('../../src/components/home-hero/PlaceholderCarousel', () => ({
 
 import { HomeHero } from '../../src/components/HomeHero';
 import { findChip, orderedCreateChips } from '../../src/components/home-hero/chips';
+import {
+  prototypeSceneProjectMetadata,
+  prototypeSubChipForSlug,
+} from '../../src/components/home-hero/sub-chips';
 
 afterEach(() => {
   placeholderCarouselMock.reportScenario = false;
@@ -72,20 +77,18 @@ function renderHero(overrides: Partial<React.ComponentProps<typeof HomeHero>> = 
 
 // #5517 removed the illustrated scenario-card rail from Home; scenarios are
 // picked from the composer footer's radial template picker instead.
-function openTemplatePicker() {
-  fireEvent.click(screen.getByTestId('home-hero-template-trigger'));
+// Types are a horizontal pill row under the working-directory row (product,
+// 2026-08-21); anything that does not fit folds into its 全部 popover.
+function typePill(chipId: string): HTMLElement | null {
+  if (!screen.queryByTestId('home-hero-template-menu')) fireEvent.click(homeTemplateTrigger());
+  return screen.getByTestId('home-hero-template-menu').querySelector(`[data-chip="${chipId}"]`);
 }
 
 describe('HomeHero scenario cards', () => {
   it('labels each create scenario in the composer template picker', () => {
     renderHero();
-    openTemplatePicker();
-    expect(
-      screen.getByTestId('home-hero-template-wedge-prototype').getAttribute('aria-label'),
-    ).toContain('Prototype');
-    expect(
-      screen.getByTestId('home-hero-template-wedge-deck').getAttribute('aria-label'),
-    ).toContain('Slide deck');
+    expect(typePill('prototype')?.textContent).toContain('Prototype');
+    expect(typePill('deck')?.textContent).toContain('Slide deck');
   });
 
   it('uses the fixed ten-item Home creation hierarchy in product order', () => {
@@ -94,33 +97,38 @@ describe('HomeHero scenario cards', () => {
     expect(ids).toEqual([
       'prototype',
       'deck',
-      'image',
       'document',
-      'hyperframes',
+      'image',
       'web-clone',
+      'hyperframes',
+      'webgl',
+      'live-artifact',
       'video',
       'audio',
-      'live-artifact',
-      'webgl',
     ]);
     expect(ids).not.toContain('wireframe');
     expect(ids).not.toContain('mobile');
   });
 
-  it('keeps nested prototype scenarios executable without exposing them as top-level templates', () => {
+  it('keeps nested prototype scenarios executable without giving them a chip of their own', () => {
     renderHero();
-    openTemplatePicker();
-    expect(screen.queryByTestId('home-hero-template-wedge-wireframe')).toBeNull();
-    expect(screen.queryByTestId('home-hero-template-wedge-mobile')).toBeNull();
-    expect(screen.getByTestId('home-hero-template-wedge-document')).toBeTruthy();
-    expect(findChip('wireframe')?.action.kind).toBe('apply-scenario');
-    expect(findChip('mobile')?.action.kind).toBe('apply-scenario');
-    // Wireframe reuses the web-prototype seed at lo-fi fidelity.
-    expect(findChip('wireframe')?.action).toMatchObject({
+    expect(typePill('wireframe')).toBeNull();
+    expect(typePill('mobile')).toBeNull();
+    expect(typePill('document')).toBeTruthy();
+    // They are scenes, so they have no catalog entry at all — what makes them
+    // executable is the Prototype chip's action plus their own refinement.
+    expect(findChip('wireframe')).toBeUndefined();
+    expect(findChip('mobile')).toBeUndefined();
+    const prototypeChip = findChip('prototype')!;
+    expect(prototypeChip.action).toMatchObject({
+      kind: 'apply-scenario',
       pluginId: 'example-web-prototype',
       projectKind: 'prototype',
-      projectMetadata: { kind: 'prototype', fidelity: 'wireframe' },
     });
+    // Wireframe reuses the web-prototype seed at lo-fi fidelity.
+    expect(
+      prototypeSceneProjectMetadata(prototypeChip, prototypeSubChipForSlug('wireframe')),
+    ).toEqual({ kind: 'prototype', fidelity: 'wireframe' });
     expect(findChip('document')?.action).toMatchObject({
       pluginId: 'od-new-generation',
       projectKind: 'other',

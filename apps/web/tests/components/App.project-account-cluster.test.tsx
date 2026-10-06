@@ -3,7 +3,7 @@
 // The floating avatar + credits cluster must survive opening a project.
 //
 // The entry refresh moved the account module (avatar chip + credits pill)
-// into a fixed top-right cluster owned by EntryNavRail — which unmounts with
+// into a top-right chrome cluster owned by EntryNavRail — which unmounts with
 // EntryShell the moment a project tab opens. Product: the avatar and credits
 // stay visible on the project view too, in the same top-right spot. App.tsx
 // therefore mounts `WorkspaceTopRightAccountCluster` with the route-owned
@@ -328,23 +328,30 @@ describe('project route — floating account cluster', () => {
     resetWorkspaceDirectoryCache();
   });
 
-  it('keeps the avatar and credits pill mounted on an open project', async () => {
+  it('keeps the credits pill — but not the account menu — mounted on an open project', async () => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
     render(<App />);
 
-    // Both cluster members ride the portal on document.body; they appear once
-    // the workspace context read resolves.
-    const avatar = await screen.findByTestId('entry-nav-account');
-    expect(avatar.closest('.entry-top-right-cluster')).not.toBeNull();
+    // The credits pill rides the shared chrome portal; it appears once the
+    // workspace context read resolves.
+    const credits = await screen.findByTestId('entry-top-right-credits');
+    expect(credits.closest('.entry-top-right-cluster')).not.toBeNull();
 
-    await waitFor(() => {
-      expect(screen.getByTestId('entry-top-right-credits')).toBeTruthy();
+    // The account module now lives at the bottom of the entry rail, and this
+    // route has no rail — so it is deliberately absent rather than relocated.
+    expect(screen.queryByTestId('entry-nav-account')).toBeNull();
+
+    // Balance still comes from THIS route's workspace, not the shell's. Since
+    // design PR #8364 the pill carries only the plan wordmark, so the amount is
+    // read off the billing card the pill opens on hover.
+    fireEvent.pointerOver(credits.closest('.entry-top-right-credits-anchor') as HTMLElement);
+    const creditsCard = await waitFor(() => {
+      const el = document.querySelector('.entry-nav-rail__menu-credits');
+      if (!el) throw new Error('credits card not open');
+      return el;
     });
-    expect(avatar.getAttribute('aria-label')).toBe('Project Nova');
-    expect(
-      screen.getByTestId('entry-top-right-credits').textContent,
-    ).toContain('$12.34');
-    expect(screen.getByTestId('entry-top-right-credits').textContent).not.toContain('$98.76');
+    expect(creditsCard.textContent).toContain('$12.34');
+    expect(creditsCard.textContent).not.toContain('98.76');
 
     fireEvent.click(screen.getByTestId('entry-top-right-credits'));
     expect(open).toHaveBeenCalledOnce();

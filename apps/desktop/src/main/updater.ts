@@ -1,3 +1,4 @@
+import { recordUpdateLifecycle, type UpdateLifecycleObservation } from "./update-lifecycle-observations.js";
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { createReadStream } from "node:fs";
@@ -167,6 +168,7 @@ export type DesktopUpdater = {
   downloadUpdate(): Promise<DesktopUpdateStatusSnapshot>;
   handle(action: DesktopUpdateAction): Promise<DesktopUpdateStatusSnapshot>;
   installUpdate(): Promise<DesktopUpdateStatusSnapshot>;
+  recordLifecycle?(event: UpdateLifecycleObservation): Promise<void>;
   shouldAutoCheck(): boolean;
   snapshot(): DesktopUpdateStatusSnapshot;
   status(): Promise<DesktopUpdateStatusSnapshot>;
@@ -432,6 +434,7 @@ export function createDesktopUpdater(
   let lastCheckedAt: string | undefined;
   let installResult: DesktopUpdateStatusSnapshot["installResult"];
   let installFrozen = false;
+  let observationHandle: InstallerObservationHandle | null = null;
   let lifecycleSummary: DesktopUpdateCacheLifecycleSummary | undefined;
   let progress: DesktopUpdateProgressSnapshot | undefined;
   let reinstallRequirement: DesktopUpdateReinstallSnapshot | undefined;
@@ -1042,13 +1045,14 @@ export function createDesktopUpdater(
   }
 
   async function writeInstallObservation(attemptedAt: string): Promise<InstallerObservationHandle | null> {
+    observationHandle = null;
     if (config.openDryRun) return null;
     if (config.installerObservationRoot == null || config.namespace == null) return null;
     if (activeRelease == null) return null;
     const artifactType = installerObservationArtifactType(activeRelease.ref.artifact.type);
     if (artifactType == null) return null;
     try {
-      return await writePendingInstallerObservation({
+      observationHandle = await writePendingInstallerObservation({
         arch: activeRelease.ref.arch,
         artifactType,
         attemptedAt,
@@ -1059,6 +1063,8 @@ export function createDesktopUpdater(
         root: config.installerObservationRoot,
         toVersion: activeRelease.ref.version,
       });
+      await recordUpdateLifecycle(observationHandle, { stage: "install_requested", outcome: "started" });
+      return observationHandle;
     } catch (observationError) {
       logger.warn("[open-design updater] failed to write installer observation", observationError);
       return null;
@@ -1349,6 +1355,7 @@ export function createDesktopUpdater(
       }
     },
     installUpdate: () => serialized(installUpdate),
+    recordLifecycle: (event) => recordUpdateLifecycle(installResult != null ? observationHandle : null, event),
     shouldAutoCheck: () => config.enabled && config.autoCheck,
     snapshot,
     async status() {

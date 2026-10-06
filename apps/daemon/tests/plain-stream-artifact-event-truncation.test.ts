@@ -1,37 +1,17 @@
-// Regression spec (RED on origin/main): a plain-stream run that emits an
-// <artifact> tag early and then streams past the run.events ring buffer
-// silently never persists the artifact — the delivered file is lost with no
-// error anywhere.
+// Regression coverage for early plain-stream artifacts surviving the bounded
+// run.events ring. The finalizer uses its bounded stdout accumulator plus the
+// ring tail; losing the early <artifact> from memory must not lose the file.
+// The cap and head/tail overlap guards below preserve that persistence contract.
 //
-// Mechanism: run.events is a bounded in-memory ring buffer
-// (createChatRunService maxEvents = 2000, apps/daemon/src/runtimes/runs.ts).
-// The plain-stream artifact finalizer (apps/daemon/src/server.ts, the
-// `status === 'succeeded' && streamFormat === 'plain'` block) rebuilds the
-// agent's stdout via plainStdoutFromRunEvents(run.events) — i.e. it re-scans
-// ONLY the last 2000 events. Once the run has streamed >2000 further events,
-// the artifact's opening tag has been spliced out of the buffer, the
-// `plainStdout.includes('<artifact')` gate is false, and
-// persistPlainStreamArtifacts is never called. The agent verifiably DID
-// stream the artifact (it is in the on-disk events.jsonl); the in-memory
-// verdict is what loses it.
+// HTTP /events has a separate contract: it replays the durable history, including
+// records evicted from the 2000-event ring. It is not an inspection endpoint for
+// the ring. runs-durable-replay.test.ts directly asserts that the real service's
+// in-memory ring remains exactly 2000 while replay restores the earlier records.
 //
-// #5350 / PR #5351 fixed this same ring-buffer-truncation class for the
-// close-status artifact verdict and the retry safety gate by folding side
-// effects into a truncation-proof per-run ledger at emit time — but that
-// migration never covered this plain-stream persistence consumer, which
-// still scans run.events after the fact.
-//
-// Harness mirrors run-event-truncation-artifact-verdict.test.ts (#5351):
-// drive a real daemon (startServer) over the production HTTP API with a fake
-// `deepseek` CLI (streamFormat: 'plain') injected via
-// agentCliEnv.deepseek.DEEPSEEK_BIN. The fake prints a complete
-// <artifact>...</artifact> block FIRST, then floods >2000 separate stdout
-// chunks (one run event per pipe read), then exits 0.
-//
-// Expected (correct) behavior: the run succeeds AND the artifact lands as a
-// project file. On origin/main the first two mechanism assertions pass (the
-// ring buffer is full and no longer contains the tag) while the behavioral
-// assertion is RED: no artifact file is ever written.
+// Drive the real daemon HTTP API with a controlled plain-stream DeepSeek CLI.
+// It prints a complete artifact first, floods more than 2000 stdout events,
+// and exits successfully. Both complete replay and persisted deliverables must
+// survive; increasing the ring or dropping the artifact assertions is not a fix.
 
 import type { Server } from 'node:http';
 import { randomUUID } from 'node:crypto';
@@ -108,19 +88,20 @@ describe('plain-stream artifact persistence vs run.events ring-buffer truncation
     expect(run.status).toBe('succeeded');
     expect(run.exitCode).toBe(0);
 
-    // Mechanism assertion 1: the run streamed far more than maxEvents — the
-    // in-memory ring buffer is full, i.e. truncation really happened.
+    // The HTTP replay must outlive the bounded ring: the earliest artifact,
+    // every intervening record and the terminal signal remain recoverable.
     const eventsBody = await fetchRunEventsSseBody(started.url, run.id);
     const eventCount = (eventsBody.match(/^event:/gm) ?? []).length;
-    expect(eventCount).toBeGreaterThanOrEqual(PROD_DEFAULT_MAX_EVENTS);
+    expect(eventCount).toBeGreaterThan(PROD_DEFAULT_MAX_EVENTS);
+    expect(eventsBody.includes('<artifact')).toBe(true);
+    expect(eventsBody).toContain('ring-buffer truncation repro');
+    const eventIds = Array.from(eventsBody.matchAll(/^id: (\d+)$/gm), (match) => Number(match[1]));
+    expect(eventIds).toEqual(Array.from({ length: eventCount }, (_, index) => index + 1));
+    expect(eventsBody).toMatch(/^event: end$/m);
 
-    // Mechanism assertion 2: the artifact tag the agent verifiably printed
-    // FIRST is no longer anywhere in the ring buffer the finalizer scans.
-    expect(eventsBody.includes('<artifact')).toBe(false);
-
-    // Behavioral assertion (RED on origin/main): the artifact the agent
-    // delivered must still land as a project file. The finalizer must not
-    // depend on the tag surviving the 2000-event ring buffer.
+    // Preserve the original business assertion: the artifact the agent
+    // delivered must land as a project file even after its opening tag was
+    // evicted from the finalizer's 2000-event memory ring.
     const filesResponse = await fetch(
       `${started.url}/api/projects/${encodeURIComponent(projectId)}/files`,
     );
@@ -506,10 +487,9 @@ async function createAndWaitForRun(url: string): Promise<{ run: RunStatus; proje
   throw new Error(`run ${body.runId} did not finish`);
 }
 
-// GET /api/runs/:id/events is an SSE replay of run.events — i.e. of the
-// capped in-memory ring buffer itself. For a terminal run the response ends
-// after the replay, so a plain text read captures exactly what the
-// finalizer's plainStdoutFromRunEvents(run.events) could see.
+// GET /api/runs/:id/events replays durable history plus the captured memory
+// tail. For a terminal run the response ends after replay; this does not expose
+// or enlarge the finalizer's bounded in-memory ring.
 async function fetchRunEventsSseBody(url: string, runId: string): Promise<string> {
   const response = await fetch(`${url}/api/runs/${encodeURIComponent(runId)}/events`);
   expect(response.status).toBe(200);

@@ -144,6 +144,14 @@ describe('sourceLooksLikeNavigableDeck', () => {
     )).toBe(false);
   });
 
+  it('ignores deck-shaped text inside report comments and scripts', () => {
+    expect(sourceLooksLikeNavigableDeck(
+      '<main class="doc"><h1>Annual report</h1></main>' +
+      '<!-- print support waits for a <deck-stage> when one exists -->' +
+      '<script>const example = "<deck-stage></deck-stage>";</script>',
+    )).toBe(false);
+  });
+
   it('keeps explicit and multi-screen persisted decks navigable', () => {
     expect(sourceLooksLikeNavigableDeck(
       '<deck-stage><section data-screen-label="Cover">A</section></deck-stage>',
@@ -675,7 +683,7 @@ describe('exportProjectImageDataUrl', () => {
       versionId: 'v1',
     });
 
-    expect(result).toEqual({ ok: false, unavailable: true });
+    expect(result).toEqual({ ok: false, unavailable: true, reason: 'no-renderer' });
     expect(fetch).toHaveBeenCalledWith('/api/projects/proj%201/export/image', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -924,7 +932,7 @@ describe('binary project/design-system downloads', () => {
 
     const res = await exportProjectAsPptx({ projectId: 'p', fileName: 'deck.html' });
 
-    expect(res).toEqual({ ok: false, unavailable: true });
+    expect(res).toEqual({ ok: false, unavailable: true, reason: 'no-renderer' });
   });
 
   it('surfaces a semantic failure (non-501) as an error, not unavailable', async () => {
@@ -945,7 +953,7 @@ describe('binary project/design-system downloads', () => {
 
     const res = await exportProjectAsPptx({ projectId: 'p', fileName: 'deck.html' });
 
-    expect(res).toEqual({ ok: false, unavailable: true });
+    expect(res).toEqual({ ok: false, unavailable: true, reason: 'unreachable' });
   });
 
   it('a post-response failure (renderer already produced bytes) is an error, not unavailable', async () => {

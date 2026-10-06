@@ -666,3 +666,102 @@ describe('errno triplet privacy', () => {
     expect(classifyStartupFailure(err, false).failureKind).toBe('spawn-failed');
   });
 });
+
+// The blind bucket (production, 14 days to 2026-08-22): macOS `daemon-start`
+// with 968 events across 293 people where the daemon exits code=1, the native
+// module IS present, and error_code / missing_module / daemon_error all come
+// back empty. `parseDaemonLogTail` only names patterns we already know
+// (`ERR_*`, a missing module, an `XError:` headline); when a daemon dies of
+// anything else, the reason is sitting in a log tail we ALREADY READ and then
+// threw away. These tests pin the recovery: when parsing yields nothing, send
+// the tail itself — scrubbed and bounded — so the largest startup-failure
+// bucket stops being undiagnosable.
+describe('daemon_log_tail (unparseable log recovery)', () => {
+  // Nothing here matches ERR_*, "Cannot find module/package", or the
+  // `XError: …` headline — exactly the shape that reports all-null today.
+  const UNPARSEABLE_LOG = [
+    '[open-design packaged] starting app=daemon',
+    'loading config from /Users/liudetao/Library/Application Support/Open Design/config.json',
+    'cache dir C:\\Users\\John Doe\\AppData\\Roaming\\Open Design\\cache',
+    'something we have never seen went wrong while binding the port',
+    '[open-design packaged] exited app=daemon pid=45305 code=1 signal=none',
+  ].join('\n');
+
+  async function captureProps(
+    readLogTail: () => Promise<string | null>,
+  ): Promise<Record<string, unknown>> {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response('ok'));
+    await reportStartupFailure(
+      {
+        error: new Error(DAEMON_EXIT_MESSAGE),
+        isPathAccess: false,
+        posthogKey: 'phc_test',
+        posthogHost: null,
+        distinctId: 'd',
+        appVersion: '0.20.2',
+        namespace: 'release-stable',
+        source: 'packaged',
+      },
+      { fetchImpl: fetchImpl as unknown as typeof fetch, readLogTail },
+    );
+    const [, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    return (JSON.parse(init.body as string) as { properties: Record<string, unknown> }).properties;
+  }
+
+  it('ships the scrubbed tail when the log matches no known pattern', async () => {
+    const props = await captureProps(async () => UNPARSEABLE_LOG);
+    // Precondition: this really is the blind case — every parsed field is null.
+    expect(props.error_code).toBeNull();
+    expect(props.missing_module).toBeNull();
+    expect(props.daemon_error).toBeNull();
+    // The recovery: the line that names the failure actually reaches us.
+    expect(String(props.daemon_log_tail)).toContain(
+      'something we have never seen went wrong while binding the port',
+    );
+  });
+
+  it('redacts POSIX and Windows home dirs in the tail it ships', async () => {
+    const props = await captureProps(async () => UNPARSEABLE_LOG);
+    const tail = String(props.daemon_log_tail);
+    expect(tail).not.toContain('liudetao');
+    expect(tail).not.toContain('John Doe');
+    expect(tail).toContain('/Users/<redacted>');
+    expect(tail).toContain('C:\\Users\\<redacted>');
+  });
+
+  it('bounds the shipped tail and keeps the lines nearest the exit', async () => {
+    // A daemon that logged a lot before dying must not blow the payload up, and
+    // the part worth keeping is the END: the tail is chronological, so the
+    // fatal line sits nearest the exit.
+    const noisy = [
+      ...Array.from({ length: 500 }, (_, i) => `noise line ${i} ${'x'.repeat(200)}`),
+      'the actual last words before the daemon died',
+    ].join('\n');
+    const props = await captureProps(async () => noisy);
+    const tail = String(props.daemon_log_tail);
+    expect(tail).toContain('the actual last words before the daemon died');
+    expect(tail).not.toContain('noise line 0 ');
+    expect(tail.length).toBeLessThanOrEqual(4200);
+  });
+
+  it('sends no tail when the log already parsed into a known signal', async () => {
+    // Guard against ballooning every event: when we can already name the cause
+    // (#4638 shape), the raw tail adds bytes and privacy surface for nothing.
+    const props = await captureProps(async () => ISSUE_4638_LOG);
+    expect(props.error_code).toBe('ERR_MODULE_NOT_FOUND');
+    expect(props.daemon_log_tail).toBeNull();
+  });
+
+  it('sends no tail when there is no log to read (status-timeout / spawn buckets)', async () => {
+    const props = await captureProps(async () => null);
+    expect(props.daemon_log_tail).toBeNull();
+  });
+
+  it('sends no tail for a log file that exists but is blank', async () => {
+    // A daemon that opened its log and died before writing anything: the read
+    // succeeds and the string is truthy, so this reaches the builder. Sending
+    // "\n\n" would be residue that reads like real evidence on a dashboard.
+    const props = await captureProps(async () => '\n   \n\n');
+    expect(props.daemon_log_tail).toBeNull();
+  });
+});

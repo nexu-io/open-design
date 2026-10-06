@@ -227,7 +227,7 @@
 .viewer-module-pointer__cta {
   margin: 4px 0 0;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text);
 }
 .viewer-module-pointer__entries {
@@ -412,9 +412,6 @@
   background: var(--bg-muted);
   color: var(--text);
 }
-.artifact-tool-menu-item .palette-tweaks-badge {
-  margin-left: auto;
-}
 /* Preview-only controls: keep layout stable across modes.
    When inactive, reserve the same horizontal slot but fully disable interaction. */
 .viewer-preview-controls {
@@ -574,7 +571,7 @@
   background: var(--bg-panel);
   border-color: var(--border);
   color: var(--text-strong);
-  font-weight: 500;
+  font-weight: 600;
 }
 .viewer-meta { font-size: 12px; color: var(--text-muted); }
 .ghost-link {
@@ -959,7 +956,7 @@
 }
 .live-artifact-refresh-value.muted {
   color: var(--text-muted);
-  font-weight: 500;
+  font-weight: 600;
 }
 .live-artifact-refresh-sub {
   font-size: 12px;
@@ -1157,7 +1154,7 @@
 }
 .live-artifact-refresh-tile-title {
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1307,6 +1304,22 @@
   visibility: hidden;
   pointer-events: none;
 }
+/* Manual Edit hands ownership between the canonical URL document and its
+   bridge-enabled srcDoc twin. Keep the outgoing frame painted until the
+   incoming frame reports its exact document revision ready. `opacity: 0`
+   still lets Chromium lay out and paint the standby document, unlike
+   `visibility: hidden`, which previously stranded reveal animations. */
+.artifact-preview-transport-stack iframe[data-od-handoff-visible='true'] {
+  visibility: visible;
+  pointer-events: none;
+  z-index: 1;
+}
+.artifact-preview-transport-stack iframe[data-od-handoff-pending='true'] {
+  visibility: visible;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 2;
+}
 /* First-ever URL-load of an artifact: the iframe's own navigation can queue
    behind heavy same-origin traffic (e.g. drafts-grid cover iframes), which
    otherwise reads as a dead white pane. Sits above both transport iframes
@@ -1370,7 +1383,7 @@
   background-color: transparent;
   color: var(--text);
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1.2;
   box-shadow: none;
 }
@@ -1431,7 +1444,7 @@
   background: transparent;
   color: var(--text-muted);
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1;
   text-align: left;
 }
@@ -1718,7 +1731,7 @@
   overflow: hidden;
   color: var(--text);
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1797,7 +1810,7 @@
 }
 .annotation-style-row span {
   color: var(--text-muted);
-  font-weight: 500;
+  font-weight: 600;
 }
 .annotation-style-row strong {
   display: inline-flex;
@@ -3004,7 +3017,7 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   background: var(--bg-subtle);
   color: var(--text-muted);
   font-size: 11px;
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: 0;
   overflow: hidden;
   white-space: nowrap;

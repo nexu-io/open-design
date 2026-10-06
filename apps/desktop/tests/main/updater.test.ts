@@ -2275,7 +2275,13 @@ describe("desktop updater", () => {
       expect(spawned).toHaveLength(1);
       expect(unref).toHaveBeenCalledTimes(1);
       expect(spawned[0]?.command).toBe(payloadLaunchPath);
-      expect(spawned[0]?.options).toEqual({ cwd: runtimeBase, detached: true, stdio: "ignore", windowsHide: true });
+      expect(spawned[0]?.options).toEqual(expect.objectContaining({
+        cwd: runtimeBase,
+        detached: true,
+        env: expect.any(Object),
+        stdio: "ignore",
+        windowsHide: true,
+      }));
       const args = spawned[0]?.args ?? [];
       expect(args).toEqual(expect.arrayContaining([
         LAUNCHER_AFTER_QUIT_FLAG,
@@ -2560,6 +2566,10 @@ describe("desktop updater", () => {
       const installed = await updater.installUpdate();
       const flowIds = await readdir(observationRoot);
       const summary = JSON.parse(await readFile(join(observationRoot, flowIds[0] ?? "", "summary.json"), "utf8")) as Record<string, unknown>;
+      const lifecycleRoot = join(observationRoot, flowIds[0] ?? "", "lifecycle");
+      expect(JSON.parse(await readFile(join(lifecycleRoot, "install_requested.json"), "utf8"))).toMatchObject({ stage: "install_requested", outcome: "started", flow_id: flowIds[0] });
+      await updater.recordLifecycle?.({ stage: "shutdown_started", outcome: "started" });
+      expect(JSON.parse(await readFile(join(lifecycleRoot, "shutdown_started.json"), "utf8"))).toMatchObject({ stage: "shutdown_started", flow_id: flowIds[0] });
       const updateRoot = await realpath(join(root, "updates"));
 
       expect(installed.installResult?.path).toBe(checked.downloadPath);

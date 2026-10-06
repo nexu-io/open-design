@@ -107,7 +107,7 @@ All four scenarios share the same `ApplyResult`, the same run pipeline, and the 
 7. [Discovery and install](#7-discovery-and-install)
 8. [The Apply pipeline](#8-the-apply-pipeline)
 9. [Trust and capabilities](#9-trust-and-capabilities)
-10. [First-party atoms](#10-first-party-atoms--open-designs-atomic-capabilities)
+10. [First-party atoms](#10-first-party-atoms--the-atomic-pipeline-plugins-assemble)
 11. [Architecture — what changes in the existing repo](#11-architecture--what-changes-in-the-existing-repo)
 12. [CLI surface](#12-cli-surface)
 13. [Public web surface](#13-public-web-surface-open-designaimarketplace)

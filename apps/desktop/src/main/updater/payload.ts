@@ -75,6 +75,21 @@ export type LauncherPayloadManifest = {
   version: string;
 };
 
+/**
+ * Launcher pointers describe the next launch, not necessarily this process.
+ * Keep the physical payload immutable until its desktop exits: Electron may
+ * need to launch another Helper long after the main executable was loaded.
+ * Version overrides and rollback bookkeeping must not weaken this protection.
+ */
+async function isRunningLauncherPayload(versionRoot: string): Promise<boolean> {
+  if (containsPath(versionRoot, process.execPath)) return true;
+  const [physicalRoot, executable] = await Promise.all([
+    realpath(versionRoot).catch(() => versionRoot),
+    realpath(process.execPath).catch(() => process.execPath),
+  ]);
+  return containsPath(physicalRoot, executable);
+}
+
 export function validateLauncherPayloadManifest(value: unknown, expected: {
   channel: DesktopUpdateChannel;
   namespace: string;
@@ -250,6 +265,10 @@ export async function prepareLauncherPayloadRelease(input: {
         });
         return;
       }
+    }
+
+    if (await isRunningLauncherPayload(versionPaths.versionRoot)) {
+      throw new Error("Cannot replace the running payload; restart from the installed app before repairing it");
     }
 
     await rm(stagingRoot, { force: true, recursive: true });
@@ -510,6 +529,7 @@ export async function cleanupLauncherPayloadRoots(input: {
   for (const entry of entries) {
     if (!entry.isDirectory() || retainedVersions.has(entry.name)) continue;
     const path = join(versionPaths.versionsRoot, entry.name);
+    if (await isRunningLauncherPayload(path)) continue;
     try {
       await removeLauncherPayloadRoot(path);
     } catch (error) {
@@ -573,8 +593,8 @@ export function summarizeLauncherCleanupDescriptor(descriptor: LauncherCleanupDe
  * Manual disaster-recovery clear of launcher-side state: removes a stale
  * attempt.json, removes a non-terminal desktop-handoff journal, and deletes
  * any payload version directory not retained by runtime pointers or explicit
- * retained cleanup entries. The running desktop's own version is always
- * retained through runtime.active. A confirmed handoff journal is a successful
+ * retained cleanup entries. The physical running payload is also retained,
+ * independently of runtime pointers. A confirmed handoff journal is a successful
  * terminal state consulted by historical-outer cold starts and must survive.
  * When the runtime descriptor is unreadable the retained set is unknown, so
  * version cleanup is skipped entirely rather than risking the active payload.
@@ -707,10 +727,16 @@ export async function runLauncherCleanupLifecycle(input: {
       nextVersions.push(entry);
       continue;
     }
-    if (retainedVersions.has(entry.version)) {
+    const versionPaths = resolveLauncherVersionPaths({
+      channel: config.channel,
+      namespace: config.namespace,
+      root: config.launcherRoot,
+      version: entry.version,
+    });
+    if (retainedVersions.has(entry.version) || await isRunningLauncherPayload(versionPaths.versionRoot)) {
       nextVersions.push({
         ...entry,
-        error: launcherCleanupError("launcher-cleanup-retained", "deprecated launcher version is retained by runtime state"),
+        error: launcherCleanupError("launcher-cleanup-retained", "deprecated launcher version is retained by runtime state or the running executable"),
         reason: "cleanup-failed",
         state: "cleanup-deferred",
         updatedAt: nowIso,
@@ -718,12 +744,6 @@ export async function runLauncherCleanupLifecycle(input: {
       continue;
     }
 
-    const versionPaths = resolveLauncherVersionPaths({
-      channel: config.channel,
-      namespace: config.namespace,
-      root: config.launcherRoot,
-      version: entry.version,
-    });
     try {
       const versionEntry = await lstat(versionPaths.versionRoot).catch(() => null);
       if (versionEntry != null && (!versionEntry.isDirectory() || versionEntry.isSymbolicLink())) {

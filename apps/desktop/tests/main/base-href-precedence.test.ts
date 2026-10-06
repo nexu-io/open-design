@@ -67,6 +67,18 @@ import { renderDeckSlides } from '../../src/main/deck-capture.js';
 
 const execFileP = promisify(execFile);
 const desktopRoot = fileURLToPath(new URL('../..', import.meta.url));
+
+/**
+ * Budget for one Electron probe process (`xvfb-run … electron <probeDir>` on
+ * Linux). The probes only need a second or two once Chromium is up, but a
+ * cold Electron start on a busy CI runner can take well over ten seconds,
+ * and `execFile` kills a timed-out child with a bare "Command failed" and no
+ * stderr — which is exactly what an otherwise green run shows when it flakes.
+ * Generous on purpose: a probe that really hangs still fails, just later.
+ */
+const ELECTRON_PROBE_TIMEOUT_MS = 60_000;
+/** Per-test budget for a test that runs one probe: the probe plus setup. */
+const ELECTRON_PROBE_TEST_TIMEOUT_MS = 90_000;
 const legacyBaseHref = 'https://external.invalid/legacy/';
 const scopedBaseHref = 'http://127.0.0.1:43123/preview/export-scope/';
 const sourceHtml = `<!doctype html>
@@ -106,7 +118,7 @@ describe('scoped renderer base precedence', () => {
     const resolution = await probeLoadedDocument(singleLoadedUrl());
     expect(result).toMatchObject({ errorCode: 'NO_SLIDES', ok: false });
     expect(resolution).toEqual(expectedResolution());
-  }, 30_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 
   it('uses the scoped base for artifact-export CSS and images when HTML already has an external base', async () => {
     // Given: an artifact-export request whose source document already declares another base.
@@ -130,7 +142,7 @@ describe('scoped renderer base precedence', () => {
     } finally {
       if (result.path) await rm(dirname(result.path), { force: true, recursive: true });
     }
-  }, 30_000);
+  }, ELECTRON_PROBE_TEST_TIMEOUT_MS);
 });
 
 function singleLoadedUrl(): string {
@@ -188,7 +200,7 @@ app.whenReady().then(async () => {
     const args = process.platform === 'linux' ? ['-a', electronPath, ...electronArgs] : electronArgs;
     const env: NodeJS.ProcessEnv = { ...process.env, OD_BASE_PROBE_URL_FILE: urlFile };
     delete env.ELECTRON_RUN_AS_NODE;
-    const { stdout } = await execFileP(command, args, { env, timeout: 20_000 });
+    const { stdout } = await execFileP(command, args, { env, timeout: ELECTRON_PROBE_TIMEOUT_MS });
     const marker = stdout.split(/\r?\n/).find((line) => line.startsWith('OD_BASE_PROBE:'));
     if (!marker) throw new Error(`Electron renderer probe returned no result: ${stdout}`);
     return parseBaseResolution(JSON.parse(marker.slice('OD_BASE_PROBE:'.length)));

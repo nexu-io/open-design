@@ -48,6 +48,7 @@ spec (`e2e/specs/mac.spec.ts` / `win.spec.ts` via `release-smoke.ts`),
 | Node | Coverage | Owning tests |
 | --- | --- | --- |
 | activate (generation++) → after-quit takeover → confirm | U, P, F | packaged + desktop unit; specs; real-feed loop |
+| Renderer quiescence before web/daemon retirement | U | desktop `shutdown.test.ts` P0 ordering/shared-cleanup cases; packaged `protocol.test.ts` no-forward/no-retry/abort cases |
 | Delegated pre-arm (`--od-launcher-delegated-*`) | U | launcher-proto selection; packaged delegation/launch tests; desktop activation test |
 | Crash rollback to lastSuccessful + self-heal on next release | P | mac/win spec `rolls back a crashing payload and self-heals on the next good update` |
 | Stale relaunch freeze scrub after rollback (installResult.activeVersion > running) | U, P | desktop unit stale-freeze spec; exercised by the spec's self-heal phase |
@@ -57,6 +58,7 @@ spec (`e2e/specs/mac.spec.ts` / `win.spec.ts` via `release-smoke.ts`),
 | Obsolete outer retirement (mac/win) | U | packaged `obsolete-installed-outer.test.ts` |
 | Reinstalled newer outer resets runtime (bound > active) | U | packaged `launcher-runtime.test.ts` supersede case |
 | Reinstalled older outer delegates (bound < active) | P | spec recovery segment precondition |
+| Physical running payload survives pointer changes, cleanup, and same-version repair | U | desktop `tests/main/updater/payload-running.test.ts` |
 
 ## E. Installer (reinstall) path
 

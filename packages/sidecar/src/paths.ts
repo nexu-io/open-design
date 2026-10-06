@@ -21,7 +21,7 @@ import type {
   RuntimeRootRequest,
   SidecarContractDescriptor,
   SidecarRuntimeContext,
-  SidecarStampShape,
+  RuntimeLayoutStampShape,
 } from "./types.js";
 
 /**
@@ -29,7 +29,7 @@ import type {
  * the contract, or the contract default — then normalize it.
  * @returns The normalized namespace.
  */
-export function resolveNamespace<TStamp extends SidecarStampShape>(options: NamespaceResolutionOptions<TStamp>): string {
+export function resolveNamespace<TStamp extends RuntimeLayoutStampShape>(options: NamespaceResolutionOptions<TStamp>): string {
   return options.contract.normalizeNamespace(
     options.namespace ??
       options.env?.[options.contract.env.namespace] ??
@@ -52,7 +52,7 @@ export function resolveProjectRoot(projectRoot: string): string {
  * Resolve the project's tmp root (`<projectRoot>/<projectTmpDirName>`).
  * @returns The resolved tmp root path.
  */
-export function resolveProjectTmpRoot<TStamp extends SidecarStampShape>({
+export function resolveProjectTmpRoot<TStamp extends RuntimeLayoutStampShape>({
   contract,
   projectRoot,
 }: {
@@ -66,7 +66,7 @@ export function resolveProjectTmpRoot<TStamp extends SidecarStampShape>({
  * Resolve the source-scoped runtime root (`<projectTmpRoot>/<source>`).
  * @returns The resolved source runtime root path.
  */
-export function resolveSourceRuntimeRoot<TStamp extends SidecarStampShape>({
+export function resolveSourceRuntimeRoot<TStamp extends RuntimeLayoutStampShape>({
   contract,
   projectRoot,
   source,
@@ -79,7 +79,7 @@ export function resolveSourceRuntimeRoot<TStamp extends SidecarStampShape>({
  * contract, or the source runtime root.
  * @returns The resolved absolute base path.
  */
-export function resolveSidecarBase<TStamp extends SidecarStampShape>({
+export function resolveSidecarBase<TStamp extends RuntimeLayoutStampShape>({
   base,
   contract,
   env = process.env,
@@ -100,7 +100,7 @@ export function resolveSidecarBase<TStamp extends SidecarStampShape>({
  * Resolve the namespace root (`<base>/<namespace>`).
  * @returns The resolved namespace root path.
  */
-export function resolveNamespaceRoot<TStamp extends SidecarStampShape>({
+export function resolveNamespaceRoot<TStamp extends RuntimeLayoutStampShape>({
   base,
   contract,
   namespace,
@@ -132,7 +132,7 @@ export function resolveNamespaceRoot<TStamp extends SidecarStampShape>({
  * `SIDECAR_MODES.RUNTIME`) so this generic helper does not have to hardcode
  * OpenDesign's mode strings.
  */
-export function resolveRuntimeNamespaceRoot<TStamp extends SidecarStampShape>({
+export function resolveRuntimeNamespaceRoot<TStamp extends RuntimeLayoutStampShape>({
   contract,
   runtime,
   runtimeMode,
@@ -154,7 +154,7 @@ export function resolveRuntimeNamespaceRoot<TStamp extends SidecarStampShape>({
  * Resolve a per-run runtime root (`<namespaceRoot>/runs/<runId>`).
  * @returns The resolved run runtime root path.
  */
-export function resolveRuntimeRoot<TStamp extends SidecarStampShape>({
+export function resolveRuntimeRoot<TStamp extends RuntimeLayoutStampShape>({
   base,
   contract,
   namespace,
@@ -167,7 +167,7 @@ export function resolveRuntimeRoot<TStamp extends SidecarStampShape>({
  * Resolve the namespace pointer file (`<namespaceRoot>/current.json`).
  * @returns The resolved pointer path.
  */
-export function resolvePointerPath<TStamp extends SidecarStampShape>({ base, contract, namespace }: RuntimePathRequest<TStamp>): string {
+export function resolvePointerPath<TStamp extends RuntimeLayoutStampShape>({ base, contract, namespace }: RuntimePathRequest<TStamp>): string {
   return join(resolveNamespaceRoot({ base, contract, namespace }), "current.json");
 }
 
@@ -183,7 +183,7 @@ export function resolveManifestPath({ runtimeRoot }: { runtimeRoot: string }): s
  * Resolve an app's logs directory (`<runtimeRoot>/logs/<app>`).
  * @returns The resolved logs directory path.
  */
-export function resolveLogsDir<TStamp extends SidecarStampShape>({
+export function resolveLogsDir<TStamp extends RuntimeLayoutStampShape>({
   app,
   contract,
   runtimeRoot,
@@ -199,7 +199,7 @@ export function resolveLogsDir<TStamp extends SidecarStampShape>({
  * Resolve an app's log file (`<logsDir>/<fileName>`, default `latest.log`).
  * @returns The resolved log file path.
  */
-export function resolveLogFilePath<TStamp extends SidecarStampShape>({
+export function resolveLogFilePath<TStamp extends RuntimeLayoutStampShape>({
   app,
   contract,
   fileName = "latest.log",
@@ -217,7 +217,7 @@ export function resolveLogFilePath<TStamp extends SidecarStampShape>({
  * Resolve an app's runtime dir under a namespace root (`<namespaceRoot>/<app>`).
  * @returns The resolved app runtime directory path.
  */
-export function resolveAppRuntimeDir<TStamp extends SidecarStampShape>({
+export function resolveAppRuntimeDir<TStamp extends RuntimeLayoutStampShape>({
   app,
   contract,
   namespaceRoot,
@@ -229,7 +229,7 @@ export function resolveAppRuntimeDir<TStamp extends SidecarStampShape>({
  * Resolve a file inside an app's runtime dir, rejecting non-simple file names.
  * @returns The resolved app runtime file path.
  */
-export function resolveAppRuntimePath<TStamp extends SidecarStampShape>({
+export function resolveAppRuntimePath<TStamp extends RuntimeLayoutStampShape>({
   app,
   contract,
   fileName,
@@ -246,7 +246,7 @@ export function resolveAppRuntimePath<TStamp extends SidecarStampShape>({
  * `<ipcBase>/<namespace>/<app>.sock`.
  * @returns The resolved IPC socket/pipe path.
  */
-export function resolveAppIpcPath<TStamp extends SidecarStampShape>({
+export function resolveAppIpcPath<TStamp extends RuntimeLayoutStampShape>({
   app,
   contract,
   env = process.env,

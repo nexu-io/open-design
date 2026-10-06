@@ -711,7 +711,7 @@
 }
 .xai-oauth-warning em {
   font-style: normal;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-muted);
 }
 
@@ -1037,7 +1037,7 @@
   position: fixed;
   inset: 0;
   z-index: 920;
-  background: rgba(28, 27, 26, 0.42);
+  background: var(--scrim-tint);
   -webkit-backdrop-filter: var(--scrim-backdrop);
   backdrop-filter: var(--scrim-backdrop);
   display: flex;
@@ -1175,7 +1175,7 @@
   color: var(--text-muted);
   letter-spacing: 0.02em;
   text-transform: uppercase;
-  font-weight: 500;
+  font-weight: 600;
 }
 .plugin-details-modal__byline .plugin-details-modal__author-name {
   font-size: 13px;
@@ -1258,7 +1258,7 @@
   padding: 4px 10px;
   border-radius: var(--radius-pill);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
   max-width: 220px;
@@ -1332,7 +1332,7 @@
   background: var(--bg-panel);
   color: var(--text-muted);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   text-decoration: none;
   flex-shrink: 0;
   transition: color 120ms var(--ease-out), border-color 120ms var(--ease-out), background 120ms var(--ease-out);
@@ -1389,7 +1389,7 @@
 }
 .plugin-details-modal__section-count {
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: 0;
   text-transform: none;
   color: var(--text-muted);
@@ -1500,7 +1500,7 @@
   border-radius: var(--radius-pill);
   background: var(--bg-subtle);
   color: var(--text-muted);
-  font-weight: 500;
+  font-weight: 600;
 }
 .plugin-details-modal__badge.is-required {
   background: rgba(200, 60, 60, 0.1);
@@ -1583,7 +1583,7 @@
 }
 .plugin-details-modal__ctx-count {
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   text-transform: none;
   letter-spacing: 0;
   background: var(--bg-subtle);
@@ -1754,7 +1754,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text);
   transition: color 120ms var(--ease-out);
 }
@@ -1770,7 +1770,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
   padding: 1px 7px;
-  font-weight: 500;
+  font-weight: 600;
 }
 .settings-skills .skills-row-summary-source {
   color: var(--accent);
@@ -1812,7 +1812,7 @@
 .plugin-details-modal__stage-id {
   font-size: 13px;
   color: var(--text);
-  font-weight: 500;
+  font-weight: 600;
 }
 .plugin-details-modal__stage-atoms {
   display: flex;
@@ -1896,7 +1896,7 @@
 }
 .plugin-details-modal__source dt {
   color: var(--text-muted);
-  font-weight: 500;
+  font-weight: 600;
 }
 .plugin-details-modal__source dd {
   margin: 0;
@@ -1913,7 +1913,7 @@
   padding: 1px 8px;
   border-radius: var(--radius-pill);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   background: var(--bg-subtle);
   color: var(--text-muted);
   border: 1px solid var(--border);
@@ -1931,7 +1931,7 @@
   gap: 5px;
   color: var(--text-muted);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
 }
 .plugins-view__version-select select {
   width: min(240px, 100%);
@@ -2018,7 +2018,7 @@
   padding: 7px 14px;
   border-radius: var(--radius-sm, 6px);
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
 }
 .plugin-details-modal__secondary:hover {
@@ -2156,7 +2156,7 @@
   margin: 0;
   color: var(--text);
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   overflow-wrap: anywhere;
 }
 .plugin-share-confirm__facts code {

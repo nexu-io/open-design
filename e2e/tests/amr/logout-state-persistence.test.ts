@@ -95,6 +95,9 @@ describe('AMR logout state persistence', () => {
             headers: { ...AMR_TEST_WORKSPACE_HEADERS },
           }),
         ).resolves.toMatch(/AMR_AUTH_REQUIRED/);
+      }, {
+        // This fixture tests authentication with plain ACP output.
+        env: { OD_NEXT_STRATEGY_ROLLOUT: 'off' },
       });
     });
   });

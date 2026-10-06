@@ -1,0 +1,265 @@
+name: release-rollback
+
+# Retract a stable release by repointing `stable/latest` at the previous
+# published version. One dispatch, no rebuild: a release publishes its artifacts
+# to an immutable `stable/versions/<version>` prefix and then copies the pointer
+# objects into `stable/latest`, so rolling back is copying an older prefix over
+# `latest` again. Implementation and all the refusals live in
+# `tools/release/src/storage/rollback-latest.ts`.
+#
+# WHAT THIS CANNOT DO — read before running. The desktop updater never offers a
+# version that is not strictly newer than the running one
+# (`apps/desktop/src/main/updater.ts`), so this stops the rollout and nothing
+# more. Installs that already took the bad release stay on it until a
+# roll-forward patch ships. The run summary repeats this and lists the surfaces
+# that are NOT covered (download page, What's New card, Feishu announcement).
+#
+# Stable only. `beta` and `prerelease` guard their `latest` with a monotonic CAS
+# that a rollback would fight, and the next counted publish would undo it
+# anyway. The underlying CLI is channel-general; this entrypoint is not.
+#
+# TRUST BOUNDARY — this performs a trusted write to the pointer every installed
+# client reads. `workflow_dispatch` runs the workflow file *from the dispatch
+# ref*, so no check written here can be the control; the control is the repo's
+# dispatch permission, the same one that guards `release-stable.yml`. The ref
+# assertion below is an operator guard rail, not a security boundary: it keeps a
+# rollback reproducible from reviewed `main` code instead of whatever branch
+# happened to be open during an incident.
+
+on:
+  workflow_dispatch:
+    inputs:
+      to_version:
+        description: "Published stable version to serve again, for example 0.24.1."
+        required: true
+        type: string
+      from_version:
+        description: "Stable version being retracted — must match what latest serves right now. This is the confirmation step."
+        required: true
+        type: string
+      dry_run:
+        description: "Resolve and validate the whole plan without writing anything."
+        required: false
+        type: boolean
+        default: false
+      allow_forward:
+        description: "Permit pointing latest at a NEWER version (undo a rollback). Off by default; moving stable forward is release-stable's job."
+        required: false
+        type: boolean
+        default: false
+      move_github_release:
+        description: "Also move the GitHub Release 'Latest' badge to the restored version."
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  # Deliberately the same group `release-stable.yml` uses for a real publish
+  # (`open-design-release-stable-${{ inputs.dry_run }}`, where a publish run
+  # passes `publish`). A rollback racing a publish would leave `latest` mixing
+  # two releases, so they queue instead. `e2e/tests/scripts/release-rollback.test.ts`
+  # asserts the two files still agree on this string.
+  group: open-design-release-stable-publish
+  cancel-in-progress: false
+
+jobs:
+  # No secrets. Everything that can be rejected without touching credentials is
+  # rejected here, and every condition is a step that exits 1 rather than an
+  # `if:` that would skip green.
+  guard:
+    name: validate request
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Assert the dispatch ref is main
+        env:
+          DISPATCH_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          if [ "$DISPATCH_REF" != "refs/heads/main" ]; then
+            echo "::error::release-rollback must be dispatched from main; got $DISPATCH_REF"
+            exit 1
+          fi
+
+      - name: Assert both versions are stable releases
+        env:
+          FROM_VERSION: ${{ inputs.from_version }}
+          TO_VERSION: ${{ inputs.to_version }}
+        run: |
+          set -euo pipefail
+          for pair in "from_version:$FROM_VERSION" "to_version:$TO_VERSION"; do
+            name="${pair%%:*}"
+            value="${pair#*:}"
+            if ! printf '%s' "$value" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "::error::$name must be a stable X.Y.Z version; got '$value'"
+              exit 1
+            fi
+          done
+          if [ "$FROM_VERSION" = "$TO_VERSION" ]; then
+            echo "::error::from_version and to_version are both $FROM_VERSION; there is nothing to roll back"
+            exit 1
+          fi
+
+  rollback:
+    name: repoint stable latest
+    needs: guard
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Before anything is written. Moving the badge happens after the R2
+      # rollback, so a missing release discovered there would fail the run with
+      # `latest` already moved — a half-done retraction is worse than a refused
+      # one.
+      - name: Assert the restored version has a GitHub Release
+        id: badge
+        if: ${{ inputs.move_github_release }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          TO_VERSION: ${{ inputs.to_version }}
+        run: |
+          set -euo pipefail
+          # The tag is NOT `v<version>`: prepare-stable.ts publishes
+          # `open-design-v<version>`, and a hand-built prefix here was wrong on
+          # the first live dry run. Read the authoritative value the publisher
+          # recorded in the release's own immutable metadata instead. Prefix
+          # candidates mirror rollback-latest.ts's ASSET_SUFFIXES.
+          to_tag=""
+          for suffix in "" ".signed" ".unsigned"; do
+            url="$PUBLIC_ORIGIN/stable/versions/${TO_VERSION}${suffix}/metadata.json?rollback=$GITHUB_RUN_ID"
+            candidate="$(curl -fsSL "$url" 2>/dev/null | jq -r '.versionTag // empty')" || continue
+            if [ -n "$candidate" ]; then to_tag="$candidate"; break; fi
+          done
+          if [ -z "$to_tag" ]; then
+            echo "::error::published metadata for $TO_VERSION has no versionTag; re-run with move_github_release=false"
+            exit 1
+          fi
+          echo "resolved release tag: $to_tag"
+          echo "to_tag=$to_tag" >> "$GITHUB_OUTPUT"
+
+          if ! release="$(gh release view "$to_tag" --json tagName,isDraft,isPrerelease --repo "$GITHUB_REPOSITORY" 2>/dev/null)"; then
+            echo "::error::no GitHub Release for $to_tag; re-run with move_github_release=false if that is expected"
+            exit 1
+          fi
+          # Existing is not the same as eligible: GitHub will not put the Latest
+          # badge on a draft or a prerelease, so the edit below would fail with
+          # the R2 rollback already done.
+          if [ "$(jq -r .isDraft <<<"$release")" != "false" ] || [ "$(jq -r .isPrerelease <<<"$release")" != "false" ]; then
+            echo "::error::GitHub Release $to_tag is a draft or prerelease and cannot be marked Latest; re-run with move_github_release=false"
+            exit 1
+          fi
+
+      # Refuses unless the live pointer still serves from_version, the target
+      # version published completely, every ready platform's manifest and
+      # updater feed exist, and the current installer floor is satisfiable by
+      # the target. Writes metadata.json last, then reads every object back and
+      # re-checks through the public URL.
+      - name: Roll back stable latest
+        env:
+          # githubInfo() stamps these into the rollback provenance block that
+          # ends up in latest/metadata.json; unset would record empty strings.
+          RELEASE_BRANCH: main
+          RELEASE_CHANNEL: stable
+          RELEASE_COMMIT: ${{ github.sha }}
+          RELEASE_DRY_RUN: ${{ inputs.dry_run }}
+          # The installer floor is repo-vars policy, and repository variables are
+          # not process env. Without this handoff the rollback resolves NO floor:
+          # it would delete an active `control.launcher.version` from the restored
+          # metadata and happily point latest below the current minimum — the
+          # exact safeguard this workflow claims to enforce.
+          # `release-stable.yml` passes the same pair to publish and verify.
+          RELEASE_LAUNCHER_VERSION_MIN_STABLE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_STABLE }}
+          RELEASE_LAUNCHER_VERSION_MIN_URL_STABLE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_URL_STABLE }}
+          RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-rollback/outputs.json
+          RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+          RELEASE_ROLLBACK_ALLOW_FORWARD: ${{ inputs.allow_forward }}
+          RELEASE_ROLLBACK_FROM_VERSION: ${{ inputs.from_version }}
+          RELEASE_ROLLBACK_TO_VERSION: ${{ inputs.to_version }}
+          RELEASE_RUN_ATTEMPT: ${{ github.run_attempt }}
+          RELEASE_RUN_ID: ${{ github.run_id }}
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          RELEASE_STORAGE_REGION: auto
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+          RELEASE_SUMMARY_PATH: ${{ runner.temp }}/release-rollback/summary.md
+          RELEASE_WORKFLOW: release-rollback
+        run: pnpm exec tools-release rollback-latest
+
+      # The GitHub Release body is hand-written release copy; this moves only the
+      # "Latest" badge and never edits a body. Setting --latest on the restored
+      # tag is what demotes the retracted one.
+      - name: Move the GitHub Release latest badge
+        if: ${{ !inputs.dry_run && inputs.move_github_release }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # Resolved from the restored release's own published metadata by the
+          # preflight above, never rebuilt from the version string here.
+          TO_TAG: ${{ steps.badge.outputs.to_tag }}
+        run: |
+          set -euo pipefail
+          gh release edit "$TO_TAG" --latest --repo "$GITHUB_REPOSITORY"
+          latest="$(gh release view --json tagName --jq .tagName --repo "$GITHUB_REPOSITORY")"
+          if [ "$latest" != "$TO_TAG" ]; then
+            echo "::error::GitHub Release latest is $latest after the edit, expected $TO_TAG"
+            exit 1
+          fi
+          echo "GitHub Release latest is now $TO_TAG"
+
+      - name: Publish the run summary
+        if: ${{ always() }}
+        env:
+          FROM_VERSION: ${{ inputs.from_version }}
+          SUMMARY_PATH: ${{ runner.temp }}/release-rollback/summary.md
+          TO_VERSION: ${{ inputs.to_version }}
+        run: |
+          set -euo pipefail
+          if [ -f "$SUMMARY_PATH" ]; then
+            cat "$SUMMARY_PATH" >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "## Rollback did not reach the write step"
+              echo ""
+              echo "\`stable/latest\` was not modified. Read the job log for the refusal."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          {
+            echo ""
+            echo "### Not covered by this run"
+            echo ""
+            echo "- [ ] Download page still links version-pinned installers for \`$FROM_VERSION\`; it needs a landing-site rebuild to advertise \`$TO_VERSION\`."
+            echo "- [ ] In-app What's New card still shows the retracted copy; republish \`docs/whats-new.json\` from \`release/v$TO_VERSION\` via \`whats-new-publish\`."
+            echo "- [ ] The GitHub Release body for \`$FROM_VERSION\` is untouched; add a retraction note by hand if users are landing on it."
+            echo "- [ ] Tell the release group what was retracted and why."
+            echo "- [ ] Installs already on \`$FROM_VERSION\` need a roll-forward patch; a rollback cannot reach them."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload rollback outputs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-rollback-outputs
+          path: ${{ runner.temp }}/release-rollback
+          if-no-files-found: warn
+          retention-days: 30

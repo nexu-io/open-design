@@ -21,6 +21,8 @@ import { readFileSync } from 'node:fs';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { createHash, randomBytes } from 'node:crypto';
 import path from 'node:path';
+import type { OdNextRolloutMode } from '@open-design/contracts';
+
 import { expandHomePrefix } from './home-expansion.js';
 
 import {
@@ -123,6 +125,12 @@ export interface AppConfigPrefs {
   customInstructions?: string | null;
   projectLocations?: ProjectLocationPrefs[];
   defaultProjectLocationId?: string | null;
+  // Whether this installation runs the OD Next design strategy. Absent and
+  // null both mean "unconfigured", which resolves to `active` — OD Next is the
+  // default route and this key is how an installation opts out of it.
+  // `OD_NEXT_STRATEGY_ROLLOUT` outranks this when set; see
+  // readOdNextRolloutPolicy.
+  odNextStrategyMode?: OdNextRolloutMode | null;
   // Most-recently-used local working directories the user granted the agent
   // read access to from the Home composer. Become a project's
   // `metadata.linkedDirs` (read-only `--add-dir` awareness, no Design Files
@@ -152,6 +160,7 @@ const ALLOWED_KEYS: ReadonlySet<keyof AppConfigPrefs> = new Set([
   'customInstructions',
   'projectLocations',
   'defaultProjectLocationId',
+  'odNextStrategyMode',
   'recentLinkedDirs',
 ] as const);
 
@@ -646,6 +655,23 @@ function applyConfigValue(
     }
     return;
   }
+  if (key === 'odNextStrategyMode') {
+    // Reached with a non-mode value only on the READ path — a truncated file, a
+    // hand edit, a value written by some other version. It must not take the
+    // daemon down, and it must not read as unconfigured either: see
+    // OD_NEXT_MODE_WHEN_CONFIG_UNREADABLE. `null` is different and stays a
+    // delete, because clearing the key IS the deliberate way back to the
+    // default. The WRITE path never reaches here with a bad value —
+    // `assertWritableControlValues` refuses it first.
+    if (value === 'off' || value === 'observe' || value === 'active') {
+      target[key] = value;
+    } else if (value === null || value === undefined) {
+      delete target[key];
+    } else {
+      target[key] = OD_NEXT_MODE_WHEN_CONFIG_UNREADABLE;
+    }
+    return;
+  }
   if (key === 'recentLinkedDirs') {
     if (Array.isArray(value)) {
       // Keep non-empty strings, trim, de-dupe preserving most-recent-first
@@ -670,6 +696,34 @@ function applyConfigValue(
     return;
   }
 }
+
+/**
+ * What this installation's OD Next preference reads as when the field is there
+ * but cannot be understood.
+ *
+ * Scoped deliberately narrow: this covers `odNextStrategyMode` holding a value
+ * that is not one of the modes — a hand edit, a typo, a mode some other version
+ * writes. Something was configured and we cannot read it, and since flipping
+ * the default made unconfigured mean `active`, dropping it would turn "we
+ * cannot read your choice" into "you chose OD Next".
+ *
+ * It deliberately does NOT cover a config file that fails to parse at all, or
+ * one whose body is not an object. Those reset every preference to its default
+ * — agent, telemetry, everything — and singling this one out to resolve against
+ * its default would be inconsistent with the rest of the file and would opt
+ * installations out of a rollout they never declined. A broken file is not
+ * evidence of an opt-out; it is evidence of a broken file, and the user has
+ * lost the whole config either way.
+ *
+ * The narrow case still has the property worth having: a user who never opted
+ * out is unaffected, because a readable config keeps its value and a fresh
+ * install has no key at all.
+ *
+ * This is a claim about one field, not about the user, so it is deliberately
+ * not reported as a distinct mode source: `readOdNextRolloutPolicy` sees a
+ * saved `off` and says `app_config`, which is true — a config is what decided.
+ */
+const OD_NEXT_MODE_WHEN_CONFIG_UNREADABLE = 'off' as const;
 
 function filterAllowedKeys(obj: Record<string, unknown>): AppConfigPrefs {
   const result: Record<string, unknown> = Object.create(null);
@@ -795,6 +849,31 @@ async function readAppConfigFileOnly(dataDir: string): Promise<AppConfigPrefs> {
 // Serialize concurrent writes to the same dataDir so the read-modify-write
 // cycle doesn't lose updates when two PUT requests overlap.
 const writeLocks = new Map<string, Promise<unknown>>();
+const configObservers = new Map<string, Set<() => void>>();
+export function observeAppConfig(dataDir: string, observer: () => void): () => void {
+  const observers = configObservers.get(dataDir) ?? new Set<() => void>();
+  observers.add(observer); configObservers.set(dataDir, observers);
+  return () => { observers.delete(observer); if (!observers.size) configObservers.delete(dataDir); };
+}
+
+/** Automatic content upload must fail closed on corrupt preferences instead of applying defaults. */
+export function automaticDiagnosticsConsent(dataDir: string): boolean {
+  try {
+    const raw: unknown = JSON.parse(readFileSync(configFile(dataDir), 'utf8'));
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return false;
+    const telemetry = (raw as Record<string, unknown>).telemetry;
+    if (telemetry !== undefined && (telemetry === null || typeof telemetry !== 'object' || Array.isArray(telemetry))) return false;
+    if (telemetry !== undefined) {
+      const value = telemetry as Record<string, unknown>;
+      return value.metrics === true && value.content === true;
+    }
+    const prefs = applyTelemetryDefaults(filterAllowedKeys(raw as Record<string, unknown>));
+    return prefs.telemetry?.metrics === true && prefs.telemetry?.content === true;
+  } catch (error) {
+    // A new installation has the same defaults as the existing telemetry settings.
+    return (error as NodeJS.ErrnoException).code === 'ENOENT';
+  }
+}
 
 export async function writeAppConfig(
   dataDir: string,
@@ -810,10 +889,47 @@ export async function writeAppConfig(
   }
 }
 
+/** Thrown by `writeAppConfig` when a control key is handed a value it cannot mean. */
+export class InvalidAppConfigValueError extends Error {
+  readonly code = 'INVALID_APP_CONFIG_VALUE';
+
+  constructor(public readonly key: string, message: string) {
+    super(message);
+    this.name = 'InvalidAppConfigValueError';
+  }
+}
+
+/**
+ * Refuse a write that names a control key with a value that is not one of its
+ * modes.
+ *
+ * Every other preference here is sanitized by dropping what it cannot store,
+ * and that is the right trade for a preference: the cost of a bad value is one
+ * setting falling back to its default. `odNextStrategyMode` is not a
+ * preference — it decides whether OD Next runs at all, and its default is
+ * `active`, so dropping it is not a neutral outcome. It revokes an opt-out,
+ * which means `od config set odNextStrategyMode of` would put the installation
+ * back on OD Next while printing success, and the person who typed it would go
+ * on believing they had opted out.
+ *
+ * So a typo fails loudly instead. `null` stays a legitimate value: clearing the
+ * key IS the deliberate way to return to the default.
+ */
+function assertWritableControlValues(partial: Record<string, unknown>): void {
+  if (!Object.prototype.hasOwnProperty.call(partial, 'odNextStrategyMode')) return;
+  const value = partial.odNextStrategyMode;
+  if (value === null || value === 'off' || value === 'observe' || value === 'active') return;
+  throw new InvalidAppConfigValueError(
+    'odNextStrategyMode',
+    'odNextStrategyMode must be one of "off", "observe", "active", or null',
+  );
+}
+
 async function doWrite(
   dataDir: string,
   partial: Record<string, unknown>,
 ): Promise<AppConfigPrefs> {
+  assertWritableControlValues(partial);
   const existing = await readAppConfig(dataDir);
   const next: Record<string, unknown> = { ...existing };
   for (const key of Object.keys(partial)) {
@@ -830,6 +946,9 @@ async function doWrite(
   const tmp = file + '.' + randomBytes(4).toString('hex') + '.tmp';
   await writeFile(tmp, JSON.stringify(normalizedNextWithoutRetiredAgents, null, 2), 'utf8');
   await rename(tmp, file);
+  for (const observer of configObservers.get(dataDir) ?? []) {
+    try { observer(); } catch { /* preference persistence must not depend on background consumers */ }
+  }
   const installationIdWasExplicitlyReset = Object.prototype.hasOwnProperty.call(partial, 'installationId')
     && (partial.installationId == null || (
       typeof existing.installationId === 'string'

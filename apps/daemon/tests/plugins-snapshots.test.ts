@@ -16,11 +16,14 @@ import { migratePlugins } from '../src/plugins/persistence.js';
 import {
   createSnapshot,
   getSnapshot,
+  InvalidAppliedStrategySnapshotError,
   linkSnapshotToRun,
   linkSnapshotToProject,
   markSnapshotStale,
   restoreProjectSnapshotLink,
+  rowToSnapshot,
 } from '../src/plugins/snapshots.js';
+import { strategyPackageHashFromDigests } from '@open-design/plugin-runtime';
 
 let db: Database.Database;
 let tmpDir: string;
@@ -68,7 +71,81 @@ const baseInput = (extra: Partial<Parameters<typeof createSnapshot>[1]> = {}) =>
   ...extra,
 });
 
+function strategyBinding() {
+  const assetDigests = [
+    { path: './SKILL.md', sha256: 'a'.repeat(64) },
+    { path: './assets/task-profiles/prototype.md', sha256: 'b'.repeat(64) },
+  ];
+  return {
+    schema: 'open-design.applied-strategy/v2' as const,
+    id: 'od-next-strategy' as const,
+    version: '2.0.0',
+    packageHash: strategyPackageHashFromDigests(assetDigests),
+    assetDigests,
+    selectedTaskProfile: {
+      taskType: 'prototype' as const,
+      version: '2.0.0',
+      path: './assets/task-profiles/prototype.md',
+      sha256: 'b'.repeat(64),
+    },
+    taskProfileVersions: ['2.0.0'],
+    promptRecipe: 'od-next-plan-build-v2' as const,
+  };
+}
+
+function strategySnapshotInput(
+  extra: Partial<Parameters<typeof createSnapshot>[1]> = {},
+) {
+  return baseInput({
+    pluginId: 'od-next-strategy',
+    pluginVersion: '2.0.0',
+    strategy: strategyBinding(),
+    ...extra,
+  });
+}
+
 describe('snapshots writer', () => {
+  it('adds strategy_json as a nullable reader-first migration column', () => {
+    const columns = db.prepare('PRAGMA table_info(applied_plugin_snapshots)').all() as Array<{
+      name: string;
+      notnull: number;
+      dflt_value: unknown;
+    }>;
+    expect(columns.find((column) => column.name === 'strategy_json')).toEqual(
+      expect.objectContaining({ notnull: 0, dflt_value: null }),
+    );
+  });
+
+  it('migrates an existing snapshot row additively before enabling the writer', () => {
+    const legacy = new Database(':memory:');
+    try {
+      legacy.exec(`
+        CREATE TABLE projects (id TEXT PRIMARY KEY, name TEXT);
+        CREATE TABLE conversations (id TEXT PRIMARY KEY, project_id TEXT, title TEXT);
+        CREATE TABLE applied_plugin_snapshots (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL,
+          run_id TEXT,
+          plugin_id TEXT NOT NULL,
+          plugin_spec_version TEXT NOT NULL DEFAULT '1.0.0',
+          plugin_version TEXT NOT NULL
+        );
+        INSERT INTO applied_plugin_snapshots (
+          id, project_id, run_id, plugin_id, plugin_version
+        ) VALUES ('legacy-snapshot', 'legacy-project', NULL, 'legacy-plugin', '1.0.0');
+      `);
+
+      migratePlugins(legacy);
+      const row = legacy.prepare(
+        'SELECT * FROM applied_plugin_snapshots WHERE id = ?',
+      ).get('legacy-snapshot') as Record<string, unknown>;
+      expect(row['strategy_json']).toBeNull();
+      expect(rowToSnapshot(row).strategy).toBeUndefined();
+    } finally {
+      legacy.close();
+    }
+  });
+
   it('createSnapshot inserts a row and round-trips via getSnapshot', () => {
     db.prepare('INSERT INTO projects (id, name) VALUES (?, ?)').run('project-1', 'Project 1');
     const snap = createSnapshot(db, baseInput({
@@ -104,6 +181,106 @@ describe('snapshots writer', () => {
     const fetched = getSnapshot(db, snap.snapshotId);
 
     expect(fetched?.craftRequires).toEqual(['typography', 'color', 'anti-ai-slop']);
+  });
+
+  it('round-trips a complete strategy binding and writes SQL NULL for ordinary plugins', () => {
+    db.prepare('INSERT INTO projects (id, name) VALUES (?, ?)').run('project-1', 'Project 1');
+    const strategy = createSnapshot(db, strategySnapshotInput());
+    const ordinary = createSnapshot(db, baseInput({ pluginId: 'ordinary-plugin' }));
+
+    expect(getSnapshot(db, strategy.snapshotId)?.strategy).toEqual(strategyBinding());
+    expect(getSnapshot(db, ordinary.snapshotId)?.strategy).toBeUndefined();
+    const rows = db.prepare(
+      'SELECT id, strategy_json AS strategyJson FROM applied_plugin_snapshots WHERE id IN (?, ?)',
+    ).all(strategy.snapshotId, ordinary.snapshotId) as Array<{
+      id: string;
+      strategyJson: string | null;
+    }>;
+    expect(rows.find((row) => row.id === strategy.snapshotId)?.strategyJson).toBeTypeOf('string');
+    expect(rows.find((row) => row.id === ordinary.snapshotId)?.strategyJson).toBeNull();
+  });
+
+  it('reads a legacy row with no strategy column and preserves null compatibility', () => {
+    db.prepare('INSERT INTO projects (id, name) VALUES (?, ?)').run('project-1', 'Project 1');
+    const snapshot = createSnapshot(db, baseInput());
+    const row = db.prepare('SELECT * FROM applied_plugin_snapshots WHERE id = ?')
+      .get(snapshot.snapshotId) as Record<string, unknown>;
+    delete row['strategy_json'];
+
+    expect(rowToSnapshot(row).strategy).toBeUndefined();
+    expect(getSnapshot(db, snapshot.snapshotId)?.strategy).toBeUndefined();
+  });
+
+  it.each(['{invalid', ''])(
+    'fails closed for invalid strategy JSON %j',
+    (invalidJson) => {
+      db.prepare('INSERT INTO projects (id, name) VALUES (?, ?)').run('project-1', 'Project 1');
+      const snapshot = createSnapshot(db, strategySnapshotInput());
+      const update = db.prepare(
+        'UPDATE applied_plugin_snapshots SET strategy_json = ? WHERE id = ?',
+      ).run(invalidJson, snapshot.snapshotId);
+
+      expect(update.changes).toBe(1);
+      expect(() => getSnapshot(db, snapshot.snapshotId)).toThrow(
+        InvalidAppliedStrategySnapshotError,
+      );
+    },
+  );
+
+  it('fails closed for a strategy package hash mismatch', () => {
+    db.prepare('INSERT INTO projects (id, name) VALUES (?, ?)').run('project-1', 'Project 1');
+    const snapshot = createSnapshot(db, strategySnapshotInput());
+
+    const mismatched = { ...strategyBinding(), packageHash: 'f'.repeat(64) };
+    db.prepare('UPDATE applied_plugin_snapshots SET strategy_json = ? WHERE id = ?')
+      .run(JSON.stringify(mismatched), snapshot.snapshotId);
+    expect(() => getSnapshot(db, snapshot.snapshotId)).toThrow(/does not match/i);
+  });
+
+  it('rejects an invalid binding before the single writer inserts a row', () => {
+    db.prepare('INSERT INTO projects (id, name) VALUES (?, ?)').run('project-1', 'Project 1');
+    const invalid = { ...strategyBinding(), packageHash: 'f'.repeat(64) };
+    const before = db.prepare('SELECT COUNT(*) AS count FROM applied_plugin_snapshots')
+      .get() as { count: number };
+
+    expect(() => createSnapshot(db, strategySnapshotInput({ strategy: invalid }))).toThrow(
+      /does not match/i,
+    );
+    const after = db.prepare('SELECT COUNT(*) AS count FROM applied_plugin_snapshots')
+      .get() as { count: number };
+    expect(after.count).toBe(before.count);
+  });
+
+  it.each([
+    ['plugin id', { pluginId: 'ordinary-plugin' }],
+    ['plugin version', { pluginVersion: '9.9.9' }],
+  ])('rejects a strategy whose %s does not match before inserting a row', (_label, mismatch) => {
+    db.prepare('INSERT INTO projects (id, name) VALUES (?, ?)').run('project-1', 'Project 1');
+    const before = db.prepare('SELECT COUNT(*) AS count FROM applied_plugin_snapshots')
+      .get() as { count: number };
+
+    expect(() => createSnapshot(db, strategySnapshotInput(mismatch))).toThrow(
+      /snapshot plugin identity/i,
+    );
+    const after = db.prepare('SELECT COUNT(*) AS count FROM applied_plugin_snapshots')
+      .get() as { count: number };
+    expect(after.count).toBe(before.count);
+  });
+
+  it.each([
+    ['plugin id', 'plugin_id', 'ordinary-plugin'],
+    ['plugin version', 'plugin_version', '9.9.9'],
+  ])('fails closed when a persisted strategy row tampers with its %s', (_label, column, value) => {
+    db.prepare('INSERT INTO projects (id, name) VALUES (?, ?)').run('project-1', 'Project 1');
+    const snapshot = createSnapshot(db, strategySnapshotInput());
+    const update = db.prepare(
+      `UPDATE applied_plugin_snapshots SET ${column} = ? WHERE id = ?`,
+    ).run(value, snapshot.snapshotId);
+
+    expect(update.changes).toBe(1);
+    expect(() => getSnapshot(db, snapshot.snapshotId)).toThrow(
+      /snapshot plugin identity/i,
+    );
   });
 
   it('linkSnapshotToRun pins expires_at to NULL', () => {

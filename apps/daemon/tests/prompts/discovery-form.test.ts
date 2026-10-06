@@ -46,6 +46,24 @@ describe('discovery.ts — on-demand clarification policy', () => {
     expect(DISCOVERY_AND_PHILOSOPHY).toContain('**Hard cap: 5 questions per form — never more.**');
   });
 
+  /**
+   * T69(2026-09-07):设计风格选择题从提示词整题下线,产品逐字「**不问了**」。
+   *
+   * 原用例守的是「`direction-cards` 是 host 目录触发器」这套用法说明。现在反过来:
+   * 开场简报里**两个入口**都要没了 —— 明面上的 `direction-cards`,和那道长得像
+   * 普通单选、却被 `QuestionForm.tsx` 的 `asksVisualDirection` 认走换成整份目录的
+   * `tone`。只撤前者会留下后者这条更隐蔽的路。
+   */
+  it('开场简报不再提供任何一条问设计风格的路', () => {
+    expect(DISCOVERY_AND_PHILOSOPHY).not.toContain('direction-cards');
+    expect(DISCOVERY_AND_PHILOSOPHY).not.toContain('visual-style catalog');
+    expect(DISCOVERY_AND_PHILOSOPHY).not.toMatch(/"id":\s*"tone"/);
+    // 防真空:示例简报本身还在,别的题一道没少
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain('"id": "output"');
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain('"id": "brand"');
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain('"id": "scale"');
+  });
+
   it('leaves the task-type form to od-default while accepting historical answers', () => {
     expect(DISCOVERY_AND_PHILOSOPHY).not.toContain('<question-form id="task-type"');
     expect(DISCOVERY_AND_PHILOSOPHY).toContain(

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { isSameWorkspacePrincipal } from '@open-design/contracts';
 import type {
+  ProjectVisibility,
   ProjectWorkspaceScope,
   ProjectWorkspaceScopeResponse,
   WorkspaceCollabContext,
@@ -15,6 +17,28 @@ import { useWorkspaceInvalidation } from './workspace-events';
 import { workspaceIdentityCacheKey } from './workspace-identity';
 
 const PROJECT_SCOPE_RETRY_MS = 5_000;
+/**
+ * First retry delay, doubling up to {@link PROJECT_SCOPE_RETRY_MS}.
+ *
+ * What this polls for is almost always a project row the daemon has not
+ * written yet — the first open of a project pulled from the hub — and that
+ * clears in a second or two. At a flat steady cadence the reader spends most
+ * of the wait idle AFTER the row exists, which is dead time the user reads as
+ * a slow open. Probe tightly first, then relax so a genuinely long outage
+ * still settles into a cheap poll rather than hammering the daemon.
+ */
+const PROJECT_SCOPE_FIRST_RETRY_MS = 500;
+/**
+ * How long "the daemon has not materialized this project yet" stays worth
+ * re-asking.
+ *
+ * That answer can only become true while materialization is actually running.
+ * A project that is simply gone returns the same 404 forever, so without a
+ * deadline a stale tab pointed at a deleted project polls for as long as it
+ * stays open. A transient backend outage deliberately keeps its unbounded
+ * poll — that one can start succeeding at any moment.
+ */
+const PROJECT_SCOPE_MATERIALIZATION_WINDOW_MS = 120_000;
 
 interface ProjectWorkspaceAuthority {
   workspaceId: string;
@@ -66,6 +90,20 @@ export function projectWorkspaceScopeReady(
   scope: ProjectWorkspaceScope | null | undefined,
 ): boolean {
   return scope?.kind === 'unbound' || scope?.kind === 'personal' || scope?.kind === 'team';
+}
+
+/**
+ * The daemon's own visibility verdict for a resolved project scope.
+ *
+ * Deliberately independent of `kind`: a private draft can live in a team
+ * workspace and still be `personal`. Null when the scope has not resolved, or
+ * for a legacy unbound project that has no `workspace_projects` row to be
+ * visible in — neither case is evidence of anything.
+ */
+export function projectWorkspaceVisibility(
+  scope: ProjectWorkspaceScope | null | undefined,
+): ProjectVisibility | null {
+  return scope && scope.kind !== 'unbound' ? scope.visibility : null;
 }
 
 function activePersonalAdoptionWitness(
@@ -183,9 +221,55 @@ export function projectWorkspaceScopeAuthorizesAmr(
   return scope?.kind === 'personal' || scope?.kind === 'team';
 }
 
+/**
+ * How to read a non-OK scope response: which failure kind the app should see,
+ * and whether asking again can change it.
+ *
+ * A 404 from this endpoint carries two unrelated meanings. A daemon that never
+ * had the route is authoritatively `unsupported` and asking again is
+ * pointless. But `PROJECT_NOT_FOUND` says only that this daemon has no local
+ * row for the project YET — the first open of a project pulled from the hub,
+ * where the row appears a few seconds later once materialization lands.
+ *
+ * Both report the same failure KIND, because to every consumer of that kind
+ * the project is equally unusable right now. They differ only in whether the
+ * reader keeps asking. Treating "not yet" as final is not cosmetic: the scope
+ * stays null forever and everything needing a resolved scope kind stalls with
+ * it — measured on a first open, the chat pane spun indefinitely because the
+ * empty-conversation seed can only act once the scope resolves.
+ */
+async function classifyScopeFetchFailure(
+  response: Response,
+): Promise<{
+  failure: NonNullable<ProjectWorkspaceScopeState['failure']>;
+  retryable: boolean;
+}> {
+  if (response.status === 403) return { failure: 'forbidden', retryable: false };
+  if (response.status !== 404) return { failure: 'unavailable', retryable: true };
+  let code: unknown;
+  try {
+    const body = (await response.json()) as { error?: { code?: unknown } } | null;
+    code = body?.error?.code;
+  } catch {
+    // A body-less or non-JSON 404 is the old-daemon shape.
+    code = undefined;
+  }
+  return { failure: 'unsupported', retryable: code === 'PROJECT_NOT_FOUND' };
+}
+
 class ProjectWorkspaceScopeFetchError extends Error {
   constructor(
     readonly failure: NonNullable<ProjectWorkspaceScopeState['failure']>,
+    /**
+     * Whether asking again can change the answer. Deliberately independent of
+     * `failure`: the failure kind is what the REST of the app reads to decide
+     * how much authority this project has, so widening a kind just to unlock a
+     * retry silently changes those decisions too. (Reclassifying a
+     * not-yet-materialized project as `unavailable` did exactly that — it
+     * flipped `projectResourceAuthority` from `denied` to `workspace` during
+     * first open.)
+     */
+    readonly retryable: boolean,
   ) {
     super(`project workspace scope ${failure}`);
     this.name = 'ProjectWorkspaceScopeFetchError';
@@ -247,13 +331,8 @@ async function fetchProjectWorkspaceScope(
         },
       );
       if (!response.ok) {
-        throw new ProjectWorkspaceScopeFetchError(
-          response.status === 404
-            ? 'unsupported'
-            : response.status === 403
-              ? 'forbidden'
-              : 'unavailable',
-        );
+        const { failure, retryable } = await classifyScopeFetchFailure(response);
+        throw new ProjectWorkspaceScopeFetchError(failure, retryable);
       }
       const body = (await response.json()) as ProjectWorkspaceScopeResponse;
       if (!body.scope || !validScopeForProject(body.scope, projectId)) {
@@ -362,7 +441,16 @@ export function useProjectWorkspaceScope(
       !boundWorkspaceId
         ? initialScope.kind === 'unbound'
         : initialScope.workspaceId === boundWorkspaceId
-          && workspaceIdentityCacheKey(initialScopeContext) === callerIdentityKey
+          // Does this pre-fetched scope belong to the caller we are asserting?
+          // That is a WHO question, so it compares principals. `callerIdentityKey`
+          // above stays a cache key because every one of its other uses compares
+          // one caller identity against another caller identity; this is the one
+          // place that crosses sources, and the daemon's scope route always
+          // answers with its placeholder `role: 'member'`. Comparing keys here
+          // discarded the route bootstrap's exact answer on every project open by
+          // an owner or admin, costing a second scope round trip and a
+          // fail-closed FileViewer skeleton on first paint.
+          && isSameWorkspacePrincipal(initialScopeContext, callerWorkspaceContext)
     ),
   );
   const [state, setState] = useState<ProjectWorkspaceScopeState & {
@@ -478,6 +566,26 @@ export function useProjectWorkspaceScope(
     const controller = new AbortController();
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     let firstAttempt = true;
+    // Scoped to this effect run, so a project / authority change restarts the
+    // tight probe instead of inheriting the previous run's relaxed delay.
+    let retryAttempt = 0;
+    let retryDeadline: number | null = null;
+    /**
+     * `windowMs` bounds how long this condition is worth re-asking; `null`
+     * means it can succeed at any time and keeps the unbounded poll.
+     */
+    const scheduleRetry = (windowMs: number | null) => {
+      if (windowMs !== null) {
+        if (retryDeadline === null) retryDeadline = Date.now() + windowMs;
+        if (Date.now() >= retryDeadline) return;
+      }
+      const delay = Math.min(
+        PROJECT_SCOPE_RETRY_MS,
+        PROJECT_SCOPE_FIRST_RETRY_MS * 2 ** retryAttempt,
+      );
+      retryAttempt += 1;
+      retryTimer = setTimeout(() => void load(), delay);
+    };
     const refreshRevision = refreshRequest.revision;
 
     if (refreshRevision === 0 && initialScopeCanSeed && seededFromInitialScopeRef.current) {
@@ -565,7 +673,7 @@ export function useProjectWorkspaceScope(
                   resolvedCallerIdentityKey: callerIdentityKey,
                 };
           });
-          retryTimer = setTimeout(() => void load(), PROJECT_SCOPE_RETRY_MS);
+          scheduleRetry(null);
         } else {
           setState({
             loading: false,
@@ -610,12 +718,19 @@ export function useProjectWorkspaceScope(
                 failure,
               };
         });
-        // Only a transient directory/backend outage earns polling. Forbidden
-        // is an authoritative access decision; unsupported is an authoritative
-        // daemon capability decision. Both still revalidate on explicit
-        // identity, page-lifecycle, or workspace invalidation events.
-        if (failure === 'unavailable') {
-          retryTimer = setTimeout(() => void load(), PROJECT_SCOPE_RETRY_MS);
+        // Poll only what asking again can change. A forbidden access decision
+        // and an old daemon without the route are both final; they still
+        // revalidate on explicit identity, page-lifecycle, or workspace
+        // invalidation events.
+        const retryable = error instanceof ProjectWorkspaceScopeFetchError
+          ? error.retryable
+          : true;
+        if (retryable) {
+          // Only the materialization case is time-boxed; an outage keeps the
+          // unbounded poll it has always had.
+          scheduleRetry(
+            failure === 'unsupported' ? PROJECT_SCOPE_MATERIALIZATION_WINDOW_MS : null,
+          );
         }
       }
     };
