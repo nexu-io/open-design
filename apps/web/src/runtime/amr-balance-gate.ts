@@ -1,56 +1,35 @@
-// Pre-run balance gate for the OpenDesign Cloud agent. Two tiers:
-//
-//   HARD  — the run cannot possibly succeed: the account is signed out, or the
-//           wallet balance is definitively <= $0. The send is blocked and the
-//           subscription dialog is the only way forward (plus dismiss).
-//   SOFT  — the run can start but may die mid-flight: balance is at or below
-//           the low-balance warning line. The user is warned once per send and
-//           may proceed anyway, top up first, or opt out of future warnings.
-//
-// Legacy account-scoped reads fail open when unavailable. Every explicitly
-// workspace-scoped run fails closed when its exact member epoch cannot be proven:
-// falling back to the account wallet would make the preflight disagree with
-// the final daemon spawn authority.
-
 import type {
   AmrWalletSnapshot,
   WorkspaceCollabContext,
   WorkspaceBillingResponse,
+  WorkspaceBillingPreflight,
 } from '@open-design/contracts';
 import { fetchAmrWalletSnapshot } from '../providers/daemon';
-import { codingPlanModelDecision } from './amr-unlimited-models';
 
-/**
- * Hard-block line (USD): at or below this the wallet cannot fund any part of
- * a run, so starting one only manufactures a mid-run
- * AMR_INSUFFICIENT_BALANCE failure.
- */
+// Wallet balance is display data, not proof that a run cannot be funded.
+// Coding Plan, free models and automatic recharge are decided by Link.
 export const AMR_HARD_BLOCK_BALANCE_USD = 0;
-
-/**
- * Soft-warning line (USD): at or below this a run may start but is likely to
- * exhaust the wallet before finishing. Tune from data: the starting-balance
- * distribution of AMR_INSUFFICIENT_BALANCE failures tells you where this
- * line should actually sit.
- */
-export const AMR_LOW_BALANCE_WARN_USD = 2;
-
-const LOW_BALANCE_WARN_OPTOUT_KEY = 'open-design:amr-low-balance-warn-optout:v1';
-
 export type AmrBalanceGateResult =
   | { kind: 'allow' }
   | { kind: 'unavailable' }
-  | { kind: 'hard'; reason: 'insufficient'; snapshot: AmrWalletSnapshot }
-  | { kind: 'hard'; reason: 'signed_out'; snapshot: AmrWalletSnapshot }
-  | { kind: 'soft'; snapshot: AmrWalletSnapshot };
+  | { kind: 'hard'; reason: 'insufficient' | 'signed_out'; snapshot: AmrWalletSnapshot }
+  | { kind: 'empty_not_blocked'; snapshot: AmrWalletSnapshot };
 
 export const HOME_AMR_BALANCE_RETRY_DELAYS_MS = [400, 1_200] as const;
+
+/** A cached wallet alone cannot prove that a task is unfunded. */
+export function amrBalanceGateFromMemory(
+  _balanceUsd: string | null | undefined,
+  _options: { profile?: string | null; updatedAt?: string | null } = {},
+): null {
+  return null;
+}
 
 /**
  * Home has no project queue to hold a send while a cold Workspace billing
  * projection catches up. Give that transient state a small, bounded recovery
  * window before returning control to the composer. Only `unavailable` is
- * retried; definitive allow/soft/hard decisions are never delayed.
+ * retried; every definitive decision is delivered immediately.
  */
 export async function retryUnavailableAmrBalanceGate(
   check: () => Promise<AmrBalanceGateResult>,
@@ -90,10 +69,7 @@ export function isAmrBalanceGateScope(value: unknown): value is AmrBalanceGateSc
  */
 export function amrBalanceGateScopeForWorkspaceContext(
   context:
-    | Pick<
-        WorkspaceCollabContext,
-        'workspaceType' | 'workspaceId' | 'workspaceMemberId'
-      >
+    | Pick<WorkspaceCollabContext, 'workspaceType' | 'workspaceId' | 'workspaceMemberId'>
     | null
     | undefined,
 ): AmrBalanceGateScope | undefined {
@@ -122,9 +98,7 @@ export function amrBalanceGateScopesMatch(
 
 /** Parse a definitive balance from a snapshot; null when the answer is
  * indefinite (missing/unavailable/unparseable — those must fail open). */
-export function amrWalletBalanceUsd(
-  snapshot: AmrWalletSnapshot | null | undefined,
-): number | null {
+export function amrWalletBalanceUsd(snapshot: AmrWalletSnapshot | null | undefined): number | null {
   if (!snapshot || snapshot.status !== 'available') return null;
   // Trim before the emptiness check: Number(' ') is 0, so an untrimmed
   // whitespace-only balance would read as a definitive $0 and block instead
@@ -143,67 +117,37 @@ export function amrWalletBalanceInsufficient(
   return balance != null && balance <= AMR_HARD_BLOCK_BALANCE_USD;
 }
 
-/** Whether the user opted out of the low-balance soft warning ("don't remind
- * me again"). Hard blocks are never subject to this opt-out. */
-export function isAmrLowBalanceWarnOptedOut(): boolean {
-  if (typeof window === 'undefined') return false;
-  try {
-    return window.localStorage.getItem(LOW_BALANCE_WARN_OPTOUT_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-
-export function setAmrLowBalanceWarnOptedOut(): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(LOW_BALANCE_WARN_OPTOUT_KEY, '1');
-  } catch {
-    // Persistence failure just means the warning shows again next time.
-  }
-}
-
-/**
- * Decide whether an OpenDesign Cloud run may start. Fast path first: the
- * daemon-cached snapshot answers without an upstream roundtrip, so healthy
- * balances start with no added latency. Only a hard-block answer is confirmed
- * against the live wallet (refresh=1) — the cache may predate a recharge or
- * subscription, and a just-topped-up user must never be hard-blocked. The
- * soft tier trusts the cache (its cost is one dismissible reminder, and the
- * daemon cache is at most a few seconds old).
- */
 async function fetchWorkspaceWalletSnapshot(
   scope: AmrBalanceGateScope,
   accountSnapshot: AmrWalletSnapshot | null,
-): Promise<AmrWalletSnapshot | null> {
+  options: { modelId?: string | null; includePreflight?: boolean } = {},
+): Promise<(AmrWalletSnapshot & { preflight: WorkspaceBillingPreflight | null }) | null> {
   const workspaceId = scope.workspaceId.trim();
   const workspaceMemberId = scope.workspaceMemberId.trim();
   if (!workspaceId || !workspaceMemberId) return null;
+  const includePreflight = options.includePreflight === true;
+  const modelId = includePreflight ? options.modelId?.trim() : undefined;
   const response = await fetch(
-    `/api/workspace/billing?scope=workspace&workspaceId=${encodeURIComponent(workspaceId)}&freshness=authoritative`,
+    `/api/workspace/billing?scope=workspace&workspaceId=${encodeURIComponent(workspaceId)}&freshness=authoritative${includePreflight ? '&includePreflight=1' : ''}${modelId ? `&modelId=${encodeURIComponent(modelId)}` : ''}`,
     { cache: 'no-store' },
   );
   if (!response.ok) return null;
   const body = (await response.json()) as WorkspaceBillingResponse;
   const runtime = body.workspaceRuntime;
   const authoritativeRead = body.authoritativeWorkspaceRead;
-  const hardExpiresAt = runtime?.hardExpiresAt
-    ? Date.parse(runtime.hardExpiresAt)
-    : Number.NaN;
+  const hardExpiresAt = runtime?.hardExpiresAt ? Date.parse(runtime.hardExpiresAt) : Number.NaN;
   if (
-    (
-      !runtime ||
-      !authoritativeRead ||
-      runtime.workspaceId !== workspaceId ||
-      runtime.workspaceMemberId !== workspaceMemberId ||
-      runtime.status !== 'fresh' ||
-      !runtime.observedAt ||
-      !Number.isFinite(hardExpiresAt) ||
-      hardExpiresAt <= Date.now() ||
-      authoritativeRead.workspaceId !== workspaceId ||
-      authoritativeRead.workspaceMemberId !== workspaceMemberId ||
-      authoritativeRead.observedAt !== runtime.observedAt
-    )
+    !runtime ||
+    !authoritativeRead ||
+    runtime.workspaceId !== workspaceId ||
+    runtime.workspaceMemberId !== workspaceMemberId ||
+    runtime.status !== 'fresh' ||
+    !runtime.observedAt ||
+    !Number.isFinite(hardExpiresAt) ||
+    hardExpiresAt <= Date.now() ||
+    authoritativeRead.workspaceId !== workspaceId ||
+    authoritativeRead.workspaceMemberId !== workspaceMemberId ||
+    authoritativeRead.observedAt !== runtime.observedAt
   ) {
     return null;
   }
@@ -217,11 +161,17 @@ async function fetchWorkspaceWalletSnapshot(
     return null;
   }
   return {
+    preflight:
+      body.preflight?.workspaceId === workspaceId &&
+      body.preflight.workspaceMemberId === workspaceMemberId &&
+      body.preflight.modelId === (modelId || null) &&
+      Math.abs(Date.now() - Date.parse(body.preflight.generatedAt)) < 60_000
+        ? body.preflight
+        : null,
     status: 'available',
     profile: accountSnapshot?.profile ?? 'default',
     user: accountSnapshot?.user ?? null,
     balanceUsd: workspaceBalance.balanceUsd,
-    codingPlanModels: accountSnapshot?.codingPlanModels ?? null,
     updatedAt: workspaceBalance.updatedAt,
     fetchedAt: new Date().toISOString(),
     stale: false,
@@ -229,116 +179,114 @@ async function fetchWorkspaceWalletSnapshot(
   };
 }
 
+/**
+ * The wallet whose balance a post-failure surface is allowed to NAME for a run
+ * in `scope` — the upgrade card's 剩余额度.
+ *
+ * The number is not decoration. It picks the card's tier (orange "running low"
+ * vs red "out"), the sentence beside it, and whether the reader believes the
+ * next run can start at all. So it has to be the money the run was actually
+ * spending, which for a workspace-scoped run is the WORKSPACE wallet.
+ *
+ * `/api/integrations/vela/wallet` cannot answer that question: it is the
+ * signed-in ACCOUNT's wallet and takes no workspace parameter, so on a team
+ * project it reports the reader's personal balance. A team wallet at $0 next to
+ * a personal $12.50 does not merely print the wrong digits — it paints the card
+ * orange and says 「余额可能撑不完下一个任务」 for a run that cannot start, and
+ * points at money that could never have funded it.
+ *
+ * Same read, and the same refusal to fall back, as the send gate: an explicitly
+ * scoped run whose exact member epoch cannot be proven returns null rather than
+ * substituting account money. Null means NOBODY can name this number, and the
+ * caller must hand the story back to the error card instead of printing the
+ * account's.
+ *
+ * No scope at all is the legacy/account case — an unbound historical project
+ * spends the account wallet, so there the account read IS the answer.
+ */
+export async function fetchAmrBalanceCardWalletSnapshot(
+  scope?: AmrBalanceGateScope,
+): Promise<AmrWalletSnapshot | null> {
+  if (!scope) {
+    // `refresh` forces one upstream read: the failure event carries no balance,
+    // and a cache that predates the run's own spending would under-report it.
+    return fetchAmrWalletSnapshot({ refresh: true }).catch(() => null);
+  }
+  // The account read rides along only for `profile` / `user` — the metadata the
+  // recovery link's profile fallback needs. It is never consulted for money.
+  const [accountSnapshot, workspaceSnapshot] = await Promise.all([
+    fetchAmrWalletSnapshot().catch(() => null),
+    fetchWorkspaceWalletSnapshot(scope, null).catch(() => null),
+  ]);
+  if (!workspaceSnapshot) return null;
+  if (!accountSnapshot) return workspaceSnapshot;
+  return {
+    ...workspaceSnapshot,
+    profile: accountSnapshot.profile,
+    user: accountSnapshot.user,
+  };
+}
+
 async function checkWorkspaceBalanceGate(
   scope: AmrBalanceGateScope,
-  modelId?: string | null,
 ): Promise<AmrBalanceGateResult> {
-  // The URL carries the selected workspace identity. The daemon authorizes
-  // that exact directory membership and returns a v2 identity-stamped wallet.
-  // Start it alongside the cached account snapshot: the latter preserves the
-  // existing signed-out confirmation and profile-aware recovery links, but no
-  // longer sits in front of the authoritative Workspace read.
-  let [accountSnapshot, workspaceSnapshot] = await Promise.all([
+  const [accountSnapshot, workspaceSnapshot] = await Promise.all([
     fetchAmrWalletSnapshot().catch(() => null),
     fetchWorkspaceWalletSnapshot(scope, null).catch(() => null),
   ]);
   if (accountSnapshot?.status === 'signed_out') {
-    const freshAccount = await fetchAmrWalletSnapshot({ refresh: true }).catch(() => null);
-    if (freshAccount?.status === 'signed_out') {
-      return {
-        kind: 'hard',
-        reason: 'signed_out',
-        snapshot: freshAccount,
-      };
-    }
-    accountSnapshot = freshAccount;
+    const fresh = await fetchAmrWalletSnapshot({ refresh: true }).catch(() => null);
+    if (fresh?.status === 'signed_out')
+      return { kind: 'hard', reason: 'signed_out', snapshot: fresh };
   }
-  if (workspaceSnapshot && accountSnapshot) {
-    workspaceSnapshot = {
-      ...workspaceSnapshot,
-      profile: accountSnapshot.profile,
-      user: accountSnapshot.user,
-      codingPlanModels: accountSnapshot.codingPlanModels ?? null,
-    };
-  }
-  const balance = amrWalletBalanceUsd(workspaceSnapshot);
-  if (balance == null) return { kind: 'unavailable' };
-  if (balance <= AMR_LOW_BALANCE_WARN_USD && scope.workspaceType === 'personal') {
-    const decision = codingPlanModelDecision(
-      workspaceSnapshot?.codingPlanModels,
-      modelId,
-    );
-    if (decision !== false) return { kind: 'allow' };
-  }
-  if (balance <= AMR_HARD_BLOCK_BALANCE_USD) {
-    return {
-      kind: 'hard',
-      reason: 'insufficient',
-      snapshot: workspaceSnapshot!,
-    };
-  }
-  if (balance <= AMR_LOW_BALANCE_WARN_USD && !isAmrLowBalanceWarnOptedOut()) {
-    return { kind: 'soft', snapshot: workspaceSnapshot! };
-  }
+  // Preserve exact-member authority. Older CLI responses have no preflight;
+  // lack of quota evidence must never become a wallet-only hard block.
+  if (!workspaceSnapshot) return { kind: 'unavailable' };
   return { kind: 'allow' };
 }
 
 export async function checkAmrBalanceGate(
   scope?: AmrBalanceGateScope,
-  modelId?: string | null,
+  _modelId?: string | null,
 ): Promise<AmrBalanceGateResult> {
   try {
-    if (scope) {
-      return await checkWorkspaceBalanceGate(scope, modelId);
-    }
+    if (scope) return await checkWorkspaceBalanceGate(scope);
     const cached = await fetchAmrWalletSnapshot().catch(() => null);
-    const cachedBalance = amrWalletBalanceUsd(cached);
-    const cachedHardCandidate =
-      cached?.status === 'signed_out' ||
-      (cachedBalance != null && cachedBalance <= AMR_HARD_BLOCK_BALANCE_USD);
-    if (!cachedHardCandidate) {
-      if (cachedBalance == null) return { kind: 'allow' };
-      if (cachedBalance > AMR_LOW_BALANCE_WARN_USD || isAmrLowBalanceWarnOptedOut()) {
-        return { kind: 'allow' };
-      }
-      // cached is non-null here: a definitive balance implies a snapshot.
-      const decision = codingPlanModelDecision(cached?.codingPlanModels, modelId);
-      if (decision !== false) return { kind: 'allow' };
-      return { kind: 'soft', snapshot: cached! };
+    if (cached?.status === 'signed_out') {
+      const fresh = await fetchAmrWalletSnapshot({ refresh: true }).catch(() => null);
+      if (fresh?.status === 'signed_out')
+        return { kind: 'hard', reason: 'signed_out', snapshot: fresh };
     }
-    // Hard-block candidate (signed out or empty): confirm against the live
-    // wallet before blocking — the cache may predate a sign-in or recharge.
-    const fresh = await fetchAmrWalletSnapshot({ refresh: true }).catch(() => null);
-    if (fresh == null) return { kind: 'allow' };
-    // Signed-out is decided from the LOCAL profile read, so it is definitive
-    // even though the snapshot carries an explanatory `signed_out` error —
-    // check it before the stale/error guard below.
-    if (fresh.status === 'signed_out') {
-      return { kind: 'hard', reason: 'signed_out', snapshot: fresh };
-    }
-    // A failed refresh hands back the PREVIOUS cached snapshot flagged
-    // `stale: true` (plus an upstream/network `error`). That is not a fresh
-    // definitive answer, so it must not confirm a hard block — a user who
-    // just topped up while the wallet endpoint hiccuped would be stranded.
-    if (fresh.stale || fresh.error != null) return { kind: 'allow' };
-    const freshBalance = amrWalletBalanceUsd(fresh);
-    if (freshBalance == null) return { kind: 'allow' };
-    if (freshBalance <= AMR_LOW_BALANCE_WARN_USD) {
-      const decision = codingPlanModelDecision(fresh.codingPlanModels, modelId);
-      if (decision !== false) return { kind: 'allow' };
-    }
-    if (freshBalance <= AMR_HARD_BLOCK_BALANCE_USD) {
-      return { kind: 'hard', reason: 'insufficient', snapshot: fresh };
-    }
-    if (freshBalance <= AMR_LOW_BALANCE_WARN_USD && !isAmrLowBalanceWarnOptedOut()) {
-      return { kind: 'soft', snapshot: fresh };
-    }
+    // An unscoped legacy account cannot prove which pool will fund the run.
     return { kind: 'allow' };
   } catch {
-    // Unscoped legacy checks retain fail-open behavior. Every explicit
-    // workspace, personal or team, must prove its exact member-scoped wallet.
-    return scope
-      ? { kind: 'unavailable' }
-      : { kind: 'allow' };
+    return scope ? { kind: 'unavailable' } : { kind: 'allow' };
   }
+}
+
+/** Recovery needs positive evidence, unlike the advisory send gate. */
+export async function hasAmrFundingRecovered(
+  scope?: AmrBalanceGateScope,
+  modelId?: string | null,
+): Promise<boolean> {
+  if (!scope) {
+    const snapshot = await fetchAmrWalletSnapshot({ refresh: true }).catch(() => null);
+    return Boolean(
+      snapshot && !snapshot.stale && !snapshot.error && (amrWalletBalanceUsd(snapshot) ?? 0) > 0,
+    );
+  }
+  const snapshot = await fetchWorkspaceWalletSnapshot(scope, null, {
+    modelId,
+    includePreflight: true,
+  }).catch(() => null);
+  if (!snapshot) return false;
+  if (snapshot.preflight) {
+    const { funding, modelCovered, codingPlan } = snapshot.preflight;
+    return funding === 'wallet' || Boolean(
+      funding === 'coding_plan' && modelCovered === true && codingPlan?.eligible &&
+      codingPlan.windows?.length > 0 && codingPlan.windows.every((window) =>
+        /^\d+$/.test(window.remainingCredits) && BigInt(window.remainingCredits) > 0n),
+    );
+  }
+  return (amrWalletBalanceUsd(snapshot) ?? 0) > 0;
 }

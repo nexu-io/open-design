@@ -529,7 +529,7 @@
   background: var(--bg-subtle);
   color: var(--text-muted);
   font-size: 10.5px;
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: 0.01em;
   line-height: 1.3;
   white-space: nowrap;
@@ -816,7 +816,7 @@
   position: relative;
   font-size: 18px;
   line-height: 1.18;
-  font-weight: 500;
+  font-weight: 600;
   color: white;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
   z-index: 1;
@@ -1070,7 +1070,7 @@
   background: var(--bg-panel);
   color: var(--text-muted);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   font-family: inherit;
   cursor: pointer;
   white-space: nowrap;
@@ -1101,7 +1101,7 @@
   padding: 6px 12px;
   border-radius: var(--radius-sm);
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   transition: background-color 120ms var(--ease-out), border-color 120ms var(--ease-out),
     color 120ms var(--ease-out);

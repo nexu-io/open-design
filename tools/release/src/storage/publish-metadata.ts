@@ -114,9 +114,10 @@ function readReleaseNoteMetadata(): ReturnType<typeof releaseNoteMetadataFromPub
   if (publication.channel !== releaseChannel || publication.releaseVersion !== releaseVersion) {
     throw new Error(`release note publication identity mismatch for ${releaseChannel} ${releaseVersion}`);
   }
-  if (releaseChannel === "stable" && publication.state === "absent") {
-    throw new Error("release note publication is required for stable metadata");
-  }
+  // An absent publication is a complete outcome, not a half-built one: the
+  // metadata simply omits its releaseNote block and verify-metadata asserts
+  // that same absence. prepare-release-note reports the editorial gap; blocking
+  // here would only move the stable hard-failure past the GitHub draft release.
   if (publication.state !== "absent") {
     const expectedState = publishSideEffectsEnabled ? "published" : "planned";
     if (publication.state !== expectedState) {

@@ -65,7 +65,12 @@ import { pathToFileURL } from 'node:url';
 //       the outer black canvas into posters/clips; a plugin declared with
 //       `od.mode: deck` now takes the slide-walk path by default instead of
 //       being misclassified as a vertically scrolling page.
-const BAKE_VERSION = 6;
+//   v7: return a deck to its FIRST slide before capture. Probing the advancing
+//       input moves the deck on, and a deck that persists its position (`#/2`
+//       in the URL hash, or web storage) reopened there after the reload — so
+//       24 of the official decks baked their agenda page as the poster instead
+//       of the cover (OPEND-2702). Bumped so every deck re-bakes.
+const BAKE_VERSION = 7;
 
 // ---- config ---------------------------------------------------------------
 const BASE_URL = process.env.BASE_URL || 'http://127.0.0.1:17579';
@@ -375,10 +380,34 @@ async function walkSlides(page, driver) {
   return Math.max(SLIDE_MS, Date.now() - t0);
 }
 
+// Runs INSIDE the page (via page.evaluate — keep it self-contained, no outer
+// scope). Undo whatever the driver probe persisted about the deck's position,
+// so the reload that follows opens the deck on its first slide again.
+// Two places a deck keeps that: the URL fragment (`#/2` — reloads preserve it,
+// so a hash-routed deck reopened on the slide the probe left it at and baked
+// that as its poster) and web storage (a "resume where you were" key). Both
+// are cleared; the fragment through replaceState so the reload is a plain one
+// and no `hashchange` fires first. Storage access can throw (disabled, opaque
+// origin), which is reported rather than fatal — the hash is the common case.
+export function resetDeckEntryState() {
+  const hadHash = Boolean(window.location.hash);
+  if (hadHash) {
+    window.history.replaceState(null, '', window.location.pathname + window.location.search);
+  }
+  let clearedStorage = false;
+  try {
+    window.localStorage.clear();
+    window.sessionStorage.clear();
+    clearedStorage = true;
+  } catch {}
+  return { hadHash, clearedStorage };
+}
+
 // Probe which input advances a fixed-viewport deck: press the arrow key, then
 // nudge the wheel, watching deckSignal for a real slide change. Returns 'arrow',
 // 'wheel', or null when nothing moves it (a single static screen). Advances the
-// deck as a side effect, so callers that go on to capture reload first.
+// deck as a side effect, so callers that go on to capture must reset the
+// deck's persisted position (resetDeckEntryState) and reload first.
 async function probeDeckDriver(page) {
   const sig0 = await page.evaluate(deckSignal, DECK_SCAN_CAP);
   await driveDeck(page, 'arrow');
@@ -484,6 +513,10 @@ async function bakeOne(browser, id, hash, motion) {
   if (isDeck) {
     capW = DECK_W; capH = DECK_H;
     await page.setViewport({ width: capW, height: capH, deviceScaleFactor: 1 });
+    // The probe advanced the deck; the reload alone does not bring it back when
+    // the deck remembers its slide (see resetDeckEntryState) — the poster is
+    // the first captured frame, and it must be the cover.
+    try { await page.evaluate(resetDeckEntryState); } catch {}
     try { await page.reload({ waitUntil: 'domcontentloaded', timeout: 25000 }); } catch {}
     await sleep(1000);
   }
@@ -558,6 +591,19 @@ async function bakeOne(browser, id, hash, motion) {
     }, 12000);
   } catch {}
   await sleep(600);
+
+  // Animated previews can hold capture until their opening sequence finishes.
+  // Pages without the marker keep the existing capture timing. Never publish
+  // a loading-screen poster when an opted-in page fails to become ready.
+  try {
+    await page.waitForFunction(
+      () => document.documentElement.getAttribute('data-od-preview-ready') !== 'false',
+      { timeout: 15000 },
+    );
+  } catch {
+    await page.close();
+    return { id, skipped: 'preview readiness timeout' };
+  }
 
   if (isDeck) {
     const crop = await cropDeckViewportToSlide(page, capW, capH);

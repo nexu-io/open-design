@@ -129,6 +129,25 @@ describe('deriveFileOps', () => {
     expect(rows.find((row) => row.path === 'c.ts')?.ops).toEqual(['delete']);
   });
 
+  it('preserves ranges for separate reads of the same file', () => {
+    const events: AgentEvent[] = [
+      use('Read', { file_path: '/repo/example.html', offset: 1, limit: 300 }, 'read-1'),
+      ok('read-1'),
+      use('Read', { file_path: '/repo/example.html', offset: 550, limit: 300 }, 'read-2'),
+      ok('read-2'),
+    ];
+
+    const [row] = deriveFileOps(events);
+    expect(row).toBeDefined();
+    // The ChatPanel must be able to distinguish these two valid reads. The
+    // current implementation merges by path and drops offset/limit entirely.
+    expect((row as unknown as { readRanges: Array<{ offset: number; limit: number }> }).readRanges)
+      .toEqual([
+        { offset: 1, limit: 300 },
+        { offset: 550, limit: 300 },
+      ]);
+  });
+
   it('infers simple Bash rm/unlink targets as delete operations', () => {
     const events: AgentEvent[] = [
       use(

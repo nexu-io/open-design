@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   CUSTOM_MODEL_SENTINEL,
   isCustomModel,
+  modelVersionLabel,
   orderModelOptionsByAvailability,
   renderModelOptions,
   SearchableModelSelect,
@@ -20,6 +21,35 @@ function renderOptions(models: AgentModelOption[]): string {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+});
+
+describe('modelVersionLabel', () => {
+  it('drops the company token a brand mark already carries', () => {
+    expect(modelVersionLabel('claude-fable-5', 'claude-fable-5')).toBe('fable-5');
+    expect(modelVersionLabel('deepseek-v4-pro', 'deepseek-v4-pro')).toBe('v4-pro');
+    expect(modelVersionLabel('claude-opus-4.6')).toBe('opus-4.6');
+  });
+
+  it('keeps ids whose leading token IS the model family', () => {
+    // Stripping here would leave `5` / nothing — a name that identifies no
+    // model at all, which is worse than repeating the company.
+    expect(modelVersionLabel('gpt-5-mini', 'gpt-5-mini')).toBe('gpt-5-mini');
+    expect(modelVersionLabel('grok-4.5', 'grok-4.5')).toBe('grok-4.5');
+    expect(modelVersionLabel('o3', 'o3')).toBe('o3');
+  });
+
+  it('leaves BYOK provider/model ids and unknown vendors alone', () => {
+    expect(modelVersionLabel('anthropic/claude-sonnet-4-5')).toBe(
+      'anthropic/claude-sonnet-4-5',
+    );
+    expect(modelVersionLabel('acme-turbo-1', 'acme-turbo-1')).toBe('acme-turbo-1');
+  });
+
+  it('leaves a prose label that does not lead with the company token', () => {
+    expect(modelVersionLabel('deepseek-v4-flash', 'DeepSeek V4 Flash')).toBe(
+      'DeepSeek V4 Flash',
+    );
+  });
 });
 
 describe('renderModelOptions', () => {
@@ -188,6 +218,9 @@ describe('SearchableModelSelect', () => {
 
     fireEvent.click(screen.getByRole('combobox'));
 
+    // Flat list = a provider's own catalog (BYOK), where the label IS the id
+    // the request will carry, so it is shown verbatim. The company-grouped
+    // catalog is the surface that shortens it (see the compact-switcher test).
     const option = await screen.findByRole('option', { name: /^deepseek-v4-flash$/ });
     expect(option.textContent).toContain('Low cost');
     expect(option.textContent).toContain('Standard');

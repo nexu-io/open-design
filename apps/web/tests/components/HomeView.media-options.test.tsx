@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { pickHomeTemplate, homeTemplateTrigger } from '../helpers/home-template-picker';
 
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -26,6 +27,7 @@ vi.mock('../../src/collab/useWorkspaceContext', async (importOriginal) => {
 });
 
 import { HomeView } from '../../src/components/HomeView';
+import { HOME_APPLY_TEMPLATE_EVENT } from '../../src/components/home-hero/chips';
 import type { DesignSystemSummary, PromptTemplateSummary } from '../../src/types';
 // HomeHero's prompt input migrated from a <textarea> + highlight overlay to the
 // same Lexical contenteditable the project composer uses. It still has
@@ -90,30 +92,27 @@ describe('HomeView media composer options', () => {
     stubFetch({ mediaApplyResponse });
     renderHome();
 
-    const imageTab = await screen.findByTestId('home-hero-type-pill-image');
-    const prototypeTab = await screen.findByTestId('home-hero-type-pill-prototype');
-    await waitFor(() => expect((imageTab as HTMLButtonElement).disabled).toBe(false));
+    await pickHomeTemplate('image');
 
-    fireEvent.click(imageTab);
-
-    await waitFor(() => expect(imageTab.getAttribute('aria-selected')).toBe('true'));
-    expect((imageTab as HTMLButtonElement).disabled).toBe(false);
-    expect((prototypeTab as HTMLButtonElement).disabled).toBe(false);
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Image');
+    });
+    expect(homeTemplateTrigger()).toBeTruthy();
   });
 
-  it('shows the Home composer mode picker and still defaults to Design mode', async () => {
+  it('defaults to Design mode with no mode picker in the composer', async () => {
     stubFetch();
     const onSubmit = vi.fn();
     renderHome({ onSubmit });
 
     await screen.findByTestId('home-hero-input');
 
-    // 设计 is the app default AND the default SELECTION: the composer opens with
-    // the Design pill showing, so the mode the request will run in is stated on
-    // screen rather than hidden behind a neutral glyph. The submitted payload
-    // carries design either way.
-    expect(screen.getByTestId('composer-mode-trigger').getAttribute('aria-label')).toBe('Mode: Design');
-    expect(screen.getByTestId('composer-mode-clear')).toBeTruthy();
+    // 设计 is the app default, and since the mode chip left the Home composer
+    // (2026-09-08, product) it is also the only mode Home submits — nothing on
+    // this surface can move it any more. Absence is pinned in full by
+    // `HomeView.mode-picker-removed.test.tsx`; this spec keeps the payload half
+    // of the pair, so a picker coming back cannot quietly change what Home runs.
+    expect(screen.queryByTestId('composer-mode-trigger')).toBeNull();
 
     await setHomePrompt('Create a clean loading animation');
     await submitHome();
@@ -568,7 +567,9 @@ describe('HomeView media composer options', () => {
     renderHome();
 
     await screen.findByTestId('home-hero-input');
-    expect((screen.getByTestId('home-hero-template-trigger') as HTMLButtonElement).disabled).toBe(true);
+    expect(
+      (homeTemplateTrigger() as HTMLButtonElement).disabled,
+    ).toBe(true);
     expect(fetchMock.mock.calls.some(([url]) => (
       typeof url === 'string' && url.includes('/api/plugins/od-media-generation/apply')
     ))).toBe(false);
@@ -637,7 +638,6 @@ function homeProps(overrides: Partial<React.ComponentProps<typeof HomeView>> = {
     projects: [],
     onSubmit: () => undefined,
     onOpenProject: () => undefined,
-    onViewAllProjects: () => undefined,
     promptTemplates: PROMPT_TEMPLATES,
     ...overrides,
   };
@@ -726,20 +726,7 @@ async function openOption(name: string) {
   await waitFor(() => expect(screen.getByTestId(`home-hero-footer-option-${name}-menu`)).toBeTruthy());
 }
 
-async function clickHomeRailChip(id: string) {
-  // #5517 removed the inline template rail from Home: every scenario template
-  // is picked from the composer footer's radial Template picker. Wait until the
-  // trigger and the wedge are enabled first — plugins load asynchronously, so
-  // both are briefly disabled after mount.
-  const trigger = await screen.findByTestId('home-hero-template-trigger');
-  await waitFor(() => expect((trigger as HTMLButtonElement).disabled).toBe(false));
-  fireEvent.click(trigger);
-  const wedgeId = `home-hero-template-wedge-${id}`;
-  await waitFor(() =>
-    expect(screen.getByTestId(wedgeId).getAttribute('aria-disabled')).not.toBe('true'),
-  );
-  fireEvent.click(screen.getByTestId(wedgeId));
-}
+const clickHomeRailChip = pickHomeTemplate;
 
 // Drive the Lexical editor and let the OnChange -> onPromptChange -> setPrompt
 // state flush settle (the submit path reads HomeView's React `prompt` state, not

@@ -1,3 +1,4 @@
+import { assertPackagedSidecarRuntime } from "../resources/runtime-manifest.js";
 import { execFile } from "node:child_process";
 import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -70,7 +71,7 @@ import type {
 
 const execFileAsync = promisify(execFile);
 const WIN_ARCHIVE_CACHE_VERSION = 4;
-const WIN_ELECTRON_BUILDER_DIR_CACHE_VERSION = 8;
+const WIN_ELECTRON_BUILDER_DIR_CACHE_VERSION = 9;
 const WIN_NSIS_BASE_PAYLOAD_INPUT_HASH_CACHE_VERSION = 2;
 
 export function createWinPortableZipCacheKey({
@@ -591,6 +592,10 @@ export async function runElectronBuilder(
     node: "win.electron-builder-dir-base",
     packagedVersion: versionCore,
   });
+  const assertSidecarRuntime = (unpackedRoot: string) => assertPackagedSidecarRuntime(winUnpackedAppRoot(unpackedRoot), [
+    "main.cjs",
+    ...(usePrebundle ? [WIN_PREBUNDLED_DAEMON_CLI_RELATIVE_PATH, WIN_PREBUNDLED_DAEMON_SIDECAR_RELATIVE_PATH, WIN_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH].map((entry) => entry.slice("app/".length)) : []),
+  ]);
   const auditOutput = "web-standalone-after-pack-audit.json";
   const node = {
     id: "win.electron-builder-dir",
@@ -600,7 +605,10 @@ export async function runElectronBuilder(
       const validationError = await validateWinUnpackedNodePtyRuntime(
         join(entryRoot, "builder", "win-unpacked"),
       );
-      return validationError == null ? null : { reason: validationError };
+      if (validationError != null) return { reason: validationError };
+      try { await assertSidecarRuntime(join(entryRoot, "builder", "win-unpacked")); }
+      catch (error) { return { reason: String(error) }; }
+      return null;
     },
     build: async ({ entryRoot }: { entryRoot: string }): Promise<ElectronBuilderDirCacheMetadata> => {
       const packagedAppRoot = await getPackagedAppRoot();
@@ -610,6 +618,7 @@ export async function runElectronBuilder(
         packagedAppRoot,
       );
       await assertWinUnpackedNodePtyRuntime(join(entryRoot, "builder", "win-unpacked"));
+      await assertSidecarRuntime(join(entryRoot, "builder", "win-unpacked"));
       return { packagedAppKey, packagedVersion };
     },
   };
@@ -635,6 +644,7 @@ export async function runElectronBuilder(
               );
               segments.push(...rawSegments);
               await assertWinUnpackedNodePtyRuntime(join(entryRoot, "builder", "win-unpacked"));
+              await assertSidecarRuntime(join(entryRoot, "builder", "win-unpacked"));
             });
             return { packagedAppKey, packagedVersion };
           },
@@ -648,6 +658,7 @@ export async function runElectronBuilder(
   const cachedExecutablePath = join(cachedUnpackedRoot, `${PRODUCT_NAME}.exe`);
   await runSegment("electron-builder-dir:validate-node-pty-runtime", async () => {
     await assertWinUnpackedNodePtyRuntime(cachedUnpackedRoot);
+    await assertSidecarRuntime(cachedUnpackedRoot);
   });
   await runSegment("electron-builder-dir:prepare-namespace", async () => {
     if (shouldBuildWinNsisInstaller(config.to) || shouldBuildWinPortableZip(config.to)) {

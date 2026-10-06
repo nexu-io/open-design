@@ -104,6 +104,9 @@ test('[P1] RTL: chat scrollbar gutter is not covered by the resize handle', asyn
   await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
 
   const chatLog = page.locator('.chat-log');
+  await expect
+    .poll(() => chatLog.evaluate((element) => window.getComputedStyle(element).direction))
+    .toBe('rtl');
   const box = await requireBoundingBox(chatLog);
   const y = box.y + box.height / 2;
 
@@ -114,8 +117,9 @@ test('[P1] RTL: chat scrollbar gutter is not covered by the resize handle', asyn
   // control probe in RTL); after the logical-property fix both are green.
   for (const inset of [1, 3]) {
     const probe = await probeHit(page, box.x + inset, y);
-    expect(probe.hitHandle, `expected chat panel at ${inset}px probe, hit <${probe.tag} class="${probe.className}">`).toBe(false);
-    expect(probe.insideChatLog).toBe(true);
+    const diagnostic = `expected chat panel at ${inset}px probe, hit <${probe.tag} class="${probe.className}" cursor="${probe.cursor}">`;
+    expect(probe.hitHandle, diagnostic).toBe(false);
+    expect(probe.insideChatLog, diagnostic).toBe(true);
   }
 });
 

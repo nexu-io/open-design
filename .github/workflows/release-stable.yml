@@ -245,7 +245,10 @@ jobs:
           GITHUB_REF_NAME: ${{ inputs.ref != '' && inputs.ref || github.ref_name }}
         run: pnpm exec tools-release prepare stable
 
-      - name: Validate stable release note policy
+      # Reports missing or partial stable release notes as a run annotation and
+      # a job-summary entry. It is deliberately not a gate: see
+      # docs/CHANGELOG/README.md.
+      - name: Check stable release note coverage
         env:
           RELEASE_CHANNEL: stable
           RELEASE_NOTE_PLAN_PATH: ${{ runner.temp }}/release-note-preflight/plan.json

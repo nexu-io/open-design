@@ -8,6 +8,12 @@
       "sha256": "e1a97e14c99c803e96c7339403282ea05a499c32f8d83defe9ef5ec66f979ed1",
       "url": "https://nodejs.org/dist/v24.18.0/node-v24.18.0-darwin-arm64.tar.gz"
     },
+    "darwin-x64": {
+      "archive": "node-v24.18.0-darwin-x64.tar.gz",
+      "mediaType": "application/gzip",
+      "sha256": "dfd0dbd3e721503434df7b7205e719f61b3a3a31b2bcf9729b8b91fea240f080",
+      "url": "https://nodejs.org/dist/v24.18.0/node-v24.18.0-darwin-x64.tar.gz"
+    },
     "win32-x64": {
       "archive": "node-v24.18.0-win-x64.zip",
       "mediaType": "application/zip",

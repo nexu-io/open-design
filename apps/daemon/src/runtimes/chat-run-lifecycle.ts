@@ -308,29 +308,47 @@ export function bufferedAntigravityGeminiFirstTokenAt(
 }
 
 /**
- * Writes the composed prompt as the final chunk on the child's stdin, closes
- * it, and reports whether that write was backpressured.
+ * Whether a runtime reads its whole prompt as plain text from stdin (and then
+ * waits for EOF). Those runtimes get the prompt as a complete file-backed stdin
+ * at spawn — see `openCompletePromptAsStdin` in `agent-process.ts`.
  *
- * `end(chunk)` cannot report this: it returns the stream rather than a boolean,
- * and `writableNeedDrain` is already back to false by the time it returns — even
- * for a chunk that `write(chunk)` would have rejected. Every runtime except
- * Claude (which streams JSON and keeps stdin open) takes this path, so reading
- * backpressure off `end()` left `stdin_backpressure` permanently false on
- * exactly the runs whose `stdin_write` stalls it exists to attribute. Issuing
- * the write and the close separately is what makes the signal real.
- *
- * Returns true when the chunk had to be buffered because the OS pipe was full,
- * i.e. the child was not draining stdin.
+ * Excluded are the runtimes whose stdin carries a framed protocol instead:
+ * Claude's `stream-json` input (stdin stays open for mid-turn messages),
+ * pi-rpc, dsh-profile JSONL, ACP / Codex app-server JSON-RPC (those set
+ * `promptViaStdin: false`). A frame cut short by a dying daemon does not parse,
+ * so they cannot act on a partial prompt the way a plain-text reader does.
  */
-export function writePromptAndEndStdin(
-  stdin: {
-    write: (chunk: string, encoding: BufferEncoding, cb: (err?: Error | null) => void) => boolean;
-    end: () => void;
-  },
-  composed: string,
-  onFlush: (err?: Error | null) => void,
-): boolean {
-  const accepted = stdin.write(composed, 'utf8', onFlush);
-  stdin.end();
-  return accepted === false;
+export function runtimeReadsPlainTextPromptFromStdin(def: {
+  promptViaStdin?: boolean;
+  promptInputFormat?: string;
+  streamFormat?: string;
+}): boolean {
+  return (
+    def.promptViaStdin === true
+    && def.streamFormat !== 'pi-rpc'
+    && def.streamFormat !== 'dsh-profile-jsonl'
+    && (def.promptInputFormat ?? 'text') !== 'stream-json'
+  );
+}
+
+/**
+ * Stdin telemetry for a prompt handed over as the child's file-backed stdin
+ * at spawn.
+ *
+ * The prompt was complete on disk before the child existed, so the daemon's
+ * side of the write is finished the moment the child is spawned: it cannot be
+ * backpressured (`stdin_backpressure` is false by construction — a child that
+ * never reads its stdin now stalls in its own first-token wait, not in a daemon
+ * write), and `stdin_write_start`/`stdin_write_end` land together, in their
+ * historical position after spawn, so phase math and the Langfuse
+ * `stdin-write` span keep their shape.
+ */
+export function recordPromptDeliveredAtSpawn(
+  run: { stdinBackpressure?: boolean },
+  lifecycle: { mark: (mark: 'model_call_start' | 'stdin_write_start' | 'stdin_write_end') => void },
+): void {
+  lifecycle.mark('model_call_start');
+  lifecycle.mark('stdin_write_start');
+  lifecycle.mark('stdin_write_end');
+  run.stdinBackpressure = false;
 }

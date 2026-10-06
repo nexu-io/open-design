@@ -4,7 +4,7 @@ import type {
   WorkspaceCollabContext,
   WorkspaceDirectoryItem,
 } from '@open-design/contracts';
-import { ensureRailOpen } from './rail.js';
+import { dismissWhatsNewPopup, ensureRailOpen } from './rail.js';
 import { T } from '@/timeouts';
 
 export const STORAGE_KEY = 'open-design:config';
@@ -23,6 +23,7 @@ type MockAmrPersonalWorkspaceOptions = {
   accountCredits?: number;
   accountPlan?: string;
   accountSummaryAvailable?: boolean;
+  workspaceBalanceAvailable?: boolean;
 };
 
 export const AMR_PERSONAL_WORKSPACE_ITEM = {
@@ -130,14 +131,16 @@ export async function mockAmrPersonalWorkspace(
       await route.fulfill({
         json: {
           summary: null,
-          workspaceBalance: {
-            workspaceId,
-            workspaceMemberId: AMR_PERSONAL_WORKSPACE_CONTEXT.workspaceMemberId,
-            balanceUsd: accountBalanceUsd,
-            billingScopeVersion: 2,
-            expiresAt: null,
-            updatedAt: observedAt,
-          },
+          workspaceBalance: options.workspaceBalanceAvailable === false
+            ? null
+            : {
+                workspaceId,
+                workspaceMemberId: AMR_PERSONAL_WORKSPACE_CONTEXT.workspaceMemberId,
+                balanceUsd: accountBalanceUsd,
+                billingScopeVersion: 2,
+                expiresAt: null,
+                updatedAt: observedAt,
+              },
           workspaceRuntime: {
             workspaceId,
             workspaceMemberId: AMR_PERSONAL_WORKSPACE_CONTEXT.workspaceMemberId,
@@ -380,6 +383,7 @@ export async function openSettingsDialog(page: Page) {
     if (await dialog.isVisible().catch(() => false)) return dialog;
 
     await dismissPrivacyDialog(page);
+    await dismissWhatsNewPopup(page);
     if (await settingsTrigger.isVisible({ timeout: 1_000 }).catch(() => false)) {
       await settingsTrigger.evaluate((element: HTMLElement) => element.click());
     } else if (!(await openSettingsFromProjectSurface(page))) {

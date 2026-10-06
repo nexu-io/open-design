@@ -2,7 +2,8 @@
 // @vitest-environment jsdom
 
 import { StrictMode } from 'react';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import type { WorkspaceCollabContext } from '@open-design/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -371,6 +372,69 @@ describe('WorkspaceTabsBar navigation semantics', () => {
       expect(screen.queryByRole('dialog', { name: 'Search tabs' })).toBeNull();
     });
     expect(screen.queryByRole('button', { name: 'Search tabs' })).toBeNull();
+  });
+
+  it('puts the rail toggle first in the entry chrome cluster and mirrors the rail state on it', async () => {
+    // OPEND-2685: the sidebar switch is the FIRST control after the window's
+    // traffic-light space — where a macOS sidebar toggle is expected — and the
+    // search follows it. It stays mounted in both rail states, so the
+    // collapsed rail's expand entry is the same target as the collapse one;
+    // only its label, aria-expanded and glyph flip.
+    render(<WorkspaceTabsBar route={homeRoute} projects={[project]} />);
+
+    const cluster = document.querySelector('.workspace-tabs-rail-actions');
+    expect(cluster).not.toBeNull();
+    const order = Array.from(cluster!.querySelectorAll('[data-testid]')).map(
+      (el) => (el as HTMLElement).dataset.testid,
+    );
+    expect(order).toEqual(['entry-rail-collapse', 'entry-nav-search']);
+
+    const toggle = screen.getByTestId('entry-rail-collapse');
+    // Fresh storage: the rail is collapsed, so the toggle reads as "expand".
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(toggle.getAttribute('aria-label')).toBe('entry.navExpand');
+    const currentGlyph = () =>
+      toggle.querySelectorAll('.entry-nav-rail__collapse-glyph.is-current').length;
+    expect(toggle.querySelectorAll('.entry-nav-rail__collapse-glyph')).toHaveLength(2);
+    expect(currentGlyph()).toBe(1);
+
+    // Clicking asks EntryShell (a sibling tree) to flip the rail via the
+    // bridge event; the button itself owns no state.
+    const toggled = vi.fn();
+    window.addEventListener('od:entry-rail-toggle', toggled);
+    fireEvent.click(toggle);
+    expect(toggled).toHaveBeenCalledTimes(1);
+    window.removeEventListener('od:entry-rail-toggle', toggled);
+
+    // EntryShell answers with the state event; the toggle mirrors it in place
+    // (same element, same slot) and flips to the collapse affordance.
+    act(() => {
+      window.dispatchEvent(new CustomEvent('od:entry-rail-state', { detail: { open: true } }));
+    });
+    expect(screen.getByTestId('entry-rail-collapse')).toBe(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(toggle.getAttribute('aria-label')).toBe('entry.navCollapse');
+    expect(currentGlyph()).toBe(1);
+    expect(
+      Array.from(cluster!.querySelectorAll('[data-testid]')).map(
+        (el) => (el as HTMLElement).dataset.testid,
+      ),
+    ).toEqual(['entry-rail-collapse', 'entry-nav-search']);
+  });
+
+  it('shows no rail toggle in the docked (project) chrome — there is no entry rail to switch', async () => {
+    const dock = document.createElement('div');
+    document.body.appendChild(dock);
+    setWorkspaceTabsDock(dock);
+    try {
+      render(<WorkspaceTabsBar route={projectRoute} projects={[project]} />);
+      expect(screen.queryByTestId('entry-rail-collapse')).toBeNull();
+      expect(screen.queryByTestId('entry-nav-search')).toBeNull();
+      // The docked chrome keeps the brand-logo Home button in that first slot.
+      expect(screen.getByTestId('workspace-home-chrome')).toBeTruthy();
+    } finally {
+      dock.remove();
+    }
   });
 
   it('collapses every entry section into the single leftmost tab (no new tab per section)', async () => {
@@ -1842,5 +1906,314 @@ describe('WorkspaceTabsBar identity-scope tab reset', () => {
         'project-alpha',
       );
     });
+  });
+});
+
+// OPEND-2795: the dock dropdown's lead glyph and the rail's 最近项目 rows read
+// ONE run-status feed, with one display mapping — including the rule that
+// opening a project spends its ✓. Before this, the switcher still drew a ✓ the
+// rail had already cleared for the same project.
+describe('WorkspaceTabsBar dock dropdown run status', () => {
+  const originalFetch = globalThis.fetch;
+  const dock = document.createElement('div');
+
+  beforeEach(() => {
+    window.localStorage.clear();
+    vi.clearAllMocks();
+    document.body.append(dock);
+    setWorkspaceTabsDock(dock);
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url === '/api/runs?projectId=project-alpha') {
+        return new Response(JSON.stringify({
+          runs: [{
+            id: 'run-alpha-1',
+            projectId: 'project-alpha',
+            conversationId: null,
+            assistantMessageId: null,
+            agentId: 'claude',
+            status: 'succeeded',
+            createdAt: 1,
+            updatedAt: 2,
+          }],
+          awaitingInputProjectIds: [],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }) as unknown as typeof fetch;
+  });
+
+  afterEach(() => {
+    cleanup();
+    globalThis.fetch = originalFetch;
+    setWorkspaceTabsDock(null);
+    dock.remove();
+  });
+
+  it('marks a finished project with the unread dot and spends it when the row opens it', async () => {
+    // OPEND-3133: the notice is the dot at the row's end, announced as the
+    // finished status; the lead slot keeps the folder.
+    render(<WorkspaceTabsBar route={{ ...projectRoute }} projects={[project]} />);
+    fireEvent.click(await screen.findByTestId('workspace-tabs-dropdown-trigger'));
+    const listbox = screen.getByRole('listbox');
+    await waitFor(() => {
+      expect(within(listbox).getByRole('img', { name: 'designs.status.succeeded' })).toBeTruthy();
+    });
+    expect(within(listbox).getByRole('img', { name: 'designs.status.succeeded' }).getAttribute('data-testid'))
+      .toBe('workspace-tabs-dropdown-unread');
+    expect(within(listbox).getByTestId('project-folder-glyph')).toBeTruthy();
+
+    fireEvent.click(within(listbox).getByRole('option', { name: /Project Alpha/ }));
+    // Same acknowledgement record the rail keeps, keyed on THIS finished run.
+    expect(JSON.parse(window.localStorage.getItem('od.entry.railRecentSeenDone') ?? '{}')).toEqual({
+      'project-alpha': 'run-alpha-1',
+    });
+
+    fireEvent.click(screen.getByTestId('workspace-tabs-dropdown-trigger'));
+    const reopened = screen.getByRole('listbox');
+    await waitFor(() => {
+      expect(within(reopened).queryByRole('img', { name: 'designs.status.succeeded' })).toBeNull();
+    });
+  });
+});
+
+// The ⋮ menu on each row of the docked project switcher (OPEND-2686 / 3128):
+// 重命名 / 复制项目 / 转入团队空间 / 删除 — the same four actions, through the
+// same shared flows, as the rail's 最近项目 rows. 转入团队空间 is a REAL move
+// into the team space (MoveToTeamConfirmDialog + POST …/move), shown under the
+// rail row menu's conditions: a team workspace with `canShareProjects` only.
+describe('WorkspaceTabsBar dock dropdown project actions', () => {
+  const originalFetch = globalThis.fetch;
+  const dock = document.createElement('div');
+  const personalContext = {
+    workspaceId: 'ws-personal',
+    workspaceType: 'personal',
+    workspaceMemberId: 'wm-1',
+    role: 'owner',
+    memberStatus: 'active',
+    lifecycleState: 'active',
+    permissions: { canInviteMembers: false, canViewWorkspaceSettings: false, canShareProjects: true },
+  } as unknown as WorkspaceCollabContext;
+  const teamContext = {
+    ...personalContext,
+    workspaceId: 'ws-team',
+    workspaceType: 'team',
+  } as unknown as WorkspaceCollabContext;
+
+  function moveRequests(): string[] {
+    return vi.mocked(fetch).mock.calls
+      .filter(([, init]) => init?.method === 'POST')
+      .map(([url]) => String(url))
+      .filter((url) => /\/projects\/[^/]+\/move$/.test(url));
+  }
+
+  beforeEach(() => {
+    window.localStorage.clear();
+    vi.clearAllMocks();
+    document.body.append(dock);
+    setWorkspaceTabsDock(dock);
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (init?.method === 'POST' && /\/projects\/[^/]+\/move$/.test(url)) {
+        return new Response(JSON.stringify({
+          project: {
+            id: project.id,
+            name: project.name,
+            workspaceId: 'ws-team',
+            visibility: 'team',
+            resourceState: 'active',
+            createdByWorkspaceMemberId: 'wm-1',
+            currentUserAccess: {
+              canOpen: true,
+              canRename: true,
+              canDelete: true,
+              canDuplicate: true,
+              canMoveToTeam: false,
+              canMoveToPersonal: true,
+              canExport: true,
+              canSendTo: true,
+              canRestoreVersion: true,
+            },
+            createdAt: 1,
+            updatedAt: 2,
+          },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.startsWith('/api/runs?')) {
+        return new Response(JSON.stringify({ runs: [], awaitingInputProjectIds: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }) as unknown as typeof fetch;
+  });
+
+  afterEach(() => {
+    cleanup();
+    globalThis.fetch = originalFetch;
+    setWorkspaceTabsDock(null);
+    dock.remove();
+  });
+
+  async function openRowMenu() {
+    fireEvent.click(await screen.findByTestId('workspace-tabs-dropdown-trigger'));
+    const listbox = screen.getByRole('listbox');
+    fireEvent.click(within(listbox).getByRole('button', { name: 'designs.menuMore' }));
+    return screen.getByRole('menu');
+  }
+
+  // OPEND-3283: the row menu closed the moment ANYTHING on the page scrolled —
+  // the listener was a capturing document `scroll`, and a running turn's
+  // transcript auto-scrolls every few hundred milliseconds — so on a project
+  // whose agent was mid-stream the menu could not be used at all. Only a
+  // scroll that actually moves the trigger (its own scroll ancestors, or the
+  // document) may dismiss it.
+  it('stays open while an unrelated scroll container scrolls, closes when its own ancestor does', async () => {
+    const transcript = document.createElement('div');
+    transcript.className = 'chat-log';
+    document.body.append(transcript);
+    try {
+      render(
+        <WorkspaceTabsBar
+          route={projectRoute}
+          projects={[project]}
+          workspaceContext={teamContext}
+          onRenameProject={vi.fn()}
+          onDuplicateProject={vi.fn()}
+          onDeleteProject={vi.fn()}
+        />,
+      );
+      await openRowMenu();
+      // The transcript scrolling under a streaming run is not the menu's business.
+      fireEvent.scroll(transcript);
+      expect(screen.queryByRole('menu')).not.toBeNull();
+      // A scroll that moves the trigger itself (here: the document) still closes it.
+      fireEvent.scroll(document);
+      expect(screen.queryByRole('menu')).toBeNull();
+    } finally {
+      transcript.remove();
+    }
+  });
+
+  it('offers rename, duplicate, move-to-team and delete on a team workspace row', async () => {
+    render(
+      <WorkspaceTabsBar
+        route={projectRoute}
+        projects={[project]}
+        workspaceContext={teamContext}
+        onRenameProject={vi.fn()}
+        onDuplicateProject={vi.fn()}
+        onDeleteProject={vi.fn()}
+      />,
+    );
+    const menu = await openRowMenu();
+    const items = within(menu).getAllByRole('menuitem').map((item) => item.textContent);
+    expect(items).toEqual([
+      'designs.menuRename',
+      'designs.menuDuplicate',
+      'recentProjects.moveToTeam',
+      'designs.menuDelete',
+    ]);
+  });
+
+  it('hides move-to-team in a personal workspace', async () => {
+    render(
+      <WorkspaceTabsBar
+        route={projectRoute}
+        projects={[project]}
+        workspaceContext={personalContext}
+        onRenameProject={vi.fn()}
+        onDuplicateProject={vi.fn()}
+        onDeleteProject={vi.fn()}
+      />,
+    );
+    const menu = await openRowMenu();
+    expect(within(menu).queryByRole('menuitem', { name: 'recentProjects.moveToTeam' })).toBeNull();
+    expect(within(menu).getByRole('menuitem', { name: 'designs.menuDelete' })).toBeTruthy();
+  });
+
+  it('deletes only through the shared confirmation dialog', async () => {
+    const remove = vi.fn().mockResolvedValue(true);
+    render(
+      <WorkspaceTabsBar
+        route={projectRoute}
+        projects={[project]}
+        workspaceContext={teamContext}
+        onDeleteProject={remove}
+      />,
+    );
+    const menu = await openRowMenu();
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'designs.menuDelete' }));
+    const dialog = await screen.findByTestId('project-delete-confirm-dialog');
+    expect(remove).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByTestId('project-delete-confirm-cancel'));
+    expect(remove).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('project-delete-confirm-dialog')).toBeNull();
+
+    fireEvent.click(within(await openRowMenu()).getByRole('menuitem', { name: 'designs.menuDelete' }));
+    fireEvent.click(within(await screen.findByTestId('project-delete-confirm-dialog')).getByTestId('project-delete-confirm-accept'));
+    await waitFor(() => expect(remove).toHaveBeenCalledWith(project.id));
+    await waitFor(() => expect(screen.queryByTestId('project-delete-confirm-dialog')).toBeNull());
+  });
+
+  it('duplicates through the shared duplicate flow and hands the id to the shell', async () => {
+    const duplicate = vi.fn().mockResolvedValue(undefined);
+    render(
+      <WorkspaceTabsBar
+        route={projectRoute}
+        projects={[project]}
+        workspaceContext={teamContext}
+        onDuplicateProject={duplicate}
+      />,
+    );
+    const menu = await openRowMenu();
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'designs.menuDuplicate' }));
+    await waitFor(() => expect(duplicate).toHaveBeenCalledWith(project.id));
+  });
+
+  it('moves the project into the team space after confirmation', async () => {
+    render(
+      <WorkspaceTabsBar
+        route={projectRoute}
+        projects={[project]}
+        workspaceContext={teamContext}
+        onDeleteProject={vi.fn()}
+      />,
+    );
+    const menu = await openRowMenu();
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'recentProjects.moveToTeam' }));
+    const confirm = await screen.findByRole('alertdialog');
+    expect(moveRequests()).toEqual([]);
+    fireEvent.click(within(confirm).getByRole('button', { name: 'recentProjects.confirmMoveToTeam' }));
+    await waitFor(() => expect(moveRequests()).toEqual(['/api/workspaces/ws-team/projects/project-alpha/move']));
+    // Progress shows in the row menu the flow re-opens; success closes it
+    // again (as the rail's row menu does), and the next open reads 已在团队空间.
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+    fireEvent.click(within(screen.getByRole('listbox')).getByRole('button', { name: 'designs.menuMore' }));
+    const item = screen.getByRole('menuitem', { name: 'recentProjects.sharedInTeam' });
+    expect((item as HTMLButtonElement).disabled).toBe(true);
+    // Still the member's own project: the move response is its ownership
+    // witness until the team catalog lists it, so the other actions stay.
+    expect((screen.getByRole('menuitem', { name: 'designs.menuDelete' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('renames in place and commits on Enter', async () => {
+    const rename = vi.fn().mockResolvedValue(undefined);
+    render(
+      <WorkspaceTabsBar
+        route={projectRoute}
+        projects={[project]}
+        workspaceContext={teamContext}
+        onRenameProject={rename}
+      />,
+    );
+    const menu = await openRowMenu();
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'designs.menuRename' }));
+    const input = await screen.findByRole('textbox', { name: 'designs.menuRename' });
+    fireEvent.change(input, { target: { value: 'Renamed project' } });
+    expect(rename).not.toHaveBeenCalled();
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(rename).toHaveBeenCalledWith(project.id, 'Renamed project'));
   });
 });

@@ -7,8 +7,12 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import url from 'node:url';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { createJsonIpcServer } from '@open-design/sidecar';
-import { SIDECAR_ENV, SIDECAR_MESSAGES, normalizeDaemonSidecarMessage } from '@open-design/sidecar-proto';
+import {
+  SidecarFactory,
+  type SidecarClient,
+  type SidecarStamp,
+} from '@open-design/sidecar';
+import { APP_KEYS, SIDECAR_MESSAGES } from '@open-design/sidecar-proto';
 
 import { createAgentRuntimeEnv, startServer } from '../src/server.js';
 import { resetDesktopAuthForTests, setDesktopAuthSecret } from '../src/desktop-auth.js';
@@ -24,7 +28,7 @@ describe('Phase 2C CLI wrappers', () => {
   let baseUrl: string;
   let shutdown: (() => Promise<void> | void) | undefined;
   const tempDirs: string[] = [];
-  const sidecarServers: { close(): Promise<void> }[] = [];
+  const sidecarClients: SidecarClient<unknown>[] = [];
 
   beforeAll(async () => {
     const started = (await startServer({ port: 0, returnServer: true })) as {
@@ -38,8 +42,8 @@ describe('Phase 2C CLI wrappers', () => {
   });
 
   afterEach(async () => {
-    for (const sidecar of sidecarServers.splice(0)) {
-      await sidecar.close();
+    for (const sidecar of sidecarClients.splice(0)) {
+      await sidecar.stop();
     }
     for (const dir of tempDirs.splice(0)) {
       rmSync(dir, { recursive: true, force: true });
@@ -195,26 +199,46 @@ describe('Phase 2C CLI wrappers', () => {
     setDesktopAuthSecret(secret);
 
     try {
-      const ipcRoot = makeFolder();
-      const ipcPath = path.join(ipcRoot, 'daemon.sock');
-      const sidecar = await createJsonIpcServer({
-        socketPath: ipcPath,
-        handler: async (message) => {
-          const request = normalizeDaemonSidecarMessage(message);
-          switch (request.type) {
-            case SIDECAR_MESSAGES.STATUS:
-              return { desktopAuthGateActive: true, state: 'running', url: baseUrl };
-            case SIDECAR_MESSAGES.MINT_IMPORT_TOKEN:
-              return mintImportTokenForCli(request.input.baseDir);
-            default:
-              throw new Error(`unexpected test IPC message: ${request.type}`);
-          }
+      const originalSupervisedContext = process.env.OD_SIDECAR_SUPERVISED_CONTEXT;
+      const stamp: SidecarStamp = {
+        app: APP_KEYS.DAEMON,
+        channel: 'local',
+        mode: 'test',
+        namespace: `cli-phase2c-${process.pid}-${Date.now()}`,
+        source: 'daemon-test',
+      };
+      const resources = {
+        dataRoot: makeFolder(),
+        ownerPid: null,
+        port: 0,
+        runtimeRoot: makeFolder(),
+      };
+      process.env.OD_SIDECAR_SUPERVISED_CONTEXT = JSON.stringify({
+        generationPid: process.pid,
+        resources,
+        stamp,
+      });
+      const sidecar = SidecarFactory.create({
+        handlers: {
+          [SIDECAR_MESSAGES.MINT_IMPORT_TOKEN]: (input) => {
+            return mintImportTokenForCli((input as { baseDir: string }).baseDir);
+          },
+        },
+        lifecycle: {
+          async start() {
+            return { desktopAuthGateActive: true, state: 'running', url: baseUrl };
+          },
+          status(runtime) { return runtime; },
+          async stop() {},
         },
       });
-      sidecarServers.push(sidecar);
+      if (originalSupervisedContext == null) delete process.env.OD_SIDECAR_SUPERVISED_CONTEXT;
+      else process.env.OD_SIDECAR_SUPERVISED_CONTEXT = originalSupervisedContext;
+      await sidecar.start();
+      sidecarClients.push(sidecar);
 
       const wrapperEnv = createAgentRuntimeEnv(
-        { PATH: process.env.PATH, [SIDECAR_ENV.IPC_PATH]: ipcPath },
+        { PATH: process.env.PATH, ...SidecarFactory.inheritedEnvironment() },
         baseUrl,
         null,
         process.execPath,
@@ -275,7 +299,7 @@ describe('Phase 2C CLI wrappers', () => {
     }
   });
 
-  it('preserves desktop-auth-pending when CLI token minting cannot reach sidecar IPC', async () => {
+  it('preserves desktop-auth-pending without an inherited sidecar connection', async () => {
     const folder = makeFolder();
     await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
     setDesktopAuthSecret(randomBytes(32));
@@ -283,7 +307,6 @@ describe('Phase 2C CLI wrappers', () => {
 
     const failed = await runCliExpectFailure(
       ['project', 'import', folder, '--name', 'Pending CLI Import', '--json'],
-      { env: { [SIDECAR_ENV.IPC_PATH]: path.join(folder, 'missing-daemon.sock') } },
     );
 
     expect(failed.code).toBe(74);
@@ -302,7 +325,6 @@ describe('Phase 2C CLI wrappers', () => {
 
     const failed = await runCliExpectFailure(
       ['project', 'import', folder, '--name', 'Rejected CLI Import', '--json'],
-      { env: { [SIDECAR_ENV.IPC_PATH]: path.join(folder, 'missing-daemon.sock') } },
     );
 
     expect(failed.code).toBe(75);

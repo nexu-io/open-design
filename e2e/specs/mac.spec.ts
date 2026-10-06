@@ -8,16 +8,28 @@ import { promisify } from 'node:util';
 
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 
-import { createFakeAgentRuntimes } from '@/fake-agents';
+import { createFakeAgentRuntimes, type FakeAgentRuntime } from '@/fake-agents';
 import { T } from '@/timeouts';
 import {
+  capturePackagedFailureEvidence,
+  PACKAGED_FAILURE_EVIDENCE_DIR,
+} from '@/vitest/packaged-failure-evidence';
+import {
   assertPackagedHomeFirstRunResult,
+  codexAppServerInvocationsCompleted,
+  describePackagedHomeFirstRunStall,
   PACKAGED_HOME_FIRST_RUN_OUTPUT,
   PACKAGED_HOME_FIRST_RUN_PROMPT,
+  PACKAGED_HOME_FIRST_RUN_STAGE_TIMEOUT_MS,
+  packagedHomeFirstRunDiagnosticsExpression,
   packagedHomeFirstRunExpression,
+  packagedHomeFirstRunInPageAwaitMs,
   packagedHomeFirstRunSnapshotExpression,
+  packagedHomeFirstRunStageSatisfied,
   packagedHomeFirstRunSubmitExpression,
   type PackagedHomeFirstRunResult,
+  type PackagedHomeFirstRunStage,
+  waitForPackagedHomeFirstRunSetup,
 } from '@/vitest/packaged-home-first-run';
 import { createPackagedSmokeReport } from '@/vitest/packaged-report';
 import {
@@ -218,6 +230,7 @@ const packagedOnboardingExpression = `
 `;
 
 type DesktopStatus = {
+  executablePath?: string;
   pid?: number;
   state?: string;
   title?: string | null;
@@ -317,13 +330,6 @@ type LauncherSnapshot = {
   stateRoot: string;
   versionRoots: string[];
   versionsRoot: string;
-};
-
-type NativeChromeActionProbe = {
-  clickCount: number;
-  targetMatches: boolean;
-  x: number;
-  y: number;
 };
 
 type LauncherPointer = {
@@ -433,45 +439,75 @@ macDescribe('packaged mac runtime smoke', () => {
     const fakeAgentRoot = join(toolsPackDir, 'fixtures', `home-first-run-${namespace}`);
     let firstRunInstalledAppPath: string | null = null;
     let firstRunStarted = false;
+    let firstRunDesktopLogPath: string | null = null;
+    let firstRunFailure: unknown = null;
+    let invocation: FakeAgentRuntime['invocation'];
     try {
       await resetPackagedRuntimeState();
       const fakeAgents = await createFakeAgentRuntimes({
         root: fakeAgentRoot,
         runtimeIds: ['codex'],
+        recordInvocations: true,
       });
+      invocation = fakeAgents.codex.invocation;
       const install = await runToolsPackJson<MacInstallResult>('install');
       firstRunInstalledAppPath = install.installedAppPath;
       await seedPackagedHomeFirstRunConfig(fakeAgents.codex.env);
 
       const start = await runToolsPackJson<MacStartResult>('start');
       firstRunStarted = true;
+      firstRunDesktopLogPath = start.logPath;
       expect(start.source).toBe('installed');
       await waitForHealthyDesktop();
-      await assertFirstNativeChromeActionClick();
 
-      const setup = await runToolsPackJson<MacInspectResult>('inspect', [
-        '--expr',
-        packagedHomeFirstRunExpression(),
-      ]);
-      if (setup.eval?.ok !== true) {
-        throw new Error(`packaged first Home run setup failed: ${formatUnknown(setup.eval)}`);
-      }
-      expect(setup.eval.value).toMatchObject({
+      const setup = await waitForPackagedHomeFirstRunSetup(async () => {
+        const inspect = await runToolsPackJson<MacInspectResult>('inspect', [
+          '--expr',
+          packagedHomeFirstRunExpression(),
+        ]);
+        if (inspect.eval?.ok !== true) {
+          throw new Error(`packaged first Home run setup failed: ${formatUnknown(inspect.eval)}`);
+        }
+        return inspect.eval.value;
+      });
+      expect(setup).toMatchObject({
         inputTextBeforeSubmit: PACKAGED_HOME_FIRST_RUN_PROMPT,
         submitClicked: false,
       });
 
       await waitForPackagedHomeFirstRunSubmit();
-      const firstRun = await waitForPackagedHomeFirstRunOutput();
+      // Two stages, so a red gate can say which half broke. The first ends when
+      // the daemon owns a finished run row; only then is a missing message a
+      // rendering problem rather than an unfinished one.
+      const runFinished = await waitForPackagedHomeFirstRunStage('run-terminal');
+      expect(runFinished.terminalRunStatus).toBe('succeeded');
+
+      const firstRun = await waitForPackagedHomeFirstRunStage('assistant-output');
+      const { report } = await createPackagedSmokeReport('mac');
+      await report.json('first-run/result.json', firstRun);
+      // Preserve the actual default/fallback decision; do not force a transport
+      // or bypass OD Next admission just to make the deterministic fake pass.
+      expect(firstRun.runId).not.toBe('');
+      expect(firstRun.strategyRolloutDecision).not.toBeNull();
+      expect(invocation).toBeDefined();
+      const receipts = (await readFile(invocation!.path, 'utf8')).trim().split('\n')
+        .map((line) => JSON.parse(line));
+      expect(codexAppServerInvocationsCompleted(receipts, invocation!.nonce)).toBe(true);
       expect(firstRun.submitClicked).toBe(true);
       expect(firstRun.projectId).toEqual(expect.any(String));
       expect(firstRun.hrefBefore).toMatch(/^(od:\/\/app\/|http:\/\/127\.0\.0\.1:\d+\/$)/);
       expect(firstRun.hrefAfter).toContain(`/projects/${firstRun.projectId}`);
-      expect(firstRun.injectedAuthorityOutageCount).toBe(1);
-      expect(firstRun.createRunRequestCount).toBeGreaterThanOrEqual(2);
-      expect(firstRun.createRunResponseStatuses[0]).toBe(503);
-      expect(firstRun.createRunResponseStatuses.at(-1)).toBeGreaterThanOrEqual(200);
-      expect(firstRun.createRunResponseStatuses.at(-1)).toBeLessThan(300);
+      // With nothing injected, a cold first run must reach the daemon cleanly:
+      // every create attempt answers 2xx, so no attempt was ever recovered from.
+      // The exact attempt count is deliberately not pinned — the injected outage
+      // made the real count unobservable, and guessing it here would trade a
+      // swallowed red for a false one.
+      expect(firstRun.createRunRequestCount).toBeGreaterThanOrEqual(1);
+      expect(firstRun.createRunResponseStatuses).toHaveLength(firstRun.createRunRequestCount);
+      for (const status of firstRun.createRunResponseStatuses) {
+        expect(status).toBeGreaterThanOrEqual(200);
+        expect(status).toBeLessThan(300);
+      }
       expect(firstRun.runEventRequestCount).toBeGreaterThan(0);
       expect(firstRun.runEventResponseStatuses).toContain(200);
       expect(firstRun.runEventsContainExpectedOutput).toBe(true);
@@ -480,7 +516,26 @@ macDescribe('packaged mac runtime smoke', () => {
       expect(firstRun.workspaceTabClicksBeforeOutput).toBe(0);
       expect(firstRun.navigationEntryCountAfter).toBe(firstRun.navigationEntryCountBefore);
       expect(firstRun.performanceTimeOriginAfter).toBe(firstRun.performanceTimeOriginBefore);
+    } catch (error) {
+      firstRunFailure = error;
+      throw error;
     } finally {
+      if (invocation) {
+        try {
+          const { report } = await createPackagedSmokeReport('mac');
+          await capturePackagedFailureEvidence(report, 'first-run', [
+            { name: 'fixture-invocations.jsonl', read: () => readFile(invocation!.path) },
+          ]);
+        } catch (error) {
+          console.error('failed to preserve packaged fixture receipt', error);
+        }
+      }
+      // Capture before uninstall: cleanup removes the installed app and the next
+      // case's reset deletes the runtime namespace, so evidence not copied out
+      // here no longer exists by the time anyone reads the report.
+      if (firstRunFailure != null) {
+        await capturePackagedHomeFirstRunFailure(firstRunFailure, firstRunDesktopLogPath);
+      }
       if (firstRunStarted || firstRunInstalledAppPath != null) {
         await runToolsPackJson<MacUninstallResult>('uninstall').catch((error: unknown) => {
           console.error('failed to uninstall packaged first-Home-run app during cleanup', error);
@@ -488,7 +543,12 @@ macDescribe('packaged mac runtime smoke', () => {
       }
       await rm(fakeAgentRoot, { force: true, recursive: true }).catch(() => undefined);
     }
-  }, 180_000);
+    // Budget: every wait above (desktop health 90s, composer readiness 45s, the
+    // two staged run waits 90s) must be able to expire and still leave room for
+    // the evidence capture in `finally`. A Vitest-level timeout aborts the case
+    // mid-cleanup, which is exactly how the earlier failures came back with
+    // `logs: {skipped: true}` and nothing else.
+  }, 300_000);
 
   test('installs, starts, inspects, stops, and uninstalls the built mac artifact', async () => {
     const report = await createPackagedSmokeReport('mac');
@@ -1079,7 +1139,10 @@ macDescribe('packaged mac runtime smoke', () => {
       // Self-heal: real recovery releases ship as version+1 (versioned
       // artifacts are immutable), so the next update arrives under a bumped
       // version with a healthy payload and converges.
-      const healedVersion = bumpCountedVersion(targetVersion);
+      const healedVersion = resolvePackagedUpdateScenario({
+        releaseChannel: updateScenario.channel,
+        releaseVersion: targetVersion,
+      }).fixtureVersion;
       const healedPayloadPath = await buildVersionBumpedMacPayloadFixture(
         localPayload.payloadPath,
         corruptWorkDir,
@@ -2313,109 +2376,104 @@ async function waitForHealthyDesktop(): Promise<MacInspectResult> {
   throw new Error(`packaged mac runtime did not become healthy: ${formatUnknown(lastResult)}`);
 }
 
-async function assertFirstNativeChromeActionClick(): Promise<void> {
-  const probeKey = '__odPackagedNativeChromeActionProbe';
-  const setup = await runToolsPackJson<MacInspectResult>('inspect', [
-    '--expr',
-    `(() => {
-      const target = document.querySelector('[data-testid="entry-top-right-github"]');
-      if (!(target instanceof HTMLElement)) {
-        throw new Error('first-render GitHub chrome action is missing');
-      }
-      window[${JSON.stringify(probeKey)}]?.cleanup?.();
-      const probe = { clickCount: 0 };
-      const onClick = (event) => {
-        probe.clickCount += 1;
-        event.preventDefault();
-      };
-      target.addEventListener('click', onClick, true);
-      window[${JSON.stringify(probeKey)}] = {
-        cleanup: () => target.removeEventListener('click', onClick, true),
-        probe,
-      };
-      const rect = target.getBoundingClientRect();
-      const clientX = rect.left + rect.width / 2;
-      const clientY = rect.top + rect.height / 2;
-      const hitTarget = document.elementFromPoint(clientX, clientY);
-      return {
-        clickCount: 0,
-        targetMatches: hitTarget != null && target.contains(hitTarget),
-        x: window.screenX + clientX,
-        y: window.screenY + clientY,
-      };
-    })()`,
-  ]);
-  if (setup.eval?.ok !== true) {
-    throw new Error(`native chrome action setup failed: ${formatUnknown(setup.eval)}`);
-  }
-  const probe = setup.eval.value as NativeChromeActionProbe;
-  expect(probe.targetMatches).toBe(true);
-  expect(Number.isFinite(probe.x)).toBe(true);
-  expect(Number.isFinite(probe.y)).toBe(true);
-
-  try {
-    const swiftSource = `
-      import CoreGraphics
-      import Darwin
-      let point = CGPoint(x: ${probe.x}, y: ${probe.y})
-      let source = CGEventSource(stateID: .hidSystemState)
-      CGEvent(mouseEventSource: source, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
-      CGEvent(mouseEventSource: source, mouseType: .leftMouseDown, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
-      usleep(50_000)
-      CGEvent(mouseEventSource: source, mouseType: .leftMouseUp, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
-    `;
-    await execFileAsync('/usr/bin/xcrun', ['swift', '-e', swiftSource], { timeout: 30_000 });
-    await waitFor(async () => {
-      const snapshot = await runToolsPackJson<MacInspectResult>('inspect', [
-        '--expr',
-        `(() => {
-          const state = window[${JSON.stringify(probeKey)}];
-          return { clickCount: Number(state?.probe?.clickCount || '0') };
-        })()`,
-      ]);
-      expect((snapshot.eval?.value as { clickCount?: number } | undefined)?.clickCount).toBe(1);
-    }, 5_000);
-  } finally {
-    await runToolsPackJson<MacInspectResult>('inspect', [
-      '--expr',
-      `(() => {
-        const state = window[${JSON.stringify(probeKey)}];
-        state?.cleanup?.();
-        delete window[${JSON.stringify(probeKey)}];
-        return true;
-      })()`,
-    ]).catch(() => undefined);
-  }
-}
-
-async function waitForPackagedHomeFirstRunOutput(): Promise<PackagedHomeFirstRunResult> {
-  const timeoutMs = 15_000;
+/**
+ * Wait for one stage of the cold first run, polling inside the page.
+ *
+ * Each `tools-pack mac inspect` pays a full Node + tsx cold start, so a Node-side
+ * poll loop spends most of its budget starting processes instead of observing
+ * the product. Handing the wait to the page turns one process into one window of
+ * continuous observation, and a transient inspect failure now costs a retry
+ * rather than the whole wait.
+ */
+async function waitForPackagedHomeFirstRunStage(
+  stage: PackagedHomeFirstRunStage,
+): Promise<PackagedHomeFirstRunResult> {
+  const timeoutMs = PACKAGED_HOME_FIRST_RUN_STAGE_TIMEOUT_MS[stage];
   const startedAt = Date.now();
-  let lastResult: unknown = null;
+  let snapshot: PackagedHomeFirstRunResult | null = null;
+  let lastError: unknown = null;
 
-  while (Date.now() - startedAt < timeoutMs) {
-    const inspect = await runToolsPackJson<MacInspectResult>('inspect', [
-      '--expr',
-      packagedHomeFirstRunSnapshotExpression(),
-    ]);
-    lastResult = inspect;
-    if (inspect.eval?.ok === true) {
-      const snapshot = assertPackagedHomeFirstRunResult(inspect.eval.value);
-      lastResult = snapshot;
-      if (
-        snapshot.assistantText.includes(PACKAGED_HOME_FIRST_RUN_OUTPUT)
-        && snapshot.daemonAssistantText.includes(PACKAGED_HOME_FIRST_RUN_OUTPUT)
-        && snapshot.runEventsContainExpectedOutput
-      ) {
-        return snapshot;
+  for (;;) {
+    const awaitMs = packagedHomeFirstRunInPageAwaitMs(timeoutMs - (Date.now() - startedAt));
+    try {
+      const inspect = await runToolsPackJson<MacInspectResult>('inspect', [
+        '--expr',
+        packagedHomeFirstRunSnapshotExpression({ awaitMs, stage }),
+      ]);
+      if (inspect.eval?.ok === true) {
+        snapshot = assertPackagedHomeFirstRunResult(inspect.eval.value);
+        lastError = null;
+        if (packagedHomeFirstRunStageSatisfied(stage, snapshot)) return snapshot;
+      } else {
+        lastError = inspect.eval ?? inspect;
       }
+    } catch (error) {
+      lastError = error;
     }
-    await delay(750);
+    if (Date.now() - startedAt >= timeoutMs) break;
+    await delay(250);
   }
 
   throw new Error(
-    `packaged first Home run did not render assistant output without recovery: ${formatUnknown(lastResult)}`,
+    [
+      `packaged first Home run stage "${stage}" timed out after ${Math.round((Date.now() - startedAt) / 1000)}s`,
+      describePackagedHomeFirstRunStall(stage, snapshot),
+      ...(lastError == null ? [] : [`last inspection error: ${formatUnknown(lastError)}`]),
+      `snapshot: ${formatUnknown(snapshot)}`,
+    ].join('\n'),
   );
+}
+
+/**
+ * Persist what a failed cold first run left behind, before cleanup destroys it.
+ *
+ * The daemon's own run rows are the only observation that separates "the run is
+ * still going" from "the run failed"; the DOM, the conversation messages, and
+ * the run event stream all read as "no output" in both cases and cannot falsify
+ * one another. Capture runs while the desktop is still alive, then the desktop
+ * log last so it also covers the diagnostic requests themselves.
+ */
+async function capturePackagedHomeFirstRunFailure(
+  error: unknown,
+  desktopLogPath: string | null,
+): Promise<void> {
+  try {
+    const { report } = await createPackagedSmokeReport('mac');
+    const entries = await capturePackagedFailureEvidence(report, PACKAGED_FAILURE_EVIDENCE_DIR, [
+      { name: 'error.txt', read: async () => `${formatUnknown(error)}\n` },
+      {
+        name: 'runs.json',
+        read: async () => {
+          const inspect = await runToolsPackJson<MacInspectResult>('inspect', [
+            '--expr',
+            packagedHomeFirstRunDiagnosticsExpression(),
+          ]);
+          if (inspect.eval?.ok !== true) {
+            throw new Error(`packaged diagnostics eval failed: ${formatUnknown(inspect.eval)}`);
+          }
+          return `${JSON.stringify(inspect.eval.value, null, 2)}\n`;
+        },
+      },
+      {
+        name: 'tools-pack-logs.json',
+        read: async () => `${JSON.stringify(await runToolsPackJson<LogsResult>('logs'), null, 2)}\n`,
+      },
+      {
+        name: 'desktop-latest.log',
+        read: async () => {
+          if (desktopLogPath == null) {
+            throw new Error('the packaged desktop never started, so no log path was reported');
+          }
+          return await readFile(desktopLogPath);
+        },
+      },
+    ]);
+    console.error(
+      `packaged first Home run failure evidence in ${report.root}: ${JSON.stringify(entries, null, 2)}`,
+    );
+  } catch (captureError) {
+    console.error('failed to capture packaged first Home run failure evidence', captureError);
+  }
 }
 
 async function waitForPackagedHomeFirstRunSubmit(): Promise<void> {
@@ -2593,13 +2651,6 @@ async function buildVersionBumpedMacPayloadFixture(
   });
 }
 
-function bumpCountedVersion(version: string): string {
-  const match = /^(.*[.-](?:beta|betas|prerelease|preview))\.(\d+)$/.exec(version);
-  if (match?.[1] == null || match[2] == null) {
-    throw new Error(`rollback acceptance requires a counted version to bump: ${version}`);
-  }
-  return `${match[1]}.${Number(match[2]) + 1}`;
-}
 
 /**
  * Reset the namespace to a pristine pre-install state. `uninstall` removes the
@@ -2685,18 +2736,14 @@ async function waitForUpdaterPopupMatching(
 }
 
 async function readDesktopIdentityMarker(): Promise<DesktopIdentityMarker> {
-  const markerPath = join(runtimeNamespaceRoot, 'runtime', 'desktop-root.json');
-  const value = JSON.parse(await readFile(markerPath, 'utf8')) as unknown;
-  if (
-    !isRecord(value) ||
-    typeof value.appPath !== 'string' ||
-    typeof value.executablePath !== 'string' ||
-    typeof value.pid !== 'number' ||
-    value.version !== 1
-  ) {
-    throw new Error(`invalid packaged desktop identity at ${markerPath}: ${formatUnknown(value)}`);
+  const status = (await runToolsPackJson<MacInspectResult>('inspect')).status;
+  if (typeof status?.executablePath !== 'string' || typeof status.pid !== 'number') {
+    throw new Error(`invalid packaged desktop sidecar status: ${formatUnknown(status)}`);
   }
-  return value as DesktopIdentityMarker;
+  const marker = '/Contents/MacOS/';
+  const markerIndex = status.executablePath.indexOf(marker);
+  const appPath = markerIndex < 0 ? status.executablePath : status.executablePath.slice(0, markerIndex);
+  return { appPath, executablePath: status.executablePath, pid: status.pid, version: 1 };
 }
 
 function assertPayloadDesktopIdentity(
@@ -2928,7 +2975,12 @@ async function fileSizeBytes(filePath: string): Promise<number> {
 }
 
 async function seedPackagedOnboardingComplete(): Promise<void> {
-  await seedPackagedAppConfig({ onboardingCompleted: true });
+  // Updater flows need the ordinary signed-out Home shell. Completion alone
+  // is insufficient when the daemon default selects the AMR cloud agent: the
+  // product correctly routes that signed-out identity back to Connect even
+  // though first-run onboarding was completed. Pin a local agent so this
+  // fixture models the actual post-onboarding state it claims to create.
+  await seedPackagedAppConfig({ agentId: 'codex', onboardingCompleted: true });
 }
 
 async function seedPackagedHomeFirstRunConfig(

@@ -22,7 +22,7 @@
  *   `vela models`                       → prints production-shaped public
  *                                         model ids from the Vela catalog.
  *
- *   `vela agent run --runtime opencode` → ACP stdio runtime. Speaks just
+ *   `vela agent run` → ACP stdio runtime. Speaks just
  *                                         enough of the protocol to drive
  *                                         OpenDesign's `detectAcpModels`
  *                                         and `attachAcpSession` through a
@@ -85,6 +85,8 @@
  *                                   accept session/prompt without prior
  *                                   session/set_model (legacy behaviour)
  *   FAKE_VELA_LOG_SET_MODEL      – when set to '1', include session/set_model
+ *                                   entries in FAKE_VELA_INVOCATION_LOG
+ *   FAKE_VELA_LOG_PROMPT         – when set to '1', include session/prompt
  *                                   entries in FAKE_VELA_INVOCATION_LOG
  */
 
@@ -173,7 +175,7 @@ const DEFAULT_MODEL_LIST_JSON = JSON.stringify({
   ],
 });
 
-// Real `vela agent run --runtime opencode` rejects session/prompt until
+// Real `vela agent run` rejects session/prompt until
 // session/set_model has been called for the current session — see the
 // AMR runtime def docblock and the integration test for the negative case.
 // The stub mirrors that contract so a regression in attachAcpSession that
@@ -338,6 +340,9 @@ function handleMessage(msg) {
       return;
     }
     case 'session/prompt': {
+      if (env.FAKE_VELA_LOG_PROMPT === '1') {
+        logInvocation('prompt');
+      }
       if (RESUME_FAILED && didLoad) {
         // Structured resume-miss: the resumed session is gone. Mirrors vela's
         // pre-prompt probe emitting resume_failed BEFORE any model call. Gated on

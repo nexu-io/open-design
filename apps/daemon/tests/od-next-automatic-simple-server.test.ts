@@ -1,11 +1,14 @@
+import type { CollectCodexChildEvidenceInput, CodexChildEvidenceCollection } from '../src/runtimes/codex-child-evidence.js';
+import type { CodexThreadCleanupResult } from '../src/agent-protocol/codex-app-server/thread-cleanup.js';
 import type { Server } from 'node:http';
 import { execFile } from 'node:child_process';
-import { chmod, cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Agent, fetch as undiciFetch } from 'undici';
 import type {
   AppliedStrategyBindingV2,
   OdNextRuntimeCapabilitySnapshotV1,
@@ -16,7 +19,58 @@ import {
   normalizeAgentObservationV1,
   OD_NEXT_PROMPT_STAGE_CONTRACT_V2,
   parseOdNextPromptBundleV2,
+  parseOdNextIntentResolutionTurnV1,
 } from '@open-design/contracts';
+
+const codexArchiveBoundary = vi.hoisted(() => ({
+  home: '', activeParentPath: '', cleanupStarted: false,
+  cleanupFinished: Promise.resolve(), onCleanupFinished: () => {},
+  order: [] as string[],
+  collections: [] as Array<{ input: CollectCodexChildEvidenceInput; result: CodexChildEvidenceCollection }>,
+  cleanupResults: [] as CodexThreadCleanupResult[],
+}));
+vi.mock('../src/agent-protocol/codex-app-server/thread-cleanup.js', async importOriginal => {
+  const actual = await importOriginal<typeof import('../src/agent-protocol/codex-app-server/thread-cleanup.js')>();
+  return { ...actual, cleanupClosedCodexThread: async (...args: Parameters<typeof actual.cleanupClosedCodexThread>) => {
+    if (!codexArchiveBoundary.home || args[0].env.CODEX_HOME !== codexArchiveBoundary.home) {
+      return actual.cleanupClosedCodexThread(...args);
+    }
+    codexArchiveBoundary.cleanupStarted = true;
+    codexArchiveBoundary.order.push('cleanup:start');
+    try {
+      const result = await actual.cleanupClosedCodexThread(...args);
+      codexArchiveBoundary.cleanupResults.push(result);
+      return result;
+    } finally {
+      codexArchiveBoundary.order.push('cleanup:end');
+      codexArchiveBoundary.onCleanupFinished();
+    }
+  } };
+});
+vi.mock('../src/runtimes/codex-child-evidence.js', async importOriginal => {
+  const actual = await importOriginal<typeof import('../src/runtimes/codex-child-evidence.js')>();
+  return { ...actual, collectCodexChildEvidence: async (...args: Parameters<typeof actual.collectCodexChildEvidence>) => {
+    if (!codexArchiveBoundary.home || args[0].codexHome !== codexArchiveBoundary.home) {
+      return actual.collectCodexChildEvidence(...args);
+    }
+    codexArchiveBoundary.order.push('collector:start');
+    const result = await actual.collectCodexChildEvidence(...args);
+    codexArchiveBoundary.collections.push({ input: args[0], result });
+    codexArchiveBoundary.order.push('collector:end');
+    return result;
+  } };
+});
+vi.mock('node:fs/promises', async importOriginal => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return { ...actual, open: async (...args: Parameters<typeof actual.open>) => {
+    // Only an already-started real cleanup may delay this actual file open.
+    // On the repaired server cleanup cannot start until collection finishes,
+    // so the collector never waits for an archive that cannot yet be launched.
+    if (codexArchiveBoundary.home && args[0] === codexArchiveBoundary.activeParentPath
+      && codexArchiveBoundary.cleanupStarted) await codexArchiveBoundary.cleanupFinished;
+    return actual.open(...args);
+  } };
+});
 
 const uuidControl = vi.hoisted(() => ({ forced: [] as string[] }));
 let pendingAutomaticFixtureIdentity: {
@@ -33,6 +87,9 @@ vi.mock('node:crypto', async (importOriginal) => {
 });
 
 import { closeDatabase, openDatabase } from '../src/db.js';
+import { AGENT_DEFS } from '../src/runtimes/registry.js';
+import { agentBinEnvKey } from '../src/runtimes/executables.js';
+import { execAgentFile } from '../src/runtimes/invocation.js';
 import { createSnapshot, linkSnapshotToProject } from '../src/plugins/snapshots.js';
 import {
   getInstalledPlugin,
@@ -48,10 +105,6 @@ import {
 import { strategyTaskCreateIdentityFixture } from './strategies/strategy-task-test-fixtures.js';
 import { prepareStrategyRequest } from '../src/strategies/od-next/coordinator.js';
 import {
-  clearOdNextRolloutStop,
-  latchOdNextRolloutStop,
-} from '../src/strategies/od-next/rollout.js';
-import {
   hashOdNextRuntimeCapabilitySnapshotV1,
   resolveBundledOdNextRuntimeCapability,
 } from '../src/runtimes/od-next-capability-gate.js';
@@ -61,6 +114,23 @@ type StartedServer = {
   server: Server;
   shutdown?: () => Promise<void> | void;
 };
+
+// Each fixture owns its HTTP transport; daemon-internal fetch remains untouched.
+const fixtureHttpClients = new Map<string, { owner: StartedServer; dispatcher: Agent }>();
+const fixtureShutdowns = new WeakMap<StartedServer, Promise<void>>();
+const fixtureAgentBinEnvKeys = [...new Set([
+  ...AGENT_DEFS.map(def => agentBinEnvKey(def.id)).filter((key): key is string => key !== null),
+  'VELA_OPENCODE_BIN',
+])];
+let fixtureDetectionIsolation: Promise<{ root: string; home: string; bin: string }> | null = null;
+let previousDetectionEnv: Record<string, string | undefined> = {};
+
+function fetch(input: Parameters<typeof undiciFetch>[0], init?: Parameters<typeof undiciFetch>[1]) {
+  const origin = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url).origin;
+  const client = fixtureHttpClients.get(origin);
+  if (!client) throw new Error(`No fixture HTTP client owns ${origin}`);
+  return undiciFetch(input, { ...init, dispatcher: client.dispatcher });
+}
 
 type RunStatus = {
   id: string;
@@ -72,6 +142,7 @@ type RunStatus = {
   errorCode?: string | null;
   strategyTask?: {
     taskExecutionId: string;
+    runMappings?: Array<{ runId: string; taskRunIndex: number }>;
     inputStage: string;
     outcome: string;
     terminal: boolean;
@@ -151,19 +222,236 @@ describe('OD Next automatic production through the real server', () => {
   let started: StartedServer | null = null;
   let binDir: string | null = null;
   let sequence = 0;
+  let previousCodexTransport: string | undefined;
+
+  beforeEach(() => {
+    previousDetectionEnv = Object.fromEntries(['PATH', 'OD_AGENT_HOME', ...fixtureAgentBinEnvKeys]
+      .map(key => [key, process.env[key]]));
+    previousCodexTransport = process.env.OD_CODEX_TRANSPORT;
+    process.env.OD_CODEX_TRANSPORT = 'exec-json';
+  });
 
   afterEach(async () => {
+    if (previousCodexTransport == null) delete process.env.OD_CODEX_TRANSPORT;
+    else process.env.OD_CODEX_TRANSPORT = previousCodexTransport;
     delete process.env.OD_NEXT_STRATEGY_ROLLOUT;
     delete process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY;
-    delete process.env.OD_NEXT_STRATEGY_MAX_RUN_DURATION_MS;
     uuidControl.forced.length = 0;
     pendingAutomaticFixtureIdentity = null;
-    await stopServer(started);
-    started = null;
-    closeDatabase();
-    if (binDir) await rm(binDir, { recursive: true, force: true });
-    binDir = null;
+    try {
+      await stopServer(started);
+      started = null;
+      closeDatabase();
+      if (binDir) await rm(binDir, { recursive: true, force: true });
+      binDir = null;
+    } finally {
+      try {
+        const isolation = await fixtureDetectionIsolation;
+        if (isolation) await rm(isolation.root, { recursive: true, force: true });
+      } finally {
+        fixtureDetectionIsolation = null;
+        for (const [key, value] of Object.entries(previousDetectionEnv)) {
+          if (value === undefined) delete process.env[key];
+          else process.env[key] = value;
+        }
+      }
+    }
   });
+
+  it.each([
+    ['public', 'models'], ['public', 'auth'],
+    ['strategy', 'models'], ['strategy', 'auth'],
+  ] as const)('%s Codex fixture answers %s probes without stdin or a generation', async (kind, probe) => {
+    binDir = await mkdtemp(path.join(os.tmpdir(), 'od-next-codex-probes-'));
+    const template = await createStrategyTemplate();
+    const fixture = kind === 'public'
+      ? await writePublicRolloutCodex(binDir, 'probe-contract')
+      : await writeStrategyCodex(binDir, 'repair', planContract(template.snapshotId, template.strategy, 'repair'));
+    const def = AGENT_DEFS.find(agent => agent.id === 'codex')!;
+    const contract = probe === 'models' ? def.listModels! : def.authProbe!;
+    // Use the real probe launcher: stdin stays open, as it does during detection.
+    // The timeout is only a failure bound; successful probes exit on their own.
+    const { stdout } = await execAgentFile(fixture.bin, contract.args, {
+      cwd: binDir,
+      timeout: contract.timeoutMs,
+    });
+    if (probe === 'models') {
+      expect(def.listModels!.parse(String(stdout))).toContainEqual({ id: 'gpt-5.5', label: 'gpt-5.5' });
+    } else {
+      expect(stdout).toContain('Logged in using ChatGPT');
+    }
+    await expect(readFile(fixture.logPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('isolates host CLI probes while retaining real selected Codex detection and preflight', async () => {
+    const hostRoot = await mkdtemp(path.join(os.tmpdir(), 'od-next-controlled-host-'));
+    const hostBinDir = path.join(hostRoot, 'bin');
+    const hostHome = path.join(hostRoot, 'home');
+    const hostLog = path.join(hostRoot, 'host-probes.jsonl');
+    const selectedLog = path.join(hostRoot, 'selected-probes.jsonl');
+    const previous = { PATH: process.env.PATH, OD_AGENT_HOME: process.env.OD_AGENT_HOME,
+      AIDER_BIN: process.env.AIDER_BIN };
+    await mkdir(hostBinDir);
+    await mkdir(hostHome);
+    await writeFile(hostLog, '');
+    await writeFile(selectedLog, '');
+    await symlink(process.execPath, path.join(hostBinDir, 'node'));
+    const sentinel = path.join(hostBinDir, 'aider');
+    await writeFile(sentinel, `#!/usr/bin/env node
+const fs = require('node:fs');
+fs.appendFileSync(${JSON.stringify(hostLog)}, JSON.stringify(process.argv.slice(2)) + '\\n');
+console.log('aider 0.86.0');
+`, 'utf8');
+    await chmod(sentinel, 0o755);
+    // A controlled host candidate, not the developer's real CLI. Fixture
+    // isolation must fence both PATH discovery and inherited explicit overrides.
+    process.env.PATH = [hostBinDir, '/usr/bin', '/bin', '/usr/sbin', '/sbin'].join(path.delimiter);
+    process.env.OD_AGENT_HOME = hostHome;
+    process.env.AIDER_BIN = sentinel;
+    try {
+      const productionPreflight = vi.fn(() => EXECUTION_PREFLIGHT);
+      const fixture = await createFixture('repair', { preflightResolver: productionPreflight,
+        probeLogPath: selectedLog });
+      const selectedBin = path.join(path.dirname(fixture.logPath), 'codex-repair');
+      // Empty fixture-only API-key entries ensure the actual login-status
+      // probe is observed instead of relying on any inherited authenticated env.
+      const config = await fetch(`${started!.url}/api/app-config`, {
+        method: 'PUT', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ agentId: 'codex', agentCliEnv: { codex: {
+          CODEX_BIN: selectedBin, CODEX_HOME: path.dirname(selectedBin),
+          CODEX_API_KEY: '', OPENAI_API_KEY: '',
+        } } }),
+      });
+      expect(config.status).toBe(200);
+      const detected = await fetch(`${started!.url}/api/agents`);
+      expect(detected.status).toBe(200);
+      const available = await detected.json() as { agents: Array<{ id: string; available: boolean }> };
+      expect(available.agents.find(agent => agent.id === 'codex')?.available).toBe(true);
+      const probes = (await readFile(selectedLog, 'utf8')).trim().split('\n')
+        .filter(Boolean).map(line => JSON.parse(line) as string[]);
+      expect(probes).toContainEqual(['--version']);
+      // Codex declares listModels/authProbe but no helpArgs/capabilityFlags;
+      // probeCapabilities therefore returns without invoking --help.
+      expect(probes).toContainEqual(['debug', 'models']);
+      expect(probes).toContainEqual(['login', 'status']);
+
+      queueFixtureIds(fixture);
+      await postRun(started!.url, createRunRequest(fixture, 'Build the operator prototype.'));
+      const task = await waitForTask(fixture.taskExecutionId, 'completed');
+      await waitForRunTerminal(started!.url, task.latestRunId);
+      expect(productionPreflight).toHaveBeenCalled();
+      const invocations = await readProjectInvocations(fixture.logPath, fixture.projectId);
+      expect(invocations.some(call => call.stdin.includes('native continuation — production'))).toBe(true);
+
+      // A real non-invocable selected executable must still become unavailable.
+      // Exit 127 is the supported stale-wrapper signal, unlike generic exit 1.
+      await writeFile(selectedBin, `#!/usr/bin/env node
+require('node:fs').appendFileSync(${JSON.stringify(selectedLog)}, JSON.stringify(process.argv.slice(2)) + '\\n');
+process.exit(127);
+`, 'utf8');
+      const probeCount = (await readFile(selectedLog, 'utf8')).trim().split('\n').length;
+      const brokenResponse = await fetch(`${started!.url}/api/agents`);
+      expect(brokenResponse.status).toBe(200);
+      const broken = await brokenResponse.json() as { agents: Array<{ id: string; available: boolean }> };
+      expect(broken.agents.find(agent => agent.id === 'codex')?.available).toBe(false);
+      const afterFailure = (await readFile(selectedLog, 'utf8')).trim().split('\n')
+        .filter(Boolean).map(line => JSON.parse(line) as string[]);
+      expect(afterFailure.length).toBeGreaterThan(probeCount);
+      expect(afterFailure.slice(probeCount)).toContainEqual(['--version']);
+      // This is the expected red anchor on the unisolated fixture. All selected
+      // runtime assertions above must pass before this boundary can be green.
+      const hostProbes = (await readFile(hostLog, 'utf8')).trim().split('\n').filter(Boolean);
+      expect(hostProbes).toEqual([]);
+    } finally {
+      await stopServer(started);
+      started = null;
+      // Keep the probe-only evidence in the Vitest log before removing owned
+      // fixture files, including when a prerequisite assertion fails.
+      const probeEvidence = await Promise.all([selectedLog, hostLog].map(async file => {
+        try {
+          return (await readFile(file, 'utf8')).trim().split('\n').filter(Boolean)
+            .map(line => JSON.parse(line) as string[]);
+        } catch { return null; }
+      }));
+      console.info('[2623-probe-evidence]', JSON.stringify({
+        selected: probeEvidence[0], controlledHost: probeEvidence[1],
+      }));
+      for (const [key, value] of Object.entries(previous)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+      await rm(hostRoot, { recursive: true, force: true });
+    }
+  });
+
+  it.each(['intent-question', 'intent-request', 'intent-first-write', 'intent-fail'] as const)(
+    'OPEND-2623 real server: %s uses one native intent supplement and retains source ownership',
+    async (mode) => {
+      const productionPreflight = vi.fn(() => EXECUTION_PREFLIGHT);
+      const fixture = await createFixture(mode, { preflightResolver: productionPreflight });
+      const request = 'Ask the required questions first. Do not create or modify files. INTENT_SERVER_2623';
+      queueFixtureIds(fixture);
+      await postRun(started!.url, createRunRequest(fixture, request));
+      const hasQuestion = mode !== 'intent-request';
+      if (hasQuestion) {
+        const awaiting = await waitForTask(fixture.taskExecutionId, 'clarification_required');
+        expect(awaiting.executionIntent).toBeUndefined();
+        expect(awaiting.runs).toHaveLength(1);
+        await waitForRunTerminal(started!.url, awaiting.latestRunId);
+        const answer = '[form answers — intent-2623]\n- Audience: Investors\n- Constraints: Keep the original no-write request';
+        const response = await fetch(`${started!.url}/api/chat`, {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ ...createRunRequest(fixture, answer),
+            taskExecutionId: fixture.taskExecutionId,
+            userMessageId: `answer-user-${fixture.projectId}`,
+            assistantMessageId: `answer-assistant-${fixture.projectId}`,
+            clientRequestId: `answer-client-${fixture.projectId}` }),
+        });
+        const responseText = await response.text();
+        expect(response.status, responseText).toBe(200);
+        expect(response.headers.get('content-type')).toContain('text/event-stream');
+        expect(responseText).toContain('event: end');
+      }
+      const blocked = mode === 'intent-first-write' || mode === 'intent-fail';
+      const task = await waitForTask(fixture.taskExecutionId, blocked ? 'blocked' : 'completed');
+      for (const mapping of task.runs) await waitForRunTerminal(started!.url, mapping.runId);
+      const calls = await readProjectInvocations(fixture.logPath, fixture.projectId);
+      expect(calls).toHaveLength(hasQuestion ? 3 : 2);
+      expect(calls.filter(call => call.stdin.includes('native continuation — production'))).toHaveLength(0);
+      expect(task.runs.some(run => ['production', 'contract_repair'].includes(run.inputStage))).toBe(false);
+      expect(productionPreflight).not.toHaveBeenCalled();
+      const supplements = task.runs.filter(run => run.purpose === 'intent_resolution');
+      expect(supplements).toHaveLength(1);
+      const supplement = supplements[0]!;
+      const sent = calls.at(-1)!;
+      expect(sent.argv).toContain('resume');
+      expect(sent.argv).toContain(THREAD_ID);
+      const turn = parseOdNextIntentResolutionTurnV1(sent.stdin);
+      expect(turn.stage).toBe(hasQuestion ? 'clarification' : 'request');
+      expect(turn.taskExecutionId).toBe(task.taskExecutionId);
+      expect(turn.sourceRunId).toBe(task.runs.at(-2)!.runId);
+      expect(turn.payload).toContain(request);
+      expect(sent.stdin).toBe(supplement.finalText.text);
+      expect(task.intentResolution?.attempts).toBe(1);
+      if (mode === 'intent-first-write') {
+        expect(task.blockedContext?.reasonCodes).toContain('od_next_planning_files_changed');
+        expect(await readFile(path.join(calls[0]!.cwd, 'intent-draft.txt'), 'utf8')).toBe('Observed first-turn write.');
+        const evidence = database().prepare(
+          'SELECT run_id, files_written FROM strategy_task_run_write_evidence WHERE task_execution_id = ?',
+        ).all(task.taskExecutionId) as Array<{ run_id: string; files_written: number }>;
+        expect(evidence.find(row => row.run_id === task.initialRunId)?.files_written).toBeGreaterThan(0);
+        expect(evidence.filter(row => row.run_id !== task.initialRunId).every(row => row.files_written === 0)).toBe(true);
+      }
+      if (!blocked) {
+        expect(task.executionIntent).toBe('plan_only');
+        const historyResponse = await fetch(`${started!.url}/api/projects/${fixture.projectId}/conversations/${fixture.conversationId}/messages`);
+        expect(historyResponse.status).toBe(200);
+        const history = JSON.stringify(await historyResponse.json());
+        expect(history).toContain('INTENT_SOURCE_ANSWER_2623');
+        expect(history).not.toContain('open-design-runtime-state');
+      }
+    },
+  );
 
   it('keeps off/observe public POST behavior ordinary and idempotent with zero strategy tasks', async () => {
     const fixture = await createPublicRolloutFixture('inert');
@@ -194,7 +482,7 @@ describe('OD Next automatic production through the real server', () => {
     const replayed = await postRun(started!.url, body);
     expect(replayed).toMatchObject({ runId: created.runId, reused: true });
     expect(replayed.strategyTask).toBeUndefined();
-    expect((database().prepare('SELECT COUNT(*) AS count FROM strategy_task_executions').get() as { count: number }).count)
+    expect((database().prepare('SELECT COUNT(*) AS count FROM strategy_task_executions WHERE project_id = ?').get(fixture.projectId) as { count: number }).count)
       .toBe(0);
     const invocations = await readProjectInvocations(fixture.logPath, fixture.projectId);
     expect(invocations).toHaveLength(1);
@@ -281,7 +569,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('selected-example-upgrade', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
 
     const createAffectedProject = async (label: string) => {
       const project = await createProjectForScenario(
@@ -393,7 +680,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('stale-selected-example', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     const exampleDir = path.join(binDir, 'stale-selected-example');
     await cp(CREATIVE_VOLTAGE_EXAMPLE_DIR, exampleDir, { recursive: true });
     const staleExamplePluginId = 'example-stale-creative-voltage';
@@ -495,82 +781,89 @@ describe('OD Next automatic production through the real server', () => {
     }
   });
 
-  // ACCEPTANCE for the opt-in switch. Nothing configured takes the ordinary
-  // route; the SAME running daemon takes the OD Next route on the next run
-  // once `odNextStrategyMode` is saved through the public app-config API. No
-  // restart, no environment variable — that is what "configure it and it
-  // takes effect" has to mean for a packaged install.
-  it('admits OD Next on the next run once the installation configures it, and not before', async () => {
-    const fixture = await createPublicRolloutFixture('app-config-opt-in', 'design');
+  // ACCEPTANCE for the opt-out switch. Nothing configured takes the OD Next
+  // route — that is the default this build ships. The SAME running daemon
+  // takes the ordinary route on the next run once `odNextStrategyMode: 'off'`
+  // is saved through the public app-config API. No restart, no environment
+  // variable — that is what "configure it and it takes effect" has to mean for
+  // a packaged install, where the saved mode is the only control a user has:
+  // the packaged child environment allowlist carries no `OD_NEXT_*` key.
+  it('runs OD Next by default and leaves it on the next run once the installation opts out', async () => {
+    const fixture = await createPublicRolloutFixture('app-config-opt-out', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     delete process.env.OD_NEXT_STRATEGY_ROLLOUT;
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
 
-    const beforeOptIn = await postRun(started.url, publicRunRequest(
+    const beforeOptOut = await postRun(started.url, publicRunRequest(
       fixture,
-      'Run before this installation opted in.',
-      'app-config-opt-in-before',
+      'Run before this installation opted out.',
+      'app-config-opt-out-before',
     ));
-    expect(beforeOptIn.strategyTask).toBeUndefined();
-    expect(beforeOptIn.pluginId).toBe('example-web-prototype');
-    await waitForRunTerminal(started.url, beforeOptIn.runId as string);
-    const ordinaryInvocations = await readProjectInvocations(fixture.logPath, fixture.projectId);
-    expect(ordinaryInvocations).toHaveLength(1);
-    expect(ordinaryInvocations[0]?.stdin).not.toContain('OD Next Strategy V2');
-    expect(ordinaryInvocations[0]?.stdin).not.toContain('open-design.strategy-state/v2');
+    expect(beforeOptOut.strategyTask).toMatchObject({ inputStage: 'request', terminal: false });
+    expect(await readDurableRunState(beforeOptOut.runId as string)).toMatchObject({
+      strategyRolloutDecision: { decisionClass: 'active', taskType: 'prototype' },
+    });
+    await fetch(
+      `${started.url}/api/runs/${encodeURIComponent(beforeOptOut.runId as string)}/cancel`,
+      { method: 'POST' },
+    );
+    await waitForRunTerminal(started.url, beforeOptOut.runId as string);
 
-    const optIn = await fetch(`${started.url}/api/app-config`, {
+    const optOut = await fetch(`${started.url}/api/app-config`, {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ odNextStrategyMode: 'active' }),
+      body: JSON.stringify({ odNextStrategyMode: 'off' }),
     });
-    expect(optIn.status).toBe(200);
-    expect((await optIn.json() as { config?: { odNextStrategyMode?: string } }).config?.odNextStrategyMode)
-      .toBe('active');
+    expect(optOut.status).toBe(200);
+    expect((await optOut.json() as { config?: { odNextStrategyMode?: string } }).config?.odNextStrategyMode)
+      .toBe('off');
 
-    // A typo is refused rather than absorbed. Dropping it would switch this
-    // installation back off while the caller saw success — the one failure
-    // mode a control switch must not have.
+    // A typo is refused rather than absorbed. Dropping it would leave the key
+    // unconfigured, and unconfigured is `active` — so an absorbed typo would
+    // revoke this opt-out while the caller saw success. That is the one
+    // failure mode a control switch must not have.
     const typo = await fetch(`${started.url}/api/app-config`, {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ odNextStrategyMode: 'acive' }),
+      body: JSON.stringify({ odNextStrategyMode: 'of' }),
     });
     expect(typo.status).toBe(400);
     expect((await typo.json() as { error?: { code?: string } }).error?.code)
       .toBe('INVALID_APP_CONFIG_VALUE');
-    const stillActive = await fetch(`${started.url}/api/app-config`);
-    expect((await stillActive.json() as { config?: { odNextStrategyMode?: string } })
-      .config?.odNextStrategyMode).toBe('active');
+    const stillOff = await fetch(`${started.url}/api/app-config`);
+    expect((await stillOff.json() as { config?: { odNextStrategyMode?: string } })
+      .config?.odNextStrategyMode).toBe('off');
 
-    const afterOptIn = await postRun(started.url, publicRunRequest(
+    // Count first, compare after: the canceled run above may or may not have
+    // reached a spawn, so what this asserts is the invocations the ordinary
+    // run added — not the whole log.
+    const invocationsBefore = (await readProjectInvocations(fixture.logPath, fixture.projectId)).length;
+    const afterOptOut = await postRun(started.url, publicRunRequest(
       fixture,
-      'Run after this installation opted in.',
-      'app-config-opt-in-after',
+      'Run after this installation opted out.',
+      'app-config-opt-out-after',
     ));
-    expect(afterOptIn.strategyTask).toMatchObject({ inputStage: 'request', terminal: false });
-    expect(await readDurableRunState(afterOptIn.runId as string)).toMatchObject({
-      strategyRolloutDecision: { decisionClass: 'active', taskType: 'prototype' },
-    });
+    expect(afterOptOut.strategyTask).toBeUndefined();
+    expect(afterOptOut.pluginId).toBe('example-web-prototype');
+    await waitForRunTerminal(started.url, afterOptOut.runId as string);
+    const ordinaryInvocations = (await readProjectInvocations(fixture.logPath, fixture.projectId))
+      .slice(invocationsBefore);
+    expect(ordinaryInvocations).toHaveLength(1);
+    expect(ordinaryInvocations[0]?.stdin).not.toContain('OD Next Strategy V2');
+    expect(ordinaryInvocations[0]?.stdin).not.toContain('open-design.strategy-state/v2');
 
     // The operator-facing surface names the authority that decided, so the
     // person who just configured the mode can confirm theirs is the one in
-    // effect rather than inferring it from the resulting mode.
+    // effect rather than inferring it from the resulting mode — which matters
+    // more now that `default` and a saved `off` resolve to opposite routes.
     const status = await fetch(`${started.url}/api/strategies/od-next/rollout`);
     expect(status.status).toBe(200);
     expect((await status.json() as { status: unknown }).status).toMatchObject({
-      requestedMode: 'active',
+      requestedMode: 'off',
       requestedModeSource: 'app_config',
-      effectiveMode: 'active',
+      effectiveMode: 'off',
     });
-
-    await fetch(
-      `${started.url}/api/runs/${encodeURIComponent(afterOptIn.runId as string)}/cancel`,
-      { method: 'POST' },
-    );
-    await waitForRunTerminal(started.url, afterOptIn.runId as string);
     // Two full runs against a real server, plus config writes and a status
     // read — the heaviest case in this file, and the only one that drives more
     // than a single run. The suite default of 20s leaves it no headroom on a
@@ -581,7 +874,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('prestart-skill-fallback', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
 
@@ -615,7 +907,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('preclaim-task-fallback', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
     const strategySnapshotCountAtStart = (database().prepare(`
@@ -670,7 +961,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('approved-profiles', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
 
@@ -1004,7 +1294,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('legacy-scenario-compat', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
     const legacy = await createProjectForScenario(
@@ -1049,7 +1338,6 @@ describe('OD Next automatic production through the real server', () => {
     );
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
 
     const resolvedCapability = resolveBundledOdNextRuntimeCapability({
@@ -1087,62 +1375,90 @@ describe('OD Next automatic production through the real server', () => {
     expect(canceled.status).toBe(200);
   });
 
-  it('exposes the instance stop latch through the shared API and CLI CAS reset', async () => {
+  it('reports the deciding authority through the shared API and CLI, and offers no reset', async () => {
+    // This used to cover the instance stop latch and its compare-and-swap
+    // reset. Both are gone: nothing but the saved mode turns OD Next off, so
+    // there is no latch to inspect and no operator recovery to protect. What is
+    // still worth an endpoint is the authority — `default` and a saved `off`
+    // produce opposite routes, and the mode alone does not say which happened.
     const fixture = await createPublicRolloutFixture('rollout-control', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    latchOdNextRolloutStop(database(), {
-      mode: 'off',
-      reasonCode: 'route_mode_drift',
+    delete process.env.OD_NEXT_STRATEGY_ROLLOUT;
+    // Cases in this file share one data dir, and an earlier one leaves a saved
+    // `off` behind. Clearing the key is the deliberate way back to the default,
+    // and asserting it here is also what proves `null` still means that.
+    const cleared = await fetch(`${started.url}/api/app-config`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ odNextStrategyMode: null }),
     });
+    expect(cleared.status).toBe(200);
 
-    const beforeResult = await runOdCli([
+    const defaultResult = await runOdCli([
       'strategy', 'rollout', 'status', '--daemon-url', started.url, '--json',
     ]);
-    expect(beforeResult.stderr).toBe('');
-    const before = JSON.parse(beforeResult.stdout) as {
-      status: { scope: string; revision: number; latch: { mode: string; reasonCode: string } | null };
-    };
-    expect(before.status).toMatchObject({
+    expect(defaultResult.stderr).toBe('');
+    expect((JSON.parse(defaultResult.stdout) as { status: unknown }).status).toEqual({
+      strategyId: 'od-next-strategy',
       scope: 'daemon_instance',
-      latch: { mode: 'off', reasonCode: 'route_mode_drift' },
+      requestedMode: 'active',
+      requestedModeSource: 'default',
+      effectiveMode: 'active',
     });
 
-    const resetResult = await runOdCli([
-      'strategy', 'rollout', 'reset', '--daemon-url', started.url, '--json',
+    const optOut = await fetch(`${started.url}/api/app-config`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ odNextStrategyMode: 'off' }),
+    });
+    expect(optOut.status).toBe(200);
+
+    const savedResult = await runOdCli([
+      'strategy', 'rollout', 'status', '--daemon-url', started.url, '--json',
     ]);
-    expect(resetResult.stderr).toBe('');
-    const reset = JSON.parse(resetResult.stdout) as {
-      status: {
-        revision: number;
-        latch: null;
-        lastEvent: { action: string; reasonCode: string } | null;
-      };
-    };
-    expect(reset.status.revision).toBe(before.status.revision + 1);
-    expect(reset.status.latch).toBeNull();
-    expect(reset.status.lastEvent).toMatchObject({
-      action: 'cleared',
-      reasonCode: 'operator_reset',
+    expect(savedResult.stderr).toBe('');
+    expect((JSON.parse(savedResult.stdout) as { status: unknown }).status).toMatchObject({
+      requestedMode: 'off',
+      requestedModeSource: 'app_config',
+      effectiveMode: 'off',
     });
 
-    const staleReset = await fetch(`${started.url}/api/strategies/od-next/rollout/reset`, {
+    // The reset endpoint and its CLI subcommand are both gone, and gone the
+    // same way — a daemon that still answered it would be a daemon that still
+    // had something to reset.
+    const reset = await fetch(`${started.url}/api/strategies/od-next/rollout/reset`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ expectedRevision: before.status.revision }),
+      body: JSON.stringify({ expectedRevision: 0 }),
     });
-    expect(staleReset.status).toBe(409);
-    await expect(staleReset.json()).resolves.toMatchObject({
-      error: { code: 'ROLLOUT_REVISION_CONFLICT' },
-      status: { revision: reset.status.revision },
-    });
+    expect(reset.status).toBe(404);
+    // `runOdCli` rejects on a non-zero exit, and an unknown subcommand is
+    // exactly that: usage, exit 2. Catching keeps the assertion on what the CLI
+    // told the operator rather than on the rejection itself.
+    const resetCli = await runOdCli([
+      'strategy', 'rollout', 'reset', '--daemon-url', started.url, '--json',
+    ]).then(
+      (ok) => ({ code: 0, stdout: ok.stdout, stderr: ok.stderr }),
+      (error: { code?: number; stdout?: string; stderr?: string }) => ({
+        code: error.code ?? -1,
+        stdout: error.stdout ?? '',
+        stderr: error.stderr ?? '',
+      }),
+    );
+    expect(resetCli.code).toBe(2);
+    // Named, not silently absent from a usage dump. `reset` shipped in 0.21.0
+    // and 0.21.1, so an operator who scripted it gets told what happened and
+    // what replaced it — and gets a non-zero exit, because the recovery it
+    // asked for neither happened nor can.
+    expect(resetCli.stderr).toContain('od strategy rollout reset was removed');
+    expect(resetCli.stderr).toContain('od config set odNextStrategyMode off');
   });
 
   it('keeps active retry/task recipe-only while rollback lazily resolves the ordinary default', async () => {
     const fixture = await createPublicRolloutFixture('rollback', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     const strategyTaskCountAtStart = (
       database().prepare('SELECT COUNT(*) AS count FROM strategy_task_executions').get() as {
         count: number;
@@ -1168,6 +1484,16 @@ describe('OD Next automatic production through the real server', () => {
         selections: [],
       });
     expect(activeTask?.runs[0]?.finalText).toEqual(activeTask?.promptBundle);
+    const promptBundleText = activeTask?.promptBundle.text ?? '';
+    const doneKey = /<od-done key="([a-f0-9]{16})"\/>/.exec(promptBundleText)?.[1];
+    expect(doneKey).toMatch(/^[a-f0-9]{16}$/);
+    expect(promptBundleText).toContain('route=direct_edit');
+    expect(promptBundleText).toContain(`<od-next key="${doneKey}" value="Add an orders list page"/>`);
+    expect(promptBundleText).toContain(`<od-focus key="${doneKey}"`);
+    expect(promptBundleText.slice(
+      promptBundleText.indexOf('<open_design_core_system_prompt>'),
+      promptBundleText.indexOf('</open_design_core_system_prompt>'),
+    )).not.toContain(doneKey);
     expect(activeTask?.promptBundle.utf8Bytes).toBe(
       Buffer.byteLength(activeTask?.promptBundle.text ?? '', 'utf8'),
     );
@@ -1176,10 +1502,10 @@ describe('OD Next automatic production through the real server', () => {
     ).get(fixture.projectId) as { snapshotId: string | null }).snapshotId)
       .toBeNull();
 
-    latchOdNextRolloutStop(database(), {
-      mode: 'observe',
-      reasonCode: 'threshold_exceeded',
-    });
+    // The rest of this case needs later runs on the ordinary route. Saying so
+    // through the mode is now the only way to say it: a run can no longer put
+    // this daemon on the legacy path for the runs that follow it.
+    process.env.OD_NEXT_STRATEGY_ROLLOUT = 'off';
     const replayed = await postRun(started!.url, activeBody);
     expect(replayed).toMatchObject({
       runId: active.runId,
@@ -1222,7 +1548,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('web-cli-skill-parity', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
     const dataDir = process.env.OD_DATA_DIR!;
@@ -1306,7 +1631,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('project-skill-row', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
     const skillDir = path.join(process.env.OD_DATA_DIR!, 'skills', 'home-picked-skill');
@@ -1362,7 +1686,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('context-plugin-authority', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
     const contextual = await createProjectForScenario(
@@ -1398,7 +1721,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('headless-conversation', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
 
@@ -1429,7 +1751,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('persisted-task-tamper', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
 
@@ -1452,9 +1773,12 @@ describe('OD Next automatic production through the real server', () => {
     ]);
     const invocationCount = (await readProjectInvocations(fixture.logPath, fixture.projectId)).length;
 
-    database().prepare(
-      'DELETE FROM strategy_task_runs WHERE task_execution_id = ?',
-    ).run(deleted.taskExecutionId);
+    // Deliberately corrupt this task's mapping after removing its new evidence
+    // children. The test still exercises the real missing-mapping rejection.
+    database().transaction(() => {
+      database().prepare('DELETE FROM strategy_task_run_write_evidence WHERE task_execution_id = ?').run(deleted.taskExecutionId);
+      database().prepare('DELETE FROM strategy_task_runs WHERE task_execution_id = ?').run(deleted.taskExecutionId);
+    }).immediate();
     database().prepare(
       `UPDATE strategy_task_runs
           SET final_text = NULL, final_text_utf8_bytes = NULL, final_text_sha256 = NULL
@@ -1480,7 +1804,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('persisted-task-scope-drift', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
     const body = publicRunRequest(
@@ -1516,7 +1839,6 @@ describe('OD Next automatic production through the real server', () => {
     );
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     expect(fixture.projectMetadata?.scenarioBinding).toMatchObject({
       provenance: 'explicit_user',
       pluginId: 'example-web-prototype',
@@ -1732,6 +2054,7 @@ describe('OD Next automatic production through the real server', () => {
 
     queueFixtureIds(fixture);
     const created = await postRun(started!.url, body);
+    expect(created.strategyTask?.runMappings).toEqual([{ runId: fixture.initialRunId, taskRunIndex: 0 }]);
     expect(created).toMatchObject({
       runId: fixture.initialRunId,
       taskExecutionId: fixture.taskExecutionId,
@@ -1820,6 +2143,18 @@ describe('OD Next automatic production through the real server', () => {
       outcome: 'completed',
       terminal: true,
     });
+    // These are the actual source end events, not a later GET projection.
+    // Every advertised handoff must already carry the successor's persisted
+    // identity when the web subscribes; mapping it later would miss live UI.
+    for (let index = 0; index < terminal.runs.length - 1; index += 1) {
+      const source = terminal.runs[index]!;
+      const successor = terminal.runs[index + 1]!;
+      expect(watchedEnds[index]?.data.strategyTask?.runMappings).toEqual(expect.arrayContaining([
+        { runId: source.runId, taskRunIndex: source.taskRunIndex },
+        { runId: successor.runId, taskRunIndex: successor.taskRunIndex },
+      ]));
+    }
+
 
     const invocations = await readProjectInvocations(fixture.logPath, fixture.projectId);
     expect(invocations).toHaveLength(3);
@@ -1837,7 +2172,9 @@ describe('OD Next automatic production through the real server', () => {
     expect(invocations[0]?.stdin).not.toContain('<task_config>');
     expect(invocations[0]?.stdin).not.toContain('<user_prompt>');
     // The Bundle is a tree: each spec slot is its own element, not a '---'
-    // section inside one blob, and the user's words come last.
+    // section inside one blob, and the user's words come last. Markdown inside
+    // a CDATA prompt is allowed to contain a thematic break, so inspect only
+    // the XML envelope when guarding against the rejected flat serialization.
     for (const nested of [
       '<execution_boundary>',
       '<core_strategy>',
@@ -1855,7 +2192,11 @@ describe('OD Next automatic production through the real server', () => {
     ]) {
       expect(invocations[0]!.stdin).toContain(nested);
     }
-    expect(invocations[0]!.stdin).not.toContain('\n\n---\n\n');
+    const structuralEnvelope = invocations[0]!.stdin.replace(
+      /<!\[CDATA\[[\s\S]*?\]\]>/gu,
+      '<![CDATA[…]]>',
+    );
+    expect(structuralEnvelope).not.toContain('\n\n---\n\n');
     expect(invocations[0]!.stdin).not.toContain('## Active stage:');
     expect(invocations[0]!.stdin.lastIndexOf('<user_first_prompt>'))
       .toBeGreaterThan(invocations[0]!.stdin.lastIndexOf('</context>'));
@@ -1901,7 +2242,10 @@ describe('OD Next automatic production through the real server', () => {
     expect(invocations[1]?.stdin).not.toContain('# User request');
     expect(invocations[2]?.stdin).not.toContain('# User request');
     expect(invocations[1]?.stdin).not.toContain('open-design.strategy-state/v2');
-    expect(invocations[2]?.stdin).not.toContain('open-design.strategy-state/v2');
+    expect(invocations[2]?.stdin).toContain('## Closing Runtime State');
+    expect(invocations[2]?.stdin).toContain('schema open-design.strategy-state/v2');
+    expect(invocations[2]?.stdin).toContain('inputStage production');
+    expect(invocations[2]?.stdin).toContain('no Plan Contract block');
     expect(statuses[0]!.updatedAt).toBeLessThanOrEqual(invocations[1]!.startedAt);
     expect(statuses[1]!.updatedAt).toBeLessThanOrEqual(invocations[2]!.startedAt);
     for (const invocation of invocations) {
@@ -2097,6 +2441,111 @@ describe('OD Next automatic production through the real server', () => {
     expect(researchContract).not.toContain('## assistant');
   });
 
+  it('keeps a blocked production turn on its clean process exit instead of a failed Run', async () => {
+    const fixture = await createFixture('repair');
+    await writeFile(`${fixture.logPath}.blocked-production`, '1');
+    queueFixtureIds(fixture);
+    await postRun(started!.url, createRunRequest(fixture, 'Build the lesson deck.'), {
+      'x-od-analytics-device-id': 'device-blocked-production',
+      'x-od-analytics-session-id': 'session-blocked-production',
+      'x-od-analytics-client-type': 'desktop',
+    });
+    const task = await waitForTask(fixture.taskExecutionId, 'blocked');
+    const terminal = await waitForRunTerminal(started!.url, task.latestRunId);
+    // The task records the blocked verdict and its reason codes; the physical
+    // Run finished the way the process did, so it stays succeeded with no
+    // error attached and no error frame on its stream.
+    expect(terminal).toMatchObject({
+      status: 'succeeded',
+      exitCode: 0,
+      strategyTask: { outcome: 'blocked', terminal: true, inputStage: 'production' },
+    });
+    expect(terminal.errorCode ?? null).toBeNull();
+    expect(terminal.error ?? null).toBeNull();
+    const records = (await readFile(terminal.eventsLogPath, 'utf8')).trim().split('\n')
+      .map((line) => JSON.parse(line));
+    expect(records.filter((event) => event.event === 'error')).toHaveLength(0);
+    expect(records.filter((event) => event.event === 'end')).toHaveLength(1);
+    const end = records.find((event) => event.event === 'end')?.data;
+    expect(end).toMatchObject({
+      status: 'succeeded',
+      code: 0,
+      artifactCount: 0,
+      strategyTask: { outcome: 'blocked', inputStage: 'production' },
+    });
+    expect(end.strategyTask.blockedContext.reasonCodes)
+      .toContain('od_next_protocol_runtime_state_missing');
+    expect(records.find((event) => event.data?.type === 'runtime_close')?.data)
+      .toMatchObject({ rpc_close_reason: 'exit_0', status: 'succeeded', exit_code: 0 });
+    const response = await fetch(
+      `${started!.url}/api/projects/${fixture.projectId}/conversations/${fixture.conversationId}/messages`,
+    );
+    const { messages } = await response.json() as {
+      messages: Array<{ runId?: string; runStatus?: string }>;
+    };
+    expect(messages.find((message) => message.runId === task.latestRunId)?.runStatus).toBe('succeeded');
+    const [recovery] = await waitForRunAnalyticsRecoveries([task.latestRunId]);
+    expect(recovery?.properties).toMatchObject({
+      result: 'success',
+      od_next_blocked_reason_code: 'od_next_canonical_deliverable_invalid',
+      rpc_close_reason: 'exit_0',
+    });
+    expect(recovery?.properties?.error_code).toBeUndefined();
+    for (const mapping of task.runs.slice(0, -1)) {
+      expect((await getRun(started!.url, mapping.runId)).status).toBe('succeeded');
+    }
+    expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(3);
+  }, 90_000);
+
+  it("ends a refused planning turn as the agent's reply instead of a failed Run", async () => {
+    const fixture = await createFixture('repair');
+    await writeFile(`${fixture.logPath}.refused-request`, '1');
+    queueFixtureIds(fixture);
+    await postRun(started!.url, createRunRequest(fixture, 'hello'), {
+      'x-od-analytics-device-id': 'device-refused-request',
+      'x-od-analytics-session-id': 'session-refused-request',
+      'x-od-analytics-client-type': 'desktop',
+    });
+    const task = await waitForTask(fixture.taskExecutionId, 'blocked');
+    expect(task.runs.map((run) => run.inputStage)).toEqual(['request']);
+    const terminal = await waitForRunTerminal(started!.url, task.latestRunId);
+    // The task records the refusal; the physical Run keeps its own clean exit.
+    expect(terminal).toMatchObject({
+      status: 'succeeded',
+      exitCode: 0,
+      strategyTask: { outcome: 'blocked', terminal: true, inputStage: 'request' },
+    });
+    expect(terminal.errorCode ?? null).toBeNull();
+    expect(terminal.error ?? null).toBeNull();
+    const records = (await readFile(terminal.eventsLogPath, 'utf8')).trim().split('\n')
+      .map((line) => JSON.parse(line));
+    expect(records.filter((event) => event.event === 'error')).toHaveLength(0);
+    expect(records.filter((event) => event.event === 'end')).toHaveLength(1);
+    expect(records.find((event) => event.event === 'end')?.data).toMatchObject({
+      status: 'succeeded', code: 0, strategyTask: { outcome: 'blocked', inputStage: 'request' },
+    });
+    expect(records.find((event) => event.data?.type === 'runtime_close')?.data)
+      .toMatchObject({ rpc_close_reason: 'exit_0', status: 'succeeded', exit_code: 0 });
+    const response = await fetch(
+      `${started!.url}/api/projects/${fixture.projectId}/conversations/${fixture.conversationId}/messages`,
+    );
+    const { messages } = await response.json() as {
+      messages: Array<{ runId?: string; runStatus?: string; content?: string }>;
+    };
+    expect(messages.find((message) => message.runId === task.latestRunId)).toMatchObject({
+      runStatus: 'succeeded',
+      content: expect.stringContaining('Tell me what you would like to design'),
+    });
+    const [recovery] = await waitForRunAnalyticsRecoveries([task.latestRunId]);
+    expect(recovery?.properties).toMatchObject({
+      result: 'success',
+      od_next_blocked_reason_code: 'od_next_canonical_deliverable_invalid',
+      rpc_close_reason: 'exit_0',
+    });
+    expect(recovery?.properties?.error_code).toBeUndefined();
+    expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(1);
+  }, 90_000);
+
   it('blocks the durable task when the selected agent exits before publishing a session', async () => {
     const fixture = await createFixture('repair');
     await writeFile(`${fixture.logPath}.fail-start`, '1');
@@ -2168,6 +2617,69 @@ describe('OD Next automatic production through the real server', () => {
       error: { code: 'OD_NEXT_SKILL_SNAPSHOT_INVALID' },
     });
     expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(invocationCount);
+  });
+
+  it.each([
+    { declaredEntry: true, childFile: 'plant-taxonomy-guide.html' },
+    { declaredEntry: false, childFile: 'plant-taxonomy-guide.html' },
+    { declaredEntry: false, childFile: 'index.html' },
+  ])('completes a linked $childFile write without Runtime State (declared entry: $declaredEntry, OPEND-2887)', async ({ declaredEntry, childFile }) => {
+    const fixture = await createFixture('repair');
+    const entryFile = 'plant-science-landing.html';
+    const upload = await fetch(`${started!.url}/api/projects/${fixture.projectId}/files`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: entryFile, content: `<!doctype html><a href="${childFile}">分类导览</a>` }),
+    });
+    expect(upload.ok).toBe(true);
+    if (declaredEntry) {
+      const update = await fetch(`${started!.url}/api/projects/${fixture.projectId}`, {
+        method: 'PATCH', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ metadata: { kind: 'prototype', entryFile } }),
+      });
+      expect(update.ok).toBe(true);
+    }
+    await writeFile(`${fixture.logPath}.linked-page`, childFile);
+    queueFixtureIds(fixture);
+    const created = await postRun(started!.url, createRunRequest(fixture, 'Build the taxonomy page linked from the existing landing page.'));
+    const terminal = await waitForRunTerminal(started!.url, created.runId as string);
+    expect(terminal).toMatchObject({
+      status: 'succeeded', deliverableValid: true, deliverableEntryFile: entryFile,
+      strategyTask: { outcome: 'completed', terminal: true },
+    });
+    const task = getStrategyTaskExecution(database(), terminal.strategyTask!.taskExecutionId)!;
+    expect(task.runs).toHaveLength(1);
+    const invocations = await readProjectInvocations(fixture.logPath, fixture.projectId);
+    expect(invocations).toHaveLength(1);
+    expect(parseOdNextPromptBundleV2(invocations[0]!.stdin).coreSystemPrompt.outputContract)
+      .toContain('Emit exactly one Runtime State block on every response.');
+    const reloaded = await fetch(`${started!.url}/api/projects/${fixture.projectId}/conversations/${fixture.conversationId}/messages`);
+    const { messages } = await reloaded.json() as { messages: Array<{ runId?: string; strategyTaskDelivered?: boolean }> };
+    expect(messages.find((message) => message.runId === task.latestRunId)?.strategyTaskDelivered).toBe(true);
+    const cli = await runOdCli(['run', 'info', task.latestRunId!, '--daemon-url', started!.url, '--json']);
+    expect(JSON.parse(cli.stdout)).toMatchObject({ strategyTask: { outcome: 'completed' } });
+    if (!declaredEntry) {
+      const project = await fetch(`${started!.url}/api/projects/${fixture.projectId}`);
+      expect(await project.json()).toMatchObject({ project: { metadata: { entryFile } } });
+      await writeFile(`${fixture.logPath}.linked-page-edit`, '1');
+    }
+    const followup = await postRun(started!.url, {
+      ...createRunRequest(fixture, declaredEntry ? 'Confirm the delivered page.' : 'Update the taxonomy page.'),
+      userMessageId: `followup-user-${fixture.projectId}`,
+      assistantMessageId: `followup-assistant-${fixture.projectId}`,
+      clientRequestId: `followup-request-${fixture.projectId}`,
+    });
+    const followupTerminal = await waitForRunTerminal(started!.url, followup.runId as string);
+    expect(followupTerminal).toMatchObject(declaredEntry ? {
+      deliverableValid: false, deliverableValidation: 'no_artifact',
+      strategyTask: { outcome: 'blocked', terminal: true },
+    } : {
+      deliverableValid: true, deliverableEntryFile: entryFile,
+      strategyTask: { outcome: 'completed', terminal: true },
+    });
+    expect(followupTerminal.strategyTask!.taskExecutionId).not.toBe(task.taskExecutionId);
+    const resumed = await readProjectInvocations(fixture.logPath, fixture.projectId);
+    expect(resumed).toHaveLength(2);
+    expect(resumed[1]!.argv).toContain('resume');
   });
 
   it('does not report unfinished work when the task delivered under a stale plan', async () => {
@@ -2379,22 +2891,127 @@ describe('OD Next automatic production through the real server', () => {
     expect(persistedEvents).not.toContain('INTERNAL_CHILD_TOOL_OUTPUT');
   });
 
+  it.each(['cancel', 'normal'] as const)(
+    'OPEND-2960 real server preserves child evidence through %s app-server close and archives once',
+    async (mode) => {
+      const fixture = await createFixture('repair');
+      if (!started || !binDir) throw new Error('Expected the owned server fixture');
+      const ownedServer = started;
+      const dataDir = process.env.OD_DATA_DIR;
+      if (!dataDir) throw new Error('Expected the fixture data directory');
+      // Reuse the exact selected CLI path installed by createFixture('repair').
+      // Its version remains the same verified 0.147.0 tuple; only its local
+      // protocol implementation changes from exec-json to app-server.
+      const history = await writeCodexArchiveServerFixture(path.join(binDir, 'codex-repair'), binDir, mode);
+      process.env.OD_CODEX_TRANSPORT = 'app-server';
+      let releaseArchive: () => void = () => {};
+      const archiveFinished = new Promise<void>(resolve => { releaseArchive = resolve; });
+      Object.assign(codexArchiveBoundary, { home: binDir, activeParentPath: history.parentPath,
+        cleanupStarted: false, cleanupFinished: archiveFinished, onCleanupFinished: releaseArchive,
+        order: [], collections: [], cleanupResults: [] });
+      let runId: string | undefined;
+      let stopped = false;
+      try {
+        queueFixtureIds(fixture);
+        const created = await postRun(ownedServer.url, createRunRequest(fixture, 'Ask a question before making files.'));
+        if (typeof created.runId !== 'string') throw new Error('Expected the actual physical run id');
+        runId = created.runId;
+        await vi.waitFor(async () => {
+          expect((await readCodexArchiveFrames(history.framesPath)).some(frame => frame.method === 'fixture:ready')).toBe(true);
+        });
+        if (mode === 'cancel') {
+          const response = await fetch(`${ownedServer.url}/api/runs/${runId}/cancel`, { method: 'POST' });
+          expect(response.status, await response.text()).toBe(200);
+        }
+        const terminal = await waitForRunTerminal(ownedServer.url, runId);
+        expect(terminal.status).toBe(mode === 'cancel' ? 'canceled' : 'succeeded');
+        // The production server must actually invoke the collector. A canceled
+        // state or a collection made manually by this test is not sufficient.
+        await vi.waitFor(() => expect(codexArchiveBoundary.collections).toHaveLength(1));
+        const collected = codexArchiveBoundary.collections[0];
+        if (!collected) throw new Error('Expected the production collector result');
+        const task = getStrategyTaskExecution(database(), fixture.taskExecutionId);
+        const mapping = task?.runs.find(run => run.runId === runId);
+        if (!mapping) throw new Error('Expected the physical run mapping');
+        expect(collected.input).toMatchObject({ codexHome: binDir,
+          parentSessionId: history.parentId, taskExecutionId: fixture.taskExecutionId,
+          runId, taskRunIndex: mapping.taskRunIndex, stage: mapping.inputStage });
+        expect.soft(collected.result.availability).toBe('complete');
+        expect.soft(collected.result.knownChildCount).toBe(1);
+        expect.soft(collected.result.observations.filter(row => row.kind === 'child_agent' && row.status === 'completed')).toHaveLength(1);
+        if (mode === 'cancel') {
+          await vi.waitFor(() => expect(codexArchiveBoundary.cleanupResults).toHaveLength(1));
+          expect(codexArchiveBoundary.cleanupResults[0]).toMatchObject({ status: 'archived' });
+          expect.soft(codexArchiveBoundary.order.indexOf('collector:end'))
+            .toBeLessThan(codexArchiveBoundary.order.indexOf('cleanup:start'));
+        } else {
+          expect(codexArchiveBoundary.cleanupStarted).toBe(false);
+          expect(codexArchiveBoundary.cleanupResults).toEqual([]);
+          expect(task?.outcome).toBe('clarification_required');
+        }
+        // Drain the actual server lifecycle before checking durable external
+        // effects. Collector/ordering assertions above remain independent.
+        await stopServer(ownedServer);
+        stopped = true;
+        if (started === ownedServer) started = null;
+        const persisted = JSON.parse(await readFile(path.join(dataDir, 'runs', runId, 'state.json'), 'utf8')) as { id?: string; status?: string };
+        expect(persisted).toMatchObject({ id: runId, status: terminal.status });
+        const frames = await readCodexArchiveFrames(history.framesPath);
+        const original = frames.find(frame => frame.method === 'turn/start');
+        const archives = frames.filter(frame => frame.method === 'thread/archive');
+        if (!original) throw new Error('Expected the original app-server turn');
+        expect(archives).toHaveLength(1);
+        const archiveFrame = archives[0];
+        if (!archiveFrame) throw new Error('Expected one real archive request');
+        expect(archives[0]?.threadId).toBe(history.parentId);
+        expect(archives[0]?.pid === original?.pid).toBe(mode === 'normal');
+        if (mode === 'cancel') {
+          expect(frames.filter(frame => frame.pid === archiveFrame.pid).map(frame => frame.method))
+            .toEqual(['initialize', 'initialized', 'thread/archive']);
+        }
+        expect(await readFile(history.childPath, 'utf8')).toBe(await readFile(history.expectedChildPath, 'utf8'));
+        expect(await readFile(history.archivedParentPath, 'utf8')).toBe(await readFile(history.expectedParentPath, 'utf8'));
+        await expect(readFile(history.parentPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+      } finally {
+        // Release only the test's interleaving waiter. Real server shutdown
+        // owns the original child and its bounded cleanup helper lifecycle.
+        releaseArchive();
+        try {
+          if (!stopped) {
+            try {
+              if (runId) await fetch(`${ownedServer.url}/api/runs/${runId}/cancel`, { method: 'POST' });
+            } finally {
+              await stopServer(ownedServer);
+              if (started === ownedServer) started = null;
+            }
+          }
+        } finally {
+          Object.assign(codexArchiveBoundary, { home: '', activeParentPath: '', cleanupStarted: false,
+            cleanupFinished: Promise.resolve(), onCleanupFinished: () => {}, order: [], collections: [], cleanupResults: [] });
+        }
+      }
+    },
+  );
+
   async function createFixture(
-    mode: 'repair' | 'direct' | 'complex',
+    mode: 'repair' | 'direct' | 'complex' | IntentServerMode,
     {
       selectedAgentId = 'codex',
       capability,
+      preflightResolver,
+      probeLogPath,
     }: {
       selectedAgentId?: string;
       capability?: OdNextRuntimeCapabilitySnapshotV1;
+      preflightResolver?: NonNullable<StartServerOptions['odNextExecutionPreflightResolver']>;
+      probeLogPath?: string;
     } = {},
   ) {
     const suffix = `${mode}-${Date.now()}-${++sequence}`;
     if (mode !== 'direct') {
-      const publicFixture = await createPublicRolloutFixture(`chain-${suffix}`, 'design');
+      const publicFixture = await createPublicRolloutFixture(`chain-${suffix}`, 'design', undefined, 'codex-cli 0.147.0', preflightResolver);
       started = publicFixture.started;
       binDir = publicFixture.binDir;
-      clearOdNextRolloutStop(database());
       process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
       process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
       const template = await createStrategyTemplate();
@@ -2405,10 +3022,10 @@ describe('OD Next automatic production through the real server', () => {
         .toString(16)
         .padStart(12, '0')}`;
       const taskExecutionId = `odnext_${taskOwnerUuid.replaceAll('-', '')}`;
-      const plan = planContract(template.snapshotId, template.strategy, mode, capability);
+      const plan = planContract(template.snapshotId, template.strategy, mode.startsWith('intent-') ? 'repair' : mode as 'repair' | 'complex', capability);
       const { bin, logPath } = selectedAgentId === 'claude'
         ? await writeStrategyClaude(binDir, plan)
-        : await writeStrategyCodex(binDir, mode, plan);
+        : await writeStrategyCodex(binDir, mode, plan, probeLogPath);
       const configResponse = await fetch(`${started.url}/api/app-config`, {
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
@@ -2500,10 +3117,10 @@ describe('OD Next automatic production through the real server', () => {
       process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
     }
 
-    const plan = planContract(snapshot.snapshotId, snapshot.strategy!, mode, capability);
+    const plan = planContract(snapshot.snapshotId, snapshot.strategy!, mode as 'repair' | 'direct' | 'complex', capability);
     const { bin, logPath } = selectedAgentId === 'claude'
       ? await writeStrategyClaude(binDir, plan)
-      : await writeStrategyCodex(binDir, mode, plan);
+      : await writeStrategyCodex(binDir, mode, plan, probeLogPath);
     const configResponse = await fetch(`${started.url}/api/app-config`, {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
@@ -2533,11 +3150,90 @@ describe('OD Next automatic production through the real server', () => {
   }
 });
 
+type CodexArchiveFrame = { pid: number; method: string; threadId?: string };
+async function readCodexArchiveFrames(file: string): Promise<CodexArchiveFrame[]> {
+  return (await readFile(file, 'utf8')).trim().split('\n').filter(Boolean)
+    .map(line => JSON.parse(line) as CodexArchiveFrame);
+}
+
+async function writeCodexArchiveServerFixture(bin: string, home: string, mode: 'cancel' | 'normal') {
+  const parentId = '10000000-0000-4000-8000-000000000001';
+  const childId = '20000000-0000-4000-8000-000000000002';
+  const active = path.join(home, 'sessions', '2026', '09', '12');
+  const archive = path.join(home, 'archived_sessions');
+  const parentName = `rollout-2026-09-12-${parentId}.jsonl`;
+  const childName = `rollout-2026-09-12-${childId}.jsonl`;
+  const framesPath = path.join(home, 'archive-server-frames.jsonl');
+  const childPath = path.join(active, childName);
+  const parentPath = path.join(active, parentName);
+  const expectedChildPath = path.join(home, 'expected-child.jsonl');
+  const expectedParentPath = path.join(home, 'expected-parent.jsonl');
+  await writeFile(bin, `#!/usr/bin/env node
+const fs = require('node:fs');
+const path = require('node:path');
+const readline = require('node:readline');
+const argv = process.argv.slice(2);
+if (argv.includes('--version')) { console.log('codex-cli 0.147.0'); process.exit(0); }
+if (argv.includes('--help')) { console.log('Usage: codex app-server'); process.exit(0); }
+if (!argv.includes('app-server')) process.exit(9);
+const home = ${JSON.stringify(home)};
+if (process.env.CODEX_HOME !== home) process.exit(10);
+const active = ${JSON.stringify(active)}, archive = ${JSON.stringify(archive)};
+const parentId = ${JSON.stringify(parentId)}, childId = ${JSON.stringify(childId)};
+const parentPath = ${JSON.stringify(parentPath)}, childPath = ${JSON.stringify(childPath)};
+const send = frame => process.stdout.write(JSON.stringify(frame) + '\\n');
+const record = (method, threadId) => fs.appendFileSync(${JSON.stringify(framesPath)}, JSON.stringify({ pid: process.pid, method, ...(threadId ? {threadId} : {}) }) + '\\n');
+const input = readline.createInterface({ input: process.stdin });
+input.on('line', line => {
+  const frame = JSON.parse(line);
+  record(frame.method, frame.params?.threadId);
+  if (frame.method === 'initialize') send({ id: frame.id, result: { userAgent: 'codex/0.147.0' } });
+  else if (frame.method === 'thread/start') send({ id: frame.id, result: { thread: { id: parentId, historyMode: 'paginated', path: parentPath } } });
+  else if (frame.method === 'turn/start') {
+    const now = Date.now();
+    const row = (offset, payload) => ({ timestamp: new Date(now + offset).toISOString(), type: 'event_msg', payload });
+    const parent = [
+      { timestamp: new Date(now).toISOString(), type: 'session_meta', payload: { id: parentId } },
+      row(-6, { type: 'task_started', turn_id: 'parent-turn' }),
+      row(-5, { type: 'sub_agent_activity', agent_thread_id: childId, kind: 'started', occurred_at_ms: now - 5 }),
+      row(-1, { type: 'sub_agent_activity', agent_thread_id: childId, kind: 'completed', occurred_at_ms: now - 1 }),
+      row(0, { type: 'task_complete', turn_id: 'parent-turn' }),
+    ];
+    fs.mkdirSync(active, { recursive: true, mode: 0o700 });
+    fs.mkdirSync(archive, { recursive: true, mode: 0o700 });
+    fs.writeFileSync(parentPath, parent.map(row => JSON.stringify(row)).join('\\n') + '\\n', { mode: 0o600 });
+    fs.writeFileSync(${JSON.stringify(expectedParentPath)}, fs.readFileSync(parentPath), { mode: 0o600 });
+    const child = [
+      { timestamp: new Date(now - 4).toISOString(), type: 'session_meta', payload: { id: childId, parent_thread_id: parentId } },
+      row(-4, { type: 'task_started', turn_id: 'child-turn' }),
+      row(-3, { type: 'user_message', message: 'Read the scoped child evidence' }),
+      row(-2, { type: 'task_complete', turn_id: 'child-turn' }),
+    ].map(row => JSON.stringify(row)).join('\\n') + '\\n';
+    fs.writeFileSync(childPath, child, { mode: 0o600 });
+    fs.writeFileSync(${JSON.stringify(expectedChildPath)}, child, { mode: 0o600 });
+    send({ id: frame.id, result: { turn: { id: 'parent-turn' } } });
+    send({ method: 'turn/started', params: { threadId: parentId, turn: { id: 'parent-turn', status: 'inProgress' } } });
+    send({ method: 'item/agentMessage/delta', params: { threadId: parentId, turnId: 'parent-turn', itemId: 'answer', delta: '<question-form id="archive-check">{"questions":[{"id":"audience","type":"text","label":"Audience?","required":true}]}</question-form>' } });
+    record('fixture:ready', parentId);
+    if (${JSON.stringify(mode)} === 'normal') send({ method: 'turn/completed', params: { threadId: parentId, turn: { id: 'parent-turn', status: 'completed', items: [] } } });
+  } else if (frame.method === 'turn/interrupt') process.exit(130);
+  else if (frame.method === 'thread/archive') {
+    if (frame.params?.threadId !== parentId) process.exit(11);
+    fs.renameSync(parentPath, path.join(archive, path.basename(parentPath)));
+    send({ id: frame.id, result: {} });
+  }
+});
+`, 'utf8');
+  await chmod(bin, 0o755);
+  return { parentId, framesPath, parentPath, childPath, expectedChildPath, expectedParentPath, archivedParentPath: path.join(archive, parentName) };
+}
+
 async function createPublicRolloutFixture(
   label: string,
   conversationMode: 'design' | 'chat' | 'plan' = 'chat',
   pluginId?: string,
   agentCliVersion = 'codex-cli 0.147.0',
+  preflightResolver?: NonNullable<StartServerOptions['odNextExecutionPreflightResolver']>,
 ) {
   const suffix = `${label}-${Date.now()}`;
   const binDir = await mkdtemp(path.join(os.tmpdir(), `od-next-public-${label}-`));
@@ -2546,7 +3242,7 @@ async function createPublicRolloutFixture(
     label,
     agentCliVersion,
   );
-  const started = await startDaemon();
+  const started = await startDaemon(preflightResolver);
   const projectId = `od-next-public-${suffix}`;
   const projectResponse = await fetch(`${started.url}/api/projects`, {
     method: 'POST',
@@ -2688,6 +3384,9 @@ const argv = process.argv.slice(2);
 const logPath = ${JSON.stringify(logPath)};
 if (argv.includes('--version')) { console.log(${JSON.stringify(agentCliVersion)}); process.exit(0); }
 if (argv.includes('--help')) { console.log('Usage: codex exec'); process.exit(0); }
+// Metadata probes never consume a generation prompt on stdin.
+if (argv[0] === 'debug' && argv[1] === 'models') { console.log(JSON.stringify({ models: [{ id: 'gpt-5.5' }] })); process.exit(0); }
+if (argv[0] === 'login' && argv[1] === 'status') { console.log('Logged in using ChatGPT'); process.exit(0); }
 let stdin = '';
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', (chunk) => { stdin += chunk; });
@@ -2737,22 +3436,70 @@ async function readDurableRunState(runId: string): Promise<Record<string, unknow
   )) as Record<string, unknown>;
 }
 
+/**
+ * Reuse the ACP server fixtures' OD_AGENT_HOME + minimal PATH boundary.
+ * Detection and the selected CLI still run normally; only unrelated host
+ * executables are outside this test's discovery scope. Explicit *_BIN paths
+ * can bypass PATH, so the fixture also removes inherited executable overrides.
+ */
+async function isolateAgentDetection(): Promise<void> {
+  fixtureDetectionIsolation ??= (async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'od-next-agent-detection-'));
+    try {
+      const home = path.join(root, 'home');
+      const bin = path.join(root, 'bin');
+      await mkdir(home);
+      await mkdir(bin);
+      // Keep Node shebangs usable without exposing every CLI installed beside
+      // the host Node binary. Selected agent bins stay explicit in app config.
+      await symlink(process.execPath, path.join(bin, 'node'));
+      return { root, home, bin };
+    } catch (error) {
+      await rm(root, { recursive: true, force: true });
+      throw error;
+    }
+  })();
+  const isolation = await fixtureDetectionIsolation;
+  process.env.OD_AGENT_HOME = isolation.home;
+  process.env.PATH = [isolation.bin, '/usr/bin', '/bin', '/usr/sbin', '/sbin'].join(path.delimiter);
+  for (const key of fixtureAgentBinEnvKeys) delete process.env[key];
+}
+
 async function startDaemon(
   resolver: NonNullable<StartServerOptions['odNextExecutionPreflightResolver']> =
     () => EXECUTION_PREFLIGHT,
   complexResolver: StartServerOptions['odNextComplexProductionResolver'] = null,
 ): Promise<StartedServer> {
-  return await startServer({
+  await isolateAgentDetection();
+  const started = await startServer({
     port: 0,
     returnServer: true,
     odNextExecutionPreflightResolver: resolver,
     odNextComplexProductionResolver: complexResolver,
   }) as StartedServer;
+  fixtureHttpClients.set(new URL(started.url).origin, { owner: started, dispatcher: new Agent() });
+  return started;
 }
 
-async function stopServer(server: StartedServer | null): Promise<void> {
-  if (!server) return;
+function stopServer(server: StartedServer | null): Promise<void> {
+  if (!server) return Promise.resolve();
+  const existing = fixtureShutdowns.get(server);
+  if (existing) return existing;
+  const pending = stopOwnedServer(server);
+  fixtureShutdowns.set(server, pending);
+  return pending;
+}
+
+async function stopOwnedServer(server: StartedServer): Promise<void> {
   await Promise.resolve(server.shutdown?.());
+  const origin = new URL(server.url).origin;
+  const client = fixtureHttpClients.get(origin);
+  if (client?.owner === server) {
+    fixtureHttpClients.delete(origin);
+    // Runs have settled first. Release only this fixture's keep-alive clients,
+    // including a connection whose idle transition races server.close().
+    await client.dispatcher.destroy();
+  }
   if (server.server.listening) {
     await new Promise<void>((resolve) => server.server.close(() => resolve()));
   }
@@ -2914,6 +3661,7 @@ function runtimeState(input: {
     route: input.route ?? 'full_plan',
     inputStage: input.inputStage ?? 'request',
     outcome: input.outcome,
+    executionIntent: 'produce',
     executionMode: input.executionMode ?? 'simple',
     reasonCodes: [],
   };
@@ -2924,10 +3672,13 @@ function machineBlock(tag: string, value: unknown, fenced = false): string {
   return `<${tag}>\n${fenced ? `\`\`\`json\n${json}\n\`\`\`` : json}\n</${tag}>`;
 }
 
+type IntentServerMode = 'intent-question' | 'intent-request' | 'intent-first-write' | 'intent-fail';
+
 async function writeStrategyCodex(
   dir: string,
-  mode: 'repair' | 'direct' | 'complex',
+  mode: 'repair' | 'direct' | 'complex' | IntentServerMode,
   plan: OpenDesignPlanContractV2,
+  probeLogPath?: string,
 ): Promise<{ bin: string; logPath: string }> {
   const bin = path.join(dir, `codex-${mode}`);
   const logPath = path.join(dir, `codex-${mode}.jsonl`);
@@ -2962,14 +3713,27 @@ async function writeStrategyCodex(
     inputStage: 'production', outcome: 'completed', executionMode: 'complex',
   }));
 
+  const questionText = '<question-form id="intent-2623">{"questions":[{"id":"audience","type":"text","label":"Audience?","required":true}]}</question-form>';
+  const missingIntentPlan = (stage: 'request' | 'clarification') => [
+    'INTENT_SOURCE_ANSWER_2623: The requested plan is available in this response.',
+    machineBlock('open-design-plan-contract', plan),
+    machineBlock('open-design-runtime-state', {
+      schema: 'open-design.strategy-state/v2', route: 'full_plan', inputStage: stage,
+      outcome: 'plan_ready', executionMode: 'simple', reasonCodes: [],
+    }),
+  ].join('\n');
   await writeFile(bin, `#!/usr/bin/env node
 const fs = require('node:fs');
 const path = require('node:path');
 const argv = process.argv.slice(2);
 const logPath = ${JSON.stringify(logPath)};
 const mode = ${JSON.stringify(mode)};
+${probeLogPath ? `if (argv.includes('--version') || argv.includes('--help') || argv[0] === 'debug' && argv[1] === 'models' || argv[0] === 'login' && argv[1] === 'status') fs.appendFileSync(${JSON.stringify(probeLogPath)}, JSON.stringify(argv) + '\\n');` : ''}
 if (argv.includes('--version')) { console.log('codex-cli 0.147.0'); process.exit(0); }
 if (argv.includes('--help')) { console.log('Usage: codex exec [--sandbox MODE]'); process.exit(0); }
+// Answer probes before failure/generation handling, without waiting for stdin.
+if (argv[0] === 'debug' && argv[1] === 'models') { console.log(JSON.stringify({ models: [{ id: 'gpt-5.5' }] })); process.exit(0); }
+if (argv[0] === 'login' && argv[1] === 'status') { console.log('Logged in using ChatGPT'); process.exit(0); }
 if (fs.existsSync(logPath + '.fail-start')) {
   process.stderr.write('fixture: process exited before session start\\n');
   process.exit(1);
@@ -2994,7 +3758,33 @@ function finish() {
     process.exit(2);
   }
   let text;
-  if (mode === 'direct') {
+  if (mode.startsWith('intent-')) {
+    if (stdin.startsWith('<open_design_intent_resolution_turn ')) {
+      if (mode === 'intent-fail') { process.stderr.write('fixture intent supplement exited\\n'); process.exit(2); }
+      const stage = / stage="(request|clarification)"/.exec(stdin)?.[1];
+      if (!argv.includes('resume') || !stage) process.exit(9);
+      text = '<open-design-runtime-state>\\n' + JSON.stringify({
+        schema: 'open-design.strategy-state/v2', route: 'full_plan', inputStage: stage,
+        outcome: 'completed', executionMode: 'simple', executionIntent: 'plan_only', reasonCodes: [],
+      }) + '\\n</open-design-runtime-state>';
+    } else if (stdin.includes('native continuation — clarification')) {
+      text = ${JSON.stringify(missingIntentPlan('clarification'))};
+    } else if (!argv.includes('resume') && stdin.includes('INTENT_SERVER_2623')) {
+      text = mode === 'intent-request' ? ${JSON.stringify(missingIntentPlan('request'))} : ${JSON.stringify(questionText)};
+      if (mode === 'intent-first-write') {
+        const target = path.join(process.cwd(), 'intent-draft.txt');
+        fs.writeFileSync(target, 'Observed first-turn write.');
+        console.log(JSON.stringify({ type: 'item.completed', item: { id: 'first-write', type: 'file_change', changes: [{ path: target, kind: 'add' }], status: 'completed' } }));
+      }
+    } else { process.stderr.write('Unexpected intent fixture invocation\\n'); process.exit(9); }
+  } else if (fs.existsSync(logPath + '.linked-page')) {
+    const childFile = fs.readFileSync(logPath + '.linked-page', 'utf8');
+    const edited = fs.existsSync(logPath + '.linked-page-edit');
+    if (edited || !fs.existsSync(path.join(process.cwd(), childFile))) {
+      fs.writeFileSync(path.join(process.cwd(), childFile), '<!doctype html><title>Taxonomy</title><a href="plant-science-landing.html">Home</a>' + (edited ? '<p>Updated taxonomy</p>' : ''));
+    }
+    text = '已交付 ' + childFile + '。';
+  } else if (mode === 'direct') {
     fs.writeFileSync(path.join(process.cwd(), 'index.html'), '<!doctype html><title>Direct</title>');
     text = ${JSON.stringify(direct)};
   } else if (mode === 'complex' && stdin.includes('native continuation — production')) {
@@ -3004,10 +3794,17 @@ function finish() {
     text = ${JSON.stringify(complexPlan)};
   } else if (stdin.includes('native continuation — contract_repair')) {
     text = ${JSON.stringify(repaired)};
+  } else if (stdin.includes('native continuation — production') && fs.existsSync(logPath + '.blocked-production')) {
+    staleTodoList = true;
+    text = 'Working on the lesson.';
   } else if (stdin.includes('native continuation — production')) {
     fs.writeFileSync(path.join(process.cwd(), 'index.html'), '<!doctype html><title>Production</title>');
     staleTodoList = true;
     text = ${JSON.stringify(production)};
+  } else if (!argv.includes('resume') && fs.existsSync(logPath + '.refused-request')) {
+    // A planning turn that declines the request: the agent answers in prose,
+    // writes nothing, emits no machine block, and exits cleanly.
+    text = 'Hello! Tell me what you would like to design and I will plan it.';
   } else {
     text = ${JSON.stringify(initialRepair)};
   }
@@ -3027,6 +3824,15 @@ function finish() {
   }
   console.log(JSON.stringify({ type: 'thread.started', thread_id: ${JSON.stringify(THREAD_ID)} }));
   console.log(JSON.stringify({ type: 'turn.started' }));
+  if (stdin.includes('native continuation — production') && fs.existsSync(logPath + '.blocked-production')) {
+    // Replay the host-observed failure boundary: completed tools and progress text,
+    // no deliverable or Runtime State, then a clean process exit.
+    for (let i = 0; i < 2; i++) console.log(JSON.stringify({ type: 'item.completed', item: {
+      id: 'tool-' + i, type: 'mcp_tool_call', server: 'tasks', tool: 'TodoWrite',
+      arguments: { todos: [{ content: 'Build the lesson', status: 'in_progress' }] },
+      result: { content: [{ type: 'text', text: 'Updated task list' }] }, status: 'completed',
+    } }));
+  }
   if (staleTodoList) {
     // Observed on real turns: the deliverable is written, but the LAST plan
     // snapshot the agent emits still carries unchecked items.

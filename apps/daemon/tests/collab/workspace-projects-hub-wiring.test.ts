@@ -224,10 +224,18 @@ describe('server.ts wiring (source boundary)', () => {
     );
     const body = source.slice(start, end);
     const resetStart = body.indexOf('resetWorkspaceIdentityCaches();');
+    const environmentResetStart = body.indexOf(
+      'workspaceHubSubscriptions?.resetForEnvironmentChange();',
+    );
+    const billingResetStart = body.indexOf(
+      'workspaceBillingRuntime.resetIdentity();',
+    );
     const endpointRefreshStart = body.indexOf(
       'workspaceHubSubscriptions?.refreshEndpoints();',
     );
     expect(resetStart).toBeGreaterThan(-1);
+    expect(environmentResetStart).toBeGreaterThan(resetStart);
+    expect(billingResetStart).toBeGreaterThan(environmentResetStart);
     expect(endpointRefreshStart).toBeGreaterThan(resetStart);
   });
 

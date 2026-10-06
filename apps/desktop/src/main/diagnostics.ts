@@ -13,6 +13,40 @@ export type DesktopDiagnosticsExportResult =
   | { ok: false; cancelled: true }
   | { ok: false; cancelled: false; message: string };
 
+/**
+ * Asks the renderer to push its chat-scroll scene to the daemon before the
+ * bundle is fetched.
+ *
+ * The in-app Export logs button already does this on its own, but the Help
+ * menu item does not go through the renderer at all — and the Help menu is the
+ * ONE export route that does not navigate. That matters because the chat scroll
+ * freeze lives in a mounted chat log: walking to Settings unmounts it and takes
+ * the frozen surface with it, so the menu is where a stuck colleague can reach
+ * an export without destroying what they are reporting.
+ *
+ * Best-effort in every direction. A renderer without the hook (older web
+ * bundle, a window showing something else) answers `false`, and a renderer that
+ * hangs is abandoned after the timeout rather than holding the export hostage.
+ */
+const RENDERER_CAPTURE_EXPRESSION =
+  "window.__odCaptureChatScrollForensics ? window.__odCaptureChatScrollForensics() : false";
+
+const RENDERER_CAPTURE_TIMEOUT_MS = 5_000;
+
+export async function requestRendererChatScrollCapture(
+  parentWindow: BrowserWindow | null,
+): Promise<void> {
+  if (parentWindow == null || parentWindow.isDestroyed?.()) return;
+  try {
+    await Promise.race([
+      parentWindow.webContents.executeJavaScript(RENDERER_CAPTURE_EXPRESSION, true),
+      new Promise((resolve) => setTimeout(resolve, RENDERER_CAPTURE_TIMEOUT_MS)),
+    ]);
+  } catch (error) {
+    console.warn("desktop diagnostics chat-scroll capture failed", error);
+  }
+}
+
 export interface DesktopDiagnosticsDeps {
   /**
    * Resolve the daemon base URL the bundle is fetched from. Mirrors the
@@ -53,6 +87,10 @@ export async function exportDiagnosticsToFile(
   }
 
   try {
+    // Before the bundle: let the renderer hand the daemon what only the
+    // renderer can see. The save dialog above does not navigate, so the chat
+    // log is still mounted and still frozen at this point.
+    await requestRendererChatScrollCapture(parentWindow);
     // Delegate the bundle to the daemon's own export endpoint instead of
     // rebuilding it here with a guessed data dir. The daemon owns its real
     // RUNTIME_DATA_DIR, so the bundle's run-event logs (`runs/<id>/events.jsonl`)

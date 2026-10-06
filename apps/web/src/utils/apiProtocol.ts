@@ -1,5 +1,6 @@
 import { isOpenAICompatible } from '../providers/openai-compatible';
 import type { ApiProtocol, AppConfig } from '../types';
+import { API_PROTOCOL_AGENT_IDS } from './byokProvider';
 
 const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
   anthropic: 'Anthropic API',
@@ -10,17 +11,6 @@ const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
   senseaudio: 'SenseAudio API',
   aihubmix: 'AIHubMix API',
   bedrock: 'AWS Bedrock',
-};
-
-const API_PROTOCOL_AGENT_IDS: Record<ApiProtocol, string> = {
-  anthropic: 'anthropic-api',
-  openai: 'openai-api',
-  azure: 'azure-openai-api',
-  google: 'google-gemini-api',
-  ollama: 'ollama-cloud-api',
-  senseaudio: 'senseaudio-api',
-  aihubmix: 'aihubmix-api',
-  bedrock: 'bedrock-api',
 };
 
 export function apiProtocolLabel(protocol: ApiProtocol | undefined): string {

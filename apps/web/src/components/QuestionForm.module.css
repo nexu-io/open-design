@@ -1,0 +1,21 @@
+/* OPEND-2947: reuse the question card and its header; only add native
+   disclosure behavior and the existing 11px chat chevron. */
+.unanswered > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.unanswered > summary::-webkit-details-marker {
+  display: none;
+}
+
+.chevron {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-soft);
+  transition: transform 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.unanswered[open] > summary .chevron {
+  transform: rotate(180deg);
+}

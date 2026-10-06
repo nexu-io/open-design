@@ -1,6 +1,8 @@
 import type { Express } from 'express';
 import type { RouteDeps } from '../server-context.js';
 import type { AuthorizeProjectRequest } from '../collab/project-request-authority.js';
+import { clientRequestIdFor } from '../http/client-request-id.js';
+import { classifyDeployFailure } from '../deploy/failure-detail.js';
 
 export interface RegisterDeployRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'ids' | 'deploy' | 'projectStore'> {
   authorizeProjectRequest: AuthorizeProjectRequest;
@@ -95,6 +97,8 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
   });
 
   app.post('/api/projects/:id/deploy', async (req, res) => {
+    const startedAt = Date.now();
+    let stage: 'file_plan' | 'provider' = 'file_plan';
     try {
       const { fileName, providerId = VERCEL_PROVIDER_ID, cloudflarePages, target: rawTarget } = req.body || {};
       // Omitted target defaults to production; any supplied value must be exact.
@@ -147,6 +151,7 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
         { metadata: deployProject?.metadata, includeProjectFiles: true },
       );
       const project = getProject(db, req.params.id);
+      stage = 'provider';
       const cloudflarePagesProjectName =
         providerId === CLOUDFLARE_PAGES_PROVIDER_ID
           ? cloudflarePagesProjectNameForDeploy(db, req.params.id, project?.name, prior)
@@ -193,14 +198,27 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
       res.json(publicDeployment(body));
     } catch (err: any) {
       const status = err instanceof DeployError ? err.status : 400;
+      const code = deployErrorCodeFor(err, status);
+      const failure = classifyDeployFailure(stage, err, err instanceof DeployError);
+      const requestId = clientRequestIdFor(req);
+      // Structured companion to the response: automatic diagnostics bundles
+      // include the daemon log, and `requestId` joins it to the client event.
+      console.warn('[od] deploy failure', JSON.stringify({
+        providerId: typeof req.body?.providerId === 'string' ? req.body.providerId : VERCEL_PROVIDER_ID,
+        status,
+        errorCode: code,
+        ...failure,
+        ...(requestId ? { requestId } : {}),
+        durationMs: Math.max(0, Date.now() - startedAt),
+      }));
       const init =
         err instanceof DeployError && err.details
-          ? { details: err.details }
-          : {};
+          ? { details: err.details, failure }
+          : { failure };
       sendApiError(
         res,
         status,
-        deployErrorCodeFor(err, status),
+        code,
         String(err?.message || err),
         init,
       );

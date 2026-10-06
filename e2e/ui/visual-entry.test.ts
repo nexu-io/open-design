@@ -31,16 +31,16 @@ test('[P2] captures the onboarding cloud sign-in surface', async ({ page }) => {
   // Cloud stays primary while identity-independent Local Agent and BYOK setup
   // remain available directly from the signed-out landing.
   await expect(
-    page.getByRole('heading', { name: /Sign in to OpenDesign|登录 OpenDesign/i }),
+    page.getByRole('heading', { name: /Welcome to OpenDesign|欢迎使用 OpenDesign/i }),
   ).toBeVisible({ timeout: T.medium });
   await expect(
-    page.getByRole('button', { name: /Sign in to OpenDesign|登录 OpenDesign/i }),
+    page.getByRole('button', { name: /Sign in \/ Sign up|登录 \/ 注册/i }),
   ).toBeVisible();
   await expect(
-    page.getByRole('button', { name: /Local (coding )?agent|本地 (Coding )?Agent/i }),
+    page.getByRole('button', { name: /Local AI|本地 AI/i }),
   ).toBeVisible();
   await expect(
-    page.getByRole('button', { name: /Bring your own key|使用自己的 Key|自己的模型 Key/i }),
+    page.getByRole('button', { name: /API Key|API 密钥/i }),
   ).toBeVisible();
   await waitForVisualFonts(page);
 
@@ -83,6 +83,12 @@ test('[P2] captures the onboarding Local Agent CLI list surface', async ({ page 
   // column shares an alignment line.
   await expect(chips.first()).toBeVisible();
   expect(await chips.count()).toBeGreaterThan(1);
+  // The panel validates the selected agent on its own, so its status line is
+  // part of the surface being archived. Let that settle first, or the capture
+  // races the transient "testing" copy.
+  await expect(panel.locator('.onboarding-view__test-status.is-success')).toBeVisible({
+    timeout: T.medium,
+  });
   await waitForVisualFonts(page);
 
   await captureVisual(page, 'visual-onboarding-local-agent');
@@ -294,7 +300,8 @@ test('[P2] captures the home plugin use staged surface', async ({ page }) => {
   const usePlugin = page.getByTestId('plugin-detail-use');
   await expect(usePlugin).toBeVisible();
   await usePlugin.click();
-  await expect(page.getByTestId('home-hero-active-plugin')).toContainText('Prototype Starter');
+  // The lead chip cuts the title to eight code points (#7635).
+  await expect(page.getByTestId('home-hero-active-plugin')).toContainText('Prototyp…');
   await expect(page.getByTestId('home-hero-input')).toBeVisible();
 
   await captureVisual(page, 'visual-home-plugin-use-staged');
@@ -308,7 +315,7 @@ test('[P2] captures the home plugin use with query surface', async ({ page }) =>
   const card = pluginMarketplaceCard(plugins, 'Deck Writer');
   await expect(card).toBeVisible();
   await card.getByRole('button', { name: 'Try it' }).click();
-  await expect(page.getByTestId('home-hero-active-plugin')).toContainText('Deck Writer');
+  await expect(page.getByTestId('home-hero-active-plugin')).toContainText('Deck Wri…');
   await expect(page.getByTestId('home-hero-input')).toBeVisible();
 
   await captureVisual(page, 'visual-home-plugin-use-with-query');

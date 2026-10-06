@@ -50,9 +50,10 @@ describe('recvpYC6eTaifb — home hero blank space above the title (empty worksp
     // The base (non-centered) tuned offset must stay untouched — this is an
     // override for the centered variant only, not a rewrite of the fold math.
     // 320a36ac1 retuned that base offset 240px → 96px (输入框整块上移，顶距
-    // 从 446 收到 300); what this case guards is that the centered variant
+    // 从 446 收到 300), and the entry refresh (#7635) lifted it to 116px under
+    // the plain headline; what this case guards is that the centered variant
     // still overrides whatever the base is, not the base number itself.
-    expect(ruleValue(baseHero, 'padding')).toBe('96px 0 var(--spacing-4)');
+    expect(ruleValue(baseHero, 'padding')).toBe('116px 0 var(--spacing-4)');
     // The centering itself (the other candidate cause) stays intact too.
     const centeredView = cssDeclarations(homeHeroCss, '.home-view--centered');
     expect(ruleValue(centeredView, 'justify-content')).toBe('center');

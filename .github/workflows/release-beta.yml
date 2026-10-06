@@ -738,7 +738,13 @@ jobs:
           RELEASE_REPORT_DIR: ${{ runner.temp }}/release-report/mac_arm64
           RELEASE_REPORT_JSON_PATH: ${{ runner.temp }}/release-report/mac_arm64/report.json
           RELEASE_REPORT_SUMMARY_PATH: ${{ runner.temp }}/release-report/mac_arm64/summary.md
+          # The smoke step is continue-on-error, so this job reports success even
+          # when the packaged gate is red. Feed the outcome to the report writer
+          # so the failure gets a run annotation and a summary banner instead of
+          # disappearing behind a green check.
+          RELEASE_SMOKE_EXEMPT: "true"
           RELEASE_SMOKE_MODE: ${{ inputs.mac_arm64_smoke_mode }}
+          RELEASE_SMOKE_OUTCOME: ${{ steps.mac_arm64_smoke.outcome }}
           RELEASE_TARGET: mac_arm64
           RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
           REPORT_TITLE: mac_arm64 beta build
@@ -1322,7 +1328,11 @@ jobs:
           RELEASE_REPORT_DIR: ${{ runner.temp }}\release-report\win_x64
           RELEASE_REPORT_JSON_PATH: ${{ runner.temp }}\release-report\win_x64\report.json
           RELEASE_REPORT_SUMMARY_PATH: ${{ runner.temp }}\release-report\win_x64\summary.md
+          # Same exemption as mac_arm64: keep the job green, but never let the
+          # red be silent.
+          RELEASE_SMOKE_EXEMPT: "true"
           RELEASE_SMOKE_MODE: ${{ inputs.win_x64_smoke_mode }}
+          RELEASE_SMOKE_OUTCOME: ${{ steps.win_x64_smoke.outcome }}
           RELEASE_TARGET: win_x64
           RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
           REPORT_TITLE: win_x64 beta build

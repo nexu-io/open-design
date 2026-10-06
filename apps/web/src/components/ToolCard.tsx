@@ -283,12 +283,13 @@ export function TodoCard({
   const done = todos.filter(
     (todo) => todo.status === 'completed' || todo.status === 'in_progress',
   ).length;
-  // All-complete state wins over an in-flight response: an agent may still be
-  // writing its final prose after marking every task complete, so the details
-  // start collapsed. The summary remains in the conversation as part of the
-  // task history and can always be expanded for review.
+  // A complete checklist is not the same thing as a terminal run. Agents often
+  // mark every task complete before writing their final prose, so announcing
+  // "Done" while the parent run is still active makes queued follow-ups look
+  // stuck. Only surface the terminal label once the run itself succeeded.
   const allComplete = todos.length > 0 && completed === todos.length;
-  const defaultExpanded = !allComplete && runStreaming && (hasInProgress || hasPending);
+  const settledComplete = allComplete && !runStreaming && runSucceeded;
+  const defaultExpanded = !settledComplete && runStreaming && (hasInProgress || hasPending);
   const [overrideExpanded, setOverrideExpanded] = useState<boolean | null>(null);
   const expanded = overrideExpanded ?? defaultExpanded;
   if (todos.length === 0) return <GenericCard name="TodoWrite" category="todo" input={input} runStreaming={runStreaming} runSucceeded={runSucceeded} />;
@@ -310,7 +311,7 @@ export function TodoCard({
           <span className="op-meta">
             {done}/{todos.length}
           </span>
-          {allComplete ? <span className="op-todo-complete">{t('tool.todosDone')}</span> : null}
+          {settledComplete ? <span className="op-todo-complete">{t('tool.todosDone')}</span> : null}
           {!expanded && inProgressTodo ? (
             <span className="op-todo-current">
               {inProgressTodo.activeForm || inProgressTodo.content}

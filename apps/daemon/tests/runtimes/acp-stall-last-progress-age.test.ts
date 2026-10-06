@@ -58,6 +58,8 @@ type RunStatus = {
   id: string;
   status: string;
   errorCode: string | null;
+  /** The child's own exit status — how this spec proves the SIGTERM landed. */
+  exitCode: number | null;
   terminalTrigger: string | null;
   eventsLogPath: string;
 };
@@ -196,6 +198,15 @@ describe('ACP stall progress age', () => {
     // the failure path really did synthesize its terminal pair. Without this the
     // progress-age assertion below could pass simply because no tool existed.
     expect(finished.tool_call_count).toBeGreaterThanOrEqual(1);
+    expect(finished.tool_call_seen).toBe(true);
+    expect(finished.tool_result_sent).toBe(false);
+    expect(finished.failure_stage).toBe('tool_outstanding');
+
+    // Provenance stays in memory; the display transcript still has its pair.
+    const transcript = readFileSync(run.eventsLogPath, 'utf8');
+    expect(transcript).toContain('"type":"tool_result"');
+    expect(transcript).not.toContain('hostSynthesized');
+    expect(transcript).not.toContain('host_flush');
 
     // Same terminal fingerprint as the tool-free stall: an ACP stage timeout,
     // named as such. Flushing an open tool must not reclassify the failure.
@@ -256,7 +267,14 @@ describe('ACP stall progress age', () => {
 
     // Non-vacuity guard: the child really did exit through its SIGTERM handler,
     // so its shutdown line really was written after the daemon's verdict.
-    expect(finished.error_code).toBe('AGENT_EXIT_143');
+    //
+    // Read off the child's exit status rather than off `error_code`. The
+    // watchdog now NAMES its own verdict on the error frame, so the run carries
+    // the failure's code (`AGENT_EXECUTION_FAILED`) instead of a code derived
+    // from the exit it caused — which never described this failure anyway. The
+    // fact this guard needs is unchanged and still first-hand: 143 is the
+    // child's SIGTERM handler running.
+    expect(run.exitCode).toBe(143);
 
     expect(finished.failure_category).toBe('timeout');
     expect(finished.failure_detail).toBe('timeout');

@@ -60,7 +60,7 @@
   color: #2563eb;
 }
 
-.buttonBold { font-weight: 800; }
+.buttonBold { font-weight: 700; }
 .buttonItalic { font-style: italic; font-family: Georgia, 'Times New Roman', serif; }
 .buttonUnderline { text-decoration: underline; text-underline-offset: 3px; }
 .buttonStrike { text-decoration: line-through; }

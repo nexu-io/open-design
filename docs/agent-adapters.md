@@ -220,14 +220,32 @@ the active-run staging implementation is in
 
 ### 5.3 Codex
 
-- A new session runs `codex exec --json --skip-git-repo-check` with the
-  effective sandbox configuration, create-only `-C`/`--add-dir` arguments,
-  and optional model/reasoning overrides. The composed prompt is written to
-  stdin.
+- The default transport runs the installed CLI's built-in `codex app-server`
+  over stdio JSON-RPC; no separate app-server installation or patched Codex
+  binary is required. New sessions use `thread/start`, follow-up turns use
+  `thread/resume`, and prompts arrive through `turn/start`.
+- Official file previews use `item/fileChange/patchUpdated`. The daemon enables
+  `features.apply_patch_streaming_events` per thread only when the running
+  server's initialize response identifies a stable version >= **0.123.0**.
+  [Upstream 0.123.0](https://github.com/openai/codex/releases/tag/rust-v0.123.0)
+  first wired the event through app-server (#18289); 0.122.0 only had the
+  internal event. Older, unknown, and prerelease versions keep the existing
+  completed-file behavior without receiving this feature override. This is a
+  preview capability floor, not a new minimum version for running Codex.
+- A patch preview creates one lightweight Write/Edit row per file as soon as
+  its path is available, before the full patch finishes generating. Final
+  events settle the same row with diff statistics and execution status.
+  This covers `apply_patch`, not arbitrary shell command arguments. The
+  upstream feature remains opt-in; absence of preview events does not block
+  completion. See [patch-stream validation](testing/codex-patch-streaming.md).
+- `OD_CODEX_TRANSPORT=exec-json` selects the legacy transport:
+  `codex exec --json --skip-git-repo-check` with the effective sandbox,
+  create-only `-C`/`--add-dir`, and optional model/reasoning overrides.
+  This transport does not carry early patch previews.
 - [`runtimes/json-event-stream.ts`](../apps/daemon/src/runtimes/json-event-stream.ts)
   parses Codex's structured JSON events; this is not a regex-based plain-text
   adapter. The parser captures `thread.started.thread_id`.
-- Follow-up turns use `codex exec resume --json ... <thread-id>`. Resume uses
+- Legacy follow-up turns use `codex exec resume --json ... <thread-id>`. Resume uses
   `-c sandbox_mode=...` because Codex rejects create-only `--sandbox`, `-C`,
   and `--add-dir` flags on `exec resume`.
 - Detection uses `codex login status` for auth and `codex debug models` for
@@ -593,3 +611,27 @@ The engine is agent-agnostic: it iterates `AGENT_DEFS` and reads fields. A commu
   that accept stdin should set `promptViaStdin`; argv-only definitions must declare and
   enforce a prompt budget so Windows' command-line limit fails observably before spawn.
 - **Docker-contained agents.** Some users run Claude Code in a container. Adapter needs a "remote" mode — probably same interface but talks over SSH. Phase 2+.
+
+### AMR compaction continuation (ACP extension v1)
+
+The shared contract lives in `packages/contracts/src/api/amr-continuation.ts`.
+An AMR `initialize` response must advertise both `loadSession` and
+`agentCapabilities._meta["com.open-design.nativeSessionContinue"].version = 1`.
+A structured `OPENCODE_COMPACTION_CONTINUATION_INCOMPLETE` prompt error can
+supply the durable session ID and exact user/assistant message cursor only
+when every observed tool result is terminal. The daemon independently checks
+its tool frames before closing unfinished rows.
+
+The daemon waits for the previous process tree to become quiescent, loads the
+same durable session in a new process, and sends `_session/continue` with only
+that cursor. Vela calls OpenCode's guarded `POST /session/:sessionID/continue`;
+OpenCode rechecks persisted history and committed tools under its serialized
+runner and continues the model loop without inserting a user prompt. This
+requires matching Vela and OpenCode implementations; ordinary `session/load`
+alone is insufficient.
+
+At most one native continuation is allowed per physical Run. Cancellation,
+missing or changed history, outstanding/unknown tools, unsupported versions,
+and exhausted recovery stop with failure. Legacy compaction failure wording
+is classified but never authorizes reseeding or full prompt replay. The same
+daemon behavior serves web and `od` callers through the existing run API.

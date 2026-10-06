@@ -43,6 +43,7 @@ describe('preview iframe observability', () => {
 
     expect(reported).toBe(true);
     expect(reportSafetyEvent).toHaveBeenCalledWith('client_preview_runtime_error', expect.objectContaining({
+      monitoring_kind: 'runtime_error',
       surface: 'artifact_preview',
       render_mode: 'url_load',
       error_origin: 'runtime_error',
@@ -77,16 +78,33 @@ describe('preview iframe observability', () => {
     }, { surface: 'artifact_preview', renderMode: 'srcdoc' });
 
     expect(reportSafetyEvent).toHaveBeenNthCalledWith(1, 'client_preview_resource_error', expect.objectContaining({
+      monitoring_kind: 'resource_tag:script',
       resource_tag: 'script',
       resource_url: 'https://cdn.example/app.js',
     }));
     expect(reportSafetyEvent).toHaveBeenNthCalledWith(2, 'client_preview_white_screen', expect.objectContaining({
+      monitoring_kind: 'no_visible_paint_after_timeout',
       reason: 'no_visible_paint_after_timeout',
       visible_element_count: 0,
       viewport_width: 1440,
       blank_observation_count: 2,
       sample_interval_ms: 1_500,
     }));
+  });
+
+  it('collapses unexpected resource tags into a bounded monitoring kind', () => {
+    reportPreviewIframeMessage({
+      type: PREVIEW_OBSERVABILITY_MESSAGE_TYPE,
+      version: 1,
+      event: 'resource_error',
+      resource_tag: 'custom-user-element-123',
+      resource_url: 'https://cdn.example/asset.bin',
+    }, { surface: 'artifact_preview', renderMode: 'srcdoc' });
+
+    expect(reportSafetyEvent).toHaveBeenCalledWith(
+      'client_preview_resource_error',
+      expect.objectContaining({ monitoring_kind: 'resource_tag:other' }),
+    );
   });
 
   it('reports host-observed incomplete srcDoc recovery without authored content', () => {
@@ -116,6 +134,7 @@ describe('preview iframe observability', () => {
         artifact_id: 'anon-artifact',
         artifact_kind: 'slide_deck',
         project_id: 'project-1',
+        monitoring_kind: 'srcdoc_transport_unverified',
         reason: 'srcdoc_transport_unverified',
         transport_signal: 'body_incomplete',
         transport_stage: 'head_bridge_alive_body_tail_missing',
@@ -203,6 +222,7 @@ describe('preview iframe observability', () => {
     }, { surface: 'artifact_preview', renderMode: 'srcdoc', artifactKind: 'slide_deck' }, new Set());
 
     expect(reportSafetyEvent).toHaveBeenCalledWith('client_preview_deck_stage_unscaled', expect.objectContaining({
+      monitoring_kind: 'stage_scale_collapsed',
       surface: 'artifact_preview',
       render_mode: 'srcdoc',
       // Frequency alone cannot triage this: three authored shapes can collapse,

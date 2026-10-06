@@ -4,7 +4,10 @@ import { useState } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { EntryShell } from '../../src/components/EntryShell';
+import {
+  EntryShell,
+  ONBOARDING_LOCAL_AUTO_TEST_DELAY_MS,
+} from '../../src/components/EntryShell';
 import {
   AMR_LOGIN_POLL_INTERVAL_MS,
   AMR_LOGIN_STATUS_EVENT,
@@ -73,6 +76,27 @@ function cliAgent(overrides: Partial<AgentInfo> = {}): AgentInfo {
   };
 }
 
+// DeepSeek Harness before its companion is installed: unavailable, yet the
+// picker still lists it so the user has somewhere to start setup from.
+function dshSetupRequiredAgent(overrides: Partial<AgentInfo> = {}): AgentInfo {
+  return {
+    id: 'deepseek-harness',
+    name: 'DeepSeek Harness',
+    bin: 'deepseek-harness',
+    available: false,
+    path: '/usr/local/bin/deepseek-harness',
+    models: [{ id: 'deepseek-chat', label: 'DeepSeek Chat' }],
+    diagnostics: [
+      {
+        reason: 'runtime-profile-incompatible',
+        severity: 'error',
+        message: 'Companion setup required.',
+      },
+    ],
+    ...overrides,
+  };
+}
+
 function baseConfig(overrides: Partial<AppConfig> = {}): AppConfig {
   return {
     mode: 'daemon',
@@ -112,6 +136,8 @@ function renderOnboarding(
     onConfigPersist: vi.fn(),
     onRefreshAgents: vi.fn(() => [amrAgent(), cliAgent()]),
     onCreateProject: vi.fn(),
+    onBeginProjectCreation: () => ({ projectId: 'optimistic-project', rollback: () => undefined }),
+    onAmrBalanceGateBlockChange: () => undefined,
     onCreatePluginShareProject: vi.fn(),
     onImportClaudeDesign: vi.fn(),
     onOpenProject: vi.fn(),
@@ -177,6 +203,8 @@ function renderHome(
     onConfigPersist: vi.fn(),
     onRefreshAgents: vi.fn(() => [cliAgent()]),
     onCreateProject: vi.fn(),
+    onBeginProjectCreation: () => ({ projectId: 'optimistic-project', rollback: () => undefined }),
+    onAmrBalanceGateBlockChange: () => undefined,
     onCreatePluginShareProject: vi.fn(),
     onImportClaudeDesign: vi.fn(),
     onOpenProject: vi.fn(),
@@ -269,7 +297,7 @@ async function clickCloudSignIn() {
 }
 
 async function findCloudSignInButton() {
-  return screen.findByRole('button', { name: /Sign in to OpenDesign/i });
+  return screen.findByRole('button', { name: /Sign in \/ Sign up/i });
 }
 
 async function openLocalRuntimeSetup() {
@@ -428,7 +456,10 @@ describe('EntryShell route scroll isolation', () => {
 });
 
 describe('EntryShell project reopen request priority', () => {
-  it('aborts Home cover work, keeps hidden Projects idle, and lets the foreground files read finish', async () => {
+  // The catalogue grid — and its background cover scan — lives on the 项目
+  // page now that Home carries no grid on either branch (OPEND-2683 /
+  // OPEND-3140); the invariant is unchanged, the surface moved.
+  it('aborts the 项目 page cover work, keeps hidden Projects idle, and lets the foreground files read finish', async () => {
     const files = [{
       name: 'index.html',
       path: 'index.html',
@@ -450,7 +481,7 @@ describe('EntryShell project reopen request priority', () => {
           // reader — cancellable or not — one shared request carrying the
           // shared AbortSignal, so "is this the background scan?" is the
           // request ordinal, not the presence of a signal. Request #1 is
-          // Home's cover scan and must hang until it is aborted; the
+          // the 项目 page's cover scan and must hang until it is aborted; the
           // foreground read that follows it must be answered.
           const isBackgroundCoverScan = fileRequests.length === 0;
           fileRequests.push(init);
@@ -493,7 +524,7 @@ describe('EntryShell project reopen request priority', () => {
     const onOpenProject = vi.fn((projectId: string) => {
       expect(projectId).toBe('project-reopen');
       // App leaves EntryShell when it opens ProjectView. Model that boundary
-      // directly so the mounted Home strip must cancel its background probe.
+      // directly so the mounted strip must cancel its background probe.
       cleanup();
     });
 
@@ -508,11 +539,12 @@ describe('EntryShell project reopen request priority', () => {
         status: { value: 'not_started' },
       }],
       onOpenProject,
-    });
+    }, '/drafts');
 
     await waitFor(() => expect(fileRequests).toHaveLength(1));
     const homeSignal = fileRequests[0]?.signal;
     expect(homeSignal).toBeDefined();
+    expect(screen.getByTestId('recent-projects-strip')).toBeTruthy();
     // DesignsTab is mounted under EntryShell's hidden Projects pane, but its
     // own background files/live-artifact scans must remain dormant.
     expect(
@@ -700,9 +732,10 @@ describe('EntryShell Home submit handoff', () => {
     // explicit user plugin choice on the public create contract.
     expect(onCreateProject.mock.calls[0]?.[0]?.pluginId).toBeUndefined();
     expect(submit.disabled).toBe(true);
-    // #5517: the submit is icon-only (spinner while sending) — assert the
-    // busy state through aria instead of the removed label text.
-    expect(submit.getAttribute('aria-busy')).toBe('true');
+    // The arrow stays visually stable while creation is in flight: no spinner,
+    // no busy state — the disabled lock above is the whole sending treatment.
+    expect(submit.getAttribute('aria-busy')).toBe('false');
+    expect(submit.getAttribute('aria-label')).toBe('Run');
 
     resolveCreate(true);
     await waitFor(() => expect(submit.disabled).toBe(false));
@@ -723,8 +756,10 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     const props = renderHome({ config, amrLoggedIn: false });
 
     expect(
-      await screen.findByRole('heading', { name: 'Sign in to OpenDesign' }),
+      await screen.findByRole('heading', { name: 'Welcome to OpenDesign' }),
     ).toBeTruthy();
+    expect(await screen.findByText('Free Credits')).toBeTruthy();
+    expect(screen.getByLabelText('New users get free starter credits to try DeepSeek V4.1 Flash.')).toBeTruthy();
     expect(window.location.pathname).toBe('/onboarding');
     expect(props.onConfigPersist).not.toHaveBeenCalled();
     expect(props.onModeChange).not.toHaveBeenCalled();
@@ -748,7 +783,7 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     expect(await screen.findByTestId('home-hero-input')).toBeTruthy();
     expect(window.location.pathname).toBe('/');
     expect(
-      screen.queryByRole('heading', { name: 'Sign in to OpenDesign' }),
+      screen.queryByRole('heading', { name: 'Welcome to OpenDesign' }),
     ).toBeNull();
   });
 
@@ -763,9 +798,9 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     ) as typeof fetch;
     renderOnboarding();
 
-    fireEvent.click(
-      await screen.findByRole('button', { name: /Continue \(signed in\)/i }),
-    );
+    const continueButton = await screen.findByRole('button', { name: /Continue \(signed in\)/i });
+    expect(screen.queryByText('Free Credits')).toBeNull();
+    fireEvent.click(continueButton);
 
     expect(
       await screen.findByRole('heading', { name: 'Choose your model source' }),
@@ -989,7 +1024,10 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
   it('drops a Local Agent validation that lands after the user goes Back', async () => {
     // Continue awaits a network round trip before it persists. Back stays
     // enabled through that wait, so a late success must not resurrect the
-    // configuration the user just walked away from.
+    // configuration the user just walked away from. Leaving the step also
+    // aborts the request; a mock that ignores its signal keeps this spec on
+    // the second line of defence, the one that judges a result that still
+    // arrives.
     let releaseTest: ((value: Response) => void) | undefined;
     let testCalls = 0;
     globalThis.fetch = vi.fn(async (input, init) => {
@@ -1045,6 +1083,421 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     expect(screen.getByRole('radio', { name: /Local Agent/i })).toBeTruthy();
   });
 
+  it('validates the selected Local Agent in the background so Continue does not wait on a spawn', async () => {
+    // The runtime smoke test spawns the agent CLI and waits for a real model
+    // reply: 7s for Claude Code and 12s for Codex CLI measured against a local
+    // daemon, against a 45s budget. Starting it only when Continue is pressed
+    // puts that whole cost between the click and the next screen, so it has to
+    // already be under way by the time the user clicks.
+    let testCalls = 0;
+    globalThis.fetch = vi.fn(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({
+          loggedIn: true,
+          profile: 'prod',
+          configPath: '/x',
+          user: { id: 'u', email: 'user@example.com' },
+        });
+      }
+      if (url.endsWith('/api/test/connection') && init?.method === 'POST') {
+        testCalls += 1;
+        return jsonResponse({
+          ok: true,
+          kind: 'success',
+          latencyMs: 12,
+          model: 'sonnet',
+          sample: 'pong',
+          agentName: 'Claude Code',
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    }) as typeof fetch;
+    const props = renderOnboarding({
+      config: baseConfig({
+        agentId: 'claude-code',
+        agentModels: { 'claude-code': { model: 'sonnet' } },
+      }),
+    });
+
+    await openLocalRuntimeSetup();
+    // Nobody has pressed Continue: the selection validates on its own.
+    await waitFor(() => {
+      expect(testCalls).toBe(1);
+    });
+    expect(props.onCompleteOnboarding).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
+    await waitFor(() => {
+      expect(props.onCompleteOnboarding).toHaveBeenCalledTimes(1);
+    });
+    expect(props.onConfigPersist).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: 'daemon', agentId: 'claude-code' }),
+    );
+    // The click settled on the finished validation instead of spawning again.
+    expect(testCalls).toBe(1);
+  });
+
+  it('lets Continue join the in-flight Local Agent validation instead of dropping the click', async () => {
+    // Background validation must not turn Continue into a dead button: a click
+    // landing mid-flight joins the attempt already validating those inputs and
+    // finishes with it, rather than being swallowed or spawning a second agent.
+    let releaseTest: ((value: Response) => void) | undefined;
+    let testCalls = 0;
+    globalThis.fetch = vi.fn(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({
+          loggedIn: true,
+          profile: 'prod',
+          configPath: '/x',
+          user: { id: 'u', email: 'user@example.com' },
+        });
+      }
+      if (url.endsWith('/api/test/connection') && init?.method === 'POST') {
+        testCalls += 1;
+        return new Promise<Response>((resolve) => {
+          releaseTest = resolve;
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    }) as typeof fetch;
+    const props = renderOnboarding({
+      config: baseConfig({
+        agentId: 'claude-code',
+        agentModels: { 'claude-code': { model: 'sonnet' } },
+      }),
+    });
+
+    await openLocalRuntimeSetup();
+    await waitFor(() => {
+      expect(testCalls).toBe(1);
+    });
+
+    const continueButton = screen.getByRole('button', { name: /^Continue$/i });
+    expect(continueButton.hasAttribute('disabled')).toBe(false);
+    fireEvent.click(continueButton);
+
+    await act(async () => {
+      releaseTest?.(
+        jsonResponse({
+          ok: true,
+          kind: 'success',
+          latencyMs: 12,
+          model: 'sonnet',
+          sample: 'pong',
+          agentName: 'Claude Code',
+        }),
+      );
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(props.onCompleteOnboarding).toHaveBeenCalledTimes(1);
+    });
+    expect(testCalls).toBe(1);
+  });
+
+  it('releases the agent child when the user leaves the setup step mid-validation', async () => {
+    // The background pass spawns a real agent CLI, so a validation the user
+    // walks away from is not free — left alone the daemon holds that child
+    // until its own timeout, and a few abandoned visits cost several spawns
+    // and model calls for nothing.
+    let testSignal: AbortSignal | undefined;
+    globalThis.fetch = vi.fn(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({
+          loggedIn: true,
+          profile: 'prod',
+          configPath: '/x',
+          user: { id: 'u', email: 'user@example.com' },
+        });
+      }
+      if (url.endsWith('/api/test/connection') && init?.method === 'POST') {
+        testSignal = init.signal ?? undefined;
+        // Never settles: the abort is the only thing that can end this run.
+        return new Promise<Response>(() => {});
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    }) as typeof fetch;
+    renderOnboarding({
+      config: baseConfig({
+        agentId: 'claude-code',
+        agentModels: { 'claude-code': { model: 'sonnet' } },
+      }),
+    });
+
+    await openLocalRuntimeSetup();
+    await waitFor(() => {
+      expect(testSignal).toBeDefined();
+    });
+    expect(testSignal?.aborted).toBe(false);
+
+    fireEvent.click(screen.getByRole('button', { name: /^Back$/i }));
+    await waitFor(() => {
+      expect(testSignal?.aborted).toBe(true);
+    });
+  });
+
+  it('restarts BYOK auto-validation against edited inputs instead of waiting the old one out', async () => {
+    // A held request must not decide when the replacement gets to start: the
+    // key the user is now looking at has to begin validating immediately, or
+    // it stays unproven until the abandoned run times out.
+    const signals: AbortSignal[] = [];
+    globalThis.fetch = vi.fn(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({
+          loggedIn: true,
+          profile: 'prod',
+          configPath: '/x',
+          user: { id: 'u', email: 'user@example.com' },
+        });
+      }
+      if (url.endsWith('/api/provider/models') && init?.method === 'POST') {
+        return jsonResponse({
+          ok: true,
+          kind: 'success',
+          latencyMs: 10,
+          models: [{ id: 'gpt-test', label: 'GPT Test' }],
+        });
+      }
+      if (url.endsWith('/api/test/connection') && init?.method === 'POST') {
+        if (init.signal) signals.push(init.signal);
+        // Never settles, so only the abort can free the slot.
+        return new Promise<Response>(() => {});
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    }) as typeof fetch;
+    renderOnboarding({
+      config: baseConfig({
+        mode: 'api',
+        apiProtocol: 'openai',
+        apiKey: 'test-api-key',
+        baseUrl: 'https://api.openai.com/v1',
+        model: 'gpt-test',
+        apiProviderBaseUrl: 'https://api.openai.com/v1',
+      }),
+    });
+
+    await openByokRuntimeSetup();
+    await waitFor(() => {
+      expect(signals).toHaveLength(1);
+    });
+
+    fireEvent.change(screen.getByLabelText('API key'), {
+      target: { value: 'rotated-api-key' },
+    });
+
+    await waitFor(() => {
+      expect(signals).toHaveLength(2);
+    });
+    expect(signals[0]?.aborted).toBe(true);
+    expect(signals[1]?.aborted).toBe(false);
+  });
+
+  it('validates again when the user returns to a selection whose check was cut short', async () => {
+    // Aborting writes no result by design, so the attempt's bookkeeping has to
+    // come back with it. Left behind, it claims these inputs were already
+    // validated and the panel stays on a "testing" line no run will ever
+    // finish — the automatic path is then dead until Continue is pressed.
+    let testCalls = 0;
+    globalThis.fetch = vi.fn(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({
+          loggedIn: true,
+          profile: 'prod',
+          configPath: '/x',
+          user: { id: 'u', email: 'user@example.com' },
+        });
+      }
+      if (url.endsWith('/api/test/connection') && init?.method === 'POST') {
+        testCalls += 1;
+        // Never settles, so leaving is the only thing that ends the first run.
+        return new Promise<Response>(() => {});
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    }) as typeof fetch;
+    renderOnboarding({
+      config: baseConfig({
+        agentId: 'claude-code',
+        agentModels: { 'claude-code': { model: 'sonnet' } },
+      }),
+    });
+
+    await openLocalRuntimeSetup();
+    await waitFor(() => {
+      expect(testCalls).toBe(1);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /^Back$/i }));
+    expect(await screen.findByRole('radio', { name: /Local Agent/i })).toBeTruthy();
+
+    // Same agent, same model: the cut-short attempt must not count as proof.
+    fireEvent.click(screen.getByRole('radio', { name: /Local Agent/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
+    expect(await screen.findByText('Local CLI')).toBeTruthy();
+    await waitFor(() => {
+      expect(testCalls).toBe(2);
+    });
+  });
+
+  it('releases a BYOK request once its key is cleared and nothing can consume it', async () => {
+    // Staying on the step does not keep a request useful: an emptied key can
+    // no longer be validated, so the run holding the daemon has to go the same
+    // way it would if the user had walked out.
+    const signals: AbortSignal[] = [];
+    globalThis.fetch = vi.fn(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({
+          loggedIn: true,
+          profile: 'prod',
+          configPath: '/x',
+          user: { id: 'u', email: 'user@example.com' },
+        });
+      }
+      if (url.endsWith('/api/provider/models') && init?.method === 'POST') {
+        return jsonResponse({
+          ok: true,
+          kind: 'success',
+          latencyMs: 10,
+          models: [{ id: 'gpt-test', label: 'GPT Test' }],
+        });
+      }
+      if (url.endsWith('/api/test/connection') && init?.method === 'POST') {
+        if (init.signal) signals.push(init.signal);
+        return new Promise<Response>(() => {});
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    }) as typeof fetch;
+    renderOnboarding({
+      config: baseConfig({
+        mode: 'api',
+        apiProtocol: 'openai',
+        apiKey: 'test-api-key',
+        baseUrl: 'https://api.openai.com/v1',
+        model: 'gpt-test',
+        apiProviderBaseUrl: 'https://api.openai.com/v1',
+      }),
+    });
+
+    await openByokRuntimeSetup();
+    await waitFor(() => {
+      expect(signals).toHaveLength(1);
+    });
+    expect(signals[0]?.aborted).toBe(false);
+
+    fireEvent.change(screen.getByLabelText('API key'), { target: { value: '' } });
+
+    await waitFor(() => {
+      expect(signals[0]?.aborted).toBe(true);
+    });
+    expect(signals).toHaveLength(1);
+  });
+
+  it('does not spend a second spawn when the debounce outlives a manual Test', async () => {
+    // Pressing Test disturbs none of the auto-validation effect's inputs, so
+    // its debounce stays armed. A manual check that answers inside that window
+    // must still leave exactly one spawn behind.
+    let testCalls = 0;
+    globalThis.fetch = vi.fn(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({
+          loggedIn: true,
+          profile: 'prod',
+          configPath: '/x',
+          user: { id: 'u', email: 'user@example.com' },
+        });
+      }
+      if (url.endsWith('/api/test/connection') && init?.method === 'POST') {
+        testCalls += 1;
+        return jsonResponse({
+          ok: true,
+          kind: 'success',
+          latencyMs: 1,
+          model: 'sonnet',
+          sample: 'pong',
+          agentName: 'Claude Code',
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    }) as typeof fetch;
+    renderOnboarding({
+      config: baseConfig({
+        agentId: 'claude-code',
+        agentModels: { 'claude-code': { model: 'sonnet' } },
+      }),
+    });
+
+    await openLocalRuntimeSetup();
+    // Beat the debounce with a manual press that resolves immediately.
+    fireEvent.click(screen.getByRole('button', { name: /^Test$/i }));
+    await waitFor(() => {
+      expect(testCalls).toBe(1);
+    });
+    expect(await screen.findByText(/replied in/i)).toBeTruthy();
+
+    // Let the armed debounce fire; it must find the inputs already proven.
+    await new Promise((resolve) => setTimeout(resolve, ONBOARDING_LOCAL_AUTO_TEST_DELAY_MS + 250));
+    expect(testCalls).toBe(1);
+  });
+
+  it('does not validate a saved selection the step is still asking the user to set up', async () => {
+    // A setup-required entry is selectable and can be the saved selection, but
+    // the daemon resolves its binary and really tries to start the runtime, so
+    // validating it unprompted answers with a failure on the same screen that
+    // is telling the user to finish installing it. Nothing may be spent until
+    // the companion setup actually succeeds.
+    let testCalls = 0;
+    globalThis.fetch = vi.fn(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({
+          loggedIn: true,
+          profile: 'prod',
+          configPath: '/x',
+          user: { id: 'u', email: 'user@example.com' },
+        });
+      }
+      if (url.endsWith('/api/test/connection') && init?.method === 'POST') {
+        testCalls += 1;
+        return jsonResponse({
+          ok: false,
+          kind: 'agent_spawn_failed',
+          latencyMs: 5,
+          model: 'deepseek-chat',
+          agentName: 'DeepSeek Harness',
+          detail: 'companion missing',
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    }) as typeof fetch;
+    // Only the setup-required entry is installed, so the scan has no available
+    // agent to fall back to and the saved selection stays on it.
+    renderOnboarding({
+      agents: [amrAgent(), dshSetupRequiredAgent()],
+      onRefreshAgents: vi.fn(() => [amrAgent(), dshSetupRequiredAgent()]),
+      config: baseConfig({ agentId: 'deepseek-harness' }),
+    });
+
+    await openLocalRuntimeSetup();
+    expect(await screen.findByText('DeepSeek Harness')).toBeTruthy();
+
+    // Let the whole debounce window pass: nothing may be spawned across it.
+    await new Promise((resolve) => setTimeout(resolve, ONBOARDING_LOCAL_AUTO_TEST_DELAY_MS + 250));
+    expect(testCalls).toBe(0);
+
+    // And the step is indeed still asking for setup rather than offering to
+    // continue — the two states must not contradict each other.
+    expect(
+      screen.getByRole('button', { name: /^Continue$/i }).getAttribute('aria-disabled'),
+    ).toBe('true');
+  });
+
   it('does not auto-select OpenDesign AMR when the AMR runtime is unavailable', async () => {
     globalThis.fetch = vi.fn(async () =>
       jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' }),
@@ -1054,7 +1507,7 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
       onRefreshAgents: vi.fn(() => [cliAgent()]),
     });
 
-    expect(await screen.findByRole('heading', { name: 'Sign in to OpenDesign' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Welcome to OpenDesign' })).toBeTruthy();
     expect(await findCloudSignInButton()).toBeTruthy();
     expect(screen.queryByRole('button', { name: /OpenDesign AMR/i })).toBeNull();
 
@@ -1062,10 +1515,10 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
       expect(props.onAgentChange).not.toHaveBeenCalledWith('amr');
     });
     expect(
-      (screen.getByRole('button', { name: /Local Agent/i }) as HTMLButtonElement).disabled,
+      (screen.getByRole('button', { name: /Local AI/i }) as HTMLButtonElement).disabled,
     ).toBe(false);
     expect(
-      (screen.getByRole('button', { name: /Bring Your Own Key/i }) as HTMLButtonElement).disabled,
+      (screen.getByRole('button', { name: /API Key/i }) as HTMLButtonElement).disabled,
     ).toBe(false);
     expect(screen.queryByText('Sign in to continue')).toBeNull();
   });
@@ -1076,7 +1529,7 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     ) as typeof fetch;
     renderOnboarding();
 
-    expect(screen.getByRole('heading', { name: 'Sign in to OpenDesign' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Welcome to OpenDesign' })).toBeTruthy();
     expect(await findCloudSignInButton()).toBeTruthy();
     // No runtime card, no AMR version text, no "Sign in to continue" CTA.
     expect(screen.queryByRole('button', { name: /OpenDesign AMR/i })).toBeNull();
@@ -1085,10 +1538,10 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     expect(screen.queryByRole('link', { name: /Authorize AMR/i })).toBeNull();
     // Cloud stays primary while identity-independent setup paths remain available.
     expect(
-      (screen.getByRole('button', { name: /Local Agent/i }) as HTMLButtonElement).disabled,
+      (screen.getByRole('button', { name: /Local AI/i }) as HTMLButtonElement).disabled,
     ).toBe(false);
     expect(
-      (screen.getByRole('button', { name: /Bring Your Own Key/i }) as HTMLButtonElement).disabled,
+      (screen.getByRole('button', { name: /API Key/i }) as HTMLButtonElement).disabled,
     ).toBe(false);
     expect(screen.queryByRole('button', { name: /OpenDesign AMR/i })).toBeNull();
     expect(screen.queryByRole('link', { name: /Authorize AMR/i })).toBeNull();
@@ -1125,7 +1578,7 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
       }),
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /Local Agent/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Local AI/i }));
     expect(await screen.findByText('Local CLI')).toBeTruthy();
 
     await act(async () => {
@@ -1343,8 +1796,8 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     await act(async () => {});
     expect(screen.getByText('Signing in…')).toBeTruthy();
     expect(signIn.hasAttribute('disabled')).toBe(true);
-    expect(screen.queryByRole('button', { name: /Local Agent/i })).toBeNull();
-    expect(screen.queryByRole('button', { name: /Bring Your Own Key/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Local AI/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /API Key/i })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: /Cancel sign-in/i }));
     await act(async () => {});
@@ -1352,14 +1805,14 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     expect(screen.queryByText('Signing in…')).toBeNull();
     // The landing CTA returns to its signed-out copy and is enabled again.
     const cloudButton = await screen.findByRole('button', {
-      name: /Sign in to OpenDesign/i,
+      name: /Sign in \/ Sign up/i,
     });
     expect(cloudButton.hasAttribute('disabled')).toBe(false);
     expect(
-      (screen.getByRole('button', { name: /Local Agent/i }) as HTMLButtonElement).disabled,
+      (screen.getByRole('button', { name: /Local AI/i }) as HTMLButtonElement).disabled,
     ).toBe(false);
     expect(
-      (screen.getByRole('button', { name: /Bring Your Own Key/i }) as HTMLButtonElement).disabled,
+      (screen.getByRole('button', { name: /API Key/i }) as HTMLButtonElement).disabled,
     ).toBe(false);
 
     fireEvent.click(cloudButton);
@@ -1533,7 +1986,7 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     expect(screen.queryByText('Signing in…')).toBeNull();
     expect(
       screen
-        .getByRole('button', { name: /Sign in to OpenDesign/i })
+        .getByRole('button', { name: /Sign in \/ Sign up/i })
         .hasAttribute('disabled'),
     ).toBe(false);
     expect(props.onCompleteOnboarding).not.toHaveBeenCalled();
@@ -2033,7 +2486,7 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
       onRefreshAgents: vi.fn(() => [cliAgent()]),
     });
 
-    expect(screen.getByRole('heading', { name: 'Sign in to OpenDesign' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Welcome to OpenDesign' })).toBeTruthy();
     const primary = screen.getByRole('button', { name: /Loading/i });
     expect(primary).toBeTruthy();
     expect(primary.getAttribute('aria-busy')).toBe('true');
@@ -2041,10 +2494,10 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     expect(document.querySelector('.onboarding-view__card--skeleton')).toBeNull();
     expect(screen.queryByRole('button', { name: /OpenDesign AMR/i })).toBeNull();
     expect(
-      (screen.getByRole('button', { name: /Local Agent/i }) as HTMLButtonElement).disabled,
+      (screen.getByRole('button', { name: /Local AI/i }) as HTMLButtonElement).disabled,
     ).toBe(false);
     expect(
-      (screen.getByRole('button', { name: /Bring Your Own Key/i }) as HTMLButtonElement).disabled,
+      (screen.getByRole('button', { name: /API Key/i }) as HTMLButtonElement).disabled,
     ).toBe(false);
   });
 
@@ -2070,7 +2523,7 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     });
 
     expect(
-      await screen.findByRole('button', { name: /Sign in to OpenDesign/i }),
+      await screen.findByRole('button', { name: /Sign in \/ Sign up/i }),
     ).toBeTruthy();
     expect(screen.queryByRole('button', { name: /OpenDesign AMR/i })).toBeNull();
     expect(document.querySelector('.onboarding-view__card--skeleton')).toBeNull();

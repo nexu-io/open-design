@@ -546,10 +546,17 @@ function chooseWorkspaceForTab(
   return chosen;
 }
 
-function explicitWorkspaceHeaders(selection: WorkspaceSelection): Record<string, string> {
+// Local/dev context reads derive authority from these assertions. The chosen
+// directory row already has them; sending only ids defaults a Team member to
+// `personal/member` on this endpoint.
+function explicitWorkspaceHeaders(selection: WorkspaceDirectoryItem): Record<string, string> {
   return {
     'x-od-workspace-id': selection.workspaceId,
     'x-od-workspace-member-id': selection.workspaceMemberId,
+    'x-od-workspace-type': selection.workspaceType,
+    'x-od-workspace-role': selection.role,
+    'x-od-workspace-lifecycle-state': selection.lifecycleState,
+    'x-od-workspace-member-status': selection.memberStatus,
   };
 }
 
@@ -770,10 +777,7 @@ export function useWorkspaceContext(): WorkspaceContextState {
         }
         const res = await fetch('/api/workspace/context', {
           cache: 'no-store',
-          headers: explicitWorkspaceHeaders({
-            workspaceId: selected.workspaceId,
-            workspaceMemberId: selected.workspaceMemberId,
-          }),
+          headers: explicitWorkspaceHeaders(selected),
         });
         if (!res.ok) {
           const error = new Error(`workspace-context ${res.status}`) as Error & {
@@ -1161,6 +1165,7 @@ function enforceWorkspaceBillingHardExpiry(
     ...response,
     workspaceBalance: null,
     workspaceSnapshot: null,
+    preflight: null,
   };
 }
 
@@ -1187,7 +1192,8 @@ type BillingInvalidation = Extract<
     type:
       | 'billing-changed'
       | 'billing-subscription-changed'
-      | 'wallet-balance-changed';
+      | 'wallet-balance-changed'
+      | 'coding-plan-usage-changed';
   }
 >;
 
@@ -1209,6 +1215,9 @@ export function shouldRefreshWorkspaceBilling(
 }
 
 function billingInvalidationToken(event: BillingInvalidation): string {
+  if (event.type === 'coding-plan-usage-changed') {
+    return `quota:${event.eventId}`;
+  }
   // Vela emits the v2 subscription signal and legacy alias with one revision.
   // A shared key collapses those two transport frames into one authoritative
   // read while keeping genuinely different revisions independent.
@@ -1250,7 +1259,7 @@ export function useWorkspaceBillingResponse(
       : `workspace-billing:workspace:${workspaceId}:member:${workspaceMemberId}`;
   const billingUrl =
     billingScopeKey
-      ? `/api/workspace/billing?scope=workspace&workspaceId=${encodeURIComponent(workspaceId)}`
+      ? `/api/workspace/billing?scope=workspace&workspaceId=${encodeURIComponent(workspaceId)}${context?.workspaceType === 'personal' ? '&includePreflight=1' : ''}`
       : null;
   // The same workspace can be left and selected again while an earlier read is
   // still in flight. The context revision makes A→B→A a new request identity.
@@ -1260,7 +1269,7 @@ export function useWorkspaceBillingResponse(
       }`
     : null;
   const billingInterestScope =
-    billingRequestKey && context?.workspaceType === 'team'
+    billingRequestKey
       ? { workspaceId, workspaceMemberId }
       : null;
   const [state, setState] = useState<{
@@ -1272,6 +1281,7 @@ export function useWorkspaceBillingResponse(
   const activeRequestKeyRef = useRef<string | null>(billingRequestKey);
   const requestEpochRef = useRef(0);
   const runtimeManagedRef = useRef(false);
+  const quotaRealtimeHealthyRef = useRef(false);
   const interestOwnerIdRef = useRef('');
   if (!interestOwnerIdRef.current) {
     interestOwnerIdRef.current = createWorkspaceBillingInterestOwnerId();
@@ -1348,12 +1358,20 @@ export function useWorkspaceBillingResponse(
         }
         const body = (await res.json()) as WorkspaceBillingResponse;
         return enforceWorkspaceBillingHardExpiry({
+          // Quota and wallet use the same last-good cache and invalidations as
+          // the account header. Hovering a presentation component never fetches.
+          ...(body.preflight?.workspaceId === workspaceId
+            && body.preflight.workspaceMemberId === workspaceMemberId
+            && Math.abs(Date.now() - Date.parse(body.preflight.generatedAt)) < 60_000
+            ? { preflight: body.preflight }
+            : {}),
           summary: body.summary ?? null,
           workspaceBalance: body.workspaceBalance ?? null,
           workspaceSnapshot: body.workspaceSnapshot ?? null,
           ...(body.workspaceRuntime
             ? { workspaceRuntime: body.workspaceRuntime }
             : {}),
+          quotaRealtime: { healthy: body.quotaRealtime?.healthy === true },
         });
       };
       const response = force
@@ -1366,6 +1384,7 @@ export function useWorkspaceBillingResponse(
         activeRequestKeyRef.current === requestKey
       ) {
         runtimeManagedRef.current = Boolean(response.workspaceRuntime);
+        quotaRealtimeHealthyRef.current = response.quotaRealtime?.healthy === true;
         clearWorkspaceBillingRetryFailures(requestKey);
         cachedWorkspaceBillingResponses.set(scopeKey, response);
         setState({ scopeKey, response });
@@ -1378,6 +1397,7 @@ export function useWorkspaceBillingResponse(
         activeRequestKeyRef.current === requestKey
       ) {
         const lastGood = cachedWorkspaceBillingResponses.get(scopeKey);
+        quotaRealtimeHealthyRef.current = false;
         const revoked =
           error instanceof WorkspaceBillingHttpError &&
           error.status === 403;
@@ -1411,9 +1431,13 @@ export function useWorkspaceBillingResponse(
     billingRequestKey,
     billingScopeKey,
     billingUrl,
+    workspaceId,
+    workspaceMemberId,
   ]);
 
   useEffect(() => {
+    runtimeManagedRef.current = false;
+    quotaRealtimeHealthyRef.current = false;
     void loadBilling(true, true);
   }, [loadBilling]);
 
@@ -1488,10 +1512,27 @@ export function useWorkspaceBillingResponse(
     state?.response.workspaceRuntime?.revision,
   ]);
 
+  // A quota reset can happen without spending money. Revalidate once at the
+  // next server reset; the shared event collapses timers from other consumers.
+  useEffect(() => {
+    const preflight = state?.scopeKey === billingScopeKey ? state.response.preflight : null;
+    if (!preflight || !billingRequestKey) return;
+    const resets = preflight.codingPlan.windows
+      .map((window) => window.resetsAt ? Date.parse(window.resetsAt) : NaN)
+      .filter((at) => Number.isFinite(at) && at > Date.now());
+    if (!resets.length) return;
+    const timer = setTimeout(() => {
+      window.dispatchEvent(new CustomEvent(WORKSPACE_BILLING_RETRY_EVENT, {
+        detail: { requestKey: billingRequestKey, force: true },
+      }));
+    }, Math.min(Math.min(...resets) - Date.now() + 250, MAX_BROWSER_TIMER_DELAY_MS));
+    return () => clearTimeout(timer);
+  }, [billingRequestKey, billingScopeKey, state]);
+
   // Thin invalidations never carry authoritative money/plan data. Legacy
   // events stay broad; v2 events are rejected unless their explicit workspace
   // and member scopes match the currently selected context.
-  useWorkspaceInvalidation({
+  const { connected: billingStreamConnected } = useWorkspaceInvalidation({
     'billing-changed': (event) => {
       if (shouldRefreshWorkspaceBilling(event, context)) {
         void loadBilling(false, true, billingInvalidationToken(event));
@@ -1507,6 +1548,11 @@ export function useWorkspaceBillingResponse(
         void loadBilling(false, true, billingInvalidationToken(event));
       }
     },
+    'coding-plan-usage-changed': (event) => {
+      if (shouldRefreshWorkspaceBilling(event, context)) {
+        void loadBilling(false, true, billingInvalidationToken(event));
+      }
+    },
   }, {
     workspaceContext: context,
     onActive: () => void loadBilling(false, true),
@@ -1514,15 +1560,18 @@ export function useWorkspaceBillingResponse(
 
   useEffect(() => {
     const interval = setInterval(() => {
-      // New daemons own the 30s safety floor and bounded retries. Keep the old
-      // browser poll only as an additive compatibility path for old daemons
-      // whose response has no runtime metadata.
-      if (!runtimeManagedRef.current && document.visibilityState === 'visible') {
+      // Wallet runtime freshness does not cover zero-wallet quota consumption.
+      // Suppress quota polling only when BOTH upstream quota events and this
+      // renderer's stream are healthy. Older backends retain the safety floor.
+      const quotaNeedsFallback = context?.workspaceType === 'personal'
+        && (!quotaRealtimeHealthyRef.current || !billingStreamConnected);
+      if ((!runtimeManagedRef.current || quotaNeedsFallback)
+        && document.visibilityState === 'visible') {
         void loadBilling(false);
       }
     }, WORKSPACE_BILLING_POLL_MS);
     return () => clearInterval(interval);
-  }, [loadBilling]);
+  }, [loadBilling, context?.workspaceType, billingStreamConnected]);
 
   useEffect(() => {
     const refresh = () => {

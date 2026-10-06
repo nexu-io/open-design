@@ -84,10 +84,36 @@ describe('vela billing 收口', () => {
       subscriptionCredits: 5000,
       rechargeCredits: 7500,
       balanceUsd: '1.2500',
+      creditsPerUsd: 10000,
       subscriptionStatus: 'active',
       availableActions: ['subscription_checkout', 'billing_portal'],
       workspaceBalance: null,
     });
+  });
+
+  // The credits-per-dollar rate is B's, and the Coding Plan quota panel is the
+  // only place that turns a window's credit count into the money the user
+  // thinks in. Dropping the field here forces the client to keep a copy of a
+  // server-owned exchange rate, which goes wrong silently the day B changes it.
+  it('passes the summary creditsPerUsd through to the client', () => {
+    expect(parseBillingSummary(SAMPLE)?.creditsPerUsd).toBe(10000);
+    // B has shipped decimal strings for money-adjacent fields before.
+    expect(
+      parseBillingSummary(JSON.stringify({ balanceUsd: '1', creditsPerUsd: '100000' }))
+        ?.creditsPerUsd,
+    ).toBe(100000);
+  });
+
+  it.each([
+    { name: 'absent', raw: {} },
+    { name: 'zero', raw: { creditsPerUsd: 0 } },
+    { name: 'negative', raw: { creditsPerUsd: -10000 } },
+    { name: 'not a number', raw: { creditsPerUsd: 'lots' } },
+    { name: 'null', raw: { creditsPerUsd: null } },
+  ])('omits a $name creditsPerUsd rather than shipping a bad rate', ({ raw }) => {
+    const summary = parseBillingSummary(JSON.stringify({ balanceUsd: '1', ...raw }));
+    expect(summary).not.toBeNull();
+    expect(summary?.creditsPerUsd).toBeUndefined();
   });
 
   it('returns null on empty or malformed output (clean "no summary")', () => {

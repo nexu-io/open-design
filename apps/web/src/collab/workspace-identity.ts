@@ -44,6 +44,20 @@ export function appendResourceQuery(path: string, query: string): string {
  * Cache partition matching exactly the fields {@link workspaceProjectHeaders}
  * puts on the wire. Billing fields are intentionally excluded because they do
  * not scope these requests.
+ *
+ * ⚠️ **This is a cache partition, not an identity.** It includes `role`, and it
+ * has to: `role` goes on the wire as `x-od-workspace-role`, so two requests
+ * that assert different roles are different requests and may not share a cached
+ * answer.
+ *
+ * That makes it the WRONG tool for asking "are these two contexts the same
+ * person?". The project scope fast path deliberately publishes a placeholder
+ * `role: 'member'` while the shell publishes the real role, so for an owner or
+ * an admin this key differs for one and the same member of one and the same
+ * workspace — and a comparison written this way is silently correct for a plain
+ * member and silently wrong for everyone above them. Use
+ * `isSameWorkspacePrincipal` from `@open-design/contracts` for that question;
+ * its docs carry the full rationale and the list of defects this produced.
  */
 export function workspaceIdentityCacheKey(
   context: WorkspaceCollabContext | null | undefined,

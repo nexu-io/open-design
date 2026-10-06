@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { harnessAnalyticsFromRolloutDecision } from '../src/analytics/events.js';
+import {
+  harnessAnalyticsFromRolloutDecision,
+  odNextBlockedAnalyticsFromStrategyTask,
+} from '../src/analytics/events.js';
 
 describe('harnessAnalyticsFromRolloutDecision', () => {
   it('reports od_next with no fallback reason when the strategy ran', () => {
@@ -37,5 +40,65 @@ describe('harnessAnalyticsFromRolloutDecision', () => {
     expect(harnessAnalyticsFromRolloutDecision({ effectiveMode: 'off', primaryReasonCode: '' })).toEqual({
       harness: 'ordinary',
     });
+  });
+});
+
+describe('odNextBlockedAnalyticsFromStrategyTask', () => {
+  it('carries the gate that refused the turn', () => {
+    expect(
+      odNextBlockedAnalyticsFromStrategyTask({
+        terminal: true,
+        outcome: 'blocked',
+        blockedContext: {
+          reasonCodes: [
+            'od_next_canonical_deliverable_invalid',
+            'od_next_protocol_runtime_state_missing',
+          ],
+        },
+      }),
+    ).toEqual({ od_next_blocked_reason_code: 'od_next_canonical_deliverable_invalid' });
+  });
+
+  it('stays silent for a task that refused nothing', () => {
+    // `harness` already says an OD Next task passed through. This field means
+    // "and it was refused" — a completed task must not land in that bucket.
+    expect(
+      odNextBlockedAnalyticsFromStrategyTask({ terminal: true, outcome: 'completed' }),
+    ).toEqual({});
+    expect(
+      odNextBlockedAnalyticsFromStrategyTask({ terminal: true, outcome: 'canceled' }),
+    ).toEqual({});
+  });
+
+  it('stays silent for a task that has not settled', () => {
+    // A running task may block later or may not; counting it now would report
+    // a refusal that never happened.
+    expect(
+      odNextBlockedAnalyticsFromStrategyTask({
+        terminal: false,
+        outcome: 'blocked',
+        blockedContext: { reasonCodes: ['od_next_protocol_runtime_state_missing'] },
+      }),
+    ).toEqual({});
+  });
+
+  it('stays silent when a blocked task carries no reason', () => {
+    // An older daemon projects a blocked task without `blockedContext`. An
+    // empty string is not a bucket.
+    expect(
+      odNextBlockedAnalyticsFromStrategyTask({ terminal: true, outcome: 'blocked' }),
+    ).toEqual({});
+    expect(
+      odNextBlockedAnalyticsFromStrategyTask({
+        terminal: true,
+        outcome: 'blocked',
+        blockedContext: { reasonCodes: [] },
+      }),
+    ).toEqual({});
+  });
+
+  it('stays silent for a run that had no strategy task at all', () => {
+    expect(odNextBlockedAnalyticsFromStrategyTask(undefined)).toEqual({});
+    expect(odNextBlockedAnalyticsFromStrategyTask(null)).toEqual({});
   });
 });

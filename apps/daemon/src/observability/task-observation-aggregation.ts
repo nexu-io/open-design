@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import type { projectTaskTrace } from './task-trace-projection.js';
 
 import {
   NORMALIZED_AGENT_OBSERVATION_V1_SCHEMA,
@@ -11,9 +12,11 @@ import {
   type ObservationUsageValuesV1,
   type OdNextRolloutDecision,
   type PromptBoundaryEvidenceV1,
+  type SafeDeliverableSyntaxTelemetryV1,
   type StrategyInputStageV2,
 } from '@open-design/contracts';
 import type Database from 'better-sqlite3';
+import type { EvalContextV2 } from './eval-context.js';
 
 import type { TelemetryPrefs } from '../app-config.js';
 import { getSnapshot } from '../plugins/snapshots.js';
@@ -148,12 +151,14 @@ function distinctRuntimeVersions(
 }
 
 export interface StrategyTaskObservationAggregateV1 {
+  traceProjection?: ReturnType<typeof projectTaskTrace>;
   schema: 'open-design.strategy-task-observation/v1';
   root: StrategyTaskObservationRootV1;
   observations: NormalizedAgentObservationV1[];
   coverage: TaskObservationCoverageV1;
   stageTotals: TaskObservationStageTotalV1[];
   limitations: string[];
+  evaluation?: { context: EvalContextV2; runs: Array<{ runId: string; context: EvalContextV2 }> };
 }
 
 export const TASK_OBSERVATION_SCHEMA_CAPABILITY_V1 = {
@@ -870,6 +875,139 @@ export interface SafeTaskObservationQualityProjectionV1 {
   metadata: Record<string, unknown>;
 }
 
+export function deliverableSyntaxFlatMetadata(
+  syntax: SafeDeliverableSyntaxTelemetryV1 | undefined,
+): Record<string, string | number | boolean | null> {
+  if (!syntax) return {};
+  return {
+    deliverable_syntax_schema_version: syntax.schemaVersion,
+    deliverable_syntax_applicable: syntax.applicable,
+    deliverable_syntax_status: syntax.status,
+    deliverable_syntax_source: syntax.source,
+    deliverable_syntax_checker: syntax.checker,
+    deliverable_syntax_checked_file_count: syntax.checkedFileCount,
+    deliverable_syntax_check_count: syntax.checkCount,
+    deliverable_syntax_checker_duration_ms: syntax.checkerDurationMs,
+    deliverable_syntax_repair_window_duration_ms: syntax.repairWindowDurationMs,
+    deliverable_syntax_repair_to_delivery_duration_ms:
+      syntax.repairToDeliveryDurationMs,
+    ...(syntax.repairExecutor !== undefined
+      ? { deliverable_syntax_repair_executor: syntax.repairExecutor }
+      : {}),
+    ...(syntax.repairDurationMs !== undefined
+      ? { deliverable_syntax_repair_duration_ms: syntax.repairDurationMs }
+      : {}),
+    ...(syntax.appliedRepairRules !== undefined
+      ? {
+          deliverable_syntax_applied_repair_rules:
+            syntax.appliedRepairRules.join(','),
+        }
+      : {}),
+    deliverable_syntax_repairable_check_count: syntax.repairableCheckCount,
+    deliverable_syntax_initial_diagnostic_count: syntax.initialDiagnosticCount,
+    deliverable_syntax_latest_diagnostic_count: syntax.latestDiagnosticCount,
+    deliverable_syntax_repair_triggered: syntax.repairTriggered,
+    deliverable_syntax_repair_attempts: syntax.repairAttempts,
+    deliverable_syntax_max_repair_attempts: syntax.maxRepairAttempts,
+    deliverable_syntax_repair_outcome: syntax.repairOutcome,
+    deliverable_syntax_recovered_delivery_count: syntax.recoveredDeliveryCount,
+    deliverable_syntax_blocked_broken_delivery_count:
+      syntax.blockedBrokenDeliveryCount,
+    ...(syntax.deliveredWithSyntaxWarningCount !== undefined
+      ? { deliverable_syntax_delivered_with_syntax_warning_count: syntax.deliveredWithSyntaxWarningCount }
+      : {}),
+    ...(syntax.finalization
+      ? {
+          deliverable_syntax_finalization_action: syntax.finalization.action,
+          ...(syntax.finalization.reason ? { deliverable_syntax_finalization_reason: syntax.finalization.reason } : {}),
+          ...(syntax.finalization.refusal ? { deliverable_syntax_finalization_refusal: syntax.finalization.refusal } : {}),
+        }
+      : {}),
+  };
+}
+
+/** Aggregate physical Run counters while keeping the latest terminal status. */
+export function taskDeliverableSyntaxTelemetry(
+  aggregate: StrategyTaskObservationAggregateV1,
+): SafeDeliverableSyntaxTelemetryV1 | undefined {
+  const syntaxes = aggregate.observations.flatMap((observation) => (
+    observation.kind === 'task_run' && observation.quality?.deliverableSyntax
+      ? [observation.quality.deliverableSyntax]
+      : []
+  ));
+  const latest = syntaxes.at(-1);
+  if (!latest) return undefined;
+  // Unlike historical any-Run counters, a warning delivery describes the
+  // latest physical Run only. Missing later evidence must not revive an older warning.
+  const latestRun = aggregate.observations.filter((observation) => observation.kind === 'task_run').at(-1);
+  const warningCount = aggregate.coverage.runs.availability === 'complete'
+    ? latestRun?.quality?.deliverableSyntax?.deliveredWithSyntaxWarningCount
+    : undefined;
+  const { deliveredWithSyntaxWarningCount: _priorWarningCount, ...latestWithoutWarningCount } = latest;
+  const durations = syntaxes.flatMap((syntax) => (
+    syntax.checkerDurationMs === null ? [] : [syntax.checkerDurationMs]
+  ));
+  const repairWindowDurations = syntaxes.flatMap((syntax) => (
+    syntax.repairWindowDurationMs === null ? [] : [syntax.repairWindowDurationMs]
+  ));
+  const repairToDeliveryDurations = syntaxes.flatMap((syntax) => (
+    syntax.repairToDeliveryDurationMs === null
+      ? []
+      : [syntax.repairToDeliveryDurationMs]
+  ));
+  const repairDurations = syntaxes.flatMap((syntax) => (
+    syntax.repairDurationMs == null ? [] : [syntax.repairDurationMs]
+  ));
+  const initialDiagnostics = syntaxes.flatMap((syntax) => (
+    syntax.initialDiagnosticCount === null ? [] : [syntax.initialDiagnosticCount]
+  ));
+  // A later warning vetoes Task-level recovery, without erasing the earlier
+  // physical Run's repair evidence or other historical counters.
+  const latestRunWarned = latestRun?.quality?.deliverableSyntax?.finalization?.action === 'warn';
+  const recoveredDeliveryCount = !latestRunWarned && syntaxes.some(
+    (syntax) => syntax.recoveredDeliveryCount === 1,
+  ) ? 1 : 0;
+  const blockedBrokenDeliveryCount = syntaxes.some(
+    (syntax) => syntax.blockedBrokenDeliveryCount === 1,
+  ) ? 1 : 0;
+  return {
+    ...latestWithoutWarningCount,
+    ...(warningCount !== undefined ? { deliveredWithSyntaxWarningCount: warningCount } : {}),
+    checkCount: syntaxes.reduce((sum, syntax) => sum + syntax.checkCount, 0),
+    checkerDurationMs: durations.length > 0
+      ? durations.reduce((sum, duration) => sum + duration, 0)
+      : null,
+    repairWindowDurationMs: repairWindowDurations.length > 0
+      ? repairWindowDurations.reduce((sum, duration) => sum + duration, 0)
+      : null,
+    repairToDeliveryDurationMs: repairToDeliveryDurations.length > 0
+      ? repairToDeliveryDurations.reduce((sum, duration) => sum + duration, 0)
+      : null,
+    repairDurationMs: repairDurations.length > 0
+      ? repairDurations.reduce((sum, duration) => sum + duration, 0)
+      : null,
+    appliedRepairRules: [...new Set(
+      syntaxes.flatMap((syntax) => syntax.appliedRepairRules ?? []),
+    )],
+    repairableCheckCount: syntaxes.reduce(
+      (sum, syntax) => sum + syntax.repairableCheckCount,
+      0,
+    ),
+    initialDiagnosticCount: initialDiagnostics.length > 0
+      ? initialDiagnostics.reduce((sum, count) => sum + count, 0)
+      : null,
+    repairTriggered: syntaxes.some((syntax) => syntax.repairTriggered),
+    repairAttempts: syntaxes.reduce((sum, syntax) => sum + syntax.repairAttempts, 0),
+    repairOutcome: blockedBrokenDeliveryCount === 1
+      ? 'exhausted'
+      : recoveredDeliveryCount === 1
+        ? 'repaired'
+        : latest.repairOutcome,
+    recoveredDeliveryCount,
+    blockedBrokenDeliveryCount,
+  };
+}
+
 /**
  * Resolve the already-validated safe quality payload for one exported
  * observation. Tool I/O is owned by the parent task_run quality projection
@@ -890,6 +1028,7 @@ export function safeTaskObservationQualityProjection(
         ? { statusMessage: quality.result.error.message.text }
         : {}),
       metadata: {
+        ...(aggregate.evaluation ? { eval_context_v2: aggregate.evaluation.runs.find(run => run.runId === observation.identity.runId)?.context } : {}),
         errorCode: quality?.result?.error?.code,
         failureCategory: quality?.result?.error?.category,
         failureDetail: quality?.result?.error?.detail,
@@ -906,6 +1045,7 @@ export function safeTaskObservationQualityProjection(
         attachmentManifest: quality?.manifests?.attachments,
         artifactManifest: quality?.manifests?.artifacts,
         inputTextSnapshotManifest: quality?.manifests?.inputTextSnapshots,
+        ...deliverableSyntaxFlatMetadata(quality?.deliverableSyntax),
       },
     };
   }
@@ -945,6 +1085,7 @@ export function buildLegacyTaskObservationPayload(
   context?: TaskObservationExportContextV1,
 ): unknown[] {
   const traceId = aggregate.root.observationId;
+  const deliverableSyntax = taskDeliverableSyntaxTelemetry(aggregate);
   const nowIso = new Date(aggregate.root.updatedAt).toISOString();
   const events: unknown[] = [];
   const pushEvent = (type: string, body: Record<string, unknown>) => {
@@ -957,6 +1098,7 @@ export function buildLegacyTaskObservationPayload(
     });
   };
   pushEvent('trace-create', {
+    ...(aggregate.traceProjection ? { input: aggregate.traceProjection.input, output: aggregate.traceProjection.output } : {}),
     id: traceId,
     name: 'open-design-strategy-task',
     sessionId: aggregate.root.conversationId,
@@ -971,6 +1113,15 @@ export function buildLegacyTaskObservationPayload(
         }
       : {}),
     metadata: {
+      ...aggregate.traceProjection?.metadata,
+      ...(aggregate.evaluation ? {
+        eval_context_v2: aggregate.evaluation.context,
+        eval_context_v2_runs: aggregate.evaluation.runs,
+        status: aggregate.evaluation.context.productOutcome.runStatus,
+        success: aggregate.evaluation.context.evaluationOutcome === 'failed' ? false : aggregate.evaluation.context.productOutcome.runStatus === 'succeeded',
+        artifact_manifest: aggregate.traceProjection?.metadata.artifact_manifest ?? aggregate.evaluation.context.artifacts.entries,
+        manifest_completeness: aggregate.traceProjection?.metadata.manifest_completeness ?? aggregate.evaluation.context.completeness.status,
+      } : {}),
       schema: aggregate.schema,
       taskExecutionId: aggregate.root.taskExecutionId,
       projectId: aggregate.root.projectId,
@@ -1001,6 +1152,7 @@ export function buildLegacyTaskObservationPayload(
         : {}),
       coverage: aggregate.coverage,
       stageTotals: aggregate.stageTotals,
+      ...deliverableSyntaxFlatMetadata(deliverableSyntax),
       limitations: safeTaskObservationLimitationCodes(aggregate.limitations),
     },
   });

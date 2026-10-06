@@ -1,21 +1,38 @@
+import { asObject } from './agent-protocol/acp/json.js';
 import type {
   TrackingRunCancelOrigin,
   TrackingRunFailureCategory,
   TrackingRunFailureDetail,
+  TrackingRunFailureDomain,
+  TrackingRunFailureMechanism,
   TrackingRunFailureStage,
   TrackingRunFailureUserAction,
+  TrackingRunEvidenceLevel,
+  TrackingRunAdmissionStatus,
+  TrackingRunAdmissionPhase,
+  TrackingRunPolicyReason,
+  TrackingRunRepairOwner,
   TrackingRunTerminalTrigger,
 } from '@open-design/contracts/analytics';
 import {
+  AMR_CONTINUATION_ERROR_CODE,
   isMembershipConcurrencyLimitFailure,
   isModelWindowLimitFailure,
 } from '@open-design/contracts';
 
-import { classifyAmrAccountFailure } from './integrations/vela-errors.js';
+import {
+  classifyAmrAccountFailure,
+  reportsPlatformProviderCredentialFault,
+} from './integrations/vela-errors.js';
+import { runFailureEvidence } from './services/run-failure-evidence.js';
 import { summarizeRunToolProgress } from './run-diagnostics.js';
 import { isAcpHandshakeRpcErrorText } from './runtimes/acp-handshake-id.js';
-import { classifyAgentServiceFailure } from './runtimes/auth.js';
+import {
+  classifyAgentServiceFailure,
+  reportsToolPrincipalAuthFailure,
+} from './runtimes/auth.js';
 import type { RunResult, RunStatusForAnalytics } from './run-result.js';
+import type { RunAdmissionEvidence } from './runtimes/run-lifecycle-analytics.js';
 
 export interface RunEventForFailureClassification {
   event: string;
@@ -32,12 +49,21 @@ export interface RunFailureClassificationInput {
   cancelOrigin?: TrackingRunCancelOrigin | null;
   terminalTrigger?: TrackingRunTerminalTrigger | null;
   events?: RunEventForFailureClassification[];
+  admissionEvidence?: RunAdmissionEvidence | undefined;
 }
 
 export interface RunFailureClassification {
   failure_category: TrackingRunFailureCategory;
   failure_detail: TrackingRunFailureDetail;
   failure_stage: TrackingRunFailureStage;
+  failure_mechanism?: TrackingRunFailureMechanism;
+  failure_domain?: TrackingRunFailureDomain;
+  evidence_level?: TrackingRunEvidenceLevel;
+  repair_owner?: TrackingRunRepairOwner;
+  admission_status?: TrackingRunAdmissionStatus;
+  admission_phase?: TrackingRunAdmissionPhase;
+  policy_reason?: TrackingRunPolicyReason;
+  classifier_version?: 'run-failure-v2' | 'run-failure-v3';
   retryable: boolean;
   user_action: TrackingRunFailureUserAction;
   /** Distinguishes an explicit user stop from lifecycle-driven cancellation. */
@@ -204,7 +230,7 @@ function isWorkspaceCreditsText(text: string): boolean {
 }
 
 function isTimeoutText(text: string): boolean {
-  return /\b(timed?\s*out|timeout|inactivity|stalled|hung|no new output|without emitting any new output)\b/i
+  return /\b(timed?\s*out|timeout|context deadline exceeded|inactivity|stalled|hung|no new output|without emitting any new output)\b/i
     .test(text);
 }
 
@@ -245,6 +271,42 @@ function isCliNotInstalledText(text: string): boolean {
     .test(text);
 }
 
+function isBundledBinaryMissingText(text: string): boolean {
+  return /\bbundled (?:OpenCode|agent) binary (?:is )?missing\b/i.test(text);
+}
+
+/**
+ * The endpoint was never reached from this machine.
+ *
+ * These are the OS-level answers to "the connection could not even be opened":
+ * the name did not resolve (`getaddrinfo` / `ENOTFOUND` / `EAI_AGAIN`), no route
+ * existed (`EHOSTUNREACH` / `ENETUNREACH` / `ENETDOWN`), or something on the path
+ * refused it (`ECONNREFUSED`).
+ *
+ * This is the FIRST shape a lost network produces, and the reason it needs to be
+ * named separately from `stream_disconnected`: a request has to resolve and
+ * connect before it can be reset, so a machine that just went offline fails at
+ * DNS, not with a socket error. Only a call that was *already streaming* when the
+ * link died reports a reset — which is why the two arrive with different words
+ * for one physical cause, and why matching only the reset vocabulary leaves the
+ * commoner half to fall through to the last-resort `execution_failed` bucket.
+ *
+ * They stay in the client-environment family rather than the upstream one on
+ * purpose: nothing is wrong at the provider, so the honest answer is the
+ * environment card and not "the provider is having trouble".
+ */
+const ENDPOINT_NEVER_REACHED_RE =
+  /\b(ECONNREFUSED|ENETUNREACH|ENETDOWN|EHOSTUNREACH|ENOTFOUND|EAI_AGAIN|getaddrinfo|network unreachable|local connection failed)\b/i;
+
+function clientEnvironmentFailureDetail(text: string): TrackingRunFailureDetail | null {
+  if (/\b(Windows Application Control|AppLocker)\b/i.test(text)) return 'host_policy_block';
+  if (/\b(SQLite|WAL).*(?:I\/O|readonly|locked|corrupt|failed)\b/i.test(text)) return 'local_storage_failure';
+  if (/\b(certificate|CERT_|self[- ]signed|unable to verify)\b/i.test(text)) return 'certificate_failure';
+  if (/\b(unsupported proxy protocol|proxy configuration)\b/i.test(text)) return 'proxy_configuration';
+  if (ENDPOINT_NEVER_REACHED_RE.test(text)) return 'network_configuration';
+  return null;
+}
+
 function isGitBashMissingText(text: string): boolean {
   return /\bClaude Code on Windows requires git-bash\b|\bCLAUDE_CODE_GIT_BASH_PATH\b|\bgit-bash\b/i
     .test(text);
@@ -260,6 +322,10 @@ function isAgentProtocolErrorText(text: string): boolean {
     /\bQoder run failed: (?:stop_sequence|end_turn)\b/i.test(text) ||
     /\bthread\/start failed\b/i.test(text) ||
     /\bfailed to parse request\b/i.test(text);
+}
+
+function isAcpFrameTooLargeText(text: string): boolean {
+  return /\bACP input line exceeds maximum size\b/i.test(text);
 }
 
 function isFabricatedRoleMarkerText(text: string): boolean {
@@ -424,6 +490,14 @@ function authDetail(text: string): TrackingRunFailureDetail {
   return 'auth_required';
 }
 
+function upstreamClientErrorDetail(text: string): TrackingRunFailureDetail {
+  // Only the provider's explicit region denial gets S30. A bare 403, proxy
+  // rejection, or request-shape error keeps the existing client-error detail.
+  return /\bCountry, region, or territory not supported\b/i.test(text)
+    ? 'region_not_supported'
+    : 'upstream_client_error';
+}
+
 function upstreamDetail(text: string): TrackingRunFailureDetail {
   if (/\b(AMR model catalog is (?:temporarily )?unavailable|no endpoints found that support tool use|provider routing)\b/i.test(text)) {
     return 'provider_routing_error';
@@ -433,7 +507,7 @@ function upstreamDetail(text: string): TrackingRunFailureDetail {
     .test(text)) {
     return 'stream_disconnected';
   }
-  if (isUpstreamClientErrorText(text)) return 'upstream_client_error';
+  if (isUpstreamClientErrorText(text)) return upstreamClientErrorDetail(text);
   if (/\b(?:http|status|error|response)(?:[ _-]?code)?[\s:=#-]*5\d\d\b|\b5\d\d\s+(?:bad gateway|service unavailable|internal server error|gateway timeout)|\b(5xx|bad gateway|gateway timeout|internal server error|service unavailable|upstream[ _-](?:error|unavailable)|provider (?:error|unavailable)|overloaded|Unexpected server error|Failed to process error response)\b/i
     .test(text)) {
     return 'upstream_5xx';
@@ -452,6 +526,22 @@ const PROCESS_CRASH_SIGNALS = new Set([
   'SIGBUS',
 ]);
 
+/**
+ * The signals a child never chooses: the OS or an operator ended it. Read from
+ * either the normalized error code or the raw status, because a run can carry
+ * the signal without ever getting an `AGENT_SIGNAL_*` code stamped on it.
+ */
+function forcedSignalName(errorCode: string, signal: unknown): string | null {
+  const named = errorCode.startsWith('AGENT_SIGNAL_')
+    ? errorCode.slice('AGENT_SIGNAL_'.length)
+    : typeof signal === 'string'
+      ? signal
+      : '';
+  if (!named) return null;
+  if (named === 'SIGKILL' || PROCESS_CRASH_SIGNALS.has(named)) return named;
+  return null;
+}
+
 // Classifies a run that died from an OS signal or an interrupt exit code
 // (130 = 128 + SIGINT). Returns null when the failure is not signal/interrupt
 // shaped so the caller can fall through to the generic exit-code bucket.
@@ -466,11 +556,18 @@ function signalInterruptClassification(
   errorCode: string,
   text: string,
   retryableHint: boolean | undefined,
+  /**
+   * The signal when the caller already knows it. A killed run does NOT reliably
+   * carry an `AGENT_SIGNAL_*` code — a real `kill -9` lands as
+   * `AGENT_EXECUTION_FAILED` with the signal only on `status.signal` — so the
+   * code alone is not enough to recognize one.
+   */
+  signalOverride?: string | null,
 ): RunFailureClassification | null {
   const isInterruptExit = errorCode === 'AGENT_EXIT_130';
   const signal = errorCode.startsWith('AGENT_SIGNAL_')
     ? errorCode.slice('AGENT_SIGNAL_'.length)
-    : '';
+    : (signalOverride ?? '');
   if (!signal && !isInterruptExit) return null;
 
   if (signal === 'SIGKILL') {
@@ -588,6 +685,22 @@ function isManagedRuntimeStartupFailureText(text: string): boolean {
 // mislabeled as a processor limitation and lose its retry. The same binary on
 // the same CPU fails deterministically, so cpu_unsupported must never be
 // auto-retried.
+/**
+ * Risk control has suspended the account.
+ *
+ * vela answers with JSON-RPC `-32600`, message "Account temporarily
+ * suspended\nWe detected abnormal payment risk on this account…", and
+ * `data: {"kind":"account_suspended","retryable":false}`. Both are matched: the
+ * ACP bridge does not always surface `data` to the host, and matching only the
+ * structured kind would lose the classification on the paths that carry the
+ * sentence alone (which is exactly how this failure went unnamed until now).
+ */
+function isAccountSuspendedText(text: string): boolean {
+  if (/\baccount_suspended\b/i.test(text)) return true;
+  if (/\baccount temporarily suspended\b/i.test(text)) return true;
+  return /\btemporarily suspended account access\b/i.test(text);
+}
+
 function isCpuUnsupportedCrashText(text: string): boolean {
   if (/\bno_avx2\b/i.test(text)) return true;
   return (
@@ -617,6 +730,52 @@ function readRuntimeCloseReason(
     }
   }
   return null;
+}
+
+/**
+ * True when the DAEMON itself declared this run timed out.
+ *
+ * Invariant: a verdict the daemon reached on its own survives without its own
+ * prose. The ACP stage watchdog decides a stage is over and kills the child —
+ * nothing upstream reported anything — and it stamps that decision as
+ * `error.details.kind === 'acp_stage_timeout'` (see `agent-protocol/acp/session.ts`).
+ * Reading the marker rather than regex-matching the sentence it happened to
+ * write is what stops a reworded, wrapped, localized or dropped message from
+ * silently re-filing a watchdog kill as an opaque `process_exit / exit_code` —
+ * which is `retryable: false` / `user_action: 'none'`, the one verdict this
+ * failure must never get, since a retry is its entire remedy.
+ *
+ * The value is matched exactly, and it is namespaced to the mechanism that
+ * writes it. `error.details` is NOT a daemon-private slot — `fail()` copies an
+ * agent's JSON-RPC `error.data` straight into it — so the marker's protection
+ * comes from being a name no upstream payload emits, not from the slot being
+ * unreachable. A generic `kind: 'timeout'`, which any vendor SDK might send for
+ * its own timeout, would have been read here as a watchdog kill that never
+ * happened, and would additionally have outranked the forced-signal guard below.
+ *
+ * This is collision resistance, not authentication: an adapter that deliberately
+ * sent `kind: 'acp_stage_timeout'` would still be believed. Making the verdict
+ * unforgeable requires carrying it in a field agent payload can never reach —
+ * see the note on `fail()` in `agent-protocol/acp/session.ts`.
+ */
+function hasDaemonTimeoutVerdict(
+  events: RunEventForFailureClassification[] = [],
+): boolean {
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const rec = events[i];
+    if (!rec || rec.event !== 'error') continue;
+    const payload = rec.data && typeof rec.data === 'object'
+      ? rec.data as Record<string, unknown>
+      : null;
+    const nested = payload?.error && typeof payload.error === 'object'
+      ? payload.error as Record<string, unknown>
+      : null;
+    const details = nested?.details && typeof nested.details === 'object'
+      ? nested.details as Record<string, unknown>
+      : null;
+    if (details?.kind === 'acp_stage_timeout') return true;
+  }
+  return false;
 }
 
 // Promote the opaque `execution_failed` detail to the specific close reason when
@@ -679,11 +838,126 @@ function classification(
   failure_stage: TrackingRunFailureStage,
   retryable: boolean,
   user_action: TrackingRunFailureUserAction,
+  options: {
+    structuredProviderEvidence?: boolean;
+    evidenceLevel?: TrackingRunEvidenceLevel;
+  } = {},
 ): RunFailureClassification {
+  const policy = [
+    'hard_quota',
+    'model_window_limit',
+    'membership_concurrency_limit',
+    'workspace_credits_exhausted',
+    'amr_insufficient_balance',
+    'amr_tier_upgrade_required',
+  ].includes(failure_detail) || failure_category === 'entitlement_required';
+  const localModel = [
+    'cli_version_incompatible',
+    'local_model_not_loaded',
+  ].includes(failure_detail);
+  const clientRequest = [
+    'attachment_media_type_unsupported',
+    'tool_schema_invalid',
+    'prompt_tokenization_failed',
+    'provider_resource_not_found',
+  ].includes(failure_detail);
+  const transport = !options.structuredProviderEvidence && [
+    'stream_disconnected',
+    'network_error',
+  ].includes(failure_detail);
+  const provider = (failure_category === 'model_unavailable' && !localModel)
+    || (failure_category === 'upstream_unavailable' && !transport && !clientRequest)
+    || (failure_category === 'rate_limit' && !policy);
+  const environment = [
+    'auth_required', 'stale_profile', 'refresh_token_reused', 'missing_api_key',
+    'invalid_api_key', 'cli_not_installed', 'git_bash_missing',
+    'agent_config_invalid', 'cpu_unsupported', 'host_policy_block',
+    'local_storage_failure', 'certificate_failure', 'proxy_configuration',
+    'network_configuration',
+  ].includes(failure_detail) || localModel;
+  const product = [
+    'agent_protocol_error', 'acp_frame_too_large', 'bundled_binary_missing', 'empty_output', 'fabricated_role_marker',
+    'permission_request_not_found', 'plugin_artifact_missing',
+  ].includes(failure_detail) || clientRequest || failure_category === 'prompt_too_large';
+  const failure_mechanism: TrackingRunFailureMechanism = policy
+    ? 'policy_rejection'
+    : provider
+      ? 'provider_rejection'
+      : transport
+        ? 'transport_failure'
+      : failure_detail === 'acp_frame_too_large'
+        ? 'frame_too_large'
+        : failure_detail === 'agent_protocol_error'
+          ? 'protocol_violation'
+        : failure_category === 'empty_output'
+          ? 'empty_completion'
+          : failure_category === 'timeout'
+            ? failure_detail === 'inactivity_timeout'
+              ? 'stream_idle_timeout'
+              : failure_stage === 'post_tool_resume'
+                ? 'post_tool_resume_timeout'
+                : 'acp_response_deadline'
+          : failure_category === 'tool_error'
+              ? 'tool_execution_failure'
+              : failure_detail === 'interrupted'
+                ? 'unknown'
+              : failure_category === 'process_exit'
+                ? 'child_exit'
+                : 'unknown';
+  const failure_domain: TrackingRunFailureDomain = policy
+    ? 'policy_admission'
+    : provider
+      ? 'provider_control_plane'
+      : transport
+        ? 'cross_boundary'
+      : environment
+        ? 'client_environment'
+        : product
+          ? 'client_product'
+          : failure_category === 'timeout' || failure_category === 'process_exit'
+            ? 'cross_boundary'
+            : 'unknown';
+  const inferredEvidenceLevel: TrackingRunEvidenceLevel = failure_detail === 'membership_concurrency_limit'
+    ? 'structured_code'
+    : failure_detail === 'interrupted'
+      ? 'lifecycle_signal'
+    : transport
+      ? 'legacy_text'
+    : provider
+      ? options.structuredProviderEvidence ? 'structured_code' : 'legacy_text'
+      : failure_detail === 'agent_protocol_error' || failure_detail === 'acp_frame_too_large'
+        ? 'protocol_error'
+        : failure_category === 'timeout'
+          ? 'lifecycle_signal'
+            : failure_detail === 'bundled_binary_missing' || environment
+              ? 'stderr_fallback'
+              : ['fatal_rpc_error', 'stream_error', 'exit_nonzero'].includes(failure_detail)
+            ? 'close_reason'
+            : failure_detail === 'unknown'
+              ? 'unknown'
+              : 'legacy_text';
+  const evidence_level = options.evidenceLevel ?? inferredEvidenceLevel;
+  const repair_owner: TrackingRunRepairOwner = failure_domain === 'policy_admission'
+    ? 'policy_owner'
+    : failure_domain === 'provider_control_plane'
+      ? 'provider_owner'
+      : failure_domain === 'client_environment'
+        ? 'client_environment'
+        : failure_domain === 'client_product'
+          ? 'open_design'
+          : failure_domain === 'cross_boundary'
+            ? 'shared_boundary'
+            : 'unknown';
   return {
     failure_category,
     failure_detail,
     failure_stage,
+    failure_mechanism,
+    failure_domain,
+    evidence_level,
+    repair_owner,
+    admission_status: 'unknown',
+    classifier_version: 'run-failure-v3',
     retryable,
     user_action,
   };
@@ -699,29 +973,83 @@ function classifyRunFailureBase(
     return {
       // Preserve the legacy category/detail for dashboard compatibility.
       // `cancel_origin` is the authoritative SLO eligibility signal.
-      ...classification(
-        'user_cancel',
-        'user_cancelled',
-        inferFailureStageFromEvents(events, 'first_token_wait'),
-        false,
-        'none',
-      ),
+      failure_category: 'user_cancel',
+      failure_detail: 'user_cancelled',
+      failure_stage: inferFailureStageFromEvents(events, 'first_token_wait'),
+      retryable: false,
+      user_action: 'none',
       cancel_origin: cancelOrigin,
       terminal_trigger: cancelOrigin,
     };
   }
 
   const errorCode = normalizeCode(input.errorCode ?? input.status.errorCode);
+  if (errorCode === 'OD_NEXT_TASK_BLOCKED') {
+    // The host rejected completion, but this does not establish why the model
+    // failed to satisfy the task contract. Do not infer a provider fault or a
+    // child crash from the blocked reason text (the process may exit zero).
+    return {
+      ...classification('process_exit', 'execution_failed', 'finalize', false, 'none', {
+        evidenceLevel: 'structured_code',
+      }),
+      failure_mechanism: 'unknown',
+      failure_domain: 'unknown',
+      repair_owner: 'unknown',
+    };
+  }
   const text = collectFailureText({ ...input, events });
   const retryableHint = latestRetryable(events);
   // Compute once; used both for the early empty_output guard below and for the
   // fatal_rpc_error promotion later in this function.
   const runtimeCloseReason = readRuntimeCloseReason(events);
+  // The daemon's own watchdog verdict, read structurally. Computed here beside
+  // the other once-only signals because two branches consult it: the forced
+  // signal guard below (a watchdog kill IS a signal, and the reason it was
+  // killed outranks the bare signal) and the timeout branch itself.
+  const daemonTimeoutVerdict = hasDaemonTimeoutVerdict(events);
+  if (input.agentId === 'amr' && events.some((event) => {
+    if (event.event !== 'error') return false;
+    const data = asObject(event.data);
+    const details = asObject(asObject(data?.error)?.details);
+    return details?.code === AMR_CONTINUATION_ERROR_CODE;
+  })) {
+    return classification('process_exit', 'continuation_incomplete',
+      inferFailureStageFromEvents(events, 'post_tool_resume'), false, 'none');
+  }
   const amrFailure = classifyAmrAccountFailure(text);
   const byokOpenCodeProviderNotFound = isByokOpenCodeProviderNotFoundText(
     input.agentId,
     text,
   );
+
+  if (errorCode === 'DAEMON_RESTARTED') {
+    return classification(
+      'process_exit',
+      'interrupted',
+      'finalize',
+      true,
+      'retry',
+    );
+  }
+
+  // Risk control suspended the account. Claimed first because nothing further
+  // down can improve on it and several branches would happily swallow it: the
+  // sentence carries no code any existing pattern matches, so today it falls
+  // through to `fatal_rpc_error` / `execution_failed` and the chat card offers a
+  // Retry that can only fail identically (catalogue R-064; design principle 4).
+  if (isAccountSuspendedText(text)) {
+    return classification(
+      // The account is refused access, so this belongs with the authorization
+      // failures rather than in the opaque process-exit bucket — but unlike the
+      // rest of that bucket there is no sign-in that fixes it, hence
+      // `user_action: 'none'` and a non-retryable verdict.
+      'auth',
+      'account_suspended',
+      inferFailureStageFromEvents(events, 'session_init'),
+      false,
+      'none',
+    );
+  }
 
   if (
     errorCode === 'AMR_INSUFFICIENT_BALANCE' ||
@@ -733,6 +1061,9 @@ function classifyRunFailureBase(
       'session_init',
       false,
       'recharge',
+      errorCode === 'AMR_INSUFFICIENT_BALANCE'
+        ? { evidenceLevel: 'structured_code' }
+        : {},
     );
   }
 
@@ -746,6 +1077,9 @@ function classifyRunFailureBase(
       'session_init',
       false,
       'upgrade',
+      errorCode === 'AMR_TIER_UPGRADE_REQUIRED'
+        ? { evidenceLevel: 'structured_code' }
+        : {},
     );
   }
 
@@ -761,7 +1095,63 @@ function classifyRunFailureBase(
       'session_init',
       false,
       'login',
+      [
+        'AMR_AUTH_REQUIRED',
+        'AGENT_AUTH_REQUIRED',
+        'UNAUTHORIZED',
+      ].includes(errorCode ?? '')
+        ? { evidenceLevel: 'structured_code' }
+        : {},
     );
+  }
+
+  // R-053. Claimed here, immediately after the AMR account branches, because
+  // this is the failure that spent the longest being mistaken for one of them.
+  // vela's link gateway turns an upstream 401/403 into an HTTP 500 under its
+  // own code (`services/link/internal/handlers/openai.go:2074`) and words it
+  // "Upstream provider credentials are missing or invalid." — a sentence
+  // `isAuthDetailText` reads as the caller's missing credentials. The
+  // credentials are the platform's, held in the gateway's configuration, so
+  // there is no sign-in for the user to perform and no retry that changes the
+  // answer: the run failed because the service is misconfigured.
+  if (reportsPlatformProviderCredentialFault(text)) {
+    return classification(
+      'upstream_unavailable',
+      'upstream_5xx',
+      inferFailureStageFromEvents(events, 'first_token_wait'),
+      false,
+      'none',
+    );
+  }
+
+  /*
+   * A forced signal is a STRUCTURAL fact — the child did not report it, the OS
+   * or an operator ended the process — so no amount of leftover stderr can
+   * explain it away. Claimed here, ahead of every text heuristic below.
+   *
+   * Found on a real run (2026-08-27): `kill -9` on the agent child produced
+   * `signal: SIGKILL, exitCode: null`, and the classifier answered
+   * `auth / stale_profile` because a half-written line about local profiles
+   * happened to be in the buffer. The chat card then told the user to run
+   * `/login` — sending them to fix something that was never broken.
+   *
+   * `signalInterruptClassification` already carries the right reasoning ("a
+   * signal is the strongest evidence we have"); it just sat 300 lines too late
+   * to win. Deliberately narrow:
+   *  · only SIGKILL and the crash signals — SIGTERM/SIGINT genuinely accompany
+   *    graceful shutdown and interrupts, where the text does carry more meaning;
+   *  · timeout still wins, because the daemon's watchdog writes its own reason
+   *    before escalating to a kill, and WHY it was killed beats the bare signal.
+   */
+  const forcedSignal = forcedSignalName(errorCode, input.status.signal);
+  if (
+    forcedSignal &&
+    !isTimeoutText(text) &&
+    errorCode !== 'TIMEOUT' &&
+    !daemonTimeoutVerdict
+  ) {
+    const forced = signalInterruptClassification(errorCode, text, retryableHint, forcedSignal);
+    if (forced) return forced;
   }
 
   const promptSizeDetail = promptTooLargeDetail(text);
@@ -772,6 +1162,9 @@ function classifyRunFailureBase(
       'prompt_send',
       false,
       'reduce_context',
+      errorCode === 'AGENT_PROMPT_TOO_LARGE'
+        ? { evidenceLevel: 'structured_code' }
+        : {},
     );
   }
 
@@ -788,6 +1181,7 @@ function classifyRunFailureBase(
         : 'model_select',
       false,
       'switch_model',
+      { structuredProviderEvidence: errorCode === 'AMR_MODEL_UNAVAILABLE' },
     );
   }
 
@@ -825,6 +1219,33 @@ function classifyRunFailureBase(
       'spawn',
       false,
       'install_cli',
+    );
+  }
+
+  if (isBundledBinaryMissingText(text)) {
+    return classification(
+      'process_exit',
+      'bundled_binary_missing',
+      'spawn',
+      false,
+      'none',
+    );
+  }
+
+  const serviceFailure = classifyAgentServiceFailure(text);
+  const environmentDetail = clientEnvironmentFailureDetail(text);
+  const hasStructuredServiceCode = [
+    'RATE_LIMITED',
+    'UPSTREAM_UNAVAILABLE',
+    'AGENT_CONNECTION_DROPPED',
+  ].includes(errorCode ?? '');
+  if (environmentDetail && !hasStructuredServiceCode) {
+    return classification(
+      'process_exit',
+      environmentDetail,
+      'spawn',
+      false,
+      'none',
     );
   }
 
@@ -868,6 +1289,16 @@ function classifyRunFailureBase(
     );
   }
 
+  if (isAcpFrameTooLargeText(text)) {
+    return classification(
+      'process_exit',
+      'acp_frame_too_large',
+      inferFailureStageFromEvents(events, 'child_close'),
+      false,
+      'none',
+    );
+  }
+
   // A protocol failure from AFTER the handshake: a session existed, so the run
   // may simply have hit a bad moment and the old transient treatment stands.
   // Handshake-numbered frames (ids 1 and 2) are deliberately NOT claimed here
@@ -886,7 +1317,34 @@ function classifyRunFailureBase(
     );
   }
 
-  const serviceFailure = classifyAgentServiceFailure(text);
+  // Whose credential failed, asked before what kind of failure it was.
+  //
+  // The `auth` verdict below prescribes `user_action: 'login'`, and the web
+  // renders that as a sign-in the user is expected to perform. It is only true
+  // of a credential the daemon can reach — the agent's own, or the AMR Cloud
+  // session. But this classifier reads one flat blob: `collectFailureText`
+  // (:177) folds `stderr` events into the corpus (:188), so a `gh`, `npm`,
+  // `curl` or MCP credential the agent tripped over mid-run arrives here
+  // wearing the same words. Sending the user to sign in for that is asking them
+  // to do something that cannot work.
+  //
+  // Landed on `tool_error` rather than left to fall through: `tool_error` is
+  // already where the one self-identifying member of this family goes today
+  // (vela's `mcp_auth_required` envelope, via `isToolErrorText` below), so this
+  // joins the existing landing instead of inventing a code. `user_action` is
+  // `'none'` because a missing credential does not fix itself on retry, and the
+  // generic card hands the tool's own line — the one that names what to fix —
+  // back to the user.
+  if (reportsToolPrincipalAuthFailure(text)) {
+    return classification(
+      'tool_error',
+      'tool_error',
+      'tool_execution',
+      false,
+      'none',
+    );
+  }
+
   if (serviceFailure === 'AGENT_AUTH_REQUIRED' || isAuthDetailText(text)) {
     return classification(
       'auth',
@@ -938,6 +1396,7 @@ function classifyRunFailureBase(
       'session_init',
       retryable,
       retryable ? 'retry' : workspaceCredits ? 'recharge' : 'none',
+      { structuredProviderEvidence: errorCode === 'RATE_LIMITED' },
     );
   }
 
@@ -948,6 +1407,9 @@ function classifyRunFailureBase(
     isUpstreamDetailText(text) ||
     byokOpenCodeProviderNotFound
   ) {
+    const structuredProviderEvidence =
+      errorCode === 'UPSTREAM_UNAVAILABLE' ||
+      errorCode === 'AGENT_CONNECTION_DROPPED';
     const upstreamClientError =
       byokOpenCodeProviderNotFound || isUpstreamClientErrorText(text);
     // A provider/SDK 4xx or request-shape rejection will deterministically fail
@@ -956,10 +1418,11 @@ function classifyRunFailureBase(
     const retryable = upstreamClientError ? false : retryableHint ?? true;
     return classification(
       'upstream_unavailable',
-      upstreamClientError ? 'upstream_client_error' : upstreamDetail(text),
+      upstreamClientError ? upstreamClientErrorDetail(text) : upstreamDetail(text),
       inferFailureStageFromEvents(events, 'first_token_wait'),
       retryable,
       retryable ? 'retry' : 'none',
+      { structuredProviderEvidence },
     );
   }
 
@@ -989,7 +1452,7 @@ function classifyRunFailureBase(
     );
   }
 
-  if (isTimeoutText(text) || errorCode === 'TIMEOUT') {
+  if (isTimeoutText(text) || errorCode === 'TIMEOUT' || daemonTimeoutVerdict) {
     const retryable = retryableHint ?? true;
     const inactivityTimeout = /inactivity|stalled|hung|no new output|without emitting any new output/i.test(text);
     // `attachAcpSession`'s stage watchdog fails the turn with
@@ -998,7 +1461,12 @@ function classifyRunFailureBase(
     // trigger the terminal reads as a bare AGENT_EXIT_130 — indistinguishable
     // from a user interrupt, which is how the 2026-07-28 AMR stall got
     // attributed to the wrong watchdog and the wrong 15-minute window.
-    const acpStageTimeout = /\bACP\b[^\n]*timed out after \d+\s*ms/i.test(text);
+    //
+    // The structured verdict counts too: it is emitted by that same watchdog
+    // and by nothing else, so the trigger keeps naming the watchdog even when
+    // the sentence it wrote is gone.
+    const acpStageTimeout =
+      daemonTimeoutVerdict || /\bACP\b[^\n]*timed out after \d+\s*ms/i.test(text);
     const terminalTrigger: TrackingRunTerminalTrigger | undefined =
       /without emitting a first output/i.test(text)
         ? 'first_output_deadline'
@@ -1205,9 +1673,56 @@ export function classifyRunFailure(
   input: RunFailureClassificationInput,
 ): RunFailureClassification | undefined {
   const failure = classifyRunFailureBase(input);
-  if (!failure || !input.terminalTrigger) return failure;
+  if (!failure) return failure;
+  if (input.result === 'cancelled') {
+    return { ...failure, ...(input.terminalTrigger ? { terminal_trigger: input.terminalTrigger } : {}) };
+  }
+  const terminalTrigger = input.terminalTrigger ?? failure.terminal_trigger;
+  const failureText = collectFailureText({
+    ...input,
+    events: terminalAttemptEvents(input.events),
+  });
+  const failureMechanism = failure.failure_category === 'timeout'
+    ? /(?:readiness|ready) deadline[^\n]*(?:timed out|timeout|expired|failed)|(?:readiness failed|failed to become ready|did not become ready|never became ready)/i.test(failureText)
+      ? 'startup_readiness_timeout'
+      : terminalTrigger === 'first_output_deadline'
+        ? 'first_output_deadline'
+        : terminalTrigger === 'acp_stage_timeout'
+          ? failure.failure_stage === 'post_tool_resume'
+            ? 'post_tool_resume_timeout'
+            : failure.failure_stage === 'tool_execution' || failure.failure_stage === 'tool_outstanding'
+              ? 'tool_execution_failure'
+              : 'acp_response_deadline'
+          : terminalTrigger === 'inactivity_watchdog'
+            ? 'stream_idle_timeout'
+            : failure.failure_mechanism
+    : failure.failure_mechanism;
+  // A retry or manual resume can fail in preflight before appending its next start. The new
+  // causal fields must not reuse the preceding attempt in that interval;
+  // legacy classification/retry behavior intentionally remains unchanged.
+  let evidenceEvents = terminalAttemptEvents(input.events);
+  let pendingRetry = -1;
+  for (let index = evidenceEvents.length - 1; index >= 0; index -= 1) {
+    if (evidenceEvents[index]?.event === 'run_retry_attempted'
+      || evidenceEvents[index]?.event === 'run_resume_attempted') {
+      pendingRetry = index;
+      break;
+    }
+  }
+  if (pendingRetry >= 0) evidenceEvents = evidenceEvents.slice(pendingRetry + 1);
+  const evidenceFailure = pendingRetry >= 0
+    ? classifyRunFailureBase({ ...input, events: evidenceEvents }) ?? failure
+    : failure;
   return {
     ...failure,
-    terminal_trigger: input.terminalTrigger,
+    ...(failureMechanism ? { failure_mechanism: failureMechanism } : {}),
+    ...(pendingRetry >= 0 ? {
+      failure_mechanism: evidenceFailure.failure_mechanism,
+      failure_domain: evidenceFailure.failure_domain,
+      evidence_level: evidenceFailure.evidence_level,
+      repair_owner: evidenceFailure.repair_owner,
+    } : {}),
+    ...runFailureEvidence(input, evidenceFailure, evidenceEvents),
+    ...(terminalTrigger ? { terminal_trigger: terminalTrigger } : {}),
   };
 }

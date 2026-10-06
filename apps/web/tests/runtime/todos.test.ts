@@ -346,4 +346,75 @@ describe('continuableUnfinishedTodos', () => {
   it('returns nothing for a missing message', () => {
     expect(continuableUnfinishedTodos(undefined)).toEqual([]);
   });
+
+  /*
+   * 「问完就交棒」那一档。
+   *
+   * 真机 run `441ff961-bd66-4c4a-91e7-812f1d489668`:清单刚写下(1 条 in_progress
+   * + 3 条 pending),正文以一个可渲染的 `<question-form>` 收尾,进程 exit 0。
+   * 这一轮**没有停**,它在等答案 —— 而页脚不读 daemon 的 `endedWithUnfinishedWork`,
+   * 它自己从这一层重算,所以判据必须落在这里。
+   */
+  const askedSnapshot: AgentEvent[] = [
+    {
+      kind: 'tool_use',
+      id: 'todo-1',
+      name: 'TodoWrite',
+      input: {
+        todos: [
+          { content: 'Collect the brand brief', status: 'in_progress' },
+          { content: 'Render the landing page', status: 'pending' },
+        ],
+      },
+    },
+  ] as AgentEvent[];
+
+  const RENDERABLE_FORM = [
+    '开始之前先确认几件事。',
+    '<question-form id="brand-brief" title="Brand brief">',
+    '{"questions":[{"id":"brand_name","label":"Brand name","type":"text"}]}',
+    '</question-form>',
+  ].join('\n');
+
+  it('offers nothing to continue when the turn ended by asking the user', () => {
+    expect(
+      continuableUnfinishedTodos({
+        events: askedSnapshot,
+        content: RENDERABLE_FORM,
+        runStatus: 'succeeded',
+      }),
+    ).toEqual([]);
+  });
+
+  it('reads the form off the turn events when no content is supplied', () => {
+    expect(
+      continuableUnfinishedTodos({
+        events: [...askedSnapshot, { kind: 'text', text: RENDERABLE_FORM }] as AgentEvent[],
+        runStatus: 'succeeded',
+      }),
+    ).toEqual([]);
+  });
+
+  // 量法能看见缺陷:同一份清单,把表单换成不可渲染的正文就必须重新给出条目。
+  it('still offers the items when the markup was only quoted, never rendered', () => {
+    expect(
+      continuableUnfinishedTodos({
+        events: askedSnapshot,
+        content: '演示一下 <question-form> 这个标记怎么写。',
+        runStatus: 'succeeded',
+      }).map((todo) => todo.content),
+    ).toEqual(['Collect the brand brief', 'Render the landing page']);
+  });
+
+  // 用户按了停,那一轮就是被停掉的 —— 它路过时问了什么不改变这件事,
+  // 剩下的活仍然要能接着做。
+  it('keeps the items continuable when the user stopped the turn', () => {
+    expect(
+      continuableUnfinishedTodos({
+        events: askedSnapshot,
+        content: RENDERABLE_FORM,
+        runStatus: 'canceled',
+      }).map((todo) => todo.content),
+    ).toEqual(['Collect the brand brief', 'Render the landing page']);
+  });
 });

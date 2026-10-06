@@ -316,12 +316,6 @@ async function startInstalledAppImageHeadlessAndFindRelay(
   appImagePath: string,
   expectedRelayUrl: string,
 ): Promise<{ launchPid: number; relayDaemonPid: number }> {
-  const markerPath = join(runtimeNamespaceRoot, 'runtime', 'headless-root.json');
-  const webMarkerPath = join(runtimeNamespaceRoot, 'runtime', 'web-root.json');
-  await Promise.all([
-    rm(markerPath, { force: true }),
-    rm(webMarkerPath, { force: true }),
-  ]);
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     OD_PACKAGED_NAMESPACE: namespace,
@@ -341,21 +335,13 @@ async function startInstalledAppImageHeadlessAndFindRelay(
   try {
     const timeoutMs = 90_000;
     const startedAt = Date.now();
-    let lastState = 'headless identity not written';
+    let lastState = `no descendant of AppImage launch pid ${launchPid} has the baked relay`;
     while (Date.now() - startedAt < timeoutMs) {
       if (child.exitCode != null) {
         throw new Error(`AppImage --headless exited before relay observation (code ${child.exitCode})`);
       }
-      const rootPid = await readHeadlessRootPid(markerPath);
-      if (rootPid != null) {
-        if (!await isProcessDescendant(rootPid, launchPid)) {
-          lastState = `headless marker pid ${rootPid} does not belong to launch pid ${launchPid}`;
-        } else {
-          const relayPid = await findDescendantWithRelay(rootPid, expectedRelayUrl);
-          if (relayPid != null) return { launchPid, relayDaemonPid: relayPid };
-          lastState = `headless root pid ${rootPid} is live but no descendant has the baked relay`;
-        }
-      }
+      const relayPid = await findDescendantWithRelay(launchPid, expectedRelayUrl);
+      if (relayPid != null) return { launchPid, relayDaemonPid: relayPid };
       await delay(200);
     }
     throw new Error(`AppImage --headless did not pass its baked relay to the daemon: ${lastState}`);
@@ -366,15 +352,6 @@ async function startInstalledAppImageHeadlessAndFindRelay(
       // The process may already have exited; preserve the original failure.
     }
     throw error;
-  }
-}
-
-async function readHeadlessRootPid(markerPath: string): Promise<number | null> {
-  try {
-    const marker = JSON.parse(await readFile(markerPath, 'utf8')) as { pid?: unknown };
-    return typeof marker.pid === 'number' && Number.isSafeInteger(marker.pid) ? marker.pid : null;
-  } catch {
-    return null;
   }
 }
 

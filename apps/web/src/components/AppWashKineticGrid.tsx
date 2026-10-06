@@ -12,6 +12,16 @@ const DOT_COLOR = '#9a9a9a';
 const SPACING = 25;
 const RADIUS = 203;
 const STRENGTH = 2;
+/** How long the startup sweep takes to cross the field. */
+const INTRO_SWEEP_MS = 1500;
+
+/* The grid only moves under a cursor, so on a fresh Home it renders as a still
+   dot field and most people never learn there is an effect there. Once per page
+   load, a virtual attractor sweeps across it — the same physics a real cursor
+   drives, just scripted — so the motion introduces itself. Module scope, not
+   component state: Home unmounts this canvas on every navigation away, and a
+   replay on each return would be a tic rather than an introduction. */
+let introPlayedThisLoad = false;
 
 interface GridDot {
   hx: number;
@@ -43,6 +53,12 @@ export function AppWashKineticGrid({ clipBottomTo }: AppWashKineticGridProps) {
 
     const pull = (Math.max(1, Math.min(10, STRENGTH)) / 10) * 4;
     const mouse = { x: -9999, y: -9999, active: false };
+    // Scripted stand-in for the cursor during the startup sweep. It ignores
+    // `hoverSuppressed` on purpose: Home autofocuses the composer, so the
+    // suppression that silences the real cursor is already on at load and
+    // would swallow the introduction entirely.
+    const intro = { x: -9999, y: -9999, active: false };
+    let introStart: number | null = null;
     // While the user is focused in an editable (the composer), the
     // cursor-follow behavior is switched off — dots settle back to rest.
     let hoverSuppressed = false;
@@ -126,6 +142,9 @@ export function AppWashKineticGrid({ clipBottomTo }: AppWashKineticGridProps) {
       mouse.x = event.clientX - rect.left;
       mouse.y = event.clientY - rect.top;
       mouse.active = true;
+      // A real cursor supersedes the demo mid-sweep — two attractors fighting
+      // over the same dots reads as a glitch, not a flourish.
+      intro.active = false;
     };
     const onLeave = () => {
       mouse.active = false;
@@ -139,6 +158,11 @@ export function AppWashKineticGrid({ clipBottomTo }: AppWashKineticGridProps) {
     document.addEventListener('focusout', onFocusOut);
     hoverSuppressed = isEditable(document.activeElement);
 
+    if (!introPlayedThisLoad) {
+      introPlayedThisLoad = true;
+      intro.active = true;
+    }
+
     let raf = 0;
     const frame = () => {
       if (document.hidden) {
@@ -146,13 +170,26 @@ export function AppWashKineticGrid({ clipBottomTo }: AppWashKineticGridProps) {
         return;
       }
       ctx.clearRect(0, 0, width, height);
-      const interactive = mouse.active && !hoverSuppressed;
+      if (intro.active) {
+        const now = performance.now();
+        if (introStart === null) introStart = now;
+        const p = Math.min(1, (now - introStart) / INTRO_SWEEP_MS);
+        // easeInOutQuad: the sweep accelerates in and settles out instead of
+        // entering and leaving at full speed.
+        const eased = p < 0.5 ? 2 * p * p : 1 - ((-2 * p + 2) ** 2) / 2;
+        // Starts and ends a radius outside the field so the first and last
+        // dots get a full pass, not a half one.
+        intro.x = -RADIUS * 0.6 + eased * (width + RADIUS * 1.2);
+        intro.y = height * 0.58;
+        if (p >= 1) intro.active = false;
+      }
+      const attractor = mouse.active && !hoverSuppressed ? mouse : intro.active ? intro : null;
       for (const d of dots) {
         let ax = (d.hx - d.x) * 0.08;
         let ay = (d.hy - d.y) * 0.08;
-        if (interactive) {
-          const dx = mouse.x - d.x;
-          const dy = mouse.y - d.y;
+        if (attractor) {
+          const dx = attractor.x - d.x;
+          const dy = attractor.y - d.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
           if (dist < RADIUS && dist > 0.001) {
             const f = (1 - dist / RADIUS) * pull;
@@ -165,8 +202,8 @@ export function AppWashKineticGrid({ clipBottomTo }: AppWashKineticGridProps) {
         d.x += d.vx;
         d.y += d.vy;
 
-        const prox = interactive
-          ? Math.max(0, 1 - Math.sqrt((mouse.x - d.x) ** 2 + (mouse.y - d.y) ** 2) / RADIUS)
+        const prox = attractor
+          ? Math.max(0, 1 - Math.sqrt((attractor.x - d.x) ** 2 + (attractor.y - d.y) ** 2) / RADIUS)
           : 0;
         const edgeFade = Math.max(0, Math.min(1, (height - d.y) / 90));
         ctx.globalAlpha = (0.22 + prox * 0.78) * edgeFade;

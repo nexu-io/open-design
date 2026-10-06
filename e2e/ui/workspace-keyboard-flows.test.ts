@@ -436,13 +436,6 @@ async function expectProjectsView(page: Page) {
     return;
   }
 
-  const allProjectsNav = page.getByTestId('entry-nav-all-projects');
-  if (await allProjectsNav.isVisible().catch(() => false)) {
-    await allProjectsNav.click();
-    await expect(page.getByRole('heading', { name: /all projects|全部项目/i })).toBeVisible();
-    return;
-  }
-
   await expect(projectsHeading.or(homeRecentProjects)).toBeVisible();
 }
 

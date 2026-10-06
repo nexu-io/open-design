@@ -7,7 +7,6 @@ await build({
   outbase: "./src",
   outdir: "./dist",
   outExtension: { ".js": ".mjs" },
-  packages: "external",
   platform: "node",
   target: "node24",
 });

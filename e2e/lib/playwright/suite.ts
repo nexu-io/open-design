@@ -9,7 +9,7 @@ import {
   warmPlaywrightDaemonRuntime,
   warmPlaywrightWebRuntime,
 } from './runtime-lifecycle.ts';
-import { routeUnavailableVelaStatus } from './mock-factory.ts';
+import { routeUnavailableVelaStatus, suppressWhatsNew } from './mock-factory.ts';
 import { resolvePlaywrightSlotNamespace } from './runtime-identity.ts';
 import { createToolsDevSuite, e2eWorkspaceRoot } from '../tools-dev/runtime.ts';
 import type { ToolsDevSuite } from '../tools-dev/types.ts';
@@ -20,6 +20,7 @@ type PlaywrightToolsDevSuite = ToolsDevSuite & {
 
 type TestFixtures = {
   _defaultCloudStatus: void;
+  _suppressedWhatsNew: void;
   _toolsDevFailureTracker: void;
 };
 
@@ -55,6 +56,24 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
         // fake runtime configuration and request headers.
         await toolsDev.startWeb({
           AMR_HOME: join(toolsDev.root, 'scratch', 'amr-home'),
+          // The hermetic Codex fixture emits the legacy `exec --json` stream.
+          // Pin its matching transport here; app-server protocol coverage lives
+          // in the daemon transport/parity suites, not in this fake-CLI worker.
+          OD_CODEX_TRANSPORT: 'exec-json',
+          // Where `chat-scroll-wheel-reach` puts a recorded daemon event log so
+          // one turn can stream deterministically. Arming the directory is NOT
+          // a decision to replay: the daemon substitutes a recording for the
+          // real agent only when a spec drops a `.selected` pointer inside it,
+          // so every other spec on this worker keeps its normal agent. The path
+          // is worker-scoped, so two workers cannot arm each other.
+          OD_REPLAY_DIR: join(toolsDev.root, 'scratch', 'chat-scroll-replay'),
+          // Replay wall-clock multiplier. The spec that uses it needs a log
+          // several thousand pixels tall, which is seven-odd turns; at the
+          // recording's own pace that is ~23 minutes of CI time. The defect it
+          // hunts triggers on the log's HEIGHT while a turn streams, not on the
+          // stream's pace, so compressing the pace keeps the trigger and drops
+          // the cost. Inert unless a recording is selected.
+          OD_REPLAY_SPEED: '8',
         });
         await warmPlaywrightWebRuntime(toolsDev.url.web('/'));
         await warmPlaywrightDaemonRuntime(toolsDev.url.daemon('/api/health'));
@@ -92,6 +111,23 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
   _defaultCloudStatus: [
     async ({ page }, use) => {
       await routeUnavailableVelaStatus(page);
+      await use();
+    },
+    { auto: true },
+  ],
+
+  // A release announcement belongs to no spec's subject. The card renders in a
+  // shared dialog whose overlay sits above the app chrome, so whenever one
+  // fetch succeeds it swallows clicks somewhere unrelated and the spec dies on
+  // an actionability timeout attributed to the wrong step. Suppressing it per
+  // spec meant every new UI spec had to remember; suppress it for the whole
+  // suite instead, alongside the Cloud-status default above.
+  //
+  // Auto fixtures are set up before a spec's own hooks, so a spec that wants to
+  // see the card registers its route later and Playwright prefers it.
+  _suppressedWhatsNew: [
+    async ({ page }, use) => {
+      await suppressWhatsNew(page);
       await use();
     },
     { auto: true },

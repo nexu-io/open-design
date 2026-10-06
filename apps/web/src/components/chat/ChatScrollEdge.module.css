@@ -1,0 +1,64 @@
+.edge {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 40px;
+  z-index: 7;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.edge[data-active='true'] {
+  opacity: 1;
+}
+
+/* Overlapping masks soften the blur radius toward the readable transcript. */
+.edge > span {
+  position: absolute;
+  inset: 0 0 auto;
+  -webkit-mask-image: linear-gradient(to bottom, #000 20%, transparent);
+  mask-image: linear-gradient(to bottom, #000 20%, transparent);
+}
+
+.edge > span:nth-child(1) {
+  height: 100%;
+  -webkit-backdrop-filter: blur(1px);
+  backdrop-filter: blur(1px);
+}
+
+.edge > span:nth-child(2) {
+  height: 75%;
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+}
+
+.edge > span:nth-child(3) {
+  height: 50%;
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+.edge > span:nth-child(4) {
+  height: 25%;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+/* Fade the composited transcript and blur together, revealing the actual
+   surface beneath (including desktop vibrancy) instead of painting a white cap. */
+:global(.chat-log-viewport):has(> .edge[data-active='true']) {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 40px);
+  mask-image: linear-gradient(to bottom, transparent, #000 40px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .edge { transition: none; }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .edge { display: none; }
+  :global(.chat-log-viewport):has(> .edge[data-active='true']) {
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+}

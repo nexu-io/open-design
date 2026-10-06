@@ -28,12 +28,10 @@
 //   restores the old A snapshot instead of showing the loading indicator.
 //
 // Race P3 (Codex P2 line 7377) — Manual Edit save silently fails during Reload:
-//   reloadHtmlPreview calls setSource(null) unconditionally.  The [source]
-//   effect then writes null into sourceRef.current.  If the user makes or
-//   saves a manual edit before the reload fetch resolves, applyManualEdit
-//   hits sourceRef.current == null and returns false without calling the file
-//   API — a silent, invisible failure even though the preview is still
-//   interactive (manualEditFrozenSource still shows the old HTML).
+//   Reload now settles Manual Edit and hands off to the already-warm URL
+//   transport. A patch submitted while that asynchronous exit is in flight
+//   must still reach the file API; the handoff must not clear the active
+//   source or start the old srcDoc reload fetch window.
 
 import type { ComponentProps } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -1136,10 +1134,7 @@ describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions
   // Observable assertion: the file-write API is called, confirming the edit
   // was not silently dropped.
   // ---------------------------------------------------------------------------
-  it('saves a Manual Edit patch made during the Reload window instead of silently discarding it', async () => {
-    // Include localStorage to trigger htmlNeedsSandboxShim → forceInline=true
-    // → srcDoc render path even before Manual Edit mode is entered.  This lets
-    // the test confirm srcdoc content in Step 1 and verify the iframe is active.
+  it('saves a Manual Edit patch while Reload exits through the URL standby', async () => {
     const initialSource =
       '<!doctype html><html><body>' +
       '<script>localStorage.setItem("k","v");</script>' +
@@ -1147,11 +1142,12 @@ describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions
       '</body></html>';
 
     const savedSources: string[] = [];
-    let resolveReloadFetch!: (resp: Response) => void;
     let reloadFetchStarted = false;
+    let reloadEffectFetches = 0;
 
-    // Initial fetch returns V1 immediately.  Subsequent fetches (reload) are
-    // deferred so the test can act while source is null.
+    // Initial and confirm-source reads resolve immediately. Reload while Edit
+    // is active should refresh the hidden URL iframe instead of starting the
+    // old srcDoc source reload effect.
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url =
         typeof input === 'string'
@@ -1178,11 +1174,11 @@ describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions
         );
       }
 
-      // Raw source GET — the same URL is used by three distinct callers:
+      // Raw source GET — the same URL may be used by three distinct callers:
       //   (a) Initial load effect: cacheBust=<mtime>-<reloadKey>-<filesRefreshKey>
       //       → resolve immediately before reloadFetchStarted.
-      //   (b) Reload effect (after Reload click): cacheBust=<mtime>-<N>-<N>
-      //       → deferred so the test can assert inside the reload window.
+      //   (b) Legacy reload effect: cacheBust=<mtime>-<N>-<N>. It must not run
+      //       when Reload exits Edit through the warm URL standby.
       //   (c) confirmManualEditHistorySource: cacheBust=<Date.now() timestamp>
       //       → pure 13-digit integer, no dashes; resolve immediately with
       //       initialSource so applyManualEdit can proceed without blocking on
@@ -1203,10 +1199,10 @@ describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions
           // return true and let applyManualEdit proceed to the file-write call.
           return new Response(initialSource, { status: 200 });
         }
-        // (b) Reload fetch: deferred.
-        return new Promise<Response>((ok) => {
-          resolveReloadFetch = ok;
-        });
+        // (b) Record an unintended legacy reload-effect fetch without hanging
+        // the test, so the assertion below reports the actual regression.
+        reloadEffectFetches += 1;
+        return new Response(initialSource, { status: 200 });
       }
 
       return new Response('{}', {
@@ -1246,10 +1242,9 @@ describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions
     // Step 3: select a target so the panel (and onApplyPatch) is available.
     await selectManualEditTarget();
 
-    // Step 4: arm the deferred reload fetch, then click Reload.
-    // reloadHtmlPreview skips setSource(null) when manualEditFrozenSource !== null
-    // (PR #4652 Codex P2 fix, kept), so sourceRef.current stays non-null.
-    // The reload re-fetch is still triggered via reloadKey increment.
+    // Step 4: mark subsequent raw reads, then click Reload. The handler first
+    // settles Manual Edit and primes the hidden URL frame; it intentionally
+    // does not bump reloadKey or clear the srcDoc source.
     reloadFetchStarted = true;
     act(() => {
       fireEvent.click(screen.getByRole('button', { name: /reload preview/i }));
@@ -1261,13 +1256,9 @@ describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions
       await Promise.resolve();
     });
 
-    // Step 5: attempt to save a Manual Edit patch BEFORE the reload fetch
-    // resolves.  applyManualEdit calls confirmManualEditHistorySource (unconditional
-    // after revert of the sourceMatchesFrozen shortcut), which fetches the
-    // persisted source.  The confirm-source fetch is mocked to resolve immediately
-    // (it uses a pure-integer cacheBust from Date.now(), distinguishable from the
-    // reload-effect cacheBust which includes dashes), so applyManualEdit proceeds
-    // to the file-write call while the reload fetch is still deferred.
+    // Step 5: attempt to save a Manual Edit patch while the asynchronous
+    // Reload exit is in flight. confirmManualEditHistorySource uses a pure
+    // integer cacheBust and resolves immediately in this mock.
     act(() => {
       panelState.props!.onApplyPatch(
         { id: 'hero', kind: 'set-text', value: 'Updated text' },
@@ -1287,11 +1278,71 @@ describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions
 
     // The written content must contain the user's edit.
     expect(savedSources[0]).toContain('Updated text');
-
-    // Drain the deferred reload fetch so it doesn't leak into subsequent tests.
-    await act(async () => {
-      resolveReloadFetch(new Response(initialSource, { status: 200 }));
-      await Promise.resolve();
+    await waitFor(() => {
+      expect(screen.getByTestId('manual-edit-mode-toggle').getAttribute('aria-pressed')).toBe('false');
+      expect(screen.getByTestId('artifact-preview-frame').getAttribute('data-od-render-mode')).toBe('url-load');
     });
+    expect(reloadEffectFetches).toBe(0);
+  });
+
+  it('reloads fresh bytes when Edit exits without an eligible URL standby', async () => {
+    window.history.replaceState({}, '', '/?forceInline=1');
+    const initialSource =
+      '<!doctype html><html><body>'
+      + '<img src="/assets/hero.png" alt="Hero">'
+      + '<h1 data-od-id="hero">Before reload</h1>'
+      + '</body></html>';
+    const reloadedSource = initialSource.replace('Before reload', 'After reload');
+    let rawReads = 0;
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string'
+        ? input
+        : input instanceof Request
+          ? input.url
+          : String(input);
+      if (url.includes('/api/projects/project-1/raw/preview.html')) {
+        rawReads += 1;
+        return new Response(rawReads === 1 ? initialSource : reloadedSource, { status: 200 });
+      }
+      if (url.includes('/api/projects/project-1/deployments')) {
+        return new Response(JSON.stringify({ deployments: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response('{}', {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={manualEditFile()}
+      />,
+    );
+    await waitFor(() => {
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      expect(frame.srcdoc).toContain('Before reload');
+    });
+
+    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+    await waitFor(() => {
+      expect(screen.getByTestId('manual-edit-mode-toggle').getAttribute('aria-pressed')).toBe('true');
+    });
+    fireEvent.click(screen.getByRole('button', { name: /reload preview/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('manual-edit-mode-toggle').getAttribute('aria-pressed')).toBe('false');
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      expect(frame.srcdoc).toContain('After reload');
+    });
+    expect(rawReads).toBeGreaterThanOrEqual(2);
+    window.history.replaceState({}, '', '/');
   });
 });

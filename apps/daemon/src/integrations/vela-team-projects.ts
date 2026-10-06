@@ -16,6 +16,9 @@ export interface VelaTeamProjectRecord {
   displayName: string | null;
   syncState: VelaTeamProjectSyncState;
   lastSyncedVersionId: string | null;
+  /** Absent when talking to an older Vela API, null when no published ref
+   * exists, otherwise the immutable version currently available to readers. */
+  publishedVersionId?: string | null;
   createdAt: string;
   /** Owner-origin project timestamp from the catalog row's metadata. This is
    * distinct from `updatedAt`, which is the catalog row revision time and may

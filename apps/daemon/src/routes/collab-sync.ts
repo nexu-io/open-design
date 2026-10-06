@@ -56,6 +56,8 @@ import {
   type PublicFilePublicationStore,
 } from '../collab/public-file-publication-store.js';
 import { readVelaControlApiContext } from '../integrations/vela.js';
+import { classifyVelaCommandFailure, logPublicFileFailure } from '../collab/public-file-failure.js';
+import { clientRequestIdFor } from '../http/client-request-id.js';
 import { isAbortedOperationError } from '../integrations/aborted-error.js';
 import { readProjectManifest } from '../project-locations.js';
 import { redactSecrets } from '../redact.js';
@@ -1235,6 +1237,8 @@ export function registerCollabSyncRoutes(
   });
 
   app.post(/^\/api\/projects\/([^/]+)\/files\/(.+)\/publish-public$/u, async (req, res) => {
+    const startedAt = Date.now();
+    const requestId = clientRequestIdFor(req);
     const params = req.params as unknown as { 0?: string; 1?: string };
     const projectId = String(params[0] ?? '');
     const filePath = normalizePublicFilePath(String(params[1] ?? ''));
@@ -1288,6 +1292,7 @@ export function registerCollabSyncRoutes(
 
     const resourceId = publicFileResourceIdFor(projectId, filePath, principal);
     const tempDir = await mkdtemp(path.join(os.tmpdir(), 'od-public-file-'));
+    let stage: 'push' | 'snapshot' | 'persist' = 'push';
     try {
       const targetFile = path.join(tempDir, filePath);
       await mkdir(path.dirname(targetFile), { recursive: true });
@@ -1308,6 +1313,7 @@ export function registerCollabSyncRoutes(
         JSON.stringify(metadata),
         '--json',
       ], principal.teamId);
+      stage = 'snapshot';
       const snapshot = parseVelaResourceSnapshot(await runVelaResourceCommand([
         'snapshot',
         resourceId,
@@ -1318,13 +1324,18 @@ export function registerCollabSyncRoutes(
         '--json',
       ], principal.teamId));
       if (!snapshot) {
-        return res.status(502).json({ error: 'PUBLIC_SNAPSHOT_UNAVAILABLE' });
+        const failure = { stage, reason: 'empty_response' } as const;
+        logPublicFileFailure({
+          action: 'publish', errorCode: 'PUBLIC_SNAPSHOT_UNAVAILABLE', failure, requestId, startedAt,
+        });
+        return res.status(502).json({ error: 'PUBLIC_SNAPSHOT_UNAVAILABLE', failure });
       }
       const publication: PublicProjectFilePublication = {
         url: publicSnapshotFileUrl(baseUrl, snapshot.slug, filePath),
         slug: snapshot.slug,
         fileName: filePath,
       };
+      stage = 'persist';
       try {
         publicFilePublicationStore.set(
           publicFilePublicationScope(projectId, filePath, principal),
@@ -1362,13 +1373,21 @@ export function registerCollabSyncRoutes(
       return res.json(publication);
     } catch (error) {
       console.warn('[od] failed to publish public project file:', error);
-      return res.status(502).json({ error: 'PUBLIC_FILE_PUBLISH_UNAVAILABLE' });
+      const failure = stage === 'persist'
+        ? { stage, reason: 'internal' as const }
+        : classifyVelaCommandFailure(stage, error);
+      logPublicFileFailure({
+        action: 'publish', errorCode: 'PUBLIC_FILE_PUBLISH_UNAVAILABLE', failure, requestId, startedAt,
+      });
+      return res.status(502).json({ error: 'PUBLIC_FILE_PUBLISH_UNAVAILABLE', failure });
     } finally {
       await rm(tempDir, { recursive: true, force: true }).catch(() => {});
     }
   });
 
   app.delete(/^\/api\/projects\/([^/]+)\/files\/(.+)\/publish-public$/u, async (req, res) => {
+    const startedAt = Date.now();
+    const requestId = clientRequestIdFor(req);
     const params = req.params as unknown as { 0?: string; 1?: string };
     const projectId = String(params[0] ?? '');
     const filePath = normalizePublicFilePath(String(params[1] ?? ''));
@@ -1417,7 +1436,11 @@ export function registerCollabSyncRoutes(
       return res.json({ ok: true, slug, fileName: filePath });
     } catch (error) {
       console.warn('[od] failed to unpublish public project file:', error);
-      return res.status(502).json({ error: 'PUBLIC_FILE_UNPUBLISH_UNAVAILABLE' });
+      const failure = classifyVelaCommandFailure('redact', error);
+      logPublicFileFailure({
+        action: 'unpublish', errorCode: 'PUBLIC_FILE_UNPUBLISH_UNAVAILABLE', failure, requestId, startedAt,
+      });
+      return res.status(502).json({ error: 'PUBLIC_FILE_UNPUBLISH_UNAVAILABLE', failure });
     }
   });
 

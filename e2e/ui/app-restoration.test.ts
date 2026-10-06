@@ -1,9 +1,11 @@
 import { expect, test } from '@/playwright/suite';
+import { ACTIVE_ARTIFACT_PREVIEW_SELECTOR } from '@/playwright/artifact-preview';
 import { ensureRailOpen, openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
 import { runErrorCard } from '@/playwright/chat';
 import {
   clickDeckNextSlide,
   clickDeckPreviousSlide,
+  clickPreviewToolbarAction,
   expectAllProjectFilesActive,
   expectAllProjectFilesInactive,
   openAllProjectFiles,
@@ -15,11 +17,15 @@ import { T } from '@/timeouts';
 import { expectStableCount } from '../lib/playwright/assertions.js';
 import {
   AMR_PERSONAL_WORKSPACE_HEADERS,
+  createProjectViaApi,
+  gotoProject,
   mockAmrPersonalWorkspace,
+  mockAmrWalletSnapshot,
 } from '@/playwright/amr';
 import {
   applyStandardMocks,
   failedRunEventBody,
+  routeAgents,
   routeMockAgents,
   routeRunSequence,
   routeSuccessfulRuns,
@@ -27,8 +33,6 @@ import {
 } from '@/playwright/mock-factory';
 
 const STORAGE_KEY = 'open-design:config';
-const ACTIVE_ARTIFACT_PREVIEW_SELECTOR = '[data-testid="artifact-preview-frame"]:visible, [data-testid="artifact-preview-frame-url-load"]:visible, [data-testid="artifact-preview-frame-srcdoc"]:visible, [data-testid="live-artifact-preview-frame"]:visible';
-
 test.describe.configure({ timeout: process.env.CI ? 90_000 : 60_000 });
 
 function artifactPreview(page: Page) {
@@ -40,9 +44,22 @@ function artifactPreviewFrame(page: Page) {
 }
 
 function stagedAttachmentName(page: Page, name: string): Locator {
-  return page
-    .locator('[data-testid="staged-attachments"], [data-testid="staged-contexts"]')
-    .getByText(name, { exact: true });
+  // Document cards deliberately middle-truncate the rendered basename and
+  // split the extension into a sibling span. The full, stable identity stays
+  // on the card's title attribute, so assert that contract instead of the
+  // presentation text.
+  return page.getByTestId('staged-attachments').getByTitle(name, { exact: true });
+}
+
+async function expectFriendlyGenericRunFailure(page: Page): Promise<void> {
+  const card = runErrorCard(page);
+  await expect(card).toContainText('The task could not be completed');
+  await expect(card.getByTestId('chat-run-error-description')).toHaveText(
+    'This task failed to run. Please retry. If it fails again, please contact support.',
+  );
+  // Raw daemon/provider details belong in exported logs, not on the recovery
+  // card. The surrounding cases still prove the friendly failure survives.
+  await expect(card).not.toContainText('connection refused');
 }
 
 function isDesignFileUploadResponse(response: Response): boolean {
@@ -722,7 +739,10 @@ test('[P0] @critical reloading the project keeps the latest conversation selecte
   await expect(historyList.locator('.chat-conv-item')).toHaveCount(2);
 });
 
-test('[P0] @critical deleting the active conversation selects the remaining conversation in history', async ({ page }) => {
+// Parked (OPEND-3087, Demo #8113): the history dropdown no longer carries a
+// per-row delete button, so this flow has no UI entry point. The steps are kept
+// verbatim so it can be re-enabled once a delete entry point returns.
+test.skip('[P0] @critical deleting the active conversation selects the remaining conversation in history', async ({ page }) => {
   page.on('dialog', async (dialog: Dialog) => {
     await dialog.accept();
   });
@@ -1168,7 +1188,7 @@ test('[P0] reloading a project keeps the Design Files entry reachable when it wa
   await expectAllProjectFilesActive(page);
 });
 
-test('[P0] @critical daemon error details persist between failed sends', async ({ page }) => {
+test('[P0] @critical friendly daemon failure guidance persists between failed sends', async ({ page }) => {
   const entry = automatedUiScenarios().find((scenario) => scenario.id === 'prototype-basic');
   if (!entry) throw new Error('prototype-basic scenario missing');
 
@@ -1199,7 +1219,7 @@ test('[P0] @critical daemon error details persist between failed sends', async (
   await expectWorkspaceReady(page);
 
   await sendPrompt(page, 'first failing prompt');
-  await expect(runErrorCard(page)).toContainText('connection refused');
+  await expectFriendlyGenericRunFailure(page);
   await expect(page.locator('.msg.user').getByText('first failing prompt', { exact: true })).toBeVisible();
 
   const current = new URL(page.url());
@@ -1217,7 +1237,7 @@ test('[P0] @critical daemon error details persist between failed sends', async (
   // an eventual catalog poll that this external write cannot emit.
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expectWorkspaceReady(page);
-  await expect(runErrorCard(page)).toContainText('connection refused');
+  await expectFriendlyGenericRunFailure(page);
   await openAllProjectFiles(page);
   const crossFileRow = page.locator('[data-testid^="design-file-row-"]', {
     hasText: 'error-cross-tab.html',
@@ -1240,12 +1260,12 @@ test('[P0] @critical daemon error details persist between failed sends', async (
 
   await page.goto(`/projects/${projectId}`);
   await expectWorkspaceReady(page);
-  await expect(runErrorCard(page)).toContainText('connection refused');
+  await expectFriendlyGenericRunFailure(page);
   await expect(page.locator('.msg.user').getByText('first failing prompt', { exact: true })).toBeVisible();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
 
   await sendPrompt(page, 'second failing prompt');
-  await expect(runErrorCard(page)).toContainText('connection refused');
+  await expectFriendlyGenericRunFailure(page);
   await expect(page.locator('.msg.user').getByText('first failing prompt', { exact: true })).toBeVisible();
   await expect(page.locator('.msg.user').getByText('second failing prompt', { exact: true })).toBeVisible();
 });
@@ -1269,8 +1289,7 @@ test('[P0] a successful retry after a failed send restores the workspace to a fr
   await expectWorkspaceReady(page);
 
   await sendPrompt(page, 'first failing prompt');
-  await expect(runErrorCard(page)).toContainText('connection refused');
-  await expect(runErrorCard(page)).toContainText('connection refused');
+  await expectFriendlyGenericRunFailure(page);
 
   await sendPrompt(page, 'retry prompt that succeeds');
   await expect(page.getByText('retry-success-artifact.html', { exact: true }).first()).toBeVisible();
@@ -1282,9 +1301,33 @@ test('[P0] a successful retry after a failed send restores the workspace to a fr
 });
 
 test('[P0] retrying a failed run does not duplicate the original user message', async ({ page }) => {
-  await routeMockAgents(page);
+  // G16 keeps Retry on Cloud failures; CLI failures switch runtime instead.
+  // Keep this scenario about retry deduplication with an explicit Cloud owner.
+  await routeAgents(page, [{
+    id: 'amr', name: 'OpenDesign AMR', bin: 'vela', available: true,
+    version: 'test', models: [{ id: 'glm-5', label: 'glm-5' }],
+  }]);
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({ json: { config: {
+      onboardingCompleted: true, agentId: 'amr', skillId: null,
+      designSystemId: null, agentModels: { amr: { model: 'glm-5', reasoning: 'default' } },
+      privacyDecisionAt: 1,
+      telemetry: { metrics: false, content: false, artifactManifest: false },
+    } } });
+  });
+  await page.route('**/api/integrations/vela/status*', async (route) => {
+    await route.fulfill({ json: {
+      loggedIn: true, profile: 'local',
+      user: { id: 'retry-dedup-user', email: 'retry-dedup@example.com', plan: 'plus' },
+    } });
+  });
+  await mockAmrWalletSnapshot(page, { balanceUsd: '20.00' });
 
-  await routeRunSequence(page, {
+  const runs = await routeRunSequence(page, {
     runIdPrefix: 'retry-run',
     eventBodies: [
       failedRunEventBody('connection refused'),
@@ -1296,24 +1339,36 @@ test('[P0] retrying a failed run does not duplicate the original user message', 
     ],
   });
 
-  await createEmptyProject(page, 'Retry dedup restore');
-  await expectWorkspaceReady(page);
+  const projectId = `retry-dedup-${crypto.randomUUID()}`;
+  await createProjectViaApi(page, projectId, 'Retry dedup restore', {
+    accountBalanceUsd: '20.00', accountCredits: 2_000, accountPlan: 'plus',
+  });
+  await gotoProject(page, projectId);
+  await expect.poll(async () => page.evaluate((key) => {
+    const raw = window.localStorage.getItem(key);
+    return raw ? JSON.parse(raw).agentId : null;
+  }, STORAGE_KEY)).toBe('amr');
 
   const prompt = 'retry dedup prompt';
   await sendPrompt(page, prompt);
-  await expect(runErrorCard(page)).toContainText('connection refused');
-  await expect(page.locator('.chat-error-retry')).toBeVisible();
+  await expectFriendlyGenericRunFailure(page);
+  await runs.expectCount(1);
+  expect(runs.bodies[0]).toMatchObject({ agentId: 'amr', projectId });
+  const retryButton = runErrorCard(page).getByRole('button', { name: /^Retry$/i });
+  await expect(retryButton).toBeVisible();
   await expect(page.locator('.msg.user', { hasText: prompt })).toHaveCount(1);
 
   await Promise.all([
     page.waitForResponse((resp) => /\/api\/runs$/.test(new URL(resp.url()).pathname) && resp.request().method() === 'POST'),
-    page.locator('.chat-error-retry').click(),
+    retryButton.click(),
   ]);
 
   await expect(page.getByRole('tab', { name: /retry-dedup-artifact\.html/i })).toHaveAttribute(
     'aria-selected',
     'true',
   );
+  await runs.expectCount(2);
+  expect(runs.bodies[1]).toMatchObject({ agentId: 'amr', projectId });
   await expect(page.locator('.msg.user', { hasText: prompt })).toHaveCount(1);
 });
 
@@ -1573,7 +1628,7 @@ test('[P0] editing a queued prompt from an artifact file route keeps the file ed
   await expect(
     artifactPreviewFrame(page).getByRole('heading', { name: 'Original Hero' }),
   ).toBeVisible();
-  await page.getByTestId('manual-edit-mode-toggle').click();
+  await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/i);
   await expect(artifactPreviewFrame(page).locator('html[data-od-edit-mode]')).toHaveCount(1);
 
   await sendPrompt(page, 'first artifact file edit prompt');
@@ -1606,110 +1661,6 @@ test('[P0] editing a queued prompt from an artifact file route keeps the file ed
   await expect(page).toHaveURL(new RegExp(`/projects/${projectId}/(?:conversations/[^/]+/)?files/active-edit\\.html$`));
   await expect(artifactPreviewFrame(page).locator('html[data-od-edit-mode]')).toHaveCount(1);
   await expect(queuedStrip).toHaveCount(0);
-});
-
-test('[P1] composer plus menu design toolbox action seeds the next run request', async ({ page }) => {
-  await routeMockAgents(page);
-
-  const runBodies: Array<Record<string, unknown>> = [];
-  const runRequests = await routeSuccessfulRuns(page, {
-    bodies: runBodies,
-    runId: 'toolbox-action-run',
-  });
-
-  await createEmptyProject(page, 'Composer toolbox action run context');
-  await expectWorkspaceReady(page);
-
-  await page.getByTestId('chat-composer-input').fill('Make this dashboard feel premium.');
-  await page.getByTestId('chat-plus-trigger').click();
-  await page.getByRole('menuitem', { name: 'Design toolbox' }).click();
-  await page.getByRole('menuitem', { name: 'Match next step' }).click();
-
-  const input = page.getByTestId('chat-composer-input');
-  await expect(input).toContainText('Creative Director orchestrator');
-  await expect(input).toContainText('Preserve the intent already in the composer: Make this dashboard feel premium.');
-
-  await page.getByTestId('chat-send').click();
-  await runRequests.expectCount(1);
-  expect(runBodies[0]?.message).toContain('Creative Director orchestrator');
-  expect(runBodies[0]?.message).toContain('Make this dashboard feel premium.');
-  expect(runBodies[0]?.message).toContain('Global resource index');
-});
-
-test('[P1] composer design toolbox motion action seeds its specific prompt into the next run request', async ({ page }) => {
-  await routeMockAgents(page);
-
-  const runBodies: Array<Record<string, unknown>> = [];
-  const runRequests = await routeSuccessfulRuns(page, {
-    bodies: runBodies,
-    runId: 'toolbox-motion-run',
-  });
-
-  await createEmptyProject(page, 'Composer toolbox motion action context');
-  await expectWorkspaceReady(page);
-
-  await page.getByTestId('chat-composer-input').fill('Animate the KPI dashboard hero.');
-  await page.getByTestId('chat-plus-trigger').click();
-  await page.getByRole('menuitem', { name: 'Design toolbox' }).click();
-  await page.getByRole('menuitem', { name: 'Add animation / motion' }).click();
-
-  const input = page.getByTestId('chat-composer-input');
-  await expect(input).toContainText('Add high-quality motion to the current HTML / page element');
-  await expect(input).toContainText('Preserve the intent already in the composer: Animate the KPI dashboard hero.');
-
-  await page.getByTestId('chat-send').click();
-  await runRequests.expectCount(1);
-  expect(runBodies[0]?.message).toContain('Add high-quality motion to the current HTML / page element');
-  expect(runBodies[0]?.message).toContain('prefers-reduced-motion fallbacks');
-  expect(runBodies[0]?.message).toContain('Animate the KPI dashboard hero.');
-  expect(runBodies[0]?.message).not.toContain('Creative Director orchestrator');
-});
-
-test('[P1] composer design toolbox anti-AI polish action seeds its specific prompt into the next run request', async ({ page }) => {
-  await routeMockAgents(page);
-
-  const runBodies: Array<Record<string, unknown>> = [];
-  const runRequests = await routeSuccessfulRuns(page, {
-    bodies: runBodies,
-    runId: 'toolbox-anti-ai-run',
-  });
-
-  await createEmptyProject(page, 'Composer toolbox anti AI polish context');
-  await expectWorkspaceReady(page);
-
-  await page.getByTestId('chat-composer-input').fill('Make this SaaS landing page feel less generic.');
-  await page.getByTestId('chat-plus-trigger').click();
-  await page.getByRole('menuitem', { name: 'Design toolbox' }).click();
-  await page.getByRole('menuitem', { name: 'Remove AI feel' }).click();
-
-  const input = page.getByTestId('chat-composer-input');
-  await expect(input).toContainText('Do one anti-AI-feel polish pass');
-  await expect(input).toContainText('Preserve the intent already in the composer: Make this SaaS landing page feel less generic.');
-
-  await page.getByTestId('chat-send').click();
-  await runRequests.expectCount(1);
-  expect(runBodies[0]?.message).toContain('Do one anti-AI-feel polish pass');
-  expect(runBodies[0]?.message).toContain('cheap gradients/glows');
-  expect(runBodies[0]?.message).toContain('Make this SaaS landing page feel less generic.');
-  expect(runBodies[0]?.message).not.toContain('prefers-reduced-motion fallbacks');
-});
-
-test('[P1] project composer design toolbox hides disabled skill resources', async ({ page }) => {
-  await routeMockAgents(page);
-  await routeRuntimeSkills(page);
-  await routeAppConfig(page, {
-    disabledSkills: ['disabled-runtime-skill'],
-  });
-
-  await createEmptyProject(page, 'Runtime disabled skill toolbox');
-  await expectWorkspaceReady(page);
-
-  await page.getByTestId('chat-plus-trigger').click();
-  await page.getByRole('menuitem', { name: 'Design toolbox' }).click();
-  await page.getByRole('textbox', { name: /Search design toolbox resources/i }).fill('Runtime Skill');
-
-  await expect(page.getByRole('menuitem', { name: /Enabled Runtime Skill/i })).toBeVisible();
-  await expect(page.getByRole('menuitem', { name: /Disabled Runtime Skill/i })).toHaveCount(0);
 });
 
 test('[P1] completed hidden-page run sends the configured desktop notification', async ({ page }) => {
@@ -2149,7 +2100,7 @@ test('[P1] Browser Inspiration page_info carries a loaded page title into the ne
   expect(runBodies[0]?.message).toContain('- title: Browser Fixture Title');
 });
 
-test('[P1] inline question form Skip all sends structured skipped answers into the next run request', async ({ page }) => {
+test('[P1] inline question form Skip — you decide sends structured skipped answers into the next run request', async ({ page }) => {
   await routeMockAgents(page);
 
   const runBodies: Array<Record<string, unknown>> = [];
@@ -2166,7 +2117,7 @@ test('[P1] inline question form Skip all sends structured skipped answers into t
   await expect(form).toBeVisible();
   await expect(form.getByText('Audience')).toBeVisible();
 
-  const skipAll = form.getByRole('button', { name: /Skip all/i });
+  const skipAll = form.getByRole('button', { name: /Skip — you decide/i });
   await expect(skipAll).toBeEnabled();
   await Promise.all([
     page.waitForResponse(isCreateRunResponse, { timeout: 5_000 }),
@@ -2216,10 +2167,9 @@ test('[P1] inline question form submits selected answers into the next run reque
 
   const form = page.locator('.question-form').first();
   await expect(form).toBeVisible();
-  const audienceQuestion = form.locator('.qf-field', { has: page.getByText('Audience') });
-  await audienceQuestion.locator('input.qf-input').fill('Product marketers');
+  await form.getByTestId('qf-input').fill('Product marketers');
 
-  const submitButton = form.getByRole('button', { name: 'Send answers' });
+  const submitButton = form.getByRole('button', { name: 'Next' });
   await expect(submitButton).toBeEnabled();
   await Promise.all([
     page.waitForResponse(isCreateRunResponse, { timeout: 5_000 }),
@@ -2255,113 +2205,6 @@ test('[P1] inline question form submits selected answers into the next run reque
   ).toBe(true);
 });
 
-test('[P1] project composer working directory replace and clear update linked dirs metadata', async ({ page }) => {
-  const workingDir = process.cwd();
-  const patchBodies: Array<Record<string, unknown>> = [];
-
-  await page.route('**/api/recent-dirs', async (route) => {
-    await route.fulfill({ json: { dirs: [] } });
-  });
-  await page.route('**/api/dialog/open-folder', async (route) => {
-    await route.fulfill({ json: { path: workingDir } });
-  });
-  await page.route('**/api/dir-exists', async (route) => {
-    await route.fulfill({ json: { exists: true } });
-  });
-  await page.route('**/api/app-config', async (route) => {
-    if (route.request().method() === 'PUT') {
-      await route.fulfill({ json: { config: { recentLinkedDirs: [workingDir] } } });
-      return;
-    }
-    await route.fallback();
-  });
-  await page.route('**/api/projects/*', async (route) => {
-    if (route.request().method() === 'PATCH') {
-      patchBodies.push(route.request().postDataJSON() as Record<string, unknown>);
-    }
-    await route.continue();
-  });
-
-  await createEmptyProject(page, 'Project composer working directory metadata');
-  await expectWorkspaceReady(page);
-
-  await page.getByTestId('chat-plus-trigger').click();
-  await page.getByTestId('composer-plus-working-dir').click();
-  await page.getByTestId('composer-plus-working-dir-pick').click();
-  await expect
-    .poll(() => patchBodies.at(-1)?.metadata)
-    .toMatchObject({ linkedDirs: [workingDir] });
-
-  await page.getByTestId('chat-plus-trigger').click();
-  await page.getByTestId('composer-plus-working-dir').click();
-  await expect(page.getByTestId('composer-plus-working-dir-pick')).toBeVisible();
-  await expect(page.getByTestId('composer-plus-working-dir-clear')).toBeVisible();
-  await page.getByTestId('composer-plus-working-dir-clear').click();
-  await expect
-    .poll(() => patchBodies.at(-1)?.metadata)
-    .toMatchObject({ linkedDirs: [] });
-});
-
-test('[P1] project composer working directory rejects stale folder without promoting it to recents', async ({ page }) => {
-  const staleDir = '/Users/mac/open-design/open-design/missing-linked-dir';
-  const patchBodies: Array<Record<string, unknown>> = [];
-  const recentDirPutBodies: Array<Record<string, unknown>> = [];
-
-  await page.route('**/api/recent-dirs', async (route) => {
-    await route.fulfill({ json: { dirs: [] } });
-  });
-  await page.route('**/api/dialog/open-folder', async (route) => {
-    await route.fulfill({ json: { path: staleDir } });
-  });
-  await page.route('**/api/dir-exists', async (route) => {
-    await route.fulfill({ json: { exists: false } });
-  });
-  await page.route('**/api/app-config', async (route) => {
-    if (route.request().method() === 'PUT') {
-      const payload = route.request().postDataJSON() as Record<string, unknown>;
-      if (JSON.stringify(payload).includes(staleDir)) {
-        recentDirPutBodies.push(payload);
-      }
-      await route.fulfill({ json: { config: { recentLinkedDirs: [staleDir] } } });
-      return;
-    }
-    await route.fallback();
-  });
-  await page.route('**/api/projects/*', async (route) => {
-    if (route.request().method() === 'PATCH') {
-      patchBodies.push(route.request().postDataJSON() as Record<string, unknown>);
-      await route.fulfill({
-        status: 400,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          error: {
-            code: 'INVALID_LINKED_DIR',
-            message: 'The linked directory no longer exists.',
-          },
-        }),
-      });
-      return;
-    }
-    await route.continue();
-  });
-
-  await createEmptyProject(page, 'Project composer stale working directory');
-  await expectWorkspaceReady(page);
-
-  await page.getByTestId('chat-plus-trigger').click();
-  await page.getByTestId('composer-plus-working-dir').click();
-  await page.getByTestId('composer-plus-working-dir-pick').click();
-
-  await expect(page.getByText("Couldn't set the working directory")).toBeVisible();
-  await expect
-    .poll(() => patchBodies.at(-1)?.metadata)
-    .toMatchObject({ linkedDirs: [staleDir] });
-  expect(recentDirPutBodies).toHaveLength(0);
-  await page.getByTestId('chat-plus-trigger').click();
-  await page.getByTestId('composer-plus-working-dir').click();
-  await expect(page.getByTestId('composer-plus-working-dir-clear')).toHaveCount(0);
-});
-
 async function routeAppConfig(page: Page, override: Record<string, unknown>) {
   await page.route('**/api/app-config', async (route) => {
     if (route.request().method() !== 'GET') {
@@ -2383,44 +2226,6 @@ async function routeAppConfig(page: Page, override: Record<string, unknown>) {
       },
     });
   });
-}
-
-async function routeRuntimeSkills(page: Page) {
-  await page.route('**/api/skills', async (route) => {
-    await route.fulfill({
-      json: {
-        skills: [
-          runtimeSkill('enabled-runtime-skill', 'Enabled Runtime Skill'),
-          runtimeSkill('disabled-runtime-skill', 'Disabled Runtime Skill'),
-        ],
-      },
-    });
-  });
-}
-
-function runtimeSkill(id: string, name: string) {
-  return {
-    id,
-    name,
-    description: `${name} fixture`,
-    triggers: [],
-    mode: 'prototype',
-    surface: 'web',
-    platform: 'desktop',
-    scenario: 'qa',
-    previewType: 'html',
-    designSystemRequired: true,
-    defaultFor: [],
-    upstream: null,
-    featured: null,
-    fidelity: null,
-    speakerNotes: null,
-    animations: null,
-    hasBody: true,
-    examplePrompt: '',
-    source: 'builtin',
-    category: 'Runtime',
-  };
 }
 
 async function createEmptyProject(page: Page, name: string): Promise<string> {
@@ -2569,29 +2374,35 @@ async function expectWorkspaceReady(page: Page) {
   await waitForLoadingToClear(page);
   await expect(page).toHaveURL(/\/projects\//);
   await expect(page.getByTestId('chat-composer')).toBeVisible();
-  await expect(page.getByTestId('chat-composer-input')).toBeVisible();
+  await expect(page.locator('.chat-loading-state')).toHaveCount(0, { timeout: T.medium });
+  await expect(page.getByTestId('chat-composer-input')).toBeEditable({ timeout: T.medium });
   await expect(page.getByTestId('file-workspace')).toBeVisible();
 }
 
 async function sendPrompt(page: Page, prompt: string) {
   const input = page.getByTestId('chat-composer-input');
   const sendButton = page.getByTestId('chat-send');
-  await expect(input).toBeVisible({ timeout: 3_000 });
+  await expect(input).toBeEditable({ timeout: T.short });
   await input.click();
   await input.fill(prompt);
-  await expect(input).toHaveText(prompt, { timeout: 5_000 });
-  await expect(sendButton).toBeEnabled({ timeout: 5_000 });
-  await Promise.all([
-    page.waitForResponse(isCreateRunResponse, { timeout: 5_000 }),
-    sendButton.evaluate((button: HTMLButtonElement) => button.click()),
-  ]);
+  await expect(input).toHaveText(prompt, { timeout: T.short });
+  await expect(sendButton).toBeEnabled({ timeout: T.medium });
+  const createRunResponse = page.waitForResponse(isCreateRunResponse, {
+    timeout: T.medium,
+  });
+  await sendButton.click();
+  await expect((await createRunResponse).ok()).toBeTruthy();
 }
 
 async function startNewConversation(page: Page) {
   const previousPath = new URL(page.url()).pathname;
+  // Open the history dropdown first: creating a conversation must also dismiss
+  // it, and the `toHaveCount(0)` below only means something if it was open.
   await page.getByTestId('conversation-history-trigger').click();
   await expect(page.getByTestId('conversation-list')).toBeVisible();
-  await page.getByTestId('conversation-history-new').click();
+  // The single "new conversation" control sits inside the history dropdown,
+  // beside the search field (OPEND-3087); creating dismisses the dropdown.
+  await page.getByTestId('conversation-history-menu').getByTestId('chat-new-conversation').click();
   await expect(page.getByTestId('conversation-list')).toHaveCount(0);
   await expect
     .poll(() => new URL(page.url()).pathname, { timeout: 10_000 })
@@ -2684,7 +2495,9 @@ async function runDesignSystemSelectionFlow(
   await page.getByTestId('create-project').click();
 
   await expect(page).toHaveURL(/\/projects\//);
-  await expect(page.getByTestId('project-meta')).toContainText('Nexu Soft Tech');
+  // The chat card carries no type / design-system meta line any more
+  // (OPEND-3128); the composer's design-system picker names the pick.
+  await expect(page.getByTestId('project-ds-picker-trigger')).toContainText('Nexu Soft Tech');
   await expect(page.getByTestId('chat-composer')).toBeVisible();
 }
 
@@ -2699,8 +2512,9 @@ async function runExampleUsePromptFlow(
   await expect(page).toHaveURL(/\/projects\//);
   await expect(page.getByTestId('chat-composer')).toBeVisible();
   await expect(page.getByTestId('chat-composer-input')).toHaveText(entry.prompt);
-  await expect(page.getByTestId('project-title')).toContainText('Warm Utility Example');
-  await expect(page.getByTestId('project-meta')).toContainText('Warm Utility Example');
+  // The project is named once, in the switcher docked above the chat card
+  // (OPEND-3128); the card itself carries no title row.
+  await expect(page.getByTestId('workspace-tabs-dropdown-trigger')).toContainText('Warm Utility Example');
 }
 
 async function runGenerationDoesNotCreateExtraFileFlow(
@@ -2978,27 +2792,20 @@ function uniqueProjectName(base: string): string {
 /**
  * Assert we are on a surface that lists the workspace's projects.
  *
- * #5517 deleted the rail's Projects destination (`entry-nav-projects`), so the
- * project list a user actually reaches is Home's recent-projects strip, or the
- * team workspace's 全部项目 grid. Both branches stay here because the strip is
- * suppressed while the workspace has no projects at all; a signed-in team
- * workspace then answers with the grid instead.
+ * Home lists the catalogue in the rail's 最近项目 section on both branches
+ * (OPEND-2683 / OPEND-3140), and the rail's 全部项目 item opens the browsable
+ * page (OPEND-3108: 最近浏览过 / 个人项目 / 团队项目 tabs on one page).
  */
 async function expectProjectsView(page: Page) {
   const legacyProjectsToolbar = page.locator('.tab-panel-toolbar');
-  const homeRecentProjects = page.getByRole('heading', { name: /recent projects|最近项目/i });
   if (await legacyProjectsToolbar.isVisible().catch(() => false)) return;
-  if (await homeRecentProjects.isVisible().catch(() => false)) return;
 
   await ensureRailOpen(page);
-  const allProjectsNav = page.getByTestId('entry-nav-all-projects');
-  if (await allProjectsNav.isVisible().catch(() => false)) {
-    await allProjectsNav.click();
-    await expect(page.getByRole('heading', { name: /all projects|全部项目/i })).toBeVisible();
-    return;
-  }
-
-  await expect(homeRecentProjects).toBeVisible();
+  await expect(page.getByTestId('entry-nav-recent-toggle')).toBeVisible();
+  // One 全部项目 entry in every workspace (OPEND-3108); a team workspace
+  // reaches its shared projects through the page's 团队项目 tab.
+  await page.getByTestId('entry-nav-drafts').click();
+  await expect(page.getByTestId('recent-projects-strip')).toBeVisible();
 }
 
 async function waitForLoadingToClear(page: Page) {

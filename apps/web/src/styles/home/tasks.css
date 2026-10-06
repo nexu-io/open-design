@@ -811,12 +811,15 @@
 .automation-modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 80;
+  /* 应用模态档(1000,和既有的五张 `.backdrop` 同档)。80 压不住 shell chrome
+     —— `.workspace-tabs-chrome` 是 120、右上角那簇真机量到 150。
+     守护:`tests/styles/app-scrim-layer.test.ts`。 */
+  z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: color-mix(in srgb, var(--scrim, rgba(0, 0, 0, 0.45)) 92%, transparent);
+  background: var(--scrim-tint);
   -webkit-backdrop-filter: var(--scrim-backdrop);
   backdrop-filter: var(--scrim-backdrop);
   animation: automation-modal-fade-in 160ms cubic-bezier(0.23, 1, 0.32, 1);
@@ -876,7 +879,7 @@
 
 .automation-modal__title-input::placeholder {
   color: var(--text-faint);
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .automation-modal__title-input:focus {
@@ -959,7 +962,7 @@
   background: color-mix(in srgb, var(--bg-panel) 72%, transparent);
   resize: none;
   color: var(--text);
-  font: 13.5px/1.55 var(--font, system-ui);
+  font: 500 13.5px/1.55 var(--font, system-ui);
 }
 
 .automation-modal__prompt::placeholder {
@@ -1248,7 +1251,7 @@
 
 .automation-pill__tz {
   color: var(--text-muted);
-  font-weight: 500;
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

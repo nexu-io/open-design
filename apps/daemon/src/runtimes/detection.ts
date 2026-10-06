@@ -50,10 +50,12 @@ export interface DetectedRuntimeVersions {
 }
 
 // Detection already pays the bounded `--version` probe cost used by Settings.
-// Keep the result as daemon-lifetime provenance so run telemetry can name the
-// exact executable family without spawning another process on every turn.
+// Keep known versions as daemon-lifetime provenance. Missing versions expire
+// so a transient probe failure cannot permanently disable version-gated features.
 const detectedRuntimeVersions = new Map<string, DetectedRuntimeVersions>();
 const detectedRuntimeVersionScopes = new Map<string, string>();
+const missingRuntimeVersionRetryAt = new Map<string, number>();
+const MISSING_RUNTIME_VERSION_TTL_MS = 5_000;
 const detectedRuntimeVersionProbes = new Map<
   string,
   Promise<DetectedRuntimeVersions | null>
@@ -69,6 +71,13 @@ const detectedRuntimeCapabilityProbes = new Map<
 // case stops at the first candidate, so this only bounds the pathological
 // shape: the same CLI name shadowed in many search directories at once.
 const MAX_EXECUTABLE_ATTEMPTS = 8;
+
+function rememberRuntimeVersions(agentId: string, scope: string, versions: DetectedRuntimeVersions): void {
+  detectedRuntimeVersions.set(agentId, versions);
+  detectedRuntimeVersionScopes.set(agentId, scope);
+  if (versions.agentCliVersion) missingRuntimeVersionRetryAt.delete(agentId);
+  else missingRuntimeVersionRetryAt.set(agentId, Date.now() + MISSING_RUNTIME_VERSION_TTL_MS);
+}
 
 export function getDetectedRuntimeVersions(
   agentId: string | null | undefined,
@@ -101,6 +110,7 @@ export async function ensureDetectedRuntimeVersions(
   if (
     remembered
     && detectedRuntimeVersionScopes.get(agentId) === context.scope
+    && (remembered.agentCliVersion || Date.now() < (missingRuntimeVersionRetryAt.get(agentId) ?? 0))
   ) {
     return remembered;
   }
@@ -444,8 +454,7 @@ async function probeRuntimeVersionsOnly(
         }
       : {}),
   };
-  detectedRuntimeVersions.set(def.id, versions);
-  detectedRuntimeVersionScopes.set(def.id, context.scope);
+  rememberRuntimeVersions(def.id, context.scope, versions);
   return { ...versions };
 }
 
@@ -453,6 +462,7 @@ function unavailableAgent(
   def: RuntimeAgentDef,
   diagnostics: AgentDiagnostic[] = [],
   detected?: { path?: string; version?: string | null },
+  configuredEnv: Record<string, string> = {},
 ): DetectedAgent {
   return {
     ...stripFns(def),
@@ -462,7 +472,7 @@ function unavailableAgent(
     ...(detected?.path ? { path: detected.path } : {}),
     ...(detected && 'version' in detected ? { version: detected.version ?? null } : {}),
     ...(diagnostics.length > 0 ? { diagnostics } : {}),
-    ...installMetaForAgent(def.id),
+    ...installMetaForAgent(def.id, configuredEnv),
   };
 }
 
@@ -503,11 +513,60 @@ async function probeCapabilities(
   }
 }
 
+// A value no option can legitimately accept, so the CLI is forced to validate
+// the flag before it does any work.
+const HIDDEN_FLAG_PROBE_VALUE = '__od_capability_probe__';
+
+/**
+ * Detect flags the CLI accepts but leaves out of `--help`.
+ *
+ * Argument parsers reject an unrecognised *option* ("unknown option '--x'")
+ * differently from a recognised option carrying an unusable *value*
+ * ("option '--x <v>' argument '…' is invalid…"). Both exit non-zero before the
+ * agent contacts a model, so this costs one spawn and no tokens.
+ *
+ * Support is only recorded on positive evidence — the failure text has to name
+ * the flag and must not be an unknown-option complaint. A timeout, a missing
+ * binary, or any wording this probe does not recognise leaves the capability
+ * false, so `buildArgs` keeps the flag off rather than risking a spawn that
+ * dies on an unknown option.
+ */
+async function probeHiddenCapabilityFlags(
+  def: RuntimeAgentDef,
+  launchPath: string,
+  env: NodeJS.ProcessEnv,
+): Promise<RuntimeCapabilityMap> {
+  const spec = def.hiddenCapabilityFlags;
+  if (!spec) return {};
+  const caps: RuntimeCapabilityMap = {};
+  await Promise.all(
+    Object.entries(spec.flags).map(async ([flag, key]) => {
+      let output = '';
+      try {
+        const { stdout, stderr } = await execAgentFile(
+          launchPath,
+          [...spec.probeArgsPrefix, flag, HIDDEN_FLAG_PROBE_VALUE],
+          { env, timeout: 5000, maxBuffer: 1024 * 1024 },
+        );
+        output = `${stdout ?? ''}\n${stderr ?? ''}`;
+      } catch (error) {
+        const failure = error as { stdout?: unknown; stderr?: unknown };
+        const out = typeof failure?.stdout === 'string' ? failure.stdout : '';
+        const err = typeof failure?.stderr === 'string' ? failure.stderr : '';
+        output = `${out}\n${err}`;
+      }
+      caps[key] = output.includes(flag) && !output.includes('unknown option');
+    }),
+  );
+  return caps;
+}
+
 async function probe(
   def: RuntimeAgentDef,
   configuredEnv: Record<string, string> = {},
 ): Promise<DetectedAgent> {
   detectedRuntimeVersions.delete(def.id);
+  missingRuntimeVersionRetryAt.delete(def.id);
   // Forget what a previous pass proved unusable before re-probing: a rescan
   // after the user repairs or reinstalls a CLI must not keep skipping it.
   forgetUnusableExecutables(def.id);
@@ -521,7 +580,7 @@ async function probe(
   // hand even though the real launch path is healthy.
   const initialLaunch = resolveAgentLaunch(def, configuredEnv);
   if (!initialLaunch.selectedPath || !initialLaunch.launchPath) {
-    return unavailableAgent(def, [buildExecutableDiagnostic(def, configuredEnv)]);
+    return unavailableAgent(def, [buildExecutableDiagnostic(def, configuredEnv)], undefined, configuredEnv);
   }
   // Carry the narrowed pair explicitly: the candidate walk below reassigns
   // this binding, which would otherwise discard the null-check above and
@@ -614,13 +673,14 @@ async function probe(
       def,
       [buildNotInvocableDiagnostic(def, launch, outcome.cause)],
       { path: launch.selectedPath },
+      configuredEnv,
     );
   }
   if (def.versionPolicy?.requireVersion && !outcome.version) {
     return unavailableAgent(def, [buildVersionDiagnostic(def, outcome.version)], {
       path: launch.selectedPath,
       version: outcome.version,
-    });
+    }, configuredEnv);
   }
   let runtimeCompanionVersion: string | undefined;
   if (def.compatibilityProbe) {
@@ -629,7 +689,7 @@ async function probe(
         return unavailableAgent(def, [buildCompatibilityDiagnostic(def)], {
           path: launch.selectedPath,
           version: outcome.version,
-        });
+        }, configuredEnv);
       }
       const { stdout } = await execAgentFile(
         launch.launchPath,
@@ -645,7 +705,7 @@ async function probe(
       return unavailableAgent(def, [buildCompatibilityDiagnostic(def)], {
         path: launch.selectedPath,
         version: outcome.version,
-      });
+      }, configuredEnv);
     }
   }
   const versionDiagnostic =
@@ -659,12 +719,21 @@ async function probe(
   // so a single agent's detection wall is max(help, models, auth) ≈ 5s rather
   // than the sum ≈ 15s. `--help` capabilities are cached on `agentCapabilities`
   // for buildArgs to consult.
-  const [caps, modelResult, auth, amrOpenCodeVersion] = await Promise.all([
-    probeCapabilities(def, launch.launchPath, probeEnv),
-    fetchModels(def, launch.launchPath, probeEnv),
-    probeAgentAuthStatus(def, launch.launchPath, probeEnv),
-    probeAmrOpenCodeVersion(def, probeEnv),
-  ]);
+  const [helpCaps, hiddenCaps, modelResult, auth, amrOpenCodeVersion] =
+    await Promise.all([
+      probeCapabilities(def, launch.launchPath, probeEnv),
+      probeHiddenCapabilityFlags(def, launch.launchPath, probeEnv),
+      fetchModels(def, launch.launchPath, probeEnv),
+      probeAgentAuthStatus(def, launch.launchPath, probeEnv),
+      probeAmrOpenCodeVersion(def, probeEnv),
+    ]);
+  // `probeCapabilities` returns null when the agent declares no help metadata;
+  // hidden-flag results still deserve to land, so only collapse to null when
+  // neither probe produced anything.
+  const caps =
+    helpCaps || Object.keys(hiddenCaps).length > 0
+      ? { ...(helpCaps ?? {}), ...hiddenCaps }
+      : null;
   const surfacedModelResult = withRememberedAmrModels(def, probeEnv, modelResult);
   if (caps) {
     agentCapabilities.set(def.id, caps);
@@ -689,10 +758,10 @@ async function probe(
       : {}),
   };
   if (Object.keys(runtimeVersions).length > 0) {
-    detectedRuntimeVersions.set(def.id, runtimeVersions);
-    detectedRuntimeVersionScopes.set(
+    rememberRuntimeVersions(
       def.id,
       runtimeVersionProbeContext(def, configuredEnv)?.scope ?? '',
+      runtimeVersions,
     );
   }
   return {
@@ -715,7 +784,7 @@ async function probe(
           ),
         }
       : {}),
-    ...installMetaForAgent(def.id),
+    ...installMetaForAgent(def.id, configuredEnv),
   };
 }
 
@@ -766,7 +835,7 @@ export async function detectAgent(
     // Without this guard the bare `Promise.all` rejected and the
     // `/api/agents` catch arm returned `[]`, so the UI silently lost
     // every CLI option and fell back to BYOK / Cloud only.
-    return unavailableAgent(def);
+    return unavailableAgent(def, [], undefined, configuredEnv);
   }
 }
 

@@ -113,6 +113,7 @@ describe('daemonAgentPayloadToPersistedAgentEvent — transient ACP status label
     ['tool_call'],
     ['tool_call_update'],
     ['session_update'],
+    ['opencode_compaction'],
   ])('returns null for transient status %s', (label) => {
     expect(
       persist({
@@ -121,6 +122,23 @@ describe('daemonAgentPayloadToPersistedAgentEvent — transient ACP status label
         detail: 'should be dropped',
       }),
     ).toBeNull();
+  });
+
+  // `agent_reconnecting` was on the list above and was taken off it. Unlike its
+  // neighbours it is not polling-shaped: it fires once per real, irreversible
+  // upstream event — the agent's connection to the model dropped mid-turn and
+  // the turn restarted — and the model can re-generate text it had already
+  // streamed, so the transcript legitimately ends up holding the answer twice.
+  // Dropping the row left the reader with two conclusions and nothing to
+  // explain the seam. Full rationale and the recorded case live on
+  // `TRANSIENT_ACP_PERSISTED_STATUS_LABELS` and in
+  // `tests/persisted-agent-reconnect-status.test.ts`.
+  it('persists agent_reconnecting so the transcript can explain a restarted turn', () => {
+    expect(persist({ type: 'status', label: 'agent_reconnecting', detail: '1/5' })).toEqual({
+      kind: 'status',
+      label: 'agent_reconnecting',
+      detail: '1/5',
+    });
   });
 
   it('persists a visible model status with model as detail', () => {

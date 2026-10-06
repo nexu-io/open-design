@@ -19,6 +19,8 @@ import type { RunAnalyticsFacts } from './run-analytics-lifecycle.js';
  * lifecycle cannot drift apart.
  */
 export interface InternalRunCreateInput extends Record<string, unknown> {
+  /** Daemon-owned nonce shared by this run's keyed host protocol markers. */
+  doneKey?: string;
   projectId?: string;
   conversationId?: string;
   userMessageId?: string;

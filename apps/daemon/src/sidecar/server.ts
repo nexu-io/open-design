@@ -1,8 +1,6 @@
 import { randomBytes } from "node:crypto";
 
 import {
-  APP_KEYS,
-  OPEN_DESIGN_SIDECAR_CONTRACT,
   SIDECAR_ENV,
   SIDECAR_MESSAGES,
   normalizeDaemonSidecarMessage,
@@ -11,18 +9,13 @@ import {
   type DesktopExportArtifactResult,
   type DesktopExportPdfInput,
   type DesktopExportPdfResult,
+  type DesktopRenderFramesInput,
+  type DesktopRenderFramesResult,
   type DesktopRenderSlidesInput,
   type DesktopRenderSlidesResult,
+  type DesktopStatusSnapshot,
   type MintImportTokenResult,
-  type SidecarStamp,
 } from "@open-design/sidecar-proto";
-import {
-  createJsonIpcServer,
-  requestJsonIpc,
-  resolveAppIpcPath,
-  type JsonIpcServerHandle,
-  type SidecarRuntimeContext,
-} from "@open-design/sidecar";
 
 import { startDaemonRuntime, type StartedDaemonRuntime } from "../daemon-startup.js";
 import {
@@ -32,7 +25,6 @@ import {
   setDesktopAuthSecret,
   signDesktopImportToken,
 } from "../desktop-auth.js";
-import { attachParentMonitor, scheduleHeldDaemonExit } from "./parent-monitor-gate.js";
 
 /**
  * PR #974 round 6 (mrcfps): pure wrapper that overlays the live
@@ -52,9 +44,18 @@ const WEB_PORT_ENV = SIDECAR_ENV.WEB_PORT;
 const DESKTOP_IMPORT_TOKEN_TTL_MS = 60_000;
 
 export type DaemonSidecarHandle = {
+  invoke(action: string, input: unknown): Promise<unknown>;
   status(): Promise<DaemonStatusSnapshot>;
   stop(): Promise<void>;
   waitUntilStopped(): Promise<void>;
+};
+
+export type DaemonSidecarRuntime = {
+  base: string;
+  mode?: string;
+  namespace: string;
+  source?: string;
+  [field: string]: unknown;
 };
 
 function parsePort(value: string | undefined): number {
@@ -99,47 +100,52 @@ export function mintImportTokenForCli(baseDir: string): MintImportTokenResult {
 }
 
 export async function startDaemonSidecar(
-  runtime: SidecarRuntimeContext<SidecarStamp>,
-  options: { exit?: (code?: number) => void } = {},
+  runtime: DaemonSidecarRuntime,
+  options: {
+    inheritedEnvironment?: (baseEnv?: NodeJS.ProcessEnv) => Record<string, string>;
+    invokeDesktop?: <TResult>(action: string, input: unknown, timeoutMs: number) => Promise<TResult>;
+    port?: number;
+    statusDesktop?: (timeoutMs: number) => Promise<DesktopStatusSnapshot>;
+  } = {},
 ): Promise<DaemonSidecarHandle> {
+  const invokeDesktop = options.invokeDesktop ?? (async () => {
+    throw new Error("desktop sidecar is unavailable");
+  });
+  const statusDesktop = options.statusDesktop ?? (async () => {
+    throw new Error("desktop sidecar is unavailable");
+  });
   const serverHandle: StartedDaemonRuntime = await startDaemonRuntime({
     desktopPdfExporter: async (input: DesktopExportPdfInput): Promise<DesktopExportPdfResult> => {
-      const desktopIpc = resolveAppIpcPath({
-        app: APP_KEYS.DESKTOP,
-        contract: OPEN_DESIGN_SIDECAR_CONTRACT,
-        namespace: runtime.namespace,
-      });
-      return await requestJsonIpc<DesktopExportPdfResult>(
-        desktopIpc,
-        { input, type: SIDECAR_MESSAGES.EXPORT_PDF },
-        { timeoutMs: 600_000 },
-      );
+      return await invokeDesktop<DesktopExportPdfResult>(SIDECAR_MESSAGES.EXPORT_PDF, input, 600_000);
+    },
+    desktopFrameRenderer: async (input: DesktopRenderFramesInput): Promise<DesktopRenderFramesResult> => {
+      let status: DesktopStatusSnapshot;
+      try {
+        status = await statusDesktop(5_000);
+      } catch {
+        return {
+          ok: false,
+          error: "Open Design desktop is not running. Open or upgrade the desktop client before rendering HyperFrames video.",
+          errorCode: "FRAME_RENDERER_NOT_READY",
+        };
+      }
+      if (status.state !== "running" || status.capabilities?.frameRenderer !== true) {
+        return {
+          ok: false,
+          error: "This Open Design desktop version does not support HyperFrames rendering. Upgrade the desktop client and try again.",
+          errorCode: "FRAME_RENDERER_NOT_READY",
+        };
+      }
+      return await invokeDesktop<DesktopRenderFramesResult>(SIDECAR_MESSAGES.RENDER_FRAMES, input, 600_000);
     },
     desktopSlideRenderer: async (input: DesktopRenderSlidesInput): Promise<DesktopRenderSlidesResult> => {
-      const desktopIpc = resolveAppIpcPath({
-        app: APP_KEYS.DESKTOP,
-        contract: OPEN_DESIGN_SIDECAR_CONTRACT,
-        namespace: runtime.namespace,
-      });
-      return await requestJsonIpc<DesktopRenderSlidesResult>(
-        desktopIpc,
-        { input, type: SIDECAR_MESSAGES.RENDER_SLIDES },
-        { timeoutMs: 600_000 },
-      );
+      return await invokeDesktop<DesktopRenderSlidesResult>(SIDECAR_MESSAGES.RENDER_SLIDES, input, 600_000);
     },
     desktopArtifactExporter: async (input: DesktopExportArtifactInput): Promise<DesktopExportArtifactResult> => {
-      const desktopIpc = resolveAppIpcPath({
-        app: APP_KEYS.DESKTOP,
-        contract: OPEN_DESIGN_SIDECAR_CONTRACT,
-        namespace: runtime.namespace,
-      });
-      return await requestJsonIpc<DesktopExportArtifactResult>(
-        desktopIpc,
-        { input, type: SIDECAR_MESSAGES.EXPORT_ARTIFACT },
-        { timeoutMs: 600_000 },
-      );
+      return await invokeDesktop<DesktopExportArtifactResult>(SIDECAR_MESSAGES.EXPORT_ARTIFACT, input, 600_000);
     },
-    port: parsePort(process.env[DAEMON_PORT_ENV]),
+    ...(options.inheritedEnvironment == null ? {} : { inheritedEnvironment: options.inheritedEnvironment }),
+    port: options.port ?? parsePort(process.env[DAEMON_PORT_ENV]),
     runtime,
   });
 
@@ -157,7 +163,6 @@ export async function startDaemonSidecar(
     updatedAt: new Date().toISOString(),
     url: serverHandle.url,
   };
-  let ipcServer: JsonIpcServerHandle | null = null;
   let stopped = false;
   let resolveStopped!: () => void;
   const stoppedPromise = new Promise<void>((resolveStop) => {
@@ -169,27 +174,20 @@ export async function startDaemonSidecar(
     stopped = true;
     state.state = "stopped";
     state.updatedAt = new Date().toISOString();
-    await ipcServer?.close().catch(() => undefined);
     await serverHandle.stop().catch(() => undefined);
     resolveStopped();
   }
 
-  attachParentMonitor(stop);
-
-  ipcServer = await createJsonIpcServer({
-    socketPath: runtime.ipc,
-    handler: async (message: unknown) => {
-      const request = normalizeDaemonSidecarMessage(message);
+  async function invoke(action: string, input: unknown): Promise<unknown> {
+      const request = normalizeDaemonSidecarMessage({ input, type: action });
       switch (request.type) {
         case SIDECAR_MESSAGES.STATUS:
           // PR #974 round 6 (mrcfps): recompute the gate flag per
           // request so `tools-dev start desktop` sees the live value
           // (the flag flips after REGISTER_DESKTOP_AUTH and stays sticky).
           return withCurrentDesktopAuthGate(state);
-        case SIDECAR_MESSAGES.SHUTDOWN: {
-          const deferred = scheduleHeldDaemonExit(stop, options.exit);
-          return deferred ? { accepted: true, deferred: true } : { accepted: true };
-        }
+        case SIDECAR_MESSAGES.SHUTDOWN:
+          throw new Error("sidecar lifecycle messages are private");
         case SIDECAR_MESSAGES.REGISTER_DESKTOP_AUTH:
           // PR #974: the desktop main process registers its per-process
           // auth secret here at startup. From this point on the HTTP
@@ -214,20 +212,10 @@ export async function startDaemonSidecar(
           return { accepted: true };
         }
       }
-    },
-  });
-
-  for (const signal of ["SIGINT", "SIGTERM"] as const) {
-    process.on(signal, () => {
-      // Packaged beforeShutdown sends SHUTDOWN. When the handoff hold is
-      // active the SHUTDOWN ack includes deferred:true so closeManagedChild
-      // waits a longer bounded grace before stopProcesses(). SIGTERM from
-      // that escalation still uses this hold; SIGKILL remains the ceiling.
-      scheduleHeldDaemonExit(stop, options.exit);
-    });
   }
 
   return {
+    invoke,
     async status() {
       return withCurrentDesktopAuthGate(state);
     },

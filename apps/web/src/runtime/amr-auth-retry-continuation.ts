@@ -1,8 +1,20 @@
+import {
+  isSameWorkspacePrincipal,
+  type WorkspaceCollabContext,
+  type WorkspacePrincipal,
+} from '@open-design/contracts';
+
+import { workspaceIdentityCacheKey } from '../collab/workspace-identity';
+
 export interface AmrAuthRetryContinuation {
   projectId: string;
   conversationId: string;
   assistantId: string;
   workspaceIdentityKey: string;
+  /** The project scope's principal, for comparison with App's directory
+   * projection after Settings. Older inline continuations keep the exact-key
+   * path; the scope key still guards consumption within the project surface. */
+  workspacePrincipal?: WorkspacePrincipal | null;
   originMountId: string;
   accountIdAtArm: string | null;
   createdAtMs: number;
@@ -35,6 +47,25 @@ export interface AmrAuthRetryPersonalAdoptionWitness {
 }
 
 export const AMR_AUTH_RETRY_CONTINUATION_TTL_MS = 5 * 60 * 1_000;
+
+/**
+ * App's directory role and the daemon's project-write role describe different
+ * permissions for the same principal. Preserve the retry across that boundary,
+ * but never retain it for a different member or an inactive/unwritable caller.
+ * This only preserves intent: ProjectView and the daemon still authorize send.
+ */
+export function amrAuthRetryMatchesRouteContext(
+  pending: AmrAuthRetryContinuation,
+  context: WorkspaceCollabContext,
+): boolean {
+  if (pending.workspacePrincipal === undefined) {
+    return pending.workspaceIdentityKey === workspaceIdentityCacheKey(context);
+  }
+  return isSameWorkspacePrincipal(pending.workspacePrincipal, context)
+    && context.memberStatus === 'active'
+    && context.lifecycleState === 'active'
+    && context.permissions.canWriteSyncedFiles;
+}
 
 /**
  * A retry armed by inline AMR authorization normally crosses the one expected

@@ -13,9 +13,9 @@
 // The default is unchanged for workspace-local installs. (1) lets a
 // supervisor relocate just the credentials file. (2) means installs
 // that already set OD_DATA_DIR for the rest of the daemon's runtime
-// state (Nix-store / immutable-image installs, the packaged daemon at
-// apps/packaged/src/sidecars.ts:createPackagedDaemonManagedPathEnv,
-// the Home Manager / NixOS modules) get media-config there too without
+// state (immutable-image installs and the packaged daemon at
+// apps/packaged/src/sidecars.ts:createPackagedDaemonManagedPathEnv)
+// get media-config there too without
 // any extra plumbing. Both env values are resolved with the same
 // semantics as OD_DATA_DIR in server.ts:resolveDataDir(): the shared
 // expandHomePrefix() helper handles `~`, `$HOME`, and `${HOME}` (with

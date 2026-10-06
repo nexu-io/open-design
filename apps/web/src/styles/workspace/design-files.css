@@ -159,6 +159,11 @@
   height: 30px;
   justify-content: center;
   padding: 0;
+  /* A circle (per product: 这个三个点的是圆形的). The button primitive's
+     `--radius-sm` drew a rounded square around a box that is already 30×30, so
+     the pill radius is the only thing standing between it and a disc — the
+     focus ring follows the same curve. */
+  border-radius: var(--radius-pill, 999px);
 }
 .df-project-menu {
   position: absolute;
@@ -696,6 +701,10 @@
   min-height: 320px;
   /* Plain pure-white surface — grid pattern removed. */
   background-color: #fff;
+  /* Hosts the building preview's absolutely-positioned stage
+     (DesignFilesBuildingState) while a run writes a page. */
+  position: relative;
+  overflow: hidden;
 }
 .df-empty-pill {
   /* Chrome-less: the illustration / title / actions sit directly on the

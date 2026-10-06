@@ -1301,11 +1301,6 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
             requestedMode: 'off',
             requestedModeSource: 'default',
             effectiveMode: 'off',
-            latch: null,
-            revision: 0,
-            updatedAt: null,
-            lastEvent: null,
-            resetAllowed: false,
           },
         }), {
           status: 200,
@@ -3314,6 +3309,60 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
 
     expect(screen.getByRole('button', { name: /Codex CLI/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Test' })).toBeTruthy();
+  });
+
+  it('shows the concrete model reported by a Local CLI connection test', async () => {
+    const claudeAgent: AgentInfo = {
+      id: 'claude',
+      name: 'Claude Code',
+      bin: 'claude',
+      available: true,
+      version: '2.1.220',
+      models: [
+        { id: 'default', label: 'Default' },
+        { id: 'opus', label: 'Opus (alias)' },
+      ],
+    };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/test/connection') {
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            kind: 'success',
+            latencyMs: 42,
+            model: 'opus',
+            resolvedModel: 'claude-opus-5',
+            agentName: 'Claude Code',
+            sample: 'ok',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+
+    renderSettingsDialog(
+      {
+        mode: 'daemon',
+        agentId: 'claude',
+        agentModels: { claude: { model: 'opus' } },
+      },
+      { agents: [claudeAgent] },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Test' }));
+
+    expect(
+      await screen.findByText(/Claude Code replied in 42 ms.*Model: claude-opus-5/i),
+    ).toBeTruthy();
   });
 
   it('renders the AMR local agent without vela branding and with the Local CLI test action', async () => {
@@ -5786,7 +5835,7 @@ describe('SettingsDialog about interactions', () => {
     expect(screen.getByText('Architecture')).toBeTruthy();
     expect(screen.getByText('arm64')).toBeTruthy();
     // OD Next routing is product-owned and invisible to end users. About must
-    // not expose the daemon's internal rollout latch/reset control.
+    // not expose the daemon's internal rollout control.
     expect(screen.queryByTestId('od-next-rollout-control')).toBeNull();
     expect(fetchMock.mock.calls.some(([input]) => (
       String(input).includes('/api/strategies/od-next/rollout')
