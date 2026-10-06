@@ -915,6 +915,28 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     expect((screen.getByLabelText('Base URL') as HTMLInputElement).value).toBe('https://api.deepseek.com');
   });
 
+  it('offers Opper as an OpenAI-compatible gateway preset', () => {
+    renderSettingsDialog({
+      apiProtocol: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+      apiProviderBaseUrl: 'https://api.openai.com/v1',
+    });
+
+    fireEvent.click(screen.getByRole('tab', { name: 'OpenAI' }));
+    selectGatewayPreset('Opper');
+
+    expect(screen.getByRole('combobox', { name: 'Model' }).textContent).toContain(
+      'claude-sonnet-4-6',
+    );
+    expect((screen.getByLabelText('Base URL') as HTMLInputElement).value).toBe(
+      'https://api.opper.ai/v3/compat',
+    );
+    expect(screen.getByRole('link', { name: 'Get key ↗' }).getAttribute('href')).toBe(
+      'https://platform.opper.ai/?utm_source=open_design&utm_medium=provider_preset&utm_campaign=opper_byok',
+    );
+  });
+
   it('offers Atlas Cloud as an OpenAI-compatible gateway preset', () => {
     renderSettingsDialog({
       apiProtocol: 'openai',
