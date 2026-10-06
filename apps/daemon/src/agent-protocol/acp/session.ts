@@ -22,6 +22,7 @@ import {
   type ArtifactTextSuppressor,
 } from '../../artifacts/text-suppression.js';
 import { redactSecrets } from '../../redact.js';
+import { createProbeSessionCleanup, supportsSessionDelete } from './probe-cleanup.js';
 import { createJsonLineStream } from '../core/index.js';
 import type { JsonRpcId, JsonObject, TimerHandle, AcpChildProcess } from './types.js';
 import {
@@ -142,6 +143,8 @@ export interface AttachAcpSessionOptions {
   // terminal turn signal instead of returning the pending session/prompt RPC.
   // Keep this opt-in so standard ACP adapters still require the response.
   completePromptOnTurnEnd?: boolean;
+  /** Delete only disposable connection-test sessions, after negotiating support. */
+  disposeSessionAfterPrompt?: boolean;
   // When set, resume an existing upstream session instead of creating a new
   // one: the handshake sends `session/load { sessionId }` (the durable handle
   // captured from a prior run via `getDurableSessionId()`) rather than
@@ -210,6 +213,7 @@ export function attachAcpSession({
   executionProfile = 'filesystem',
   modelUnavailableErrorCode,
   completePromptOnTurnEnd = false,
+  disposeSessionAfterPrompt = false,
   resumeSessionId,
   nativeContinuation,
   promptBudgetContext,
@@ -252,6 +256,8 @@ export function attachAcpSession({
   };
   let expectedId = 1;
   let nextId = 2;
+  const probeCleanup = createProbeSessionCleanup(stdin, () => nextId++);
+  let sessionDeleteAdvertised = false;
   let promptRequestId: JsonRpcId | null = null;
   let setModelRequestId: JsonRpcId | null = null;
   let sessionId: string | null = null;
@@ -551,6 +557,38 @@ export function attachAcpSession({
     );
   };
 
+  const cleanupProbe = (afterCleanup: () => void) => {
+    // Loaded sessions belong to the user even if a caller enables probe cleanup.
+    if (disposeSessionAfterPrompt && !resumeSessionId) {
+      probeCleanup.start(sessionId, sessionDeleteAdvertised, afterCleanup);
+    } else {
+      afterCleanup();
+    }
+  };
+
+  const terminateSession = (kind: 'completed' | 'fatal', emitError?: () => void) => {
+    cleanupProbe(() => {
+      if (kind === 'completed') stdin.end();
+      let terminalOwnedByCaller = false;
+      try {
+        onTerminal?.(kind);
+        terminalOwnedByCaller = onTerminal != null;
+      } catch {
+        // Fall back to direct-child termination below.
+      }
+      emitError?.();
+      if (terminalOwnedByCaller) return;
+      if (kind === 'fatal') {
+        if (!child.killed) child.kill('SIGTERM');
+      } else {
+        const cleanExitTimer = setTimeout(() => {
+          if (!child.killed) child.kill('SIGTERM');
+        }, 500);
+        child.once('close', () => clearTimeout(cleanExitTimer));
+      }
+    });
+  };
+
   const failWithPayload = (payload: unknown) => {
     if (finished) return;
     // Emit pending tools as errored before terminal state so deferred
@@ -559,15 +597,7 @@ export function attachAcpSession({
     finished = true;
     fatal = true;
     clearStageTimer();
-    let terminalOwnedByCaller = false;
-    try {
-      onTerminal?.('fatal');
-      terminalOwnedByCaller = onTerminal != null;
-    } catch {
-      // Fall back to direct-child termination below.
-    }
-    send('error', payload);
-    if (!terminalOwnedByCaller && !child.killed) child.kill('SIGTERM');
+    terminateSession('fatal', () => send('error', payload));
   };
 
   /**
@@ -599,17 +629,10 @@ export function attachAcpSession({
     finished = true;
     fatal = true;
     clearStageTimer();
-    let terminalOwnedByCaller = false;
-    try {
-      onTerminal?.('fatal');
-      terminalOwnedByCaller = onTerminal != null;
-    } catch {
-      // Fall back to direct-child termination below.
-    }
     const useModelUnavailable =
       modelUnavailableErrorCode &&
       (options.forceModelUnavailable || isModelUnavailableError(message));
-    send(
+    terminateSession('fatal', () => send(
       'error',
       useModelUnavailable
         ? amrModelUnavailablePayload(message)
@@ -624,8 +647,7 @@ export function attachAcpSession({
                 ...(options.details === undefined ? {} : { details: options.details }),
               },
             },
-    );
-    if (!terminalOwnedByCaller && !child.killed) child.kill('SIGTERM');
+    ));
   };
 
   const writeRpc = (id: JsonRpcId, method: string, params: unknown, timeoutLabel: string) => {
@@ -960,23 +982,10 @@ export function attachAcpSession({
     emitArtifactTextSuppressionSummary();
     emitUsageIfPresent(usageSource);
     clearStageTimer();
-    stdin.end();
-    let terminalOwnedByCaller = false;
-    try {
-      onTerminal?.('completed');
-      terminalOwnedByCaller = onTerminal != null;
-    } catch {
-      // Fall back to the direct-child timer below.
-    }
     // Some ACP agents keep the child process alive after stdin closes,
     // waiting for another prompt. Each OpenDesign run owns one process per
     // turn, so close it once this prompt is cleanly complete.
-    if (!terminalOwnedByCaller) {
-      const cleanExitTimer = setTimeout(() => {
-        if (!child.killed) child.kill('SIGTERM');
-      }, 500);
-      child.once('close', () => clearTimeout(cleanExitTimer));
-    }
+    terminateSession('completed');
   };
 
   const replyPermission = (raw: JsonObject) => {
@@ -1014,6 +1023,8 @@ export function attachAcpSession({
   };
 
   const parser = createJsonLineStream((raw, rawLine) => {
+    const cleanupFrame = asObject(raw);
+    if (cleanupFrame && probeCleanup.consume(cleanupFrame)) return;
     if (aborted || finished) return;
     resetStageTimer('response');
     const obj = asObject(raw);
@@ -1329,6 +1340,7 @@ export function attachAcpSession({
       return;
     }
     if (expectedId === 1) {
+      sessionDeleteAdvertised = supportsSessionDelete(result);
       nativeContinuationSupported = !!modelUnavailableErrorCode && supportsAmrNativeContinuation(result);
       if (nativeContinuation && (!resumeSessionId || !nativeContinuationSupported)) {
         fail('The agent does not support safe native continuation.', { retryable: false,
@@ -1493,6 +1505,7 @@ export function attachAcpSession({
   child.on('close', (code, signal) => {
     clearStageTimer();
     parser.flush();
+    probeCleanup.transportClosed();
     if (!finished && !aborted && !fatal) {
       const stderrTail = redactSecrets(
         acpStderrTail
@@ -1517,7 +1530,10 @@ export function attachAcpSession({
     }
   });
   child.on('error', (err: Error) => fail(err.message));
-  stdin.on('error', (err: Error) => fail(`stdin error: ${err.message}`));
+  stdin.on('error', (err: Error) => {
+    probeCleanup.transportClosed();
+    fail(`stdin error: ${err.message}`);
+  });
 
   writeRpc(1, 'initialize', {
     protocolVersion: ACP_PROTOCOL_VERSION,
@@ -1534,6 +1550,8 @@ export function attachAcpSession({
   const promptCompletedCleanly = () => finished && !fatal && !aborted;
 
   return {
+    /** Await best-effort probe deletion before the connection-test caller kills the transport. */
+    cleanupCompleted() { return probeCleanup.completed(); },
     /** Returns `true` when the session ended with a fatal protocol or transport error, allowing the caller to surface the failure. */
     hasFatalError() {
       return fatal;
@@ -1602,7 +1620,7 @@ export function attachAcpSession({
       // SIGTERM fallback fires. This also covers aborts during ACP startup,
       // before session/new returns. Mirrors the clean-completion path above.
       try {
-        child.stdin.end();
+        cleanupProbe(() => child.stdin?.end());
       } catch {
         // Best effort; the caller still owns the SIGTERM/SIGKILL fallback.
       }
