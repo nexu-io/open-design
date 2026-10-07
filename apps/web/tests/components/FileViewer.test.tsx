@@ -11908,6 +11908,47 @@ describe('FileViewer tweaks toolbar', () => {
     getBoundingClientRectSpy.mockRestore();
   });
 
+  it.each(['od:comment-active-target-update', 'od:comment-targets'])(
+    'keeps the selected click point anchored when %s refreshes geometry', async (type) => {
+      render(
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={htmlPreviewFile()}
+          liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+        />,
+      );
+      fireEvent.click(screen.getByLabelText('Preview viewport'));
+      fireEvent.click(screen.getByRole('option', { name: 'Desktop' }));
+      fireEvent.click(screen.getByRole('button', { name: /^\d+%$/ }));
+      fireEvent.click(screen.getByRole('menuitem', { name: '100%' }));
+      fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      const target = {
+        elementId: 'hero', selector: '[data-od-id="hero"]', label: 'Hero', text: 'Hero',
+        position: { x: 8, y: 12, width: 120, height: 48 },
+      };
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { ...target, type: 'od:comment-target', hoverPoint: { x: 72, y: 36 } },
+      }));
+      const pin = await screen.findByTestId('comment-active-pin');
+      const originalLeft = Number.parseFloat(pin.style.left);
+      const originalTop = Number.parseFloat(pin.style.top);
+      expect(originalLeft).toBe(72);
+      expect(originalTop).toBe(36);
+      const updated = { ...target, position: { x: 18, y: 32, width: 240, height: 96 } };
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: type === 'od:comment-targets' ? { type, targets: [updated] } : { ...updated, type },
+      }));
+      await waitFor(() => {
+        expect(Number.parseFloat(pin.style.left)).toBe(originalLeft + 74);
+        expect(Number.parseFloat(pin.style.top)).toBe(originalTop + 44);
+      });
+    },
+  );
+
   it('keeps saved comment pins visible while adding another comment', async () => {
     const olderComment: PreviewComment = {
       id: 'comment-older',

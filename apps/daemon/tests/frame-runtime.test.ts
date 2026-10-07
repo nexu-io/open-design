@@ -137,6 +137,7 @@ describe('URL preview nested-frame bridges', () => {
     let frameLoad = () => {};
     let resize = () => {};
     let frameY = 0;
+    let frameScale = 1;
     let projectFrameMarked = false;
     const childWindow = { postMessage: (message: unknown) => received.push(message) };
     const frame = {
@@ -145,7 +146,7 @@ describe('URL preview nested-frame bridges', () => {
       getAttribute(name: string) { return name === 'src' ? 'child.html' : null; },
       addEventListener(type: string, listener: () => void) { if (type === 'load') frameLoad = listener; },
       toggleAttribute(name: string, enabled: boolean) { if (name === 'data-od-project-frame') projectFrameMarked = enabled; },
-      getBoundingClientRect() { return { x: 0, y: frameY, width: 100, height: 100 }; },
+      getBoundingClientRect() { return { x: 0, y: frameY, width: 100 * frameScale, height: 100 * frameScale }; },
       clientWidth: 100,
       clientHeight: 100,
     };
@@ -224,6 +225,20 @@ describe('URL preview nested-frame bridges', () => {
     expect(parentMessages).toContainEqual({ type: 'od:comment-targets', targets: [expect.objectContaining({
       position: { x: 10, y: 120, width: 30, height: 40 },
     })] });
+
+    frameScale = 0.5;
+    for (const type of ['od:comment-target', 'od:comment-hover', 'od:comment-active-target-update']) {
+      parentMessages.length = 0;
+      dispatch({
+        type, elementId: 'hero', selector: '[data-od-id="hero"]',
+        position: { x: 10, y: 20, width: 30, height: 40 },
+        hoverPoint: { x: 4, y: 5 },
+      }, childWindow);
+      expect(parentMessages).toContainEqual(expect.objectContaining({
+        type, position: { x: 5, y: 110, width: 15, height: 20 },
+        hoverPoint: { x: 2, y: 103 },
+      }));
+    }
 
     received.length = 0;
     dispatch({
