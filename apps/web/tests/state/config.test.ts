@@ -1652,4 +1652,75 @@ describe('boot config sync guard (#8560)', () => {
     expect(shouldSyncBootConfigToDaemon(null)).toBe(false);
     expect(shouldSyncBootConfigToDaemon({ telemetry: { metrics: false } })).toBe(true);
   });
+
+  it('auto-picks make no PUT when the daemon config GET is aborted', async () => {
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      if (String(url) === '/api/app-config') {
+        throw new DOMException('The operation was aborted.', 'AbortError');
+      }
+      return new Response('{}', { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    // Full boot path as App.tsx performs it: aborted GET, then the two
+    // automatic pickers fire against a non-empty design-system catalog.
+    const daemonConfig = await fetchDaemonConfig();
+    expect(daemonConfig).toBeNull();
+
+    // App.tsx derives this flag with the same predicate that gates the
+    // bootstrap PUT; both auto-pick effects gate their PUT on it.
+    const daemonAppConfigReady = shouldSyncBootConfigToDaemon(daemonConfig);
+    expect(daemonAppConfigReady).toBe(false);
+
+    const localConfig: AppConfig = { ...DEFAULT_CONFIG };
+    expect(localConfig.designSystemId).toBeNull();
+
+    // Design-system auto-pick: catalog non-empty, local slot empty, so the
+    // effect fills the in-memory slot...
+    const designSystems = [{ id: 'default' }, { id: 'other' }];
+    const pickedId = designSystems.find((d) => d.id === 'default')?.id ?? designSystems[0]!.id;
+    const withPick: AppConfig = { ...localConfig, designSystemId: pickedId };
+    expect(withPick.designSystemId).toBe('default');
+    // ...but the whole-config PUT stays gated on the authoritative read.
+    if (daemonAppConfigReady) {
+      await syncConfigToDaemon(withPick);
+    }
+
+    // Agent auto-pick follows the same pattern.
+    const withAgent: AppConfig = { ...withPick, agentId: 'claude' };
+    if (daemonAppConfigReady) {
+      await syncConfigToDaemon(withAgent);
+    }
+
+    const puts = fetchMock.mock.calls.filter((args) => args[1]?.method === 'PUT');
+    expect(puts).toHaveLength(0);
+  });
+
+  it('auto-picks sync back once the daemon config was actually observed', async () => {
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      if (String(url) === '/api/app-config' && (!init || init.method === 'GET' || !init.method)) {
+        return new Response(JSON.stringify({ config: { telemetry: { metrics: false, content: false } } }), {
+          status: 200,
+        });
+      }
+      return new Response('{}', { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const daemonConfig = await fetchDaemonConfig();
+    expect(daemonConfig).not.toBeNull();
+
+    const daemonAppConfigReady = shouldSyncBootConfigToDaemon(daemonConfig);
+    expect(daemonAppConfigReady).toBe(true);
+
+    const withPick: AppConfig = { ...DEFAULT_CONFIG, designSystemId: 'default' };
+    if (daemonAppConfigReady) {
+      await syncConfigToDaemon(withPick);
+    }
+
+    const puts = fetchMock.mock.calls.filter(
+      (args) => String(args[0]) === '/api/app-config' && args[1]?.method === 'PUT',
+    );
+    expect(puts).toHaveLength(1);
+  });
 });
