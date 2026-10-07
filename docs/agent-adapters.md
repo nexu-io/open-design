@@ -282,12 +282,21 @@ the active-run staging implementation is in
 ### 5.6 OpenCode
 
 - OpenCode runs as `opencode run --format json` with the prompt on stdin.
-  Newer builds that advertise `--dangerously-skip-permissions` from
-  `opencode run --help` receive that flag; older builds keep the compatible
-  argv without it.
-- The adapter discovers models with `opencode models`, parses structured JSON
-  events, and captures OpenCode's `sessionID`. Follow-up turns continue the
-  native session with `-s <session-id>`.
+  Builds that advertise `--dangerously-skip-permissions` from
+  `opencode run --help` receive that flag; 2.x builds that advertise `--auto`
+  receive `--auto` instead; older builds keep the compatible argv without it.
+- Workspace pinning is version-aware: 1.x receives `--dir <project-cwd>`
+  (it walks up to the enclosing git root otherwise); 2.x removed `--dir`
+  (verified on 2.0.24) and relies on the spawn cwd instead.
+- Model variants are version-aware: 1.x receives `--variant <name>`; 2.x
+  folds it into `-m provider/model#variant`. Model discovery tries
+  `opencode models --verbose` (1.x, with variant metadata) then falls back to
+  plain `opencode models` (2.x).
+- Child evidence reads `opencode session export <id> --sanitize` (2.x) with
+  fallback to `opencode export <id> --sanitize[--pure]` (1.x).
+- The adapter parses structured JSON events, and captures OpenCode's
+  `sessionID`. Follow-up turns continue the native session with
+  `-s <session-id>`.
 - External MCP configuration is supplied per invocation through
   `OPENCODE_CONFIG_CONTENT`; selected skills still use the shared §4 path.
 
