@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { ChildProcess } from 'node:child_process';
 import { PassThrough } from 'node:stream';
+import { once } from 'node:events';
 import {
   closeDatabase, getAgentSessionRecord, insertConversation, insertProject,
   openDatabase, upsertAgentSession, upsertMessage,
@@ -174,5 +175,41 @@ describe('spawned DSH ready authority', () => {
     expect(JSON.parse(commands[0] ?? '{}').resume_session_id).toBe(sessionId);
     child.stdin.destroy();
     child.stdout.destroy();
+  });
+});
+
+describe('DSH ready execution rejection', () => {
+  it('fails once and closes stdin without sending execute when selection rejects continuation', async () => {
+    const child = new ChildProcess();
+    const stdout = new PassThrough();
+    const stdin = new PassThrough();
+    child.stdin = stdin;
+    child.stdout = stdout;
+    const commands: string[] = [];
+    const events: Array<{ event: string; payload: unknown }> = [];
+    stdin.on('data', (chunk: Buffer) => commands.push(chunk.toString()));
+    const rejection = { code: 'AGENT_SESSION_RESUME_FAILED', message: 'Locked continuation unavailable.' };
+    const session = attachDshProfileSession({
+      child, requestId: 'r', cwd: '/project', prompt: 'locked', resumeSessionId: 'saved',
+      selectExecution: () => ({ rejection }),
+      send: (event, payload) => events.push({ event, payload }),
+    });
+    const ended = once(stdout, 'end');
+    stdout.end(JSON.stringify({
+      v: 1, type: 'ready', runtime: 'open-design', protocol_version: 1, plugin_version: 'fixture',
+      compatibility_generation: 'generation-2',
+      capabilities: { session_resume: true, session_cancel: true, structured_events: true },
+    }) + '\n');
+    expect(commands).toHaveLength(0);
+    await ended;
+    expect(session.executeWasSent()).toBe(false);
+    expect(session.hasFatalError()).toBe(true);
+    expect(session.getTerminalStatus()).toBe('failed');
+    expect(stdin.writableEnded).toBe(true);
+    expect(events).toEqual([{ event: 'error', payload: {
+      message: rejection.message, error: { ...rejection, retryable: false },
+    } }]);
+    stdin.destroy();
+    stdout.destroy();
   });
 });

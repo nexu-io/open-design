@@ -21,6 +21,8 @@ export type AttachDshProfileSessionOptions = {
   selectExecution?: (ready: DshProfileReadyFrame) => {
     readonly prompt: string;
     readonly resumeSessionId: string | null;
+  } | {
+    readonly rejection: { readonly code: string; readonly message: string };
   };
   send: (event: string, payload: unknown) => void;
   onReady?: () => void;
@@ -257,6 +259,10 @@ export function attachDshProfileSession({
         }
         if (selectExecution) {
           const execution = selectExecution(frame);
+          if ('rejection' in execution) {
+            fail(execution.rejection.message, execution.rejection.code);
+            return;
+          }
           prompt = execution.prompt;
           resumeSessionId = execution.resumeSessionId;
         }

@@ -13062,6 +13062,7 @@ export async function startServer({
           conversationId: run.conversationId,
           agentId: def.id,
           sessionId: liveSessionId,
+          compatibilityGeneration: activeCompatibilityGeneration,
           stablePromptHash: currentStableHash,
           stablePromptSections: currentStableSectionsJson,
           model: safeModel ?? null,
@@ -13185,6 +13186,7 @@ export async function startServer({
           conversationId: run.conversationId,
           agentId: def.id,
           sessionId: liveSessionId,
+          compatibilityGeneration: activeCompatibilityGeneration,
           stablePromptHash: currentStableHash,
           stablePromptSections: currentStableSectionsJson,
           model: safeModel ?? null,
@@ -15929,6 +15931,16 @@ export async function startServer({
               storedStableSections: agentResumeCtx.storedStableSections,
               currentStableSections,
             });
+            if (strategyTaskAtStart && !isOdNextInitialRun && !agentResumeCtx.isResuming) {
+              const blocked = blockAutomaticContinuation(db, { runId: run.id });
+              if (blocked) run.strategyTask = projectStrategyTask(blocked, run.id);
+              return {
+                rejection: {
+                  code: 'AGENT_SESSION_RESUME_FAILED',
+                  message: 'The locked OD Next native session is unavailable; the task was blocked without cold re-seeding.',
+                },
+              };
+            }
             return {
               prompt: agentResumePromptPolicy.skipTranscript ? composed : fullTranscriptCandidate ?? composed,
               resumeSessionId: agentResumePromptPolicy.resumeSessionId,
