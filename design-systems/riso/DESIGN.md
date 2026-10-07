@@ -45,7 +45,7 @@ The mood is print-shop exuberance: high contrast, generous whitespace, visible g
 |---|---|---|
 | `--fg` | `#111827` | Primary text — headlines, body |
 | `--fg-2` | `#374151` | Secondary text — descriptions, lead paragraphs |
-| `--muted` | `#6b7280` | Muted text — captions, labels, metadata |
+| `--muted` | `#5f6772` | Muted text — captions, labels, metadata (4.87:1 on warm, 5.33:1 on paper) |
 
 ### Borders
 
@@ -141,7 +141,7 @@ Use on one hero panel per page — never on every card. The rest use the soft pi
 |---|---|---|
 | 0 — Flat | No shadow, no border | Body text, section backgrounds |
 | 1 — Border | 1px `--border` border | Cards, panels, inputs |
-| 2 — Pink glow | `0 16px 40px rgba(242,55,161,0.12)` | Default card state |
+| 2 — Pink glow | `0 16px 40px rgba(194, 24, 123, 0.12)` | Default card state |
 | 3 — Print offset | `4px 4px 0 #2c40a7` | One featured card per page |
 | Focus | Pink ring `0 0 0 3px` at 30% alpha | Keyboard focus on all controls |
 
@@ -198,7 +198,7 @@ Surface:     #ffffff (pure white)
 Tint:        #fce7f3 (pink-tinted bands)
 Text:        #111827 (near-black)
 Secondary:   #374151
-Muted:       #6b7280
+Muted:       #5f6772
 Accent:      #c2187b (deep rose — actions only, white text 5.66:1)
 Structure:   #2c40a7 (federal blue — headings, shadows)
 Border:      #e8d9c8

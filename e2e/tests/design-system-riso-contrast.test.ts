@@ -51,6 +51,7 @@ const TEXT_PAIRS: ReadonlyArray<{
   { brand: "riso", foreground: "--meta", background: "--surface", context: "status row" },
   { brand: "riso", foreground: "--meta", background: "--surface-warm", context: "badge" },
   { brand: "riso", foreground: "--muted", background: "--bg", context: "muted copy" },
+  { brand: "riso", foreground: "--muted", background: "--surface-warm", context: "mini-card caption" },
   { brand: "riso", foreground: "--fg-2", background: "--bg", context: "lede" },
   { brand: "riso", foreground: "--fg", background: "--bg", context: "body" },
 ];
