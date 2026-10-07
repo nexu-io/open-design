@@ -1102,7 +1102,9 @@ ${COMMENT_IDENTITY_HELPERS}
       position: position,
       htmlHint: typeof data.htmlHint === 'string' ? data.htmlHint : '', style: data.style || null };
     if (data.clickedDescendant && typeof data.clickedDescendant === 'object') message.clickedDescendant = { label: typeof data.clickedDescendant.label === 'string' ? data.clickedDescendant.label : '', text: typeof data.clickedDescendant.text === 'string' ? data.clickedDescendant.text : '' };
-    if (data.hoverPoint && Number.isFinite(Number(data.hoverPoint.x)) && Number.isFinite(Number(data.hoverPoint.y))) message.hoverPoint = { x: Math.round(Number(data.hoverPoint.x)), y: Math.round(Number(data.hoverPoint.y)) };
+    // Pins and target rectangles share root-viewport coordinates, including frame offset and scale.
+    var hoverPoint = data.hoverPoint && safeRelayPosition({ x: data.hoverPoint.x, y: data.hoverPoint.y, width: 0, height: 0 }, frame);
+    if (hoverPoint) message.hoverPoint = { x: hoverPoint.x, y: hoverPoint.y };
     if (Number.isFinite(Number(data.slideIndex)) && Number(data.slideIndex) >= 0) message.slideIndex = Math.floor(Number(data.slideIndex));
     window.parent.postMessage(message, '*');
   }

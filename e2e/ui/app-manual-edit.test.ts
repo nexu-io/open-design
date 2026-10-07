@@ -207,7 +207,7 @@ test('[P0] manual edit inspector previews and persists page and selected element
 });
 
 test('[P0] nested Inspect merges and resets a persisted child rule without changing root', async ({ page }, testInfo) => {
-  test.setTimeout(60_000);
+  test.setTimeout(T.xlong);
   await routeMockAgents(page);
   const projectId = await createEmptyProject(page, 'Nested inspect safety');
   const root = '<!doctype html><html><body><iframe title="child" src="child.html"></iframe></body></html>';
@@ -236,6 +236,16 @@ test('[P0] nested Inspect merges and resets a persisted child rule without chang
   await expectFileSource(page, projectId, 'child.html', ['color: #123456', 'font-weight: 700', 'font-size: 20px']);
   expect(await (await page.request.get(`/api/projects/${projectId}/files/root.html`)).text()).toBe(root);
   await testInfo.attach('srcdoc-inspect-saved', { body: await page.screenshot(), contentType: 'image/png' });
+  await page.reload();
+  await waitForLoadingToClear(page);
+  await expect(page.getByTestId('inspect-mode-toggle')).toBeVisible();
+  await page.getByTestId('inspect-mode-toggle').click();
+  await expect(artifactPreview(page)).toHaveAttribute('data-od-render-mode', 'srcdoc');
+  await expect(nested.locator('html[data-od-inspect-mode]')).toHaveCount(1);
+  await expect(nested.locator('[data-od-id="hero"]')).toHaveCSS('font-size', '20px');
+  await nested.locator('[data-od-id="hero"]').click();
+  await expect(page.getByTestId('inspect-panel')).toContainText(`frame:${encodeURIComponent(JSON.stringify(['child.html', 'hero']))}`);
+  await testInfo.attach('srcdoc-inspect-reloaded', { body: await page.screenshot(), contentType: 'image/png' });
   await page.getByRole('button', { name: /Reset element/i }).click();
   await page.getByTestId('inspect-save').click();
   await expectFileSourceExcludes(page, projectId, 'child.html', ['data-od-inspect-overrides']);
@@ -490,36 +500,52 @@ test('[P0] Inspect does not treat a dynamically created iframe as a trusted proj
   await expect(page.getByTestId('inspect-panel')).toBeVisible();
 });
 
-test('[P0] nested child hover overlay aligns at 150 percent host zoom with iframe scale', async ({ page }) => {
-  test.setTimeout(60_000);
-  page.on('console', (msg) => { console.log('BROWSER:', msg.text()); });
-  await routeMockAgents(page);
-  const projectId = await createEmptyProject(page, 'Nested coordinate alignment');
-  await seedProjectFile(page, projectId, 'child.html', '<!doctype html><html><body><div data-od-id="target" style="margin:30px;width:160px;height:70px;background:#38bdf8">Target</div></body></html>');
-  await seedHtmlArtifact(page, projectId, 'root.html', '<!doctype html><html><body><iframe title="scaled child" src="child.html" style="width:500px;height:300px;border:0;transform:scale(.8);transform-origin:top left"></iframe></body></html>');
-  await page.goto(`/projects/${projectId}/files/root.html`);
-  await openDesignFile(page, 'root.html');
-  const zoomButton = page.locator('.viewer-toolbar-zoom .zoom-trigger');
-  await zoomButton.click();
-  await page.locator('.zoom-menu-popover[role="menu"]').getByRole('menuitem', { name: '150%' }).click();
-  await page.getByTestId('board-mode-toggle').click();
-  const nested = artifactPreviewFrame(page).frameLocator('iframe[title="scaled child"]');
-  const target = nested.locator('[data-od-id="target"]');
-  await expect(nested.locator('html[data-od-comment-mode]')).toHaveCount(1);
-  await expect(artifactPreviewFrame(page).locator('iframe[title="scaled child"]')).toHaveAttribute('data-od-project-frame', '');
-  await target.hover();
-  const overlay = page.getByTestId('comment-target-overlay');
-  await expect(overlay).toBeVisible();
-  // Hover traverses the root before the child's relayed message arrives.
-  await expect(overlay).toContainText(`frame:${encodeURIComponent(JSON.stringify(['child.html', 'target']))}`);
-  await expect.poll(async () => {
-    const [targetBox, overlayBox] = await Promise.all([target.boundingBox(), overlay.boundingBox()]);
-    if (!targetBox || !overlayBox) return Infinity;
-    return Math.max(...(['x', 'y', 'width', 'height'] as const)
-      .map((key) => Math.abs(targetBox[key] - overlayBox[key])));
-  }).toBeLessThanOrEqual(4);
-  // v1 deliberately excludes rotation/skew; this covers axis-aligned scale only.
-});
+for (const transport of ['url', 'srcdoc'] as const) {
+  test(`[P0] nested child hover overlay and comment pin align at 150 percent zoom (${transport})`, async ({ page }, testInfo) => {
+    test.setTimeout(T.xlong);
+    await routeMockAgents(page);
+    const projectId = await createEmptyProject(page, 'Nested coordinate alignment');
+    await seedProjectFile(page, projectId, 'child.html', '<!doctype html><html><body><div data-od-id="target" style="margin:30px;width:160px;height:70px;background:#38bdf8">Target</div></body></html>');
+    const childSrc = transport === 'url' ? 'child.html' : '/child.html';
+    await seedHtmlArtifact(page, projectId, 'root.html', `<!doctype html><html><body><iframe title="scaled child" src="${childSrc}" style="margin:40px 80px;width:500px;height:300px;border:0;transform:scale(.8);transform-origin:top left"></iframe></body></html>`);
+    await page.goto(`/projects/${projectId}/files/root.html`);
+    await openDesignFile(page, 'root.html');
+    await expect(artifactPreview(page)).toHaveAttribute('data-od-render-mode', transport === 'url' ? 'url-load' : 'srcdoc');
+    const zoomButton = page.locator('.viewer-toolbar-zoom .zoom-trigger');
+    await zoomButton.click();
+    await page.locator('.zoom-menu-popover[role="menu"]').getByRole('menuitem', { name: '150%' }).click();
+    await page.getByTestId('comment-panel-toggle').click();
+    const nested = artifactPreviewFrame(page).frameLocator('iframe[title="scaled child"]');
+    const target = nested.locator('[data-od-id="target"]');
+    await expect(nested.locator('html[data-od-comment-mode]')).toHaveCount(1);
+    await expect(artifactPreviewFrame(page).locator('iframe[title="scaled child"]')).toHaveAttribute('data-od-project-frame', '');
+    await target.hover();
+    const overlay = page.getByTestId('comment-target-overlay');
+    await expect(overlay).toBeVisible();
+    // Hover traverses the root before the child's relayed message arrives.
+    await expect(overlay).toContainText(`frame:${encodeURIComponent(JSON.stringify(['child.html', 'target']))}`);
+    await expect.poll(async () => {
+      const [targetBox, overlayBox] = await Promise.all([target.boundingBox(), overlay.boundingBox()]);
+      if (!targetBox || !overlayBox) return Infinity;
+      return Math.max(...(['x', 'y', 'width', 'height'] as const)
+        .map((key) => Math.abs(targetBox[key] - overlayBox[key])));
+    }).toBeLessThanOrEqual(4);
+    // The active pin uses the relayed click point, not the target rectangle.
+    // Both must be in the root viewport before the host applies its own zoom.
+    await target.click();
+    await expect(page.getByTestId('comment-popover')).toBeVisible();
+    const pin = page.getByTestId('comment-active-pin');
+    await expect(pin).toBeVisible();
+    await expect.poll(async () => {
+      const [targetBox, pinBox] = await Promise.all([target.boundingBox(), pin.boundingBox()]);
+      if (!targetBox || !pinBox) return Infinity;
+      return Math.max(Math.abs(targetBox.x + targetBox.width / 2 - pinBox.x - pinBox.width / 2),
+        Math.abs(targetBox.y + targetBox.height / 2 - pinBox.y - pinBox.height / 2));
+    }).toBeLessThanOrEqual(4);
+    await testInfo.attach(`${transport}-scaled-comment-pin`, { body: await page.screenshot(), contentType: 'image/png' });
+    // v1 deliberately excludes rotation/skew; this covers axis-aligned scale only.
+  });
+}
 
 test('[P0] forged nested Inspect identity cannot select or write an unlisted project file', async ({ page }) => {
   await routeMockAgents(page);
