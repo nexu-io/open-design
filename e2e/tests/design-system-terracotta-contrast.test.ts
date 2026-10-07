@@ -55,6 +55,7 @@ const TEXT_PAIRS: ReadonlyArray<{
   },
   { brand: "terracotta", foreground: "--muted", background: "--bg", context: "eyebrow + captions" },
   { brand: "terracotta", foreground: "--muted", background: "--surface", context: "status row" },
+  { brand: "terracotta", foreground: "--muted", background: "--surface-warm", context: "mini-card caption" },
   { brand: "terracotta", foreground: "--meta", background: "--surface-warm", context: "badge" },
   { brand: "terracotta", foreground: "--fg-2", background: "--bg", context: "lede" },
   { brand: "terracotta", foreground: "--fg", background: "--bg", context: "body" },
