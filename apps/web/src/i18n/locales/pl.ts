@@ -157,7 +157,6 @@ export const pl: Dict = {
   'chat.runError.modelUnavailableMessage': "Wybierz inny dostępny model i spróbuj ponownie.",
   'chat.runError.modelCapabilityUnsupportedMessage': "Ten model nie obsługuje funkcji wymaganych przez zadanie. Zmień model i spróbuj ponownie.",
   'chat.runError.rateLimitedMessage': 'W tej chwili do tej usługi modelu trafia dużo żądań i osiągnięto limit częstotliwości żądań dostawcy. Spróbuj ponownie później lub spróbuj przełączyć się na inny model.',
-  'chat.runError.antigravityQuotaMessage': 'Każdy model Antigravity ma własny limit, a limit bieżącego modelu został wyczerpany. Wybierz inny model w menu modeli albo otwórz `agy` w terminalu i zmień model poleceniem /model, a następnie spróbuj ponownie.',
   'chat.runError.modelWindowLimitMessage': 'Obecnie duże obciążenie. Spróbuj ponownie po {retryAt}. Za to żądanie nie naliczono opłaty.',
   'chat.runError.modelWindowLimitMessageNoTime': 'Obecnie duże obciążenie. Spróbuj ponownie za chwilę. Za to żądanie nie naliczono opłaty.',
   'chat.runError.membershipConcurrencyLimitMessage': 'Limit równoległych zadań w Twoim członkostwie jest pełny. Poczekaj do {retryAt}, a następnie spróbuj ponownie lub zmień agenta. Natychmiastowe ponowienie nie pomoże.',

@@ -157,7 +157,6 @@ export const ja: Dict = {
   'chat.runError.modelUnavailableMessage': "利用できる別のモデルを選んでから、もう一度お試しください。",
   'chat.runError.modelCapabilityUnsupportedMessage': "このモデルはタスクに必要な機能に対応していません。モデルを変更してから、もう一度お試しください。",
   'chat.runError.rateLimitedMessage': '現在このモデルサービスへのリクエストが多く、プロバイダーのリクエスト頻度の上限に達しました。しばらくしてから再試行するか、別のモデルへの切り替えをお試しください。',
-  'chat.runError.antigravityQuotaMessage': 'Antigravity のモデルにはそれぞれ個別のクォータがあり、現在のモデルのクォータを使い切りました。モデルメニューで別のモデルを選ぶか、ターミナルで `agy` を開いて /model でモデルを切り替えてから、もう一度お試しください。',
   'chat.runError.modelWindowLimitMessage': 'アクセスが集中しています。{retryAt} 以降に再度お試しください（今回のリクエストは課金されていません）。',
   'chat.runError.modelWindowLimitMessageNoTime': 'アクセスが集中しています。しばらくしてから再度お試しください（今回のリクエストは課金されていません）。',
   'chat.runError.membershipConcurrencyLimitMessage': 'メンバーシップの同時実行タスク上限に達しています。{retryAt} まで待って再試行するか、別のエージェントに切り替えてください。すぐに再試行しても解消しません。',

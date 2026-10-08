@@ -163,7 +163,6 @@ export const zhCN: Dict = {
   "chat.runError.modelUnavailableMessage": "请选择其他可用模型后再试。",
   "chat.runError.modelCapabilityUnsupportedMessage": "该模型不支持任务所需的功能，请更换模型后再试。",
   "chat.runError.rateLimitedMessage": "当前使用该模型服务的请求较多，已达到供应商的请求频率上限，请稍后再试，或尝试切换其他模型。",
-  "chat.runError.antigravityQuotaMessage": "每个 Antigravity 模型都有各自的配额，当前模型的配额已用完。请在模型菜单中换一个模型，或在终端打开 `agy` 并用 /model 切换模型，然后重试。",
   "chat.runError.modelWindowLimitMessage": "高峰期繁忙，请在 {retryAt} 后尝试（本次请求未扣费）",
   "chat.runError.modelWindowLimitMessageNoTime": "高峰期繁忙，请稍后再试（本次请求未扣费）",
   "chat.runError.membershipConcurrencyLimitMessage": "当前会员的并发任务已满。请等到 {retryAt} 后重试，或切换到其他智能体；立即重复尝试不会恢复。",

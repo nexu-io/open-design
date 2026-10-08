@@ -157,7 +157,6 @@ export const hu: Dict = {
   'chat.runError.modelUnavailableMessage': "Válassz másik elérhető modellt, és próbáld újra.",
   'chat.runError.modelCapabilityUnsupportedMessage': "Ez a modell nem támogatja a feladathoz szükséges funkciókat. Válts modellt, és próbáld újra.",
   'chat.runError.rateLimitedMessage': 'Jelenleg sok kérés érkezik ehhez a modellszolgáltatáshoz, és elérted a szolgáltató kérésgyakorisági korlátját. Próbáld újra később, vagy próbálj meg másik modellre váltani.',
-  'chat.runError.antigravityQuotaMessage': 'Minden Antigravity-modellnek saját kerete van, és a jelenlegi modellé elfogyott. Válassz másik modellt a modellmenüben, vagy nyisd meg az `agy` parancsot egy terminálban, és válts modellt a /model paranccsal, majd próbáld újra.',
   'chat.runError.modelWindowLimitMessage': 'Jelenleg nagy a terhelés. Próbáld újra {retryAt} után. Ezt a kérést nem számoltuk fel.',
   'chat.runError.modelWindowLimitMessageNoTime': 'Jelenleg nagy a terhelés. Próbáld újra kicsit később. Ezt a kérést nem számoltuk fel.',
   'chat.runError.membershipConcurrencyLimitMessage': 'A tagságod párhuzamos feladatainak kerete betelt. Várj {retryAt} időpontig, majd próbáld újra, vagy válts másik ügynökre. Az azonnali újrapróbálkozás nem segít.',

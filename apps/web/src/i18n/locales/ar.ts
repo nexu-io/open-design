@@ -157,7 +157,6 @@ export const ar: Dict = {
   'chat.runError.modelUnavailableMessage': "يُرجى اختيار نموذج آخر متاح ثم إعادة المحاولة.",
   'chat.runError.modelCapabilityUnsupportedMessage': "هذا النموذج لا يدعم الإمكانات التي تحتاجها المهمة. غيّر النموذج ثم أعد المحاولة.",
   'chat.runError.rateLimitedMessage': 'هناك عدد كبير من الطلبات على خدمة النموذج هذه حاليًا، وقد تم بلوغ حد تكرار الطلبات لدى المزوّد. أعد المحاولة لاحقًا، أو جرّب التبديل إلى نموذج آخر.',
-  'chat.runError.antigravityQuotaMessage': 'لكل نموذج في Antigravity حصة خاصة به، وقد نفدت حصة النموذج الحالي. اختر نموذجًا آخر من قائمة النماذج، أو افتح `agy` في الطرفية وبدّل النموذج باستخدام ‎/model، ثم حاول مرة أخرى.',
   'chat.runError.modelWindowLimitMessage': 'هناك ازدحام في الاستخدام حاليًا. حاول مرة أخرى بعد {retryAt}. لم تتم محاسبتك على هذا الطلب.',
   'chat.runError.modelWindowLimitMessageNoTime': 'هناك ازدحام في الاستخدام حاليًا. حاول مرة أخرى بعد قليل. لم تتم محاسبتك على هذا الطلب.',
   'chat.runError.membershipConcurrencyLimitMessage': 'تم بلوغ حد المهام المتزامنة لعضويتك. انتظر حتى {retryAt} ثم أعد المحاولة، أو انتقل إلى وكيل آخر. لن تفيد المحاولة الفورية.',
