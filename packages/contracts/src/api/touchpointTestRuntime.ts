@@ -21,10 +21,43 @@ export interface TestRuntimeContextRequest {
   scenario: TestRuntimeScenario;
 }
 
-/** Context established for a test deployment. */
-export interface TestRuntimeContext extends TestRuntimeContextRequest {
-  testerMemberId?: string;
-  updatedAt: string;
+/** Server-issued immutable identity; the token is an identity, never a credential. */
+export interface TestRuntimeContextIdentity {
+  /** Stable versioned deployment/authenticated tester/realtime identity. */
+  contextId: string;
+  /** Decimal immutable deployment activityRevision, never a timestamp or client counter. */
+  generation: string;
+  /** Versioned digest binding the identity and complete immutable snapshot facts. */
+  contextToken: string;
+}
+
+/**
+ * Context acquired from the server. All three identity fields negotiate immutable
+ * mode; their absence negotiates legacy updatedAt matching. Partial bundles are
+ * invalid. updatedAt remains on both wires for old clients, not immutable identity.
+ */
+export type TestRuntimeContext = TestRuntimeContextRequest & { updatedAt: string } & (
+  | (TestRuntimeContextIdentity & { testerMemberId: string })
+  | { testerMemberId?: string; contextId?: never; generation?: never; contextToken?: never }
+);
+
+/** Additive GET runtime/test query. Old clients may omit the identity token. */
+export interface TestRuntimeQuery {
+  deploymentId: string;
+  placementKey: string;
+  locale: string;
+  contextToken?: string;
+}
+
+/**
+ * HTTP 409 after authentication, availability and withdrawal checks. Metadata
+ * is scoped to the authenticated tester and current deployment; it grants no
+ * display authority. Reacquire through POST context before requesting decisions.
+ */
+export interface TestRuntimeContextMismatch {
+  error: 'test_context_mismatch';
+  reason: 'context_token_mismatch';
+  testContext: TestRuntimeContextRequest & { updatedAt: string; testerMemberId: string } & TestRuntimeContextIdentity;
 }
 
 /** Server-authoritative clock and deployment-window bounds, serialized as ISO-8601 strings. */

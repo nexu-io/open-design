@@ -6,6 +6,7 @@ import {
 import type {
 	TestRuntimeContext,
 	TestRuntimeDecision,
+	TestRuntimeContextMismatch,
 } from "@open-design/contracts/api/touchpointTestRuntime";
 import { getOpenDesignHost, OPEN_DESIGN_HOST_VERSION } from "@open-design/host";
 import { mountTouchpoint } from "./touchpoint-lifecycle";
@@ -151,20 +152,39 @@ function unpublishTestRuntimeSession(): void {
 	for (const listener of testRuntimeListeners) listener();
 }
 
-/** Test decisions are valid only for the exact selected deployment and clock snapshot. */
+/** The acquired context pins the protocol; malformed/partial bundles never downgrade. */
+type TestContextMode = "legacy" | "immutable" | "invalid";
+function testContextMode(context: TestContext | null | undefined): TestContextMode {
+	if (!context || typeof context !== "object") return "invalid";
+	const fields = ["contextId", "generation", "contextToken"] as const;
+	if (fields.every((key) => !(key in context))) return "legacy";
+	return typeof context.contextId === "string" && /^ctx-v1:[a-f0-9]{64}$/.test(context.contextId) &&
+		typeof context.generation === "string" && /^(0|[1-9][0-9]*)$/.test(context.generation) && context.generation.length <= 32 &&
+		typeof context.contextToken === "string" && /^ctx-token-v1:[a-f0-9]{64}$/.test(context.contextToken) &&
+		typeof context.testerMemberId === "string" && context.testerMemberId.length > 0
+		? "immutable" : "invalid";
+}
+
+/** Negotiated identity matching, independent of immutable-mode timestamps. */
+function sameTestContext(left: TestContext, right: TestContext): boolean {
+	const mode = testContextMode(left);
+	return mode !== "invalid" && testContextMode(right) === mode &&
+		left.deploymentId === right.deploymentId && left.scenario === right.scenario &&
+		left.testerMemberId === right.testerMemberId &&
+		(mode === "immutable"
+			? left.contextId === right.contextId && left.generation === right.generation && left.contextToken === right.contextToken
+			: left.updatedAt === right.updatedAt);
+}
+
+/** Test decisions must match the negotiated context and exact selected placement. */
 export function isSelectedTestCampaignDecision(
 	next: TestDecision,
 	context: TestContext,
 	placementKey: string = TEST_CAMPAIGN_MODAL_PLACEMENT,
 ): boolean {
-	return (
-		next.deploymentId === context.deploymentId &&
-		next.placementKey === placementKey &&
-		next.content?.placementKey === placementKey &&
-		next.testContext?.deploymentId === context.deploymentId &&
-		next.testContext?.scenario === context.scenario &&
-		next.testContext?.updatedAt === context.updatedAt
-	);
+	return Boolean(next && next.deploymentId === context.deploymentId &&
+		next.placementKey === placementKey && next.content?.placementKey === placementKey &&
+		next.testContext && sameTestContext(context, next.testContext));
 }
 
 /**
@@ -248,57 +268,60 @@ function retainedTestValue(owner: string | null, locale: string): TestRuntimeVal
 
 /** A decision that disagrees with the selection, carrying both identities. */
 class TestDecisionMismatchError extends Error {
+	readonly touchpointWithdrawal = true;
 	constructor(readonly detail: string) {
 		super("touchpoint_decision_mismatch");
 	}
 }
 
-/**
- * Diagnostic identities for a rejected decision: the selected deployment and
- * placement, what this client expected (context and snapshot), and what the
- * server answered. A bare code cannot be correlated with a request.
- */
+/** Diagnostics carry bounded scalars only; malformed token contents are never logged. */
+const diagnosticScalar = (value: unknown): string | number | boolean | null => {
+	if (typeof value === "string") return value.replace(/[\u0000-\u001f\u007f]/g, "?").slice(0, 256);
+	if (typeof value === "boolean" || (typeof value === "number" && Number.isFinite(value))) return value;
+	return null;
+};
+function diagnosticContext(context: TestContext | null | undefined) {
+	if (!context) return null;
+	return {
+		deploymentId: diagnosticScalar(context.deploymentId), scenario: diagnosticScalar(context.scenario),
+		updatedAt: diagnosticScalar(context.updatedAt), testerMemberId: diagnosticScalar(context.testerMemberId),
+		mode: testContextMode(context), contextId: typeof context.contextId === "string" && /^ctx-v1:[a-f0-9]{64}$/.test(context.contextId) ? context.contextId : null,
+		generation: typeof context.generation === "string" && /^(0|[1-9][0-9]*)$/.test(context.generation) ? diagnosticScalar(context.generation) : null,
+		tokenFingerprint: typeof context.contextToken === "string" && /^ctx-token-v1:[a-f0-9]{64}$/.test(context.contextToken)
+			? context.contextToken.slice(13, 25) : null,
+	};
+}
+function contextMismatchReason(expected: TestContext, received: TestContext | null | undefined): string {
+	if (testContextMode(received) === "invalid") return "context_identity_invalid";
+	if (testContextMode(expected) !== testContextMode(received)) return "context_protocol_mismatch";
+	if (expected.testerMemberId !== received?.testerMemberId) return "tester_mismatch";
+	if (testContextMode(expected) === "immutable") return expected.contextToken !== received?.contextToken
+		? "context_token_mismatch" : "context_identity_mismatch";
+	return "context_timestamp_mismatch";
+}
 function decisionMismatchDetail(
 	decision: TestDecision | null | undefined,
 	context: TestContext,
 	deployment: TestDeployment,
 	placementKey: TestCampaignPlacement,
+	trace: { correlation: string; retry: number; reason?: string; receivedContext?: TestContext } = { correlation: "selection", retry: 0 },
 ): string {
 	return JSON.stringify({
-		deploymentId: deployment.id,
-		placementKey,
+		deploymentId: diagnosticScalar(deployment.id), placementKey, mode: testContextMode(context),
+		reason: trace.reason ?? (decision && !decisionFactsMatchSelection(decision, context, deployment, placementKey)
+			? "selected_facts_mismatch" : contextMismatchReason(context, decision?.testContext)),
+		correlation: trace.correlation, retry: trace.retry,
 		expected: {
-			activityId: deployment.activityId,
-			snapshotHash: deployment.snapshotHash ?? null,
-			contentVersionId: deployment.snapshot.contentVersionId,
-			manifestHash: deployment.snapshot.manifestHash,
-			artifactHash: deployment.snapshot.artifactHash,
-			context: {
-				deploymentId: context.deploymentId,
-				scenario: context.scenario,
-				updatedAt: context.updatedAt,
-				testerMemberId: context.testerMemberId ?? null,
-			},
+			activityId: diagnosticScalar(deployment.activityId), snapshotHash: diagnosticScalar(deployment.snapshotHash),
+			contentVersionId: diagnosticScalar(deployment.snapshot.contentVersionId), manifestHash: diagnosticScalar(deployment.snapshot.manifestHash),
+			artifactHash: diagnosticScalar(deployment.snapshot.artifactHash), context: diagnosticContext(context),
 		},
-		received: decision
-			? {
-					deploymentId: decision.deploymentId ?? null,
-					activityId: decision.activityId ?? null,
-					placementKey: decision.placementKey ?? null,
-					snapshotHash: decision.snapshotHash ?? null,
-					contentVersionId: decision.content?.id ?? null,
-					manifestHash: decision.manifestHash ?? null,
-					artifactHash: decision.artifactHash ?? null,
-					context: decision.testContext
-						? {
-								deploymentId: decision.testContext.deploymentId ?? null,
-								scenario: decision.testContext.scenario ?? null,
-								updatedAt: decision.testContext.updatedAt ?? null,
-								testerMemberId: decision.testContext.testerMemberId ?? null,
-							}
-						: null,
-				}
-			: null,
+		received: decision ? {
+			deploymentId: diagnosticScalar(decision.deploymentId), activityId: diagnosticScalar(decision.activityId),
+			placementKey: diagnosticScalar(decision.placementKey), snapshotHash: diagnosticScalar(decision.snapshotHash),
+			contentVersionId: diagnosticScalar(decision.content?.id), manifestHash: diagnosticScalar(decision.manifestHash),
+			artifactHash: diagnosticScalar(decision.artifactHash), context: diagnosticContext(decision.testContext),
+		} : trace.receivedContext ? { context: diagnosticContext(trace.receivedContext) } : null,
 	});
 }
 
@@ -343,14 +366,25 @@ function testPresentationOf(
 function isContextGenerationDrift(
 	decision: TestDecision,
 	context: TestContext,
+	deployment: TestDeployment,
+	placementKey: TestCampaignPlacement,
 ): boolean {
-	return (
-		decision.deploymentId === context.deploymentId &&
-		decision.testContext?.deploymentId === context.deploymentId &&
-		decision.testContext.scenario === context.scenario &&
-		(decision.testContext.updatedAt !== context.updatedAt ||
-			decision.testContext.testerMemberId !== context.testerMemberId)
-	);
+	return Boolean(decision && decision.testContext &&
+		decisionFactsMatchSelection(decision, context, deployment, placementKey) &&
+		validIso(decision.serverTime) && validIso(decision.startsAt) && validIso(decision.endsAt) &&
+		validIso(decision.authorizationExpiresAt) && Date.parse(decision.startsAt) < Date.parse(decision.endsAt) &&
+		decision.testContext.scheduleState === (Date.parse(decision.serverTime) < Date.parse(decision.startsAt) ? "before"
+			: Date.parse(decision.serverTime) < Date.parse(decision.endsAt) ? "active" : "ended") &&
+		supportsWebTouchpointCapabilities(decision.content, decision.requiredCapabilities,
+			placementKey === TEST_CAMPAIGN_MODAL_PLACEMENT ? supportedCapabilities : placementCapabilities) &&
+		isLegitimateContextDrift(decision.testContext, context));
+}
+function isLegitimateContextDrift(received: TestContext, expected: TestContext): boolean {
+	const mode = testContextMode(expected);
+	return mode !== "invalid" && testContextMode(received) === mode &&
+		received.deploymentId === expected.deploymentId && received.scenario === expected.scenario &&
+		received.testerMemberId === expected.testerMemberId && validIso(received.updatedAt) &&
+		!("simulatedAt" in received) && !sameTestContext(expected, received);
 }
 
 /** Only the current live, authorized Test snapshot can navigate a registered action. */
@@ -425,26 +459,32 @@ function expectedSnapshotMatches(
 	);
 }
 
+/** Every non-context fact must agree before drift can justify a context refresh. */
+function decisionFactsMatchSelection(
+	decision: TestDecision,
+	context: TestContext,
+	deployment: TestDeployment,
+	placementKey: TestCampaignPlacement,
+): boolean {
+	return Boolean(decision && decision.deploymentId === deployment.id &&
+		decision.placementKey === placementKey && decision.content?.placementKey === placementKey &&
+		decision.activityId === deployment.activityId && decision.testContext &&
+		decision.testContext.deploymentId === context.deploymentId && decision.testContext.scenario === context.scenario &&
+		decision.testContext.testerMemberId === context.testerMemberId &&
+		["before", "active", "ended"].includes(decision.testContext.scheduleState) &&
+		expectedSnapshotMatches(decision, deployment) && Array.isArray(decision.content?.manifest?.placements) &&
+		touchpointStaticActionsMatch(decision.staticActions,
+			decision.content.manifest.placements.find((placement) => placement.key === placementKey)?.staticActions ?? []) &&
+		decision.content.id.length > 0);
+}
 function decisionMatchesSelection(
 	decision: TestDecision,
 	context: TestContext,
 	deployment: TestDeployment,
 	placementKey: TestCampaignPlacement,
 ): boolean {
-	return (
-		isSelectedTestCampaignDecision(decision, context, placementKey) &&
-		decision.activityId === deployment.activityId &&
-		decision.testContext.testerMemberId === context.testerMemberId &&
-		["before", "active", "ended"].includes(decision.testContext.scheduleState) &&
-		expectedSnapshotMatches(decision, deployment) &&
-		touchpointStaticActionsMatch(
-			decision.staticActions,
-			decision.content.manifest.placements.find(
-				(placement) => placement.key === placementKey,
-			)?.staticActions ?? [],
-		) &&
-		decision.content.id.length > 0
-	);
+	return isSelectedTestCampaignDecision(decision, context, placementKey) &&
+		decisionFactsMatchSelection(decision, context, deployment, placementKey);
 }
 
 function acceptanceEvidence(
@@ -882,6 +922,9 @@ export function TestCampaignModal({
 	const { locale } = useI18n();
 	const compatible = supportsHost(authenticated);
 	const owner = sessionSubject ?? null;
+	// Render-time authority fences even a transport that ignores abort, before effects run.
+	const selectionAuthority = useRef({ compatible, owner, locale });
+	selectionAuthority.current = { compatible, owner, locale };
 	observeTestRuntimeIdentity(authenticated, owner, locale);
 	const retained = retainedTestValue(owner, locale);
 	const remountValue = useRef(retained);
@@ -898,6 +941,7 @@ export function TestCampaignModal({
 			invalidateRetainedTestRuntime();
 			requests.current.runtime = false;
 		}
+		selectedRef.current = selected;
 	}, []);
 	const [showControls] = useState(
 		() =>
@@ -943,6 +987,12 @@ export function TestCampaignModal({
 			locale,
 		]);
 		let context: TestContext | null = null;
+		let negotiatedMode: TestContextMode | null = inherited ? testContextMode(inherited.context) : null;
+		let round = 0;
+		const correlation = crypto.randomUUID();
+		const ownsSelection = () => selectionAuthority.current.compatible &&
+			selectionAuthority.current.owner === owner && selectionAuthority.current.locale === locale &&
+			!!selectedRef.current && sameTestDeployment(selectedRef.current, selected);
 		let contextRequest: Promise<TestContext | null> | null = null;
 		let windowBounds: Readonly<{ startsAt: number; endsAt: number }> | null =
 			null;
@@ -965,8 +1015,8 @@ export function TestCampaignModal({
 				startsAt: Date.parse(decision.startsAt), endsAt: Date.parse(decision.endsAt), serverTime: Date.parse(decision.serverTime),
 			} });
 		}
-		/** Resolves `null` for a context response this selection cannot use. */
-		const fetchContext = async (signal: AbortSignal): Promise<TestContext | null> => {
+		/** Acquires a validated context only while this request owns the selection. */
+		const fetchContext = async (signal: AbortSignal, ownsRequest: () => boolean): Promise<TestContext | null> => {
 			const response = await fetch("/api/touchpoints/test-runtime/context", {
 				method: "POST",
 				headers: { "content-type": "application/json" },
@@ -976,37 +1026,46 @@ export function TestCampaignModal({
 				}),
 				signal,
 			});
+			if (!ownsRequest()) return null;
 			if (!response.ok)
 				throw new TestRuntimeResponseError(
 					"realtime_test_runtime_required",
 					response.status,
 				);
 			const next = (await response.json()) as TestContext;
-			if (!(next &&
-				next.deploymentId === selected.id &&
-				next.scenario === "realtime" &&
-				!("simulatedAt" in next) &&
-				validIso(next.updatedAt))) return null;
-			return inherited && next.updatedAt === inherited.context.updatedAt &&
-				next.testerMemberId === inherited.context.testerMemberId
-				? inherited.context : next;
+			if (!ownsRequest()) return null;
+			const mode = testContextMode(next);
+			if (!(next && next.deploymentId === selected.id && next.scenario === "realtime" &&
+				!("simulatedAt" in next) && validIso(next.updatedAt) && mode !== "invalid" &&
+				(negotiatedMode === null || mode === negotiatedMode) &&
+				(mode !== "immutable" || (!!owner && next.testerMemberId === owner))))
+				throw new TestDecisionMismatchError(decisionMismatchDetail(null,
+					context ?? inherited?.context ?? { deploymentId: selected.id, scenario: "realtime", updatedAt: "" },
+					selected, placements[0]!, { correlation, retry: 0, reason: "context_identity_invalid", receivedContext: next }));
+			return inherited && sameTestContext(inherited.context, next) ? inherited.context : next;
 		};
 		/**
 		 * Single-flight: every caller that needs a context while one is being
 		 * fetched shares that request, and only the in-flight request installs
 		 * its result.
 		 */
-		const acquireContext = (signal: AbortSignal): Promise<TestContext | null> => {
+		const acquireContext = (signal: AbortSignal, ownsRequest: () => boolean): Promise<TestContext | null> => {
 			if (!contextRequest) {
-				const request: Promise<TestContext | null> = fetchContext(signal)
+				// Release an aborted single flight immediately; late fetch/body completion
+				// may neither install its context nor clear a newer request's ownership.
+				const release = () => { if (contextRequest === request) contextRequest = null; };
+				const request: Promise<TestContext | null> = fetchContext(signal, ownsRequest)
 					.then((next) => {
-						if (contextRequest === request) context = next;
+						if (contextRequest !== request || !ownsRequest()) return null;
+						if (next) negotiatedMode ??= testContextMode(next);
+						context = next;
 						return next;
 					})
-					.finally(() => {
-						if (contextRequest === request) contextRequest = null;
-					});
+					.finally(() => { release(); signal.removeEventListener("abort", release); });
 				contextRequest = request;
+				signal.addEventListener("abort", release, { once: true });
+				if (signal.aborted) release();
+				return request;
 			}
 			return contextRequest;
 		};
@@ -1017,13 +1076,17 @@ export function TestCampaignModal({
 		): Promise<TouchpointLifecycleLoad<TestRuntimeValue>> => {
 			active ??= inheritedEpoch === retainedTestEpoch ? inherited : null;
 			const started = testClock();
-			const current = () => !signal.aborted;
+			const requestRound = ++round;
+			let retry = 0;
+			const trace = () => ({ correlation: `${correlation}:${requestRound}`, retry });
+			const current = () => !signal.aborted && round === requestRound && ownsSelection();
+			if (!current()) return { kind: "retain" };
 			if (!placements.length) { requests.current.runtime = false; return { kind: "clear" }; }
 			// A held context must not add a turn before the placement requests start.
 			let selectedContext: TestContext;
 			if (context) selectedContext = context;
 			else {
-				const acquired = await acquireContext(signal);
+				const acquired = await acquireContext(signal, current);
 				if (!current()) return { kind: "retain" };
 				if (!acquired) { requests.current.runtime = false; return { kind: "clear" }; }
 				selectedContext = acquired;
@@ -1047,7 +1110,7 @@ export function TestCampaignModal({
 				const publishReady = (item: LoadedTestPlacement | null) => {
 					if (!item || !current() || siblings.signal.aborted) return;
 					if (windowBounds && (windowBounds.startsAt !== item.startsAt || windowBounds.endsAt !== item.endsAt))
-						throw new TestDecisionMismatchError(JSON.stringify({ deploymentId: selected.id, expected: windowBounds, received: { startsAt: item.startsAt, endsAt: item.endsAt } }));
+						throw new TestDecisionMismatchError(JSON.stringify({ deploymentId: diagnosticScalar(selected.id), expected: windowBounds, received: { startsAt: item.startsAt, endsAt: item.endsAt } }));
 					windowBounds = { startsAt: item.startsAt, endsAt: item.endsAt };
 					ready.set(item.placementKey, item);
 					if ([...ready.values()].some((answer) => answer.decision.testContext.scheduleState !== "active")) { publish(null); return; }
@@ -1131,6 +1194,7 @@ export function TestCampaignModal({
 						placementKey,
 						locale,
 					});
+					if (testContextMode(selectedContext) === "immutable") query.set("contextToken", selectedContext.contextToken!);
 					// Server time precedes its awaited reads; request and body latency consume the grant.
 					const received = testClock();
 					const response = await fetch("/api/touchpoints/test-runtime?" + query, {
@@ -1138,6 +1202,17 @@ export function TestCampaignModal({
 						signal: requestSignal,
 					});
 					if (!current() || requestSignal.aborted) return null;
+					if (response.status === 409) {
+						const mismatch = (await response.json()) as TestRuntimeContextMismatch;
+						if (!current() || requestSignal.aborted) return null;
+						const receivedContext = mismatch?.testContext;
+						const legitimate = mismatch?.error === "test_context_mismatch" && mismatch.reason === "context_token_mismatch" &&
+							testContextMode(selectedContext) === "immutable" && receivedContext?.testerMemberId === owner &&
+							isLegitimateContextDrift(receivedContext, selectedContext);
+						const detail = decisionMismatchDetail(null, selectedContext, selected, placementKey,
+							{ ...trace(), reason: legitimate ? "context_token_mismatch" : "context_mismatch_metadata_invalid", receivedContext });
+						throw legitimate ? new StaleTestContextError(detail) : new TestDecisionMismatchError(detail);
+					}
 					if (!response.ok)
 						throw new TestRuntimeResponseError(
 							"touchpoint_test_load_failed",
@@ -1154,13 +1229,15 @@ export function TestCampaignModal({
 							placementKey,
 						)
 					)
-						throw isContextGenerationDrift(decision, selectedContext)
+						throw isContextGenerationDrift(decision, selectedContext, selected, placementKey) &&
+							(!windowBounds || (Date.parse(decision.startsAt) === windowBounds.startsAt && Date.parse(decision.endsAt) === windowBounds.endsAt))
 							? new StaleTestContextError(
 									decisionMismatchDetail(
 										decision,
 										selectedContext,
 										selected,
 										placementKey,
+										trace(),
 									),
 								)
 							: new TestDecisionMismatchError(
@@ -1169,6 +1246,7 @@ export function TestCampaignModal({
 										selectedContext,
 										selected,
 										placementKey,
+										trace(),
 									),
 								);
 					if (
@@ -1183,7 +1261,7 @@ export function TestCampaignModal({
 					const serverTime = Date.parse(decision.serverTime);
 					const startsAt = Date.parse(decision.startsAt);
 					const endsAt = Date.parse(decision.endsAt);
-					if (startsAt >= endsAt) throw new TestDecisionMismatchError(decisionMismatchDetail(decision, selectedContext, selected, placementKey));
+					if (startsAt >= endsAt) throw new TestDecisionMismatchError(decisionMismatchDetail(decision, selectedContext, selected, placementKey, trace()));
 					const expected =
 						serverTime < startsAt
 							? "before"
@@ -1191,7 +1269,7 @@ export function TestCampaignModal({
 								? "active"
 								: "ended";
 					if (decision.testContext.scheduleState !== expected)
-						throw new TestDecisionMismatchError(decisionMismatchDetail(decision, selectedContext, selected, placementKey));
+						throw new TestDecisionMismatchError(decisionMismatchDetail(decision, selectedContext, selected, placementKey, trace()));
 					const capabilities =
 						placementKey === TEST_CAMPAIGN_MODAL_PLACEMENT
 							? supportedCapabilities
@@ -1235,16 +1313,23 @@ export function TestCampaignModal({
 			if (failures(settled).some((error) => error instanceof StaleTestContextError)) {
 				const withdrawal = failures(settled).find(touchpointWithdrawsDisplay);
 				if (withdrawal) throw withdrawal;
+				retry = 1;
+				const drift = failures(settled).find((error): error is StaleTestContextError => error instanceof StaleTestContextError)!;
+				// Successful repair must remain observable without dumping the identity token.
+				emitWebTouchpointDiagnostic({ code: "touchpoint_test_context_drift", detail: drift.detail
+					? JSON.stringify({ ...JSON.parse(drift.detail), retry }) : undefined });
 				// The server moved to a new context generation. Refetch it once for
 				// this attempt; a server refusal throws and never restores the old one.
 				if (context === selectedContext) context = null;
-				const refreshed = context ?? (await acquireContext(signal));
+				const refreshed = context ?? (await acquireContext(signal, current));
 				if (!current()) return { kind: "retain" };
 				if (!refreshed) { requests.current.runtime = false; return { kind: "clear" }; }
 				selectedContext = refreshed;
 				settled = await loadPlacements(selectedContext);
 				if (!current()) return { kind: "retain" };
 			}
+			const unrepaired = failures(settled).find((error): error is StaleTestContextError => error instanceof StaleTestContextError);
+			if (unrepaired) throw new TestDecisionMismatchError(unrepaired.detail ?? decisionMismatchDetail(null, selectedContext, selected, placements[0]!, trace()));
 			// A wholly failed round enters request recovery. A partial placement
 			// failure remains isolated: live sibling answers still renew normally
 			// (OPEND-3298), and a held failed grant keeps its own original deadline.
@@ -1295,11 +1380,11 @@ export function TestCampaignModal({
 			)
 				throw new TestDecisionMismatchError(
 					JSON.stringify({
-						deploymentId: selected.id,
+						deploymentId: diagnosticScalar(selected.id),
 						placements: decisions.map((item) => ({
 							placementKey: item.placementKey,
-							startsAt: item.decision.startsAt,
-							endsAt: item.decision.endsAt,
+							startsAt: diagnosticScalar(item.decision.startsAt),
+							endsAt: diagnosticScalar(item.decision.endsAt),
 						})),
 					}),
 				);
@@ -1310,7 +1395,7 @@ export function TestCampaignModal({
 			)
 				throw new TestDecisionMismatchError(
 					JSON.stringify({
-						deploymentId: selected.id,
+						deploymentId: diagnosticScalar(selected.id),
 						placementKey: first.placementKey,
 						expected: windowBounds,
 						received: { startsAt: first.startsAt, endsAt: first.endsAt },
@@ -1357,7 +1442,10 @@ export function TestCampaignModal({
 				value: session,
 				key: JSON.stringify([
 					selectionKey,
-					selectedContext.updatedAt,
+					testContextMode(selectedContext),
+					...(testContextMode(selectedContext) === "immutable"
+						? [selectedContext.contextId, selectedContext.generation, selectedContext.contextToken]
+						: [selectedContext.updatedAt]),
 					selectedContext.testerMemberId ?? null,
 				]),
 				// Convert the remaining placement grants to the lifecycle's load-start baseline.
@@ -1365,7 +1453,7 @@ export function TestCampaignModal({
 				replaceValue: true,
 			};
 		};
-		return { selectionKey, independent, load, recover: () => failedPresentations.clear() };
+		return { selectionKey, independent, load, ownsSelection, recover: () => failedPresentations.clear() };
 	}, [deployment, locale, owner]);
 	useEffect(() => {
 		const recover = () => { if (!document.hidden) adapter?.recover(); };
@@ -1381,7 +1469,7 @@ export function TestCampaignModal({
 		async (signal: AbortSignal, active: TestRuntimeValue | null): Promise<TouchpointLifecycleLoad<TestRuntimeValue>> => {
 			let epoch = retainedTestEpoch;
 			const publish = (value: TestRuntimeValue | null) => {
-				if (signal.aborted || epoch !== retainedTestEpoch || !adapter) return;
+				if (signal.aborted || epoch !== retainedTestEpoch || !adapter?.ownsSelection()) return;
 				if (value && owner) retainedTestRuntime = { owner, locale, value };
 				else {
 					invalidateRetainedTestRuntime();
@@ -1396,15 +1484,14 @@ export function TestCampaignModal({
 			};
 			try {
 				const result = adapter ? await adapter.load(signal, active, publish) : { kind: "clear" } as const;
-				if (signal.aborted || epoch !== retainedTestEpoch) return { kind: "retain" };
+				if (signal.aborted || epoch !== retainedTestEpoch || !adapter?.ownsSelection()) return { kind: "retain" };
 				if (result.kind === "decision") publish(result.value);
 				else if (result.kind === "clear" || result.kind === "waiting") publish(null);
 				return result;
 			} catch (error) {
-				if (!signal.aborted && epoch === retainedTestEpoch) {
-					requests.current.runtime = true;
-					if (touchpointWithdrawsDisplay(error) || error instanceof TestDecisionMismatchError) publish(null);
-				}
+				if (signal.aborted || epoch !== retainedTestEpoch || !adapter?.ownsSelection()) return { kind: "retain" };
+				requests.current.runtime = true;
+				if (touchpointWithdrawsDisplay(error) || error instanceof TestDecisionMismatchError) publish(null);
 				throw error;
 			}
 		},
