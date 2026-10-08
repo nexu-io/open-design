@@ -2,7 +2,7 @@
 // @ts-nocheck
 import { readFileSync, writeFileSync } from 'node:fs';
 import { basename } from 'node:path';
-import { runDaemonCliStartup, startDaemonRuntime } from './daemon-startup.js';
+import { installGracefulShutdownSignals, runDaemonCliStartup, startDaemonRuntime } from './daemon-startup.js';
 import { runLiveArtifactsMcpServer } from './mcp-live-artifacts-server.js';
 import { runArtifactsCli } from './artifacts-cli.js';
 import { runResource } from './resource-cli.js';
@@ -9249,22 +9249,8 @@ async function runDaemonStart(flags) {
   });
   console.log(`[od] listening on ${runtime.url} (${headless ? 'headless' : 'desktop'})`);
 
-  await new Promise((resolve) => {
-    let shuttingDown = false;
-    const stop = () => {
-      if (shuttingDown) process.exit(0);
-      shuttingDown = true;
-      void runtime.stop().finally(() => {
-        cleanup();
-        resolve();
-      });
-    };
-    const cleanup = () => {
-      process.off('SIGINT', stop);
-      process.off('SIGTERM', stop);
-    };
-    process.on('SIGINT', stop);
-    process.on('SIGTERM', stop);
+  await new Promise<void>((resolve) => {
+    installGracefulShutdownSignals(() => runtime.stop(), resolve);
   });
 }
 
