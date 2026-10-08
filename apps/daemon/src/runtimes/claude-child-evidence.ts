@@ -273,7 +273,6 @@ export function createClaudeChildEvidenceCollector(input: {
   onToolFact?: (fact: ClaudeChildToolRuntimeFact) => void;
   now?: () => number;
   /** Daemon-owned native agent handle -> locked Build Package id map. */
-  nativeBuildPackageBindings?: Readonly<Record<string, string>>;
 }): ClaudeChildEvidenceCollector {
   const now = input.now ?? Date.now;
   const nativeTasks = new Map<string, NativeTaskRegistration>();
@@ -567,10 +566,6 @@ export function createClaudeChildEvidenceCollector(input: {
       ...(runtimeReportedVersion ? { runtimeReportedVersion } : {}),
       ...(tool.prompt ? { prompt: tool.prompt } : {}),
       ...(tool.nativeAgentType ? { nativeAgentType: tool.nativeAgentType } : {}),
-      ...(tool.nativeAgentType
-        && nonEmptyString(input.nativeBuildPackageBindings?.[tool.nativeAgentType])
-        ? { buildPackageId: input.nativeBuildPackageBindings![tool.nativeAgentType]! }
-        : {}),
       poisoned: runtimeSessionConflicted,
       conflictReasons: new Set<ClaudeChildEvidenceConflictReason>(
         runtimeSessionConflicted ? ['runtime_session_changed'] : [],

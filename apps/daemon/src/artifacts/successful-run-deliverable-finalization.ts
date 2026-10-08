@@ -43,6 +43,7 @@ export async function finalizeSuccessfulRunDeliverable(input: {
   repairState?: DeliverableSyntaxRepairState;
   touchedPaths?: string[];
   baselineEntryFile?: string;
+  allowIndependentOutput?: boolean;
   syntaxFinalizerEnabled?: boolean;
 }): Promise<SuccessfulRunDeliverableFinalizationResult> {
   const deliverable = await validateRunDeliverable({
@@ -55,6 +56,7 @@ export async function finalizeSuccessfulRunDeliverable(input: {
     artifactCount: input.artifactCount,
     ...(input.touchedPaths ? { touchedPaths: input.touchedPaths } : {}),
     ...(input.baselineEntryFile ? { baselineEntryFile: input.baselineEntryFile } : {}),
+    ...(input.allowIndependentOutput ? { allowIndependentOutput: true } : {}),
   });
   if (
     !deliverable.valid

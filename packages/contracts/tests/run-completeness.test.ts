@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  strategyTaskProvesDelivery,
   advanceAuthenticatedDoneCapture,
   eventsHaveAuthenticatedDoneConclusion,
   eventsEndedByAskingUser,
@@ -300,5 +301,14 @@ describe('eventsEndedWithUnfinishedWork vs a turn that ended by asking', () => {
         { kind: 'usage', stopReason: 'max_tokens' },
       ]),
     ).toBe(true);
+  });
+});
+
+
+describe('strategy delivery is an explicit file fact', () => {
+  it('does not infer delivery from completed or historical missing evidence', () => {
+    expect(strategyTaskProvesDelivery({ outcome: 'completed', terminal: true, deliverableValid: false })).toBe(false);
+    expect(strategyTaskProvesDelivery({ outcome: 'completed', terminal: true })).toBe(false);
+    expect(strategyTaskProvesDelivery({ outcome: 'completed', terminal: true, deliverableValid: true })).toBe(true);
   });
 });

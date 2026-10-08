@@ -42,6 +42,9 @@ interface ValidateRunDeliverableInput {
   touchedPaths?: string[];
   /** Unambiguous HTML entry observed by the host before this run wrote files. */
   baselineEntryFile?: string;
+  /** New marker tasks may deliver a separate file without changing the project entry.
+   * Requires exact current-run touched paths; never enables project-wide inference. */
+  allowIndependentOutput?: boolean;
 }
 
 export function inferBaselineHtmlEntry(projectRoot: string, paths: Iterable<string>): string | undefined {
@@ -227,11 +230,16 @@ export async function validateProjectDeliverable(
 export async function validateRunDeliverable(
   input: ValidateRunDeliverableInput,
 ): Promise<RunDeliverableValidationResult> {
-  return resolveDeliverable({ ...input, scope: 'run' });
+  const primary = await resolveDeliverable({ ...input, scope: 'run' });
+  if (primary.valid || !input.allowIndependentOutput || !input.touchedPaths?.length
+    || !['entry_missing', 'entry_not_touched', 'type_mismatch'].includes(primary.validation)) {
+    return primary;
+  }
+  return resolveDeliverable({ ...input, scope: 'run', independentOutput: true });
 }
 
 async function resolveDeliverable(
-  input: ValidateRunDeliverableInput & { scope: DeliverableValidationScope },
+  input: ValidateRunDeliverableInput & { scope: DeliverableValidationScope; independentOutput?: boolean },
 ): Promise<RunDeliverableValidationResult> {
   const runScoped = input.scope === 'run';
   if (runScoped && input.runStatus !== 'succeeded') {
@@ -262,10 +270,17 @@ async function resolveDeliverable(
     return { valid: false, validation: 'project_missing' };
   }
 
-  const acceptedKinds = acceptedDeliverableKinds(input.projectMetadata);
+  const touched = new Set((input.touchedPaths ?? []).flatMap((candidate) => {
+    if (typeof candidate !== 'string' || !candidate) return [];
+    const relative = path.relative(projectRoot, path.resolve(projectRoot, candidate));
+    return !relative || relative.startsWith('..') || path.isAbsolute(relative)
+      ? [] : [relative.replaceAll(path.sep, '/')];
+  }));
+  if (input.independentOutput) files = files.filter(file => touched.has(filePath(file)));
+  const acceptedKinds = input.independentOutput ? null : acceptedDeliverableKinds(input.projectMetadata);
   const isPrototype = projectKind(input.projectMetadata) === 'prototype';
-  const declared = safeRelativeFile(input.projectMetadata?.entryFile);
-  const baselineEntry = isPrototype && input.touchedPaths
+  const declared = input.independentOutput ? null : safeRelativeFile(input.projectMetadata?.entryFile);
+  const baselineEntry = !input.independentOutput && isPrototype && input.touchedPaths
     ? safeRelativeFile(input.baselineEntryFile)
     : null;
   const selected = declared
@@ -283,23 +298,6 @@ async function resolveDeliverable(
   };
   let linkedPage: string | null = null;
   if (runScoped && input.touchedPaths) {
-    const touched = new Set(
-      input.touchedPaths.flatMap((candidate) => {
-        if (typeof candidate !== 'string' || !candidate) return [];
-        const absolute = path.isAbsolute(candidate)
-          ? path.resolve(candidate)
-          : path.resolve(projectRoot, candidate);
-        const relative = path.relative(projectRoot, absolute);
-        if (
-          !relative
-          || relative.startsWith('..')
-          || path.isAbsolute(relative)
-        ) {
-          return [];
-        }
-        return [relative.replaceAll(path.sep, '/')];
-      }),
-    );
     if (!touched.has(entryFile)) {
       if (isPrototype && selected.kind === 'html') {
         linkedPage = await findTouchedLinkedPage({
@@ -327,6 +325,12 @@ async function resolveDeliverable(
     const relative = path.relative(projectRoot, target);
     if (relative.startsWith('..') || path.isAbsolute(relative)) {
       return { valid: false, validation: 'entry_unreadable', ...facts };
+    }
+    if (input.independentOutput) {
+      const realRelative = path.relative(await fs.realpath(projectRoot), await fs.realpath(target));
+      if (realRelative.startsWith('..') || path.isAbsolute(realRelative)) {
+        return { valid: false, validation: 'entry_unreadable', ...facts };
+      }
     }
     const stat = await fs.stat(target);
     if (!stat.isFile()) {

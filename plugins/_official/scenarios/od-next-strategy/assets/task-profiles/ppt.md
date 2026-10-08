@@ -1,10 +1,20 @@
-# OD Next Presentation Task Profile v2.0.0
+# OD Next Presentation Task Profile v2.0.2
 
 > Rollout: active
 
 Task routing, clarification, Build, and the ship-on-write boundary follow the
-general orchestration Skill. Profile field semantics and the artifact
-contract bind to the V2 machine contract at the recorded taskProfileVersion.
+general orchestration Skill. Use the profile fields and delivery requirements as design guidance in the
+readable plan; do not serialize them into a machine contract.
+
+## Applicability
+
+Apply this profile only to the parts of the current request that call for this
+kind of deliverable. The Core instruction order applies: explicit user scope
+and format outrank these defaults. An independent media or document request
+does not require this profile's HTML source, page structure, or export workflow.
+Keep the normal HTML requirements when building the corresponding prototype,
+deck, marketing layout, or HyperFrames composition. Do not add a wrapper merely
+because this profile is loaded.
 
 ## Profile fields
 
@@ -23,31 +33,17 @@ truthful data, layout fitted to content, and consistency across the deck.
 
 ## Artifact contract
 
-The canonical deliverable is fixed: one editable single-file HTML deck with a
-stable entry, complete content and slide order, openable and pageable from
-Open Design's real entry point, with no overflow or cropping.
+For presentation work, the default source is one editable single-file HTML
+deck with a stable entry, complete content and slide order, openable and pageable
+from Open Design's real entry point, with no overflow or cropping. Use the deck
+host protocol for HTML decks so paging and product-side exports keep working.
 
-- The Agent generates and modifies only the HTML primary deliverable; it
-  never generates, previews, exports, or validates PPTX or PDF.
-- PPTX, PDF, and other formats are produced by Open Design's product-side
-  engineering after the HTML primary deliverable is written; they are outside
-  the Agent's responsibility. The Agent does not claim an output that the
-  declared production route did not create.
-- Even when the user's request mentions PPTX or PDF, complete the HTML
-  primary deliverable first; never probe for Keynote, PowerPoint,
-  LibreOffice, print-to-PDF routes, or PDF libraries, and never implement a
-  format converter.
-- Rules in the general orchestration Skill concerning export routes,
-  exporters, editable formats, or derived deliverables apply only when the
-  current task contract explicitly assigns them to the Agent; they never
-  apply to PPTX or PDF.
-
-This boundary is an Open Design product runtime boundary, not a default
-design preference a prompt can override. Writing the single-file HTML to disk
-IS the delivery: no previewing, no paging back through slides, no
-slide-by-slide inspection, and no generating, opening, previewing, or
-exporting of PPTX or PDF. Never describe a PPTX or PDF that the product-side
-route has not yet produced as completed output.
+When the user explicitly requests PPTX, PDF, or another format, treat that format
+as a requirement. Use a supported product export or an actually available tool;
+never invent a converter or claim a file that was not created. If export is
+unavailable in this run, explain the limitation and identify HTML as partial
+source delivery, not as fulfillment of the requested format. Do not perform
+unrequested exports or post-generation actions.
 
 ## Build Requirements
 

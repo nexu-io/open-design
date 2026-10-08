@@ -660,15 +660,13 @@ export function resolveBundledOdNextRuntimeCapability(input: {
  * AGENT_EXECUTION_FAILED instead of quietly taking the ordinary route.
  *
  * `forwardSubagentText` backs native Child behaviour observation, which every
- * admitted Claude strategy Run enables. `customAgents` backs native Build
- * Package binding; it is required up front because a simple task may escalate
- * to complex after planning, and discovering the gap at the production stage
- * would strand a task mid-flight.
+ * admitted Claude strategy Run enables. Custom --agents definitions belonged
+ * to the retired Build Package protocol and are no longer required.
  */
 export const OD_NEXT_REQUIRED_ADVERTISED_CAPABILITIES: Readonly<
   Record<string, readonly string[]>
 > = {
-  claude: ['forwardSubagentText', 'customAgents'],
+  claude: ['forwardSubagentText'],
 };
 
 /**

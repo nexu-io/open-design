@@ -999,6 +999,8 @@ export function createRunAnalyticsLifecycle(
               // terminal projection, the same object the SSE `end` payload and
               // the failure card were built from, so the three cannot drift.
               ...odNextBlockedAnalyticsFromStrategyTask(run.strategyTask),
+              ...(run.strategyTask?.settlementReason ? { od_next_settlement_reason: run.strategyTask.settlementReason } : {}),
+              ...(run.strategyTask?.settlementFacts ? { od_next_settlement_facts: run.strategyTask.settlementFacts } : {}),
               design_system_id: run.designSystemId ?? undefined,
               design_system_digest: run.designSystemDigest ?? undefined,
               design_system_selection_source: run.designSystemSelectionSource ?? 'none',

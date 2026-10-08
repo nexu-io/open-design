@@ -56,8 +56,8 @@ describe('OPEND-2765 next-step suggestions follow the run locale', () => {
     expect(nextSteps).toContain('marker format only, not the output language');
   });
 
-  it('carries the locale on both OD Next stage policies too', () => {
-    for (const policy of ['od_next_request', 'od_next_production'] as const) {
+  it('carries the locale on the OD Next production policy', () => {
+    for (const policy of ['od_next_production'] as const) {
       const { nextSteps } = renderChatTurnHostProtocolInstructions(KEY, policy, 'zh-TW');
       expect(nextSteps).toContain('Traditional Chinese');
     }

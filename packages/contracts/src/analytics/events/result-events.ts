@@ -11,6 +11,7 @@ import type {
   AnalyticsPublisherClass,
   TrackingRuntimeType,
 } from '../public-params.js';
+import type { StrategySettlementFactsV2 } from '../../plugins/strategy-v2.js';
 import type { ReleaseChannel } from '@open-design/release';
 import type { ArtifactOriginEntrySurface, ArtifactOriginStatus } from '../../api/files.js';
 import type { AgentDiagnosticReason, AgentDiagnosticSeverity } from '../../api/registry.js';
@@ -512,6 +513,10 @@ export interface RunCreatedProps extends RunTaskLineageProps {
    * common case.
    */
   od_next_blocked_reason_code?: string;
+  /** Orchestration action: question, continued, or ended. */
+  od_next_settlement_reason?: string;
+  /** Independent physical-run and reply facts, not a success verdict. */
+  od_next_settlement_facts?: StrategySettlementFactsV2;
 }
 
 export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {

@@ -1,7 +1,5 @@
 import { z } from 'zod';
 
-import { OpenDesignPlanContractV2Schema, StrategyRuntimeStateV2Schema } from '../plugins/strategy-v2.js';
-
 import {
   indexCanonicalXmlChildren,
   parseCanonicalXml,
@@ -64,57 +62,3 @@ export function parseOdNextIntentResolutionTurnV1(source: string): OdNextIntentR
   }
   return input;
 }
-
-/** Resolve an omitted field without authorizing tools or rewriting the preceding answer. */
-export function composeOdNextIntentResolutionTurnV1(input: Omit<OdNextIntentResolutionTurnV1, 'payload'> & {
-  originalRequest: string;
-  executionMode: 'simple' | 'complex' | null;
-}): string {
-  const { originalRequest, executionMode, ...identity } = input;
-  return serializeOdNextIntentResolutionTurnV1({
-    ...identity,
-    payload: [
-      '# OD Next execution intent resolution',
-      'Continue the locked native session. The preceding response omitted executionIntent. Resolve only that field from the frozen original user request below and the existing task context. Do not use tools, create or modify files, ask another question, rewrite the plan, or repeat the visible answer.',
-      'Use plan_only when the original request limits the task to a visible planning answer, including an explicit no-write request. Use produce for requested file work, including an editable Plan document or an explicit small Chat edit. Clarification answers do not remove an original no-write constraint.',
-      `Emit exactly one open-design-runtime-state block and no other text or Plan Contract. Its schema is open-design.strategy-state/v2, route full_plan, inputStage ${input.stage}, executionMode ${JSON.stringify(executionMode)}, executionIntent produce or plan_only, reasonCodes [], and outcome completed for plan_only or plan_ready for produce. Do not change any other task decision.`,
-      '## Frozen original user request',
-      originalRequest,
-    ].join('\n\n'),
-  });
-}
-
-/** Durable source/reply envelope for the one host-owned intent supplement. */
-const ProtocolResultSchema = z.object({
-  visibleText: z.string(),
-  planContract: OpenDesignPlanContractV2Schema.optional(),
-  runtimeState: StrategyRuntimeStateV2Schema.optional(),
-  repairPlanContract: OpenDesignPlanContractV2Schema.optional(),
-  repairRuntimeState: StrategyRuntimeStateV2Schema.optional(),
-  normalizations: z.array(z.string()),
-  issues: z.array(z.object({
-    code: z.enum([
-      'od_next_protocol_machine_block_malformed', 'od_next_protocol_machine_block_too_large',
-      'od_next_protocol_plan_contract_duplicate', 'od_next_protocol_plan_contract_invalid_json',
-      'od_next_protocol_plan_contract_invalid_schema', 'od_next_protocol_runtime_state_duplicate',
-      'od_next_protocol_runtime_state_invalid_json', 'od_next_protocol_runtime_state_invalid_schema',
-      'od_next_protocol_runtime_state_missing',
-    ]),
-    detail: z.string(),
-  }).strict()),
-}).strict();
-
-const CompletionEvidenceSchema = z.object({
-  physicalStatus: z.enum(['succeeded', 'failed', 'canceled']),
-  deliverableValid: z.boolean(),
-  filesWritten: z.number().int().nonnegative().optional(),
-  filesWrittenUnknown: z.boolean().optional(),
-  filesWrittenSource: z.enum(['filesystem', 'tool_stream', 'unknown']).optional(),
-}).strict();
-
-export const OdNextIntentResolutionResultSchema = z.object({
-  runId: z.string().min(1),
-  parsed: ProtocolResultSchema,
-  toolUseCount: z.number().int().nonnegative(),
-  completionEvidence: CompletionEvidenceSchema.optional(),
-}).strict();

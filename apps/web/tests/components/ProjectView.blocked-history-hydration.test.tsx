@@ -17,7 +17,9 @@ import { en } from '../../src/i18n/locales/en';
 import { streamViaDaemon, reattachDaemonRun } from '../../src/providers/daemon';
 import type { AppConfig, ChatMessage, Project, ProjectFile } from '../../src/types';
 
-const observedChat = vi.hoisted(() => ({ messages: [] as ChatMessage[], proofCompletions: [] as string[] }));
+import type { ProjectEvent } from '../../src/providers/project-events';
+
+const observedChat = vi.hoisted(() => ({ messages: [] as ChatMessage[], proofCompletions: [] as string[], onProjectEvent: undefined as ((event: ProjectEvent) => void) | undefined }));
 
 vi.mock('../../src/router', () => ({ navigate: vi.fn(), registerNavigationGuard: vi.fn(() => () => {}) }));
 vi.mock('../../src/providers/anthropic', () => ({ streamMessage: vi.fn() }));
@@ -34,7 +36,7 @@ vi.mock('../../src/providers/daemon', async () => {
     listActiveChatRuns: vi.fn().mockResolvedValue([]), listProjectRuns: vi.fn().mockResolvedValue([]),
     publishDaemonRunFinishedEvent: vi.fn() };
 });
-vi.mock('../../src/providers/project-events', () => ({ useProjectFileEvents: vi.fn() }));
+vi.mock('../../src/providers/project-events', () => ({ useProjectFileEvents: vi.fn((_id: string, _enabled: boolean, callback: (event: ProjectEvent) => void) => { observedChat.onProjectEvent = callback; }) }));
 vi.mock('../../src/providers/registry', async () => {
   const actual = await vi.importActual<typeof import('../../src/providers/registry')>('../../src/providers/registry');
   return { ...actual, fetchDesignSystem: vi.fn().mockResolvedValue(null),
@@ -291,6 +293,27 @@ describe('blocked task history hydration through real ProjectView and ChatPane (
     expect(unexpectedWrites).toEqual([]);
     expect(streamViaDaemon).not.toHaveBeenCalled();
     expect(reattachDaemonRun).not.toHaveBeenCalled();
+  });
+
+  it('clears a cached legacy block after an authoritative migrated history refresh', async () => {
+    setHistory(persistedAssistant({ runStatus: 'failed', strategyTaskBlocked: true,
+      events: [{ kind: 'thinking', text: 'Old work.' }, { kind: 'text', text: 'Old reply.' }, { kind: 'status', label: 'error', code: MISSING_STATE, detail: 'Old contract rejection' }] }));
+    proofs.set(runId(), runProof({ status: 'failed' }));
+    render(view());
+    await expectDisplayedStatus(en['chat.record.failedTurn']);
+    await waitFor(() => expect(observedChat.messages.find(message => message.id === assistantId())?.strategyTaskBlocked).toBe(true));
+    setHistory(persistedAssistant({ runStatus: 'succeeded', strategyTaskBlocked: false,
+      strategyTaskBlockedText: null, strategyTaskDelivered: false,
+      events: [{ kind: 'thinking', text: 'Old work.' }, { kind: 'text', text: 'Old reply.' }] }));
+    proofs.set(runId(), runProof({ status: 'succeeded', strategyTask: blockedTask({ outcome: 'completed', blockedContext: undefined, deliverableValid: false }) }));
+    await act(async () => {
+      observedChat.onProjectEvent?.({ type: 'chat-artifact-refs-changed', projectId: project.id,
+        conversationId: conversationId(), messageId: assistantId(), runId: runId() } as ProjectEvent);
+    });
+    await waitFor(() => expect(observedChat.messages.find(message => message.id === assistantId()))
+      .toMatchObject({ runStatus: 'succeeded', strategyTaskBlocked: false, strategyTaskDelivered: false }));
+    expect(errorCodesOnAssistant()).toEqual([]);
+    await expectDisplayedStatus(en['chat.record.done']);
   });
 
   it('does not turn the successful request predecessor into the later active run failure', async () => {

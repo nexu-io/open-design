@@ -324,17 +324,14 @@ describe('continuableUnfinishedTodos', () => {
     },
   ] as AgentEvent[];
 
-  it('offers nothing to continue once the strategy task delivered its work', () => {
-    // The agent wrote index.html plus its assets and OD Next settled the task
-    // `completed`, but its last TodoWrite still carried two pending items.
-    // Offering "continue" there sends the user into a second task that has
-    // nothing left to write and can only block.
+  it('keeps unfinished items continuable even when file delivery was recorded', () => {
     expect(
       continuableUnfinishedTodos({
         events: staleSnapshot,
         strategyTaskDelivered: true,
-      }),
-    ).toEqual([]);
+        runStatus: 'succeeded',
+      }).map((todo) => todo.content),
+    ).toEqual(['写入响应式交互原型', '交付根目录运行入口']);
   });
 
   it('still offers the unfinished items when the task did not deliver', () => {

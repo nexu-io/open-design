@@ -71,11 +71,6 @@ export type RuntimeContext = {
   // same Codex Plugin and route itself into another OpenDesign workflow.
   // Operator-wide overrides remain owned by each runtime definition.
   disablePlugins?: boolean;
-  /** Daemon-issued opaque native Child handles for one locked complex Run. */
-  nativeBuildPackageBindings?: readonly {
-    nativeAgentHandle: string;
-    buildPackageId: string;
-  }[];
   /**
    * Enables provider-owned native Child behavior frames for an OD Next mapped
    * Run. Runtime definitions must keep this off for ordinary Runs, and stream

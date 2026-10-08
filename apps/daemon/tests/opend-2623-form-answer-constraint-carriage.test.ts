@@ -30,7 +30,6 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-  composeOdNextStrategyContinuationV2,
   composeOdNextStrategyStableRequestContextV2,
 } from '@open-design/contracts';
 
@@ -56,45 +55,6 @@ const PLAN_CONTRACT_HASH =
   'aecd87af3023a586046ed715b557cd32d705c330aec72b85817d5333339d028e';
 
 describe.skip('OPEND-2623 standing user constraint across a question-form answer', () => {
-  it('carries the constraint into the OD Next clarification stage prompt', () => {
-    const clarification = composeOdNextStrategyContinuationV2({
-      stage: 'clarification',
-      nativeSessionResume: true,
-      taskExecutionId: 'odnext_opend2623',
-      taskRunIndex: 1,
-      answer: FORM_ANSWER_PROMPT,
-    });
-
-    expect(clarification).toContain(USER_CONSTRAINT);
-  });
-
-  it('carries the constraint into the OD Next production stage prompt', () => {
-    const production = composeOdNextStrategyContinuationV2({
-      stage: 'production',
-      nativeSessionResume: true,
-      taskExecutionId: 'odnext_opend2623',
-      taskRunIndex: 2,
-      planContractHash: PLAN_CONTRACT_HASH,
-      hostProtocolKey: '046733f7ca81ddc4',
-    });
-
-    expect(production).toContain(USER_CONSTRAINT);
-  });
-
-  it('does not order an unconditional file delivery on the production stage', () => {
-    const production = composeOdNextStrategyContinuationV2({
-      stage: 'production',
-      nativeSessionResume: true,
-      taskExecutionId: 'odnext_opend2623',
-      taskRunIndex: 2,
-      planContractHash: PLAN_CONTRACT_HASH,
-      hostProtocolKey: '046733f7ca81ddc4',
-    });
-
-    // The live wording: "Open Design must be able to identify one runnable entry
-    // in the delivered files, otherwise the completed task is rejected".
-    expect(production).not.toContain('otherwise the completed task is rejected');
-  });
 
   it('keeps the sanctioned persistent-instruction surface in a non-request OD Next stage payload', () => {
     // `## Custom instructions (user-level)` is an EXISTING product surface:

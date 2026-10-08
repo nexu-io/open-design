@@ -100,27 +100,6 @@ export const claudeAgentDef = {
       if (options.model && options.model !== 'default') {
         args.push('--model', options.model);
       }
-      const nativeBindings = runtimeContext.nativeBuildPackageBindings ?? [];
-      if (nativeBindings.length > 0) {
-        if (!caps.customAgents) {
-          throw new TypeError(
-            'Claude native Build Package execution requires advertised --agents support.',
-          );
-        }
-        if (
-          new Set(nativeBindings.map(({ nativeAgentHandle }) => nativeAgentHandle)).size
-            !== nativeBindings.length
-        ) {
-          throw new TypeError('Claude native Build Package handles must be unique.');
-        }
-        args.push('--agents', JSON.stringify(Object.fromEntries(nativeBindings.map((binding) => [
-          binding.nativeAgentHandle,
-          {
-            description: 'Execute one daemon-bound OD Next Build Package.',
-            prompt: 'Execute only the task supplied by the parent Agent. Do not spawn another subagent.',
-          },
-        ]))));
-      }
       const dirs = (extraAllowedDirs || []).filter(
         (d) => typeof d === 'string' && d.length > 0,
       );

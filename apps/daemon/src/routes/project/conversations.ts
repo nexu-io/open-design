@@ -410,11 +410,9 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
           ...message,
           strategyTaskExecutionId: turn.taskExecutionId,
           strategyTaskRunIndex: turn.taskRunIndex,
-          ...(turn.delivered ? { strategyTaskDelivered: true } : {}),
-          ...(turn.blocked ? {
-            strategyTaskBlocked: true,
-            strategyTaskBlockedText: turn.blockedText,
-          } : {}),
+          strategyTaskDelivered: turn.delivered,
+          strategyTaskBlocked: turn.blocked,
+          strategyTaskBlockedText: turn.blockedText,
         };
       }),
     });

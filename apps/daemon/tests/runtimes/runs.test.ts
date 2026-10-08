@@ -2176,9 +2176,7 @@ describe('work completeness vs a settled OD Next verdict', () => {
     });
   }
 
-  /** A settled OD Next task projection. `completed` is only reachable once the
-   *  coordinator saw BOTH a succeeded process AND a resolvable canonical
-   *  deliverable, so it is the strongest completion evidence the daemon holds. */
+  /** The task ended; physical status and remaining work are independent facts. */
   function completedStrategyTask() {
     return {
       taskExecutionId: 'odnext_8979d0a7452e4e65a51c666ad89f864d',
@@ -2197,22 +2195,30 @@ describe('work completeness vs a settled OD Next verdict', () => {
     };
   }
 
-  it('does not report unfinished work when OD Next settled the task as completed', () => {
+  it.each([true, false, undefined])('preserves unfinished work after task completion with file evidence %s', (deliverableValid) => {
     const runs = createRuns();
     const run = runs.create({ projectId: 'p1', conversationId: 'c1' }) as any;
-    // The agent delivered index.html plus six images and declared the task
-    // complete, but its LAST TodoWrite snapshot still carried two pending
-    // items — the exact shape QA captured on project 3ffc55f1.
     run.lastTodoSnapshot = [
-      { content: '生成品牌视觉资产', status: 'completed' },
-      { content: '写入响应式交互原型', status: 'pending' },
-      { content: '交付根目录运行入口', status: 'pending' },
+      { content: 'Write the page', status: 'completed' },
+      { content: 'Add animation', status: 'pending' },
+      { content: 'Adapt for mobile', status: 'pending' },
     ];
-    run.strategyTask = completedStrategyTask();
-    run.deliverableValid = true;
+    run.strategyTask = { ...completedStrategyTask(), deliverableValid };
+    run.deliverableValid = deliverableValid;
 
     runs.finish(run, 'succeeded', 0, null);
 
+    expect(run.status).toBe('succeeded');
+    expect(run.strategyTask.outcome).toBe('completed');
+    expect(run.endedWithUnfinishedWork).toBe(true);
+  });
+
+  it('allows an ordinary answer to finish without files or todo', () => {
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'p1', conversationId: 'c1' }) as any;
+    run.strategyTask = { ...completedStrategyTask(), deliverableValid: false };
+    runs.finish(run, 'succeeded', 0, null);
+    expect(run.status).toBe('succeeded');
     expect(run.endedWithUnfinishedWork).toBe(false);
   });
 

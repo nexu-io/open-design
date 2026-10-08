@@ -905,9 +905,8 @@ function AssistantMessageImpl({
     isBrandExtractionNextStepVariant(nextStepVariant) &&
     (message.content.includes('<od-card type="brand-browser-assist"') ||
       textNeedsBrandBrowserAssistFallback(message.content));
-  // A settled `completed` strategy verdict outranks a stale TodoWrite snapshot:
-  // the deliverable was verified on disk, so the footer must not report the
-  // turn as stopped with unfinished work (and must not withhold next steps).
+  // Files may exist while declared work remains. Only the existing completion
+  // signal or question handoff can suppress the unfinished-todo offer.
   const unfinishedTodos = streaming || completedWithAuthenticatedDone
     ? []
     : continuableUnfinishedTodos({
@@ -916,7 +915,6 @@ function AssistantMessageImpl({
         // source `hasPendingQuestionForm` reads.
         content: message.content,
         runStatus: message.runStatus,
-        strategyTaskDelivered: message.strategyTaskDelivered,
       });
   const hasTodoSnapshot = events.some(
     (event) => event.kind === "tool_use" && isTodoWriteToolName(event.name),

@@ -5,11 +5,14 @@ import {
   OD_NEXT_PROMPT_BUNDLE_SCHEMA_V1,
   OD_NEXT_PROMPT_BUNDLE_SCHEMA_V2,
   OD_NEXT_REQUEST_TURN_SCHEMA_V1,
+  OD_NEXT_RESUME_REQUEST_SCHEMA,
   OD_NEXT_STRATEGY_ID,
-  OpenDesignPlanContractV2Schema,
-  StrategyRuntimeStateV2Schema,
   StrategyExecutionIntentV2Schema,
-  StrategyRuntimeTransitionV2Schema,
+  StrategySettlementReasonV2Schema,
+  StrategySettlementFactsV2Schema,
+  normalizeStrategySettlementReason,
+  type StrategySettlementFactsV2,
+  type StrategySettlementReasonV2,
   parseOdNextPromptBundleV1,
   parseOdNextPromptBundleV2,
   parseOdNextRequestTurnV1,
@@ -34,9 +37,9 @@ import {
 } from './od-next/frozen-skill-package.js';
 
 import {
-  migrateIntentResolutionStore, initializeIntentResolution, readIntentResolution,
-  claimIntentResolutionRecord, intentResolutionDigest, failIntentResolutionRecord,
-  resolveIntentResolutionRecord, readStrategyTaskWriteEvidence,
+  migrateIntentResolutionStore,
+  readIntentResolution,
+  failIntentResolutionRecord,
   type StrategyIntentResolution,
 } from './od-next/intent-resolution-store.js';
 
@@ -67,7 +70,7 @@ const COMPOSED_PROMPT_BUNDLE_SCHEMA = OD_NEXT_PROMPT_BUNDLE_SCHEMA_V2;
  */
 const ACCEPTED_FINAL_TEXT_SCHEMAS = {
   bundle: [OD_NEXT_PROMPT_BUNDLE_SCHEMA_V1, OD_NEXT_PROMPT_BUNDLE_SCHEMA_V2],
-  turn: [OD_NEXT_REQUEST_TURN_SCHEMA_V1, OD_NEXT_INTENT_RESOLUTION_TURN_SCHEMA],
+  turn: [OD_NEXT_REQUEST_TURN_SCHEMA_V1, OD_NEXT_INTENT_RESOLUTION_TURN_SCHEMA, OD_NEXT_RESUME_REQUEST_SCHEMA],
 } as const satisfies Record<
   StrategyTaskFinalTextKind,
   ReadonlyArray<StrategyTaskFinalTextSchema>
@@ -82,6 +85,11 @@ export interface StrategyTaskRunMapping {
   sourceRunId?: string;
   purpose?: 'intent_resolution';
   finalText: StrategyTaskFinalTextIdentity;
+  /** Immutable alternative used only when native production resume is unavailable. */
+  coldStartFinalText?: StrategyTaskFinalTextIdentity;
+  resumeFinalText?: StrategyTaskFinalTextIdentity;
+  settlementReason?: StrategySettlementReasonV2;
+  settlementFacts?: StrategySettlementFactsV2;
 }
 
 export type StrategyTaskFinalTextKind = 'bundle' | 'turn';
@@ -95,6 +103,7 @@ export type StrategyTaskFinalTextSchema =
   | typeof OD_NEXT_PROMPT_BUNDLE_SCHEMA_V1
   | typeof OD_NEXT_PROMPT_BUNDLE_SCHEMA_V2
   | typeof OD_NEXT_REQUEST_TURN_SCHEMA_V1
+  | typeof OD_NEXT_RESUME_REQUEST_SCHEMA
   | typeof OD_NEXT_INTENT_RESOLUTION_TURN_SCHEMA;
 
 export interface StrategyTaskFinalTextIdentity {
@@ -117,6 +126,7 @@ export interface StrategyTaskExecutionRecord {
   schemaVersion: typeof TASK_STORE_SCHEMA_VERSION;
   revision: number;
   taskExecutionId: string;
+  continuedFromTaskExecutionId?: string;
   projectId: string;
   conversationId: string;
   snapshotId: string;
@@ -130,6 +140,7 @@ export interface StrategyTaskExecutionRecord {
   executionMode: StrategyExecutionModeV2 | null;
   executionIntent?: StrategyExecutionIntentV2;
   intentResolution: StrategyIntentResolution | null;
+  deliverableValid?: boolean;
   blockedContext?: StrategyTaskBlockedContext;
   planContract?: OpenDesignPlanContractV2;
   planContractHash?: string;
@@ -150,6 +161,7 @@ export interface StrategyTaskExecutionRecord {
 export interface CreateStrategyTaskExecutionInput {
   sessionMode?: ChatSessionMode;
   taskExecutionId: string;
+  continuedFromTaskExecutionId?: string;
   projectId: string;
   conversationId: string;
   snapshotId: string;
@@ -187,13 +199,16 @@ export interface CompareAndTransitionStrategyTaskInput {
     runId: string;
     sourceRunId: string;
     finalText: string;
+    coldStartText?: string;
   };
-  planContract?: OpenDesignPlanContractV2;
   blockedContext?: {
     reasonCodes: readonly string[];
     visibleText?: string | null;
   };
   updatedAt?: number;
+  deliverableValid?: boolean;
+  settlementReason?: StrategySettlementReasonV2;
+  settlementFacts?: StrategySettlementFactsV2;
 }
 
 export class InvalidStrategyTaskRecordError extends Error {
@@ -288,6 +303,12 @@ export function migrateStrategyTaskStore(db: SqliteDb): void {
   `);
   addColumnIfMissing(db, 'strategy_task_executions', "execution_intent TEXT NOT NULL DEFAULT 'produce'");
   addColumnIfMissing(db, 'strategy_task_executions', 'intent_resolution_version INTEGER');
+  addColumnIfMissing(db, 'strategy_task_executions', 'deliverable_valid INTEGER');
+  addColumnIfMissing(db, 'strategy_task_executions', 'continued_from_task_execution_id TEXT');
+  addColumnIfMissing(db, 'strategy_task_runs', 'settlement_reason TEXT');
+  addColumnIfMissing(db, 'strategy_task_runs', 'settlement_facts_json TEXT');
+  addColumnIfMissing(db, 'strategy_task_runs', 'cold_start_final_text_json TEXT');
+  addColumnIfMissing(db, 'strategy_task_runs', 'resume_final_text_json TEXT');
   migrateIntentResolutionStore(db);
   addColumnIfMissing(db, 'strategy_task_executions', 'prompt_bundle_schema TEXT');
   addColumnIfMissing(db, 'strategy_task_executions', 'prompt_bundle_text TEXT');
@@ -302,6 +323,11 @@ export function migrateStrategyTaskStore(db: SqliteDb): void {
   addColumnIfMissing(db, 'strategy_task_runs', 'final_text_utf8_bytes INTEGER');
   addColumnIfMissing(db, 'strategy_task_runs', 'final_text_sha256 TEXT');
   migrateFrozenSkillPackageStore(db);
+  // Retire the task-level failure verdict without rewriting any physical Run.
+  // Keep the old attribution columns as historical diagnostics, not live authority.
+  db.prepare(`UPDATE strategy_task_executions
+    SET outcome = 'completed', deliverable_valid = 0, revision = revision + 1
+    WHERE outcome = 'blocked'`).run();
 }
 
 export function createStrategyTaskExecution(
@@ -332,6 +358,12 @@ export function createStrategyTaskExecution(
       );
     }
     assertSnapshotOwnership(db, snapshotId, projectId, conversationId);
+    if (input.continuedFromTaskExecutionId) {
+      const source = requireTask(db, input.continuedFromTaskExecutionId);
+      if (source.projectId !== projectId || source.conversationId !== conversationId) {
+        throw new InvalidStrategyTaskRecordError('Task handoff must stay in its project and conversation.');
+      }
+    }
 
     const snapshot = getSnapshot(db, snapshotId);
     const binding = AppliedStrategyBindingV2Schema.safeParse(snapshot?.strategy);
@@ -411,8 +443,10 @@ export function createStrategyTaskExecution(
         promptBundle.sha256,
         now,
       );
-      db.prepare('UPDATE strategy_task_executions SET intent_resolution_version=1 WHERE task_execution_id=?').run(taskExecutionId);
-      initializeIntentResolution(db, taskExecutionId);
+      if (input.continuedFromTaskExecutionId) {
+        db.prepare('UPDATE strategy_task_executions SET continued_from_task_execution_id=? WHERE task_execution_id=?')
+          .run(input.continuedFromTaskExecutionId, taskExecutionId);
+      }
       insertFrozenSkillPackage(
         db,
         taskExecutionId,
@@ -463,7 +497,7 @@ export function getStrategyTaskExecutionByRunId(
 export interface StrategyTaskTurnProjection {
   taskExecutionId: string;
   taskRunIndex: number;
-  /** The task settled `completed` — deliverable verified. Carried because the
+  /** The task ended with explicit verified file evidence. Carried because the
    *  messages table has no strategy column, so a reload has no other way to
    *  learn the verdict, and surfaces keyed off the agent's TodoWrite snapshot
    *  (the "continue remaining tasks" offer) would resurrect on every reload. */
@@ -507,6 +541,7 @@ export function strategyTaskTurnsForRunIds(
                r.task_execution_id AS taskExecutionId,
                r.task_run_index AS taskRunIndex,
                t.outcome AS outcome,
+               t.deliverable_valid AS deliverableValid,
                t.blocked_visible_text AS blockedVisibleText
           FROM strategy_task_runs r
           -- LEFT so a mapping whose task row is gone still yields its turn
@@ -527,7 +562,7 @@ export function strategyTaskTurnsForRunIds(
         turns.set(row['runId'], {
           taskExecutionId: row['taskExecutionId'],
           taskRunIndex: row['taskRunIndex'],
-          delivered: row['outcome'] === 'completed',
+          delivered: row['outcome'] === 'completed' && row['deliverableValid'] === 1,
           blocked: row['outcome'] === 'blocked',
           blockedText: row['outcome'] === 'blocked'
             && typeof row['blockedVisibleText'] === 'string'
@@ -572,73 +607,6 @@ export function getAwaitingClarificationStrategyTaskExecution(
   }
 }
 
-/** The only same-stage physical continuation; claim, mapping and revision share one transaction. */
-export function claimStrategyExecutionIntentResolution(db: SqliteDb, input: {
-  taskExecutionId: string; expectedRevision: number; sourceRunId: string;
-  nextRunId: string; sourceResultJson: string; finalText: string; updatedAt?: number;
-}): StrategyTaskExecutionRecord {
-  db.transaction(() => {
-    const current = requireTask(db, input.taskExecutionId);
-    const updatedAt = normalizeTimestamp(input.updatedAt ?? Date.now(), 'updatedAt');
-    if (current.revision !== input.expectedRevision || current.latestRunId !== input.sourceRunId
-      || current.outcome !== 'running' || current.route === 'direct_edit'
-      || !['request', 'clarification'].includes(current.inputStage)
-      || current.intentResolution?.state !== 'unresolved' || current.intentResolution.attempts !== 0
-      || updatedAt < current.updatedAt) throw new StrategyTaskTransitionConflictError('Strategy task revision changed while applying the transition.');
-    requireNonEmpty(input.nextRunId, 'nextRunId');
-    if (JSON.parse(input.sourceResultJson)?.runId !== input.sourceRunId) {
-      throw new InvalidStrategyTaskTransitionError('Continuation final text identity does not match its task Run mapping.');
-    }
-    const turn = parseOdNextIntentResolutionTurnV1(input.finalText);
-    if (turn.taskExecutionId !== current.taskExecutionId || turn.stage !== current.inputStage
-      || turn.taskRunIndex !== current.runs.length || turn.sourceRunId !== input.sourceRunId
-      || turn.promptBundleSha256 !== current.promptBundle.sha256
-      || turn.sourceResultSha256 !== intentResolutionDigest(input.sourceResultJson)) {
-      throw new InvalidStrategyTaskTransitionError('Continuation final text identity does not match its task Run mapping.');
-    }
-    const finalText = finalTextIdentity({ kind: 'turn', schema: OD_NEXT_INTENT_RESOLUTION_TURN_SCHEMA, text: input.finalText });
-    claimIntentResolutionRecord(db, {
-      taskExecutionId: current.taskExecutionId, runId: input.nextRunId,
-      sourceRunId: input.sourceRunId, sourceResultJson: input.sourceResultJson,
-    });
-    const result = db.prepare(`UPDATE strategy_task_executions SET revision=revision+1,
-      route=COALESCE(route, 'full_plan'), latest_run_id=?, updated_at=?
-      WHERE task_execution_id=? AND revision=? AND outcome='running'`).run(
-      input.nextRunId, updatedAt, current.taskExecutionId, input.expectedRevision,
-    );
-    if (result.changes !== 1) throw new StrategyTaskTransitionConflictError('Strategy task revision changed while applying the transition.');
-    db.prepare(`INSERT INTO strategy_task_runs(task_execution_id,run_id,input_stage,task_run_index,source_run_id,
-      final_text_kind,final_text_schema,final_text,final_text_utf8_bytes,final_text_sha256,created_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?)`).run(current.taskExecutionId, input.nextRunId, current.inputStage,
-      current.runs.length, input.sourceRunId, finalText.kind, finalText.schema, finalText.text,
-      finalText.utf8Bytes, finalText.sha256, updatedAt);
-  }).immediate();
-  return requireTask(db, input.taskExecutionId);
-}
-
-/** Consume the already persisted reply under the current task revision; never launches a provider. */
-export function consumeStrategyExecutionIntentResolution(db: SqliteDb, input: {
-  taskExecutionId: string; expectedRevision: number; runId: string;
-  executionIntent: StrategyExecutionIntentV2; updatedAt?: number;
-}): StrategyTaskExecutionRecord {
-  db.transaction(() => {
-    const current = requireTask(db, input.taskExecutionId);
-    const intent = StrategyExecutionIntentV2Schema.parse(input.executionIntent);
-    const updatedAt = normalizeTimestamp(input.updatedAt ?? Date.now(), 'updatedAt');
-    if (current.revision !== input.expectedRevision || current.latestRunId !== input.runId
-      || current.outcome !== 'running' || updatedAt < current.updatedAt
-      || (current.executionIntent === 'plan_only' && intent !== 'plan_only')) {
-      throw new StrategyTaskTransitionConflictError('Strategy task revision changed while applying the transition.');
-    }
-    resolveIntentResolutionRecord(db, current.taskExecutionId, input.runId);
-    const changed = db.prepare(`UPDATE strategy_task_executions SET execution_intent=?, revision=revision+1, updated_at=?
-      WHERE task_execution_id=? AND revision=? AND latest_run_id=? AND outcome='running'`)
-      .run(intent, updatedAt, current.taskExecutionId, input.expectedRevision, input.runId);
-    if (changed.changes !== 1) throw new StrategyTaskTransitionConflictError('Strategy task revision changed while applying the transition.');
-  }).immediate();
-  return requireTask(db, input.taskExecutionId);
-}
-
 /** Logical request stage is not proof that a physical Run owns the initial Bundle. */
 export function isInitialStrategyTaskRun(task: StrategyTaskExecutionRecord, runId: string): boolean {
   const mapping = task.runs.find(run => run.runId === runId);
@@ -669,12 +637,8 @@ export function compareAndTransitionStrategyTaskExecution(
       );
     }
 
-    if (input.to.outcome === 'completed' && (input.to.executionIntent === 'plan_only' || current.executionIntent === 'plan_only')
-      && current.intentResolution && readStrategyTaskWriteEvidence(db, current.taskExecutionId).some(evidence => evidence.unknown || evidence.filesWritten !== 0)) {
-      throw new InvalidStrategyTaskTransitionError('Illegal strategy task outcome.');
-    }
     const next = validateTransition(current, input);
-    const plan = resolvePlanContract(current, input.planContract, next);
+
     const nextRunId = input.nextRun?.runId ?? current.latestRunId;
     const nextRunIndex = current.runs.length;
     const nextRunFinalText = input.nextRun
@@ -685,6 +649,11 @@ export function compareAndTransitionStrategyTaskExecution(
           taskRunIndex: nextRunIndex,
         })
       : null;
+    if (input.nextRun?.coldStartText && next.inputStage !== 'production') {
+      throw new InvalidStrategyTaskTransitionError('Cold start is only valid for production.');
+    }
+    const coldStartFinalText = input.nextRun?.coldStartText
+      ? composedPromptBundleIdentity(input.nextRun.coldStartText) : null;
     const clarificationCount = current.clarificationCount
       + (next.inputStage === 'clarification' && current.inputStage !== 'clarification' ? 1 : 0);
     const repairAttempts = current.planContractRepairAttempts
@@ -713,7 +682,7 @@ export function compareAndTransitionStrategyTaskExecution(
       UPDATE strategy_task_executions
          SET revision = revision + 1,
              route = ?, input_stage = ?, outcome = ?, execution_mode = ?, execution_intent = ?,
-             plan_contract_json = ?, plan_contract_hash = ?,
+             deliverable_valid = COALESCE(?, deliverable_valid),
              blocked_reason_codes_json = ?, blocked_visible_text = ?,
              clarification_count = ?, plan_contract_repair_attempts = ?,
              latest_run_id = ?, updated_at = ?
@@ -724,8 +693,7 @@ export function compareAndTransitionStrategyTaskExecution(
       next.outcome,
       next.executionMode,
       next.executionIntent,
-      plan.json,
-      plan.hash,
+      input.deliverableValid === undefined ? (input.nextRun ? 0 : null) : Number(input.deliverableValid),
       blockedContext ? JSON.stringify(blockedContext.reasonCodes) : null,
       blockedContext ? blockedContext.visibleText : null,
       clarificationCount,
@@ -741,8 +709,11 @@ export function compareAndTransitionStrategyTaskExecution(
       );
     }
 
-    if (input.to.executionIntent !== undefined && current.intentResolution?.state === 'unresolved') {
-      resolveIntentResolutionRecord(db, current.taskExecutionId);
+    if (input.settlementReason) {
+      db.prepare('UPDATE strategy_task_runs SET settlement_reason = ?, settlement_facts_json = ? WHERE run_id = ?')
+        .run(StrategySettlementReasonV2Schema.parse(input.settlementReason),
+          input.settlementFacts ? JSON.stringify(StrategySettlementFactsV2Schema.parse(input.settlementFacts)) : null,
+          current.latestRunId);
     }
     if (TERMINAL_OUTCOMES.has(next.outcome)) failIntentResolutionRecord(db, current.taskExecutionId);
     if (input.nextRun) {
@@ -766,6 +737,10 @@ export function compareAndTransitionStrategyTaskExecution(
           nextRunFinalText!.sha256,
           updatedAt,
         );
+        if (coldStartFinalText) {
+          db.prepare('UPDATE strategy_task_runs SET cold_start_final_text_json = ? WHERE run_id = ?')
+            .run(JSON.stringify(coldStartFinalText), input.nextRun.runId);
+        }
       } catch (error) {
         throw new StrategyTaskTransitionConflictError(
           `Strategy next Run is already claimed: ${errorMessage(error)}`,
@@ -814,6 +789,7 @@ export function cancelStrategyTaskExecution(
         'Strategy task changed while applying cancellation.',
       );
     }
+    db.prepare('UPDATE strategy_task_runs SET settlement_reason = ? WHERE run_id = ?').run('canceled', current.latestRunId);
     failIntentResolutionRecord(db, current.taskExecutionId);
   });
   cancel.immediate();
@@ -822,9 +798,9 @@ export function cancelStrategyTaskExecution(
 
 /**
  * Converge a logical task after startup reconciles its latest physical Run.
- * Successful Runs still require Coordinator-owned protocol interpretation, so
- * this narrow bridge only maps process failure -> blocked and cancellation ->
- * canceled. Databases without Task06 tables are intentionally a no-op.
+ * Successful Runs still require Coordinator settlement; failures end the task
+ * while their error and retry authority remain on the physical Run. Cancellation
+ * keeps its distinct task outcome. Databases without Task06 tables are intentionally a no-op.
  */
 export function reconcileStrategyTaskRunTerminal(
   db: SqliteDb,
@@ -846,24 +822,26 @@ export function reconcileStrategyTaskRunTerminal(
       }
       const result = db.prepare(`
         UPDATE strategy_task_executions
-           SET revision = revision + 1, outcome = ?, updated_at = ?,
+           SET revision = revision + 1, outcome = ?, updated_at = ?, deliverable_valid = 0,
                blocked_reason_codes_json = ?, blocked_visible_text = NULL
          WHERE task_execution_id = ? AND revision = ?
            AND latest_run_id = ? AND outcome = 'running'
       `).run(
-        input.status === 'canceled' ? 'canceled' : 'blocked',
+        input.status === 'canceled' ? 'canceled' : 'completed',
         Math.max(
           current.updatedAt,
           normalizeTimestamp(input.updatedAt ?? Date.now(), 'updatedAt'),
         ),
-        input.status === 'canceled'
-          ? null
-          : JSON.stringify(['od_next_physical_run_interrupted']),
+        null,
         current.taskExecutionId,
         current.revision,
         input.runId,
       );
-      if (result.changes === 1) failIntentResolutionRecord(db, current.taskExecutionId);
+      if (result.changes === 1) {
+        db.prepare('UPDATE strategy_task_runs SET settlement_reason = ?, settlement_facts_json = ? WHERE run_id = ?')
+          .run('ended', JSON.stringify({ physicalStatus: input.status }), input.runId);
+        failIntentResolutionRecord(db, current.taskExecutionId);
+      }
       return result.changes === 1;
     });
     return reconcile.immediate();
@@ -934,43 +912,28 @@ function rowToTask(db: SqliteDb, row: DbRow): StrategyTaskExecutionRecord {
     );
   }
 
+  const promptBundle = parseStoredFinalText({
+    kind: 'bundle',
+    schema: row['prompt_bundle_schema'],
+    text: row['prompt_bundle_text'],
+    utf8Bytes: row['prompt_bundle_utf8_bytes'],
+    sha256: row['prompt_bundle_sha256'],
+  });
   const route = parseNullableRoute(row['route']);
   const inputStage = parseStage(row['input_stage']);
   const outcome = parseOutcome(row['outcome']);
   const executionMode = parseNullableExecutionMode(row['execution_mode']);
   const storedExecutionIntent = StrategyExecutionIntentV2Schema.parse(row['execution_intent'] ?? 'produce');
-  const pendingIntent = intentResolution !== null && intentResolution.state !== 'resolved';
-  if (pendingIntent && (storedExecutionIntent !== 'produce' || ['production', 'contract_repair'].includes(inputStage) || outcome === 'plan_ready')) {
-    throw new InvalidStrategyTaskRecordError('Illegal strategy task outcome.');
-  }
-  const executionIntent = pendingIntent ? undefined : storedExecutionIntent;
+  const executionIntent = storedExecutionIntent;
   validateStoredState({ route, inputStage, outcome, executionMode, ...(executionIntent ? { executionIntent } : {}) });
-  const blockedContext = parseStoredBlockedContext(
+  const blockedContext = outcome === 'blocked' ? parseStoredBlockedContext(
     row['blocked_reason_codes_json'],
     row['blocked_visible_text'],
     outcome,
-  );
-  const plan = parseStoredPlanContract(row['plan_contract_json'], row['plan_contract_hash']);
-  if (
-    (inputStage === 'production' || outcome === 'plan_ready')
-    && (!plan.contract || !plan.hash)
-  ) {
-    throw new InvalidStrategyTaskRecordError(
-      'Production and plan-ready records require a versioned, hash-bound Plan Contract.',
-    );
-  }
-  if (plan.contract) {
-    validatePlanIdentity(
-      plan.contract,
-      {
-        snapshotId,
-        strategyVersion,
-        strategyPackageHash,
-        selectedAgentId: requireStoredString(row['selected_agent_id'], 'selected_agent_id'),
-      },
-      executionMode,
-    );
-  }
+  ) : null;
+  // Retired model contracts are historical data only. Never gate reading a
+  // conversation on their schema, hash, or relationship to execution state.
+  const plan = readHistoricalPlan(row['plan_contract_json'], row['plan_contract_hash']);
 
   const runs = db.prepare(`
     SELECT run_id AS runId, input_stage AS inputStage,
@@ -980,6 +943,10 @@ function rowToTask(db: SqliteDb, row: DbRow): StrategyTaskExecutionRecord {
            final_text AS finalText,
            final_text_utf8_bytes AS finalTextUtf8Bytes,
            final_text_sha256 AS finalTextSha256,
+           settlement_reason AS settlementReason,
+           settlement_facts_json AS settlementFactsJson,
+           cold_start_final_text_json AS coldStartFinalTextJson,
+           resume_final_text_json AS resumeFinalTextJson,
            created_at AS createdAt
       FROM strategy_task_runs
      WHERE task_execution_id = ?
@@ -994,6 +961,10 @@ function rowToTask(db: SqliteDb, row: DbRow): StrategyTaskExecutionRecord {
     finalText: unknown;
     finalTextUtf8Bytes: unknown;
     finalTextSha256: unknown;
+    settlementReason: unknown;
+    settlementFactsJson: unknown;
+    coldStartFinalTextJson: unknown;
+    resumeFinalTextJson: unknown;
     createdAt: unknown;
   }>;
   const createdAt = requireNonNegativeInteger(row['created_at'], 'created_at');
@@ -1025,6 +996,23 @@ function rowToTask(db: SqliteDb, row: DbRow): StrategyTaskExecutionRecord {
       utf8Bytes: mapping.finalTextUtf8Bytes,
       sha256: mapping.finalTextSha256,
     });
+    const resumeFinalText = mapping.resumeFinalTextJson == null ? undefined
+      : parseStoredFinalText(JSON.parse(requireStoredString(mapping.resumeFinalTextJson, 'resume_final_text_json')));
+    if (resumeFinalText) {
+      if (resumeFinalText.kind !== 'turn' || resumeFinalText.schema !== OD_NEXT_RESUME_REQUEST_SCHEMA
+        || mapping.inputStage !== 'request' || taskRunIndex !== 0) {
+        throw new InvalidStrategyTaskRecordError('Resume input must belong to its initial request.');
+      }
+    }
+    const coldStartFinalText = mapping.coldStartFinalTextJson == null ? undefined
+      : parseStoredFinalText(JSON.parse(requireStoredString(mapping.coldStartFinalTextJson, 'cold_start_final_text_json')));
+    if (coldStartFinalText) {
+      if (mapping.inputStage !== 'production' || coldStartFinalText.kind !== 'bundle'
+        || coldStartFinalText.schema !== OD_NEXT_PROMPT_BUNDLE_SCHEMA_V2) {
+        throw new InvalidStrategyTaskRecordError('Cold start input must be a production bundle.');
+      }
+      parseOdNextPromptBundleV2(coldStartFinalText.text);
+    }
     validateMappedFinalText(finalText, {
       taskExecutionId,
       inputStage: parseStage(mapping.inputStage),
@@ -1040,6 +1028,10 @@ function rowToTask(db: SqliteDb, row: DbRow): StrategyTaskExecutionRecord {
         ? {}
         : { sourceRunId: requireStoredString(mapping.sourceRunId, 'source_run_id') }),
       finalText,
+      ...(coldStartFinalText ? { coldStartFinalText } : {}),
+      ...(resumeFinalText ? { resumeFinalText } : {}),
+      ...(mapping.settlementReason == null ? {} : { settlementReason: normalizeStrategySettlementReason(mapping.settlementReason) }),
+      ...(mapping.settlementFactsJson == null ? {} : { settlementFacts: StrategySettlementFactsV2Schema.parse(JSON.parse(requireStoredString(mapping.settlementFactsJson, 'settlement_facts_json'))) }),
     };
   });
   const initialRunId = requireStoredString(row['initial_run_id'], 'initial_run_id');
@@ -1071,13 +1063,7 @@ function rowToTask(db: SqliteDb, row: DbRow): StrategyTaskExecutionRecord {
     planContractRepairAttempts,
   );
   const frozenSkillPackage = getFrozenSkillPackage(db, taskExecutionId);
-  const promptBundle = parseStoredFinalText({
-    kind: 'bundle',
-    schema: row['prompt_bundle_schema'],
-    text: row['prompt_bundle_text'],
-    utf8Bytes: row['prompt_bundle_utf8_bytes'],
-    sha256: row['prompt_bundle_sha256'],
-  });
+
   parseStoredPromptBundle(promptBundle);
   if (!sameFinalTextIdentity(promptBundle, mappings[0]!.finalText)) {
     throw new InvalidStrategyTaskRecordError(
@@ -1119,6 +1105,8 @@ function rowToTask(db: SqliteDb, row: DbRow): StrategyTaskExecutionRecord {
     executionMode,
     ...(executionIntent ? { executionIntent } : {}),
     intentResolution,
+    ...(typeof row['continued_from_task_execution_id'] === 'string' ? { continuedFromTaskExecutionId: row['continued_from_task_execution_id'] } : {}),
+    ...(row['deliverable_valid'] == null ? {} : { deliverableValid: row['deliverable_valid'] === 1 }),
     ...(blockedContext ? { blockedContext } : {}),
     ...(plan.contract ? { planContract: plan.contract } : {}),
     ...(plan.hash ? { planContractHash: plan.hash } : {}),
@@ -1552,11 +1540,6 @@ function validateTransition(
   current: StrategyTaskExecutionRecord,
   input: CompareAndTransitionStrategyTaskInput,
 ): StrategyTaskTransitionState {
-  if (current.intentResolution && current.intentResolution.state !== 'resolved'
-    && input.to.executionIntent === undefined
-    && (['production', 'contract_repair'].includes(input.to.inputStage) || input.to.outcome === 'plan_ready')) {
-    throw new InvalidStrategyTaskTransitionError('Illegal strategy task outcome.');
-  }
   const next = {
     ...input.to,
     executionIntent: input.to.executionIntent ?? current.executionIntent ?? 'produce',
@@ -1618,160 +1601,31 @@ function validateTransition(
         'The next Run source must be the task chain latest Run.',
       );
     }
-    const transition = StrategyRuntimeTransitionV2Schema.safeParse({
-      from: {
-        route: current.route ?? next.route,
-        inputStage: current.inputStage,
-        executionMode: current.executionMode,
-      },
-      to: {
-        route: next.route,
-        inputStage: next.inputStage,
-        executionMode: next.executionMode,
-      },
-    });
-    if (!transition.success) {
-      throw new InvalidStrategyTaskTransitionError(
-        transition.error.issues[0]?.message ?? 'Illegal strategy physical-stage transition.',
-      );
-    }
   } else if (input.nextRun) {
     throw new InvalidStrategyTaskTransitionError(
       'A next Run must advance to a different physical stage.',
     );
   }
 
-  if (next.outcome !== 'running') {
-    const state = StrategyRuntimeStateV2Schema.safeParse({
-      schema: 'open-design.strategy-state/v2',
-      route: next.route,
-      inputStage: next.inputStage,
-      outcome: next.outcome,
-      executionMode: next.executionMode,
-      executionIntent: next.executionIntent,
-      reasonCodes: [],
-    });
-    if (!state.success) {
-      throw new InvalidStrategyTaskTransitionError(
-        state.error.issues[0]?.message ?? 'Illegal strategy task outcome.',
-      );
-    }
-  }
   return next;
-}
-
-function resolvePlanContract(
-  current: StrategyTaskExecutionRecord,
-  candidate: OpenDesignPlanContractV2 | undefined,
-  next: StrategyTaskTransitionState,
-): { json: string | null; hash: string | null } {
-  let contract = current.planContract;
-  let hash = current.planContractHash;
-  if (candidate) {
-    const parsed = OpenDesignPlanContractV2Schema.safeParse(candidate);
-    if (!parsed.success) {
-      throw new InvalidStrategyTaskTransitionError(
-        parsed.error.issues[0]?.message ?? 'Plan Contract is invalid.',
-      );
-    }
-    validatePlanIdentity(parsed.data, current, next.executionMode);
-    const candidateHash = strategyPlanContractHash(parsed.data);
-    if (hash && hash !== candidateHash) {
-      throw new InvalidStrategyTaskTransitionError(
-        'The locked Plan Contract hash cannot change.',
-      );
-    }
-    contract = parsed.data;
-    hash = candidateHash;
-  }
-  if (next.inputStage === 'production' && (!contract || !hash)) {
-    throw new InvalidStrategyTaskTransitionError(
-      'Production requires a versioned, hash-bound Plan Contract.',
-    );
-  }
-  if (next.outcome === 'plan_ready' && (!contract || !hash)) {
-    throw new InvalidStrategyTaskTransitionError(
-      'A plan-ready task requires a versioned, hash-bound Plan Contract.',
-    );
-  }
-  return {
-    json: contract ? JSON.stringify(contract) : null,
-    hash: hash ?? null,
-  };
-}
-
-function validatePlanIdentity(
-  plan: OpenDesignPlanContractV2,
-  identity: {
-    snapshotId: string;
-    strategyVersion: string;
-    strategyPackageHash: string;
-    selectedAgentId: string;
-  },
-  executionMode: StrategyExecutionModeV2 | null,
-): void {
-  if (
-    plan.strategy.snapshotId !== identity.snapshotId
-    || plan.strategy.version !== identity.strategyVersion
-    || plan.strategy.packageHash !== identity.strategyPackageHash
-  ) {
-    throw new InvalidStrategyTaskTransitionError(
-      'Plan Contract strategy identity must match the locked Snapshot.',
-    );
-  }
-  if (plan.runManifest.selectedAgentId !== identity.selectedAgentId) {
-    throw new InvalidStrategyTaskTransitionError(
-      'Plan Contract selected agent must match the locked task agent.',
-    );
-  }
-  if (executionMode === null || plan.fullPlan.executionMode !== executionMode) {
-    throw new InvalidStrategyTaskTransitionError(
-      'Plan Contract execution mode must match the locked task mode.',
-    );
-  }
-}
-
-function parseStoredPlanContract(
-  json: unknown,
-  hash: unknown,
-): { contract?: OpenDesignPlanContractV2; hash?: string } {
-  if (json == null && hash == null) return {};
-  if (typeof json !== 'string' || typeof hash !== 'string' || !/^[a-f0-9]{64}$/u.test(hash)) {
-    throw new InvalidStrategyTaskRecordError(
-      'Stored Plan Contract JSON and hash must be present together.',
-    );
-  }
-  let value: unknown;
-  try {
-    value = JSON.parse(json);
-  } catch {
-    throw new InvalidStrategyTaskRecordError('Stored Plan Contract contains invalid JSON.');
-  }
-  const parsed = OpenDesignPlanContractV2Schema.safeParse(value);
-  if (!parsed.success || strategyPlanContractHash(parsed.data) !== hash) {
-    throw new InvalidStrategyTaskRecordError(
-      'Stored Plan Contract failed schema or hash validation.',
-    );
-  }
-  return { contract: parsed.data, hash };
-}
-
-export function strategyPlanContractHash(plan: OpenDesignPlanContractV2): string {
-  return createHash('sha256')
-    .update(JSON.stringify(canonicalJsonValue(plan)), 'utf8')
-    .digest('hex');
 }
 
 function canonicalJsonValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalJsonValue);
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
-        .map(([key, child]) => [key, canonicalJsonValue(child)]),
-    );
-  }
+  if (value && typeof value === 'object') return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
+      .map(([key, child]) => [key, canonicalJsonValue(child)]),
+  );
   return value;
+}
+
+function readHistoricalPlan(json: unknown, hash: unknown): { contract?: OpenDesignPlanContractV2; hash?: string } {
+  if (typeof json !== 'string') return {};
+  try {
+    const value = JSON.parse(json);
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? { contract: value as OpenDesignPlanContractV2, ...(typeof hash === 'string' ? { hash } : {}) } : {};
+  } catch { return {}; }
 }
 
 function validateStoredState(state: {
@@ -1785,7 +1639,7 @@ function validateStoredState(state: {
     if (
       state.inputStage !== 'request'
       || state.executionMode !== null
-      || !['running', 'canceled', 'blocked'].includes(state.outcome)
+      || !['running', 'completed', 'canceled', 'blocked'].includes(state.outcome)
     ) {
       throw new InvalidStrategyTaskRecordError(
         'An unlocked route is valid only for an initial request before routing.',
@@ -1810,20 +1664,7 @@ function validateStoredState(state: {
     }
     return;
   }
-  const parsed = StrategyRuntimeStateV2Schema.safeParse({
-    schema: 'open-design.strategy-state/v2',
-    route: state.route,
-    inputStage: state.inputStage,
-    outcome: state.outcome,
-    executionMode: state.executionMode,
-    executionIntent: state.executionIntent,
-    reasonCodes: [],
-  });
-  if (!parsed.success) {
-    throw new InvalidStrategyTaskRecordError(
-      parsed.error.issues[0]?.message ?? 'Persisted strategy task state is invalid.',
-    );
-  }
+
 }
 
 function parseNullableRoute(value: unknown): StrategyRouteV2 | null {
@@ -1895,4 +1736,20 @@ function errorMessage(error: unknown): string {
 function isMissingTaskStoreError(error: unknown): boolean {
   return error instanceof Error
     && /no such table: strategy_task_(?:executions|runs)/iu.test(error.message);
+}
+
+/** Preserve the actual incremental request alongside its full recovery bundle. */
+export function persistStrategyResumeText(db: Database.Database, runId: string, text: string): StrategyTaskFinalTextIdentity {
+  const task = getStrategyTaskExecutionByRunId(db, runId);
+  if (!task || task.initialRunId !== runId || !text.trim()) {
+    throw new InvalidStrategyTaskRecordError('Resume input must belong to its initial request.');
+  }
+  const identity = finalTextIdentity({ kind: 'turn', schema: OD_NEXT_RESUME_REQUEST_SCHEMA, text });
+  const existing = task.runs[0]?.resumeFinalText;
+  if (existing && !sameFinalTextIdentity(existing, identity)) {
+    throw new InvalidStrategyTaskRecordError('Persisted resume input cannot change within a Run.');
+  }
+  db.prepare('UPDATE strategy_task_runs SET resume_final_text_json = ? WHERE run_id = ?')
+    .run(JSON.stringify(identity), runId);
+  return identity;
 }

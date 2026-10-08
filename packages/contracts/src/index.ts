@@ -85,6 +85,7 @@ export * from './prompts/chat-turn-host-protocol.js';
 export * from './prompts/deck-framework.js';
 export * from './prompts/od-next-device-frame.js';
 export * from './prompts/od-next-strategy.js';
+export * from './prompts/od-next-production-marker.js';
 export * from './prompts/canonical-xml.js';
 export * from './prompts/od-next-prompt-bundle.js';
 export * from './prompts/od-next-prompt-bundle-v2.js';

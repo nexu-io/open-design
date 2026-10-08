@@ -178,25 +178,24 @@ async function coldStatus(fixture: Awaited<ReturnType<typeof seed>>, strategy = 
   const persistedTask = getStrategyTaskExecutionByRunId(db, fixture.runId);
   if (strategy) {
     expect(persistedTask).toMatchObject({
-      taskExecutionId: TASK, outcome: 'blocked', snapshotId: fixture.snapshotId,
-      blockedContext: { reasonCodes: [REASON] },
+      taskExecutionId: TASK, outcome: 'completed', snapshotId: fixture.snapshotId,
     });
   } else expect(persistedTask).toBeNull();
   return readStatus(await serve(db, newRuns(fixture.root), fixture.root), fixture.runId);
 }
 
-function expectBlocked(status: Awaited<ReturnType<typeof readStatus>>, snapshotId: string) {
+function expectMigrated(status: Awaited<ReturnType<typeof readStatus>>, snapshotId: string) {
   expect(status).toMatchObject({ status: 'succeeded', exitCode: 0, deliverableValid: false, deliverableValidation: 'no_artifact', appliedPluginSnapshotId: snapshotId });
   expect(status.strategyTask).toMatchObject({
-    taskExecutionId: TASK, strategy: { snapshotId }, outcome: 'blocked', terminal: true,
-    blockedContext: { reasonCodes: [REASON], visibleText: 'A real task was blocked.' },
+    taskExecutionId: TASK, strategy: { snapshotId }, outcome: 'completed', terminal: true,
   });
+  expect(status.strategyTask?.blockedContext).toBeUndefined();
 }
 
 describe('GET run strategy projection after real durable-service restart', () => {
   it('round-trips a newly persisted terminal task without changing physical succeeded', async () => {
     const fixture = await seed();
-    expectBlocked(await coldStatus(fixture), fixture.snapshotId);
+    expectMigrated(await coldStatus(fixture), fixture.snapshotId);
   });
 
   it('restores an existing schema-1 journal missing only applied snapshot identity', async () => {
@@ -207,7 +206,7 @@ describe('GET run strategy projection after real durable-service restart', () =>
     // omitted by the deployed writer so this stays a legacy guard after fixing it.
     delete state.appliedPluginSnapshotId;
     fs.writeFileSync(fixture.statePath, JSON.stringify(state));
-    expectBlocked(await coldStatus(fixture), fixture.snapshotId);
+    expectMigrated(await coldStatus(fixture), fixture.snapshotId);
   });
 
   it('leaves an ordinary physical run without strategy metadata', async () => {

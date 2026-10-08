@@ -1,5 +1,6 @@
 import { renderArtifactFocusInstruction } from '../api/artifact-focus-marker.js';
 import { renderDoneMarker } from '../api/done-marker.js';
+import { renderOdNextProductionReadyInstructions } from './od-next-production-marker.js';
 import { renderNextStepMarkerExample } from '../api/next-step-marker.js';
 import {
   PROMPT_LOCALE_EXEMPT_TERMS_SENTENCE,
@@ -87,6 +88,9 @@ export function renderChatTurnHostProtocolInstructions(
   policy: ChatTurnHostProtocolPolicy = 'ordinary',
   locale?: string | undefined,
 ): ChatTurnHostProtocolInstructions {
+  if (policy === 'od_next_request') {
+    return { doneMarker: '', nextSteps: '', artifactFocus: '', text: renderOdNextProductionReadyInstructions(key) };
+  }
   if (!key) {
     return { doneMarker: '', nextSteps: '', artifactFocus: '', text: '' };
   }

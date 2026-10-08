@@ -45,6 +45,7 @@ export type StrategyRouteV2 = z.infer<typeof StrategyRouteV2Schema>;
 export const StrategyExecutionModeV2Schema = z.enum(['simple', 'complex']);
 export type StrategyExecutionModeV2 = z.infer<typeof StrategyExecutionModeV2Schema>;
 
+// `completed` means orchestration ended; physical Run status owns success/failure.
 export const StrategyOutcomeV2Schema = z.enum([
   'clarification_required',
   'plan_ready',
@@ -224,430 +225,34 @@ export const AppliedStrategyBindingV2Schema = z.object({
 });
 export type AppliedStrategyBindingV2 = z.infer<typeof AppliedStrategyBindingV2Schema>;
 
-const CanonicalDeliverableV2Schema = z.object({
-  id: z.string().min(1),
-  kind: z.string().min(1),
-  format: z.string().min(1),
-}).strict();
-
-const RequiredDeliverableV2Schema = z.object({
-  id: z.string().min(1),
-  kind: z.string().min(1),
-  derivesFrom: z.string().min(1).optional(),
-}).strict();
-
-export const ResolvedTaskProfileV2Schema = z.object({
-  schemaVersion: z.literal('2'),
-  taskType: StrategyTaskTypeV2Schema,
-  taskProfileVersion: z.string().min(1),
-  goal: z.string().min(1),
-  contextAndAudience: z.string().min(1),
-  inputsAndReferences: z.array(z.string().min(1)),
-  constraints: z.array(z.string().min(1)),
-  canonicalDeliverable: CanonicalDeliverableV2Schema,
-  requiredDeliverables: z.array(RequiredDeliverableV2Schema).min(1),
-  designSpec: z.object({
-    source: z.enum(['existing-artifact', 'brand', 'resolved-baseline']),
-    version: z.string().min(1),
-    decisions: z.record(z.unknown()),
-  }).strict(),
-  buildRequirements: z.array(z.object({
-    id: z.string().min(1),
-    text: z.string().min(1),
-  }).strict()),
-  assumptions: z.array(z.string()),
-  risks: z.array(z.string()),
-  taskSpecific: z.record(z.unknown()),
-}).strict().superRefine((value, context) => {
-  rejectForbiddenStrategySemantics(value, context);
-
-  const deliverableIds = value.requiredDeliverables.map((deliverable) => deliverable.id);
-  if (new Set(deliverableIds).size !== deliverableIds.length) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['requiredDeliverables'],
-      message: 'Required deliverable ids must be unique.',
-    });
-  }
-  if (!deliverableIds.includes(value.canonicalDeliverable.id)) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['requiredDeliverables'],
-      message: 'The canonical deliverable must be part of requiredDeliverables.',
-    });
-  }
-  const requirementIds = value.buildRequirements.map((requirement) => requirement.id);
-  if (new Set(requirementIds).size !== requirementIds.length) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['buildRequirements'],
-      message: 'Build requirement ids must be unique.',
-    });
-  }
-});
-export type ResolvedTaskProfileV2 = z.infer<typeof ResolvedTaskProfileV2Schema>;
-
-const FullPlanStepV2Schema = z.object({
-  id: z.string().min(1),
-  objective: z.string().min(1),
-  outputs: z.array(z.string().min(1)).min(1),
-  dependsOn: z.array(z.string().min(1)).optional(),
-}).strict();
-
-const ReadinessArtifactV2Schema = z.object({
-  id: z.string().min(1),
-  version: z.string().min(1),
-  digest: sha256Schema,
-}).strict();
-
-const BuildPackageV2Schema = z.object({
-  id: z.string().min(1),
-  objective: z.string().min(1),
-  inputs: z.array(z.string().min(1)),
-  outputs: z.array(z.string().min(1)).min(1),
-  sharedConstraints: z.array(z.string().min(1)).min(1),
-  dependsOn: z.array(z.string().min(1)),
-  allowedResources: z.array(z.string().min(1)),
-}).strict();
-
-function validateDependencyGraph(
-  entries: Array<{ id: string; dependsOn?: string[] | undefined }>,
-  path: string,
-  context: z.RefinementCtx,
-): void {
-  const ids = entries.map((entry) => entry.id);
-  if (new Set(ids).size !== ids.length) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: [path],
-      message: `${path} ids must be unique.`,
-    });
-    return;
-  }
-  const knownIds = new Set(ids);
-  const dependencies = new Map(
-    entries.map((entry) => [entry.id, entry.dependsOn ?? []]),
-  );
-  for (const [id, refs] of dependencies) {
-    for (const ref of refs) {
-      if (!knownIds.has(ref)) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: [path],
-          message: `${id} depends on unknown ${path} id ${ref}.`,
-        });
-      }
-    }
-  }
-
-  const visiting = new Set<string>();
-  const visited = new Set<string>();
-  const hasCycle = (id: string): boolean => {
-    if (visiting.has(id)) return true;
-    if (visited.has(id)) return false;
-    visiting.add(id);
-    for (const dependency of dependencies.get(id) ?? []) {
-      if (knownIds.has(dependency) && hasCycle(dependency)) return true;
-    }
-    visiting.delete(id);
-    visited.add(id);
-    return false;
+/** Historical storage only. New runs never read or validate model-authored plans. */
+export interface OpenDesignPlanContractV2 {
+  schema: 'open-design.plan-contract/v2';
+  strategy: { id: 'od-next-strategy'; version: string; packageHash: string; snapshotId: string };
+  taskProfile: {
+    schemaVersion: '2'; taskType: StrategyTaskTypeV2; taskProfileVersion: string;
+    goal: string; contextAndAudience: string; inputsAndReferences: string[]; constraints: string[];
+    canonicalDeliverable: { id: string; kind: string; format: string };
+    requiredDeliverables: { id: string; kind: string; derivesFrom?: string }[];
+    designSpec: { source: 'existing-artifact' | 'brand' | 'resolved-baseline'; version: string; decisions: Record<string, unknown> };
+    buildRequirements: { id: string; text: string }[];
+    assumptions: string[]; risks: string[]; taskSpecific: Record<string, unknown>;
   };
-  if (ids.some(hasCycle)) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: [path],
-      message: `${path} dependencies must be acyclic.`,
-    });
-  }
+  fullPlan: {
+    executionMode: StrategyExecutionModeV2;
+    steps: { id: string; objective: string; outputs: string[]; dependsOn?: string[] }[];
+    readinessArtifacts: { id: string; version: string; digest: string }[];
+    buildPackages: { id: string; objective: string; inputs: string[]; outputs: string[]; sharedConstraints: string[]; dependsOn: string[]; allowedResources: string[] }[];
+  };
+  runManifest: {
+    selectedAgentId: string; capabilitySnapshotHash: string; inputRefs: string[]; baselineArtifactRef?: string;
+    productionRoutes: string[]; preflight: { intake: 'passed'; execution: 'passed' };
+  };
+  decisionSummary: { goal: string; deliverables: string[]; keyConstraints: string[]; assumptions: string[]; risks: string[]; openDecisions: string[] };
 }
-
-export const FullPlanV2Schema = z.object({
-  executionMode: StrategyExecutionModeV2Schema,
-  steps: z.array(FullPlanStepV2Schema).min(1),
-  readinessArtifacts: z.array(ReadinessArtifactV2Schema),
-  buildPackages: z.array(BuildPackageV2Schema),
-}).strict().superRefine((value, context) => {
-  rejectForbiddenStrategySemantics(value, context);
-  if (value.executionMode === 'simple' && value.buildPackages.length !== 0) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['buildPackages'],
-      message: 'Simple plans may not declare Build Packages.',
-    });
-  }
-  if (value.executionMode === 'complex' && value.buildPackages.length < 2) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['buildPackages'],
-      message: 'Complex plans require at least two Build Packages.',
-    });
-  }
-  if (value.executionMode === 'complex') {
-    const outputOwners = new Map<string, string>();
-    for (const [index, buildPackage] of value.buildPackages.entries()) {
-      const localOutputs = new Set<string>();
-      for (const output of buildPackage.outputs) {
-        if (localOutputs.has(output)) {
-          context.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: ['buildPackages', index, 'outputs'],
-            message: `Build Package ${buildPackage.id} outputs must be unique.`,
-          });
-        }
-        localOutputs.add(output);
-        const owner = outputOwners.get(output);
-        if (owner && owner !== buildPackage.id) {
-          context.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: ['buildPackages', index, 'outputs'],
-            message: `Build output ${output} is already owned by Build Package ${owner}.`,
-          });
-        } else {
-          outputOwners.set(output, buildPackage.id);
-        }
-      }
-    }
-  }
-  validateDependencyGraph(value.steps, 'steps', context);
-  validateDependencyGraph(value.buildPackages, 'buildPackages', context);
-});
-export type FullPlanV2 = z.infer<typeof FullPlanV2Schema>;
-
-const PlanContractStrategyIdentityV2Schema = z.object({
-  id: z.literal(OD_NEXT_STRATEGY_ID),
-  version: z.string().min(1),
-  packageHash: sha256Schema,
-  snapshotId: z.string().min(1),
-}).strict();
-
-export const OpenDesignPlanContractV2Schema = z.object({
-  schema: z.literal(OD_NEXT_PLAN_CONTRACT_SCHEMA),
-  strategy: PlanContractStrategyIdentityV2Schema,
-  taskProfile: ResolvedTaskProfileV2Schema,
-  fullPlan: FullPlanV2Schema,
-  runManifest: z.object({
-    selectedAgentId: z.string().min(1),
-    capabilitySnapshotHash: sha256Schema,
-    inputRefs: z.array(z.string().min(1)),
-    baselineArtifactRef: z.string().min(1).optional(),
-    productionRoutes: z.array(z.string().min(1)).min(1),
-    preflight: z.object({
-      intake: z.literal('passed'),
-      execution: z.literal('passed'),
-    }).strict(),
-  }).strict(),
-  decisionSummary: z.object({
-    goal: z.string().min(1),
-    deliverables: z.array(z.string().min(1)).min(1),
-    keyConstraints: z.array(z.string()),
-    assumptions: z.array(z.string()),
-    risks: z.array(z.string()),
-    openDecisions: z.array(z.string()),
-  }).strict(),
-}).strict().superRefine(rejectForbiddenStrategySemantics);
-export type OpenDesignPlanContractV2 = z.infer<typeof OpenDesignPlanContractV2Schema>;
 
 export const StrategyExecutionIntentV2Schema = z.enum(['produce', 'plan_only']);
 export type StrategyExecutionIntentV2 = z.infer<typeof StrategyExecutionIntentV2Schema>;
-
-export const StrategyRuntimeStateV2Schema = z.object({
-  schema: z.literal(OD_NEXT_RUNTIME_STATE_SCHEMA),
-  executionIntent: StrategyExecutionIntentV2Schema.optional(),
-  route: StrategyRouteV2Schema,
-  inputStage: StrategyInputStageV2Schema,
-  outcome: StrategyOutcomeV2Schema,
-  executionMode: StrategyExecutionModeV2Schema.nullable(),
-  reasonCodes: z.array(z.string().min(1)),
-}).strict().superRefine((value, context) => {
-  rejectForbiddenStrategySemantics(value, context);
-
-  if (value.executionIntent === 'plan_only') {
-    if (value.route !== 'full_plan' || !['request', 'clarification'].includes(value.inputStage)) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['executionIntent'],
-        message: 'Planning intent is confined to Full Plan request and clarification.',
-      });
-    }
-    if (value.outcome === 'completed') return;
-  }
-
-  if (value.route === 'direct_edit') {
-    if (value.inputStage !== 'request') {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['inputStage'],
-        message: 'Direct Edit is confined to the request stage.',
-      });
-    }
-    if (value.executionMode !== 'simple') {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['executionMode'],
-        message: 'Direct Edit always uses simple execution.',
-      });
-    }
-    if (!['completed', 'blocked', 'canceled'].includes(value.outcome)) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['outcome'],
-        message: 'Direct Edit must finish in the request stage.',
-      });
-    }
-    return;
-  }
-
-  if (value.inputStage === 'production') {
-    if (value.executionMode === null) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['executionMode'],
-        message: 'Production requires a locked execution mode.',
-      });
-    }
-    if (!['completed', 'blocked', 'canceled'].includes(value.outcome)) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['outcome'],
-        message: 'Production must report a task-chain terminal outcome.',
-      });
-    }
-  } else if (value.inputStage === 'clarification') {
-    if (!['plan_ready', 'blocked', 'canceled'].includes(value.outcome)) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['outcome'],
-        message: 'Clarification cannot request another clarification round.',
-      });
-    }
-  } else if (value.inputStage === 'contract_repair') {
-    if (value.executionMode === null) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['executionMode'],
-        message: 'Contract repair preserves an already-locked execution mode.',
-      });
-    }
-    if (!['plan_ready', 'blocked', 'canceled'].includes(value.outcome)) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['outcome'],
-        message: 'Contract repair only serializes a plan or stops the task.',
-      });
-    }
-  } else {
-    if (!['clarification_required', 'plan_ready', 'blocked', 'canceled'].includes(value.outcome)) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['outcome'],
-        message: 'A Full Plan request cannot complete before Production.',
-      });
-    }
-    if (value.outcome === 'clarification_required' && value.executionMode !== null) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['executionMode'],
-        message: 'Execution mode is not locked before clarification is resolved.',
-      });
-    }
-  }
-
-  if (value.outcome === 'plan_ready' && value.executionMode === null) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['executionMode'],
-      message: 'A plan-ready state requires a locked execution mode.',
-    });
-  }
-});
-export type StrategyRuntimeStateV2 = z.infer<typeof StrategyRuntimeStateV2Schema>;
-
-const StrategyRuntimeTransitionEndpointV2Schema = z.object({
-  route: StrategyRouteV2Schema,
-  inputStage: StrategyInputStageV2Schema,
-  executionMode: StrategyExecutionModeV2Schema.nullable(),
-}).strict();
-
-const allowedStageTransitions = new Set([
-  'request:clarification',
-  'request:contract_repair',
-  'request:production',
-  'clarification:contract_repair',
-  'clarification:production',
-  'contract_repair:production',
-]);
-
-export const StrategyRuntimeTransitionV2Schema = z.object({
-  from: StrategyRuntimeTransitionEndpointV2Schema,
-  to: StrategyRuntimeTransitionEndpointV2Schema,
-}).strict().superRefine((value, context) => {
-  if (value.from.route !== value.to.route) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['to', 'route'],
-      message: 'Strategy route is locked for the task chain.',
-    });
-  }
-  if (value.from.route === 'direct_edit') {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['to', 'inputStage'],
-      message: 'Direct Edit does not continue into another physical stage.',
-    });
-  }
-  if (!allowedStageTransitions.has(`${value.from.inputStage}:${value.to.inputStage}`)) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['to', 'inputStage'],
-      message: 'Illegal OD Next physical-stage transition.',
-    });
-  }
-  if (value.to.inputStage === 'clarification' && value.to.executionMode !== null) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['to', 'executionMode'],
-      message: 'Execution mode remains unlocked when entering clarification.',
-    });
-  }
-  if (value.to.inputStage === 'contract_repair') {
-    if (value.from.executionMode === null || value.to.executionMode === null) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['to', 'executionMode'],
-        message: 'Contract repair requires the previously locked execution mode.',
-      });
-    }
-  }
-  if (
-    value.from.inputStage === 'contract_repair'
-    && value.from.executionMode === null
-  ) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['from', 'executionMode'],
-      message: 'Contract repair cannot continue without its locked execution mode.',
-    });
-  }
-  if (
-    value.from.executionMode !== null
-    && value.from.executionMode !== value.to.executionMode
-  ) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['to', 'executionMode'],
-      message: 'Execution mode is locked once selected.',
-    });
-  }
-  if (value.to.inputStage === 'production' && value.to.executionMode === null) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['to', 'executionMode'],
-      message: 'Production requires a locked execution mode.',
-    });
-  }
-});
-export type StrategyRuntimeTransitionV2 = z.infer<typeof StrategyRuntimeTransitionV2Schema>;
 
 export const CapabilitySupportV2Schema = z.enum([
   'unsupported',
@@ -725,6 +330,31 @@ const StrategyTaskBlockedContextV2Schema = z.object({
 }).strict();
 export type StrategyTaskBlockedContextV2 = z.infer<typeof StrategyTaskBlockedContextV2Schema>;
 
+/** The host's routing action; independent of execution success and file facts. */
+export const StrategySettlementReasonV2Schema = z.enum(['question', 'continued', 'ended']);
+export type StrategySettlementReasonV2 = z.infer<typeof StrategySettlementReasonV2Schema>;
+
+/** Unknown historical facts stay absent rather than being inferred from an outcome. */
+export const StrategySettlementFactsV2Schema = z.object({
+  physicalStatus: z.enum(['succeeded', 'failed', 'canceled']).optional(),
+  deliverableValid: z.boolean().optional(),
+  truncated: z.boolean().optional(),
+  todoUnfinished: z.boolean().optional(),
+  askedUserQuestion: z.boolean().optional(),
+  productionReady: z.boolean().optional(),
+  emptyReply: z.boolean().optional(),
+  executionIntent: StrategyExecutionIntentV2Schema.optional(),
+}).strict();
+export type StrategySettlementFactsV2 = z.infer<typeof StrategySettlementFactsV2Schema>;
+
+/** Read old persisted reasons without continuing to write overlapping categories. */
+export function normalizeStrategySettlementReason(value: unknown): StrategySettlementReasonV2 {
+  if (value === 'production_ready') return 'continued';
+  if (['deliverable_valid', 'plan_only', 'truncated', 'todo_unfinished', 'text_only',
+    'empty_reply', 'run_failed', 'canceled', 'interrupted'].includes(String(value))) return 'ended';
+  return StrategySettlementReasonV2Schema.parse(value);
+}
+
 export const StrategyTaskProjectionV2Schema = z.object({
   taskExecutionId: z.string().min(1),
   strategy: StrategyTaskProjectionIdentityV2Schema,
@@ -742,6 +372,11 @@ export const StrategyTaskProjectionV2Schema = z.object({
     runId: z.string().min(1),
     taskRunIndex: z.number().int().nonnegative(),
   }).strict()).max(3).optional(),
+  /** Host file observation, independent of terminal turn status. Absent on old tasks. */
+  deliverableValid: z.boolean().optional(),
+  /** Reason for the viewed physical round ending; absent before settlement. */
+  settlementReason: z.preprocess(normalizeStrategySettlementReason, StrategySettlementReasonV2Schema).optional(),
+  settlementFacts: StrategySettlementFactsV2Schema.optional(),
   terminal: z.boolean(),
   blockedContext: StrategyTaskBlockedContextV2Schema.optional(),
 }).strict().superRefine((value, context) => {
@@ -760,92 +395,6 @@ export const StrategyTaskProjectionV2Schema = z.object({
       message: 'Terminal task projections may not advertise a next Run.',
     });
   }
-  if (value.route === 'direct_edit' && value.executionMode !== 'simple') {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['executionMode'],
-      message: 'Direct Edit projections always use simple execution.',
-    });
-  }
-  if (value.inputStage === 'contract_repair' && value.executionMode === null) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['executionMode'],
-      message: 'Contract-repair projections preserve a locked execution mode.',
-    });
-  }
-  if (value.route === null) {
-    if (
-      value.inputStage !== 'request'
-      || value.outcome !== 'running'
-      || value.executionMode !== null
-    ) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['route'],
-        message: 'An unlocked route is valid only while the initial request is running.',
-      });
-    }
-    return;
-  }
-  if (value.outcome !== 'running') {
-    const state = StrategyRuntimeStateV2Schema.safeParse({
-      schema: OD_NEXT_RUNTIME_STATE_SCHEMA,
-      route: value.route,
-      inputStage: value.inputStage,
-      outcome: value.outcome,
-      executionMode: value.executionMode,
-      executionIntent: value.executionIntent,
-      reasonCodes: [],
-    });
-    if (!state.success) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['outcome'],
-        message: 'A settled task projection must match the Runtime State transition table.',
-      });
-    }
-  }
-  if (value.route === 'direct_edit') {
-    if (value.inputStage !== 'request') {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['inputStage'],
-        message: 'Direct Edit projections are confined to the request stage.',
-      });
-    }
-    return;
-  }
-  if (
-    value.outcome === 'clarification_required'
-    && (value.inputStage !== 'request' || value.executionMode !== null)
-  ) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['outcome'],
-      message: 'Clarification is requested once before execution mode is locked.',
-    });
-  }
-  if (value.outcome === 'plan_ready' && value.executionMode === null) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['executionMode'],
-      message: 'A plan-ready projection requires a locked execution mode.',
-    });
-  }
-  if (value.inputStage === 'production' && value.executionMode === null) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['executionMode'],
-      message: 'Production projections require a locked execution mode.',
-    });
-  }
-  if (value.outcome === 'completed' && value.inputStage !== 'production' && value.executionIntent !== 'plan_only') {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['outcome'],
-      message: 'Full Plan completion is valid only after Production.',
-    });
-  }
+
 });
 export type StrategyTaskProjectionV2 = z.infer<typeof StrategyTaskProjectionV2Schema>;

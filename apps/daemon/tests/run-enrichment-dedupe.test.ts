@@ -4,7 +4,7 @@ import { promises as fsp } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { startServer } from '../src/server.js';
 
 /**
@@ -88,6 +88,7 @@ describe('design-system enrichment run dedupe', () => {
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     if (originalPath == null) delete process.env.PATH;
     else process.env.PATH = originalPath;
   });
@@ -174,7 +175,10 @@ describe('design-system enrichment run dedupe', () => {
     });
   });
 
-  it('leaves ordinary chat turns ungated (the composer queues those itself)', async () => {
+  it('leaves ordinary non-strategy chat turns ungated (the composer queues those itself)', async () => {
+    // OD Next task handoff intentionally serializes an active logical task.
+    // This control exercises enrichment gating on the ordinary runtime path.
+    vi.stubEnv('OD_NEXT_STRATEGY_ROLLOUT', 'off');
     const { projectId, conversationId } = await createProject('Enrichment dedupe control');
     await withFakeAgent('opencode', FAKE_SLOW_OPENCODE, async () => {
       const first = await postRun('/api/runs', {

@@ -1158,25 +1158,6 @@ test('claude enables native Child behavior frames only for an observed OD Next R
   );
 });
 
-test('claude registers daemon-issued Build Package handles and rejects an unadvertised CLI', () => {
-  const bindings = [{ nativeAgentHandle: 'od-build-1-0123456789abcdef', buildPackageId: 'package-a' }];
-  agentCapabilities.set('claude', { customAgents: true });
-  try {
-    const args = claude.buildArgs('', [], [], {}, { nativeBuildPackageBindings: bindings });
-    const flag = args.indexOf('--agents');
-    assert.ok(flag >= 0);
-    const definitions = JSON.parse(args[flag + 1]!);
-    assert.deepEqual(Object.keys(definitions), ['od-build-1-0123456789abcdef']);
-    assert.equal(JSON.stringify(definitions).includes('package-a'), false);
-  } finally {
-    agentCapabilities.delete('claude');
-  }
-  assert.throws(
-    () => claude.buildArgs('', [], [], {}, { nativeBuildPackageBindings: bindings }),
-    /advertised --agents support/,
-  );
-});
-
 // ---- Claude Code --add-dir capability (issue #430) -------------------------
 // Skill seeds (`skills/<id>/assets/template.html`) and design-system specs
 // (`design-systems/<id>/DESIGN.md`) live outside the project cwd. Without
