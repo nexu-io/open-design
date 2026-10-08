@@ -1,9 +1,9 @@
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import http from 'node:http';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -107,6 +107,119 @@ describe('CLI startup boundaries', () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  // Regression spec for #8593: a repeated SIGINT/SIGTERM while the first
+  // signal's graceful shutdown is still in flight must be ignored, so
+  // runtime.stop() gets to terminate the live agent child before exit.
+  it.each([
+    ['bare od', 'SIGINT'],
+    ['bare od', 'SIGTERM'],
+    ['od daemon start', 'SIGINT'],
+    ['od daemon start', 'SIGTERM'],
+  ] as const)('%s ignores a repeated %s and still finishes graceful shutdown', async (entryPoint, signal) => {
+    const root = await mkdtemp(join(tmpdir(), 'od-cli-double-signal-'));
+    const dataDir = join(root, 'data');
+    const stubDir = join(root, 'bin');
+    const markerPath = join(root, 'agent.pid');
+    await mkdir(dataDir, { recursive: true });
+    await mkdir(stubDir, { recursive: true });
+    // The stub exits immediately for detection probes (--version, run --help,
+    // models, ...) and only a real run invocation records its PID and stays
+    // alive, so an always-sleeping stub can never hang agent detection.
+    const stub = join(stubDir, 'opencode-cli');
+    await writeFile(stub, `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args[0] === 'run' && !args.includes('--help')) {
+  require('node:fs').writeFileSync(${JSON.stringify(markerPath)}, String(process.pid));
+  setInterval(() => {}, 60000);
+} else {
+  process.exit(0);
+}
+`);
+    await chmod(stub, 0o755);
+
+    const port = entryPoint === 'bare od' ? await findFreePort() : 0;
+    const args = [
+      '--import', 'tsx', cliEntry,
+      ...(entryPoint === 'bare od'
+        ? ['--port', String(port), '--no-open']
+        : ['daemon', 'start', '--headless', '--port', '0']),
+    ];
+    const child = spawn(process.execPath, args, {
+      cwd: daemonRoot,
+      env: {
+        ...process.env,
+        OD_BIND_HOST: '127.0.0.1',
+        OD_DATA_DIR: dataDir,
+        OD_CHAT_RUN_SHUTDOWN_GRACE_MS: '2000',
+        PATH: `${stubDir}${delimiter}${process.env.PATH ?? ''}`,
+        POSTHOG_KEY: '',
+        POSTHOG_HOST: '',
+        OPEN_DESIGN_VELA_TELEMETRY: 'off',
+        OPEN_DESIGN_TELEMETRY_RELAY_URL: '',
+        LANGFUSE_PUBLIC_KEY: '',
+        LANGFUSE_SECRET_KEY: '',
+      },
+    });
+    let output = '';
+    child.stdout.on('data', (chunk) => { output += chunk.toString('utf8'); });
+    child.stderr.on('data', (chunk) => { output += chunk.toString('utf8'); });
+    let agentPid: number | null = null;
+
+    try {
+      const listeningPattern = entryPoint === 'bare od'
+        ? /\[od\] listening on (http:\/\/[^\s]+)$/u
+        : /\[od\] listening on (http:\/\/[^\s]+) \(headless\)/u;
+      const line = await waitForStdoutLine(child, listeningPattern);
+      const match = line.match(/(http:\/\/[^\s]+)/u);
+      expect(match?.[1]).toBeTruthy();
+      const daemonUrl = match![1];
+
+      const createResponse = await fetch(`${daemonUrl}/api/runs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId: 'opencode', message: 'keep running' }),
+      });
+      expect(createResponse.status).toBe(202);
+
+      await waitForFile(markerPath, 15_000);
+      agentPid = Number((await readFile(markerPath, 'utf8')).trim());
+      expect(Number.isInteger(agentPid)).toBe(true);
+      expect(isPidAlive(agentPid)).toBe(true);
+
+      const runId = (await createResponse.json() as { runId: string }).runId;
+      await waitForRunRunning(`${daemonUrl}/api/runs/${runId}`, 15_000);
+      expect(isPidAlive(agentPid)).toBe(true);
+
+      const t0 = Date.now();
+      let exitAt = 0;
+      child.once('exit', () => { exitAt = Date.now(); });
+      child.kill(signal);
+      await sleep(800);
+      child.kill(signal);
+      await sleep(400);
+      child.kill(signal);
+      await waitForExit(child);
+
+      // A hard exit on the second signal lands well under this: the first
+      // signal's shutdown waits OD_CHAT_RUN_SHUTDOWN_GRACE_MS first.
+      expect.soft(exitAt - t0).toBeGreaterThanOrEqual(1800);
+      expect.soft(child.signalCode).toBeNull();
+      expect.soft(child.exitCode).toBe(0);
+      expect.soft(output).toContain('ignored: shutdown already in progress');
+      expect.soft(await waitForPidDead(agentPid, 10_000)).toBe(true);
+    } finally {
+      if (agentPid !== null) {
+        try {
+          process.kill(-agentPid, 'SIGKILL');
+        } catch {
+          try { process.kill(agentPid, 'SIGKILL'); } catch { /* already gone */ }
+        }
+      }
+      await terminateChild(child);
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 60_000);
 
   it('reconciles a durable running message after a real daemon process restart', { timeout: 60_000 }, async () => {
     const root = await mkdtemp(join(tmpdir(), 'od-cli-daemon-restart-'));
@@ -646,6 +759,54 @@ async function waitFor(predicate: () => boolean, timeoutMs = 10_000): Promise<vo
 async function waitForExit(child: ChildProcessWithoutNullStreams): Promise<void> {
   if (child.exitCode !== null || child.signalCode !== null) return;
   await new Promise<void>((resolve) => child.once('exit', () => resolve()));
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isPidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
+async function waitForFile(path: string, timeoutMs: number): Promise<void> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    if (existsSync(path)) return;
+    await sleep(50);
+  }
+  throw new Error(`timed out waiting for file: ${path}`);
+}
+
+async function waitForPidDead(pid: number, timeoutMs: number): Promise<boolean> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    if (!isPidAlive(pid)) return true;
+    await sleep(50);
+  }
+  return !isPidAlive(pid);
+}
+
+async function waitForRunRunning(url: string, timeoutMs: number): Promise<void> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const response = await fetch(url);
+      if (response.ok) {
+        const body = await response.json() as { status?: string };
+        if (body.status === 'running') return;
+      }
+    } catch {
+      // transient fetch failure: keep polling until the deadline
+    }
+    await sleep(100);
+  }
+  throw new Error(`timed out waiting for run to reach running: ${url}`);
 }
 
 async function terminateChild(child: ChildProcessWithoutNullStreams): Promise<void> {
