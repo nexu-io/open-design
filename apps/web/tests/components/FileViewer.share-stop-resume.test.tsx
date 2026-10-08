@@ -106,6 +106,36 @@ async function openStoppedSharePanel() {
   return linkAccess;
 }
 
+it.each([true, false])('shows a busy switch while stopping, then restores the confirmed state (success=%s)', async (success) => {
+  const route = shareRoute({ status: 'active' });
+  let release!: () => void;
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  const request = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (String(input).includes('publish-public') && init?.method === 'DELETE') {
+      await pending;
+      if (!success) return Response.json({ error: 'stop_failed' }, { status: 503 });
+    }
+    return route.fetch(input, init);
+  });
+  vi.stubGlobal('fetch', request);
+  const linkAccess = await openSharePanel();
+  await screen.findByText(publication.url);
+  fireEvent.click(linkAccess);
+  await waitFor(() => expect(writes(request, 'DELETE')).toHaveLength(1));
+  expect(linkAccess).toHaveAttribute('aria-busy', 'true');
+  expect(linkAccess).toBeDisabled();
+  expect(linkAccess.querySelector('svg')).not.toBeNull();
+  fireEvent.click(linkAccess);
+  expect(writes(request, 'DELETE')).toHaveLength(1);
+  await act(async () => { release(); });
+  await waitFor(() => expect(linkAccess).toBeEnabled());
+  expect(linkAccess).not.toHaveAttribute('aria-busy', 'true');
+  expect(linkAccess.querySelector('svg')).toBeNull();
+  expect(linkAccess).toHaveAttribute('aria-checked', success ? 'false' : 'true');
+  if (success) expect(await screen.findByText(stoppedNotice)).toBeVisible();
+  else expect(await screen.findByText('Could not turn off the link. Please try again.')).toBeVisible();
+});
+
 it('a share stopped inside the panel shows as stopped and reopens from the same panel', async () => {
   const { fetch } = shareRoute({ status: 'active' });
   const linkAccess = await openSharePanel();
