@@ -176,6 +176,170 @@ describe("Test decisions at the existing host touchpoints", () => {
 		vi.unstubAllEnvs();
 		vi.restoreAllMocks();
 		delete (globalThis as HostGlobal).__cmsTestHost;
+		vi.useRealTimers();
+	});
+
+	function pendingDecisions(held: readonly (typeof placements)[number][]) {
+		vi.useFakeTimers({ toFake: ["Date", "performance", "setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
+		vi.setSystemTime(new Date(context.updatedAt));
+		vi.spyOn(document, "hidden", "get").mockReturnValue(false);
+		const pending = new Map<string, { resolve: (response: Response) => void; signal: AbortSignal }>();
+		let current: TestRuntimeSession | null = null;
+		function Probe() { current = useTestRuntime(); return null; }
+		let deployment = {
+			id: context.deploymentId, activityId: "activity-four", snapshotHash: "sha256:four-snapshot",
+			snapshot: { contentVersionId: "version-four-placement", manifestHash: "sha256:four-manifest", artifactHash: "sha256:four-artifact", placementKeys: [...placements] },
+		};
+		const calls: string[] = [];
+		let holdContext = false;
+		vi.stubGlobal("fetch", vi.fn(async (input: string, init?: RequestInit) => {
+			const url = new URL(input, "http://localhost");
+			if (url.pathname.endsWith("/deployments")) return Response.json({ deployments: [deployment] });
+			if (url.pathname.endsWith("/context")) {
+				if (holdContext) return new Promise<Response>((resolve) => pending.set("context", { resolve, signal: init!.signal! }));
+				return Response.json({ ...context, deploymentId: deployment.id });
+			}
+			if (url.pathname.includes("acceptances")) return Response.json({ id: "acceptance" });
+			if (url.pathname === "/api/touchpoints/test-runtime") {
+				const key = placements.find((key) => key === url.searchParams.get("placementKey"))!;
+				calls.push(key);
+				// Deliberately ignores abort: cancellation must fence late results too.
+				if (held.includes(key)) return new Promise<Response>((resolve) => pending.set(key, { resolve, signal: init!.signal! }));
+				const value = decision(key);
+				return Response.json({ ...value, deploymentId: deployment.id, activityId: deployment.activityId,
+					testContext: { ...value.testContext, deploymentId: deployment.id },
+					serverTime: new Date().toISOString(), authorizationExpiresAt: new Date(Date.now() + 60_000).toISOString() });
+			}
+			return Response.json({}, { status: 404 });
+		}));
+		const view = render(<I18nProvider initial="zh-CN"><Probe />
+			<TestCampaignModal authenticated sessionSubject="account-a" />
+			<ProductionCampaignModal authenticated sessionSubject="account-a" />
+			<ProductionCampaignBadge authenticated sessionSubject="account-a" />
+			<ProductionCampaignHover authenticated sessionSubject="account-a" />
+		</I18nProvider>);
+		const tick = async (ms = 0) => { await act(async () => { await vi.advanceTimersByTimeAsync(ms); }); };
+		const resolve = async (key: (typeof placements)[number], response = Response.json(decision(key))) => {
+			await act(async () => { pending.get(key)!.resolve(response); });
+			await tick();
+		};
+		return { pending, calls, tick, resolve, view, session: () => current, holdContext: () => { holdContext = true; },
+			replaceActivity: () => { deployment = { ...deployment, id: "deployment-2", activityId: "activity-new" }; } };
+	}
+
+	it("publishes ready badge and atomic hover before an unresolved modal, and renews healthy grants after its timeout", async () => {
+		const h = pendingDecisions(["opend.home.campaign-modal"]);
+		await h.tick();
+		expect(h.pending.has("opend.home.campaign-modal")).toBe(true);
+		expect(h.session()?.decisions.size).toBe(3);
+		expect(screen.getByTestId("production-campaign-badge")).toBeVisible();
+		const entry = screen.getByTestId("cms-hover-overlay-root").querySelector("opend-touchpoint");
+		expect(entry).not.toHaveAttribute("hidden");
+		await h.tick(9_999);
+		expect(h.session()?.decisions.size).toBe(3);
+		await h.tick(1);
+		await h.tick(20_000); // Healthy presentations renew at their existing poll boundary.
+		await h.tick(30_001);
+		expect(h.session()?.isAuthorized("opend.home.account-badge")).toBe(true);
+		expect(screen.getByTestId("production-campaign-badge")).toBeVisible();
+		expect(h.calls.filter((key) => key === "opend.home.account-badge").length).toBeGreaterThan(1);
+		expect(h.calls.filter((key) => key === "opend.home.campaign-modal")).toHaveLength(1);
+		await act(async () => { window.dispatchEvent(new Event("focus")); });
+		await h.tick();
+		expect(h.calls.filter((key) => key === "opend.home.campaign-modal")).toHaveLength(2);
+	});
+
+	it("waits for both hover halves while badge is ready, independently of a mounting modal", async () => {
+		vi.mocked(OpenDesignTouchpointElement.prototype.mount).mockImplementation(async function (_url, _digest, host) {
+			if (host.placementKey === "opend.home.campaign-modal") await new Promise<void>(() => {});
+		});
+		const h = pendingDecisions(["opend.home.hover-layer"]);
+		await h.tick();
+		expect(screen.getByTestId("production-campaign-badge")).toBeVisible();
+		expect(h.session()?.decisions.has("opend.home.hover-entry")).toBe(false);
+		expect(screen.queryByTestId("cms-hover-overlay-root")).toBeNull();
+		await h.resolve("opend.home.hover-layer");
+		expect(h.session()?.decisions.size).toBe(4);
+		expect(screen.getByTestId("cms-hover-overlay-root").querySelector("opend-touchpoint")).not.toHaveAttribute("hidden");
+	});
+
+	it.each([401, 403, 410])("late modal %s withdraws early authority immediately and fences an abort-ignoring sibling", async (status) => {
+		const h = pendingDecisions(["opend.home.campaign-modal", "opend.home.hover-layer"]);
+		await h.tick();
+		expect(h.session()?.decisions.size).toBe(1);
+		const previous = h.session()!;
+		await h.resolve("opend.home.campaign-modal", Response.json({}, { status }));
+		expect(previous.isAuthorized("opend.home.account-badge")).toBe(false);
+		expect(h.session()?.decisions.size ?? 0).toBe(0);
+		expect(document.querySelectorAll("opend-touchpoint")).toHaveLength(0);
+		expect(h.pending.get("opend.home.hover-layer")!.signal.aborted).toBe(true);
+		await h.resolve("opend.home.hover-layer");
+		await h.tick(10_001);
+		expect(h.session()?.decisions.size ?? 0).toBe(0);
+		expect(document.querySelectorAll("opend-touchpoint")).toHaveLength(0);
+	});
+
+	it.each(["activity", "schedule", "schedule-state", "context"] as const)("late %s conflict clears the partial session before a sibling settles", async (kind) => {
+		const h = pendingDecisions(["opend.home.campaign-modal", "opend.home.hover-layer"]);
+		await h.tick();
+		const previous = h.session()!;
+		expect(previous.decisions.size).toBe(1);
+		h.holdContext();
+		const value = decision("opend.home.campaign-modal");
+		await h.resolve("opend.home.campaign-modal", Response.json({ ...value,
+			...(kind === "activity" ? { activityId: "foreign-activity" } : {}),
+			...(kind === "schedule" ? { endsAt: "2030-01-01T00:30:00.000Z" } : {}),
+			...(kind === "schedule-state" ? { testContext: { ...value.testContext, scheduleState: "before" } } : {}),
+			...(kind === "context" ? { testContext: { ...value.testContext, updatedAt: "2030-01-01T00:00:01.000Z" } } : {}),
+		}));
+		expect(previous.isAuthorized("opend.home.account-badge")).toBe(false);
+		expect(h.session()?.decisions.size ?? 0).toBe(0);
+		expect(document.querySelectorAll("opend-touchpoint")).toHaveLength(0);
+		await h.resolve("opend.home.hover-layer");
+		await h.tick();
+		expect(h.session()?.decisions.size ?? 0).toBe(0);
+	});
+
+	it("fences a stale activity refusal after selection replacement while a matching activity refusal still clears authority", async () => {
+		const h = pendingDecisions(["opend.home.campaign-modal", "opend.home.hover-layer"]);
+		await h.tick();
+		const previous = h.session()!;
+		const oldModal = h.pending.get("opend.home.campaign-modal")!;
+		const oldLayer = h.pending.get("opend.home.hover-layer")!;
+		h.replaceActivity();
+		await act(async () => { window.dispatchEvent(new Event("focus")); });
+		await h.tick();
+		expect(h.session()?.deployment.activityId).toBe("activity-new");
+		expect(h.session()?.isAuthorized("opend.home.account-badge")).toBe(true);
+		expect(previous.isAuthorized("opend.home.account-badge")).toBe(false);
+		expect(oldModal.signal.aborted).toBe(true);
+		await act(async () => {
+			oldModal.resolve(Response.json({}, { status: 401 }));
+			oldLayer.resolve(Response.json(decision("opend.home.hover-layer")));
+		});
+		await h.tick();
+		expect(h.session()?.deployment.activityId).toBe("activity-new");
+		expect(h.session()?.isAuthorized("opend.home.account-badge")).toBe(true);
+		await h.resolve("opend.home.campaign-modal", Response.json({}, { status: 403 }));
+		expect(h.session()?.decisions.size ?? 0).toBe(0);
+		expect(document.querySelectorAll("opend-touchpoint")).toHaveLength(0);
+	});
+
+	it("a late schedule end clears early authority and a later active sibling cannot republish it", async () => {
+		const h = pendingDecisions(["opend.home.campaign-modal", "opend.home.hover-layer"]);
+		await h.tick();
+		const previous = h.session()!;
+		expect(previous.decisions.size).toBe(1);
+		const value = decision("opend.home.campaign-modal");
+		await h.resolve("opend.home.campaign-modal", Response.json({ ...value,
+			serverTime: value.endsAt, authorizationExpiresAt: value.endsAt,
+			testContext: { ...value.testContext, scheduleState: "ended" },
+		}));
+		expect(previous.isAuthorized("opend.home.account-badge")).toBe(false);
+		expect(h.session()?.decisions.size ?? 0).toBe(0);
+		await h.resolve("opend.home.hover-layer");
+		expect(h.session()?.decisions.size ?? 0).toBe(0);
+		expect(document.querySelectorAll("opend-touchpoint")).toHaveLength(0);
 	});
 
 

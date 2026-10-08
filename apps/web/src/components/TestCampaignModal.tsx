@@ -919,6 +919,7 @@ export function TestCampaignModal({
 	});
 	selectedRef.current = deployment;
 	const publishedSession = useRef<TestRuntimeSession | null>(null);
+	const [progressive, setProgressive] = useState<{ adapter: object; epoch: number; value: TestRuntimeValue | null } | null>(null);
 	useEffect(() => {
 		ensureWebTouchpointElement();
 	}, []);
@@ -931,6 +932,10 @@ export function TestCampaignModal({
 			? remountValue.current : null;
 		const inheritedEpoch = retainedTestEpoch;
 		const placements = testPlacementIds(selected);
+		const independent = TEST_PRESENTATIONS.filter((group) => group.some((key) => placements.includes(key))).length > 1;
+		// A failed presentation waits for an existing recovery event; its healthy
+		// siblings keep their normal renewals rather than retrying the failed I/O.
+		const failedPresentations = new Map<TestCampaignPlacement, unknown>();
 		// A snapshot may be renewed without remounting only within the same UI language.
 		const selectionKey = JSON.stringify([
 			selected.id,
@@ -1008,6 +1013,7 @@ export function TestCampaignModal({
 		const load = async (
 			signal: AbortSignal,
 			active: TestRuntimeValue | null,
+			publish: (value: TestRuntimeValue | null) => void,
 		): Promise<TouchpointLifecycleLoad<TestRuntimeValue>> => {
 			active ??= inheritedEpoch === retainedTestEpoch ? inherited : null;
 			const started = testClock();
@@ -1034,9 +1040,43 @@ export function TestCampaignModal({
 				const cancelSiblings = () => siblings.abort();
 				signal.addEventListener("abort", cancelSiblings, { once: true });
 				let withdrawal: unknown = null;
+				const ready = new Map<TestCampaignPlacement, LoadedTestPlacement>();
+				let rejectRound!: (error: unknown) => void;
+				const interrupted = new Promise<never>((_resolve, reject) => { rejectRound = reject; });
+				/** Publish only complete presentations, with their own original grant clocks. */
+				const publishReady = (item: LoadedTestPlacement | null) => {
+					if (!item || !current() || siblings.signal.aborted) return;
+					if (windowBounds && (windowBounds.startsAt !== item.startsAt || windowBounds.endsAt !== item.endsAt))
+						throw new TestDecisionMismatchError(JSON.stringify({ deploymentId: selected.id, expected: windowBounds, received: { startsAt: item.startsAt, endsAt: item.endsAt } }));
+					windowBounds = { startsAt: item.startsAt, endsAt: item.endsAt };
+					ready.set(item.placementKey, item);
+					if ([...ready.values()].some((answer) => answer.decision.testContext.scheduleState !== "active")) { publish(null); return; }
+					const decisions = new Map<TestCampaignPlacement, TestDecision>();
+					const authorizations = new Map<TestCampaignPlacement, TestPlacementAuthority>();
+					for (const group of TEST_PRESENTATIONS) {
+						const keys = group.filter((key) => placements.includes(key));
+						if (!keys.length) continue;
+						const complete = keys.every((key) => {
+							const answer = ready.get(key);
+							return answer && answer.decision.testContext.scheduleState === "active" && answer.validForMs > testElapsed(answer.received);
+						});
+						const held = active?.context === selectedContext && keys.every((key) => {
+							const grant = active.authorizations.get(key);
+							return active.decisions.has(key) && grant && grant.validForMs > testElapsed(grant.received);
+						});
+						if (!complete && !held) continue;
+						for (const key of keys) {
+							const answer = complete ? ready.get(key)! : null;
+							decisions.set(key, (active?.context === selectedContext && active.decisions.get(key)) || answer!.decision);
+							authorizations.set(key, answer ? { received: answer.received, validForMs: answer.validForMs } : active!.authorizations.get(key)!);
+						}
+					}
+					if (independent && decisions.size) publish(Object.freeze({ selectionKey, deployment: selected, context: selectedContext, decisions, authorizations }));
+				};
 				try {
-					const settled = await Promise.allSettled(
+					const settled = await Promise.race([Promise.allSettled(
 						placements.map((placementKey) => {
+							if (failedPresentations.has(placementKey)) return Promise.reject(failedPresentations.get(placementKey));
 							// A hung placement must not hold back its healthy siblings until the
 							// lifecycle abandons the whole attempt.
 							const request = new AbortController();
@@ -1053,10 +1093,16 @@ export function TestCampaignModal({
 								loadPlacement(selectedContext, placementKey, request.signal),
 								expired,
 							])
+								.then((item) => { publishReady(item); return item; })
 								.catch((error: unknown) => {
-									if (touchpointWithdrawsDisplay(error)) {
+									if (!siblings.signal.aborted && (touchpointWithdrawsDisplay(error) || error instanceof StaleTestContextError || error instanceof TestDecisionMismatchError)) {
 										withdrawal ??= error;
+										if (independent || !(error instanceof StaleTestContextError)) publish(null);
+										lastAuthorized.clear();
 										siblings.abort();
+										rejectRound(error);
+									} else if (current() && !siblings.signal.aborted) {
+										for (const key of testPresentationOf(placementKey)) failedPresentations.set(key, error);
 									}
 									throw error;
 								})
@@ -1065,8 +1111,11 @@ export function TestCampaignModal({
 									siblings.signal.removeEventListener("abort", cancelRequest);
 								});
 						}),
-					);
-					if (withdrawal) throw withdrawal;
+					), interrupted]).catch((error: unknown) => {
+						if (error instanceof StaleTestContextError) return placements.map(() => ({ status: "rejected" as const, reason: error }));
+						throw error;
+					});
+					if (withdrawal && !(withdrawal instanceof StaleTestContextError)) throw withdrawal;
 					return settled;
 				} finally {
 					signal.removeEventListener("abort", cancelSiblings);
@@ -1088,7 +1137,7 @@ export function TestCampaignModal({
 						cache: "no-store",
 						signal: requestSignal,
 					});
-					if (!current()) return null;
+					if (!current() || requestSignal.aborted) return null;
 					if (!response.ok)
 						throw new TestRuntimeResponseError(
 							"touchpoint_test_load_failed",
@@ -1134,7 +1183,7 @@ export function TestCampaignModal({
 					const serverTime = Date.parse(decision.serverTime);
 					const startsAt = Date.parse(decision.startsAt);
 					const endsAt = Date.parse(decision.endsAt);
-					if (startsAt >= endsAt) throw new Error("realtime_test_runtime_required");
+					if (startsAt >= endsAt) throw new TestDecisionMismatchError(decisionMismatchDetail(decision, selectedContext, selected, placementKey));
 					const expected =
 						serverTime < startsAt
 							? "before"
@@ -1142,7 +1191,7 @@ export function TestCampaignModal({
 								? "active"
 								: "ended";
 					if (decision.testContext.scheduleState !== expected)
-						throw new Error("realtime_test_runtime_required");
+						throw new TestDecisionMismatchError(decisionMismatchDetail(decision, selectedContext, selected, placementKey));
 					const capabilities =
 						placementKey === TEST_CAMPAIGN_MODAL_PLACEMENT
 							? supportedCapabilities
@@ -1316,27 +1365,50 @@ export function TestCampaignModal({
 				replaceValue: true,
 			};
 		};
-		return { selectionKey, load };
+		return { selectionKey, independent, load, recover: () => failedPresentations.clear() };
 	}, [deployment, locale, owner]);
+	useEffect(() => {
+		const recover = () => { if (!document.hidden) adapter?.recover(); };
+		for (const event of ["online", "focus", "pageshow"]) window.addEventListener(event, recover);
+		document.addEventListener("visibilitychange", recover);
+		return () => {
+			for (const event of ["online", "focus", "pageshow"]) window.removeEventListener(event, recover);
+			document.removeEventListener("visibilitychange", recover);
+		};
+	}, [adapter]);
 
 	const load = useCallback(
 		async (signal: AbortSignal, active: TestRuntimeValue | null): Promise<TouchpointLifecycleLoad<TestRuntimeValue>> => {
-			const epoch = retainedTestEpoch;
+			let epoch = retainedTestEpoch;
+			const publish = (value: TestRuntimeValue | null) => {
+				if (signal.aborted || epoch !== retainedTestEpoch || !adapter) return;
+				if (value && owner) retainedTestRuntime = { owner, locale, value };
+				else {
+					invalidateRetainedTestRuntime();
+					epoch = retainedTestEpoch;
+					setTestRuntimeSession(Object.freeze<TestRuntimeSession>({
+						selectionKey: adapter.selectionKey, deployment: deployment!,
+						context: { deploymentId: deployment!.id, scenario: "realtime", updatedAt: "" },
+						decisions: new Map<TestCampaignPlacement, TestDecision>(), isAuthorized: () => false,
+					}));
+				}
+				setProgressive({ adapter, epoch, value });
+			};
 			try {
-				const result = adapter ? await adapter.load(signal, active) : { kind: "clear" } as const;
+				const result = adapter ? await adapter.load(signal, active, publish) : { kind: "clear" } as const;
 				if (signal.aborted || epoch !== retainedTestEpoch) return { kind: "retain" };
-				if (result.kind === "decision" && owner) retainedTestRuntime = { owner, locale, value: result.value };
-				else if (result.kind === "clear" || result.kind === "waiting") invalidateRetainedTestRuntime();
+				if (result.kind === "decision") publish(result.value);
+				else if (result.kind === "clear" || result.kind === "waiting") publish(null);
 				return result;
 			} catch (error) {
 				if (!signal.aborted && epoch === retainedTestEpoch) {
 					requests.current.runtime = true;
-					if (touchpointWithdrawsDisplay(error)) invalidateRetainedTestRuntime();
+					if (touchpointWithdrawsDisplay(error) || error instanceof TestDecisionMismatchError) publish(null);
 				}
 				throw error;
 			}
 		},
-		[adapter, owner, locale],
+		[adapter, owner, locale, deployment],
 	);
 	const lifecycle = useTouchpointLifecycle<TestRuntimeValue>({
 		enabled: compatible && adapter !== null,
@@ -1352,20 +1424,27 @@ export function TestCampaignModal({
 	// Only the grant this route mount inherited may fill its initial load gap.
 	// Once a server answer replaces it, the lifecycle owns normal revalidation.
 	const restored = retained === remountValue.current && retained && deployment && sameTestDeployment(retained.deployment, deployment) ? retained : null;
-	const currentValue = lifecycle.current ?? restored;
+	const currentValue = !compatible ? null : progressive?.adapter === adapter
+		? progressive.epoch === retainedTestEpoch ? progressive.value : null
+		: lifecycle.current ?? restored;
 	const authorityRef = useRef(currentValue);
 	authorityRef.current = currentValue;
 	const expired = useRef(new WeakSet<TestClock>());
 	const [, expirePlacement] = useState(0);
 	const authorityEpoch = retainedTestEpoch;
+	// Admitting a sibling or committing the whole round must not remount healthy
+	// hosts. The callback stays stable while reading the current lifecycle fence.
+	const lifecycleRef = useRef(lifecycle);
+	lifecycleRef.current = lifecycle;
 	const isSessionAuthorized = useCallback((placementKey?: TestCampaignPlacement) => {
 		const current = authorityRef.current;
-		if (authorityEpoch !== retainedTestEpoch || !current || document.hidden || !(lifecycle.isCurrent(lifecycle.generation) ||
+		const liveLifecycle = lifecycleRef.current;
+		if (authorityEpoch !== retainedTestEpoch || !current || document.hidden || !(liveLifecycle.isCurrent(liveLifecycle.generation) ||
 			(compatible && retainedTestRuntime?.value === current && retainedTestRuntime.owner === owner && retainedTestRuntime.locale === locale))) return false;
 		if (!placementKey) return [...current.authorizations.values()].some((grant) => testElapsed(grant.received) < grant.validForMs);
 		const grant = authorityRef.current?.authorizations.get(placementKey);
 		return !!grant && !expired.current.has(grant.received) && testElapsed(grant.received) < grant.validForMs;
-	}, [lifecycle.generation, lifecycle.isCurrent, compatible, owner, locale, authorityEpoch]);
+	}, [adapter, compatible, owner, locale, authorityEpoch]);
 	// A held placement may end between polls, even while another round is in flight.
 	// Retire that grant once; a later clock correction cannot revive it.
 	const live: TestCampaignPlacement[] = [];
