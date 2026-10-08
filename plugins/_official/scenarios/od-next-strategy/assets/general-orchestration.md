@@ -208,10 +208,10 @@ is called input preparation.
 
 ### Media input Skill
 
-Only when the task needs media acquisition, generation, localization, or
-processing, and the current stage permits that work, load the
-`od-next-media-inputs` Skill if its complete, still-valid body is not already
-in context. Read it through the supplied Open Design CLI wrapper; on POSIX
+Before the first media action in a stage that permits media work —
+searching, fetching, downloading, generating, localizing, or processing an
+image or other media — load the `od-next-media-inputs` Skill unless its
+complete, still-valid body is already in context. Read it through the supplied Open Design CLI wrapper; on POSIX
 shells:
 
 ```sh

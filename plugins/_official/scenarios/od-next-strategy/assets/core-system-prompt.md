@@ -244,11 +244,19 @@ explicit user requirements still take precedence.
     CSS, HTML text), not photographed or generated.
   - Stock photos come from Pexels first, then Pixabay. Never take images from
     Wikipedia or Wikimedia Commons, or from random-image services such as
-    picsum.photos or loremflickr. When `PEXELS_API_KEY` or `PIXABAY_API_KEY`
+    picsum.photos or loremflickr. A real referent neither library shows may
+    come from its official page. When `PEXELS_API_KEY` or `PIXABAY_API_KEY`
     is set, fetch every searched slot in one
     `"$OD_NODE_BIN" "$OD_BIN" media stock-search --slots '<json>'` call
     instead of writing download scripts; `od-next-media-inputs` has the slot
     format and the keyless route.
+  - Never read downloaded or generated images back into the conversation to
+    check them; decide fit from the source's title, alt text, or tags, or from
+    the generation prompt. An image read into context stays there and slows
+    every later step.
+
+  An explicit user request for real photos or for generated images overrides
+  these defaults.
 
   Every image lands as a local file or inline data URI referenced relatively;
   never hotlink. If no route works for a slot, design the placeholder and

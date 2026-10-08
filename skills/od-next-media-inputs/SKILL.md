@@ -36,37 +36,17 @@ Reuse suitable user assets and the same asset across pages. Deduplicate work,
 not distinct subjects or required states. Do not add a new plan, manifest,
 approval step, or review Agent. Preserve every required asset and quality
 condition, including semantic fit, authenticity, licensing, local or inline
-references, and image geometry. Do not hotlink or fabricate real referents.
+references, and image geometry.
 
 ## Route each image slot
 
-Decide each slot's route from what it shows, following the Core imagery rule:
-
-- Real referent (a named product, book cover, brand mark, or a real place,
-  person, or event): use a user or brand asset first, then search stock
-  photos as described below. Never generate it.
-- Illustrative, fictional, or atmospheric subject, or a set that must share
-  one style: generate it. Search stock photos only when generation is
-  unavailable.
-- Chart, diagram, icon, or text-heavy image: build it in code.
-
-A dish, cuisine, or product category is illustrative however famous its name;
-only a specific instance, such as a named real restaurant's own dish or one
-brand's product, is a real referent.
-
-When the user explicitly asks for real photos or for generated images, follow
-that request.
+Decide each slot's route, and which libraries a stock search may use, with
+the Core imagery-by-type rule; it is the only source of those rules.
 
 ## Search stock photos
 
-Use Pexels first and Pixabay second. Do not use Wikipedia or Wikimedia
-Commons, random-image services such as picsum.photos or loremflickr, or other
-sites the user did not supply. A named real referent that neither library
-shows, such as a specific book cover or product, may come from its official
-page; otherwise design a placeholder and disclose it.
-
 - With `PEXELS_API_KEY` or `PIXABAY_API_KEY` in the environment, fetch every
-  slot in one call instead of writing a script:
+  slot in one call:
   `"$OD_NODE_BIN" "$OD_BIN" media stock-search --slots '[{"id":"hero","query":"black eyeglasses frame","width":1200,"orientation":"landscape"}]'`.
   Write each query in English with the subject first. The command searches,
   re-ranks by alt text, downloads at `width` into `assets/stock/`, records
@@ -132,11 +112,9 @@ that covers the display size (usually 1K). Reuse valid measurements for
 unchanged files; after transformation, remeasure affected files before sizing
 their containers.
 
-HTTP success and file/size probes do not prove semantic fit; judge fit from
-the source's title, alt text, or tags, or from the generation prompt. Do not
-read downloaded or generated images back into the conversation to inspect
-them: images stay in context and slow every later step, and a text-only model
-may not see them.
+HTTP success and file/size probes do not prove semantic fit; decide it as the
+Core imagery rule describes, without reading images back into the
+conversation.
 
 ## Collect results and stop when complete
 
