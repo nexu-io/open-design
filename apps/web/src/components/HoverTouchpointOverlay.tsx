@@ -161,7 +161,7 @@ export function HoverTouchpointOverlay({
 	const restoreFocusRef = useRef<HTMLElement | null>(null);
 	const restoringFocusRef = useRef(false);
 	const pointerIsInBridgeRef = useRef(false);
-	const [position, setPosition] = useState<HoverOverlayPosition>();
+	const [position, setPosition] = useState<HoverOverlayPosition & { overflow: "auto" | "visible" }>();
 	const [elementReady, setElementReady] = useState(() =>
 		typeof customElements !== "undefined" && customElements.get("opend-touchpoint") !== undefined,
 	);
@@ -201,9 +201,33 @@ export function HoverTouchpointOverlay({
 	}, [close, pointerIsInBridge]);
 	const refreshPosition = useCallback(() => {
 		const anchor = entryRef.current?.getBoundingClientRect();
-		const overlay = layerRef.current?.getBoundingClientRect();
-		if (!anchor || !overlay) return;
-		setPosition(placeHoverOverlay(anchor, overlay, viewportRect()));
+		const element = layerRef.current;
+		if (!anchor || !element) return;
+		const { scrollTop, scrollLeft } = element;
+		// Probe without old limits or scrollbars so viewport growth and content
+		// shrink can leave scroll mode. Box shadows are not scrollable overflow.
+		element.style.maxWidth = "none";
+		element.style.maxHeight = "none";
+		element.style.overflow = "visible";
+		const viewport = viewportRect();
+		const natural = placeHoverOverlay(anchor, element.getBoundingClientRect(), viewport);
+		element.style.maxWidth = `${natural.maxWidth}px`;
+		// Width reflow also changes the height used for placement and its bounds.
+		const next = placeHoverOverlay(anchor, element.getBoundingClientRect(), viewport);
+		element.style.maxHeight = `${next.maxHeight}px`;
+		// Read after applying limits: responsive material can reflow at maxWidth.
+		// Both axes must fit; one auto axis forces the other visible axis to auto.
+		const overflow = element.scrollWidth > element.clientWidth || element.scrollHeight > element.clientHeight
+			? "auto" : "visible";
+		element.style.overflow = overflow;
+		if (overflow === "auto") {
+			element.scrollTop = scrollTop;
+			element.scrollLeft = scrollLeft;
+		}
+		setPosition((previous) => previous && previous.left === next.left && previous.top === next.top &&
+			previous.maxWidth === next.maxWidth && previous.maxHeight === next.maxHeight &&
+			previous.placement === next.placement && previous.overflow === overflow
+			? previous : { ...next, overflow });
 	}, []);
 
 	useEffect(() => {
@@ -331,18 +355,41 @@ export function HoverTouchpointOverlay({
 	}, [isAuthorized, onDiagnostic, onLayerVisible, open, ready]);
 	useEffect(() => {
 		if (!open || !ready) return;
-		const reposition = () => refreshPosition();
+		let frame: number | undefined;
+		const reposition = () => {
+			if (frame !== undefined) return;
+			frame = requestAnimationFrame(() => {
+				frame = undefined;
+				refreshPosition();
+			});
+		};
 		const visual = window.visualViewport;
 		const observer = new ResizeObserver(reposition);
-		if (entryRef.current) observer.observe(entryRef.current);
-		if (layerRef.current) observer.observe(layerRef.current);
-		window.addEventListener("scroll", reposition, true);
+		const element = layerRef.current;
+		// A capped host can stay the same size while its material grows/shrinks.
+		const observeMaterial = () => {
+			observer.disconnect();
+			if (entryRef.current) observer.observe(entryRef.current);
+			if (element) observer.observe(element);
+			for (const child of (element?.shadowRoot ?? element)?.querySelectorAll("*") ?? []) observer.observe(child);
+		};
+		observeMaterial();
+		const mutations = new MutationObserver(() => { observeMaterial(); reposition(); });
+		if (element) mutations.observe(element.shadowRoot ?? element, { childList: true, subtree: true, characterData: true });
+		// Scrolling within the fixed layer cannot move its anchor; ignore the
+		// scroll events produced when restoring offsets after measurement too.
+		const onScroll = (event: Event) => {
+			if (!element || !event.composedPath().includes(element)) reposition();
+		};
+		window.addEventListener("scroll", onScroll, true);
 		window.addEventListener("resize", reposition);
 		visual?.addEventListener("resize", reposition);
 		visual?.addEventListener("scroll", reposition);
 		return () => {
+			if (frame !== undefined) cancelAnimationFrame(frame);
+			mutations.disconnect();
 			observer.disconnect();
-			window.removeEventListener("scroll", reposition, true);
+			window.removeEventListener("scroll", onScroll, true);
 			window.removeEventListener("resize", reposition);
 			visual?.removeEventListener("resize", reposition);
 			visual?.removeEventListener("scroll", reposition);
@@ -417,6 +464,7 @@ export function HoverTouchpointOverlay({
 							top: position.top,
 							maxWidth: position.maxWidth,
 							maxHeight: position.maxHeight,
+							overflow: position.overflow,
 						}
 					: undefined,
 				onPointerEnter: openHover,
