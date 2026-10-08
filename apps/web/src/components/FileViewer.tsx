@@ -8069,6 +8069,9 @@ function HtmlViewer({
     if (streaming || viewerOnly || publishingPublicFile) return;
     const requestProjectId = projectId;
     const requestFileName = file.name;
+    const requestAccountScope = workspaceAccountScopedCacheKey(workspaceContext);
+    const requestAccountGeneration = currentWorkspaceAccountGeneration();
+    let confirmedPublication: { sourceFilePath: string; accountScope: string; generation: number } | undefined;
     const requestSeq = ++publicFileRequestSeqRef.current;
     invalidatePublicFileCopy();
     clearPublicFileProgressTimers();
@@ -8098,6 +8101,8 @@ function HtmlViewer({
         publish_duration_ms: Math.round(performance.now() - publishStarted),
       }, publishRequestId);
       // Project-wide, so announce it even if the viewer moved on meanwhile.
+      confirmedPublication = { sourceFilePath: file.path || requestFileName,
+        accountScope: requestAccountScope, generation: requestAccountGeneration };
       if (response.madeTeamVisible) notifyTeamProjectsChanged({ projectId: requestProjectId, kind: 'catalog' });
       const current = publicFileIdentityRef.current;
       if (
@@ -8169,7 +8174,7 @@ function HtmlViewer({
       if (publicFileRequestSeqRef.current === requestSeq) {
         setPublishingPublicFile(false);
         invalidateCommentSyncState(requestProjectId, file.path || requestFileName);
-        notifyProjectShareHistoryChanged(requestProjectId);
+        notifyProjectShareHistoryChanged(requestProjectId, undefined, confirmedPublication);
       }
     }
   }
@@ -8179,6 +8184,9 @@ function HtmlViewer({
       || updateInFlightRef.current || fileShareFreshness !== 'outdated' || fileShareStatus !== 'active') return;
     const requestProjectId = projectId;
     const requestFileName = file.name;
+    const requestAccountScope = workspaceAccountScopedCacheKey(workspaceContext);
+    const requestAccountGeneration = currentWorkspaceAccountGeneration();
+    let confirmedPublication: { sourceFilePath: string; accountScope: string; generation: number } | undefined;
     const requestSeq = ++publicFileRequestSeqRef.current;
     updateInFlightRef.current = true;
     setPublishingPublicFile(true);
@@ -8194,6 +8202,8 @@ function HtmlViewer({
       const current = publicFileIdentityRef.current;
       if (requestSeq !== publicFileRequestSeqRef.current
         || current.projectId !== requestProjectId || current.fileName !== requestFileName) return;
+      confirmedPublication = { sourceFilePath: file.path || requestFileName,
+        accountScope: requestAccountScope, generation: requestAccountGeneration };
       setPublishedFileUrl(response.url ?? '');
       setPublishedFileSlug(response.slug);
       setFileShareFreshness('unknown');
@@ -8238,7 +8248,7 @@ function HtmlViewer({
         updateInFlightRef.current = false;
         setPublishingPublicFile(false);
         invalidateCommentSyncState(requestProjectId, file.path || requestFileName);
-        notifyProjectShareHistoryChanged(requestProjectId);
+        notifyProjectShareHistoryChanged(requestProjectId, undefined, confirmedPublication);
       }
     }
   }

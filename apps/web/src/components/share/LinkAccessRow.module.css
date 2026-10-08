@@ -60,9 +60,26 @@
 }
 
 .toggleThumb {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 15px;
   height: 15px;
   border-radius: 50%;
   background: var(--share-white);
   box-shadow: 0 1px 2px #00000026;
+}
+
+.spinner {
+  color: var(--share-text-strong);
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation: none; }
 }

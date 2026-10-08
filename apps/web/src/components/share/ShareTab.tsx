@@ -283,6 +283,7 @@ export function ShareTab({
                         label={t('fileViewer.linkAccessTitle')}
                         description={t('fileViewer.linkAccessDescription')}
                         checked={linkAccessChecked}
+                        busy={publishingPublicFile && filePublished}
                         disabled={!canMutatePublicShare || viewerOnly || publishingPublicFile || (!filePublished && (streaming || sharePlanPending || planBlocked))}
                         title={viewerOnly ? viewerOnlyDisabledTitle : undefined}
                         onToggle={() => {
