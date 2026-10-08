@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { fetchProjectFileSharePlan } from '../../providers/registry';
-import type { EntryIndexConflictDetails, SharePlanSummary } from '@open-design/contracts';
+import type { EntryIndexConflictDetails } from '@open-design/contracts';
+import { useSharePlan, type SharePlanState } from './useSharePlan';
 import { useShareScopeKeyboard } from './useShareScopeKeyboard';
 import { Button } from '@open-design/components';
 import { ShareButton } from './ShareButton';
@@ -150,6 +150,7 @@ export function ShareTab({
   copyShareLinkLabel,
   canOpenSharePage,
   shareLinkStatusHint,
+  sharePlanState,
 }: {
   menuOrigin: 'toolbar' | 'artifact-card';
   /** Exact file status from authoritative project share-state, not local URL presence. */
@@ -190,10 +191,15 @@ export function ShareTab({
   copyShareLinkLabel: string;
   canOpenSharePage: boolean;
   shareLinkStatusHint: string;
+  /** Owned by the retained viewer so closing the panel preserves preflight and intent. */
+  sharePlanState?: SharePlanState;
 }) {
   const [copyingLink, setCopyingLink] = useState(false);
-  const [sharePlan, setSharePlan] = useState<SharePlanSummary | null>(null);
-  const [sharePlanPending, setSharePlanPending] = useState(false);
+  const localPlan = useSharePlan({ projectId, filePath, workspaceContext,
+    enabled: !sharePlanState && canPublishPublic && !viewerOnly && publicationStatus !== 'stopped' });
+  const planState = sharePlanState ?? localPlan;
+  const sharePlan = planState.plan;
+  const publishing = publishingPublicFile || planState.waiting;
   // S1: selected link access is only an unpublished UI intent. It never
   // transfers bytes or creates a URL until Generate and copy is clicked.
   const [prepublishLinkAccess, setPrepublishLinkAccess] = useState(true);
@@ -203,17 +209,6 @@ export function ShareTab({
   const canMutatePublicShare = canPublishPublic && workspaceContext !== null;
   const initialUnpublished = !filePublished && publicationStatus == null;
   const linkAccessChecked = filePublished || (initialUnpublished && prepublishLinkAccess);
-  useEffect(() => {
-    let cancelled = false;
-    setSharePlan(null);
-    if (!projectId || !filePath || !canPublishPublic || viewerOnly || publicationStatus === 'stopped') { setSharePlanPending(false); return; }
-    setSharePlanPending(true);
-    void fetchProjectFileSharePlan(projectId, filePath, workspaceContext).then(
-      (plan) => { if (!cancelled) { setSharePlan(plan); setSharePlanPending(false); } },
-      () => { if (!cancelled) { setSharePlan(null); setSharePlanPending(false); } },
-    );
-    return () => { cancelled = true; };
-  }, [projectId, filePath, workspaceContext, canPublishPublic, viewerOnly, publicationStatus]);
   const planTooLarge = sharePlan?.exceedsSizeLimit === true;
   // Preflight blockers refuse publishing like the size limit does; a 409 from
   // an attempt made before the plan arrived carries the same details.
@@ -252,7 +247,7 @@ export function ShareTab({
     setOpen: setShareAccessMenuOpen,
   });
 
-  const showsTeamVisibilityNotice = !filePublished && !publishingPublicFile && !viewerOnly
+  const showsTeamVisibilityNotice = !filePublished && !publishing && !viewerOnly
     && workspaceContext?.workspaceType === 'team' && shareAccess === 'private';
 
   // The host owns clipboard outcomes and their reset timer; only await its action here.
@@ -283,7 +278,7 @@ export function ShareTab({
                         label={t('fileViewer.linkAccessTitle')}
                         description={t('fileViewer.linkAccessDescription')}
                         checked={linkAccessChecked}
-                        disabled={!canMutatePublicShare || viewerOnly || publishingPublicFile || (!filePublished && (streaming || sharePlanPending || planBlocked))}
+                        disabled={!canMutatePublicShare || viewerOnly || publishing || (!filePublished && (streaming || planBlocked))}
                         title={viewerOnly ? viewerOnlyDisabledTitle : undefined}
                         onToggle={() => {
                           if (!canMutatePublicShare || viewerOnly) return;
@@ -366,9 +361,9 @@ export function ShareTab({
                             action={
                               <ShareButton
                                 variant="soft"
-                                disabled={!canMutatePublicShare || viewerOnly || streaming || publishingPublicFile || sharePlanPending || planTooLarge || planBlocked}
-                                aria-busy={publishingPublicFile || undefined}
-                                onClick={() => { if (canMutatePublicShare && !viewerOnly) void updateCurrentFilePublic?.(); }}
+                                disabled={!canMutatePublicShare || viewerOnly || streaming || publishing || planTooLarge || planBlocked}
+                                aria-busy={publishing || undefined}
+                                onClick={() => { if (canMutatePublicShare && !viewerOnly) void planState.run(() => updateCurrentFilePublic?.() ?? Promise.resolve()); }}
                               >
                                 {t('fileViewer.shareUpdateLink')}
                               </ShareButton>
@@ -383,28 +378,28 @@ export function ShareTab({
                             missing-refs advisories were yellow banners; deleted, no lighter
                             replacement. Neither ever blocked publishing (unlike planTooLarge
                             above), so there is no reason left to surface here. */}
-                        {publicationStatus !== 'stopped' || publishingPublicFile ? (
+                        {publicationStatus !== 'stopped' || publishing ? (
                         <ShareProgressButton variant="upload" value={publicationStatus === 'stopped' ? null : publishProgress} label={t('fileViewer.uploadingFile')}>
                         <ShareButton
                           variant="primary"
                           hoverLighten={false}
-                          transparentWhenBusy={publishingPublicFile && publicationStatus !== 'stopped' && publishProgress !== null}
+                          transparentWhenBusy={publishing && publicationStatus !== 'stopped' && publishProgress !== null}
                           role="menuitem"
-                          disabled={streaming || viewerOnly || publishingPublicFile || sharePlanPending || planTooLarge || planBlocked || (initialUnpublished && !prepublishLinkAccess)}
-                          aria-busy={publishingPublicFile}
+                          disabled={streaming || viewerOnly || publishing || planTooLarge || planBlocked || (initialUnpublished && !prepublishLinkAccess)}
+                          aria-busy={publishing}
                           title={viewerOnly ? viewerOnlyDisabledTitle : streaming ? t('fileViewer.shareAfterGenerationComplete') : undefined}
                           onClick={() => {
-                            void publishCurrentFilePublic(publicationStatus === 'stopped' ? 'resume' : undefined);
+                            void planState.run(() => publishCurrentFilePublic(publicationStatus === 'stopped' ? 'resume' : undefined));
                           }}
                         >
-                          {publishingPublicFile ? (
+                          {publishing ? (
                             <Icon name="share-spinner" size={13} strokeWidth={2} className="icon-spin" />
                           ) : publishFailureKey === 'fileViewer.publishFileFailed' ? (
                             <Icon name="share-refresh-arrows" size={13} strokeWidth={1.8} />
                           ) : (
                             <Icon name="share-upload-arrow" size={13} strokeWidth={1.8} />
                           )}
-                          <span>{publishingPublicFile
+                          <span>{publishing
                             ? publicationStatus === 'stopped' ? t('fileViewer.shareReopening') : `${t('fileViewer.uploadingFile')}${publishProgress !== null ? ` ${Math.round(publishProgress * 100)}%` : ''}`
                             : publishFailureKey === 'fileViewer.publishFileFailed' || publishFailureKey === 'fileViewer.publishFileTooLarge'
                               ? t('preview.retry')
@@ -414,7 +409,7 @@ export function ShareTab({
                         ) : null}
                         </>
                       ) }
-                      {publishingPublicFile && !filePublished && publicationStatus !== 'stopped' ? (
+                      {publishing && !filePublished && publicationStatus !== 'stopped' ? (
                         <p className={styles.publishHint}>{t('fileViewer.publishingContinuesOnClose')}</p>
                       ) : null}
                       </>
