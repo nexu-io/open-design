@@ -17292,22 +17292,8 @@ function HtmlViewer({
                     title={viewerOnly ? viewerOnlyDisabledTitle : !rawCanShare || streaming ? shareUnavailableHint : undefined}
                     onClick={openShareMenu}
                   >
-                    {/* E0: board's upload-arrow glyph (13px), not RemixIcon's
-                        share-forward-line — the icon shape itself differs. */}
-                    <svg
-                      width="13"
-                      height="13"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      aria-hidden="true"
-                      focusable="false"
-                    >
-                      <path d="M12 4v11M7 9l5-5 5 5M5 14v5h14v-5" />
-                    </svg>
+                    {/* Owner C0: share the artifact card's forward-arrow glyph. */}
+                    <RemixIcon name="share-forward-line" size={15} />
                     <span>{shareMenuLabel}</span>
                   </button>
                   {afterExportGuide.noticeId !== null ? (
