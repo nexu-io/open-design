@@ -40,81 +40,65 @@ const campaignModalStyles = readFileSync(
 );
 
 describe('DeepSeek V4 Flash workbench campaign entry', () => {
-  it('uses checked-in Go modal model marks without network dependencies', () => {
-    for (const assetPath of [
-      'public/agent-icons/deepseek.svg',
-      'public/agent-icons/kimi.svg',
-      'public/model-icons/minimax.svg',
-      'public/go-plan/mimo-logo-user-CWOWEwG5.png',
-      'public/go-plan/zai-logo-official-Byn-xbrp.png',
-    ]) {
-      expect(readFileSync(resolve(process.cwd(), assetPath)).byteLength).toBeGreaterThan(0);
-    }
+  it('removes the Go-only media branch from the active campaign modal', () => {
     expect(campaignModalSource).not.toContain('unpkg.com');
-    expect(campaignModalSource).toContain('/agent-icons/deepseek.svg');
-    expect(campaignModalSource).toContain('/agent-icons/kimi.svg');
-    expect(campaignModalSource).toContain('/model-icons/minimax.svg');
-    expect(campaignModalSource).toContain(
-      '/go-plan/mimo-logo-user-CWOWEwG5.png',
-    );
-    expect(campaignModalSource).toContain(
-      '/go-plan/zai-logo-official-Byn-xbrp.png',
-    );
-    expect(campaignModalSource).toContain('styles.goWelcomeMimoLogo');
-    expect(campaignModalSource).toContain('styles.goWelcomeZhipuLogo');
-    expect(campaignModalSource).toContain('styles.goWelcomeBenefitZhipu');
-    expect(campaignModalStyles).toContain('.goWelcomeMimoLogo img');
-    expect(campaignModalStyles).toContain('.goWelcomeZhipuLogo img');
-    expect(campaignModalStyles).toContain(
-      '.goWelcomeBenefitZhipu img',
-    );
-    expect(campaignModalStyles).not.toContain(
-      '.goWelcomeBenefitModel.goWelcomeBenefitZhipu img',
-    );
-    expect(campaignModalStyles).toMatch(
-      /\.goWelcomeBenefitModel img\s*\{[\s\S]*?filter: brightness\(0\) invert\(1\);[\s\S]*?\}/,
-    );
+    expect(campaignModalSource).not.toContain('/go-plan/');
+    expect(campaignModalSource).not.toContain('styles.goWelcome');
   });
 
-  it('collapses the Go modal before its fixed tracks overflow and scrolls short viewports', () => {
-    const baseModalRule = campaignModalStyles.match(
-      /\.goWelcomeModal\s*\{([^}]*)\}/,
-    )?.[1];
-
-    expect(baseModalRule).toContain(
-      'min-height: min(430px, calc(100dvh - 48px))',
-    );
-    expect(campaignModalStyles).toMatch(
-      /@media \(max-width: 658px\)[\s\S]*?\.goWelcomeModal\s*\{[\s\S]*?grid-template-columns: 1fr;[\s\S]*?overflow: auto;/,
-    );
-    expect(campaignModalStyles).toMatch(
-      /@media \(max-height: 477px\)[\s\S]*?\.goWelcomeModal\s*\{[\s\S]*?min-height: 0;[\s\S]*?overflow: auto;/,
-    );
-  });
-
-  it('reuses the top-right campaign slot for Go and DeepSeek audiences', () => {
+  it('uses the top-right campaign slot only for the active DeepSeek audience', () => {
     expect(entryShellSource).toContain('<WorkbenchCampaignBadge');
     expect(workbenchCampaignBadgeSource).toContain('deepseek-campaign-pricing-badge');
-    expect(workbenchCampaignBadgeSource).toContain("kind === 'go'");
-    expect(workbenchCampaignBadgeSource).toContain('goPlanCopy.workbenchBadge');
+    expect(workbenchCampaignBadgeSource).not.toContain("kind === 'go'");
+    expect(workbenchCampaignBadgeSource).not.toContain('goPlanCopy.workbenchBadge');
     expect(workbenchCampaignBadgeSource).toContain("t('campaign.deepseekV4Flash.workbenchBadge')");
     expect(workbenchCampaignBadgeSource).toContain("t('campaign.deepseekV4Flash.workbenchBadgeAria')");
-    expect(entryShellSource).toContain("subscriptionAudience === 'unpaid'");
-    expect(entryShellSource).toContain('goPlanCampaignVisibility.visible');
+    expect(entryShellSource).not.toContain("subscriptionAudience === 'unpaid'");
+    expect(entryShellSource).not.toContain('goPlanCampaignVisibility.visible');
+    expect(entryShellSource).toContain("deepSeekV4FlashCampaignAudience === 'unknown'");
   });
 
-  it('keeps the top-right campaign entry visible across entry tabs and project detail', () => {
+  it('keeps the built-in campaign entry visible across entry tabs and project detail', () => {
+    // The DeepSeek pill is product chrome and rides every surface. The CMS
+    // touchpoints beside it are home placements and are asserted separately
+    // below; that is why this slot may no longer open on `amrLoggedIn` alone.
     expect(entryShellSource).toMatch(
-      /topRightSlot=\{\s*topRightCampaignKind \? \(/,
+      /topRightSlot=\{\s*topRightCampaignAudience\s*\|\|\s*\(homeCampaignHostsVisible && amrLoggedIn === true\)\s*\?\s*\(/,
+    );
+    expect(entryShellSource).toMatch(
+      /topRightSlot=\{[\s\S]*?\{\s*topRightCampaignAudience\s*\?\s*\([\s\S]*?<WorkbenchCampaignBadge[\s\S]*?audience=\{topRightCampaignAudience\}[\s\S]*?page="home"/,
     );
     expect(entryShellSource).not.toMatch(
       /topRightSlot=\{\s*view === 'home'/,
     );
+    expect(entryShellSource).not.toMatch(
+      /topRightSlot=\{\s*homeCampaignHostsVisible\s*&&/,
+    );
     expect(entryNavRailSource).toMatch(
-      /export function WorkspaceTopRightAccountCluster[\s\S]*?leadingSlot=\{campaignKind \? \([\s\S]*?<WorkbenchCampaignBadge[\s\S]*?page="project"/,
+      /export function WorkspaceTopRightAccountCluster[\s\S]*?leadingSlot=\{\s*campaignAudience\s*\?\s*\(/,
+    );
+    expect(entryNavRailSource).toMatch(
+      /export function WorkspaceTopRightAccountCluster[\s\S]*?leadingSlot=\{[\s\S]*?<WorkbenchCampaignBadge[\s\S]*?audience=\{campaignAudience\}[\s\S]*?page="project"/,
     );
     expect(appSource).toMatch(
       /<WorkspaceTopRightAccountCluster[\s\S]*?amrLoggedIn=\{amrLoginStatus\?\.loggedIn \?\? null\}[\s\S]*?metricsConsent=\{config\.telemetry\?\.metrics === true\}/,
+    );
+  });
+
+  it('keeps every CMS touchpoint host on the home view', () => {
+    // `opend.home.*` is the only placement family this app authorizes, so the
+    // account badge, the hover entry and the modals are home hosts. The
+    // workbench corner carries none of them.
+    expect(entryShellSource).toContain("const homeCampaignHostsVisible = view === 'home';");
+    expect(entryShellSource).toMatch(
+      /homeCampaignHostsVisible\s*&&\s*canRenderProductionCampaignBadge\(amrLoggedIn === true, amrAccountId\)\s*\?\s*<ProductionCampaignBadge authenticated sessionSubject=\{amrAccountId\}/,
+    );
+    expect(entryShellSource).toMatch(
+      /homeCampaignHostsVisible\s*\?\s*\(\s*<ProductionCampaignHover\s+authenticated=\{amrLoggedIn === true\}\s+sessionSubject=\{amrAccountId\}/,
+    );
+    expect(entryNavRailSource).not.toContain('ProductionCampaignBadge');
+    expect(appSource).toMatch(
+      /\{route\.kind === 'home' && route\.view === 'home' && \([\s\S]*?<TestCampaignModal[\s\S]*?<ProductionCampaignModal/,
     );
   });
 
@@ -205,16 +189,16 @@ describe('DeepSeek V4 Flash workbench campaign entry', () => {
       expect(source).not.toContain('URLSearchParams');
       expect(source).not.toContain('location.search');
     }
-    // The reserved presentation branches stay, but without any trigger that
-    // could be driven from a URL.
-    expect(modelSwitcherSource).toContain('const campaignRestricted = false;');
+    // The remaining reserved presentation branch stays, but without any
+    // trigger that could be driven from a URL.
     expect(modelSwitcherSource).toContain('const campaignNeedsUpgrade = false;');
   });
 
-  it('keeps existing DeepSeek analytics while the Go pass stays UI-only', () => {
+  it('keeps DeepSeek analytics for paid and unpaid campaign audiences', () => {
     expect(workbenchCampaignBadgeSource).toContain('trackDeepSeekCampaignBadgeSurfaceView');
     expect(workbenchCampaignBadgeSource).toContain('trackDeepSeekCampaignBadgeClick');
-    expect(workbenchCampaignBadgeSource).toContain("window.open(pricingUrl, '_blank', 'noopener,noreferrer')");
+    expect(workbenchCampaignBadgeSource).toContain('attributedAmrUrl(pricingUrl, attribution, deviceId)');
+    expect(workbenchCampaignBadgeSource).toContain('user_state: audience');
     expect(workbenchCampaignBadgeSource).toContain("page !== 'home'");
     expect(modelSwitcherSource).toContain('trackDeepSeekCampaignModelBenefitSurfaceView');
     expect(modelSwitcherSource).toContain('trackExecutionSettingsPopoverClick');

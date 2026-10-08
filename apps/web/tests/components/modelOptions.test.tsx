@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   CUSTOM_MODEL_SENTINEL,
   isCustomModel,
+  modelVersionLabel,
   orderModelOptionsByAvailability,
   renderModelOptions,
   SearchableModelSelect,
@@ -20,6 +21,35 @@ function renderOptions(models: AgentModelOption[]): string {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+});
+
+describe('modelVersionLabel', () => {
+  it('drops the company token a brand mark already carries', () => {
+    expect(modelVersionLabel('claude-fable-5', 'claude-fable-5')).toBe('fable-5');
+    expect(modelVersionLabel('deepseek-v4-pro', 'deepseek-v4-pro')).toBe('v4-pro');
+    expect(modelVersionLabel('claude-opus-4.6')).toBe('opus-4.6');
+  });
+
+  it('keeps ids whose leading token IS the model family', () => {
+    // Stripping here would leave `5` / nothing — a name that identifies no
+    // model at all, which is worse than repeating the company.
+    expect(modelVersionLabel('gpt-5-mini', 'gpt-5-mini')).toBe('gpt-5-mini');
+    expect(modelVersionLabel('grok-4.5', 'grok-4.5')).toBe('grok-4.5');
+    expect(modelVersionLabel('o3', 'o3')).toBe('o3');
+  });
+
+  it('leaves BYOK provider/model ids and unknown vendors alone', () => {
+    expect(modelVersionLabel('anthropic/claude-sonnet-4-5')).toBe(
+      'anthropic/claude-sonnet-4-5',
+    );
+    expect(modelVersionLabel('acme-turbo-1', 'acme-turbo-1')).toBe('acme-turbo-1');
+  });
+
+  it('leaves a prose label that does not lead with the company token', () => {
+    expect(modelVersionLabel('deepseek-v4-flash', 'DeepSeek V4 Flash')).toBe(
+      'DeepSeek V4 Flash',
+    );
+  });
 });
 
 describe('renderModelOptions', () => {
@@ -188,6 +218,9 @@ describe('SearchableModelSelect', () => {
 
     fireEvent.click(screen.getByRole('combobox'));
 
+    // Flat list = a provider's own catalog (BYOK), where the label IS the id
+    // the request will carry, so it is shown verbatim. The company-grouped
+    // catalog is the surface that shortens it (see the compact-switcher test).
     const option = await screen.findByRole('option', { name: /^deepseek-v4-flash$/ });
     expect(option.textContent).toContain('Low cost');
     expect(option.textContent).toContain('Standard');
@@ -308,5 +341,64 @@ describe('SearchableModelSelect', () => {
     expect(affordances?.contains(lock)).toBe(true);
     expect(affordances?.contains(badge)).toBe(true);
     expect(disabledOption).toHaveAccessibleName(longModelLabel);
+  });
+
+  it('exposes the full model name on hover for same-prefix long ids', async () => {
+    // The report: two OpenRouter variants share a prefix, the row label is
+    // ellipsised, and no title leaves the two indistinguishable. Hovering any
+    // row must reveal the complete name it stands for.
+    const models: AgentModelOption[] = [
+      {
+        id: 'openrouter/google/gemini-2.5-pro-preview-06-05',
+        label: 'openrouter/google/gemini-2.5-pro-preview-06-05',
+      },
+      {
+        id: 'openrouter/google/gemini-2.5-pro-preview-05-06',
+        label: 'openrouter/google/gemini-2.5-pro-preview-05-06',
+      },
+    ];
+    render(
+      <SearchableModelSelect
+        models={models}
+        value={models[0]!.id}
+        onChange={vi.fn()}
+        searchPlaceholder="Search models"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('combobox'));
+
+    for (const model of models) {
+      const option = await screen.findByRole('option', { name: model.label });
+      expect(option.getAttribute('title')).toBe(model.label);
+    }
+    // The trigger readout truncates the same way, so it carries the full name
+    // on hover too.
+    expect(screen.getByRole('combobox').getAttribute('title')).toBe(models[0]!.label);
+  });
+
+  it('keeps the full name in the hover title when the row shortens it', async () => {
+    render(
+      <SearchableModelSelect
+        models={[
+          { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' },
+          { id: 'deepseek-v4-pro', label: 'deepseek-v4-pro' },
+          { id: 'claude-opus-4.6', label: 'claude-opus-4.6' },
+        ]}
+        value="deepseek-v4-flash"
+        onChange={vi.fn()}
+        searchPlaceholder="Search models"
+        groupByCompany
+        minSearchableOptions={2}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('combobox'));
+
+    // The company-grouped row drops the company token (`v4-pro`) because the
+    // brand mark already carries it; the title restores the full identity.
+    const option = await screen.findByRole('option', { name: 'v4-pro' });
+    expect(option.textContent).toContain('v4-pro');
+    expect(option.getAttribute('title')).toBe('deepseek-v4-pro');
   });
 });

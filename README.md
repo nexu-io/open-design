@@ -1,13 +1,11 @@
-<h1 align="center">OpenDesign: The open-source Claude Design alternative</h1>
+<h1 align="center">OpenDesign: The First Collaborative Design Agent Workspace</h1>
 
-> ⚡ **[OpenDesign Cloud — the official model service.](https://open-design.ai/zh/pricing/)** One recharge to use both agent and image models inside OpenDesign: GPT, Claude, and DeepSeek for agents; GPT Image 2.0, Seedream 5.0 Pro, and Nano Banana 2.0 for images.
->
-> 🚀 **[DeepSeek V4 Flash and V4 Pro are now available.](https://open-design.ai/zh/pricing/)** Put top-tier intelligence to work across prototypes, decks, design systems, and everyday agent tasks. OpenDesign members can use both models without limits for two weeks, directly inside the app.
+> ✨ **[Introducing OpenDesign Go](https://open-design.ai/pricing/)**. The Go Plan starts at $8 for your first month, with monthly credits for over 10 models, including GPT-6.1 Sol, GPT-6 Luna, DeepSeek V4.1 Flash, GLM-5.3 Flash-X, and MiMo V2.6 Flash. All personal plans include API access for Codex, Claude Code, DSH, OpenCode, and more.
 >
 > 🧩 **[DeepSeek Harness is now supported.](https://open-design.ai/zh/agents/deepseek-harness-design/)** Connect DeepSeek's official `dsh` agent harness to OpenDesign as a native runtime, with structured thinking, tool calls, model discovery, cancellation, and session resume. Generated files stay in the OpenDesign workflow for live preview and delivery.
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="OpenDesign hero banner — the headline &quot;The open-source Claude Design alternative&quot; over a classical scene of columns and robed figures on a digital-code backdrop, with stat cards for design systems, plugins, coding agents, and media providers" width="100%" />
+  <img src="docs/assets/readme-hero-design-agent.webp" alt="OpenDesign hero banner — The First Collaborative Design Agent Workspace, with design systems, plugins, coding agents, and media providers" width="100%" />
 </p>
 
 <p align="center">
@@ -31,76 +29,61 @@
 
 ## What is OpenDesign
 
-🎨 **The open-source Claude Design alternative.** &nbsp;🖥️ **Local-first native desktop app for macOS and Windows.** &nbsp;⚡ **Composable skills, brand-grade `DESIGN.md` design systems, and ready-to-use plugins.** &nbsp;🖼️ Generates **web · desktop · mobile prototypes**, **live dashboards / artifacts**, **decks**, **images**, **video**, plus **HyperFrames** motion graphics. 🔒 Sandboxed iframe preview · HTML / PDF / PPTX / MP4 export. &nbsp;🤖 **Runs on DeepSeek Harness (`dsh`) · Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Amp · Hermes · Kimi · Antigravity and 26 distinct local CLI executables**, or any OpenAI-compatible endpoint via BYOK.
+OpenDesign is **a collaborative design agent workspace**. Start with a brief, then use your coding agent or OpenDesign Cloud to create a prototype that follows your design system. Share it with your team for feedback, and let your agent refine it in the same project.
 
-OpenDesign is what you get when the **agent-native** loop Anthropic shipped with Claude Design — discover the brief, lock the direction, stream the artifact, critique, deliver — stops being closed and becomes a **filesystem of functional skills, rendering design templates, design systems, and plugins** that the coding agents already on your laptop can read, write, and remix. Your CLI becomes the design engine, your laptop becomes the studio, and your team's `DESIGN.md` becomes the brand contract.
-
-It's also the **Figma alternative for the agent era** — instead of pushing pixels on a canvas, it delivers single-page artifacts in real CSS, real fonts, real components, exported straight to HTML / PDF / PPTX / MP4 — already shaped by your design system, already runnable inside the agent you use every day.
+That workflow is open and extensible. As the **open-source Claude Design alternative**, OpenDesign is licensed under Apache 2.0 and gives teams skills, design templates, design systems, and plugins they can inspect and adapt to their own process.
 
 
 ---
 
 ## Product tour
 
-A quick look at the core OpenDesign workflow. Start from **Home** with a brief, explore reusable skills in **Plugins**, and turn brand references into a **Design System**. Then enter a project's **Studio** to create and refine prototypes, decks, mobile apps, images, documents, and HyperFrames in one place.
-
 ### Core pages
 
 <table>
 <tr>
-<td valign="top">
-<img src="docs/screenshots/product-tour/home.png" alt="OpenDesign Home page with artifact types, brief composer, model picker, and examples" /><br/>
-<sub><b>Home</b> — choose an artifact type, enter a brief, and set the design system, working directory, and model before you start.</sub>
+<td width="50%" valign="top">
+<a href="docs/screenshots/product-tour/home-workspace-2026-09-30-220844.png"><img src="docs/screenshots/product-tour/home-workspace-2026-09-30-220844.png" alt="OpenDesign Home page with the prototype composer and example prompts" width="500" /></a><br/>
+<sub><b>Home</b> — start with a brief or an example.</sub>
+</td>
+<td width="50%" valign="top">
+<a href="docs/screenshots/product-tour/all-projects-2026-09-30-220900.webp"><img src="docs/screenshots/product-tour/all-projects-2026-09-30-220900.webp" alt="OpenDesign All projects page showing recent design systems, media, and prototypes" width="500" /></a><br/>
+<sub><b>All projects</b> — revisit design systems, media, and prototypes.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<a href="docs/screenshots/product-tour/design-systems-stripe-2026-09-30-220910.png"><img src="docs/screenshots/product-tour/design-systems-stripe-2026-09-30-220910.png" alt="OpenDesign Design systems page showing the Stripe brand identity, logo, and typography" width="500" /></a><br/>
+<sub><b>Design Systems</b> — inspect brand assets and refine them with an agent.</sub>
+</td>
+<td width="50%" valign="top">
+<a href="docs/screenshots/product-tour/plugins-skills-2026-09-30-220917.png"><img src="docs/screenshots/product-tour/plugins-skills-2026-09-30-220917.png" alt="OpenDesign Plugins page showing official skills, categories, and search" width="500" /></a><br/>
+<sub><b>Plugins</b> — find skills and launch them with <code>Try it</code>.</sub>
 </td>
 </tr>
 </table>
 
-<table>
-<tr>
-<td width="50%" valign="top">
-<img src="docs/screenshots/product-tour/plugins.png" alt="OpenDesign Plugins page showing the official skills catalog" /><br/>
-<sub><b>Plugins</b> — browse official skills by category, search the catalog, and launch a workflow with <code>Try it</code>.</sub>
-</td>
-<td width="50%" valign="top">
-<img src="docs/screenshots/product-tour/design-system.png" alt="Shopify design system preview inside OpenDesign Studio" /><br/>
-<sub><b>Design System</b> — extract and refine a brand's visual language, preview the result, and create with it in the same workspace.</sub>
-</td>
-</tr>
-</table>
-
-### Studio — many artifact types in one project
-
-Inside a project's Studio, the conversation, generated files, and live preview stay together across six artifact types:
+### Studio — create and refine in one project
 
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="docs/screenshots/product-tour/studio-prototype.png" alt="Web prototype preview in OpenDesign Studio" /><br/>
-<sub><b>Prototype</b> — generate or reconstruct web experiences, inspect the rendered page, and iterate with the agent in place.</sub>
+<img src="docs/screenshots/product-tour/studio-prototype-2026.webp" alt="Website prototype with live preview and agent conversation in OpenDesign Studio" /><br/>
+<sub><b>Prototype</b> — build and refine interactive web experiences with your agent and live preview.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="docs/screenshots/product-tour/studio-deck.png" alt="Multi-slide deck preview in OpenDesign Studio" /><br/>
-<sub><b>Deck</b> — create multi-slide presentations, review thumbnails and speaker notes, and export when ready.</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<img src="docs/screenshots/product-tour/studio-mobile-app.png" alt="Mobile app artifact preview in OpenDesign Studio" /><br/>
-<sub><b>Mobile app</b> — generate and polish mobile interfaces in a device preview, with the conversation, output files, and next-step actions beside it.</sub>
-</td>
-<td width="50%" valign="top">
-<img src="docs/screenshots/product-tour/studio-image.png" alt="Generated image preview in OpenDesign Studio" /><br/>
-<sub><b>Image</b> — generate visual assets from the project conversation, preview the result at full size, then download or open it.</sub>
+<img src="docs/screenshots/product-tour/studio-slides-2026.png" alt="Swiss Grid presentation in OpenDesign Studio with slide thumbnails and speaker notes" /><br/>
+<sub><b>Slides</b> — create decks, review slides and speaker notes, and export when ready.</sub>
 </td>
 </tr>
 <tr>
 <td width="50%" valign="top">
-<img src="docs/screenshots/product-tour/studio-document.png" alt="Multi-page document preview in OpenDesign Studio" /><br/>
-<sub><b>Document</b> — create polished, multi-page guides and editorial documents, inspect the rendered layout, and export or share when ready.</sub>
+<img src="docs/screenshots/product-tour/studio-image-2026.webp" alt="Generated fashion portrait preview in OpenDesign Studio" /><br/>
+<sub><b>Image</b> — generate visual assets from the conversation, inspect the result, then download or open it.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="docs/screenshots/product-tour/studio-hyperframe.png" alt="HyperFrame motion graphic preview in OpenDesign Studio" /><br/>
-<sub><b>HyperFrame</b> — build code-driven motion graphics, preview the animation inside Studio, and export the finished video.</sub>
+<a href="docs/screenshots/product-tour/studio-hyperframes-2026.mp4"><img src="docs/screenshots/product-tour/studio-hyperframes-poster-2026.png" alt="OpenDesign HyperFrames editor showing the One brief, Every deliverable motion graphic" /></a><br/>
+<sub><b>HyperFrames</b> — create motion graphics with your agent and export to MP4. <a href="docs/screenshots/product-tour/studio-hyperframes-2026.mp4">Watch the video</a>.</sub>
 </td>
 </tr>
 </table>
@@ -259,7 +242,7 @@ OpenDesign (OD) is the open-source alternative. Same loop, same artifact-first m
 
 - 🤖 **Agent-native, model-agnostic.** We don't ship an agent. The `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi` already on your `PATH` are the design engine. Swap with one click.
 - 🧠 **Brand-grade by default.** Every render reads the active package's `DESIGN.md` as the core brand contract. 151 design-system packages ship with the repo; legacy packages may be `DESIGN.md`-only, while newer packages can add `manifest.json`, `tokens.css`, components, assets, and provenance. Drop a folder in, the picker finds it.
-- 🖥️ **Local-first, BYOK at every layer.** Native desktop apps for macOS (Apple Silicon + Intel) and Windows (x64). Linux AppImage on the optional release lane. Product analytics and session replay are consent-gated; scrubbed safety and reliability telemetry is always on. Before describing daemon data paths, contributors and operators MUST read `AGENTS.md` → **Daemon data directory contract**. This README MUST NOT restate it.
+- 🖥️ **Local-first, BYOK at every layer.** Native desktop apps for macOS (Apple Silicon + Intel) and Windows (x64). Linux desktop users can currently run OpenDesign [from source](#-run-from-source); the latest official release does not include a prebuilt Linux artifact. Product analytics and session replay are consent-gated; scrubbed safety and reliability telemetry is always on. Before describing daemon data paths, contributors and operators MUST read `AGENTS.md` → **Daemon data directory contract**. This README MUST NOT restate it.
 - 🌍 **Composable on four planes.** **Plugins** carry runnable workflows · functional **skills** carry agent behavior · **design templates** carry rendering blueprints · **design systems** carry the brand. All four use portable, versionable directories that anyone can author and publish.
 - 🔁 **Refresh an existing codebase.** Hand a `git` repo + `DESIGN.md` to the agent and it refactors your real components to the brand spec. Dedicated plugins migrate Figma / Pencil workflows into React / Next.js / Vue code.
 - 🔒 **Privacy by conviction.** Everything runs where your data lives — your laptop, your team's server, your Vercel project. When the network is needed, the BYOK proxy is SSRF-guarded.
@@ -287,7 +270,7 @@ The fastest way to use OpenDesign. No Node, no pnpm, no clone.
 
 - **macOS** (Apple Silicon · Intel x64) → [**open-design.ai**](https://open-design.ai/?utm_source=github&utm_medium=referral&utm_content=readme_download_macos) or [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 - **Windows** (x64) → [**open-design.ai**](https://open-design.ai/?utm_source=github&utm_medium=referral&utm_content=readme_download_windows) or [GitHub Releases](https://github.com/nexu-io/open-design/releases)
-- **Linux** (AppImage, optional lane) → [GitHub Releases](https://github.com/nexu-io/open-design/releases)
+- **Linux** → No prebuilt Linux artifact is currently published in the official releases. For now, [run OpenDesign from source](#-run-from-source); Linux release work is tracked in [#4368](https://github.com/nexu-io/open-design/issues/4368).
 
 After install: the app auto-detects every coding-agent CLI on your `PATH`, loads 100+ functional skills, the separate rendering-template catalog, and 151 design systems, and lets you type a brief in the entry view.
 
@@ -362,7 +345,7 @@ pnpm tools-dev run web
 
 Open the URL printed by `tools-dev`; development ports are allocated dynamically unless you pass explicit port flags.
 
-Node `~24`, pnpm `10.33.x`. WSL2 users, see [`docs/wsl-setup.md`](docs/wsl-setup.md); native Windows users, see [`docs/windows-troubleshooting.md`](docs/windows-troubleshooting.md). Full quickstart, env vars, Nix flake, and packaged build flow → [`QUICKSTART.md`](QUICKSTART.md).
+Node `~24`, pnpm `10.33.x`. WSL2 users, see [`docs/wsl-setup.md`](docs/wsl-setup.md); native Windows users, see [`docs/windows-troubleshooting.md`](docs/windows-troubleshooting.md). Full quickstart, env vars, and packaged build flow → [`QUICKSTART.md`](QUICKSTART.md).
 
 ### A full workflow — from brief to artifact
 
@@ -606,7 +589,8 @@ Full architecture → [`docs/architecture.md`](docs/architecture.md). Skill prot
 - [x] **0.11.0** — _The Bazaar_: built in the open — a community marketplace of plugins and design systems anyone can pick from and contribute to
 - [x] **0.12.0** — _Brand-backed Design System_: turn the brand you already own into a reusable, portable `DESIGN.md` system
 - [x] **0.13.0** — _Stay in Flow_: native session resume, faster model picking, and export straight to screenshot-backed PPTX / PDF
-- [x] Packaged Electron builds — macOS (Apple Silicon + Intel) + Windows (x64) + Linux AppImage (optional lane)
+- [x] Published desktop releases — macOS (Apple Silicon + Intel) + Windows (x64)
+- [ ] Published Linux desktop release (optional lane) — tracked in [#4368](https://github.com/nexu-io/open-design/issues/4368)
 - [ ] Comment-mode surgical edits — partially shipped; reliable targeted patching in progress
 - [ ] AI-emitted tweaks panel UX — not yet implemented
 - [ ] `npx od init` to scaffold a project with `DESIGN.md`

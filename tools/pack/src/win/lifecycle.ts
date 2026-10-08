@@ -14,21 +14,21 @@ import {
   type DesktopStatusSnapshot,
   type DesktopUpdateAction,
   type DesktopUpdateResult,
-  type SidecarStamp,
   type WebStatusSnapshot,
 } from "@open-design/sidecar-proto";
-import { createSidecarLaunchEnv, requestJsonIpc, resolveAppIpcPath } from "@open-design/sidecar";
 import {
-  collectProcessTreePids,
-  createProcessStampArgs,
-  listProcessSnapshots,
-  matchesStampedProcess,
-  readLogTail,
-  spawnBackgroundProcess,
-  stopProcesses,
-} from "@open-design/platform";
+  convergeSidecarLaunch,
+  findSidecarProcesses,
+  getSidecarStatus,
+  invokeSidecar,
+  stopSidecars,
+  withSidecarLifecycleLock,
+  type SidecarStamp,
+} from "@open-design/sidecar";
+import { readLogTail } from "@open-design/platform";
 
 import type { ToolPackConfig } from "../config/index.js";
+import { allPackagedSidecarStopRequests, toolPackSidecarStamp } from "../config/sidecar-stamps.js";
 import { resolveToolPackLauncherLayout } from "../launcher/layout.js";
 import { readToolPackLauncherRuntimeSnapshot } from "../launcher/runtime-snapshot.js";
 import { readToolPackUpdateCacheLifecycleSnapshot } from "../updates/cache-lifecycle-snapshot.js";
@@ -63,39 +63,46 @@ import type {
 } from "./types.js";
 
 const PACKAGED_CONFIG_PATH_ENV = "OD_PACKAGED_CONFIG_PATH";
+const PACKAGED_COLD_START_CONVERGENCE_TIMEOUT_MS = 90_000;
 const UPDATE_ACTION_TIMEOUT_MS = 10 * 60 * 1000;
 
-function desktopStamp(config: ToolPackConfig): SidecarStamp {
-  return {
-    app: APP_KEYS.DESKTOP,
-    ipc: resolveAppIpcPath({ app: APP_KEYS.DESKTOP, contract: OPEN_DESIGN_SIDECAR_CONTRACT, namespace: config.namespace }),
-    mode: SIDECAR_MODES.RUNTIME,
-    namespace: config.namespace,
-    source: SIDECAR_SOURCES.TOOLS_PACK,
+function appStamp(
+  config: ToolPackConfig,
+  app: SidecarStamp["app"] = APP_KEYS.DESKTOP,
+  source: typeof SIDECAR_SOURCES.TOOLS_PACK | typeof SIDECAR_SOURCES.PACKAGED = SIDECAR_SOURCES.TOOLS_PACK,
+  mode: SidecarStamp["mode"] = SIDECAR_MODES.RUNTIME,
+): SidecarStamp & { source: typeof SIDECAR_SOURCES.TOOLS_PACK | typeof SIDECAR_SOURCES.PACKAGED } {
+  return toolPackSidecarStamp(config, { app, mode, source }) as SidecarStamp & {
+    source: typeof SIDECAR_SOURCES.TOOLS_PACK | typeof SIDECAR_SOURCES.PACKAGED;
   };
-}
-
-function appIpcPath(config: ToolPackConfig, app: SidecarStamp["app"]): string {
-  return resolveAppIpcPath({ app, contract: OPEN_DESIGN_SIDECAR_CONTRACT, namespace: config.namespace });
 }
 
 function desktopLogPath(config: ToolPackConfig): string {
   return join(config.roots.runtime.namespaceRoot, "logs", APP_KEYS.DESKTOP, "latest.log");
 }
 
-function desktopIdentityPath(config: ToolPackConfig): string {
-  return join(config.roots.runtime.namespaceRoot, "runtime", "desktop-root.json");
+type DesktopEndpoint = {
+  snapshot: { error?: string; status: DesktopStatusSnapshot | null };
+  stamp: SidecarStamp & { source: typeof SIDECAR_SOURCES.TOOLS_PACK | typeof SIDECAR_SOURCES.PACKAGED };
+};
+
+async function resolveDesktopEndpoint(config: ToolPackConfig, timeoutMs: number): Promise<DesktopEndpoint> {
+  const probes = await Promise.all([
+    SIDECAR_SOURCES.TOOLS_PACK,
+    SIDECAR_SOURCES.PACKAGED,
+  ].map(async (source): Promise<DesktopEndpoint> => {
+    const stamp = appStamp(config, APP_KEYS.DESKTOP, source);
+    return { snapshot: await requestStatusSnapshot<DesktopStatusSnapshot>(stamp, timeoutMs), stamp };
+  }));
+  return probes.find(({ snapshot }) => snapshot.status != null) ?? probes[0]!;
 }
 
 async function waitForDesktopStatus(config: ToolPackConfig, timeoutMs = 45_000): Promise<DesktopStatusSnapshot | null> {
-  const stamp = desktopStamp(config);
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
-    try {
-      return await requestJsonIpc<DesktopStatusSnapshot>(stamp.ipc, { type: SIDECAR_MESSAGES.STATUS }, { timeoutMs: 1000 });
-    } catch {
-      await new Promise((resolveWait) => setTimeout(resolveWait, 200));
-    }
+    const active = await resolveDesktopEndpoint(config, 1000);
+    if (active.snapshot.status != null) return active.snapshot.status;
+    await new Promise((resolveWait) => setTimeout(resolveWait, 200));
   }
   return null;
 }
@@ -276,51 +283,53 @@ async function resolveStartTarget(config: ToolPackConfig): Promise<{ configPath:
 }
 
 export async function startPackedWinApp(config: ToolPackConfig, options: { waitForStatus?: boolean } = {}): Promise<WinStartResult> {
+  const lifecycleStamps = allPackagedSidecarStopRequests(config).map(({ stamp }) => stamp);
+  return await withSidecarLifecycleLock(lifecycleStamps, async () => await startPackedWinAppLocked(config, options));
+}
+
+async function startPackedWinAppLocked(config: ToolPackConfig, options: { waitForStatus?: boolean }): Promise<WinStartResult> {
   const target = await resolveStartTarget(config);
-  const stamp = desktopStamp(config);
+  const stamp = appStamp(config);
   const logPath = desktopLogPath(config);
   await mkdir(dirname(logPath), { recursive: true });
   await writeFile(logPath, "", "utf8");
-  const spawned = await spawnBackgroundProcess({
-    args: createProcessStampArgs(stamp, OPEN_DESIGN_SIDECAR_CONTRACT),
+  const convergence = await convergeSidecarLaunch({
+    args: [],
     command: target.executablePath,
     cwd: dirname(target.executablePath),
-    env: createSidecarLaunchEnv({
-      base: join(config.roots.runtime.namespaceRoot, "runtime"),
-      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
-      extraEnv: {
+    env: {
         ...process.env,
         [DESKTOP_LOG_ECHO_ENV]: "0",
         ...(target.configPath == null ? {} : { [PACKAGED_CONFIG_PATH_ENV]: target.configPath }),
-      },
-      stamp,
-    }),
+    },
     logFd: null,
+    resources: {
+      dataRoot: join(config.roots.runtime.namespaceRoot, "data"),
+      ownerPid: null,
+      port: 0,
+      runtimeRoot: join(config.roots.runtime.namespaceRoot, "runtime"),
+    },
+    stamp,
+  }, {
+    ownerStamps: [stamp, appStamp(config, APP_KEYS.DESKTOP, SIDECAR_SOURCES.PACKAGED)],
+    timeoutMs: PACKAGED_COLD_START_CONVERGENCE_TIMEOUT_MS,
   });
   return {
     executablePath: target.executablePath,
     logPath,
     namespace: config.namespace,
-    pid: spawned.pid,
+    pid: convergence.description.resources.pid,
     source: target.source,
     status: options.waitForStatus === false ? null : await waitForDesktopStatus(config),
   };
 }
 
 async function findManagedDesktopProcessTree(config: ToolPackConfig): Promise<number[]> {
-  const processes = await listProcessSnapshots();
-  const stampedRootPids = processes
-    .filter((processInfo) =>
-      [SIDECAR_SOURCES.TOOLS_PACK, SIDECAR_SOURCES.PACKAGED].some((source) =>
-        matchesStampedProcess(
-          processInfo,
-          { mode: SIDECAR_MODES.RUNTIME, namespace: config.namespace, source },
-          OPEN_DESIGN_SIDECAR_CONTRACT,
-        )
-      ),
-    )
-    .map((processInfo) => processInfo.pid);
-  return collectProcessTreePids(processes, stampedRootPids);
+  const processes = await Promise.all([
+    findSidecarProcesses(appStamp(config, APP_KEYS.DESKTOP, SIDECAR_SOURCES.TOOLS_PACK)),
+    findSidecarProcesses(appStamp(config, APP_KEYS.DESKTOP, SIDECAR_SOURCES.PACKAGED)),
+  ]);
+  return processes.flat().map(({ pid }) => pid);
 }
 
 async function waitForNoManagedDesktopProcesses(config: ToolPackConfig, timeoutMs = 6000): Promise<number[]> {
@@ -334,29 +343,19 @@ async function waitForNoManagedDesktopProcesses(config: ToolPackConfig, timeoutM
 }
 
 export async function stopPackedWinApp(config: ToolPackConfig): Promise<WinStopResult> {
-  const stamp = desktopStamp(config);
-  const before = await findManagedDesktopProcessTree(config);
-  let gracefulRequested = false;
-  try {
-    await requestJsonIpc(stamp.ipc, { type: SIDECAR_MESSAGES.SHUTDOWN }, { timeoutMs: 1500 });
-    gracefulRequested = true;
-  } catch {
-    gracefulRequested = false;
-  }
-  const remainingAfterGraceful = gracefulRequested ? await waitForNoManagedDesktopProcesses(config) : before;
-  if (remainingAfterGraceful.length === 0) {
-    await rm(desktopIdentityPath(config), { force: true }).catch(() => undefined);
-    return { gracefulRequested, namespace: config.namespace, remainingPids: [], status: before.length === 0 ? "not-running" : "stopped", stoppedPids: before };
-  }
-  const stopped = await stopProcesses(remainingAfterGraceful);
-  if (stopped.remainingPids.length === 0) await rm(desktopIdentityPath(config), { force: true }).catch(() => undefined);
-  return {
-    gracefulRequested,
-    namespace: config.namespace,
-    remainingPids: stopped.remainingPids,
-    status: stopped.remainingPids.length === 0 ? "stopped" : "partial",
-    stoppedPids: stopped.stoppedPids,
-  };
+  const requests = allPackagedSidecarStopRequests(config);
+  return await withSidecarLifecycleLock(requests.map(({ stamp }) => stamp), async () => {
+    const stopped = await stopSidecars(requests);
+    return {
+      gracefulRequested: stopped.gracefulAccepted,
+      namespace: config.namespace,
+      remainingPids: stopped.remainingPids,
+      status: stopped.remainingPids.length > 0
+        ? "partial"
+        : stopped.matchedPids.length > 0 || stopped.gracefulAccepted ? "stopped" : "not-running",
+      stoppedPids: stopped.stoppedPids,
+    };
+  });
 }
 
 export async function readPackedWinLogs(config: ToolPackConfig) {
@@ -381,6 +380,7 @@ export async function uninstallPackedWinApp(config: ToolPackConfig): Promise<Win
   const paths = resolveWinPaths(config);
   const registeredPaths = await measureLifecycleStep(lifecycleTimings, "resolve registered paths", async () => resolveWinRegisteredPaths(config, paths));
   const stop = await measureLifecycleStep(lifecycleTimings, "stop", async () => stopPackedWinApp(config));
+  assertWinStopComplete(stop, "uninstall");
   if (await pathExists(registeredPaths.uninstallerPath)) {
     await measureLifecycleStep(lifecycleTimings, "nsis uninstall", async () => runTimed(paths.uninstallTimingPath, "uninstall", async () => {
       await invokeNsis(paths, registeredPaths.uninstallerPath, config.silent ? ["/S"] : [], "uninstall");
@@ -427,10 +427,10 @@ export async function cleanupPackedWinNamespace(config: ToolPackConfig): Promise
   const launcher = resolveToolPackLauncherLayout(config);
   const registeredPaths = await resolveWinRegisteredPaths(config, paths);
   const removalPlan = await createWinRemovalPlan(config);
-  if (await pathExists(registeredPaths.uninstallerPath)) {
-    await uninstallPackedWinApp(config);
-  }
-  const stop = await stopPackedWinApp(config);
+  const stop = await pathExists(registeredPaths.uninstallerPath)
+    ? (await uninstallPackedWinApp(config)).stop
+    : await stopPackedWinApp(config);
+  assertWinStopComplete(stop, "cleanup");
   const removedOutputRoot = await pathExists(config.roots.output.namespaceRoot);
   const removedRuntimeNamespaceRoot = await pathExists(config.roots.runtime.namespaceRoot);
   const removedLauncherNamespaceRoot = await pathExists(launcher.paths.namespaceRoot);
@@ -454,6 +454,13 @@ export async function cleanupPackedWinNamespace(config: ToolPackConfig): Promise
     residueObservation: await observeWinResidues(config, registeredPaths),
     stop,
   };
+}
+
+function assertWinStopComplete(stop: WinStopResult, operation: string): void {
+  if (stop.remainingPids.length === 0) return;
+  throw new Error(
+    `cannot ${operation} packaged namespace while sidecar processes remain: ${stop.remainingPids.join(", ")}`,
+  );
 }
 
 export async function listPackedWinNamespaces(config: ToolPackConfig): Promise<WinListResult> {
@@ -517,13 +524,14 @@ function resolveUpdateAction(value: string | undefined): DesktopUpdateAction | n
 }
 
 async function requestDesktopEval(
-  ipc: string,
+  stamp: SidecarStamp,
   expression: string,
 ): Promise<DesktopEvalResult> {
   try {
-    return await requestJsonIpc<DesktopEvalResult>(
-      ipc,
-      { input: { expression }, type: SIDECAR_MESSAGES.EVAL },
+    return await invokeSidecar<DesktopEvalResult>(
+      stamp,
+      SIDECAR_MESSAGES.EVAL,
+      { expression },
       { timeoutMs: 5000 },
     );
   } catch (error) {
@@ -534,9 +542,9 @@ async function requestDesktopEval(
   }
 }
 
-async function requestStatusSnapshot<T>(ipc: string): Promise<{ error?: string; status: T | null }> {
+async function requestStatusSnapshot<T>(stamp: SidecarStamp, timeoutMs = 2000): Promise<{ error?: string; status: T | null }> {
   try {
-    return { status: await requestJsonIpc<T>(ipc, { type: SIDECAR_MESSAGES.STATUS }, { timeoutMs: 2000 }) };
+    return { status: await getSidecarStatus<T>(stamp, { timeoutMs }) };
   } catch (error) {
     return {
       error: error instanceof Error ? error.message : String(error),
@@ -558,16 +566,16 @@ async function delay(ms: number): Promise<void> {
 
 async function pollWinInspectStatus(config: ToolPackConfig, count: number, intervalMs: number): Promise<WinInspectStatusPollResult> {
   const samples: WinInspectStatusPollSample[] = [];
-  const desktopIpc = desktopStamp(config).ipc;
-  const daemonIpc = appIpcPath(config, APP_KEYS.DAEMON);
-  const webIpc = appIpcPath(config, APP_KEYS.WEB);
+  const desktop = (await resolveDesktopEndpoint(config, 2000)).stamp;
+  const daemon = appStamp(config, APP_KEYS.DAEMON, desktop.source);
+  const web = appStamp(config, APP_KEYS.WEB, desktop.source);
   for (let attempt = 1; attempt <= count; attempt += 1) {
     const startedAtMs = Date.now();
     const startedAt = new Date(startedAtMs).toISOString();
     const [desktopSnapshot, daemonSnapshot, webSnapshot] = await Promise.all([
-      requestStatusSnapshot<DesktopStatusSnapshot>(desktopIpc),
-      requestStatusSnapshot<DaemonStatusSnapshot>(daemonIpc),
-      requestStatusSnapshot<WebStatusSnapshot>(webIpc),
+      requestStatusSnapshot<DesktopStatusSnapshot>(desktop),
+      requestStatusSnapshot<DaemonStatusSnapshot>(daemon),
+      requestStatusSnapshot<WebStatusSnapshot>(web),
     ]);
     samples.push({
       attempt,
@@ -589,12 +597,13 @@ export async function inspectPackedWinApp(
   config: ToolPackConfig,
   options: { expr?: string; path?: string; statusPollCount?: string | number; statusPollIntervalMs?: string | number; updateAction?: string },
 ): Promise<WinInspectResult> {
-  const stamp = desktopStamp(config);
-  const [desktopSnapshot, daemonSnapshot, webSnapshot] = await Promise.all([
-    requestStatusSnapshot<DesktopStatusSnapshot>(stamp.ipc),
-    requestStatusSnapshot<DaemonStatusSnapshot>(appIpcPath(config, APP_KEYS.DAEMON)),
-    requestStatusSnapshot<WebStatusSnapshot>(appIpcPath(config, APP_KEYS.WEB)),
+  const desktop = await resolveDesktopEndpoint(config, 2000);
+  const stamp = desktop.stamp;
+  const [daemonSnapshot, webSnapshot] = await Promise.all([
+    requestStatusSnapshot<DaemonStatusSnapshot>(appStamp(config, APP_KEYS.DAEMON, stamp.source)),
+    requestStatusSnapshot<WebStatusSnapshot>(appStamp(config, APP_KEYS.WEB, stamp.source)),
   ]);
+  const desktopSnapshot = desktop.snapshot;
   const updateAction = resolveUpdateAction(options.updateAction);
   const statusPollCount = resolveOptionalPositiveInteger(options.statusPollCount, "--status-poll-count");
   const statusPollIntervalMs = resolveOptionalPositiveInteger(options.statusPollIntervalMs, "--status-poll-interval-ms") ?? 500;
@@ -604,7 +613,7 @@ export async function inspectPackedWinApp(
     daemonStatus: daemonSnapshot.status,
     ...(daemonSnapshot.error == null ? {} : { daemonStatusError: daemonSnapshot.error }),
     ...(options.expr == null ? {} : {
-      eval: await requestDesktopEval(stamp.ipc, options.expr),
+      eval: await requestDesktopEval(stamp, options.expr),
     }),
     launcher,
     launcherSource: {
@@ -619,16 +628,18 @@ export async function inspectPackedWinApp(
       root: updateCache.updateRoot,
     },
     ...(options.path == null ? {} : {
-      screenshot: await requestJsonIpc<DesktopScreenshotResult>(
-        stamp.ipc,
-        { input: { path: options.path }, type: SIDECAR_MESSAGES.SCREENSHOT },
+      screenshot: await invokeSidecar<DesktopScreenshotResult>(
+        stamp,
+        SIDECAR_MESSAGES.SCREENSHOT,
+        { path: options.path },
         { timeoutMs: 10000 },
       ),
     }),
     ...(updateAction == null ? {} : {
-      update: await requestJsonIpc<DesktopUpdateResult>(
-        stamp.ipc,
-        { input: { action: updateAction }, type: SIDECAR_MESSAGES.UPDATE },
+      update: await invokeSidecar<DesktopUpdateResult>(
+        stamp,
+        SIDECAR_MESSAGES.UPDATE,
+        { action: updateAction },
         { timeoutMs: UPDATE_ACTION_TIMEOUT_MS },
       ),
     }),

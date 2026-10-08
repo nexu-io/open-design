@@ -11,6 +11,15 @@ import {
 // requires a closed, renderable block, not a bare tag.
 const RENDERABLE_BODY = '{"questions":[{"id":"surface","label":"Which surface?"}]}';
 const RENDERABLE_FORM = `<question-form id="q">${RENDERABLE_BODY}</question-form>`;
+const LEGACY_RENDERABLE_FORM = [
+  '<question-form id="audio-brief" title="Audio brief">',
+  '<question-select id="format" label="Which format?" required="true">',
+  '<option value="mp3">MP3</option>',
+  '<option value="wav">WAV</option>',
+  '</question-select>',
+  '<question-text id="mood" label="Describe the mood" />',
+  '</question-form>',
+].join('');
 
 // The exact production regression (OD Next strategy turn, PR #7016): the agent
 // declared it had nothing to ask AND still emitted the literal marker, with
@@ -32,6 +41,22 @@ describe('scanQuestionForms', () => {
       unrenderable: 0,
       unterminated: false,
     });
+  });
+
+  it('counts the legacy child-tag form stored by older conversations', () => {
+    expect(scanQuestionForms(LEGACY_RENDERABLE_FORM)).toEqual({
+      renderable: 1,
+      unrenderable: 0,
+      unterminated: false,
+    });
+  });
+
+  it('does not accept malformed legacy child markup as a renderable form', () => {
+    expect(
+      scanQuestionForms(
+        '<question-form><question-select id="format"><option>MP3</question-select></question-form>',
+      ),
+    ).toEqual({ renderable: 0, unrenderable: 1, unterminated: false });
   });
 
   // The defect: an open tag whose body is prose and which never closes used to
@@ -78,6 +103,68 @@ describe('scanQuestionForms', () => {
     expect(
       scanQuestionForms(`<question-form>prose</question-form>\ntail <question-form> more prose`),
     ).toEqual({ renderable: 0, unrenderable: 1, unterminated: true });
+  });
+});
+
+// OPEND-2364. Every case below is markup the chat DOES render into a form
+// card: `splitOnQuestionForms` gives up on an open marker only when no other
+// open marker is left to retry from. Scoring any of them as zero renderable
+// forms blocks the OD Next task on `od_next_clarification_form_missing` while
+// the user is still looking at the form, so their answer returns 409
+// STRATEGY_TASK_STATE_MISMATCH. The cross-parser corpus lives in
+// `e2e/tests/question-form-parity.test.ts`; these pin the daemon's own scan.
+describe('scanQuestionForms recovers wherever the web renderer does', () => {
+  it('counts the inner form when the agent duplicates its own open tag', () => {
+    expect(
+      scanQuestionForms(
+        `<question-form id="q" title="T">\n<question-form id="q" title="T">\n${RENDERABLE_BODY}\n</question-form>\n</question-form>`,
+      ),
+    ).toEqual({ renderable: 1, unrenderable: 0, unterminated: false });
+  });
+
+  it('counts an inner form reached through an unterminated outer marker', () => {
+    expect(
+      scanQuestionForms(`<question-form id="outer">\n${RENDERABLE_FORM}`),
+    ).toEqual({ renderable: 1, unrenderable: 0, unterminated: false });
+  });
+
+  it('counts a form the model wrapped in the other tag name', () => {
+    expect(
+      scanQuestionForms(`<question-form id="outer">\n<ask-question>${RENDERABLE_BODY}</ask-question>\n</question-form>`),
+    ).toEqual({ renderable: 1, unrenderable: 0, unterminated: false });
+  });
+
+  it('counts a real form that follows the tag name quoted in prose', () => {
+    expect(
+      scanQuestionForms(`the \`<question-form>\` markup\n${RENDERABLE_FORM}`),
+    ).toEqual({ renderable: 1, unrenderable: 0, unterminated: false });
+  });
+
+  // `parseForm` reads a bare top-level array as the questions list, so the UI
+  // renders this. Requiring the `questions` key here made a displayed form
+  // invisible to every daemon consumer.
+  it('accepts a bare top-level questions array', () => {
+    expect(
+      scanQuestionForms('<question-form>[{"id":"surface","label":"Which surface?"}]</question-form>'),
+    ).toEqual({ renderable: 1, unrenderable: 0, unterminated: false });
+  });
+
+  // Recovery must not become permissiveness: a wrapper that holds no further
+  // marker is still the unrenderable block it always was.
+  it('still charges a failed block with no inner marker to retry from', () => {
+    expect(
+      scanQuestionForms('<question-form>{"questions":[]}</question-form>'),
+    ).toEqual({ renderable: 0, unrenderable: 1, unterminated: false });
+  });
+
+  // Two forms the chat renders separately stay two, so the one-round protocol
+  // still catches the ambiguity instead of silently picking one.
+  it('keeps a recovered form distinct from a sibling form', () => {
+    expect(
+      scanQuestionForms(
+        `${RENDERABLE_FORM}\n<question-form>\n${RENDERABLE_FORM}\n</question-form>`,
+      ),
+    ).toEqual({ renderable: 2, unrenderable: 0, unterminated: false });
   });
 });
 

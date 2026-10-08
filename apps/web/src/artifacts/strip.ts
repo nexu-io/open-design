@@ -52,10 +52,27 @@ function findRealOpen(content: string, fromIndex: number, ranges: ReadonlyArray<
  * literal recitations of the protocol and must survive intact, otherwise
  * the rendered chat reply gets silently truncated mid-explanation.
  *
- * If no real open tag exists, the content is returned unchanged. If a real
- * open exists but no matching real close is found, the content is also
- * returned unchanged (refusing to strip is safer than truncating to
- * end-of-string when a tag is malformed or still streaming).
+ * If no real open tag exists, the content is returned unchanged.
+ *
+ * An open tag with no matching close is handled by what the tag itself claims
+ * to be, because two very different things produce one:
+ *
+ *  · **A truncated generation.** The open tag carries a real `type`
+ *    (`text/html`, `text/…`) and the rest of the message is the artifact body.
+ *    Leaving it in dumped 14k chars of `<!doctype html>…` into the chat as
+ *    Markdown and stretched one message past eleven thousand pixels, so the
+ *    tail is dropped. Safe to do here: the *streaming* path never reaches this
+ *    function (it goes through `splitStreamingArtifact`, which shows the
+ *    half-written body in a live code panel), so by the time we see an
+ *    unterminated artifact the turn is over and nothing more is coming.
+ *
+ *  · **A bare mention in prose**, e.g. `…<artifact identifier="x"> with no
+ *    closer.` — no `type`, and the sentence continues afterwards. Slicing to
+ *    end-of-string here would nuke the rest of the message; that was a real
+ *    regression once, so this case still returns the content untouched.
+ *
+ * Literal `<artifact …>` recitations inside code fences or inline code are
+ * excluded before either branch, by the same skip ranges the renderer uses.
  */
 export function stripArtifact(content: string): string {
   const { ranges: baseRanges, unclosedFenceStart } = computeSkipRanges(content);
@@ -72,7 +89,13 @@ export function stripArtifact(content: string): string {
   const closeTag = content.indexOf('>', open);
   if (closeTag === -1) return content;
   const end = findUnskipped(content, CLOSE, closeTag, ranges);
-  if (end === -1) return content;
+  if (end === -1) {
+    // 同一个判据 `splitStreamingArtifact` 也在用:只有声称自己是 html / 文本的
+    // 才当成「产物被截断了」,其余按「行文里提了一嘴」原样留着
+    const type = parseArtifactAttrs(content.slice(open, closeTag))['type'] ?? '';
+    const looksLikeArtifact = /html|text\//i.test(type);
+    return looksLikeArtifact ? content.slice(0, open).trim() : content;
+  }
   return (content.slice(0, open) + content.slice(end + CLOSE.length)).trim();
 }
 

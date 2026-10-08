@@ -244,7 +244,11 @@ node --experimental-strip-types scripts/sync-litellm-models.ts
 그 외에:
 
 - **설명조 주석은 쓰지 마세요.** `// import the module`이나 `// loop through items` 같은 것 말입니다. 코드만 봐도 명백하다면 그 주석은 잡음입니다. 주석은 코드로 표현할 수 없는 의도나 제약에만 쓰세요.
-- **`apps/web/src/`는 TypeScript를 씁니다.** daemon(`apps/daemon/`)은 타입이 중요한 곳에 JSDoc을 붙인 순수 ESM JavaScript입니다. 그대로 유지하세요.
+- **TypeScript-first.** `apps/web/src/`와 `apps/daemon/src/`의 코드를 포함해
+  프로젝트가 소유하는 진입점, 모듈, 스크립트, 테스트, 리포터, 설정은
+  TypeScript로 작성하세요. 새 `.js`, `.mjs`, `.cjs` 파일은 생성물, 저장소에
+  포함된 서드파티 코드 또는 명시적으로 문서화된 호환성 목적일 때만 허용되며
+  `pnpm guard`를 통과해야 합니다.
 - **새 최상위 의존성을 추가하지 마세요.** 추가한다면 얻는 것과 늘어나는 번들 크기를 PR 설명에 한 단락으로 적으세요. [`package.json`](../../package.json)의 의존성 목록은 일부러 작게 둡니다.
 - **푸시 전에 `pnpm typecheck`를 실행하세요.** CI에서도 돌립니다. 실패하면 "고쳐주세요" 코멘트를 받게 됩니다.
 

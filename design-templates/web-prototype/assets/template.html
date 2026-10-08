@@ -270,6 +270,16 @@
     .ph-img.square    { aspect-ratio: 1 / 1; }
     .ph-img.portrait  { aspect-ratio: 3 / 4; }
     .ph-img.wide      { aspect-ratio: 16 / 9; }
+    .content-img {
+      display: block;
+      max-width: 100%;
+      max-height: min(70vh, 720px);
+      width: auto;
+      height: auto;
+      object-fit: contain;
+      justify-self: center;
+      border-radius: var(--radius-lg);
+    }
 
     /* ─── divider ───────────────────────────────────────────────────── */
     .rule  { border: 0; border-top: 1px solid var(--border); margin: 0; }

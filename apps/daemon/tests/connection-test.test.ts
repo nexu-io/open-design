@@ -1070,6 +1070,45 @@ describe('POST /api/test/connection provider mode', () => {
     expect(body.status).toBe(404);
   });
 
+  it('maps OpenRouter no-endpoints 404 responses to not_found_model', async () => {
+    vi.stubGlobal(
+      'fetch',
+      passThroughOrUpstream(() =>
+        jsonResponse(
+          {
+            error: {
+              message: 'No endpoints found for anthropic/claude-3.7-sonnet.',
+            },
+          },
+          { status: 404 },
+        ),
+      ),
+    );
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'openai',
+        baseUrl: 'https://openrouter.ai/api/v1',
+        apiKey: 'sk-or-test',
+        model: 'anthropic/claude-3.7-sonnet',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+
+    expect(body).toMatchObject({
+      ok: false,
+      kind: 'not_found_model',
+      status: 404,
+      model: 'anthropic/claude-3.7-sonnet',
+    });
+    expect(body.detail).toBe(
+      'No endpoints found for anthropic/claude-3.7-sonnet.',
+    );
+  });
+
   it('maps an ambiguous 404 to invalid_base_url', async () => {
     vi.stubGlobal(
       'fetch',
@@ -3099,6 +3138,48 @@ process.stdin.on('end', () => {
       else process.env.ANTHROPIC_AUTH_TOKEN = previousToken;
       await fsp.rm(markerDir, { recursive: true, force: true });
     }
+  });
+
+  it('reports the concrete model resolved from a Claude alias', async () => {
+    await withFakeClaude(
+      `
+console.log(JSON.stringify({
+  type: 'system',
+  subtype: 'init',
+  model: 'claude-opus-5',
+  session_id: 'test-session',
+}));
+let input = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { input += chunk; });
+process.stdin.on('end', () => {
+  JSON.parse(input.trim());
+  console.log(JSON.stringify({
+    type: 'assistant',
+    message: {
+      id: 'msg_1',
+      content: [{ type: 'text', text: 'ok' }],
+      stop_reason: 'end_turn',
+    },
+  }));
+});
+`,
+      async () => {
+        const result = await testAgentConnection({
+          agentId: 'claude',
+          model: 'opus',
+        });
+
+        expect(result).toMatchObject({
+          ok: true,
+          kind: 'success',
+          model: 'opus',
+          resolvedModel: 'claude-opus-5',
+          agentName: 'Claude Code',
+          sample: 'ok',
+        });
+      },
+    );
   });
 
   it('waits for the Codex process before accepting early success text', async () => {

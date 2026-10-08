@@ -92,6 +92,101 @@ describe('project preview containment routes', () => {
     cleanupWorkspaceHeaders.set(projectId, workspaceHeaders(workspaceId, workspaceMemberId));
   }
 
+  // OPEND-2283. The web client builds its srcDoc preview from this response.
+  // Minting a fresh scope per request makes the SAME artifact serve different
+  // bytes every time, so any refetch produces a different srcDoc string, React
+  // assigns it, and the iframe reloads -- the artifact visibly disappears and
+  // comes back. Measured 1-4 reloads on a single project entry.
+  it('serves the same preview base for repeated reads of one artifact', async () => {
+    const projectId = await createProject();
+    await writeProjectFile(projectId, 'index.html', '<html><head></head><body>hi</body></html>');
+
+    const read = async () => {
+      // `odPreviewBridge` is what marks this as the FileViewer preview transport;
+      // a plain raw read deliberately returns the untouched bytes.
+      const res = await fetch(
+        `${baseUrl}/api/projects/${projectId}/raw/index.html?odPreviewBridge=scroll`,
+      );
+      expect(res.ok).toBe(true);
+      return await res.text();
+    };
+
+    const first = await read();
+    const second = await read();
+
+    // Compare the WHOLE document, not just the `<base href>`. What React
+    // assigns to `srcDoc` is this entire string, so any byte that moves per
+    // request reloads the iframe just as surely as a fresh scope id would --
+    // the bridge script serializes the scope's expiry, so renewing that expiry
+    // on a read is enough to defeat a stable scope id. Asserting only on the
+    // base href cannot see that.
+    expect(first).toContain('<base');
+    expect(second).toBe(first);
+  });
+
+  // Renewal keeps a scope alive; it must not change what the document SAYS.
+  // The bridge script serializes the expiry, so letting an explicit renewal
+  // move that value makes the next read of the same artifact return different
+  // bytes -- one more srcDoc assignment, one more iframe reload. The client
+  // renews on a timer while a preview is open, so this is the steady-state
+  // path, not an edge case.
+  it('keeps the bridged document identical across an explicit renewal', async () => {
+    const projectId = await createProject();
+    await writeProjectFile(projectId, 'index.html', '<html><head></head><body>hi</body></html>');
+
+    const read = async () => {
+      const res = await fetch(
+        `${baseUrl}/api/projects/${projectId}/raw/index.html?odPreviewBridge=scroll`,
+      );
+      expect(res.ok).toBe(true);
+      return await res.text();
+    };
+
+    const first = await read();
+    const scope = /\/preview\/([^/]+)\//.exec(
+      /<base\b[^>]*href="([^"]+)"/i.exec(first)?.[1] ?? '',
+    )?.[1];
+    expect(scope).toBeTruthy();
+
+    const renewed = await fetch(
+      `${baseUrl}/api/projects/${projectId}/preview/${scope}/renew`,
+      { method: 'POST', headers: { 'x-od-preview-scope-renewal': '1' } },
+    );
+    expect(renewed.ok).toBe(true);
+
+    expect(await read()).toBe(first);
+  });
+
+  // A scope minted for a one-shot job must never be handed to a live preview.
+  // Screenshot/PDF export mints a scope for the render and `revoke`s it in its
+  // `finally`; if a preview were allowed to adopt that scope, the export's
+  // teardown would revoke the very base the preview still serves its assets
+  // from -- blanking the artifact, which is the symptom this whole area exists
+  // to prevent. `preview-url` mints exactly the way an export does, so it
+  // stands in for one here without needing a renderer.
+  it('never reuses a one-shot minted scope for a live preview read', async () => {
+    const projectId = await createProject();
+    await writeProjectFile(projectId, 'index.html', '<html><head></head><body>hi</body></html>');
+
+    const mintResponse = await fetch(
+      `${baseUrl}/api/projects/${projectId}/preview-url?file=index.html`,
+    );
+    expect(mintResponse.ok).toBe(true);
+    const mintedUrl = (await mintResponse.json() as { url: string }).url;
+    const mintedScope = /\/preview\/([^/]+)\//.exec(mintedUrl)?.[1];
+    expect(mintedScope).toBeTruthy();
+
+    const previewResponse = await fetch(
+      `${baseUrl}/api/projects/${projectId}/raw/index.html?odPreviewBridge=scroll`,
+    );
+    expect(previewResponse.ok).toBe(true);
+    const previewScope = /<base\b[^>]*href="[^"]*\/preview\/([^/]+)\//i
+      .exec(await previewResponse.text())?.[1];
+
+    expect(previewScope).toBeTruthy();
+    expect(previewScope).not.toBe(mintedScope);
+  });
+
   it('returns a scoped preview URL with sandbox guidance and serves it with an opaque-origin CSP', async () => {
     const projectId = await createProject({ entryFile: 'pages/index.html' });
     await writeProjectFile(
@@ -489,6 +584,41 @@ describe('project preview containment routes', () => {
       if (previousToken === undefined) delete process.env.OD_API_TOKEN;
       else process.env.OD_API_TOKEN = previousToken;
     }
+  });
+
+  // The build-focus bridge is what lets the Design Files pane park a cursor on
+  // the part of a page the agent is writing right now. It rides the same
+  // `odPreviewBridge` query as the other bridges and must stay opt-in: a
+  // preview that did not ask for it gets a clean document.
+  it('injects the build-focus bridge only when asked, and only once', async () => {
+    const projectId = await createProject();
+    await writeProjectFile(
+      projectId,
+      'index.html',
+      '<!doctype html><html><body><h1>Studio Nine</h1></body></html>',
+    );
+
+    const plain = await fetch(`${baseUrl}/api/projects/${projectId}/raw/index.html`);
+    expect(await plain.text()).not.toContain('data-od-preview-build-focus');
+
+    const bridged = await fetch(
+      `${baseUrl}/api/projects/${projectId}/raw/index.html?odPreviewBridge=buildfocus`,
+    );
+    expect(bridged.status).toBe(200);
+    const html = await bridged.text();
+    expect(html.split('data-od-preview-build-focus').length - 1).toBe(1);
+    expect(html).toContain('od:preview-build-focus');
+    // Asking for one bridge must not hand out the others — the observability
+    // bridge in particular reports page errors into a host-wide buffer.
+    expect(html).not.toContain('data-od-preview-observability');
+    expect(html).not.toContain('data-od-url-scroll-bridge');
+
+    // A non-HTML file has nothing to inject into.
+    await writeProjectFile(projectId, 'notes.txt', 'plain text');
+    const text = await fetch(
+      `${baseUrl}/api/projects/${projectId}/raw/notes.txt?odPreviewBridge=buildfocus`,
+    );
+    expect(await text.text()).not.toContain('data-od-preview-build-focus');
   });
 
   it('rejects invalid preview scopes and escaping preview-url paths', async () => {

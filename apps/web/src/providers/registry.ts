@@ -30,6 +30,7 @@ import type {
   ProjectFileVersionSource,
   ProjectFileVersionResponse,
   ProjectFileVersionsResponse,
+  ProjectMediaTasksResponse,
   RestoreProjectFileVersionResponse,
   SocialShareRequest,
   SocialShareResponse,
@@ -102,8 +103,34 @@ import {
   appendResourceQuery,
   workspaceIdentityCacheKey,
   workspaceResourceUrl,
+  workspaceAccountScopedCacheKey,
+  currentWorkspaceAccountGeneration,
 } from '../collab/workspace-identity';
 import { PublicFilePublishError } from '../collab/public-file-publish';
+import { clientRequestIdHeaders, withDaemonFailure } from '../analytics/failure-detail';
+
+/**
+ * `coalescedGet` ttl for reads that may only JOIN a request still on the wire.
+ *
+ * Zero means nothing is retained once the read settles: a caller that starts
+ * after the previous one finished always issues its own request. That is the
+ * whole safety argument — such a read can never hand anyone a body it did not
+ * itself trigger, so it cannot serve stale state. It can only remove a request
+ * the browser would have opened *concurrently* with an identical one.
+ *
+ * Why that is worth doing: several of these endpoints are read by one effect
+ * that legitimately runs twice (React StrictMode replays mount effects in dev;
+ * a settling dependency replays them in prod), and the replay always lands
+ * while the first request is still open. Measured on one cold conversation
+ * open: /api/editors ×2 1ms apart, /deployments ×2 6ms apart, /folders ×2 2ms
+ * apart, /api/health ×2 4ms apart. The daemon answers each in 3-7ms, so the
+ * cost is not server time — it is a slot in the browser's ~6-connection budget
+ * for this origin, which the same page is already oversubscribing.
+ *
+ * Use this ttl, not a positive one, unless the endpoint has an explicit reason
+ * a settled body stays true for a while.
+ */
+const IN_FLIGHT_SHARE_ONLY_MS = 0;
 
 export const DEFAULT_DEPLOY_PROVIDER_ID = 'vercel-self';
 export const CLOUDFLARE_PAGES_PROVIDER_ID = 'cloudflare-pages';
@@ -264,6 +291,21 @@ export async function fetchSkills(
   } catch {
     return [];
   }
+}
+
+export async function fetchProjectMediaTasks(
+  projectId: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): Promise<ProjectMediaTasksResponse> {
+  const resp = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/media/tasks?includeDone=1`,
+    {
+      cache: 'no-store',
+      ...(workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : {}),
+    },
+  );
+  if (!resp.ok) throw new Error(`media tasks ${resp.status}`);
+  return await resp.json() as ProjectMediaTasksResponse;
 }
 
 // Design templates — the rendering catalogue (decks, prototypes, image/
@@ -584,12 +626,18 @@ export interface FetchDesignSystemsOptions {
    * Exact Team ids returned by a workspace-scoped Team-index read that just
    * completed in the caller. Reuse that witness while reading the unified
    * catalog instead of issuing a duplicate `/team` materialization request.
+   *
+   * Supplying it also declares the catalog read itself authoritative: the only
+   * caller passes it when its fresh `/team` witness disagrees with the rows it
+   * holds, or straight after a share/unshare. So the catalog read starts fresh
+   * rather than joining one issued before that change.
    */
   materializedTeamIds?: readonly string[];
 }
 
 async function materializeTeamDesignSystems(
   workspaceContext: WorkspaceCollabContext | null | undefined,
+  accountGeneration: number,
   options?: FetchDesignSystemsOptions,
 ): Promise<ReadonlySet<string>> {
   if (!workspaceContext || !workspaceContextHasTeamIdentity(workspaceContext)) {
@@ -608,9 +656,14 @@ async function materializeTeamDesignSystems(
   // workspace" lookup. One account can have multiple clients open in different
   // Workspaces; a backend-global active Workspace would let either client
   // retarget the other's catalog request.
-  const identity = workspaceIdentityCacheKey(workspaceContext);
   try {
-    const cacheKey = `design-system-team-materialization:${identity}`;
+    // Account-scoped for the same reason the catalog key is, and with the SAME
+    // captured generation: this witness decorates the catalog rows, so a `/team`
+    // request still in flight across a sign-out/sign-in must not be joined by a
+    // post-boundary reader — that would stamp the new account's rows with the
+    // previous account's Team-share flags.
+    const cacheKey = `design-system-team-materialization:`
+      + `${workspaceAccountScopedCacheKey(workspaceContext, accountGeneration)}`;
     const readTeamIndex = async () => {
       const response = await fetch('/api/workspace/design-systems/team', {
         cache: 'no-store',
@@ -636,20 +689,140 @@ async function materializeTeamDesignSystems(
   }
 }
 
+/**
+ * Read the unified catalog once per burst of identical concurrent readers.
+ *
+ * Several independent surfaces want this catalog on the same launch or
+ * navigation pass: bootstrap, the Workspace-identity effect, the home-route
+ * effect, plus LibrarySection, DesignSystemsSection and DesignSystemSwitchPicker
+ * as they mount. None of them can drop its read — each owns its own latest-wins
+ * bookkeeping and must settle its own loading state — but on the wire they are
+ * one request, and the browser's ~6-connections-per-host cap makes the extra
+ * copies queue behind everything else the launch is already fetching.
+ *
+ * SINGLE-FLIGHT ONLY (ttl 0, no shared settled result). Some of those call
+ * sites exist precisely to observe a change that just happened out of band:
+ * returning home re-reads so an in-project brand extraction appears, and a
+ * `forceTeamMaterialization` caller is announcing a realtime mutation. Sharing
+ * a settled answer — for even a second — would hand exactly those reads the
+ * state they were fired to replace.
+ */
+const CATALOG_SINGLE_FLIGHT_ONLY_MS = 0;
+
+/**
+ * Bumped by every successful LOCAL catalog mutation, and part of the read key.
+ *
+ * `ttl = 0` stops a settled result from being reused; it does not stop a new
+ * caller from JOINING a request that is still in flight. The callers that follow
+ * a mutation are exactly the ones that must not join: `DesignSystemsTab` awaits
+ * `deleteDesignSystemDraft` / `updateDesignSystemDraft` and then calls its plain
+ * `onSystemsRefresh()` — no `forceTeamMaterialization`, because nothing remote
+ * changed — and the daemon answers `/api/design-systems` from a snapshot taken
+ * when the request arrived. Joining a pre-mutation GET would leave the deleted
+ * system on screen, or show the old published/draft status.
+ *
+ * The rule, stated so it stays checkable: every export that SYNCHRONOUSLY changes
+ * catalog membership or a summary field bumps this on success — create, update,
+ * update-revision-status, delete, uninstall, the three imports, install, and
+ * asset sync.
+ *
+ * Two groups deliberately do not, and should not be "fixed" later:
+ *   - the job starters (`startDesignSystemGenerationJob`,
+ *     `startDesignSystemRevisionJob`,
+ *     `startDesignSystemTokenContractRebuildJob`) — nothing has changed when they
+ *     return; the finished job arrives through the invalidation path;
+ *   - `ensureDesignSystemWorkspace` — it materializes an editing workspace and
+ *     leaves the catalog rows alone.
+ *
+ * `forceTeamMaterialization` also stays as it is: that is the REMOTE
+ * (team-invalidation) signal, this is the local one.
+ */
+let designSystemCatalogMutationGeneration = 0;
+
+function noteDesignSystemCatalogMutation(): void {
+  designSystemCatalogMutationGeneration += 1;
+}
+
+async function readDesignSystemCatalog(
+  workspaceContext: WorkspaceCollabContext | null | undefined,
+  accountGeneration: number,
+  options?: FetchDesignSystemsOptions,
+): Promise<DesignSystemSummary[]> {
+  // Keyed by the exact identity the request will carry, PLUS the account
+  // boundary it was captured under — the same two-part identity the app uses
+  // for this catalog and the team-project catalog carries as its request
+  // generation. `/api/design-systems` is fail-closed on a missing scope, so a
+  // headerless read is a different, smaller catalog and never an answer a
+  // Workspace-scoped read may join. The generation is load-bearing on its own:
+  // a sign-out/sign-in cycle can leave every context field identical while the
+  // authority behind them has changed, and ttl 0 would not catch it — it stops
+  // settled-result reuse, not a post-boundary reader joining a request issued
+  // before the boundary.
+  const cacheKey = `design-system-catalog:${designSystemCatalogMutationGeneration}`
+    + `:${workspaceAccountScopedCacheKey(workspaceContext, accountGeneration)}`;
+  // Same rule as the Team index above: a forced call is an authoritative read
+  // for one mutation and must never join a snapshot issued before it.
+  //
+  // `materializedTeamIds` counts too, and it is not obvious from the name.
+  // `DesignSystemsTab.refreshTeamShared` is the only caller that supplies it,
+  // and it does so exactly when the fresh `/team` witness disagrees with the
+  // catalog it holds — or immediately after a share/unshare. Carrying that
+  // witness therefore means "what I hold is out of date"; joining a catalog GET
+  // issued before the share would omit the newly shared system or keep a
+  // retired mirror on screen. Routine mounts do not pass it, so ordinary
+  // readers still collapse onto the shared key.
+  if (options?.forceTeamMaterialization || options?.materializedTeamIds) {
+    evictCoalescedGet(cacheKey);
+  }
+  return coalescedGet(cacheKey, async () => {
+    const resp = await fetch('/api/design-systems', {
+      ...(workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : {}),
+    });
+    // Throw rather than return a sentinel: `coalescedGet` never caches a
+    // failure, so the next reader retries instead of joining a dead entry.
+    if (!resp.ok) throw new Error(`design-systems ${resp.status}`);
+    const json = (await resp.json()) as { designSystems?: DesignSystemSummary[] };
+    return json.designSystems ?? [];
+  }, CATALOG_SINGLE_FLIGHT_ONLY_MS);
+}
+
 export async function fetchDesignSystemsResult(
   workspaceContext?: WorkspaceCollabContext | null,
   options?: FetchDesignSystemsOptions,
 ): Promise<DesignSystemsResult> {
+  // Capture the account boundary ONCE. The Team witness and the catalog are two
+  // awaited reads; letting each resolve the generation at its own call time lets
+  // them straddle a sign-out/sign-in, which would decorate post-boundary rows
+  // with pre-boundary Team-share flags. Keyed as of one boundary, the pair is at
+  // least internally consistent.
+  //
+  // What this does NOT do, stated because the opposite is easy to assume: it
+  // does not stop a late result from being COMMITTED after a boundary. Only
+  // `App`'s `refreshDesignSystems` re-checks the generation after awaiting;
+  // `DesignSystemSwitchPicker`, `DesignSystemsSection` and `LibrarySection` key
+  // their effects on workspace identity alone, and the Workspace hook
+  // deliberately retains the old context while an identity change is pending, so
+  // those fields can be unchanged across the boundary. That exposure predates
+  // coalescing — each of those readers had it when every call made its own
+  // request — and closing it means giving those three readers a generation
+  // guard, which is its own change.
+  const accountGeneration = currentWorkspaceAccountGeneration();
   try {
-    const teamSharedIds = await materializeTeamDesignSystems(workspaceContext, options);
-    const resp = await fetch('/api/design-systems', {
-      ...(workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : {}),
-    });
-    if (!resp.ok) return { ok: false };
-    const json = (await resp.json()) as { designSystems?: DesignSystemSummary[] };
+    const teamSharedIds = await materializeTeamDesignSystems(
+      workspaceContext,
+      accountGeneration,
+      options,
+    );
+    const designSystems = await readDesignSystemCatalog(
+      workspaceContext,
+      accountGeneration,
+      options,
+    );
     return {
       ok: true,
-      designSystems: (json.designSystems ?? []).map((system) => (
+      // Mapped per caller: readers sharing one catalog read still resolve the
+      // Team-shared flag against their own Team-index witness.
+      designSystems: designSystems.map((system) => (
         teamSharedIds.has(system.id)
           ? { ...system, teamShared: true }
           : system
@@ -761,6 +934,7 @@ export async function createDesignSystemDraft(
       body: JSON.stringify(input),
     });
     if (!resp.ok) return null;
+    noteDesignSystemCatalogMutation();
     return parseDesignSystemDetail(await resp.json());
   } catch {
     return null;
@@ -861,6 +1035,7 @@ export async function updateDesignSystemRevisionStatus(
       },
     );
     if (!resp.ok) return null;
+    noteDesignSystemCatalogMutation();
     const json = (await resp.json()) as { revision?: DesignSystemRevision };
     return json.revision ?? null;
   } catch {
@@ -926,6 +1101,7 @@ export async function updateDesignSystemDraft(
       body: JSON.stringify(input),
     });
     if (!resp.ok) return null;
+    noteDesignSystemCatalogMutation();
     return parseDesignSystemDetail(await resp.json());
   } catch {
     return null;
@@ -955,6 +1131,7 @@ export async function syncDesignSystemAssetsFromWorkspace(
       },
     });
     if (!resp.ok) return null;
+    noteDesignSystemCatalogMutation();
     return (await resp.json()) as { synced: string[] };
   } catch {
     return null;
@@ -992,6 +1169,7 @@ export async function deleteDesignSystemDraft(
         ?? (/^[A-Z][A-Z0-9_]+$/.test(errorBody.message) ? errorBody.message : undefined);
       throw new DesignSystemDeleteError(errorBody.message, resp.status, code);
     }
+    if (resp.ok) noteDesignSystemCatalogMutation();
     return resp.ok;
   } catch (error) {
     if (error instanceof DesignSystemDeleteError) throw error;
@@ -1011,6 +1189,7 @@ export async function importLocalDesignSystem(
     if (!resp.ok) {
       return { error: await readImportError(resp) };
     }
+    noteDesignSystemCatalogMutation();
     return (await resp.json()) as ImportLocalDesignSystemResponse;
   } catch (err) {
     return {
@@ -1031,6 +1210,7 @@ export async function importGitHubDesignSystem(
       body: JSON.stringify(input),
     });
     if (!resp.ok) return { error: await readImportError(resp) };
+    noteDesignSystemCatalogMutation();
     return (await resp.json()) as ImportGitHubDesignSystemResponse;
   } catch (err) {
     return {
@@ -1051,6 +1231,7 @@ export async function importShadcnDesignSystem(
       body: JSON.stringify(input),
     });
     if (!resp.ok) return { error: await readImportError(resp) };
+    noteDesignSystemCatalogMutation();
     return (await resp.json()) as ImportShadcnDesignSystemResponse;
   } catch (err) {
     return {
@@ -1103,12 +1284,18 @@ export async function fetchPromptTemplate(
 }
 
 export async function daemonIsLive(): Promise<boolean> {
-  try {
-    const resp = await fetch('/api/health');
-    return resp.ok;
-  } catch {
-    return false;
-  }
+  return coalescedGet(
+    'daemon-health',
+    async () => {
+      try {
+        const resp = await fetch('/api/health');
+        return resp.ok;
+      } catch {
+        return false;
+      }
+    },
+    IN_FLIGHT_SHARE_ONLY_MS,
+  );
 }
 
 export async function fetchConnectors(): Promise<ConnectorDetail[]> {
@@ -1661,17 +1848,27 @@ export async function fetchProjectDeployments(
   projectId: string,
   workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<WebDeploymentInfo[]> {
-  try {
-    const resp = await fetch(
-      `/api/projects/${encodeURIComponent(projectId)}/deployments`,
-      workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : undefined,
-    );
-    if (!resp.ok) return [];
-    const json = (await resp.json()) as ProjectDeploymentsResponse;
-    return (json.deployments ?? []) as WebDeploymentInfo[];
-  } catch {
-    return [];
-  }
+  // HtmlViewer reads this from its identity-load effect and again when the
+  // Share/Export popover opens; those can overlap. Retaining nothing after the
+  // read settles keeps the popover's on-demand refresh a real request — it
+  // exists precisely to observe a deploy that happened since the mount read.
+  return coalescedGet(
+    `project-deployments:${projectId}:${workspaceIdentityCacheKey(workspaceContext)}`,
+    async () => {
+      try {
+        const resp = await fetch(
+          `/api/projects/${encodeURIComponent(projectId)}/deployments`,
+          workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : undefined,
+        );
+        if (!resp.ok) return [];
+        const json = (await resp.json()) as ProjectDeploymentsResponse;
+        return (json.deployments ?? []) as WebDeploymentInfo[];
+      } catch {
+        return [];
+      }
+    },
+    IN_FLIGHT_SHARE_ONLY_MS,
+  );
 }
 
 export async function deployProjectFile(
@@ -1681,6 +1878,7 @@ export async function deployProjectFile(
   cloudflarePages?: WebCloudflarePagesDeploySelection,
   target?: 'preview' | 'production',
   workspaceContext?: WorkspaceCollabContext | null,
+  requestId?: string,
 ): Promise<WebDeployProjectFileResponse> {
   const body = {
     fileName,
@@ -1693,12 +1891,13 @@ export async function deployProjectFile(
     headers: {
       'Content-Type': 'application/json',
       ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
+      ...clientRequestIdHeaders(requestId),
     },
     body: JSON.stringify(body),
   });
   if (!resp.ok) {
     const payload = (await resp.json().catch(() => null)) as
-      | { error?: { message?: string; code?: string }; code?: string; message?: string }
+      | { error?: { message?: string; code?: string; failure?: unknown }; code?: string; message?: string }
       | null;
     const message = payload?.error?.message || payload?.message || `Deploy failed (${resp.status})`;
     // Preserve a queryable failure code for analytics (`deployErrorCode` reads
@@ -1712,7 +1911,9 @@ export async function deployProjectFile(
     // one code.
     const rawCode = payload?.error?.code || payload?.code;
     const code = rawCode && !GENERIC_DEPLOY_ENVELOPE_CODES.has(rawCode) ? rawCode : `HTTP_${resp.status}`;
-    throw Object.assign(new Error(message), { code });
+    throw withDaemonFailure(Object.assign(new Error(message), { code }), {
+      failure: payload?.error?.failure,
+    });
   }
   return (await resp.json()) as WebDeployProjectFileResponse;
 }
@@ -1746,6 +1947,7 @@ export async function publishProjectFilePublic(
   projectId: string,
   fileName: string,
   workspaceContext?: WorkspaceCollabContext | null,
+  requestId?: string,
 ): Promise<WebPublicProjectFileResponse> {
   // Carry the active workspace identity so the daemon's `canShareProjectsForRequest`
   // gate (apps/daemon/src/routes/collab-sync.ts) reads the real permission bit
@@ -1755,7 +1957,14 @@ export async function publishProjectFilePublic(
     `/api/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(fileName)}/publish-public`,
     {
       method: 'POST',
-      ...(workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : {}),
+      ...(workspaceContext || requestId
+        ? {
+            headers: {
+              ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
+              ...clientRequestIdHeaders(requestId),
+            },
+          }
+        : {}),
     },
   );
   if (!resp.ok) {
@@ -1763,6 +1972,7 @@ export async function publishProjectFilePublic(
       | {
           error?: { code?: unknown; message?: unknown; data?: unknown } | string;
           message?: unknown;
+          failure?: unknown;
         }
       | null;
     const structuredError = payload?.error && typeof payload.error === 'object'
@@ -1784,13 +1994,16 @@ export async function publishProjectFilePublic(
     const recoveryData = code === PUBLIC_FILE_MANUAL_REVOKE_REQUIRED
       ? parsePublicFileManualRevokeData(structuredError?.data)
       : undefined;
-    throw new PublicFilePublishError(
-      errorMessage || `Publish failed (${resp.status})`,
-      resp.status,
-      code,
-      recoveryData?.projectId === projectId && recoveryData.fileName === fileName
-        ? recoveryData
-        : undefined,
+    throw withDaemonFailure(
+      new PublicFilePublishError(
+        errorMessage || `Publish failed (${resp.status})`,
+        resp.status,
+        code,
+        recoveryData?.projectId === projectId && recoveryData.fileName === fileName
+          ? recoveryData
+          : undefined,
+      ),
+      { failure: payload?.failure, daemonErrorCode: code },
     );
   }
   return (await resp.json()) as WebPublicProjectFileResponse;
@@ -1826,6 +2039,7 @@ export async function unpublishProjectFilePublic(
   fileName: string,
   slug: string,
   workspaceContext?: WorkspaceCollabContext | null,
+  requestId?: string,
 ): Promise<{ ok: true; slug: string; fileName: string }> {
   const resp = await fetch(
     `/api/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(fileName)}/publish-public`,
@@ -1834,13 +2048,14 @@ export async function unpublishProjectFilePublic(
       headers: {
         'content-type': 'application/json',
         ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
+        ...clientRequestIdHeaders(requestId),
       },
       body: JSON.stringify({ slug }),
     },
   );
   if (!resp.ok) {
     const payload = (await resp.json().catch(() => null)) as
-      | { error?: { message?: string } | string; message?: string }
+      | { error?: { message?: string; code?: unknown } | string; message?: string; failure?: unknown }
       | null;
     const errorMessage =
       typeof payload?.error === 'object'
@@ -1848,7 +2063,10 @@ export async function unpublishProjectFilePublic(
         : typeof payload?.error === 'string'
           ? payload.error
           : payload?.message;
-    throw new Error(errorMessage || `Unpublish failed (${resp.status})`);
+    throw withDaemonFailure(new Error(errorMessage || `Unpublish failed (${resp.status})`), {
+      failure: payload?.failure,
+      daemonErrorCode: typeof payload?.error === 'object' ? payload.error.code : payload?.error,
+    });
   }
   return (await resp.json()) as { ok: true; slug: string; fileName: string };
 }
@@ -2020,17 +2238,26 @@ export async function fetchProjectFolders(
   projectId: string,
   workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<ProjectFolder[]> {
-  try {
-    const resp = await fetch(
-      `/api/projects/${encodeURIComponent(projectId)}/folders`,
-      workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : undefined,
-    );
-    if (!resp.ok) return [];
-    const json = (await resp.json()) as { folders?: ProjectFolder[] };
-    return json.folders ?? [];
-  } catch {
-    return [];
-  }
+  // Keyed by the authority the request is made under as well as the project:
+  // two readers may only share a request that carries the same Workspace
+  // headers, or one identity's answer could satisfy another's read.
+  return coalescedGet(
+    `project-folders:${projectId}:${workspaceIdentityCacheKey(workspaceContext)}`,
+    async () => {
+      try {
+        const resp = await fetch(
+          `/api/projects/${encodeURIComponent(projectId)}/folders`,
+          workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : undefined,
+        );
+        if (!resp.ok) return [];
+        const json = (await resp.json()) as { folders?: ProjectFolder[] };
+        return json.folders ?? [];
+      } catch {
+        return [];
+      }
+    },
+    IN_FLIGHT_SHARE_ONLY_MS,
+  );
 }
 
 export async function createProjectFolder(
@@ -3257,9 +3484,15 @@ export async function replaceProjectWorkingDir(
 export async function fetchHostEditors(): Promise<
   import('@open-design/contracts').HostEditorsResponse
 > {
-  const resp = await fetch('/api/editors');
-  if (!resp.ok) throw new Error(`GET /api/editors failed: ${resp.status}`);
-  return (await resp.json()) as import('@open-design/contracts').HostEditorsResponse;
+  return coalescedGet(
+    'host-editors',
+    async () => {
+      const resp = await fetch('/api/editors');
+      if (!resp.ok) throw new Error(`GET /api/editors failed: ${resp.status}`);
+      return (await resp.json()) as import('@open-design/contracts').HostEditorsResponse;
+    },
+    IN_FLIGHT_SHARE_ONLY_MS,
+  );
 }
 
 export async function openProjectInEditor(
@@ -3465,6 +3698,7 @@ export async function installDesignSystem(
     });
     const json = await resp.json();
     if (!resp.ok) return { error: json.error ?? 'Install failed' };
+    noteDesignSystemCatalogMutation();
     return json as InstallDesignSystemResponse;
   } catch {
     return { error: 'Network error' };
@@ -3482,9 +3716,15 @@ export async function uninstallDesignSystem(
         ? { headers: workspaceProjectHeaders(workspaceContext) }
         : {}),
     });
-    const json = await resp.json();
-    if (!resp.ok) return { error: json.error ?? 'Uninstall failed' };
-    return { ok: true };
+    // Success is decided by the status, not by a parsed body: this route can
+    // answer an empty 204, and parsing first threw straight into the catch —
+    // which also made any bump placed on the success path unreachable.
+    if (resp.ok) {
+      noteDesignSystemCatalogMutation();
+      return { ok: true };
+    }
+    const json = (await resp.json().catch(() => null)) as { error?: string } | null;
+    return { error: json?.error ?? 'Uninstall failed' };
   } catch {
     return { error: 'Network error' };
   }

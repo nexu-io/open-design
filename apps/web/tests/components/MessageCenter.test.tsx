@@ -64,6 +64,82 @@ afterEach(() => {
 });
 
 describe('MessageCenter', () => {
+  const targetedAnnouncement = (): MessageCenterMessage => ({
+    id: 'go-plan-sunset-message',
+    messageKey: 'go-plan-sunset-2026-08',
+    audienceType: 'targeted',
+    typeName: 'Account notice',
+    title: 'Go Plan update',
+    body: 'Account-specific details',
+    ctaLabel: null,
+    ctaUrl: null,
+    publishedAt: '2026-08-26T00:00:00.000Z',
+    readAt: null,
+  });
+
+  it('shows and acknowledges the preset dialog for the logged-in allowlisted message', async () => {
+    mockFetch({ loggedIn: true, messages: [targetedAnnouncement()] });
+    const onPendingChange = vi.fn();
+    render(
+      <I18nProvider initial="zh-CN">
+        <MessageCenter
+          priorityAnnouncementActive
+          onPriorityAnnouncementPendingChange={onPendingChange}
+        />
+      </I18nProvider>,
+    );
+
+    expect(await screen.findByRole('alertdialog')).toBeTruthy();
+    expect(screen.getByText('关于停售 Go 订阅的公告')).toBeTruthy();
+    await waitFor(() => expect(onPendingChange).toHaveBeenCalledWith(true));
+
+    fireEvent.click(screen.getByRole('button', { name: '我知道了' }));
+
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url, init]) => (
+      String(url).includes('/go-plan-sunset-message/read') && init?.method === 'POST'
+    ))).toBe(true));
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    expect(onPendingChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it('keeps the strong dialog open and reports a failed required acknowledgement', async () => {
+    mockFetch({
+      loggedIn: true,
+      messages: [targetedAnnouncement()],
+      onRead: async () => new Response(null, { status: 500 }),
+    });
+    render(
+      <I18nProvider initial="zh-CN">
+        <MessageCenter priorityAnnouncementActive />
+      </I18nProvider>,
+    );
+
+    expect(await screen.findByRole('alertdialog')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '我知道了' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('确认失败，请重试。');
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+  });
+
+  it('never promotes the allowlisted message for an anonymous client', async () => {
+    mockFetch({ loggedIn: false, messages: [targetedAnnouncement()] });
+    const onPendingChange = vi.fn();
+    render(
+      <I18nProvider initial="zh-CN">
+        <MessageCenter
+          priorityAnnouncementActive
+          onPriorityAnnouncementPendingChange={onPendingChange}
+        />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => (
+      String(url).includes('/message-center-public/messages?')
+    ))).toBe(true));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(onPendingChange).not.toHaveBeenCalledWith(true);
+  });
+
   it('formats published dates using the selected locale', async () => {
     const publishedAt = new Date(defaultMessages[0]!.publishedAt);
     const zhDate = new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium' }).format(publishedAt);
@@ -128,8 +204,47 @@ describe('MessageCenter', () => {
     expect(within(dialog).queryByRole('button', { name: 'Unread' })).toBeNull();
     expect(within(dialog).queryByRole('button', { name: 'Read' })).toBeNull();
     expect(within(dialog).queryByRole('button', { name: 'Mark all read' })).toBeNull();
+    // The panel is the inbox and nothing else: no subtitle under the title and
+    // no desktop-settings footer (the setting still lives in Settings).
+    expect(within(dialog).queryByText('OpenDesign updates, platform announcements, and account notices.')).toBeNull();
+    expect(within(dialog).queryByText('Task completion sounds and system notifications stay in Settings.')).toBeNull();
+    expect(within(dialog).queryByRole('button', { name: 'Desktop notification settings' })).toBeNull();
     expect(within(dialog).getByText('OpenDesign 0.14 is available')).toBeTruthy();
     expect(within(dialog).getByText('Credits added')).toBeTruthy();
+  });
+
+  it('reveals the media on expand with type and date below it', async () => {
+    const imageUrl = 'https://open-design.ai/update-card.png';
+    mockFetch({
+      messages: [{ ...defaultMessages[0]!, imageUrl }],
+    });
+    renderMessageCenter();
+    const dialog = await openCenter();
+    const row = within(dialog).getByRole('button', { name: /OpenDesign 0\.14 is available/ });
+    const title = within(row).getByText('OpenDesign 0.14 is available');
+    const type = within(row).getByText('Product update');
+    const date = row.querySelector('time');
+    const icon = row.querySelector('svg');
+
+    expect(date).toBeTruthy();
+    expect(icon).toBeTruthy();
+    // Title leads the card with the chevron beside it; type · date close it.
+    expect(title.compareDocumentPosition(icon as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(type.compareDocumentPosition(date as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(row).toHaveAttribute('aria-expanded', 'false');
+    expect(row.querySelector('img')).toBeNull();
+
+    fireEvent.click(icon as SVGElement);
+
+    expect(row).toHaveAttribute('aria-expanded', 'true');
+    const image = row.querySelector('img');
+    expect(image).toHaveAttribute('src', imageUrl);
+    expect((image as Node).compareDocumentPosition(type) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    fireEvent.click(icon as SVGElement);
+
+    expect(row).toHaveAttribute('aria-expanded', 'false');
+    expect(row.querySelector('img')).toBeNull();
   });
 
   it('expands the whole message row and opens its CTA', async () => {

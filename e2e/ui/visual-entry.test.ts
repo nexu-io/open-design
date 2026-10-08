@@ -28,20 +28,20 @@ test('[P2] captures the onboarding cloud sign-in surface', async ({ page }) => {
 
   await page.goto('/onboarding', { waitUntil: 'domcontentloaded' });
   await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
-  // Execution-source selection is intentionally gated behind Cloud identity.
-  // The signed-out landing exposes only the authentication action.
+  // Cloud stays primary while identity-independent Local Agent and BYOK setup
+  // remain available directly from the signed-out landing.
   await expect(
-    page.getByRole('heading', { name: /Sign in to OpenDesign|登录 OpenDesign/i }),
+    page.getByRole('heading', { name: /Welcome to OpenDesign|欢迎使用 OpenDesign/i }),
   ).toBeVisible({ timeout: T.medium });
   await expect(
-    page.getByRole('button', { name: /Sign in to OpenDesign|登录 OpenDesign/i }),
+    page.getByRole('button', { name: /Sign in \/ Sign up|登录 \/ 注册/i }),
   ).toBeVisible();
   await expect(
-    page.getByRole('button', { name: /Local coding agent|本地 Coding Agent/i }),
-  ).toHaveCount(0);
+    page.getByRole('button', { name: /Local AI|本地 AI/i }),
+  ).toBeVisible();
   await expect(
-    page.getByRole('button', { name: /Bring your own key|自己的模型 Key/i }),
-  ).toHaveCount(0);
+    page.getByRole('button', { name: /API Key|API 密钥/i }),
+  ).toBeVisible();
   await waitForVisualFonts(page);
 
   await captureVisual(page, 'visual-onboarding-cloud');
@@ -83,6 +83,12 @@ test('[P2] captures the onboarding Local Agent CLI list surface', async ({ page 
   // column shares an alignment line.
   await expect(chips.first()).toBeVisible();
   expect(await chips.count()).toBeGreaterThan(1);
+  // The panel validates the selected agent on its own, so its status line is
+  // part of the surface being archived. Let that settle first, or the capture
+  // races the transient "testing" copy.
+  await expect(panel.locator('.onboarding-view__test-status.is-success')).toBeVisible({
+    timeout: T.medium,
+  });
   await waitForVisualFonts(page);
 
   await captureVisual(page, 'visual-onboarding-local-agent');
@@ -100,7 +106,7 @@ test('[P2] captures the visual home harness', async ({ page }) => {
   await captureVisual(page, 'visual-home');
 });
 
-test('[P2] captures the Go campaign at narrow and short viewport boundaries', async ({ page }) => {
+test('[P2] captures the unpaid DeepSeek campaign at narrow and short viewport boundaries', async ({ page }) => {
   test.setTimeout(T.xlong);
 
   await page.clock.setFixedTime('2026-08-21T00:00:00+08:00');
@@ -110,9 +116,9 @@ test('[P2] captures the Go campaign at narrow and short viewport boundaries', as
   await gotoVisualHome(page);
   // Functional specs seed campaign dismissals globally so marketing surfaces
   // cannot interrupt unrelated flows. This visual contract deliberately opts
-  // back into the Go modal after establishing the page's same-origin storage.
+  // back into the DeepSeek modal after establishing same-origin storage.
   await page.evaluate(() => {
-    window.localStorage.removeItem('open-design:campaign-seen:go-plan-launch-2026');
+    window.localStorage.removeItem('open-design:campaign-seen:deepseek-v4-dual-unlimited-2026');
   });
   await ensureRailOpen(page);
   await page.getByTestId('entry-nav-community').evaluate((element: HTMLButtonElement) => {
@@ -124,15 +130,15 @@ test('[P2] captures the Go campaign at narrow and short viewport boundaries', as
   });
 
   const dialog = page.getByTestId('deepseek-v4-flash-campaign-dialog');
-  const close = page.getByRole('button', { name: 'Close dialog' });
-  const cta = page.getByRole('button', { name: 'View Go plan' });
+  const close = page.getByRole('button', { name: 'Close' });
+  const cta = page.getByRole('button', { name: 'Upgrade and use' });
   await expect(dialog).toBeVisible();
   await expect(close).toBeVisible();
   await expect(cta).toBeVisible();
   await expectInsideViewport(page, dialog);
   await expectInsideViewport(page, close);
   await expectInsideViewport(page, cta);
-  await captureVisual(page, 'visual-go-campaign-600');
+  await captureVisual(page, 'visual-deepseek-unpaid-campaign-600');
 
   await page.setViewportSize({ width: 760, height: 400 });
   await expect(close).toBeVisible();
@@ -141,7 +147,7 @@ test('[P2] captures the Go campaign at narrow and short viewport boundaries', as
   await expect.poll(async () => dialog.evaluate((element) => (
     element.scrollHeight > element.clientHeight
   ))).toBe(true);
-  await captureVisual(page, 'visual-go-campaign-short-height');
+  await captureVisual(page, 'visual-deepseek-unpaid-campaign-short-height');
   await cta.scrollIntoViewIfNeeded();
   await expect(cta).toBeVisible();
   await expectInsideViewport(page, cta);
@@ -199,6 +205,33 @@ test('[P2] captures the plugin detail share menu surface', async ({ page }) => {
 
   await captureVisual(page, 'visual-plugin-share-menu');
   await captureVisualTarget(page, 'visual-plugin-share-menu-popover', [trigger, popover]);
+});
+
+test('[P2] plugin detail owns vertical scrolling inside the fixed workspace shell', async ({ page }) => {
+  await configureVisualPage(page);
+  const plugins = await openVisualPluginsCatalog(page);
+  // Navigate with the standard visual viewport; shrink only the detail page so
+  // the assertion owns the detail scroller rather than the responsive nav.
+  await page.setViewportSize({ width: 960, height: 600 });
+
+  const card = plugins.getByTestId('plugins-card-visual-prototype-starter');
+  await expect(card).toBeVisible();
+  await card.locator('.plugin-marketplace__row-main').click();
+  await expect(page).toHaveURL(/\/marketplace\/visual-prototype-starter$/);
+
+  const detail = page.locator('.plugin-suite-detail');
+  await expect(detail).toBeVisible();
+  await expect(detail).toHaveCSS('overflow-y', 'auto');
+  const before = await detail.evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+    scrollTop: element.scrollTop,
+  }));
+  expect(before.scrollHeight).toBeGreaterThan(before.clientHeight);
+  expect(before.scrollTop).toBe(0);
+
+  await detail.evaluate((element) => element.scrollTo({ top: element.scrollHeight }));
+  await expect.poll(() => detail.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
 });
 
 test('[P2] captures the home context picker surface', async ({ page }) => {
@@ -267,7 +300,8 @@ test('[P2] captures the home plugin use staged surface', async ({ page }) => {
   const usePlugin = page.getByTestId('plugin-detail-use');
   await expect(usePlugin).toBeVisible();
   await usePlugin.click();
-  await expect(page.getByTestId('home-hero-active-plugin')).toContainText('Prototype Starter');
+  // The lead chip cuts the title to eight code points (#7635).
+  await expect(page.getByTestId('home-hero-active-plugin')).toContainText('Prototyp…');
   await expect(page.getByTestId('home-hero-input')).toBeVisible();
 
   await captureVisual(page, 'visual-home-plugin-use-staged');
@@ -281,7 +315,7 @@ test('[P2] captures the home plugin use with query surface', async ({ page }) =>
   const card = pluginMarketplaceCard(plugins, 'Deck Writer');
   await expect(card).toBeVisible();
   await card.getByRole('button', { name: 'Try it' }).click();
-  await expect(page.getByTestId('home-hero-active-plugin')).toContainText('Deck Writer');
+  await expect(page.getByTestId('home-hero-active-plugin')).toContainText('Deck Wri…');
   await expect(page.getByTestId('home-hero-input')).toBeVisible();
 
   await captureVisual(page, 'visual-home-plugin-use-with-query');

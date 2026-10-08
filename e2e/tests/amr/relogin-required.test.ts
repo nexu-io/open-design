@@ -101,6 +101,9 @@ describe('AMR relogin-required run failures', () => {
           headers: { ...AMR_TEST_WORKSPACE_HEADERS },
           timeoutMs: 20_000,
         });
+      }, {
+        // The preflight fixture emits plain ACP output without strategy state.
+        env: { OD_NEXT_STRATEGY_ROLLOUT: 'off' },
       });
     });
   });
@@ -151,6 +154,9 @@ describe('AMR relogin-required run failures', () => {
             headers: { ...AMR_TEST_WORKSPACE_HEADERS },
             timeoutMs: 20_000,
           });
+        }, {
+          // The preflight fixture emits plain ACP output without strategy state.
+          env: { OD_NEXT_STRATEGY_ROLLOUT: 'off' },
         });
       },
     );

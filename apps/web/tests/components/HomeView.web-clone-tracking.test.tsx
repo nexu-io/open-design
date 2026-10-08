@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { pickHomeTemplate } from '../helpers/home-template-picker';
 //
 // Web-clone example-card analytics (埋点文档 row 116, element=example_prompt).
 // The Website-clone examples are plain text prompt cards (no embedded HTML / no
@@ -8,9 +9,10 @@
 // project_kind=web_clone on project_create_result.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import { HomeView } from '../../src/components/HomeView';
+import { HOME_APPLY_TEMPLATE_EVENT } from '../../src/components/home-hero/chips';
 import { I18nProvider } from '../../src/i18n';
 import { writeHomeGuideStage } from '../../src/components/home-hero/firstRunGuide';
 
@@ -90,7 +92,6 @@ function renderHome() {
         projects={[]}
         onSubmit={() => undefined}
         onOpenProject={() => undefined}
-        onViewAllProjects={() => undefined}
       />
     </I18nProvider>,
   );
@@ -105,12 +106,7 @@ afterEach(() => {
 
 // #5517 removed the inline template rail from Home; scenario templates are
 // picked from the composer footer's radial Template picker instead.
-async function pickHomeTemplate(id: string) {
-  const trigger = await screen.findByTestId('home-hero-template-trigger');
-  await waitFor(() => expect((trigger as HTMLButtonElement).disabled).toBe(false));
-  fireEvent.click(trigger);
-  fireEvent.click(await screen.findByTestId(`home-hero-template-wedge-${id}`));
-}
+
 
 describe('web-clone example-card tracking', () => {
   it('renders the Website-clone examples as text prompt cards (no plugin preview / no remix)', async () => {

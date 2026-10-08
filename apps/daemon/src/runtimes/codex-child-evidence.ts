@@ -12,6 +12,8 @@ import {
 } from 'node:fs/promises';
 import path from 'node:path';
 
+import { findIndexedCodexArchivedRolloutPath } from '../codex-archived-rollout-index.js';
+
 import {
   normalizeAgentObservationV1,
   type NormalizedAgentObservationV1,
@@ -452,14 +454,28 @@ async function resolveRolloutPath(input: {
   }
   const sessionsRoot = path.join(codexHome, 'sessions');
   const rootEntries = await safeDirectoryEntries(sessionsRoot, input.maxDirectoryEntries);
-  if (!rootEntries) return { ok: false, reason: 'sessions_root_unavailable' };
-  const rootRealPath = await realpath(sessionsRoot).catch(() => null);
-  if (!rootRealPath) return { ok: false, reason: 'sessions_root_unavailable' };
-
-  const matches: string[] = [];
+  const rootRealPath = rootEntries ? await realpath(sessionsRoot).catch(() => null) : null;
+  // Archiving moves only the explicitly owned thread and its descendants.
+  // Match the requested id under either native storage root; never inspect
+  // unrelated transcript contents or relax the existing file safety checks.
+  const archiveRoot = path.join(codexHome, 'archived_sessions');
+  const indexedArchivePath = await findIndexedCodexArchivedRolloutPath(codexHome, input.sessionId);
+  const archiveEntries = indexedArchivePath
+    ? null
+    : await safeDirectoryEntries(archiveRoot, input.maxDirectoryEntries);
+  const archiveRealPath = indexedArchivePath || archiveEntries
+    ? await realpath(archiveRoot).catch(() => null)
+    : null;
+  if (!rootRealPath && !archiveRealPath) return { ok: false, reason: 'sessions_root_unavailable' };
+  const suffix = `-${input.sessionId}.jsonl`;
+  const matches: string[] = (archiveEntries ?? [])
+    .filter((entry) => entry.isFile() && !entry.isSymbolicLink()
+      && entry.name.startsWith('rollout-') && entry.name.endsWith(suffix))
+    .map((entry) => path.join(archiveRoot, entry.name));
+  if (indexedArchivePath) matches.push(indexedArchivePath);
   let scannedDays = 0;
   let exhausted = false;
-  const years = rootEntries
+  const years = (rootEntries ?? [])
     .filter((entry) => entry.isDirectory() && !entry.isSymbolicLink() && YEAR_PATTERN.test(entry.name))
     .sort((left, right) => codePointCompare(right.name, left.name));
   for (const year of years) {
@@ -513,7 +529,8 @@ async function resolveRolloutPath(input: {
   if (!stat || isUnsafeFileStat(stat)) return { ok: false, reason: 'unsafe_rollout_file' };
   if (stat.size > input.maxRolloutBytes) return { ok: false, reason: 'rollout_too_large' };
   const resolved = await realpath(filePath).catch(() => null);
-  if (!resolved || !resolved.startsWith(`${rootRealPath}${path.sep}`)) {
+  const expectedRoot = path.dirname(filePath) === archiveRoot ? archiveRealPath : rootRealPath;
+  if (!resolved || !expectedRoot || !resolved.startsWith(`${expectedRoot}${path.sep}`)) {
     return { ok: false, reason: 'unsafe_rollout_file' };
   }
   return { ok: true, filePath, stat };

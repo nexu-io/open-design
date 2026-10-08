@@ -244,6 +244,37 @@ describe('AmrArtifactUpgradeGate', () => {
     expect(onHomeOfferChange).toHaveBeenCalledTimes(2);
   });
 
+  it('does not reinterpret a paid project session through the ambient Free plan on Home', async () => {
+    const onHomeOfferChange = vi.fn();
+    const view = render(
+      <AmrArtifactUpgradeGate
+        {...BASE_PROPS}
+        plan="team_pro"
+        planResolved
+        onHomeOfferChange={onHomeOfferChange}
+      />,
+    );
+
+    act(() => publishFinishedRun());
+    view.rerender(
+      <AmrArtifactUpgradeGate
+        {...BASE_PROPS}
+        activeProjectId={null}
+        activeConversationId={null}
+        activeFileName={null}
+        homeVisible
+        plan="free"
+        planResolved
+        onHomeOfferChange={onHomeOfferChange}
+      />,
+    );
+
+    await waitFor(() => expect(onHomeOfferChange).toHaveBeenCalledWith(null));
+    expect(onHomeOfferChange).not.toHaveBeenCalledWith(expect.objectContaining({
+      sessionKey: JSON.stringify(['project-1', 'conversation-1']),
+    }));
+  });
+
   it('fails open while the plan is unavailable, then prompts after Free resolves', async () => {
     const view = render(
       <AmrArtifactUpgradeGate {...BASE_PROPS} plan={null} planResolved={false} />,

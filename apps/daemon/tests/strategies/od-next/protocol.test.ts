@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   OdNextMachineProtocolStream,
+  createOdNextRunProtocol,
   passThroughOrdinaryAssistantText,
 } from '../../../src/strategies/od-next/protocol.js';
 
@@ -290,5 +291,32 @@ describe('OD Next machine protocol stream', () => {
       taskProfile: { goal: hostile.taskProfile.goal },
     });
     expect(result.issues).toEqual([]);
+  });
+});
+
+
+describe('physical-run protocol output ownership', () => {
+  it.each([undefined, 'intent_resolution'] as const)('preserves parsed reply bytes with purpose %s and only emits ordinary answers', purpose => {
+    const runtime = { schema: 'open-design.strategy-state/v2', route: 'full_plan', inputStage: 'request',
+      outcome: 'completed', executionMode: 'simple', executionIntent: 'plan_only', reasonCodes: [] };
+    const visible = 'Discuss this JSON: {"runtimeState":{"example":true}}.\n';
+    const text = `${visible}<open-design-runtime-state>\n${JSON.stringify(runtime)}\n</open-design-runtime-state>`;
+    const stream = createOdNextRunProtocol(purpose ? { purpose } : null);
+    let emitted = '';
+    for (let i = 0; i < text.length; i += 7) emitted += stream.push(text.slice(i, i + 7));
+    const finished = stream.finish(); emitted += finished.visibleTail;
+    expect(finished.parsed.issues).toEqual([]);
+    expect(finished.parsed.runtimeState?.executionIntent).toBe('plan_only');
+    expect(finished.parsed.visibleText).toBe(visible);
+    expect(emitted).toBe(purpose ? '' : visible);
+  });
+
+  it.each([undefined, 'intent_resolution'] as const)('handles a close-time withheld text tail with purpose %s', purpose => {
+    const stream = createOdNextRunProtocol(purpose ? { purpose } : null);
+    const text = 'Example: <open-design-runtime-sta';
+    const emitted = stream.push(text);
+    const finished = stream.finish();
+    expect(finished.parsed.visibleText).toBe(text);
+    expect(emitted + finished.visibleTail).toBe(purpose ? '' : text);
   });
 });

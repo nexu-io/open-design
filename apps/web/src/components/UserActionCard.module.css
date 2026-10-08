@@ -212,3 +212,119 @@
     transition: none;
   }
 }
+
+/* ============================================================
+   design/chat-panel-next alignment layer
+
+   The reference draws this card with two faces: the neutral state is a
+   banded card (head band + body + footer band — component 5, `.card`), and
+   the danger state drops the bands for one solid red block (component 19,
+   `.errb`). 380px matches the user bubble's width — per the reference, the
+   only two shaped things in the conversation are what the user said and
+   what the agent asked, same width, one on each side.
+
+   Written as trailing overrides rather than edits to the blocks above: one
+   place to roll back, and easier to read side by side with the reference.
+   ============================================================ */
+
+.card {
+  width: 380px;
+  max-width: 100%;
+  gap: 0;
+  margin: 6px 0;
+  padding: 0;
+  border-radius: var(--radius);
+  background: var(--bg);
+  overflow: hidden;
+}
+
+/* Head band */
+.head {
+  gap: 8px;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  padding: 9px 11px;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--bg-panel);
+}
+
+.icon {
+  width: 20px;
+  height: 20px;
+}
+
+.title {
+  font-size: var(--t-mini, 12px);
+  line-height: var(--lh-row, 1.5);
+}
+
+/* Body band */
+.details {
+  margin: 0;
+  padding: 9px 11px 10px;
+  border-top: 1px solid var(--border-soft);
+  font-size: var(--t-mini, 12px);
+  line-height: var(--lh-body, 1.7);
+}
+
+.status {
+  margin-left: 0;
+  padding: 0 11px 10px;
+  font-size: var(--t-cap, 12px);
+}
+
+/* Footer band */
+.footer {
+  margin-left: 0;
+  padding: 8px 11px;
+  border-top: 1px solid var(--border-soft);
+  background: var(--bg-panel);
+}
+
+/* ── Danger = the reference's .errb: no bands, one solid red block ── */
+.card[data-tone='danger'] {
+  border-color: var(--red-border);
+  background: var(--red-bg);
+}
+
+.card[data-tone='danger'] .head {
+  border-bottom-color: transparent;
+  background: transparent;
+  padding: 10px 11px 4px;
+}
+
+.card[data-tone='danger'] .title {
+  font-weight: 600;
+  color: var(--red);
+}
+
+.card[data-tone='danger'] .icon {
+  background: none;
+  color: var(--red);
+}
+
+.card[data-tone='danger'] .details,
+.card[data-tone='danger'] .status {
+  border-top-color: transparent;
+  color: var(--text-muted);
+}
+
+.card[data-tone='danger'] .footer {
+  border-top-color: transparent;
+  background: transparent;
+  padding: 4px 11px 10px;
+}
+
+/* ── Warning ──
+   color-mix inline instead of defining --amber-border on :root:
+   workspace/mention-home.css reads
+   `var(--amber-border, var(--orange-border, var(--green-border)))`, which
+   currently falls all the way through to green; defining the token would
+   silently flip that surface to amber. */
+.card[data-tone='warning'] {
+  border-color: color-mix(in srgb, var(--amber) 24%, var(--border));
+}
+
+.card[data-tone='warning'] .icon {
+  background: none;
+  color: var(--amber);
+}

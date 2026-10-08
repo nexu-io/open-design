@@ -273,6 +273,7 @@ function parsedPlanning(plan: OpenDesignPlanContractV2) {
     block('open-design-plan-contract', plan),
     block('open-design-runtime-state', {
       schema: 'open-design.strategy-state/v2',
+      executionIntent: 'produce',
       route: 'full_plan',
       inputStage: 'request',
       outcome: 'plan_ready',
@@ -287,6 +288,7 @@ function parsedCompletion() {
   const protocol = new OdNextMachineProtocolStream();
   protocol.push(block('open-design-runtime-state', {
     schema: 'open-design.strategy-state/v2',
+    executionIntent: 'produce',
     route: 'full_plan',
     inputStage: 'production',
     outcome: 'completed',
@@ -760,6 +762,20 @@ describe('OD Next complex production enforcement', () => {
       createMeta: () => ({}),
       updatedAt: 120,
     });
+    expect(planning).toMatchObject({
+      start: true,
+      stage: 'production',
+      result: { task: { inputStage: 'production', executionMode: 'complex' } },
+    });
+    expect(getStrategyTaskExecution(db, TASK_ID)?.runs).toMatchObject([
+      { runId: REQUEST_RUN_ID, inputStage: 'request', taskRunIndex: 0 },
+      {
+        runId: PRODUCTION_RUN_ID,
+        inputStage: 'production',
+        taskRunIndex: 1,
+        sourceRunId: REQUEST_RUN_ID,
+      },
+    ]);
     const canceled = cancelStrategyTaskExecution(db, {
       taskExecutionId: TASK_ID,
       expectedRevision: planning.result.task.revision,

@@ -41,6 +41,8 @@ const AMR_ENTRY_SOURCES: ReadonlySet<TrackingAmrEntrySource> = new Set([
   'chat_error_recharge',
   'chat_error_upgrade',
   'chat_balance_gate_upgrade',
+  'chat_upgrade_card',
+  'chat_upgrade_card_auto_recharge',
   'home_balance_gate_upgrade',
   'chat_low_balance_warn_recharge',
   'home_low_balance_warn_recharge',
@@ -52,6 +54,7 @@ const AMR_ENTRY_SOURCES: ReadonlySet<TrackingAmrEntrySource> = new Set([
   'generation_preview_switch_retry_card',
   'settings_amr_upgrade',
   'inline_amr_upgrade',
+  'go_plan_sunset_modal',
   'deepseek_unpaid_modal',
   'deepseek_workbench_badge',
   'deepseek_model_switcher_upgrade',
@@ -92,10 +95,12 @@ const AMR_ENTRY_SOURCE_PAGES: ReadonlySet<AmrEntrySourcePageName> = new Set([
 const AMR_ENTRY_CAMPAIGN_IDS: ReadonlySet<TrackingCampaignId> = new Set([
   'deepseek_v4_flash',
   'deepseek_v4_pro',
+  'go_plan_sunset_202608',
 ]);
 
 const AMR_ENTRY_CAMPAIGN_CONVERSION_SOURCES: ReadonlySet<TrackingCampaignConversionSource> =
   new Set([
+    'go_plan_sunset_modal',
     'deepseek_unpaid_modal',
     'deepseek_workbench_badge',
     'deepseek_model_switcher_upgrade',
@@ -122,6 +127,8 @@ const AMR_ENTRY_SOURCE_PAGE_BY_SOURCE: Record<
   chat_error_recharge: 'chat_panel',
   chat_error_upgrade: 'chat_panel',
   chat_balance_gate_upgrade: 'chat_panel',
+  chat_upgrade_card: 'chat_panel',
+  chat_upgrade_card_auto_recharge: 'chat_panel',
   home_balance_gate_upgrade: 'home',
   chat_low_balance_warn_recharge: 'chat_panel',
   home_low_balance_warn_recharge: 'home',
@@ -133,6 +140,7 @@ const AMR_ENTRY_SOURCE_PAGE_BY_SOURCE: Record<
   generation_preview_switch_retry_card: 'file_manager',
   settings_amr_upgrade: 'settings',
   inline_amr_upgrade: 'chat_panel',
+  go_plan_sunset_modal: 'home',
   deepseek_unpaid_modal: 'home',
   deepseek_workbench_badge: 'home',
   deepseek_model_switcher_upgrade: 'chat_panel',

@@ -348,7 +348,7 @@ describe('ProjectView API empty response handling', () => {
     await waitFor(() => {
       expect(screen.getByText('empty_response:deepseek-chat')).toBeTruthy();
     });
-    expect(screen.getByText(/provider ended the request/i)).toBeTruthy();
+    expect(screen.getByText('This task failed to run. Please retry. If it fails again, please contact support.')).toBeTruthy();
     expect(screen.queryByText('succeeded')).toBeNull();
 
     await waitFor(() => {
@@ -664,7 +664,7 @@ describe('ProjectView API empty response handling', () => {
   it('does not expose the project instructions editor from the project header', async () => {
     const view = renderProjectView();
 
-    await screen.findByTestId('project-title');
+    await screen.findByTestId('file-workspace');
 
     expect(screen.queryByTestId('project-instructions-add')).toBeNull();
     expect(view.container.querySelector('.project-instructions-chip')).toBeNull();
@@ -726,7 +726,7 @@ describe('ProjectView API empty response handling', () => {
     });
     await waitFor(() => expect(mockedPlaySound).toHaveBeenCalledWith('success-sound'));
     expect(mockedPlaySound).not.toHaveBeenCalledWith('failure-sound');
-    expect(screen.queryByText(/provider ended the request/i)).toBeNull();
+    expect(screen.queryByText('This task failed to run. Please retry. If it fails again, please contact support.')).toBeNull();
     expect(screen.queryByText('empty_response:deepseek-chat')).toBeNull();
   });
 
@@ -1053,7 +1053,7 @@ describe('ProjectView API empty response handling', () => {
 
 async function sendTestPrompt() {
   await waitFor(() => {
-    expect(mockedListMessages).toHaveBeenCalledWith(project.id, 'conv-project-1', null);
+    expect(mockedListMessages).toHaveBeenCalledWith(project.id, 'conv-project-1', null, expect.any(AbortSignal));
   });
   await new Promise((resolve) => setTimeout(resolve, 0));
   await waitFor(() => expect(screen.getByRole('button', { name: 'send' })).toBeTruthy());

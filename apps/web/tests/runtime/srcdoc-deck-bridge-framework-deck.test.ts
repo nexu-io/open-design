@@ -90,6 +90,15 @@ describe('injectDeckBridge — framework-deck detection (#deck-stage)', () => {
     expect(out).toMatch(/<script[^>]*data-od-deck-bridge/);
   });
 
+  it('recognizes the canonical v1 marker before legacy navigation probing', () => {
+    const html = frameworkDeckHtml().replace('<html>', '<html data-od-deck-protocol="1">');
+    const out = buildSrcdoc(html, { deck: true });
+
+    expect(out).toContain('var odDeckProtocolVersion = 1;');
+    expect(out).toContain('odHasExternalSlideMessageListener = false || odDeckProtocolVersion === 1');
+    expect(out).toContain("data.type !== \"od:deck-ready\"");
+  });
+
   it('keeps a framework deck stage at its authored size when the shell is a flex container', () => {
     const out = buildSrcdoc(frameworkDeckHtml(), { deck: true });
     expect(out).toMatch(/<style[^>]*data-od-deck-fix/);

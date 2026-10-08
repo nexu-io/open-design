@@ -165,8 +165,8 @@ otherwise.** A newly added node is low confidence by default.
 Recorded so that grading stays checkable. These are known and accepted; do not
 extend them.
 
-- `<platform>.workspace-build` — `pnpm-workspace.yaml` is not a key input;
-  file mode (executable bit) is not hashed by `hashPackageSourcePath`.
+- `<platform>.workspace-build` — file mode (executable bit) is not hashed by
+  `hashPackageSourcePath`.
 - `win.launcher-payload` — the `seed: "nsis-base"` branch takes content from
   the NSIS base payload but carries only the literal `"nsis-base"`, not
   `WIN_ARCHIVE_CACHE_VERSION`. Bumping that constant without bumping the

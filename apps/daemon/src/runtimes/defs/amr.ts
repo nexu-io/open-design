@@ -23,7 +23,7 @@ const OPENCODE_MODEL_PRICE_PROVIDER_PRIORITY = [
   'openrouter',
 ] as const;
 
-// AMR is the vela CLI's ACP stdio mode. `vela agent run --runtime opencode`
+// AMR is the vela CLI's ACP stdio mode. `vela agent run`
 // starts a private OpenCode server and forwards stream-json over ACP JSON-RPC.
 // Required env (set on the daemon process or via Settings → CLI env):
 //   VELA_RUNTIME_KEY  — OpenRouter (or compatible) API key
@@ -98,11 +98,11 @@ function normalizeKnownVelaVersionId(rawId: string): string | null {
   return null;
 }
 
-function isVelaChatModelId(modelId: string): boolean {
+export function isVelaChatCapableModelId(modelId: string): boolean {
   // Temporary chat-surface guard: Vela already lists media-generation models,
   // but OpenDesign's AMR runtime currently drives only chat completions.
   // Remove this filter when AMR grows first-class image/video execution.
-  const id = modelId.toLowerCase();
+  const id = (normalizeVelaModelId(modelId) ?? modelId.trim()).toLowerCase();
   if (id.startsWith('gpt-image-')) return false;
   if (id.startsWith('nano-banana-')) return false;
   if (id.startsWith('seedream-')) return false;
@@ -122,7 +122,7 @@ export function parseVelaModels(stdout: string): RuntimeModelOption[] {
     const [rawId] = trimmed.split(/\s+/);
     if (!rawId) continue;
     const id = normalizeVelaModelId(rawId);
-    if (!id || seen.has(id) || !isVelaChatModelId(id)) continue;
+    if (!id || seen.has(id) || !isVelaChatCapableModelId(id)) continue;
     seen.add(id);
     models.push({ id, label: id });
   }
@@ -157,7 +157,7 @@ export function parseVelaModelJson(
       ? (item as { id?: unknown }).id
       : null;
     const id = typeof rawId === 'string' ? (normalizeVelaModelId(rawId) ?? '') : '';
-    if (!id || seen.has(id) || !isVelaChatModelId(id)) continue;
+    if (!id || seen.has(id) || !isVelaChatCapableModelId(id)) continue;
     seen.add(id);
     models.push(withVelaModelPriceFields({ id, label: id }, item));
   }
@@ -200,11 +200,34 @@ function extractModelMetadata(item: unknown): ModelMetadata | null {
   const metadata = isRecord(item.metadata) ? item.metadata : item;
   const cost = parseModelCost(metadata.cost);
   const capability = parseModelCapability(metadata.capability);
-  if (!cost && !capability) return null;
+  const contextWindowTokens = firstPositiveInteger([
+    metadata.contextWindowTokens,
+    metadata.context_window_tokens,
+    item.contextWindowTokens,
+    item.context_window_tokens,
+    item.contextLength,
+    item.context_length,
+  ]);
+  if (!cost && !capability && !contextWindowTokens) return null;
   return {
     ...(cost ? { cost } : {}),
     ...(capability ? { capability } : {}),
+    ...(contextWindowTokens ? { contextWindowTokens } : {}),
   };
+}
+
+function firstPositiveInteger(values: unknown[]): number | null {
+  for (const value of values) {
+    if (
+      typeof value === 'number' &&
+      Number.isSafeInteger(value) &&
+      value > 0 &&
+      value <= 1_000_000_000
+    ) {
+      return value;
+    }
+  }
+  return null;
 }
 
 function withPriceDerivedCostMetadata(
@@ -650,7 +673,7 @@ export const amrAgentDef = {
   // Fail closed when Vela's live catalog is unavailable. Stale static
   // fallbacks let users select models that link/opencode no longer accepts.
   fallbackModels: [] as RuntimeModelOption[],
-  buildArgs: () => ['agent', 'run', '--runtime', 'opencode'],
+  buildArgs: () => ['agent', 'run'],
   streamFormat: 'acp-json-rpc',
   // vela resumes the upstream OpenCode session via ACP session/load across
   // turns (the OpenCode session store persists per conversation), so the daemon

@@ -303,6 +303,7 @@ export function AmrLoginPill({
   const { t } = useI18n();
   const analytics = useAnalytics();
   const [status, setStatus] = useState<VelaLoginStatus | null>(initialStatus);
+  const statusRef = useRef<VelaLoginStatus | null>(initialStatus);
   const [pending, setPending] = useState<null | 'login' | 'logout' | 'cancel'>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [canceledVisible, setCanceledVisible] = useState(false);
@@ -312,6 +313,16 @@ export function AmrLoginPill({
   const loginStartPendingRef = useRef(false);
   const loginCancelRequestedRef = useRef(false);
   const authAttemptIdRef = useRef<string | null>(null);
+
+  // Status received through `initialStatus` is parent-owned. Only publish
+  // snapshots produced locally (a refresh, poll, or local cancellation) so
+  // two controlled pills cannot echo the same status through their shared
+  // Settings state indefinitely.
+  const publishStatus = useCallback((next: VelaLoginStatus | null) => {
+    statusRef.current = next;
+    setStatus(next);
+    onStatusChange?.(next);
+  }, [onStatusChange]);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current !== null) {
@@ -328,11 +339,10 @@ export function AmrLoginPill({
       observeAmrAuthTracking(analytics.track, next, authAttemptId);
     }
     if (next) {
-      setStatus(next);
-      onStatusChange?.(next);
+      publishStatus(next);
     }
     return next;
-  }, [analytics.track, onStatusChange]);
+  }, [analytics.track, publishStatus]);
 
   useEffect(() => {
     if (!skipInitialRefresh) void refresh();
@@ -344,6 +354,7 @@ export function AmrLoginPill({
   }, [refresh, skipInitialRefresh, stopPolling]);
 
   useEffect(() => {
+    statusRef.current = initialStatus;
     setStatus(initialStatus);
     if (initialStatus?.authAttemptId) {
       authAttemptIdRef.current = initialStatus.authAttemptId;
@@ -370,10 +381,6 @@ export function AmrLoginPill({
     }, AMR_CANCELED_RESET_MS);
     return () => window.clearTimeout(timeout);
   }, [canceledVisible]);
-
-  useEffect(() => {
-    onStatusChange?.(status);
-  }, [onStatusChange, status]);
 
   const startPolling = useCallback((
     startedAt = Date.now(),
@@ -478,9 +485,9 @@ export function AmrLoginPill({
         // explicit refresh (mount, user interaction, or a
         // `status-changed` event) will pick up the daemon's confirmed
         // state once the child has actually exited.
-        setStatus((current) => (
-          current ? { ...current, loginInFlight: false } : current
-        ));
+        publishStatus(
+          statusRef.current ? { ...statusRef.current, loginInFlight: false } : null,
+        );
         return;
       }
       void refresh().then((next) => {
@@ -599,11 +606,11 @@ export function AmrLoginPill({
           loginCancelRequestedRef.current = false;
           loginStartedAtRef.current = null;
           loginPendingRef.current = false;
-          setStatus((current) => (
-            current
-              ? { ...current, loggedIn: false, loginInFlight: false, user: null }
-              : current
-          ));
+          publishStatus(
+            statusRef.current
+              ? { ...statusRef.current, loggedIn: false, loginInFlight: false, user: null }
+              : null,
+          );
           setPending(null);
           setCanceledVisible(true);
           notifyAmrLoginStatusChanged('login-canceled');
@@ -701,17 +708,17 @@ export function AmrLoginPill({
       closeAmrActivationWindowBestEffort();
       loginStartedAtRef.current = null;
       loginPendingRef.current = false;
-      setStatus((current) => (
-        current
-          ? { ...current, loggedIn: false, loginInFlight: false, user: null }
+      publishStatus(
+        statusRef.current
+          ? { ...statusRef.current, loggedIn: false, loginInFlight: false, user: null }
           : {
               loggedIn: false,
               loginInFlight: false,
               profile: 'default',
               user: null,
               configPath: '',
-            }
-      ));
+            },
+      );
       setPending(null);
       setCanceledVisible(true);
       notifyAmrLoginStatusChanged('login-canceled');

@@ -11,7 +11,16 @@
 //   COMMIT                commit SHA that was built
 //   PREVIOUS_COMMIT       changelog baseline (last published build); empty on cold start
 //   CHANGELOG_FILE        path to a file holding `git log` output (one commit per line)
-//   BUILD_STATE           build result (success | ...) — drives header color
+//   BUILD_STATE           build workflow result (success | ...). Only consulted
+//                         when VERSION_METADATA_URL is absent — see below.
+//   VERSION_METADATA_URL  public URL of the published version metadata.json.
+//                         Non-empty means the packages really shipped. This is
+//                         the authoritative signal, and it outranks BUILD_STATE:
+//                         a release workflow's conclusion goes red for anything
+//                         anywhere in the pipeline, including work that runs
+//                         after publication, so a red BUILD_STATE routinely
+//                         accompanies packages that are already downloadable
+//                         from the buttons on this very card.
 //   RELEASE_STATE         complete | partial; partial means artifacts exist but channel latest was not promoted
 //   RELEASE_NOTE          optional operator-facing explanation for a partial release
 //   MAC_ARM64_SMOKE_RESULT macOS arm64 packaged smoke outcome (success | failure | skipped)
@@ -52,13 +61,28 @@ const commit = optional("COMMIT");
 const previousCommit = optional("PREVIOUS_COMMIT");
 const changelogFile = optional("CHANGELOG_FILE");
 const buildState = optional("BUILD_STATE", "success");
+const versionMetadataUrl = optional("VERSION_METADATA_URL");
 const releaseState = optional("RELEASE_STATE", "complete");
 const releaseNote = optional("RELEASE_NOTE");
 const streamLabel = optional("STREAM_LABEL", "构建");
 const repo = optional("REPO");
 const runUrl = optional("RUN_URL");
 
-const smokeFailures = buildState === "success"
+/**
+ * Did a package actually ship?
+ *
+ * `version_metadata_url` is only non-empty once the publish job wrote the
+ * version metadata to R2, which makes it the one honest answer. The workflow
+ * conclusion is not: it goes red whenever ANY job in the release run fails,
+ * including advisory jobs and jobs that run after publication, so keying off it
+ * paints the card red — and hides the smoke annotations — while the downloads
+ * beside them work perfectly. A caller that does not pass the URL at all keeps
+ * the old BUILD_STATE behaviour, so this stays safe for the lanes that have not
+ * been rewired.
+ */
+const packagePublished = versionMetadataUrl.length > 0 || buildState === "success";
+
+const smokeFailures = packagePublished
   ? [
       { failureText: "macOS arm64 smoke 失败", result: optional("MAC_ARM64_SMOKE_RESULT") },
       { failureText: "Windows x64 smoke 失败", result: optional("WIN_X64_SMOKE_RESULT") },
@@ -120,7 +144,9 @@ function changelogMarkdown(): string {
 }
 
 function headerTemplate(): "blue" | "red" {
-  return buildState === "success" ? "blue" : "red";
+  // Red means "no package". It does not mean "something in the pipeline was
+  // red" — see packagePublished.
+  return packagePublished ? "blue" : "red";
 }
 
 function buildCard(): FeishuCard {

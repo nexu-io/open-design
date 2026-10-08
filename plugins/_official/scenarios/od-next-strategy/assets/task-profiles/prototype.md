@@ -1,4 +1,4 @@
-# OD Next Prototype Task Profile v2.1.0
+# OD Next Prototype Task Profile v2.2.0
 
 > Rollout: active
 
@@ -162,9 +162,61 @@ fact and quotes its source in `device-frame-shell`.
 - The shell is presentation, not a design system: it sets no typography,
   palette, spacing, components, or navigation for the app. Never put an
   Android app in the iPhone shell or the reverse.
+- Sheets, dialogs, toasts, and scrims mount inside the shell's screen, often
+  outside the app's own wrapper, so the product's design tokens live on
+  `:root` — never on an inner wrapper where an overlay cannot inherit them.
 - Keep the shell's narrow-viewport fallback (below 480px the handset chrome
   collapses and the screen fills the viewport) so the artifact still meets
   the 375px rule above.
+
+### Variable-length text and stacked information
+
+Open Design stages `.od-frames/layout.css` beside the handset shells and
+quotes it in the `layout-primitives` context fact. It is structure only —
+display, flex/grid, overflow, wrapping, ratio — and sets no palette, type,
+spacing scale, or component look. Put the whole block into the document's own
+`<style>` as its first rule set (`@layer od-layout` must come first so the
+product's CSS always wins), keep the `OD-LAYOUT-PRIMITIVES v1` marker comments,
+and compose the shapes below from it instead of re-deriving them per card,
+row, tile, or chip.
+
+Two kinds of text, two treatments:
+
+- Authored copy — headings, taglines, chip labels, button labels, tile and
+  section titles — is written to a length budget and never truncated or
+  clamped: chip ≤ 4 汉字; tile name ≤ 5 汉字 at ≥ 14px; tagline over media 1–2
+  lines of ≤ 12 汉字; button label one line. When copy does not fit, shorten
+  the copy or change the container; a slogan with an ellipsis is not a design.
+- Data text — names, addresses, descriptions, reviews, anything from the
+  user's data — may truncate (`.od-truncate`) in lists, chips, and rails, or
+  clamp (`.od-clamp-2/3`) in cards; in confirmation, order, and detail screens
+  it wraps in full. A truncated value stays reachable by tap (expand, sheet, or
+  the detail screen) — `title` alone is not a mobile path.
+- Never truncated, clamped, or wrapped: prices, times, quantities,
+  availability and status, the primary action label, errors.
+
+| Content | Container | Shape |
+|---|---|---|
+| Numeral + caption | stat strip, hero stats | `.od-stat` — numeral above, caption below, each its own block |
+| Label + helper text | settings row, form row | `.od-row > .od-field.od-fill + control.od-fixed`; helper is a block under the label, ≤ 2 lines |
+| Weekday + day + availability | date rail cell | `.od-cell` — three blocks; sold-out dims the whole cell and keeps its text (约满 / 余 2) |
+| Commerce / service card | list row, 2–3 column tile | `.od-tile > .od-media + body`: name ≤ 5 汉字 one line; selling points as ≤ 3 tag chips, not a 2-line description; price `¥98起` (起 smaller, attached) in `.od-nowrap`, on the name line or lower-right — never wrapped. Media: bare `.od-media` keeps the photo's full frame (product shots, covers, artwork); only a deliberately uniform tile crop sets `--od-ratio` **and** adds `.od-media-cover` together |
+| Chip rail | filter bar | `.od-rail` — the next chip peeks at the edge; chips ≤ 4 汉字; anything longer is a list row |
+| Screen chrome | top bar / content / bottom bar | `.od-screen > header + .od-scroll + footer` — bars take their own space, the middle scrolls, no height constant reused as padding; a translucent overlay bar is an explicit choice with `backdrop-filter` and the hero as first child |
+| Centring placeholder in a bar | top bar | `.od-spacer` sized like the opposite control — never an empty button |
+| Rarely needed explanation (fees, terms) | beside a label or price | a ≥ 44px ⓘ control that opens a sheet on tap (hover only under `@media (hover: hover)`); selling points and guarantees are chips or a guarantee row, not hidden detail |
+
+Everywhere: one piece of information is one block-level line — sibling
+`<span>`s never carry two pieces, inside a `<button>` included; `width`,
+`height`, `min-height` go only on elements already declared block or flex; a
+number and its unit, a price and 起, a date and its weekday sit in
+`.od-nowrap`; short CJK labels use `.od-keep` with `<wbr>` at the phrase
+boundary (精油洗护`<wbr>`SPA) so a break never lands inside a word;
+pointer-only styles live under `@media (hover: hover)`. An `<img>` keeps its
+`width`/`height` attributes for layout stability and `.od-media` sizes it —
+never a CSS height on the image. A card, tile, or row built on `<a>` sets its
+own `color` and `text-decoration: none`; browser-default link styling never
+reaches product UI.
 
 ### Design usable forms and feedback
 
@@ -241,13 +293,11 @@ Meet the following in one pass, while writing the source:
   the measured intrinsic dimensions and render the full frame; cover-cropping
   is reserved for decorative backdrops, and no content-bearing image is
   cropped or distorted.
-- Layout mechanics hold: sibling content regions (pills, cards, text blocks)
-  never overlap and flow content stays in normal flow, while intentional
-  fixed or sticky chrome (headers, bottom bars) reserves matching padding for
-  the content it covers; a stat numeral and its unit (e.g. 82%) render on one
-  line inside an auto-sized or clamp()-sized container, never squeezed into a
-  fixed box; track-style elements such as progress bars declare block-level
-  display before receiving dimensions.
+- Layout mechanics hold through the staged primitives: every stacked-text
+  box, truncation, chip rail, and screen bar is composed from the
+  `layout-primitives` classes per the text treatment table above; sibling
+  content regions never overlap, flow content stays in normal flow, and
+  nothing reuses a chrome height constant as content padding.
 - Every step of the core flow is genuinely implemented; buttons, navigation,
   and key controls are bound to real behavior, not decoration.
 - Responsive breakpoints cover 375px and wide screens; no horizontal

@@ -6,7 +6,7 @@
   position: fixed;
   inset: 0;
   z-index: 920;
-  background: rgba(28, 27, 26, 0.42);
+  background: var(--scrim-tint);
   -webkit-backdrop-filter: var(--scrim-backdrop);
   backdrop-filter: var(--scrim-backdrop);
   display: flex;

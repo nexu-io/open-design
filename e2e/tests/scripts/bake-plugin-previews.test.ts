@@ -77,3 +77,54 @@ describe('bake-plugin-previews vertical deck driver', () => {
     expect(windowScrollTo).not.toHaveBeenCalled();
   });
 });
+
+describe('bake-plugin-previews deck entry reset', () => {
+  // OPEND-2702: probing the advancing input moves the deck off its first
+  // slide, and a deck that persists its position (`#/2` in the URL hash, or
+  // web storage) reopened there after the reload — so the poster baked the
+  // agenda page, not the cover. The reset must clear both before the reload.
+  it('[P1] clears a persisted slide position so the reload lands on the cover', async () => {
+    const scriptUrl = new URL('../../../scripts/bake-plugin-previews.mjs', import.meta.url).href;
+    const { resetDeckEntryState } = await import(/* @vite-ignore */ scriptUrl) as {
+      resetDeckEntryState: () => { hadHash: boolean; clearedStorage: boolean };
+    };
+
+    const replaceState = vi.fn();
+    const localClear = vi.fn();
+    const sessionClear = vi.fn();
+    const location = { hash: '#/2', pathname: '/api/plugins/example-deck/preview', search: '?v=1' };
+    Object.assign(globalThis, {
+      window: {
+        location,
+        history: { replaceState },
+        localStorage: { clear: localClear },
+        sessionStorage: { clear: sessionClear },
+      },
+    });
+
+    expect(resetDeckEntryState()).toEqual({ hadHash: true, clearedStorage: true });
+    expect(replaceState).toHaveBeenCalledWith(null, '', '/api/plugins/example-deck/preview?v=1');
+    expect(localClear).toHaveBeenCalledTimes(1);
+    expect(sessionClear).toHaveBeenCalledTimes(1);
+  });
+
+  it('[P2] reports a deck that persisted nothing without touching history', async () => {
+    const scriptUrl = new URL('../../../scripts/bake-plugin-previews.mjs', import.meta.url).href;
+    const { resetDeckEntryState } = await import(/* @vite-ignore */ scriptUrl) as {
+      resetDeckEntryState: () => { hadHash: boolean; clearedStorage: boolean };
+    };
+
+    const replaceState = vi.fn();
+    Object.assign(globalThis, {
+      window: {
+        location: { hash: '', pathname: '/api/plugins/example-deck/preview', search: '' },
+        history: { replaceState },
+        localStorage: { clear: () => { throw new Error('storage disabled'); } },
+        sessionStorage: { clear: () => { throw new Error('storage disabled'); } },
+      },
+    });
+
+    expect(resetDeckEntryState()).toEqual({ hadHash: false, clearedStorage: false });
+    expect(replaceState).not.toHaveBeenCalled();
+  });
+});

@@ -55,7 +55,7 @@ The repo already has the right substrate:
 - `apps/daemon/src/plugins/marketplaces.ts` supports add/list/info/refresh/remove/trust and bare-name resolution through configured marketplaces.
 - `apps/daemon/src/cli.ts` already exposes `od marketplace add/list/info/search/refresh/remove/trust`.
 - `apps/web/src/components/MarketplaceView.tsx` and `PluginDetailView.tsx` exist for `/marketplace` and `/marketplace/:id`.
-- `apps/landing-page` now has a static public `/plugins/` registry renderer and per-plugin detail routes generated from `plugins/registry/*/open-design-marketplace.json` plus bundled official manifests.
+- The public marketing site has a static `/plugins/` registry renderer and per-plugin detail routes generated from `plugins/registry/*/open-design-marketplace.json` plus bundled official manifests.
 - `apps/web/src/components/PluginsView.tsx` now has the first `Installed / Available / Sources / Team` UI slice: source management is enabled and Available entries are built from cached marketplace manifests.
 - `apps/daemon/src/plugins/pack.ts` can produce `.tgz` plugin archives.
 - `apps/daemon/src/plugins/publish.ts` now builds submission links for external catalogs and the OpenDesign registry target. Full GitHub fork/branch/PR mutation is still future backend work.
@@ -622,7 +622,7 @@ Goal: upgrade from "installed plugin gallery" to "multi-source plugin registry".
 - [x] Add install/use/upgrade card states for available entries. Current install uses the existing bare-name `od plugin install <name>` path and now preserves provenance; explicit `--from <marketplace-id>` remains a P1 follow-up.
 - [x] Rename the Home page official shelf copy to `Official starters` or `Official installed`, and add a lightweight `Browse registry` path to `/plugins` so Home stays a fast-use surface while `/plugins` remains the registry console.
 - [x] Make `Create plugin` launch an agent-assisted authoring flow backed by `od plugin scaffold/validate/pack/publish`, including local install/run validation before publish and `gh` login/whoami checks before opening a registry PR. Current slice updates the agent prompt and CLI wrapper; full GitHub PR mutation remains in P2.
-- [x] Add public `/plugins/` route on `apps/landing-page` for open-design.ai: searchable official/community registry listing, static plugin detail pages, canonical/OG/Twitter metadata, JSON-LD item/detail data, and homepage/header entry points.
+- [x] Add public `/plugins/` route on the marketing site for open-design.ai: searchable official/community registry listing, static plugin detail pages, canonical/OG/Twitter metadata, JSON-LD item/detail data, and homepage/header entry points.
 - [x] Add Available-source filtering for all configured sources or one specific marketplace source.
 - [ ] Add the broader semantic filters across surfaces: Official, Community, My plugins, and Team.
 - [x] Add detail provenance, publisher, version, integrity, command, and risk sections to the public website detail route; in-app drawer polish remains tracked separately.

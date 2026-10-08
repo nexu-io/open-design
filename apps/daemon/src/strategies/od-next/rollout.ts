@@ -1,23 +1,31 @@
 import { createHash } from 'node:crypto';
 
-import type Database from 'better-sqlite3';
 import type {
   OdNextRolloutDecision,
-  OdNextRolloutClearReasonCode,
-  OdNextRolloutControlReasonCode,
   OdNextRolloutMode,
-  OdNextRolloutStopReasonCode,
+  OdNextRolloutModeSource,
   OdNextRolloutTaskType,
 } from '@open-design/contracts';
 
 export type {
   OdNextRolloutDecision,
   OdNextRolloutMode,
+  OdNextRolloutModeSource,
   OdNextRolloutTaskType,
 } from '@open-design/contracts';
 
+/**
+ * The single app-config field this policy consults. Structural on purpose: the
+ * daemon's `AppConfigPrefs`, a partially read config, and a test literal all
+ * satisfy it without this module depending on the config reader.
+ */
+export interface OdNextRolloutAppConfig {
+  odNextStrategyMode?: OdNextRolloutMode | null | undefined;
+}
+
 export interface OdNextRolloutPolicy {
   requestedMode: OdNextRolloutMode;
+  requestedModeSource: OdNextRolloutModeSource;
   assignmentPercent: number;
   assignmentSalt: string;
   contentEnabled: boolean;
@@ -45,13 +53,63 @@ function list(value: string | undefined): string[] {
   return (value ?? '').split(',').map((item) => item.trim()).filter(Boolean);
 }
 
-function mode(value: string | undefined): OdNextRolloutMode {
-  if (value === undefined || value.trim() === '') return 'active';
-  return value === 'observe' || value === 'active' ? value : 'off';
+function envMode(value: string | undefined): OdNextRolloutMode | null {
+  const trimmed = value?.trim() ?? '';
+  if (trimmed === '') return null;
+  return trimmed === 'observe' || trimmed === 'active' ? trimmed : 'off';
+}
+
+function configuredMode(value: unknown): OdNextRolloutMode | null {
+  return value === 'off' || value === 'observe' || value === 'active' ? value : null;
+}
+
+/**
+ * Which authority decides the requested mode, and what it decided.
+ *
+ * OD Next is the default route. An installation that configured nothing runs
+ * `active`, so the strategy decides how a run behaves unless someone asked it
+ * not to.
+ *
+ * That inverts which case is load-bearing. While the strategy was opt-in, the
+ * question was whether anyone had asked for it, and an installation that lost
+ * its saved mode simply kept the behaviour it already had. Now the question is
+ * whether anyone asked against it, and an installation that loses its saved
+ * mode is switched back on. So the invariant this function has to keep is:
+ * an installation that opted out reads `off` through every later release.
+ *
+ * That rests on the config never reading as unconfigured unless it genuinely
+ * is. `off` is a value the config carries, and the read path in `app-config.ts`
+ * keeps three states apart rather than two: no file at all is the only one that
+ * reaches the default below. A file that exists but cannot be believed —
+ * malformed JSON, a non-object body, a mode this build does not recognise —
+ * resolves to `off` before it gets here, because "we cannot read your choice"
+ * must not become "you chose OD Next". See
+ * `OD_NEXT_MODE_WHEN_CONFIG_UNREADABLE`.
+ *
+ * `assertWritableControlValues` covers the write path for the same reason, but
+ * only the write path: it cannot do anything about a file that was already bad
+ * on disk, hand-edited, or written by another version.
+ *
+ * `OD_NEXT_STRATEGY_ROLLOUT` outranks the saved `odNextStrategyMode` so that a
+ * pinned process stays pinned: an operator debugging one daemon, a packaged
+ * smoke run, and a test all set the mode for one process without overwriting
+ * the user's choice, and without a user's saved choice overriding theirs. The
+ * config is what survives a restart; the env var is what wins inside one.
+ */
+function resolveRequestedMode(
+  env: NodeJS.ProcessEnv,
+  appConfig: OdNextRolloutAppConfig | null | undefined,
+): { mode: OdNextRolloutMode; source: OdNextRolloutModeSource } {
+  const fromEnv = envMode(env.OD_NEXT_STRATEGY_ROLLOUT);
+  if (fromEnv) return { mode: fromEnv, source: 'env' };
+  const fromConfig = configuredMode(appConfig?.odNextStrategyMode);
+  if (fromConfig) return { mode: fromConfig, source: 'app_config' };
+  return { mode: 'active', source: 'default' };
 }
 
 export function readOdNextRolloutPolicy(
   env: NodeJS.ProcessEnv = process.env,
+  appConfig?: OdNextRolloutAppConfig | null,
 ): OdNextRolloutPolicy {
   const taskTypes = list(env.OD_NEXT_STRATEGY_TASK_TYPES).filter(
     (value): value is OdNextRolloutTaskType => (
@@ -59,8 +117,10 @@ export function readOdNextRolloutPolicy(
     ),
   );
   const percent = Number(env.OD_NEXT_STRATEGY_ASSIGNMENT_PERCENT ?? '100');
+  const requested = resolveRequestedMode(env, appConfig);
   return {
-    requestedMode: mode(env.OD_NEXT_STRATEGY_ROLLOUT),
+    requestedMode: requested.mode,
+    requestedModeSource: requested.source,
     assignmentPercent: Number.isFinite(percent) ? Math.max(0, Math.min(100, percent)) : 0,
     assignmentSalt: env.OD_NEXT_STRATEGY_ASSIGNMENT_SALT?.trim() || 'od-next-v2-rollout',
     contentEnabled: bool(env.OD_NEXT_STRATEGY_CONTENT_ENABLED, true),
@@ -100,7 +160,6 @@ export function evaluateOdNextRollout(input: {
   sourceKind: string | null;
   runtimeCapabilityVerified?: boolean;
   runtimeCapabilityReason?: string | null;
-  stoppedMode?: Exclude<OdNextRolloutMode, 'active'> | null;
   routeApplicability?: 'eligible' | 'explicit_user' | 'not_applicable';
 }): OdNextRolloutDecision {
   const { policy } = input;
@@ -145,8 +204,6 @@ export function evaluateOdNextRollout(input: {
   if (evaluateEligibility && !policy.productionActiveApproved && !syntheticCanary) {
     reasons.push('od_next_rollout_x2_active_unapproved');
   }
-  if (evaluateEligibility && input.stoppedMode) reasons.push('od_next_rollout_stop_latched');
-
   const requestedActive = policy.requestedMode === 'active';
   const eligible = evaluateEligibility && requestedActive && reasons.length === 0;
   const effectiveMode: OdNextRolloutMode = !evaluateEligibility
@@ -155,10 +212,9 @@ export function evaluateOdNextRollout(input: {
     || !policy.contentEnabled
     || !policy.behaviorEnabled
     ? 'off'
-    : input.stoppedMode
-      ?? (eligible
+    : eligible
       ? 'active'
-      : 'observe');
+      : 'observe';
   return {
     schemaVersion: 1,
     decisionClass: routeApplicability === 'explicit_user'
@@ -177,271 +233,40 @@ export function evaluateOdNextRollout(input: {
   };
 }
 
-export function migrateOdNextRolloutStore(db: Database.Database): void {
-  const existing = db.prepare(`PRAGMA table_info(strategy_rollout_controls)`).all() as Array<{
-    name: string;
-  }>;
-  if (existing.length > 0 && !existing.some((column) => column.name === 'revision')) {
-    db.transaction(() => {
-      db.exec(`ALTER TABLE strategy_rollout_controls RENAME TO strategy_rollout_controls_legacy`);
-      createOdNextRolloutControlTable(db);
-      db.exec(`
-        INSERT INTO strategy_rollout_controls (
-          strategy_id, mode, reason_code, latched_at, updated_at, revision,
-          last_event, last_event_reason_code
-        )
-        SELECT strategy_id, mode, reason_code, updated_at, updated_at, 1,
-               'latched', reason_code
-          FROM strategy_rollout_controls_legacy;
-        DROP TABLE strategy_rollout_controls_legacy;
-      `);
-    })();
-    return;
-  }
-  createOdNextRolloutControlTable(db);
-}
-
-function createOdNextRolloutControlTable(db: Database.Database): void {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS strategy_rollout_controls (
-      strategy_id TEXT PRIMARY KEY,
-      mode TEXT CHECK (mode IN ('off', 'observe')),
-      reason_code TEXT CHECK (reason_code IN (
-        'machine_contract_leak',
-        'default_critique_skipped',
-        'native_resume_failed',
-        'route_mode_drift',
-        'complex_child_unverified',
-        'threshold_exceeded',
-        'quality_regression'
-      )),
-      latched_at INTEGER,
-      updated_at INTEGER NOT NULL,
-      revision INTEGER NOT NULL,
-      last_event TEXT NOT NULL CHECK (last_event IN ('latched', 'cleared')),
-      last_event_reason_code TEXT NOT NULL CHECK (last_event_reason_code IN (
-        'machine_contract_leak',
-        'default_critique_skipped',
-        'native_resume_failed',
-        'route_mode_drift',
-        'complex_child_unverified',
-        'threshold_exceeded',
-        'quality_regression',
-        'operator_reset',
-        'internal_test_reset'
-      )),
-      CHECK (
-        (mode IS NULL AND reason_code IS NULL AND latched_at IS NULL)
-        OR (mode IS NOT NULL AND reason_code IS NOT NULL AND latched_at IS NOT NULL)
-      )
-    );
-  `);
-}
-
-interface OdNextRolloutControlRow {
-  mode: 'off' | 'observe' | null;
-  reasonCode: OdNextRolloutStopReasonCode | null;
-  latchedAt: number | null;
-  updatedAt: number;
-  revision: number;
-  lastEvent: 'latched' | 'cleared';
-  lastEventReasonCode: OdNextRolloutControlReasonCode;
-}
-
-function readOdNextRolloutControlRow(
-  db: Database.Database,
-): OdNextRolloutControlRow | null {
-  return db.prepare(`
-    SELECT mode,
-           reason_code AS reasonCode,
-           latched_at AS latchedAt,
-           updated_at AS updatedAt,
-           revision,
-           last_event AS lastEvent,
-           last_event_reason_code AS lastEventReasonCode
-      FROM strategy_rollout_controls WHERE strategy_id = 'od-next-strategy'
-  `).get() as OdNextRolloutControlRow | undefined ?? null;
-}
-
-export function readOdNextRolloutStop(
-  db: Database.Database,
-): { mode: 'off' | 'observe'; reasonCode: OdNextRolloutStopReasonCode } | null {
-  const row = readOdNextRolloutControlRow(db);
-  return row?.mode && row.reasonCode
-    ? { mode: row.mode, reasonCode: row.reasonCode }
-    : null;
-}
-
-export function latchOdNextRolloutStop(
-  db: Database.Database,
-  input: {
-    mode: 'off' | 'observe';
-    reasonCode: OdNextRolloutStopReasonCode;
-    updatedAt?: number;
-  },
-): void {
-  const updatedAt = input.updatedAt ?? Date.now();
-  db.prepare(`
-    INSERT INTO strategy_rollout_controls (
-      strategy_id, mode, reason_code, latched_at, updated_at, revision,
-      last_event, last_event_reason_code
-    )
-    VALUES ('od-next-strategy', ?, ?, ?, ?, 1, 'latched', ?)
-    ON CONFLICT(strategy_id) DO UPDATE SET
-      mode = CASE
-        WHEN strategy_rollout_controls.mode = 'off' THEN 'off'
-        ELSE excluded.mode
-      END,
-      reason_code = CASE
-        WHEN strategy_rollout_controls.mode = 'off' AND excluded.mode = 'observe'
-          THEN strategy_rollout_controls.reason_code
-        ELSE excluded.reason_code
-      END,
-      latched_at = CASE
-        WHEN strategy_rollout_controls.mode = 'off' AND excluded.mode = 'observe'
-          THEN strategy_rollout_controls.latched_at
-        ELSE excluded.latched_at
-      END,
-      updated_at = excluded.updated_at,
-      revision = strategy_rollout_controls.revision + 1,
-      last_event = 'latched',
-      last_event_reason_code = CASE
-        WHEN strategy_rollout_controls.mode = 'off' AND excluded.mode = 'observe'
-          THEN strategy_rollout_controls.reason_code
-        ELSE excluded.last_event_reason_code
-      END
-  `).run(
-    input.mode,
-    input.reasonCode,
-    updatedAt,
-    updatedAt,
-    input.reasonCode,
-  );
-}
-
-export function clearOdNextRolloutStop(db: Database.Database): void {
-  const row = readOdNextRolloutControlRow(db);
-  if (!row || !row.mode) return;
-  resetOdNextRolloutStop(db, {
-    expectedRevision: row.revision,
-    reasonCode: 'internal_test_reset',
-  });
-}
-
-export function resetOdNextRolloutStop(
-  db: Database.Database,
-  input: {
-    expectedRevision: number;
-    reasonCode: OdNextRolloutClearReasonCode;
-    updatedAt?: number;
-  },
-): { ok: true; changed: boolean } | { ok: false; currentRevision: number } {
-  const row = readOdNextRolloutControlRow(db);
-  if (!row) {
-    return input.expectedRevision === 0
-      ? { ok: true, changed: false }
-      : { ok: false, currentRevision: 0 };
-  }
-  if (row.revision !== input.expectedRevision) {
-    return { ok: false, currentRevision: row.revision };
-  }
-  if (!row.mode) return { ok: true, changed: false };
-  const updatedAt = input.updatedAt ?? Date.now();
-  const result = db.prepare(`
-    UPDATE strategy_rollout_controls
-       SET mode = NULL,
-           reason_code = NULL,
-           latched_at = NULL,
-           updated_at = ?,
-           revision = revision + 1,
-           last_event = 'cleared',
-           last_event_reason_code = ?
-     WHERE strategy_id = 'od-next-strategy'
-       AND revision = ?
-       AND mode IS NOT NULL
-  `).run(updatedAt, input.reasonCode, input.expectedRevision);
-  return result.changes === 1
-    ? { ok: true, changed: true }
-    : {
-        ok: false,
-        currentRevision: readOdNextRolloutControlRow(db)?.revision ?? 0,
-      };
-}
-
+/**
+ * What decides OD Next for this daemon, and what that decision came out as.
+ *
+ * Derived, with nothing persisted behind it. This used to consult a
+ * `strategy_rollout_controls` row — a stop latch that outranked the saved mode
+ * for the whole daemon instance and survived restart. That row is gone, so the
+ * effective mode is a pure function of the requested mode and the two content
+ * flags, and two callers reading this at the same moment cannot disagree.
+ *
+ * `requestedModeSource` is what makes this worth reporting at all: the mode
+ * alone does not say who chose it, and `default` and a saved `off` now resolve
+ * to opposite routes.
+ */
 export function readOdNextRolloutControlStatus(
-  db: Database.Database,
   env: NodeJS.ProcessEnv = process.env,
+  appConfig?: OdNextRolloutAppConfig | null,
 ): {
   strategyId: 'od-next-strategy';
   scope: 'daemon_instance';
   requestedMode: OdNextRolloutMode;
+  requestedModeSource: OdNextRolloutModeSource;
   effectiveMode: OdNextRolloutMode;
-  latch: null | {
-    mode: 'off' | 'observe';
-    reasonCode: OdNextRolloutStopReasonCode;
-    latchedAt: number;
-  };
-  revision: number;
-  updatedAt: number | null;
-  lastEvent: null | {
-    action: 'latched' | 'cleared';
-    reasonCode: OdNextRolloutControlReasonCode;
-    at: number;
-  };
-  resetAllowed: boolean;
 } {
-  const policy = readOdNextRolloutPolicy(env);
-  const row = readOdNextRolloutControlRow(db);
-  const latch = row?.mode && row.reasonCode && row.latchedAt != null
-    ? { mode: row.mode, reasonCode: row.reasonCode, latchedAt: row.latchedAt }
-    : null;
+  const policy = readOdNextRolloutPolicy(env, appConfig);
   const effectiveMode: OdNextRolloutMode = policy.requestedMode === 'off'
     || !policy.contentEnabled
     || !policy.behaviorEnabled
     ? 'off'
-    : latch?.mode ?? policy.requestedMode;
+    : policy.requestedMode;
   return {
     strategyId: 'od-next-strategy',
     scope: 'daemon_instance',
     requestedMode: policy.requestedMode,
+    requestedModeSource: policy.requestedModeSource,
     effectiveMode,
-    latch,
-    revision: row?.revision ?? 0,
-    updatedAt: row?.updatedAt ?? null,
-    lastEvent: row
-      ? {
-          action: row.lastEvent,
-          reasonCode: row.lastEventReasonCode,
-          at: row.updatedAt,
-        }
-      : null,
-    resetAllowed: Boolean(latch),
   };
-}
-
-export function stopModeForOdNextSignal(
-  signal: string,
-): 'off' | 'observe' | null {
-  if (signal === 'machine_contract_leak' || signal === 'default_critique_skipped') return 'off';
-  if (
-    signal === 'native_resume_failed'
-    || signal === 'route_mode_drift'
-    || signal === 'complex_child_unverified'
-    || signal === 'threshold_exceeded'
-    || signal === 'quality_regression'
-  ) return 'observe';
-  return null;
-}
-
-export function odNextRolloutSignalForRun(input: {
-  durationMs: number;
-  maxDurationMs?: number | null;
-}): 'threshold_exceeded' | null {
-  if (
-    typeof input.maxDurationMs === 'number'
-    && Number.isFinite(input.maxDurationMs)
-    && input.maxDurationMs >= 0
-    && input.durationMs > input.maxDurationMs
-  ) return 'threshold_exceeded';
-  return null;
 }

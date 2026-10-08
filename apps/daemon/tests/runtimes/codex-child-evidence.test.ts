@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { readFileSync, writeFileSync } from 'node:fs';
+import Database from 'better-sqlite3';
+import { chmod, mkdir, mkdtemp, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -175,6 +176,85 @@ afterEach(async () => {
 });
 
 describe('collectCodexChildEvidence', () => {
+  it('retains parent and declared child evidence after terminal archiving', async () => {
+    const home = await codexHome();
+    const parentPath = await writeRollout(home, PARENT, [
+      metadata(PARENT),
+      ...turn({ id: 'parent-turn', startedAtMs: 100, terminal: 'none', childActivities: [
+        { sessionId: CHILD, kind: 'started', atMs: 1_000 },
+        { sessionId: CHILD, kind: 'completed', atMs: 6_000 },
+      ] }),
+      event(7_000, { type: 'task_complete', turn_id: 'parent-turn' }),
+    ]);
+    const childPath = await writeRollout(home, CHILD, [
+      metadata(CHILD, PARENT),
+      ...turn({ id: 'child-turn', startedAtMs: 2_000, prompt: 'Audit child evidence' }),
+    ]);
+    const before = await collectCodexChildEvidence(collectInput(home));
+    expect(before.availability).toBe('complete');
+    expect(before.observations.filter(o => o.kind === 'child_agent' && o.status === 'completed')).toHaveLength(1);
+    // thread/archive moves both logs before server collects evidence on close.
+    const archive = path.join(home, 'archived_sessions');
+    await mkdir(archive);
+    for (const filePath of [parentPath, childPath]) {
+      await rename(filePath, path.join(archive, path.basename(filePath)));
+    }
+    const after = await collectCodexChildEvidence(collectInput(home));
+    expect(after.availability).toBe(before.availability);
+    expect(after.observations).toEqual(before.observations);
+  });
+
+  it('retains indexed parent and child evidence in an archive larger than the scan limit', async () => {
+    const home = await codexHome();
+    const parentPath = await writeRollout(home, PARENT, [
+      metadata(PARENT),
+      ...turn({ id: 'parent-turn', startedAtMs: 100, childActivities: [
+        { sessionId: CHILD, kind: 'started', atMs: 200 },
+      ] }),
+    ]);
+    const childPath = await writeRollout(home, CHILD, [
+      metadata(CHILD, PARENT),
+      ...turn({ id: 'child-turn', startedAtMs: 300, prompt: 'Retain this child' }),
+    ]);
+    const before = await collectCodexChildEvidence(collectInput(home));
+    expect(before.availability).toBe('complete');
+    const archive = path.join(home, 'archived_sessions');
+    await mkdir(archive);
+    const db = new Database(path.join(home, 'state_5.sqlite'));
+    try {
+      db.exec('CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT NOT NULL, archived INTEGER NOT NULL)');
+      for (const [id, filePath] of [[PARENT, parentPath], [CHILD, childPath]] as const) {
+        const archivedPath = path.join(archive, path.basename(filePath));
+        await rename(filePath, archivedPath);
+        db.prepare('INSERT INTO threads VALUES (?, ?, 1)').run(id, archivedPath);
+      }
+    } finally { db.close(); }
+    for (let i = 0; i < 4_097; i += 1) writeFileSync(path.join(archive, `unrelated-${i}`), '');
+    const after = await collectCodexChildEvidence(collectInput(home));
+    expect(after.availability).toBe(before.availability);
+    expect(after.observations).toEqual(before.observations);
+  });
+
+  it('rejects ambiguous active/archive copies and ignores unrelated archived threads', async () => {
+    const home = await codexHome();
+    const records = [metadata(PARENT), ...turn({ id: 'parent-turn', startedAtMs: 100 })];
+    const parentPath = await writeRollout(home, PARENT, records);
+    const archive = path.join(home, 'archived_sessions');
+    await mkdir(archive);
+    const archivedParent = path.join(archive, path.basename(parentPath));
+    await writeFile(archivedParent, readFileSync(parentPath));
+    const db = new Database(path.join(home, 'state_5.sqlite'));
+    try {
+      db.exec('CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT NOT NULL, archived INTEGER NOT NULL)');
+      db.prepare('INSERT INTO threads VALUES (?, ?, 1)').run(PARENT, archivedParent);
+    } finally { db.close(); }
+    const ambiguous = await collectCodexChildEvidence(collectInput(home));
+    expect(ambiguous.availability).toBe('unavailable');
+    expect(ambiguous.diagnostics).toContainEqual({ code: 'rollout_ambiguous', count: 1 });
+    await rename(archivedParent, path.join(archive, `rollout-unrelated-${CHILD}.jsonl`));
+    expect((await collectCodexChildEvidence(collectInput(home))).availability).toBe('complete');
+  });
+
   it('replays the exact Codex 0.147.0 best-effort success, started failure, and cancel records', async () => {
     const seed = JSON.parse(readFileSync(sanitizedRealSeedPath, 'utf8')) as {
       fixtureKind: string;

@@ -171,7 +171,7 @@
   background: var(--bg-elevated);
   color: var(--text);
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   transition: border-color var(--dur-quick) var(--ease-out),
     background-color var(--dur-quick) var(--ease-out),
@@ -279,7 +279,7 @@
   background: var(--bg-subtle);
   color: var(--text-muted);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   transition: border-color var(--dur-quick) var(--ease-out),
     background-color var(--dur-quick) var(--ease-out),
@@ -537,7 +537,7 @@
   padding: 9px 12px;
   border-radius: var(--radius-sm);
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .statusBusy {
@@ -584,7 +584,7 @@
   background: var(--bg-elevated);
   color: var(--text);
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   transition: border-color var(--dur-quick) var(--ease-out),
     background-color var(--dur-quick) var(--ease-out);

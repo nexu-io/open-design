@@ -88,6 +88,55 @@ describe('extractCategories', () => {
     ).toEqual(['hyperframes']);
   });
 
+  // OPEND-3118: the bundled document examples are prototype-mode plugins whose
+  // tags name a document (résumé, docs site, PRD, invoice, data report, the
+  // parchment letter). They used to fall under 原型 → 文档 / 报告, which left the
+  // Community 文档 tab empty. `document` now precedes `prototype`, keyed on that
+  // same docs-reports tag group, so they land in exactly one tab: 文档.
+  it('classifies the bundled document examples as document, ahead of prototype', () => {
+    const documentExamples: Array<[string, string[]]> = [
+      ['example-resume-modern', ['example', 'prototype', 'personal', 'resume', 'cv']],
+      ['example-docs-page', ['example', 'prototype', 'engineering', 'docs', 'documentation', 'guide', 'tutorial', 'api-reference']],
+      ['example-pm-spec', ['example', 'prototype', 'product', 'prd', 'spec', 'product-spec']],
+      ['example-invoice', ['example', 'prototype', 'finance', 'invoice', 'bill']],
+      ['example-data-report', ['example', 'prototype', 'finance', 'data', 'report', 'chart']],
+      ['example-doc-kami-parchment', ['example', 'prototype', 'personal', 'kami', 'editorial', 'report', 'letter', 'one-pager']],
+    ];
+    for (const [id, tags] of documentExamples) {
+      expect(extractCategories(fixture({ id, tags, od: { mode: 'prototype' } })), id).toEqual(['document']);
+      // Document is flat: no scene row under it.
+      expect(extractSubcategories(fixture({ id, tags, od: { mode: 'prototype' } })), id).toEqual([]);
+    }
+    // Only prototype-mode plugins qualify — a deck about a report is still a deck,
+    // an image poster tagged `resume` is still an image.
+    expect(extractCategories(fixture({ id: 'report-deck', tags: ['report'], od: { mode: 'deck' } }))).toEqual(['deck']);
+    expect(extractCategories(fixture({ id: 'resume-poster', tags: ['resume'], od: { mode: 'image' } }))).toEqual(['image']);
+  });
+
+  // OPEND-3098: the bundled `webgl-*` examples carry webgl / webgl2 / shader /
+  // gpu tags on prototype mode. They get their own kind so the Community WebGL
+  // tab has cards and 原型 stops listing them as brand pages.
+  it('classifies the bundled webgl examples as webgl, ahead of prototype', () => {
+    const webglExamples: Array<[string, string[]]> = [
+      ['example-webgl-aurora-veil', ['hero', 'webgl', 'webgl2', 'shader', 'generative']],
+      ['example-webgl-caustic-pool', ['hero', 'webgl', 'webgl2', 'shader', 'water']],
+      ['example-webgl-depth-gallery', ['gallery', '3d', 'webgl', 'three.js', 'scroll']],
+      ['example-webgl-distortion-grain', ['gallery', 'webgl', 'three.js', 'shader']],
+      ['example-webgl-experience', ['prototype', 'web', 'webgl', 'webgl2', 'shader', '3d', 'gpu']],
+      ['example-webgl-halftone-drift', ['hero', 'webgl', 'webgl2', 'shader', 'halftone']],
+      ['example-webgl-liquid-metal', ['prototype', 'web', 'webgl', 'webgl2', 'shader', 'gpu']],
+      ['example-webgl-neon-grid', ['prototype', 'web', 'webgl', 'webgl2', 'shader', 'gpu']],
+      ['example-webgl-particle-galaxy', ['prototype', 'web', 'webgl', 'webgl2', 'shader', 'gpu']],
+      ['example-webgl-raymarched-hero', ['prototype', 'web', 'webgl', 'webgl2', 'shader', '3d', 'gpu']],
+    ];
+    for (const [id, tags] of webglExamples) {
+      expect(extractCategories(fixture({ id, tags, od: { mode: 'prototype' } })), id).toEqual(['webgl']);
+      expect(extractSubcategories(fixture({ id, tags, od: { mode: 'prototype' } })), id).toEqual([]);
+    }
+    // A single qualifying slug is enough.
+    expect(extractCategories(fixture({ id: 'shader-only', tags: ['shader'], od: { mode: 'prototype' } }))).toEqual(['webgl']);
+  });
+
   it('keeps non-artifact workflow and design-system plugins out of primary tabs', () => {
     expect(extractCategories(fixture({ id: 'design-system', od: { mode: 'design-system' } }))).toEqual([]);
     expect(extractCategories(fixture({ id: 'import', od: { taskKind: 'figma-migration', mode: 'scenario' } }))).toEqual([]);
@@ -108,7 +157,10 @@ describe('extractSubcategories', () => {
     expect(extractSubcategories(fixture({ id: 'app', tags: ['mobile-app'], od: { mode: 'prototype' } }))).toEqual(['app-prototypes']);
     expect(extractSubcategories(fixture({ id: 'landing', tags: ['saas-landing'], od: { mode: 'prototype' } }))).toEqual(['landing-marketing']);
     expect(extractSubcategories(fixture({ id: 'dev', tags: ['engineering'], od: { mode: 'prototype' } }))).toEqual(['developer-tools']);
-    expect(extractSubcategories(fixture({ id: 'clinical', tags: ['case-report'], od: { mode: 'prototype' } }))).toEqual(['docs-reports']);
+    // OPEND-3118: docs / reports are their own kind now (`document`), so no
+    // prototype scene bucket names them any more.
+    expect(extractCategories(fixture({ id: 'clinical', tags: ['case-report'], od: { mode: 'prototype' } }))).toEqual(['document']);
+    expect(extractSubcategories(fixture({ id: 'clinical', tags: ['case-report'], od: { mode: 'prototype' } }))).toEqual([]);
     expect(extractSubcategories(fixture({ id: 'brand', tags: ['wireframe'], od: { mode: 'prototype' } }))).toEqual(['brand-design']);
   });
 
@@ -190,10 +242,14 @@ describe('buildFacetCatalog', () => {
       fixture({ id: 'hf', tags: ['hyperframes'], od: { mode: 'video' } }),
       fixture({ id: 'audio', od: { mode: 'audio' } }),
       fixture({ id: 'design-system', od: { mode: 'design-system' } }),
+      fixture({ id: 'resume', tags: ['resume'], od: { mode: 'prototype' } }),
+      fixture({ id: 'neon', tags: ['webgl'], od: { mode: 'prototype' } }),
     ]);
 
     expect(catalog.category.map((o) => [o.slug, o.count])).toEqual([
       ['deck', 1],
+      ['document', 1],
+      ['webgl', 1],
       ['prototype', 1],
       ['live-artifact', 1],
       ['image', 1],
@@ -209,8 +265,10 @@ describe('buildFacetCatalog', () => {
       'business-dashboards',
       'app-prototypes',
       'developer-tools',
-      'docs-reports',
     ]);
+    // Document and WebGL are flat kinds, like HyperFrames and Audio.
+    expect(catalog.subcategory.document).toBeUndefined();
+    expect(catalog.subcategory.webgl).toBeUndefined();
     // Deck scenes: the 15 commercial "品类" buckets in commercial-priority order.
     expect((catalog.subcategory.deck ?? []).map((o) => o.slug)).toEqual([
       'fundraising-pitch',

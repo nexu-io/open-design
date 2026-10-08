@@ -56,8 +56,12 @@ import {
   type PublicFilePublicationStore,
 } from '../collab/public-file-publication-store.js';
 import { readVelaControlApiContext } from '../integrations/vela.js';
+import { classifyVelaCommandFailure, logPublicFileFailure } from '../collab/public-file-failure.js';
+import { clientRequestIdFor } from '../http/client-request-id.js';
+import { isAbortedOperationError } from '../integrations/aborted-error.js';
 import { readProjectManifest } from '../project-locations.js';
 import { redactSecrets } from '../redact.js';
+import { findRealElementRange, HTML_TAG_PATTERNS } from '@open-design/contracts/runtime/html-injection-points';
 
 /** The fields register-on-pull reads out of a pulled project's manifest. */
 export interface PulledProjectManifest {
@@ -452,8 +456,15 @@ async function inferNameFromSkillManifest(projectDir: string): Promise<string | 
 async function inferNameFromHtmlTitle(projectDir: string): Promise<string | null> {
   try {
     const html = await readFile(path.join(projectDir, 'index.html'), 'utf8');
-    const match = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-    return cleanPulledProjectName(match?.[1]?.replace(/<[^>]*>/g, ''));
+    // The document's own <title>, not one an author stored in a script string
+    // or an attribute (nexu-io/open-design#7410). Both ends are located by the
+    // parser's rules: the open tag through `endOfTag`, so a `>` in a quoted
+    // attribute cannot cut it short, and the close by the raw-text rule, so
+    // `</title >` closes it while `</title-page>` does not.
+    const range = findRealElementRange(html, HTML_TAG_PATTERNS.titleOpen, 'title');
+    if (!range) return null;
+    const raw = html.slice(range.contentStart, range.contentEnd);
+    return cleanPulledProjectName(raw.replace(/<[^>]*>/g, ''));
   } catch {
     return null;
   }
@@ -702,6 +713,25 @@ export function registerCollabSyncRoutes(
     notifyFilesChanged,
     notifyProjectMetadataChanged,
   } = deps;
+  /**
+   * One seam for "this project's team-share state just changed".
+   *
+   * Both halves belong together: the visibility record is persisted AND the
+   * team-project catalog is dropped. The catalog read behind
+   * `/api/workspace/projects/team` is served from a short-lived SWR entry, so a
+   * GET issued right after a share would otherwise answer with the pre-share
+   * list until the freshness window expired or a hub event happened to arrive.
+   *
+   * Announce through this rather than calling the two deps side by side, so a
+   * future mutation added to this module cannot pick up one and forget the
+   * other.
+   */
+  const announceTeamShareStateChange = (
+    change: Parameters<NonNullable<RegisterCollabSyncRoutesDeps['onTeamShareStateChanged']>>[0],
+  ): void => {
+    deps.onTeamShareStateChanged?.(change);
+    invalidateTeamProjectCatalog?.();
+  };
   const readManifest = deps.readManifest ?? readProjectManifest;
   const publicFilePublicationStore =
     deps.publicFilePublicationStore
@@ -1207,6 +1237,8 @@ export function registerCollabSyncRoutes(
   });
 
   app.post(/^\/api\/projects\/([^/]+)\/files\/(.+)\/publish-public$/u, async (req, res) => {
+    const startedAt = Date.now();
+    const requestId = clientRequestIdFor(req);
     const params = req.params as unknown as { 0?: string; 1?: string };
     const projectId = String(params[0] ?? '');
     const filePath = normalizePublicFilePath(String(params[1] ?? ''));
@@ -1260,6 +1292,7 @@ export function registerCollabSyncRoutes(
 
     const resourceId = publicFileResourceIdFor(projectId, filePath, principal);
     const tempDir = await mkdtemp(path.join(os.tmpdir(), 'od-public-file-'));
+    let stage: 'push' | 'snapshot' | 'persist' = 'push';
     try {
       const targetFile = path.join(tempDir, filePath);
       await mkdir(path.dirname(targetFile), { recursive: true });
@@ -1280,6 +1313,7 @@ export function registerCollabSyncRoutes(
         JSON.stringify(metadata),
         '--json',
       ], principal.teamId);
+      stage = 'snapshot';
       const snapshot = parseVelaResourceSnapshot(await runVelaResourceCommand([
         'snapshot',
         resourceId,
@@ -1290,13 +1324,18 @@ export function registerCollabSyncRoutes(
         '--json',
       ], principal.teamId));
       if (!snapshot) {
-        return res.status(502).json({ error: 'PUBLIC_SNAPSHOT_UNAVAILABLE' });
+        const failure = { stage, reason: 'empty_response' } as const;
+        logPublicFileFailure({
+          action: 'publish', errorCode: 'PUBLIC_SNAPSHOT_UNAVAILABLE', failure, requestId, startedAt,
+        });
+        return res.status(502).json({ error: 'PUBLIC_SNAPSHOT_UNAVAILABLE', failure });
       }
       const publication: PublicProjectFilePublication = {
         url: publicSnapshotFileUrl(baseUrl, snapshot.slug, filePath),
         slug: snapshot.slug,
         fileName: filePath,
       };
+      stage = 'persist';
       try {
         publicFilePublicationStore.set(
           publicFilePublicationScope(projectId, filePath, principal),
@@ -1334,13 +1373,21 @@ export function registerCollabSyncRoutes(
       return res.json(publication);
     } catch (error) {
       console.warn('[od] failed to publish public project file:', error);
-      return res.status(502).json({ error: 'PUBLIC_FILE_PUBLISH_UNAVAILABLE' });
+      const failure = stage === 'persist'
+        ? { stage, reason: 'internal' as const }
+        : classifyVelaCommandFailure(stage, error);
+      logPublicFileFailure({
+        action: 'publish', errorCode: 'PUBLIC_FILE_PUBLISH_UNAVAILABLE', failure, requestId, startedAt,
+      });
+      return res.status(502).json({ error: 'PUBLIC_FILE_PUBLISH_UNAVAILABLE', failure });
     } finally {
       await rm(tempDir, { recursive: true, force: true }).catch(() => {});
     }
   });
 
   app.delete(/^\/api\/projects\/([^/]+)\/files\/(.+)\/publish-public$/u, async (req, res) => {
+    const startedAt = Date.now();
+    const requestId = clientRequestIdFor(req);
     const params = req.params as unknown as { 0?: string; 1?: string };
     const projectId = String(params[0] ?? '');
     const filePath = normalizePublicFilePath(String(params[1] ?? ''));
@@ -1389,7 +1436,11 @@ export function registerCollabSyncRoutes(
       return res.json({ ok: true, slug, fileName: filePath });
     } catch (error) {
       console.warn('[od] failed to unpublish public project file:', error);
-      return res.status(502).json({ error: 'PUBLIC_FILE_UNPUBLISH_UNAVAILABLE' });
+      const failure = classifyVelaCommandFailure('redact', error);
+      logPublicFileFailure({
+        action: 'unpublish', errorCode: 'PUBLIC_FILE_UNPUBLISH_UNAVAILABLE', failure, requestId, startedAt,
+      });
+      return res.status(502).json({ error: 'PUBLIC_FILE_UNPUBLISH_UNAVAILABLE', failure });
     }
   });
 
@@ -1474,7 +1525,7 @@ export function registerCollabSyncRoutes(
       if (nextPublishedVersion == null) {
         return res.status(502).json({ error: 'TEAM_PROJECT_PUBLISH_UNAVAILABLE' });
       }
-      deps.onTeamShareStateChanged?.({
+      announceTeamShareStateChange({
         projectId,
         principal,
         visibility: 'team',
@@ -1503,7 +1554,7 @@ export function registerCollabSyncRoutes(
         return res.status(403).json({ error: 'WORKSPACE_PROJECT_UNSHARE_DENIED' });
       }
       await requestTeamUnshare(projectId, principal);
-      deps.onTeamShareStateChanged?.({
+      announceTeamShareStateChange({
         projectId,
         principal,
         visibility: 'personal',
@@ -1704,11 +1755,21 @@ export function registerCollabSyncRoutes(
             if (await shouldRetryStaleReceipt(error, authorizedAttempt)) {
               continue;
             }
-            console.warn('[od] authorized proactive team pull failed closed:', {
-              projectId,
-              version: expectedVersion,
-              ...errorLogFields(error),
-            });
+            // A cancelled child is not a fault: the scheduler aborts this pull
+            // on purpose when a higher version supersedes it, or when the
+            // intent is cleared. Logging that as "failed closed" put a
+            // fault-shaped warning in the log on ordinary version churn and
+            // sent an investigation chasing a phantom failure. The scheduler
+            // already handles the cancellation itself (a superseded intent
+            // bumps `revision` and re-loops; a cleared one is gone), so this
+            // only stops mislabelling it.
+            if (!isAbortedOperationError(error)) {
+              console.warn('[od] authorized proactive team pull failed closed:', {
+                projectId,
+                version: expectedVersion,
+                ...errorLogFields(error),
+              });
+            }
             return complete({ status: 'register_failed' });
           }
           // Old CLIs can materialize successfully while returning no version.

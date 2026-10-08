@@ -35,10 +35,9 @@ export type ChipScenarioPluginId =
   | DefaultScenarioPluginId
   | 'example-hyperframes'
   // Powered-preview scenarios: real-time GPU / off-main-thread artifacts that
-  // render in the cross-origin-isolated "powered preview" iframe. They ship
-  // their own bundled example plugins under plugins/_official/examples/, so —
-  // like example-hyperframes — they carry their plugin id directly rather than
-  // routing through the default kind→plugin table.
+  // render in the cross-origin-isolated "powered preview" iframe. Kept as
+  // explicit members — like example-hyperframes — so the rail can name a
+  // scenario the default table has not mapped yet; both are mapped today.
   | 'example-webgl-experience';
 
 export type ChipAction =
@@ -46,7 +45,23 @@ export type ChipAction =
       kind: 'apply-scenario';
       pluginId: ChipScenarioPluginId;
       projectKind: ProjectKind;
-      /** Product-owned default route; the daemon resolves and stamps it. */
+      /**
+       * Product-owned default route; the daemon resolves and stamps it.
+       *
+       * Set it on every first-level output type in `CREATE_RAIL_ORDER`: the
+       * user picked a task type, not a plugin, so the create must travel as
+       * `pluginSelectionProvenance: 'automatic-default'` and let the daemon
+       * re-derive `pluginId` from the metadata. Forwarding the id instead
+       * reads as a user pin — which is real authority elsewhere (it opts a
+       * project out of OD Next), so the project is left with no
+       * `automatic_default` scenario binding and the header offers to restore
+       * an automatic scenario it never left.
+       *
+       * Only truthful when `pluginId` is exactly what
+       * `defaultScenarioPluginIdForProjectMetadata` resolves for the metadata
+       * this same chip stamps — otherwise dropping the id binds a different
+       * plugin. `chips.automatic-default.test.ts` pins both halves.
+       */
       automaticDefault?: boolean;
       inputs?: Record<string, unknown>;
       projectMetadata?: ProjectMetadata;
@@ -130,21 +145,22 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
     label: 'Website clone',
     icon: 'globe',
     group: 'create',
-    description: 'Recreate an existing website',
-    hint: 'Paste a site URL and recreate its structure, visuals, and interactions from real source evidence.',
-    // Website reproduction is its own creation workflow (start from a target
-    // URL, source-first recon, preserve real structure/assets), so it binds
-    // the bundled `example-web-clone` skill instead of the blank prototype
-    // seed. The project still stores `kind: 'prototype'` for preview
-    // behavior; `intent: 'web-clone'` routes the scenario plugin and splits
-    // the analytics `project_kind` (see contracts scenario-defaults/events).
+    description: 'Source-first site reproduction',
+    hint: 'Paste a target URL, then reconstruct the site and audit the clone.',
+    // Website reproduction binds the bundled `example-web-clone` plugin.
+    // Stored as a prototype so the artifact keeps prototype preview
+    // behavior; `intent: 'web-clone'` is what routes the scenario plugin
+    // (see `defaultScenarioPluginIdForProjectMetadata`) and splits these
+    // projects into their own `web_clone` analytics kind.
     action: {
       kind: 'apply-scenario',
       pluginId: 'example-web-clone',
       projectKind: 'prototype',
+      automaticDefault: true,
       projectMetadata: {
         kind: 'prototype',
         intent: 'web-clone',
+        fidelity: 'high-fidelity',
       },
     },
   },
@@ -191,6 +207,7 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
       kind: 'apply-scenario',
       pluginId: 'od-new-generation',
       projectKind: 'other',
+      automaticDefault: true,
       inputs: {
         artifactKind: 'document',
         audience: 'readers',
@@ -242,6 +259,7 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
       kind: 'apply-scenario',
       pluginId: 'example-webgl-experience',
       projectKind: 'prototype',
+      automaticDefault: true,
       projectMetadata: {
         kind: 'prototype',
         intent: 'webgl-experience',
@@ -260,6 +278,7 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
       kind: 'apply-scenario',
       pluginId: 'example-live-artifact',
       projectKind: 'prototype',
+      automaticDefault: true,
       projectMetadata: {
         kind: 'prototype',
         intent: 'live-artifact',
@@ -277,6 +296,7 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
       kind: 'apply-scenario',
       pluginId: 'od-media-generation',
       projectKind: 'image',
+      automaticDefault: true,
       inputs: {
         mediaKind: 'image',
         subject: 'a polished product concept',
@@ -295,6 +315,7 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
       kind: 'apply-scenario',
       pluginId: 'od-media-generation',
       projectKind: 'video',
+      automaticDefault: true,
       inputs: {
         mediaKind: 'video',
         subject: 'a short product reveal',
@@ -313,6 +334,7 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
       kind: 'apply-scenario',
       pluginId: 'od-media-generation',
       projectKind: 'audio',
+      automaticDefault: true,
       inputs: {
         mediaKind: 'audio',
         subject: 'a concise audio identity for a product',
@@ -361,19 +383,37 @@ export function chipsForGroup(group: ChipGroup): HomeHeroChip[] {
 
 // Fixed Home information architecture. Only these ten output types are
 // top-level choices. Action-only create entries (for example Create Design
-// System) are intentionally excluded.
+// System) are intentionally excluded. Prototype leads and Slide deck follows;
+// the media scenarios trail so at typical widths they live in the 更多
+// overflow popover rather than the visible pill row.
 export const CREATE_RAIL_ORDER = [
   'prototype',
   'deck',
-  'image',
   'document',
+  'image',
+  'web-clone',
+  'hyperframes',
+  'webgl',
+  'live-artifact',
+  'video',
+  'audio',
+] as const;
+
+// The Home type row is an explicit product decision, not a width computation
+// (OPEND-3146, 2026-09-16): three entry types stay inline, and 更多 holds EVERY
+// other create type in this exact order, so no artifact kind loses its
+// discoverable entry to the fold. The two lists together cover
+// `CREATE_RAIL_ORDER`; `TypePillRow.more-order.test.tsx` pins both.
+export const HOME_TYPE_ROW_IDS: readonly string[] = ['prototype', 'deck', 'document'];
+export const HOME_TYPE_ROW_MORE_IDS: readonly string[] = [
+  'image',
   'hyperframes',
   'web-clone',
   'video',
   'audio',
   'live-artifact',
   'webgl',
-] as const;
+];
 
 // Chip ids the onboarding "build a design system" teaser intentionally omits.
 // Video and Audio are pure-media outputs and the least central to the

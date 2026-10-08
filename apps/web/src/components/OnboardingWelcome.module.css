@@ -1,0 +1,82 @@
+.signInAction {
+  position: relative;
+  width: 100%;
+  margin-top: 32px;
+}
+
+.signInAction :global(.onboarding-cloud__primary) {
+  margin-top: 0;
+}
+
+.creditCorner {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  border-radius: 14px;
+  pointer-events: none;
+}
+
+.credits.credits {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  inset-block-start: 10px;
+  inset-inline-end: -24px;
+  width: 112px;
+  height: 22px;
+  transform: rotate(40deg);
+  margin: 0;
+  padding: 0;
+  background: color-mix(in srgb, var(--brand) 40%, var(--brand-soft));
+  color: var(--brand-text);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: auto;
+}
+
+.credits:dir(rtl) {
+  transform: rotate(-40deg);
+}
+
+.creditLabel {
+  max-width: 68px;
+  text-align: center;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+
+.credits:focus-visible {
+  outline: 2px solid var(--brand-text);
+  outline-offset: -2px;
+}
+
+.alternatives {
+  width: 100%;
+  margin-top: 28px;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.options.options {
+  flex-wrap: wrap;
+  margin-top: 16px;
+  gap: 12px;
+}

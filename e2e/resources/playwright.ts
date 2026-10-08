@@ -411,7 +411,9 @@ export const playwrightUiScenarios: UiScenario[] = [
     title: 'Deleting the active conversation falls back cleanly',
     kind: 'workspace',
     flow: 'conversation-delete-recovery',
-    automated: true,
+    // Parked (OPEND-3087): the history dropdown lost its per-row delete
+    // button with the toolbar dock port, so the flow has no UI entry point.
+    automated: false,
     description:
       'Creates multiple conversations, deletes the active one, and verifies the UI falls back to the remaining thread instead of getting stuck.',
     create: {
@@ -469,6 +471,27 @@ export const playwrightUiScenarios: UiScenario[] = [
     notes: [
       'Mocks an inline question form on the first assistant turn and a plain acknowledgment on the follow-up turn.',
       'Confirms the answered state survives a full page reload instead of relying only on local submit state.',
+    ],
+  },
+  {
+    id: 'question-form-single-answer',
+    title: 'One question form occurrence produces exactly one answer',
+    kind: 'workspace',
+    flow: 'question-form-single-answer',
+    automated: true,
+    description:
+      'Answers an inline question form, then hammers the paths that used to re-open it — a rapid double submit, leaving the project and coming back, and a full reload — asserting the daemon still holds exactly one answer message for the occurrence.',
+    create: {
+      projectName: 'Question form single answer',
+      tab: 'prototype',
+    },
+    prompt: 'Plan a small restaurant homepage',
+    expectedRunRequest: {
+      message: 'Plan a small restaurant homepage',
+    },
+    notes: [
+      'Covers OPEND-2367: the submit lock used to live in the mounted component, so any remount offered the same form again and a second answer produced a second run.',
+      'Asserts against the daemon conversation, not the rendered form, so a UI that merely looks locked cannot pass.',
     ],
   },
   {

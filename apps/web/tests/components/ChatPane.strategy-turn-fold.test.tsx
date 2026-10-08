@@ -28,7 +28,7 @@ describe('foldStrategyTaskTurns', () => {
         content: 'PRODUCTION_TEXT',
         runId: 'run-production',
         runStatus: 'running',
-        events: [{ kind: 'status', label: 'building' }],
+        events: [{ kind: 'done_key', key: '2222222222222222' }, { kind: 'status', label: 'building' }],
         producedFiles: [{ name: 'index.html' } as ProjectFile],
         strategyTaskExecutionId: 'odnext_1',
         strategyTaskRunIndex: 1,
@@ -46,7 +46,7 @@ describe('foldStrategyTaskTurns', () => {
     expect(turn.content.indexOf('PLAN_TEXT')).toBeLessThan(turn.content.indexOf('PRODUCTION_TEXT'));
 
     // Events and files accumulate without loss or repetition.
-    expect(turn.events).toHaveLength(2);
+    expect(turn.events).toHaveLength(3);
     expect(turn.producedFiles?.map((f) => f.name)).toEqual(['plan.md', 'index.html']);
 
     // The turn tracks the latest Run: an intermediate Run finishing is not the
@@ -62,6 +62,38 @@ describe('foldStrategyTaskTurns', () => {
         strategyTaskExecutionId: 'odnext_2', strategyTaskRunIndex: 0,
       }),
       assistant({ id: 'a-plain', content: 'ORDINARY', runId: 'r2' }),
+    ];
+    expect(foldStrategyTaskTurns(input)).toEqual(input);
+  });
+
+  it('keeps a question form and its answer as two turns', () => {
+    // `buildRecoveryTaskAnalytics` deliberately carries the asking turn's
+    // `taskExecutionId` onto the answer (analytics lineage spans retries,
+    // resumes and clarifications), so an off-mode chain looks like one task in
+    // analytics while being two things the user asked for. Folding on that
+    // lineage would merge a form with the work its answer requested — the
+    // "must not wrongly merge different follow-up requests" case. Only the
+    // daemon-issued `strategyTaskRunIndex`, which off-mode never emits above
+    // 0, marks a continuation that carries no prompt of its own.
+    const input = [
+      { id: 'u1', role: 'user', content: '生成一个旅游app原型' } as ChatMessage,
+      assistant({
+        id: 'a-brief',
+        content: 'BRIEF_FORM',
+        runId: 'run-1',
+        taskAnalytics: { taskExecutionId: 'u1', taskRunIndex: 0 },
+      }),
+      { id: 'u2', role: 'user', content: '- 受众: 设计师' } as ChatMessage,
+      assistant({
+        id: 'a-answer',
+        content: 'ANSWER_WORK',
+        runId: 'run-2',
+        taskAnalytics: {
+          taskExecutionId: 'u1',
+          taskRunIndex: 1,
+          recoveryActionType: 'question_answer',
+        },
+      }),
     ];
     expect(foldStrategyTaskTurns(input)).toEqual(input);
   });

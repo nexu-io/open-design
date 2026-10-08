@@ -1,0 +1,38 @@
+.switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.switcher:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+/* The capsule owns the surface. Global button:disabled must not paint a
+   second gray button inside it while the catalog or a selection is pending. */
+.picker .switcher:disabled {
+  background: transparent;
+  color: inherit;
+  box-shadow: none;
+  cursor: default;
+  opacity: 0.5;
+}
+
+.picker .switcher:hover:not(:disabled) { background: transparent; }
+
+.picker :global(.home-hero__footer-select-menu) {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  top: calc(100% + 7px);
+  bottom: auto;
+}
+
+.picker[data-field-name='template'] :global(.home-hero__footer-select-menu) :global(.home-hero__footer-select-item.is-selected),
+.picker[data-field-name='template'] :global(.home-hero__footer-select-menu) :global(.home-hero__footer-select-item:hover),
+.picker[data-field-name='template'] :global(.home-hero__footer-select-menu) :global(.home-hero__footer-select-item:focus-visible) {
+  background: color-mix(in srgb, var(--bg-subtle) 78%, var(--bg-panel));
+  color: var(--text);
+}

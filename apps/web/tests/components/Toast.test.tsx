@@ -11,6 +11,71 @@ afterEach(() => {
 });
 
 describe('Toast', () => {
+  it.each(['bottom', 'top'] as const)(
+    'keeps an explicitly global %s toast outside the animated app and cleans up its body layer',
+    (placement) => {
+      const onDismiss = vi.fn();
+      const onAction = vi.fn();
+      const { rerender } = render(
+        <div className="app" data-testid="animated-app">
+          <Toast
+            message="评论保存失败"
+            details="本次评论未保存成功，请重新尝试。"
+            placement={placement}
+            portalToBody
+            tone="error"
+            ttlMs={0}
+            onDismiss={onDismiss}
+            actionLabel="Open file"
+            onAction={onAction}
+          />
+        </div>,
+      );
+      const toast = screen.getByRole('status');
+      // The browser red proves the .app animation traps this layer below the
+      // body-portaled composer. jsdom guards the owning DOM layer, not pixels.
+      expect.soft(toast.parentElement).toBe(document.body);
+      expect(toast).toHaveTextContent('评论保存失败');
+      expect(toast).toHaveTextContent('本次评论未保存成功，请重新尝试。');
+      fireEvent.click(screen.getByRole('button', { name: 'Open file' }));
+      expect(onAction).toHaveBeenCalledTimes(1);
+      fireEvent.click(screen.getByRole('button', { name: /Dismiss/i }));
+      expect(onDismiss).toHaveBeenCalledTimes(1);
+
+      rerender(<div className="app" data-testid="animated-app" />);
+      expect(screen.queryByRole('status')).toBeNull();
+      expect(document.body.contains(toast)).toBe(false);
+    },
+  );
+
+  it('keeps a toast in its original owner by default', () => {
+    render(<div data-testid="toast-owner"><Toast message="Local feedback" ttlMs={0} /></div>);
+    expect(screen.getByTestId('toast-owner').contains(screen.getByRole('status'))).toBe(true);
+  });
+
+  it('preserves the existing chat-pane anchor when body mounting is not requested', () => {
+    render(
+      <div className="app">
+        <div className="project-actions-toast-anchor" data-testid="toast-anchor">
+          <Toast message="Anchored feedback" details="Keep the pane context." ttlMs={0} />
+        </div>
+      </div>,
+    );
+    // The owner chooses local positioning; Toast does not infer intent from
+    // this ancestor's class name or move an unopted caller into a global layer.
+    expect(screen.getByTestId('toast-anchor').contains(screen.getByRole('status'))).toBe(true);
+  });
+
+  it('keeps modal feedback inside its dialog interaction scope', () => {
+    render(
+      <div role="dialog" aria-label="Settings">
+        <Toast message="Settings feedback" ttlMs={0} onDismiss={() => {}} />
+      </div>,
+    );
+    expect(screen.getByRole('dialog').contains(screen.getByRole('status'))).toBe(true);
+    expect(screen.getByRole('dialog').contains(screen.getByRole('button', { name: /Dismiss/i }))).toBe(true);
+  });
+
   it('renders the message and primary line by default', () => {
     render(<Toast message="Folder opened." />);
     expect(screen.getByText('Folder opened.')).not.toBeNull();

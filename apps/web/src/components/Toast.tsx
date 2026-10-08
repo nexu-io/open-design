@@ -1,9 +1,9 @@
 // Lightweight transient toast for the new project-actions toolbar
 // (Continue in CLI / Finalize design package — #451). Mirrors the
-// canonical state-based pattern from PromptTemplatePreviewModal:
-// transient state cleared on a setTimeout, no portal, no DOM
-// imperative work. Single-toast queue; multi-toast support is
-// deliberately deferred to a follow-up.
+// canonical state-based transient pattern: state cleared on a setTimeout.
+// Callers can explicitly place global feedback in the body layer; local
+// feedback stays with its positioning owner. Single-toast queue; multi-toast
+// support is deliberately deferred to a follow-up.
 //
 // Renders an optional secondary `details` line beneath the primary
 // message so daemon error envelopes that carry an upstream
@@ -11,6 +11,7 @@
 // the real upstream message alongside the daemon's category label.
 
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import { Icon } from './Icon';
 import { useT } from '../i18n';
@@ -36,6 +37,8 @@ export interface ToastProps {
   role?: 'status' | 'alert';
   tone?: 'default' | 'success' | 'error' | 'loading';
   placement?: 'bottom' | 'top';
+  /** Global feedback can escape ancestor stacking contexts; local toasts stay in place by default. */
+  portalToBody?: boolean;
 }
 
 const DEFAULT_TTL = 4000;
@@ -72,8 +75,13 @@ export function Toast({
   role = 'status',
   tone = 'default',
   placement = 'bottom',
+  portalToBody = false,
 }: ToastProps) {
   const t = useT();
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setPortalTarget(portalToBody ? document.body : null);
+  }, [portalToBody]);
   // When code is present the toast is a manual-action surface; never
   // auto-dismiss it out from under the user mid-copy.
   const effectiveTtl = code ? 0 : ttlMs;
@@ -122,7 +130,7 @@ export function Toast({
   // `transform`, clobbering the `translateX(-50%)` centering and leaving the
   // toast off-centre. Keep this a plain div so the CSS keyframes are the single
   // source of truth for both motion and centering.
-  return (
+  const toast = (
     <div
       className={`od-toast tone-${tone} placement-${placement}${className ? ` ${className}` : ''}${leaving ? ' leaving' : ''}`}
       role={role}
@@ -172,4 +180,8 @@ export function Toast({
       ) : null}
     </div>
   );
+  // A global toast waits for its owner layer rather than briefly painting
+  // inside the app. The server and the first hydration render both return null.
+  if (portalToBody) return portalTarget ? createPortal(toast, portalTarget) : null;
+  return toast;
 }

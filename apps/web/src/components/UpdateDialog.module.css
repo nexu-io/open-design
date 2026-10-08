@@ -5,8 +5,9 @@
   display: grid;
   place-items: center;
   padding: 24px;
-  background: color-mix(in srgb, #111 28%, transparent);
-  backdrop-filter: blur(2px);
+  background: var(--scrim-tint);
+  -webkit-backdrop-filter: var(--scrim-backdrop);
+  backdrop-filter: var(--scrim-backdrop);
   animation: updateBackdropIn 160ms ease-out;
 }
 
@@ -85,7 +86,7 @@
   margin: 0;
   color: var(--text-strong);
   font-size: 18px;
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: -0.015em;
 }
 
@@ -161,7 +162,7 @@
   border-radius: 9px;
   font: inherit;
   font-size: 13px;
-  font-weight: 550;
+  font-weight: 600;
   cursor: pointer;
 }
 

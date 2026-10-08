@@ -63,6 +63,11 @@ describe('OD Next admission vs advertised CLI capabilities', () => {
       agentCliEnv: { claude: { CLAUDE_BIN: fakeClaude } },
       telemetry: { metrics: false, content: false, artifactManifest: false },
       privacyDecisionAt: Date.now(),
+      // This case is about an opted-in installation still refusing a build
+      // that cannot carry the strategy, so the opt-in has to be explicit —
+      // otherwise the run is declined for being switched off and never
+      // reaches the capability gate at all.
+      odNextStrategyMode: 'active',
     });
 
     const run = await createAndWaitForRun(started.url);

@@ -63,6 +63,40 @@ export function isWorkspaceOpenDeeplink(url: string): boolean {
   );
 }
 
+/** How this process may claim the `opendesign://` scheme with the OS, if at all. */
+export type ProtocolClientRegistration =
+  | { register: false }
+  /** `clientPath` is the executable to register, or null to register this process. */
+  | { register: true; clientPath: string | null };
+
+/**
+ * Only a packaged install may claim `opendesign://` with the OS.
+ *
+ * A source/dev run is hosted by the shared `electron` binary from
+ * `node_modules`, so claiming the scheme there points the OS at that binary —
+ * `com.github.electron` in macOS LaunchServices, a throwaway `electron.exe` in
+ * the Windows registry — for every channel at once. The cloud authorization
+ * page's `opendesign://workspace/open` hand-off then launches a bare Electron
+ * welcome window from a checkout that may not even exist any more, instead of
+ * focusing the installed app (OPEND-2352).
+ *
+ * Packaged builds already declare the scheme statically (Info.plist
+ * `CFBundleURLTypes` on macOS, `Software\Classes\opendesign` from the Windows
+ * installer) and re-assert it on every start, which is also what takes a
+ * handler back from a dev run that poisoned it before this fix shipped.
+ */
+export function planProtocolClientRegistration(input: {
+  platform: NodeJS.Platform;
+  isPackaged: boolean;
+  protocolClientPath?: string | null;
+}): ProtocolClientRegistration {
+  if (!input.isPackaged) return { register: false };
+  // Windows registers a stable installed launcher rather than the versioned
+  // payload executable, which an update can delete; see `protocolClientPath`.
+  const clientPath = input.platform === "win32" ? input.protocolClientPath ?? null : null;
+  return { clientPath, register: true };
+}
+
 export interface InviteDeeplinkDeps {
   /** Resolve the running daemon's base URL; rejects when it is not up yet. */
   resolveDaemonBaseUrl: () => Promise<string>;

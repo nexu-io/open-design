@@ -62,9 +62,10 @@ export async function applyStandardMocks(page: Page): Promise<void> {
   await applyStorageConfig(page);
   await routeMockAgents(page);
   await routeAppConfig(page);
-  // Keep this explicit even though the shared suite fixture also installs the
-  // route: callers use applyStandardMocks for extra pages/contexts that are
-  // created outside the built-in Playwright `page` fixture.
+  // Keep both explicit even though the shared suite fixture also installs them:
+  // callers use applyStandardMocks for extra pages/contexts that are created
+  // outside the built-in Playwright `page` fixture, and the fixture's routes are
+  // bound to that one page.
   await routeUnavailableVelaStatus(page);
   await suppressWhatsNew(page);
 }

@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   RecentProjectsStrip,
   projectCardCategory,
+  projectKindFilterCategory,
 } from '../../src/components/RecentProjectsStrip';
 import type { Project } from '../../src/types';
 import type { WorkspaceProjectSummary } from '@open-design/contracts';
@@ -108,20 +109,72 @@ const MEDIA = project({
   updatedAt: 2,
   metadata: { kind: 'video' },
 });
+// OPEND-3107: a Document project is what the Home "Document" chip creates —
+// `kind: 'other'` with `intent: 'document'` (home-hero/chips.ts).
+const DOCUMENT = project({
+  id: 'p-document',
+  name: 'Document project',
+  updatedAt: 1.8,
+  metadata: { kind: 'other', intent: 'document' },
+});
+// OPEND-3107: an Image project is the media-generation chip's `kind: 'image'`.
+const IMAGE = project({
+  id: 'p-image',
+  name: 'Image project',
+  updatedAt: 1.5,
+  metadata: { kind: 'image' },
+});
 const DESIGN_SYSTEM = project({
   id: 'p-ds',
   name: 'Design system project',
   updatedAt: 1,
   metadata: { kind: 'other', importedFrom: 'design-system' },
 });
+// OPEND-3107 (2026-09-16 定稿): the filter names every creation type on its
+// own. A HyperFrames project stores `kind: 'video'` plus `intent:
+// 'hyperframes'` (home-hero/chips.ts), so it must file under HyperFrames, not
+// Video; WebGL is `kind: 'prototype'` + `intent: 'webgl-experience'`.
+const HYPERFRAMES = project({
+  id: 'p-hyperframes',
+  name: 'HyperFrames project',
+  updatedAt: 0.9,
+  metadata: { kind: 'video', intent: 'hyperframes' },
+});
+const WEBGL = project({
+  id: 'p-webgl',
+  name: 'WebGL project',
+  updatedAt: 0.8,
+  metadata: { kind: 'prototype', intent: 'webgl-experience' },
+});
+const AUDIO = project({
+  id: 'p-audio',
+  name: 'Audio project',
+  updatedAt: 0.7,
+  metadata: { kind: 'audio' },
+});
 
-const ALL_PROJECTS = [PROTOTYPE, DECK, LIVE, WEB_CLONE, MEDIA, DESIGN_SYSTEM];
+const ALL_PROJECTS = [
+  PROTOTYPE,
+  DECK,
+  LIVE,
+  WEB_CLONE,
+  MEDIA,
+  DOCUMENT,
+  IMAGE,
+  DESIGN_SYSTEM,
+  HYPERFRAMES,
+  WEBGL,
+  AUDIO,
+];
 
 function renderGrid(props: Partial<React.ComponentProps<typeof RecentProjectsStrip>> = {}) {
   return render(
     <RecentProjectsStrip
       heading="All projects"
       projects={ALL_PROJECTS}
+      // The strip caps at 6 cards by default; the fixtures outgrew that, and
+      // the page mode this mirrors passes an effectively unbounded limit too.
+      limit={ALL_PROJECTS.length}
       onOpen={() => {}}
       {...props}
     />,
@@ -176,6 +229,55 @@ describe('projectCardCategory', () => {
   });
 });
 
+describe('projectKindFilterCategory (OPEND-3107)', () => {
+  // The dropdown offers eleven creation types; every project resolves to
+  // exactly one of them, bucketed by its creation metadata.
+  it('maps each project to the filter bucket the dropdown offers', () => {
+    expect(projectKindFilterCategory(PROTOTYPE)).toBe('prototype');
+    expect(projectKindFilterCategory(DECK)).toBe('slide');
+    expect(projectKindFilterCategory(DOCUMENT)).toBe('document');
+    expect(projectKindFilterCategory(IMAGE)).toBe('image');
+    expect(projectKindFilterCategory(HYPERFRAMES)).toBe('hyperframes');
+    expect(projectKindFilterCategory(WEB_CLONE)).toBe('web-clone');
+    expect(projectKindFilterCategory(MEDIA)).toBe('video');
+    expect(projectKindFilterCategory(AUDIO)).toBe('audio');
+    expect(projectKindFilterCategory(LIVE)).toBe('live-artifact');
+    expect(projectKindFilterCategory(WEBGL)).toBe('webgl');
+    expect(projectKindFilterCategory(DESIGN_SYSTEM)).toBe('design-system');
+  });
+
+  it('files a live-artifact project under Live artifact whether marked by intent or by skill', () => {
+    expect(projectKindFilterCategory(LIVE)).toBe('live-artifact');
+    expect(
+      projectKindFilterCategory(
+        project({ id: 'p-live-skill', skillId: 'live-artifact', metadata: { kind: 'prototype' } }),
+      ),
+    ).toBe('live-artifact');
+  });
+
+  it('keeps a document project out of the Prototype bucket', () => {
+    // The card still wears the Prototype chip (projectCategory falls through),
+    // but the filter must not list it under Prototype AND Document.
+    expect(projectCardCategory(DOCUMENT)).toBe('prototype');
+    expect(projectKindFilterCategory(DOCUMENT)).toBe('document');
+  });
+
+  it('lets the creation intent outrank the storage kind', () => {
+    // HyperFrames is stored as a video project and WebGL as a prototype; the
+    // intent is what the user picked on Home, so it names the bucket.
+    expect(projectCardCategory(HYPERFRAMES)).toBe('media');
+    expect(projectKindFilterCategory(HYPERFRAMES)).toBe('hyperframes');
+    expect(projectCardCategory(WEBGL)).toBe('prototype');
+    expect(projectKindFilterCategory(WEBGL)).toBe('webgl');
+  });
+
+  it('resolves brand-kind projects to the Design system bucket', () => {
+    expect(
+      projectKindFilterCategory(project({ id: 'p-brand', metadata: { kind: 'brand' } })),
+    ).toBe('design-system');
+  });
+});
+
 describe('RecentProjectsStrip type filter (#77)', () => {
   it('omits the redundant owner filter from the drafts space', () => {
     const { container } = renderGrid({ heading: 'Drafts', space: 'drafts' });
@@ -197,42 +299,78 @@ describe('RecentProjectsStrip type filter (#77)', () => {
     expect(filters).toEqual(['All', 'Any type']);
   });
 
-  it('offers exactly the artifact types the cards stamp on themselves', () => {
+  it('offers the twelve entries in the product order, labelled with the Home chip copy (OPEND-3107)', () => {
     const { container } = renderGrid();
 
     const menu = openKindMenu(container);
     const options = [...menu.querySelectorAll('button')].map((node) => node.textContent);
 
+    // 2026-09-16 定稿: 任何类型、原型、幻灯片、文档、图片、HyperFrames、网站克隆、
+    // 视频、音频、实时产物、WebGL、设计体系 — one entry per creation type, in
+    // this order, each reusing the Home type chip's own label key.
     expect(options).toEqual([
       'Any type',
       'Prototype',
-      'Slide',
-      'Live Artifact',
+      'Slide deck',
+      'Document',
+      'Image',
+      'HyperFrames',
       'Website clone',
-      'Media',
-      'Design System',
+      'Video',
+      'Audio',
+      'Live artifact',
+      'WebGL',
+      'Design system',
     ]);
-    // The legacy taxonomy's catch-all bucket matched no chip at all.
+    // Media (the merged video / audio bucket) and Other stay gone.
+    expect(options).not.toContain('Media');
     expect(options).not.toContain('Other');
   });
 
-  it('filters the grid down to the projects wearing the picked chip', () => {
+  it('filters the grid down to the projects in the picked bucket', () => {
     const { container } = renderGrid();
 
-    fireEvent.click(within(openKindMenu(container)).getByText('Slide'));
-    expect(cardNames(container)).toEqual(['Deck project']);
+    const kindTrigger = () => container.querySelectorAll('.recent-projects__filter')[1]!;
 
-    fireEvent.click(within(openKindMenu(container)).getByText('Live Artifact'));
-    expect(cardNames(container)).toEqual(['Live project']);
+    fireEvent.click(within(openKindMenu(container)).getByText('Slide deck'));
+    expect(cardNames(container)).toEqual(['Deck project']);
+    // The trigger names the picked type (OPEND-3107 acceptance).
+    expect(kindTrigger().textContent?.trim()).toBe('Slide deck');
+
+    fireEvent.click(within(openKindMenu(container)).getByText('Document'));
+    expect(cardNames(container)).toEqual(['Document project']);
+    expect(kindTrigger().textContent?.trim()).toBe('Document');
+
+    fireEvent.click(within(openKindMenu(container)).getByText('Image'));
+    expect(cardNames(container)).toEqual(['Image project']);
+    expect(kindTrigger().textContent?.trim()).toBe('Image');
+
+    fireEvent.click(within(openKindMenu(container)).getByText('HyperFrames'));
+    expect(cardNames(container)).toEqual(['HyperFrames project']);
 
     // recvpZbvupSr1o: Website clone must be its own filter bucket, separate
-    // from both Live Artifact and the blank Prototype bucket it used to hide in.
+    // from the blank Prototype bucket it used to hide in.
     fireEvent.click(within(openKindMenu(container)).getByText('Website clone'));
     expect(cardNames(container)).toEqual(['Web clone project']);
 
-    fireEvent.click(within(openKindMenu(container)).getByText('Design System'));
+    // Video no longer swallows the HyperFrames project that shares its kind.
+    fireEvent.click(within(openKindMenu(container)).getByText('Video'));
+    expect(cardNames(container)).toEqual(['Media project']);
+
+    fireEvent.click(within(openKindMenu(container)).getByText('Audio'));
+    expect(cardNames(container)).toEqual(['Audio project']);
+
+    fireEvent.click(within(openKindMenu(container)).getByText('Live artifact'));
+    expect(cardNames(container)).toEqual(['Live project']);
+
+    fireEvent.click(within(openKindMenu(container)).getByText('WebGL'));
+    expect(cardNames(container)).toEqual(['WebGL project']);
+
+    fireEvent.click(within(openKindMenu(container)).getByText('Design system'));
     expect(cardNames(container)).toEqual(['Design system project']);
 
+    // Prototype is the blank-prototype bucket only: no live artifact, no
+    // document, no WebGL — each of those has its own entry now.
     fireEvent.click(within(openKindMenu(container)).getByText('Prototype'));
     expect(cardNames(container)).toEqual(['Prototype project']);
 

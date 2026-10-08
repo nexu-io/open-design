@@ -1,11 +1,11 @@
-// Wordmark badges for the plan a workspace is on (free / plus / pro / max /
-// team), shown at the right end of the nav-rail account row in place of the
+// Wordmark badges for the plan a workspace is on (free / go / plus / pro /
+// max / team), shown at the right end of the nav-rail account row in place of the
 // dropdown chevron. Strokes are normalized to currentColor so the badge
 // follows the surrounding icon color.
 
 import { isTeamPlanTier } from '../collab/team-plan';
 
-export type PlanBadgeTier = 'free' | 'plus' | 'pro' | 'max' | 'team';
+export type PlanBadgeTier = 'free' | 'go' | 'plus' | 'pro' | 'max' | 'team';
 
 /** The tier sources a badge can be derived from; pass whichever are in scope. */
 export interface PlanBadgeSources {
@@ -69,6 +69,10 @@ export function planBadgeTierForLabel(label: string): PlanBadgeTier | null {
   const normalized = label.trim().toLowerCase();
   const words = normalized.split(/[^a-z0-9]+/).filter(Boolean);
   if (isTeamPlanTier(normalized) || words.includes('team') || label.includes('团队')) return 'team';
+  // Whole word only: `go` is two letters that sit inside ordinary words, and
+  // the other tiers can afford a substring match because `plus` / `pro` / `max`
+  // do not.
+  if (words.includes('go')) return 'go';
   if (normalized.includes('plus')) return 'plus';
   if (normalized.includes('pro')) return 'pro';
   if (normalized.includes('max')) return 'max';
@@ -76,15 +80,26 @@ export function planBadgeTierForLabel(label: string): PlanBadgeTier | null {
   return null;
 }
 
-const VIEW_BOX: Record<PlanBadgeTier, { width: number; height: number }> = {
+type PlanWordmarkTier = PlanBadgeTier;
+
+const VIEW_BOX: Record<PlanWordmarkTier, { width: number; height: number }> = {
   free: { width: 107, height: 49 },
+  go: { width: 88, height: 49 },
   plus: { width: 114, height: 49 },
   pro: { width: 108, height: 49 },
   max: { width: 114, height: 49 },
   team: { width: 136, height: 49 },
 };
 
-const PATHS: Record<PlanBadgeTier, string[]> = {
+/**
+ * Tiers whose vector was drawn with rounded ends. Only Go: its `G` bar and its
+ * tail are short strokes, and butt caps read as cut-off stubs at the 16–20px
+ * the badge is drawn at. The other wordmarks are closed shapes that the
+ * designer left on the SVG default.
+ */
+const ROUND_ENDS: ReadonlySet<PlanWordmarkTier> = new Set<PlanWordmarkTier>(['go']);
+
+const PATHS: Record<PlanWordmarkTier, string[]> = {
   free: [
     'M21.5 39.5V25.4869C21.5 21.6308 22.8579 18.3357 25.5736 15.6014C28.2893 12.8671 31.5707 11.5 35.418 11.5',
     'M2.5 39.5L2.5 20.7365M2.5 20.7365L2.5 2.5L25.5 2.5M2.5 20.7365H15',
@@ -111,6 +126,11 @@ const PATHS: Record<PlanBadgeTier, string[]> = {
     'M2.5 47.5L2.5 11.5L6.92857 11.5L15.7857 36.4999L20.2143 36.5L29.0714 11.5L33.5 11.5L33.5 39.5',
     'M43.5 18.5L43.5 16.4999C43.5001 13.7385 45.7386 11.5 48.5 11.5H59.5C62.2614 11.5 64.5 13.7386 64.5 16.5V32.5C64.5 35.2614 62.2614 37.5 59.5 37.5H49.9613C46.3928 37.5 43.5 34.6072 43.5 31.0387C43.5 27.4703 46.3928 24.5775 49.9613 24.5775H58.5615',
   ],
+  go: [
+    'M1 2.5h63c12 0 21.5 9.8 21.5 22S76 46.5 64 46.5H1',
+    'M29 17c-2.4-3.6-6.4-5.5-11.4-5.5C8.8 11.5 2 17 2 24.5s6.8 13 15.6 13c5.7 0 10-2.3 12.3-6.5v-7H17.5',
+    'M38 24.5a12.5 13 0 1 0 25 0a12.5 13 0 1 0 -25 0',
+  ],
   team: [
     'M0 2.5H111.396C123.547 2.5 133.396 12.3497 133.396 24.5C133.396 36.6503 123.547 46.5 111.396 46.5H8.79169e-05',
     'M12.3965 39.5L12.3965 3.50001',
@@ -128,12 +148,15 @@ interface Props {
 
 export function PlanWordmark({ tier, height = 13 }: Props) {
   const box = VIEW_BOX[tier];
+  const round = ROUND_ENDS.has(tier);
   return (
     <svg
       viewBox={`0 0 ${box.width} ${box.height}`}
       height={height}
       width={Math.round((box.width / box.height) * height)}
       fill="none"
+      strokeLinecap={round ? 'round' : undefined}
+      strokeLinejoin={round ? 'round' : undefined}
       aria-hidden
       className="plan-wordmark"
     >

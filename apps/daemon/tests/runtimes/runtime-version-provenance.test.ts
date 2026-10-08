@@ -1,18 +1,21 @@
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   detectAgents,
+  detectAgent,
   ensureDetectedRuntimeVersions,
   getDetectedRuntimeVersions,
 } from '../../src/runtimes/detection.js';
+import { AGENT_DEFS } from '../../src/runtimes/registry.js';
 
 const roots: string[] = [];
 const originalPath = process.env.PATH;
 
 afterEach(() => {
+  vi.useRealTimers();
   process.env.PATH = originalPath;
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
@@ -28,6 +31,50 @@ function executable(name: string, version: string): string {
 }
 
 describe('runtime version provenance', () => {
+  it.runIf(process.platform !== 'win32').each(['selected', 'picker'] as const)(
+    'recovers a missing version cached by %s detection without a manual rescan', async (source) => {
+      // Only Date is virtual: child-process completion remains real I/O.
+      vi.useFakeTimers({ toFake: ['Date'] });
+      const start = new Date('2026-09-15T00:00:00Z');
+      vi.setSystemTime(start);
+      const bin = executable('opencode', '');
+      const root = join(bin, '..');
+      const count = join(root, 'probes');
+      const version = join(root, 'version');
+      writeFileSync(version, '');
+      writeFileSync(bin, `#!/bin/sh\nif [ "$1" = "--version" ]; then\n  printf x >> '${count}'\n  cat '${version}'\nfi\n`);
+      const env = { OPENCODE_BIN: bin };
+      if (source === 'picker') await detectAgent(AGENT_DEFS.find(def => def.id === 'opencode')!, env);
+      else await ensureDetectedRuntimeVersions('opencode', env);
+      expect(getDetectedRuntimeVersions('opencode')).toEqual({ invocable: true });
+      writeFileSync(version, '1.18.18\n');
+      vi.setSystemTime(start.getTime() + 4_999);
+      await expect(ensureDetectedRuntimeVersions('opencode', env)).resolves.toEqual({ invocable: true });
+      expect(readFileSync(count, 'utf8')).toBe('x');
+      vi.setSystemTime(start.getTime() + 5_000);
+      const results = await Promise.all(Array.from({ length: 4 }, () => ensureDetectedRuntimeVersions('opencode', env)));
+      expect(results).toEqual(Array.from({ length: 4 }, () => ({ invocable: true, agentCliVersion: '1.18.18' })));
+      expect(readFileSync(count, 'utf8')).toBe('xx');
+      vi.setSystemTime(start.getTime() + 60_000);
+      await ensureDetectedRuntimeVersions('opencode', env);
+      expect(readFileSync(count, 'utf8')).toBe('xx');
+    },
+  );
+
+  it.runIf(process.platform !== 'win32')('bounds repeated missing-version probes and keeps the CLI invocable', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(0);
+    const bin = executable('opencode', '');
+    const count = join(bin, '..', 'probes');
+    writeFileSync(bin, `#!/bin/sh\nprintf x >> '${count}'\nexit 2\n`);
+    const env = { OPENCODE_BIN: bin };
+    for (const now of [0, 4_999, 5_000, 9_999, 10_000]) {
+      vi.setSystemTime(now);
+      await expect(ensureDetectedRuntimeVersions('opencode', env)).resolves.toEqual({ invocable: true });
+      expect(readFileSync(count, 'utf8').length).toBe(Math.floor(now / 5_000) + 1);
+    }
+  });
+
   it('remembers the exact detected CLI version for later run telemetry', async () => {
     executable('claude', 'claude 9.8.7');
 

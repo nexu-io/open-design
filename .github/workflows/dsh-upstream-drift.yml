@@ -8,7 +8,7 @@ name: dsh-upstream-drift
 # agent def — both halves of our own config — so it stays green while both are
 # equally stale. This compares them against the registry instead.
 #
-# Standalone and outside the merge gate, like nix.yml and docker-image.yml: an
+# Standalone and outside the merge gate, like docker-image.yml: an
 # upstream release is not a reason to fail a PR.
 
 on:

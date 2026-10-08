@@ -1,0 +1,23 @@
+/* 搬到按钮旁边开的那一档 —— 包裹盒盖在按钮的矩形上。
+   ------------------------------------------------------------
+   盒子本身不可见也不吃事件,它只是给菜单一个「按钮在哪儿」的定位参照:这样
+   `shell.css` 里那两条既有的后代规则(`top: calc(100% + 6px)` / `right: 0`)
+   原封不动就得到「贴在按钮下缘、右缘对齐」。菜单本体照旧 `pointer-events`,
+   只有包裹盒是穿透的。 */
+.anchored {
+  pointer-events: none;
+  /* 菜单层 —— 与 `.od-select-menu` 同一档,在提示层之上。理由见 tokens.css。
+     portal 到 body 之后不再受 `.artifact-card-acts`(z-index:2 的层叠上下文)约束。 */
+  z-index: var(--z-menu);
+}
+
+.anchored > * {
+  pointer-events: auto;
+}
+
+/* 往上翻:盖掉 `.chrome-share-menu .share-menu-popover` 的 `top`。
+   选择器带上 `.anchored` 前缀,原地那一档一个字不受影响。 */
+.anchored > [data-placement='above'] {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
