@@ -22,6 +22,7 @@ vi.mock('../../src/collab/useWorkspaceContext', async (importOriginal) => {
 });
 
 import { HomeView } from '../../src/components/HomeView';
+import { createProject, resetPluginsCache } from '../../src/state/projects';
 import { requestHomeChip } from '../../src/runtime/home-intent';
 import {
   createPluginAuthoringHandoff,
@@ -1020,6 +1021,144 @@ describe('HomeView prompt handoff', () => {
       skillId: 'industrial-product-design',
       appliedPluginSnapshotId: null,
     }));
+  });
+
+  it('restores the skill-only route after an optimistic unmount and HTTP 503, including delayed catalog loading', async () => {
+    let rejectCreation!: (response: Response) => void;
+    const failedCreation = new Promise<Response>((resolve) => { rejectCreation = resolve; });
+    const projectRequests: Record<string, unknown>[] = [];
+    let recovering = false;
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (url, init) => {
+      if (url === '/api/plugins') {
+        return Response.json({ plugins: recovering
+          ? [HIDDEN_DEFAULT_PLUGIN, WEB_PROTOTYPE_PLUGIN] : [HIDDEN_DEFAULT_PLUGIN] });
+      }
+      if (url === '/api/projects' && init?.method === 'POST') {
+        projectRequests.push(JSON.parse(String(init.body)));
+        return projectRequests.length === 1
+          ? failedCreation
+          : Response.json({ error: 'service unavailable' }, { status: 503 });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }));
+    const onSubmit = vi.fn(async (input) => {
+      try {
+        await createProject({
+          name: 'Retry skill-only design',
+          skillId: input.skillId,
+          skillCatalogScope: input.skillCatalogScope,
+          designSystemId: input.designSystemId,
+          pendingPrompt: input.prompt,
+          ...(input.pluginId ? { pluginId: input.pluginId } : {}),
+          ...(input.automaticStrategyTaskProfile
+            ? { automaticStrategyTaskProfile: input.automaticStrategyTaskProfile } : {}),
+        }, { maxRetries: 0 });
+        return true;
+      } catch {
+        return false;
+      }
+    });
+    const props = {
+      projects: [], onSubmit,
+      onOpenProject: () => undefined, onViewAllProjects: () => undefined,
+    };
+    const first = render(<HomeView {...props} skills={[INDUSTRIAL_PRODUCT_DESIGN_SKILL]} />);
+    await waitFor(() => expect((screen.getByTestId('home-hero-template-trigger') as HTMLButtonElement)
+      .disabled).toBe(false));
+    first.rerender(<HomeView {...props} skills={[INDUSTRIAL_PRODUCT_DESIGN_SKILL]}
+      promptHandoff={createSkillUseHandoff(13, INDUSTRIAL_PRODUCT_DESIGN_SKILL)} />);
+    await screen.findByTestId('home-hero-active-skill');
+    await setPromptAndSettle('Develop an air purifier using @Industrial Product Design.');
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+    await waitFor(() => expect(projectRequests).toHaveLength(1));
+    // App navigates to the optimistic project before POST settles, then remounts
+    // Home on failure. The handoff has already been consumed on that first mount.
+    first.unmount();
+    await act(async () => {
+      rejectCreation(Response.json({ error: 'service unavailable' }, { status: 503 }));
+      await onSubmit.mock.results[0]!.value;
+    });
+    recovering = true;
+    resetPluginsCache();
+    const retry = render(<HomeView {...props} skills={[]} skillsLoading />);
+    expect((screen.getByTestId('home-hero-submit') as HTMLButtonElement).disabled).toBe(true);
+    retry.rerender(<HomeView {...props} skills={[INDUSTRIAL_PRODUCT_DESIGN_SKILL]} />);
+    await waitFor(() => expect(screen.getByTestId('home-hero-active-skill').textContent)
+      .toContain('Industrial Product Design'));
+    await waitFor(() => expect((screen.getByTestId('home-hero-submit') as HTMLButtonElement).disabled)
+      .toBe(false));
+    expect(screen.getByTestId('home-hero-template-trigger').textContent).not.toContain('Prototype');
+    expect(homeHeroPromptText()).toBe('Develop an air purifier using @Industrial Product Design.');
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+    await waitFor(() => expect(projectRequests).toHaveLength(2));
+    for (const request of projectRequests) {
+      expect(request).toMatchObject({ skillId: 'industrial-product-design' });
+      expect(request).not.toHaveProperty('pluginId');
+      expect(request).not.toHaveProperty('automaticStrategyTaskProfile');
+    }
+  });
+
+  it.each([
+    { skillId: 'removed-skill', scope: null },
+    { skillId: 'industrial-product-design', scope: { workspaceId: 'other', workspaceMemberId: 'other-member' } },
+  ])('drops an unavailable or foreign skill draft ($skillId, $scope)', async ({ skillId, scope }) => {
+    window.localStorage.setItem('open-design:home-composer:skill', skillId);
+    if (scope) window.localStorage.setItem('open-design:home-composer:skill-scope', JSON.stringify(scope));
+    window.localStorage.setItem('open-design:home-composer:prompt', 'Keep my edited brief.');
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (url) => {
+      if (url === '/api/plugins') return Response.json({ plugins: [WEB_PROTOTYPE_PLUGIN] });
+      throw new Error(`unexpected fetch ${url}`);
+    }));
+    render(<HomeView projects={[]} skills={[INDUSTRIAL_PRODUCT_DESIGN_SKILL]}
+      onSubmit={vi.fn()} onOpenProject={() => undefined} onViewAllProjects={() => undefined} />);
+    await waitFor(() => expect(screen.getByTestId('home-hero-template-trigger').textContent)
+      .toContain('Prototype'));
+    expect(screen.queryByTestId('home-hero-active-skill')).toBeNull();
+    expect(window.localStorage.getItem('open-design:home-composer:skill')).toBeNull();
+    expect(window.localStorage.getItem('open-design:home-composer:skill-scope')).toBeNull();
+    expect(homeHeroPromptText()).toBe('Keep my edited brief.');
+  });
+
+  it('restores a skill alongside an intentional task type and clears its draft only after success', async () => {
+    window.localStorage.setItem('open-design:home-composer:skill', INDUSTRIAL_PRODUCT_DESIGN_SKILL.id);
+    window.localStorage.setItem('open-design:home-composer:chip', JSON.stringify({
+      chipId: 'prototype', pluginId: WEB_PROTOTYPE_PLUGIN.id, projectKind: 'prototype',
+    }));
+    window.localStorage.setItem('open-design:home-composer:prompt', 'Make a product control dashboard.');
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (url) => {
+      if (url === '/api/plugins') return Response.json({ plugins: [WEB_PROTOTYPE_PLUGIN] });
+      throw new Error(`unexpected fetch ${url}`);
+    }));
+    const onSubmit = vi.fn().mockResolvedValue(true);
+    render(<HomeView projects={[]} skills={[INDUSTRIAL_PRODUCT_DESIGN_SKILL]}
+      onSubmit={onSubmit} onOpenProject={() => undefined} onViewAllProjects={() => undefined} />);
+    await screen.findByTestId('home-hero-active-skill');
+    await waitFor(() => expect((screen.getByTestId('home-hero-submit') as HTMLButtonElement).disabled)
+      .toBe(false));
+    expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Prototype');
+    expect(window.localStorage.getItem('open-design:home-composer:skill')).toBe(INDUSTRIAL_PRODUCT_DESIGN_SKILL.id);
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      skillId: INDUSTRIAL_PRODUCT_DESIGN_SKILL.id, automaticStrategyTaskProfile: 'prototype',
+      prompt: 'Make a product control dashboard.',
+    })));
+    await waitFor(() => expect(window.localStorage.getItem('open-design:home-composer:skill')).toBeNull());
+  });
+
+  it('does not restore an old skill over a new plugin-authoring handoff', async () => {
+    window.localStorage.setItem('open-design:home-composer:skill', INDUSTRIAL_PRODUCT_DESIGN_SKILL.id);
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (url) => {
+      if (url === '/api/plugins') return Response.json({ plugins: [AUTHORING_PLUGIN] });
+      if (String(url).includes('/apply-local')) return Response.json(DEFAULT_APPLY_RESULT);
+      throw new Error(`unexpected fetch ${url}`);
+    }));
+    render(<HomeView projects={[]} skills={[INDUSTRIAL_PRODUCT_DESIGN_SKILL]}
+      promptHandoff={createPluginAuthoringHandoff(14)} onSubmit={vi.fn()}
+      onOpenProject={() => undefined} onViewAllProjects={() => undefined} />);
+    await waitFor(() => expect(screen.getByTestId('home-hero-active-plugin').textContent)
+      .toContain('Create plugin'));
+    expect(screen.queryByTestId('home-hero-active-skill')).toBeNull();
+    expect(window.localStorage.getItem('open-design:home-composer:skill')).toBeNull();
   });
 
   it('falls back to od-new-generation when od-plugin-authoring is not registered yet', async () => {

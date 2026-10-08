@@ -344,13 +344,17 @@ const EMPTY_PROMPT_TEMPLATES: PromptTemplateSummary[] = [];
 // system vanish when the user steps away and comes back. Persist those two
 // serializable, user-visible fields to localStorage so they survive the
 // unmount/remount, mirroring ChatComposer's draft persistence. Object-valued
-// selections (active template, skill, staged files, working directory) are
+// selections (active template, staged files, working directory) are
 // intentionally NOT persisted here — they reference live catalogue records /
 // File handles / a desktop auth token that cannot round-trip through JSON
 // safely.
 const HOME_COMPOSER_PROMPT_KEY = 'open-design:home-composer:prompt';
 const HOME_COMPOSER_DESIGN_SYSTEM_KEY = 'open-design:home-composer:design-system';
 const HOME_COMPOSER_DESIGN_SYSTEM_SCOPE_KEY = 'open-design:home-composer:design-system-scope';
+// Preserve only the skill identity and its catalogue owner, never the live
+// record. App unmounts Home during optimistic creation, including failed runs.
+const HOME_COMPOSER_SKILL_KEY = 'open-design:home-composer:skill';
+const HOME_COMPOSER_SKILL_SCOPE_KEY = 'open-design:home-composer:skill-scope';
 // The active type-chip + bound plugin (the "创作类型" + "示例提示词" pick) is a
 // third piece of composer state that used to fall through this same crack:
 // `active` (below) held only a live `InstalledPluginRecord` + resolved apply
@@ -473,6 +477,8 @@ function clearHomeComposerDraft(): void {
   writeHomeComposerDraft(HOME_COMPOSER_PROMPT_KEY, null);
   writeHomeComposerDraft(HOME_COMPOSER_DESIGN_SYSTEM_KEY, null);
   writeHomeComposerDraft(HOME_COMPOSER_DESIGN_SYSTEM_SCOPE_KEY, null);
+  writeHomeComposerDraft(HOME_COMPOSER_SKILL_KEY, null);
+  writeHomeComposerDraft(HOME_COMPOSER_SKILL_SCOPE_KEY, null);
   writeHomeComposerChipDraft(null);
 }
 
@@ -637,6 +643,13 @@ export function HomeView({
     chipId: string | null;
   } | null>(null);
   const [sessionMode, setSessionMode] = useState<ChatSessionMode>('design');
+  const [pendingSkillRestore, setPendingSkillRestore] = useState(() => {
+    const skillId = readHomeComposerDraft(HOME_COMPOSER_SKILL_KEY)?.trim();
+    return skillId ? {
+      skillId,
+      catalogScope: readLocalCatalogScopeDraft(HOME_COMPOSER_SKILL_SCOPE_KEY),
+    } : null;
+  });
   const [activeSkill, setActiveSkill] = useState<SkillSummary | null>(null);
   const [activeSkillCatalogScope, setActiveSkillCatalogScope] =
     useState<LocalCatalogScope | null>(null);
@@ -733,6 +746,15 @@ export function HomeView({
         : null,
     );
   }, [designSystemCatalogScope, designSystemId]);
+  useEffect(() => {
+    // Do not erase the saved identity while its catalogue is still loading.
+    if (pendingSkillRestore) return;
+    writeHomeComposerDraft(HOME_COMPOSER_SKILL_KEY, activeSkill?.id ?? null);
+    writeHomeComposerDraft(
+      HOME_COMPOSER_SKILL_SCOPE_KEY,
+      activeSkill && activeSkillCatalogScope ? JSON.stringify(activeSkillCatalogScope) : null,
+    );
+  }, [activeSkill, activeSkillCatalogScope, pendingSkillRestore]);
   // Persist the active chip/plugin identity the same way — only the
   // serializable fields, not `active` itself (see the module note above).
   // Clearing on `active === null` covers the explicit-clear (×) and the
@@ -1121,6 +1143,7 @@ export function HomeView({
     }
 
     setActive(null);
+    setPendingSkillRestore(null);
     setActiveSkill(null);
     setActiveSkillCatalogScope(null);
     setSelectedPluginContexts([]);
@@ -1286,6 +1309,23 @@ export function HomeView({
       return pluginById.get(current.id) ?? null;
     });
   }, [pluginCatalogKey, plugins, pluginsLoading]);
+
+  useEffect(() => {
+    if (!pendingSkillRestore || skillsLoading || workspaceContextState.loading
+      || workspaceContextState.identityChangePending) return;
+    const currentScope = localCatalogScopeFromWorkspaceContext(workspaceContext);
+    const savedScope = pendingSkillRestore.catalogScope;
+    const sameScope = currentScope?.workspaceId === savedScope?.workspaceId
+      && currentScope?.workspaceMemberId === savedScope?.workspaceMemberId;
+    if (!activeSkill && sameScope && promptHandoff?.source !== 'plugin-authoring') {
+      setActiveSkill(selectableSkills.find((skill) => skill.id === pendingSkillRestore.skillId) ?? null);
+      setActiveSkillCatalogScope(currentScope);
+    }
+    // Removed skills and another workspace/member's draft must not resurrect.
+    // Restore only the selection: the saved user-edited prompt stays untouched.
+    setPendingSkillRestore(null);
+  }, [pendingSkillRestore, skillsLoading, selectableSkills, activeSkill, workspaceContext, promptHandoff?.source,
+    workspaceContextState.loading, workspaceContextState.identityChangePending]);
 
   useEffect(() => {
     if (skillsLoading) return;
@@ -1920,11 +1960,10 @@ export function HomeView({
   );
   useEffect(() => {
     if (defaultChipSeededRef.current) return;
-    if (pluginsLoading || pendingPluginUseHandoff || pendingChipRestore) return;
-    // A live hand-off or another explicit intent may have bound a plugin in
-    // the same catalog-resolution turn. It supersedes the default prototype and is
-    // just as ready to submit.
-    if (active) {
+    if (pluginsLoading || pendingPluginUseHandoff || pendingChipRestore || pendingSkillRestore) return;
+    // A live hand-off or restored skill may already own this route. Do not
+    // replace a skill-only retry with the fresh-home default prototype.
+    if (active || activeSkill) {
       defaultChipSeededRef.current = true;
       setDefaultChipSeedPending(false);
       return;
@@ -1951,7 +1990,8 @@ export function HomeView({
     });
     setDefaultChipSeedPending(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pluginsLoading, active, pendingPluginUseHandoff, pendingChipRestore, plugins]);
+  }, [pluginsLoading, active, activeSkill, pendingPluginUseHandoff, pendingChipRestore,
+    pendingSkillRestore, plugins]);
 
   function addPluginContext(record: InstalledPluginRecord, nextPrompt: string | null) {
     setSelectedPluginContexts((prev) => {
@@ -2368,6 +2408,7 @@ export function HomeView({
   // order already ranks a user-selected Skill above its own), so nothing has
   // to be discarded to keep the rule defined.
   function useSkill(skill: SkillSummary, nextPrompt: string | null) {
+    setPendingSkillRestore(null);
     setActiveSkill(skill);
     setActiveSkillCatalogScope(localCatalogScopeFromWorkspaceContext(workspaceContext));
     setError(null);
@@ -2431,6 +2472,7 @@ export function HomeView({
     const nextPrompt = buildPluginAuthoringPromptForInputs(nextInputs);
     runWithReplacementConfirmation('Plugin authoring', nextPrompt, async () => {
       setActive(null);
+      setPendingSkillRestore(null);
       setActiveSkill(null);
       setActiveSkillCatalogScope(null);
       setFallbackProjectKind('other');
@@ -2730,7 +2772,7 @@ export function HomeView({
   async function submit() {
     // The send button disables itself while sending, but the Enter-to-send
     // path lands here directly — swallow re-entry during the in-flight window.
-    if (sending) return;
+    if (sending || pendingSkillRestore) return;
     const trimmed = prompt.trim();
     if (!trimmed && stagedFiles.length === 0) return;
     // P0 ui_click area=chat_composer element=send_button. Fires before the
@@ -3144,6 +3186,7 @@ export function HomeView({
         submitDisabled={
           (defaultChipSeedPending && !hasExplicitSubmitRoute) ||
           Boolean(pendingChipRestore) ||
+          Boolean(pendingSkillRestore) ||
           Boolean(pendingPluginUseHandoff) ||
           Boolean(pendingApplyId) ||
           Boolean(pendingAuthoringChipId) ||
