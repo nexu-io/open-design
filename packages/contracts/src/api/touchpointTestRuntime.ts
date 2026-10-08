@@ -1,6 +1,17 @@
 /** The only scenario accepted by the test touchpoint runtime. */
 export type TestRuntimeScenario = 'realtime';
 
+/**
+ * One bounded page of GET /api/touchpoints/test-runtime/deployments.
+ * Follow the opaque cursor until null before treating the catalog as complete.
+ * Legacy servers omit nextCursor: their single page has unknown completeness.
+ * Catalog metadata never grants runtime display authority.
+ */
+export interface TestRuntimeDeploymentCatalogPage<Deployment = unknown> {
+  deployments: Deployment[];
+  nextCursor?: string | null;
+}
+
 /** Server-computed placement of the current time in a test deployment window. */
 export type TestRuntimeScheduleState = 'before' | 'active' | 'ended';
 

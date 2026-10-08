@@ -133,12 +133,14 @@ beforeEach(() => {
 });
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); fs.rmSync(dataDir, { recursive: true, force: true }); });
 
-const start = async (options: { runtime?: 'production' | 'test'; events?: boolean; held?: boolean; locale?: string; placement?: string } = {}) => {
+const start = async (options: { runtime?: 'production' | 'test'; events?: boolean; held?: boolean; locale?: string; placement?: string; deploymentsQuery?: string } = {}) => {
   const runtime = options.runtime ?? 'production';
   const route = `/api/touchpoints/${runtime}-runtime`;
   const query = new URLSearchParams({ placementKey: options.placement ?? PLACEMENT, locale: options.locale ?? LOCALE });
   if (options.held) { query.set('heldContentId', 'version-1'); query.set('heldContentLocale', LOCALE); }
-  const req = Object.assign(new EventEmitter(), { method: options.events ? 'POST' : 'GET', path: route + (options.events ? '/events' : ''), url: route + (options.events ? '/events' : `?${query}`), body: {}, headers: {}, query: {} });
+  const suffix = options.deploymentsQuery !== undefined ? '/deployments' : options.events ? '/events' : '';
+  const search = options.deploymentsQuery !== undefined ? options.deploymentsQuery : options.events ? '' : `?${query}`;
+  const req = Object.assign(new EventEmitter(), { method: options.events ? 'POST' : 'GET', path: route + suffix, url: route + suffix + search, body: {}, headers: {}, query: {} });
   const chunks: Buffer[] = [];
   const headers: Record<string, string> = {};
   const res = Object.assign(new PassThrough(), {
@@ -166,6 +168,21 @@ const answer = async (status: number, body: unknown, options: Parameters<typeof 
   const call = await start(options); respond(call.attempt, status, body); return call.done;
 };
 const receipt = (deploymentId = 'deployment-1') => ({ error: 'production_runtime_revoked', receipt: { ...RECEIPT, deploymentId } });
+
+describe('Test deployment catalog query passthrough', () => {
+  it.each([
+    '',
+    `?${new URLSearchParams({ cursor: 'created/id +&?=/%中文', limit: '50' })}`,
+    '?activityIds=activity-a%2Cactivity-b',
+  ])('forwards the complete catalog query verbatim: %s', async deploymentsQuery => {
+    const call = await start({ runtime: 'test', deploymentsQuery });
+    const [url] = vi.mocked(http.request).mock.calls.at(-1)!;
+    expect(String(url)).toBe(`http://runtime.invalid/api/v1/touchpoints/runtime/test-deployments${deploymentsQuery}`);
+    const page = { deployments: [], nextCursor: 'opaque-next+/=' };
+    respond(call.attempt, 200, page);
+    expect(await call.done).toEqual({ status: 200, body: page, offline: undefined });
+  });
+});
 
 describe('route authority independent of assembly', () => {
   it.each([401, 403, 400, 404, 409])('events %s retires only account authentication authority', async status => {
