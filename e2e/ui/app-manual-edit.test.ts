@@ -385,15 +385,19 @@ test('[P0] saving a root Inspect edit preserves an unsaved nested child edit (#7
   // Edit the CHILD but leave it unsaved -- only the host's in-memory map and
   // the live preview know about this override.
   await nested.locator('[data-od-id="hero"]').click();
-  await expect(page.getByTestId('inspect-panel')).toBeVisible();
+  const childId = `frame:${encodeURIComponent(JSON.stringify(['child.html', 'hero']))}`;
+  await expect(page.getByTestId('inspect-panel').locator('.inspect-panel-title code')).toHaveText(childId);
   await page.getByTestId('inspect-font-size').fill('28');
   await expect(nested.locator('[data-od-id="hero"]')).toHaveCSS('font-size', '28px');
 
   // Now select a ROOT-level element and save it -- this is the branch that
   // calls setSource(next) and previously wiped the child's unsaved entry.
   await artifactPreviewFrame(page).locator('[data-od-id="root-title"]').click();
-  await expect(page.getByTestId('inspect-panel')).toBeVisible();
+  // The panel is already visible for the child; wait for the root selection
+  // message before editing or the input still belongs to the child.
+  await expect(page.getByTestId('inspect-panel').locator('.inspect-panel-title code')).toHaveText('root-title');
   await page.getByTestId('inspect-font-size').fill('36');
+  await expect(artifactPreviewFrame(page).locator('[data-od-id="root-title"]')).toHaveCSS('font-size', '36px');
   await page.getByTestId('inspect-save').click();
   await expectFileSource(page, projectId, 'root.html', ['font-size: 36px']);
   await expectFileSourceExcludes(page, projectId, 'child.html', ['data-od-inspect-overrides']);
@@ -403,7 +407,7 @@ test('[P0] saving a root Inspect edit preserves an unsaved nested child edit (#7
   const nestedAfterRootSave = artifactPreviewFrame(page).frameLocator('iframe[title="child"]');
   await expect(nestedAfterRootSave.locator('[data-od-id="hero"]')).toHaveCSS('font-size', '28px');
   await nestedAfterRootSave.locator('[data-od-id="hero"]').click();
-  await expect(page.getByTestId('inspect-panel')).toBeVisible();
+  await expect(page.getByTestId('inspect-panel').locator('.inspect-panel-title code')).toHaveText(childId);
   await page.getByTestId('inspect-save').click();
   await expectFileSource(page, projectId, 'child.html', ['font-size: 28px']);
 });
@@ -511,14 +515,23 @@ for (const transport of ['url', 'srcdoc'] as const) {
     await page.goto(`/projects/${projectId}/files/root.html`);
     await openDesignFile(page, 'root.html');
     await expect(artifactPreview(page)).toHaveAttribute('data-od-render-mode', transport === 'url' ? 'url-load' : 'srcdoc');
+    if (transport === 'url') await waitForUrlPreviewRefreshToSettle(page);
+    const nested = artifactPreviewFrame(page).frameLocator('iframe[title="scaled child"]');
+    const target = nested.locator('[data-od-id="target"]');
+    await expect(target).toBeVisible();
+    if (transport === 'srcdoc') {
+      await waitForSrcdocPreviewRefreshToSettle(page);
+    }
+    // Wait for the initial file/iframe load before choosing zoom, and do it
+    // before the floating Comment list covers the zoom control.
     const zoomButton = page.locator('.viewer-toolbar-zoom .zoom-trigger');
     await zoomButton.click();
     await page.locator('.zoom-menu-popover[role="menu"]').getByRole('menuitem', { name: '150%' }).click();
     await page.getByTestId('comment-panel-toggle').click();
-    const nested = artifactPreviewFrame(page).frameLocator('iframe[title="scaled child"]');
-    const target = nested.locator('[data-od-id="target"]');
     await expect(nested.locator('html[data-od-comment-mode]')).toHaveCount(1);
     await expect(artifactPreviewFrame(page).locator('iframe[title="scaled child"]')).toHaveAttribute('data-od-project-frame', '');
+    await expect(artifactPreview(page)).toHaveAttribute('data-od-render-mode', transport === 'url' ? 'url-load' : 'srcdoc');
+    await expect(zoomButton).toHaveText('150%');
     await target.hover();
     const overlay = page.getByTestId('comment-target-overlay');
     await expect(overlay).toBeVisible();
@@ -582,6 +595,7 @@ for (const transport of ['url', 'srcdoc'] as const) {
     await openDesignFile(page, 'root.html');
     const renderMode = transport === 'url' ? 'url-load' : 'srcdoc';
     await expect(artifactPreview(page)).toHaveAttribute('data-od-render-mode', renderMode);
+    if (transport === 'url') await waitForUrlPreviewRefreshToSettle(page);
     await testInfo.attach(`${transport}-comment-entry`, { body: await page.screenshot(), contentType: 'image/png' });
     await page.getByTestId('board-mode-toggle').click();
     const nested = artifactPreviewFrame(page).frameLocator('iframe[title="comment child"]');
@@ -596,6 +610,9 @@ for (const transport of ['url', 'srcdoc'] as const) {
     await page.reload();
     await waitForLoadingToClear(page);
     await expect(page.getByTestId('board-mode-toggle')).toBeVisible();
+    // URL Comment requires the root bridge's load handshake, not just a
+    // visible toolbar. Early activation legitimately falls back to srcdoc.
+    if (transport === 'url') await waitForUrlPreviewRefreshToSettle(page);
     await page.getByTestId('board-mode-toggle').click();
     await expect(page.getByTestId('comment-panel-toggle')).toContainText('1');
     const reloadedChild = artifactPreviewFrame(page).frameLocator('iframe[title="comment child"]');
@@ -810,6 +827,34 @@ test('[P0] srcDoc page navigation keeps manual edit hover guides across files an
   await preview.locator('[data-od-id="profile-screen"]').hover();
   await expect(preview.locator('[data-od-edit-guides-layer] > *')).not.toHaveCount(0);
 });
+
+async function waitForSrcdocPreviewRefreshToSettle(page: Page) {
+  let observedGeneration: string | null = null;
+  let unchangedSince = Date.now();
+  await expect.poll(async () => {
+    const generation = await artifactPreviewFrame(page).locator('html').evaluate(() => {
+      if (document.readyState !== 'complete') return null;
+      return document.querySelector('template[data-od-srcdoc-transport-body-complete]')
+        ?.getAttribute('data-od-srcdoc-transport-body-complete') ?? null;
+    });
+    if (!generation) {
+      observedGeneration = null;
+      unchangedSince = Date.now();
+      return 0;
+    }
+    if (generation !== observedGeneration) {
+      observedGeneration = generation;
+      unchangedSince = Date.now();
+    }
+    return Date.now() - unchangedSince;
+  }, {
+    message: 'srcdoc should finish loading and its initial scroll restoration before interaction',
+    timeout: T.short,
+  }).toBeGreaterThanOrEqual(400);
+  // The bridge requests initial scroll restoration at 0/80/240ms. A visible
+  // child and a shell load epoch can precede the real document's final load.
+  // Keep the same 400ms stability window as the URL refresh helper below.
+}
 
 async function waitForUrlPreviewRefreshToSettle(page: Page) {
   const frame = page.locator(
