@@ -74,7 +74,7 @@ export function ShareMoreMenu({ label, items }: { label: string; items: readonly
     return () => document.removeEventListener('pointerdown', outside);
   }, [open]);
   const menuNode = (
-    <div ref={menu} id={id} role="menu" aria-label={label} tabIndex={-1} hidden={!open} style={open ? position : undefined} className={styles.menu}
+    <div ref={menu} id={id} role="menu" data-share-overlay-layer aria-label={label} tabIndex={-1} hidden={!open} style={open ? position : undefined} className={styles.menu}
       onKeyDown={event => {
         if (!open) return;
         if (event.key === 'Escape') {

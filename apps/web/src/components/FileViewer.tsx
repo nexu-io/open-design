@@ -14300,6 +14300,8 @@ function HtmlViewer({
        * 「关掉 + 再开一次」。
        */
       const target = e.target as Node;
+      // Independently portaled share layers must survive the press until click selects an action.
+      if (target instanceof Element && target.closest('[data-share-overlay-layer]')) return;
       if (anchoredMenuRef.current?.contains(target)) return;
       if (
         menuAnchorId &&

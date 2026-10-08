@@ -361,6 +361,8 @@ test('capture isolated OD share entry, progress and failure states',async({page}
   await save(page,'S14-ERR','S14-ERR');
 });
 test('capture updated owner G1 portal and S12 deployment submenu',async({page})=>{
+  await page.route('**/api/deploy/config?providerId=*',r=>r.fulfill({json:{providerId:new URL(r.request().url()).searchParams.get('providerId'),configured:false,tokenMask:'',teamId:'',teamSlug:'',accountId:'',projectName:'',target:'production'}}));
+  await page.route('**/api/deploy/cloudflare-pages/zones',r=>r.fulfill({json:{zones:[]}}));
   await page.addInitScript(()=>{localStorage.setItem('open-design:locale','zh-CN');localStorage.setItem('open-design:locale-source','manual');});
   await mockAmrPersonalWorkspace(page);
   await page.route('**/api/projects/*/workspace-scope',async r=>{const id=new URL(r.request().url()).pathname.match(/\/api\/projects\/([^/]+)/)?.[1];await r.fulfill({json:{scope:{kind:'personal',projectId:id,workspaceId:AMR_PERSONAL_WORKSPACE_CONTEXT.workspaceId,visibility:'personal',context:AMR_PERSONAL_WORKSPACE_CONTEXT}}});});
@@ -403,6 +405,19 @@ test('capture updated owner G1 portal and S12 deployment submenu',async({page})=
   expect(bounds.y).toBeGreaterThanOrEqual(0);
   expect(bounds.bottom).toBeLessThanOrEqual(bounds.viewport.height);
   await save(page,'S12','S12',{geometry:bounds});
+  // OPEND-3537: a real click includes mousedown on this independent body portal.
+  await submenu.getByRole('menuitem',{name:/Vercel/}).click();
+  await expect(menu).toBeHidden();
+  const provider=page.getByRole('combobox',{name:/部署平台|Provider/});
+  await expect(provider).toHaveValue('vercel-self');
+  await page.screenshot({path:resolve(out,`OPEND-3537-deploy-open-${captureRun}.png`),animations:'disabled'});
+  await page.keyboard.press('Escape');
+  await expect(provider).toBeHidden();
+  await share.click();
+  await more.click();
+  await submenu.getByRole('menuitem',{name:/Cloudflare Pages/}).click();
+  await expect(menu).toBeHidden();
+  await expect(provider).toHaveValue('cloudflare-pages');
 });
 test('capture first-export share guide and ever-shared exclusion P1 EX0',async({page})=>{
   await page.addInitScript(()=>{localStorage.setItem('open-design:locale','zh-CN');localStorage.setItem('open-design:locale-source','manual');});
