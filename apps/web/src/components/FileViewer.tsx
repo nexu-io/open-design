@@ -6034,6 +6034,7 @@ function CommentPreviewOverlays({
   activeSlideIndex = null,
   driftLadder = false,
   currentVersion,
+  targetsReady,
   onLostAnchors,
   onOpenComment,
   t,
@@ -6060,6 +6061,8 @@ function CommentPreviewOverlays({
   driftLadder?: boolean;
   /** Current content version, used by the ladder to flag reanchored (older vN). */
   currentVersion?: number;
+  /** An empty map is authoritative only after this preview has reported targets. */
+  targetsReady: boolean;
   /** Team collaboration: persist the durable `lost` capture (last-good position) so the
    *  ghost pin survives reload. Only fires in drift-ladder mode. */
   onLostAnchors?: (writeBacks: AnchorWriteBack[]) => void;
@@ -6109,7 +6112,7 @@ function CommentPreviewOverlays({
   // the server COALESCEs too, so this is belt-and-suspenders idempotency.
   const persistedLostRef = useRef<Set<string>>(new Set());
   useEffect(() => {
-    if (!driftLadder || !onLostAnchors) return;
+    if (!targetsReady || !driftLadder || !onLostAnchors) return;
     const plan = planLostAnchorWriteBacks(
       visibleComments.map(({ comment, snapshot, anchorState }) => ({
         comment,
@@ -6120,7 +6123,7 @@ function CommentPreviewOverlays({
     if (fresh.length === 0) return;
     for (const writeBack of fresh) persistedLostRef.current.add(writeBack.commentId);
     onLostAnchors(fresh);
-  }, [driftLadder, onLostAnchors, visibleComments]);
+  }, [targetsReady, driftLadder, onLostAnchors, visibleComments]);
   // `onOpenComment` is an inline arrow from the parent (new identity every
   // render), so read it through a ref to keep the saved-marker memo below from
   // busting. The closure only calls stable state setters, so a current ref read
@@ -9289,6 +9292,7 @@ function HtmlViewer({
   useEffect(() => cancelHoverCardDismiss, [cancelHoverCardDismiss]);
   const [activePreviewCommentId, setActivePreviewCommentId] = useState<string | null>(null);
   const [liveCommentTargets, setLiveCommentTargets] = useState<Map<string, PreviewCommentSnapshot>>(() => new Map());
+  const [commentTargetsReadyKey, setCommentTargetsReadyKey] = useState<string | null>(null);
   const liveCommentTargetsRef = useRef(liveCommentTargets);
   const [commentDraft, setCommentDraft] = useState('');
   // Inspect mode shares the iframe selection bridge with comment mode but
@@ -12461,6 +12465,11 @@ function HtmlViewer({
     win.postMessage({ type: 'od:inspect-mode', enabled: inspectMode }, '*');
   }, [inspectMode, srcDoc, useUrlLoadPreview, workspaceActive]);
 
+  const commentTargetsKey = JSON.stringify([file.name, srcDoc, useUrlLoadPreview]);
+  useEffect(() => {
+    setLiveCommentTargets(new Map());
+  }, [commentTargetsKey]);
+
   // Mirror the bridge's `od:comment-targets` broadcast into
   // `liveCommentTargets` whenever EITHER Inspect or Comments mode is
   // active. The boardMode-only useEffect below still handles its
@@ -12476,6 +12485,7 @@ function HtmlViewer({
     if (!workspaceActive) return;
     if (!inspectMode && !boardMode) {
       setLiveCommentTargets((current) => (current.size > 0 ? new Map() : current));
+      setCommentTargetsReadyKey(null);
       return;
     }
     function onMessage(ev: MessageEvent) {
@@ -12487,6 +12497,7 @@ function HtmlViewer({
           }
         | null;
       if (data?.type !== 'od:comment-targets' || !Array.isArray(data.targets)) return;
+      setCommentTargetsReadyKey(commentTargetsKey);
       const next = new Map<string, PreviewCommentSnapshot>();
       data.targets.forEach((item) => {
         const elementId = String(item?.elementId || '');
@@ -12518,7 +12529,7 @@ function HtmlViewer({
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [inspectMode, boardMode, file.name, isOurPreviewIframeSource, workspaceActive]);
+  }, [inspectMode, boardMode, file.name, commentTargetsKey, isOurPreviewIframeSource, workspaceActive]);
 
   useEffect(() => {
     setActiveCommentTarget(null);
@@ -12634,6 +12645,7 @@ function HtmlViewer({
       }) | null;
       if (!data?.type) return;
       if (data.type === 'od:comment-targets' && Array.isArray(data.targets)) {
+        setCommentTargetsReadyKey(commentTargetsKey);
         const next = new Map<string, PreviewCommentSnapshot>();
         data.targets.forEach((item) => {
           const snapshot = snapshotFromData(item);
@@ -12778,7 +12790,7 @@ function HtmlViewer({
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [activeCommentTarget, boardMode, boardTool, cancelHoverCardDismiss, commentPortalHost, file.name, isOurPreviewIframeSource, previewComments, requestComposerRetarget, scheduleHoverCardDismiss, workspaceActive]);
+  }, [activeCommentTarget, boardMode, boardTool, cancelHoverCardDismiss, commentPortalHost, file.name, commentTargetsKey, isOurPreviewIframeSource, previewComments, requestComposerRetarget, scheduleHoverCardDismiss, workspaceActive]);
 
   useEffect(() => {
     if (!workspaceActive || !boardMode || !activeCommentTarget || activeCommentTarget.selectionKind === 'pod') return;
@@ -17859,6 +17871,7 @@ function HtmlViewer({
                   t={t}
                   driftLadder={collab.enabled}
                   currentVersion={collab.publishedVersion ?? undefined}
+                  targetsReady={commentTargetsReadyKey === commentTargetsKey}
                   {...(collab.onLostAnchors ? { onLostAnchors: collab.onLostAnchors } : {})}
                   liveTargets={liveCommentTargets}
                   hoveredTarget={hoveredCommentTarget}
