@@ -2723,7 +2723,21 @@ function meaningfulDomFallbackTarget(el) {
     if (data.type === 'od:comment-active-target') {
       activeCommentElementId = data.elementId ? String(data.elementId) : null;
       activeCommentSelector = data.selector ? String(data.selector) : null;
-      schedulePostActiveCommentTarget();
+      if (data.locate && typeof data.requestId === 'string') {
+        // Saved comments can predate the current annotation identities. Locate
+        // the actual DOM first, then report viewport pixels after scrolling.
+        var target = findCommentTargetByIdentity(activeCommentElementId, activeCommentSelector);
+        var payload = target && targetFrom(target, true);
+        if (payload) {
+          try { target.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' }); } catch (_) {}
+          payload = targetFrom(target, true);
+        }
+        window.parent.postMessage(payload
+          ? Object.assign({}, payload, { type: 'od:comment-active-target-update', requestId: data.requestId })
+          : { type: 'od:comment-location-missing', requestId: data.requestId }, '*');
+        schedulePostTargets();
+        schedulePostPreviewScroll();
+      } else schedulePostActiveCommentTarget();
       return;
     }
     if (data.type === 'od:preview-scroll-by') {

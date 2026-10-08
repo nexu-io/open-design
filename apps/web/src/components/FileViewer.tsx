@@ -1,3 +1,4 @@
+import { commentSelectorsMatch, resolveOwnerCommentAnchor } from '../comments/owner-anchor';
 import { useExperienceError } from '../observability/use-experience-error';
 import { daemonErrorCodeProp, failureDetailProps } from '../analytics/failure-detail';
 import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent as ReactClipboardEvent, type CSSProperties, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
@@ -296,7 +297,6 @@ import {
   overlayBoundsFromSnapshot,
   planLostAnchorWriteBacks,
   provisionalNextPinNumber,
-  resolveCommentAnchor,
   targetFromSnapshot,
   type AnchorWriteBack,
   type PreviewCommentSnapshot,
@@ -6085,7 +6085,7 @@ function CommentPreviewOverlays({
           if (driftLadder) {
             // Keep stale/lost comments and carry their state so the marker can
             // badge them, instead of silently dropping a drifted anchor.
-            const resolution = resolveCommentAnchor(comment, liveTargets, currentVersion);
+            const resolution = resolveOwnerCommentAnchor(comment, liveTargets, currentVersion);
             return { comment, markerNumber, snapshot: resolution.snapshot, anchorState: resolution.state };
           }
           return {
@@ -6137,7 +6137,7 @@ function CommentPreviewOverlays({
   // comments reuses the whole subtree and React skips reconciling it.
   const savedMarkers = useMemo(
     () =>
-      visibleComments.map(({ comment, markerNumber, snapshot, anchorState }) => {
+      visibleComments.filter(({ comment }) => !driftLadder || comment.id !== activeExistingCommentId || Boolean(activeTarget)).map(({ comment, markerNumber, snapshot, anchorState }) => {
         const bounds = overlayBoundsFromSnapshot(snapshot, scale, overlayOffset);
         const label = commentTargetDisplayName(comment);
         const drifted = anchorState !== 'anchored';
@@ -6175,7 +6175,7 @@ function CommentPreviewOverlays({
           </div>
         );
       }),
-    [visibleComments, scale, overlayOffset, t],
+    [visibleComments, scale, overlayOffset, t, driftLadder, activeExistingCommentId, activeTarget],
   );
   const activeSavedIndex = activeExistingCommentId
     ? comments.findIndex((comment) => comment.id === activeExistingCommentId)
@@ -12466,6 +12466,8 @@ function HtmlViewer({
   }, [inspectMode, srcDoc, useUrlLoadPreview, workspaceActive]);
 
   const commentTargetsKey = JSON.stringify([file.name, srcDoc, useUrlLoadPreview]);
+  const commentLocateRequestRef = useRef<{ requestId: string; commentId: string; previewKey: string; selector: string; targetId: string | null; scrolled: boolean } | null>(null);
+  const commentLocateSequenceRef = useRef(0);
   useEffect(() => {
     setLiveCommentTargets(new Map());
   }, [commentTargetsKey]);
@@ -12640,6 +12642,7 @@ function HtmlViewer({
       if (!isOurPreviewIframeSource(ev.source)) return;
       const data = ev.data as (Partial<PreviewCommentSnapshot> & {
         type?: string;
+        requestId?: string;
         targets?: Array<Partial<PreviewCommentSnapshot>>;
         points?: StrokePoint[];
       }) | null;
@@ -12671,9 +12674,40 @@ function HtmlViewer({
         });
         return;
       }
+      if (data.type === 'od:comment-location-missing' || (data.type === 'od:comment-active-target-update' && data.requestId)) {
+        const request = commentLocateRequestRef.current;
+        if (!request || request.requestId !== data.requestId || request.previewKey !== commentTargetsKey) return;
+        if (data.type === 'od:comment-location-missing') {
+          setActiveCommentTarget(null);
+          setHoveredCommentTarget(null);
+          return;
+        }
+        const snapshot = snapshotFromData(data);
+        if (!snapshot.elementId || !isValidCommentOverlayPosition(snapshot.position)) return;
+        if (snapshot.elementId !== request.targetId && !commentSelectorsMatch(snapshot.selector, request.selector)) return;
+        setActiveCommentTarget(snapshot);
+        setHoveredCommentTarget(snapshot);
+        setLiveCommentTargets(current => new Map(current).set(snapshot.elementId, snapshot));
+        return;
+      }
       if (data.type === 'od:comment-active-target-update') {
         const snapshot = snapshotFromData(data);
         if (!snapshot.elementId || !isValidCommentOverlayPosition(snapshot.position)) return;
+        const request = commentLocateRequestRef.current;
+        // URL previews still use the daemon's existing bridge. It reports DOM
+        // boxes without request ids; match the current target and use its
+        // existing scroll protocol, without changing daemon or its contract.
+        if (request && request.previewKey === commentTargetsKey && snapshot.elementId === request.targetId) {
+          const height = iframeRef.current?.clientHeight ?? 0;
+          if (!request.scrolled && height > 0 && (snapshot.position.y < 0 || snapshot.position.y + snapshot.position.height > height)) {
+            request.scrolled = true;
+            iframeRef.current?.contentWindow?.postMessage({ type: 'od:preview-scroll-by',
+              left: 0, top: snapshot.position.y + snapshot.position.height / 2 - height / 2 }, '*');
+            return;
+          }
+          setActiveCommentTarget(snapshot);
+          setHoveredCommentTarget(snapshot);
+        }
         // Fires on every pointermove while a target is active — skip the Map
         // clone and the active/hovered state writes when nothing changed, so a
         // steady hover doesn't re-render the whole overlay each frame.
@@ -12791,6 +12825,23 @@ function HtmlViewer({
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
   }, [activeCommentTarget, boardMode, boardTool, cancelHoverCardDismiss, commentPortalHost, file.name, commentTargetsKey, isOurPreviewIframeSource, previewComments, requestComposerRetarget, scheduleHoverCardDismiss, workspaceActive]);
+
+  useEffect(() => {
+    commentLocateRequestRef.current = null;
+    if (!workspaceActive || !boardMode || !collab.enabled || !activePreviewCommentId) return;
+    const comment = previewComments.find(item => item.id === activePreviewCommentId && item.filePath === file.name);
+    if (!comment || comment.elementId.startsWith('pin-') || comment.selectionKind === 'pod') return;
+    setActiveCommentTarget(null);
+    setHoveredCommentTarget(null);
+    if (commentTargetsReadyKey !== commentTargetsKey) return;
+    const requestId = `comment-location-${++commentLocateSequenceRef.current}`;
+    const resolution = resolveOwnerCommentAnchor(comment, liveCommentTargets, collab.publishedVersion ?? undefined);
+    commentLocateRequestRef.current = { requestId, commentId: comment.id, previewKey: commentTargetsKey, selector: comment.selector,
+      targetId: resolution.state !== 'lost' ? resolution.snapshot?.elementId ?? null : null, scrolled: false };
+    iframeRef.current?.contentWindow?.postMessage({ type: 'od:comment-active-target',
+      elementId: comment.elementId, selector: comment.selector, locate: true, requestId }, '*');
+    return () => { commentLocateRequestRef.current = null; };
+  }, [workspaceActive, boardMode, collab.enabled, activePreviewCommentId, previewComments, file.name, commentTargetsKey, commentTargetsReadyKey]);
 
   useEffect(() => {
     if (!workspaceActive || !boardMode || !activeCommentTarget || activeCommentTarget.selectionKind === 'pod') return;
@@ -16656,8 +16707,9 @@ function HtmlViewer({
           ...(typeof comment.slideIndex === 'number' ? { slideIndex: comment.slideIndex } : {}),
         };
         requestComposerRetarget(() => {
-          setActiveCommentTarget(snapshot);
-          setHoveredCommentTarget(snapshot);
+          const needsLocation = collab.enabled && !comment.elementId.startsWith('pin-') && comment.selectionKind !== 'pod';
+          setActiveCommentTarget(needsLocation ? null : snapshot);
+          setHoveredCommentTarget(needsLocation ? null : snapshot);
           setActivePreviewCommentId(comment.id);
           setCommentDraft(comment.note);
           setQueuedBoardNotes([]);
@@ -17891,8 +17943,9 @@ function HtmlViewer({
                       setCommentSidePanelCollapsed(false);
                       setCommentCreateMode(true);
                       setBoardMode(true);
-                      setActiveCommentTarget(snapshot);
-                      setHoveredCommentTarget(snapshot);
+                      const needsLocation = collab.enabled && !comment.elementId.startsWith('pin-') && comment.selectionKind !== 'pod';
+                      setActiveCommentTarget(needsLocation ? null : snapshot);
+                      setHoveredCommentTarget(needsLocation ? null : snapshot);
                       setActivePreviewCommentId(comment.id);
                       setCommentDraft(comment.note);
                       setQueuedBoardNotes([]);
