@@ -323,7 +323,9 @@ describe('G4 · retired HTML publishing section label', () => {
       expect.objectContaining({ method: 'POST' }),
     );
     await waitFor(() => expect(changed).toHaveBeenCalledTimes(1));
-    expect((changed.mock.calls[0]?.[0] as CustomEvent | undefined)?.detail).toEqual({ projectId: 'project-1' });
+    expect((changed.mock.calls[0]?.[0] as CustomEvent | undefined)?.detail).toEqual({ projectId: 'project-1', confirmedPublication: {
+      sourceFilePath: 'index.html', accountScope: expect.any(String), generation: expect.any(Number),
+    } });
   });
 
   it.each(['toolbar', 'artifact-card'] as const)('%s hydrates the exact publication URL and keeps copy/stop usable', async (origin) => {

@@ -7,9 +7,11 @@ export interface ConfirmedProjectShareStop {
   generation: number;
 }
 
-/** Refresh for all mutations; an optional scoped stop receipt removes stale active feedback during a failed refresh. */
-export function notifyProjectShareHistoryChanged(projectId: string, confirmedStop?: ConfirmedProjectShareStop): void {
+export type ConfirmedProjectSharePublication = ConfirmedProjectShareStop;
+
+/** Refresh for all mutations; scoped successful mutation receipts reconcile card feedback with lagging reads. */
+export function notifyProjectShareHistoryChanged(projectId: string, confirmedStop?: ConfirmedProjectShareStop, confirmedPublication?: ConfirmedProjectSharePublication): void {
   window.dispatchEvent(new CustomEvent(PROJECT_SHARE_HISTORY_CHANGED_EVENT, {
-    detail: { projectId, ...(confirmedStop ? { confirmedStop } : {}) },
+    detail: { projectId, ...(confirmedStop ? { confirmedStop } : {}), ...(confirmedPublication ? { confirmedPublication } : {}) },
   }));
 }

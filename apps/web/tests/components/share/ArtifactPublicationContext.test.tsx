@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { useContext } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ArtifactPublicationContext, ArtifactPublicationProvider } from '../../../src/components/share/ArtifactPublicationContext';
@@ -70,6 +70,54 @@ describe('chat artifact publication state', () => {
     });
     await waitFor(() => expect(fetchHistory).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(screen.getByTestId('card')).toBeEmptyDOMElement());
+  });
+
+  it('keeps a confirmed stop through a stale active refresh, then accepts a later publish', async () => {
+    let nextResponse: ((response: Response) => void) | undefined;
+    const active = (status: 'active' | 'stopped' = 'active') => Response.json({ projectId: 'project-1', bindingExists: true, hasEverShared: true,
+      publications: [{ sourceFilePath: 'pages/one.html', slug: 'one', status },
+        { sourceFilePath: 'pages/other.html', slug: 'other', status: 'active' }] });
+    const fetchHistory = vi.fn().mockResolvedValueOnce(active()).mockImplementation(() =>
+      new Promise<Response>(resolve => { nextResponse = resolve; }));
+    vi.stubGlobal('fetch', fetchHistory);
+    render(<ArtifactPublicationProvider projectId="project-1"><PublicationProbe name="card" /></ArtifactPublicationProvider>);
+    await waitFor(() => expect(screen.getByTestId('card')).toHaveTextContent('pages/one.html'));
+    notifyProjectShareHistoryChanged('project-1', {
+      sourceFilePath: 'pages/one.html', accountScope: workspaceAccountScopedCacheKey(null),
+      generation: currentWorkspaceAccountGeneration(),
+    });
+    await waitFor(() => expect(fetchHistory).toHaveBeenCalledTimes(2));
+    expect(screen.getByTestId('card')).not.toHaveTextContent('pages/one.html');
+    expect(screen.getByTestId('card')).toHaveTextContent('pages/other.html');
+    await act(async () => { nextResponse!(active()); });
+    await waitFor(() => expect(screen.getByTestId('card')).not.toHaveTextContent('pages/one.html'));
+    for (const receipt of [undefined, {sourceFilePath: 'pages/other.html', accountScope: workspaceAccountScopedCacheKey(null), generation: currentWorkspaceAccountGeneration()}]) {
+      await act(async () => { notifyProjectShareHistoryChanged('project-1', undefined, receipt); });
+      await act(async () => { nextResponse!(active()); });
+      expect(screen.getByTestId('card')).not.toHaveTextContent('pages/one.html');
+    }
+    notifyProjectShareHistoryChanged('project-1', undefined, {
+      sourceFilePath: 'pages/one.html', accountScope: workspaceAccountScopedCacheKey(null),
+      generation: currentWorkspaceAccountGeneration(),
+    }); // Only a successful publish of this file invalidates its stop receipt.
+    await waitFor(() => expect(fetchHistory).toHaveBeenCalledTimes(5));
+    await act(async () => { nextResponse!(active('stopped')); }); // The publish receipt also wins over a lagging stopped read.
+    await waitFor(() => expect(screen.getByTestId('card')).toHaveTextContent('pages/one.html'));
+  });
+
+  it('ignores stop receipts from a different account, generation or project', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ projectId: 'project-1', bindingExists: true, hasEverShared: true,
+      publications: [{ sourceFilePath: 'a.html', slug: 'one', status: 'active' }] })));
+    render(<ArtifactPublicationProvider projectId="project-1"><PublicationProbe name="card" /></ArtifactPublicationProvider>);
+    await waitFor(() => expect(screen.getByTestId('card')).toHaveTextContent('a.html'));
+    for (const [projectId, accountScope, generation] of [
+      ['another-project', workspaceAccountScopedCacheKey(null), currentWorkspaceAccountGeneration()],
+      ['project-1', 'different-account', currentWorkspaceAccountGeneration()],
+      ['project-1', workspaceAccountScopedCacheKey(null), currentWorkspaceAccountGeneration() - 1],
+    ] as const) {
+      await act(async () => { notifyProjectShareHistoryChanged(projectId, { sourceFilePath: 'a.html', accountScope, generation }); });
+      expect(screen.getByTestId('card')).toHaveTextContent('a.html');
+    }
   });
 
   it('never carries a confirmed share into a different project or failed initial read', async () => {
