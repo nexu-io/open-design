@@ -132,6 +132,7 @@ const API_MODE_AGENT_IDS = new Set([
   'ollama-cloud-api',
   'senseaudio-api',
   'aihubmix-api',
+  'aimlapi-api',
   'bedrock-api',
 ]);
 
