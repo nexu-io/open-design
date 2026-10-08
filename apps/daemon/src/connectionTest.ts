@@ -955,7 +955,10 @@ function inspectProviderCompletion(
       enforceResponseModel &&
       responseModel &&
       requestedModel &&
-      responseModel !== requestedModel
+      responseModel !== requestedModel &&
+      // Gateways may strip provider-routing prefixes in completion responses.
+      // Keep rejecting unrelated models, including different leaf model ids.
+      !requestedModel.endsWith(`/${responseModel}`)
     ) {
       return {
         valid: false,

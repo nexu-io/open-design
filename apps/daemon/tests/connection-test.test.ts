@@ -1322,6 +1322,39 @@ describe('POST /api/test/connection provider mode', () => {
     ).toBe(false);
   });
 
+  it.each([
+    ['gpt-6.1-sol', true, 'success'],
+    ['cx/gpt-6.1-sol', true, 'success'],
+    ['gpt-6.1-luna', false, 'not_found_model'],
+    ['sol', false, 'not_found_model'],
+  ])('checks routed local model response %s', async (responseModel, ok, kind) => {
+    vi.stubGlobal('fetch', passThroughOrUpstream((url) => {
+      if (url.endsWith('/models')) {
+        return jsonResponse({ data: [{ id: 'cx/gpt-6.1-sol', object: 'model' }] });
+      }
+      return jsonResponse({
+        model: responseModel,
+        choices: [{ message: { role: 'assistant', content: 'ok' } }],
+      });
+    }));
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'openai',
+        baseUrl: 'http://localhost:20128/v1',
+        apiKey: 'local-no-auth',
+        model: 'cx/gpt-6.1-sol',
+      }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.ok).toBe(ok);
+    expect(body.kind).toBe(kind);
+    expect(body.model).toBe('cx/gpt-6.1-sol');
+  });
+
   it('reports forbidden for an internal-IP base URL without calling fetch', async () => {
     const fetchMock = passThroughOrUpstream(() => jsonResponse({}));
     vi.stubGlobal('fetch', fetchMock);
