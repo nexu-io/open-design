@@ -2268,6 +2268,9 @@ function meaningfulDomFallbackTarget(el) {
     var el = findCommentTargetByIdentity(activeCommentElementId, activeCommentSelector);
     if (!el) return;
     var payload = targetFrom(el, commentEnabled && mode === 'picker' && !inspectEnabled);
+    // Preserve the selector that actually found the saved target, even when
+    // source annotation gives that DOM node a newer attribute identity.
+    try { if (payload && activeCommentSelector && el.matches(activeCommentSelector)) payload.selector = activeCommentSelector; } catch (_) {}
     if (payload) window.parent.postMessage(Object.assign({}, payload, { type: 'od:comment-active-target-update' }), '*');
   }
   function schedulePostActiveCommentTarget(){
@@ -2723,7 +2726,28 @@ function meaningfulDomFallbackTarget(el) {
     if (data.type === 'od:comment-active-target') {
       activeCommentElementId = data.elementId ? String(data.elementId) : null;
       activeCommentSelector = data.selector ? String(data.selector) : null;
-      schedulePostActiveCommentTarget();
+      if (data.locate && typeof data.requestId === 'string') {
+        // Saved comments can predate the current annotation identities. Locate
+        // the actual DOM first, then report viewport pixels after scrolling.
+        var target = findCommentTargetByIdentity(activeCommentElementId, activeCommentSelector);
+        // A missing structural path must not scroll to an unrelated element
+        // that inherited the old annotation id. Attribute anchors keep their
+        // existing identity fallback; structural paths require an actual match.
+        if (target && activeCommentSelector && activeCommentSelector.split('>')[0].trim() === 'body') {
+          try { if (!target.matches(activeCommentSelector)) target = null; } catch (_) { target = null; }
+        }
+        var payload = target && targetFrom(target, true);
+        if (payload) {
+          try { target.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' }); } catch (_) {}
+          payload = targetFrom(target, true);
+          try { if (payload && activeCommentSelector && target.matches(activeCommentSelector)) payload.selector = activeCommentSelector; } catch (_) {}
+        }
+        window.parent.postMessage(payload
+          ? Object.assign({}, payload, { type: 'od:comment-active-target-update', requestId: data.requestId })
+          : { type: 'od:comment-location-missing', requestId: data.requestId }, '*');
+        schedulePostTargets();
+        schedulePostPreviewScroll();
+      } else schedulePostActiveCommentTarget();
       return;
     }
     if (data.type === 'od:preview-scroll-by') {
