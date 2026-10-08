@@ -2226,7 +2226,7 @@ describe('work completeness vs a settled OD Next verdict', () => {
     const runs = createRuns();
     const run = runs.create({ projectId: 'p1', conversationId: 'c1' }) as any;
     run.lastTodoSnapshot = [{ content: '写入响应式交互原型', status: 'pending' }];
-    run.strategyTask = { ...completedStrategyTask(), outcome: 'blocked' };
+    run.strategyTask = { ...completedStrategyTask(), outcome: 'running', terminal: false };
 
     runs.finish(run, 'succeeded', 0, null);
 

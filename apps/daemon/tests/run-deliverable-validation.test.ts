@@ -6,7 +6,6 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   inferBaselineHtmlEntry,
-  validateProjectDeliverable,
   validateRunDeliverable,
 } from '../src/run-deliverable-validation.js';
 
@@ -405,57 +404,3 @@ describe('prototype delivery boundaries', () => {
   });
 });
 
-
-// A completed project can be presented after a later run that writes nothing.
-// Keep this project-state check separate from the strict run acceptance gate.
-describe('project deliverable validation', () => {
-  it('resolves the entry a run did not touch this round', async () => {
-    const fixture = await projectFixture({
-      'qingdao-travel-guide.html': '<!doctype html><title>Done</title>',
-    });
-    const metadata = { kind: 'deck' as const };
-
-    await expect(validateRunDeliverable({
-      ...fixture,
-      runStatus: 'succeeded',
-      artifactCount: 0,
-      touchedPaths: [],
-      projectMetadata: metadata,
-    })).resolves.toMatchObject({ valid: false, validation: 'no_artifact' });
-
-    await expect(validateProjectDeliverable({ ...fixture, projectMetadata: metadata }))
-      .resolves.toMatchObject({
-        valid: true,
-        validation: 'valid',
-        entryFile: 'qingdao-travel-guide.html',
-        artifactKind: 'html',
-      });
-  });
-
-  it('still refuses a project with no compatible entry', async () => {
-    const fixture = await projectFixture({ 'notes.md': '# nothing runnable' });
-    await expect(validateProjectDeliverable({
-      ...fixture,
-      projectMetadata: { kind: 'deck' },
-    })).resolves.toMatchObject({ valid: false, validation: 'type_mismatch' });
-  });
-
-  it('still refuses a declared entry that is gone', async () => {
-    const fixture = await projectFixture({
-      'other.html': '<!doctype html><title>Not the entry</title>',
-    });
-    await expect(validateProjectDeliverable({
-      ...fixture,
-      projectMetadata: { kind: 'deck', entryFile: 'index.html' },
-    })).resolves.toMatchObject({ valid: false, validation: 'entry_missing' });
-  });
-
-  it('refuses a project it cannot identify', async () => {
-    const fixture = await projectFixture({ 'index.html': '<!doctype html>' });
-    await expect(validateProjectDeliverable({
-      projectsRoot: fixture.projectsRoot,
-      projectId: null,
-      projectMetadata: { kind: 'deck' },
-    })).resolves.toMatchObject({ valid: false, validation: 'project_missing' });
-  });
-});

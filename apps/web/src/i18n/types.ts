@@ -4628,7 +4628,6 @@ export interface Dict {
   'questions.tabLabel': string;
   'questions.banner': string;
   'questions.bannerAnswered': string;
-  'questions.strategyBlockedNotice': string;
   'questions.continue': string;
   'questions.generating': string;
   'questions.skipAll': string;

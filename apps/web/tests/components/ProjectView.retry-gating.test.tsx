@@ -1035,8 +1035,6 @@ describe('2026-09-14 retry replaces the old error surface without erasing histor
       events: [],
       strategyTaskExecutionId: 'task-folded-retry',
       strategyTaskRunIndex: 0,
-      strategyTaskBlocked: true,
-      strategyTaskBlockedText: null,
     };
     const production: ChatMessage = {
       ...cloudFailedAssistant,
@@ -1046,8 +1044,6 @@ describe('2026-09-14 retry replaces the old error surface without erasing histor
       createdAt: 3,
       strategyTaskExecutionId: 'task-folded-retry',
       strategyTaskRunIndex: 1,
-      strategyTaskBlocked: true,
-      strategyTaskBlockedText: null,
     };
     conversationMessages = [userMessage, planning, production];
     // A persisted successful strategy predecessor probes its task projection on
@@ -1072,7 +1068,7 @@ describe('2026-09-14 retry replaces the old error surface without erasing histor
             packageHash: 'b'.repeat(64), snapshotId: 'snapshot-folded-retry',
           },
           inputStage: 'production',
-          outcome: 'blocked',
+          outcome: 'completed',
           route: 'full_plan',
           executionMode: 'simple',
           activeRunId: production.runId,

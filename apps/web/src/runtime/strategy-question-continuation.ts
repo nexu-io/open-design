@@ -29,50 +29,20 @@ export async function resolveQuestionFormStrategyTaskExecutionId(input: {
 }
 
 /**
- * Message fields persisting a terminal `blocked` strategy-task verdict.
+ * Message fields persisting a terminal strategy-task verdict.
  *
- * A blocked outcome is sticky: the daemon rejects every further continuation
- * of the task with 409 STRATEGY_TASK_STATE_MISMATCH, so the turn's question
- * form must stop accepting submissions. Every surface that observes a task
- * projection (run-status probe, SSE end, reattach) derives the same message
- * stamp through this helper: the blocked flag plus the gate's agent-visible
- * text (trimmed; null when the gate left none, so the UI falls back to its
- * generic localized notice).
- *
- * Returns null for anything that is not a blocked terminal projection —
- * callers then leave the message untouched.
- */
-export function strategyBlockedMessageFields(
-  strategyTask: StrategyTaskProjectionV2 | undefined,
-): { strategyTaskBlocked: true; strategyTaskBlockedText: string | null } | null {
-  if (!strategyTask?.terminal || strategyTask.outcome !== 'blocked') return null;
-  const visibleText = strategyTask.blockedContext?.visibleText?.trim();
-  return {
-    strategyTaskBlocked: true,
-    strategyTaskBlockedText: visibleText ? visibleText : null,
-  };
-}
-
-/**
- * Message fields persisting ANY terminal strategy-task verdict.
- *
- * `blocked` terminates the turn's question form (above). A marker-based task
- * may complete without a usable deliverable, so only stamp delivery when the
- * host's file check explicitly succeeded. Missing historical evidence does not
- * imply delivery.
+ * A marker-based task may complete without a usable deliverable, so only stamp
+ * delivery when the host's file check explicitly succeeded. Missing historical
+ * evidence does not imply delivery.
  *
  * Every surface observing a task projection (run-status probe, SSE settle,
  * reattach) derives its message stamp here, so the three cannot drift. Returns
- * null for a non-terminal projection — callers then leave the message untouched.
+ * null unless the projection is a terminal `completed` task with a verified
+ * deliverable — callers then leave the message untouched.
  */
 export function strategySettledMessageFields(
   strategyTask: StrategyTaskProjectionV2 | undefined,
-):
-  | { strategyTaskBlocked: true; strategyTaskBlockedText: string | null }
-  | { strategyTaskDelivered: true }
-  | null {
-  const blocked = strategyBlockedMessageFields(strategyTask);
-  if (blocked) return blocked;
+): { strategyTaskDelivered: true } | null {
   if (strategyTaskProvesDelivery(strategyTask)) {
     return { strategyTaskDelivered: true };
   }

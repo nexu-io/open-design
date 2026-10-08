@@ -348,30 +348,12 @@ test('[P0] local OD Next clarification canary preserves one taskExecutionId thro
   });
 });
 
-test('[P0] local OD Next public canaries project blocked and canceled terminal mappings', async ({ page }) => {
+test('[P0] local OD Next public canary projects a canceled terminal mapping', async ({ page }) => {
   test.skip(
     process.env.OD_NEXT_STRATEGY_ROLLOUT !== 'active'
       || process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY !== '1',
     'requires the explicit local synthetic rollout canary flags',
   );
-  await prepareLocalOdNextCanary(page, 'OD Next local blocked canary');
-  const blockedResponsePromise = page.waitForResponse(isCreateRunResponse);
-  await sendPrompt(page, 'Create an OD Next blocked canary');
-  const blocked = await (await blockedResponsePromise).json() as {
-    runId: string;
-    taskExecutionId: string;
-  };
-  await expect.poll(async () => {
-    const response = await page.request.get(`/api/runs/${blocked.runId}`);
-    return (await response.json() as {
-      strategyTask?: { taskExecutionId: string; outcome: string; terminal: boolean };
-    }).strategyTask;
-  }, { timeout: 20_000 }).toMatchObject({
-    taskExecutionId: blocked.taskExecutionId,
-    outcome: 'blocked',
-    terminal: true,
-  });
-
   await prepareLocalOdNextCanary(page, 'OD Next local canceled canary');
   const canceledResponsePromise = page.waitForResponse(isCreateRunResponse);
   await sendPrompt(page, 'Hold the daemon run open until canceled');

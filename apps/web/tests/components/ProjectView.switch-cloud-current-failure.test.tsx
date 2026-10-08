@@ -362,13 +362,11 @@ describe('OPEND-3205 new send owns the current failure presentation', () => {
       id: 'strategy-plan-head', role: 'assistant', content: 'Planning history stays', createdAt: 2,
       agentId: 'codex', runId: 'planning-run', runStatus: 'succeeded',
       strategyTaskExecutionId: 'one-strategy-task', strategyTaskRunIndex: 0,
-      strategyTaskBlocked: true, strategyTaskBlockedText: null,
     };
     const tail: ChatMessage = {
       id: 'strategy-failed-tail', role: 'assistant', content: 'Physical failure history stays', createdAt: 3,
       agentId: 'codex', runId: 'production-run', runStatus: 'failed',
       strategyTaskExecutionId: 'one-strategy-task', strategyTaskRunIndex: 1,
-      strategyTaskBlocked: true, strategyTaskBlockedText: null,
       events: [{ kind: 'status', label: 'error', code: 'AGENT_EXECUTION_FAILED',
         failureDetail: 'process_crashed', detail: 'Physical tail diagnostic' }],
     };
@@ -376,9 +374,9 @@ describe('OPEND-3205 new send owns the current failure presentation', () => {
     // Real hydration probes a physically succeeded strategy predecessor even
     // before Send. Supply its terminal task projection and the persisted
     // sibling's exact physical status, rather than a missing-run response.
-    // These history rows already carry the settled task stamp; recovery may
-    // re-save identical rows, but neither hydration nor consumption may rewrite
-    // the original physical status, content, events, or identity.
+    // These history rows already carry the task handle that recovery stamps, so
+    // recovery may re-save identical rows, but neither hydration nor consumption
+    // may rewrite the original physical status, content, events, or identity.
     vi.mocked(fetchChatRunStatus).mockImplementation(async (runId) => {
       const message = [head, tail].find((row) => row.runId === runId);
       if (!message?.runStatus) return null;
@@ -393,7 +391,7 @@ describe('OPEND-3205 new send owns the current failure presentation', () => {
             id: 'od-next-strategy', version: '2.0.0',
             packageHash: 'b'.repeat(64), snapshotId: 'one-strategy-snapshot',
           },
-          inputStage: 'production', outcome: 'blocked', route: 'full_plan',
+          inputStage: 'production', outcome: 'completed', route: 'full_plan',
           executionMode: 'simple', activeRunId: 'production-run', terminal: true,
         },
       } satisfies ChatRunStatusResponse;

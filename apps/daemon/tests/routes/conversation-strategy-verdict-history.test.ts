@@ -3,8 +3,9 @@ import fs from 'node:fs';
 import type { AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
+import { finished } from 'node:stream/promises';
 
-import type { ChatMessage } from '@open-design/contracts';
+import type { ChatMessage, ChatRunStatusResponse } from '@open-design/contracts';
 import { strategyPackageHashFromDigests } from '@open-design/plugin-runtime';
 import express, { type Response } from 'express';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -28,6 +29,8 @@ import {
   registerProjectConversationRoutes,
   type RegisterProjectConversationRoutesDeps,
 } from '../../src/routes/project/conversations.js';
+import { registerRunRoutes } from '../../src/routes/runs.js';
+import { createChatRunService } from '../../src/runtimes/runs.js';
 import {
   cancelStrategyTaskExecution,
   compareAndTransitionStrategyTaskExecution,
@@ -47,8 +50,9 @@ const REASON = 'od_next_protocol_runtime_state_missing';
 type Db = ReturnType<typeof openDatabase>;
 type Outcome = 'blocked' | 'completed' | 'canceled' | 'running';
 
-// The real task writer owns these fields; the fixture never injects proposed
-// response fields or edits SQLite schema to make the read-side assertion pass.
+// Current outcomes go through the real task writer. No current writer produces
+// `blocked`, so that row is stored the way an older daemon left it, attribution
+// columns included; the next database open migrates it.
 function seedTaskAndMessage(
   db: Db,
   outcome: Outcome,
@@ -107,19 +111,18 @@ function seedTaskAndMessage(
       expectedRevision: task.revision,
       updatedAt: 200,
     });
+  } else if (outcome === 'blocked') {
+    db.prepare(`
+      UPDATE strategy_task_executions
+         SET revision = revision + 1, route = 'full_plan', outcome = 'blocked',
+             blocked_reason_codes_json = ?, blocked_visible_text = ?, updated_at = 200
+       WHERE task_execution_id = ?
+    `).run(JSON.stringify([REASON]), scope.visibleText, ids.taskId);
   } else if (outcome !== 'running') {
     compareAndTransitionStrategyTaskExecution(db, {
       taskExecutionId: ids.taskId,
       expectedRevision: task.revision,
-      to: {
-        route: outcome === 'blocked' ? 'full_plan' : 'direct_edit',
-        inputStage: 'request',
-        executionMode: outcome === 'blocked' ? null : 'simple',
-        outcome,
-      },
-      ...(outcome === 'blocked'
-        ? { blockedContext: { reasonCodes: [REASON], visibleText: scope.visibleText } }
-        : {}),
+      to: { route: 'direct_edit', inputStage: 'request', executionMode: 'simple', outcome },
       updatedAt: 200,
     });
   }
@@ -135,14 +138,16 @@ function seedTaskAndMessage(
   return { snapshot, task };
 }
 
-// Mount only the production conversation registrar; no agent or full daemon
-// starts. Each request sees actual SQLite rows and crosses JSON serialization.
+// Mount only the production conversation registrar, plus the run registrar
+// when a case reads run status; no agent or full daemon starts. Each request
+// sees actual SQLite rows and crosses JSON serialization.
 async function readHistory(
   db: Db,
   dataDir: string,
   options: {
     beforeRead?: (origin: string) => Promise<void>;
     authorizeProjectRequest?: RegisterProjectConversationRoutesDeps['authorizeProjectRequest'];
+    runs?: ReturnType<typeof createChatRunService>;
   } = {},
 ): Promise<ChatMessage[]> {
   const app = express();
@@ -167,6 +172,39 @@ async function readHistory(
     // a project-authority boundary; neither claims live Workspace coverage.
     authorizeProjectRequest: options.authorizeProjectRequest,
   } as unknown as RegisterProjectConversationRoutesDeps);
+  if (options.runs) {
+    // Only run creation and analytics integrations are stubs. GET, run
+    // hydration, task projection and SQLite reads are production code.
+    registerRunRoutes(app, {
+      db,
+      design: { runs: options.runs, analytics: { capture() {} }, getAppVersion: () => 'test' },
+      http: {
+        createSseResponse: () => ({ send() {}, end() {}, cleanup() {} }),
+        sendApiError: (res: Response, status: number, code: string, message: string) =>
+          res.status(status).json({ error: { code, message } }),
+      },
+      paths: { PROJECTS_DIR: dataDir, RUNTIME_DATA_DIR: dataDir },
+      agents: { detectAgents: async () => [], getAgentDef: () => null },
+      chat: { startChatRun: async () => undefined },
+      plugins: {
+        connectorService: {},
+        detectSkillPluginCandidateOnRunSuccess() {},
+        firePipelineForRun() {},
+        loadPluginRegistryView: async () => ({}),
+        renderPluginBriefTemplate: (text: string) => text,
+      },
+      telemetry: {
+        reportRunCompletionTelemetryFallback() {},
+        resolveRunProjectKindForAnalytics: () => null,
+        runArtifactBaselines: { take: () => undefined },
+        runRetryEventsForAnalytics: () => [],
+      },
+      messages: {
+        pinAssistantMessageOnRunCreate: () => ({ ok: true }),
+        reconcileAssistantMessageOnRunEnd() {},
+      },
+    } as unknown as Parameters<typeof registerRunRoutes>[1]);
+  }
   const server = app.listen(0, '127.0.0.1');
   try {
     await once(server, 'listening');
@@ -203,38 +241,86 @@ describe('persisted strategy verdict in conversation history', () => {
     fs.rmSync(dataDir, { recursive: true, force: true });
   });
 
-  it('clears retired blocked verdicts on restart without rewriting physical success', async () => {
-    seedTaskAndMessage(db, 'blocked');
-    const persisted = db.prepare(`
-      SELECT outcome, blocked_reason_codes_json AS reasons
-      FROM strategy_task_executions WHERE task_execution_id = ?
-    `).get(TASK_ID);
-    expect(persisted).toEqual({ outcome: 'blocked', reasons: JSON.stringify([REASON]) });
-    const warm = await readHistory(db, dataDir);
+  it('reads a migrated blocked task as completed from the message list and the run status', async () => {
+    const runsLogDir = path.join(dataDir, 'runs');
+    const runService = () => createChatRunService({
+      createSseResponse: () => ({ send: () => true, end() {}, cleanup() {} }),
+      createSseErrorPayload: (code: string, message: string) => ({ error: { code, message } }),
+      // The JS-inferred options on this @ts-nocheck service narrow its null default.
+      runsLogDir: runsLogDir as unknown as null,
+    });
+    const liveRuns = runService();
+    const run = liveRuns.create({
+      projectId: PROJECT_ID, conversationId: CONVERSATION_ID, assistantMessageId: MESSAGE_ID, agentId: 'codex',
+      odNextTaskInputSnapshot: {
+        taskExecutionId: TASK_ID, snapshotDir: path.join(dataDir, 'task-input'),
+        manifestSha256: strategyTaskCreateIdentityFixture().taskInputManifestSha256,
+      },
+    });
+    const { snapshot } = seedTaskAndMessage(db, 'blocked', { taskId: TASK_ID, runId: run.id, messageId: MESSAGE_ID });
+    // The older daemon also stored its blocked projection with the Run.
+    Object.assign(run, {
+      appliedPluginSnapshotId: snapshot.snapshotId,
+      strategyTask: {
+        taskExecutionId: TASK_ID, outcome: 'blocked', terminal: true,
+        blockedContext: { reasonCodes: [REASON], visibleText: REPLY },
+      },
+    });
+    // The Run wrote the project's deliverable and exited cleanly.
+    fs.mkdirSync(path.join(dataDir, PROJECT_ID), { recursive: true });
+    fs.writeFileSync(path.join(dataDir, PROJECT_ID, 'index.html'), '<!doctype html><title>Delivered</title>');
+    liveRuns.setDeliverableValidation(run, {
+      valid: true, validation: 'valid', entryFile: 'index.html', artifactKind: 'html',
+    });
+    liveRuns.emit(run, 'agent', { type: 'text_delta', delta: REPLY });
+    const log = run.eventsLogStream;
+    if (!log) throw new Error('Real event journal was not opened');
+    const flushed = finished(log);
+    liveRuns.finish(run, 'succeeded', 0, null);
+    await flushed;
+    const statePath = path.join(runsLogDir, run.id, 'state.json');
+    expect(JSON.parse(fs.readFileSync(statePath, 'utf8'))).toMatchObject({
+      status: 'succeeded', strategyTask: { outcome: 'blocked' },
+    });
 
     closeDatabase();
     db = openDatabase(dataDir, { dataDir });
-    expect(getStrategyTaskExecution(db, TASK_ID)).toMatchObject({
-      outcome: 'completed',
+    expect(db.prepare(`
+      SELECT outcome, deliverable_valid AS deliverableValid,
+             blocked_reason_codes_json AS reasons, blocked_visible_text AS text
+        FROM strategy_task_executions WHERE task_execution_id = ?
+    `).get(TASK_ID)).toEqual({
+      outcome: 'completed', deliverableValid: 0, reasons: JSON.stringify([REASON]), text: REPLY,
     });
-    const cold = await readHistory(db, dataDir);
 
-    for (const [messages, blocked] of [[warm, true], [cold, false]] as const) {
-      expect(messages).toHaveLength(1);
-      // Existing ChatMessage fields represent task truth independently from
-      // physical Run success. This is not a request to invent an error string
-      // or to change all blocked tasks into failed physical processes.
-      expect.soft(messages[0]).toMatchObject({
-        id: MESSAGE_ID,
-        content: REPLY,
-        runStatus: 'succeeded',
-        strategyTaskExecutionId: TASK_ID,
-        strategyTaskRunIndex: 0,
-        strategyTaskBlocked: blocked,
-        strategyTaskBlockedText: blocked ? REPLY : null,
-      });
-      expect(messages[0]?.strategyTaskDelivered).not.toBe(true);
+    let status: ChatRunStatusResponse | undefined;
+    const messages = await readHistory(db, dataDir, {
+      runs: runService(),
+      beforeRead: async (origin) => {
+        const response = await fetch(`${origin}/api/runs/${run.id}`);
+        expect(response.status).toBe(200);
+        status = await response.json() as ChatRunStatusResponse;
+      },
+    });
+
+    expect(messages).toHaveLength(1);
+    for (const message of messages) {
+      expect(message).not.toHaveProperty('strategyTaskBlocked');
+      expect(message).not.toHaveProperty('strategyTaskBlockedText');
     }
+    expect(messages[0]).toMatchObject({
+      id: MESSAGE_ID, runId: run.id, runStatus: 'succeeded',
+      strategyTaskExecutionId: TASK_ID, strategyTaskRunIndex: 0, strategyTaskDelivered: false,
+    });
+    expect(status).toMatchObject({
+      id: run.id, status: 'succeeded', exitCode: 0,
+      deliverableValid: true, deliverableValidation: 'valid', deliverableEntryFile: 'index.html',
+      strategyTask: { taskExecutionId: TASK_ID, outcome: 'completed', terminal: true, deliverableValid: false },
+    });
+    expect(status?.strategyTask).not.toHaveProperty('blockedContext');
+    expect(status).not.toHaveProperty('projectDeliverableValid');
+    expect(status).not.toHaveProperty('projectDeliverableValidation');
+    expect(JSON.parse(fs.readFileSync(statePath, 'utf8'))).toMatchObject({ status: 'succeeded', exitCode: 0 });
     expect(getMessage(db, MESSAGE_ID)?.runStatus).toBe('succeeded');
   });
 
@@ -248,7 +334,7 @@ describe('persisted strategy verdict in conversation history', () => {
     const foreignText = 'Foreign task attribution must remain in its own conversation.';
     const importedMessageId = 'caller-written-assistant';
     const importedContent = 'Caller-owned imported placeholder.';
-    seedTaskAndMessage(db, 'blocked');
+    seedTaskAndMessage(db, 'completed');
     if (foreignProjectId !== PROJECT_ID) {
       insertProject(db, {
         id: foreignProjectId, name: 'Foreign history fixture', createdAt: 1, updatedAt: 1,
@@ -258,14 +344,13 @@ describe('persisted strategy verdict in conversation history', () => {
       id: foreignConversationId, projectId: foreignProjectId,
       title: 'Foreign history', createdAt: 1, updatedAt: 1,
     });
-    seedTaskAndMessage(db, 'blocked', {
+    seedTaskAndMessage(db, 'completed', {
       taskId: foreignTaskId, runId: foreignRunId, messageId: 'foreign-history-assistant',
     }, {
       projectId: foreignProjectId, conversationId: foreignConversationId, visibleText: foreignText,
     });
     expect(getStrategyTaskExecution(db, foreignTaskId)).toMatchObject({
-      projectId: foreignProjectId, conversationId: foreignConversationId,
-      outcome: 'blocked', blockedContext: { visibleText: foreignText },
+      projectId: foreignProjectId, conversationId: foreignConversationId, outcome: 'completed',
     });
     const authorizeProjectRequest: NonNullable<
       RegisterProjectConversationRoutesDeps['authorizeProjectRequest']
@@ -311,12 +396,11 @@ describe('persisted strategy verdict in conversation history', () => {
     closeDatabase();
     db = openDatabase(dataDir, { dataDir });
     const cold = await readHistory(db, dataDir, { authorizeProjectRequest });
-    for (const [messages, blocked] of [[warm, true], [cold, false]] as const) {
+    for (const messages of [warm, cold]) {
       expect(messages).toHaveLength(2);
       // Preserve the intended same-project, same-conversation restoration.
       expect(messages.find((message) => message.id === MESSAGE_ID)).toMatchObject({
-        strategyTaskExecutionId: TASK_ID, strategyTaskRunIndex: 0,
-        strategyTaskBlocked: blocked, strategyTaskBlockedText: blocked ? REPLY : null, runStatus: 'succeeded',
+        strategyTaskExecutionId: TASK_ID, strategyTaskRunIndex: 0, runStatus: 'succeeded',
       });
       const imported = messages.find((message) => message.id === importedMessageId);
       expect(imported).toMatchObject({
@@ -324,13 +408,11 @@ describe('persisted strategy verdict in conversation history', () => {
       });
       expect.soft(imported?.strategyTaskExecutionId).toBeUndefined();
       expect.soft(imported?.strategyTaskRunIndex).toBeUndefined();
-      expect.soft(imported?.strategyTaskBlocked).toBeUndefined();
-      expect.soft(imported?.strategyTaskBlockedText).toBeUndefined();
       expect.soft(imported?.strategyTaskDelivered).toBeUndefined();
     }
   });
 
-  it('returns the blocked task verdict for request and production runs without changing either process status', async () => {
+  it('maps request and production runs to one task without changing either process status', async () => {
     const { snapshot, task } = seedTaskAndMessage(db, 'running');
     const productionRunId = 'history-production-run';
     const production = compareAndTransitionStrategyTaskExecution(db, {
@@ -354,9 +436,8 @@ describe('persisted strategy verdict in conversation history', () => {
       taskExecutionId: TASK_ID,
       expectedRevision: production.revision,
       to: {
-        route: 'full_plan', inputStage: 'production', outcome: 'blocked', executionMode: 'simple',
+        route: 'full_plan', inputStage: 'production', outcome: 'completed', executionMode: 'simple',
       },
-      blockedContext: { reasonCodes: [REASON], visibleText: REPLY },
       updatedAt: 400,
     });
     upsertMessage(db, CONVERSATION_ID, {
@@ -379,11 +460,10 @@ describe('persisted strategy verdict in conversation history', () => {
       ['history-production-assistant', productionRunId, 1, 'failed'],
     ] as const) {
       const message = messages.find((candidate) => candidate.id === id);
-      // This existing flag is task-scoped. It must not rewrite a successful
-      // predecessor as a failed process or erase the failed child's status.
+      // Task metadata must not rewrite a successful predecessor as a failed
+      // process or erase the failed child's status.
       expect(message).toMatchObject({
         runId, runStatus, strategyTaskExecutionId: TASK_ID, strategyTaskRunIndex: runIndex,
-        strategyTaskBlocked: false, strategyTaskBlockedText: null,
       });
       expect(message?.strategyTaskDelivered).not.toBe(true);
       expect(getMessage(db, id)?.runStatus).toBe(runStatus);
@@ -391,13 +471,12 @@ describe('persisted strategy verdict in conversation history', () => {
   });
 
   it.each([
-    { label: 'legacy missing attribution', reasons: null, text: null, expectedText: null },
-    { label: 'malformed reason JSON', reasons: '{broken', text: REPLY, expectedText: REPLY },
-    { label: 'non-text attribution', reasons: '{broken', text: Buffer.from('invalid'), expectedText: null },
+    { label: 'legacy missing attribution', reasons: null, text: null },
+    { label: 'malformed reason JSON', reasons: '{broken', text: REPLY },
+    { label: 'non-text attribution', reasons: '{broken', text: Buffer.from('invalid') },
   ])('keeps history readable with $label', async ({ reasons, text }) => {
     seedTaskAndMessage(db, 'blocked');
-    // Corrupt only existing optional storage columns after using the real
-    // writer. Display reads must not require a fully verifiable task record.
+    // The migration keeps the attribution columns and no read parses them.
     db.prepare(`
       UPDATE strategy_task_executions
          SET blocked_reason_codes_json = ?, blocked_visible_text = ?
@@ -406,14 +485,13 @@ describe('persisted strategy verdict in conversation history', () => {
     closeDatabase();
     db = openDatabase(dataDir, { dataDir });
 
+    expect(getStrategyTaskExecution(db, TASK_ID)).toMatchObject({ outcome: 'completed' });
     const messages = await readHistory(db, dataDir);
     expect(messages).toHaveLength(1);
     expect(messages[0]).toMatchObject({
       id: MESSAGE_ID,
       runStatus: 'succeeded',
       strategyTaskExecutionId: TASK_ID,
-      strategyTaskBlocked: false,
-      strategyTaskBlockedText: null,
     });
     expect(messages[0]?.strategyTaskDelivered).not.toBe(true);
   });
@@ -432,24 +510,20 @@ describe('persisted strategy verdict in conversation history', () => {
     const messages = await readHistory(db, dataDir);
     expect(messages).toHaveLength(3);
     expect(messages.find((message) => message.id === MESSAGE_ID)).toMatchObject({
-      strategyTaskExecutionId: TASK_ID, strategyTaskRunIndex: 0,
-      strategyTaskBlocked: false, strategyTaskBlockedText: null, runStatus: 'succeeded',
+      strategyTaskExecutionId: TASK_ID, strategyTaskRunIndex: 0, runStatus: 'succeeded',
     });
     const completed = messages.find((message) => message.id === 'completed-assistant');
     expect(completed).toMatchObject({
       strategyTaskExecutionId: 'completed-task', strategyTaskRunIndex: 0,
       strategyTaskDelivered: false, runStatus: 'succeeded',
     });
-    expect(completed?.strategyTaskBlocked).toBe(false);
-    expect(completed?.strategyTaskBlockedText).toBeNull();
     const unmapped = messages.find((message) => message.id === 'unmapped-assistant');
     expect(unmapped).toMatchObject({ runId: 'unmapped-run', runStatus: 'succeeded' });
     expect(unmapped?.strategyTaskExecutionId).toBeUndefined();
-    expect(unmapped?.strategyTaskBlocked).toBeUndefined();
   });
 
   it.each(['completed', 'canceled', 'running'] as const)(
-    'does not turn a %s task or an unrelated legacy message into a blocked turn',
+    'maps a %s task without claiming delivery and leaves an unrelated legacy message unmapped',
     async (outcome) => {
       seedTaskAndMessage(db, outcome);
       upsertMessage(db, CONVERSATION_ID, {
@@ -461,11 +535,9 @@ describe('persisted strategy verdict in conversation history', () => {
       const mapped = messages.find((message) => message.id === MESSAGE_ID);
       const legacy = messages.find((message) => message.id === 'legacy-assistant');
       expect(mapped?.strategyTaskExecutionId).toBe(TASK_ID);
-      expect(mapped?.strategyTaskBlocked).not.toBe(true);
       expect(mapped?.strategyTaskDelivered).toBe(false);
       expect(legacy).toMatchObject({ content: 'Legacy reply.', runStatus: 'succeeded' });
       expect(legacy?.strategyTaskExecutionId).toBeUndefined();
-      expect(legacy?.strategyTaskBlocked).toBeUndefined();
     },
   );
 });

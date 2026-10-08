@@ -184,6 +184,14 @@ describe('OD Next V2 capability, Child, and task projection contracts', () => {
       executionMode: null, nextRunId: undefined, terminal: true, deliverableValid: false,
     })).toMatchObject({ outcome: 'completed', deliverableValid: false });
 
+    // No task settles as blocked any more, and a projection carries no block context.
+    expect(() => StrategyTaskProjectionV2Schema.parse({
+      ...projection, outcome: 'blocked', nextRunId: undefined, terminal: true,
+    })).toThrow();
+    expect(() => StrategyTaskProjectionV2Schema.parse({
+      ...projection, outcome: 'completed', nextRunId: undefined, terminal: true,
+      blockedContext: { reasonCodes: ['od_next_protocol_runtime_state_missing'], visibleText: null },
+    })).toThrow();
   });
 });
 

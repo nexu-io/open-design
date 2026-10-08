@@ -3669,7 +3669,6 @@ export const hu: Dict = {
   'questions.tabLabel': 'Kérdések',
   'questions.banner': 'Megengeded, hogy feltegyek néhány gyors kérdést?',
   'questions.bannerAnswered': 'Kérdések megválaszolva',
-  'questions.strategyBlockedNotice': "Ezt a feladatot a stratégia minőségi kapuja leállította, ezért ez az űrlap már nem küldhető be. A folytatáshoz indíts egy új kérést.",
   'questions.continue': 'Folytatás',
   'questions.generating': 'Kérdések generálása…',
   'questions.skipAll': "Kihagyás · te döntesz",

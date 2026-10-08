@@ -9,19 +9,6 @@ export const OD_NEXT_PLAN_CONTRACT_BLOCK = 'open-design-plan-contract' as const;
 export const OD_NEXT_RUNTIME_STATE_BLOCK = 'open-design-runtime-state' as const;
 export const OD_NEXT_BUNDLED_STRATEGY_SCHEMA = 'open-design.bundled-strategy/v2' as const;
 
-/**
- * The reason a task carries when the agent itself declared the turn blocked and
- * raised no machine code of its own.
- *
- * Shared because it is the one blocked verdict whose visible text can be taken
- * as the explanation. Every other block is a gate the agent did not ask for —
- * a missing Runtime State, an unresolvable deliverable, an unproven session —
- * and the prose sitting next to it is the agent's ordinary reply, not an
- * account of the stop. Reading the code, rather than the presence of text,
- * keeps those two apart.
- */
-export const OD_NEXT_AGENT_DECLARED_BLOCK_REASON = 'od_next_agent_declared_block' as const;
-
 export const StrategyTaskTypeV2Schema = z.enum([
   'prototype',
   'ppt',
@@ -50,7 +37,6 @@ export const StrategyOutcomeV2Schema = z.enum([
   'clarification_required',
   'plan_ready',
   'completed',
-  'blocked',
   'canceled',
 ]);
 export type StrategyOutcomeV2 = z.infer<typeof StrategyOutcomeV2Schema>;
@@ -317,19 +303,6 @@ const StrategyTaskProjectionIdentityV2Schema = z.object({
   snapshotId: z.string().min(1),
 }).strict();
 
-/**
- * Client-facing attribution for a blocked task projection: the protocol gate's
- * reason codes plus the agent-visible text of the rejected turn (null when the
- * turn had no visible text). Mirrors the daemon task store's persisted
- * `blockedContext`; present only when the projected outcome is `blocked`, so
- * the UI can terminate the turn's form interaction and explain why.
- */
-const StrategyTaskBlockedContextV2Schema = z.object({
-  reasonCodes: z.array(z.string().min(1)).min(1),
-  visibleText: z.string().nullable(),
-}).strict();
-export type StrategyTaskBlockedContextV2 = z.infer<typeof StrategyTaskBlockedContextV2Schema>;
-
 /** The host's routing action; independent of execution success and file facts. */
 export const StrategySettlementReasonV2Schema = z.enum(['question', 'continued', 'ended']);
 export type StrategySettlementReasonV2 = z.infer<typeof StrategySettlementReasonV2Schema>;
@@ -378,9 +351,8 @@ export const StrategyTaskProjectionV2Schema = z.object({
   settlementReason: z.preprocess(normalizeStrategySettlementReason, StrategySettlementReasonV2Schema).optional(),
   settlementFacts: StrategySettlementFactsV2Schema.optional(),
   terminal: z.boolean(),
-  blockedContext: StrategyTaskBlockedContextV2Schema.optional(),
 }).strict().superRefine((value, context) => {
-  const isTerminalOutcome = ['completed', 'blocked', 'canceled'].includes(value.outcome);
+  const isTerminalOutcome = ['completed', 'canceled'].includes(value.outcome);
   if (value.terminal !== isTerminalOutcome) {
     context.addIssue({
       code: z.ZodIssueCode.custom,

@@ -56,7 +56,7 @@ readonly TaskAnalyticsMetricDefinitionV1[] = [
     source: 'task_root',
     aggregation: 'count',
     missingness: 'exclude_and_report_coverage',
-    notes: 'Group only durable completed, blocked, canceled, or other observed outcomes.',
+    notes: 'Group only durable completed, canceled, or other observed outcomes.',
   },
   {
     key: 'physical_run_count_by_stage',

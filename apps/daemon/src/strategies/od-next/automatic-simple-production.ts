@@ -22,7 +22,7 @@ import {
 import type { StrategyTaskProjectionV2 } from '@open-design/contracts';
 import type { OdNextCoordinatorResult } from './coordinator.js';
 type SqliteDb = Database.Database;
-const TERMINAL_OUTCOMES = new Set(['completed', 'blocked', 'canceled']);
+const TERMINAL_OUTCOMES = new Set(['completed', 'canceled']);
 
 export function projectStrategyTask(
   task: StrategyTaskExecutionRecord,
@@ -65,15 +65,6 @@ export function projectStrategyTask(
     runMappings,
     ...(!terminal && nextRunId ? { nextRunId } : {}),
     terminal,
-    // Preserve the historical verdict; a user follow-up creates a new task.
-    ...(task.outcome === 'blocked' && task.blockedContext
-      ? {
-          blockedContext: {
-            reasonCodes: [...task.blockedContext.reasonCodes],
-            visibleText: task.blockedContext.visibleText,
-          },
-        }
-      : {}),
   };
 }
 

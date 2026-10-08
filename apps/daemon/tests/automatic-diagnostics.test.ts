@@ -67,7 +67,6 @@ it('maps failed attempts and recovered retries but excludes healthy success and 
   expect(diagnosticFaultFromRun(run, { ...event, event: 'end', data: { status: 'canceled' } })).toBeNull();
   expect(diagnosticFaultFromRun(run, { ...event, event: 'end', data: { status: 'completed' } })).toBeNull();
   expect(diagnosticFaultFromRun(run, { ...event, event: 'end', data: { status: 'failed' } })?.kind).toBe('terminal_failure');
-  expect(diagnosticFaultFromRun({ ...run, strategyTask: { outcome: 'blocked' } }, { ...event, event: 'end', data: { status: 'succeeded' } })?.kind).toBe('logical_blocked');
 });
 it('does not create a second fault for the terminal callback following an observed error', () => {
   const observe = createDiagnosticRunObserver(); const run = { id: 'r', retryAttemptCount: 0 };

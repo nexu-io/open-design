@@ -434,10 +434,6 @@ async function emitRun(promptText) {
     }
     return;
   }
-  if (promptText.includes('Create an OD Next blocked canary')) {
-    emitOdNextBlockedRun();
-    return;
-  }
   if (promptText.includes('Create an OD Next active canary artifact')) {
     emitOdNextPlanningRun(promptText);
     return;
@@ -627,22 +623,6 @@ function emitOdNextClarificationRequest(promptText) {
     + '</question-form>';
   emitSuccess(
     'One platform choice is required.\\n' + form
-,
-    false,
-    false,
-  );
-  process.exitCode = 0;
-  exitSoon(0);
-}
-
-function emitOdNextBlockedRun() {
-  const state = {
-    schema: 'open-design.strategy-state/v2', route: 'full_plan', inputStage: 'request',
-    outcome: 'blocked', executionMode: null,
-    reasonCodes: ['od_next_canary_fixture_blocked'],
-  };
-  emitSuccess(
-    'The local canary was blocked by its fixture guard.\\n'
 ,
     false,
     false,

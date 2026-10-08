@@ -28,7 +28,6 @@ export interface OdNextCoordinatorResult {
     | 'awaiting_clarification'
     | 'plan_ready'
     | 'completed'
-    | 'blocked'
     | 'canceled';
   task: StrategyTaskExecutionRecord;
   visibleText: string;

@@ -19,7 +19,6 @@ import {
   buildRunFinishedV4Aliases,
   deriveConfigureGlobals,
   harnessAnalyticsFromRolloutDecision,
-  odNextBlockedAnalyticsFromStrategyTask,
   modelIdForTracking,
   sessionModeToTracking,
   type RunTaskLineageProps,
@@ -992,13 +991,6 @@ export function createRunAnalyticsLifecycle(
           const finishedProperties: Record<string, unknown> = {
               ...baseProps,
               ...(run.diagnosticIncidentIds?.length ? { diagnostic_incident_ids: run.diagnosticIncidentIds } : {}),
-              // The gate that refused an OD Next turn. `result` above comes
-              // from the physical run status, and a refused turn normally exits
-              // 0 — so without this the whole class counted as `success` while
-              // the user was looking at a failure card. Read off the run's own
-              // terminal projection, the same object the SSE `end` payload and
-              // the failure card were built from, so the three cannot drift.
-              ...odNextBlockedAnalyticsFromStrategyTask(run.strategyTask),
               ...(run.strategyTask?.settlementReason ? { od_next_settlement_reason: run.strategyTask.settlementReason } : {}),
               ...(run.strategyTask?.settlementFacts ? { od_next_settlement_facts: run.strategyTask.settlementFacts } : {}),
               design_system_id: run.designSystemId ?? undefined,
