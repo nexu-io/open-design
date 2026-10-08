@@ -6,11 +6,12 @@ import { I18nProvider, useI18n } from "../../src/i18n";
 import { ProductionCampaignHover } from "../../src/components/ProductionCampaignHover";
 import { ProductionCampaignModal } from "../../src/components/ProductionCampaignModal";
 import {
-  TestCampaignModal, clearTestRuntimeSession, setTestRuntimeSession, useTestRuntime, recordVisibleTestTouchpoint,
+  TestCampaignModal, TEST_PLACEMENT_REQUEST_TIMEOUT_MS, clearTestRuntimeSession, setTestRuntimeSession, useTestRuntime, recordVisibleTestTouchpoint,
   type TestContext, type TestDecision, type TestDeployment, type TestRuntimeSession,
 } from "../../src/components/TestCampaignModal";
 import * as component from "../../src/components/touchpoint-component";
 import * as navigation from "../../src/components/touchpoint-navigation";
+import { TOUCHPOINT_POLL_MS } from "../../src/components/touchpoint-lifecycle";
 
 vi.mock("@open-design/host", () => ({
   OPEN_DESIGN_HOST_VERSION: 2,
@@ -389,15 +390,36 @@ describe("OPEND-3298 context recovery and remaining P1", () => {
   });
 
   it("shows the healthy presentations when one placement hangs on first display", async () => {
+    let finishLayer!: () => void;
+    const startedAt = Date.now();
     decisionReply = (key, locale, id) => key === modal
-      ? new Promise<Response>(() => {}) : Response.json(decision(key, locale, oldGeneration, id));
+      ? new Promise<Response>(() => {}) : key === layer
+        ? new Promise<Response>(resolve => { finishLayer = () => resolve(Response.json(decision(key, locale, oldGeneration, id))); })
+        : Response.json(decision(key, locale, oldGeneration, id));
     await start();
+    // An entry answer alone must not publish half a hover presentation.
     expect(visibleEntry()).toBe(false);
-    // Before the lifecycle's 15s attempt budget abandons every placement.
-    await settle(10_000);
+    expect(latest?.decisions.size ?? 0).toBe(0);
+    finishLayer();
+    await settle(32);
+    // A complete healthy pair publishes immediately, without waiting for the
+    // unrelated modal's placement timeout or the whole-round request budget.
     expect(visibleEntry()).toBe(true);
+    expect(latest?.decisions.has(entry)).toBe(true);
+    expect(latest?.decisions.has(layer)).toBe(true);
+    expect(latest?.decisions.has(modal)).toBe(false);
     expect(screen.queryByRole("dialog", { name: "Test campaign" })).toBeNull();
+    const mount = vi.mocked(component.OpenDesignTouchpointElement.prototype.mount);
+    const hoverMounts = () => mount.mock.calls.filter(([, , host]) => host.placementKey !== modal).length;
+    const initialMounts = hoverMounts();
+    expect(initialMounts).toBe(2);
+    await settle(TEST_PLACEMENT_REQUEST_TIMEOUT_MS - (Date.now() - startedAt) - 1);
+    expect(diagnostics).not.toContainEqual({ code: "touchpoint_test_placement_timeout" });
+    expect(visibleEntry()).toBe(true);
+    await settle(1);
     expect(diagnostics).toContainEqual({ code: "touchpoint_test_placement_timeout" });
+    expect(visibleEntry()).toBe(true);
+    expect(hoverMounts()).toBe(initialMounts);
   });
 
   it("keeps an on-screen presentation when its renewal hangs", async () => {
@@ -440,6 +462,9 @@ describe("OPEND-3298 context recovery and remaining P1", () => {
     const hoverMounts = () => mount.mock.calls.filter(([, , host]) => host.placementKey !== modal).length;
     const initialMounts = hoverMounts();
     const originalEntry = latest?.decisions.get(entry);
+    const modalDeadline = Date.parse(latest!.decisions.get(modal)!.authorizationExpiresAt);
+    const modalRequests = () => requests("/test-runtime").filter(([url]) => new URL(String(url), "http://localhost").searchParams.get("placementKey") === modal).length;
+    expect(modalRequests()).toBe(1);
     let hanging = true;
     decisionReply = (key, locale, id) => key === modal && hanging
       ? new Promise<Response>(() => {}) : Response.json(decision(key, locale, oldGeneration, id));
@@ -449,14 +474,24 @@ describe("OPEND-3298 context recovery and remaining P1", () => {
       expect(visibleEntry(), `hover at t=${second}s`).toBe(true);
       expect(hoverMounts(), `hover mounts at t=${second}s`).toBe(initialMounts);
       expect(latest?.decisions.get(entry)).toBe(originalEntry);
-      if (second < 60) expect(screen.queryByRole("dialog", { name: "Test campaign" })).not.toBeNull();
-      if (second >= 60 && second <= 90) {
+      if (Date.now() < modalDeadline) expect(screen.queryByRole("dialog", { name: "Test campaign" })).not.toBeNull();
+      else {
         expect(screen.queryByRole("dialog", { name: "Test campaign" })).toBeNull();
         expect(latest?.decisions.has(modal)).toBe(false);
       }
+      // Failed presentations stop automatic requests; only the healthy pair
+      // keeps polling. Merely changing the mock response cannot wake recovery.
+      if (Date.now() - epoch >= TOUCHPOINT_POLL_MS + TEST_PLACEMENT_REQUEST_TIMEOUT_MS)
+        expect(modalRequests(), `modal requests at t=${second}s`).toBe(2);
       if (second === 90) hanging = false;
     }
+    act(() => window.dispatchEvent(new Event("focus")));
+    await settle(32);
+    expect(modalRequests()).toBe(3);
     expect(latest?.decisions.has(modal)).toBe(true);
+    expect(visibleEntry()).toBe(true);
+    expect(hoverMounts()).toBe(initialMounts);
+    expect(latest?.decisions.get(entry)).toBe(originalEntry);
   });
 
   it("ages an answer from its own fetch completion while a sibling delays the round", async () => {

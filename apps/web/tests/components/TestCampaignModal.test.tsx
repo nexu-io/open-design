@@ -1549,10 +1549,16 @@ describe("negotiated immutable Test context", () => {
 		await failed(); expect(latest?.decisions.size ?? 0).toBe(0); expect(contextCalls(mock)).toBe(2);
 	});
 
-	it("preserves only the original short immutable grant after a network renewal failure", async () => {
+	it.each(["network", "empty body", "null body", "unreadable JSON"])("preserves only the original short immutable grant after a %s renewal failure", async failure => {
 		vi.useFakeTimers();
 		let offline = false;
-		const mock = server({ decision: () => offline ? Promise.reject(new TypeError("Failed to fetch")) : json(decision()) });
+		const mock = server({ decision: async () => {
+			if (!offline) return json(decision());
+			if (failure === "empty body") return json({});
+			if (failure === "null body") return json(null);
+			if (failure === "unreadable JSON") return new Response("{", { status: 200 });
+			throw new TypeError("Failed to fetch");
+		} });
 		vi.stubGlobal("fetch", mock); render(<><Probe /><TestCampaignHarness authenticated /></>);
 		await act(async () => { await vi.advanceTimersByTimeAsync(0); });
 		fireEvent.change(screen.getByLabelText("Test activity"), { target: { value: "deployment-1" } });

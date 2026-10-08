@@ -1220,6 +1220,12 @@ export function TestCampaignModal({
 						);
 					const decision = (await response.json()) as TestDecision;
 					if (!current() || requestSignal.aborted) return null;
+					// A response with no decision identity is a failed renewal, like
+					// unreadable JSON. It cannot renew the grant or revoke the still-valid
+					// one. An explicit/partial identity below is checked fail-closed.
+					if (!decision || typeof decision !== "object" ||
+						(!("deploymentId" in decision) && !("testContext" in decision)))
+						throw new Error("touchpoint_test_load_failed");
 					if (
 						!decision ||
 						!decisionMatchesSelection(
