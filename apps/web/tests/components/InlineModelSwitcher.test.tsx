@@ -234,6 +234,40 @@ describe('InlineModelSwitcher AMR row', () => {
     resetWorkspaceContextCache();
   });
 
+  it.each([false, true])('exposes model-specific effort in the chat picker (compact=%s)', (compact) => {
+    const claude: AgentInfo = {
+      id: 'claude', name: 'Claude Code', bin: 'claude', available: true,
+      models: [{
+        id: 'claude-haiku-5-5', label: 'Haiku 5.5',
+        reasoningOptions: [
+          { id: 'default', label: 'CLI default', default: true },
+          { id: 'medium', label: 'Medium' },
+          { id: 'max', label: 'Max' },
+        ],
+      }],
+    };
+    const view = renderSwitcher({
+      agentId: 'claude',
+      agentModels: { claude: { model: 'claude-haiku-5-5', reasoning: 'max' } },
+    }, [claude], {}, { compact });
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip'));
+    const picker = screen.getByRole('combobox', { name: 'Reasoning effort' });
+    expect((picker as HTMLSelectElement).value).toBe('max');
+    fireEvent.change(picker, { target: { value: 'medium' } });
+    expect(view.onAgentModelChange).toHaveBeenLastCalledWith('claude', { reasoning: 'medium' });
+  });
+
+  it('hides chat effort when the selected model declares no effort support', () => {
+    const claude: AgentInfo = {
+      id: 'claude', name: 'Claude Code', bin: 'claude', available: true,
+      models: [{ id: 'claude-haiku-4-5', label: 'Haiku 4.5', reasoningOptions: [] }],
+      reasoningOptions: [{ id: 'high', label: 'High' }],
+    };
+    renderSwitcher({ agentId: 'claude', agentModels: { claude: { model: 'claude-haiku-4-5' } } }, [claude]);
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip'));
+    expect(screen.queryByRole('combobox', { name: 'Reasoning effort' })).toBeNull();
+  });
+
   it('keeps the AMR reminder inside the picker without marking the chip', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
