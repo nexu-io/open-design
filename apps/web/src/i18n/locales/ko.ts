@@ -157,6 +157,7 @@ export const ko: Dict = {
   'chat.runError.modelUnavailableMessage': "사용 가능한 다른 모델을 선택한 후 다시 시도하세요.",
   'chat.runError.modelCapabilityUnsupportedMessage': "이 모델은 작업에 필요한 기능을 지원하지 않습니다. 모델을 변경한 후 다시 시도하세요.",
   'chat.runError.rateLimitedMessage': '현재 이 모델 서비스에 요청이 많아 제공업체의 요청 빈도 상한에 도달했습니다. 잠시 후 다시 시도하거나 다른 모델로 전환해 보세요.',
+  'chat.runError.antigravityQuotaMessage': 'Antigravity 모델마다 할당량이 따로 있으며, 현재 모델의 할당량을 모두 사용했습니다. 모델 메뉴에서 다른 모델을 선택하거나, 터미널에서 `agy`를 열고 /model로 모델을 바꾼 뒤 다시 시도하세요.',
   'chat.runError.modelWindowLimitMessage': '사용량이 많습니다. {retryAt} 이후에 다시 시도해 주세요. 이번 요청은 청구되지 않았습니다.',
   'chat.runError.modelWindowLimitMessageNoTime': '사용량이 많습니다. 잠시 후 다시 시도해 주세요. 이번 요청은 청구되지 않았습니다.',
   'chat.runError.membershipConcurrencyLimitMessage': '멤버십의 동시 작업 한도가 가득 찼습니다. {retryAt}까지 기다린 뒤 다시 시도하거나 다른 에이전트로 전환하세요. 즉시 재시도해도 해결되지 않습니다.',

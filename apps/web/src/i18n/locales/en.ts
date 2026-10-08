@@ -157,6 +157,7 @@ export const en: Dict = {
   'chat.runError.modelUnavailableMessage': "Please pick another available model and try again.",
   'chat.runError.modelCapabilityUnsupportedMessage': "This model doesn’t support the capabilities this task needs. Switch models and try again.",
   'chat.runError.rateLimitedMessage': 'There are a lot of requests to this model service right now and the provider\'s rate limit has been reached. Try again later, or try switching to another model.',
+  'chat.runError.antigravityQuotaMessage': 'Each Antigravity model has its own quota, and the current model\'s is used up. Pick a different model in the model menu, or open `agy` in a terminal and switch models with /model, then try again.',
   'chat.runError.modelWindowLimitMessage': 'High demand right now — please try again after {retryAt}. This request was not charged.',
   'chat.runError.modelWindowLimitMessageNoTime': 'High demand right now — please try again shortly. This request was not charged.',
   'chat.runError.membershipConcurrencyLimitMessage': 'Your membership\'s concurrent task limit is full. Wait until {retryAt}, then retry, or switch to another agent. Immediate retries will not help.',

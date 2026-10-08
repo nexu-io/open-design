@@ -157,6 +157,7 @@ export const th: Dict = {
   'chat.runError.modelUnavailableMessage': "โปรดเลือกโมเดลอื่นที่พร้อมใช้งานแล้วลองอีกครั้ง",
   'chat.runError.modelCapabilityUnsupportedMessage': "โมเดลนี้ไม่รองรับความสามารถที่งานนี้ต้องใช้ โปรดเปลี่ยนโมเดลแล้วลองอีกครั้ง",
   'chat.runError.rateLimitedMessage': 'ขณะนี้มีคำขอไปยังบริการโมเดลนี้จำนวนมาก และถึงขีดจำกัดความถี่คำขอของผู้ให้บริการแล้ว โปรดลองใหม่ในภายหลัง หรือลองสลับไปใช้โมเดลอื่น',
+  'chat.runError.antigravityQuotaMessage': 'โมเดล Antigravity แต่ละตัวมีโควตาของตัวเอง และโควตาของโมเดลปัจจุบันหมดแล้ว เลือกโมเดลอื่นในเมนูโมเดล หรือเปิด `agy` ในเทอร์มินัลแล้วสลับโมเดลด้วย /model จากนั้นลองอีกครั้ง',
   'chat.runError.modelWindowLimitMessage': 'ขณะนี้มีผู้ใช้งานจำนวนมาก โปรดลองอีกครั้งหลัง {retryAt} คำขอนี้ไม่มีการเรียกเก็บเงิน',
   'chat.runError.modelWindowLimitMessageNoTime': 'ขณะนี้มีผู้ใช้งานจำนวนมาก โปรดลองอีกครั้งในภายหลัง คำขอนี้ไม่มีการเรียกเก็บเงิน',
   'chat.runError.membershipConcurrencyLimitMessage': 'สมาชิกของคุณใช้งานถึงขีดจำกัดงานพร้อมกันแล้ว โปรดรอจนถึง {retryAt} แล้วลองใหม่ หรือเปลี่ยนเอเจนต์ การลองซ้ำทันทีจะไม่ช่วย',

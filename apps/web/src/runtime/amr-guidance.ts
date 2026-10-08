@@ -304,6 +304,7 @@ export type RunFailureMessageKey =
   | 'chat.connectionDropped'
   | 'chat.runError.signInMessage.amr'
   | 'chat.runError.signInMessage.other'
+  | 'chat.runError.antigravityQuotaMessage'
   | 'chat.runError.cliMissingMessage'
   | 'chat.runError.promptTooLargeMessage'
   | 'chat.runError.modelUnavailableMessage'
@@ -1795,12 +1796,15 @@ function resolveRunFailureUiIgnoringSelfPromotion(
     }
     // Quota: each Antigravity model has its own quota, so the action
     // is "open agy, switch model" rather than "sign in." Same handler
-    // spawns the same terminal; only the label changes.
+    // spawns the same terminal; only the label changes. The card carries
+    // its own copy: with `null` it fell back to the generic "task failed,
+    // please retry" sentence (OPEND-3495), which never said the quota was
+    // the cause or that switching models gets past it.
     if (code === 'RATE_LIMITED') {
       return failureCard(
         { directFix: 'launch-terminal-switch-model' },
-        'chat.runError.title.rateLimited',
-        null,
+        'chat.runError.title.quotaExhausted',
+        'chat.runError.antigravityQuotaMessage',
         { secondaryRetry: true },
       );
     }

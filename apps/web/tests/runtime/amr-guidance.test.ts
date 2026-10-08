@@ -9,6 +9,7 @@ import {
   amrRechargeUrlForProfile,
   formatModelWindowRetryAt,
   modelWindowLimitCopy,
+  resolveRunErrorCardDescription,
   resolveRunFailureUi,
   setRuntimeAmrConsoleOrigin,
 } from '../../src/runtime/amr-guidance';
@@ -668,9 +669,33 @@ describe('resolveRunFailureUi', () => {
     const ui = resolveRunFailureUi('RATE_LIMITED', null, 'antigravity');
     expect(ui).toMatchObject({
       primaryAction: 'launch-terminal-switch-model',
-      messageKey: null,
+      titleKey: 'chat.runError.title.quotaExhausted',
+      messageKey: 'chat.runError.antigravityQuotaMessage',
       secondaryRetry: true,
       cloudSwitchCta: true,
+    });
+  });
+
+  // OPEND-3495: with no copy of its own, the Antigravity quota card fell back
+  // to `chat.runError.fallbackMessage` ("This task failed to run. Please
+  // retry…") — the exact sentence in the user report, which says nothing about
+  // the per-model quota or how to get past it. The daemon's real shape for an
+  // exhausted agy quota is RATE_LIMITED + hard_quota; the card must render the
+  // quota guidance, never the generic fallback.
+  it('renders the Antigravity quota guidance, not the generic fallback, for hard_quota', () => {
+    const ui = resolveRunFailureUi('RATE_LIMITED', 'hard_quota', 'antigravity');
+    const description = resolveRunErrorCardDescription({
+      handedToAnotherSurface: false,
+      mappedMessageKey: ui.messageKey,
+      paneError: null,
+      paneErrorCameFromARun: false,
+      failedRunRawDetail:
+        'Antigravity returned "RESOURCE_EXHAUSTED: Individual quota reached" for the current model.',
+      turnEndedInTerminalFailure: true,
+    });
+    expect(description).toEqual({
+      render: 'mapped',
+      messageKey: 'chat.runError.antigravityQuotaMessage',
     });
   });
 

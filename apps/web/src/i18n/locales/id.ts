@@ -157,6 +157,7 @@ export const id: Dict = {
   'chat.runError.modelUnavailableMessage': "Silakan pilih model lain yang tersedia, lalu coba lagi.",
   'chat.runError.modelCapabilityUnsupportedMessage': "Model ini tidak mendukung kemampuan yang dibutuhkan tugas ini. Ganti model lalu coba lagi.",
   'chat.runError.rateLimitedMessage': 'Saat ini ada banyak permintaan ke layanan model ini dan batas frekuensi permintaan penyedia telah tercapai. Coba lagi nanti, atau coba beralih ke model lain.',
+  'chat.runError.antigravityQuotaMessage': 'Setiap model Antigravity punya kuotanya sendiri, dan kuota model saat ini sudah habis. Pilih model lain di menu model, atau buka `agy` di terminal lalu ganti model dengan /model, kemudian coba lagi.',
   'chat.runError.modelWindowLimitMessage': 'Sedang ramai saat ini. Coba lagi setelah {retryAt}. Permintaan ini tidak dikenai biaya.',
   'chat.runError.modelWindowLimitMessageNoTime': 'Sedang ramai saat ini. Coba lagi sebentar lagi. Permintaan ini tidak dikenai biaya.',
   'chat.runError.membershipConcurrencyLimitMessage': 'Batas tugas bersamaan untuk keanggotaan Anda sudah penuh. Tunggu hingga {retryAt}, lalu coba lagi, atau ganti agen. Mencoba ulang segera tidak akan membantu.',

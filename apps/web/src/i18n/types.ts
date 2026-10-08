@@ -2955,6 +2955,7 @@ export interface Dict {
   /** S23 · 以前这一格没有正文,报错卡因此落到兜底句上。 */
   'chat.runError.artifactMissingMessage': string;
   'chat.runError.rateLimitedMessage': string;
+  'chat.runError.antigravityQuotaMessage': string;
   'chat.runError.modelWindowLimitMessage': string;
   'chat.runError.modelWindowLimitMessageNoTime': string;
   'chat.runError.membershipConcurrencyLimitMessage': string;

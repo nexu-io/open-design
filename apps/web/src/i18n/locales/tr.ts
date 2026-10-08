@@ -157,6 +157,7 @@ export const tr: Dict = {
   'chat.runError.modelUnavailableMessage': "Lütfen kullanılabilir başka bir model seçip tekrar deneyin.",
   'chat.runError.modelCapabilityUnsupportedMessage': "Bu model, görevin gerektirdiği özellikleri desteklemiyor. Model değiştirip tekrar deneyin.",
   'chat.runError.rateLimitedMessage': 'Şu anda bu model hizmetine çok sayıda istek geliyor ve sağlayıcının istek sıklığı sınırına ulaşıldı. Daha sonra tekrar deneyin veya başka bir modele geçmeyi deneyin.',
+  'chat.runError.antigravityQuotaMessage': 'Her Antigravity modelinin kendi kotası vardır ve geçerli modelin kotası doldu. Model menüsünden başka bir model seçin ya da bir terminalde `agy` komutunu açıp /model ile model değiştirin, ardından tekrar deneyin.',
   'chat.runError.modelWindowLimitMessage': 'Şu anda yoğunluk var. {retryAt} sonrasında tekrar deneyin. Bu istek için ücret alınmadı.',
   'chat.runError.modelWindowLimitMessageNoTime': 'Şu anda yoğunluk var. Kısa süre sonra tekrar deneyin. Bu istek için ücret alınmadı.',
   'chat.runError.membershipConcurrencyLimitMessage': 'Üyeliğinizin eşzamanlı görev sınırı dolu. {retryAt} saatine kadar bekleyip yeniden deneyin veya başka bir aracıya geçin. Hemen yeniden denemek yardımcı olmaz.',

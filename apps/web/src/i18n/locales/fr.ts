@@ -157,6 +157,7 @@ export const fr: Dict = {
   'chat.runError.modelUnavailableMessage': "Veuillez choisir un autre modèle disponible, puis réessayer.",
   'chat.runError.modelCapabilityUnsupportedMessage': "Ce modèle ne prend pas en charge les fonctions requises par la tâche. Changez de modèle, puis réessayez.",
   'chat.runError.rateLimitedMessage': 'Le service de modèle reçoit beaucoup de requêtes en ce moment et la limite de fréquence du fournisseur est atteinte. Réessayez plus tard ou essayez de changer de modèle.',
+  'chat.runError.antigravityQuotaMessage': 'Chaque modèle Antigravity dispose de son propre quota, et celui du modèle actuel est épuisé. Choisissez un autre modèle dans le menu des modèles, ou ouvrez `agy` dans un terminal et changez de modèle avec /model, puis réessayez.',
   'chat.runError.modelWindowLimitMessage': 'Forte affluence en ce moment. Réessayez après {retryAt}. Cette requête n’a pas été facturée.',
   'chat.runError.modelWindowLimitMessageNoTime': 'Forte affluence en ce moment. Réessayez dans un instant. Cette requête n’a pas été facturée.',
   'chat.runError.membershipConcurrencyLimitMessage': 'La limite de tâches simultanées de votre abonnement est atteinte. Attendez jusqu’à {retryAt}, puis réessayez, ou changez d’agent. Réessayer immédiatement ne servira à rien.',

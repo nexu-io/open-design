@@ -157,6 +157,7 @@ export const fa: Dict = {
   'chat.runError.modelUnavailableMessage': "لطفاً مدل در دسترس دیگری انتخاب کنید و دوباره تلاش کنید.",
   'chat.runError.modelCapabilityUnsupportedMessage': "این مدل از قابلیت‌های موردنیاز این وظیفه پشتیبانی نمی‌کند. مدل را عوض کنید و دوباره تلاش کنید.",
   'chat.runError.rateLimitedMessage': 'در حال حاضر درخواست‌های زیادی به این سرویس مدل ارسال می‌شود و به سقف تعداد درخواست ارائه‌دهنده رسیده‌اید. بعداً دوباره تلاش کنید یا تغییر به مدل دیگری را امتحان کنید.',
+  'chat.runError.antigravityQuotaMessage': 'هر مدل Antigravity سهمیهٔ جداگانه‌ای دارد و سهمیهٔ مدل فعلی تمام شده است. از منوی مدل، مدل دیگری انتخاب کنید یا `agy` را در ترمینال باز کنید و با ‎/model مدل را عوض کنید، سپس دوباره امتحان کنید.',
   'chat.runError.modelWindowLimitMessage': 'در حال حاضر ازدحام زیاد است. لطفاً پس از {retryAt} دوباره تلاش کنید. بابت این درخواست هزینه‌ای کسر نشد.',
   'chat.runError.modelWindowLimitMessageNoTime': 'در حال حاضر ازدحام زیاد است. لطفاً کمی بعد دوباره تلاش کنید. بابت این درخواست هزینه‌ای کسر نشد.',
   'chat.runError.membershipConcurrencyLimitMessage': 'سقف کارهای هم‌زمان عضویت شما پر شده است. تا {retryAt} صبر کنید و دوباره تلاش کنید، یا عامل دیگری را انتخاب کنید. تلاش فوری کمکی نمی‌کند.',
