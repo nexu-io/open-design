@@ -223,6 +223,25 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
     },
   },
   {
+    id: 'motion-design',
+    label: 'Motion design',
+    icon: 'video-ai',
+    group: 'create',
+    description: 'Animated stories, typography and product films',
+    hint: 'Describe the idea, style and duration of your motion film.',
+    action: {
+      kind: 'apply-scenario',
+      pluginId: 'od-new-generation',
+      projectKind: 'video',
+      automaticDefault: true,
+      projectMetadata: {
+        kind: 'video',
+        intent: 'motion-design',
+        videoModel: 'hyperframes-html',
+      },
+    },
+  },
+  {
     id: 'hyperframes',
     label: 'HyperFrames',
     icon: 'orbit',
@@ -392,6 +411,7 @@ export const CREATE_RAIL_ORDER = [
   'document',
   'image',
   'web-clone',
+  'motion-design',
   'hyperframes',
   'webgl',
   'live-artifact',
@@ -407,6 +427,7 @@ export const CREATE_RAIL_ORDER = [
 export const HOME_TYPE_ROW_IDS: readonly string[] = ['prototype', 'deck', 'document'];
 export const HOME_TYPE_ROW_MORE_IDS: readonly string[] = [
   'image',
+  'motion-design',
   'hyperframes',
   'web-clone',
   'video',

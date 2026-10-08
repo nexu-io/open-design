@@ -4126,6 +4126,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         || req.body?.automaticStrategyTaskProfile === 'ppt'
         || req.body?.automaticStrategyTaskProfile === 'marketing'
         || req.body?.automaticStrategyTaskProfile === 'hyperframes'
+        || req.body?.automaticStrategyTaskProfile === 'motion-design'
           ? req.body.automaticStrategyTaskProfile
           : null;
       if (

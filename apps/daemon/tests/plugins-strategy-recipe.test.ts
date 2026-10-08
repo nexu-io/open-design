@@ -1,4 +1,4 @@
-import { cp, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import Database from 'better-sqlite3';
@@ -100,6 +100,21 @@ afterAll(() => {
 });
 
 describe('OD Next V2 request recipe wiring', () => {
+  it('composes the canonical motion skill with Core and orchestration for the motion route', async () => {
+    const binding = createBundledStrategyBindingV2({ plugin, taskType: 'motion-design' });
+    const motionSnapshot = applyPlugin({
+      plugin, inputs: {}, registry: EMPTY_REGISTRY, internalStrategyBinding: binding,
+    }).result.appliedPlugin;
+    const recipe = await resolveRecipe({ activeSnapshot: { ...motionSnapshot, snapshotId: 'snapshot-motion-recipe' } });
+    if (!recipe) throw new Error('expected motion recipe');
+    const prompt = composeSystemPrompt({ agentId: 'codex', sessionMode: 'design', odNextStrategyRecipe: recipe });
+    const source = await readFile(path.resolve(BUNDLED_ROOT, '../../skills/motion-design/SKILL.md'), 'utf8');
+    expect(prompt).toContain(source);
+    expect(prompt).toContain('OD Next Core Strategy');
+    expect(prompt).toContain('General Orchestration');
+    expect(prompt).not.toContain('# OD Next Task Profile: HyperFrames');
+  });
+
 
   // Read and register the real bundled resource; no hand-authored atom fixture.
   // This witnesses the prompt contract that reaches a strategy recipe, not an

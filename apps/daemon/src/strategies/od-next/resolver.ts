@@ -281,6 +281,7 @@ const DAEMON_OWNED_PRODUCTION_ROUTES = {
   ppt: new Set(['ppt-html', 'html', 'deck-html']),
   marketing: new Set(['marketing-html', 'html', 'image-html']),
   hyperframes: new Set(['hyperframes-html', 'html']),
+  'motion-design': new Set(['hyperframes-html', 'html']),
 } as const;
 
 const DAEMON_OWNED_OUTPUT_KINDS = {
@@ -288,6 +289,7 @@ const DAEMON_OWNED_OUTPUT_KINDS = {
   ppt: new Set(['presentation', 'ppt', 'deck', 'html', 'source']),
   marketing: new Set(['image', 'marketing', 'html', 'source']),
   hyperframes: new Set(['video', 'hyperframes', 'html', 'source', 'rendered-video']),
+  'motion-design': new Set(['video', 'html', 'source', 'rendered-video']),
 } as const;
 
 export function daemonOwnedOdNextPlanningCatalog(

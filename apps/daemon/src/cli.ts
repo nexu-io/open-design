@@ -244,7 +244,7 @@ const MESSAGE_CENTER_STRING_FLAGS = new Set([
 ]);
 const MESSAGE_CENTER_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 const PROJECT_STRING_FLAGS = new Set([
-  'daemon-url', 'name', 'skill', 'design-system', 'plugin', 'metadata-json',
+  'daemon-url', 'name', 'skill', 'design-system', 'plugin', 'metadata-json', 'task-type',
   'pending-prompt', 'project', 'conversation', 'message', 'prompt',
   'prompt-file', 'task-execution', 'path', 'dir', 'as', 'url',
   'client-request-id',
@@ -6997,7 +6997,8 @@ async function runProject(args) {
     console.log(`Usage:
   od project create [--name "<title>"] [--skill <id>] [--design-system <id>]
                     [--plugin <id>] [--inputs <json>] [--metadata-json <path|->]
-                    [--mode design|chat|plan]
+                    [--mode design|chat|plan] [--task-type motion-design]
+                    [--prompt-file <path|->] [--json]
   od project create-design-system <id> [--name "<title>"]
                     [--prompt "<text>" | --prompt-file <path|->] [--json]
                     Duplicate a project as a design-system workspace and seed
@@ -7202,6 +7203,21 @@ Common options:
       if (flags['metadata-json']) {
         const mj = safeReadJsonFile(flags['metadata-json']);
         if (mj && typeof mj === 'object') body.metadata = mj;
+      }
+      const prompt = await readPromptFromFlags(flags);
+      if (prompt) body.pendingPrompt = prompt;
+      if (flags['task-type']) {
+        if (flags['task-type'] !== 'motion-design') {
+          console.error('--task-type currently supports motion-design');
+          process.exit(2);
+        }
+        if (flags.plugin || (conversationMode && conversationMode !== 'design')) {
+          console.error('--task-type motion-design requires Design mode and no explicit --plugin');
+          process.exit(2);
+        }
+        body.conversationMode = 'design';
+        body.metadata = { ...body.metadata, kind: 'video', intent: 'motion-design', videoModel: 'hyperframes-html' };
+        body.automaticStrategyTaskProfile = 'motion-design';
       }
       if (flags.plugin) body.pluginId = flags.plugin;
       if (flags.inputs) {

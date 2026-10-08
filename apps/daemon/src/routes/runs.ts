@@ -778,6 +778,7 @@ const SCENARIO_PROJECT_INTENTS: readonly NonNullable<ContractProjectMetadata['in
   'document',
   'marketing',
   'hyperframes',
+  'motion-design',
 ];
 
 function toScenarioProjectIntent(value: unknown): ContractProjectMetadata['intent'] | undefined {

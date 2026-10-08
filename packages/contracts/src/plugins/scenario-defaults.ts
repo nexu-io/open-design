@@ -63,6 +63,7 @@ const AUTOMATIC_STRATEGY_TASK_PROFILE_BY_ROUTE_ID = {
   deck: 'ppt',
   marketing: 'marketing',
   hyperframes: 'hyperframes',
+  'motion-design': 'motion-design',
 } as const satisfies Record<string, ProjectScenarioTaskProfile>;
 
 /**
@@ -110,6 +111,9 @@ export function automaticStrategyTaskProfileForProjectMetadata(
 ): ProjectScenarioTaskProfile | null {
   if (metadata?.intent === 'marketing') {
     return metadata.kind === 'prototype' ? 'marketing' : null;
+  }
+  if (metadata?.intent === 'motion-design') {
+    return metadata.kind === 'video' ? 'motion-design' : null;
   }
   if (metadata?.intent === 'hyperframes') {
     return metadata.kind === 'video' ? 'hyperframes' : null;
@@ -163,6 +167,7 @@ export function defaultScenarioPluginIdForProjectMetadata(
   // prototype seed, so the card's own binding read as a user pin and
   // restoring it would have bound the wrong plugin.
   if (metadata?.intent === 'webgl-experience') return 'example-webgl-experience';
+  if (metadata?.intent === 'motion-design') return 'od-new-generation';
   if (metadata?.intent === 'hyperframes') return 'example-hyperframes';
   if (metadata?.intent === 'marketing') return 'example-web-prototype';
   return defaultScenarioPluginIdForKind(metadata?.kind);
@@ -185,6 +190,9 @@ export function defaultScenarioTaskProfileForProjectMetadata(
   }
   if (taskProfile === 'ppt') {
     return pluginId === 'example-simple-deck' ? taskProfile : null;
+  }
+  if (taskProfile === 'motion-design') {
+    return pluginId === 'od-new-generation' ? taskProfile : null;
   }
   if (taskProfile === 'hyperframes') {
     return pluginId === 'example-hyperframes' ? taskProfile : null;

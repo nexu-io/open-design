@@ -54,6 +54,11 @@ async function startProjectStubServer(): Promise<StubServer> {
       requests.push(captured);
 
       res.setHeader('content-type', 'application/json');
+      if (captured.method === 'POST' && captured.url === '/api/projects') {
+        res.statusCode = 201;
+        res.end(JSON.stringify({ project: { id: 'created-project' } }));
+        return;
+      }
       if (captured.method === 'POST' && captured.url === '/api/projects/source-project/design-system-copy') {
         res.statusCode = 201;
         res.end(JSON.stringify({
@@ -298,6 +303,36 @@ describe('od project CLI', () => {
       body: JSON.stringify({ slug: 'legacy-public-slug' }),
     });
   });
+
+  it('creates a motion design task with the same automatic OD Next route as Home', async () => {
+    stub = await startProjectStubServer();
+    tempRoot = mkdtempSync(join(tmpdir(), 'od-motion-cli-'));
+    const promptPath = join(tempRoot, 'prompt.md');
+    writeFileSync(promptPath, 'Create a 12-second motion film.\n', 'utf8');
+    const result = await runCli([
+      'project', 'create', '--task-type', 'motion-design',
+      '--prompt-file', promptPath, '--json', '--daemon-url', stub.baseUrl,
+    ]);
+    expect(result.code).toBe(0);
+    const request = stub.requests.find((item) => item.method === 'POST' && item.url === '/api/projects');
+    expect(request).toBeDefined();
+    expect(JSON.parse(request!.body)).toMatchObject({
+      conversationMode: 'design',
+      automaticStrategyTaskProfile: 'motion-design',
+      metadata: { kind: 'video', intent: 'motion-design', videoModel: 'hyperframes-html' },
+      pendingPrompt: 'Create a 12-second motion film.\n',
+    });
+    expect(JSON.parse(request!.body).pluginId).toBeUndefined();
+  });
+
+  it.each([['--plugin', 'example-hyperframes'], ['--mode', 'chat']])(
+    'rejects an incompatible motion route option %s', async (flag, value) => {
+      stub = await startProjectStubServer();
+      const result = await runCli(['project', 'create', '--task-type', 'motion-design', flag, value, '--daemon-url', stub.baseUrl]);
+      expect(result.code).toBe(2);
+      expect(stub.requests.some((item) => item.method === 'POST')).toBe(false);
+    },
+  );
 
   it('creates a design-system project with prompt-file content and JSON output', async () => {
     stub = await startProjectStubServer();

@@ -418,6 +418,7 @@ export async function listSkills(
   // does whenever the request carries no `x-od-workspace-id` header — must
   // still go through `skillVisibleFromWorkspace` below so a claimed skill is
   // hidden from a headerless reader instead of silently passing through here.
+  out.sort((a, b) => (a.featured ?? Number.POSITIVE_INFINITY) - (b.featured ?? Number.POSITIVE_INFINITY));
   if (!options.db || options.workspaceId === undefined) return out;
   const scopeDb = options.db;
   const scopeId = options.workspaceId;
