@@ -99,11 +99,12 @@ const RECEIPT = {
 
 
 type Handler = (req: Request, res: Response) => Promise<void>;
-type Attempt = { request: EventEmitter & { destroyed: boolean }; respond: (stream: PassThrough) => void; stream?: PassThrough };
+type Attempt = { url: string; request: EventEmitter & { destroyed: boolean }; respond: (stream: PassThrough) => void; stream?: PassThrough };
 let dataDir: string;
 let env: Record<string, string>;
 let handlers: Record<string, Handler>;
 let attempts: Attempt[];
+let lifecycle: ReturnType<typeof registerVelaRoutes>;
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -114,7 +115,7 @@ beforeEach(() => {
     get: () => {}, post: () => {},
     all: (paths: string[], handler: Handler) => { handlers[paths[0]!] = handler; },
   } as unknown as Express;
-  registerVelaRoutes(app, {
+  lifecycle = registerVelaRoutes(app, {
     paths: { RUNTIME_DATA_DIR: dataDir },
     appConfig: { readAppConfig: async () => ({ agentCliEnv: {} }) as AppConfigPrefs }, http: {}, env,
   });
@@ -127,11 +128,11 @@ beforeEach(() => {
         this.emit('error', error ?? new Error('aborted'));
       },
     });
-    attempts.push({ request, respond: callback });
+    attempts.push({ url: _url.toString(), request, respond: callback });
     return request;
   }) as unknown as typeof http.request);
 });
-afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); fs.rmSync(dataDir, { recursive: true, force: true }); });
+afterEach(async () => { await lifecycle.close(); vi.restoreAllMocks(); vi.useRealTimers(); fs.rmSync(dataDir, { recursive: true, force: true }); });
 
 const start = async (options: { runtime?: 'production' | 'test'; events?: boolean; held?: boolean; locale?: string; placement?: string; deploymentsQuery?: string } = {}) => {
   const runtime = options.runtime ?? 'production';
@@ -287,4 +288,66 @@ describe('revocation history eviction through the real proxy sequence', () => {
     await answer(200, decision()); attempts.at(-1)!.request.emit('close');
     expect((await answer(503, {})).offline).toBe('1');
   });
+});
+
+
+describe('pre-dispatch durability and route shutdown', () => {
+  it.each(['write', 'rename', 'file-fsync', 'directory-fsync'] as const)('never dispatches when pre-marker %s fails', async fault => {
+    await answer(200, decision());
+    const count = attempts.length;
+    const fail = () => { throw Object.assign(new Error('authority storage fault'), { code: 'EIO' }); };
+    if (fault === 'write') vi.spyOn(fs, 'writeFileSync').mockImplementation(fail);
+    else if (fault === 'rename') vi.spyOn(fs, 'renameSync').mockImplementation(fail);
+    else {
+      const original = fs.fsyncSync;
+      vi.spyOn(fs, 'fsyncSync').mockImplementation(fd => {
+        if (fs.fstatSync(fd).isDirectory() === (fault === 'directory-fsync')) fail();
+        original(fd);
+      });
+    }
+    const call = await start(); expect(attempts).toHaveLength(count);
+    expect((await call.done).status).toBe(503);
+  });
+  it('close shares its promise, aborts pending bodies, awaits classification and refuses new requests', async () => {
+    await answer(200, decision());
+    const pending = await start(); respond(pending.attempt, 410);
+    const first = lifecycle.close(); expect(lifecycle.close()).toBe(first); await first;
+    expect(pending.attempt.request.destroyed).toBe(true);
+    const count = attempts.length; const blocked = await start();
+    expect((await blocked.done).status).toBe(503); expect(attempts).toHaveLength(count);
+    const journals = fs.readdirSync(path.join(dataDir, 'touchpoint-content-cache')).map(scope =>
+      JSON.parse(fs.readFileSync(path.join(dataDir, 'touchpoint-content-cache', scope, 'replay-authority.json'), 'utf8')));
+    expect(journals).toHaveLength(1); expect(journals[0].pending).toEqual([]);
+  });
+  it('failed shutdown settlement retains recovery evidence rather than treating clean exit as authorization', async () => {
+    await answer(200, decision()); const pending = await start(); respond(pending.attempt, 410);
+    vi.spyOn(fs, 'writeFileSync').mockImplementation(() => { throw new Error('total shutdown failure'); });
+    vi.spyOn(fs, 'renameSync').mockImplementation(() => { throw new Error('total shutdown failure'); });
+    vi.spyOn(fs, 'rmSync').mockImplementation(() => { throw new Error('total shutdown failure'); });
+    await lifecycle.close(); vi.restoreAllMocks();
+    const scope = fs.readdirSync(path.join(dataDir, 'touchpoint-content-cache'))[0]!;
+    const journal = JSON.parse(fs.readFileSync(path.join(dataDir, 'touchpoint-content-cache', scope, 'replay-authority.json'), 'utf8'));
+    expect(journal.pending).toHaveLength(1);
+  });
+});
+
+it('keeps one durable token over bounded assembly retry, including the first ClientRequest close', async () => {
+  await answer(200, decision());
+  const call = await start();
+  expect(call.attempt.url).toContain('heldContentId=version-1');
+  const scopeRoot = path.join(dataDir, 'touchpoint-content-cache', fs.readdirSync(path.join(dataDir, 'touchpoint-content-cache'))[0]!);
+  const journal = () => JSON.parse(fs.readFileSync(path.join(scopeRoot, 'replay-authority.json'), 'utf8'));
+  const pending = journal().pending; expect(pending).toHaveLength(1);
+  const blobs = path.join(scopeRoot, 'blobs');
+  expect(fs.readdirSync(blobs).length).toBeGreaterThan(0);
+  for (const file of fs.readdirSync(blobs)) fs.rmSync(path.join(blobs, file));
+  const { content: _content, ...envelope } = decision();
+  const firstResponse = respond(call.attempt, 200, { ...envelope, contentOmitted: true });
+  await new Promise<void>(resolve => firstResponse.once('end', resolve));
+  const retry = attempts.at(-1)!; expect(retry).not.toBe(call.attempt);
+  call.attempt.request.emit('close');
+  expect(journal().pending).toEqual(pending);
+  respond(retry, 410, receipt()); expect((await call.done).status).toBe(410);
+  expect(journal().pending).toEqual([]);
+  expect((await answer(503, {})).status).toBe(503);
 });

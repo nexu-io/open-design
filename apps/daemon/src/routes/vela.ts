@@ -584,12 +584,16 @@ function touchpointCacheScope(context: {
   return `${context.profile ?? ''}\u0000${context.apiUrl}\u0000${account}`;
 }
 
+export interface VelaRoutesLifecycle { close(): Promise<void>; }
+type TouchpointRequests = { closing: boolean; active: Map<() => void, Promise<void>> };
+
 function proxyTouchpointRuntimeRequest(
   req: Request,
   res: Response,
   context: { profile?: string; apiUrl: string; controlKey?: string },
   runtime: 'test' | 'production',
   contentCache?: TouchpointContentCache,
+  requests?: TouchpointRequests,
 ): void {
   // Express retains the mounted path for these route patterns, so normalize
   // it before applying the strict suffix allowlist.
@@ -638,6 +642,22 @@ function proxyTouchpointRuntimeRequest(
     ? touchpointContentKeyForRequest(target, authorityScope) : null;
   const contentKey = !HELD_CONTENT_PARAMS.some(param => target.searchParams.has(param)) ? authorityKey : null;
 
+  if (requests?.closing) { res.status(503).json({ error: 'touchpoint_runtime_closing' }); return; }
+  const operation = authorityScope && contentCache ? contentCache.beginAuthority(authorityScope) : null;
+  if (authorityScope && contentCache && !operation) {
+    res.status(503).json({ error: 'touchpoint_authority_unavailable' });
+    return;
+  }
+  let operationFinished = false;
+  let resolveOperation: () => void = () => undefined;
+  const operationDone = new Promise<void>(resolve => { resolveOperation = resolve; });
+  const finishOperation = (): void => {
+    if (operationFinished) return;
+    operationFinished = true;
+    if (operation && authorityScope) contentCache?.settleAuthority(authorityScope, operation);
+    requests?.active.delete(abortUpstream);
+    resolveOperation();
+  };
   const controlKey = context.controlKey;
   /**
    * A caller that walked away takes its upstream request with it.
@@ -655,6 +675,7 @@ function proxyTouchpointRuntimeRequest(
    * rather than adding to it -- so a single mutable reference covers both.
    */
   let currentUpstream: http.ClientRequest | null = null;
+  let currentResponse: http.IncomingMessage | null = null;
   /**
    * Set when the caller walked away, so the failure handlers below can tell an
    * upstream that died from an upstream this proxy killed. Without it, an
@@ -667,8 +688,10 @@ function proxyTouchpointRuntimeRequest(
     callerGone = true;
     settlePendingWithdrawal?.(null);
     const pending = currentUpstream;
+    if (!res.writableEnded) currentResponse?.destroy();
     if (pending && !res.writableEnded && !pending.destroyed) pending.destroy();
   };
+  requests?.active.set(abortUpstream, operationDone);
   req.once('aborted', abortUpstream);
   res.once('close', abortUpstream);
   if (authorityKey && contentCache) {
@@ -765,6 +788,7 @@ function proxyTouchpointRuntimeRequest(
       finally { release(); }
     };
     let cutShortSettled = false;
+    let bodyEnded = false;
     /**
      * Settles an attempt whose body ended in an error — the decision budget,
      * a reset socket, a truncated stream — before it could be answered.
@@ -780,15 +804,17 @@ function proxyTouchpointRuntimeRequest(
      * remains the only display authority the daemon has.
      */
     const settleCutShort = (): void => {
-      if (cutShortSettled) return;
+      if (cutShortSettled || bodyEnded) return;
       cutShortSettled = true;
       if (upstreamStatus !== null && touchpointStatusRefusesReplay(upstreamStatus)) {
         if (upstreamStatus === 410) settleWithdrawal(null);
+        finishOperation();
         if (res.headersSent) res.end();
         else if (!callerGone && !res.writableEnded)
           res.status(upstreamStatus).json({ error: 'touchpoint_runtime_response_incomplete' });
         return;
       }
+      finishOperation();
       if (res.headersSent) res.end();
       // DNS failure, refused connection, reset socket, or this proxy's own
       // timeout: the runtime was not reached, so the last thing it said is the
@@ -801,7 +827,8 @@ function proxyTouchpointRuntimeRequest(
     const requestStarted = performance.now();
     const requestElapsed = () => Math.max(0, performance.now() - requestStarted);
     const upstream = transport.request(attempt, { method: req.method, headers }, (upstreamRes) => {
-      if (callerGone) { upstreamRes.destroy(); return; }
+      if (callerGone && operationFinished) { upstreamRes.destroy(); return; }
+      currentResponse = upstreamRes;
       upstreamStatus = upstreamRes.statusCode ?? null;
       if (upstreamStatus === 410 && authorityKey && contentCache) {
         releaseWithdrawal = contentCache.pauseReplay(authorityKey);
@@ -810,7 +837,11 @@ function proxyTouchpointRuntimeRequest(
       // The status itself retires the old grant, even if the body is cut off,
       // oversized, or unreadable. Keep bytes for a later authenticated renewal.
       if (upstreamStatus !== null) refuseCachedAuthority(upstreamStatus);
+      if (callerGone) { settleCutShort(); upstreamRes.destroy(); return; }
       const passThrough = () => {
+        upstreamRes.once('end', () => { bodyEnded = true; finishOperation(); });
+        upstreamRes.once('error', settleCutShort);
+        upstreamRes.once('close', () => { if (!bodyEnded) settleCutShort(); });
         res.status(upstreamRes.statusCode ?? 502);
         res.setHeader('content-type', upstreamRes.headers['content-type'] ?? 'application/json');
         // Without this the client would decode gzip bytes as JSON. It is set only
@@ -890,6 +921,7 @@ function proxyTouchpointRuntimeRequest(
         }
         return touchpointStatusIsTransient(status) && answerFromCache('upstream_unavailable');
       };
+      upstreamRes.once('close', () => { if (!bodyEnded && !operationFinished && !answered) settleCutShort(); });
       upstreamRes.on('error', () => {
         if (answered) return;
         failed = true;
@@ -908,6 +940,7 @@ function proxyTouchpointRuntimeRequest(
           // Answered from cache. Keeping the rest would put the daemon's memory
           // back above the ceiling for a body nobody will read.
           answered = true;
+          finishOperation();
           chunks.length = 0;
           size = 0;
           upstreamRes.destroy();
@@ -916,8 +949,10 @@ function proxyTouchpointRuntimeRequest(
         degradeToStreaming();
       });
       upstreamRes.on('end', () => {
+        bodyEnded = true;
         if (answered) return;
         if (streaming) {
+          finishOperation();
           res.end();
           return;
         }
@@ -925,6 +960,7 @@ function proxyTouchpointRuntimeRequest(
         const raw = Buffer.concat(chunks, size);
         chunks.length = 0;
         const echo = () => {
+          finishOperation();
           res.status(upstreamRes.statusCode ?? 502);
           res.setHeader('content-type', upstreamRes.headers['content-type'] ?? 'application/json');
           const contentEncoding = upstreamRes.headers['content-encoding'];
@@ -957,8 +993,10 @@ function proxyTouchpointRuntimeRequest(
           // 5xx is "temporarily unavailable", which is a transport condition
           // wearing a status code. Everything else — 401, 403, 404, 410 — is an
           // answer, and a cache may never overrule one.
-          else if (touchpointStatusIsTransient(status) && answerFromCache('upstream_unavailable'))
-            return;
+          else if (touchpointStatusIsTransient(status)) {
+            finishOperation();
+            if (answerFromCache('upstream_unavailable')) return;
+          }
         }
         if (!contentKey || !decoded || status !== 200) {
           echo();
@@ -978,6 +1016,7 @@ function proxyTouchpointRuntimeRequest(
         const decision = parsed as Record<string, unknown>;
         if (decision.contentOmitted !== true) {
           contentCache.remember(contentKey, decision, ticket, requestElapsed());
+          finishOperation();
           res.status(200);
           res.setHeader('content-type', upstreamRes.headers['content-type'] ?? 'application/json');
           res.end(decoded);
@@ -990,6 +1029,7 @@ function proxyTouchpointRuntimeRequest(
         // the same placement may already have replaced.
         const full = held ? contentCache.reassemble(contentKey, held, decision, ticket, requestElapsed()) : null;
         if (full) {
+          finishOperation();
           res.status(200);
           res.setHeader('content-type', 'application/json');
           res.end(Buffer.from(JSON.stringify(full), 'utf8'));
@@ -998,12 +1038,17 @@ function proxyTouchpointRuntimeRequest(
         // The one thing that must never happen is a campaign that does not show
         // because a cache went bad. Ask again the way today's daemon asks, with
         // no held content, and answer from that.
-        if (fallback) send(null, false);
+        if (fallback) { try { send(null, false); } catch { echo(); } }
         else echo();
       });
     });
     currentUpstream = upstream;
-    if (ticket !== undefined) upstream.once('close', () => contentCache?.finishTicket(ticket));
+    upstream.once('close', () => {
+      if (ticket !== undefined) contentCache?.finishTicket(ticket);
+      // ClientRequest.close can precede body classification. A received body
+      // owns settlement; only a request with no response may finish here.
+      if (currentUpstream === upstream && upstreamStatus === null) finishOperation();
+    });
     upstream.setTimeout(30_000, () =>
       upstream.destroy(new Error('Touchpoint runtime request timed out')),
     );
@@ -1013,10 +1058,14 @@ function proxyTouchpointRuntimeRequest(
   };
 
   const held = contentKey && contentCache ? contentCache.held(contentKey) : null;
-  send(held, held !== null);
+  try { send(held, held !== null); }
+  catch {
+    finishOperation();
+    if (!res.headersSent && !res.writableEnded) res.status(502).json({ error: 'touchpoint_runtime_unavailable' });
+  }
 }
 
-export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): void {
+export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): VelaRoutesLifecycle {
   const env = deps.env ?? process.env;
   const onCredentialStateObserved =
     deps.onCredentialStateObserved ?? (() => undefined);
@@ -1025,6 +1074,24 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
   // other daemon path (AGENTS.md "Daemon data directory contract"). Two
   // namespaces therefore get two roots and cannot see each other's content.
   const touchpointContentCache = createTouchpointContentCache(RUNTIME_DATA_DIR);
+  const requests: TouchpointRequests = { closing: false, active: new Map() };
+  let closePromise: Promise<void> | null = null;
+  const lifecycle: VelaRoutesLifecycle = {
+    close() {
+      if (closePromise) return closePromise;
+      requests.closing = true;
+      closePromise = (async () => {
+        const pending = [...requests.active.entries()];
+        for (const [abort] of pending) abort();
+        // Await response/body classification, not merely HTTP close. Failed
+        // durable settlements retain their journal tokens on lock release.
+        await Promise.all(pending.map(([, done]) => done));
+        touchpointContentCache.close();
+        requests.active.clear();
+      })();
+      return closePromise;
+    },
+  };
   const { readAppConfig } = deps.appConfig;
   const getPublicBaseUrl = deps.http.getPublicBaseUrl ?? ((req: Request) => {
     const proto = req.protocol || 'http';
@@ -1286,10 +1353,11 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
             { ...context, apiUrl: target.origin },
             'production',
             touchpointContentCache,
+            requests,
           );
           return;
         }
-        proxyTouchpointRuntimeRequest(req, res, context, 'production', touchpointContentCache);
+        proxyTouchpointRuntimeRequest(req, res, context, 'production', touchpointContentCache, requests);
       } catch {
         res.status(502).json({ error: 'touchpoint_runtime_unavailable' });
       }
@@ -1541,4 +1609,5 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
       res.status(500).json({ error: String(err) });
     }
   });
+  return lifecycle;
 }

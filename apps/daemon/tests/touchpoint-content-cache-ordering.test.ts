@@ -13,7 +13,32 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createTouchpointContentCache } from '../src/routes/touchpoint-content-cache.js';
+import { createTouchpointContentCache as createCache } from '../src/routes/touchpoint-content-cache.js';
+
+// Cache-only cold-start fixtures release the prior owner's OS lock. Real
+// overlapping owners and SIGKILL are covered by the child-process suite.
+const fixtureCaches = new Map<string, ReturnType<typeof createCache>>();
+function createTouchpointContentCache(directory: string) {
+  const cache = createCache(directory);
+  fixtureCaches.set(directory, cache);
+  return cache;
+}
+afterEach(() => { for (const cache of fixtureCaches.values()) cache.close(); fixtureCaches.clear(); });
+// Copy only persisted state into an isolated root for a cold-reader assertion.
+// The primary is deliberately retained to continue testing its in-flight fences.
+const diskReaders: { directory: string; cache: ReturnType<typeof createCache> }[] = [];
+function createDiskReader(directory: string) {
+  const snapshot = mkdtempSync(path.join(tmpdir(), 'touchpoint-cold-snapshot-'));
+  fs.cpSync(directory, snapshot, { recursive: true });
+  const cache = createCache(snapshot);
+  diskReaders.push({ directory: snapshot, cache });
+  return cache;
+}
+afterEach(() => {
+  vi.restoreAllMocks();
+  for (const reader of diskReaders.splice(0)) { reader.cache.close(); rmSync(reader.directory, { recursive: true, force: true }); }
+});
+
 
 const T0 = Date.parse('2030-01-01T00:00:00Z');
 const iso = (ms: number) => new Date(T0 + ms).toISOString();
@@ -61,7 +86,7 @@ const records = () =>
     .map(String)
     .filter((name) => name.includes('assemblies') && name.endsWith('.json'));
 const replayAfterRestart = () =>
-  createTouchpointContentCache(dataDir).replayOffline(key, 'upstream_unreachable');
+  createDiskReader(dataDir).replayOffline(key, 'upstream_unreachable');
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date', 'performance', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] });
@@ -76,6 +101,61 @@ afterEach(() => {
 
 describe('touchpoint content cache answer ordering', () => {
   const ioFailure = () => Object.assign(new Error('injected cache storage failure'), { code: 'EACCES' });
+
+  it('drains a failed owner before recovering and cannot accept its late grant or settlement', () => {
+    const cache = createTouchpointContentCache(dataDir);
+    cache.remember(key, full({ serverTime: 0, endsAt: HOUR }));
+    const operation = cache.beginAuthority(key.scope)!;
+    expect(operation).not.toBeNull();
+    const ticket = cache.ticket(key);
+    const write = fs.writeFileSync;
+    const fault = vi.spyOn(fs, 'writeFileSync').mockImplementation((file, ...args) => {
+      if (String(file).includes('replay-authority.json')) throw ioFailure();
+      return Reflect.apply(write, fs, [file, ...args]);
+    });
+    expect(cache.beginAuthority(key.scope)).toBeNull();
+    fault.mockRestore();
+    // The first upstream operation is still active. Recovery cannot create a
+    // new generation underneath its late response, even after storage recovers.
+    expect(cache.beginAuthority(key.scope)).toBeNull();
+    cache.remember(key, full({ serverTime: 1, endsAt: HOUR * 2 }), ticket);
+    cache.finishTicket(ticket);
+    cache.settleAuthority(key.scope, operation);
+    const successor = cache.beginAuthority(key.scope)!;
+    expect(successor).not.toBeNull();
+    expect(cache.replayOffline(key, 'upstream_unreachable')).toBeNull();
+    const journal = fs.readdirSync(dataDir, { recursive: true }).map(String)
+      .find(name => name.endsWith('replay-authority.json'))!;
+    cache.settleAuthority(key.scope, operation); // duplicate old completion
+    expect(JSON.parse(fs.readFileSync(path.join(dataDir, journal), 'utf8')).pending).toEqual([successor]);
+    const freshTicket = cache.ticket(key);
+    cache.remember(key, full({ serverTime: 2, endsAt: HOUR / 2 }), freshTicket);
+    cache.finishTicket(freshTicket);
+    cache.settleAuthority(key.scope, successor);
+    expect(cache.replayOffline(key, 'upstream_unreachable')?.endsAt).toBe(iso(HOUR / 2));
+    expect(replayAfterRestart()?.endsAt).toBe(iso(HOUR / 2));
+  });
+
+  it('a 404 tombstone remains settled when a later account refusal visits it', () => {
+    const cache = createTouchpointContentCache(dataDir);
+    cache.remember(key, full({ serverTime: 0, endsAt: HOUR }));
+    const operation = cache.beginAuthority(key.scope)!;
+    const read = fs.readFileSync;
+    const fault = vi.spyOn(fs, 'readFileSync').mockImplementation((file, ...args) => {
+      if (String(file).includes('/assemblies/')) throw ioFailure();
+      return Reflect.apply(read, fs, [file, ...args]);
+    });
+    cache.refuseReplay(key, 404);
+    cache.settleAuthority(key.scope, operation);
+    fault.mockRestore();
+    const next = cache.beginAuthority(key.scope)!;
+    cache.refuseScope(key.scope);
+    cache.settleAuthority(key.scope, next);
+    const journal = fs.readdirSync(dataDir, { recursive: true }).map(String)
+      .find(name => name.endsWith('replay-authority.json'))!;
+    expect(JSON.parse(fs.readFileSync(path.join(dataDir, journal), 'utf8')).pending).toEqual([]);
+    expect(cache.replayOffline(key, 'upstream_unreachable')).toBeNull();
+  });
 
   it.each(['full', 'trimmed'] as const)('never replays the old window after a shortened %s answer fails assembly replacement', kind => {
     const cache = createTouchpointContentCache(dataDir);
@@ -200,7 +280,7 @@ describe('touchpoint content cache answer ordering', () => {
     cache.refuseReplay(key, status);
     read.mockRestore();
     expect(cache.replayOffline(key, 'upstream_unavailable')).toBeNull();
-    expect(createTouchpointContentCache(dataDir).replayOffline(alias, 'upstream_unavailable')).toBeNull();
+    expect(createDiskReader(dataDir).replayOffline(alias, 'upstream_unavailable')).toBeNull();
     expect(cache.replayOffline(alias, 'upstream_unavailable')).toBeNull();
     expect(cache.replayOffline(account, 'upstream_unavailable')).not.toBeNull();
     expect(cache.replayOffline(environment, 'upstream_unavailable')).not.toBeNull();
@@ -261,7 +341,7 @@ describe('touchpoint content cache answer ordering', () => {
     cache.remember(alias, full({ serverTime: 1_000, endsAt: HOUR }), lateTicket);
     cache.reassemble(alias, held, trimmed({ serverTime: 1_000, endsAt: HOUR }), lateTicket);
     expect(cache.replayOffline(key, 'upstream_unavailable')).toBeNull();
-    expect(createTouchpointContentCache(dataDir).replayOffline(alias, 'upstream_unavailable')).toBeNull();
+    expect(createDiskReader(dataDir).replayOffline(alias, 'upstream_unavailable')).toBeNull();
     for (const candidate of [key, alias])
       expect(cache.replayOffline(candidate, 'upstream_unavailable')).toBeNull();
     if (kind === 'matching') expect(cache.replayOffline(unrelated, 'upstream_unavailable')).not.toBeNull();
@@ -288,7 +368,7 @@ describe('touchpoint content cache answer ordering', () => {
       expect(cache.replayOffline(candidate, 'upstream_unavailable')).toBeNull();
     expect(cache.replayOffline(unrelated, 'upstream_unavailable')).not.toBeNull();
     vi.restoreAllMocks();
-    expect(createTouchpointContentCache(dataDir).replayOffline(unrelated, 'upstream_unavailable')).not.toBeNull();
+    expect(createDiskReader(dataDir).replayOffline(unrelated, 'upstream_unavailable')).not.toBeNull();
   });
 
   it.each([401, 410] as const)('retires unvisited locales when a fresh online grant recovers storage after %s', status => {
@@ -302,7 +382,7 @@ describe('touchpoint content cache answer ordering', () => {
     read.mockRestore();
     vi.advanceTimersByTime(1_000);
     cache.remember(key, full({ serverTime: 1_000, endsAt: HOUR }), cache.ticket(key));
-    const restarted = createTouchpointContentCache(dataDir);
+    const restarted = createDiskReader(dataDir);
     expect(restarted.replayOffline(key, 'upstream_unavailable')).not.toBeNull();
     expect(restarted.replayOffline(alias, 'upstream_unavailable')).toBeNull();
   });
@@ -339,7 +419,7 @@ describe('touchpoint content cache answer ordering', () => {
     for (const candidate of [key, otherAccount, otherEnvironment, otherLocale])
       cache.remember(candidate, full({ serverTime: 0, endsAt: HOUR }));
     cache.refuseReplay(key, 403);
-    const restarted = createTouchpointContentCache(dataDir);
+    const restarted = createDiskReader(dataDir);
     for (const candidate of [key, otherLocale])
       expect(restarted.replayOffline(candidate, 'upstream_unavailable')).toBeNull();
     for (const candidate of [otherAccount, otherEnvironment])
@@ -358,7 +438,7 @@ describe('touchpoint content cache answer ordering', () => {
       activityId: 'activity-1', deploymentId: 'deployment-1', contentVersionId: 'version-1', touchpointDecisionId: 'decision-1',
     } });
     cache.remember(alias, full({ serverTime: 1_000, endsAt: HOUR }), lateTicket);
-    const restarted = createTouchpointContentCache(dataDir);
+    const restarted = createDiskReader(dataDir);
     expect(restarted.replayOffline(alias, 'upstream_unavailable')).toBeNull();
     expect(restarted.replayOffline(unrelated, 'upstream_unavailable')).not.toBeNull();
   });
@@ -551,7 +631,7 @@ describe('delivery receipt fence recovery', () => {
     cache.forgetWithdrawn(key, receipt); read?.mockRestore(); cache.held(key);
     expect(cache.reassemble(alias, held, trimmed({ serverTime: 0, endsAt: HOUR }), old)?.deploymentId).toBe('deployment-1');
     expect(cache.replayOffline(alias, 'upstream_unavailable')?.deploymentId).toBe('deployment-2');
-    expect(createTouchpointContentCache(dataDir).replayOffline(alias, 'upstream_unavailable')?.deploymentId).toBe('deployment-2');
+    expect(createDiskReader(dataDir).replayOffline(alias, 'upstream_unavailable')?.deploymentId).toBe('deployment-2');
     // Truly new authorization for the same delivery can restore this key.
     cache.reassemble(alias, held, trimmed({ serverTime: 1_000, endsAt: HOUR }), cache.ticket(alias));
     expect(cache.replayOffline(alias, 'upstream_unavailable')?.deploymentId).toBe('deployment-1');

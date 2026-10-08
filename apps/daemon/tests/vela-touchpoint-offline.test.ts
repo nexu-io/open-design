@@ -150,10 +150,20 @@ let upstreamRequests: string[];
 let onStalled: (() => void) | null;
 
 const listen = (server: Server) =>
-  new Promise<AddressInfo>((resolve) => {
-    server.listen(0, '127.0.0.1', () => resolve(server.address() as AddressInfo));
+  new Promise<AddressInfo>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      server.off('error', reject);
+      resolve(server.address() as AddressInfo);
+    });
   });
-const close = (server: Server) => new Promise<void>((resolve) => server.close(() => resolve()));
+const lifecycles = new Map<Server, ReturnType<typeof registerVelaRoutes>>();
+const close = async (server: Server) => {
+  if (!server) return; // A rejected setup has no daemon to close.
+  await lifecycles.get(server)?.close();
+  lifecycles.delete(server);
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+};
 
 /** Takes the runtime away entirely: the next connection is refused, as it is with no network. */
 const cutTheWire = async () => {
@@ -209,20 +219,21 @@ beforeEach(async () => {
 const startDaemon = async () => {
   const app = express();
   app.use(express.json());
-  registerVelaRoutes(app, {
+  const lifecycle = registerVelaRoutes(app, {
     paths: { RUNTIME_DATA_DIR: dataDir },
     appConfig: { readAppConfig: async () => ({ agentCliEnv: {} }) as AppConfigPrefs },
     http: {},
     env,
   });
   daemon = createServer(app);
+  lifecycles.set(daemon, lifecycle);
   baseUrl = `http://127.0.0.1:${(await listen(daemon)).port}`;
 };
 
 afterEach(async () => {
   vi.useRealTimers();
   vi.restoreAllMocks();
-  daemon.closeAllConnections();
+  daemon?.closeAllConnections();
   await close(daemon);
   // A stalled reply never ends on its own; `close` would wait for it forever.
   upstream?.closeAllConnections();

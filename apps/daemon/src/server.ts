@@ -9293,7 +9293,7 @@ export async function startServer({
     authorizeProjectToolRequest,
   });
 
-  registerVelaRoutes(app, {
+  const velaRoutesLifecycle = registerVelaRoutes(app, {
     paths: { RUNTIME_DATA_DIR },
     appConfig: { readAppConfig },
     http: { getPublicBaseUrl },
@@ -18047,7 +18047,7 @@ export async function startServer({
   //   - `apps/daemon/sidecar/server.ts`     → expects `{ url, server }`
   //   - `apps/daemon/tests/version-route.test.ts` → expects `{ url, server }`
   return await new Promise((resolve, reject) => {
-    let daemonShutdownStarted = false;
+    let daemonShutdownPromise: Promise<void> | null = null;
     const clearTerminalTelemetryFallbackTimers = () => {
       for (const timer of terminalTelemetryFallbackTimers) clearTimeout(timer);
       terminalTelemetryFallbackTimers.clear();
@@ -18084,23 +18084,26 @@ export async function startServer({
       collabPublishWatcher.dispose();
       collabCloud?.dispose();
     };
-    const shutdownDaemonRuns = async () => {
-      if (daemonShutdownStarted) return;
-      daemonShutdownStarted = true;
-      daemonShuttingDown = true;
-      amrTerminalReportDelivery.stop();
-      clearTerminalTelemetryFallbackTimers();
-      const shutdownGraceMs = resolveChatRunShutdownGraceMs();
-      await design.runs.shutdownActive({ graceMs: shutdownGraceMs });
-      // Cleanup runs independently of user terminal classification. Give
-      // confirmed closed writers at most three additional seconds at shutdown.
-      const cleanupDrain = await codexThreadCleanupOwner.drain(shutdownGraceMs);
-      if (cleanupDrain.pending > 0) {
-        console.warn('[codex] closed-thread cleanup shutdown deadline reached', cleanupDrain);
-      }
-      await terminalService.shutdownActive();
-      await browserSessionService.shutdownActive();
-      await design.analytics.shutdown();
+    const shutdownDaemonRuns = (): Promise<void> => {
+      if (daemonShutdownPromise) return daemonShutdownPromise;
+      daemonShutdownPromise = (async () => {
+        daemonShuttingDown = true;
+        await velaRoutesLifecycle.close();
+        amrTerminalReportDelivery.stop();
+        clearTerminalTelemetryFallbackTimers();
+        const shutdownGraceMs = resolveChatRunShutdownGraceMs();
+        await design.runs.shutdownActive({ graceMs: shutdownGraceMs });
+        // Cleanup runs independently of user terminal classification. Give
+        // confirmed closed writers at most three additional seconds at shutdown.
+        const cleanupDrain = await codexThreadCleanupOwner.drain(shutdownGraceMs);
+        if (cleanupDrain.pending > 0) {
+          console.warn('[codex] closed-thread cleanup shutdown deadline reached', cleanupDrain);
+        }
+        await terminalService.shutdownActive();
+        await browserSessionService.shutdownActive();
+        await design.analytics.shutdown();
+      })();
+      return daemonShutdownPromise;
     };
     let server;
     try {

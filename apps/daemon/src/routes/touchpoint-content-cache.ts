@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { TouchpointReplayAuthority, writeAuthorityFile, syncAuthorityDirectory } from '../storage/touchpoint-replay-authority.js';
 
 import {
   touchpointCachedIdentityOf,
@@ -45,11 +46,13 @@ import {
  * only from the last thing the server itself said, inside the window the server
  * itself set.
  *
- * Every operation is best-effort by construction. A miss, an unreadable file, a
+ * Content assembly remains best-effort. Production authority admission requires
+ * durable pre-dispatch evidence; a failed journal/ownership check refuses the
+ * protected request. A content miss, an unreadable file, a
  * digest that does not match, a read-only data directory — each one returns
  * `null` (or does nothing) and the caller falls back to the full request it
- * would have made anyway. "The cache broke, so the campaign did not show" must
- * not be a reachable state.
+ * would have made anyway after durable admission. No content failure alone
+ * should suppress an otherwise authorized online campaign.
  */
 
 /**
@@ -64,6 +67,11 @@ export type TouchpointContentKey = Readonly<{
 export type HeldContentRef = Readonly<{ heldContentId: string; heldContentLocale: string }>;
 
 export interface TouchpointContentCache {
+  /** Durable operation marker BEFORE any production request, including events. */
+  beginAuthority(scope: string): string | null;
+  settleAuthority(scope: string, token: string): void;
+  /** Stop mutations/timers and release OS ownership; pending evidence is retained. */
+  close(): void;
   /** The (id, locale) pair to offer upstream for this placement, if one is fully held. */
   held(key: TouchpointContentKey): HeldContentRef | null;
   /** Persisted delivery credential for a cold recheck when no mounted caller supplies one. */
@@ -139,12 +147,11 @@ export interface TouchpointContentCache {
 }
 
 /**
- * Cache-record shape version. A record written by another version is ignored,
- * not migrated — so the OPEND-3436 schedule fields cannot be absent from a
- * record this build is willing to read, and a v1 record simply costs one
- * refetch.
+ * v3 adds journal-generation provenance. Production v2 is explicitly supported
+ * for verified byte reuse, but needs a fresh full/trimmed online authorization
+ * before offline replay. Unknown versions remain cache misses.
  */
-const ASSEMBLY_VERSION = 2;
+const ASSEMBLY_VERSION = 3;
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/u;
 /**
  * One content package is bounded by the same budget the web host enforces.
@@ -170,6 +177,7 @@ type CachedResource = Readonly<{ path: string; digest: string }>;
 type CachedClock = Readonly<{ fetchedAt: number; observedAt: number }>;
 type AssemblyRecord = Readonly<{
   version: number;
+  generation?: string;
   scope: string;
   placementKey: string;
   contentId: string;
@@ -283,6 +291,7 @@ export function createTouchpointContentCache(runtimeDataDir: string): Touchpoint
   // Storage failure cannot turn an authoritative refusal into display authority.
   // A successful fresh grant is the only operation that clears a local block.
   const refusedFiles = new Set<string>();
+  const pendingKeyRefusals = new Map<string, TouchpointContentKey>();
   const refusedScopes = new Map<string, Set<string>>();
   const pendingWithdrawals = new Map<string, {
     scope: string;
@@ -302,35 +311,40 @@ export function createTouchpointContentCache(runtimeDataDir: string): Touchpoint
   const assemblyFile = (key: TouchpointContentKey) =>
     path.join(assembliesDirFor(key.scope), `${keyName(key)}.json`);
 
-  const writeFileAtomically = (file: string, data: string | Buffer): void => {
-    const dir = path.dirname(file);
-    fs.mkdirSync(dir, { recursive: true });
-    const temporary = path.join(dir, `.${path.basename(file)}.${process.pid}.${Date.now()}.tmp`);
-    try {
-      fs.writeFileSync(temporary, data);
-      fs.renameSync(temporary, file);
-    } catch (error) {
-      try {
-        fs.rmSync(temporary, { force: true });
-      } catch {
-        /* the temp file is already gone or unremovable; neither changes the outcome */
-      }
-      throw error;
-    }
+  const owners = new Map<string, TouchpointReplayAuthority>();
+  let closed = false;
+  const authority = (scope: string): TouchpointReplayAuthority | null => {
+    if (closed) return null;
+    let owner = owners.get(scope);
+    if (!owner) { owner = new TouchpointReplayAuthority(scopeRoot(scope)); owners.set(scope, owner); }
+    return owner;
   };
+  const owns = (scope: string): boolean => authority(scope)?.generation != null;
+  const undurableRetirements = new Map<string, AssemblyRecord>();
+  const completed = new Map<string, Set<string>>();
+  // A failed owner can be replaced only after every dispatched operation has
+  // finished classification. No old response may write under its successor.
+  const inFlightAuthority = new Map<string, Set<string>>();
+  const writeFileAtomically = writeAuthorityFile;
 
   /** Retire authority before deleting bytes; a failed rename may still permit overwriting the record. */
   const retireReplay = (file: string, record: AssemblyRecord): boolean => {
     refusedFiles.add(file);
+    undurableRetirements.set(file, record);
     const retired = JSON.stringify({ ...record, replayRefused: true });
     try {
       writeFileAtomically(file, retired);
+      undurableRetirements.delete(file);
       return true;
     } catch {
       try {
         // This fallback only removes authority. A partial write is invalid JSON
         // and therefore a cache miss; it can never manufacture a fresh grant.
         fs.writeFileSync(file, retired);
+        const fd = fs.openSync(file, 'r+');
+        try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+        syncAuthorityDirectory(path.dirname(file));
+        undurableRetirements.delete(file);
         return true;
       } catch {
         return false;
@@ -341,7 +355,7 @@ export function createTouchpointContentCache(runtimeDataDir: string): Touchpoint
   const parseAssembly = (file: string, expect?: TouchpointContentKey): AssemblyRecord | null => {
     try {
       const parsed: unknown = JSON.parse(fs.readFileSync(file, 'utf8'));
-      if (!isRecord(parsed) || parsed.version !== ASSEMBLY_VERSION) return null;
+      if (!isRecord(parsed) || (parsed.version !== ASSEMBLY_VERSION && parsed.version !== 2)) return null;
       const record = parsed as unknown as AssemblyRecord;
       if (
         (expect && (record.placementKey !== expect.placementKey || record.scope !== expect.scope)) ||
@@ -457,6 +471,7 @@ export function createTouchpointContentCache(runtimeDataDir: string): Touchpoint
   const unlink = (file: string): void => {
     try {
       fs.rmSync(file, { force: true });
+      syncAuthorityDirectory(path.dirname(file));
     } catch {
       /* a blob that cannot be removed is wasted disk, never a wrong answer */
     }
@@ -516,6 +531,7 @@ export function createTouchpointContentCache(runtimeDataDir: string): Touchpoint
     record: AssemblyRecord,
     requirePersistence = false,
   ): { record: AssemblyRecord; schedule: TouchpointSchedule; now: number } | null => {
+    if (!owns(record.scope)) return null;
     const schedule = record.schedule ? touchpointScheduleOf(record.schedule) : null;
     if (!schedule) return null;
     const anchor = marks.get(file);
@@ -589,8 +605,14 @@ export function createTouchpointContentCache(runtimeDataDir: string): Touchpoint
       () => {
         expiryTimers.delete(file);
         const record = parseAssembly(file);
-        const live = record ? liveRecordIn(file, record) : null;
-        if (live) armExpiry(file, live.schedule, live.now);
+        const alreadyOwned = record ? owners.has(record.scope) : false;
+        try {
+          const live = record ? liveRecordIn(file, record) : null;
+          if (live) armExpiry(file, live.schedule, live.now);
+        } finally {
+          // Expiry-only maintenance must not retain another account's lock.
+          if (record && !alreadyOwned) { owners.get(record.scope)?.close(); owners.delete(record.scope); }
+        }
       },
       Math.min(Math.max(0, remaining), MAX_TIMER_DELAY_MS),
     );
@@ -619,9 +641,9 @@ export function createTouchpointContentCache(runtimeDataDir: string): Touchpoint
    * only when the server gave it AFTER the withdrawal; one that cannot say when
    * it was given cannot prove that, and is refused.
    *
-   * In memory on purpose: the record itself is deleted on withdrawal, so after
-   * a restart there is nothing to resurrect and no in-flight request survives
-   * to try. Bounded so a long-running daemon cannot grow it without limit.
+   * In memory for current-process ordering. Durable retirement and journal
+   * generation recovery prevent replay after a crash even when deletion failed;
+   * no in-flight request survives to repersist an old answer. Bounded so a long-running daemon cannot grow it without limit.
    */
   const revocations = new Map<string, number>();
   // Receipt fences outlive disk cleanup: an uncached locale may still be in flight.
@@ -811,9 +833,40 @@ export function createTouchpointContentCache(runtimeDataDir: string): Touchpoint
   };
 
   sweepExpired();
+  // Startup maintenance has no active request owner. Release its temporary
+  // locks; accessing one account must not reserve every cached account.
+  for (const owner of owners.values()) owner.close();
+  owners.clear();
 
   /** Recover all affected records together, so an unvisited locale cannot revive on restart. */
+  function isRefusalTombstone(file: string, scope: string): boolean {
+    try {
+      const value: unknown = JSON.parse(fs.readFileSync(file, 'utf8'));
+      return isRecord(value) && value.version === ASSEMBLY_VERSION &&
+        value.kind === 'replay-refusal' && value.replayRefused === true && value.scope === scope;
+    } catch { return false; }
+  }
+
   function retryRefusals(scope: string): void {
+    if (!owns(scope)) return;
+    for (const [file, key] of pendingKeyRefusals) {
+      if (key.scope !== scope) continue;
+      const record = parseAssembly(file, key);
+      if (record) {
+        if (retireReplay(file, record)) pendingKeyRefusals.delete(file);
+      } else {
+        // A temporarily unreadable record is not proof of absence. Replace its
+        // exact pathname with a tombstone before permitting journal settlement;
+        // this does not require enumerating other locales or reading old bytes.
+        try {
+          writeFileAtomically(file, JSON.stringify({ version: ASSEMBLY_VERSION, kind: 'replay-refusal', replayRefused: true, scope }));
+          pendingKeyRefusals.delete(file);
+        } catch { /* retain the obligation until durable replacement succeeds */ }
+      }
+    }
+    for (const [file, record] of [...undurableRetirements]) {
+      if (record.scope === scope) retireReplay(file, record);
+    }
     const account = refusedScopes.get(scope);
     const withdrawals = [...pendingWithdrawals.entries()].filter(([, value]) => value.scope === scope);
     if (!account && !withdrawals.length) return;
@@ -831,7 +884,7 @@ export function createTouchpointContentCache(runtimeDataDir: string): Touchpoint
       let persisted = true;
       for (const { file, record } of entries) {
         if (account.has(file)) continue;
-        if (!record) { persisted = false; continue; }
+        if (!record) { if (!isRefusalTombstone(file, scope)) persisted = false; continue; }
         if (record.scope === scope && !retireReplay(file, record)) persisted = false;
       }
       if (persisted) refusedScopes.delete(scope);
@@ -840,7 +893,7 @@ export function createTouchpointContentCache(runtimeDataDir: string): Touchpoint
       let persisted = true;
       for (const { file, record } of entries) {
         if (withdrawal.renewed.has(file)) continue;
-        if (!record) { persisted = false; continue; }
+        if (!record) { if (!isRefusalTombstone(file, scope)) persisted = false; continue; }
         if (record.scope !== scope || record.placementKey !== withdrawal.placementKey ||
           !touchpointWithdrawalReclaims(withdrawal.body, record.identity)) continue;
         if (!retireReplay(file, record)) persisted = false;
@@ -851,13 +904,65 @@ export function createTouchpointContentCache(runtimeDataDir: string): Touchpoint
     }
   }
 
+  const settleCompleted = (scope: string): void => {
+    retryRefusals(scope);
+    if (refusedScopes.has(scope) || [...pendingWithdrawals.values()].some(value => value.scope === scope) ||
+      [...pendingKeyRefusals.values()].some(value => value.scope === scope) ||
+      [...undurableRetirements.values()].some(value => value.scope === scope)) return;
+    const tokens = completed.get(scope);
+    if (!tokens) return;
+    for (const token of [...tokens]) if (authority(scope)?.settle(token)) tokens.delete(token);
+    if (!tokens.size) completed.delete(scope);
+  };
+
   return {
+    beginAuthority(scope) {
+      if (closed) return null;
+      if (!owns(scope)) {
+        if (inFlightAuthority.get(scope)?.size) return null;
+        // A constructor/lock failure or uncertain preflight can recover on the
+        // next request. Reacquiring the OS lock also recovers journal generation;
+        // unresolved prior evidence is never simply cleared in memory.
+        owners.get(scope)?.close();
+        owners.delete(scope);
+        completed.delete(scope);
+        if (!owns(scope)) return null;
+      }
+      settleCompleted(scope);
+      const token = authority(scope)?.begin() ?? null;
+      if (token) {
+        let active = inFlightAuthority.get(scope);
+        if (!active) { active = new Set(); inFlightAuthority.set(scope, active); }
+        active.add(token);
+      }
+      return token;
+    },
+    settleAuthority(scope, token) {
+      const active = inFlightAuthority.get(scope);
+      if (!active?.delete(token)) return;
+      if (!active.size) inFlightAuthority.delete(scope);
+      if (!owns(scope)) return;
+      let tokens = completed.get(scope);
+      if (!tokens) { tokens = new Set(); completed.set(scope, tokens); }
+      tokens.add(token);
+      settleCompleted(scope);
+    },
+    close() {
+      if (closed) return;
+      closed = true;
+      for (const timer of expiryTimers.values()) clearTimeout(timer);
+      expiryTimers.clear();
+      for (const owner of owners.values()) owner.close();
+    },
     activeDecisionId(key) {
+      if (!owns(key.scope)) return null;
       const id = readAssembly(key)?.identity?.touchpointDecisionId;
       return typeof id === 'string' && id ? id : null;
     },
 
     held(key) {
+      if (!owns(key.scope)) return null;
+      settleCompleted(key.scope);
       retryRefusals(key.scope);
       const record = readAssembly(key);
       if (!record) return null;
@@ -873,6 +978,7 @@ export function createTouchpointContentCache(runtimeDataDir: string): Touchpoint
     },
 
     reassemble(key, held, trimmed, ticket, requestElapsedMs = 0) {
+      if (!owns(key.scope)) return null;
       const clock = responseClock(requestElapsedMs);
       const record = readAssembly(key);
       if (!record || !recordStillHolds(record, held)) return null;
@@ -893,6 +999,10 @@ export function createTouchpointContentCache(runtimeDataDir: string): Touchpoint
     finishTicket(ticket) { activeTickets.delete(ticket); },
 
     replayOffline(key, reason) {
+      if (!owns(key.scope)) return null;
+      settleCompleted(key.scope);
+      const eligible = readAssembly(key);
+      if (!eligible || eligible.version !== ASSEMBLY_VERSION || eligible.generation !== authority(key.scope)?.generation) return null;
       retryRefusals(key.scope);
       if (replayPauses.has(placementFenceName(key))) return null;
       const file = assemblyFile(key);
@@ -930,6 +1040,7 @@ export function createTouchpointContentCache(runtimeDataDir: string): Touchpoint
     },
 
     forgetWithdrawn(key, body) {
+      if (!owns(key.scope)) return false;
       const receipt = touchpointRevocationReceiptOf(body);
       if (receipt) fenceActive(key.scope, key, receipt);
       else {
@@ -965,7 +1076,7 @@ export function createTouchpointContentCache(runtimeDataDir: string): Touchpoint
           const file = path.join(dir, name);
           if (!name.endsWith('.json')) continue;
           const stored = parseAssembly(file);
-          if (!stored) { persisted = false; continue; }
+          if (!stored) { if (!isRefusalTombstone(file, key.scope)) persisted = false; continue; }
           if (stored.scope !== key.scope) continue;
           if (stored.placementKey !== key.placementKey) continue;
           if (!touchpointWithdrawalReclaims(body, stored.identity)) continue;
@@ -1000,6 +1111,7 @@ export function createTouchpointContentCache(runtimeDataDir: string): Touchpoint
 
     remember(key, response, ticket, requestElapsedMs = 0) {
       try {
+        if (!owns(key.scope)) return;
         const clock = responseClock(requestElapsedMs);
         if (requestCannotPersist(key, response, ticket) || overtakenByWithdrawal(key, ticket)) return;
         if (!isRecord(response)) return;
@@ -1065,9 +1177,6 @@ export function createTouchpointContentCache(runtimeDataDir: string): Touchpoint
           pending.push({ dir: blobsDir, digest, data: raw });
           stored.push({ path: resourcePath, digest });
         }
-        for (const blob of pending) {
-          if (!storeBlob(blob.dir, blob.digest, blob.data)) return;
-        }
         const envelope = envelopeOf(response);
         const record: AssemblyRecord = {
           version: ASSEMBLY_VERSION,
@@ -1102,6 +1211,18 @@ export function createTouchpointContentCache(runtimeDataDir: string): Touchpoint
           clock,
           envelope,
         };
+        for (const blob of pending) {
+          let storedBlob = false;
+          try { storedBlob = storeBlob(blob.dir, blob.digest, blob.data); } catch { /* retirement below */ }
+          if (!storedBlob) {
+            // A verified new decision supersedes the previous schedule even
+            // when its bytes cannot be synchronized. Preserve ordering and
+            // block old replay; the operation cannot settle until retirement.
+            retireReplay(assemblyFile(key), record);
+            armExpiryForFresh(assemblyFile(key), record.schedule, Math.max(0, nowEstimate() - clock.fetchedAt));
+            return;
+          }
+        }
         writeFresh(key, record);
       } catch {
         /* A cache that cannot be written changes nothing the caller has to act on. */
@@ -1110,10 +1231,14 @@ export function createTouchpointContentCache(runtimeDataDir: string): Touchpoint
   };
 
   function refuseAuthority(scope: string, key?: TouchpointContentKey): void {
+    if (!owns(scope)) return;
     fenceActive(scope, key);
     if (key !== undefined) {
       fenceInFlight(key);
       refusedFiles.add(assemblyFile(key));
+      pendingKeyRefusals.set(assemblyFile(key), { ...key });
+      retryRefusals(scope);
+      return;
     } else {
       fenceGroup(scopeFenceName(scope));
       // Cover the whole account even if directory enumeration fails or one
@@ -1128,7 +1253,7 @@ export function createTouchpointContentCache(runtimeDataDir: string): Touchpoint
         const file = path.join(dir, name);
         if (key !== undefined && file !== assemblyFile(key)) continue;
         const record = parseAssembly(file);
-        if (!record) { persisted = false; continue; }
+        if (!record) { if (!isRefusalTombstone(file, scope)) persisted = false; continue; }
         if (record.scope !== scope) continue;
         if (!retireReplay(file, record)) persisted = false;
       }
@@ -1148,6 +1273,8 @@ export function createTouchpointContentCache(runtimeDataDir: string): Touchpoint
 
   /** Replace the answer and timer without resetting its request-start anchor. */
   function writeFresh(key: TouchpointContentKey, record: AssemblyRecord): void {
+    if (!owns(key.scope)) return;
+    record = { ...record, version: ASSEMBLY_VERSION, generation: authority(key.scope)!.generation! };
     const file = assemblyFile(key);
     const clock = { ...record.clock, observedAt: Math.max(record.clock.observedAt, nowEstimate()) };
     try {
@@ -1161,6 +1288,8 @@ export function createTouchpointContentCache(runtimeDataDir: string): Touchpoint
       armExpiryForFresh(file, record.schedule, Math.max(0, nowEstimate() - clock.fetchedAt));
       throw error;
     }
+    undurableRetirements.delete(file);
+    pendingKeyRefusals.delete(file);
     refusedFiles.delete(file);
     refusedScopes.get(key.scope)?.add(file);
     for (const withdrawal of pendingWithdrawals.values()) {

@@ -1,10 +1,31 @@
 // OPEND-3436 acceptance probes: local files and virtual clocks only, no sockets.
 import { createHash } from "node:crypto";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { cpSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createTouchpointContentCache } from "../src/routes/touchpoint-content-cache.js";
+import { createTouchpointContentCache as createCache } from "../src/routes/touchpoint-content-cache.js";
+
+// Cache-only cold-start fixtures release the prior owner's OS lock. Real
+// overlapping owners and SIGKILL are covered by the child-process suite.
+const fixtureCaches = new Map<string, ReturnType<typeof createCache>>();
+function createTouchpointContentCache(directory: string) {
+  fixtureCaches.get(directory)?.close();
+  const cache = createCache(directory);
+  fixtureCaches.set(directory, cache);
+  return cache;
+}
+afterEach(() => { for (const cache of fixtureCaches.values()) cache.close(); fixtureCaches.clear(); });
+// Cold persisted-state probes use a separate root so continuing current-process
+// ticket/fence assertions cannot accidentally compete with a second owner.
+function replayFromDisk(candidate: typeof key, reason: Parameters<ReturnType<typeof createCache>['replayOffline']>[1]) {
+  const snapshot = mkdtempSync(path.join(tmpdir(), 'cms-cold-snapshot-'));
+  cpSync(dataDir, snapshot, { recursive: true });
+  const reader = createCache(snapshot);
+  try { return reader.replayOffline(candidate, reason); }
+  finally { reader.close(); rmSync(snapshot, { recursive: true, force: true }); }
+}
+
 
 const T0 = Date.parse("2030-01-01T00:00:00Z");
 const iso = (ms: number) => new Date(T0 + ms).toISOString();
@@ -47,7 +68,7 @@ describe("OPEND-3436 offline cache acceptance", () => {
     expect(stored.identity).toEqual(receipt().receipt);
     expect(stored.clock.fetchedAt).toBe(T0);
     vi.advanceTimersByTime(120_000);
-    const replay = createTouchpointContentCache(dataDir).replayOffline(key, "upstream_unreachable");
+    const replay = replayFromDisk(key, "upstream_unreachable");
     expect(replay?.content).toEqual(body().content);
     expect(replay?.authorizationExpiresAt).toBe(iso(3_600_000));
   });
@@ -71,7 +92,7 @@ describe("OPEND-3436 offline cache acceptance", () => {
     // This is the exact cache API sequence in vela.ts's contentOmitted path.
     expect(cache.reassemble(key, held, shortened)?.endsAt).toBe(iso(90_000));
     vi.advanceTimersByTime(60_001);
-    expect(createTouchpointContentCache(dataDir).replayOffline(key, "upstream_unreachable")).toBeNull();
+    expect(replayFromDisk(key, "upstream_unreachable")).toBeNull();
   });
   it("AC6 a late full response cannot repopulate a revoked version", () => {
     const cache = createTouchpointContentCache(dataDir); const delayedResponse = body();
@@ -80,7 +101,7 @@ describe("OPEND-3436 offline cache acceptance", () => {
     // Another still-connected caller's earlier request completes after the 410.
     // vela.ts remembers every completed full 200; there is no request epoch.
     cache.remember(key, delayedResponse);
-    expect(createTouchpointContentCache(dataDir).replayOffline(key, "upstream_unreachable")).toBeNull();
+    expect(replayFromDisk(key, "upstream_unreachable")).toBeNull();
   });
   it.each([
     ["an empty cache", () => undefined, receipt()],
@@ -93,11 +114,11 @@ describe("OPEND-3436 offline cache acceptance", () => {
     const earlier = cache.ticket(key);
     cache.forgetWithdrawn(key, withdrawal);
     cache.remember(key, body(), earlier);
-    const replay = createTouchpointContentCache(dataDir).replayOffline(key, "upstream_unreachable");
+    const replay = replayFromDisk(key, "upstream_unreachable");
     expect(replay?.deploymentId).not.toBe("deployment-1");
     // A request sent after the 410 is an answer the server gave knowing about it.
     cache.remember(key, { ...body(), serverTime: iso(1) }, cache.ticket(key));
-    expect(createTouchpointContentCache(dataDir).replayOffline(key, "upstream_unreachable")?.deploymentId).toBe("deployment-1");
+    expect(replayFromDisk(key, "upstream_unreachable")?.deploymentId).toBe("deployment-1");
   });
   it("AC6 receipt for the retained UI credential clears the rotated cache credential's same delivery", () => {
     const cache = createTouchpointContentCache(dataDir); cache.remember(key, body());
@@ -105,7 +126,7 @@ describe("OPEND-3436 offline cache acceptance", () => {
     // OPEND-3374 deliberately keeps decision-1 in the mounted UI; its next
     // activeDecisionId asks for decision-1's receipt, while disk has decision-2.
     cache.forgetWithdrawn(key, receipt("decision-1"));
-    expect(createTouchpointContentCache(dataDir).replayOffline(key, "upstream_unreachable")).toBeNull();
+    expect(replayFromDisk(key, "upstream_unreachable")).toBeNull();
   });
   it("AC5 expiry deletes persisted assemblies without another request", () => {
     const cache = createTouchpointContentCache(dataDir); cache.remember(key, { ...body(), endsAt: iso(60_000) });
