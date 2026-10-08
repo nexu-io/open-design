@@ -2,6 +2,7 @@ import { useExperienceError } from '../observability/use-experience-error';
 import { daemonErrorCodeProp, failureDetailProps } from '../analytics/failure-detail';
 import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent as ReactClipboardEvent, type CSSProperties, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import type { ArtifactExportFormat } from '../runtime/chat/artifact-export';
+import { useSharePlan } from './share/useSharePlan';
 import { boundedPublishProgress, ShareTab, type SharePublishFailureKey } from './share/ShareTab';
 import type { ObservedPublicShareLink, ObservedShareUpdateRequest } from './share/observed-public-share-link';
 
@@ -7849,6 +7850,14 @@ function HtmlViewer({
   // Async publish completions must also observe the current streaming state.
   const shareContentStreamingRef = useRef(streaming);
   shareContentStreamingRef.current = streaming;
+
+  const sharePlanState = useSharePlan({
+    projectId, filePath: file.name, workspaceContext,
+    enabled: deployMenuOpen && unifiedActionTab === 'share' && canPublishPublic
+      && !viewerOnly && workspaceActive && fileShareStatus !== 'stopped',
+    contentKey: JSON.stringify([file.mtime, file.size, liveHtml ?? source,
+      streaming, viewerOnly, workspaceActive, canPublishPublic, fileShareStatus]),
+  });
 
   // Owned by the viewer: closing ShareTab neither cancels nor restarts a publish.
   const [publishProgress, setPublishProgress] = useState<number | null>(null);
@@ -17382,6 +17391,7 @@ function HtmlViewer({
                       </SharePanelHeader>
 
                       <ShareTab
+                        sharePlanState={sharePlanState}
                         publicationStatus={fileShareStatus === 'active' || fileShareStatus === 'stopped' ? fileShareStatus : (projectShareHistory?.publications.find(publication => publication.sourceFilePath === file.name)?.status ?? null)}
                         publicationFreshness={fileShareFreshness}
                         updateCurrentFilePublic={updateCurrentFilePublic}
