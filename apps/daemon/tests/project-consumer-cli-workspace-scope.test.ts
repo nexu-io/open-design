@@ -303,6 +303,20 @@ function workspaceFlags(memberId: string): string[] {
 }
 
 describe('project consumer CLI explicit Workspace fixture matrix', () => {
+  it('forwards the selected reasoning level from od run start to the daemon', async () => {
+    requests = [];
+    const result = await runCli([
+      'run', 'start', '--project', 'unbound-project',
+      '--agent', 'claude', '--model', 'claude-haiku-5-5', '--reasoning', 'max',
+      '--daemon-url', baseUrl, '--json',
+    ]);
+    expect(result.code, result.stderr).toBe(0);
+    const request = requests.find((entry) => entry.method === 'POST' && entry.url === '/api/runs');
+    expect(JSON.parse(request!.body)).toMatchObject({
+      agentId: 'claude', model: 'claude-haiku-5-5', reasoning: 'max',
+    });
+  });
+
   it('export addresses a bound project without Workspace flags', async () => {
     requests = [];
     const result = await runCli([

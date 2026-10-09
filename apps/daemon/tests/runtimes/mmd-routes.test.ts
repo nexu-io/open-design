@@ -149,7 +149,7 @@ test('mmd route loader uses HOME default path and keeps Claude fallback models',
       'default',
       'MiniMax-M2.7',
       'gpt-5.4',
-      'sonnet',
+      'claude-haiku-5-5',
     ]);
     assert.ok(ids?.includes('opus'));
     assert.ok(ids?.includes('claude-sonnet-4-5'));
@@ -183,7 +183,7 @@ test('mmd route loader supports explicit file override and safe fallback on bad 
     assert.deepEqual(models?.map((model) => model.id).slice(0, 3), [
       'default',
       'mimo-v2.5',
-      'sonnet',
+      'claude-haiku-5-5',
     ]);
     assert.equal(JSON.stringify(models).includes('sk-secret'), false);
 
@@ -270,7 +270,7 @@ test('claude runtime fetchModels surfaces mmd route models to the picker', async
     assert.deepEqual(models.map((model) => model.id).slice(0, 3), [
       'default',
       'claude-opus-4-6-thinking',
-      'sonnet',
+      'claude-haiku-5-5',
     ]);
     assert.equal(JSON.stringify(models).includes('sk-secret'), false);
   } finally {

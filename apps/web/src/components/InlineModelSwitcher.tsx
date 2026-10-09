@@ -714,6 +714,12 @@ export function InlineModelSwitcher({
       : configuredModelId ?? defaultAgentModelId(currentAgent);
   const currentModelOption =
     currentAgentModels.find((m) => m.id === currentModelId) ?? null;
+  const currentReasoningOptions = currentModelOption?.reasoningOptions ?? currentAgent?.reasoningOptions;
+  const currentReasoningId = currentReasoningOptions?.some(
+    (option) => option.id === effectiveCurrentChoice.reasoning,
+  )
+    ? effectiveCurrentChoice.reasoning!
+    : currentReasoningOptions?.find((option) => option.default)?.id ?? currentReasoningOptions?.[0]?.id ?? '';
   // `agentId` and `agentModels` intentionally retain the last local-agent
   // choice while BYOK is active so switching back restores that choice. Do
   // not let campaign UI read that dormant AMR state: in BYOK mode the visible
@@ -1773,6 +1779,24 @@ export function InlineModelSwitcher({
               ) : null}
             </>
           )}
+
+          {config.mode === 'daemon' && currentAgent && currentReasoningOptions && currentReasoningOptions.length > 0 ? (
+            <label className="inline-switcher__row">
+              <span className="inline-switcher__label">{t('settings.reasoningPicker')}</span>
+              <select
+                className="inline-switcher__select"
+                data-testid="inline-model-switcher-reasoning"
+                value={currentReasoningId}
+                onChange={(event) => onAgentModelChange(currentAgent.id, { reasoning: event.target.value })}
+              >
+                {currentReasoningOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.id === 'default' ? t('settings.modelUsesCliDefault') : option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
 
           <button
             type="button"

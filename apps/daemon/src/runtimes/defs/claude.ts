@@ -1,20 +1,41 @@
 import { agentCapabilities } from '../capabilities.js';
 import { DEFAULT_MODEL_OPTION } from './shared.js';
 import { loadMmdRouteModels } from '../mmd-routes.js';
-import type { RuntimeAgentDef } from '../types.js';
+import type { RuntimeAgentDef, RuntimeModelOption } from '../types.js';
 
-const CLAUDE_FALLBACK_MODELS = [
-  DEFAULT_MODEL_OPTION,
-  { id: 'sonnet', label: 'Sonnet (alias)' },
-  { id: 'opus', label: 'Opus (alias)' },
-  { id: 'haiku', label: 'Haiku (alias)' },
-  { id: 'fable', label: 'Fable (alias)' },
-  { id: 'claude-opus-5', label: 'claude-opus-5' },
-  { id: 'claude-sonnet-5', label: 'claude-sonnet-5' },
-  { id: 'claude-fable-5', label: 'claude-fable-5' },
-  { id: 'claude-opus-4-5', label: 'claude-opus-4-5' },
-  { id: 'claude-sonnet-4-5', label: 'claude-sonnet-4-5' },
-  { id: 'claude-haiku-4-5', label: 'claude-haiku-4-5' },
+// Claude owns alias resolution and account/provider availability. Pinned IDs
+// make the version explicit; aliases remain available for CLI-managed routing.
+// Effort support: https://code.claude.com/docs/en/model-config#adjust-effort-level
+const CLAUDE_EFFORT_OPTIONS: RuntimeModelOption[] = [
+  { id: 'default', label: 'CLI default', default: true },
+  { id: 'low', label: 'Low' },
+  { id: 'medium', label: 'Medium' },
+  { id: 'high', label: 'High' },
+  { id: 'xhigh', label: 'Extra high' },
+  { id: 'max', label: 'Max' },
+];
+const CLAUDE_46_EFFORT_OPTIONS = CLAUDE_EFFORT_OPTIONS.filter((option) => option.id !== 'xhigh');
+
+const CLAUDE_FALLBACK_MODELS: RuntimeModelOption[] = [
+  { ...DEFAULT_MODEL_OPTION, reasoningOptions: CLAUDE_EFFORT_OPTIONS },
+  { id: 'claude-haiku-5-5', label: 'Haiku 5.5', reasoningOptions: CLAUDE_EFFORT_OPTIONS },
+  { id: 'claude-sonnet-5-5', label: 'Sonnet 5.5', reasoningOptions: CLAUDE_EFFORT_OPTIONS },
+  { id: 'claude-opus-5-5', label: 'Opus 5.5', reasoningOptions: CLAUDE_EFFORT_OPTIONS },
+  { id: 'claude-fable-5-1', label: 'Fable 5.1', reasoningOptions: CLAUDE_EFFORT_OPTIONS },
+  { id: 'haiku', label: 'Haiku (CLI alias)', reasoningOptions: CLAUDE_EFFORT_OPTIONS },
+  { id: 'sonnet', label: 'Sonnet (CLI alias)', reasoningOptions: CLAUDE_EFFORT_OPTIONS },
+  { id: 'opus', label: 'Opus (CLI alias)', reasoningOptions: CLAUDE_EFFORT_OPTIONS },
+  { id: 'fable', label: 'Fable (CLI alias)', reasoningOptions: CLAUDE_EFFORT_OPTIONS },
+  { id: 'claude-opus-5', label: 'Opus 5', reasoningOptions: CLAUDE_EFFORT_OPTIONS },
+  { id: 'claude-sonnet-5', label: 'Sonnet 5', reasoningOptions: CLAUDE_EFFORT_OPTIONS },
+  { id: 'claude-fable-5', label: 'Fable 5', reasoningOptions: CLAUDE_EFFORT_OPTIONS },
+  { id: 'claude-opus-4-8', label: 'Opus 4.8', reasoningOptions: CLAUDE_EFFORT_OPTIONS },
+  { id: 'claude-opus-4-7', label: 'Opus 4.7', reasoningOptions: CLAUDE_EFFORT_OPTIONS },
+  { id: 'claude-opus-4-6', label: 'Opus 4.6', reasoningOptions: CLAUDE_46_EFFORT_OPTIONS },
+  { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6', reasoningOptions: CLAUDE_46_EFFORT_OPTIONS },
+  { id: 'claude-opus-4-5', label: 'Opus 4.5', reasoningOptions: [] },
+  { id: 'claude-sonnet-4-5', label: 'Sonnet 4.5', reasoningOptions: [] },
+  { id: 'claude-haiku-4-5', label: 'Haiku 4.5', reasoningOptions: [] },
 ];
 
 export const claudeAgentDef = {
@@ -42,6 +63,7 @@ export const claudeAgentDef = {
       '--forward-subagent-text': 'forwardSubagentText',
       '--agents': 'customAgents',
       '--add-dir': 'addDir',
+      '--effort': 'effort',
     },
     // `--thinking-display` is a real option but it is hidden from both
     // `claude --help` and `claude -p --help`, so the capabilityFlags scan
@@ -99,6 +121,15 @@ export const claudeAgentDef = {
       }
       if (options.model && options.model !== 'default') {
         args.push('--model', options.model);
+      }
+      if (options.reasoning && options.reasoning !== 'default') {
+        if (caps.effort === false) {
+          throw new TypeError('This Claude CLI does not advertise --effort. Update Claude Code or select CLI default reasoning.');
+        }
+        if (!CLAUDE_EFFORT_OPTIONS.some((option) => option.id === options.reasoning)) {
+          throw new TypeError('Unsupported Claude reasoning effort.');
+        }
+        args.push('--effort', options.reasoning);
       }
       const nativeBindings = runtimeContext.nativeBuildPackageBindings ?? [];
       if (nativeBindings.length > 0) {
