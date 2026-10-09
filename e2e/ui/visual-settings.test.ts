@@ -213,3 +213,66 @@ test('[P2] captures the settings BYOK model dropdown surface', async ({ page }) 
   await captureVisual(page, 'visual-settings-byok-model-dropdown');
   await captureVisualTarget(page, 'visual-settings-byok-model-dropdown-popover', [modelSelect, popover]);
 });
+
+test('[P2] captures the settings BYOK Opper surface', async ({ page }) => {
+  await configureVisualPage(page, {
+    config: {
+      mode: 'api',
+      apiKey: 'sk-visual',
+      apiProtocol: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+      agentId: null,
+    },
+  });
+  await gotoVisualHome(page);
+  await gotoVisualWorkspace(page);
+
+  const dialog = await prepareVisualSettingsDialog(page);
+  await byokModeTab(dialog).click();
+  await dialog.getByRole('tab', { name: 'Opper', exact: true }).click();
+  await expect(dialog.getByRole('heading', { name: 'OpenAI API' })).toBeVisible();
+  await expect(dialog.getByLabel('Base URL', { exact: true })).toHaveValue('https://api.opper.ai/v3/compat');
+  await expect(dialog.getByRole('combobox', { name: 'Model', exact: true })).toContainText('claude-sonnet-4-6');
+  await waitForVisualFonts(page);
+
+  await captureVisual(page, 'visual-settings-byok-opper');
+});
+
+test('[P2] captures the settings BYOK Opper preset dropdown', async ({ page }) => {
+  await configureVisualPage(page, {
+    config: {
+      mode: 'api',
+      apiKey: 'sk-visual',
+      apiProtocol: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+      agentId: null,
+    },
+  });
+  await gotoVisualHome(page);
+  await gotoVisualWorkspace(page);
+
+  const dialog = await prepareVisualSettingsDialog(page);
+  await byokModeTab(dialog).click();
+  await dialog.getByRole('tab', { name: 'OpenAI', exact: true }).click();
+  const presetSelect = dialog.getByRole('combobox', { name: 'Provider preset', exact: true });
+  await expect(presetSelect).toBeVisible();
+  await presetSelect.click();
+  const popover = page.getByTestId('settings-byok-provider-preset-popover');
+  await expect(popover).toBeVisible();
+  const opperOption = popover.getByRole('option', { name: 'Opper', exact: true });
+  await opperOption.scrollIntoViewIfNeeded();
+  await expect(opperOption).toBeVisible();
+  await waitForVisualFonts(page);
+
+  await captureVisual(page, 'visual-settings-byok-opper-preset-dropdown');
+  await captureVisualTarget(page, 'visual-settings-byok-opper-preset-dropdown-popover', [presetSelect, popover]);
+
+  await opperOption.click();
+  await expect(popover).toBeHidden();
+  await expect(dialog.getByLabel('Base URL', { exact: true })).toHaveValue('https://api.opper.ai/v3/compat');
+  await expect(dialog.getByRole('combobox', { name: 'Model', exact: true })).toContainText('claude-sonnet-4-6');
+
+  await captureVisual(page, 'visual-settings-byok-opper-preset-selected');
+});
