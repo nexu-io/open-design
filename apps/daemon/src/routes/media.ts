@@ -18,7 +18,7 @@ import type {
   AuthorizeProjectRequest,
   AuthorizeProjectToolRequest,
 } from '../collab/project-request-authority.js';
-import { proxyDispatcherRequestInit } from '../connectionTest.js';
+import { proxyDispatcherRequestInit } from '../http/proxy-dispatcher.js';
 import {
   aihubmixCatalogUrl,
   parseAIHubMixCatalog,

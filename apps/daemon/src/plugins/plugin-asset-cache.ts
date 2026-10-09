@@ -29,6 +29,8 @@ import path from 'node:path';
 
 import { Agent } from 'undici';
 
+import { proxyDispatcherRequestInit } from '../http/proxy-dispatcher.js';
+
 /** Media extensions we are willing to cache + proxy. Anything else (HTML,
  *  CSS, JS, fonts) is intentionally left alone so this surface never becomes a
  *  general-purpose open proxy. */
@@ -252,11 +254,35 @@ export interface PluginAssetCache {
 let sharedSsrfDispatcher: Agent | undefined;
 
 /**
+ * The proxy dispatcher `safeExternalFetch` should use, or `null` when this
+ * environment configures no proxy — neither through the proxy env vars nor
+ * through a system proxy the platform layer can read.
+ *
+ * Built per call, like every other daemon caller of `proxyDispatcherRequestInit`
+ * (see `routes/chat.ts`): the effective configuration also includes the OS
+ * proxy settings, which can change while the daemon runs, so a dispatcher
+ * cached here would silently go stale. Callers own the result and must close it.
+ */
+export function externalFetchDispatcher(
+  env: NodeJS.ProcessEnv = process.env,
+): ReturnType<typeof proxyDispatcherRequestInit> | null {
+  const dispatcher = proxyDispatcherRequestInit(env);
+  return dispatcher.requestInit.dispatcher ? dispatcher : null;
+}
+
+/**
  * Fetch a user-influenced external URL with SSRF protection. Rejects
  * private/loopback/link-local/metadata hosts, bad schemes, and embedded
  * credentials up front (`assertSafePublicUrl`), and pins every outbound
  * connection — including redirect hops, since `follow` re-connects per hop —
  * to a validating DNS lookup so a hostname cannot rebind to a private address.
+ *
+ * When the environment configures a proxy, the request goes through it
+ * instead: the hop to the proxy is itself a loopback connection, so the
+ * address guard cannot apply to it, and the proxy resolves the target host.
+ * `assertSafePublicUrl` still runs either way, so a literal private target or
+ * a non-http(s) scheme is refused in both modes. With no proxy configured the
+ * guard is unchanged.
  *
  * Every daemon fetch of a user-supplied URL must route through this instead of
  * a bare `fetch(url, { redirect: 'follow' })`, so no single call site can
@@ -266,16 +292,29 @@ export async function safeExternalFetch(
   rawUrl: string,
   init: RequestInit = {},
   fetchImpl: typeof fetch = fetch,
+  env: NodeJS.ProcessEnv = process.env,
 ): Promise<Response> {
   assertSafePublicUrl(rawUrl);
+  // `dispatcher` is an undici extension of RequestInit; attach at runtime to
+  // dodge the undici-types vs undici@7 skew (same pattern as the asset cache).
+  const withGuard: RequestInit = { redirect: 'follow', ...init };
+  const proxy = externalFetchDispatcher(env);
+  if (proxy) {
+    (withGuard as { dispatcher?: unknown }).dispatcher = proxy.requestInit.dispatcher;
+    try {
+      return await fetchImpl(rawUrl, withGuard);
+    } finally {
+      // The dispatcher was built for this one fetch, so release it here.
+      // `close()` drains in-flight requests before dropping sockets — it never
+      // aborts one — so the caller can still read the response body.
+      void proxy.close().catch(() => undefined);
+    }
+  }
   if (!sharedSsrfDispatcher) {
     sharedSsrfDispatcher = new Agent({
       connect: { lookup: createValidatingLookup() as unknown as LookupFunction },
     });
   }
-  // `dispatcher` is an undici extension of RequestInit; attach at runtime to
-  // dodge the undici-types vs undici@7 skew (same pattern as the asset cache).
-  const withGuard: RequestInit = { redirect: 'follow', ...init };
   (withGuard as { dispatcher?: unknown }).dispatcher = sharedSsrfDispatcher;
   return fetchImpl(rawUrl, withGuard);
 }
