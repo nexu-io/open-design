@@ -100,9 +100,19 @@ describe("workspace product boundary", () => {
 
   it.skipIf(process.platform === "win32")("rejects non-portable links before changing existing outputs", async () => {
     const f = fixture();
-    writeFileSync(join(f.root, "outside"), "outside\n");
-    symlinkSync(join(f.root, "outside"), join(f.root, "apps/daemon/dist/escape"));
     const archive = exportWorkspaceOutputs(f.root, join(f.root, "export"), [f.output], ["daemon"]);
+    const outside = join(f.root, "outside");
+    writeFileSync(outside, "outside\n");
+    execFileSync("python3", ["-c", [
+      "import os,sys,tarfile",
+      "source,temp,target=sys.argv[1:]",
+      "with tarfile.open(source,'r:gz') as old, tarfile.open(temp,'w:gz') as new:",
+      " for member in old:",
+      "  stream=old.extractfile(member) if member.isfile() else None; new.addfile(member,stream)",
+      " link=tarfile.TarInfo('apps/daemon/dist/escape')",
+      " link.type=tarfile.SYMTYPE; link.linkname=target; new.addfile(link)",
+      "os.replace(temp,source)",
+    ].join("\n"), archive, `${archive}.new`, outside]);
     const descriptor = source(f.root, archive);
     writeFileSync(join(f.root, "apps/daemon/dist/cli.js"), "previous\n");
     await expect(importWorkspaceOutputs(f.root, f.scratch, descriptor)).rejects.toThrow("non-portable link");
