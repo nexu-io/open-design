@@ -175,6 +175,87 @@ async function setup(options: Parameters<typeof stubFetch>[0] = { publishBody: p
   vi.useFakeTimers();
   return { fetch, view };
 }
+
+it('reopens unchanged content with usable controls while the second preflight is pending (OPEND-3536)', async () => {
+  const fallback = stubFetch();
+  const pending = deferred<Response>();
+  let reads = 0;
+  vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    if (String(input).includes('/share-plan')) {
+      reads++;
+      return reads === 1 ? Promise.resolve(Response.json({ fileCount: 1, totalBytes: 100, exceedsSizeLimit: false, exclusions: [] })) : pending.promise;
+    }
+    return fallback(input, init);
+  }));
+  renderProjectFileViewer(teamWorkspaceContext(), props);
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^share$/i })); });
+  await vi.waitFor(() => expect(screen.getByRole('menuitem', { name: /generate and copy link/i })).toBeEnabled());
+  fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+  fireEvent.click(screen.getByRole('button', { name: /^share$/i }));
+  await vi.waitFor(() => expect(reads).toBe(2));
+  expect(screen.getByRole('switch', { name: /link access/i })).toBeEnabled();
+  expect(screen.getByRole('menuitem', { name: /generate and copy link/i })).toBeEnabled();
+});
+
+it.each([false, true])('accepts a click before first preflight, waits, and honors its size block (oversize=%s)', async (oversize) => {
+  const fallback = stubFetch();
+  const pending = deferred<Response>();
+  vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
+    String(input).includes('/share-plan') ? pending.promise : fallback(input, init)));
+  renderProjectFileViewer(teamWorkspaceContext(), props);
+  fireEvent.click(await screen.findByRole('button', { name: /^share$/i }));
+  const generate = await screen.findByRole('menuitem', { name: /generate and copy link/i });
+  expect(generate).toBeEnabled();
+  fireEvent.click(generate);
+  expect(generate).toHaveAttribute('aria-busy', 'true');
+  expect(generate).toBeDisabled();
+  expect(posts(fallback)).toHaveLength(0);
+  await act(async () => { pending.resolve(Response.json({ fileCount: 1, totalBytes: oversize ? SHARE_MAX_TOTAL_BYTES + 1 : 100, exceedsSizeLimit: oversize, exclusions: [] })); });
+  await vi.waitFor(() => expect(posts(fallback)).toHaveLength(oversize ? 0 : 1));
+  if (oversize) expect(generate).toBeDisabled();
+});
+
+it.each(['content', 'file', 'account'] as const)('invalidates the cached plan and queued click when %s changes', async (change) => {
+  const fallback = stubFetch();
+  const pending = deferred<Response>();
+  let reads = 0;
+  vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    if (String(input).includes('/share-plan')) {
+      reads++;
+      return reads === 1 ? Promise.resolve(Response.json({ fileCount: 1, totalBytes: 100, exceedsSizeLimit: false, exclusions: [] })) : pending.promise;
+    }
+    return fallback(input, init);
+  }));
+  const context = teamWorkspaceContext();
+  const view = renderProjectFileViewer(context, props);
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^share$/i })); });
+  const next = change === 'content' ? { ...props, liveHtml: '<html><body>changed</body></html>' }
+    : change === 'file' ? { ...props, file: { ...props.file, name: 'other.html', path: 'other.html' } } : props;
+  view.rerenderWith(next, change === 'account' ? { ...context, workspaceMemberId: 'other-member' } : context);
+  await vi.waitFor(() => expect(reads).toBe(2));
+  fireEvent.click(screen.getByRole('menuitem', { name: /generate and copy link/i }));
+  expect(posts(fallback)).toHaveLength(0);
+  expect(screen.getByRole('menuitem', { name: /uploading/i })).toHaveAttribute('aria-busy', 'true');
+  // A queued click must not publish after the viewer becomes read-only.
+  view.rerenderWith({ ...next, viewerOnly: true }, context);
+  await act(async () => { pending.resolve(Response.json({ fileCount: 1, totalBytes: 100, exceedsSizeLimit: false, exclusions: [] })); });
+  expect(posts(fallback)).toHaveLength(0);
+});
+
+it('retains one queued first-share click across panel close and reopen', async () => {
+  const fallback = stubFetch();
+  const pending = deferred<Response>();
+  vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
+    String(input).includes('/share-plan') ? pending.promise : fallback(input, init)));
+  renderProjectFileViewer(teamWorkspaceContext(), props);
+  fireEvent.click(screen.getByRole('button', { name: /^share$/i }));
+  fireEvent.click(screen.getByRole('menuitem', { name: /generate and copy link/i }));
+  fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+  fireEvent.click(screen.getByRole('button', { name: /^share$/i }));
+  expect(screen.getByRole('menuitem', { name: /uploading/i })).toBeDisabled();
+  await act(async () => { pending.resolve(Response.json({ fileCount: 1, totalBytes: 100, exceedsSizeLimit: false, exclusions: [] })); });
+  await vi.waitFor(() => expect(posts(fallback)).toHaveLength(1));
+});
 it('S15 blocks an over-limit planned file before publish, then rechecks a smaller file on reopen', async () => {
   let totalBytes = SHARE_MAX_TOTAL_BYTES + 1;
   const fetch = stubFetch({ sharePlan: () => ({ fileCount: 1, totalBytes, exceedsSizeLimit: totalBytes > SHARE_MAX_TOTAL_BYTES, exclusions: [] }) });

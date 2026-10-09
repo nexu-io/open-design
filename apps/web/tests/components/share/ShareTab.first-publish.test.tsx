@@ -156,7 +156,7 @@ describe('S1 first-publish visual seam', () => {
     const publish = vi.fn().mockResolvedValue(undefined);
     render(<ShareTab {...firstProps({ projectId: 'p1', filePath: 'index.html', publishCurrentFilePublic: publish })} />);
     const toggle = screen.getByRole('switch', { name: 'fileViewer.linkAccessTitle' });
-    expect(toggle).toBeDisabled();
+    expect(toggle).toBeEnabled();
     await waitFor(() => expect(toggle).toBeEnabled());
     expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.queryByText('fileViewer.sharePlanUnavailable')).toBeNull();
@@ -193,12 +193,14 @@ describe('S1 first-publish visual seam', () => {
     expect(publish).not.toHaveBeenCalled();
   });
 
-  it('keeps the link-access switch disabled only while preflight is pending', async () => {
+  it('keeps link-access selection usable while preflight is pending (OPEND-3536)', async () => {
     let resolveFetch!: (value: unknown) => void;
     vi.stubGlobal('fetch', vi.fn(() => new Promise(resolve => { resolveFetch = resolve; })));
     render(<ShareTab {...firstProps({ projectId: 'p1', filePath: 'index.html' })} />);
     const toggle = screen.getByRole('switch', { name: 'fileViewer.linkAccessTitle' });
-    expect(toggle).toBeDisabled();
+    expect(toggle).toBeEnabled();
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
     resolveFetch({ ok: true, json: async () => ({ fileCount: 1, totalBytes: 4, exceedsSizeLimit: false, exclusions: [] }) });
     await waitFor(() => expect(toggle).toBeEnabled());
   });

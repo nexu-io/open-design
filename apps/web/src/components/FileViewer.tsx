@@ -1,7 +1,9 @@
+import { commentSelectorsMatch, resolveOwnerCommentAnchor } from '../comments/owner-anchor';
 import { useExperienceError } from '../observability/use-experience-error';
 import { daemonErrorCodeProp, failureDetailProps } from '../analytics/failure-detail';
 import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent as ReactClipboardEvent, type CSSProperties, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import type { ArtifactExportFormat } from '../runtime/chat/artifact-export';
+import { useSharePlan } from './share/useSharePlan';
 import { boundedPublishProgress, ShareTab, type SharePublishFailureKey } from './share/ShareTab';
 import type { ObservedPublicShareLink, ObservedShareUpdateRequest } from './share/observed-public-share-link';
 
@@ -296,7 +298,6 @@ import {
   overlayBoundsFromSnapshot,
   planLostAnchorWriteBacks,
   provisionalNextPinNumber,
-  resolveCommentAnchor,
   targetFromSnapshot,
   type AnchorWriteBack,
   type PreviewCommentSnapshot,
@@ -6034,6 +6035,7 @@ function CommentPreviewOverlays({
   activeSlideIndex = null,
   driftLadder = false,
   currentVersion,
+  targetsReady,
   onLostAnchors,
   onOpenComment,
   t,
@@ -6060,6 +6062,8 @@ function CommentPreviewOverlays({
   driftLadder?: boolean;
   /** Current content version, used by the ladder to flag reanchored (older vN). */
   currentVersion?: number;
+  /** An empty map is authoritative only after this preview has reported targets. */
+  targetsReady: boolean;
   /** Team collaboration: persist the durable `lost` capture (last-good position) so the
    *  ghost pin survives reload. Only fires in drift-ladder mode. */
   onLostAnchors?: (writeBacks: AnchorWriteBack[]) => void;
@@ -6082,7 +6086,7 @@ function CommentPreviewOverlays({
           if (driftLadder) {
             // Keep stale/lost comments and carry their state so the marker can
             // badge them, instead of silently dropping a drifted anchor.
-            const resolution = resolveCommentAnchor(comment, liveTargets, currentVersion);
+            const resolution = resolveOwnerCommentAnchor(comment, liveTargets, currentVersion);
             return { comment, markerNumber, snapshot: resolution.snapshot, anchorState: resolution.state };
           }
           return {
@@ -6109,7 +6113,7 @@ function CommentPreviewOverlays({
   // the server COALESCEs too, so this is belt-and-suspenders idempotency.
   const persistedLostRef = useRef<Set<string>>(new Set());
   useEffect(() => {
-    if (!driftLadder || !onLostAnchors) return;
+    if (!targetsReady || !driftLadder || !onLostAnchors) return;
     const plan = planLostAnchorWriteBacks(
       visibleComments.map(({ comment, snapshot, anchorState }) => ({
         comment,
@@ -6120,7 +6124,7 @@ function CommentPreviewOverlays({
     if (fresh.length === 0) return;
     for (const writeBack of fresh) persistedLostRef.current.add(writeBack.commentId);
     onLostAnchors(fresh);
-  }, [driftLadder, onLostAnchors, visibleComments]);
+  }, [targetsReady, driftLadder, onLostAnchors, visibleComments]);
   // `onOpenComment` is an inline arrow from the parent (new identity every
   // render), so read it through a ref to keep the saved-marker memo below from
   // busting. The closure only calls stable state setters, so a current ref read
@@ -6134,7 +6138,7 @@ function CommentPreviewOverlays({
   // comments reuses the whole subtree and React skips reconciling it.
   const savedMarkers = useMemo(
     () =>
-      visibleComments.map(({ comment, markerNumber, snapshot, anchorState }) => {
+      visibleComments.filter(({ comment }) => !driftLadder || comment.id !== activeExistingCommentId || Boolean(activeTarget)).map(({ comment, markerNumber, snapshot, anchorState }) => {
         const bounds = overlayBoundsFromSnapshot(snapshot, scale, overlayOffset);
         const label = commentTargetDisplayName(comment);
         const drifted = anchorState !== 'anchored';
@@ -6172,7 +6176,7 @@ function CommentPreviewOverlays({
           </div>
         );
       }),
-    [visibleComments, scale, overlayOffset, t],
+    [visibleComments, scale, overlayOffset, t, driftLadder, activeExistingCommentId, activeTarget],
   );
   const activeSavedIndex = activeExistingCommentId
     ? comments.findIndex((comment) => comment.id === activeExistingCommentId)
@@ -7850,6 +7854,14 @@ function HtmlViewer({
   const shareContentStreamingRef = useRef(streaming);
   shareContentStreamingRef.current = streaming;
 
+  const sharePlanState = useSharePlan({
+    projectId, filePath: file.name, workspaceContext,
+    enabled: deployMenuOpen && unifiedActionTab === 'share' && canPublishPublic
+      && !viewerOnly && workspaceActive && fileShareStatus !== 'stopped',
+    contentKey: JSON.stringify([file.mtime, file.size, liveHtml ?? source,
+      streaming, viewerOnly, workspaceActive, canPublishPublic, fileShareStatus]),
+  });
+
   // Owned by the viewer: closing ShareTab neither cancels nor restarts a publish.
   const [publishProgress, setPublishProgress] = useState<number | null>(null);
   const publicFileProgressTimerRef = useRef<number | null>(null);
@@ -8069,6 +8081,9 @@ function HtmlViewer({
     if (streaming || viewerOnly || publishingPublicFile) return;
     const requestProjectId = projectId;
     const requestFileName = file.name;
+    const requestAccountScope = workspaceAccountScopedCacheKey(workspaceContext);
+    const requestAccountGeneration = currentWorkspaceAccountGeneration();
+    let confirmedPublication: { sourceFilePath: string; accountScope: string; generation: number } | undefined;
     const requestSeq = ++publicFileRequestSeqRef.current;
     invalidatePublicFileCopy();
     clearPublicFileProgressTimers();
@@ -8098,6 +8113,8 @@ function HtmlViewer({
         publish_duration_ms: Math.round(performance.now() - publishStarted),
       }, publishRequestId);
       // Project-wide, so announce it even if the viewer moved on meanwhile.
+      confirmedPublication = { sourceFilePath: file.path || requestFileName,
+        accountScope: requestAccountScope, generation: requestAccountGeneration };
       if (response.madeTeamVisible) notifyTeamProjectsChanged({ projectId: requestProjectId, kind: 'catalog' });
       const current = publicFileIdentityRef.current;
       if (
@@ -8169,7 +8186,7 @@ function HtmlViewer({
       if (publicFileRequestSeqRef.current === requestSeq) {
         setPublishingPublicFile(false);
         invalidateCommentSyncState(requestProjectId, file.path || requestFileName);
-        notifyProjectShareHistoryChanged(requestProjectId);
+        notifyProjectShareHistoryChanged(requestProjectId, undefined, confirmedPublication);
       }
     }
   }
@@ -8179,6 +8196,9 @@ function HtmlViewer({
       || updateInFlightRef.current || fileShareFreshness !== 'outdated' || fileShareStatus !== 'active') return;
     const requestProjectId = projectId;
     const requestFileName = file.name;
+    const requestAccountScope = workspaceAccountScopedCacheKey(workspaceContext);
+    const requestAccountGeneration = currentWorkspaceAccountGeneration();
+    let confirmedPublication: { sourceFilePath: string; accountScope: string; generation: number } | undefined;
     const requestSeq = ++publicFileRequestSeqRef.current;
     updateInFlightRef.current = true;
     setPublishingPublicFile(true);
@@ -8194,6 +8214,8 @@ function HtmlViewer({
       const current = publicFileIdentityRef.current;
       if (requestSeq !== publicFileRequestSeqRef.current
         || current.projectId !== requestProjectId || current.fileName !== requestFileName) return;
+      confirmedPublication = { sourceFilePath: file.path || requestFileName,
+        accountScope: requestAccountScope, generation: requestAccountGeneration };
       setPublishedFileUrl(response.url ?? '');
       setPublishedFileSlug(response.slug);
       setFileShareFreshness('unknown');
@@ -8238,7 +8260,7 @@ function HtmlViewer({
         updateInFlightRef.current = false;
         setPublishingPublicFile(false);
         invalidateCommentSyncState(requestProjectId, file.path || requestFileName);
-        notifyProjectShareHistoryChanged(requestProjectId);
+        notifyProjectShareHistoryChanged(requestProjectId, undefined, confirmedPublication);
       }
     }
   }
@@ -9288,7 +9310,9 @@ function HtmlViewer({
   // Don't let a pending dismiss outlive the component.
   useEffect(() => cancelHoverCardDismiss, [cancelHoverCardDismiss]);
   const [activePreviewCommentId, setActivePreviewCommentId] = useState<string | null>(null);
+  const [commentLocationIntent, setCommentLocationIntent] = useState(0);
   const [liveCommentTargets, setLiveCommentTargets] = useState<Map<string, PreviewCommentSnapshot>>(() => new Map());
+  const [commentTargetsReadyKey, setCommentTargetsReadyKey] = useState<string | null>(null);
   const liveCommentTargetsRef = useRef(liveCommentTargets);
   const [commentDraft, setCommentDraft] = useState('');
   // Inspect mode shares the iframe selection bridge with comment mode but
@@ -12461,6 +12485,13 @@ function HtmlViewer({
     win.postMessage({ type: 'od:inspect-mode', enabled: inspectMode }, '*');
   }, [inspectMode, srcDoc, useUrlLoadPreview, workspaceActive]);
 
+  const commentTargetsKey = JSON.stringify([file.name, srcDoc, useUrlLoadPreview]);
+  const commentLocateRequestRef = useRef<{ requestId: string; commentId: string; previewKey: string; selector: string; targetId: string | null; scrolled: boolean } | null>(null);
+  const commentLocateSequenceRef = useRef(0);
+  useEffect(() => {
+    setLiveCommentTargets(new Map());
+  }, [commentTargetsKey]);
+
   // Mirror the bridge's `od:comment-targets` broadcast into
   // `liveCommentTargets` whenever EITHER Inspect or Comments mode is
   // active. The boardMode-only useEffect below still handles its
@@ -12476,6 +12507,7 @@ function HtmlViewer({
     if (!workspaceActive) return;
     if (!inspectMode && !boardMode) {
       setLiveCommentTargets((current) => (current.size > 0 ? new Map() : current));
+      setCommentTargetsReadyKey(null);
       return;
     }
     function onMessage(ev: MessageEvent) {
@@ -12487,6 +12519,7 @@ function HtmlViewer({
           }
         | null;
       if (data?.type !== 'od:comment-targets' || !Array.isArray(data.targets)) return;
+      setCommentTargetsReadyKey(commentTargetsKey);
       const next = new Map<string, PreviewCommentSnapshot>();
       data.targets.forEach((item) => {
         const elementId = String(item?.elementId || '');
@@ -12518,7 +12551,7 @@ function HtmlViewer({
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [inspectMode, boardMode, file.name, isOurPreviewIframeSource, workspaceActive]);
+  }, [inspectMode, boardMode, file.name, commentTargetsKey, isOurPreviewIframeSource, workspaceActive]);
 
   useEffect(() => {
     setActiveCommentTarget(null);
@@ -12629,11 +12662,13 @@ function HtmlViewer({
       if (!isOurPreviewIframeSource(ev.source)) return;
       const data = ev.data as (Partial<PreviewCommentSnapshot> & {
         type?: string;
+        requestId?: string;
         targets?: Array<Partial<PreviewCommentSnapshot>>;
         points?: StrokePoint[];
       }) | null;
       if (!data?.type) return;
       if (data.type === 'od:comment-targets' && Array.isArray(data.targets)) {
+        setCommentTargetsReadyKey(commentTargetsKey);
         const next = new Map<string, PreviewCommentSnapshot>();
         data.targets.forEach((item) => {
           const snapshot = snapshotFromData(item);
@@ -12659,9 +12694,44 @@ function HtmlViewer({
         });
         return;
       }
+      if (data.type === 'od:comment-location-missing' || (data.type === 'od:comment-active-target-update' && data.requestId)) {
+        const request = commentLocateRequestRef.current;
+        if (!request || request.requestId !== data.requestId || request.previewKey !== commentTargetsKey) return;
+        if (data.type === 'od:comment-location-missing') {
+          setActiveCommentTarget(null);
+          setHoveredCommentTarget(null);
+          return;
+        }
+        const snapshot = snapshotFromData(data);
+        if (!snapshot.elementId || !isValidCommentOverlayPosition(snapshot.position)) return;
+        if (snapshot.elementId !== request.targetId && !commentSelectorsMatch(snapshot.selector, request.selector)) return;
+        request.targetId = snapshot.elementId;
+        // A tagged reply acknowledges srcDoc's completed locate/scroll. Later
+        // tracking updates must not trigger the URL bridge's initial scroll.
+        request.scrolled = true;
+        setActiveCommentTarget(snapshot);
+        setHoveredCommentTarget(snapshot);
+        setLiveCommentTargets(current => new Map(current).set(snapshot.elementId, snapshot));
+        return;
+      }
       if (data.type === 'od:comment-active-target-update') {
         const snapshot = snapshotFromData(data);
         if (!snapshot.elementId || !isValidCommentOverlayPosition(snapshot.position)) return;
+        const request = commentLocateRequestRef.current;
+        // URL previews still use the daemon's existing bridge. It reports DOM
+        // boxes without request ids; match the current target and use its
+        // existing scroll protocol, without changing daemon or its contract.
+        if (request && request.previewKey === commentTargetsKey && snapshot.elementId === request.targetId) {
+          const height = iframeRef.current?.clientHeight ?? 0;
+          if (!request.scrolled && height > 0 && (snapshot.position.y < 0 || snapshot.position.y + snapshot.position.height > height)) {
+            request.scrolled = true;
+            iframeRef.current?.contentWindow?.postMessage({ type: 'od:preview-scroll-by',
+              left: 0, top: snapshot.position.y + snapshot.position.height / 2 - height / 2 }, '*');
+            return;
+          }
+          setActiveCommentTarget(snapshot);
+          setHoveredCommentTarget(snapshot);
+        }
         // Fires on every pointermove while a target is active — skip the Map
         // clone and the active/hovered state writes when nothing changed, so a
         // steady hover doesn't re-render the whole overlay each frame.
@@ -12778,7 +12848,24 @@ function HtmlViewer({
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [activeCommentTarget, boardMode, boardTool, cancelHoverCardDismiss, commentPortalHost, file.name, isOurPreviewIframeSource, previewComments, requestComposerRetarget, scheduleHoverCardDismiss, workspaceActive]);
+  }, [activeCommentTarget, boardMode, boardTool, cancelHoverCardDismiss, commentPortalHost, file.name, commentTargetsKey, isOurPreviewIframeSource, previewComments, requestComposerRetarget, scheduleHoverCardDismiss, workspaceActive]);
+
+  useEffect(() => {
+    commentLocateRequestRef.current = null;
+    if (!workspaceActive || !boardMode || !collab.enabled || !activePreviewCommentId) return;
+    const comment = previewComments.find(item => item.id === activePreviewCommentId && item.filePath === file.name);
+    if (!comment || comment.elementId.startsWith('pin-') || comment.selectionKind === 'pod') return;
+    setActiveCommentTarget(null);
+    setHoveredCommentTarget(null);
+    if (commentTargetsReadyKey !== commentTargetsKey) return;
+    const requestId = `comment-location-${++commentLocateSequenceRef.current}`;
+    const resolution = resolveOwnerCommentAnchor(comment, liveCommentTargets, collab.publishedVersion ?? undefined);
+    commentLocateRequestRef.current = { requestId, commentId: comment.id, previewKey: commentTargetsKey, selector: comment.selector,
+      targetId: resolution.state !== 'lost' ? resolution.snapshot?.elementId ?? null : null, scrolled: false };
+    iframeRef.current?.contentWindow?.postMessage({ type: 'od:comment-active-target',
+      elementId: comment.elementId, selector: comment.selector, locate: true, requestId }, '*');
+    return () => { commentLocateRequestRef.current = null; };
+  }, [workspaceActive, boardMode, collab.enabled, activePreviewCommentId, commentLocationIntent, previewComments, file.name, commentTargetsKey, commentTargetsReadyKey]);
 
   useEffect(() => {
     if (!workspaceActive || !boardMode || !activeCommentTarget || activeCommentTarget.selectionKind === 'pod') return;
@@ -14300,6 +14387,8 @@ function HtmlViewer({
        * 「关掉 + 再开一次」。
        */
       const target = e.target as Node;
+      // Independently portaled share layers must survive the press until click selects an action.
+      if (target instanceof Element && target.closest('[data-share-overlay-layer]')) return;
       if (anchoredMenuRef.current?.contains(target)) return;
       if (
         menuAnchorId &&
@@ -16644,8 +16733,10 @@ function HtmlViewer({
           ...(typeof comment.slideIndex === 'number' ? { slideIndex: comment.slideIndex } : {}),
         };
         requestComposerRetarget(() => {
-          setActiveCommentTarget(snapshot);
-          setHoveredCommentTarget(snapshot);
+          const needsLocation = collab.enabled && !comment.elementId.startsWith('pin-') && comment.selectionKind !== 'pod';
+          if (needsLocation) setCommentLocationIntent(intent => intent + 1);
+          setActiveCommentTarget(needsLocation ? null : snapshot);
+          setHoveredCommentTarget(needsLocation ? null : snapshot);
           setActivePreviewCommentId(comment.id);
           setCommentDraft(comment.note);
           setQueuedBoardNotes([]);
@@ -17260,14 +17351,13 @@ function HtmlViewer({
                     0.18.0 unified tabs buried Export one level deep and export
                     reach halved); they still share one popover shell so
                     switching between them keeps the menu anchored in place.
-                    Export leads and carries the dark (primary) treatment —
-                    it is the far more used of the two (30-day: ~14k users
-                    exported successfully vs ~0.6k who attempted a deploy). */}
+                    Export keeps the leading slot; Owner C0 gives Share the
+                    dark primary treatment and Export the quiet secondary one. */}
                 {rawCanDownload ? (
                   <button
                     type="button"
                     className={
-                      'chrome-action chrome-action-secondary chrome-action-with-label chrome-action-text-only chrome-action-unified chrome-action-dark' +
+                      `chrome-action chrome-action-secondary chrome-action-with-label chrome-action-text-only chrome-action-unified ${shareEntryStyles.toolbarSecondary}` +
                       (exportReadyNudge ? ' export-ready-nudge' : '')
                     }
                     aria-haspopup="menu"
@@ -17292,22 +17382,8 @@ function HtmlViewer({
                     title={viewerOnly ? viewerOnlyDisabledTitle : !rawCanShare || streaming ? shareUnavailableHint : undefined}
                     onClick={openShareMenu}
                   >
-                    {/* E0: board's upload-arrow glyph (13px), not RemixIcon's
-                        share-forward-line — the icon shape itself differs. */}
-                    <svg
-                      width="13"
-                      height="13"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      aria-hidden="true"
-                      focusable="false"
-                    >
-                      <path d="M12 4v11M7 9l5-5 5 5M5 14v5h14v-5" />
-                    </svg>
+                    {/* Owner C0: share the artifact card's forward-arrow glyph. */}
+                    <RemixIcon name="share-forward-line" size={15} />
                     <span>{shareMenuLabel}</span>
                   </button>
                   {afterExportGuide.noticeId !== null ? (
@@ -17384,6 +17460,7 @@ function HtmlViewer({
                       </SharePanelHeader>
 
                       <ShareTab
+                        sharePlanState={sharePlanState}
                         publicationStatus={fileShareStatus === 'active' || fileShareStatus === 'stopped' ? fileShareStatus : (projectShareHistory?.publications.find(publication => publication.sourceFilePath === file.name)?.status ?? null)}
                         publicationFreshness={fileShareFreshness}
                         updateCurrentFilePublic={updateCurrentFilePublic}
@@ -17859,6 +17936,7 @@ function HtmlViewer({
                   t={t}
                   driftLadder={collab.enabled}
                   currentVersion={collab.publishedVersion ?? undefined}
+                  targetsReady={commentTargetsReadyKey === commentTargetsKey}
                   {...(collab.onLostAnchors ? { onLostAnchors: collab.onLostAnchors } : {})}
                   liveTargets={liveCommentTargets}
                   hoveredTarget={hoveredCommentTarget}
@@ -17878,8 +17956,10 @@ function HtmlViewer({
                       setCommentSidePanelCollapsed(false);
                       setCommentCreateMode(true);
                       setBoardMode(true);
-                      setActiveCommentTarget(snapshot);
-                      setHoveredCommentTarget(snapshot);
+                      const needsLocation = collab.enabled && !comment.elementId.startsWith('pin-') && comment.selectionKind !== 'pod';
+                      if (needsLocation) setCommentLocationIntent(intent => intent + 1);
+                      setActiveCommentTarget(needsLocation ? null : snapshot);
+                      setHoveredCommentTarget(needsLocation ? null : snapshot);
                       setActivePreviewCommentId(comment.id);
                       setCommentDraft(comment.note);
                       setQueuedBoardNotes([]);

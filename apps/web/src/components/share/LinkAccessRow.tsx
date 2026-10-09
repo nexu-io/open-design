@@ -1,4 +1,5 @@
 import styles from './LinkAccessRow.module.css';
+import { Icon } from '../Icon';
 
 /**
  * S1/S4/S13: the "link access" heading row — label + switch + description.
@@ -6,11 +7,12 @@ import styles from './LinkAccessRow.module.css';
  * see AGENTS.md item 3): only the switch's checked/disabled/title/onToggle
  * vary per caller, never the shape.
  */
-export function LinkAccessRow({ label, description, checked, disabled = false, title, onToggle }: {
+export function LinkAccessRow({ label, description, checked, disabled = false, busy = false, title, onToggle }: {
   label: string;
   description: string;
   checked: boolean;
   disabled?: boolean;
+  busy?: boolean;
   title?: string;
   /** Omitted for a purely static/disabled row (e.g. the signed-out card). */
   onToggle?: () => void;
@@ -23,13 +25,16 @@ export function LinkAccessRow({ label, description, checked, disabled = false, t
           type="button"
           role="switch"
           aria-checked={checked}
+          aria-busy={busy || undefined}
           aria-label={label}
           className={`${styles.toggle}${checked ? ` ${styles.toggleOn}` : ''}`}
-          disabled={disabled}
+          disabled={disabled || busy}
           title={title}
           onClick={onToggle}
         >
-          <span className={styles.toggleThumb} aria-hidden="true" />
+          <span className={styles.toggleThumb} aria-hidden="true">
+            {busy ? <Icon name="share-spinner" size={11} strokeWidth={2} className={styles.spinner} /> : null}
+          </span>
         </button>
       </div>
       <p className={styles.description}>{description}</p>
