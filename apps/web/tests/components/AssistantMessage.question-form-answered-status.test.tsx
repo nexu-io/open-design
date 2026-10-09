@@ -106,7 +106,7 @@ describe('a successful clarification turn, after its form is answered', () => {
     );
 
     // run 的末帧是 status:"succeeded" / code:0 / signal:null。屏幕不许说它停过。
-    expect(screen.queryByText('Stopped with unfinished work')).toBeNull();
+    expect(screen.queryByText('Task not finished yet')).toBeNull();
 
     const label = document.querySelector('[data-testid="assistant-label"]')?.textContent ?? '';
     expect(label).not.toMatch(/stopped/i);
@@ -150,7 +150,7 @@ describe('a clarification turn the user stopped', () => {
     );
 
     const label = document.querySelector('[data-testid="assistant-label"]')?.textContent ?? '';
-    expect(label).toContain('Stopped manually');
+    expect(label).toContain('Task stopped');
     expect(screen.queryByText('Completed')).toBeNull();
     // 这四条活是真的没做,出口必须还在 —— 豁免只针对跑到干净终点的那一轮。
     expect(document.querySelector('[data-testid="assistant-continue-remaining"]')).not.toBeNull();

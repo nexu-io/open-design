@@ -1417,6 +1417,7 @@ function AssistantMessageImpl({
                 footerProps={{
                   streaming,
                   hasUnfinishedTodos: unfinishedTodos.length > 0,
+                  unfinishedTodoCount: unfinishedTodos.length,
                   hasEmptyResponse,
                   canceled: message.runStatus === "canceled",
                   preparing,
@@ -1436,6 +1437,7 @@ function AssistantMessageImpl({
               <AssistantFooter
                 streaming={streaming}
                 hasUnfinishedTodos={unfinishedTodos.length > 0}
+                unfinishedTodoCount={unfinishedTodos.length}
                 hasEmptyResponse={hasEmptyResponse}
                 canceled={message.runStatus === "canceled"}
                 preparing={preparing}
@@ -2100,6 +2102,11 @@ function appendRoleModel(label: string, model: string | null): string {
 interface AssistantFooterProps {
   streaming: boolean;
   hasUnfinishedTodos: boolean;
+  /**
+   * 还欠着几项(S24a 正文「本次任务仍有 {N} 项内容未完成。」的 N)。
+   * 和 `hasUnfinishedTodos` 同源(`unfinishedTodos.length`);不传或为 0 就不出那行正文。
+   */
+  unfinishedTodoCount?: number;
   hasEmptyResponse: boolean;
   canceled?: boolean;
   // Pre-output phase: streaming but nothing rendered yet. The label shimmers
@@ -2131,6 +2138,7 @@ interface AssistantFooterProps {
 export function AssistantFooter({
   streaming,
   hasUnfinishedTodos,
+  unfinishedTodoCount = 0,
   hasEmptyResponse,
   canceled = false,
   preparing = false,
@@ -2198,6 +2206,15 @@ export function AssistantFooter({
               ? t("assistant.unfinishedLabel")
               : t("assistant.doneLabel")}
           </span>
+          {/* 产品《报错文案》S24c / S24a(OPEND-2849):这两档的状态词是「标题」,
+              紧跟一句正文。其余各档只有状态词。 */}
+          {!streaming && !hasEmptyResponse && (canceled || (hasUnfinishedTodos && unfinishedTodoCount > 0)) ? (
+            <span className="assistant-label-detail" data-testid="assistant-label-detail">
+              {canceled
+                ? t("assistant.canceledDetail")
+                : t("assistant.unfinishedDetail", { n: unfinishedTodoCount })}
+            </span>
+          ) : null}
         </>
       ) : null}
       {copyMarkdown || onFork || feedbackControls || onContinueRemaining ? (

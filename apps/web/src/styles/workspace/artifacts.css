@@ -2331,6 +2331,15 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
   line-height: 1.35;
   color: var(--text-muted, #6b7280);
 }
+/* 浏览器没能自动打开(产品《报错文案》S32a,OPEND-2849):标题 + 正文两行。 */
+.amr-login-activation__title {
+  display: block;
+  font-weight: 600;
+  color: var(--text, inherit);
+}
+.amr-login-activation__body {
+  display: block;
+}
 .amr-login-activation__actions {
   display: flex;
   flex-wrap: wrap;

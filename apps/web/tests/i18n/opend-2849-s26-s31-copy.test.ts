@@ -86,11 +86,20 @@ describe('OPEND-2849 supplement copy', () => {
     expect(lookup(zh, 'chat.runError.title.localStorageFailure')).toBe('无法保存文件');
   });
 
-  it('browser-not-opened hint uses a full-width comma and is otherwise unchanged (zh-CN, zh-TW)', async () => {
-    const zh = await loadDict('zh-CN');
-    const tw = await loadDict('zh-TW');
-    expect(lookup(zh, 'settings.amrActivationBrowserFailed')).toBe('没能自动打开浏览器，请打开下面的登录页继续。');
-    expect(lookup(tw, 'settings.amrActivationBrowserFailed')).toBe('無法自動開啟瀏覽器，請開啟下方的登入頁繼續。');
+  /*
+   * 第四轮(S32a 整格对齐)把这一句拆成了标题 + 正文两个键,旧键已删;逐字判据在
+   * `opend-2849-round4-copy.test.ts`。这里留着的是上一轮的那条底线:中文里不许再出现半角逗号。
+   */
+  it('browser-not-opened copy has no half-width comma (zh-CN, zh-TW)', async () => {
+    for (const locale of ['zh-CN', 'zh-TW'] as const) {
+      const dict = await loadDict(locale);
+      expect(lookup(dict, 'settings.amrActivationBrowserFailed')).toBeUndefined();
+      for (const key of ['settings.amrActivationBrowserFailedTitle', 'settings.amrActivationBrowserFailedDescription']) {
+        const value = lookup(dict, key);
+        expect(value?.trim()).toBeTruthy();
+        expect(value).not.toContain(',');
+      }
+    }
   });
 });
 

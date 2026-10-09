@@ -7382,6 +7382,7 @@ export function ProjectView({
                 attempt: state.attempt,
                 max: state.max,
                 phase: state.phase,
+                ...(state.cause ? { cause: state.cause } : {}),
               });
             },
             onAgentReconnect: (state: DaemonAgentReconnectState) => {
@@ -9592,6 +9593,7 @@ export function ProjectView({
             attempt: state.attempt,
             max: state.max,
             phase: state.phase,
+            ...(state.cause ? { cause: state.cause } : {}),
           });
         },
         onAgentReconnect: (state: DaemonAgentReconnectState) => {
@@ -13942,6 +13944,7 @@ export function ProjectView({
               onOpenSettings={onOpenSettings}
               amrBalanceCardUsd={amrBalanceCardUsd}
               amrBalanceCardAnchorMessageId={amrBalanceCardAnchorId}
+              amrBalanceAudience={amrBalanceBranch.audience}
               amrBalanceCardUnavailable={amrBalanceFailureWalletUnavailable}
               onAmrBalanceUpgrade={handleAmrBalanceCardUpgrade}
               showByokRecoveryAction={

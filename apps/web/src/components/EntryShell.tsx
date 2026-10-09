@@ -247,6 +247,7 @@ import {
 import { resolveByokModelPreference } from './byok/validation';
 import onboardingSourceStyles from './OnboardingModelSource.module.css';
 import onboardingWelcomeStyles from './OnboardingWelcome.module.css';
+import { AmrActivationHintText } from './AmrActivationHintText';
 
 // Persist the entry nav-rail open/collapsed state so it survives both a
 // home -> project -> home navigation (EntryShell unmounts on the project
@@ -3726,9 +3727,7 @@ function OnboardingView({
             {cloudBusy && amrStatus?.activationUrl && !activationHintClosed ? (
               <div className="amr-login-activation onboarding-cloud__activation" role="group">
                 <span className="amr-login-activation__hint">
-                  {amrStatus.browserOpenFailed
-                    ? t('settings.amrActivationBrowserFailed')
-                    : t('settings.amrActivationHint')}
+                  <AmrActivationHintText browserOpenFailed={Boolean(amrStatus.browserOpenFailed)} />
                 </span>
                 <div className="amr-login-activation__actions">
                   <a

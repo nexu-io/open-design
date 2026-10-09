@@ -168,7 +168,10 @@ describe('文案修订不能更改错误成因和恢复能力', () => {
     const ui = resolveRunFailureUi('AMR_TIER_UPGRADE_REQUIRED', null, 'amr');
     expect(ui.primaryAction).toBe('upgrade');
     expect(ui.secondaryRetry).toBe(true);
-    expect(translate('chat.amrBalanceGate.title')).toBe('升级套餐，继续创作');
+    // 余额闸门弹窗的标题由它自己那一格决定(OPEND-2849:S06「可用额度不足」),
+    // 套餐升级那张卡的标题不能借它、也不能改它。
+    expect(translate('chat.amrBalanceGate.title')).toBe('可用额度不足');
+    expect(translate('chat.runError.title.tierUpgradeRequired')).not.toBe(translate('chat.amrBalanceGate.title'));
   });
 
   it('处理器不支持不会多出无效重试', () => {

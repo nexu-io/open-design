@@ -19,6 +19,7 @@ import {
   notifyWorkspaceBillingRefresh,
   notifyWorkspaceContextRefresh,
 } from '../collab/useWorkspaceContext';
+import { AmrActivationHintText } from './AmrActivationHintText';
 
 const DISMISSED_KEY = 'od.entry.cloudSignInTip.dismissed';
 
@@ -221,9 +222,7 @@ export function CloudSignInTip() {
           {status?.activationUrl ? (
             <div className="amr-login-activation" role="group">
               <span className="amr-login-activation__hint">
-                {status.browserOpenFailed
-                  ? t('settings.amrActivationBrowserFailed')
-                  : t('settings.amrActivationHint')}
+                <AmrActivationHintText browserOpenFailed={Boolean(status.browserOpenFailed)} />
               </span>
               <div className="amr-login-activation__actions">
                 <a

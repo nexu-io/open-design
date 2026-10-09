@@ -237,16 +237,18 @@ function mountUnderApp(container: HTMLElement) {
 }
 
 describe('中断的一轮 · 状态词', () => {
-  it('写的是「已手动停止」,不是「已取消」', () => {
+  it('写的是「任务已停止」,不是「已取消」(OPEND-2849 S24c 换词)', () => {
     // 测试环境默认走 en,所以这里比的是英文档;中文那一档在下面逐字钉。
     const { container } = renderTurn(turn({ runStatus: 'canceled' }));
     const label = container.querySelector('[data-testid="assistant-label"]');
     expect(label?.textContent).toBe(en['assistant.canceledLabel']);
-    expect(en['assistant.canceledLabel']).toBe('Stopped manually');
+    expect(en['assistant.canceledLabel']).toBe('Task stopped');
   });
 
   it('文案落在 `assistant.canceledLabel` 上,逐字与稿子相同', () => {
-    expect(zhCN['assistant.canceledLabel']).toBe('已手动停止');
+    // 产品《报错文案｜精简版》S24c「用户主动停止」:标题「任务已停止」(正文另见 `assistant.canceledDetail`)。
+    expect(zhCN['assistant.canceledLabel']).toBe('任务已停止');
+    expect(zhCN['assistant.canceledDetail']).toBe('本次运行已按你的操作停止。');
   });
 
   it('旧会话同时带 no_result 时仍按手动停止处理,不回退成红色运行失败', () => {
