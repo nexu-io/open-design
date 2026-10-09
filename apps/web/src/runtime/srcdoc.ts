@@ -2268,6 +2268,9 @@ function meaningfulDomFallbackTarget(el) {
     var el = findCommentTargetByIdentity(activeCommentElementId, activeCommentSelector);
     if (!el) return;
     var payload = targetFrom(el, commentEnabled && mode === 'picker' && !inspectEnabled);
+    // Preserve the selector that actually found the saved target, even when
+    // source annotation gives that DOM node a newer attribute identity.
+    try { if (payload && activeCommentSelector && el.matches(activeCommentSelector)) payload.selector = activeCommentSelector; } catch (_) {}
     if (payload) window.parent.postMessage(Object.assign({}, payload, { type: 'od:comment-active-target-update' }), '*');
   }
   function schedulePostActiveCommentTarget(){
@@ -2731,6 +2734,7 @@ function meaningfulDomFallbackTarget(el) {
         if (payload) {
           try { target.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' }); } catch (_) {}
           payload = targetFrom(target, true);
+          try { if (payload && activeCommentSelector && target.matches(activeCommentSelector)) payload.selector = activeCommentSelector; } catch (_) {}
         }
         window.parent.postMessage(payload
           ? Object.assign({}, payload, { type: 'od:comment-active-target-update', requestId: data.requestId })

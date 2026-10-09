@@ -9291,6 +9291,7 @@ function HtmlViewer({
   // Don't let a pending dismiss outlive the component.
   useEffect(() => cancelHoverCardDismiss, [cancelHoverCardDismiss]);
   const [activePreviewCommentId, setActivePreviewCommentId] = useState<string | null>(null);
+  const [commentLocationIntent, setCommentLocationIntent] = useState(0);
   const [liveCommentTargets, setLiveCommentTargets] = useState<Map<string, PreviewCommentSnapshot>>(() => new Map());
   const [commentTargetsReadyKey, setCommentTargetsReadyKey] = useState<string | null>(null);
   const liveCommentTargetsRef = useRef(liveCommentTargets);
@@ -12685,6 +12686,7 @@ function HtmlViewer({
         const snapshot = snapshotFromData(data);
         if (!snapshot.elementId || !isValidCommentOverlayPosition(snapshot.position)) return;
         if (snapshot.elementId !== request.targetId && !commentSelectorsMatch(snapshot.selector, request.selector)) return;
+        request.targetId = snapshot.elementId;
         setActiveCommentTarget(snapshot);
         setHoveredCommentTarget(snapshot);
         setLiveCommentTargets(current => new Map(current).set(snapshot.elementId, snapshot));
@@ -12841,7 +12843,7 @@ function HtmlViewer({
     iframeRef.current?.contentWindow?.postMessage({ type: 'od:comment-active-target',
       elementId: comment.elementId, selector: comment.selector, locate: true, requestId }, '*');
     return () => { commentLocateRequestRef.current = null; };
-  }, [workspaceActive, boardMode, collab.enabled, activePreviewCommentId, previewComments, file.name, commentTargetsKey, commentTargetsReadyKey]);
+  }, [workspaceActive, boardMode, collab.enabled, activePreviewCommentId, commentLocationIntent, previewComments, file.name, commentTargetsKey, commentTargetsReadyKey]);
 
   useEffect(() => {
     if (!workspaceActive || !boardMode || !activeCommentTarget || activeCommentTarget.selectionKind === 'pod') return;
@@ -16708,6 +16710,7 @@ function HtmlViewer({
         };
         requestComposerRetarget(() => {
           const needsLocation = collab.enabled && !comment.elementId.startsWith('pin-') && comment.selectionKind !== 'pod';
+          if (needsLocation) setCommentLocationIntent(intent => intent + 1);
           setActiveCommentTarget(needsLocation ? null : snapshot);
           setHoveredCommentTarget(needsLocation ? null : snapshot);
           setActivePreviewCommentId(comment.id);
@@ -17944,6 +17947,7 @@ function HtmlViewer({
                       setCommentCreateMode(true);
                       setBoardMode(true);
                       const needsLocation = collab.enabled && !comment.elementId.startsWith('pin-') && comment.selectionKind !== 'pod';
+                      if (needsLocation) setCommentLocationIntent(intent => intent + 1);
                       setActiveCommentTarget(needsLocation ? null : snapshot);
                       setHoveredCommentTarget(needsLocation ? null : snapshot);
                       setActivePreviewCommentId(comment.id);

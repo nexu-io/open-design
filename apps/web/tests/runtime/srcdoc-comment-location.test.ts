@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { buildSrcdoc } from '../../src/runtime/srcdoc';
 
 describe('Owner saved-comment DOM location (OPEND-3516)', () => {
-  it('locates an unchanged unannotated H2 by selector before using a reused root id, scrolls, and reports its current box', () => {
+  it.each([false, true])('locates a retained H2 by selector before a reused root id and preserves that selector (annotated=%s)', (annotated) => {
     const dom = new JSDOM('<body><main data-od-id="old-id"><section><h2>Location target</h2></section></main></body>',
       { runScripts: 'outside-only', pretendToBeVisual: true });
     try {
@@ -13,6 +13,7 @@ describe('Owner saved-comment DOM location (OPEND-3516)', () => {
       Object.defineProperty(win, 'parent', { value: { postMessage }, configurable: true });
       let y = 1100;
       const target = win.document.querySelector('h2')!;
+      if (annotated) target.setAttribute('data-od-id', 'new-h2-id');
       const scroll = vi.fn(() => { y = 80; });
       Object.defineProperty(target, 'scrollIntoView', { value: scroll });
       Object.defineProperty(target, 'getBoundingClientRect', { value: () =>
@@ -29,6 +30,7 @@ describe('Owner saved-comment DOM location (OPEND-3516)', () => {
       expect(scroll).toHaveBeenCalledOnce();
       expect(postMessage.mock.calls.map(call => call[0])).toContainEqual(expect.objectContaining({
         type: 'od:comment-active-target-update', requestId: 'old-comment-v1',
+        selector: 'body > main > section > h2',
         position: { x: 20, y: 80, width: 200, height: 40 },
       }));
       postMessage.mockClear();

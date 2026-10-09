@@ -49,6 +49,16 @@ it('rechecks an old lost comment in the DOM, ignores stale location replies and 
   expect(screen.getByTestId('comment-saved-marker-' + comment.elementId)).toHaveStyle({
     left: '20px', top: '80px', width: '200px', height: '40px',
   });
+  // Scrolling away does not change the selected comment id. Clicking its row
+  // again must query/scroll again rather than clearing the marker indefinitely.
+  const locateCount = post.mock.calls.filter(call => call[0]?.locate).length;
+  fireEvent.click(screen.getByTestId('comment-side-item'));
+  expect(post.mock.calls.filter(call => call[0]?.locate)).toHaveLength(locateCount + 1);
+  const repeated = post.mock.calls.map(call => call[0]).filter(data => data?.locate).at(-1);
+  expect(repeated.requestId).not.toBe(request.requestId);
+  await dispatch({ type: 'od:comment-active-target-update', ...comment, elementId: 'current-h2',
+    position: { x: 20, y: 80, width: 200, height: 40 }, requestId: repeated.requestId });
+  expect(screen.getByTestId('comment-active-pin')).toHaveStyle({ top: '80px' });
   view.rerender(tree(html.replace('Location target', 'Updated location target')));
   await dispatch({ type: 'od:comment-active-target-update', ...comment,
     position: { x: 0, y: 0, width: 752, height: 38 }, requestId: request.requestId });
