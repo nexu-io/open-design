@@ -44,11 +44,30 @@ export type PreviewVisualMarkKind = 'click' | 'stroke' | 'click+stroke';
  * The explicit `stale`/`lost` marking is load-bearing: with no injected id,
  * drift must be surfaced, never silently mis-pointed.
  */
-export type PreviewCommentAnchorState =
-  | 'anchored'
-  | 'reanchored'
-  | 'stale'
-  | 'lost';
+export const PREVIEW_COMMENT_ANCHOR_STATES = [
+  'anchored',
+  'reanchored',
+  'stale',
+  'lost',
+] as const;
+
+export type PreviewCommentAnchorState = (typeof PREVIEW_COMMENT_ANCHOR_STATES)[number];
+
+/**
+ * Narrow a persisted value to an anchor state. Storage hands back a bare
+ * string, and the renderer switches on this union to decide between a normal
+ * pin, a "based on older vN" badge, a dashed warning and a ghost pin — so an
+ * unrecognized value must become `undefined` (no drift marking) rather than
+ * flow through as a state nothing matches.
+ */
+export function asPreviewCommentAnchorState(
+  value: unknown,
+): PreviewCommentAnchorState | undefined {
+  return typeof value === 'string'
+    && (PREVIEW_COMMENT_ANCHOR_STATES as readonly string[]).includes(value)
+    ? (value as PreviewCommentAnchorState)
+    : undefined;
+}
 
 /**
  * An image attached to a preview comment. `path` is the project-relative file
@@ -148,6 +167,34 @@ export interface PreviewComment {
   anchoredVersion?: number;
   /** Comment author's workspaceMemberId (for cross-member attribution/display). */
   authorMemberId?: string;
+  /**
+   * Which identity the author holds. Absent means `member` — every comment
+   * written before the share page existed is one.
+   *
+   * A `user` author is someone who opened a share link, signed in, and
+   * commented: they hold a site account but no membership in the owning team,
+   * so `authorMemberId` is absent and `authorAppUserId` carries them instead.
+   */
+  authorKind?: 'member' | 'user';
+  /** The author's account id when `authorKind` is `user`. */
+  authorAppUserId?: string;
+  /**
+   * Display name captured when the comment was written.
+   *
+   * The client previously had no name to render for an author it could not
+   * resolve, and fell back to an id-only anonymous form. It now renders this
+   * instead. The value is a snapshot rather than a live lookup because the
+   * live lookup is the team member directory, which the share page must not
+   * be able to reach — so the name travels with the comment and the two stay
+   * separate channels.
+   */
+  authorDisplayName?: string;
+  /**
+   * Avatar colour seed, keyed on the account rather than the membership.
+   * Display only; `isMine` is decided server-side against the live session,
+   * never by comparing this.
+   */
+  authorKey?: string;
   /**
    * Bbox written back on each successful anchor. The `lost` ghost pin renders
    * here (last known-good position), NOT the creation-time `position`, which

@@ -1,0 +1,26 @@
+/* S5/S13: `.share-status-panel .notice` — UNBOXED (no border, fill, or
+   padding): copy on the left, a fixed-width action on the right. Moved from
+   ShareTab.module.css's `.updateNotice` (2026 refactor: item 3) — same
+   values, now the single owner shared with SignedOutObservedShare and
+   CommentSyncBanner's backfill-retry row. */
+.row {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.row p {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  color: var(--share-text-notice);
+  font-size: 12px;
+  line-height: 18px;
+}

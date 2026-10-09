@@ -1,6 +1,8 @@
 import {
   PUBLIC_FILE_MANUAL_REVOKE_REQUIRED,
+  SHARE_ENTRY_INDEX_CONFLICT,
   workspaceContextHasWorkspaceIdentity,
+  type EntryIndexConflictDetails,
   type PublicFileManualRevokeRequiredData,
   type PublicProjectFilePublication,
   type WorkspaceCollabContext,
@@ -12,15 +14,33 @@ export class PublicFilePublishError extends Error {
     readonly status: number,
     readonly code?: string,
     readonly data?: PublicFileManualRevokeRequiredData,
+    /** Present for a 409 {@link SHARE_ENTRY_INDEX_CONFLICT} refusal. */
+    readonly conflict?: EntryIndexConflictDetails,
   ) {
     super(message);
     this.name = 'PublicFilePublishError';
   }
 }
 
+/** The daemon's entry/index.html conflict details, when that is why publishing was refused. */
+export function publicFileEntryIndexConflict(error: unknown): EntryIndexConflictDetails | null {
+  return error instanceof PublicFilePublishError && error.code === SHARE_ENTRY_INDEX_CONFLICT
+    ? error.conflict ?? null
+    : null;
+}
+
+/** Narrow an untrusted 409 `error.data` to the fields the share panel renders. */
+export function parseEntryIndexConflictDetails(value: unknown): EntryIndexConflictDetails | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const data = value as Record<string, unknown>;
+  if (typeof data.agentPrompt !== 'string' || typeof data.referencedFrom !== 'string'
+    || typeof data.suggestedName !== 'string') return undefined;
+  return data as unknown as EntryIndexConflictDetails;
+}
+
 export function publicFileManualRevokePublication(
   error: unknown,
-): PublicProjectFilePublication | null {
+): Omit<PublicProjectFilePublication, 'url'> & { url: string | null } | null {
   if (
     !(error instanceof PublicFilePublishError)
     || error.code !== PUBLIC_FILE_MANUAL_REVOKE_REQUIRED

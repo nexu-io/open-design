@@ -1,6 +1,6 @@
 import { mkdir } from 'node:fs/promises';
 
-import type { Page } from '@playwright/test';
+import type { Page, Request, Response } from '@playwright/test';
 
 import {
   createCollabCluster,
@@ -512,6 +512,9 @@ test('[P0] two isolated clients converge live content, presence, and owner unsha
         timeout: T.long,
       });
       await clickPreviewToolbarAction(ownerPage, 'board-mode-toggle', /^Comment$/);
+      const initialRead = ownerPage.waitForResponse((response) =>
+        isProjectCommentReadResponse(response, projectId),
+      );
       await clickPreviewToolbarAction(
         ownerPage,
         'comment-panel-toggle',
@@ -523,6 +526,74 @@ test('[P0] two isolated clients converge live content, presence, and owner unsha
           .getByTestId('comment-side-item')
           .filter({ hasText: COLLAB_COMMENT_NOTE }),
       ).toBeVisible({ timeout: T.medium });
+      expect((await initialRead).ok()).toBeTruthy();
+
+      await test.step('keep the collapsed rail unread until it is expanded', async () => {
+        const collapsedReadRequests: string[] = [];
+        const recordCollapsedRead = (request: Request) => {
+          if (isProjectCommentReadRequest(request, projectId)) {
+            collapsedReadRequests.push(request.url());
+          }
+        };
+        ownerPage.on('request', recordCollapsedRead);
+        try {
+          await ownerPage.getByRole('button', { name: /hide comments/i }).click();
+          const collapsedRail = ownerPage.getByTestId('comment-side-collapsed-rail');
+          await expect(collapsedRail).toBeVisible();
+          await expect(ownerPage.getByTestId('comment-side-panel')).toHaveCount(0);
+
+          const response = await memberPage.request.post(
+            `/api/projects/${projectId}/conversations/${memberConversationId}/comments`,
+            {
+              data: {
+                target: COLLAB_COMMENT_TARGET,
+                note: 'Member comment received while the owner rail is collapsed.',
+              },
+              headers: workspaceHeaders(MEMBER),
+              timeout: T.long,
+            },
+          );
+          expect(response.ok(), await response.text()).toBeTruthy();
+          await hub.waitForCommand(
+            (entry) =>
+              entry.memberId === MEMBER.memberId
+              && entry.args[0] === 'collab'
+              && entry.args[1] === 'comment'
+              && entry.args[2] === 'push'
+              && entry.args[3] === projectId,
+            T.medium,
+          );
+          await expect.poll(
+            async () => {
+              const ownerComments = await ownerPage.request.get(
+                `/api/projects/${projectId}/conversations/${ownerConversationId}/comments`,
+                { headers: workspaceHeaders(OWNER), timeout: T.long },
+              );
+              if (!ownerComments.ok()) return [];
+              const body = await ownerComments.json() as {
+                comments?: Array<{ note?: string }>;
+              };
+              return body.comments?.map((comment) => comment.note) ?? [];
+            },
+            { timeout: T.medium },
+          ).toContain('Member comment received while the owner rail is collapsed.');
+          await expect(collapsedRail).toContainText('2', { timeout: T.medium });
+          expect(collapsedReadRequests).toEqual([]);
+
+          const expandedRead = ownerPage.waitForResponse((response) =>
+            isProjectCommentReadResponse(response, projectId),
+          );
+          await collapsedRail.click();
+          await expect(ownerPage.getByTestId('comment-side-panel')).toBeVisible();
+          expect((await expandedRead).ok()).toBeTruthy();
+
+          await ownerPage.keyboard.press('Escape');
+          await expect(ownerPage.getByTestId('comment-side-panel')).toHaveCount(0);
+          await expect(ownerPage.getByTestId('comment-side-collapsed-rail')).toHaveCount(0);
+        } finally {
+          ownerPage.off('request', recordCollapsedRead);
+        }
+      });
     });
 
     const memberDocumentMarker = await memberPage.evaluate(() => {
@@ -1447,6 +1518,15 @@ function addedWorkspaceHeaders(
     'x-od-workspace-member-status': 'active',
     'x-od-workspace-lifecycle-state': 'active',
   };
+}
+
+function isProjectCommentReadRequest(request: Request, projectId: string): boolean {
+  return request.method() === 'PUT'
+    && new URL(request.url()).pathname === `/api/projects/${projectId}/comments/read`;
+}
+
+function isProjectCommentReadResponse(response: Response, projectId: string): boolean {
+  return isProjectCommentReadRequest(response.request(), projectId);
 }
 
 function htmlFor(heading: string): string {

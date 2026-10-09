@@ -698,6 +698,10 @@ if (argv[2] === 'billing' && argv[3] === 'summary') {
     stderr.write('Error: unknown command "billing" for "vela"\n');
     exit(1);
   }
+  if (env.FAKE_VELA_BILLING_STDERR) {
+    stderr.write(`${env.FAKE_VELA_BILLING_STDERR}\n`);
+    exit(1);
+  }
   const delayMs = Number(env.FAKE_VELA_BILLING_DELAY_MS) || 0;
   const finishBilling = () => {
     const tier = env.FAKE_VELA_BILLING_TIER;

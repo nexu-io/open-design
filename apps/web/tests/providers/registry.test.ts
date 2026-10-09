@@ -1,3 +1,4 @@
+import { JSDOM } from 'jsdom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { installMockOpenDesignHost } from '@open-design/host/testing';
 import { advanceWorkspaceAccountGeneration } from '../../src/collab/workspace-identity';
@@ -19,6 +20,7 @@ import {
   deployProjectFile,
   createDesignSystemDraft,
   fetchAgentsStream,
+  fetchPreviewComments,
   fetchCloudflarePagesZones,
   fetchDeployConfig,
   fetchDesignSystemsResult,
@@ -41,10 +43,55 @@ import {
   patchPreviewCommentSortKey,
   patchPreviewCommentStatus,
   updateDeployConfig,
+  COMMENT_PULL_TIMEOUT_MS,
   uploadProjectFiles,
   upsertPreviewComment,
   writeProjectTextFileDetailed,
 } from '../../src/providers/registry';
+
+describe('explicit comment pull in the UI provider', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('uses the same pull endpoint as CLI and preserves local comments when remote is unavailable', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith('/pull')) {
+        return new Response(JSON.stringify({ pulled: true, comments: [{ id: 'visitor' }] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ comments: [{ id: 'local' }] }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    expect(await fetchPreviewComments('p', 'conv', personalWorkspaceContext(), true)).toEqual([{ id: 'visitor' }]);
+    expect(fetchMock).toHaveBeenCalledWith('/api/projects/p/conversations/conv/comments/pull',
+      expect.objectContaining({ method: 'POST' }));
+    fetchMock.mockImplementation(async input => String(input).endsWith('/pull')
+      ? new Response(null, { status: 503 })
+      : new Response(JSON.stringify({ comments: [{ id: 'local' }] }), { status: 200 }));
+    expect(await fetchPreviewComments('p', 'conv', personalWorkspaceContext(), true)).toEqual([{ id: 'local' }]);
+  });
+});
+
+describe('comment pull deadline', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('falls back to the local list when the remote pull outlives its deadline', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith('/pull')) {
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+        });
+      }
+      return Promise.resolve(new Response(JSON.stringify({ comments: [{ id: 'local' }] }), { status: 200 }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const read = fetchPreviewComments('p', 'conv', personalWorkspaceContext(), true);
+    await vi.advanceTimersByTimeAsync(COMMENT_PULL_TIMEOUT_MS);
+    await expect(read).resolves.toEqual([{ id: 'local' }]);
+  });
+});
 
 describe('skill operation diagnostics', () => {
   afterEach(() => {
@@ -1755,10 +1802,7 @@ describe('connectConnector', () => {
   it('renders a fallback link before navigating the auth popup', async () => {
     const replace = vi.fn();
     const authWindow = {
-      document: {
-        title: '',
-        body: { innerHTML: '' },
-      },
+      document: new JSDOM('<body></body>').window.document,
       location: { replace },
       close: vi.fn(),
     };
@@ -1807,10 +1851,7 @@ describe('connectConnector', () => {
 
   it('keeps the popup open with custom auth guidance when initialization fails', async () => {
     const authWindow = {
-      document: {
-        title: '',
-        body: { innerHTML: '' },
-      },
+      document: new JSDOM('<body></body>').window.document,
       location: { replace: vi.fn() },
       close: vi.fn(),
     };
@@ -1885,10 +1926,7 @@ describe('connectConnector', () => {
 
   it('renders an info notice in the popup when the connect response carries no redirect URL', async () => {
     const authWindow = {
-      document: {
-        title: '',
-        body: { innerHTML: '' },
-      },
+      document: new JSDOM('<body></body>').window.document,
       location: { replace: vi.fn() },
       close: vi.fn(),
     };

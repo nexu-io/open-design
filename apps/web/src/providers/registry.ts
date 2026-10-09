@@ -1,8 +1,11 @@
 import {
   PUBLIC_FILE_MANUAL_REVOKE_REQUIRED,
+  SHARE_ENTRY_INDEX_CONFLICT,
   workspaceContextHasTeamIdentity,
   type PublicFileManualRevokeRequiredData,
-  type PublicProjectFilePublication,
+  type ProjectFilePublicShareResponse,
+  type ShareUnpublishResponse,
+  type SharePublishRequest,
 } from '@open-design/contracts';
 import { boundedRequestErrorCode } from '../analytics/workspace';
 import type {
@@ -106,7 +109,7 @@ import {
   workspaceAccountScopedCacheKey,
   currentWorkspaceAccountGeneration,
 } from '../collab/workspace-identity';
-import { PublicFilePublishError } from '../collab/public-file-publish';
+import { parseEntryIndexConflictDetails, PublicFilePublishError } from '../collab/public-file-publish';
 import { clientRequestIdHeaders, withDaemonFailure } from '../analytics/failure-detail';
 
 /**
@@ -148,7 +151,51 @@ export type WebDeployProjectFileResponse = DeployProjectFileResponse;
 export type WebCloudflarePagesDeploySelection = CloudflarePagesDeploySelection;
 export type WebCloudflarePagesZonesResponse = CloudflarePagesZonesResponse;
 
-export type WebPublicProjectFileResponse = PublicProjectFilePublication;
+/**
+ * What the share surfaces need from a durable public-file publication.
+ * `url` is `null` when the daemon has no Viewer origin configured: the file
+ * is still published (and stoppable by `slug`), but there is no link to show.
+ * Consumers must not treat a null `url` as "not published", or the UI would
+ * offer Publish again and upload a duplicate.
+ */
+export interface WebPublicFileShareLink {
+  slug: string;
+  url: string | null;
+  /** Publish only: this publish made a private team-workspace project team-visible. */
+  madeTeamVisible?: true;
+}
+
+function nonEmptyString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value : null;
+}
+
+/** Normalize the POST publish-public body (`SharePublishResponse`). */
+function publicFileShareLinkFromPublish(payload: unknown): WebPublicFileShareLink {
+  const body = (payload && typeof payload === 'object' ? payload : {}) as {
+    receipt?: { slug?: unknown };
+    url?: unknown;
+    madeTeamVisible?: unknown;
+  };
+  const slug = nonEmptyString(body.receipt?.slug);
+  if (!slug) throw new Error('Publish response is missing its receipt slug');
+  return { slug, url: nonEmptyString(body.url), ...(body.madeTeamVisible === true ? { madeTeamVisible: true as const } : {}) };
+}
+
+/** Normalize the GET publish-public body (`ProjectFilePublicShareResponse`):
+ * a live publication with a URL, or one whose link is unavailable (slug only). */
+export function publicFileShareLinkFromRead(payload: unknown): WebPublicFileShareLink | null {
+  const body = (payload && typeof payload === 'object' ? payload : {}) as {
+    publication?: { url?: unknown; slug?: unknown } | null;
+    link?: { status?: unknown } | null;
+    slug?: unknown;
+  };
+  const publicationSlug = nonEmptyString(body.publication?.slug);
+  const publicationUrl = nonEmptyString(body.publication?.url);
+  if (publicationSlug && publicationUrl) return { slug: publicationSlug, url: publicationUrl };
+  const unavailableSlug = nonEmptyString(body.slug);
+  if (body.link?.status === 'unavailable' && unavailableSlug) return { slug: unavailableSlug, url: null };
+  return null;
+}
 
 export function isDeployProviderId(value: unknown): value is WebDeployProviderId {
   return typeof value === 'string' && (DEPLOY_PROVIDER_IDS as readonly string[]).includes(value);
@@ -1526,34 +1573,53 @@ async function prepareConnectorAuthConfig(connectorId: string): Promise<{ status
 }
 
 function openConnectorAuthRedirect(authWindow: Window | null, redirectUrl: string): void {
+  const parsed = new URL(redirectUrl);
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') throw new Error('Invalid connector authorization URL');
+  const safeUrl = parsed.href;
   if (authWindow) {
-    renderConnectorAuthRedirect(authWindow, redirectUrl);
+    renderConnectorAuthRedirect(authWindow, safeUrl);
     try {
-      authWindow.location.replace(redirectUrl);
+      authWindow.location.replace(safeUrl);
       return;
     } catch {
       // Some embedded browsers block async popup navigation. Leave the
       // clickable fallback in the popup so the user can continue.
     }
   }
-  const opened = window.open(redirectUrl, '_blank');
-  if (!opened) window.location.assign(redirectUrl);
+  const opened = window.open(safeUrl, '_blank');
+  if (!opened) window.location.assign(safeUrl);
+}
+
+function connectorAuthPage(authWindow: Window, title: string, body: string, maxWidth: number): HTMLElement {
+  const doc = authWindow.document;
+  doc.title = title;
+  const main = doc.createElement('main');
+  main.style.cssText = "min-height:100vh;display:grid;place-items:center;margin:0;background:#0f1115;color:#f6f7fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;";
+  const content = doc.createElement('div');
+  content.style.cssText = 'display:grid;gap:14px;justify-items:center;text-align:center;padding:32px;';
+  const heading = doc.createElement('div');
+  heading.style.cssText = 'font-size:15px;font-weight:600;';
+  heading.textContent = title;
+  const description = doc.createElement('div');
+  description.style.cssText = `max-width:${maxWidth}px;color:rgba(246,247,251,.72);font-size:13px;line-height:1.5;`;
+  description.textContent = body;
+  content.append(heading, description);
+  main.append(content);
+  doc.body.replaceChildren(main);
+  return content;
 }
 
 function renderConnectorAuthLoading(authWindow: Window | null, copy: { title: string; body: string }): void {
   if (!authWindow) return;
   try {
-    authWindow.document.title = 'Connecting…';
-    authWindow.document.body.innerHTML = `
-      <main style="min-height:100vh;display:grid;place-items:center;margin:0;background:#0f1115;color:#f6f7fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
-        <div style="display:grid;gap:14px;justify-items:center;text-align:center;padding:32px;">
-          <div aria-hidden="true" style="width:28px;height:28px;border-radius:999px;border:3px solid rgba(255,255,255,.22);border-top-color:#fff;animation:od-spin .8s linear infinite;"></div>
-          <div style="font-size:15px;font-weight:600;">${escapeHtmlText(copy.title)}</div>
-          <div style="max-width:300px;color:rgba(246,247,251,.72);font-size:13px;line-height:1.5;">${escapeHtmlText(copy.body)}</div>
-        </div>
-        <style>@keyframes od-spin{to{transform:rotate(360deg)}}</style>
-      </main>
-    `;
+    const content = connectorAuthPage(authWindow, copy.title, copy.body, 300);
+    const spinner = authWindow.document.createElement('div');
+    spinner.setAttribute('aria-hidden', 'true');
+    spinner.style.cssText = 'width:28px;height:28px;border-radius:999px;border:3px solid rgba(255,255,255,.22);border-top-color:#fff;animation:od-spin .8s linear infinite;';
+    content.prepend(spinner);
+    const style = authWindow.document.createElement('style');
+    style.textContent = '@keyframes od-spin{to{transform:rotate(360deg)}}';
+    content.append(style);
   } catch {
     /* Popup may be unavailable or already navigated; ignore. */
   }
@@ -1561,96 +1627,28 @@ function renderConnectorAuthLoading(authWindow: Window | null, copy: { title: st
 
 function renderConnectorAuthInfo(authWindow: Window | null, copy: { title: string; body: string }): void {
   if (!authWindow) return;
-  try {
-    authWindow.document.title = copy.title;
-    authWindow.document.body.innerHTML = `
-      <main style="min-height:100vh;display:grid;place-items:center;margin:0;background:#0f1115;color:#f6f7fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
-        <div style="display:grid;gap:14px;justify-items:center;text-align:center;padding:32px;">
-          <div style="font-size:15px;font-weight:600;">${escapeHtmlText(copy.title)}</div>
-          <div style="max-width:360px;color:rgba(246,247,251,.72);font-size:13px;line-height:1.5;">${escapeHtmlText(copy.body)}</div>
-        </div>
-      </main>
-    `;
-  } catch {
-    /* Popup may be unavailable or already navigated; ignore. */
-  }
+  try { connectorAuthPage(authWindow, copy.title, copy.body, 360); }
+  catch { /* Popup may be unavailable or already navigated; ignore. */ }
 }
 
 function renderConnectorAuthRedirect(authWindow: Window, redirectUrl: string): void {
   try {
-    authWindow.document.title = 'Continue authorization';
-    authWindow.document.body.innerHTML = `
-      <main style="min-height:100vh;display:grid;place-items:center;margin:0;background:#0f1115;color:#f6f7fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
-        <div style="display:grid;gap:14px;justify-items:center;text-align:center;padding:32px;">
-          <div style="font-size:15px;font-weight:600;">Continue authorization</div>
-          <div style="max-width:300px;color:rgba(246,247,251,.72);font-size:13px;line-height:1.5;">If this window does not redirect automatically, use the button below.</div>
-          <a href="${escapeHtmlAttribute(redirectUrl)}" style="display:inline-flex;align-items:center;justify-content:center;min-width:164px;border-radius:8px;padding:9px 14px;background:#df7b56;color:#fff;text-decoration:none;font-size:13px;font-weight:600;">Open Composio</a>
-        </div>
-      </main>
-    `;
+    const content = connectorAuthPage(authWindow, 'Continue authorization',
+      'If this window does not redirect automatically, use the button below.', 300);
+    const link = authWindow.document.createElement('a');
+    link.href = redirectUrl;
+    link.textContent = 'Open Composio';
+    link.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;min-width:164px;border-radius:8px;padding:9px 14px;background:#df7b56;color:#fff;text-decoration:none;font-size:13px;font-weight:600;';
+    content.append(link);
   } catch {
     /* Popup may already be cross-origin; navigation fallback still runs. */
   }
 }
 
-async function readConnectorApiErrorMessage(resp: Response): Promise<string> {
-  try {
-    const payload = await resp.json() as { error?: { message?: string }; message?: string };
-    return payload.error?.message ?? payload.message ?? `Connection failed (${resp.status})`;
-  } catch {
-    return `Connection failed (${resp.status})`;
-  }
-}
-
 function renderConnectorAuthError(authWindow: Window | null, message: string): void {
   if (!authWindow) return;
-  try {
-    authWindow.document.title = 'Connection failed';
-    authWindow.document.body.innerHTML = `
-      <main style="min-height:100vh;display:grid;place-items:center;margin:0;background:#0f1115;color:#f6f7fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
-        <div style="display:grid;gap:14px;justify-items:center;text-align:center;padding:32px;">
-          <div style="font-size:15px;font-weight:600;">Connection failed</div>
-          <div style="max-width:360px;color:rgba(246,247,251,.72);font-size:13px;line-height:1.5;">${escapeHtmlText(message)}</div>
-        </div>
-      </main>
-    `;
-  } catch {
-    /* Popup may be unavailable or already navigated; ignore. */
-  }
-}
-
-function escapeHtmlText(value: string): string {
-  return value.replace(/[&<>]/g, (char) => {
-    switch (char) {
-      case '&':
-        return '&amp;';
-      case '<':
-        return '&lt;';
-      case '>':
-        return '&gt;';
-      default:
-        return char;
-    }
-  });
-}
-
-function escapeHtmlAttribute(value: string): string {
-  return value.replace(/[&<>"']/g, (char) => {
-    switch (char) {
-      case '&':
-        return '&amp;';
-      case '<':
-        return '&lt;';
-      case '>':
-        return '&gt;';
-      case '"':
-        return '&quot;';
-      case "'":
-        return '&#39;';
-      default:
-        return char;
-    }
-  });
+  try { connectorAuthPage(authWindow, 'Connection failed', message, 360); }
+  catch { /* Popup may be unavailable or already navigated; ignore. */ }
 }
 
 export async function disconnectConnector(connectorId: string): Promise<ConnectorDetail | null> {
@@ -1925,11 +1923,11 @@ function parsePublicFileManualRevokeData(
   const data = value as Partial<Record<keyof PublicFileManualRevokeRequiredData, unknown>>;
   if (
     typeof data.projectId !== 'string'
-    || typeof data.url !== 'string'
+    // No Viewer origin configured: the live publication has no URL, only a slug.
+    || (data.url !== null && (typeof data.url !== 'string' || !data.url))
     || typeof data.slug !== 'string'
     || typeof data.fileName !== 'string'
     || !data.projectId
-    || !data.url
     || !data.slug
     || !data.fileName
   ) {
@@ -1937,7 +1935,7 @@ function parsePublicFileManualRevokeData(
   }
   return {
     projectId: data.projectId,
-    url: data.url,
+    url: typeof data.url === 'string' ? data.url : null,
     slug: data.slug,
     fileName: data.fileName,
   };
@@ -1948,7 +1946,8 @@ export async function publishProjectFilePublic(
   fileName: string,
   workspaceContext?: WorkspaceCollabContext | null,
   requestId?: string,
-): Promise<WebPublicProjectFileResponse> {
+  mode?: SharePublishRequest['mode'],
+): Promise<WebPublicFileShareLink> {
   // Carry the active workspace identity so the daemon's `canShareProjectsForRequest`
   // gate (apps/daemon/src/routes/collab-sync.ts) reads the real permission bit
   // instead of falling back to a headerless context read — see
@@ -1957,14 +1956,16 @@ export async function publishProjectFilePublic(
     `/api/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(fileName)}/publish-public`,
     {
       method: 'POST',
-      ...(workspaceContext || requestId
+      ...(workspaceContext || requestId || mode
         ? {
             headers: {
               ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
               ...clientRequestIdHeaders(requestId),
+              ...(mode ? { 'content-type': 'application/json' } : {}),
             },
           }
         : {}),
+      ...(mode ? { body: JSON.stringify({ mode } satisfies SharePublishRequest) } : {}),
     },
   );
   if (!resp.ok) {
@@ -2002,18 +2003,25 @@ export async function publishProjectFilePublic(
         recoveryData?.projectId === projectId && recoveryData.fileName === fileName
           ? recoveryData
           : undefined,
+        code === SHARE_ENTRY_INDEX_CONFLICT ? parseEntryIndexConflictDetails(structuredError?.data) : undefined,
       ),
       { failure: payload?.failure, daemonErrorCode: code },
     );
   }
-  return (await resp.json()) as WebPublicProjectFileResponse;
+  return publicFileShareLinkFromPublish(await resp.json());
 }
 
-export async function fetchProjectFilePublicPublication(
+export async function fetchProjectFileSharePlan(projectId: string, fileName: string, workspaceContext?: WorkspaceCollabContext | null) {
+  const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(fileName)}/share-plan`, { method: 'POST', headers: workspaceContext ? workspaceProjectHeaders(workspaceContext) : undefined });
+  if (!resp.ok) throw new Error(`Share preflight failed (${resp.status})`);
+  return resp.json() as Promise<import('@open-design/contracts').SharePlanSummary>;
+}
+
+export async function fetchProjectFilePublicShareState(
   projectId: string,
   fileName: string,
   workspaceContext?: WorkspaceCollabContext | null,
-): Promise<WebPublicProjectFileResponse | null> {
+): Promise<ProjectFilePublicShareResponse> {
   const resp = await fetch(
     `/api/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(fileName)}/publish-public`,
     workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : undefined,
@@ -2030,8 +2038,17 @@ export async function fetchProjectFilePublicPublication(
           : payload?.message;
     throw new Error(errorMessage || `Fetch publish state failed (${resp.status})`);
   }
-  const payload = (await resp.json()) as { publication?: WebPublicProjectFileResponse | null };
-  return payload.publication ?? null;
+  return (await resp.json()) as ProjectFilePublicShareResponse;
+}
+
+/** Compatibility read for surfaces that only need the link, not its freshness. */
+export async function fetchProjectFilePublicPublication(
+  projectId: string,
+  fileName: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): Promise<WebPublicFileShareLink | null> {
+  const state = await fetchProjectFilePublicShareState(projectId, fileName, workspaceContext);
+  return publicFileShareLinkFromRead(state);
 }
 
 export async function unpublishProjectFilePublic(
@@ -2040,7 +2057,7 @@ export async function unpublishProjectFilePublic(
   slug: string,
   workspaceContext?: WorkspaceCollabContext | null,
   requestId?: string,
-): Promise<{ ok: true; slug: string; fileName: string }> {
+): Promise<ShareUnpublishResponse> {
   const resp = await fetch(
     `/api/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(fileName)}/publish-public`,
     {
@@ -2068,7 +2085,7 @@ export async function unpublishProjectFilePublic(
       daemonErrorCode: typeof payload?.error === 'object' ? payload.error.code : payload?.error,
     });
   }
-  return (await resp.json()) as { ok: true; slug: string; fileName: string };
+  return (await resp.json()) as ShareUnpublishResponse;
 }
 
 export async function checkDeploymentLink(
@@ -2880,20 +2897,41 @@ export async function restoreProjectFileVersion(
   }
 }
 
+/**
+ * Deadline for the remote half of an explicit comment pull. The web runs one
+ * comment-list read at a time, so a daemon pull that stalls (a slow CLI
+ * transport, a long member drain) must not hold every later refresh; past the
+ * deadline the read falls back to the local list, which the daemon keeps
+ * filling and announces with `comment-changed`.
+ */
+export const COMMENT_PULL_TIMEOUT_MS = 15_000;
+
 export async function fetchPreviewComments(
   projectId: string,
   conversationId: string,
   workspaceContext?: WorkspaceCollabContext | null,
+  pullRemote = false,
 ): Promise<PreviewComment[]> {
+  const url = `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/comments`;
+  const headers = workspaceContext ? workspaceProjectHeaders(workspaceContext) : undefined;
+  if (pullRemote && workspaceContext) {
+    const controller = new AbortController();
+    const deadline = setTimeout(() => controller.abort(), COMMENT_PULL_TIMEOUT_MS);
+    try {
+      const remote = await fetch(`${url}/pull`, { method: 'POST', headers, signal: controller.signal });
+      if (remote.ok) {
+        const result = (await remote.json()) as import('@open-design/contracts').ProjectCommentPullResponse;
+        return result.comments;
+      }
+    } catch {
+      // The existing local list stays usable when remote sync is unavailable
+      // or slower than its deadline.
+    } finally {
+      clearTimeout(deadline);
+    }
+  }
   try {
-    const resp = await fetch(
-      `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/comments`,
-      {
-        headers: workspaceContext
-          ? workspaceProjectHeaders(workspaceContext)
-          : undefined,
-      },
-    );
+    const resp = await fetch(url, { headers });
     if (!resp.ok) return [];
     const json = (await resp.json()) as { comments: PreviewComment[] };
     return json.comments ?? [];

@@ -446,11 +446,12 @@ function cloudError(res: Response, error: unknown) {
     return sendClassifiedCloudError(res, error.classified);
   }
   const classified = classifyCollabCloudError(error);
-  // The full failure — command line, stderr — is diagnostic gold but must not
-  // reach the renderer; keep it daemon-side.
+  // Log the classification only (OPEND-3520): the raw failure repeats the
+  // spawned command line, whose heartbeat argv carries the member's display
+  // name and activity payload. Neither may reach the renderer or the log.
   console.warn(
     `[od] collab_presence_upstream_failure kind=${classified.kind} status=${classified.status} `
-      + `detail=${JSON.stringify(error instanceof Error ? error.message : String(error))}`,
+      + `upstreamStatus=${classified.upstreamStatus ?? 'none'}`,
   );
   return sendClassifiedCloudError(res, classified);
 }

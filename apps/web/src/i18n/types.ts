@@ -142,6 +142,27 @@ export interface Dict {
   'libraryPicker.add': string;
   'libraryPicker.loading': string;
   'common.save': string;
+  'fileViewer.commentSync.sessionMissing': string;
+  'fileViewer.commentSync.shareStoppedPersonal': string;
+  'fileViewer.commentSync.shareStoppedTeam': string;
+  'fileViewer.commentSync.backfillFailedBody': string;
+  'fileViewer.commentSync.backfillRetryingBody': string;
+  'fileViewer.commentSync.backfillReopenedPendingBody': string;
+  'fileViewer.commentSync.backfillReopenedRetryingBody': string;
+  'fileViewer.commentSync.backfillReopenedTerminalBody': string;
+  'fileViewer.commentSync.backfillTerminalBody': string;
+  'fileViewer.commentSync.backfillPendingBody': string;
+  /** K1 with a known batch size: `{count}` is the initial backfill batch's total comment count. */
+  'fileViewer.commentSync.backfillPendingCountBody': string;
+  /** K4: reopen-resume comment sync busy state, shown in the primary share button itself. */
+  'fileViewer.commentSync.reopenSyncBusy': string;
+  'fileViewer.commentSync.alignFailedBody': string;
+  'fileViewer.shareGuide.title': string;
+  'fileViewer.shareGuide.description': string;
+  'fileViewer.shareGuide.tryShare': string;
+  'fileViewer.shareGuide.neverShowAgain': string;
+  'fileViewer.shareGuide.close': string;
+  'fileViewer.shareGuide.preferenceSaveFailed': string;
   'common.close': string;
   'common.clear': string;
   'common.delete': string;
@@ -174,6 +195,7 @@ export interface Dict {
   'common.justNow': string;
   'common.minutesAgo': string;
   'common.hoursAgo': string;
+  'common.yesterday': string;
   'common.daysAgo': string;
   'common.weeksAgo': string;
   'common.now': string;
@@ -1156,6 +1178,15 @@ export interface Dict {
   'collabPresence.roleOwner': string;
   'collabPresence.roleAdmin': string;
   'collabPresence.roleMember': string;
+  'comment.authorRole.owner': string;
+  'comment.authorRole.admin': string;
+  'comment.authorRole.member': string;
+  'comment.authorRole.sharePage': string;
+  'comment.sharePageCommentReadOnly': string;
+  'comment.unsentDiscardNotice': string;
+  'comment.anchorState.reanchored': string;
+  'comment.anchorState.stale': string;
+  'comment.anchorState.lost': string;
   'collabPresence.viewingFileSelf': string;
   'collabPresence.viewingFileOther': string;
   'collabPresence.viewingProjectSelf': string;
@@ -2485,6 +2516,11 @@ export interface Dict {
   'designs.emptyNoMatch': string;
   'designs.deleteTitle': string;
   'designs.deleteConfirm': string;
+  'designs.deleteActiveShares': string;
+  'designs.deletedShareTitle': string;
+  'designs.deletedShareRetrying': string;
+  'designs.deletedShareFailed': string;
+  'designs.deletedShareRetry': string;
   'designs.cardFreeform': string;
   'designs.badgeLive': string;
   'designs.liveArtifactBadgesAria': string;
@@ -3012,6 +3048,8 @@ export interface Dict {
   'chat.comments.sending': string;
   'chat.comments.edit': string;
   'chat.comments.select': string;
+  'chat.comments.expandBody': string;
+  'chat.comments.collapseBody': string;
   'chat.comments.selectAll': string;
   'chat.comments.deselect': string;
   'chat.comments.nSelected': string;
@@ -3936,6 +3974,7 @@ export interface Dict {
   'fileViewer.exportPptx': string;
   'fileViewer.openInNewTab': string;
   'fileViewer.copyPath': string;
+  'fileViewer.copyingLink': string;
   'fileViewer.copied': string;
   'fileViewer.share': string;
   'fileViewer.binaryMeta': string;
@@ -4160,16 +4199,22 @@ export interface Dict {
   'fileViewer.shareMenuSave': string;
   'fileViewer.shareMenuPublishViaOd': string;
   'fileViewer.unifiedShareAria': string;
+  'fileViewer.moreSharingOptions': string;
   'fileViewer.unifiedShareTab': string;
   'fileViewer.unifiedExportTab': string;
   'fileViewer.unifiedSendTab': string;
   'fileViewer.openFileForHistory': string;
+  'fileViewer.workspaceVisibilityTitle': string;
   'fileViewer.workspaceShareTitle': string;
   'fileViewer.workspaceSharePrivateDescription': string;
   'fileViewer.workspaceShareWorkspaceDescription': string;
   'fileViewer.workspaceAccessPrivate': string;
   'fileViewer.workspaceAccessMembers': string;
   'fileViewer.publishSingleFileTitle': string;
+  'fileViewer.generateAndCopyLink': string;
+  'fileViewer.linkAccessTitle': string;
+  'fileViewer.linkAccessDescription': string;
+  'fileViewer.publicLinkUnavailable': string;
   'fileViewer.publishSingleFileDescription': string;
   'fileViewer.openFileRequired': string;
   'fileViewer.publishFile': string;
@@ -4178,6 +4223,12 @@ export interface Dict {
    *  for the "no loading state, looks like nothing happened" report
    *  (recvqae7v8yMlk). */
   'fileViewer.publishingFile': string;
+  'fileViewer.uploadingFile': string;
+  /** Publish button label while resuming a stopped share (OD-3: was a
+   *  hard-coded Chinese string, `publicationStatus === 'stopped'` branch). */
+  'fileViewer.shareReopening': string;
+  'fileViewer.publishingContinuesOnClose': string;
+  'fileViewer.publishMakesProjectTeamVisible': string;
   'fileViewer.unpublishFile': string;
   /** @deprecated Orphaned (recvqgif6Xa7Wb): rendered the "no team to share
    *  with yet" bridge card with its create-team CTA in the share panel.
@@ -4197,12 +4248,28 @@ export interface Dict {
   'fileViewer.publishFileRequiresTeam': string;
   'fileViewer.publishFileRequiresWorkspace': string;
   'fileViewer.publishFileFailed': string;
+  'fileViewer.shareUpdateHint': string;
+  'fileViewer.shareUpdateLink': string;
+  'fileViewer.signInToUpdate': string;
+  'fileViewer.signInToShare': string;
+  'fileViewer.shareOutdatedSignInHint': string;
+  'fileViewer.signInToShareDescription': string;
+  'fileViewer.shareUpdateSuccess': string;
+  'fileViewer.shareUpdateFailed': string;
+  'fileViewer.shareUpdateUncertain': string;
+  'fileViewer.shareUpdateRetry': string;
+  'fileViewer.unpublishFileFailed': string;
+  'fileViewer.publishFileTooLarge': string;
+  'fileViewer.publishFileEntryIndexConflict': string;
+  'fileViewer.copyFixForAgent': string;
+  'fileViewer.copyFixForAgentFailed': string;
   'fileViewer.workspaceShareSuccess': string;
   'fileViewer.workspaceShareFailed': string;
   'fileViewer.workspaceUnshareSuccess': string;
   'fileViewer.workspaceUnshareFailed': string;
   'fileViewer.readonlySharedNoExport': string;
   'fileViewer.copyShareLink': string;
+  'fileViewer.copyLinkManually': string;
   'fileViewer.openSharePage': string;
   'fileViewer.shareLinkRequiresDeploy': string;
   'fileViewer.shareLinkPublishGuide': string;
@@ -4589,6 +4656,8 @@ export interface Dict {
   'chat.artifact.export': string;
   'chat.artifact.pending': string;
   'chat.artifact.publish': string;
+  'chat.artifact.published': string;
+  'chat.artifact.shareStatusUnknown': string;
   'chat.edge.paused': string;
   'chat.edge.reconnectCta': string;
   'chat.edge.reconnectDetail': string;

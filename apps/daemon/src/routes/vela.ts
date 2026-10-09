@@ -34,7 +34,6 @@ import {
   applyVelaLiveAccount,
   clearAllVelaLiveAccounts,
   clearVelaAuthorizationState,
-  markVelaAuthorizationExpired,
   parseVelaLoginAttribution,
   peekVelaLiveAccount,
   readVelaApiContext,
@@ -60,7 +59,6 @@ import {
   fetchVelaPresetModels,
   fetchVelaRemoteModelsWithRetry,
 } from '../runtimes/defs/amr.js';
-import { classifyAmrAccountFailure } from '../integrations/vela-errors.js';
 import {
   createTouchpointContentCache,
   MAX_CONTENT_BYTES,
@@ -980,10 +978,11 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
         // Keep the refresh throttle as a short negative cache/backoff. /status
         // is read by focus/menu/login surfaces, so a persistent optional
         // billing failure must not make every poll await the same slow probe.
+        // Billing is display-only (OPEND-3553): a failed `vela billing
+        // summary` — even an auth-shaped one — must never expire the AMR
+        // session. Genuine credential expiry is detected by the non-billing
+        // workspace directory path.
         console.warn('[amr] live account fetch failed', err);
-        if (classifyAmrAccountFailure(err instanceof Error ? err.message : String(err))?.code === 'AMR_AUTH_REQUIRED') {
-          markVelaAuthorizationExpired(env, probe.configuredEnv);
-        }
         return null;
       })
       .finally(() => {

@@ -982,7 +982,9 @@ export type DeployPreflightWarningCode =
   | 'external-script'
   | 'external-stylesheet'
   | 'no-doctype'
-  | 'no-viewport';
+  | 'no-viewport'
+  /** The entry would collide with the project's root index.html; deploy is refused with ENTRY_INDEX_CONFLICT. */
+  | 'entry-index-conflict';
 
 export interface DeployPreflightWarning {
   code: DeployPreflightWarningCode;

@@ -7,6 +7,16 @@ import { DesignsTab } from '../../src/components/DesignsTab';
 import { fetchProjectFiles } from '../../src/providers/registry';
 import type { Project } from '../../src/types';
 
+const workspaceContext = vi.hoisted(() => ({
+  workspaceId: 'ws-personal', workspaceType: 'personal', workspaceMemberId: 'wm-1',
+  role: 'owner', memberStatus: 'active', lifecycleState: 'active', permissions: {},
+}));
+
+vi.mock('../../src/collab/useWorkspaceContext', () => ({
+  useWorkspaceContext: () => ({ context: workspaceContext, loading: false, failure: null, refresh: vi.fn() }),
+  useWorkspaceBilling: () => null,
+}));
+
 vi.mock('../../src/providers/registry', () => ({
   deleteLiveArtifact: vi.fn(),
   fetchLiveArtifacts: vi.fn(async () => []),
@@ -33,11 +43,13 @@ const project: Project = {
 };
 
 function stubCoverProbe(status = 200, statusText = 'OK') {
-  const fetchMock = vi.fn(async () => ({
-    ok: status >= 200 && status < 300,
-    status,
-    statusText,
-  }) as Response);
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const projectId = String(input).match(/\/api\/projects\/([^/]+)\/share-state/)?.[1];
+    if (projectId) return new Response(JSON.stringify({
+      projectId, hasEverShared: false, bindingExists: false, publications: [],
+    }), { headers: { 'Content-Type': 'application/json' } });
+    return { ok: status >= 200 && status < 300, status, statusText } as Response;
+  });
   vi.stubGlobal('fetch', fetchMock);
   return fetchMock;
 }
@@ -299,6 +311,7 @@ describe('DesignsTab select mode', () => {
     fireEvent.click(screen.getByRole('button', { name: 'More actions' }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
     const dialog = screen.getByRole('alertdialog');
+    await within(dialog).findByText('Delete "Landing refresh"?');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
 
     await waitFor(() => {
@@ -369,6 +382,7 @@ describe('DesignsTab select mode', () => {
     expect(screen.getByText('2 selected')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete selected' }));
+    await waitFor(() => expect(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete selected' })).toBeEnabled());
     fireEvent.click(
       within(screen.getByRole('alertdialog')).getByRole('button', {
         name: 'Delete selected',
@@ -400,6 +414,7 @@ describe('DesignsTab select mode', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Select' }));
       fireEvent.click(screen.getByText('Landing refresh').closest('.design-card') as HTMLElement);
       fireEvent.click(screen.getByRole('button', { name: 'Delete selected' }));
+      await flushDelete();
       fireEvent.click(
         within(screen.getByRole('alertdialog')).getByRole('button', {
           name: 'Delete selected',

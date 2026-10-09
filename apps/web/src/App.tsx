@@ -55,6 +55,8 @@ import {
   memoryToastSubscriptionMode,
 } from './components/MemoryToast';
 import { Toast } from './components/Toast';
+import { DeletedShareNotices } from './components/project-actions/DeletedShareNotices';
+import { useDeletedShareNotices } from './components/project-actions/useDeletedShareNotices';
 import { CenteredLoader } from './components/Loading';
 import { PetOverlay, type PetTaskCenter } from './components/pet/PetOverlay';
 import { buildPetTaskCenter } from './components/pet/taskCenter';
@@ -64,6 +66,8 @@ import {
   type ProjectRenameFenceToken,
   type ProjectNameAuthorityResolution,
 } from './components/ProjectView';
+import type { ObservedPublicShareLink, ObservedShareUpdateRequest } from './components/share/observed-public-share-link';
+import { SignedOutObservedShare } from './components/share/SignedOutObservedShare';
 import { ProjectCreationPendingView } from './components/ProjectCreationPendingView';
 import { projectsForWorkspaceChrome } from './runtime/workspace-chrome-projects';
 import { AmrArtifactUpgradeGate } from './components/AmrArtifactUpgradeGate';
@@ -967,6 +971,7 @@ function AppInner() {
     accountGeneration: number;
   } | null>(null);
   workspaceContextRef.current = workspaceContext;
+  const deletedShares = useDeletedShareNotices(workspaceContext);
   workspaceContextStateRef.current = workspaceContextState;
   const listCurrentWorkspaceProjects = useCallback(
     (options?: { throwOnError?: boolean; workspaceView?: WorkspaceProjectListView }) => {
@@ -1726,6 +1731,17 @@ function AppInner() {
   // globals effect below reads it; the sync effects live next to the
   // other AMR plumbing further down.
   const [amrLoginStatus, setAmrLoginStatus] = useState<VelaLoginStatus | null>(null);
+  // A public URL is a capability. Retain only the last exact active-share GET
+  // observed under this App's authenticated account, in memory, for S13 copy.
+  const [observedPublicShareLink, setObservedPublicShareLink] = useState<
+    (ObservedPublicShareLink & { accountId: string }) | null
+  >(null);
+  const [loginUpdateRequest, setLoginUpdateRequest] = useState<ObservedShareUpdateRequest | null>(null);
+  const loginUpdateNonceRef = useRef(0);
+  const onLoginUpdateRequestHandled = useCallback((nonce: number) => {
+    setLoginUpdateRequest((current) => current?.nonce === nonce ? null : current);
+  }, []);
+
   // Inline AMR auth can invalidate the caller identity and intentionally tear
   // down ProjectView before the login poll reports success. Keep only the
   // exact failed-turn continuation above that authorization lifetime; the
@@ -1780,6 +1796,38 @@ function AppInner() {
   // snapshot updates `agents`, which makes Settings fetch status again and
   // creates a status -> models -> agents request loop.
   const amrLoginStatusRef = useRef<VelaLoginStatus | null>(null);
+  const onObservedPublicShareLink = useCallback((share: ObservedPublicShareLink | null) => {
+    if (share === null) { setObservedPublicShareLink(null); return; }
+    const account = amrLoginStatusRef.current;
+    const currentRoute = routeRef.current;
+    const authority = projectRouteWorkspaceContextRef.current;
+    if (share.status !== 'active' || !share.url || !share.slug
+      || !share.authorizationScopeKey.startsWith('workspace:')
+      || !isAmrSessionAuthenticated(account) || !account?.user?.id
+      || currentRoute.kind !== 'project' || currentRoute.projectId !== share.projectId
+      || (currentRoute.fileName !== null && currentRoute.fileName !== share.filePath)
+      || !authority || authority.workspaceId !== share.workspaceId
+      || authority.workspaceMemberId !== share.workspaceMemberId) return;
+    setObservedPublicShareLink({ ...share, accountId: account.user.id });
+  }, []);
+  useEffect(() => {
+    if (!observedPublicShareLink) return;
+    if (route.kind !== 'project' || route.projectId !== observedPublicShareLink.projectId
+      || (route.fileName !== null && route.fileName !== observedPublicShareLink.filePath)
+      || (isAmrSessionAuthenticated(amrLoginStatus) && amrLoginStatus?.user?.id !== observedPublicShareLink.accountId)) {
+      setObservedPublicShareLink(null);
+    }
+  }, [route, amrLoginStatus, observedPublicShareLink]);
+  useEffect(() => {
+    if (!loginUpdateRequest) return;
+    if (Date.now() > loginUpdateRequest.expiresAt
+      || route.kind !== 'project' || route.projectId !== loginUpdateRequest.link.projectId
+      || (route.fileName !== null && route.fileName !== loginUpdateRequest.link.filePath)
+      || (isAmrSessionAuthenticated(amrLoginStatus) && amrLoginStatus?.user?.id !== loginUpdateRequest.accountId)) {
+      setLoginUpdateRequest(null);
+    }
+  }, [route, amrLoginStatus, loginUpdateRequest]);
+
   const applyAmrLoginStatus = useCallback((
     status: VelaLoginStatus,
     options: { forceModelRefresh?: boolean; restartOnSignIn?: boolean } = {},
@@ -2076,12 +2124,19 @@ function AppInner() {
           || amrLoginStatus?.sessionState === 'reauth_required'
         )
       );
+    // Keep this exact file route only when its public URL was witnessed under
+    // the authenticated workspace. Project reads still fail closed below;
+    // the signed-out surface exposes that URL and no mutation authority.
+    if (observedPublicShareLink && route.kind === 'project'
+      && route.projectId === observedPublicShareLink.projectId
+      && route.fileName === observedPublicShareLink.filePath) return;
     if (!cloudIdentityRejected) return;
     if (route.kind === 'home' && route.view === 'onboarding') return;
     navigate({ kind: 'home', view: 'onboarding' }, { replace: true });
   }, [
     amrLoginStatus,
     config.agentId,
+    observedPublicShareLink,
     config.mode,
     route,
     workspaceContextState.failure,
@@ -3170,10 +3225,7 @@ function AppInner() {
       (input.metadata?.promptTemplate?.prompt?.trim() || undefined);
 
       const metadata = mergeLinkedDirsIntoMetadata(input.metadata, input.linkedDirs);
-      const kind = metadata?.kind ?? null;
       const fidelity = fidelityToTracking(metadata?.fidelity ?? null);
-      const creationSource: 'blank' | 'template' | 'zip' | 'folder' =
-        kind === 'template' ? 'template' : 'blank';
       let createWorkspaceContext: WorkspaceCollabContext | null = null;
       let optimisticProjectId: string | null = input.optimisticProjectId ?? null;
       let result;
@@ -4152,7 +4204,7 @@ function AppInner() {
     // visible, because this call sent no workspace headers at all).
     const mutationContext = workspaceContextRef.current;
     const mutationAccountGeneration = currentWorkspaceAccountGeneration();
-    await deleteProjectApi(id, mutationContext);
+    await deleteProjectApi(id, mutationContext, deletedShares.capture(id, mutationContext, mutationAccountGeneration));
     if (mutationContext) {
       removeProjectFromDisplaySnapshots({
         accountGeneration: mutationAccountGeneration,
@@ -4168,7 +4220,7 @@ function AppInner() {
       navigate({ kind: 'home', view: 'home' });
     }
     return true;
-  }, [clearLocalProject, iframeKeepAlivePool, route]);
+  }, [clearLocalProject, iframeKeepAlivePool, route, deletedShares.capture]);
 
   const handleRenameProject = useCallback(async (id: string, name: string) => {
     const trimmed = name.trim();
@@ -5086,7 +5138,7 @@ function AppInner() {
     });
   }, []);
 
-  const handleTuckPet = useCallback(
+  const _handleTuckPet = useCallback(
     () => handleSetPetEnabled(false),
     [handleSetPetEnabled],
   );
@@ -5469,6 +5521,38 @@ function AppInner() {
         />
       </div>
     ) : null;
+    const signedOutObservedShare = observedPublicShareLink
+      && route.kind === 'project' && route.projectId === observedPublicShareLink.projectId
+      && route.fileName === observedPublicShareLink.filePath
+      && amrLoginStatus?.loggedIn === false && amrLoginStatus.loginInFlight !== true
+      && (activeProject
+        ? activeProject.id === observedPublicShareLink.projectId
+          && activeProject.workspaceId === observedPublicShareLink.workspaceId
+          && projectRouteWorkspaceContext.failure !== undefined
+          && activeProjectWorkspaceContext === null
+        : routeSurfaceState === 'missing')
+        ? observedPublicShareLink : null;
+    const signedOutShareFallback = signedOutObservedShare ? (
+      <div className="entry-shell entry-shell--no-header">
+        <SignedOutObservedShare
+          url={signedOutObservedShare.url}
+          canUpdate={signedOutObservedShare.freshness === 'outdated'}
+          onLoginUpdateSuccess={() => {
+            if (signedOutObservedShare.freshness !== 'outdated') return;
+            setLoginUpdateRequest({
+              nonce: ++loginUpdateNonceRef.current, accountId: signedOutObservedShare.accountId,
+              link: signedOutObservedShare, expiresAt: Date.now() + 60_000,
+            });
+          }}
+        />
+      </div>
+    ) : null;
+    const localObservedShare = observedPublicShareLink
+      && activeProject?.id === observedPublicShareLink.projectId
+      && route.kind === 'project' && route.fileName === observedPublicShareLink.filePath
+      && activeProject.workspaceId === null && activeProjectWorkspaceContext === null
+      && amrLoginStatus?.loggedIn === false && amrLoginStatus.loginInFlight !== true
+        ? observedPublicShareLink : null;
     if (pendingFrame && !pendingCreation?.created) {
       appMain = pendingFrame;
     } else if (
@@ -5490,7 +5574,7 @@ function AppInner() {
       );
     } else if (routeSurfaceState !== 'ready') {
       const canRetry = routeSurfaceState === 'materialization-failed';
-      appMain = pendingFrame ?? (
+      appMain = pendingFrame ?? signedOutShareFallback ?? (
         <div className="entry-shell entry-shell--no-header">
           <div className="centered-loader">
             <span role="alert">
@@ -5514,13 +5598,14 @@ function AppInner() {
       );
     } else if (
       activeProject
+      && !localObservedShare
       && projectRouteWorkspaceContext.failure
       && (
         projectRouteWorkspaceContext.failure === 'forbidden'
         || activeProjectWorkspaceContext === null
       )
     ) {
-      appMain = pendingFrame ?? (
+      appMain = pendingFrame ?? signedOutShareFallback ?? (
         <div className="entry-shell entry-shell--no-header">
           <div className="centered-loader">
             <span role="alert">
@@ -5571,6 +5656,10 @@ function AppInner() {
           projectAuthorizationKey={
             activeProjectAuthorizationKey ?? activeProject.id
           }
+          onObservedPublicShareLink={onObservedPublicShareLink}
+          observedPublicShareLink={signedOutObservedShare ?? localObservedShare}
+          loginUpdateRequest={loginUpdateRequest}
+          onLoginUpdateRequestHandled={onLoginUpdateRequestHandled}
           amrAuthRetryContinuation={amrAuthRetryContinuation}
           onArmAmrAuthRetryContinuation={armAmrAuthRetryContinuation}
           onConsumeAmrAuthRetryContinuation={consumeAmrAuthRetryContinuation}
@@ -5751,6 +5840,10 @@ function AppInner() {
               ? activeProject.workspaceId ?? null
               : undefined
           }
+          preserveSignedOutShareRoute={Boolean(observedPublicShareLink
+            && route.kind === 'project' && route.projectId === observedPublicShareLink.projectId
+            && route.fileName === observedPublicShareLink.filePath
+            && amrLoginStatus?.loggedIn === false && amrLoginStatus.loginInFlight !== true)}
           onboardingCompleted={config.onboardingCompleted === true}
           identityScopeKey={workspaceTabsIdentityScopeKey}
           workspaceContext={workspaceContext}
@@ -5882,6 +5975,7 @@ function AppInner() {
             ),
         })}
       />
+      <DeletedShareNotices state={deletedShares} />
       {workingDirError ? (
         <Toast
           message={workingDirError}

@@ -20,6 +20,8 @@ vi.mock('@open-design/platform', async (importOriginal) => ({
   stopProcesses: stopProcessesMock,
 }));
 
+import { createVelaCliCollabClient } from '../../src/collab/vela-cli-collab-client.js';
+import type { CollabCloudComment } from '@open-design/contracts';
 import * as diagnosticEvidence from '../../src/services/diagnostics-evidence.js';
 import { runVelaCommand } from '../../src/integrations/vela-command.js';
 import {
@@ -87,6 +89,39 @@ describe('runVelaCommand', () => {
     vi.useRealTimers();
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
+  });
+
+  it('OPEND-3520: redacts identity flag values from a failed command without hiding the upstream status', async () => {
+    const failure = Object.assign(
+      new Error(
+        'Command failed: /bin/vela presence heartbeat p1 --client-id m1 --display-name 张 三'
+          + ' --activity-json {"file":"secret-plan.html"}'
+          + '\nError: API request failed with status 404: not_found',
+      ),
+      {
+        code: 1,
+        cmd: '/bin/vela presence heartbeat p1 --client-id m1 --display-name 张 三 --activity-json {"file":"secret-plan.html"}',
+      },
+    );
+    execFileMock.mockImplementation((_command: string, _args: string[], _options: unknown, callback: (error: Error) => void) => {
+      callback(failure);
+      return { pid: 4321 };
+    });
+    const rejection = await runVelaCommand(
+      ['presence', 'heartbeat', 'p1', '--client-id', 'm1', '--display-name', '张 三',
+        '--activity-json', '{"file":"secret-plan.html"}'],
+      { env: { VELA_BIN: process.execPath, OD_DATA_DIR: '' } },
+    ).then(
+      () => { throw new Error('expected the command to reject'); },
+      (error: unknown) => error as Error & { cmd?: string },
+    );
+    expect(rejection).toBe(failure);
+    for (const text of [rejection.message, rejection.cmd ?? '']) {
+      expect(text).not.toContain('张 三');
+      expect(text).not.toContain('secret-plan.html');
+      expect(text).toContain('--display-name [REDACTED]');
+    }
+    expect(rejection.message).toContain('API request failed with status 404');
   });
 
   it('uses the configured AMR binary and feature-test login profile', async () => {
@@ -518,6 +553,56 @@ describe('runVelaCommand', () => {
     };
     expect(options.timeout).toBeUndefined();
     expect(options.signal).toBeUndefined();
+  });
+
+  it.each([
+    ['{"error":"stopped","status":410,"errorCode":"SHARE_STOPPED"}', 410, 'SHARE_STOPPED'],
+    ['{"error":"stopped","status":500,"errorCode":"SHARE_STOPPED"}', 500, 'SHARE_STOPPED'],
+    ['{"error":"stopped","status":410,"errorCode":"OTHER"}', 410, 'OTHER'],
+    ['{"error":"stopped","errorCode":"SHARE_STOPPED"}', null, 'SHARE_STOPPED'],
+    ['SHARE_STOPPED status 410', undefined, undefined],
+    ['{"error":"stopped","status":"410","errorCode":"SHARE_STOPPED"}', null, 'SHARE_STOPPED'],
+    ['', undefined, undefined],
+  ])('maps only validated comment failure JSON: %s', async (stdout, status, code) => {
+    vi.stubEnv('VELA_BIN', process.execPath);
+    vi.stubEnv('OD_DATA_DIR', '');
+    execFileMock.mockImplementationOnce((_bin, _args, _opts, callback) => {
+      callback(new Error('network or CLI failure'), stdout, 'SHARE_STOPPED');
+      return { pid: 4321 };
+    });
+    const error = await createVelaCliCollabClient().pushComment('w1', 'p1', {} as CollabCloudComment).catch(e => e);
+    expect(error).toBeInstanceOf(Error);
+    expect(error.status).toBe(status);
+    expect(error.code).toBe(code);
+  });
+
+  it('writes the complete large Unicode comment to stdin, never argv', async () => {
+    vi.stubEnv('VELA_BIN', process.execPath);
+    vi.stubEnv('OD_DATA_DIR', '');
+    const stdin = { on: vi.fn(), end: vi.fn() };
+    execFileMock.mockImplementationOnce((_bin, _args, _opts, callback) => {
+      callback(null, '{"seq":7}'); return { pid: 4321, stdin };
+    });
+    const comment = { body: '中文 🙂 spaces\n'.repeat(10000) } as unknown as CollabCloudComment;
+    await expect(createVelaCliCollabClient().pushComment('w1', 'p1', comment)).resolves.toEqual({ seq: 7 });
+    expect(execFileMock.mock.calls[0]?.[1]).toEqual(['collab', 'comment', 'push', 'p1', '--comment-file', '-']);
+    expect(stdin.end).toHaveBeenCalledWith(JSON.stringify(comment));
+  });
+
+  it.each(['push', 'pull'])('terminates a wedged comment %s before rejecting', async (operation) => {
+    vi.useFakeTimers();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.stubEnv('VELA_BIN', process.execPath);
+    vi.stubEnv('OD_DATA_DIR', '');
+    execFileMock.mockImplementation(() => ({ pid: 4321 }));
+    const client = createVelaCliCollabClient();
+    const command = operation === 'push' ? client.pushComment('w1', 'p1', {} as CollabCloudComment) : client.pullComments('w1', 'p1', 0);
+    const rejected = expect(command).rejects.toMatchObject({ name: 'TimeoutError', code: 'ETIMEDOUT' });
+    await vi.advanceTimersByTimeAsync(29_999);
+    expect(stopProcessesMock).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(stopProcessesMock).toHaveBeenCalledTimes(1);
+    await rejected;
   });
 
   it('enables Vela pull profiling only behind the OD opt-in', async () => {
