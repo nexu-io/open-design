@@ -1057,11 +1057,9 @@ describe('HomeView prompt handoff', () => {
     let rejectCreation!: (response: Response) => void;
     const failedCreation = new Promise<Response>((resolve) => { rejectCreation = resolve; });
     const projectRequests: Record<string, unknown>[] = [];
-    let recovering = false;
     vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (url, init) => {
       if (url === '/api/plugins') {
-        return Response.json({ plugins: recovering
-          ? [HIDDEN_DEFAULT_PLUGIN, WEB_PROTOTYPE_PLUGIN] : [HIDDEN_DEFAULT_PLUGIN] });
+        return Response.json({ plugins: [HIDDEN_DEFAULT_PLUGIN, WEB_PROTOTYPE_PLUGIN] });
       }
       if (url === '/api/projects' && init?.method === 'POST') {
         projectRequests.push(JSON.parse(String(init.body)));
@@ -1092,8 +1090,18 @@ describe('HomeView prompt handoff', () => {
       projects: [], onSubmit,
       onOpenProject: () => undefined,
     };
-    const first = render(<HomeView {...props} skills={[INDUSTRIAL_PRODUCT_DESIGN_SKILL]} />);
-    await waitFor(() => expect(homeTemplateTrigger().disabled).toBe(false));
+    let first = render(<HomeView {...props} skills={[INDUSTRIAL_PRODUCT_DESIGN_SKILL]} />);
+    // Match the browser: Home has already seeded Prototype before the user
+    // visits the Skill library and returns through its Try handoff.
+    await waitFor(() => expect(screen.getByTestId('home-hero-template-picker').getAttribute('data-type'))
+      .toBe('prototype'));
+    expect(JSON.parse(window.localStorage.getItem('open-design:home-composer:chip')!))
+      .toMatchObject({ automaticTypeSeed: true });
+    // Reloading Home must not turn an automatic default into a deliberate pick.
+    first.unmount();
+    first = render(<HomeView {...props} skills={[INDUSTRIAL_PRODUCT_DESIGN_SKILL]} />);
+    await waitFor(() => expect(screen.getByTestId('home-hero-template-picker').getAttribute('data-type'))
+      .toBe('prototype'));
     first.rerender(<HomeView {...props} skills={[INDUSTRIAL_PRODUCT_DESIGN_SKILL]}
       promptHandoff={createSkillUseHandoff(13, INDUSTRIAL_PRODUCT_DESIGN_SKILL)} />);
     await screen.findByTestId('home-hero-active-skill');
@@ -1107,7 +1115,6 @@ describe('HomeView prompt handoff', () => {
       rejectCreation(Response.json({ error: 'service unavailable' }, { status: 503 }));
       await onSubmit.mock.results[0]!.value;
     });
-    recovering = true;
     resetPluginsCache();
     const retry = render(<HomeView {...props} skills={[]} skillsLoading />);
     expect((screen.getByTestId('home-hero-submit') as HTMLButtonElement).disabled).toBe(true);

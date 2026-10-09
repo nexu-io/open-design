@@ -199,6 +199,8 @@ export interface ActivePlugin {
   // legitimately equal the chip's default plugin id (e.g. the prototype rail's
   // `example-web-prototype`).
   explicitPick: boolean;
+  // Only the untouched Home default, never a user-selected task type.
+  automaticTypeSeed?: boolean;
   // True when this pick came from an OFFICIAL EXAMPLE CARD on a task type's
   // example rail, as opposed to the Community grid / details modal / plugins-
   // page hand-off. Always accompanies `explicitPick` — an example card is an
@@ -377,6 +379,7 @@ interface HomeComposerChipDraft {
   // identity, so it is persisted with it.
   explicitPick?: boolean;
   examplePick?: boolean;
+  automaticTypeSeed?: boolean;
 }
 // `EntryShell` keeps `HomeView` permanently mounted and toggles it with CSS
 // visibility instead of unmounting it on every Home/Community/... view
@@ -459,6 +462,7 @@ function readHomeComposerChipDraft(): HomeComposerChipDraft | null {
       // they restore as the plain type-chip binding they always did.
       explicitPick: parsed.explicitPick === true,
       examplePick: parsed.examplePick === true,
+      automaticTypeSeed: parsed.automaticTypeSeed === true,
     };
   } catch {
     return null;
@@ -781,6 +785,7 @@ export function HomeView({
               : {}),
             ...(active.explicitPick ? { explicitPick: true } : {}),
             ...(active.examplePick ? { examplePick: true } : {}),
+            ...(active.automaticTypeSeed ? { automaticTypeSeed: true } : {}),
           }
         : null,
     );
@@ -1506,6 +1511,7 @@ export function HomeView({
       // feel instant; submit() still resolves the snapshot before sending.
       deferApply?: boolean;
       focusPrompt?: boolean;
+      automaticTypeSeed?: boolean;
       // True when the user explicitly picked this plugin (example-prompt preset
       // or Community card / detail modal) rather than a type chip's default
       // plugin. Stored on `active.explicitPick`; gates the chip's clear button.
@@ -1582,6 +1588,7 @@ export function HomeView({
       suppressPromptSync: suppressPromptUpdate,
       explicitPick: options?.explicitPick === true,
       examplePick: options?.examplePick === true,
+      automaticTypeSeed: options?.automaticTypeSeed === true,
     });
     setFallbackProjectKind(null);
     setFallbackProjectMetadata(null);
@@ -1738,6 +1745,7 @@ export function HomeView({
       // made with.
       explicitPick?: boolean;
       examplePick?: boolean;
+      automaticTypeSeed?: boolean;
     },
   ) {
     const inputFields = options?.inputFields ?? record.manifest?.od?.inputs ?? [];
@@ -1981,6 +1989,7 @@ export function HomeView({
       // binding would quietly change what the next Send does.
       explicitPick: restore.explicitPick === true,
       examplePick: restore.examplePick === true,
+      automaticTypeSeed: restore.automaticTypeSeed === true,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingChipRestore, pluginsLoading, plugins, active, pendingPluginUseHandoff]);
@@ -2013,6 +2022,7 @@ export function HomeView({
       suppressPromptUpdate: true,
       focusPrompt: false,
       deferApply: true,
+      automaticTypeSeed: true,
     });
     // usePlugin reads this render's catalog/context; it is not an effect trigger.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2434,6 +2444,10 @@ export function HomeView({
   // order already ranks a user-selected Skill above its own), so nothing has
   // to be discarded to keep the rule defined.
   function useSkill(skill: SkillSummary, nextPrompt: string | null) {
+    // A Skill handoff supersedes an untouched default, but must preserve an
+    // intentional task-type choice (#2972). Keep that distinction on reload.
+    setDefaultTypeSettled(true);
+    setActive((current) => current?.automaticTypeSeed ? null : current);
     setPendingSkillRestore(null);
     setActiveSkill(skill);
     setActiveSkillCatalogScope(localCatalogScopeFromWorkspaceContext(workspaceContext));
@@ -2574,6 +2588,13 @@ export function HomeView({
       projectMetadata?: ProjectMetadata | null;
     },
   ) {
+    setDefaultTypeSettled(true);
+    // Confirming the already-selected default is an intentional choice too.
+    // Do not reapply it or reset its inputs just to update provenance.
+    if (!selection && active?.chipId === chip.id && !active.explicitPick) {
+      setActive((current) => current ? { ...current, automaticTypeSeed: false } : current);
+      return;
+    }
     setError(null);
     releaseWebCloneScaffold(chip.id);
     const activeChipId = chip.id;

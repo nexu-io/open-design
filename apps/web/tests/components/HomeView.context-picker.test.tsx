@@ -573,10 +573,11 @@ describe('HomeView context picker', () => {
       />,
     );
 
-    await pickHomeTemplate('prototype');
     await waitFor(() => {
       expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Prototype');
     });
+    // Wait for the automatic seed before deliberately choosing the type.
+    await pickHomeTemplate('prototype');
 
     screen.getByTestId('home-hero-input');
     setHomeHeroPrompt('@deck');
