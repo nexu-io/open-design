@@ -131,7 +131,7 @@ export const ar: Dict = {
   "chat.runError.title.hostPolicyBlock": "تم حظر بدء البرنامج",
   "chat.runError.hostPolicyBlockMessage": "منع Windows بدء البرنامج. تحقق من إعدادات أمان النظام.",
   "chat.runError.title.localStorageFailure": "تعذّر حفظ الملف",
-  "chat.runError.localStorageFailureMessage": "تعذّرت كتابة الملف على القرص. تأكد من وجود مساحة فارغة كافية ومن امتلاكك إذن الحفظ في المجلد الحالي.",
+  "chat.runError.localStorageFailureMessage": "تعذّرت كتابة الملف على القرص. تأكد من وجود مساحة فارغة كافية، ثم أعد المحاولة.",
   "chat.runError.title.tierUpgradeRequired": "خطتك الحالية لا تدعم هذه المهمة",
   "chat.runError.tierUpgradeRequiredMessage": "لا تسمح خطتك الحالية بمتابعة هذه المهمة. قم بترقية الخطة ثم أعد المحاولة.",
   "chat.runError.title.generic": "تعذّر إكمال المهمة",

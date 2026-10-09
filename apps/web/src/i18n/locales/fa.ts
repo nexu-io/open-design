@@ -131,7 +131,7 @@ export const fa: Dict = {
   "chat.runError.title.hostPolicyBlock": "راه‌اندازی برنامه مسدود شد",
   "chat.runError.hostPolicyBlockMessage": "Windows از راه‌اندازی برنامه جلوگیری کرد. تنظیمات امنیتی سیستم را بررسی کنید.",
   "chat.runError.title.localStorageFailure": "ذخیرهٔ فایل ممکن نیست",
-  "chat.runError.localStorageFailureMessage": "نوشتن فایل روی دیسک ممکن نشد. مطمئن شوید فضای خالی کافی دارید و اجازهٔ ذخیره در پوشهٔ فعلی را دارید.",
+  "chat.runError.localStorageFailureMessage": "نوشتن فایل روی دیسک ممکن نشد. مطمئن شوید فضای خالی کافی دارید، سپس دوباره تلاش کنید.",
   "chat.runError.title.tierUpgradeRequired": "طرح فعلی از این کار پشتیبانی نمی‌کند",
   "chat.runError.tierUpgradeRequiredMessage": "با طرح فعلی نمی‌توان این کار را ادامه داد. طرح را ارتقا دهید و دوباره امتحان کنید.",
   "chat.runError.title.generic": "کار تکمیل نشد",

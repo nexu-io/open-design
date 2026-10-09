@@ -131,7 +131,7 @@ export const pl: Dict = {
   "chat.runError.title.hostPolicyBlock": "Uruchomienie programu zablokowane",
   "chat.runError.hostPolicyBlockMessage": "Windows zablokował uruchomienie programu. Sprawdź ustawienia zabezpieczeń systemu.",
   "chat.runError.title.localStorageFailure": "Nie można zapisać pliku",
-  "chat.runError.localStorageFailureMessage": "Nie udało się zapisać pliku na dysku. Upewnij się, że jest wystarczająco dużo wolnego miejsca i masz uprawnienia do zapisu w bieżącym folderze.",
+  "chat.runError.localStorageFailureMessage": "Nie udało się zapisać pliku na dysku. Upewnij się, że jest wystarczająco dużo wolnego miejsca, a następnie spróbuj ponownie.",
   "chat.runError.title.tierUpgradeRequired": "Obecny plan nie obsługuje tego zadania",
   "chat.runError.tierUpgradeRequiredMessage": "Obecny plan nie pozwala kontynuować tego zadania. Przejdź na wyższy plan i spróbuj ponownie.",
   "chat.runError.title.generic": "Nie udało się ukończyć zadania",

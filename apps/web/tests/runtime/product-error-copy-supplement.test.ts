@@ -104,7 +104,7 @@ const cases: ProductCase[] = [
   },
   {
     scenario: '磁盘写入失败', code: 'AGENT_EXECUTION_FAILED', detail: 'local_storage_failure',
-    title: '无法保存文件', body: '文件无法写入磁盘。请确认有足够的剩余空间，且有权限保存到当前文件夹。',
+    title: '无法保存文件', body: '文件无法写入磁盘。请确认有足够的剩余空间后，再重新尝试。',
   },
   {
     scenario: '未分类任务失败', code: 'AGENT_EXECUTION_FAILED',

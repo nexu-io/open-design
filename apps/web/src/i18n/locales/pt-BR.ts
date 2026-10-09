@@ -131,7 +131,7 @@ export const ptBR: Dict = {
   "chat.runError.title.hostPolicyBlock": "Inicialização do programa bloqueada",
   "chat.runError.hostPolicyBlockMessage": "O Windows impediu a inicialização do programa. Verifique as configurações de segurança do sistema.",
   "chat.runError.title.localStorageFailure": "Não foi possível salvar o arquivo",
-  "chat.runError.localStorageFailureMessage": "Não foi possível gravar o arquivo no disco. Confirme que há espaço livre suficiente e que você tem permissão para salvar na pasta atual.",
+  "chat.runError.localStorageFailureMessage": "Não foi possível gravar o arquivo no disco. Confirme que há espaço livre suficiente e tente novamente.",
   "chat.runError.title.tierUpgradeRequired": "Seu plano atual não suporta esta tarefa",
   "chat.runError.tierUpgradeRequiredMessage": "Seu plano atual não permite continuar esta tarefa. Faça upgrade do plano e tente novamente.",
   "chat.runError.title.generic": "Não foi possível concluir a tarefa",

@@ -70,3 +70,68 @@ describe.each(LOCALES)('OPEND-2849 locale %s', (locale) => {
     expect(lines[1]?.trim()).toBeTruthy();
   });
 });
+
+/**
+ * OPEND-2849 补充:
+ * - 《补充场景》第 13 行 硬盘写不进去:正文逐字「文件无法写入磁盘。请确认有足够的剩余空间后，再重新尝试。」
+ *   (去掉了旧稿「且有权限保存到当前文件夹」那半句,19 语跟着改)。
+ * - S32 浏览器没打开:只修标点,半角「,」→ 全角「，」;整句不动(整句改写待产品定)。
+ */
+describe('OPEND-2849 supplement copy', () => {
+  it('local storage failure body matches the product copy verbatim (zh-CN)', async () => {
+    const zh = await loadDict('zh-CN');
+    expect(lookup(zh, 'chat.runError.localStorageFailureMessage')).toBe(
+      '文件无法写入磁盘。请确认有足够的剩余空间后，再重新尝试。',
+    );
+    expect(lookup(zh, 'chat.runError.title.localStorageFailure')).toBe('无法保存文件');
+  });
+
+  it('browser-not-opened hint uses a full-width comma and is otherwise unchanged (zh-CN, zh-TW)', async () => {
+    const zh = await loadDict('zh-CN');
+    const tw = await loadDict('zh-TW');
+    expect(lookup(zh, 'settings.amrActivationBrowserFailed')).toBe('没能自动打开浏览器，请打开下面的登录页继续。');
+    expect(lookup(tw, 'settings.amrActivationBrowserFailed')).toBe('無法自動開啟瀏覽器，請開啟下方的登入頁繼續。');
+  });
+});
+
+describe.each(LOCALES)('OPEND-2849 supplement locale %s', (locale) => {
+  it('defines a translated local storage failure body without the old permission clause', async () => {
+    const dict = await loadDict(locale);
+    const body = lookup(dict, 'chat.runError.localStorageFailureMessage');
+    expect(body?.trim()).toBeTruthy();
+    if (locale !== 'en') {
+      const en = await loadDict('en');
+      expect(body).not.toBe(lookup(en, 'chat.runError.localStorageFailureMessage'));
+    }
+  });
+});
+
+// The previous (pre-product) wording per locale. A hit means the locale was missed.
+const OLD_LOCAL_STORAGE_FAILURE: Record<Locale, string> = {
+  ar: "تعذّرت كتابة الملف على القرص. تأكد من وجود مساحة فارغة كافية ومن امتلاكك إذن الحفظ في المجلد الحالي.",
+  de: "Die Datei konnte nicht auf den Datenträger geschrieben werden. Prüfe, ob genügend Speicherplatz verfügbar ist und du im aktuellen Ordner speichern darfst.",
+  en: "The file could not be written to disk. Please make sure there is enough free space and you have permission to save to the current folder.",
+  "es-ES": "No se ha podido escribir el archivo en el disco. Comprueba que haya suficiente espacio libre y que tengas permiso para guardar en la carpeta actual.",
+  fa: "نوشتن فایل روی دیسک ممکن نشد. مطمئن شوید فضای خالی کافی دارید و اجازهٔ ذخیره در پوشهٔ فعلی را دارید.",
+  fr: "Le fichier n’a pas pu être écrit sur le disque. Vérifiez que l’espace disponible est suffisant et que vous avez l’autorisation d’enregistrer dans le dossier actuel.",
+  hu: "Nem sikerült a fájlt lemezre írni. Ellenőrizd, hogy van-e elegendő szabad hely, és van-e jogosultságod az aktuális mappába menteni.",
+  id: "File tidak dapat ditulis ke disk. Pastikan ruang kosong mencukupi dan Anda memiliki izin untuk menyimpan ke folder saat ini.",
+  it: "Non è stato possibile scrivere il file sul disco. Verifica che ci sia spazio libero sufficiente e di avere il permesso di salvare nella cartella attuale.",
+  ja: "ファイルをディスクに書き込めません。十分な空き容量があり、現在のフォルダーへの保存権限があることを確認してください。",
+  ko: "파일을 디스크에 쓸 수 없습니다. 여유 공간이 충분하고 현재 폴더에 저장할 권한이 있는지 확인해 주세요.",
+  pl: "Nie udało się zapisać pliku na dysku. Upewnij się, że jest wystarczająco dużo wolnego miejsca i masz uprawnienia do zapisu w bieżącym folderze.",
+  "pt-BR": "Não foi possível gravar o arquivo no disco. Confirme que há espaço livre suficiente e que você tem permissão para salvar na pasta atual.",
+  ru: "Не удалось записать файл на диск. Убедитесь, что достаточно свободного места и у вас есть разрешение на сохранение в текущую папку.",
+  th: "ไม่สามารถเขียนไฟล์ลงดิสก์ได้ โปรดตรวจสอบว่ามีพื้นที่ว่างเพียงพอและมีสิทธิ์บันทึกลงในโฟลเดอร์ปัจจุบัน",
+  tr: "Dosya diske yazılamadı. Yeterli boş alan bulunduğunu ve mevcut klasöre kaydetme izniniz olduğunu kontrol edin.",
+  uk: "Не вдалося записати файл на диск. Переконайтеся, що є достатньо вільного місця та ви маєте дозвіл зберігати файли в поточній папці.",
+  "zh-CN": "文件无法写入磁盘。请确认有足够的剩余空间，且有权限保存到当前文件夹。",
+  "zh-TW": "檔案無法寫入磁碟。請確認有足夠的剩餘空間，且有權限儲存到目前資料夾。",
+};
+
+describe.each(LOCALES)('OPEND-2849 supplement old wording gone: %s', (locale) => {
+  it('no longer ships the old permission wording', async () => {
+    const dict = await loadDict(locale);
+    expect(lookup(dict, 'chat.runError.localStorageFailureMessage')).not.toBe(OLD_LOCAL_STORAGE_FAILURE[locale]);
+  });
+});

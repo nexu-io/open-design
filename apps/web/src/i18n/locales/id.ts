@@ -131,7 +131,7 @@ export const id: Dict = {
   "chat.runError.title.hostPolicyBlock": "Program diblokir saat dimulai",
   "chat.runError.hostPolicyBlockMessage": "Windows memblokir program agar tidak dimulai. Periksa pengaturan keamanan sistem.",
   "chat.runError.title.localStorageFailure": "Tidak dapat menyimpan file",
-  "chat.runError.localStorageFailureMessage": "File tidak dapat ditulis ke disk. Pastikan ruang kosong mencukupi dan Anda memiliki izin untuk menyimpan ke folder saat ini.",
+  "chat.runError.localStorageFailureMessage": "File tidak dapat ditulis ke disk. Pastikan ruang kosong mencukupi, lalu coba lagi.",
   "chat.runError.title.tierUpgradeRequired": "Paket saat ini tidak mendukung tugas ini",
   "chat.runError.tierUpgradeRequiredMessage": "Paket saat ini tidak dapat melanjutkan tugas ini. Tingkatkan paket, lalu coba lagi.",
   "chat.runError.title.generic": "Tugas tidak dapat diselesaikan",

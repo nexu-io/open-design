@@ -131,7 +131,7 @@ export const tr: Dict = {
   "chat.runError.title.hostPolicyBlock": "Programın başlatılması engellendi",
   "chat.runError.hostPolicyBlockMessage": "Windows programın başlatılmasını engelledi. Sistem güvenlik ayarlarınızı kontrol edin.",
   "chat.runError.title.localStorageFailure": "Dosya kaydedilemiyor",
-  "chat.runError.localStorageFailureMessage": "Dosya diske yazılamadı. Yeterli boş alan bulunduğunu ve mevcut klasöre kaydetme izniniz olduğunu kontrol edin.",
+  "chat.runError.localStorageFailureMessage": "Dosya diske yazılamadı. Yeterli boş alan bulunduğunu kontrol edip yeniden deneyin.",
   "chat.runError.title.tierUpgradeRequired": "Mevcut planınız bu görevi desteklemiyor",
   "chat.runError.tierUpgradeRequiredMessage": "Mevcut planınızla bu göreve devam edilemiyor. Planınızı yükseltip yeniden deneyin.",
   "chat.runError.title.generic": "Görev tamamlanamadı",

@@ -131,7 +131,7 @@ export const fr: Dict = {
   "chat.runError.title.hostPolicyBlock": "Démarrage du programme bloqué",
   "chat.runError.hostPolicyBlockMessage": "Windows a empêché le programme de démarrer. Vérifiez les paramètres de sécurité du système.",
   "chat.runError.title.localStorageFailure": "Impossible d’enregistrer le fichier",
-  "chat.runError.localStorageFailureMessage": "Le fichier n’a pas pu être écrit sur le disque. Vérifiez que l’espace disponible est suffisant et que vous avez l’autorisation d’enregistrer dans le dossier actuel.",
+  "chat.runError.localStorageFailureMessage": "Le fichier n’a pas pu être écrit sur le disque. Vérifiez que l’espace disponible est suffisant, puis réessayez.",
   "chat.runError.title.tierUpgradeRequired": "Votre offre actuelle ne prend pas en charge cette tâche",
   "chat.runError.tierUpgradeRequiredMessage": "Votre offre actuelle ne permet pas de poursuivre cette tâche. Passez à une offre supérieure, puis réessayez.",
   "chat.runError.title.generic": "La tâche n’a pas pu être terminée",

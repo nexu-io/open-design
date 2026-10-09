@@ -131,7 +131,7 @@ export const hu: Dict = {
   "chat.runError.title.hostPolicyBlock": "A program indítása blokkolva",
   "chat.runError.hostPolicyBlockMessage": "A Windows megakadályozta a program indítását. Ellenőrizd a rendszer biztonsági beállításait.",
   "chat.runError.title.localStorageFailure": "Nem lehet menteni a fájlt",
-  "chat.runError.localStorageFailureMessage": "Nem sikerült a fájlt lemezre írni. Ellenőrizd, hogy van-e elegendő szabad hely, és van-e jogosultságod az aktuális mappába menteni.",
+  "chat.runError.localStorageFailureMessage": "Nem sikerült a fájlt lemezre írni. Ellenőrizd, hogy van-e elegendő szabad hely, majd próbáld újra.",
   "chat.runError.title.tierUpgradeRequired": "A jelenlegi csomagod nem támogatja ezt a feladatot",
   "chat.runError.tierUpgradeRequiredMessage": "A jelenlegi csomagoddal ez a feladat nem folytatható. Válts magasabb csomagra, majd próbáld újra.",
   "chat.runError.title.generic": "A feladatot nem sikerült befejezni",

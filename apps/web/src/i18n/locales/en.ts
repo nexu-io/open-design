@@ -131,7 +131,7 @@ export const en: Dict = {
   "chat.runError.title.hostPolicyBlock": "Program launch blocked",
   "chat.runError.hostPolicyBlockMessage": "Windows blocked the program from starting. Please check your system security settings.",
   "chat.runError.title.localStorageFailure": "Unable to save the file",
-  "chat.runError.localStorageFailureMessage": "The file could not be written to disk. Please make sure there is enough free space and you have permission to save to the current folder.",
+  "chat.runError.localStorageFailureMessage": "The file could not be written to disk. Please make sure there is enough free space, then try again.",
   "chat.runError.title.tierUpgradeRequired": "Your current plan does not support this task",
   "chat.runError.tierUpgradeRequiredMessage": "Your current plan cannot continue this task. Please upgrade your plan and try again.",
   "chat.runError.title.generic": "The task could not be completed",

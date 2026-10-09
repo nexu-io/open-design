@@ -131,7 +131,7 @@ export const ja: Dict = {
   "chat.runError.title.hostPolicyBlock": "プログラムの起動が制限されています",
   "chat.runError.hostPolicyBlockMessage": "Windows がプログラムの起動をブロックしました。システムのセキュリティ設定を確認してください。",
   "chat.runError.title.localStorageFailure": "ファイルを保存できません",
-  "chat.runError.localStorageFailureMessage": "ファイルをディスクに書き込めません。十分な空き容量があり、現在のフォルダーへの保存権限があることを確認してください。",
+  "chat.runError.localStorageFailureMessage": "ファイルをディスクに書き込めません。十分な空き容量があることを確認してから、もう一度お試しください。",
   "chat.runError.title.tierUpgradeRequired": "現在のプランではこのタスクに対応していません",
   "chat.runError.tierUpgradeRequiredMessage": "現在のプランではこのタスクを続行できません。プランをアップグレードして、もう一度お試しください。",
   "chat.runError.title.generic": "タスクを完了できませんでした",

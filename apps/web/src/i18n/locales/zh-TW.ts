@@ -135,7 +135,7 @@ export const zhTW: Dict = {
   "chat.runError.title.hostPolicyBlock": "程式啟動受限",
   "chat.runError.hostPolicyBlockMessage": "Windows 阻止了程式啟動，請檢查系統的安全設定。",
   "chat.runError.title.localStorageFailure": "無法儲存檔案",
-  "chat.runError.localStorageFailureMessage": "檔案無法寫入磁碟。請確認有足夠的剩餘空間，且有權限儲存到目前資料夾。",
+  "chat.runError.localStorageFailureMessage": "檔案無法寫入磁碟。請確認有足夠的剩餘空間後，再重新嘗試。",
   "chat.runError.title.tierUpgradeRequired": "目前方案不支援此任務",
   "chat.runError.tierUpgradeRequiredMessage": "目前方案無法繼續此任務，請升級方案後重試。",
   "chat.runError.title.generic": "任務未能完成",
@@ -547,7 +547,7 @@ export const zhTW: Dict = {
   "settings.amrSigningIn": "登入中…",
   "settings.amrActivationHint": "沒有彈出登入頁?點擊下方按鈕重新喚起",
   "settings.amrActivationBrowserFailed":
-    "無法自動開啟瀏覽器,請開啟下方的登入頁繼續。",
+    "無法自動開啟瀏覽器，請開啟下方的登入頁繼續。",
   "settings.amrActivationOpen": "開啟登入頁",
   "settings.amrCancelSignIn": "取消登入",
   "settings.amrAccountStatus": "OpenDesign Cloud 帳戶狀態",

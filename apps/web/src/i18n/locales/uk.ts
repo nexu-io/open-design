@@ -131,7 +131,7 @@ export const uk: Dict = {
   "chat.runError.title.hostPolicyBlock": "Запуск програми заблоковано",
   "chat.runError.hostPolicyBlockMessage": "Windows заблокувала запуск програми. Перевірте налаштування безпеки системи.",
   "chat.runError.title.localStorageFailure": "Не вдається зберегти файл",
-  "chat.runError.localStorageFailureMessage": "Не вдалося записати файл на диск. Переконайтеся, що є достатньо вільного місця та ви маєте дозвіл зберігати файли в поточній папці.",
+  "chat.runError.localStorageFailureMessage": "Не вдалося записати файл на диск. Переконайтеся, що є достатньо вільного місця, і спробуйте ще раз.",
   "chat.runError.title.tierUpgradeRequired": "Поточний тариф не підтримує це завдання",
   "chat.runError.tierUpgradeRequiredMessage": "Поточний тариф не дозволяє продовжити це завдання. Перейдіть на вищий тариф і повторіть спробу.",
   "chat.runError.title.generic": "Не вдалося завершити завдання",

@@ -131,7 +131,7 @@ export const esES: Dict = {
   "chat.runError.title.hostPolicyBlock": "Inicio del programa bloqueado",
   "chat.runError.hostPolicyBlockMessage": "Windows ha bloqueado el inicio del programa. Revisa la configuración de seguridad del sistema.",
   "chat.runError.title.localStorageFailure": "No se puede guardar el archivo",
-  "chat.runError.localStorageFailureMessage": "No se ha podido escribir el archivo en el disco. Comprueba que haya suficiente espacio libre y que tengas permiso para guardar en la carpeta actual.",
+  "chat.runError.localStorageFailureMessage": "No se ha podido escribir el archivo en el disco. Comprueba que haya suficiente espacio libre y vuelve a intentarlo.",
   "chat.runError.title.tierUpgradeRequired": "Tu plan actual no admite esta tarea",
   "chat.runError.tierUpgradeRequiredMessage": "Tu plan actual no permite continuar esta tarea. Mejora tu plan y vuelve a intentarlo.",
   "chat.runError.title.generic": "No se ha podido completar la tarea",

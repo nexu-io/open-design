@@ -131,7 +131,7 @@ export const ko: Dict = {
   "chat.runError.title.hostPolicyBlock": "프로그램 시작이 제한되었습니다",
   "chat.runError.hostPolicyBlockMessage": "Windows가 프로그램 시작을 차단했습니다. 시스템 보안 설정을 확인해 주세요.",
   "chat.runError.title.localStorageFailure": "파일을 저장할 수 없습니다",
-  "chat.runError.localStorageFailureMessage": "파일을 디스크에 쓸 수 없습니다. 여유 공간이 충분하고 현재 폴더에 저장할 권한이 있는지 확인해 주세요.",
+  "chat.runError.localStorageFailureMessage": "파일을 디스크에 쓸 수 없습니다. 여유 공간이 충분한지 확인한 후 다시 시도해 주세요.",
   "chat.runError.title.tierUpgradeRequired": "현재 요금제에서 이 작업을 지원하지 않습니다",
   "chat.runError.tierUpgradeRequiredMessage": "현재 요금제로 이 작업을 계속할 수 없습니다. 요금제를 업그레이드한 후 다시 시도해 주세요.",
   "chat.runError.title.generic": "작업을 완료하지 못했습니다",

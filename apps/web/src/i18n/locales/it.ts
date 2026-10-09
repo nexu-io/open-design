@@ -131,7 +131,7 @@ export const it: Dict = {
   "chat.runError.title.hostPolicyBlock": "Avvio del programma bloccato",
   "chat.runError.hostPolicyBlockMessage": "Windows ha impedito l’avvio del programma. Controlla le impostazioni di sicurezza del sistema.",
   "chat.runError.title.localStorageFailure": "Impossibile salvare il file",
-  "chat.runError.localStorageFailureMessage": "Non è stato possibile scrivere il file sul disco. Verifica che ci sia spazio libero sufficiente e di avere il permesso di salvare nella cartella attuale.",
+  "chat.runError.localStorageFailureMessage": "Non è stato possibile scrivere il file sul disco. Verifica che ci sia spazio libero sufficiente, quindi riprova.",
   "chat.runError.title.tierUpgradeRequired": "Il piano attuale non supporta questa attività",
   "chat.runError.tierUpgradeRequiredMessage": "Il piano attuale non consente di continuare questa attività. Passa a un piano superiore e riprova.",
   "chat.runError.title.generic": "Impossibile completare l’attività",

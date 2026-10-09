@@ -131,7 +131,7 @@ export const de: Dict = {
   "chat.runError.title.hostPolicyBlock": "Programmstart blockiert",
   "chat.runError.hostPolicyBlockMessage": "Windows hat den Programmstart blockiert. Prüfe die Sicherheitseinstellungen des Systems.",
   "chat.runError.title.localStorageFailure": "Datei konnte nicht gespeichert werden",
-  "chat.runError.localStorageFailureMessage": "Die Datei konnte nicht auf den Datenträger geschrieben werden. Prüfe, ob genügend Speicherplatz verfügbar ist und du im aktuellen Ordner speichern darfst.",
+  "chat.runError.localStorageFailureMessage": "Die Datei konnte nicht auf den Datenträger geschrieben werden. Prüfe, ob genügend Speicherplatz verfügbar ist, und versuche es dann erneut.",
   "chat.runError.title.tierUpgradeRequired": "Dein aktueller Tarif unterstützt diese Aufgabe nicht",
   "chat.runError.tierUpgradeRequiredMessage": "Mit deinem aktuellen Tarif kann diese Aufgabe nicht fortgesetzt werden. Wechsle zu einem höheren Tarif und versuche es erneut.",
   "chat.runError.title.generic": "Die Aufgabe konnte nicht abgeschlossen werden",

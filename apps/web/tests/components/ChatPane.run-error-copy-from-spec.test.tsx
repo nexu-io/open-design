@@ -213,7 +213,7 @@ describe('这些格子不许再落到兜底句上', () => {
  * 换成明确的错话时会发生的净劣化。
  */
 const CLIENT_ENVIRONMENT_CELLS: readonly { detail: string; body: string }[] = [
-  { detail: 'local_storage_failure', body: '文件无法写入磁盘。请确认有足够的剩余空间，且有权限保存到当前文件夹。' },
+  { detail: 'local_storage_failure', body: '文件无法写入磁盘。请确认有足够的剩余空间后，再重新尝试。' },
   { detail: 'host_policy_block', body: 'Windows 阻止了程序启动，请检查系统的安全设置。' },
   { detail: 'certificate_failure', body: '连接服务时未通过安全验证，请尝试更换网络。' },
   { detail: 'proxy_configuration', body: '当前设置的代理无法连接，请确认代理已开启、设置正确后再试。' },

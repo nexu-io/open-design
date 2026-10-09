@@ -131,7 +131,7 @@ export const th: Dict = {
   "chat.runError.title.hostPolicyBlock": "การเริ่มโปรแกรมถูกจำกัด",
   "chat.runError.hostPolicyBlockMessage": "Windows บล็อกการเริ่มโปรแกรม โปรดตรวจสอบการตั้งค่าความปลอดภัยของระบบ",
   "chat.runError.title.localStorageFailure": "ไม่สามารถบันทึกไฟล์ได้",
-  "chat.runError.localStorageFailureMessage": "ไม่สามารถเขียนไฟล์ลงดิสก์ได้ โปรดตรวจสอบว่ามีพื้นที่ว่างเพียงพอและมีสิทธิ์บันทึกลงในโฟลเดอร์ปัจจุบัน",
+  "chat.runError.localStorageFailureMessage": "ไม่สามารถเขียนไฟล์ลงดิสก์ได้ โปรดตรวจสอบว่ามีพื้นที่ว่างเพียงพอ แล้วลองใหม่อีกครั้ง",
   "chat.runError.title.tierUpgradeRequired": "แพ็กเกจปัจจุบันไม่รองรับงานนี้",
   "chat.runError.tierUpgradeRequiredMessage": "แพ็กเกจปัจจุบันไม่สามารถดำเนินงานนี้ต่อได้ โปรดอัปเกรดแพ็กเกจแล้วลองอีกครั้ง",
   "chat.runError.title.generic": "ไม่สามารถทำงานให้เสร็จได้",
