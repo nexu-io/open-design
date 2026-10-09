@@ -8,6 +8,7 @@ import {
   mkdtempSync,
   promises as fsp,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -666,6 +667,87 @@ process.stdin.on('end', () => {
             externalDirectory[`${cwd}/**`] === 'allow',
         );
         expect(allowedCwd).toBeTruthy();
+      },
+    );
+  });
+
+  it('allowlists the active skill root that lives outside the repository skills dir', async () => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for OpenCode skill permission tests');
+    }
+
+    // #8173: the skill preamble advertises the skill's absolute root as its
+    // fallback path, but the allowlist was built from the repository `skills/`
+    // tree alone. A skill installed under the daemon data dir — the same shape
+    // as the bundled plugin folder in the report — landed outside it, so
+    // OpenCode asked for `external_directory` approval on a file OD itself told
+    // the agent to open.
+    const skillId = `od-skill-root-${randomUUID().slice(0, 8)}`;
+    const userSkillDir = join(process.env.OD_DATA_DIR, 'skills', skillId);
+    mkdirSync(join(userSkillDir, 'references'), { recursive: true });
+    writeFileSync(
+      join(userSkillDir, 'SKILL.md'),
+      `---\nname: ${skillId}\ndescription: External directory allowlist fixture.\n---\n`
+        + '# Fixture\n\nRead `references/layouts.md` before writing anything.\n',
+    );
+    writeFileSync(join(userSkillDir, 'references', 'layouts.md'), '# Layouts\n');
+    tempDirs.push(userSkillDir);
+
+    const projectId = `proj-${randomUUID()}`;
+    const markerDir = await fsp.mkdtemp(join(tmpdir(), 'od-opencode-skill-dir-'));
+    tempDirs.push(markerDir);
+    const envFile = join(markerDir, 'opencode-config-content.json');
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'OpenCode skill root permission fixture',
+        skillId,
+      }),
+    });
+    expect(createProjectResponse.ok).toBe(true);
+
+    await withFakeAgent(
+      'opencode',
+      `
+const fs = require('node:fs');
+process.stdin.resume();
+process.stdin.on('end', () => {
+  fs.writeFileSync(${JSON.stringify(envFile)}, process.env.OPENCODE_CONFIG_CONTENT || '');
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: 'skill-permission-ok' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId,
+            skillId,
+            message: 'hello',
+          }),
+        });
+        expect(response.ok).toBe(true);
+        expect(await response.text()).toContain('skill-permission-ok');
+
+        const parsed = JSON.parse(readFileSync(envFile, 'utf8')) as {
+          permission?: { external_directory?: Record<string, string> };
+        };
+        const externalDirectory = parsed.permission?.external_directory ?? {};
+        const roots = new Set([userSkillDir, realpathSync(userSkillDir)]);
+        const allowedRoot = [...roots].find(
+          (root) =>
+            externalDirectory[root] === 'allow' &&
+            externalDirectory[`${root}/**`] === 'allow',
+        );
+
+        expect(allowedRoot).toBeTruthy();
       },
     );
   });

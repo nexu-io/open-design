@@ -112,7 +112,6 @@ on:
 permissions:
   actions: write
   contents: write
-  packages: write
 
 concurrency:
   group: open-design-release-stable-${{ inputs.dry_run }}
@@ -1096,31 +1095,6 @@ jobs:
           path: ${{ runner.temp }}/release-assets
           retention-days: 1
 
-  publish_docker_image:
-    name: Publish stable Docker image
-    needs:
-      - metadata
-      - publish
-    if: >-
-      ${{
-        always() &&
-        !cancelled() &&
-        needs.metadata.outputs.dry_run != 'true' &&
-        needs.metadata.outputs.github_release_enabled == 'true' &&
-        needs.metadata.result == 'success' &&
-        needs.publish.result == 'success'
-      }}
-    permissions:
-      contents: read
-      packages: write
-      id-token: write
-    uses: ./.github/workflows/docker-image.yml
-    secrets: inherit
-    with:
-      ref: ${{ needs.metadata.outputs.commit }}
-      release_version: ${{ needs.metadata.outputs.stable_version }}
-      publish_latest: true
-
   publish:
     name: Finalize ${{ needs.metadata.outputs.channel }} release plan
     needs:
@@ -1438,6 +1412,73 @@ jobs:
       - name: Cleanup workflow artifacts
         if: ${{ success() }}
         run: bash .github/scripts/release/github/cleanup-artifacts.sh
+
+  dispatch_stable_docker:
+    name: Dispatch independent stable Docker reconciliation
+    needs:
+      - metadata
+      - publish
+    if: >-
+      ${{
+        always() &&
+        !cancelled() &&
+        needs.metadata.outputs.dry_run != 'true' &&
+        needs.metadata.outputs.github_release_enabled == 'true' &&
+        needs.metadata.result == 'success' &&
+        needs.publish.result == 'success' &&
+        needs.publish.outputs.version_metadata_url != ''
+      }}
+    # Docker is an independent, retryable delivery line. A dispatch outage
+    # must remain visible in this job's summary without rolling back or marking
+    # an already-published stable release as failed.
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    env:
+      GH_REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ github.token }}
+      PRIMARY_REF: ${{ github.event.repository.default_branch || 'main' }}
+    steps:
+      - name: Checkout dispatch helper
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 1
+          ref: ${{ github.event.repository.default_branch || 'main' }}
+
+      - name: Dispatch stable Docker reconciler
+        id: dispatch
+        env:
+          RELEASE_VERSION: ${{ needs.metadata.outputs.stable_version }}
+        run: |
+          bash .github/scripts/release/dispatch-validation.sh release-stable-docker.yml \
+            -f "release_version=$RELEASE_VERSION" \
+            -f "origin_run_id=$GITHUB_RUN_ID" \
+            -f "origin_run_attempt=$GITHUB_RUN_ATTEMPT"
+
+      - name: Publish Docker handoff summary
+        if: ${{ always() }}
+        env:
+          DISPATCH_OUTCOME: ${{ steps.dispatch.outcome }}
+          METADATA_URL: ${{ needs.publish.outputs.version_metadata_url }}
+          RELEASE_VERSION: ${{ needs.metadata.outputs.stable_version }}
+        run: |
+          workflow_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/workflows/release-stable-docker.yml"
+          {
+            echo "## Independent stable Docker handoff"
+            echo
+            echo "- Version: \`$RELEASE_VERSION\`"
+            echo "- Metadata: $METADATA_URL"
+            echo "- Dispatch outcome: \`$DISPATCH_OUTCOME\`"
+            echo "- Docker runs: $workflow_url"
+            if [ "$DISPATCH_OUTCOME" != "success" ]; then
+              echo
+              echo "> [!WARNING]"
+              echo "> Stable was published, but Docker reconciliation was not dispatched."
+              echo "> Open the workflow link and run it manually with release_version=\`$RELEASE_VERSION\`."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
   cleanup_partial_release_assets:
     name: Cleanup unpublished release asset artifacts

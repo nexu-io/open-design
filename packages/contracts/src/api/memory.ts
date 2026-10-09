@@ -278,6 +278,8 @@ export interface ExtractMemoryRequest {
   assistantMessage?: string;
   projectId?: string | null;
   conversationId?: string | null;
+  /** Stable sending draft identity, available before a daemon run exists. */
+  assistantMessageId?: string;
   /** BYOK chat config snapshot. The web app sends this with every
    *  BYOK / API-mode extraction call so the daemon can run LLM
    *  extraction against the *current* chat provider/key/baseUrl/
@@ -451,9 +453,20 @@ export type MemoryExtractionSkipReason =
   | 'empty-message'
   | 'no-match';
 
+/** Explicit producing chat identity; absent for legacy/non-chat extraction. */
+export interface MemoryExtractionOrigin {
+  projectId: string;
+  conversationId: string;
+  /** Only present when assigned by the daemon's actual run. */
+  runId?: string;
+  /** Sending draft for HTTP extraction; native runs use their physical row. */
+  assistantMessageId?: string;
+}
+
 export interface MemoryExtractionRecord {
   /** Stable id for the attempt. UUID-ish; safe to use as a React key. */
   id: string;
+  extractionOrigin?: MemoryExtractionOrigin;
   /** Which extractor wrote this record. Optional for backwards compat
    *  with daemons that predate the heuristic surfacing — the UI treats
    *  a missing kind as `'llm'` since that was the only writer. */

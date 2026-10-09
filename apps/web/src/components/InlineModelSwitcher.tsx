@@ -1438,7 +1438,10 @@ export function InlineModelSwitcher({
                           role="radio"
                           aria-checked={active}
                           aria-disabled={selectable ? undefined : 'true'}
-                          title={lockedHint ?? undefined}
+                          /* A long catalog ellipsises these rows and many
+                             share a prefix, so the full model name must stay
+                             readable on hover. A locked row keeps its reason. */
+                          title={lockedHint ?? m.label}
                           className={
                             'inline-switcher__agent' +
                             (active ? ' is-active' : '') +

@@ -151,6 +151,7 @@ import {
   clearUpdaterCache,
   deriveUpdaterModel,
   downloadUpdaterUpdate,
+  isUpdaterDownloadFailure,
   openUpdaterInstaller,
   quitAfterUpdaterInstallerOpen,
   readUpdaterStatus,
@@ -418,7 +419,9 @@ export function deriveAboutUpdateControl(
         primaryAction,
         primaryLabelKey: 'settings.updateRetry',
         showReleaseLink: true,
-        statusKey: 'updater.failed',
+        // S31c(OPEND-2849):下载没完成就说下载没完成。这一格是版本号旁边的
+        // 一枚短状态词,放得下的只有产品那格的标题;正文在更新弹窗里。
+        statusKey: isUpdaterDownloadFailure(model.status) ? 'updater.downloadFailedTitle' : 'updater.failed',
         statusTone: 'error',
       };
     }

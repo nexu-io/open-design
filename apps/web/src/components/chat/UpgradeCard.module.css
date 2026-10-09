@@ -155,6 +155,16 @@
   color: var(--upgrade-card-ink);
 }
 
+/* S15(OPEND-2849):跑到一半额度用尽时,说明句是「标题 + 正文」两行。
+   标题沿用说明句的字号,只加一档字重;正文另起一行,颜色不变。 */
+.whyTitle {
+  display: block;
+  font-weight: 600;
+}
+.whyBody {
+  display: block;
+}
+
 /* 稿子 `.up .up-bottom .btn.mod-primary` + `.btn` + `.btn svg`。
    ------------------------------------------------------------
    **祖先 `.up .bottom` 不能省。** 少了它这条是 (0,1,0),和共享 Button 的

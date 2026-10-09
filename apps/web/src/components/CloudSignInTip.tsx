@@ -19,6 +19,7 @@ import {
   notifyWorkspaceBillingRefresh,
   notifyWorkspaceContextRefresh,
 } from '../collab/useWorkspaceContext';
+import { AmrActivationHintText } from './AmrActivationHintText';
 
 const DISMISSED_KEY = 'od.entry.cloudSignInTip.dismissed';
 
@@ -258,7 +259,7 @@ export function CloudSignInTip() {
             <p className="entry-local-mode-tip__activation">
               <span>
                 {status.browserOpenFailed
-                  ? t('settings.onboardingActivationBrowserFailed')
+                  ? <AmrActivationHintText browserOpenFailed />
                   : t('settings.onboardingActivationPrompt')}
               </span>
               <a

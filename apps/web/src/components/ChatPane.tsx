@@ -805,6 +805,12 @@ interface Props {
    */
   amrBalanceCardAnchorMessageId?: string | null;
   /**
+   * 升级卡**是谁在看**:`owner` 有充值权限,`member` 没有(只能找管理员)。
+   * 只用于锚在某一轮下面的那张卡在余额归零时的说明句(产品《报错文案》S15,
+   * OPEND-2849)。宿主读不出时按 `owner` 说 —— 那是今天的默认身份。
+   */
+  amrBalanceAudience?: 'owner' | 'member';
+  /**
    * **失败之后的那次钱包补查已经落地,而且没读出数字。**
    *
    * 只有跑到一半死在余额上那条路用得着它。那条失败自己**不带余额**,升级卡的
@@ -1068,6 +1074,19 @@ export function foldStrategyTaskTurns(messages: ChatMessage[]): ChatMessage[] {
     if (runIndex === 0 || !turnHeadIndexByTask.has(taskId)) {
       turnHeadIndexByTask.set(taskId, folded.length);
       folded.push({ ...message, events: stampRunSpan(message) });
+      continue;
+    }
+    // Run metadata arrives before its SSE boundary. Until the successor's
+    // done_key arrives, buildTurnBlocks only sees the predecessor's events:
+    // adopting the active status here would reopen that completed record and
+    // tick its clock again (OPEND-3463). Keep the pending Run as its own row;
+    // once its boundary arrives the normal fold can safely close the old Run.
+    // Terminal legacy history can still fold without protocol metadata.
+    if (
+      isActiveRunStatus(message.runStatus)
+      && !message.events?.some((event) => event.kind === 'done_key' && event.key.trim())
+    ) {
+      folded.push(message);
       continue;
     }
     const headIndex = turnHeadIndexByTask.get(taskId)!;
@@ -1375,6 +1394,7 @@ export function ChatPane({
   onOpenSettings,
   amrBalanceCardUsd = null,
   amrBalanceCardAnchorMessageId = null,
+  amrBalanceAudience = 'owner',
   amrBalanceCardUnavailable = false,
   onAmrBalanceUpgrade,
   onOpenAmrSettings,
@@ -4424,6 +4444,7 @@ export function ChatPane({
                   messages={displayMessages}
                   streaming={streaming}
                   lowBalanceTurnCards={lowBalanceTurnCards}
+                  lowBalanceTurnCardAudience={amrBalanceAudience}
                   onLowBalanceTurnCardUpgrade={
                     onAmrBalanceUpgrade ?? (() => openAmrPlans('chat_upgrade_card'))
                   }
@@ -4609,6 +4630,7 @@ export function ChatPane({
                     exhausted={reconnect.exhausted}
                     manualRetry={reconnect.manualRetry}
                     reason={reconnect.reason}
+                    retryCause={reconnect.retryCause}
                     /* 〔重新连接〕只属于传输层那一行:线断了才有东西可重连。
                        daemon 重跑一轮时连接是通的,给一颗「重新连接」既没有对应的
                        动作,也会让用户以为是自己网络的问题。 */
@@ -5186,6 +5208,7 @@ function ChatRows({
   messages,
   streaming,
   lowBalanceTurnCards,
+  lowBalanceTurnCardAudience = 'owner',
   onLowBalanceTurnCardUpgrade,
   onResendUserMessage,
   onRetryImage,
@@ -5264,6 +5287,8 @@ function ChatRows({
    * 下面、第二轮跑起来时不许挪」是这样成立的,不靠任何位置计算。
    */
   lowBalanceTurnCards?: ReadonlyMap<string, number>;
+  /** 那一轮的卡在余额归零时按谁在看说话(S15),见 `ChatPane.amrBalanceAudience`。 */
+  lowBalanceTurnCardAudience?: 'owner' | 'member';
   /** 升级卡那颗按钮。落点由宿主决定,和流水末尾那张同一个 handler。 */
   onLowBalanceTurnCardUpgrade?: () => void;
   onResendUserMessage?: (message: ChatMessage) => void;
@@ -5516,7 +5541,11 @@ function ChatRows({
     return (
       <>
         {assistantRow}
-        <UpgradeCard balanceUsd={turnBalanceUsd} onUpgrade={onLowBalanceTurnCardUpgrade} />
+        <UpgradeCard
+          balanceUsd={turnBalanceUsd}
+          onUpgrade={onLowBalanceTurnCardUpgrade}
+          pausedAudience={lowBalanceTurnCardAudience}
+        />
       </>
     );
   };

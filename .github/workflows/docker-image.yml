@@ -2,8 +2,8 @@ name: Docker image
 
 # Standalone Docker packaging line (not part of core merge validation in ci.yml).
 #
-# - pull_request / workflow_dispatch: smoke build only (push: false, amd64)
-# - tag v*.*.* / workflow_call from release: multi-arch build + push to ghcr.io
+# - pull_request / standalone workflow_dispatch: smoke build only (push: false, amd64)
+# - workflow_call from release-stable-docker: idempotent version-tag reconcile
 
 on:
   workflow_call:
@@ -18,13 +18,18 @@ on:
         required: false
         type: string
         default: ""
-      publish_latest:
-        description: "Whether to also publish :latest when invoked from release automation."
+      expected_revision:
+        description: "Authoritative stable source commit from versioned release metadata."
         required: false
-        type: boolean
-        default: false
-  push:
-    tags: ['v*.*.*']
+        type: string
+        default: ""
+    outputs:
+      reconciliation:
+        description: "Version-tag reconciliation action: noop or published."
+        value: ${{ jobs.build-and-push.outputs.reconciliation }}
+      version_digest:
+        description: "Verified multi-arch digest for the immutable version tag."
+        value: ${{ jobs.build-and-push.outputs.version_digest }}
   pull_request:
     paths:
       - "deploy/**"
@@ -32,39 +37,47 @@ on:
       - "package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
+      - ".github/scripts/release/stable-docker.py"
       - ".github/workflows/docker-image.yml"
+      - ".github/workflows/release-stable-docker.yml"
   workflow_dispatch:
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    outputs:
+      reconciliation: ${{ steps.verify.outputs.reconciliation }}
+      version_digest: ${{ steps.verify.outputs.digest }}
     permissions:
       contents: read
       packages: write
-      id-token: write
     steps:
-      - name: Check out repository
+      - name: Check out trusted Docker control plane
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch || 'main' }}
+          path: .docker-control
+
+      - name: Check out image source
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref || github.sha }}
+          path: source
 
       - name: Resolve publish mode
         id: mode
         shell: bash
         env:
-          EVENT_NAME: ${{ github.event_name }}
+          EXPECTED_REVISION: ${{ inputs.expected_revision }}
           RELEASE_VERSION: ${{ inputs.release_version }}
-          PUBLISH_LATEST: ${{ inputs.publish_latest }}
         run: |
           set -euo pipefail
-          # Publish on:
-          #   - tag push (event_name=push with tags filter), or
-          #   - reusable release call that passes release_version / publish_latest.
-          # Do NOT key on event_name == 'workflow_call': nested reusable workflows
-          # keep the *caller's* event name (usually workflow_dispatch), so that
-          # check never matches and stable GHCR publish would silently become a
-          # smoke-only build.
-          if [ "$EVENT_NAME" = "push" ] || [ -n "${RELEASE_VERSION:-}" ] || [ "${PUBLISH_LATEST:-}" = "true" ]; then
+          if { [ -n "${RELEASE_VERSION:-}" ] && [ -z "${EXPECTED_REVISION:-}" ]; } || \
+             { [ -z "${RELEASE_VERSION:-}" ] && [ -n "${EXPECTED_REVISION:-}" ]; }; then
+            echo "::error::release_version and expected_revision must be supplied together"
+            exit 1
+          fi
+          if [ -n "${RELEASE_VERSION:-}" ]; then
             echo "publish=true" >> "$GITHUB_OUTPUT"
             echo "platforms=linux/amd64,linux/arm64" >> "$GITHUB_OUTPUT"
           else
@@ -90,34 +103,66 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Inspect immutable version tag
+        id: existing
+        if: ${{ steps.mode.outputs.publish == 'true' }}
+        shell: bash
+        env:
+          EXPECTED_REVISION: ${{ inputs.expected_revision }}
+          IMAGE: ghcr.io/${{ github.repository_owner }}/od:${{ inputs.release_version }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: |
+          set -euo pipefail
+          inspection="$RUNNER_TEMP/stable-docker-existing.json"
+          error="$RUNNER_TEMP/stable-docker-existing.err"
+          if docker buildx imagetools inspect "$IMAGE" --format '{{json .}}' > "$inspection" 2> "$error"; then
+            python3 .docker-control/.github/scripts/release/stable-docker.py image-state \
+              --inspection "$inspection" \
+              --expected-revision "$EXPECTED_REVISION" \
+              --expected-version "$RELEASE_VERSION" \
+              --github-output "$GITHUB_OUTPUT"
+          elif grep -Eqi 'manifest unknown|not found|does not exist' "$error"; then
+            {
+              echo "state=missing"
+              echo "digest="
+              echo "missing_platforms=linux/amd64,linux/arm64"
+            } >> "$GITHUB_OUTPUT"
+          else
+            cat "$error" >&2
+            echo "::error::could not determine whether $IMAGE already exists"
+            exit 1
+          fi
+
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository_owner }}/od
           # spec §15.1 tag scheme:
-          #   - vX.Y.Z push             → :X.Y.Z + :latest
-          #   - workflow_call (stable)  → :<release_version> + optional :latest
+          #   - workflow_call (stable)  → immutable :<release_version> only
           #   - PR / manual validate    → local-only sha tags (only when not publishing)
           tags: |
-            type=semver,pattern={{version}}
             type=raw,value=${{ inputs.release_version }},enable=${{ inputs.release_version != '' }}
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
-            type=raw,value=latest,enable=${{ inputs.publish_latest == true }}
             type=sha,prefix=pr-${{ github.event.pull_request.number }}-sha-,format=short,enable=${{ steps.mode.outputs.publish != 'true' && github.event_name == 'pull_request' }}
             type=sha,prefix=manual-sha-,format=short,enable=${{ steps.mode.outputs.publish != 'true' && github.event_name == 'workflow_dispatch' }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ inputs.expected_revision || github.sha }}
+            org.opencontainers.image.version=${{ inputs.release_version || github.sha }}
 
       - name: Build and push
+        if: ${{ steps.mode.outputs.publish != 'true' || steps.existing.outputs.state != 'complete' }}
         uses: docker/build-push-action@v6
         with:
-          context: .
-          file: deploy/Dockerfile
+          context: source
+          file: source/deploy/Dockerfile
           platforms: ${{ steps.mode.outputs.platforms }}
           push: ${{ steps.mode.outputs.publish == 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          annotations: |
+            index:org.opencontainers.image.revision=${{ inputs.expected_revision || github.sha }}
+            index:org.opencontainers.image.version=${{ inputs.release_version || github.sha }}
           # The in-tree Dockerfile uses node:24-alpine + apk for build
           # tooling; we keep that default so the workflow doesn't drift
           # from local builds. Spec §15.1 nominates bookworm-slim as
@@ -130,24 +175,57 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Verify public GHCR pull access
+        id: verify
         if: ${{ steps.mode.outputs.publish == 'true' }}
         shell: bash
         env:
-          PUBLISHED_TAGS: ${{ steps.meta.outputs.tags }}
+          EXPECTED_REVISION: ${{ inputs.expected_revision }}
+          EXISTING_STATE: ${{ steps.existing.outputs.state }}
+          IMAGE: ghcr.io/${{ github.repository_owner }}/od:${{ inputs.release_version }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
         run: |
           set -euo pipefail
-
           docker logout ghcr.io >/dev/null 2>&1 || true
-
-          while IFS= read -r image; do
-            [ -n "$image" ] || continue
-            echo "Verifying anonymous access for $image"
-            if ! docker buildx imagetools inspect "$image" >/dev/null; then
-              printf '%s\n' \
-                "Published image is not anonymously pullable: $image" \
-                "" \
-                "Make the GHCR package public before cutting a public Docker release:" \
-                "GitHub organization -> Packages -> od -> Package settings -> Change visibility -> Public." >&2
-              exit 1
+          inspection="$RUNNER_TEMP/stable-docker-verified.json"
+          verified=false
+          for attempt in 1 2 3 4 5; do
+            if docker buildx imagetools inspect "$IMAGE" --format '{{json .}}' > "$inspection"; then
+              verified=true
+              break
             fi
-          done <<< "$PUBLISHED_TAGS"
+            echo "public GHCR verification attempt $attempt failed; retrying"
+            sleep 15
+          done
+          if [ "$verified" != "true" ]; then
+            printf '%s\n' \
+              "Published image is not anonymously pullable: $IMAGE" \
+              "" \
+              "Make the GHCR package public before cutting a public Docker release:" \
+              "GitHub organization -> Packages -> od -> Package settings -> Change visibility -> Public." >&2
+            exit 1
+          fi
+          python3 .docker-control/.github/scripts/release/stable-docker.py image-state \
+            --inspection "$inspection" \
+            --expected-revision "$EXPECTED_REVISION" \
+            --expected-version "$RELEASE_VERSION" \
+            --github-output "$GITHUB_OUTPUT"
+          if [ "${EXISTING_STATE:-}" = "complete" ]; then
+            echo "reconciliation=noop" >> "$GITHUB_OUTPUT"
+          else
+            echo "reconciliation=published" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish reconciliation summary
+        if: ${{ steps.mode.outputs.publish == 'true' }}
+        env:
+          DIGEST: ${{ steps.verify.outputs.digest }}
+          IMAGE: ghcr.io/${{ github.repository_owner }}/od:${{ inputs.release_version }}
+          RECONCILIATION: ${{ steps.verify.outputs.reconciliation }}
+        run: |
+          {
+            echo "## Stable Docker version tag"
+            echo
+            echo "- Image: \`$IMAGE\`"
+            echo "- Action: \`$RECONCILIATION\`"
+            echo "- Digest: \`$DIGEST\`"
+          } >> "$GITHUB_STEP_SUMMARY"

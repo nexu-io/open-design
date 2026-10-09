@@ -2939,9 +2939,11 @@
   color: var(--home-hero-submit-fg);
   box-shadow: none;
 }
+/* `pre-line`:部分报错是「标题\n正文」两行(产品《报错文案》S03 / S28a,OPEND-2849)。 */
 .home-hero__error {
   color: var(--red);
   font-size: 13px;
+  white-space: pre-line;
   background: var(--red-bg);
   border: 1px solid var(--red-border);
   padding: 8px 12px;

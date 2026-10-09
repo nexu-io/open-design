@@ -350,6 +350,15 @@ export type TrackingRunFailureDetail =
   | 'agent_protocol_error'
   | 'acp_frame_too_large'
   | 'session_resume_expired'
+  // Two local processes raced to refresh the same stored OAuth credential and
+  // one lost the lock (Claude Code: "another Claude Code process is refreshing
+  // it or exited mid-refresh"). The credential itself is valid — nothing is
+  // expired, revoked or misconfigured — so this must not land in `auth`, whose
+  // verdict prescribes a sign-in the user does not need. The contending holder
+  // releases the lock within seconds, which is why the agent itself calls the
+  // condition transient; named here so it stays retryable rather than falling
+  // through to an opaque exit.
+  | 'credential_refresh_contention'
   | 'fabricated_role_marker'
   | 'permission_request_not_found'
   | 'qoder_stop_sequence'

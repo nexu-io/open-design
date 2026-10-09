@@ -385,6 +385,12 @@ export interface DaemonAgentRetryState {
    * 一闪而过,最需要解释的那 30 秒照旧沉默。
    */
   phase: 'retrying' | 'cleared';
+  /**
+   * 这次重跑是因为什么。只在 daemon 判为限流(`failure_category: 'rate_limit'`,
+   * 逐字取自 `run_retry_attempted`)时带上 —— 那一行要改说「模型服务请求繁忙」
+   * (产品《报错文案》S09a,OPEND-2849)。其他原因不带,那一行照旧说「正在重试」。
+   */
+  cause?: 'rate_limit';
 }
 
 /** Upstream reconnect progress emitted by an agent runtime (not browser SSE). */
@@ -2144,6 +2150,7 @@ async function consumeDaemonPhysicalRun({
                 attempt,
                 max: Number.isFinite(max) && max > 0 ? max : attempt,
                 phase: 'retrying',
+                ...(data.failure_category === 'rate_limit' ? { cause: 'rate_limit' as const } : {}),
               });
             }
             continue;

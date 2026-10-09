@@ -918,6 +918,33 @@ export async function hydrateReadyTeamProject(
   return summary.project;
 }
 
+/**
+ * What the user reads when a Home send's optimistic project creation fails.
+ *
+ * Product copy (OPEND-2849, 《报错文案｜精简版》): a create request that never
+ * reached the local daemon is S28a 「本地连接已断开」; a daemon that rejects the
+ * create as not signed in (`AMR_AUTH_REQUIRED`) is S03 「Open Design 尚未登录」.
+ * Both are "title\nbody" keys, rendered as the toast's title + details. The
+ * transport classification is the same one `HomeView` uses for its own error
+ * block. Any other failure keeps its existing text.
+ */
+function homeCreateFailureNotice(
+  err: unknown,
+  t: (key: 'home.createTimedOut' | 'home.daemonRecovering' | 'entry.authExpiredBody') => string,
+  fallback: string,
+): string {
+  if (err instanceof ProjectCreateError && err.code === 'PROJECT_CREATE_PREPARATION_TIMEOUT') {
+    return t('home.createTimedOut');
+  }
+  if (err instanceof TypeError || (err instanceof ProjectCreateError && err.status === null)) {
+    return t('home.daemonRecovering');
+  }
+  if (err instanceof ProjectCreateError && err.code === 'AMR_AUTH_REQUIRED') {
+    return t('entry.authExpiredBody');
+  }
+  return fallback;
+}
+
 export function App() {
   // `reducedMotion="user"` makes every motion/react component honor the OS
   // `prefers-reduced-motion` setting: transform/layout animations are zeroed
@@ -1374,6 +1401,10 @@ function AppInner() {
   }, []);
   const [dsLoading, setDsLoading] = useState(true);
   const [projectsLoading, setProjectsLoading] = useState(true);
+  const [projectListFailure, setProjectListFailure] = useState<{
+    displayKey: string;
+    generation: number;
+  } | null>(null);
   const [promptTemplatesLoading, setPromptTemplatesLoading] = useState(true);
   // Goes true once the daemon-persisted config (agentId/designSystemId/etc.)
   // has merged into local state. Auto-selection effects below wait on this
@@ -1569,6 +1600,16 @@ function AppInner() {
     };
   }, []);
 
+  const recordProjectListFailure = useCallback((request: ProjectListRequest) => {
+    if (
+      request.generation === projectListRequestGenerationRef.current
+      && request.accountGeneration === currentWorkspaceAccountGeneration()
+      && request.scopeKey === projectListScopeKey(workspaceContextRef.current)
+    ) {
+      setProjectListFailure({ displayKey: request.displayKey, generation: request.generation });
+    }
+  }, []);
+
   const reconcileFetchedProjects = useCallback((list: Project[], request: ProjectListRequest) => {
     if (
       request.accountGeneration !== currentWorkspaceAccountGeneration()
@@ -1644,6 +1685,10 @@ function AppInner() {
       return true;
     }
     latestAppliedProjectListGenerationRef.current = request.generation;
+    setProjectListFailure((failure) =>
+      failure?.displayKey === request.displayKey && request.generation >= failure.generation
+        ? null
+        : failure);
     setAppliedProjectListWitness({
       scopeKey: request.scopeKey,
       generation: request.generation,
@@ -2203,11 +2248,14 @@ function AppInner() {
 
       const request = beginProjectListRequest(workspaceProjectViewRef.current);
       void listCurrentWorkspaceProjects({
+        throwOnError: true,
         workspaceView: workspaceProjectViewRef.current,
       }).then((list) => {
-        if (cancelled) return;
-        reconcileFetchedProjects(list, request);
-        setProjectsLoading(false);
+        if (!cancelled) reconcileFetchedProjects(list, request);
+      }).catch(() => {
+        if (!cancelled) recordProjectListFailure(request);
+      }).finally(() => {
+        if (!cancelled) setProjectsLoading(false);
       });
 
       void listTemplates().then((list) => {
@@ -2339,6 +2387,7 @@ function AppInner() {
     isCurrentAgentStreamRequest,
     listCurrentWorkspaceProjects,
     reconcileFetchedProjects,
+    recordProjectListFailure,
   ]);
 
   // Keep the active projection's last-good display in sync with optimistic
@@ -2440,20 +2489,24 @@ function AppInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const refreshProjects = useCallback(async () => {
-    const request = beginProjectListRequest(workspaceProjectView);
-    const list = await listCurrentWorkspaceProjects({ workspaceView: workspaceProjectView });
-    reconcileFetchedProjects(list, request);
-  }, [beginProjectListRequest, listCurrentWorkspaceProjects, reconcileFetchedProjects, workspaceProjectView]);
-
   const refreshProjectsStrict = useCallback(async () => {
     const request = beginProjectListRequest(workspaceProjectView);
-    const list = await listCurrentWorkspaceProjects({
-      throwOnError: true,
-      workspaceView: workspaceProjectView,
-    });
-    reconcileFetchedProjects(list, request);
-  }, [beginProjectListRequest, listCurrentWorkspaceProjects, reconcileFetchedProjects, workspaceProjectView]);
+    try {
+      const list = await listCurrentWorkspaceProjects({
+        throwOnError: true,
+        workspaceView: workspaceProjectView,
+      });
+      reconcileFetchedProjects(list, request);
+    } catch (error) {
+      recordProjectListFailure(request);
+      throw error;
+    }
+  }, [beginProjectListRequest, listCurrentWorkspaceProjects, reconcileFetchedProjects, recordProjectListFailure, workspaceProjectView]);
+
+  const refreshProjects = useCallback(
+    () => refreshProjectsStrict().catch(() => {}),
+    [refreshProjectsStrict],
+  );
 
   const refreshProjectsAfterTeamCatalogChange = useCallback(() => {
     const context = workspaceContextRef.current;
@@ -2511,6 +2564,7 @@ function AppInner() {
             await new Promise((resolve) => setTimeout(resolve, 1200));
             continue;
           }
+          recordProjectListFailure(request);
           console.error('[projects] failed to refresh after workspace switch', err);
         }
       }
@@ -2527,6 +2581,7 @@ function AppInner() {
     effectiveWorkspaceProjectView,
     listCurrentWorkspaceProjects,
     reconcileFetchedProjects,
+    recordProjectListFailure,
   ]);
 
   const refreshDesignSystems = useCallback(async (options?: {
@@ -3227,10 +3282,7 @@ function AppInner() {
           rollbackOptimisticProjectCreation(
             optimisticProjectId,
             stagedFiles,
-            err instanceof ProjectCreateError
-            && err.code === 'PROJECT_CREATE_PREPARATION_TIMEOUT'
-              ? t('home.createTimedOut')
-              : errorCode,
+            homeCreateFailureNotice(err, t, errorCode),
           );
           return false;
         }
@@ -4946,6 +4998,7 @@ function AppInner() {
     beginProjectListRequest,
     listCurrentWorkspaceProjects,
     reconcileFetchedProjects,
+    recordProjectListFailure,
   ]);
 
   const openSettings = useCallback((
@@ -5641,6 +5694,7 @@ function AppInner() {
           workspaceDesignSystems.identity !== currentWorkspaceCatalogIdentity || dsLoading
         }
         projectsLoading={projectsLoading}
+        projectsLoadFailed={projectListFailure?.displayKey === currentProjectDisplayKey}
         promptTemplatesLoading={promptTemplatesLoading}
         onCreateProject={handleCreateProject}
         onCreatePluginShareProject={handleCreatePluginShareProject}
@@ -5861,7 +5915,10 @@ function AppInner() {
       ) : null}
       {projectCreateError ? (
         <Toast
-          message={projectCreateError}
+          // 「标题\n正文」两行的定稿(S28a / S03,见 `homeCreateFailureNotice`)拆成
+          // Toast 的标题 + 正文;单行的照旧只有标题。
+          message={projectCreateError.split('\n')[0] ?? projectCreateError}
+          details={projectCreateError.includes('\n') ? projectCreateError.slice(projectCreateError.indexOf('\n') + 1) : null}
           role="alert"
           tone="error"
           onDismiss={() => setProjectCreateError(null)}

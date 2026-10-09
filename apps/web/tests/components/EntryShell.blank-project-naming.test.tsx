@@ -862,3 +862,42 @@ describe('EntryShell blank-project creation tags nameSource', () => {
     );
   });
 });
+
+
+describe('empty project catalog completion', () => {
+  it('shows the empty state in a personal workspace without waiting for a team catalog', async () => {
+    const context = teamContext({ workspaceType: 'personal' });
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const pathname = new URL(String(input), 'http://d.local').pathname;
+      if (pathname.endsWith('/workspace/directory')) return jsonResponse(workspaceDirectoryFixture([context]));
+      if (pathname.endsWith('/workspace/context')) return jsonResponse({ context });
+      return jsonResponse({ projects: [], plugins: [] });
+    }) as typeof fetch;
+    renderAt('/drafts');
+    await act(async () => {});
+    expect(screen.queryByText('Loading…')).toBeNull();
+    expect(screen.getByText('Create a project here first. It stays private until you move it into the team space.')).toBeTruthy();
+  });
+});
+
+
+it('renders a settled team catalog failure with retry instead of a loader or an empty success', async () => {
+  let denied = true;
+  globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+    const pathname = new URL(String(input), 'http://d.local').pathname;
+    if (pathname.endsWith('/workspace/directory')) return jsonResponse(workspaceDirectoryFixture([teamContext()]));
+    if (pathname.endsWith('/workspace/context')) return jsonResponse({ context: teamContext() });
+    if (pathname.endsWith('/workspace/projects/team')) return denied
+      ? jsonResponse({ error: 'WORKSPACE_ACCESS_DENIED' }, 403)
+      : jsonResponse({ projects: [] });
+    return jsonResponse({});
+  }) as typeof fetch;
+  renderAt('/drafts');
+  const alert = await screen.findByRole('alert');
+  expect(alert.textContent).toContain('Could not load projects');
+  expect(screen.queryByText('Loading…')).toBeNull();
+  denied = false;
+  await act(async () => fireEvent.click(within(alert).getByRole('button', { name: 'Retry' })));
+  expect(screen.queryByRole('alert')).toBeNull();
+  expect(screen.getByText('Create a project here first. It stays private until you move it into the team space.')).toBeTruthy();
+});
