@@ -650,13 +650,13 @@ import {
   modelIdForTracking,
 } from '@open-design/contracts/analytics';
 import {
-  mergeNoProxyWithLoopbackDefaults,
   redactSecrets,
   testAgentConnection,
   testProviderConnection,
   validateBaseUrl,
   validateBaseUrlResolved,
 } from './connectionTest.js';
+import { mergeNoProxyWithLoopbackDefaults } from './http/proxy-dispatcher.js';
 import { listProviderModels } from './integrations/provider-models.js';
 import { importClaudeDesignZip } from './design/index.js';
 import {
