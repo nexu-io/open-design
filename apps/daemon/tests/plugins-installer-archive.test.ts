@@ -82,6 +82,11 @@ function makeResponse(body: Buffer | string, status = 200, statusText = 'OK'): A
   };
 }
 
+/** Read a request header off the `init` an installer fetch received. */
+function acceptHeader(init: Pick<RequestInit, 'headers'> | undefined): string | null {
+  return new Headers(init?.headers).get('accept');
+}
+
 beforeEach(async () => {
   tmpRoot = await mkdtemp(path.join(os.tmpdir(), 'od-installer-archive-'));
   pluginsRoot = path.join(tmpRoot, 'plugins');
@@ -220,6 +225,118 @@ describe('archive installer', () => {
     expect(urlsSeen).not.toContain('https://codeload.github.com/nexu-io/open-design/tar.gz/garnet-hemisphere');
     const row = db.prepare(`SELECT source_kind, source FROM installed_plugins WHERE id = 'sample-plugin'`).get();
     expect(row).toEqual({ source_kind: 'github', source });
+  });
+
+  // raw.githubusercontent.com (the host GitHub advertises as `download_url`)
+  // is unreachable on some networks: DNS resolves it to 0.0.0.0 or the TLS
+  // handshake is reset. The api.github.com listing that produced the entry
+  // just succeeded, so the same host must be able to serve the file bytes.
+  it('falls back to the api.github.com raw endpoint when the download_url host is unreachable', async () => {
+    const fixtureSrc = path.join(__dirname, 'fixtures', 'plugin-fixtures', 'sample-plugin');
+    const fixtureFiles = await readdir(fixtureSrc);
+    const urlsSeen: string[] = [];
+    const acceptsSeen = new Map<string, string | null>();
+    const subpath = 'plugins/community/registry-starter';
+    const apiUrl = `https://api.github.com/repos/nexu-io/open-design/contents/${subpath}?ref=main`;
+    const fileApiUrl = (name: string): string =>
+      `https://api.github.com/repos/nexu-io/open-design/contents/${subpath}/${name}?ref=main`;
+    const downloadBase = `https://raw.githubusercontent.com/nexu-io/open-design/main/${subpath}`;
+    const entries = fixtureFiles.map((name) => ({
+      type: 'file',
+      name,
+      path: `${subpath}/${name}`,
+      download_url: `${downloadBase}/${name}`,
+    }));
+    const fileBodies = new Map<string, Buffer>();
+    for (const name of fixtureFiles) {
+      fileBodies.set(name, await readFile(path.join(fixtureSrc, name)));
+    }
+    const fetcher: ArchiveFetcher = async (u, init) => {
+      urlsSeen.push(u);
+      acceptsSeen.set(u, acceptHeader(init));
+      if (u === apiUrl) return makeResponse(JSON.stringify(entries));
+      if (u.startsWith(downloadBase)) {
+        // What the reported network produces: undici fails before any socket
+        // is opened, and the real reason only rides on `cause`.
+        throw new TypeError('fetch failed', {
+          cause: new Error('host resolves to a private address'),
+        });
+      }
+      const name = fixtureFiles.find((candidate) => u === fileApiUrl(candidate));
+      if (name) return makeResponse(fileBodies.get(name) as Buffer);
+      return makeResponse('not found', 404, 'Not Found');
+    };
+
+    let success = false;
+    let error: string | undefined;
+    const source = `github:nexu-io/open-design@main/${subpath}`;
+    for await (const ev of installPlugin(db, {
+      source,
+      roots: { userPluginsRoot: pluginsRoot },
+      fetcher,
+    })) {
+      if (ev.kind === 'success') success = true;
+      if (ev.kind === 'error') error = ev.message;
+    }
+    if (!success) {
+      throw new Error(`install failed: ${error}`);
+    }
+
+    expect(urlsSeen).toContain(`${downloadBase}/SKILL.md`);
+    expect(urlsSeen).toContain(fileApiUrl('SKILL.md'));
+    // Raw media type: the fallback must ask for the file's bytes, not for the
+    // base64 JSON envelope the contents API returns by default.
+    expect(acceptsSeen.get(fileApiUrl('SKILL.md'))).toBe('application/vnd.github.raw');
+    const row = db.prepare(`SELECT source_kind, source FROM installed_plugins WHERE id = 'sample-plugin'`).get();
+    expect(row).toEqual({ source_kind: 'github', source });
+  });
+
+  it('reports the cause and both file URLs when the download_url host and the raw endpoint both fail', async () => {
+    const fixtureSrc = path.join(__dirname, 'fixtures', 'plugin-fixtures', 'sample-plugin');
+    const fixtureFiles = await readdir(fixtureSrc);
+    const urlsSeen: string[] = [];
+    const subpath = 'plugins/community/registry-starter';
+    const apiUrl = `https://api.github.com/repos/nexu-io/open-design/contents/${subpath}?ref=main`;
+    const fileApiUrl = (name: string): string =>
+      `https://api.github.com/repos/nexu-io/open-design/contents/${subpath}/${name}?ref=main`;
+    const downloadBase = `https://raw.githubusercontent.com/nexu-io/open-design/main/${subpath}`;
+    const tarballUrl = 'https://codeload.github.com/nexu-io/open-design/tar.gz/main';
+    const entries = fixtureFiles.map((name) => ({
+      type: 'file',
+      name,
+      path: `${subpath}/${name}`,
+      download_url: `${downloadBase}/${name}`,
+    }));
+    const fetcher: ArchiveFetcher = async (u) => {
+      urlsSeen.push(u);
+      if (u === apiUrl) return makeResponse(JSON.stringify(entries));
+      if (u.startsWith(downloadBase)) {
+        throw new TypeError('fetch failed', {
+          cause: new Error('host resolves to a private address'),
+        });
+      }
+      if (fixtureFiles.some((name) => u === fileApiUrl(name))) {
+        return makeResponse('rate limited', 403, 'Forbidden');
+      }
+      return makeResponse('not found', 404, 'Not Found');
+    };
+
+    let error: string | undefined;
+    const source = `github:nexu-io/open-design@main/${subpath}`;
+    for await (const ev of installPlugin(db, {
+      source,
+      roots: { userPluginsRoot: pluginsRoot },
+      fetcher,
+    })) {
+      if (ev.kind === 'error') error = ev.message;
+    }
+
+    expect(error).toContain('host resolves to a private address');
+    expect(error).toContain(`${downloadBase}/SKILL.md`);
+    expect(error).toContain(fileApiUrl('SKILL.md'));
+    // A file-level failure is not a "try the next ref" signal, so the 3.3 GB
+    // codeload tarball must never be attempted.
+    expect(urlsSeen).not.toContain(tarballUrl);
   });
 
   it.each([
