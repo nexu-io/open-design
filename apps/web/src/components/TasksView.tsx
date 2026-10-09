@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 // Automations tab: one surface for scheduled routines, Orbit-style digests,
 // and live artifact refreshers. The daemon still stores these as routines;
 // the UI presents them as scheduled agent conversations.
@@ -473,13 +474,13 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [], 
   const refresh = useCallback(async (): Promise<{ proposalRefreshFailed: boolean }> => {
     let proposalRefreshFailed = false;
     try {
-      const templateRequest = fetch('/api/automation-templates')
+      const templateRequest = apiFetch('/api/automation-templates')
         .then(async (res) => {
           if (!res.ok) return null;
           return (await res.json()) as AutomationTemplateListResponse;
         })
         .catch(() => null);
-      const proposalRequest = fetch('/api/automation-proposals?status=pending-review')
+      const proposalRequest = apiFetch('/api/automation-proposals?status=pending-review')
         .then(async (res) => {
           if (!res.ok) {
             proposalRefreshFailed = true;
@@ -492,7 +493,7 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [], 
           return null;
         });
       const [rRes, projectList, tJson, proposalJson] = await Promise.all([
-        fetch('/api/routines', routineHeaders ? { headers: routineHeaders } : undefined),
+        apiFetch('/api/routines', routineHeaders ? { headers: routineHeaders } : undefined),
         listProjects({ workspaceContext: tasksWorkspaceContext, workspaceView: 'all' }),
         templateRequest,
         proposalRequest,
@@ -564,7 +565,7 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [], 
     setProposalBusyId(id);
     setError(null);
     try {
-      const res = await fetch(`/api/automation-proposals/${id}/${action}`, {
+      const res = await apiFetch(`/api/automation-proposals/${id}/${action}`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: action === 'reject' ? JSON.stringify({ reason: t('automations.proposalsDismissReason') }) : '{}',
@@ -585,7 +586,7 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [], 
     setBusyId(id);
     setError(null);
     try {
-      const res = await fetch(`/api/routines/${id}/run`, {
+      const res = await apiFetch(`/api/routines/${id}/run`, {
         method: 'POST',
         ...(routineHeaders ? { headers: routineHeaders } : {}),
       });
@@ -617,7 +618,7 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [], 
     setCrystallizingRunId(runId);
     setError(null);
     try {
-      const res = await fetch(`/api/routines/${routineId}/runs/${runId}/crystallize`, {
+      const res = await apiFetch(`/api/routines/${routineId}/runs/${runId}/crystallize`, {
         method: 'POST',
         ...(routineHeaders ? { headers: routineHeaders } : {}),
       });
@@ -650,7 +651,7 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [], 
   const togglePaused = async (routine: Routine) => {
     setBusyId(routine.id);
     try {
-      const res = await fetch(`/api/routines/${routine.id}`, {
+      const res = await apiFetch(`/api/routines/${routine.id}`, {
         method: 'PATCH',
         headers: {
           'content-type': 'application/json',
@@ -675,7 +676,7 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [], 
       return;
     setBusyId(id);
     try {
-      const res = await fetch(`/api/routines/${id}`, {
+      const res = await apiFetch(`/api/routines/${id}`, {
         method: 'DELETE',
         ...(routineHeaders ? { headers: routineHeaders } : {}),
       });
@@ -1111,7 +1112,7 @@ function AutomationRunHistory({
     setRuns(null);
     void (async () => {
       try {
-        const res = await fetch(`/api/routines/${routineId}/runs?limit=10`, workspaceContext
+        const res = await apiFetch(`/api/routines/${routineId}/runs?limit=10`, workspaceContext
           ? { headers: workspaceProjectHeaders(workspaceContext) }
           : undefined);
         if (!res.ok) throw new Error(`runs: ${res.status}`);

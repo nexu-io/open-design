@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 import {
 	touchpointOfflineReplayOf,
 	type TouchpointOfflineReplay,
@@ -80,7 +81,7 @@ export async function loadProductionTouchpointDecision(placementKey: string, loc
 	try {
 		const query = new URLSearchParams({ placementKey, locale });
 		if (activeDecisionId) query.set("activeDecisionId", activeDecisionId);
-		response = await fetch(`/api/touchpoints/production-runtime?${query}`, { cache: "no-store", signal });
+		response = await apiFetch(`/api/touchpoints/production-runtime?${query}`, { cache: "no-store", signal });
 	} catch (error) {
 		if (error instanceof DOMException && error.name === "AbortError") throw error;
 		throw new ProductionTouchpointLoadError("network");

@@ -1,3 +1,4 @@
+import { normalizeBasePath } from '@open-design/path-config';
 import type { NextConfig } from 'next';
 import { existsSync, realpathSync, readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -9,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 // dev-all launcher overrides OD_PORT after probing for a free port; we read
 // the same env so /api, /artifacts, and /frames always reach the right
 // daemon instance during `next dev`.
+const WEB_BASE_PATH = normalizeBasePath(process.env.OD_WEB_BASE_PATH);
 const DAEMON_PORT = Number(process.env.OD_PORT) || 7456;
 const DAEMON_ORIGIN = `http://127.0.0.1:${DAEMON_PORT}`;
 
@@ -196,7 +198,9 @@ export function cmsHostReleaseFingerprint(
 }
 
 const nextConfig: NextConfig = {
+  basePath: WEB_BASE_PATH,
   env: {
+    NEXT_PUBLIC_OD_WEB_BASE_PATH: WEB_BASE_PATH,
     // Embedded in the client at build time. Packaged servers use the already
     // compiled client and need not retain source files to load this config.
     NEXT_PUBLIC_CMS_HOST_RELEASE: existsSync(resolve(WEB_ROOT, 'src/components/touchpoint-component.ts'))

@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 // Wraps POST /api/projects/:id/finalize/<provider> for the Finalize
 // design package button (#451). The daemon route runs synchronously for
 // 60–120 s, so the hook owns:
@@ -105,7 +106,7 @@ export function useFinalizeProject(
           : 'anthropic';
 
       try {
-        const resp = await fetch(
+        const resp = await apiFetch(
           `/api/projects/${encodeURIComponent(projectId)}/finalize/${protocol}`,
           {
             method: 'POST',

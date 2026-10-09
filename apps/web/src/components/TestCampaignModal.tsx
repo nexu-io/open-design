@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 import {
 	TOUCHPOINT_COMPONENT_V2_RUNTIME_API_VERSION,
 	TOUCHPOINT_COMPONENT_V2_SDK_VERSION,
@@ -292,7 +293,7 @@ export async function recordTestAcceptance(
 		hostVersion?: string;
 	}>,
 ): Promise<unknown> {
-	const response = await fetch(
+	const response = await apiFetch(
 		`/api/touchpoints/test-runtime/test-deployments/${encodeURIComponent(input.deploymentId)}/acceptances`,
 		{
 			method: "POST",
@@ -502,7 +503,7 @@ export function TestCampaignModal({
 			null;
 		/** Resolves `null` for a context response this selection cannot use. */
 		const fetchContext = async (signal: AbortSignal): Promise<TestContext | null> => {
-			const response = await fetch("/api/touchpoints/test-runtime/context", {
+			const response = await apiFetch("/api/touchpoints/test-runtime/context", {
 				method: "POST",
 				headers: { "content-type": "application/json" },
 				body: JSON.stringify({
@@ -562,7 +563,7 @@ export function TestCampaignModal({
 						placementKey,
 						locale,
 					});
-					const response = await fetch("/api/touchpoints/test-runtime?" + query, {
+					const response = await apiFetch("/api/touchpoints/test-runtime?" + query, {
 						cache: "no-store",
 						signal,
 					});

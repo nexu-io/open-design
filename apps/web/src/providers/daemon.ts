@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 /**
  * Daemon provider — fetch-based SSE client for /api/runs. The daemon can
  * emit three event streams depending on the agent's streamFormat:
@@ -1112,7 +1113,7 @@ export async function streamViaDaemon({
   try {
     let createResp: Response;
     for (let attempt = 0; ; attempt += 1) {
-      createResp = await fetch('/api/runs', {
+      createResp = await apiFetch('/api/runs', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1226,7 +1227,7 @@ export async function fetchChatRunStatus(
   workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<ChatRunStatusResponse | null> {
   try {
-    const resp = await fetch(`/api/runs/${encodeURIComponent(runId)}`, {
+    const resp = await apiFetch(`/api/runs/${encodeURIComponent(runId)}`, {
       ...(workspaceContext
         ? { headers: workspaceProjectHeaders(workspaceContext) }
         : {}),
@@ -1254,7 +1255,7 @@ export interface LaunchAntigravityOauthResult {
 }
 export async function launchAntigravityOauth(): Promise<LaunchAntigravityOauthResult> {
   try {
-    const resp = await fetch('/api/agents/antigravity/oauth-launch', {
+    const resp = await apiFetch('/api/agents/antigravity/oauth-launch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: '{}',
@@ -1433,7 +1434,7 @@ export function readVelaLoginStatus(
   return coalescedGet(
     `vela-login-status:${accountGeneration}:${url}`,
     async (): Promise<VelaLoginStatusRead> => {
-      const resp = await fetch(url, { cache: 'no-store' });
+      const resp = await apiFetch(url, { cache: 'no-store' });
       const body = await resp.json().catch(() => null);
       return { ok: resp.ok, httpStatus: resp.status, body };
     },
@@ -1462,7 +1463,7 @@ export async function fetchVelaLoginStatus(options: { refresh?: boolean } = {}):
 export async function fetchAmrWalletSnapshot(options: { refresh?: boolean } = {}): Promise<AmrWalletSnapshot | null> {
   try {
     const query = options.refresh ? '?refresh=1' : '';
-    const resp = await fetch(`/api/integrations/vela/wallet${query}`, { cache: 'no-store' });
+    const resp = await apiFetch(`/api/integrations/vela/wallet${query}`, { cache: 'no-store' });
     if (!resp.ok) return null;
     return (await resp.json()) as AmrWalletSnapshot;
   } catch {
@@ -1472,7 +1473,7 @@ export async function fetchAmrWalletSnapshot(options: { refresh?: boolean } = {}
 
 export async function fetchAmrModels(): Promise<AmrModelsResponse | null> {
   try {
-    const resp = await fetch('/api/amr/models', { cache: 'no-store' });
+    const resp = await apiFetch('/api/amr/models', { cache: 'no-store' });
     if (!resp.ok) return null;
     return (await resp.json()) as AmrModelsResponse;
   } catch {
@@ -1513,7 +1514,7 @@ export async function startVelaLogin(
       ...(canonicalAuthAttemptId ? { authAttemptId: canonicalAuthAttemptId } : {}),
       ...(authRequestId ? { authRequestId } : {}),
     };
-    const resp = await fetch('/api/integrations/vela/login', {
+    const resp = await apiFetch('/api/integrations/vela/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -1558,7 +1559,7 @@ export async function cancelVelaLogin(
     return { ok: false };
   }
   try {
-    const resp = await fetch('/api/integrations/vela/login/cancel', {
+    const resp = await apiFetch('/api/integrations/vela/login/cancel', {
       method: 'POST',
       ...(hasTarget
         ? {
@@ -1579,7 +1580,7 @@ export async function cancelVelaLogin(
 
 export async function velaLogout(): Promise<{ ok: boolean }> {
   try {
-    const resp = await fetch('/api/integrations/vela/logout', { method: 'POST' });
+    const resp = await apiFetch('/api/integrations/vela/logout', { method: 'POST' });
     return { ok: resp.ok };
   } catch {
     return { ok: false };
@@ -1599,7 +1600,7 @@ export async function reportChatRunFeedback(req: {
 }, workspaceContext?: WorkspaceCollabContext | null): Promise<void> {
   try {
     const { runId, ...feedback } = req;
-    await fetch(`/api/runs/${encodeURIComponent(runId)}/feedback`, {
+    await apiFetch(`/api/runs/${encodeURIComponent(runId)}/feedback`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1631,7 +1632,7 @@ export async function steerChatRun(
 > {
   let response: Response;
   try {
-    response = await fetch(`/api/runs/${encodeURIComponent(req.runId)}/steer`, {
+    response = await apiFetch(`/api/runs/${encodeURIComponent(req.runId)}/steer`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1666,7 +1667,7 @@ export async function listActiveChatRuns(
 ): Promise<ChatRunStatusResponse[]> {
   try {
     const qs = new URLSearchParams({ projectId, conversationId, status: 'active' });
-    const resp = await fetch(`/api/runs?${qs.toString()}`, {
+    const resp = await apiFetch(`/api/runs?${qs.toString()}`, {
       ...(workspaceContext
         ? { headers: workspaceProjectHeaders(workspaceContext) }
         : {}),
@@ -1697,7 +1698,7 @@ export async function listProjectRunsWithScope(
   workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<{ runs: ChatRunStatusResponse[]; scopeRequired: boolean }> {
   try {
-    const resp = await fetch('/api/runs', {
+    const resp = await apiFetch('/api/runs', {
       ...(workspaceContext
         ? { headers: workspaceProjectHeaders(workspaceContext) }
         : {}),
@@ -1741,7 +1742,7 @@ export async function listRunsForProject(
   workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<{ runs: ChatRunStatusResponse[]; awaitingInputProjectIds: string[] } | null> {
   try {
-    const resp = await fetch(`/api/runs?projectId=${encodeURIComponent(projectId)}`, {
+    const resp = await apiFetch(`/api/runs?projectId=${encodeURIComponent(projectId)}`, {
       ...(workspaceContext
         ? { headers: workspaceProjectHeaders(workspaceContext) }
         : {}),
@@ -1892,7 +1893,7 @@ async function consumeDaemonPhysicalRun({
   const cancelRun = () => {
     if (canceled) return;
     canceled = true;
-    void fetch(`/api/runs/${encodeURIComponent(runId)}/cancel`, {
+    void apiFetch(`/api/runs/${encodeURIComponent(runId)}/cancel`, {
       method: 'POST',
       ...(workspaceContext
         ? { headers: workspaceProjectHeaders(workspaceContext) }
@@ -1976,7 +1977,7 @@ async function consumeDaemonPhysicalRun({
       const qs = lastEventId ? `?after=${encodeURIComponent(lastEventId)}` : '';
       let resp: Response;
       try {
-        resp = await fetch(`/api/runs/${encodeURIComponent(runId)}/events${qs}`, {
+        resp = await apiFetch(`/api/runs/${encodeURIComponent(runId)}/events${qs}`, {
           method: 'GET',
           signal,
           ...(workspaceContext
@@ -2837,7 +2838,7 @@ export async function saveArtifact(
   html: string,
 ): Promise<{ url: string; path: string } | null> {
   try {
-    const resp = await fetch('/api/artifacts/save', {
+    const resp = await apiFetch('/api/artifacts/save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ identifier, title, html }),

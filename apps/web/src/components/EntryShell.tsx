@@ -1,3 +1,5 @@
+import { publicPath } from '@/runtime/web-path';
+import { apiFetch } from '@/runtime/web-path';
 // EntryShell — the centered-hero entry layout.
 //
 // This component owns the entire JSX render and local UI state for
@@ -1114,12 +1116,12 @@ export function EntryShell({
     setPullingProjectId(id);
     try {
       const collabRoute = `/api/projects/${encodeURIComponent(id)}/collab`;
-      let response = await fetch(`${collabRoute}/bootstrap`, {
+      let response = await apiFetch(`${collabRoute}/bootstrap`, {
         method: 'PUT',
         headers: workspaceProjectHeaders(pullRead.context),
       });
       if (response.status === 404 || response.status === 405) {
-        response = await fetch(`${collabRoute}/pull`, {
+        response = await apiFetch(`${collabRoute}/pull`, {
           method: 'POST',
           headers: workspaceProjectHeaders(pullRead.context),
         });
@@ -3805,7 +3807,7 @@ function OnboardingView({
           </footer>
         </div>
         <div className="onboarding-cloud__art" aria-hidden="true">
-          <img src="/onboarding/onboarding-cloud-art.webp" alt="" />
+          <img src={publicPath("/onboarding/onboarding-cloud-art.webp")} alt="" />
         </div>
       </section>
     );
@@ -3934,7 +3936,7 @@ function OnboardingView({
           </footer>
         </div>
         <div className="onboarding-cloud__art" aria-hidden="true">
-          <img src="/onboarding/onboarding-cloud-art.webp" alt="" />
+          <img src={publicPath("/onboarding/onboarding-cloud-art.webp")} alt="" />
         </div>
       </section>
     );

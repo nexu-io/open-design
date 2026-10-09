@@ -32,7 +32,7 @@
 import type { ChatSessionMode } from '../api/chat.js';
 import type { ProjectMetadata, ProjectTemplate } from '../api/projects.js';
 import { OFFICIAL_DESIGNER_PROMPT, renderOfficialDesignerPrompt } from './official-system.js';
-import { DISCOVERY_AND_PHILOSOPHY } from './discovery.js';
+import { renderDiscoveryAndPhilosophy } from './discovery.js';
 import {
   renderDeckFrameworkDirective,
   type DeckFrameworkMode,
@@ -193,6 +193,7 @@ export interface ComposeInput {
   planToolNote?: string | null | undefined;
   skillBody?: string | undefined;
   skillName?: string | undefined;
+  webBasePath?: string;
   skillMode?:
     | 'prototype'
     | 'deck'
@@ -288,6 +289,7 @@ export function composeSystemPrompt({
   planToolNote,
   skillBody,
   skillName,
+  webBasePath,
   skillMode,
   designSystemBody,
   designSystemTitle,
@@ -418,7 +420,7 @@ export function composeSystemPrompt({
   }
 
   if (!isMediaSurfaceEarly && !isAskMode) {
-    parts.push(DISCOVERY_AND_PHILOSOPHY, '\n\n---\n\n');
+    parts.push(renderDiscoveryAndPhilosophy(webBasePath), '\n\n---\n\n');
   }
 
   // Ask mode skips the multi-thousand-token designer charter entirely — the

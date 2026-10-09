@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 // Drives the Continue in CLI button's existence + staleness chip without
 // a daemon-side endpoint. Fetches the project's file list to detect
 // DESIGN.md, downloads its body to parse the `## Provenance` section,
@@ -127,7 +128,7 @@ export function useDesignMdState(
           return;
         }
 
-        const designResp = await fetch(
+        const designResp = await apiFetch(
           `/api/projects/${projectIdEnc}/files/${encodeURIComponent(DESIGN_MD)}`,
           {
             signal,

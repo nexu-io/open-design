@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { TrackingProjectKind } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
@@ -1281,7 +1282,7 @@ export function DesignFilesPanel({
     const fileList = [...selected];
     if (fileList.length === 0) return;
     try {
-      const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/archive/batch`, {
+      const resp = await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/archive/batch`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -2123,7 +2124,7 @@ function HtmlCardThumbnail({
       void loadHtmlThumbnailSource(
         thumbnailIdentity,
         async () => {
-          const response = await fetch(
+          const response = await apiFetch(
             appendResourceQuery(url, `v=${Math.round(file.mtime)}`),
             {},
           );

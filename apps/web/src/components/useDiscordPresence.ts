@@ -1,3 +1,4 @@
+import { apiFetch, apiPath } from '@/runtime/web-path';
 // Shared Discord presence hook backing the entry Discord CTAs.
 //
 // The renderer asks the local daemon for public invite counts so we avoid
@@ -7,7 +8,7 @@
 import { useEffect, useState } from 'react';
 import type { OpenDesignDiscordPresenceResponse } from '@open-design/contracts';
 
-const API = '/api/community/discord';
+const API = apiPath('/community/discord');
 const LS_KEY = 'open-design:discord-presence';
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
@@ -95,7 +96,7 @@ export function useDiscordPresence(): CachedPresence | null {
     if (!inflight) {
       inflight = (async () => {
         try {
-          const res = await fetch(API);
+          const res = await apiFetch(API);
           if (!res.ok) return null;
           const next = cacheFromPayload(await res.json());
           if (!next) return null;

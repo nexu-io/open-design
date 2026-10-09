@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 import { useExperienceError } from '../observability/use-experience-error';
 import type { RecoveryActionBlockReason } from '../runtime/chat/recovery-gating';
 import {
@@ -6790,7 +6791,7 @@ function pagePresetPreviewErrorText(value: string): boolean {
 }
 
 async function validatePagePresetRemotePreview(url: string, signal: AbortSignal): Promise<boolean> {
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     signal,
     headers: { Accept: 'text/html,*/*' },
   });

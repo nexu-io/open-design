@@ -4,6 +4,7 @@ import {
   useState,
 } from 'react';
 import type { ConnectorDetail } from '@open-design/contracts';
+import { apiPath } from '@/runtime/web-path';
 
 const COMPOSIO_LOGO_SLUG_OVERRIDES: Record<string, string> = {
   google_drive: 'googledrive',
@@ -32,7 +33,7 @@ function composioLogoUrl(
 ): string | null {
   const slug = composioLogoSlug(connector);
   if (!slug) return null;
-  return `/api/connectors/logos/${encodeURIComponent(slug)}?theme=${theme}`;
+  return apiPath(`/connectors/logos/${encodeURIComponent(slug)}?theme=${theme}`);
 }
 
 /**

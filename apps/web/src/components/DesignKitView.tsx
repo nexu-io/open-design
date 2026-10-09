@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 // DesignKitView — the shared brand.html-style kit layout.
 //
 // Renders a normalized DesignKit (see runtime/design-kit.ts) as the full module
@@ -470,7 +471,7 @@ function DesignKitViewInner({
     let cancelled = false;
     void (async () => {
       try {
-        const resp = await fetch(url, { cache: 'no-store' });
+        const resp = await apiFetch(url, { cache: 'no-store' });
         if (!resp.ok) return;
         const raw = (await resp.json()) as Record<string, unknown>;
         if (cancelled) return;

@@ -443,6 +443,23 @@ describe("packaged smoke workflow", () => {
     expect(blobGuard).toContain("select(.status != \"removed\") | .filename");
   });
 
+  it("[P2] boots the Helm-rendered non-root image in the standalone Docker smoke lane", async () => {
+    const workflow = await readFile(dockerImageWorkflowPath, "utf8");
+    const mode = sectionBetween(workflow, "Resolve publish mode", "Set up QEMU");
+    const build = sectionBetween(workflow, "Build and push", "Set up Helm for deployment smoke");
+    const smoke = sectionBetween(workflow, "Set up Helm for deployment smoke", "Verify public GHCR pull access");
+    expect(workflow).toContain('"charts/open-design/**"');
+    expect(mode).toContain('echo "web_base_path=/open-design"');
+    expect(mode).toContain('echo "web_base_path="');
+    expect(build).toContain("load: ${{ steps.mode.outputs.publish != 'true' }}");
+    expect(build).toContain("OD_WEB_BASE_PATH=${{ steps.mode.outputs.web_base_path }}");
+    expect(smoke).toContain("if: ${{ steps.mode.outputs.publish != 'true' }}");
+    expect(smoke).toContain("working-directory: source");
+    expect(smoke).toContain("OD_HELM_SMOKE_WEB_BASE_PATH: ${{ steps.mode.outputs.web_base_path }}");
+    expect(smoke).toContain('export OD_HELM_SMOKE_IMAGE="$smoke_image"');
+    expect(smoke).toContain("charts/open-design/tests/base-path-image-runtime.test.ts");
+  });
+
   it("[P2] keeps merge queue as the authoritative post-PR validation path", async () => {
     const [ciWorkflow, dockerWorkflow, stableDockerWorkflow, commentWorkflow, autofixWorkflow, reportWorkflow] = await Promise.all([
       readFile(ciWorkflowPath, "utf8"),

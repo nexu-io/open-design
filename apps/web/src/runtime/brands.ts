@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 // Brand lookup shared by every design-system picker.
 //
 // A finalized brand registers a `user:<id>` design system (BrandMeta
@@ -59,7 +60,7 @@ export async function finalizeBrandProject(
   workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<ExtractBrandFromHtmlOutcome> {
   try {
-    const resp = await fetch(`/api/brands/${encodeURIComponent(brandId)}/finalize`, {
+    const resp = await apiFetch(`/api/brands/${encodeURIComponent(brandId)}/finalize`, {
       method: 'POST',
       cache: 'no-store',
       headers: {
@@ -97,7 +98,7 @@ export async function extractBrandFromHtml(
   body: BrandExtractFromHtmlRequest,
 ): Promise<ExtractBrandFromHtmlOutcome> {
   try {
-    const resp = await fetch(`/api/brands/${encodeURIComponent(brandId)}/extract-from-html`, {
+    const resp = await apiFetch(`/api/brands/${encodeURIComponent(brandId)}/extract-from-html`, {
       method: 'POST',
       cache: 'no-store',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -135,7 +136,7 @@ export async function continueBrandExtraction(
   brandId: string,
 ): Promise<ContinueBrandExtractionOutcome> {
   try {
-    const resp = await fetch(`/api/brands/${encodeURIComponent(brandId)}/continue-extraction`, {
+    const resp = await apiFetch(`/api/brands/${encodeURIComponent(brandId)}/continue-extraction`, {
       method: 'POST',
       cache: 'no-store',
       headers: { Accept: 'application/json' },
@@ -164,7 +165,7 @@ export async function cancelBrandExtraction(
   brandId: string,
 ): Promise<CancelBrandExtractionOutcome> {
   try {
-    const resp = await fetch(`/api/brands/${encodeURIComponent(brandId)}/cancel-extraction`, {
+    const resp = await apiFetch(`/api/brands/${encodeURIComponent(brandId)}/cancel-extraction`, {
       method: 'POST',
       cache: 'no-store',
       headers: { Accept: 'application/json' },
@@ -191,7 +192,7 @@ export async function cancelBrandExtraction(
 
 export async function fetchBrands(): Promise<BrandSummary[]> {
   try {
-    const resp = await fetch('/api/brands', { cache: 'no-store' });
+    const resp = await apiFetch('/api/brands', { cache: 'no-store' });
     if (!resp.ok) return [];
     const data = (await resp.json()) as { brands?: BrandSummary[] };
     return Array.isArray(data?.brands) ? data.brands : [];

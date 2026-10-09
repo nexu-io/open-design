@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 import { useCallback, useEffect, useState } from "react";
 import { emitWebTouchpointDiagnostic } from "./touchpoint-component";
 import type { TouchpointStaticAction } from "./touchpoint-static-actions";
@@ -158,7 +159,7 @@ export function useTestDeploymentSelection({
 				});
 			}, REQUEST_TIMEOUT_MS);
 			try {
-				const response = await fetch("/api/touchpoints/test-runtime/deployments", {
+				const response = await apiFetch("/api/touchpoints/test-runtime/deployments", {
 					cache: "no-store",
 					signal: controller.signal,
 				});

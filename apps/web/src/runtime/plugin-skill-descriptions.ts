@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 export interface PluginSkillDescriptionSource {
   key: string;
   assetPath: string | null;
@@ -190,7 +191,7 @@ async function fetchSkillMarkdown(
   else parentSignal.addEventListener('abort', abort, { once: true });
   const timeout = globalThis.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    const response = await fetch(pluginAssetUrl(pluginId, assetPath), {
+    const response = await apiFetch(pluginAssetUrl(pluginId, assetPath), {
       signal: controller.signal,
       ...(workspaceContext
         ? { headers: workspaceProjectHeaders(workspaceContext) }

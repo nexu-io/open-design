@@ -1,3 +1,4 @@
+import { publicPath } from '@/runtime/web-path';
 // Tiny URL router. We avoid pulling in react-router for two reasons:
 // the surface area we need is small (three routes, plain pushState), and
 // we want a single source of truth for "what file is open" — encoding
@@ -5,6 +6,7 @@
 
 import { useSyncExternalStore } from 'react';
 import { LIBRARY_UI_VISIBLE } from './features/libraryUi';
+import { stripWebBasePath, withWebBasePath } from './runtime/web-path';
 
 // Entry-shell sub-views. The home/project landing renders one of three
 // columns and each sub-view now owns a top-level path so the browser
@@ -73,7 +75,9 @@ export type Route =
   | { kind: 'community' };
 
 export function parseRoute(pathname: string): Route {
-  const parts = pathname.replace(/\/+$/, '').split('/').filter(Boolean);
+  const appPathname = stripWebBasePath(pathname);
+  if (appPathname == null) return { kind: 'home', view: 'home' };
+  const parts = appPathname.replace(/\/+$/, '').split('/').filter(Boolean);
   if (parts.length === 0) return { kind: 'home', view: 'home' };
   if (parts[0] === 'onboarding') {
     return { kind: 'home', view: 'onboarding' };
@@ -174,9 +178,9 @@ export function parseRoute(pathname: string): Route {
   return { kind: 'home', view: 'home' };
 }
 
-export function buildPath(route: Route): string {
+function buildCanonicalPath(route: Route): string {
   if (route.kind === 'home') {
-    if (route.view === 'onboarding') return '/onboarding';
+    if (route.view === 'onboarding') return publicPath('/onboarding');
     if (route.view === 'projects') return '/projects';
     if (route.view === 'tasks') return '/automations';
     if (route.view === 'plugins') return '/plugins';
@@ -216,6 +220,10 @@ export function buildPath(route: Route): string {
       : `/projects/${id}/conversations/${cid}`;
   }
   return file ? `/projects/${id}/files/${file}` : `/projects/${id}`;
+}
+
+export function buildPath(route: Route): string {
+  return withWebBasePath(buildCanonicalPath(route));
 }
 
 // Centralized navigation. Components call this instead of mutating

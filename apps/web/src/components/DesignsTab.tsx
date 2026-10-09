@@ -36,6 +36,7 @@ import {
 } from "./design-system-project";
 import { LiveArtifactBadges } from "./LiveArtifactBadges";
 import { Toast } from "./Toast";
+import { apiPath } from "../runtime/web-path";
 import {
 	HtmlProjectCoverFrame,
 	coverFromProjectFile,
@@ -1445,7 +1446,7 @@ function ProjectBrandCover({
 }) {
 	const sources = useMemo(() => {
 		const list: string[] = [];
-		if (brandId) list.push(`/api/brands/${encodeURIComponent(brandId)}/logo`);
+		if (brandId) list.push(apiPath(`/brands/${encodeURIComponent(brandId)}/logo`));
 		if (host) {
 			list.push(
 				`https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=128`,

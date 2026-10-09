@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 /**
  * A whole-scene capture of the chat scroller, taken on demand and shipped
  * inside the diagnostics zip.
@@ -1119,7 +1120,7 @@ export async function uploadChatScrollForensics(
   envelope: ChatScrollForensicsEnvelope,
 ): Promise<boolean> {
   try {
-    const res = await fetch(CHAT_SCROLL_FORENSICS_PATH, {
+    const res = await apiFetch(CHAT_SCROLL_FORENSICS_PATH, {
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'content-type': 'application/json' },
