@@ -58,7 +58,7 @@ with tempfile.TemporaryDirectory() as temporary:
 function run(mode: string) {
   return JSON.parse(execFileSync("python3", ["-c", probe, script, mode], { encoding: "utf8" }));
 }
-describe.skipIf(process.platform === "win32")("stdlib release executor restoration", () => {
+describe("stdlib release executor restoration", () => {
   it("restores a complete host-specific product without preparing the JS workspace", () => {
     expect(run("valid")).toMatchObject({ ok: true, output: true });
   });

@@ -223,7 +223,11 @@ export async function restoreMacRuntimeProduct(config: ToolPackConfig, options: 
     const members = listArchive(productZip, "zip");
     if (members.length !== 1 || members[0] !== "workspace.tar.gz") throw new Error("unexpected mac runtime product wrapper");
     extractArchive(productZip, temporary, "zip", members);
-    const manifest = await restoreArchive(config, join(temporary, "workspace.tar.gz"), options.output);
+    const workspaceArchive = join(temporary, "workspace.tar.gz");
+    if (!(await lstat(workspaceArchive).catch(() => null))?.isFile()) {
+      throw new Error("mac runtime product wrapper must contain regular workspace.tar.gz");
+    }
+    const manifest = await restoreArchive(config, workspaceArchive, options.output);
     return { bytes: download.bytes, manifest, output: resolve(options.output) };
   } finally {
     await rm(temporary, { force: true, recursive: true });

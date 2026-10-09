@@ -89,6 +89,15 @@ def safe_member(name: str) -> PurePosixPath:
     return path
 
 
+def archive_executable() -> str:
+    if sys.platform != "win32":
+        return "tar"
+    system_root = os.environ.get("SystemRoot")
+    if not system_root or not Path(system_root).is_absolute():
+        fail("Windows SystemRoot is required for native tar")
+    return str(Path(system_root) / "System32" / "tar.exe")
+
+
 def extract_executor(product: Path, destination: Path) -> dict[str, object]:
     if destination.exists() or destination.is_symlink():
         fail(f"executor destination already exists: {destination}")
@@ -129,7 +138,7 @@ def extract_executor(product: Path, destination: Path) -> dict[str, object]:
                     continue
                 if not member.isfile() and not member.isdir():
                     fail(f"executor archive entry is not a regular file: {normalized}")
-        subprocess.run(["tar", "-xzf", str(archive), "-C", str(stage)], check=True)
+        subprocess.run([archive_executable(), "-xzf", str(archive), "-C", str(stage)], check=True)
         for target, normalized in links:
             canonical = target.resolve(strict=True)
             if not canonical.is_relative_to(stage.resolve()):

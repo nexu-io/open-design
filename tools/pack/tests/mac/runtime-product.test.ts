@@ -1,7 +1,9 @@
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createTarArchive } from "@open-design/download";
 import type { ToolPackConfig } from "@/config/index.js";
@@ -16,6 +18,7 @@ const roots: string[] = [];
 const config = { electronVersion: "41.3.0" } as ToolPackConfig;
 
 afterEach(async () => {
+  vi.unstubAllGlobals();
   await Promise.all(roots.splice(0).map(async (root) => await rm(root, { force: true, recursive: true })));
 });
 
@@ -84,5 +87,29 @@ describe("mac runtime product", () => {
       archive: await product(root, incompatible),
       output: join(root, "restored"),
     })).rejects.toThrow("incompatible mac runtime product");
+  });
+
+  it.skipIf(process.platform === "win32")("rejects a remote wrapper whose workspace archive is a symlink", async () => {
+    const root = await fixture();
+    const target = await product(root);
+    const wrapper = join(root, "product.zip");
+    execFileSync("python3", ["-c", String.raw`
+import stat, sys, zipfile
+info = zipfile.ZipInfo("workspace.tar.gz")
+info.create_system = 3
+info.external_attr = (stat.S_IFLNK | 0o777) << 16
+with zipfile.ZipFile(sys.argv[1], "w") as product:
+    product.writestr(info, sys.argv[2])
+`, wrapper, target]);
+    const bytes = await readFile(wrapper);
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(bytes, {
+      headers: { "content-length": String(bytes.length) },
+    })));
+
+    await expect(restoreMacRuntimeProduct(config, {
+      output: join(root, "restored"),
+      sha256: createHash("sha256").update(bytes).digest("hex"),
+      url: "https://example.test/product.zip",
+    })).rejects.toThrow("wrapper must contain regular workspace.tar.gz");
   });
 });
