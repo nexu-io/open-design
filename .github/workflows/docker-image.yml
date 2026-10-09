@@ -158,6 +158,7 @@ jobs:
           file: source/deploy/Dockerfile
           platforms: ${{ steps.mode.outputs.platforms }}
           push: ${{ steps.mode.outputs.publish == 'true' }}
+          load: ${{ steps.mode.outputs.publish != 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           annotations: |
@@ -171,6 +172,7 @@ jobs:
           build-args: |
             NODE_IMAGE=public.ecr.aws/docker/library/node:24-alpine
             RUNTIME_IMAGE=public.ecr.aws/docker/library/node:24-alpine
+            OD_APP_VERSION=${{ inputs.release_version || steps.meta.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -214,6 +216,52 @@ jobs:
           else
             echo "reconciliation=published" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Verify daemon version
+        timeout-minutes: 2
+        shell: bash
+        env:
+          IMAGE: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+          EXPECTED_VERSION: ${{ inputs.release_version || steps.meta.outputs.version }}
+          PUBLISHED_DIGEST: ${{ steps.verify.outputs.digest }}
+        run: |
+          set -euo pipefail
+          if [ -n "$PUBLISHED_DIGEST" ]; then
+            IMAGE="${IMAGE%:*}@$PUBLISHED_DIGEST"
+          fi
+          container="$(docker run --detach --network none "$IMAGE")"
+          cleanup() {
+            docker logs "$container" || true
+            docker rm --force "$container" >/dev/null
+          }
+          trap cleanup EXIT
+          docker exec --interactive --env EXPECTED_VERSION="$EXPECTED_VERSION" "$container" node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { setTimeout as delay } from 'node:timers/promises';
+
+          assert.ok(process.env.EXPECTED_VERSION, 'EXPECTED_VERSION is required');
+          let health;
+          for (let attempt = 0; attempt < 60; attempt += 1) {
+            try {
+              const response = await fetch('http://127.0.0.1:7456/api/health', {
+                signal: AbortSignal.timeout(1_000),
+              });
+              if (response.ok) {
+                const body = await response.json();
+                if (body.ok === true) {
+                  health = body;
+                  break;
+                }
+              }
+            } catch {
+              // The container may still be starting its local HTTP listener.
+            }
+            await delay(500);
+          }
+          assert.ok(health, 'daemon health endpoint did not become ready');
+          assert.equal(health.version, process.env.EXPECTED_VERSION, 'daemon version must match image version');
+          console.log(`Verified daemon version: ${health.version}`);
+          NODE
 
       - name: Publish reconciliation summary
         if: ${{ steps.mode.outputs.publish == 'true' }}

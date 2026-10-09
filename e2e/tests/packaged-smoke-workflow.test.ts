@@ -507,6 +507,47 @@ describe("packaged smoke workflow", () => {
     expect(reportWorkflow).not.toContain("merge_group");
   });
 
+  it('[P1] carries the Docker tag version into the runtime and health check', async () => {
+    const workflow = await readFile(dockerImageWorkflowPath, 'utf8');
+    const build = sectionBetween(workflow, '      - name: Build and push', '      - name: Verify public GHCR pull access');
+    const smoke = sectionBetween(workflow, '      - name: Verify daemon version', '      - name: Publish reconciliation summary');
+
+    expect(build).toContain('OD_APP_VERSION=${{ inputs.release_version || steps.meta.outputs.version }}');
+    expect(build).toContain("load: ${{ steps.mode.outputs.publish != 'true' }}");
+    expect(smoke).toContain('EXPECTED_VERSION: ${{ inputs.release_version || steps.meta.outputs.version }}');
+    expect(smoke).toContain('PUBLISHED_DIGEST: ${{ steps.verify.outputs.digest }}');
+    expect(smoke).toContain('IMAGE="${IMAGE%:*}@$PUBLISHED_DIGEST"');
+    expect(smoke).toContain('docker run --detach --network none "$IMAGE"');
+    expect(smoke).toContain('trap cleanup EXIT');
+    // The expected value belongs only to the probe, never the daemon env:
+    // overriding OD_APP_VERSION at docker run would hide a broken image.
+    expect(smoke).not.toContain('OD_APP_VERSION');
+  });
+
+  it.each([
+    ['0.24.1', true],
+    ['0.23.1', false],
+    [undefined, false],
+  ])('[P1] validates tagged Docker health version %s against the release', async (version, matches) => {
+    const workflow = await readFile(dockerImageWorkflowPath, 'utf8');
+    const script = extractWorkflowRunScript(workflow, 'Verify daemon version');
+    const probe = script.match(/<<'NODE'\n([\s\S]*?)\nNODE/)?.[1];
+    expect(probe).toBeTruthy();
+    const stub = `globalThis.fetch = async () => new Response(${JSON.stringify(JSON.stringify({ ok: true, version }))});\n`;
+    const result = execFileAsync(process.execPath, ['--input-type=module', '-e', stub + probe], {
+      env: { ...process.env, EXPECTED_VERSION: '0.24.1' },
+    });
+
+    if (matches) {
+      expect((await result).stdout).toContain('Verified daemon version: 0.24.1');
+    } else {
+      await expect(result).rejects.toMatchObject({
+        code: 1,
+        stderr: expect.stringContaining('daemon version must match image version'),
+      });
+    }
+  });
+
   it("[P2] gates infra-cancel auto-rerun as a trusted workflow_run consumer", async () => {
     const [rerunWorkflow, rerunScript, ciWorkflow] = await Promise.all([
       readFile(rerunWorkflowPath, "utf8"),
