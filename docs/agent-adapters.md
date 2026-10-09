@@ -206,6 +206,10 @@ the active-run staging implementation is in
 
 ### 5.2 BYOK OpenCode
 
+For scripts, CI, and Docker deployments without the UI, see
+[Headless BYOK runs over REST](headless-byok.md) for the request shape,
+authentication, and the boundary between REST and MCP.
+
 - The former direct-Anthropic fallback was replaced by the
   `byok-opencode` profile. API-mode provider credentials and model selection
   are translated into OpenCode configuration, while the installed
