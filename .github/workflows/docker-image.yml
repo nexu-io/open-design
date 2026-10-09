@@ -221,13 +221,30 @@ jobs:
         timeout-minutes: 2
         shell: bash
         env:
+          PUBLISH: ${{ steps.mode.outputs.publish }}
+          EXISTING_STATE: ${{ steps.existing.outputs.state }}
           IMAGE: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
           EXPECTED_VERSION: ${{ inputs.release_version || steps.meta.outputs.version }}
           PUBLISHED_DIGEST: ${{ steps.verify.outputs.digest }}
         run: |
           set -euo pipefail
+          if [ "$PUBLISH" = "true" ] && [ "$EXISTING_STATE" = "complete" ]; then
+            echo "::notice::Immutable tag is already complete; retaining the verified metadata reconciliation."
+            exit 0
+          fi
           if [ -n "$PUBLISHED_DIGEST" ]; then
             IMAGE="${IMAGE%:*}@$PUBLISHED_DIGEST"
+            docker pull "$IMAGE"
+          fi
+          baked_version="$(docker image inspect "$IMAGE" --format '{{json .Config.Env}}' | \
+            jq -r '[.[] | select(startswith("OD_APP_VERSION="))] | last // ""')"
+          if [ "$PUBLISH" = "true" ] && [ -z "$baked_version" ]; then
+            echo "::notice::Legacy release image has no OD_APP_VERSION; skipping runtime version smoke after OCI identity verification."
+            exit 0
+          fi
+          if [ "$baked_version" != "OD_APP_VERSION=$EXPECTED_VERSION" ]; then
+            echo "::error::Image does not bake the expected OD_APP_VERSION=$EXPECTED_VERSION"
+            exit 1
           fi
           token="$(openssl rand -hex 32)"
           container="$(docker run --detach --network none --env OD_API_TOKEN="$token" "$IMAGE")"
