@@ -2377,6 +2377,9 @@ export function SettingsDialog({
         (agent) => agent.id === 'deepseek-harness' && agent.available,
       );
       if (!installed) throw new Error(t('settings.dshSetupRequired'));
+      // This commits a CLI choice outside the card click handler, so drop any
+      // pending OpenDesign intent or a later sign-in would overwrite it.
+      setAmrPendingSelect(false);
       setCfg((current) => ({ ...current, agentId: installed.id, mode: 'daemon' }));
       setDshSetup(null);
       setAgentTestState({ status: 'running' });

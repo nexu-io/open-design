@@ -3554,6 +3554,115 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     );
   }, 15_000);
 
+  it('keeps a DeepSeek Harness choice made after a pending OpenDesign pick when sign-in lands later', async () => {
+    let loginStarted = false;
+    let companionInstalled = false;
+    const dshAgent: AgentInfo = {
+      id: 'deepseek-harness',
+      name: 'DeepSeek Harness',
+      bin: 'deepseek-harness',
+      available: false,
+      path: '/usr/local/bin/deepseek-harness',
+      models: [{ id: 'deepseek-chat', label: 'DeepSeek Chat' }],
+      diagnostics: [
+        {
+          reason: 'runtime-profile-incompatible',
+          severity: 'error',
+          message: 'Companion setup required.',
+        },
+      ],
+    };
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      const json = (body: unknown, status = 200) =>
+        new Response(JSON.stringify(body), {
+          status,
+          headers: { 'content-type': 'application/json' },
+        });
+      if (url === '/api/workspace/context') return json({ context: null });
+      if (url === '/api/memory') {
+        return json({ enabled: true, memories: [], extraction: null });
+      }
+      if (url === '/api/agents/deepseek-harness/companion/install' && init?.method === 'POST') {
+        companionInstalled = true;
+        return json({ ok: true });
+      }
+      if (url === '/api/test/connection') return json({ ok: true, kind: 'success' });
+      if (url === '/api/integrations/vela/login' && init?.method === 'POST') {
+        loginStarted = true;
+        return json({ pid: 1 }, 202);
+      }
+      if (url === '/api/integrations/vela/status') {
+        return json(
+          loginStarted
+            ? { loggedIn: true, profile: 'local', user: { id: 'u', email: 'user@example.com' } }
+            : { loggedIn: false, profile: 'local', user: null },
+        );
+      }
+      if (url.startsWith('/api/integrations/vela/')) return json({});
+      throw new Error(`Unexpected fetch: ${url}`);
+    }) as typeof fetch;
+
+    const codexAgent = availableAgents.find((agent) => agent.id === 'codex');
+    if (!codexAgent) throw new Error('missing codex test agent');
+    const onRefreshAgents = vi.fn<OnRefreshAgents>(async () => [
+      amrAgent,
+      codexAgent,
+      companionInstalled ? { ...dshAgent, available: true, diagnostics: [] } : dshAgent,
+    ]);
+    const { onPersist } = renderSettingsDialog(
+      { mode: 'daemon', agentId: codexAgent.id },
+      { agents: [amrAgent, codexAgent, dshAgent], onRefreshAgents },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI/i }));
+    const amrSelect = screen.getByTestId('settings-agent-select-amr');
+    fireEvent.click(amrSelect);
+    expect(amrSelect.getAttribute('aria-pressed')).toBe('true');
+
+    // DeepSeek needs setup, so its click opens the install dialog and commits
+    // the selection from the dialog rather than from the card handler.
+    fireEvent.click(screen.getByTestId('settings-agent-select-deepseek-harness'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Install and select' }));
+    await waitFor(() => {
+      expect(
+        onPersist.mock.calls.some(
+          ([config]) => (config as AppConfig).agentId === 'deepseek-harness',
+        ),
+      ).toBe(true);
+    });
+    expect(screen.getByTestId('settings-agent-select-amr').getAttribute('aria-pressed')).toBe(
+      'false',
+    );
+
+    const callout = document.querySelector('.settings-cloud-signin-callout');
+    if (!(callout instanceof HTMLElement)) throw new Error('missing cloud callout');
+    fireEvent.click(within(callout).getByRole('button', { name: 'Sign up / Sign in' }));
+    await waitFor(() => expect(screen.queryByText('Signing in…')).toBeNull(), {
+      timeout: 8000,
+    });
+    // Wait past the status poll that would have applied the stale pending pick.
+    await waitFor(
+      () => {
+        expect(
+          (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(
+            ([u]) => String(u) === '/api/integrations/vela/status',
+          ).length,
+        ).toBeGreaterThan(1);
+      },
+      { timeout: 8000 },
+    );
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    const lastConfig = onPersist.mock.calls.at(-1)?.[0] as AppConfig | undefined;
+    expect(lastConfig?.agentId).toBe('deepseek-harness');
+    expect(
+      onPersist.mock.calls.some(([config]) => (config as AppConfig).agentId === 'amr'),
+    ).toBe(false);
+  }, 20_000);
+
   it('shows the AMR upgrade action for a personal identity with an upgradeable plan', async () => {
     const context = personalWorkspaceContext();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
