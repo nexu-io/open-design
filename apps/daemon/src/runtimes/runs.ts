@@ -53,7 +53,7 @@ export const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'canceled']
 const MAX_RUN_MEDIA_TASK_FAILURES = 20;
 
 /**
- * Did the HOST itself watch a piece of this turn's declared work fail?
+ * Does this turn still have a host-observed media failure without recovery?
  *
  * The only evidence this predicate accepts is evidence the daemon wrote down
  * about its own execution: a media generation dispatched under this run's tool
@@ -69,7 +69,8 @@ const MAX_RUN_MEDIA_TASK_FAILURES = 20;
  * finally delivers is judged on its own execution.
  */
 function runHasHostRecordedDeliveryFailure(run) {
-  return Array.isArray(run?.mediaTaskFailures) && run.mediaTaskFailures.length > 0;
+  return Array.isArray(run?.mediaTaskFailures)
+    && run.mediaTaskFailures.some((failure) => !failure.recoveredByTaskId);
 }
 
 const RUN_STATE_SCHEMA_VERSION = 1;
@@ -600,7 +601,7 @@ function durableRunState(run) {
     artifactCount: Number.isFinite(run.artifactCount) ? run.artifactCount : 0,
     ...(Array.isArray(run.artifactPaths) ? { artifactPaths: run.artifactPaths } : {}),
     endedWithUnfinishedWork: Boolean(run.endedWithUnfinishedWork),
-    ...(runHasHostRecordedDeliveryFailure(run)
+    ...(run.mediaTaskFailures?.length
       ? { mediaTaskFailures: run.mediaTaskFailures }
       : {}),
     ...(typeof run.userPrompt === 'string' ? { userPrompt: run.userPrompt } : {}),
@@ -1199,6 +1200,7 @@ export function createChatRunService({
         ? { surface: failure.surface }
         : {}),
       ...(typeof failure.model === 'string' && failure.model ? { model: failure.model } : {}),
+      ...(typeof failure.output === 'string' && failure.output ? { output: failure.output } : {}),
       failedAt: Number.isFinite(failure.failedAt) ? failure.failedAt : Date.now(),
       error: failure.error && typeof failure.error === 'object'
         ? failure.error
@@ -1210,6 +1212,26 @@ export function createChatRunService({
     if (!TERMINAL_RUN_STATUSES.has(run.status)) run.updatedAt = Date.now();
     persistState(run);
     return true;
+  };
+
+  /** A successful replacement only settles failures of its explicit target.
+   *  A pre-existing file, an unrelated image, or an overlapping older request
+   *  is not recovery evidence. The route calls this after real bytes land. */
+  const noteMediaTaskRecovery = (runId, recovery) => {
+    const run = get(runId);
+    if (!run || TERMINAL_RUN_STATUSES.has(run.status) || !recovery?.taskId || !recovery.output
+      || !Number.isFinite(recovery.startedAt) || !Number.isFinite(recovery.completedAt)) return false;
+    let changed = false;
+    for (const failure of run.mediaTaskFailures ?? []) {
+      if (failure.recoveredByTaskId || failure.taskId === recovery.taskId
+        || failure.output !== recovery.output || failure.surface !== recovery.surface
+        || failure.failedAt > recovery.startedAt) continue;
+      failure.recoveredByTaskId = recovery.taskId;
+      failure.recoveredAt = recovery.completedAt;
+      changed = true;
+    }
+    if (changed) persistState(run);
+    return changed;
   };
 
   const persistTerminalState = (run, lifecycleEvidence = run.terminalLifecycle) => {
@@ -1561,7 +1583,7 @@ export function createChatRunService({
     retryable: run.retryable ?? null,
     resumable: run.resumable ?? false,
     endedWithUnfinishedWork: !!run.endedWithUnfinishedWork,
-    ...(runHasHostRecordedDeliveryFailure(run)
+    ...(run.mediaTaskFailures?.length
       ? { mediaTaskFailures: run.mediaTaskFailures }
       : {}),
     ...(Number.isFinite(run.artifactCount) ? { artifactCount: run.artifactCount } : {}),
@@ -1705,7 +1727,7 @@ export function createChatRunService({
       terminalAt,
       resumable: run.resumable ?? false,
       endedWithUnfinishedWork: run.endedWithUnfinishedWork,
-      ...(runHasHostRecordedDeliveryFailure(run)
+      ...(run.mediaTaskFailures?.length
         ? { mediaTaskFailures: run.mediaTaskFailures }
         : {}),
       ...(Number.isFinite(run.artifactCount) ? { artifactCount: run.artifactCount } : {}),
@@ -2610,6 +2632,7 @@ export function createChatRunService({
     emit,
     persistState,
     noteMediaTaskFailure,
+    noteMediaTaskRecovery,
     setAnalyticsRecovery,
     beginAnalyticsDelivery,
     finalizeAnalyticsDelivery,

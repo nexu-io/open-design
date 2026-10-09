@@ -9,6 +9,7 @@ import type {
   ProjectMediaTaskFile,
 } from '@open-design/contracts';
 import type { AnalyticsContext } from '../analytics.js';
+import { sanitizeName } from '../projects.js';
 import { defaultMediaExecutionPolicy, mediaPolicyDenial } from '../media/policy.js';
 import { formatMediaTaskDiagnostic } from '../media/diagnostics.js';
 import { findMediaModel } from '../media/models.js';
@@ -343,6 +344,10 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
      * waiters already told, so this must never turn a recorded failure into an
      * unhandled rejection.
      */
+    // Only explicit targets identify replacement intent. Auto-named generations
+    // must never accidentally settle an unrelated failed request.
+    const output = typeof req.body?.output === 'string' && req.body.output
+      ? sanitizeName(req.body.output) : undefined;
     const reportFailureToRun = (taskId: string, error: unknown): void => {
       const runId = options.grant?.runId;
       if (!runId || !taskId) return;
@@ -352,6 +357,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
           surface,
           model,
           failedAt: Date.now(),
+          output,
           error,
         });
       } catch (err) {
@@ -501,6 +507,18 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
           task.file = meta;
           task.endedAt = Date.now();
           persistMediaTask(task);
+          if (options.grant?.runId && output && meta?.size > 0
+            && !meta.usedStubFallback && !meta.intentionalStub) {
+            try {
+              design.runs.noteMediaTaskRecovery(options.grant.runId, {
+                taskId, output, surface, startedAt: task.startedAt, completedAt: task.endedAt,
+              });
+            } catch (err) {
+              // A failed evidence write must not turn a delivered file into a
+              // failed media task. Missing evidence keeps the run conservative.
+              console.warn('[media] run recovery association failed', err);
+            }
+          }
           if (analyticsContext && providerRequestSummary) {
             captureMediaGenerationResult({
               analyticsContext,

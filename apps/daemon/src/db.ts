@@ -449,6 +449,9 @@ function migrate(db: SqliteDb): void {
   if (!messageCols.some((c: DbRow) => c.name === 'run_id')) {
     db.exec(`ALTER TABLE messages ADD COLUMN run_id TEXT`);
   }
+  if (!messageCols.some((c: DbRow) => c.name === 'ended_with_unfinished_work')) {
+    db.exec(`ALTER TABLE messages ADD COLUMN ended_with_unfinished_work INTEGER`);
+  }
   if (!messageCols.some((c: DbRow) => c.name === 'run_status')) {
     db.exec(`ALTER TABLE messages ADD COLUMN run_status TEXT`);
   }
@@ -1686,8 +1689,8 @@ export function deleteWorkspaceResourceByResourceId(
  * Each project's latest run status, for `GET /api/projects`.
  *
  * The latest run row per project is chosen in SQLite, so the listing never
- * loads any run's event log just to order rows; only a winning `succeeded` row
- * is then inspected, through {@link completenessEventsOfMessage}.
+ * loads any run's event log just to order rows. Only a winning historical
+ * `succeeded` row without a host verdict needs {@link completenessEventsOfMessage}.
  */
 export function listLatestProjectRunStatuses(db: SqliteDb) {
   // Low-frequency, historically the largest read (full-history events before
@@ -1701,12 +1704,13 @@ export function listLatestProjectRunStatuses(db: SqliteDb) {
 function listLatestProjectRunStatusesUnobserved(db: SqliteDb) {
   const rows = db
     .prepare(
-      `SELECT projectId, messageId, runId, status, updatedAt
+      `SELECT projectId, messageId, runId, status, updatedAt, endedWithUnfinishedWork
          FROM (
            SELECT c.project_id AS projectId,
                   m.id AS messageId,
                   m.run_id AS runId,
                   m.run_status AS status,
+                  m.ended_with_unfinished_work AS endedWithUnfinishedWork,
                   COALESCE(m.ended_at, m.started_at, m.created_at) AS updatedAt,
                   ROW_NUMBER() OVER (
                     PARTITION BY c.project_id
@@ -1723,7 +1727,9 @@ function listLatestProjectRunStatusesUnobserved(db: SqliteDb) {
   const completenessEvents = completenessEventsStatement(db);
   for (const row of rows) {
     latestByProject.set(row.projectId, {
-      value: projectDisplayStatusForRunRow(completenessEvents, row.status, String(row.messageId)),
+      value: projectDisplayStatusForRunRow(
+        completenessEvents, row.status, String(row.messageId), row.endedWithUnfinishedWork,
+      ),
       updatedAt: Number(row.updatedAt),
       runId: row.runId ?? undefined,
     });
@@ -1731,19 +1737,19 @@ function listLatestProjectRunStatusesUnobserved(db: SqliteDb) {
   return latestByProject;
 }
 
-// A terminal `succeeded` run whose PERSISTED events show unfinished declared
-// work (a non-`completed` TodoWrite task) projects as `incomplete`, never
-// `succeeded`, so the project pill can't read "Completed" for a run whose work
-// is not actually done (#1247 / #1060). Derived from the same events the chat
-// footer reads, so the two surfaces cannot disagree, and it survives reload
-// because the events were persisted per-event as the run streamed.
+// Prefer the persisted host verdict, including media recovery. Historical
+// messages without one retain their event-derived completeness fallback.
 function projectDisplayStatusForRunRow(
   completenessEvents: Database.Statement,
   status: unknown,
   messageId: string,
+  endedWithUnfinishedWork: unknown,
 ) {
   const normalized = normalizeProjectRunStatus(status);
   if (normalized !== 'succeeded') return normalized;
+  if (endedWithUnfinishedWork === 0 || endedWithUnfinishedWork === 1) {
+    return endedWithUnfinishedWork === 1 ? 'incomplete' : normalized;
+  }
   const events = completenessEventsOfMessage(completenessEvents, messageId);
   return eventsEndedWithUnfinishedWork(events) ? 'incomplete' : normalized;
 }
@@ -2945,6 +2951,7 @@ function listMessagesUnobserved(db: SqliteDb, conversationId: string) {
     .prepare(
       `SELECT id, role, content, agent_id AS agentId, agent_name AS agentName,
               run_id AS runId, run_status AS runStatus,
+              ended_with_unfinished_work AS endedWithUnfinishedWork,
               result_delivery_state AS resultDeliveryState,
               last_run_event_id AS lastRunEventId,
               events_json AS eventsJson,
@@ -3024,6 +3031,7 @@ export function getMessage(db: SqliteDb, id: string, conversationId?: string) {
     .prepare(
       `SELECT id, role, content, agent_id AS agentId, agent_name AS agentName,
               run_id AS runId, run_status AS runStatus,
+              ended_with_unfinished_work AS endedWithUnfinishedWork,
               result_delivery_state AS resultDeliveryState,
               last_run_event_id AS lastRunEventId,
               events_json AS eventsJson,
@@ -3157,6 +3165,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
   const existing = db
     .prepare(
       `SELECT position, run_id AS runId, run_status AS runStatus,
+              ended_with_unfinished_work AS endedWithUnfinishedWork,
               content, events_json AS eventsJson,
               task_analytics_json AS taskAnalyticsJson,
               ${eventBatchProjection} AS hasEventBatches
@@ -3194,9 +3203,12 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
         : m.taskAnalytics
           ? JSON.stringify(m.taskAnalytics)
           : null;
+    // Completeness belongs to the run finalizer. Stale client saves cannot
+    // overwrite it, and replacing the run pointer invalidates the old verdict.
     db.prepare(
       `UPDATE messages
           SET role = ?, content = ?, agent_id = ?, agent_name = ?,
+              ended_with_unfinished_work = CASE WHEN run_id IS ? THEN ended_with_unfinished_work ELSE NULL END,
               run_id = ?, run_status = ?, result_delivery_state = ?, last_run_event_id = ?,
               events_json = ?, attachments_json = ?, comment_attachments_json = ?,
               produced_files_json = ?, trace_object_files_json = ?, feedback_json = ?,
@@ -3215,6 +3227,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       nextContent,
       m.agentId ?? null,
       m.agentName ?? null,
+      m.runId ?? null,
       m.runId ?? null,
       m.runStatus ?? null,
       normalizeResultDeliveryStateForStorage(m.resultDeliveryState),
@@ -3248,13 +3261,13 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
     const createdAt = typeof m.createdAt === 'number' && Number.isFinite(m.createdAt)
       ? m.createdAt
       : now;
-    // 28 values: id, conversation_id, role, content, agent_id, agent_name,
+    // 29 values: id, conversation_id, role, content, agent_id, agent_name,
     // run_id, run_status, result_delivery_state, last_run_event_id, events_json, attachments_json,
     // comment_attachments_json, produced_files_json, trace_object_files_json,
     // feedback_json, pre_turn_file_names_json, session_mode, run_context_json,
     // task_analytics_json, applied_plugin_snapshot_json, forked_into_json,
     // cancel_origin, telemetry_finalized_at, started_at, ended_at, position,
-    // created_at.
+    // created_at, ended_with_unfinished_work.
     db.prepare(
       `INSERT INTO messages
          (id, conversation_id, role, content, agent_id, agent_name,
@@ -3263,8 +3276,8 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
           trace_object_files_json, feedback_json, pre_turn_file_names_json,
           session_mode, run_context_json, task_analytics_json,
           applied_plugin_snapshot_json, forked_into_json, cancel_origin,
-          telemetry_finalized_at, started_at, ended_at, position, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          telemetry_finalized_at, started_at, ended_at, position, created_at, ended_with_unfinished_work)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       m.id,
       conversationId,
@@ -3294,6 +3307,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       m.endedAt ?? null,
       position,
       createdAt,
+      typeof m.endedWithUnfinishedWork === 'boolean' ? Number(m.endedWithUnfinishedWork) : null,
     );
   }
   seedMessageArtifactRefsIfAbsent(db, String(m.id), m.artifactRefs);
@@ -3306,6 +3320,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
     .prepare(
       `SELECT id, role, content, agent_id AS agentId, agent_name AS agentName,
               run_id AS runId, run_status AS runStatus,
+              ended_with_unfinished_work AS endedWithUnfinishedWork,
               result_delivery_state AS resultDeliveryState,
               last_run_event_id AS lastRunEventId,
               events_json AS eventsJson,
@@ -4990,6 +5005,8 @@ function normalizeMessage(
     agentName: row.agentName ?? undefined,
     runId: row.runId ?? undefined,
     runStatus: row.runStatus ?? undefined,
+    ...(row.endedWithUnfinishedWork === 0 || row.endedWithUnfinishedWork === 1
+      ? { endedWithUnfinishedWork: row.endedWithUnfinishedWork === 1 } : {}),
     resultDeliveryState: normalizeResultDeliveryState(row.resultDeliveryState),
     lastRunEventId: row.lastRunEventId ?? undefined,
     events:

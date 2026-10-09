@@ -918,6 +918,10 @@ function AssistantMessageImpl({
         runStatus: message.runStatus,
         strategyTaskDelivered: message.strategyTaskDelivered,
       });
+  const hasUnfinishedWork = message.runStatus === 'succeeded'
+    && typeof message.endedWithUnfinishedWork === 'boolean'
+    ? message.endedWithUnfinishedWork
+    : unfinishedTodos.length > 0;
   const hasTodoSnapshot = events.some(
     (event) => event.kind === "tool_use" && isTodoWriteToolName(event.name),
   );
@@ -933,6 +937,7 @@ function AssistantMessageImpl({
    * runtime 走的就是第二条路。
    */
   const continuableTodos = streaming || completedWithAuthenticatedDone
+    || (message.runStatus === "succeeded" && message.endedWithUnfinishedWork === false)
     ? []
     : hasTodoSnapshot
       ? unfinishedTodos
@@ -958,7 +963,7 @@ function AssistantMessageImpl({
       streaming,
       message,
       hasEmptyResponse,
-      hasUnfinishedTodos: unfinishedTodos.length > 0,
+      hasUnfinishedTodos: hasUnfinishedWork,
     });
   /*
    * OPEND-2542 supersedes the 2026-08-26 "last turn only" decision. Every
@@ -975,7 +980,7 @@ function AssistantMessageImpl({
     !!message.startedAt ||
     !!message.endedAt ||
     !!usage ||
-    unfinishedTodos.length > 0 ||
+    hasUnfinishedWork ||
     // 只剩「还欠着上一轮的活」这一条理由时,这一行也得出 —— 出口挂在它上面
     continuableTodos.length > 0 ||
     hasEmptyResponse ||
@@ -1203,7 +1208,7 @@ function AssistantMessageImpl({
   const ownsTrailingNextStep = !!isLast || !!isLastTurn;
   const showNextStepActions =
     !streaming &&
-    unfinishedTodos.length === 0 &&
+    !hasUnfinishedWork &&
     !hasPendingQuestionForm &&
     ((ownsTrailingNextStep && hasNextStepPrimary &&
       ((runSucceeded && nextStepDeliveryEvidence) || isBrandExtractionRecovery)) ||
@@ -1416,7 +1421,8 @@ function AssistantMessageImpl({
                 hasDesignSystemContext={hasDesignSystemContext}
                 footerProps={{
                   streaming,
-                  hasUnfinishedTodos: unfinishedTodos.length > 0,
+                  hasUnfinishedTodos: hasUnfinishedWork,
+                  hostUnfinishedWork: message.runStatus === "succeeded" && message.endedWithUnfinishedWork === true,
                   hasEmptyResponse,
                   canceled: message.runStatus === "canceled",
                   preparing,
@@ -1435,7 +1441,8 @@ function AssistantMessageImpl({
             ) : (
               <AssistantFooter
                 streaming={streaming}
-                hasUnfinishedTodos={unfinishedTodos.length > 0}
+                hasUnfinishedTodos={hasUnfinishedWork}
+                hostUnfinishedWork={message.runStatus === "succeeded" && message.endedWithUnfinishedWork === true}
                 hasEmptyResponse={hasEmptyResponse}
                 canceled={message.runStatus === "canceled"}
                 preparing={preparing}
@@ -2098,6 +2105,7 @@ function appendRoleModel(label: string, model: string | null): string {
 }
 
 interface AssistantFooterProps {
+  hostUnfinishedWork?: boolean;
   streaming: boolean;
   hasUnfinishedTodos: boolean;
   hasEmptyResponse: boolean;
@@ -2129,6 +2137,7 @@ interface AssistantFooterProps {
 /** 导出只为验收:镜像陈列页要单挂这一行去对第 34–39 格。产品里的消费方仍是
  *  `AssistantMessageImpl` 与下面的 `AssistantFeedback`。 */
 export function AssistantFooter({
+  hostUnfinishedWork = false,
   streaming,
   hasUnfinishedTodos,
   hasEmptyResponse,
@@ -2195,7 +2204,7 @@ export function AssistantFooter({
               : canceled
               ? t("assistant.canceledLabel")
               : hasUnfinishedTodos
-              ? t("assistant.unfinishedLabel")
+              ? t(hostUnfinishedWork ? "designs.status.incomplete" : "assistant.unfinishedLabel")
               : t("assistant.doneLabel")}
           </span>
         </>
