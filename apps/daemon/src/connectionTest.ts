@@ -948,6 +948,13 @@ function inspectProviderCompletion(
 
   if (protocol === 'openai' || protocol === 'azure' || protocol === 'senseaudio' || protocol === 'aihubmix') {
     const responseModel = typeof obj.model === 'string' ? obj.model : '';
+    const normalizedResponseModel = responseModel.trim();
+    const normalizedRequestedModel = requestedModel.trim();
+    const isGatewayNormalizedEcho =
+      normalizedResponseModel !== '' &&
+      normalizedRequestedModel !== '' &&
+      normalizedResponseModel !== normalizedRequestedModel &&
+      normalizedRequestedModel.endsWith(`/${normalizedResponseModel}`);
     if (
       // AIHubMix is omitted from the strict response-model check (like Azure):
       // its gateway routes by model name and may echo a normalized id.
@@ -955,7 +962,8 @@ function inspectProviderCompletion(
       enforceResponseModel &&
       responseModel &&
       requestedModel &&
-      responseModel !== requestedModel
+      responseModel !== requestedModel &&
+      !isGatewayNormalizedEcho
     ) {
       return {
         valid: false,
