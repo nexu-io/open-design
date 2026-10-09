@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -81,6 +81,50 @@ describe("workspace product boundary", () => {
     rmSync(join(f.root, "apps/daemon/dist"), { recursive: true });
     expect(await importWorkspaceOutputs(f.root, f.scratch, descriptor)).toBeGreaterThan(0);
     for (const file of files) expect(readFileSync(join(f.root, "apps/daemon/dist", file), "utf8")).toBe("export {};\n");
+  });
+
+  it.skipIf(process.platform === "win32")("preserves a linked dependency closure that starts only after independent restoration", async () => {
+    const f = fixture();
+    const moduleRoot = join(f.root, "apps/daemon/dist/node_modules/.store/runtime");
+    mkdirSync(moduleRoot, { recursive: true });
+    writeFileSync(join(moduleRoot, "index.js"), "module.exports = 'started';\n");
+    symlinkSync(".store/runtime", join(f.root, "apps/daemon/dist/node_modules/runtime"), "dir");
+    writeFileSync(join(f.root, "apps/daemon/dist/cli.js"), "console.log(require('runtime'));\n");
+    const archive = exportWorkspaceOutputs(f.root, join(f.root, "export"), [f.output], ["daemon"]);
+    const descriptor = source(f.root, archive);
+    const restored = join(f.root, "restored");
+    mkdirSync(restored);
+    await importWorkspaceOutputs(restored, f.scratch, descriptor);
+    expect(execFileSync(process.execPath, [join(restored, "apps/daemon/dist/cli.js")], { encoding: "utf8" })).toBe("started\n");
+  });
+
+  it.skipIf(process.platform === "win32")("rejects non-portable links before changing existing outputs", async () => {
+    const f = fixture();
+    writeFileSync(join(f.root, "outside"), "outside\n");
+    symlinkSync(join(f.root, "outside"), join(f.root, "apps/daemon/dist/escape"));
+    const archive = exportWorkspaceOutputs(f.root, join(f.root, "export"), [f.output], ["daemon"]);
+    const descriptor = source(f.root, archive);
+    writeFileSync(join(f.root, "apps/daemon/dist/cli.js"), "previous\n");
+    await expect(importWorkspaceOutputs(f.root, f.scratch, descriptor)).rejects.toThrow("non-portable link");
+    expect(readFileSync(join(f.root, "apps/daemon/dist/cli.js"), "utf8")).toBe("previous\n");
+  });
+
+  it("rejects normalized duplicate archive paths without changing existing outputs", async () => {
+    const f = fixture();
+    const archive = exportWorkspaceOutputs(f.root, join(f.root, "export"), [f.output], ["daemon"]);
+    execFileSync("python3", ["-c", [
+      "import os,sys,tarfile",
+      "source,temp,path=sys.argv[1:]",
+      "with tarfile.open(source,'r:gz') as old, tarfile.open(temp,'w:gz') as new:",
+      " for member in old:",
+      "  stream=old.extractfile(member) if member.isfile() else None; new.addfile(member,stream)",
+      " new.add(path,arcname='apps/daemon/dist/./cli.js')",
+      "os.replace(temp,source)",
+    ].join("\n"), archive, `${archive}.new`, join(f.root, "apps/daemon/dist/cli.js")]);
+    const descriptor = source(f.root, archive);
+    writeFileSync(join(f.root, "apps/daemon/dist/cli.js"), "previous\n");
+    await expect(importWorkspaceOutputs(f.root, f.scratch, descriptor)).rejects.toThrow("duplicate paths");
+    expect(readFileSync(join(f.root, "apps/daemon/dist/cli.js"), "utf8")).toBe("previous\n");
   });
 
   it("rejects a checksum mismatch without replacing existing outputs or building", async () => {

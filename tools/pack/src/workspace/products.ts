@@ -1,5 +1,5 @@
-import { lstatSync, mkdirSync, mkdtempSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { lstatSync, mkdirSync, mkdtempSync, readlinkSync, readdirSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, isAbsolute, join, posix, relative, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { createTarArchive, downloadCopyAndClear, extractArchive, listArchive, readTarEntry } from "@open-design/download";
 import { WORKSPACE_BUILD_UNITS as units, type WorkspaceBuildUnit as Unit } from "./units.js";
@@ -64,11 +64,26 @@ function pathsOf(outputs: Output[], selected: readonly Unit[] = units): string[]
   return paths;
 }
 
-function assertMaterializedTree(directory: string): void {
+function assertPortableTree(directory: string, root = directory): void {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
-    if (entry.isDirectory()) assertMaterializedTree(join(directory, entry.name));
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) assertPortableTree(path, root);
+    else if (entry.isSymbolicLink()) {
+      const target = readlinkSync(path);
+      const resolved = realpathSync(path);
+      const escaped = relative(root, resolved);
+      if (isAbsolute(target) || escaped === ".." || escaped.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) || isAbsolute(escaped)) {
+        throw new Error("source product contains a non-portable link");
+      }
+    }
     else if (!entry.isFile()) throw new Error("source product contains an unmaterialized link or special file");
   }
+}
+
+function normalizedArchiveEntries(entries: string[]): string[] {
+  const normalized = entries.map((entry) => posix.normalize(entry.replace(/\/$/, "")));
+  if (new Set(normalized).size !== normalized.length) throw new Error("source archive contains duplicate paths");
+  return normalized;
 }
 
 export function exportWorkspaceOutputs(root: string, directory: string, outputs: Output[], selected: readonly Unit[]): string {
@@ -76,7 +91,10 @@ export function exportWorkspaceOutputs(root: string, directory: string, outputs:
   mkdirSync(directory, { recursive: true });
   const archive = resolve(directory, "workspace.tar.gz");
   writeFileSync(join(directory, "outputs.json"), JSON.stringify(outputs));
-  createTarArchive(archive, [{ directory: root, entries: paths }, { directory: resolve(directory), entries: ["outputs.json"] }], { reproducible: true });
+  // Keep the standalone pnpm topology intact. Dereferencing a package link
+  // relocates that package away from its sibling dependencies in `.pnpm`, so
+  // a tree that starts in the producer workspace can fail after restoration.
+  createTarArchive(archive, [{ directory: root, entries: paths }, { directory: resolve(directory), entries: ["outputs.json"] }], { dereference: false, reproducible: true });
   return archive;
 }
 
@@ -103,7 +121,7 @@ export async function importWorkspaceOutputs(root: string, scratch: string, sour
     const outputs = JSON.parse(readTarEntry(archive, "outputs.json")) as Output[];
     const selected = [source.unit];
     const paths = pathsOf(outputs, selected);
-    const entries = listArchive(archive, "tar.gz");
+    const entries = normalizedArchiveEntries(listArchive(archive, "tar.gz"));
     for (const entry of entries) {
       const path = entry.replace(/\/$/, "");
       if (path.split("/").includes("..") || path.includes("\\")
@@ -116,7 +134,7 @@ export async function importWorkspaceOutputs(root: string, scratch: string, sour
     // The complete listing is already validated; passing every member again
     // can exceed Windows command-line limits for large standalone trees.
     extractArchive(archive, stage, "tar.gz");
-    assertMaterializedTree(stage);
+    assertPortableTree(stage);
     await workspaceBuildUnitResult({ workspaceRoot: stage, webOutputMode: "standalone" }, source.unit);
     for (const path of paths) {
       if (!lstatSync(join(stage, path)).isDirectory()) throw new Error("source output is not a directory");
