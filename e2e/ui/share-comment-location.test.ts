@@ -5,7 +5,22 @@ for (const forceInline of [false, true])
     test(`[P1] Owner locates an old H2 again after scrolling away (srcdoc=${forceInline})`, async ({ page }) => {
         test.setTimeout(T.xlong * 2);
         const team = { ...AMR_PERSONAL_WORKSPACE_CONTEXT, workspaceId: 'ws-ui-audit-team', workspaceName: 'UI audit team', workspaceType: 'team' as const, workspaceMemberId: 'mem-ui-audit-team', seatSummary: { seatLimit: 5, usedSeats: 1, availableSeats: 4, isSeatFull: false }, teamId: 'team-ui-audit', teamName: 'UI audit team', role: 'owner' as const };
-        await page.addInitScript(() => { localStorage.setItem('open-design:locale', 'zh-CN'); localStorage.setItem('open-design:locale-source', 'manual'); });
+        await page.addInitScript(() => {
+            localStorage.setItem('open-design:locale', 'zh-CN');
+            localStorage.setItem('open-design:locale-source', 'manual');
+            // Observe the same real-document handshake that enables URL-mode
+            // comments. Opening comments before it arrives selects srcDoc.
+            if (window !== window.top) return;
+            window.addEventListener('message', event => {
+                const iframe = document.querySelector<HTMLIFrameElement>('iframe[data-od-render-mode="url-load"][data-od-active="true"]');
+                if (!iframe || event.source !== iframe.contentWindow || event.origin !== 'null') return;
+                const src = iframe.getAttribute('src');
+                if (src && event.data?.type === 'od:url-selection-bridge-ready'
+                    && event.data.href === new URL(src, window.location.href).href) {
+                    Reflect.set(window, 'commentLocationReadyUrl', event.data.href);
+                }
+            });
+        });
         await mockAmrPersonalWorkspace(page);
         await page.route('**/api/workspace/directory', r => r.fulfill({ json: { items: [team], activeWorkspaceId: team.workspaceId } }));
         await page.route('**/api/workspace/context', r => r.fulfill({ json: { context: team } }));
@@ -39,19 +54,39 @@ for (const forceInline of [false, true])
         await page.route(`**/api/projects/${projectId}/conversations/${conversationId}/comments/lost-anchors`, r => r.fulfill({ json: { updated: 0 } }));
         await page.goto(`/projects/${projectId}${forceInline ? '?forceInline=1' : ''}`);
         await page.getByTestId('file-workspace').getByText('index.html', { exact: true }).first().click();
+        if (!forceInline) {
+            const preview = page.getByTestId('artifact-preview-frame');
+            await expect(preview).toHaveAttribute('data-od-render-mode', 'url-load');
+            await expect.poll(async () => {
+                const src = await preview.getAttribute('src');
+                const readyUrl = await page.evaluate(() => Reflect.get(window, 'commentLocationReadyUrl'));
+                return !!src && readyUrl === new URL(src, page.url()).href;
+            }, { message: 'URL preview comment bridge must be ready before opening comments' }).toBe(true);
+        }
         await page.getByTestId('comment-panel-toggle').click();
         const row = page.getByTestId('comment-side-item').filter({ hasText: comment.note });
         await expect(row).toBeVisible();
         await row.click();
         const active = page.getByTestId('artifact-preview-frame');
+        await expect(active).toHaveAttribute('data-od-active', 'true');
+        await expect(active).toHaveAttribute('data-od-render-mode', forceInline ? 'srcdoc' : 'url-load');
         const frame = await (await active.elementHandle())!.contentFrame();
         if (!frame)
             throw new Error('Preview frame missing');
         const target = frame.locator('h2');
-        // Root-relative assets require the inline pipeline and its generated annotations.
-        expect((await frame.content()).includes('data.locate')).toBe(forceInline);
-        if (forceInline)
+        // Both transports carry the comment bridge. Check the active iframe's
+        // navigation, not bridge source text, to prove which path is exercised.
+        if (forceInline) {
+            await expect(active).toHaveAttribute('srcdoc', /[\s\S]+/);
+            await expect.poll(() => frame.url()).toBe('about:srcdoc');
             await expect(target).toHaveAttribute('data-od-id', /^path-/);
+        } else {
+            await expect(active).not.toHaveAttribute('srcdoc', /[\s\S]*/);
+            await expect(active).toHaveAttribute('src', new RegExp(`/api/projects/${projectId}/`));
+            const src = await active.getAttribute('src');
+            if (!src) throw new Error('URL preview source missing');
+            await expect.poll(() => frame.url()).toBe(new URL(src, page.url()).href);
+        }
         await expect(target).toBeInViewport();
         const overlay = page.getByTestId('comment-target-overlay').last();
         await expect(overlay).toBeVisible();

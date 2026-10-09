@@ -73,6 +73,33 @@ it('rechecks an old lost comment in the DOM, ignores stale location replies and 
   expect(screen.queryByTestId('comment-active-pin')).toBeNull();
 });
 
+it('does not scroll again after a srcDoc location acknowledgement when the owner scrolls away', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({})));
+  render(tree());
+  fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+  const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+  Object.defineProperty(frame, 'clientHeight', { configurable: true, value: 600 });
+  const post = vi.spyOn(frame.contentWindow!, 'postMessage');
+  const dispatch = async (data: object) => { await act(async () => {
+    window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, data }));
+  }); };
+  const target = { ...comment, elementId: 'current-h2', position: { x: 20, y: 1100, width: 200, height: 40 } };
+  await dispatch({ type: 'od:comment-targets', targets: [target] });
+  fireEvent.click(screen.getByTestId('comment-side-item'));
+  const request = post.mock.calls.map(call => call[0]).find(data => data?.locate);
+  await dispatch({ ...target, type: 'od:comment-active-target-update', requestId: request.requestId,
+    position: { x: 20, y: 80, width: 200, height: 40 } });
+  expect(screen.getByTestId('comment-active-pin')).toHaveStyle({ top: '80px' });
+
+  // The request-id reply already confirms that the bridge scrolled. A later
+  // untagged position update is tracking the owner's scroll, not another locate.
+  await dispatch({ ...target, type: 'od:comment-active-target-update' });
+  expect(post.mock.calls.filter(call => call[0]?.type === 'od:preview-scroll-by')).toHaveLength(0);
+  fireEvent.click(screen.getByTestId('comment-side-item'));
+  const repeated = post.mock.calls.map(call => call[0]).filter(data => data?.locate).at(-1);
+  expect(repeated.requestId).not.toBe(request.requestId);
+});
+
 it('scrolls a URL preview through its existing bridge and accepts only the current DOM target', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({})));
   render(tree());

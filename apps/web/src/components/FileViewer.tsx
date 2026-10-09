@@ -12706,6 +12706,9 @@ function HtmlViewer({
         if (!snapshot.elementId || !isValidCommentOverlayPosition(snapshot.position)) return;
         if (snapshot.elementId !== request.targetId && !commentSelectorsMatch(snapshot.selector, request.selector)) return;
         request.targetId = snapshot.elementId;
+        // A tagged reply acknowledges srcDoc's completed locate/scroll. Later
+        // tracking updates must not trigger the URL bridge's initial scroll.
+        request.scrolled = true;
         setActiveCommentTarget(snapshot);
         setHoveredCommentTarget(snapshot);
         setLiveCommentTargets(current => new Map(current).set(snapshot.elementId, snapshot));
