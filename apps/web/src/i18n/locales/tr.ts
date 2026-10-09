@@ -392,6 +392,7 @@ export const tr: Dict = {
   'settings.onboardingCloudAlternative': 'Yerel bir CLI ya da kendi API anahtarını kullan',
   'settings.onboardingCloudRights': 'Tüm hakları saklıdır.',
   'settings.onboardingCloudOr': 'veya',
+  'settings.onboardingCloudCancel': 'İptal edip OpenDesign uygulamasına dön',
   'settings.onboardingGateTooltipNoRuntime': 'Sonraki adımlar yapay zekâ ile çalışır — devam etmek için bir çalışma yöntemi seçin.',
   'settings.onboardingGateTooltipAmr': 'Sonraki adımlar yapay zekâ ile çalışır — devam etmek için OpenDesign Cloud’ye giriş yapın.',
   'settings.onboardingGateTooltipLocal': 'Sonraki adımlar yapay zekâ ile çalışır — devam etmek için kullanılabilir bir yerel CLI seçin.',

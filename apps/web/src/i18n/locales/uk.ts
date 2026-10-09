@@ -392,6 +392,7 @@ export const uk: Dict = {
   'settings.onboardingCloudAlternative': 'Використати локальний CLI або власний ключ API',
   'settings.onboardingCloudRights': 'Усі права захищено.',
   'settings.onboardingCloudOr': 'або',
+  'settings.onboardingCloudCancel': 'Скасувати й повернутися до OpenDesign',
   'settings.onboardingGateTooltipNoRuntime': 'Наступні кроки виконуються на ШІ — виберіть спосіб запуску, щоб продовжити.',
   'settings.onboardingGateTooltipAmr': 'Наступні кроки виконуються на ШІ — увійдіть в OpenDesign Cloud, щоб продовжити.',
   'settings.onboardingGateTooltipLocal': 'Наступні кроки виконуються на ШІ — виберіть доступний локальний CLI, щоб продовжити.',

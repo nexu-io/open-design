@@ -148,6 +148,7 @@ function renderOnboarding(
     onPersistComposioKey: vi.fn(),
     onOpenSettings: vi.fn(),
     onCompleteOnboarding: vi.fn(),
+    onCancelCloudOnboarding: vi.fn(),
     ...overrides,
   };
 
@@ -215,6 +216,7 @@ function renderHome(
     onPersistComposioKey: vi.fn(),
     onOpenSettings: vi.fn(),
     onCompleteOnboarding: vi.fn(),
+    onCancelCloudOnboarding: vi.fn(),
     ...overrides,
   };
 
@@ -764,6 +766,47 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     expect(props.onConfigPersist).not.toHaveBeenCalled();
     expect(props.onModeChange).not.toHaveBeenCalled();
     expect(props.onAgentChange).not.toHaveBeenCalled();
+  });
+
+  it('offers a cancel escape for a completed user stuck on the passive Cloud reauth gate', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      jsonResponse({ loggedIn: false, profile: 'prod', configPath: '/x', user: null }),
+    ) as typeof fetch;
+    const onCancelCloudOnboarding = vi.fn();
+    const props = renderOnboarding({
+      config: baseConfig({
+        onboardingCompleted: true,
+        mode: 'daemon',
+        agentId: 'amr',
+        model: 'claude-opus-4-5',
+      }),
+      amrLoggedIn: false,
+      onCancelCloudOnboarding,
+    });
+
+    expect(
+      await screen.findByRole('heading', { name: 'Welcome to OpenDesign' }),
+    ).toBeTruthy();
+    const cancel = await screen.findByRole('button', {
+      name: /Cancel and return to OpenDesign/i,
+    });
+    fireEvent.click(cancel);
+    expect(onCancelCloudOnboarding).toHaveBeenCalledTimes(1);
+    expect(props.onCompleteOnboarding).not.toHaveBeenCalled();
+  });
+
+  it('keeps the Connect step mandatory for first-run (no cancel escape)', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      jsonResponse({ loggedIn: false, profile: 'prod', configPath: '/x', user: null }),
+    ) as typeof fetch;
+    renderOnboarding({ config: baseConfig({ mode: 'daemon', agentId: 'amr' }) });
+
+    expect(
+      await screen.findByRole('heading', { name: 'Welcome to OpenDesign' }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole('button', { name: /Cancel and return to OpenDesign/i }),
+    ).toBeNull();
   });
 
   it.each([
