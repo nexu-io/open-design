@@ -69,4 +69,21 @@ for (const forceInline of [false, true])
             const expected = await target.boundingBox();
             return actual && expected ? Math.max(Math.abs(actual.y - expected.y), Math.abs(actual.height - expected.height)) : 999;
         }).toBeLessThan(3);
+        // The original target can disappear while its old annotation id is
+        // still attached to the root. Neither transport may select that root.
+        await target.evaluate(element => element.remove());
+        const scrollBeforeMissing = await frame.evaluate(() => window.scrollY);
+        await page.evaluate(() => {
+            const replies: unknown[] = [];
+            Reflect.set(window, 'missingLocationReplies', replies);
+            window.addEventListener('message', event => {
+                if (event.data?.type === 'od:comment-location-missing'
+                    || (event.data?.type === 'od:comment-active-target-update' && event.data.elementId === 'old-cloud-id')) replies.push(event.data);
+            });
+        });
+        await row.click();
+        await expect.poll(() => page.evaluate(() => (Reflect.get(window, 'missingLocationReplies') as unknown[]).length)).toBeGreaterThan(0);
+        await expect(page.getByTestId('comment-active-pin')).toHaveCount(0);
+        await expect(page.getByTestId('comment-target-overlay')).toHaveCount(0);
+        expect(await frame.evaluate(() => window.scrollY)).toBe(scrollBeforeMissing);
     });

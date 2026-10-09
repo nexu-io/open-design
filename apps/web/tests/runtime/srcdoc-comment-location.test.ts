@@ -34,11 +34,17 @@ describe('Owner saved-comment DOM location (OPEND-3516)', () => {
         position: { x: 20, y: 80, width: 200, height: 40 },
       }));
       postMessage.mockClear();
-      win.document.querySelector('main')!.remove();
+      target.remove();
+      const unrelatedRoot = win.document.querySelector('main')!;
+      const rootScroll = vi.fn();
+      Object.defineProperty(unrelatedRoot, 'scrollIntoView', { value: rootScroll });
+      Object.defineProperty(unrelatedRoot, 'getBoundingClientRect', { value: () =>
+        ({ x: 0, y: 0, top: 0, left: 0, right: 752, bottom: 38, width: 752, height: 38 }) });
       win.dispatchEvent(new win.MessageEvent('message', { data: {
         type: 'od:comment-active-target', elementId: 'old-id', selector: 'body > main > section > h2',
         locate: true, requestId: 'missing-target',
       } }));
+      expect(rootScroll).not.toHaveBeenCalled();
       expect(postMessage.mock.calls.map(call => call[0])).toContainEqual(expect.objectContaining({
         type: 'od:comment-location-missing', requestId: 'missing-target',
       }));
