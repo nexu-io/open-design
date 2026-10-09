@@ -4,7 +4,7 @@ import { homeTemplateTrigger } from '../helpers/home-template-picker';
 // Scenario-card rail coverage.
 //   - The default create rail renders illustrated scenario cards carrying a
 //     title AND a one-line description.
-//   - The rail leads with Website clone, then the slide deck ("Slides"), per the
+//   - The rail leads with Prototype, then Motion design, per the
 //     curated create order.
 //   - The finer-grained scenarios (wireframe / mobile / document) exist and
 //     route to a working scenario plugin.
@@ -42,7 +42,7 @@ vi.mock('../../src/components/home-hero/PlaceholderCarousel', () => ({
 }));
 
 import { HomeHero } from '../../src/components/HomeHero';
-import { findChip, orderedCreateChips } from '../../src/components/home-hero/chips';
+import { findChip, ONBOARDING_ARTIFACT_CHIP_IDS, orderedCreateChips } from '../../src/components/home-hero/chips';
 import {
   prototypeSceneProjectMetadata,
   prototypeSubChipForSlug,
@@ -91,11 +91,12 @@ describe('HomeHero scenario cards', () => {
     expect(typePill('deck')?.textContent).toContain('Slide deck');
   });
 
-  it('uses the fixed ten-item Home creation hierarchy in product order', () => {
+  it('uses the fixed eleven-item Home creation hierarchy in product order', () => {
     const ordered = orderedCreateChips();
     const ids = ordered.map((chip) => chip.id);
     expect(ids).toEqual([
       'prototype',
+      'motion-design',
       'deck',
       'document',
       'image',
@@ -108,6 +109,18 @@ describe('HomeHero scenario cards', () => {
     ]);
     expect(ids).not.toContain('wireframe');
     expect(ids).not.toContain('mobile');
+  });
+
+  it('keeps the design-system onboarding teaser within its existing curated scope', () => {
+    expect(ONBOARDING_ARTIFACT_CHIP_IDS).toEqual([
+      'prototype',
+      'deck',
+      'document',
+      'image',
+      'hyperframes',
+      'webgl',
+      'live-artifact',
+    ]);
   });
 
   it('keeps nested prototype scenarios executable without giving them a chip of their own', () => {

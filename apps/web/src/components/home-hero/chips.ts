@@ -436,11 +436,12 @@ export const HOME_TYPE_ROW_MORE_IDS: readonly string[] = [
 
 // Chip ids the onboarding "build a design system" teaser intentionally omits.
 // Video and Audio are pure-media outputs and the least central to the
-// design-system story, so they are omitted to keep the teaser chips to a
-// single tidy row. Website clone starts
+// design-system story. Motion design is a separate film-creation entry, so
+// it also stays off this curated teaser to preserve its single tidy row.
+// Website clone starts
 // from someone else's site rather than the user's design system, so it stays
 // off the design-system teaser too.
-const ONBOARDING_ARTIFACT_OMIT = new Set<string>(['web-clone', 'video', 'audio']);
+const ONBOARDING_ARTIFACT_OMIT = new Set<string>(['web-clone', 'motion-design', 'video', 'audio']);
 
 // The artifact chips shown on the onboarding "build a design system" step — a
 // curated single-row subset of the create rail. Derived from CREATE_RAIL_ORDER
