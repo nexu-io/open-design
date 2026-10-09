@@ -1,6 +1,10 @@
 import type { PromptTemplateSummary } from '../types';
 
 export const ZH_CN_SKILL_COPY: Record<string, { description?: string; examplePrompt?: string }> = {
+  'motion-design': {
+    description: '制作可编辑的视频动效：产品短片、动态文字、视觉解说与艺术动画。围绕画面、节奏和有意义的变形编排，避免静态卡片轮播。',
+    examplePrompt: '为专注计时器做一支15秒动效短片：让杂乱的想法汇聚成一件清晰的行动，用富有表现力的文字、贯穿的视觉元素和有力的收尾表达。',
+  },
   '8-bit-orbit-video-template': {
     description:
       '基于 Hyperframes 的视频模板，用于复古像素卡组动效设计。\n当用户需要高保真、多场景的 HTML-to-video 合成，并配备高级转场、交互式预览控件和开箱即用的默认样式时使用。',

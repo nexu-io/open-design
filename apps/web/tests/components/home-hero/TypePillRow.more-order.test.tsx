@@ -22,6 +22,7 @@ afterEach(() => {
 
 const EXPECTED_MORE_ORDER = [
   'image',
+  'motion-design',
   'hyperframes',
   'web-clone',
   'video',
@@ -44,7 +45,7 @@ function renderRow() {
 }
 
 describe('TypePillRow — 更多 (OPEND-3146)', () => {
-  it('keeps the three lead types inline and lists the other seven behind 更多 in product order', () => {
+  it('keeps the three lead types inline and lists the other types behind 更多 in product order', () => {
     expect([...HOME_TYPE_ROW_IDS]).toEqual(['prototype', 'deck', 'document']);
     expect([...HOME_TYPE_ROW_MORE_IDS]).toEqual(EXPECTED_MORE_ORDER);
 
