@@ -517,7 +517,9 @@ describe("packaged smoke workflow", () => {
     expect(smoke).toContain('EXPECTED_VERSION: ${{ inputs.release_version || steps.meta.outputs.version }}');
     expect(smoke).toContain('PUBLISHED_DIGEST: ${{ steps.verify.outputs.digest }}');
     expect(smoke).toContain('IMAGE="${IMAGE%:*}@$PUBLISHED_DIGEST"');
-    expect(smoke).toContain('docker run --detach --network none "$IMAGE"');
+    expect(smoke).toContain('token="$(openssl rand -hex 32)"');
+    expect(smoke).toContain('docker run --detach --network none --env OD_API_TOKEN="$token" "$IMAGE"');
+    expect(smoke).toContain('headers: { Authorization: `Bearer ${process.env.OD_API_TOKEN}` }');
     expect(smoke).toContain('trap cleanup EXIT');
     // The expected value belongs only to the probe, never the daemon env:
     // overriding OD_APP_VERSION at docker run would hide a broken image.
@@ -535,7 +537,7 @@ describe("packaged smoke workflow", () => {
     expect(probe).toBeTruthy();
     const stub = `globalThis.fetch = async () => new Response(${JSON.stringify(JSON.stringify({ ok: true, version }))});\n`;
     const result = execFileAsync(process.execPath, ['--input-type=module', '-e', stub + probe], {
-      env: { ...process.env, EXPECTED_VERSION: '0.24.1' },
+      env: { ...process.env, EXPECTED_VERSION: '0.24.1', OD_API_TOKEN: 'smoke-test-token' },
     });
 
     if (matches) {

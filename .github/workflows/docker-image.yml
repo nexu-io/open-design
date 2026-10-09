@@ -229,7 +229,8 @@ jobs:
           if [ -n "$PUBLISHED_DIGEST" ]; then
             IMAGE="${IMAGE%:*}@$PUBLISHED_DIGEST"
           fi
-          container="$(docker run --detach --network none "$IMAGE")"
+          token="$(openssl rand -hex 32)"
+          container="$(docker run --detach --network none --env OD_API_TOKEN="$token" "$IMAGE")"
           cleanup() {
             docker logs "$container" || true
             docker rm --force "$container" >/dev/null
@@ -240,11 +241,13 @@ jobs:
           import { setTimeout as delay } from 'node:timers/promises';
 
           assert.ok(process.env.EXPECTED_VERSION, 'EXPECTED_VERSION is required');
+          assert.ok(process.env.OD_API_TOKEN, 'OD_API_TOKEN is required');
           let health;
           for (let attempt = 0; attempt < 60; attempt += 1) {
             try {
               const response = await fetch('http://127.0.0.1:7456/api/health', {
                 signal: AbortSignal.timeout(1_000),
+                headers: { Authorization: `Bearer ${process.env.OD_API_TOKEN}` },
               });
               if (response.ok) {
                 const body = await response.json();
