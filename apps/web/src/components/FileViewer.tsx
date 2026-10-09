@@ -246,6 +246,11 @@ import { HandoffButton } from './HandoffButton';
 import { SocialShareGrid } from './SocialShareGrid';
 import { Toast } from './Toast';
 import {
+  LocalizedExportError,
+  exportFailureToast,
+  genericExportFailedToast,
+} from './export-failure-toast';
+import {
   PreviewDrawOverlay,
   ANNOTATION_EVENT,
   type AnnotationEventDetail,
@@ -3340,37 +3345,6 @@ type ExportToastState = {
   tone: 'default' | 'success' | 'error' | 'loading';
 };
 
-/**
- * Marks an export failure that has no more specific, user-facing reason, so
- * the toast falls back to the generic "export failed" title + body instead of
- * echoing the thrown message.
- */
-class GenericExportFailure extends Error {}
-
-/**
- * Product error copy S26a (OPEND-2849): a generic export failure always
- * surfaces as a title plus a body line, in the same Toast message + details
- * shape as the S26c comment-save failure.
- */
-function genericExportFailedToast(t: TranslateFn): ExportToastState {
-  return {
-    message: t('fileViewer.exportFailedTitle'),
-    details: t('fileViewer.exportFailedDescription'),
-    tone: 'error',
-  };
-}
-
-/**
- * An export error that carries its own message keeps showing it; anything
- * without one (or explicitly generic) shows the S26a title + body.
- */
-function exportFailureToast(err: unknown, t: TranslateFn): ExportToastState {
-  if (err instanceof Error && err.message && !(err instanceof GenericExportFailure)) {
-    return { message: err.message, tone: 'error' };
-  }
-  return genericExportFailedToast(t);
-}
-
 export type DeckKeyboardShortcut = 'next' | 'prev' | 'first' | 'last' | 'reset';
 
 type DeckKeyboardShortcutEvent = Pick<
@@ -3857,7 +3831,7 @@ function FileVersionManagerModal({
     }
     await runVersionExport(version, async (content, title) => {
       const snapshot = await captureVersionPreviewSnapshot({ full: true });
-      if (!snapshot) throw new GenericExportFailure('version PDF snapshot unavailable');
+      if (!snapshot) throw new Error('version PDF snapshot unavailable');
       await exportSnapshotAsPdf(snapshot, title);
     });
   }
@@ -3865,9 +3839,9 @@ function FileVersionManagerModal({
   async function exportVersionImage(version: ProjectFileVersion, format: ImageExportFormat) {
     await runVersionExport(version, async (content, title) => {
       const snapshot = await captureVersionPreviewSnapshot({ full: true });
-      if (!snapshot) throw new Error(t('fileViewer.exportImageFailed'));
+      if (!snapshot) throw new LocalizedExportError(t('fileViewer.exportImageFailed'));
       const blob = await imageDataUrlToBlob(snapshot.dataUrl, format);
-      if (blob.size <= 0) throw new Error(t('fileViewer.exportImageFailed'));
+      if (blob.size <= 0) throw new LocalizedExportError(t('fileViewer.exportImageFailed'));
       const target = await prepareImageExportTarget(title, format, { useNativePicker: false });
       if (!target) return 'cancelled';
       if (target.method === 'download' && format === 'png') {
@@ -15739,8 +15713,7 @@ function HtmlViewer({
       });
     } catch (err) {
       console.warn('[exportAsImage] failed to save snapshot:', err);
-      const message = err instanceof Error && err.message ? err.message : t('fileViewer.exportImageFailed');
-      setExportToast({ message, tone: 'error' });
+      setExportToast(exportFailureToast(err, t));
       fireImageExportResult('failed', exportErrorCode(err));
     } finally {
       imageExportInFlightRef.current = false;
@@ -18152,12 +18125,13 @@ function HtmlViewer({
                       // reach at all (transient, says nothing about support).
                       // Telling a user with a dead daemon that the feature is
                       // "not available here" sends them to the wrong problem.
-                      throw new Error(
-                        'error' in res
-                          ? res.error
-                          : res.reason === 'unreachable'
-                            ? t('fileViewer.exportDaemonUnreachable')
-                            : t('fileViewer.exportPptxNa'),
+                      // A raw renderer/daemon `error` string stays out of the UI
+                      // (generic S26a copy); the two localized reasons pass through.
+                      if ('error' in res) throw new Error(res.error);
+                      throw new LocalizedExportError(
+                        res.reason === 'unreachable'
+                          ? t('fileViewer.exportDaemonUnreachable')
+                          : t('fileViewer.exportPptxNa'),
                       );
                     }
                   });
