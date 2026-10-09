@@ -1,26 +1,39 @@
-/* Chain-1-publish E0/G1 (◇): share-only seams. Export retains its own chrome.
-   Include the existing host classes to beat the later global compatibility CSS. */
-:global(.chrome-action.chrome-action-secondary).toolbar {
+/* Owner C0 toolbar pair: primary Share / secondary Export. Scope the host
+   selectors so later workspace compatibility rules cannot flatten the pair;
+   artifact-card entries below keep their independent geometry and palette. */
+:global(.app .ws-tabs-actions .chrome-action.chrome-action-secondary).toolbar,
+:global(.app .ws-tabs-actions .chrome-action.chrome-action-secondary).toolbarSecondary {
   box-sizing: border-box;
-  height: 28px;
-  min-height: 28px;
+  height: 30px;
+  min-height: 30px;
   padding: 0 12px;
-  gap: 5px;
+  gap: 8px;
   border: 0;
-  border-radius: 6px;
-  background: var(--share-toggle-on);
-  color: var(--share-white);
+  border-radius: 7px;
+  background: var(--toolbar-action-background);
+  color: var(--toolbar-action-color);
   font-size: 12px;
   font-weight: 500;
   box-shadow: none;
 }
 
-:global(.chrome-action.chrome-action-secondary).toolbar:hover:not(:disabled) {
-  background: var(--share-toggle-on);
-  color: var(--share-white);
+.toolbar {
+  --toolbar-action-background: #242424;
+  --toolbar-action-color: #fff;
 }
 
-:global(.chrome-action.chrome-action-secondary).toolbar:disabled {
+.toolbarSecondary {
+  --toolbar-action-background: #f2f2f3;
+  --toolbar-action-color: #555;
+}
+
+:global(.app .ws-tabs-actions .chrome-action.chrome-action-secondary).toolbar:hover:not(:disabled),
+:global(.app .ws-tabs-actions .chrome-action.chrome-action-secondary).toolbarSecondary:hover:not(:disabled) {
+  background: var(--toolbar-action-background);
+  color: var(--toolbar-action-color);
+}
+
+:global(.app .ws-tabs-actions .chrome-action.chrome-action-secondary).toolbar:disabled {
   background: #E4E4E6;
   color: #A6A6AA;
   opacity: 1;
