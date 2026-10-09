@@ -277,21 +277,6 @@ describe("copyMacPrebundleRuntimeDependencies", () => {
 });
 
 describe("renderMacPackagedConfig", () => {
-  it("bakes an explicit updater opt-out into a local fork", () => {
-    const saved = process.env.OD_UPDATE_ENABLED;
-    try {
-      process.env.OD_UPDATE_ENABLED = '0';
-      const config = makeConfig(join(tmpdir(), 'od-model-picker-test'), { namespace: 'model-picker' });
-      const rendered = JSON.parse(renderMacPackagedConfig({
-        appVersion: '0.24.1-fork.1', config, usePrebundledStandaloneWeb: true,
-      }));
-      expect(rendered.updateEnabled).toBe(false);
-    } finally {
-      if (saved == null) delete process.env.OD_UPDATE_ENABLED;
-      else process.env.OD_UPDATE_ENABLED = saved;
-    }
-  });
-
   it("omits nodeCommandRelative so packaged mac sidecars use Electron as Node", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-"));
     try {

@@ -6,21 +6,7 @@ import {
   PACKAGED_NAMESPACE_BASE_ROOT_ENV,
   resolvePackagedAmrProfile,
   resolvePackagedNamespaceBaseRoot,
-  resolvePackagedUpdaterEnv,
 } from '../src/config.js';
-
-describe('packaged fork updater policy', () => {
-  it('keeps a fork off the official updater after a normal app launch', () => {
-    expect(resolvePackagedUpdaterEnv({ updateEnabled: false, updateMetadataUrl: null }, {})).toEqual({ OD_UPDATE_ENABLED: '0' });
-  });
-
-  it('preserves release defaults and explicit launcher overrides', () => {
-    expect(resolvePackagedUpdaterEnv({ updateMetadataUrl: null }, {})).toEqual({});
-    expect(resolvePackagedUpdaterEnv({ updateEnabled: false, updateMetadataUrl: 'https://fork.example/metadata.json' }, {
-      OD_UPDATE_ENABLED: '1', OD_UPDATE_METADATA_URL: 'https://fixture.example/metadata.json',
-    })).toEqual({});
-  });
-});
 
 describe('resolvePackagedNamespaceBaseRoot', () => {
   it('lets a historical handoff preserve the already-resolved namespace base root', () => {

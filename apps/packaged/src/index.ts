@@ -33,7 +33,7 @@ import { releaseChannelFromNamespace, releaseChannelFromVersion } from "@open-de
 import { join } from "node:path";
 import { app, dialog } from "electron";
 
-import { readPackagedConfig, resolvePackagedUpdaterEnv } from "./config.js";
+import { readPackagedConfig } from "./config.js";
 import {
   claimPackagedDownloadAttribution,
   discoverPackagedDownloadAttribution,
@@ -99,6 +99,12 @@ let startupTelemetryContext:
       nativeModulePath: string | null;
     }
   | null = null;
+
+function applyPackagedUpdaterEnv(updateMetadataUrl: string | null): void {
+  if (updateMetadataUrl == null) return;
+  if (process.env.OD_UPDATE_METADATA_URL != null && process.env.OD_UPDATE_METADATA_URL.length > 0) return;
+  process.env.OD_UPDATE_METADATA_URL = updateMetadataUrl;
+}
 
 async function main(): Promise<void> {
   const config = await readPackagedConfig();
@@ -304,7 +310,7 @@ async function main(): Promise<void> {
     platform: process.platform,
   });
   applyPackagedElectronPathOverrides(paths);
-  Object.assign(process.env, resolvePackagedUpdaterEnv(activeConfig, process.env));
+  applyPackagedUpdaterEnv(activeConfig.updateMetadataUrl);
   if (!claimPackagedSingleInstanceLock(app, (argv) => {
     secondInstanceHandoff.handle(findPackagedDeeplinkArg(argv));
   })) {
