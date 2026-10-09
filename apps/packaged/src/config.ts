@@ -36,6 +36,7 @@ export type RawPackagedConfig = {
   // the daemon at runtime; Langfuse credentials never ship in packaged config.
   telemetryRelayUrl?: string;
   updateMetadataUrl?: string;
+  updateEnabled?: boolean;
   // PostHog product-analytics ingest key, baked by tools/pack from
   // process.env.POSTHOG_KEY at packaging time. Forwarded to the daemon
   // sidecar's spawn env as POSTHOG_KEY. `phc_` keys are public ingest
@@ -68,6 +69,7 @@ export type PackagedConfig = {
   resourceRoot: string;
   telemetryRelayUrl: string | null;
   updateMetadataUrl: string | null;
+  updateEnabled?: boolean;
   posthogKey: string | null;
   posthogHost: string | null;
   velaWebUrl: string | null;
@@ -76,6 +78,19 @@ export type PackagedConfig = {
   webStandaloneRoot: string | null;
   webOutputMode: PackagedWebOutputMode;
 };
+
+/** Baked fork policy applies unless the launcher explicitly overrides it. */
+export function resolvePackagedUpdaterEnv(
+  config: Pick<PackagedConfig, 'updateMetadataUrl' | 'updateEnabled'>,
+  env: NodeJS.ProcessEnv,
+): NodeJS.ProcessEnv {
+  return {
+    ...(config.updateEnabled != null && !env.OD_UPDATE_ENABLED
+      ? { OD_UPDATE_ENABLED: config.updateEnabled ? '1' : '0' } : {}),
+    ...(config.updateMetadataUrl != null && !env.OD_UPDATE_METADATA_URL
+      ? { OD_UPDATE_METADATA_URL: config.updateMetadataUrl } : {}),
+  };
+}
 
 async function pathExists(filePath: string): Promise<boolean> {
   try {
@@ -227,6 +242,7 @@ export async function readPackagedConfig(): Promise<PackagedConfig> {
     resourceRoot,
     telemetryRelayUrl: cleanOptionalString(raw.telemetryRelayUrl),
     updateMetadataUrl: cleanOptionalString(raw.updateMetadataUrl),
+    ...(typeof raw.updateEnabled === 'boolean' ? { updateEnabled: raw.updateEnabled } : {}),
     posthogKey: cleanOptionalString(raw.posthogKey),
     posthogHost: cleanOptionalString(raw.posthogHost),
     velaWebUrl: cleanOptionalString(raw.velaWebUrl),
