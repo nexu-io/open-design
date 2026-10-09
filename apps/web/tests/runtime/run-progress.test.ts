@@ -87,6 +87,20 @@ describe('runProgressSteps', () => {
     expect(steps[0]?.target?.endsWith('…')).toBe(true);
   });
 
+  it('deduplicates events sharing the same tool id, keeping the newest state', () => {
+    const steps = runProgressSteps([
+      assistant([
+        toolUse('acp_1', 'Write', { file_path: 'partial.html' }),
+        toolUse('acp_1', 'Write', { file_path: 'final.html' }),
+        toolUse('acp_2', 'Read', { file_path: 'styles.css' }),
+      ]),
+    ]);
+    expect(steps.map((step) => [step.id, step.target])).toEqual([
+      ['acp_2', 'styles.css'],
+      ['acp_1', 'final.html'],
+    ]);
+  });
+
   it('caps the trail so a long turn cannot grow it without bound', () => {
     const events = Array.from({ length: 40 }, (_, i) =>
       toolUse(String(i), 'Read', { file_path: `file-${i}.html` }),
