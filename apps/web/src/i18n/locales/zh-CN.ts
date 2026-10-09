@@ -3484,7 +3484,8 @@ export const zhCN: Dict = {
   "fileViewer.exportingElapsed": "正在导出… {seconds} 秒",
   "fileViewer.exportSlideEta":
     "正在导出第 {current}/{total} 页 · 约剩 {seconds} 秒",
-  "fileViewer.exportFailed": "导出失败，请重试。",
+  "fileViewer.exportFailedTitle": "导出失败",
+  "fileViewer.exportFailedDescription": "本次导出未完成，请重新尝试。",
   "fileViewer.exportDone": "导出完成",
   "fileViewer.exportImageFailed":
     "图片捕获失败，请重试或使用浏览器的截图工具。",
@@ -4389,7 +4390,7 @@ export const zhCN: Dict = {
   "updater.opening": "正在打开安装器…",
   "updater.dialogAvailableGeneric": "发现新版本。\n下载后即可安装。",
   "updater.dialogAvailableVersion": "v{version} 可供更新。\n下载后即可安装。",
-  "updater.dialogCheckFailed": "检查更新失败。\n暂时无法获取版本信息，请检查网络连接后重试。",
+  "updater.dialogCheckFailed": "检查更新失败\n暂时无法获取版本信息，请检查网络连接后重试。",
   "updater.dialogReadyGeneric":
     "新版本已准备就绪。\n更好的体验，更智能的设计，欢迎体验新版本。",
   "updater.dialogReadyVersion":

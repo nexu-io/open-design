@@ -3493,7 +3493,8 @@ export const zhTW: Dict = {
   "fileViewer.exportingElapsed": "正在匯出… {seconds} 秒",
   "fileViewer.exportSlideEta":
     "正在匯出第 {current}/{total} 張 · 約剩 {seconds} 秒",
-  "fileViewer.exportFailed": "匯出失敗，請重試。",
+  "fileViewer.exportFailedTitle": "匯出失敗",
+  "fileViewer.exportFailedDescription": "本次匯出未完成，請重新嘗試。",
   "fileViewer.exportDone": "匯出完成",
   "fileViewer.exportImageFailed":
     "圖片擷取失敗，請重試或使用瀏覽器的截圖工具。",
@@ -4394,7 +4395,7 @@ export const zhTW: Dict = {
   "updater.opening": "正在開啟安裝器…",
   "updater.dialogAvailableGeneric": "發現新版本。\n下載後即可安裝。",
   "updater.dialogAvailableVersion": "v{version} 可供更新。\n下載後即可安裝。",
-  "updater.dialogCheckFailed": "檢查更新失敗。\n暫時無法取得版本資訊，請檢查網路連線後重試。",
+  "updater.dialogCheckFailed": "檢查更新失敗\n暫時無法取得版本資訊，請檢查網路連線後重試。",
   "updater.dialogReadyGeneric":
     "新版本已準備就緒。\n更好的體驗、更智慧的設計，歡迎體驗新版本。",
   "updater.dialogReadyVersion":

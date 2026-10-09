@@ -3336,8 +3336,40 @@ type HtmlVersionExportContext = {
 
 type ExportToastState = {
   message: string;
+  details?: string | null;
   tone: 'default' | 'success' | 'error' | 'loading';
 };
+
+/**
+ * Marks an export failure that has no more specific, user-facing reason, so
+ * the toast falls back to the generic "export failed" title + body instead of
+ * echoing the thrown message.
+ */
+class GenericExportFailure extends Error {}
+
+/**
+ * Product error copy S26a (OPEND-2849): a generic export failure always
+ * surfaces as a title plus a body line, in the same Toast message + details
+ * shape as the S26c comment-save failure.
+ */
+function genericExportFailedToast(t: TranslateFn): ExportToastState {
+  return {
+    message: t('fileViewer.exportFailedTitle'),
+    details: t('fileViewer.exportFailedDescription'),
+    tone: 'error',
+  };
+}
+
+/**
+ * An export error that carries its own message keeps showing it; anything
+ * without one (or explicitly generic) shows the S26a title + body.
+ */
+function exportFailureToast(err: unknown, t: TranslateFn): ExportToastState {
+  if (err instanceof Error && err.message && !(err instanceof GenericExportFailure)) {
+    return { message: err.message, tone: 'error' };
+  }
+  return genericExportFailedToast(t);
+}
 
 export type DeckKeyboardShortcut = 'next' | 'prev' | 'first' | 'last' | 'reset';
 
@@ -3762,7 +3794,7 @@ function FileVersionManagerModal({
     setVersionExportToast({ message: t('fileViewer.exportingProgress'), tone: 'loading' });
     const content = await ensureVersionContent(version);
     if (!content) {
-      setVersionExportToast({ message: t('fileViewer.exportFailed'), tone: 'error' });
+      setVersionExportToast(genericExportFailedToast(t));
       return;
     }
     try {
@@ -3780,8 +3812,7 @@ function FileVersionManagerModal({
       }
       setVersionExportToast({ message: t('fileViewer.exportDone'), tone: 'success' });
     } catch (err) {
-      const message = err instanceof Error && err.message ? err.message : t('fileViewer.exportFailed');
-      setVersionExportToast({ message, tone: 'error' });
+      setVersionExportToast(exportFailureToast(err, t));
     }
   }
 
@@ -3806,7 +3837,7 @@ function FileVersionManagerModal({
     setVersionExportToast({ message: t('fileViewer.exportingProgress'), tone: 'loading' });
     const content = await ensureVersionContent(version);
     if (!content) {
-      setVersionExportToast({ message: t('fileViewer.exportFailed'), tone: 'error' });
+      setVersionExportToast(genericExportFailedToast(t));
       return;
     }
     const context: HtmlVersionExportContext = {
@@ -3826,7 +3857,7 @@ function FileVersionManagerModal({
     }
     await runVersionExport(version, async (content, title) => {
       const snapshot = await captureVersionPreviewSnapshot({ full: true });
-      if (!snapshot) throw new Error(t('fileViewer.exportFailed'));
+      if (!snapshot) throw new GenericExportFailure('version PDF snapshot unavailable');
       await exportSnapshotAsPdf(snapshot, title);
     });
   }
@@ -4330,6 +4361,7 @@ function FileVersionManagerModal({
         <Toast
           className="file-version-export-toast"
           message={visibleExportToast.message}
+          details={visibleExportToast.details}
           tone={visibleExportToast.tone}
           role={visibleExportToast.tone === 'error' ? 'alert' : 'status'}
           ttlMs={visibleExportToast.tone === 'loading' ? 60000 : 2200}
@@ -7602,8 +7634,7 @@ function HtmlViewer({
     }
     const failToast = (err?: unknown) => {
       stopTicker();
-      const message = err instanceof Error && err.message ? err.message : t('fileViewer.exportFailed');
-      if (toastFormats.has(format)) setExportToast({ message, tone: 'error' });
+      if (toastFormats.has(format)) setExportToast(exportFailureToast(err, t));
     };
     try {
       const out = fn();
@@ -17759,6 +17790,7 @@ function HtmlViewer({
                 ? createPortal(
                     <Toast
                       message={exportToast.message}
+                      details={exportToast.details}
                       tone={exportToast.tone}
                       role={exportToast.tone === 'error' ? 'alert' : 'status'}
                       ttlMs={exportToast.tone === 'loading' ? 60000 : 2200}

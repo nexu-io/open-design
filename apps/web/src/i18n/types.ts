@@ -4236,7 +4236,8 @@ export interface Dict {
   'fileViewer.exportSlideProgress': string;
   'fileViewer.exportingElapsed': string;
   'fileViewer.exportSlideEta': string;
-  'fileViewer.exportFailed': string;
+  'fileViewer.exportFailedTitle': string;
+  'fileViewer.exportFailedDescription': string;
   'fileViewer.exportDone': string;
   'fileViewer.exportImageFailed': string;
   'fileViewer.exportImageModalSubtitle': string;
