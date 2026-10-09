@@ -89,7 +89,17 @@ export function pnpmInvocation(
   return { args: [npmExecPath], command: process.execPath };
 }
 
-async function defaultDeploy(packageName: string, destination: string, includeOptional: boolean): Promise<void> {
+export function electronInstallEnvironment(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const clean = { ...env };
+  for (const key of [
+    "ELECTRON_OVERRIDE_DIST_PATH",
+    "ELECTRON_SKIP_BINARY_DOWNLOAD",
+    "npm_config_electron_skip_binary_download",
+  ]) delete clean[key];
+  return clean;
+}
+
+export async function defaultDeploy(packageName: string, destination: string, includeOptional: boolean): Promise<void> {
   const pnpm = pnpmInvocation();
   await execFileAsync(pnpm.command, [
     ...pnpm.args,
@@ -111,7 +121,10 @@ async function defaultDeploy(packageName: string, destination: string, includeOp
       ? join(electronRoot, "dist", "electron.exe")
       : join(electronRoot, "dist", "electron");
   if (!(await stat(electronBinary).catch(() => null))?.isFile()) {
-    await execFileAsync(process.execPath, [join(electronRoot, "install.js")], { cwd: electronRoot, env: process.env });
+    await execFileAsync(process.execPath, [join(electronRoot, "install.js")], {
+      cwd: electronRoot,
+      env: electronInstallEnvironment(),
+    });
   }
   for (const entry of [
     electronBinary,

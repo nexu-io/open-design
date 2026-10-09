@@ -1,4 +1,4 @@
-import { lstatSync, mkdirSync, mkdtempSync, readlinkSync, readdirSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, lstatSync, mkdirSync, mkdtempSync, readlinkSync, readdirSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, posix, relative, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { createTarArchive, downloadCopyAndClear, extractArchive, listArchive, readTarEntry } from "@open-design/download";
@@ -86,16 +86,70 @@ function normalizedArchiveEntries(entries: string[]): string[] {
   return normalized;
 }
 
+function containsAbsoluteLink(directory: string): boolean {
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name);
+    if (entry.isSymbolicLink() && isAbsolute(readlinkSync(path))) return true;
+    if (entry.isDirectory() && containsAbsoluteLink(path)) return true;
+  }
+  return false;
+}
+
+function materializeAbsoluteLinks(directory: string): void {
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name);
+    if (entry.isSymbolicLink()) {
+      const target = readlinkSync(path);
+      if (!isAbsolute(target)) continue;
+      const resolved = realpathSync(path);
+      const metadata = lstatSync(resolved);
+      rmSync(path, { force: true, recursive: true });
+      if (metadata.isDirectory()) {
+        cpSync(resolved, path, { dereference: false, recursive: true });
+        materializeAbsoluteLinks(path);
+      } else if (metadata.isFile()) {
+        cpSync(resolved, path);
+      } else {
+        throw new Error("source product contains an unmaterialized link or special file");
+      }
+    } else if (entry.isDirectory()) {
+      materializeAbsoluteLinks(path);
+    }
+  }
+}
+
 export function exportWorkspaceOutputs(root: string, directory: string, outputs: Output[], selected: readonly Unit[]): string {
   const paths = pathsOf(outputs, selected);
   mkdirSync(directory, { recursive: true });
   const archive = resolve(directory, "workspace.tar.gz");
-  writeFileSync(join(directory, "outputs.json"), JSON.stringify(outputs));
-  // Keep the standalone pnpm topology intact. Dereferencing a package link
-  // relocates that package away from its sibling dependencies in `.pnpm`, so
-  // a tree that starts in the producer workspace can fail after restoration.
-  createTarArchive(archive, [{ directory: root, entries: paths }, { directory: resolve(directory), entries: ["outputs.json"] }], { dereference: false, reproducible: true });
-  return archive;
+  let productRoot = root;
+  let staging: string | undefined;
+  try {
+    // Windows directory junctions are stored as absolute links. Keep ordinary
+    // relative pnpm links intact, but materialize any absolute junction closure
+    // in a private tree so the archive neither escapes nor mutates build output.
+    if (paths.some((path) => containsAbsoluteLink(join(root, path)))) {
+      staging = mkdtempSync(join(directory, ".workspace-export-"));
+      productRoot = staging;
+      for (const path of paths) {
+        const destination = join(staging, path);
+        mkdirSync(dirname(destination), { recursive: true });
+        cpSync(join(root, path), destination, { dereference: false, recursive: true });
+        materializeAbsoluteLinks(destination);
+      }
+    }
+    const manifestRoot = staging ?? resolve(directory);
+    writeFileSync(join(manifestRoot, "outputs.json"), JSON.stringify(outputs));
+    // Keep relative pnpm topology intact. Dereferencing every package link
+    // relocates packages away from sibling dependencies in `.pnpm`.
+    createTarArchive(archive, staging
+      ? [{ directory: productRoot, entries: [...paths, "outputs.json"] }]
+      : [{ directory: productRoot, entries: paths }, { directory: manifestRoot, entries: ["outputs.json"] }],
+    { dereference: false, reproducible: true });
+    return archive;
+  } finally {
+    if (staging) rmSync(staging, { force: true, recursive: true });
+  }
 }
 
 export async function importWorkspaceOutputs(root: string, scratch: string, source: WorkspaceSource): Promise<number> {

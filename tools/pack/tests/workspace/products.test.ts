@@ -25,12 +25,12 @@ function fixture() {
   return { root, output, scratch: join(root, "scratch") };
 }
 
-function source(root: string, archive: string) {
+function source(root: string, archive: string, unit: "daemon" | "web" = "daemon") {
   const zip = join(root, "source.zip");
   execFileSync("python3", ["-c", "import zipfile,sys; z=zipfile.ZipFile(sys.argv[2],'w'); z.write(sys.argv[1],'workspace.tar.gz'); z.close()", archive, zip]);
   const bytes = readFileSync(zip);
   vi.stubGlobal("fetch", vi.fn(async () => new Response(bytes, { headers: { "content-length": String(bytes.length) } })));
-  return { unit: "daemon" as const, url: "https://cache.example/source.zip", sha256: createHash("sha256").update(bytes).digest("hex") };
+  return { unit, url: "https://cache.example/source.zip", sha256: createHash("sha256").update(bytes).digest("hex") };
 }
 
 afterEach(() => {
@@ -96,6 +96,36 @@ describe("workspace product boundary", () => {
     mkdirSync(restored);
     await importWorkspaceOutputs(restored, f.scratch, descriptor);
     expect(execFileSync(process.execPath, [join(restored, "apps/daemon/dist/cli.js")], { encoding: "utf8" })).toBe("started\n");
+  });
+
+  it("exports and directly starts a restored Web closure with an absolute Next directory link", async () => {
+    const f = fixture();
+    const standalone = join(f.root, "apps/web/.next/standalone");
+    const externalNext = join(f.root, "workspace-store/next");
+    mkdirSync(externalNext, { recursive: true });
+    writeFileSync(join(externalNext, "index.js"), "module.exports = 'portable-next';\n");
+    mkdirSync(join(standalone, "apps/web/node_modules"), { recursive: true });
+    mkdirSync(join(f.root, "apps/web/.next/static"), { recursive: true });
+    mkdirSync(join(f.root, "apps/web/dist/sidecar"), { recursive: true });
+    writeFileSync(join(f.root, "apps/web/dist/sidecar/index.js"), "export {};\n");
+    writeFileSync(join(f.root, "apps/web/dist/sidecar/index.d.ts"), "export {};\n");
+    symlinkSync(externalNext, join(standalone, "apps/web/node_modules/next"), process.platform === "win32" ? "junction" : "dir");
+    writeFileSync(join(standalone, "apps/web/server.js"), "console.log(require('next'));\n");
+    const output = {
+      schemaVersion: 1,
+      unit: "web" as const,
+      platform: process.platform,
+      arch: process.arch,
+      webOutputMode: "standalone",
+      outputPaths: ["apps/web/dist", "apps/web/.next/standalone", "apps/web/.next/static"],
+    };
+    const archive = exportWorkspaceOutputs(f.root, join(f.root, "export"), [output], ["web"]);
+    const descriptor = source(f.root, archive, "web");
+    const restored = join(f.root, "restored");
+    mkdirSync(restored);
+    await importWorkspaceOutputs(restored, f.scratch, descriptor);
+    expect(execFileSync(process.execPath, [join(restored, "apps/web/.next/standalone/apps/web/server.js")], { encoding: "utf8" }))
+      .toBe("portable-next\n");
   });
 
   it.skipIf(process.platform === "win32")("rejects non-portable links before changing existing outputs", async () => {

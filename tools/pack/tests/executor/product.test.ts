@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { listArchive, readTarEntry } from "@open-design/download";
 import {
+  defaultDeploy,
+  electronInstallEnvironment,
   exportReleaseExecutorProduct,
   pnpmInvocation,
   releaseExecutorManifest,
@@ -32,6 +34,23 @@ describe("release executor product", () => {
     expect(pnpmInvocation("darwin")).toEqual({ args: [], command: "pnpm" });
     expect(pnpmInvocation("linux")).toEqual({ args: [], command: "pnpm" });
   });
+
+  it("does not let inherited Electron skip controls suppress executor payload installation", () => {
+    const env = electronInstallEnvironment({
+      ELECTRON_OVERRIDE_DIST_PATH: "C:\\workspace\\electron",
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1",
+      npm_config_electron_skip_binary_download: "true",
+      npm_config_electron_mirror: "https://mirror.example/electron/",
+    });
+    expect(env).toEqual({ npm_config_electron_mirror: "https://mirror.example/electron/" });
+  });
+
+  it.skipIf(process.platform !== "win32")("materializes Electron through the real Windows deploy", async () => {
+    const root = await fixture();
+    const destination = join(root, "pack");
+    await defaultDeploy("@open-design/tools-pack", destination, true);
+    expect(await readFile(join(destination, "node_modules", "electron", "dist", "electron.exe"))).not.toHaveLength(0);
+  }, 180_000);
 
   it("exports one reproducible platform contract without command links", async () => {
     const root = await fixture();
