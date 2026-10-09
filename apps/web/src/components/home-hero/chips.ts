@@ -400,18 +400,16 @@ export function chipsForGroup(group: ChipGroup): HomeHeroChip[] {
   return HOME_HERO_CHIPS.filter((c) => c.group === group);
 }
 
-// Fixed Home information architecture. Only these ten output types are
+// Fixed Home information architecture. Only these output types are
 // top-level choices. Action-only create entries (for example Create Design
-// System) are intentionally excluded. Prototype leads and Slide deck follows;
-// the media scenarios trail so at typical widths they live in the 更多
-// overflow popover rather than the visible pill row.
+// System) are intentionally excluded. Prototype leads and Motion design follows.
 export const CREATE_RAIL_ORDER = [
   'prototype',
+  'motion-design',
   'deck',
   'document',
   'image',
   'web-clone',
-  'motion-design',
   'hyperframes',
   'webgl',
   'live-artifact',

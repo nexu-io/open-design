@@ -1013,7 +1013,7 @@ export const zhCN: Dict = {
   "homeHero.chip.deck": "幻灯片",
   "homeHero.chip.image": "图片",
   "homeHero.chip.video": "视频",
-  "homeHero.chip.motionDesign": "视频动效",
+  "homeHero.chip.motionDesign": "动效设计",
   "homeHero.chip.motionDesignDesc": "动态图形、艺术动画与产品短片",
   "homeHero.chip.motionDesignHint": "描述你想表达的内容、风格和时长，制作一段有节奏的动效。",
   "homeHero.chip.hyperframes": "HyperFrames",
