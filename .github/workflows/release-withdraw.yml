@@ -29,7 +29,10 @@ name: release-withdraw
 #
 # `dry_run` defaults to TRUE here, unlike release-rollback. A withdrawal is
 # never the urgent case — nothing is bleeding, the release simply is not going
-# out — so the plan is worth one look before a branch is deleted.
+# out — so the plan is worth one look before a branch is deleted. A dry run runs
+# every guard and the full rollback plan against live R2; it only withholds the
+# three writes (pointer, label, branch), so "the dry run passed" means the real
+# run has nothing left to discover.
 #
 # TRUST BOUNDARY — `workflow_dispatch` runs the workflow file from the dispatch
 # ref, so no check written here is a security control; the control is the repo's
@@ -63,9 +66,27 @@ permissions:
   contents: read # branch and label deletion go through the App token below
 
 concurrency:
-  # A withdrawal must not overlap the cut it is undoing, nor a stable publish
-  # that would move the pointers underneath it.
-  group: open-design-release-withdraw
+  # Deliberately the SAME group as `release-prerelease.yml`, not a private one.
+  # This workflow reads `prerelease/latest` and then rewrites every object under
+  # it; release-prerelease is the only other writer of that pointer. A private
+  # group serialises a withdrawal against nothing: a prerelease publish could
+  # move the pointer after `Resolve the prerelease pointer` read it, and then
+  # interleave its own multi-object `latest` writes with the rollback's, leaving
+  # `latest` mixing two candidates. Queue behind it instead.
+  #
+  # Held for the whole run, workflow-level and never per job, because the branch
+  # delete has to happen inside it. The publish this races is not a manual re-run
+  # but the ordinary cut timeline: the cut push and the preview-manifest push that
+  # follows each start `notify-release-feishu` -> `release-prerelease`. Queued
+  # behind a withdrawal, such a run cannot enter the publisher until
+  # `release/vX.Y.Z` is gone, and it then fails closed on a checkout of a deleted
+  # ref instead of republishing the withdrawn commit. It also closes the other
+  # direction: the publisher's CAS refuses only BACKWARD moves, so a publish
+  # landing after the repoint would happily restore the abandoned pointer.
+  #
+  # `cut-release.yml` stays out of the group because it writes no R2 object of its
+  # own; what needed serialising was the publisher it triggers.
+  group: open-design-release-prerelease
   cancel-in-progress: false
 
 jobs:
@@ -252,24 +273,35 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Setup pnpm
-        if: ${{ !inputs.dry_run && steps.pre.outputs.rollback == 'true' }}
+        if: ${{ steps.pre.outputs.rollback == 'true' }}
         uses: pnpm/action-setup@v5
         with:
           version: 10.33.2
 
       - name: Install dependencies
-        if: ${{ !inputs.dry_run && steps.pre.outputs.rollback == 'true' }}
+        if: ${{ steps.pre.outputs.rollback == 'true' }}
         run: pnpm install --frozen-lockfile
 
       # Reuses the rollback planner, which re-checks that the target published
       # completely, restores every platform manifest and updater feed, writes
       # metadata.json last, and reads it all back.
+      #
+      # Runs on a dry run too, gated only on whether the pointer needs moving.
+      # `RELEASE_DRY_RUN` stops it writing, it does not stop it planning — and
+      # planning IS the validation: that the target exists, published completely,
+      # has a manifest for every ready target and a feed for every platform, and
+      # that the live launcher floor is still satisfiable. Skipping this step on a
+      # dry run made the safe default worthless: `prerelease_to_version` only had
+      # to be well-shaped, so a typo'd or half-published target passed the plan
+      # and failed for the first time during the real run, after the label and the
+      # branch were already gone.
       - name: Repoint prerelease latest
-        if: ${{ !inputs.dry_run && steps.pre.outputs.rollback == 'true' }}
+        if: ${{ steps.pre.outputs.rollback == 'true' }}
         env:
           RELEASE_BRANCH: main
           RELEASE_CHANNEL: prerelease
           RELEASE_COMMIT: ${{ github.sha }}
+          RELEASE_DRY_RUN: ${{ inputs.dry_run }}
           RELEASE_LAUNCHER_VERSION_MIN_PRERELEASE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_PRERELEASE }}
           RELEASE_LAUNCHER_VERSION_MIN_STABLE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_STABLE }}
           RELEASE_LAUNCHER_VERSION_MIN_URL_PRERELEASE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_URL_PRERELEASE }}
@@ -312,6 +344,19 @@ jobs:
           SHA: ${{ steps.branch.outputs.sha }}
         run: |
           set -euo pipefail
+          # Compare-and-delete. Everything that made this branch safe to delete
+          # was established against $SHA: that only the two cut bots had committed
+          # to it, and that no open PR targeted or was labelled for it. Between
+          # that and here sits the whole dry run a human just read, plus whatever
+          # ran in parallel. A tip that has moved means those findings describe a
+          # branch that no longer exists, and the one commit most likely to have
+          # landed is the backport somebody needed. GitHub's ref delete takes no
+          # expected-SHA precondition, so the check is explicit.
+          tip="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$BRANCH" --jq '.object.sha')"
+          if [ "$tip" != "$SHA" ]; then
+            echo "::error::$BRANCH moved from $SHA to $tip after it was inspected; re-run so the new commits are judged"
+            exit 1
+          fi
           # Recorded before the delete so the branch can be restored:
           #   git push origin <SHA>:refs/heads/<BRANCH>
           echo "deleting $BRANCH (was $SHA — restore with: git push origin $SHA:refs/heads/$BRANCH)"
@@ -352,7 +397,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$DRY_RUN" = "true" ]; then
-            heading="Withdrawal plan for $VERSION (dry run — nothing was changed)"
+            heading="Withdrawal plan for $VERSION (dry run — validated, nothing was changed)"
           else
             heading="Withdrew $VERSION"
           fi
