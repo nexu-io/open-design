@@ -4527,13 +4527,14 @@ export function commentAuthorAvatarColor(seed: string) {
   return COMMENT_AUTHOR_AVATAR_COLORS[hash % COMMENT_AUTHOR_AVATAR_COLORS.length] ?? COMMENT_AUTHOR_AVATAR_COLORS[0];
 }
 
-// First glyph of the display name (code-point aware so a CJK name shows its
-// first character and an emoji is not split). Falls back to '?'.
+const commentAvatarSegmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+
+// Keep joined emoji and combining marks together; preserve the existing casing.
 function commentAuthorInitials(name: string): string {
   const trimmed = name.trim();
   if (!trimmed) return '?';
-  const [first] = Array.from(trimmed);
-  return (first ?? '?').toUpperCase();
+  const first = commentAvatarSegmenter.segment(trimmed)[Symbol.iterator]().next().value;
+  return (first?.segment ?? '?').toUpperCase();
 }
 
 type CommentAuthorRole = CollabMemberRole | 'sharePage';
@@ -15375,7 +15376,9 @@ function HtmlViewer({
   // unified chrome action still renders (disabled) for read-only members instead
   // of vanishing. `canShare`/`canDownload` keep the `&& !viewerOnly` gate that
   // guards the actual export/publish handlers.
-  const rawCanShare = source !== null && isShareableArtifact;
+  // Preview memory policy does not determine publication eligibility. The share
+  // plan and POST validate the original file, never the routing-only preview.
+  const rawCanShare = isShareableArtifact;
   const shareGuideAppUserId = useShareGuideAppUserId();
   const projectShareHistory = useProjectShareHistory(projectId, workspaceContext, JSON.stringify([file.name, publishedFileSlug, publishedFileUrl]));
   const afterExportGuide = useAfterExportShareGuide({
@@ -15388,6 +15391,7 @@ function HtmlViewer({
   const rawCanDownload = source !== null && (isShareableArtifact || isMarkdownArtifact);
   const canShare = rawCanShare && !viewerOnly;
   const canDownload = rawCanDownload && !viewerOnly;
+  const canExportHtml = canShare && source !== null;
   // PPTX export is slide-based, so show it only for explicit decks plus
   // structured deck runtimes. Do not key this off plain `.slide`: ordinary
   // parallax/long pages may use that class but must remain page-mode exports.
@@ -15399,10 +15403,10 @@ function HtmlViewer({
   // answered or predates the flag: keep showing the entry, since hiding on
   // absence would take a working export away from every deployment that has
   // not upgraded. Only an explicit `false` hides it.
-  const showPptxExport = canShare && deckExportSignal && slideRendererAvailable !== false;
+  const showPptxExport = canExportHtml && deckExportSignal && slideRendererAvailable !== false;
   const canPptx = showPptxExport && !streaming;
   const showMarkdownExport = source !== null && isMarkdownArtifact && !viewerOnly;
-  const showImageExport = canShare;
+  const showImageExport = canExportHtml;
   // Read-only viewer of a team-shared project: comment-only copy for the
   // disabled edit/export controls and the comment composer's send-to-chat path.
   const viewerOnlyDisabledTitle = t('fileViewer.readonlySharedNoExport');
@@ -15487,23 +15491,22 @@ function HtmlViewer({
 
   useEffect(() => {
     const nudgeKey = `${projectId}\n${file.name}`;
-    if (!canShare || exportReadyNudgeSeenRef.current.has(nudgeKey)) return;
+    if (!canExportHtml || exportReadyNudgeSeenRef.current.has(nudgeKey)) return;
     exportReadyNudgeSeenRef.current.add(nudgeKey);
     if (hasSeenExportReadyNudge(projectId, file.name)) return;
     markExportReadyNudgeSeen(projectId, file.name);
     setExportReadyNudge(true);
     const timeout = window.setTimeout(() => setExportReadyNudge(false), 1800);
     return () => window.clearTimeout(timeout);
-  }, [canShare, file.name, projectId]);
+  }, [canExportHtml, file.name, projectId]);
 
   // Chat-side "Share" next-step action: when a new share request arrives, open
   // the share menu (the toolbar's "Share" button → deploy menu, which holds the
   // share-link items AND the "publish online" providers). This is the right
   // surface for "share" — publishing is the prerequisite for a shareable link,
   // and that publish step lives here; the download menu is export-to-disk, a
-  // different intent. The artifact source may still be loading when the request
-  // lands (the file was just auto-opened), so we defer until `canShare` flips
-  // true and only consume each nonce once.
+  // different intent. Only consume the nonce for an eligible artifact; source
+  // loading is independent of sharing and the plan gates the actual publish.
   useEffect(() => {
     const nonce = shareRequest?.nonce;
     if (nonce == null) return;
@@ -15514,8 +15517,7 @@ function HtmlViewer({
      * 清空,于是旧请求被当成新请求重放,菜单自己弹出来(用户 2026-08-27:
      * 「这个弹窗动不动自己弹出来」)。`slide-nav` 早就是这么修的。
      *
-     * 顺序也要紧:`canShare` 的判断必须在消费之前 —— 否则文件还没加载完那一轮
-     * 就把 nonce 吃掉了,等真能分享时反而不开了。
+     * 在消费之前检查分享资格，避免只读状态吞掉请求。
      */
     if (!shouldConsumeActionRequest(actionRequestKey('share', projectId, file.name), nonce)) return;
     setExportReadyNudge(false);
@@ -16091,8 +16093,9 @@ function HtmlViewer({
   // classify an unattributed external comment as the viewer's own.
   const viewerMemberId = workspaceContext?.workspaceMemberId?.trim() || null;
   const unreadSideComments = useMemo(() => visibleSideComments.filter((comment) => (
-    !viewerMemberId || comment.authorMemberId !== viewerMemberId
-  )), [viewerMemberId, visibleSideComments]);
+    !(viewerMemberId && comment.authorMemberId === viewerMemberId)
+    && !(shareGuideAppUserId && comment.authorAppUserId === shareGuideAppUserId)
+  )), [viewerMemberId, shareGuideAppUserId, visibleSideComments]);
   const latestVisibleSideCommentCreatedAt = useMemo(
     () => unreadSideComments.reduce((latest, comment) => Math.max(latest, comment.createdAt), 0),
     [unreadSideComments],
@@ -16136,9 +16139,8 @@ function HtmlViewer({
     }).catch(() => undefined);
     return () => { cancelled = true; };
   }, [commentPanelOpen, commentReadScopeKey, commentSidePanelCollapsed, latestVisibleSideCommentCreatedAt, mergeReadState, projectId, workspaceContext]);
-  // Do not fabricate an authorKey from a member id. This client has no trusted
-  // personal authorKey input, so only the verified member identity is excluded
-  // here; external-account self recognition remains a server/identity seam.
+  // Trusted current member/app-account identities are filtered above. Never
+  // fabricate an authorKey from names, colors, or either identity namespace.
   const hasUnreadSideComments = hasUnreadComments({
     readState: commentReadState,
     comments: unreadSideComments.map((comment) => ({
