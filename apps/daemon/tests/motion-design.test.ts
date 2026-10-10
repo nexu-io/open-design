@@ -21,7 +21,7 @@ describe('Motion Design official skill and OD Next route', () => {
     const skills = await listSkills([path.join(root, '.tmp/nonexistent-user-skills'), path.join(root, 'skills')]);
     expect(skills[0]?.id).toBe('motion-design');
     expect(skills[0]?.source).toBe('built-in');
-    expect(skills[0]?.mode).toBe('video');
+    expect(skills[0]?.mode).toBe('utility');
     const source = await readFile(path.join(root, 'skills/motion-design/SKILL.md'), 'utf8');
     const folder = path.join(root, 'plugins/_official/scenarios/od-next-strategy');
     const resolved = await resolvePluginFolder({ folder, folderId: 'od-next-strategy', sourceKind: 'bundled', source: folder, trust: 'bundled' });

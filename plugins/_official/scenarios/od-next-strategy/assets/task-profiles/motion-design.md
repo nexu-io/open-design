@@ -1,6 +1,6 @@
 ---
 name: motion-design
-description: "Design and build distinctive, editable motion graphics: product films, kinetic typography, visual explainers, brand sequences, and procedural art. Use for a timed animated composition or video; ordinary button/hover feedback alone is not this workflow."
+description: "Apply motion craft to an active task: refine a brief, beat map, visual continuity, typography, pacing, and timeline implementation. Use when planning or improving motion graphics; the host task owns artifact creation, output format, and export."
 triggers:
   - motion design
   - motion graphics
@@ -10,7 +10,7 @@ triggers:
   - kinetic typography
   - animated explainer
 od:
-  mode: video
+  mode: utility
   category: animation-motion
   featured: -100
   example_prompt: Create a 15-second motion film for a focus timer. Show scattered thoughts converging into one clear task, with expressive typography, a continuous visual motif, and a confident closing frame.
@@ -18,10 +18,12 @@ od:
 
 # Motion Design
 
-Create a film with a point of view: one clear idea expressed through composition,
-transformation, rhythm, and sound when requested. Deliver actual editable motion,
-not a slide deck with entrance effects. Quality means viewers understand and
-remember the idea while wanting to watch the movement again.
+Use this functional helper to refine the user's brief or work in progress with
+one clear idea expressed through composition, transformation, rhythm, and sound
+when requested. Apply the relevant craft guidance within the current task; this
+skill is not a rendering template and does not create a project or choose an
+output format. The Motion Design creation route owns those decisions. Quality
+means viewers understand and remember the idea while wanting to watch it move.
 
 ## Execution context
 
@@ -34,9 +36,8 @@ forbids it. The editable HTML composition is the canonical OD Next deliverable;
 MP4 is a separate product export unless the accepted Build Package owns it.
 Never describe an unrendered video file as complete.
 
-Outside a host-constrained run, make a working local preview with replay and
-scrubbing, and deliver the requested source and/or video. Where tools and scope
-permit visual iteration, examine the opening, key transformation, transition,
+Where the active task's tools and scope permit visual iteration, examine the
+opening, key transformation, transition,
 text hold and ending at intended size, plus continuous playback. Correct the
 largest observable defect, then revisit only affected moments. A runnable file
 alone is not proof of successful motion. Distinguish what was observed from

@@ -2,7 +2,7 @@ import type { PromptTemplateSummary } from '../types';
 
 export const ZH_CN_SKILL_COPY: Record<string, { description?: string; examplePrompt?: string }> = {
   'motion-design': {
-    description: '制作可编辑的视频动效：产品短片、动态文字、视觉解说与艺术动画。围绕画面、节奏和有意义的变形编排，避免静态卡片轮播。',
+    description: '辅助当前任务梳理动效脚本、画面连续性、节奏与时间轴实现；产物创建和导出由任务流程负责。',
     examplePrompt: '为专注计时器做一支15秒动效短片：让杂乱的想法汇聚成一件清晰的行动，用富有表现力的文字、贯穿的视觉元素和有力的收尾表达。',
   },
   '8-bit-orbit-video-template': {
