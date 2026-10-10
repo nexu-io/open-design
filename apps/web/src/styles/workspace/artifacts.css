@@ -795,6 +795,28 @@
 .media-provider-detail-field input {
   width: 100%;
 }
+.media-provider-detail-field select {
+  width: 100%;
+}
+/*
+ * Global "default image model" control under the provider list. Applies
+ * to every run: the daemon injects the pick into the agent's
+ * media-dispatch prompt so BYOK setups stop falling back to the
+ * OpenDesign Cloud catalogue when the user names no model.
+ */
+.media-provider-default-model {
+  margin-top: 12px;
+  max-width: 760px;
+  padding: 12px 14px;
+  background: var(--bg-panel);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.media-provider-default-model select {
+  width: 100%;
+}
 .media-provider-detail-actions {
   display: flex;
   align-items: center;

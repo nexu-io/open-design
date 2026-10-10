@@ -49,6 +49,13 @@ const recipe: OdNextStrategyRequestRecipeV2 = {
 };
 
 describe('OD Next V2 prompt recipe', () => {
+  it('carries the selected image default into the OD Next request context', () => {
+    const context = { byokMediaDefaults: { imageModel: 'custom-image' } };
+    const prompt = composeOdNextStrategyRequestPromptV2(recipe, context);
+    expect(prompt).toContain('name="media-model-defaults"');
+    expect(prompt).toContain('custom-image');
+  });
+
   // OPEND-2589. The strategy admits a turn on the project's task type, not on
   // what this turn said, so a greeting or a stray keystroke enters the same
   // Full Plan route as a real brief. The prompt taught only three outcomes —

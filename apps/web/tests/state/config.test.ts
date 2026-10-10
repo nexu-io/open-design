@@ -1610,3 +1610,114 @@ describe('saveConfig', () => {
     });
   });
 });
+
+describe('media-config format + clear tombstones (web side)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.stubGlobal('fetch', originalFetch);
+  });
+
+  it('loads global media preferences from the daemon and respects explicit resets', () => {
+    const prefs = { defaultImageModel: 'custom-image', hideSuggestedModels: true };
+    const merged = mergeDaemonConfig(DEFAULT_CONFIG, prefs);
+    expect(merged).toMatchObject(prefs);
+    const reset = mergeDaemonConfig(merged, { defaultImageModel: null, hideSuggestedModels: false });
+    expect(reset.defaultImageModel).toBeUndefined();
+    expect(reset.hideSuggestedModels).toBe(false);
+  });
+
+  it('preserves a local deletion while the daemon has no saved providers', () => {
+    const local = { ...DEFAULT_CONFIG, mediaProviders: {
+      openai: { apiKey: '', baseUrl: '', deleted: true },
+    } };
+    expect(mergeDaemonMediaProviders(local, {}).mediaProviders).toEqual(local.mediaProviders);
+  });
+
+  it('maps a daemon format and tombstone into local credentials state', async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          providers: {
+            'custom-image': {
+              configured: true,
+              source: 'stored',
+              apiKeyTail: '1234',
+              baseUrl: 'http://relay.example.test',
+              model: 'gemini-3.1-flash-image',
+              format: 'gemini-native',
+            },
+            openai: {
+              configured: false,
+              source: 'unset',
+              apiKeyTail: '',
+              baseUrl: '',
+              deleted: true,
+            },
+          },
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchMediaProvidersFromDaemon()).resolves.toEqual({
+      status: 'ok',
+      providers: {
+        'custom-image': {
+          apiKey: '',
+          apiKeyConfigured: true,
+          source: 'stored',
+          apiKeyTail: '1234',
+          baseUrl: 'http://relay.example.test',
+          model: 'gemini-3.1-flash-image',
+          format: 'gemini-native',
+        },
+        openai: {
+          apiKey: '',
+          apiKeyConfigured: false,
+          source: 'unset',
+          apiKeyTail: '',
+          baseUrl: '',
+          deleted: true,
+        },
+      },
+    });
+  });
+
+  it('keeps a tombstone in the save payload and out of the configured set', () => {
+    // A tombstoned entry must stay in the map (so the daemon keeps the
+    // marker) while every "configured?" surface reports unconfigured.
+    expect(
+      isStoredMediaProviderEntryPresent({ apiKey: '', baseUrl: '', deleted: true }),
+    ).toBe(true);
+    expect(
+      isStoredMediaProviderEntryEmpty({ apiKey: '', baseUrl: '', deleted: true }),
+    ).toBe(false);
+
+    const payload = buildMediaProvidersForDaemonSave(
+      { openai: { apiKey: '', baseUrl: '', deleted: true } },
+      null,
+    );
+    expect(payload.providers.openai).toEqual({ deleted: true });
+  });
+
+  it('sends the custom-image format alongside the key and base URL', () => {
+    const payload = buildMediaProvidersForDaemonSave(
+      {
+        'custom-image': {
+          apiKey: 'relay-key',
+          baseUrl: 'http://relay.example.test',
+          model: 'gemini-3.1-flash-image',
+          format: 'openai-chat',
+        },
+      },
+      null,
+    );
+    expect(payload.providers['custom-image']).toEqual({
+      apiKey: 'relay-key',
+      baseUrl: 'http://relay.example.test',
+      model: 'gemini-3.1-flash-image',
+      format: 'openai-chat',
+    });
+  });
+});

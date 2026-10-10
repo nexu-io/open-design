@@ -41,6 +41,13 @@ describe('app-config', () => {
   });
 
   describe('readAppConfig', () => {
+    it('round-trips global media preferences and clears an explicit default', async () => {
+      await writeAppConfig(dataDir, { defaultImageModel: ' custom-image ', hideSuggestedModels: true });
+      expect(await readAppConfig(dataDir)).toMatchObject({ defaultImageModel: 'custom-image', hideSuggestedModels: true });
+      await writeAppConfig(dataDir, { defaultImageModel: null, hideSuggestedModels: false });
+      expect(await readAppConfig(dataDir)).toMatchObject({ defaultImageModel: null, hideSuggestedModels: false });
+    });
+
     it('returns default telemetry when config file does not exist', async () => {
       expect(await readAppConfig(dataDir)).toEqual({
         telemetry: DEFAULT_TELEMETRY,

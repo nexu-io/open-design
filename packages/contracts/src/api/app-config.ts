@@ -62,6 +62,10 @@ export interface AppConfigPrefs {
   allowSilentUpdates?: boolean;
   orbit?: OrbitConfigPrefs;
   customInstructions?: string | null;
+  /** Registry image model used when a run has no explicit image default. null clears it. */
+  defaultImageModel?: string | null;
+  /** Hide curated suggestions after the provider model catalogue loads. */
+  hideSuggestedModels?: boolean;
   /** External project library roots. The daemon adds its built-in .od/projects location at read time. */
   projectLocations?: ProjectLocationPrefs[];
   /** Project location id used for new projects when the create request does not choose one explicitly. */

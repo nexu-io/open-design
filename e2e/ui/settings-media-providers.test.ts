@@ -268,6 +268,134 @@ test.describe('Settings media providers flows', () => {
     await expect(dialog.getByLabel('FishAudio Base URL')).toHaveValue('https://fish.example.com');
   });
 
+  test('[P1] persists the custom-image request format and restores it after reopening settings', async ({ page }) => {
+    await seedSettingsBase(page);
+
+    const mediaConfigWrites: Array<{ providers?: Record<string, Record<string, unknown>> }> = [];
+    await routeBootstrapApis(page, {
+      mediaConfigPut: async (route) => {
+        mediaConfigWrites.push(route.request().postDataJSON() as { providers?: Record<string, Record<string, unknown>> });
+        await route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
+      },
+    });
+
+    let dialog = await openMediaSettings(page);
+
+    await selectMediaProvider(dialog, 'Custom Image API');
+    await dialog.getByLabel('Custom Image API API key').fill('relay-key');
+    await dialog.getByLabel('Custom Image API Base URL').fill('https://relay.example.com');
+    await dialog.getByLabel('Custom Image API Model').fill('gemini-3.1-flash-image');
+    await dialog.getByLabel('Custom Image API Request format').selectOption('gemini-native');
+
+    await page.waitForFunction(
+      ({ key }) => {
+        const raw = window.localStorage.getItem(key);
+        if (!raw) return false;
+        const parsed = JSON.parse(raw);
+        return parsed.mediaProviders?.['custom-image']?.format === 'gemini-native';
+      },
+      { key: STORAGE_KEY },
+    );
+
+    await expect(dialog.getByText('All changes saved')).toBeVisible();
+    // The daemon-side write must carry the format next to the credentials,
+    // otherwise media-config.json falls back to openai-images on reload.
+    expect(mediaConfigWrites.at(-1)?.providers?.['custom-image']).toMatchObject({
+      baseUrl: 'https://relay.example.com',
+      model: 'gemini-3.1-flash-image',
+      format: 'gemini-native',
+    });
+    // Documentation screenshot for PR review; lands in the gitignored
+    // e2e/ui/reports directory.
+    await dialog.screenshot({ path: 'ui/reports/test-results/pr1-custom-image-format.png' });
+
+    await dialog.getByRole('button', { name: 'Back to home', exact: true }).click();
+
+    dialog = await openMediaSettingsFromCurrentPage(page);
+    await selectMediaProvider(dialog, 'Custom Image API');
+    await expect(dialog.getByLabel('Custom Image API Request format')).toHaveValue('gemini-native');
+    await expect(dialog.getByLabel('Custom Image API Base URL')).toHaveValue('https://relay.example.com');
+  });
+
+  test('[P1] saves the global default image model and restores it after reopening settings', async ({ page }) => {
+    await seedSettingsBase(page);
+    await routeBootstrapApis(page);
+
+    let dialog = await openMediaSettings(page);
+    await selectMediaProvider(dialog, 'Custom Image API');
+    await dialog.getByLabel('Custom Image API API key').fill('relay-key');
+    await dialog.getByLabel('Custom Image API Base URL').fill('https://relay.example.com');
+    await dialog.getByLabel('Custom Image API Model').fill('gemini-3.1-flash-image');
+
+    // The global picker only appears once a provider is actually configured.
+    const defaultModelSelect = dialog.getByLabel('Default image model');
+    await expect(defaultModelSelect).toBeVisible();
+    await defaultModelSelect.selectOption('custom-image');
+
+    await page.waitForFunction(
+      ({ key }) => {
+        const raw = window.localStorage.getItem(key);
+        if (!raw) return false;
+        return JSON.parse(raw).defaultImageModel === 'custom-image';
+      },
+      { key: STORAGE_KEY },
+    );
+    await page.locator('.media-provider-default-model').screenshot({
+      path: 'ui/reports/test-results/pr1-default-image-model.png',
+    });
+
+    await dialog.getByRole('button', { name: 'Back to home', exact: true }).click();
+
+    dialog = await openMediaSettingsFromCurrentPage(page);
+    await expect(dialog.getByLabel('Default image model')).toHaveValue('custom-image');
+  });
+
+  test('[P1] clearing a media provider writes an explicit tombstone that survives reopening settings', async ({ page }) => {
+    await seedSettingsBase(page, {
+      mediaProviders: {
+        openai: { apiKey: 'sk-openai-clear-me', baseUrl: 'https://api.openai.com/v1' },
+      },
+    });
+
+    const mediaConfigWrites: Array<{ providers?: Record<string, Record<string, unknown>> }> = [];
+    await routeBootstrapApis(page, {
+      mediaConfigPut: async (route) => {
+        mediaConfigWrites.push(route.request().postDataJSON() as { providers?: Record<string, Record<string, unknown>> });
+        await route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
+      },
+    });
+
+    let dialog = await openMediaSettings(page);
+    await selectMediaProvider(dialog, 'OpenAI');
+    // Clear is guarded by a window.confirm (issue #737); accept it so the
+    // tombstone write actually lands.
+    page.on('dialog', (confirmDialog) => confirmDialog.accept());
+    await dialog.getByRole('button', { name: 'Clear configuration' }).click();
+
+    await page.waitForFunction(
+      ({ key }) => {
+        const raw = window.localStorage.getItem(key);
+        if (!raw) return false;
+        const parsed = JSON.parse(raw);
+        return parsed.mediaProviders?.openai?.deleted === true;
+      },
+      { key: STORAGE_KEY },
+    );
+
+    // The write is an explicit deletion marker, not a dropped map key: the
+    // daemon keeps it so the chat-side key mirror cannot resurrect the
+    // provider on the next message.
+    expect(mediaConfigWrites.at(-1)?.providers?.openai).toMatchObject({ deleted: true });
+    await dialog.screenshot({ path: 'ui/reports/test-results/pr1-cleared-tombstone.png' });
+
+    await dialog.getByRole('button', { name: 'Back to home', exact: true }).click();
+
+    dialog = await openMediaSettingsFromCurrentPage(page);
+    await selectMediaProvider(dialog, 'OpenAI');
+    await expect(dialog.getByLabel('OpenAI API key')).toHaveValue('');
+    await expect(dialog.getByLabel('OpenAI Base URL')).toHaveValue('');
+  });
+
   test('[P1] reloads media provider settings from daemon after an initial load failure', async ({ page }) => {
     await seedSettingsBase(page);
 

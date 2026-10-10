@@ -21,7 +21,7 @@ import { readFileSync } from 'node:fs';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { createHash, randomBytes } from 'node:crypto';
 import path from 'node:path';
-import type { OdNextRolloutMode } from '@open-design/contracts';
+import type { AppConfigPrefs as SharedAppConfigPrefs, OdNextRolloutMode } from '@open-design/contracts';
 
 import { expandHomePrefix } from './home-expansion.js';
 
@@ -123,6 +123,14 @@ export interface AppConfigPrefs {
   allowSilentUpdates?: boolean;
   orbit?: OrbitConfigPrefs;
   customInstructions?: string | null;
+  /** Global default image model (a media-registry image model id). The
+   *  daemon folds it into every run's BYOK media defaults when the run
+   *  carries none, so media dispatch stops falling back to the
+   *  OpenDesign Cloud catalogue. null/'' = unset. */
+  defaultImageModel?: SharedAppConfigPrefs['defaultImageModel'];
+  /** BYOK only — hide the hand-curated suggested-model list once a
+   *  provider catalogue has been fetched. */
+  hideSuggestedModels?: SharedAppConfigPrefs['hideSuggestedModels'];
   projectLocations?: ProjectLocationPrefs[];
   defaultProjectLocationId?: string | null;
   // Whether this installation runs the OD Next design strategy. Absent and
@@ -158,6 +166,8 @@ const ALLOWED_KEYS: ReadonlySet<keyof AppConfigPrefs> = new Set([
   'allowSilentUpdates',
   'orbit',
   'customInstructions',
+  'defaultImageModel',
+  'hideSuggestedModels',
   'projectLocations',
   'defaultProjectLocationId',
   'odNextStrategyMode',
@@ -637,6 +647,22 @@ function applyConfigValue(
     if (typeof value === 'string') {
       target[key] = value.slice(0, 5000);
     } else if (value === null) {
+      target[key] = value;
+    }
+    return;
+  }
+  if (key === 'defaultImageModel') {
+    // Registry model id; keep it short and drop blanks so an empty
+    // string from the UI means "unset" rather than a stored ''.
+    if (typeof value === 'string') {
+      target[key] = value.trim().slice(0, 200) || null;
+    } else if (value === null) {
+      target[key] = value;
+    }
+    return;
+  }
+  if (key === 'hideSuggestedModels') {
+    if (typeof value === 'boolean') {
       target[key] = value;
     }
     return;

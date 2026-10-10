@@ -564,6 +564,28 @@ function renderMediaDispatchHint(
   return `${hint}${renderByokMediaDefaultsHint(defaults)}${renderRuntimeMediaDefaultsHint(runtimeDefaults, defaults)}`;
 }
 
+/**
+ * Fold the installation-wide default image model into a run's BYOK media
+ * defaults when the run carries none. The daemon reads the global pick
+ * from app-config and applies it here so media dispatch on BYOK setups
+ * stops falling back to the OpenDesign Cloud catalogue whenever the user
+ * names no model. Per-run and per-session picks (an explicit
+ * `imageModel`) always win.
+ */
+export function withGlobalDefaultImageModel(
+  defaults: ByokMediaDefaults | undefined,
+  globalDefaultImageModel: string | null | undefined,
+): ByokMediaDefaults | undefined {
+  const global = typeof globalDefaultImageModel === 'string'
+    ? globalDefaultImageModel.trim()
+    : '';
+  if (!global) return defaults;
+  if (typeof defaults?.imageModel === 'string' && defaults.imageModel.trim()) {
+    return defaults;
+  }
+  return { ...defaults, imageModel: global };
+}
+
 function mediaDefaultsForRuntime(
   agentId: string | null | undefined,
   defaults?: ByokMediaDefaults,
@@ -960,6 +982,7 @@ export function composeSystemPrompt({
       // `planToolNote` on ComposeInput) so this fork and its contracts mirror
       // stay byte-identical.
       planToolNote,
+      byokMediaDefaults,
       sessionMode,
       locale,
       deckIntent: odNextStrategyRecipe.taskType !== 'ppt' && freeformDeckSignal === true,

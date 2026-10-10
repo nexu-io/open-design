@@ -69,6 +69,7 @@ import {
   planToolNoteForRuntime,
   renderConnectedExternalMcpDirective,
   resolveExclusiveSurface,
+  withGlobalDefaultImageModel,
 } from './prompts/system.js';
 import {
   computeStableSectionHashes,
@@ -9918,6 +9919,17 @@ export async function startServer({
     } catch (err) {
       console.warn('[app-config] readAppConfig failed', err);
     }
+    // Fold the installation-wide default image model into the run's BYOK
+    // media defaults when the run carries none (see
+    // withGlobalDefaultImageModel). Without this, media dispatch on BYOK
+    // setups falls back to the OpenDesign Cloud catalogue
+    // (vela/gpt-image-2) whenever the user names no model — including
+    // when the agent shortens that fallback to a provider the user
+    // never configured. Per-run and per-session picks still win.
+    byokMediaDefaults = withGlobalDefaultImageModel(
+      byokMediaDefaults,
+      appConfigForPrompt?.defaultImageModel,
+    );
     let pluginDesignSystemId = null;
     if (
       typeof appliedPluginSnapshotId === 'string' &&
@@ -10654,6 +10666,7 @@ export async function startServer({
     const odNextStableRequestContext = odNextStrategyRecipe
       ? {
           agentId,
+          byokMediaDefaults,
           streamFormat,
           // The runtime's real plan-tool name. OD Next composes its own prompt
           // and never reaches the slim charter that carries this note, so

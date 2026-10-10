@@ -1959,7 +1959,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     ]);
   });
 
-  it('reports the account model count when account models are combined with provider suggestions', async () => {
+  it.each([false, true])('filters suggested models only when requested (hide=%s)', async (hideSuggestedModels) => {
     fetchProviderModelsMock.mockResolvedValueOnce({
       ok: true,
       kind: 'success',
@@ -1981,6 +1981,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
       baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
       model: 'glm-4.6',
       apiProviderBaseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+      hideSuggestedModels,
     });
 
     fireEvent.click(screen.getByRole('tab', { name: 'Zhipu AI' }));
@@ -1988,8 +1989,10 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     expect(await screen.findByText('✓ Loaded 8 models from your account.')).toBeTruthy();
     fireEvent.click(screen.getByRole('combobox', { name: 'Model' }));
     const modelPopover = screen.getByTestId('settings-byok-model-popover');
-    expect(within(modelPopover).getByRole('option', { name: 'glm-4-plus · Suggested' })).toBeTruthy();
-    expect(within(modelPopover).getByRole('option', { name: 'glm-4-air · Suggested' })).toBeTruthy();
+    expect(Boolean(within(modelPopover).queryByRole('option', { name: 'glm-4-plus · Suggested' }))).toBe(!hideSuggestedModels);
+    expect(Boolean(within(modelPopover).queryByRole('option', { name: 'glm-4-air · Suggested' }))).toBe(!hideSuggestedModels);
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Hide suggested models after loading the account catalogue' }));
+    expect(Boolean(within(modelPopover).queryByRole('option', { name: 'glm-4-air · Suggested' }))).toBe(hideSuggestedModels);
   });
 
   it('fetches provider models, merges them into the picker, and preserves a custom current model', async () => {
@@ -4638,7 +4641,7 @@ describe('SettingsDialog media providers interactions', () => {
     expect(baseUrlInput.disabled).toBe(false);
   });
 
-  it('clears an existing provider config and removes it from the persisted payload', async () => {
+  it('clears an existing provider config and persists an explicit deletion', async () => {
     const { onPersist } = renderSettingsDialog(
       {
         mode: 'daemon',
@@ -4665,7 +4668,10 @@ describe('SettingsDialog media providers interactions', () => {
     await waitForPersist(
       onPersist,
       expect.objectContaining({
-        mediaProviders: {},
+        mediaProviders: { openai: {
+          apiKey: '', baseUrl: '', model: '', format: '', deleted: true,
+          apiKeyConfigured: false, apiKeyTail: '',
+        } },
       }),
       { forceMediaProviderSync: true },
     );

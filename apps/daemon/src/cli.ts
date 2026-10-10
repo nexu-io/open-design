@@ -1739,7 +1739,7 @@ async function runMedia(args) {
     printMediaHelp();
     return;
   }
-  if (sub !== 'generate' && sub !== 'wait' && sub !== 'scaffold') {
+  if (sub !== 'generate' && sub !== 'wait' && sub !== 'scaffold' && sub !== 'config') {
     console.error(`unknown subcommand: od media ${sub}`);
     printMediaHelp();
     process.exit(1);
@@ -1747,9 +1747,50 @@ async function runMedia(args) {
 
   const idx = args.indexOf(sub);
   const subArgs = [...args.slice(0, idx), ...args.slice(idx + 1)];
+  if (sub === 'config') return runMediaConfig(subArgs);
   if (sub === 'wait') return runMediaWait(subArgs);
   if (sub === 'scaffold') return runMediaScaffold(subArgs);
   return runMediaGenerate(subArgs);
+}
+
+async function runMediaConfig(args) {
+  if (!args.length || args.includes('--help') || args[0] === 'help') {
+    console.log(`Usage:
+  od media config get [--json]
+  od media config set --file <path|-> [--json]
+
+Reads or replaces the provider map through /api/media/config. GET masks keys.
+SET accepts the same JSON body as the API, including format and deleted.
+Use preserveApiKey: true for saved keys; omitted providers are removed.
+--file - reads JSON from stdin. --daemon-url selects the daemon.
+Global defaults: od config set defaultImageModel custom-image
+Suggestions:    od config set hideSuggestedModels true`);
+    return;
+  }
+  const [operation, ...rest] = args;
+  if (operation !== 'get' && operation !== 'set') {
+    throw new Error('Usage: od media config <get|set>');
+  }
+  const flags = parseFlags(rest, {
+    string: new Set(['daemon-url', 'file']),
+    boolean: new Set(['json']),
+  });
+  let body;
+  if (operation === 'set') {
+    const raw = await readFileFlagOrStdin(flags.file);
+    if (raw === null) throw new Error('od media config set requires --file <path|->');
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed.providers !== 'object' || !parsed.providers || Array.isArray(parsed.providers)) {
+      throw new Error('Expected a JSON object with a providers map');
+    }
+    body = JSON.stringify(parsed);
+  }
+  const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
+  const response = await fetch(`${base}/api/media/config`, body === undefined ? {} : {
+    method: 'PUT', headers: { 'content-type': 'application/json' }, body,
+  });
+  if (!response.ok) return structuredHttpFailure(response);
+  process.stdout.write(JSON.stringify(await response.json(), null, 2) + '\n');
 }
 
 async function runMediaScaffold(rawArgs) {
@@ -2246,6 +2287,7 @@ async function cliDaemonBaseUrl(flags) {
 
 function printMediaHelp() {
   console.log(`Usage: od media scaffold --composition-dir .hyperframes-cache/<id> [opts]
+       od media config <get|set> [--file <path|->] [--json]
        od media generate --surface <image|video|audio> --model <id> [opts]
        "$OD_NODE_BIN" "$OD_BIN" media generate --surface <image|video|audio> --model <id> [opts]
 

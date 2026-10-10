@@ -12,7 +12,7 @@ import {
   type StrategyTaskTypeV2,
 } from '../plugins/strategy-v2.js';
 import { renderChatTurnHostProtocolInstructions } from './chat-turn-host-protocol.js';
-import type { ChatSessionMode } from '../api/chat.js';
+import type { ByokMediaDefaults, ChatSessionMode } from '../api/chat.js';
 import {
   renderDeckFrameworkDirective,
   renderLegacyDeckCompatibilityDirective,
@@ -73,6 +73,7 @@ export interface OdNextStrategyRequestRecipeV2 {
  */
 export interface OdNextStrategyStableRequestContextV2 {
   agentId?: string | null | undefined;
+  byokMediaDefaults?: ByokMediaDefaults | undefined;
   sessionMode?: ChatSessionMode | undefined;
   locale?: string | undefined;
   /**
@@ -580,6 +581,10 @@ export function composeOdNextStrategyStableRequestContextV2(
   // sentence naming a tool has no such excuse, and a note that ever did
   // contain post-Build semantics should stop the run rather than ship.
   instructionText('runtime-plan-tool', context.planToolNote ?? undefined);
+  if (context.byokMediaDefaults?.imageModel?.trim()) {
+    factualStructured('media-model-defaults', context.byokMediaDefaults);
+    instructionText('media-model-selection', 'When media generation is allowed, use the run-scoped media model defaults with od media generate unless the user explicitly requests another model. Preserve the exact model id, including any provider prefix.');
+  }
   const deckFrameworkMode = context.deckFrameworkMode
     ?? (context.deckIntent ? 'canonical' : undefined);
   if (deckFrameworkMode) {

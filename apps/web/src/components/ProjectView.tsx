@@ -1937,14 +1937,21 @@ function byokMediaDefaultsForRun(input: {
   videoModelOverride: string;
   speechModelOverride: string;
   speechVoiceOverride: string;
-  config: Pick<AppConfig, 'byokImageModel' | 'byokVideoModel' | 'byokSpeechModel' | 'byokSpeechVoice'>;
+  config: Pick<AppConfig, 'byokImageModel' | 'byokVideoModel' | 'byokSpeechModel' | 'byokSpeechVoice' | 'defaultImageModel'>;
   imageModelOptions: readonly { id: string }[];
   videoModelOptions: readonly { id: string }[];
   speechModelOptions: readonly { id: string }[];
 }): ByokMediaDefaults {
+  // Image precedence: this session's override > the protocol-scoped
+  // BYOK default > the global default image model (Settings → Media
+  // providers) > the first option of the protocol-filtered picker. The
+  // global default sits above the picker fallback because the picker
+  // only lists models of the active chat protocol — the trap that sent
+  // image generation to a provider the user never configured.
   const imageModel = firstNonBlank(
     input.imageModelOverride,
     input.config.byokImageModel,
+    input.config.defaultImageModel,
     input.imageModelOptions[0]?.id,
   );
   const videoModel = firstNonBlank(

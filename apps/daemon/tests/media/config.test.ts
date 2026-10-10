@@ -1073,3 +1073,154 @@ describe('seedProviderIfMissing', () => {
     });
   });
 });
+
+describe('media-config custom-image format and clear tombstones', () => {
+  let projectRoot: string;
+
+  beforeEach(async () => {
+    projectRoot = await mkdtemp(path.join(tmpdir(), 'od-media-format-'));
+    for (const key of OPENAI_ENV_KEYS) {
+      delete process.env[key];
+    }
+    delete process.env.OD_MEDIA_CONFIG_DIR;
+    delete process.env.OD_DATA_DIR;
+  });
+
+  afterEach(async () => {
+    for (const key of OPENAI_ENV_KEYS) {
+      delete process.env[key];
+    }
+    await rm(projectRoot, { recursive: true, force: true });
+  });
+
+  async function readStoredJson(): Promise<Record<string, any>> {
+    const raw = await readFile(
+      path.join(projectRoot, '.od', 'media-config.json'),
+      'utf8',
+    );
+    return JSON.parse(raw);
+  }
+
+  it('round-trips a custom-image format through write/resolve/masked', async () => {
+    await writeConfig(projectRoot, {
+      providers: {
+        'custom-image': {
+          apiKey: 'relay-key',
+          baseUrl: 'http://relay.example.test',
+          model: 'gemini-3.1-flash-image',
+          format: 'gemini-native',
+        },
+      },
+    });
+
+    expect((await readStoredJson()).providers['custom-image']).toMatchObject({
+      apiKey: 'relay-key',
+      baseUrl: 'http://relay.example.test',
+      model: 'gemini-3.1-flash-image',
+      format: 'gemini-native',
+    });
+
+    const resolved = await resolveProviderConfig(projectRoot, 'custom-image');
+    expect(resolved.format).toBe('gemini-native');
+
+    const masked = await readMaskedConfig(projectRoot);
+    expect((masked.providers as Record<string, any>)['custom-image']).toMatchObject({
+      configured: true,
+      source: 'stored',
+      format: 'gemini-native',
+    });
+  });
+
+  it('drops unknown format values so a stale client cannot persist them', async () => {
+    await writeConfig(projectRoot, {
+      providers: {
+        'custom-image': {
+          apiKey: 'relay-key',
+          baseUrl: 'http://relay.example.test',
+          format: 'not-a-format',
+        },
+      },
+    });
+
+    const resolved = await resolveProviderConfig(projectRoot, 'custom-image');
+    expect(resolved.format).toBeUndefined();
+    const masked = await readMaskedConfig(projectRoot);
+    expect((masked.providers as Record<string, any>)['custom-image'].format).toBeUndefined();
+  });
+
+  it('keeps a tombstone across writes and suppresses borrowed credentials', async () => {
+    await writeConfig(projectRoot, {
+      providers: { openai: { deleted: true } },
+    });
+
+    await writeConfig(projectRoot, {
+      providers: { 'custom-image': { baseUrl: 'https://relay.example', model: 'image-model' } },
+    });
+
+    const masked = await readMaskedConfig(projectRoot);
+    expect((masked.providers as Record<string, any>).openai).toMatchObject({
+      configured: false,
+      source: 'unset',
+      deleted: true,
+      apiKeyTail: '',
+    });
+
+    const resolved = await resolveProviderConfig(projectRoot, 'openai');
+    expect(resolved.apiKey).toBe('');
+  });
+
+  it('suppresses the Codex auth-file borrow once the provider is tombstoned', async () => {
+    const homeDir = await mkdtemp(path.join(tmpdir(), 'od-media-format-home-'));
+    const homedirSpy = vi.spyOn(os, 'homedir').mockReturnValue(homeDir);
+    try {
+      await mkdir(path.join(homeDir, '.codex'), { recursive: true });
+      await writeFile(
+        path.join(homeDir, '.codex', 'auth.json'),
+        JSON.stringify({ OPENAI_API_KEY: 'sk-borrowed' }),
+        'utf8',
+      );
+
+      // Sanity: without the tombstone the borrowed key resolves.
+      expect((await resolveProviderConfig(projectRoot, 'openai')).apiKey).toBe('sk-borrowed');
+
+      await writeConfig(projectRoot, { providers: { openai: { deleted: true } } });
+
+      expect((await resolveProviderConfig(projectRoot, 'openai')).apiKey).toBe('');
+      const masked = await readMaskedConfig(projectRoot);
+      expect((masked.providers as Record<string, any>).openai).toMatchObject({
+        configured: false,
+        source: 'unset',
+      });
+    } finally {
+      homedirSpy.mockRestore();
+      await rm(homeDir, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps the chat-side seed from resurrecting a tombstoned provider', async () => {
+    await writeConfig(projectRoot, { providers: { openai: { deleted: true } } });
+
+    const seeded = await seedProviderIfMissing(projectRoot, 'openai', {
+      apiKey: 'chat-mirrored-key',
+      baseUrl: 'http://relay.example.test',
+    });
+    expect(seeded).toBe(false);
+
+    const resolved = await resolveProviderConfig(projectRoot, 'openai');
+    expect(resolved.apiKey).toBe('');
+  });
+
+  it('clears the tombstone when the user re-configures the provider', async () => {
+    await writeConfig(projectRoot, { providers: { openai: { deleted: true } } });
+    await writeConfig(projectRoot, {
+      providers: {
+        openai: { apiKey: 'sk-real', baseUrl: 'https://api.openai.com/v1' },
+      },
+    });
+
+    const stored = await readStoredJson();
+    expect(stored.providers.openai.deleted).toBeUndefined();
+    const resolved = await resolveProviderConfig(projectRoot, 'openai');
+    expect(resolved.apiKey).toBe('sk-real');
+  });
+});

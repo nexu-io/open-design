@@ -83,6 +83,9 @@ export interface MediaProvider {
  * cards that will silently fall back to a stub if the user hasn't
  * configured a key.
  */
+
+export { CUSTOM_IMAGE_FORMATS, type CustomImageFormat } from '@open-design/contracts';
+
 export const MEDIA_PROVIDERS: MediaProvider[] = [
   {
     id: 'openai',

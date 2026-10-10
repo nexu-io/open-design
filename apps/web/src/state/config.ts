@@ -1,4 +1,4 @@
-import type { AppConfigPrefs } from '@open-design/contracts';
+import type { AppConfigPrefs, MediaConfigResponse, MediaConfigWriteRequest, MediaProviderConfigWriteEntry } from '@open-design/contracts';
 import { MEDIA_PROVIDERS } from '../media/models';
 import { isOpenAICompatible } from '../providers/openai-compatible';
 import type {
@@ -94,6 +94,8 @@ export const DEFAULT_CONFIG: AppConfig = {
   theme: FORCED_APP_THEME,
   accentColor: DEFAULT_ACCENT_COLOR,
   mediaProviders: {},
+  defaultImageModel: '',
+  hideSuggestedModels: false,
   composio: {},
   agentModels: {},
   agentCliEnv: {},
@@ -831,17 +833,7 @@ interface PublicComposioConfigResponse {
   apiKeyTail?: string;
 }
 
-interface PublicMediaProviderConfigEntry {
-  configured?: boolean;
-  source?: string;
-  apiKeyTail?: string;
-  baseUrl?: string;
-  model?: string;
-}
-
-interface PublicMediaProviderConfigResponse {
-  providers?: Record<string, PublicMediaProviderConfigEntry>;
-}
+type PublicMediaProviderConfigResponse = Partial<MediaConfigResponse>;
 
 export type DaemonMediaProvidersFetchResult =
   | {
@@ -852,17 +844,8 @@ export type DaemonMediaProvidersFetchResult =
     status: 'error';
   };
 
-interface MediaProviderDaemonWriteEntry {
-  apiKey?: string;
-  preserveApiKey?: boolean;
-  baseUrl?: string;
-  model?: string;
-}
-
-interface MediaProviderDaemonWriteRequest {
-  providers: Record<string, MediaProviderDaemonWriteEntry>;
-  force: boolean;
-}
+type MediaProviderDaemonWriteEntry = MediaProviderConfigWriteEntry;
+type MediaProviderDaemonWriteRequest = MediaConfigWriteRequest;
 
 function hasAnyDaemonManagedMediaProvider(
   providers: Record<string, MediaProviderCredentials> | null | undefined,
@@ -875,7 +858,9 @@ function hasRecoverableLocalMediaProviderFields(
   entry: MediaProviderCredentials | null | undefined,
 ): boolean {
   return Boolean(
-    entry?.apiKey?.trim()
+    entry?.deleted
+    || entry?.format?.trim()
+    || entry?.apiKey?.trim()
     || entry?.baseUrl?.trim()
     || entry?.model?.trim(),
   );
@@ -892,7 +877,9 @@ export function isStoredMediaProviderEntryPresent(
   entry: MediaProviderCredentials | null | undefined,
 ): boolean {
   return Boolean(
-    entry?.apiKey?.trim()
+    entry?.deleted
+    || entry?.format?.trim()
+    || entry?.apiKey?.trim()
     || entry?.baseUrl?.trim()
     || entry?.model?.trim()
     || entry?.apiKeyConfigured
@@ -917,6 +904,12 @@ export function buildMediaProvidersForDaemonSave(
 ): MediaProviderDaemonWriteRequest {
   const providers: Record<string, MediaProviderDaemonWriteEntry> = {};
   for (const [providerId, currentEntry] of Object.entries(currentProviders ?? {})) {
+    // A tombstone is written verbatim so the daemon keeps suppressing the
+    // provider (and the chat-side seed keeps skipping it) across saves.
+    if (currentEntry?.deleted) {
+      providers[providerId] = { deleted: true };
+      continue;
+    }
     const daemonEntry = daemonProviders?.[providerId];
     const apiKey = currentEntry?.apiKey?.trim() ?? '';
     const hasStoredKeyMarker = Boolean(
@@ -932,13 +925,15 @@ export function buildMediaProvidersForDaemonSave(
       || daemonEntry?.baseUrl?.trim()
       || '';
     const model = currentEntry?.model?.trim() || daemonEntry?.model?.trim() || '';
-    if (!apiKey && !preserveApiKey && !explicitBaseUrl && !model) continue;
+    const format = currentEntry?.format?.trim() || daemonEntry?.format?.trim() || '';
+    if (!apiKey && !preserveApiKey && !explicitBaseUrl && !model && !format) continue;
     const baseUrl = explicitBaseUrl || defaultBaseUrlForProvider(providerId);
     providers[providerId] = {
       ...(apiKey ? { apiKey } : {}),
       ...(preserveApiKey ? { preserveApiKey: true } : {}),
       ...(baseUrl ? { baseUrl } : {}),
       ...(model ? { model } : {}),
+      ...(format ? { format } : {}),
     };
   }
   return {
@@ -981,6 +976,10 @@ export async function fetchMediaProvidersFromDaemon(): Promise<DaemonMediaProvid
         ...(typeof entry?.model === 'string' && entry.model.trim()
           ? { model: entry.model.trim() }
           : {}),
+        ...(typeof entry?.format === 'string' && entry.format.trim()
+          ? { format: entry.format.trim() }
+          : {}),
+        ...(entry?.deleted === true ? { deleted: true } : {}),
       };
     }
     return {
@@ -1173,6 +1172,12 @@ export function mergeDaemonConfig(
   if (daemonConfig.customInstructions !== undefined) {
     next.customInstructions = daemonConfig.customInstructions ?? undefined;
   }
+  if (daemonConfig.defaultImageModel !== undefined) {
+    next.defaultImageModel = daemonConfig.defaultImageModel ?? undefined;
+  }
+  if (daemonConfig.hideSuggestedModels !== undefined) {
+    next.hideSuggestedModels = daemonConfig.hideSuggestedModels;
+  }
   if (daemonConfig.projectLocations !== undefined) {
     next.projectLocations = daemonConfig.projectLocations;
   }
@@ -1302,6 +1307,8 @@ export async function syncConfigToDaemon(
     privacyDecisionAt: config.privacyDecisionAt,
     allowSilentUpdates: config.allowSilentUpdates,
     customInstructions: config.customInstructions ?? null,
+    defaultImageModel: config.defaultImageModel?.trim() || null,
+    hideSuggestedModels: config.hideSuggestedModels === true,
     projectLocations: config.projectLocations ?? [],
     defaultProjectLocationId: config.defaultProjectLocationId ?? 'default',
   };
