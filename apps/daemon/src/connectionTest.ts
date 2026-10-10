@@ -98,6 +98,10 @@ import {
   BYOK_OPENCODE_PROVIDER_ID,
   buildOpenCodeByokProviderConfig,
 } from './runtimes/byok-opencode.js';
+import {
+  openCodeGoWireForModel,
+  openCodeSessionHeaders,
+} from './integrations/opencode-go.js';
 
 export { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 
@@ -1446,6 +1450,73 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
         },
         extractText: extractOpenAIMessageText,
       };
+    case 'opencode-go': {
+      // OpenCode Go routes per model id across three wires on one origin. The
+      // smoke test mirrors the BYOK provider config so a model that only speaks
+      // /v1/messages or /v1/responses is not probed on /v1/chat/completions.
+      const wire = openCodeGoWireForModel(model);
+      const sessionHeaders = openCodeSessionHeaders();
+      if (wire === '@ai-sdk/anthropic') {
+        return {
+          url: appendVersionedApiPath(baseUrl, '/messages'),
+          headers: {
+            'content-type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+            ...sessionHeaders,
+          },
+          body: {
+            model,
+            max_tokens: PROVIDER_MAX_TOKENS,
+            messages: [{ role: 'user', content: SMOKE_PROMPT }],
+            stream: false,
+          },
+          extractText: (data) => {
+            const blocks = (data as { content?: unknown }).content;
+            if (!Array.isArray(blocks)) return '';
+            for (const block of blocks) {
+              if (
+                block &&
+                typeof block === 'object' &&
+                (block as { type?: string }).type === 'text' &&
+                typeof (block as { text?: unknown }).text === 'string'
+              ) {
+                return (block as { text: string }).text;
+              }
+            }
+            return '';
+          },
+        };
+      }
+      return {
+        url: appendVersionedApiPath(
+          baseUrl,
+          wire === '@ai-sdk/openai' ? '/responses' : '/chat/completions',
+        ),
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${apiKey}`,
+          ...sessionHeaders,
+        },
+        body:
+          wire === '@ai-sdk/openai'
+            ? {
+                model,
+                input: SMOKE_PROMPT,
+                max_output_tokens: PROVIDER_MAX_TOKENS,
+              }
+            : {
+                model,
+                ...buildOpenAIChatTokenParam(model, PROVIDER_MAX_TOKENS),
+                messages: [{ role: 'user', content: SMOKE_PROMPT }],
+                stream: false,
+              },
+        extractText:
+          wire === '@ai-sdk/openai'
+            ? extractOpenAIResponsesText
+            : extractOpenAIMessageText,
+      };
+    }
     case 'openai':
     case 'senseaudio':
       // SenseAudio is wire-compatible with OpenAI (POST /v1/chat/completions,
