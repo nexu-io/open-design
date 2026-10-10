@@ -94,7 +94,8 @@ to the **host**, not to either strategy — if a strategy is retired, these stay
 | `id="deck-stage"` | `srcdoc.ts:3145` `isFrameworkDeck` → stage style fix, disables click-nav | ✅ | ✅ |
 | `@media print` block | Share → PDF multi-page stitching | ✅ | ✅ |
 | `<question-form>` | `AssistantMessage.tsx` → `QuestionFormView`; `runAskedUserQuestion` analytics | ✅ `discovery.ts` | ✅ `od-next-strategy.ts:434` |
-| `od-motion-output` meta + MP4 alternate link | motion-design source and rendered output completion | ✅ selected motion skill | ✅ motion task profile |
+| Frozen `taskSpecific.motionDelivery` | Exact source/MP4 paths and video vs interactive completion; HTML metadata cannot downgrade this plan | ✅ selected motion skill | ✅ motion task profile |
+| Shared motion source player | Composition-only preview controls and persisted playback; suppressed during frame capture | ✅ motion source | ✅ motion source |
 | `.od-frames/` device shells | prototype device frames | ❌ | ✅ OD Next only |
 
 Two things to read off this table.

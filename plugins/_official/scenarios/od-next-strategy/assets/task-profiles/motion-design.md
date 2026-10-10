@@ -219,7 +219,13 @@ positions and reveals as functions of time, or as seekable timeline tracks.
 Audio-reactive motion needs a precomputed envelope or known beat map when exact
 replay matters. Never imply that an arbitrary pulse is analysis of the music.
 
-For a standalone HTML preview, put play/pause, scrub and replay outside the
+Open Design scaffolds and embeds a shared source player with play/pause, scrub
+and replay. Preserve its `script[data-od-motion-source-player]`. Do not create
+competing controls or start a second playback clock. The renderer sets
+`window.__odMotionRender` before author scripts to disable preview chrome and
+scaling during capture. Use a local GSAP file (download the pinned 3.14.2 build
+into the source directory if needed) so reopening the source does not require
+a CDN. For an existing standalone source without the host player, put controls outside the
 composition and connect them to the same master timeline. Scale the whole stage
 uniformly to fit; do not reflow scene layout when the viewport changes. Controls
 must not appear in the exported frames. Keep a useful poster when reduced motion
@@ -232,6 +238,18 @@ Build. It needs no video-generation API key. Do not ask the user to render it
 manually or run a second renderer. Plan declares `hyperframes-html` as the
 production route, editable source as canonical, and MP4 as a required derived
 output. For interactive briefs use `html` and source only.
+
+In the accepted Plan Contract, set `taskProfile.taskSpecific.motionDelivery` to
+`{"mode":"video","sourcePath":"motion-source/film/index.html","videoPath":"film.mp4"}`
+for a film, or `{"mode":"interactive","sourcePath":"index.html"}` for interactive
+motion. Use the actual planned paths. The host freezes and enforces this contract;
+HTML metadata is descriptive and cannot change the required output. Include a
+required `kind: "video"` deliverable with `derivesFrom` set to the canonical HTML
+id. Omit `derivesFrom` on the canonical source entry; never set it to null.
+A new film needs Full Plan; do not start it as a contract-free Direct Edit.
+This applies only when the user's requested deliverable is motion, including an
+explicit motion helper used in another task; adding hover/scroll animation to a
+prototype does not turn it into a video request.
 
 1. Scaffold a visible source directory with the native shell tool:
    `"$OD_NODE_BIN" "$OD_BIN" media scaffold --project "$OD_PROJECT_ID" --composition-dir "motion-source/film"`.

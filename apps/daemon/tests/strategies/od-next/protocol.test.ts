@@ -320,3 +320,18 @@ describe('physical-run protocol output ownership', () => {
     expect(emitted + finished.visibleTail).toBe(purpose ? '' : text);
   });
 });
+
+it('normalizes only the motion source null derivation while retaining required video edges', () => {
+  const motion = JSON.parse(JSON.stringify(plan));
+  motion.taskProfile.taskType = 'motion-design';
+  motion.taskProfile.taskProfileVersion = '1.2.0';
+  motion.taskProfile.canonicalDeliverable = {id:'source',kind:'html',format:'html'};
+  motion.taskProfile.taskSpecific = {motionDelivery:{mode:'video',sourcePath:'index.html',videoPath:'film.mp4'}};
+  motion.taskProfile.requiredDeliverables = [{id:'source',kind:'html',derivesFrom:null},{id:'film',kind:'video',derivesFrom:'source'}];
+  motion.fullPlan.steps[0].outputs = ['source','film'];
+  const parse = () => { const stream=new OdNextMachineProtocolStream(); stream.push(machineBlock('open-design-plan-contract',motion)+machineBlock('open-design-runtime-state',state));return stream.finish(); };
+  expect(parse().issues).toEqual([]);
+  expect(parse().normalizations).toContain('od_next_protocol_motion_source_null_derivation_normalized');
+  motion.taskProfile.requiredDeliverables[1].derivesFrom = null;
+  expect(parse().issues.some((issue)=>issue.code==='od_next_protocol_plan_contract_invalid_schema')).toBe(true);
+});

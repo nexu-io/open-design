@@ -534,3 +534,16 @@ describe('task profile resources', () => {
     ]))).toThrow();
   });
 });
+
+describe('motion plan delivery contract', () => {
+  it('requires explicit mode and paths for the new motion profile without changing prototypes', () => {
+    expect(ResolvedTaskProfileV2Schema.safeParse(taskProfile()).success).toBe(true);
+    expect(ResolvedTaskProfileV2Schema.safeParse(taskProfile({ taskType:'motion-design', taskProfileVersion:'1.2.0' })).success).toBe(false);
+    expect(ResolvedTaskProfileV2Schema.safeParse(taskProfile({ taskType:'motion-design', taskProfileVersion:'1.2.0', taskSpecific:{motionDelivery:{mode:'interactive',sourcePath:'index.html'}} })).success).toBe(true);
+  });
+  it('requires a derived video instead of accepting an HTML-only plan as a film', () => {
+    const profile = taskProfile({ taskType:'motion-design', taskProfileVersion:'1.2.0', canonicalDeliverable:{id:'source',kind:'html',format:'html'}, requiredDeliverables:[{id:'source',kind:'html'}], taskSpecific:{motionDelivery:{mode:'video',sourcePath:'source/index.html',videoPath:'film.mp4'}} });
+    expect(ResolvedTaskProfileV2Schema.safeParse(profile).success).toBe(false);
+    expect(ResolvedTaskProfileV2Schema.safeParse({ ...profile, requiredDeliverables: [...profile.requiredDeliverables, {id:'film',kind:'video',derivesFrom:'source'}] }).success).toBe(true);
+  });
+});

@@ -1,3 +1,4 @@
+import { readMotionDeliveryContract } from '@open-design/contracts';
 import type { StrategyExecutionModeV2, StrategyRouteV2 } from '@open-design/contracts';
 
 export const OD_NEXT_RESOLVER_SOURCE_AUTHORITY = {
@@ -311,12 +312,13 @@ export function resolveDaemonOwnedOdNextExecutionPreflight(
   plan: import('@open-design/contracts').OpenDesignPlanContractV2,
 ): OdNextExecutionPreflightInput {
   const taskType = plan.taskProfile.taskType as keyof typeof DAEMON_OWNED_PRODUCTION_ROUTES;
+  const motionVideo = readMotionDeliveryContract(plan)?.mode === 'video';
   const routes = DAEMON_OWNED_PRODUCTION_ROUTES[taskType];
   const outputKinds = DAEMON_OWNED_OUTPUT_KINDS[taskType];
   return {
     productionRoutes: plan.runManifest.productionRoutes.map((id) => ({
       id,
-      available: Boolean(routes?.has(id)),
+      available: Boolean(routes?.has(id) || (motionVideo && id === 'hyperframes-html')),
     })),
     dependencies: [],
     inputs: plan.runManifest.inputRefs.map((id) => ({
@@ -328,7 +330,7 @@ export function resolveDaemonOwnedOdNextExecutionPreflight(
     templates: [],
     outputKinds: plan.taskProfile.requiredDeliverables.map(({ kind }) => ({
       id: kind,
-      supported: Boolean(outputKinds?.has(kind)),
+      supported: Boolean(outputKinds?.has(kind) || (motionVideo && ['video', 'rendered-video'].includes(kind))),
     })),
   };
 }

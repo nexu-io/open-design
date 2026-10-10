@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { readMotionDeliveryContract } from '@open-design/contracts';
 import { startEvidenceDelivery } from './services/evidence-delivery.js';
 import type {
   DesktopExportArtifactInput,
@@ -16845,7 +16846,9 @@ export async function startServer({
           processTreeQuiescentForFinalization = termination?.quiescent === true;
         }
         await resolveRunArtifactOutcomeBeforeFinishAsync();
+        const motionDelivery = readMotionDeliveryContract(strategyTaskAtStart?.planContract);
         const deliverableFinalization = await finalizeSuccessfulRunDeliverable({
+          ...(motionDelivery ? { motionDelivery } : {}),
           ...(run.artifactOutcome?.diff && baselineEntryFile ? { baselineEntryFile } : {}),
           projectsRoot: PROJECTS_DIR,
           projectId: run.projectId ?? null,

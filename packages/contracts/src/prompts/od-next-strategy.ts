@@ -186,6 +186,8 @@ export type OdNextStrategyContinuationV2 =
       taskExecutionId: string;
       taskRunIndex: number;
       planContractHash: string;
+      executionMode?: 'simple' | 'complex';
+      motionDelivery?: import('../motion-delivery.js').MotionDeliveryContract;
       /** Per-run nonce; omitted for non-completing continuation stages. */
       hostProtocolKey?: string;
       /**
@@ -459,7 +461,7 @@ On the request stage YOU choose the route. Open Design does not pick it for you:
 
 Having chosen the route, prepare the Task Profile, Design Spec, Full Plan, stable Todo plan, Build Requirements, and any Build Packages required by the locked execution mode.
 
-For a Full Plan route, the request and clarification stages are planning-only. You may read the bounded inputs needed to freeze the plan, but do not create, edit, render, or dispatch a deliverable until Open Design continues the same native session into the production stage. Direct Edit remains the only route allowed to perform Build work on the request stage. When you declare \`outcome: completed\` on that stage, the same canonical-deliverable check that gates production already applies: Open Design must be able to identify one runnable entry in the delivered files, otherwise the completed task is rejected — it looks for a root \`index.html\`, then a single root-level html file, then a single file matching the project kind. A motion-design task can instead deliver one visible source HTML under motion-source; its video mode must link the required MP4 through the motion delivery contract. Write every deliverable inside the project directory and lay it out so exactly one of those resolves; files written outside the project directory are not delivered work and leave the task with no artifact.
+For a Full Plan route, the request and clarification stages are planning-only. You may read the bounded inputs needed to freeze the plan, but do not create, edit, render, or dispatch a deliverable until Open Design continues the same native session into the production stage. Direct Edit remains the only route allowed to perform Build work on the request stage. When you declare \`outcome: completed\` on that stage, the same canonical-deliverable check that gates production already applies: Open Design must be able to identify one runnable entry in the delivered files, otherwise the completed task is rejected — it looks for a root \`index.html\`, then a single root-level html file, then a single file matching the project kind. Write every deliverable inside the project directory and lay it out so exactly one of those resolves; files written outside the project directory are not delivered work and leave the task with no artifact.
 
 Ask only when one unresolved answer would materially change scope, direction, the canonical deliverable, main outputs, editability, or substantial rework. Use one inline \`<question-form>\` containing one to three questions with recommended defaults. The form is assistant text parsed by the host, not a native tool call. If the known context is sufficient, continue without a form — do not output, quote, or explain the \`<question-form>\` marker to announce that you are skipping it. The host parses that marker wherever it appears, so writing it as a heading, label, or declaration line leaves the user waiting on a form that does not exist.
 
@@ -683,7 +685,8 @@ export function renderOdNextOutputContractV2(
   if (planningFacts && !SHA256_HEX.test(planningFacts.capabilitySnapshotHash)) {
     throw new TypeError('OD Next planning capabilitySnapshotHash must be 64 lowercase hex characters.');
   }
-  const canonicalOutputKind = planningFacts?.outputKinds[0] ?? 'artifact';
+  const motionProfile = input.taskType === 'motion-design';
+  const canonicalOutputKind = motionProfile ? 'html' : planningFacts?.outputKinds[0] ?? 'artifact';
   const planContractExample = {
     schema: OD_NEXT_PLAN_CONTRACT_SCHEMA,
     strategy: {
@@ -703,9 +706,10 @@ export function renderOdNextOutputContractV2(
       canonicalDeliverable: {
         id: 'canonical-deliverable',
         kind: canonicalOutputKind,
-        format: 'declared-format',
+        format: motionProfile ? 'html' : 'declared-format',
       },
-      requiredDeliverables: [{ id: 'canonical-deliverable', kind: canonicalOutputKind }],
+      requiredDeliverables: [{ id: 'canonical-deliverable', kind: canonicalOutputKind },
+        ...(motionProfile ? [{ id: 'rendered-video', kind: 'video', derivesFrom: 'canonical-deliverable' }] : [])],
       designSpec: {
         source: 'resolved-baseline',
         version: 'resolved-design-spec-version',
@@ -714,14 +718,14 @@ export function renderOdNextOutputContractV2(
       buildRequirements: [],
       assumptions: [],
       risks: [],
-      taskSpecific: {},
+      taskSpecific: motionProfile ? { motionDelivery: { mode: 'video', sourcePath: 'motion-source/film/index.html', videoPath: 'film.mp4' } } : {},
     },
     fullPlan: {
       executionMode: 'simple',
       steps: [{
         id: 'build',
         objective: 'Build the declared deliverables.',
-        outputs: ['canonical-deliverable'],
+        outputs: motionProfile ? ['canonical-deliverable', 'rendered-video'] : ['canonical-deliverable'],
       }],
       readinessArtifacts: [],
       buildPackages: [],
@@ -1044,7 +1048,11 @@ export function composeOdNextStrategyContinuationV2(
       'od_next_production',
       input.locale,
     ).text;
-    payload = `# OD Next native continuation — production\n\nContinue this native session and execute the frozen Full Plan bound to \`planContractHash=${requireSha256(input.planContractHash, 'planContractHash')}\`. Use the existing in-session Task Profile, Design Spec, Todo plan, and Build Packages. Do not re-seed or restate their full text, do not choose a new route or execution mode, and do not ask another question. Open Design must be able to identify one runnable entry in the delivered files, otherwise the completed task is rejected: it looks for a root \`index.html\`, then a single root-level html file, then a single file matching the project kind. A motion-design task can instead deliver one visible source HTML under motion-source; its video mode must link the required MP4 through the motion delivery contract. Lay the deliverable out so exactly one of those resolves.${bindingBlock}\n\n## Closing Runtime State\n\nFinish the delivery response with exactly one ${OD_NEXT_RUNTIME_STATE_BLOCK} block written as plain text between its tags, and no Plan Contract block: schema ${OD_NEXT_RUNTIME_STATE_SCHEMA}, route full_plan, inputStage production, executionMode equal to the mode locked by the accepted Plan Contract, outcome completed once every required deliverable is written (otherwise blocked or canceled), reasonCodes [], and no other fields.${hostProtocol ? `\n\nPlace the Closing Runtime State before any final follow-up markers required by the host protocols below.\n\n${hostProtocol}` : ''}`;
+    const motionContract = input.motionDelivery
+      ? `\n\n## Frozen motion delivery\n\nUse the accepted output contract exactly: ${JSON.stringify(input.motionDelivery)}. The sourcePath is the canonical entry even when nested. HTML metadata cannot change the mode or waive a required MP4. Preserve the shared source player and local dependencies.` : '';
+    const closingExample = input.executionMode
+      ? `\n\nCopy this exact JSON block for successful delivery (no Markdown fence, prose, comments or trailing commas inside the tags):\n<${OD_NEXT_RUNTIME_STATE_BLOCK}>${JSON.stringify({ schema: OD_NEXT_RUNTIME_STATE_SCHEMA, route: 'full_plan', inputStage: 'production', executionMode: input.executionMode, outcome: 'completed', reasonCodes: [] })}</${OD_NEXT_RUNTIME_STATE_BLOCK}>` : '';
+    payload = `# OD Next native continuation — production\n\nContinue this native session and execute the frozen Full Plan bound to \`planContractHash=${requireSha256(input.planContractHash, 'planContractHash')}\`. Use the existing in-session Task Profile, Design Spec, Todo plan, and Build Packages. Do not re-seed or restate their full text, do not choose a new route or execution mode, and do not ask another question. Open Design must be able to identify one runnable entry in the delivered files, otherwise the completed task is rejected: it looks for a root \`index.html\`, then a single root-level html file, then a single file matching the project kind. Lay the deliverable out so exactly one of those resolves.${bindingBlock}${motionContract}\n\n## Closing Runtime State\n\nFinish the delivery response with exactly one ${OD_NEXT_RUNTIME_STATE_BLOCK} block written as plain text between its tags, and no Plan Contract block: schema ${OD_NEXT_RUNTIME_STATE_SCHEMA}, route full_plan, inputStage production, executionMode equal to the mode locked by the accepted Plan Contract, outcome completed once every required deliverable is written (otherwise blocked or canceled), reasonCodes [], and no other fields.${closingExample}${hostProtocol ? `\n\nPlace the Closing Runtime State before any final follow-up markers required by the host protocols below.\n\n${hostProtocol}` : ''}`;
   }
   return serializeOdNextRequestTurnV1({
     taskExecutionId: input.taskExecutionId,

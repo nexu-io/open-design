@@ -1,3 +1,4 @@
+import { MotionDeliveryContractSchema } from '../motion-delivery.js';
 import { z } from 'zod';
 
 export const OD_NEXT_STRATEGY_ID = 'od-next-strategy' as const;
@@ -261,6 +262,19 @@ export const ResolvedTaskProfileV2Schema = z.object({
   taskSpecific: z.record(z.unknown()),
 }).strict().superRefine((value, context) => {
   rejectForbiddenStrategySemantics(value, context);
+
+  const declaredMotion = value.taskSpecific.motionDelivery;
+  const needsMotion = value.taskType === 'motion-design'
+    && !['1.0.0', '1.1.0'].includes(value.taskProfileVersion);
+  if (declaredMotion !== undefined || needsMotion) {
+    const motion = MotionDeliveryContractSchema.safeParse(declaredMotion);
+    if (!motion.success) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ['taskSpecific', 'motionDelivery'], message: 'Declare the motion delivery mode and exact project-relative output paths in the plan.' });
+    } else if (motion.data.mode === 'video' && (!['html', 'source'].includes(value.canonicalDeliverable.kind)
+      || !value.requiredDeliverables.some((d) => ['video', 'rendered-video'].includes(d.kind) && d.derivesFrom === value.canonicalDeliverable.id))) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ['requiredDeliverables'], message: 'A motion video needs canonical editable HTML and a required derived video.' });
+    }
+  }
 
   const deliverableIds = value.requiredDeliverables.map((deliverable) => deliverable.id);
   if (new Set(deliverableIds).size !== deliverableIds.length) {

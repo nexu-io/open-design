@@ -1,3 +1,4 @@
+import { injectMotionSourcePlayer } from '@open-design/contracts/runtime/motion-source-player';
 import { lstat, mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -101,7 +102,7 @@ export async function scaffoldHyperFramesComposition(input: {
     await Promise.all([
       writeFile(path.join(targetDir, files[0]), HYPERFRAMES_CONFIG, { encoding: 'utf8', flag: 'wx' }),
       writeFile(path.join(targetDir, files[1]), metadata, { encoding: 'utf8', flag: 'wx' }),
-      writeFile(path.join(targetDir, files[2]), BLANK_COMPOSITION_HTML, { encoding: 'utf8', flag: 'wx' }),
+      writeFile(path.join(targetDir, files[2]), compositionRoot === 'motion-source' ? injectMotionSourcePlayer(BLANK_COMPOSITION_HTML) : BLANK_COMPOSITION_HTML, { encoding: 'utf8', flag: 'wx' }),
     ]);
   } catch (error) {
     await rm(targetDir, { recursive: true, force: true });

@@ -101,6 +101,10 @@
     "./runtime/html-injection-points": {
       "types": "./dist/runtime/html-injection-points.d.ts",
       "default": "./dist/runtime/html-injection-points.mjs"
+    },
+    "./runtime/motion-source-player": {
+      "types": "./dist/runtime/motion-source-player.d.ts",
+      "default": "./dist/runtime/motion-source-player.mjs"
     }
   },
   "scripts": {

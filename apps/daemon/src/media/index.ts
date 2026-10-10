@@ -1,3 +1,4 @@
+import { injectMotionSourcePlayer, markMotionFrameRender } from '@open-design/contracts/runtime/motion-source-player';
 // Media-generation dispatcher. The unifying contract is:
 //
 //   skills + metadata + system-prompt
@@ -3980,7 +3981,10 @@ async function renderHyperFramesWithDesktop(
   desktopFrameRenderer: DesktopFrameRenderer,
   onProgress?: ProgressFn,
 ): Promise<void> {
-  const sourceHtml = await readFile(path.join(compAbs, 'index.html'), 'utf8');
+  const sourcePath = path.join(compAbs, 'index.html');
+  const original = await readFile(sourcePath, 'utf8');
+  const sourceHtml = injectMotionSourcePlayer(original);
+  if (sourceHtml !== original) await writeFile(sourcePath, sourceHtml, 'utf8');
   const { fps, height, width } = hyperFramesCompositionMetrics(sourceHtml);
   const browserRuntime = await readFile(resolveHyperFramesBrowserRuntimePath(), 'utf8');
   const html = injectHyperFramesFrameBridge(sourceHtml, browserRuntime);
@@ -4029,6 +4033,7 @@ export function hyperFramesCompositionMetrics(html: string): {
 }
 
 export function injectHyperFramesFrameBridge(sourceHtml: string, runtimeScript: string): string {
+  const motionVideo = loadHtml(sourceHtml)('meta[name="od-motion-output"]').attr('content') === 'video';
   const safeRuntime = runtimeScript.replace(/<\/script/gi, '<\\/script');
   const bridge = `<script>${safeRuntime}</script><script>
 (() => {
@@ -4048,7 +4053,7 @@ export function injectHyperFramesFrameBridge(sourceHtml: string, runtimeScript: 
       const player = window.__player;
       const duration = Number(player && typeof player.getDuration === 'function' && player.getDuration());
       if (window.__renderReady === true && player && typeof player.renderSeek === 'function' && duration > 0) {
-        return { duration, seek: (timeSeconds) => player.renderSeek(timeSeconds, { suppressEvents: true }) };
+        return { duration, seek: (timeSeconds) => player.renderSeek(timeSeconds, { suppressEvents: ${!motionVideo} }) };
       }
       const legacy = window.__hf;
       if (legacy && typeof legacy.seek === 'function' && Number(legacy.duration) > 0) {
@@ -4101,6 +4106,7 @@ export function injectHyperFramesFrameBridge(sourceHtml: string, runtimeScript: 
   };
 })();
 </script>`;
+  sourceHtml = markMotionFrameRender(sourceHtml);
   const bodyClose = findRealTagOffset(sourceHtml, HTML_TAG_PATTERNS.bodyClose);
   if (bodyClose >= 0) {
     return sourceHtml.slice(0, bodyClose) + bridge + sourceHtml.slice(bodyClose);

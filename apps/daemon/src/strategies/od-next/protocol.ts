@@ -458,6 +458,22 @@ export class OdNextMachineProtocolStream {
    * unchanged.
    */
   private normalizeMachineValue(kind: MachineKind, value: unknown): unknown {
+    if (kind === 'plan' && value && typeof value === 'object' && !Array.isArray(value)) {
+      const record = value as Record<string, any>;
+      const profile = record.taskProfile;
+      // Motion sources are roots, not derived outputs. Some providers encode
+      // the optional absent edge as null. Drop only that root's empty edge;
+      // derived video edges and all other contract fields remain strict.
+      if (profile?.taskSpecific?.motionDelivery && Array.isArray(profile.requiredDeliverables)) {
+        const required = profile.requiredDeliverables.map((item: any) => {
+          if (item?.id !== profile.canonicalDeliverable?.id || item?.derivesFrom !== null) return item;
+          const { derivesFrom: _empty, ...source } = item;
+          this.normalizations.push('od_next_protocol_motion_source_null_derivation_normalized');
+          return source;
+        });
+        return { ...record, taskProfile: { ...profile, requiredDeliverables: required } };
+      }
+    }
     if (kind !== 'runtime') return value;
     if (
       typeof value !== 'object'

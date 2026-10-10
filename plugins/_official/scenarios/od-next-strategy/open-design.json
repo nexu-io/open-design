@@ -3,7 +3,7 @@
   "specVersion": "1.0.0",
   "name": "od-next-strategy",
   "title": "OD Next Strategy V2",
-  "version": "2.0.6",
+  "version": "2.0.7",
   "publishedAt": "2026-08-14T10:44:00Z",
   "description": "Bundled, inactive OD Next planning and Build strategy content.",
   "license": "MIT",
@@ -81,7 +81,7 @@
           {
             "taskType": "motion-design",
             "path": "./assets/task-profiles/motion-design.md",
-            "version": "1.1.0",
+            "version": "1.2.0",
             "rollout": "active",
             "projectKinds": ["video"]
           }

@@ -424,28 +424,41 @@ describe('motion source and MP4 delivery', () => {
       'motion-source/film/index.html': motionSource,
       ...(video === undefined ? {} : { 'film.mp4': video }),
     });
-    expect((await validateRunDeliverable({ ...fixture, projectMetadata: motionMetadata, runStatus: 'succeeded', artifactCount: 1 })).valid).toBe(false);
+    expect((await validateRunDeliverable({ ...fixture, projectMetadata: motionMetadata, motionDelivery: { mode: 'video', sourcePath: 'motion-source/film/index.html', videoPath: 'film.mp4' }, runStatus: 'succeeded', artifactCount: 1 })).valid).toBe(false);
   });
 
   it('accepts the paired source and newly rendered MP4 while preserving source as the editable entry', async () => {
     const fixture = await projectFixture({ 'motion-source/film/index.html': motionSource, 'film.mp4': motionMp4 });
-    expect(await validateRunDeliverable({ ...fixture, projectMetadata: motionMetadata, runStatus: 'succeeded', artifactCount: 2, touchedPaths: ['motion-source/film/index.html', 'film.mp4'] })).toMatchObject({ valid: true, entryFile: 'motion-source/film/index.html' });
-    expect((await validateRunDeliverable({ ...fixture, projectMetadata: motionMetadata, runStatus: 'succeeded', artifactCount: 1, touchedPaths: ['motion-source/film/index.html'] })).valid).toBe(false);
+    expect(await validateRunDeliverable({ ...fixture, projectMetadata: motionMetadata, motionDelivery: { mode: 'video', sourcePath: 'motion-source/film/index.html', videoPath: 'film.mp4' }, runStatus: 'succeeded', artifactCount: 2, touchedPaths: ['motion-source/film/index.html', 'film.mp4'] })).toMatchObject({ valid: true, entryFile: 'motion-source/film/index.html' });
+    expect((await validateRunDeliverable({ ...fixture, projectMetadata: motionMetadata, motionDelivery: { mode: 'video', sourcePath: 'motion-source/film/index.html', videoPath: 'film.mp4' }, runStatus: 'succeeded', artifactCount: 1, touchedPaths: ['motion-source/film/index.html'] })).valid).toBe(false);
   });
 
   it('accepts explicitly interactive motion without requiring a flattened video', async () => {
     const fixture = await projectFixture({ 'index.html': '<meta name="od-motion-output" content="interactive"><button>Animate</button>' });
-    expect((await validateRunDeliverable({ ...fixture, projectMetadata: motionMetadata, runStatus: 'succeeded', artifactCount: 1 })).valid).toBe(true);
+    expect((await validateRunDeliverable({ ...fixture, projectMetadata: motionMetadata, motionDelivery: { mode: 'interactive', sourcePath: 'index.html' }, runStatus: 'succeeded', artifactCount: 1 })).valid).toBe(true);
   });
 
-  it('rejects a source that omits the output mode instead of silently assuming HTML delivery', async () => {
+  it('rejects a missing contracted source instead of silently accepting a different entry', async () => {
     const fixture = await projectFixture({ 'index.html': '<main>Unrendered film</main>' });
-    expect((await validateRunDeliverable({ ...fixture, projectMetadata: motionMetadata, runStatus: 'succeeded', artifactCount: 1 })).valid).toBe(false);
+    expect((await validateRunDeliverable({ ...fixture, projectMetadata: motionMetadata, motionDelivery: { mode: 'video', sourcePath: 'motion-source/film/index.html', videoPath: 'film.mp4' }, runStatus: 'succeeded', artifactCount: 1 })).valid).toBe(false);
   });
 
   it('rejects a video link outside the project', async () => {
     const fixture = await projectFixture({ 'motion-source/film/index.html': motionSource.replace('../../film.mp4', '../../../outside.mp4') });
     await fs.writeFile(path.join(fixture.projectsRoot, 'outside.mp4'), motionMp4);
-    expect((await validateRunDeliverable({ ...fixture, projectMetadata: motionMetadata, runStatus: 'succeeded', artifactCount: 1 })).valid).toBe(false);
+    expect((await validateRunDeliverable({ ...fixture, projectMetadata: motionMetadata, motionDelivery: { mode: 'video', sourcePath: 'motion-source/film/index.html', videoPath: 'film.mp4' }, runStatus: 'succeeded', artifactCount: 1 })).valid).toBe(false);
+  });
+});
+
+describe('motion contract scope', () => {
+  it('does not require an MP4 from ordinary prototypes or interactive motion', async () => {
+    const fixture = await projectFixture({ 'index.html': '<main>Interactive prototype</main>' });
+    for (const metadata of [{ kind: 'prototype' }, motionMetadata]) {
+      expect((await validateRunDeliverable({ ...fixture, projectMetadata: metadata, runStatus: 'succeeded', artifactCount: 1 })).valid).toBe(true);
+    }
+  });
+  it('does not let source metadata downgrade a frozen video contract, even in a prototype project', async () => {
+    const fixture = await projectFixture({ 'index.html': '<meta name="od-motion-output" content="interactive"><main>Film</main>' });
+    expect((await validateRunDeliverable({ ...fixture, projectMetadata: { kind: 'prototype' }, motionDelivery: { mode: 'video', sourcePath: 'index.html', videoPath: 'film.mp4' }, runStatus: 'succeeded', artifactCount: 1 })).valid).toBe(false);
   });
 });
