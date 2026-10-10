@@ -1046,6 +1046,7 @@ export const PT_BR_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   'retro': 'Design nostálgico com tipografia de inspiração vintage, paletas retrô de alto contraste e elementos visuais que remetem ao passado.',
   'revolut': 'Banco digital. Interface escura elegante, cartões com gradiente, precisão fintech.',
   'runwayml': 'Geração de vídeo com IA. Interface escura cinematográfica, layout rico em mídia.',
+  'riso': 'Estética risográfica lúdica. Papel quente, acento rosa profundo, estrutura azul federal.',
   'sanity': 'CMS headless. Toque de vermelho, layout editorial com foco no conteúdo.',
   'sentry': 'Monitoramento de erros. Painel escuro, denso em dados, toque rosa-roxo.',
   'shadcn': 'Design inspirado no Shadcn/ui com componentes mínimos e limpos, paleta monocromática e padrões utility-first.',

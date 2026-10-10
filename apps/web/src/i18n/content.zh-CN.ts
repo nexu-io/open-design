@@ -1046,6 +1046,7 @@ export const ZH_CN_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   'retro': '怀旧复古设计，采用复古风格排版、高对比度的复古配色与怀旧的视觉元素。',
   'revolut': '数字银行。流畅的深色界面、渐变卡片、金融科技般的精准感。',
   'runwayml': 'AI 视频生成。电影感深色 UI，富媒体布局。',
+  'riso': '俏皮的孔版印刷美学。暖纸底、深玫红点缀、联邦蓝结构。',
   'sanity': '无头 CMS。红色点缀，内容优先的编辑式布局。',
   'sentry': '错误监控。深色仪表盘、数据密集、粉紫点缀色。',
   'shadcn': 'Shadcn/ui 风格的设计，组件极简干净，单色配色，采用 utility-first 模式。',
