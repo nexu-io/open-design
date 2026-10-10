@@ -365,6 +365,10 @@ export type TrackingRunFailureDetail =
   | 'signal_killed'
   | 'process_crashed'
   | 'cpu_unsupported'
+  // The bundled Bun-compiled runtime cannot load on this OS version (Windows
+  // builds older than 10 1809 exit with STATUS_ENTRYPOINT_NOT_FOUND before
+  // readiness). Deterministic, so never retried.
+  | 'os_unsupported'
   // Risk control suspended the account (vela returns JSON-RPC -32600 with
   // `data.kind: "account_suspended"`, `retryable: false`). Named because
   // retrying is guaranteed to fail the same way: without this it lands in

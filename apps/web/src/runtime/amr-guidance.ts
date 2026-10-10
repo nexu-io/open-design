@@ -327,6 +327,7 @@ export type RunFailureMessageKey =
   | 'chat.runError.sessionExpiredMessage'
   | 'chat.runError.gitBashMissingMessage'
   | 'chat.runError.cpuUnsupportedMessage'
+  | 'chat.runError.osUnsupportedMessage'
   | 'chat.runError.agentCrashedMessage'
   | 'chat.runError.accountSuspendedMessage'
   | 'chat.runError.certificateFailureMessage'
@@ -504,6 +505,7 @@ export type RunFailureTitleKey =
   | 'chat.runError.title.gitBashMissing'
   | 'chat.runError.title.artifactMissing'
   | 'chat.runError.title.cpuUnsupported'
+  | 'chat.runError.title.osUnsupported'
   | 'chat.runError.title.agentCrashed'
   | 'chat.runError.title.accountSuspended'
   | 'chat.runError.title.cliSessionRefused'
@@ -1336,6 +1338,13 @@ const AGENT_AGNOSTIC_DETAIL_FAILURE_UI: Record<string, RunFailureUi> = {
   cpu_unsupported: contactSupportOnly(
     'chat.runError.title.cpuUnsupported',
     'chat.runError.cpuUnsupportedMessage',
+  ),
+  // The bundled runtime cannot load on this Windows build (older than 10 1809 /
+  // build 17763, Bun's floor). Deterministic like cpu_unsupported, so no Retry;
+  // the copy names the OS version so the user updates Windows instead.
+  os_unsupported: contactSupportOnly(
+    'chat.runError.title.osUnsupported',
+    'chat.runError.osUnsupportedMessage',
   ),
   // S19 · the agent exited and did not say why. 20,868 runs/month, 16.3% of all
   // failures, 3,869 devices — the second-largest bucket, and until now it had no

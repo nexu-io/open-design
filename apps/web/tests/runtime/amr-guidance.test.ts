@@ -328,6 +328,20 @@ describe('resolveRunFailureUi', () => {
     }
   });
 
+  // os_unsupported: the bundled runtime cannot load on a Windows build older
+  // than 10 1809. Same deterministic shape as cpu_unsupported — no Retry; the
+  // card names the OS version so the user stops retrying and updates Windows.
+  it('maps os_unsupported to Windows-version guidance without retry', () => {
+    for (const agent of ['claude', 'codex', 'amr', null]) {
+      expect(resolveRunFailureUi('AGENT_EXECUTION_FAILED', 'os_unsupported', agent)).toMatchObject({
+        primaryAction: 'contact-support',
+        titleKey: 'chat.runError.title.osUnsupported',
+        messageKey: 'chat.runError.osUnsupportedMessage',
+        secondaryRetry: false,
+      });
+    }
+  });
+
   // Agent-agnostic root-cause codes (#895): each carries a named failure type +
   // actionable fix, resolved the same way for any agent, with a plain Retry and
   // no AMR promotion (these aren't "switch to hosted model" cases).
