@@ -40,6 +40,8 @@ describe.skipIf(!findBrowserExecutable())('real isolated browser navigation', { 
     ['URL only', `document.addEventListener('click',e=>{if(e.target.dataset.page)location.hash=e.target.dataset.page;});`, ''],
     ['wrong selection', `document.addEventListener('click',e=>{if(e.target.dataset.page){document.querySelector('h1').textContent=e.target.dataset.page;document.querySelector('main').textContent=e.target.dataset.page+'其他业务内容';}});`, ''],
     ['heading only', `document.addEventListener('click',e=>{if(e.target.dataset.page)document.querySelector('h1').textContent=e.target.dataset.page;});`, ''],
+    ['heading and selection only', `document.addEventListener('click',e=>{const b=e.target.closest('[data-page]');if(b){document.querySelectorAll('nav[aria-label="主导航"] button').forEach(t=>t.setAttribute('aria-current',t===b?'page':'false'));document.querySelector('h1').textContent=b.dataset.page;}});`, ''],
+    ['heading selection and arbitrary counter', `document.addEventListener('click',e=>{const b=e.target.closest('[data-page]');if(b){document.querySelectorAll('nav[aria-label="主导航"] button').forEach(t=>t.setAttribute('aria-current',t===b?'page':'false'));document.querySelector('h1').textContent=b.dataset.page;counter.textContent=Number(counter.textContent)+1;}});`, '<main id="counter">0</main>'],
     ['highlight only', `document.addEventListener('click',e=>{if(e.target.dataset.page)e.target.classList.add('active');});`, ''],
     ['hidden target', `document.addEventListener('click',e=>{if(e.target.dataset.page)document.querySelector('#hidden').textContent=e.target.dataset.page;});`, '<h1 id="hidden" hidden></h1>'],
     ['overlay', '', '<div style="position:fixed;inset:0;z-index:99;background:white"></div>'],

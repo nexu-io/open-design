@@ -148,7 +148,7 @@ async function visibleContent(page: Page): Promise<string> {
         next = walker.nextNode();
       }
       return text.join(' ').replace(/\s+/g, ' ').trim();
-    }).join('|'));
+    }).join('|').replace(/\d+(?:[.,]\d+)*/g, '#'));
 }
 
 export async function checkPrototypeQuality(input: {
