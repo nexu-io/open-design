@@ -25,7 +25,6 @@ import {
   type DesktopUpdateStatusSnapshot,
   type DaemonStatusSnapshot,
   type DesktopUpdateInput,
-  type RegisterDesktopAuthResult,
   type LegacySidecarRuntimeLayout,
   type WebStatusSnapshot,
 } from "@open-design/sidecar-proto";
@@ -40,6 +39,8 @@ import {
 } from "@open-design/sidecar";
 
 import { createDesktopRuntime, type DesktopRuntime } from "./runtime.js";
+import { registerDesktopAuthWithDaemon } from './register-desktop-auth.js';
+export { registerDesktopAuthWithDaemon } from './register-desktop-auth.js';
 import { dispatchInviteDeeplink, registerInviteDeeplink } from "./invite-deeplink.js";
 import { focusDesktopForDeeplink } from "./deeplink-focus.js";
 import { setUpDesktopCrashReporter, writeDesktopGpuInfo } from "./crash-diagnostics.js";
@@ -633,8 +634,6 @@ function installDesktopMenu(
   };
 }
 
-const REGISTER_DESKTOP_AUTH_TIMEOUT_MS = 800;
-
 function summarizeDesktopIpcInput(input: unknown): Record<string, unknown> | null {
   if (input == null || typeof input !== "object") return null;
   if ("expression" in input && typeof (input as { expression?: unknown }).expression === "string") {
@@ -1117,19 +1116,7 @@ if (isDirectEntry()) {
               return null;
             }
           },
-          registerDesktopAuth: async (secret) => {
-            try {
-              const result = await client.invoke<RegisterDesktopAuthResult>(
-                APP_KEYS.DAEMON,
-                SIDECAR_MESSAGES.REGISTER_DESKTOP_AUTH,
-                { secret: secret.toString("base64") },
-                { timeoutMs: REGISTER_DESKTOP_AUTH_TIMEOUT_MS },
-              );
-              return result.accepted === true;
-            } catch {
-              return false;
-            }
-          },
+          registerDesktopAuth: (secret) => registerDesktopAuthWithDaemon(client, secret),
         });
         runtimeHandle = started;
         return started;

@@ -27,14 +27,12 @@ describe("packaged desktop sidecar boundary", () => {
     );
   });
 
-  it("turns desktop auth transport failures into a false registration result", () => {
+  it('uses the shared fail-closed desktop auth registrar', () => {
     const main = source("../src/index.ts");
-    const registrationStart = main.indexOf("registerDesktopAuth: async (secret) => {");
+    const registrationStart = main.indexOf('registerDesktopAuth: (secret) => registerDesktopAuthWithDaemon(client, secret)');
     const registrationEnd = main.indexOf("windowTitle:", registrationStart);
     expect(registrationStart).toBeGreaterThanOrEqual(0);
     expect(registrationEnd).toBeGreaterThan(registrationStart);
-    const registration = main.slice(registrationStart, registrationEnd);
-    expect(registration).toContain("try {");
-    expect(registration).toContain("catch {\n        return false;");
+    expect(main).toMatch(/import\s*\{[^}]*registerDesktopAuthWithDaemon[^}]*\}\s*from\s*"@open-design\/desktop\/main"/s);
   });
 });
