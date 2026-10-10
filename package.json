@@ -65,9 +65,11 @@
       "electron",
       "electron-winstaller",
       "esbuild",
-      "onnxruntime-node",
       "protobufjs",
       "sharp"
+    ],
+    "ignoredBuiltDependencies": [
+      "onnxruntime-node"
     ]
   }
 }

@@ -23,6 +23,11 @@ onlyBuiltDependencies:
   - electron
   - electron-winstaller
   - esbuild
-  - onnxruntime-node
   - protobufjs
   - sharp
+
+# onnxruntime-node (via hyperframes) uses its postinstall only to fetch the
+# optional CUDA execution provider, which OpenDesign never loads; on CUDA 13
+# hosts that script crashes `pnpm install` (#8441).
+ignoredBuiltDependencies:
+  - onnxruntime-node
