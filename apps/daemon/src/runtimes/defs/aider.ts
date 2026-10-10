@@ -58,6 +58,7 @@ export const aiderAgentDef = {
     },
     maxPromptArgBytes: 30_000,
     streamFormat: 'plain',
+    proxyEnvCompatibility: 'httpx',
     installUrl: 'https://aider.chat/docs/install.html',
     docsUrl: 'https://aider.chat',
 } satisfies RuntimeAgentDef;

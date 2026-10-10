@@ -161,6 +161,9 @@ export type RuntimeAgentDef = {
     runtimeContext?: RuntimeContext,
   ) => string[];
   streamFormat: string;
+  // Some Python runtimes use httpx, whose NO_PROXY parser requires bare IPv6
+  // literals. The default system/Node representation keeps IPv6 bracketed.
+  proxyEnvCompatibility?: 'httpx';
   fallbackBins?: string[];
   versionProbeTimeoutMs?: number;
   versionPolicy?: RuntimeVersionPolicy;
