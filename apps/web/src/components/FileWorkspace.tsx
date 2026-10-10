@@ -3392,15 +3392,6 @@ export function FileWorkspace({
   // FileWorkspace state change (closing an adjacent tab, drag hover, launcher
   // toggles) would hand FileViewer fresh object/function identities and drag
   // the whole viewer subtree — live iframes included — through a re-render.
-  const previewCommentsByFile = useMemo(() => {
-    const byFile = new Map<string, PreviewComment[]>();
-    for (const comment of previewComments) {
-      const comments = byFile.get(comment.filePath) ?? [];
-      comments.push(comment);
-      byFile.set(comment.filePath, comments);
-    }
-    return byFile;
-  }, [previewComments]);
   const activeFileShareRequest = useMemo(
     () => (shareRequest
       ? {
@@ -3441,7 +3432,7 @@ export function FileWorkspace({
       streaming={streaming}
       commentQueueOnSend={commentQueueOnSend}
       commentSendDisabled={commentSendDisabled}
-      previewComments={previewCommentsByFile.get(file.name) ?? NO_PREVIEW_COMMENTS}
+      previewComments={previewComments}
       onSavePreviewComment={onSavePreviewComment}
       onRemovePreviewComment={onRemovePreviewComment}
       onReorderPreviewComment={onReorderPreviewComment}
