@@ -38,13 +38,20 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { CUSTOM_IMAGE_FORMATS, type CustomImageFormat, type MediaConfigResponse } from '@open-design/contracts';
 import { MEDIA_PROVIDERS } from './models.js';
 import { expandHomePrefix } from '../home-expansion.js';
 import { resolveXAIBearer } from '../integrations/xai-credentials.js';
 import { isSandboxModeEnabled } from '../sandbox-mode.js';
 
 const PROVIDER_IDS = MEDIA_PROVIDERS.map((p) => p.id);
-type ProviderEntry = { apiKey?: string; baseUrl?: string; model?: string };
+type ProviderEntry = {
+  apiKey?: string;
+  baseUrl?: string;
+  model?: string;
+  format?: string;
+  deleted?: boolean;
+};
 type ProviderMap = Record<string, ProviderEntry>;
 type ModelAliasMap = Record<string, string>;
 type JsonRecord = Record<string, unknown>;
@@ -59,6 +66,17 @@ type OAuthCredential = { apiKey: string; source: string };
 //
 //   OD_MEDIA_MODEL_ALIASES='{"doubao-seedream-3-0-t2i-250415":"doubao-seedream-5-0"}'
 const ENV_MODEL_ALIASES = 'OD_MEDIA_MODEL_ALIASES';
+
+export { CUSTOM_IMAGE_FORMATS, type CustomImageFormat } from '@open-design/contracts';
+
+const CUSTOM_IMAGE_FORMAT_SET: ReadonlySet<string> = new Set(CUSTOM_IMAGE_FORMATS);
+
+/** Normalise an arbitrary stored value into a known format, or '' when absent/unknown. */
+export function normalizeCustomImageFormat(raw: unknown): CustomImageFormat | '' {
+  if (typeof raw !== 'string') return '';
+  const trimmed = raw.trim();
+  return CUSTOM_IMAGE_FORMAT_SET.has(trimmed) ? (trimmed as CustomImageFormat) : '';
+}
 
 function isRecord(value: unknown): value is JsonRecord {
   return value !== null && typeof value === 'object';
@@ -352,12 +370,18 @@ async function resolveXAIOAuthCredential(
  * explicit API keys from Codex auth files; Codex/Hermes OAuth tokens are
  * not valid proof that the Images API can be called.
  * Returns { apiKey, baseUrl } where either may be empty string.
+ *
+ * A `deleted: true` tombstone (written when the user clears a provider in
+ * Settings) suppresses stored and borrowed credentials so a cleared
+ * provider stays cleared. Env-var keys still win: they are a
+ * deployment-level choice the in-app clear cannot override.
  */
 export async function resolveProviderConfig(projectRoot: string, providerId: string): Promise<ProviderEntry> {
   const stored = await readStored(projectRoot);
   const entry = stored[providerId] || {};
+  const tombstoned = entry.deleted === true;
   const envKey = readEnvKey(providerId);
-  const needsExternalCredential = !envKey && !entry.apiKey;
+  const needsExternalCredential = !envKey && !tombstoned && !entry.apiKey;
   const externalCredential = needsExternalCredential
     ? providerId === 'openai'
       ? await resolveOpenAIAuthFileCredential()
@@ -365,12 +389,15 @@ export async function resolveProviderConfig(projectRoot: string, providerId: str
         ? await resolveXAIOAuthCredential(projectRoot)
         : null
     : null;
+  const model = !tombstoned && typeof entry.model === 'string' && entry.model.trim()
+    ? entry.model.trim()
+    : '';
+  const format = tombstoned ? '' : normalizeCustomImageFormat(entry.format);
   return {
-    apiKey: envKey || entry.apiKey || externalCredential?.apiKey || '',
-    baseUrl: entry.baseUrl || '',
-    ...(typeof entry.model === 'string' && entry.model.trim()
-      ? { model: entry.model.trim() }
-      : {}),
+    apiKey: envKey || (tombstoned ? '' : entry.apiKey || externalCredential?.apiKey || ''),
+    baseUrl: tombstoned ? '' : entry.baseUrl || '',
+    ...(model ? { model } : {}),
+    ...(format ? { format } : {}),
   };
 }
 
@@ -379,25 +406,20 @@ export async function resolveProviderConfig(projectRoot: string, providerId: str
  * frontend can show "••••" + a "configured" indicator without leaking
  * the secret back into the DOM.
  */
-export interface MaskedConfigResponse {
-  providers: Record<string, { configured: boolean; source: string; apiKeyTail: string; baseUrl: string; model?: string }>;
-  /**
-   * Effective alias map plus source attribution. The Settings UI can
-   * show "from env" vs "from media-config.json" badges next to each
-   * entry without needing a second endpoint. Empty maps mean no
-   * aliases are configured (issue #1277).
-   */
-  aliases: { effective: ModelAliasMap; env: ModelAliasMap; stored: ModelAliasMap };
-}
+export type MaskedConfigResponse = MediaConfigResponse;
 
 export async function readMaskedConfig(projectRoot: string): Promise<MaskedConfigResponse> {
   const stored = await readStored(projectRoot);
   const providers: MaskedConfigResponse['providers'] = {};
   for (const id of PROVIDER_IDS) {
     const entry = stored[id] || {};
+    const deleted = entry.deleted === true;
     const envKey = readEnvKey(id);
     const hasStoredKey = typeof entry.apiKey === 'string' && entry.apiKey.length > 0;
-    const needsExternalCredential = !envKey && !hasStoredKey;
+    // A tombstone suppresses borrowed credentials too: "cleared" means
+    // the user does not want this provider resolved from anywhere but
+    // an env var. Surfacing the marker lets any client round-trip it.
+    const needsExternalCredential = !envKey && !deleted && !hasStoredKey;
     const externalCredential = needsExternalCredential
       ? id === 'openai'
         ? await resolveOpenAIAuthFileCredential()
@@ -405,17 +427,20 @@ export async function readMaskedConfig(projectRoot: string): Promise<MaskedConfi
           ? await resolveXAIOAuthCredential(projectRoot)
           : null
       : null;
+    const format = deleted ? '' : normalizeCustomImageFormat(entry.format);
     providers[id] = {
-      configured: Boolean(envKey || hasStoredKey || externalCredential?.apiKey),
-      source: envKey ? 'env' : hasStoredKey ? 'stored' : externalCredential?.source || 'unset',
+      configured: Boolean(envKey || (!deleted && (hasStoredKey || externalCredential?.apiKey))),
+      source: envKey ? 'env' : !deleted && hasStoredKey ? 'stored' : externalCredential?.source || 'unset',
       // Show last 4 chars only when stored locally; never echo env-var
       // or borrowed auth-file/OAuth secrets so power users don't
       // accidentally see them in the DOM.
       apiKeyTail: hasStoredKey && entry.apiKey ? entry.apiKey.slice(-4) : '',
-      baseUrl: entry.baseUrl || '',
-      ...(typeof entry.model === 'string' && entry.model.trim()
+      baseUrl: deleted ? '' : entry.baseUrl || '',
+      ...(!deleted && typeof entry.model === 'string' && entry.model.trim()
         ? { model: entry.model.trim() }
         : {}),
+      ...(format ? { format } : {}),
+      ...(deleted ? { deleted: true } : {}),
     };
   }
   const aliases = await readAliasMap(projectRoot);
@@ -428,6 +453,15 @@ export async function readMaskedConfig(projectRoot: string): Promise<MaskedConfi
  * deliberately replace the whole map rather than merging so the
  * UI's "clear key" affordance just sends an empty string.
  *
+ * Two entry-level extras survive alongside apiKey/baseUrl/model:
+ *   * `format` — the custom-image wire format (see CUSTOM_IMAGE_FORMATS);
+ *     unknown values are dropped so a stale client can never persist a
+ *     format the renderer does not implement.
+ *   * `deleted: true` — an explicit "cleared" tombstone. The Settings UI
+ *     writes it instead of silently dropping the entry so the chat-side
+ *     seed (seedProviderIfMissing) cannot resurrect the provider on the
+ *     next message, and borrowed credentials stay suppressed.
+ *
  * Safety: if the incoming payload is empty but the on-disk config
  * currently has providers, we log a WARN to stderr. This catches
  * accidental wipes (e.g. a fresh-localStorage browser bootstrap
@@ -438,10 +472,16 @@ export async function writeConfig(projectRoot: string, body: unknown) {
   const incoming = isRecord(body) && isRecord(body.providers) ? body.providers : {};
   const force = Boolean(isRecord(body) && body.force === true);
   const prior = await readStored(projectRoot);
-  const next: ProviderMap = {};
+  const next: ProviderMap = Object.fromEntries(
+    Object.entries(prior).filter(([, entry]) => entry.deleted === true),
+  );
   for (const id of PROVIDER_IDS) {
     const entry = incoming[id];
     if (!isRecord(entry)) continue;
+    if (entry.deleted === true) {
+      next[id] = { deleted: true };
+      continue;
+    }
     const incomingApiKey =
       typeof entry.apiKey === 'string' && entry.apiKey.trim()
         ? entry.apiKey.trim()
@@ -460,11 +500,13 @@ export async function writeConfig(projectRoot: string, body: unknown) {
       typeof entry.model === 'string' && entry.model.trim()
         ? entry.model.trim()
         : '';
-    if (!apiKey && !baseUrl && !model) continue;
+    const format = normalizeCustomImageFormat(entry.format);
+    if (!apiKey && !baseUrl && !model && !format) continue;
     next[id] = {
       apiKey,
       baseUrl,
       ...(model ? { model } : {}),
+      ...(format ? { format } : {}),
     };
   }
   if (Object.keys(next).length === 0) {
@@ -497,6 +539,9 @@ export async function writeConfig(projectRoot: string, body: unknown) {
  * proxy uses this to mirror a BYOK key into media-config so the agent's
  * image / TTS path picks up the same credential without the user having
  * to paste it twice. Strict rules:
+ *   * No-op when the slot carries a `deleted: true` tombstone — the user
+ *     explicitly cleared this provider in Settings and the mirror must
+ *     not resurrect it on the next chat message.
  *   * No-op when an apiKey is ALREADY stored for `providerId` (the user
  *     may have configured Media independently and we never overwrite).
  *   * No-op when an env-var key resolves for `providerId` (env wins
@@ -514,7 +559,7 @@ export async function writeConfig(projectRoot: string, body: unknown) {
 export async function seedProviderIfMissing(
   projectRoot: string,
   providerId: string,
-  entry: { apiKey?: string; baseUrl?: string; model?: string },
+  entry: { apiKey?: string; baseUrl?: string; model?: string; format?: string },
 ): Promise<boolean> {
   if (!PROVIDER_IDS.includes(providerId)) return false;
   const apiKey = entry.apiKey?.trim() ?? '';
@@ -524,6 +569,7 @@ export async function seedProviderIfMissing(
   if (readEnvKey(providerId)) return false;
 
   const prior = await readStored(projectRoot);
+  if (prior[providerId]?.deleted === true) return false;
   const priorApiKey =
     typeof prior[providerId]?.apiKey === 'string' && prior[providerId].apiKey.trim()
       ? prior[providerId].apiKey.trim()
@@ -532,11 +578,13 @@ export async function seedProviderIfMissing(
 
   const baseUrl = entry.baseUrl?.trim() ?? '';
   const model = entry.model?.trim() ?? '';
+  const format = normalizeCustomImageFormat(entry.format);
   const next: ProviderMap = { ...prior };
   next[providerId] = {
     apiKey,
     ...(baseUrl ? { baseUrl } : {}),
     ...(model ? { model } : {}),
+    ...(format ? { format } : {}),
   };
   await writeStored(projectRoot, next);
   return true;

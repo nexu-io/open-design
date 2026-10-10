@@ -9,6 +9,7 @@ import {
   composeSystemPrompt,
   renderConnectedExternalMcpDirective,
   resolveExclusiveSurface,
+  withGlobalDefaultImageModel,
 } from '../../src/prompts/system.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -846,5 +847,64 @@ describe('composeSystemPrompt', () => {
       expect(prompt).not.toContain('## Reference component manifest');
       expect(prompt).not.toContain('## Reference fixture');
     });
+  });
+});
+
+describe('withGlobalDefaultImageModel', () => {
+  it('fills the image default when the run carries none', () => {
+    expect(
+      withGlobalDefaultImageModel(
+        { videoModel: 'vela/doubao-seedance-2-0-260128' },
+        'gemini-3.1-flash-image-preview',
+      ),
+    ).toEqual({
+      videoModel: 'vela/doubao-seedance-2-0-260128',
+      imageModel: 'gemini-3.1-flash-image-preview',
+    });
+  });
+
+  it('never overrides an explicit run-scoped image default', () => {
+    expect(
+      withGlobalDefaultImageModel(
+        { imageModel: 'openrouter/google/gemini-2.5-flash-image' },
+        'gemini-3.1-flash-image-preview',
+      ),
+    ).toEqual({ imageModel: 'openrouter/google/gemini-2.5-flash-image' });
+  });
+
+  it('fills the global default for a CLI run without BYOK defaults', () => {
+    expect(withGlobalDefaultImageModel(undefined, 'custom-image')).toEqual({ imageModel: 'custom-image' });
+  });
+
+  it('is a no-op without a global default', () => {
+    expect(withGlobalDefaultImageModel({}, '')).toEqual({});
+    expect(withGlobalDefaultImageModel({}, '   ')).toEqual({});
+    expect(withGlobalDefaultImageModel(undefined, null)).toBeUndefined();
+    expect(
+      withGlobalDefaultImageModel({ imageModel: 'vela/gpt-image-2' }, null),
+    ).toEqual({ imageModel: 'vela/gpt-image-2' });
+  });
+});
+
+describe('composeSystemPrompt — run-scoped image default reaches the dispatch hint', () => {
+  it('substitutes the pick into the BYOK defaults block and the shell recipe', () => {
+    const prompt = composeSystemPrompt({
+      agentId: 'byok-opencode',
+      byokMediaDefaults: { imageModel: 'gemini-3.1-flash-image-preview' },
+    });
+    expect(prompt).toContain('### Run-scoped BYOK media defaults');
+    expect(prompt).toContain('Image model: `gemini-3.1-flash-image-preview`');
+    expect(prompt).toContain(
+      'For image generation prefer your configured model: `gemini-3.1-flash-image-preview`',
+    );
+    expect(prompt).toContain('IMAGE_MODEL="gemini-3.1-flash-image-preview"');
+    // The hardcoded fal tail must not survive next to a user pick.
+    expect(prompt).not.toContain('For the best fal image model use `--model flux-pro-ultra`');
+  });
+
+  it('keeps the built-in fallbacks when no image default is set', () => {
+    const prompt = composeSystemPrompt({ agentId: 'byok-opencode' });
+    expect(prompt).not.toContain('### Run-scoped BYOK media defaults');
+    expect(prompt).toContain('For the best fal image model use `--model flux-pro-ultra`');
   });
 });

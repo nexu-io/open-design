@@ -83,6 +83,7 @@ import { assertAndFetchExternalAsset } from '../connectionTest.js';
 import {
   resolveModelAlias,
   resolveProviderConfig,
+  normalizeCustomImageFormat,
 } from './config.js';
 import {
   fetchImageGenerationWithResponseRetry,
@@ -111,7 +112,7 @@ import {
 
 const execFile = promisify(execFileCb);
 const DEFAULT_OPENROUTER_VIDEO_POLL_INTERVAL_MS = 8000;
-type ProviderConfig = { apiKey?: string; baseUrl?: string; model?: string };
+type ProviderConfig = { apiKey?: string; baseUrl?: string; model?: string; format?: string };
 type ProgressFn = (message: string) => void;
 type DesktopFrameRenderer = (
   input: DesktopRenderFramesInput,
@@ -1128,6 +1129,20 @@ async function renderCustomOpenAIImage(ctx: MediaContext, credentials: ProviderC
     );
   }
 
+  // Wire format for the endpoint. `openai-images` (POST {base}/images/
+  // generations) is the historical default; `gemini-native` speaks
+  // Gemini's :generateContent shape; `openai-chat` speaks the
+  // chat-completions image shape (modalities + message.images). The
+  // latter two let one custom provider front any relay exposing either
+  // dialect — pick per endpoint in Settings.
+  const format = normalizeCustomImageFormat(credentials.format) || 'openai-images';
+  if (format === 'gemini-native') {
+    return renderCustomGeminiNativeImage(ctx, credentials, baseUrl, wireModel);
+  }
+  if (format === 'openai-chat') {
+    return renderCustomOpenAIChatImage(ctx, credentials, baseUrl, wireModel);
+  }
+
   const headers: Record<string, string> = {
     'content-type': 'application/json',
   };
@@ -1169,6 +1184,136 @@ async function renderCustomOpenAIImage(ctx: MediaContext, credentials: ProviderC
   return {
     bytes,
     providerNote: `custom-image/${wireModel} · ${body.size} · ${bytes.length} bytes`,
+    suggestedExt: sniffImageExt(bytes),
+  };
+}
+
+// custom-image, gemini-native format: POST {base}/v1beta/models/{model}:generateContent
+// with the Gemini image request shape. Mirrors renderNanoBananaImage's
+// wire contract so a relay fronting Gemini works behind a plain base
+// URL + key. Text-to-image only — the edits path stays on openai-images.
+async function renderCustomGeminiNativeImage(
+  ctx: MediaContext,
+  credentials: ProviderConfig,
+  baseUrl: string,
+  wireModel: string,
+): Promise<RenderResult> {
+  if (ctx.imageRef?.dataUrl) {
+    throw new Error(
+      'custom image i2i requires the openai-images format — switch the provider format in Settings',
+    );
+  }
+  const body = {
+    contents: [{
+      parts: [{
+        text: ctx.prompt || 'A high-quality reference image.',
+      }],
+    }],
+    generationConfig: {
+      responseModalities: ['IMAGE'],
+      imageConfig: {
+        aspectRatio: nanoBananaAspectFor(ctx.aspect),
+        imageSize: NANOBANANA_DEFAULT_IMAGE_SIZE,
+      },
+    },
+  };
+  const headers: Record<string, string> = { 'content-type': 'application/json' };
+  if (credentials.apiKey) {
+    // Official Google hosts want x-goog-api-key; relays accept Bearer.
+    Object.assign(headers, nanoBananaHeaders(baseUrl, credentials.apiKey));
+  }
+  const resp = await fetchImageGenerationWithResponseRetry(
+    () => fetch(`${baseUrl.replace(/\/$/, '')}/v1beta/models/${encodeURIComponent(wireModel)}:generateContent`, withMediaRequestInit(ctx, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    })),
+    (summary) => ctx.onProviderRequestSettled?.({
+      providerId: 'custom-image',
+      ...summary,
+    }),
+  );
+  const text = await resp.text();
+  if (!resp.ok) {
+    throw new Error(`custom image ${resp.status}: ${truncate(text, 240)}`);
+  }
+  let data: any;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`custom image non-JSON: ${truncate(text, 200)}`);
+  }
+  const bytes = inlineImageBytesFromGenerateContent(data, 'custom image');
+  return {
+    bytes,
+    providerNote: `custom-image/${wireModel} · gemini-native · ${nanoBananaAspectFor(ctx.aspect)} · ${bytes.length} bytes`,
+    suggestedExt: sniffImageExt(bytes),
+  };
+}
+
+// custom-image, openai-chat format: POST {base}/chat/completions with
+// modalities + image_config, reading the image back from
+// choices[0].message.images[].image_url.url. Mirrors
+// renderOpenRouterImage's wire contract minus the OpenRouter-only
+// attribution headers. Text-to-image only.
+async function renderCustomOpenAIChatImage(
+  ctx: MediaContext,
+  credentials: ProviderConfig,
+  baseUrl: string,
+  wireModel: string,
+): Promise<RenderResult> {
+  if (ctx.imageRef?.dataUrl) {
+    throw new Error(
+      'custom image i2i requires the openai-images format — switch the provider format in Settings',
+    );
+  }
+  // Multi-modal models (Gemini variants) accept image + text output;
+  // image-only models accept ["image"] only. Same slug heuristic the
+  // OpenRouter renderer uses.
+  const modalities: string[] = wireModel.includes('gemini')
+    ? ['image', 'text']
+    : ['image'];
+  const body: Record<string, unknown> = {
+    model: wireModel,
+    messages: [{
+      role: 'user',
+      content: ctx.prompt || 'A high-quality reference image.',
+    }],
+    modalities,
+    stream: false,
+    image_config: {
+      aspect_ratio: openRouterAspectFor(ctx.aspect),
+      image_size: '1K',
+    },
+  };
+  const headers: Record<string, string> = { 'content-type': 'application/json' };
+  if (credentials.apiKey) {
+    headers.authorization = `Bearer ${credentials.apiKey}`;
+  }
+  const resp = await fetchImageGenerationWithResponseRetry(
+    () => fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, withMediaRequestInit(ctx, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    })),
+    (summary) => ctx.onProviderRequestSettled?.({
+      providerId: 'custom-image',
+      ...summary,
+    }),
+  );
+  const data = await parseOpenAICompatibleJson(resp, 'custom image');
+  const images: any[] | undefined = data?.choices?.[0]?.message?.images;
+  if (!images || images.length === 0) {
+    throw new Error(`custom image response contained no images for model ${wireModel}`);
+  }
+  const dataUrl: string | undefined = images[0]?.image_url?.url;
+  if (typeof dataUrl !== 'string' || !dataUrl) {
+    throw new Error('custom image response missing image_url.url');
+  }
+  const bytes = await bytesFromChatCompletionImageDataUrl(dataUrl, 'custom image', ctx.requestInit);
+  return {
+    bytes,
+    providerNote: `custom-image/${wireModel} · openai-chat · ${openRouterAspectFor(ctx.aspect)} · ${bytes.length} bytes`,
     suggestedExt: sniffImageExt(bytes),
   };
 }
@@ -1816,7 +1961,7 @@ function nanoBananaAspectFor(aspect?: string): string {
   return '1:1';
 }
 
-function inlineImageBytesFromGenerateContent(data: any): Buffer {
+function inlineImageBytesFromGenerateContent(data: any, tag = 'nano-banana image'): Buffer {
   const candidates = Array.isArray(data?.candidates) ? data.candidates : [];
   for (const candidate of candidates) {
     const parts = Array.isArray(candidate?.content?.parts) ? candidate.content.parts : [];
@@ -1827,7 +1972,32 @@ function inlineImageBytesFromGenerateContent(data: any): Buffer {
       }
     }
   }
-  throw new Error('nano-banana image response missing candidates[].content.parts[].inlineData.data');
+  throw new Error(`${tag} response missing candidates[].content.parts[].inlineData.data`);
+}
+
+/**
+ * Decode the image payload a chat-completions image response carries in
+ * `choices[0].message.images[].image_url.url`. Providers emit either an
+ * inline `data:image/...;base64,` URL, a plain http(s) URL to fetch, or
+ * (rarely) raw base64. Shared by the OpenRouter renderer and the
+ * custom-image openai-chat format.
+ */
+async function bytesFromChatCompletionImageDataUrl(
+  dataUrl: string,
+  tag: string,
+  requestInit: MediaRequestInit = {},
+): Promise<Buffer> {
+  const b64Match = dataUrl.match(/^data:image\/[^;]+;base64,(.+)$/s);
+  if (b64Match) {
+    return Buffer.from(b64Match[1]!, 'base64');
+  }
+  if (dataUrl.startsWith('http')) {
+    const imgResp = await fetch(dataUrl, requestInit);
+    if (!imgResp.ok) throw new Error(`${tag} image download ${imgResp.status}`);
+    return Buffer.from(await imgResp.arrayBuffer());
+  }
+  // Assume raw base64 without prefix.
+  return Buffer.from(dataUrl, 'base64');
 }
 
 function sniffImageExt(bytes: Buffer): string {
@@ -1955,21 +2125,7 @@ async function renderOpenRouterImage(
     );
   }
 
-  // Strip the data URL prefix (e.g. "data:image/png;base64,") and
-  // decode the remaining base64 payload.
-  const b64Match = dataUrl.match(/^data:image\/[^;]+;base64,(.+)$/s);
-  let bytes: Buffer;
-  if (b64Match) {
-    bytes = Buffer.from(b64Match[1]!, 'base64');
-  } else if (dataUrl.startsWith('http')) {
-    // Some models may return a plain URL instead of inline base64.
-    const imgResp = await fetch(dataUrl, withMediaRequestInit(ctx));
-    if (!imgResp.ok) throw new Error(`openrouter image download ${imgResp.status}`);
-    bytes = Buffer.from(await imgResp.arrayBuffer());
-  } else {
-    // Assume raw base64 without prefix.
-    bytes = Buffer.from(dataUrl, 'base64');
-  }
+  const bytes = await bytesFromChatCompletionImageDataUrl(dataUrl, 'openrouter image', ctx.requestInit);
 
   return {
     bytes,
