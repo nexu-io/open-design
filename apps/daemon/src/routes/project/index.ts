@@ -7680,7 +7680,12 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
           );
         }
         if (rejectInternalVersionPath(res, name)) return;
-        const desiredName = sanitizePath(name);
+        let desiredName: string;
+        try {
+          desiredName = sanitizePath(name);
+        } catch (err) {
+          return sendApiError(res, 400, 'BAD_REQUEST', String((err as Error).message));
+        }
         if (rejectInternalVersionPath(res, desiredName)) return;
         const requestedSource = uploadProject && /\.html?$/i.test(desiredName)
           ? requestProjectFileVersionUploadSource(req.body)
@@ -7776,6 +7781,9 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         res.json(body);
       } catch (err: any) {
         const message = String(err?.message || err);
+        if (err?.code === 'EPATHESCAPE') {
+          return sendApiError(res, 400, 'BAD_REQUEST', message);
+        }
         if (/^invalid (source|versionSource);/u.test(message)) {
           return sendApiError(res, 400, 'BAD_REQUEST', message);
         }

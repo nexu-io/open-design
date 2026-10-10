@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- [Fixed] Local OpenAI-compatible connection tests accept canonical model names when gateways strip provider-routing prefixes, while still rejecting unrelated models.
+- [Fixed] Project file uploads return `400 BAD_REQUEST` for invalid paths and symlink escapes instead of a generic server error.
 - [Fixed] Long speaker notes are now scrollable inside the presenter view instead of being clipped when notes push the layout past the viewport. (#6271)
 - [Changed] Retired the official Nix flake, Home Manager/NixOS modules, and lockfile-coupled Nix CI maintenance. OpenDesign still discovers agent CLIs installed through Nix profiles on NixOS and nix-darwin hosts.
 

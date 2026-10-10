@@ -45,6 +45,26 @@ describe('project upload filenames', () => {
     };
   }
 
+  it.each([
+    '../outside.txt',
+    'assets/../../outside.txt',
+    '/tmp/outside.txt',
+    'C:\\outside.txt',
+    'assets\0bad.txt',
+  ])('rejects invalid JSON upload path %j as a client error', async (name) => {
+    const projectId = await createProject();
+    const response = await fetch(`${baseUrl}/api/projects/${projectId}/files`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, content: 'must not be written' }),
+    });
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.error.code).toBe('BAD_REQUEST');
+    const files = await fetch(`${baseUrl}/api/projects/${projectId}/files`);
+    expect((await files.json()).files.some((file: { name: string }) => file.name.includes('outside'))).toBe(false);
+  });
+
   it('preserves uploaded source filenames and suffixes only duplicates', async () => {
     const projectId = await createProject();
 
