@@ -15,6 +15,9 @@ describe('byok-opencode runtime config', () => {
     expect(byokOpenCodeAgentDef.helpArgs).toEqual(['run', '--help']);
     expect(byokOpenCodeAgentDef.capabilityFlags).toEqual({
       '--dangerously-skip-permissions': 'skipPermissions',
+      '--dir': 'workspaceDir',
+      '--pure': 'pure',
+      '--variant': 'variant',
     });
     expect(byokOpenCodeAgentDef.buildArgs('', [], [], {})).toEqual([
       'run',
@@ -32,6 +35,28 @@ describe('byok-opencode runtime config', () => {
         '-m',
         'open-design-byok/gpt-5.5',
       ]);
+    } finally {
+      agentCapabilities.delete('byok-opencode');
+    }
+  });
+
+  it('omits --dir when the installed OpenCode build does not advertise it (v2)', () => {
+    agentCapabilities.set('byok-opencode', { workspaceDir: false });
+    try {
+      expect(
+        byokOpenCodeAgentDef.buildArgs('', [], [], {}, { cwd: '/projects/p1' }),
+      ).toEqual(['run', '--format', 'json']);
+    } finally {
+      agentCapabilities.delete('byok-opencode');
+    }
+  });
+
+  it('pins --dir when the installed OpenCode build advertises it (v1)', () => {
+    agentCapabilities.set('byok-opencode', { workspaceDir: true });
+    try {
+      expect(
+        byokOpenCodeAgentDef.buildArgs('', [], [], {}, { cwd: '/projects/p1' }),
+      ).toEqual(['run', '--format', 'json', '--dir', '/projects/p1']);
     } finally {
       agentCapabilities.delete('byok-opencode');
     }

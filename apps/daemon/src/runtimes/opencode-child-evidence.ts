@@ -369,17 +369,24 @@ export async function collectOpenCodeChildRuntimeFacts(input: {
 }
 
 /**
- * Read one child session through `opencode export <id> --sanitize`, the only
+ * Read one child session through a sanitized OpenCode export, the only
  * OpenCode surface that emits a child transcript together with the `parentID`
  * the two-sided verification needs, and with transcript and file bytes already
  * redacted by the CLI itself.
  *
- * `--pure` keeps a user-installed OpenCode plugin from executing inside the
- * evidence path, and `execAgentFile` supplies a neutral working directory so
- * the bun-based CLI cannot drop a lockfile into the user's project (see
- * `invocation.ts`). The env must be the one the Run was spawned with: it
- * carries the `XDG_DATA_HOME` / `HOME` that decide which session store the
- * spawned CLI actually wrote to.
+ * OpenCode v2 moved the export to `session export <id> --sanitize` and
+ * dropped the global `--pure` flag; v1 serves it as
+ * `export <id> --sanitize --pure`, where `--pure` keeps a user-installed
+ * OpenCode plugin from executing inside the evidence path. The v2 form is
+ * tried first and the v1 form is the fallback, so either major line resolves
+ * on the first attempt and the other pays a single failed spawn on this
+ * close-path loader (failures degrade to L1 through the collector).
+ *
+ * `execAgentFile` supplies a neutral working directory so the bun-based CLI
+ * cannot drop a lockfile into the user's project (see `invocation.ts`). The
+ * env must be the one the Run was spawned with: it carries the
+ * `XDG_DATA_HOME` / `HOME` that decide which session store the spawned CLI
+ * actually wrote to.
  */
 export function createOpenCodeSanitizedExportLoader(input: {
   launchPath: string;
@@ -391,18 +398,26 @@ export function createOpenCodeSanitizedExportLoader(input: {
     if (!OPENCODE_CHILD_SESSION_ID.test(childSessionId)) {
       throw new TypeError(`Unsupported OpenCode child session id: ${childSessionId}`);
     }
-    const { stdout } = await execAgentFile(
-      input.launchPath,
+    const options = {
+      env: input.env,
+      timeout: input.timeoutMs ?? OPENCODE_CHILD_EXPORT_TIMEOUT_MS,
+      maxBuffer: input.maxBytes ?? OPENCODE_CHILD_EXPORT_MAX_BYTES,
+    };
+    let lastError: unknown = null;
+    for (const argv of [
+      ['session', 'export', childSessionId, '--sanitize'],
       ['export', childSessionId, '--sanitize', '--pure'],
-      {
-        env: input.env,
-        timeout: input.timeoutMs ?? OPENCODE_CHILD_EXPORT_TIMEOUT_MS,
-        maxBuffer: input.maxBytes ?? OPENCODE_CHILD_EXPORT_MAX_BYTES,
-      },
-    );
-    // `opencode export` writes its progress line to stderr, so stdout is the
-    // session document alone.
-    return JSON.parse(typeof stdout === 'string' ? stdout : String(stdout));
+    ]) {
+      try {
+        const { stdout } = await execAgentFile(input.launchPath, argv, options);
+        // `opencode export` writes its progress line to stderr, so stdout is the
+        // session document alone.
+        return JSON.parse(typeof stdout === 'string' ? stdout : String(stdout));
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError;
   };
 }
 

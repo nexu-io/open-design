@@ -98,6 +98,8 @@ import {
   BYOK_OPENCODE_PROVIDER_ID,
   buildOpenCodeByokProviderConfig,
 } from './runtimes/byok-opencode.js';
+import { ensureDetectedRuntimeCapabilities } from './runtimes/detection.js';
+import { supportsOpenCodePure } from './runtimes/opencode-permissions.js';
 
 export { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 
@@ -2578,6 +2580,13 @@ async function testAgentConnectionInternal(
     if (input.agentId === 'opencode' || input.agentId === 'mimo') {
       if (input.agentId === 'opencode') await prepareOpenCodeConnectionTestCwd(tempDir);
     }
+    // Warm the `--help` capability map before building argv: OpenCode v2
+    // dropped `--dir` and `--pure` from `run`, so both are gated on what the
+    // installed build advertises. Without this probe the helpers fall back to
+    // the historical v1 argv and a v2 binary fails the spawn loudly.
+    if (input.agentId === 'opencode' || input.agentId === 'byok-opencode') {
+      await ensureDetectedRuntimeCapabilities(input.agentId, configuredAgentEnv);
+    }
     let args: string[];
     try {
       promptFile = await preparePromptFileForAgent(def, SMOKE_PROMPT, 'connection-test');
@@ -2608,8 +2617,14 @@ async function testAgentConnectionInternal(
       // Connection tests should validate the adapter's core CLI path, not
       // fail on unrelated user-installed OpenCode plugins. `opencode run
       // --pure` keeps the smoke test isolated while regular chat runs retain
-      // the user's full plugin environment.
-      if ((input.agentId === 'opencode' || input.agentId === 'mimo') && !args.includes('--pure')) {
+      // the user's full plugin environment. OpenCode v2 removed `--pure`,
+      // so it is only sent when the installed build advertises it (mimo
+      // keeps the historical behavior: its capability map is never warmed
+      // here and defaults to sending the flag).
+      const pureSupported = input.agentId === 'opencode' || input.agentId === 'byok-opencode'
+        ? supportsOpenCodePure(input.agentId)
+        : true;
+      if ((input.agentId === 'opencode' || input.agentId === 'mimo') && pureSupported && !args.includes('--pure')) {
         args.push('--pure');
       }
       if ((input.agentId === 'opencode' || input.agentId === 'mimo') && !args.includes('--title')) {
