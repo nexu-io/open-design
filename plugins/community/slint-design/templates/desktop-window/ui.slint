@@ -1,0 +1,41 @@
+export component DesktopWindow inherits Window {
+    title: "App";
+    preferred-width: 960px;
+    preferred-height: 640px;
+    background: #111827;
+
+    HorizontalLayout {
+        spacing: 0;
+
+        Rectangle {
+            width: 220px;
+            background: #0b1220;
+            VerticalLayout {
+                padding: 16px;
+                spacing: 8px;
+                Text { text: "Navigation"; color: #e5e7eb; font-weight: 700; }
+                Text { text: "Home"; color: #9ca3af; }
+                Text { text: "Projects"; color: #9ca3af; }
+                Text { text: "Settings"; color: #9ca3af; }
+            }
+        }
+
+        VerticalLayout {
+            padding: 24px;
+            spacing: 12px;
+            Text { text: "Main canvas"; color: #f9fafb; font-size: 22px; font-weight: 700; }
+            Text { text: "Replace this body with your feature UI."; color: #9ca3af; }
+            Rectangle {
+                border-radius: 12px;
+                background: #1f2937;
+                min-height: 280px;
+                Text {
+                    text: "Content";
+                    color: #6b7280;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+}
