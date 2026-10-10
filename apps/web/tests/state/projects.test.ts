@@ -2449,6 +2449,79 @@ describe('read-only project tabs cache', () => {
   });
 });
 
+describe('project canvas layout in tabs state', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  // #8230 自由画布 v1 — 画布布局跟着 tabs JSON 从 daemon 回来时不能被 web 侧
+  // 归一化悄悄丢掉；坏节点整枚丢弃、好节点保留。
+  it('preserves a well-formed canvas from the daemon response', async () => {
+    const store = new Map<string, string>();
+    vi.stubGlobal('window', {
+      localStorage: {
+        getItem: (key: string) => store.get(key) ?? null,
+        setItem: (key: string, value: string) => {
+          store.set(key, value);
+        },
+        removeItem: (key: string) => {
+          store.delete(key);
+        },
+      },
+    });
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      Response.json({
+        tabs: ['a.html'],
+        active: 'a.html',
+        updatedAt: 2,
+        canvas: {
+          nodes: [
+            { id: 'n1', ref: 'a.html', x: 0, y: 0, w: 320, h: 240, z: 0 },
+            { id: 'bad', ref: '', x: 0, y: 0, w: 10, h: 10, z: 0 },
+          ],
+          viewport: { x: -40, y: 12, zoom: 0.75 },
+        },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const loaded = await loadTabs('project-canvas', personalWorkspaceContext());
+
+    expect(loaded.canvas).toEqual({
+      nodes: [{ id: 'n1', ref: 'a.html', x: 0, y: 0, w: 320, h: 240, z: 0 }],
+      viewport: { x: -40, y: 12, zoom: 0.75 },
+    });
+  });
+
+  it('omits canvas when the daemon payload has no usable layout', async () => {
+    const store = new Map<string, string>();
+    vi.stubGlobal('window', {
+      localStorage: {
+        getItem: (key: string) => store.get(key) ?? null,
+        setItem: (key: string, value: string) => {
+          store.set(key, value);
+        },
+        removeItem: (key: string) => {
+          store.delete(key);
+        },
+      },
+    });
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      Response.json({
+        tabs: ['a.html'],
+        active: 'a.html',
+        updatedAt: 2,
+        canvas: { nodes: 'nope' },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const loaded = await loadTabs('project-canvas-empty', personalWorkspaceContext());
+
+    expect(loaded.canvas).toBeUndefined();
+  });
+});
+
 describe('listTemplates request coalescing', () => {
   afterEach(() => {
     vi.unstubAllGlobals();

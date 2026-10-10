@@ -13,6 +13,7 @@ import { markProjectCreatedByViewer } from '../collab/useProjectCollab';
 import {
   API_ERROR_CODES,
   isSameWorkspacePrincipal,
+  normalizeProjectCanvasState,
   type ApiErrorCode,
 } from '@open-design/contracts';
 import type {
@@ -1698,6 +1699,8 @@ function normalizeTabsState(value: unknown): OpenTabsState | null {
   if (typeof record.updatedAt === 'number' && Number.isFinite(record.updatedAt)) {
     state.updatedAt = record.updatedAt;
   }
+  const canvas = normalizeProjectCanvasState(record.canvas);
+  if (canvas) state.canvas = canvas;
   return state;
 }
 

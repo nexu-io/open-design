@@ -179,6 +179,16 @@ export function terminalIdFromTabId(tabId: TerminalTabId): string {
   return tabId.slice('terminal:'.length);
 }
 
+// 自由画布 tab 约定（#8230）。与上面的 `live:` / `chat:` / `terminal:` 家族
+// 不同，一个项目至多持有一块画布，所以它的 tab 是单一固定 id——仿 design-system /
+// design-files 固定 tab 的写法——而不是 `canvas:<id>` 前缀。布局本身挂在
+// `ProjectTabsState.canvas` 上，不进 tab id。
+export const PROJECT_CANVAS_TAB = '__project_canvas__';
+
+export function isProjectCanvasTab(tabId: string): boolean {
+  return tabId === PROJECT_CANVAS_TAB;
+}
+
 export type LiveArtifactViewerTab =
   | 'preview'
   | 'code'

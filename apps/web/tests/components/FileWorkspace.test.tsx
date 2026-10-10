@@ -36,6 +36,7 @@ import {
   fetchProjectFolders,
 } from '../../src/providers/registry';
 import type { ChatMessage, OpenTabsState, ProjectFile, ProjectFolder } from '../../src/types';
+import { PROJECT_CANVAS_TAB } from '../../src/types';
 import {
   CollabProvider,
   type CollabContextValue,
@@ -4741,5 +4742,284 @@ describe('FileWorkspace empty-project generation contract', () => {
     );
 
     expect(screen.queryByTestId('preview-run-status')).toBeNull();
+  });
+});
+
+
+describe('FileWorkspace project canvas assembly', () => {
+  // #8230 自由画布 v1 —— FileWorkspace 画布装配用例：New Canvas 入口、chip 门控、
+  // 画布编辑经唯一 commit 路径落库往返。底层/组件/命令栈由各自的专属测试守住，
+  // 这里只验证「画布是怎么接进工作区外壳的」。
+  it('offers New Canvas in the launcher and focuses the canvas surface', async () => {
+    const onTabsStateChange = vi.fn();
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('workspace-add-tab'));
+
+    const launcherMenu = within(screen.getByTestId('tab-launcher-menu'));
+    const newCanvas = launcherMenu.getByRole('button', { name: /New Canvas/i });
+    expect(newCanvas).toBeTruthy();
+
+    // New Canvas 属于 Create new 区：滚动体里能查到，且排在 Create new 表头之后。
+    const scrollBody = screen.getByTestId('tab-launcher-scroll-body');
+    expect(scrollBody.contains(newCanvas)).toBe(true);
+    const createHeader = screen.getByText('Create new');
+    expect(
+      createHeader.compareDocumentPosition(newCanvas) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    fireEvent.click(newCanvas);
+
+    await waitFor(() => {
+      expect(onTabsStateChange).toHaveBeenCalledWith(
+        expect.objectContaining({ tabs: [], active: PROJECT_CANVAS_TAB }),
+      );
+    });
+  });
+
+  it('keeps the canvas chip out of the tab strip for an empty project', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByTestId('project-canvas-tab')).toBeNull();
+    expect(renderedTabLabels()).toEqual(['Design Files']);
+  });
+
+  it('reveals the canvas chip once the layout carries nodes', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{
+          tabs: [],
+          active: null,
+          canvas: {
+            nodes: [{ id: 'node-1', ref: 'a.html', x: 0, y: 0, w: 480, h: 360, z: 1 }],
+          },
+        }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    const chip = screen.getByTestId('project-canvas-tab');
+    expect(chip).toBeTruthy();
+    // Design Files stays active; the canvas chip is present but not selected.
+    expect(chip.getAttribute('aria-selected')).toBe('false');
+    expect(screen.getByTestId('design-files-tab').getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('appends generated artifacts to an existing canvas while keeping the preview focused', async () => {
+    const onTabsStateChange = vi.fn();
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('existing.html'), workspaceFile('todo.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{
+          tabs: ['existing.html'],
+          active: 'existing.html',
+          canvas: {
+            nodes: [
+              { id: 'node-1', ref: 'existing.html', x: 0, y: 0, w: 480, h: 360, z: 1 },
+            ],
+          },
+        }}
+        openRequest={{ name: 'todo.html', nonce: 1, syncToCanvas: ['todo.html'] }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(onTabsStateChange).toHaveBeenCalledWith({
+        tabs: ['existing.html', 'todo.html'],
+        active: 'todo.html',
+        canvas: {
+          nodes: [
+            { id: 'node-1', ref: 'existing.html', x: 0, y: 0, w: 480, h: 360, z: 1 },
+            { id: 'node-2', ref: 'todo.html', x: 32, y: 32, w: 480, h: 360, z: 2 },
+          ],
+        },
+      });
+    });
+  });
+
+  it('does not duplicate a generated artifact that is already on the canvas', async () => {
+    const onTabsStateChange = vi.fn();
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('todo.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{
+          tabs: [],
+          active: PROJECT_CANVAS_TAB,
+          canvas: {
+            nodes: [
+              { id: 'node-7', ref: 'todo.html', x: 10, y: 20, w: 520, h: 380, z: 4 },
+            ],
+          },
+        }}
+        openRequest={{ name: 'todo.html', nonce: 1, syncToCanvas: ['todo.html'] }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(onTabsStateChange).toHaveBeenCalledWith({
+        tabs: ['todo.html'],
+        active: 'todo.html',
+        canvas: {
+          nodes: [
+            { id: 'node-7', ref: 'todo.html', x: 10, y: 20, w: 520, h: 380, z: 4 },
+          ],
+        },
+      });
+    });
+  });
+
+  it('creates the first canvas node after a run that started from an empty canvas', async () => {
+    const onTabsStateChange = vi.fn();
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('todo.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['todo.html'], active: 'todo.html' }}
+        openRequest={{
+          name: 'todo.html',
+          nonce: 1,
+          syncToCanvas: ['todo.html'],
+          createCanvasForSync: true,
+        }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(onTabsStateChange).toHaveBeenCalledWith({
+        tabs: ['todo.html'],
+        active: 'todo.html',
+        canvas: {
+          nodes: [
+            { id: 'node-1', ref: 'todo.html', x: 0, y: 0, w: 480, h: 360, z: 1 },
+          ],
+        },
+      });
+    });
+  });
+
+  it('does not create a canvas for generated artifacts in a project that never opened one', async () => {
+    const onTabsStateChange = vi.fn();
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('todo.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: DESIGN_FILES_TAB }}
+        openRequest={{ name: 'todo.html', nonce: 1, syncToCanvas: ['todo.html'] }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(onTabsStateChange).toHaveBeenCalledWith({
+        tabs: ['todo.html'],
+        active: 'todo.html',
+      });
+    });
+  });
+
+  it('mounts the canvas surface and selects the chip when the canvas tab is active', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: PROJECT_CANVAS_TAB }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId('project-canvas-tab').getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByTestId('project-canvas')).toBeTruthy();
+    // Empty layout shows the freeform hint rather than any nodes.
+    expect(screen.getByTestId('project-canvas-empty')).toBeTruthy();
+  });
+
+  it('routes a canvas edit back through the single tabs-state commit path', () => {
+    const onTabsStateChange = vi.fn();
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{
+          tabs: ['cover.html'],
+          active: PROJECT_CANVAS_TAB,
+          canvas: {
+            nodes: [
+              { id: 'node-1', ref: 'a.html', x: 0, y: 0, w: 480, h: 360, z: 1 },
+              { id: 'node-2', ref: 'b.html', x: 40, y: 40, w: 480, h: 360, z: 2 },
+            ],
+          },
+        }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    const firstNode = screen.getAllByTestId('rf-node')[0]!;
+    // Focus surfaces the node toolbar; the ref has no backing file so the node
+    // stays a snapshot and no live viewer mounts.
+    fireEvent.click(firstNode);
+    const toolbar = within(firstNode).getByTestId('rf-node-toolbar');
+    fireEvent.click(within(toolbar).getByTestId('canvas-node-remove'));
+
+    const lastCall = onTabsStateChange.mock.calls.at(-1)?.[0] as OpenTabsState;
+    expect(lastCall.tabs).toEqual(['cover.html']);
+    expect(lastCall.active).toBe(PROJECT_CANVAS_TAB);
+    expect(lastCall.canvas?.nodes.map((node) => node.ref)).toEqual(['b.html']);
   });
 });
