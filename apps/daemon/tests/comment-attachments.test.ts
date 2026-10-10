@@ -528,6 +528,33 @@ describe('preview comment persistence', () => {
 });
 
 describe('preview comment agent payload', () => {
+  it('F11-18 preserves external comment identity and untrusted provenance in the agent input', () => {
+    const normalized = normalizeCommentAttachments([
+      commentAttachment({
+        id: 'external-comment-f11-18',
+        comment: '',
+        commentContext: 'query',
+        source: 'share-page',
+        authorKind: 'user',
+        authorDisplayName: 'External Reviewer',
+        trust: 'untrusted',
+      }),
+    ]);
+    const hint = renderCommentAttachmentHint(normalized);
+    const input = `${JSON.stringify(normalized)}\n${hint}`;
+    expect({
+      commentIdRetained: input.includes('external-comment-f11-18') && hint.includes('external-comment-f11-18'),
+      authorRetained: input.includes('External Reviewer') && hint.includes('External Reviewer'),
+      shareSourceRetained: /share.page|external comment|外部评论/i.test(input),
+      untrustedMarked: /untrusted|不可信/i.test(hint),
+    }).toEqual({
+      commentIdRetained: true,
+      authorRetained: true,
+      shareSourceRetained: true,
+      untrustedMarked: true,
+    });
+  });
+
   it('accepts empty visible text when comment attachments are present', () => {
     const normalized = normalizeCommentAttachments([
       commentAttachment({
