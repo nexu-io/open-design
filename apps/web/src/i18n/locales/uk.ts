@@ -3325,6 +3325,7 @@ export const uk: Dict = {
   'fileViewer.exportFailedTitle': 'Не вдалося експортувати',
   'fileViewer.exportFailedDescription': 'Цей експорт не було завершено. Спробуйте ще раз.',
   'fileViewer.exportDone': 'Експорт завершено',
+  'fileViewer.exportDegradedFallback': 'Не вдалося отримати файли проєкту — цей ZIP містить лише відрендерену сторінку.',
   'fileViewer.exportImageFailed': 'Не вдалося захопити зображення. Спробуйте ще раз або скористайтеся інструментом знімків екрана вашого браузера.',
   'fileViewer.exportImageModalSubtitle': 'Виберіть формат, а потім завантажте поточний попередній перегляд як зображення.',
   'fileViewer.exportImageFormatLabel': 'Формат',

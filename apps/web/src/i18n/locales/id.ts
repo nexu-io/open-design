@@ -3325,6 +3325,7 @@ export const id: Dict = {
   'fileViewer.exportFailedTitle': 'Ekspor gagal',
   'fileViewer.exportFailedDescription': 'Ekspor ini belum selesai. Silakan coba lagi.',
   'fileViewer.exportDone': 'Ekspor selesai',
+  'fileViewer.exportDegradedFallback': 'Tidak dapat mengakses berkas proyek — ZIP ini hanya berisi halaman yang dirender.',
   'fileViewer.exportImageFailed': 'Gagal menangkap gambar. Silakan coba lagi atau gunakan alat tangkapan layar browser Anda.',
   'fileViewer.exportImageModalSubtitle': 'Pilih format, lalu unduh pratinjau saat ini sebagai gambar.',
   'fileViewer.exportImageFormatLabel': 'Format',

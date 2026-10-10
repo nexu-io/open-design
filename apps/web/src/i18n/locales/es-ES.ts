@@ -3325,6 +3325,7 @@ export const esES: Dict = {
   'fileViewer.exportFailedTitle': 'Error al exportar',
   'fileViewer.exportFailedDescription': 'Esta exportación no se ha completado. Inténtalo de nuevo.',
   'fileViewer.exportDone': 'Exportación completada',
+  'fileViewer.exportDegradedFallback': 'No se pudo acceder a los archivos del proyecto: este ZIP solo contiene la página renderizada.',
   'fileViewer.exportImageFailed': 'Error al capturar la imagen. Inténtalo de nuevo o usa la herramienta de captura de pantalla de tu navegador.',
   'fileViewer.exportImageModalSubtitle': 'Elige un formato y descarga la vista previa actual como imagen.',
   'fileViewer.exportImageFormatLabel': 'Formato',

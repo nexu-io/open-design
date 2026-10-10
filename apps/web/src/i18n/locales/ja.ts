@@ -3325,6 +3325,7 @@ export const ja: Dict = {
   'fileViewer.exportFailedTitle': '書き出しに失敗しました',
   'fileViewer.exportFailedDescription': '今回の書き出しは完了しませんでした。もう一度お試しください。',
   'fileViewer.exportDone': '書き出しが完了しました',
+  'fileViewer.exportDegradedFallback': 'プロジェクトファイルを取得できませんでした。この ZIP にはレンダリング済みのページのみが含まれます。',
   'fileViewer.exportImageFailed': '画像のキャプチャに失敗しました。再試行するか、ブラウザのスクリーンショット機能をご利用ください。',
   'fileViewer.exportImageModalSubtitle': '形式を選択して、現在のプレビューを画像としてダウンロードします。',
   'fileViewer.exportImageFormatLabel': '形式',

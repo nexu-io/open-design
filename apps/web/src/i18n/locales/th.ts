@@ -3325,6 +3325,7 @@ export const th: Dict = {
   'fileViewer.exportFailedTitle': 'ส่งออกไม่สำเร็จ',
   'fileViewer.exportFailedDescription': 'การส่งออกครั้งนี้ยังไม่เสร็จสมบูรณ์ กรุณาลองใหม่อีกครั้ง',
   'fileViewer.exportDone': 'ส่งออกเสร็จสิ้น',
+  'fileViewer.exportDegradedFallback': 'ไม่สามารถเข้าถึงไฟล์โปรเจกต์ ไฟล์ ZIP นี้มีเฉพาะหน้าที่เรนเดอร์แล้วเท่านั้น',
   'fileViewer.exportImageFailed': 'การจับภาพล้มเหลว กรุณาลองอีกครั้งหรือใช้เครื่องมือจับภาพหน้าจอของเบราว์เซอร์',
   'fileViewer.exportImageModalSubtitle': 'เลือกรูปแบบ แล้วดาวน์โหลดตัวอย่างปัจจุบันเป็นรูปภาพ',
   'fileViewer.exportImageFormatLabel': 'รูปแบบ',

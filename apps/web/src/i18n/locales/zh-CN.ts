@@ -3497,6 +3497,7 @@ export const zhCN: Dict = {
   "fileViewer.exportFailedTitle": "导出失败",
   "fileViewer.exportFailedDescription": "本次导出未完成，请重新尝试。",
   "fileViewer.exportDone": "导出完成",
+  "fileViewer.exportDegradedFallback": "无法获取项目文件，此 ZIP 仅包含渲染后的页面。",
   "fileViewer.exportImageFailed":
     "图片捕获失败，请重试或使用浏览器的截图工具。",
   "fileViewer.exportImageModalSubtitle":

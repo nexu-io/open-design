@@ -3339,6 +3339,7 @@ export const en: Dict = {
   'fileViewer.exportFailedTitle': 'Export failed',
   'fileViewer.exportFailedDescription': 'This export did not complete. Please try again.',
   'fileViewer.exportDone': 'Export complete',
+  'fileViewer.exportDegradedFallback': 'Couldn\'t reach the project files — this ZIP contains only the rendered page.',
   'fileViewer.exportImageFailed': 'Image capture failed. Please try again or use your browser\'s screenshot tool.',
   'fileViewer.exportImageModalSubtitle': 'Choose a format, then download the current preview as an image.',
   'fileViewer.exportImageFormatLabel': 'Format',

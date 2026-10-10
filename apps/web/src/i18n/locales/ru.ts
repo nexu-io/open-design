@@ -3325,6 +3325,7 @@ export const ru: Dict = {
   'fileViewer.exportFailedTitle': 'Не удалось экспортировать',
   'fileViewer.exportFailedDescription': 'Этот экспорт не был завершён. Попробуйте ещё раз.',
   'fileViewer.exportDone': 'Экспорт завершён',
+  'fileViewer.exportDegradedFallback': 'Не удалось получить файлы проекта — этот ZIP содержит только отрисованную страницу.',
   'fileViewer.exportImageFailed': 'Не удалось сделать снимок. Попробуйте ещё раз или воспользуйтесь инструментом скриншотов вашего браузера.',
   'fileViewer.exportImageModalSubtitle': 'Выберите формат, затем скачайте текущий предпросмотр как изображение.',
   'fileViewer.exportImageFormatLabel': 'Формат',

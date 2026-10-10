@@ -3325,6 +3325,7 @@ export const ar: Dict = {
   'fileViewer.exportFailedTitle': 'فشل التصدير',
   'fileViewer.exportFailedDescription': 'لم يكتمل هذا التصدير. يرجى المحاولة مرة أخرى.',
   'fileViewer.exportDone': 'اكتمل التصدير',
+  'fileViewer.exportDegradedFallback': 'تعذّر الوصول إلى ملفات المشروع — يحتوي ملف ZIP هذا على الصفحة المعروضة فقط.',
   'fileViewer.exportImageFailed': 'فشل التقاط الصورة. يرجى المحاولة مرة أخرى أو استخدام أداة لقطة الشاشة في المتصفح.',
   'fileViewer.exportImageModalSubtitle': 'اختر تنسيقًا، ثم نزّل المعاينة الحالية كصورة.',
   'fileViewer.exportImageFormatLabel': 'التنسيق',

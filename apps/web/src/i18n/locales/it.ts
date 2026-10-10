@@ -3325,6 +3325,7 @@ export const it: Dict = {
   'fileViewer.exportFailedTitle': 'Esportazione non riuscita',
   'fileViewer.exportFailedDescription': 'Questa esportazione non è stata completata. Riprova.',
   'fileViewer.exportDone': 'Esportazione completata',
+  'fileViewer.exportDegradedFallback': 'Impossibile raggiungere i file del progetto: questo ZIP contiene solo la pagina renderizzata.',
   'fileViewer.exportImageFailed': 'Acquisizione immagine non riuscita. Riprova o usa lo strumento screenshot del browser.',
   'fileViewer.exportImageModalSubtitle': 'Scegli un formato, poi scarica l\'anteprima corrente come immagine.',
   'fileViewer.exportImageFormatLabel': 'Formato',

@@ -3325,6 +3325,7 @@ export const tr: Dict = {
   'fileViewer.exportFailedTitle': 'Dışa aktarma başarısız',
   'fileViewer.exportFailedDescription': 'Bu dışa aktarma tamamlanmadı. Lütfen tekrar deneyin.',
   'fileViewer.exportDone': 'Dışa aktarma tamamlandı',
+  'fileViewer.exportDegradedFallback': 'Proje dosyalarına erişilemedi — bu ZIP yalnızca işlenmiş sayfayı içeriyor.',
   'fileViewer.exportImageFailed': 'Görsel yakalama başarısız oldu. Lütfen tekrar deneyin veya tarayıcınızın ekran görüntüsü aracını kullanın.',
   'fileViewer.exportImageModalSubtitle': 'Bir biçim seçin, ardından geçerli önizlemeyi resim olarak indirin.',
   'fileViewer.exportImageFormatLabel': 'Biçim',
