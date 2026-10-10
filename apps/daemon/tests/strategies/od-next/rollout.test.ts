@@ -94,13 +94,12 @@ describe('OD Next controlled rollout', () => {
         )).toMatchObject({ requestedMode: 'active', requestedModeSource: 'default' });
       }
 
-      // A value that is not a mode never arrives here in production: the read
-      // path in `app-config.ts` resolves an unreadable config to `off` before
-      // this function sees it, because unconfigured now means `active` and
-      // "we could not read your choice" must not become "you chose OD Next".
-      // The end-to-end guarantee is asserted across that join in
-      // `tests/app-config.test.ts`; this function stays a pure reader of what
-      // it is handed.
+      // A value that is not a mode reads the same way, and it is the same
+      // answer the read path gives: `app-config.ts` drops what it cannot read
+      // rather than resolving it to a mode, so an unreadable field arrives here
+      // absent. Asserting it on both sides of that join is deliberate — the two
+      // halves agreeing is what makes an illegible field mean "nobody chose"
+      // end to end rather than "chose to stay off" in one of them.
       for (const saved of ['acive', '', 'true', 1, {}] as unknown[]) {
         expect(readOdNextRolloutPolicy(
           {},
