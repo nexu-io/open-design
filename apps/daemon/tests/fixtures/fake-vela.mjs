@@ -71,6 +71,15 @@
  *                                   alive, modelling a CLI (or a wrapper shim)
  *                                   that is slow to die or never honours the
  *                                   signal at all
+ *   FAKE_VELA_EXIT_CODE_ON_SIGTERM – exit with this code on SIGTERM. `1`
+ *                                   reproduces how a Windows child looks after
+ *                                   the host kills it by pid: code 1, no signal
+ *   FAKE_VELA_EXIT_DELAY_AFTER_EOF_MS – keep running this long after stdin EOF
+ *                                   before exiting, modelling vela's own
+ *                                   post-turn shutdown work
+ *   FAKE_VELA_EXIT_CODE_AFTER_EOF – exit with this code (default 0) once stdin
+ *                                   EOF handling finishes, modelling vela
+ *                                   failing on its own after a clean turn
  *   FAKE_VELA_DESCENDANT_ACTIVITY_FILE – when set, spawn a SIGTERM-ignoring
  *                                   descendant that appends activity ticks to
  *                                   this file while the ACP prompt is stalled
@@ -119,6 +128,11 @@ const TEXT_BEFORE_STALL = env.FAKE_VELA_TEXT_BEFORE_STALL === '1';
 const OPEN_TOOL_BEFORE_STALL = env.FAKE_VELA_OPEN_TOOL_BEFORE_STALL === '1';
 const STDERR_ON_SIGTERM = env.FAKE_VELA_STDERR_ON_SIGTERM === '1';
 const IGNORE_SIGTERM = env.FAKE_VELA_IGNORE_SIGTERM === '1';
+const EXIT_CODE_ON_SIGTERM = env.FAKE_VELA_EXIT_CODE_ON_SIGTERM === undefined
+  ? null
+  : Number(env.FAKE_VELA_EXIT_CODE_ON_SIGTERM);
+const EXIT_DELAY_AFTER_EOF_MS = Number(env.FAKE_VELA_EXIT_DELAY_AFTER_EOF_MS) || 0;
+const EXIT_CODE_AFTER_EOF = Number(env.FAKE_VELA_EXIT_CODE_AFTER_EOF) || 0;
 const DESCENDANT_ACTIVITY_FILE = env.FAKE_VELA_DESCENDANT_ACTIVITY_FILE || '';
 const DESCENDANT_PID_FILE = env.FAKE_VELA_DESCENDANT_PID_FILE || '';
 const PROMPT_RESULT_DELAY_MS = Number(env.FAKE_VELA_PROMPT_RESULT_DELAY_MS) || 0;
@@ -235,6 +249,9 @@ if (STDERR_ON_SIGTERM || IGNORE_SIGTERM) {
     }
     if (!IGNORE_SIGTERM) exit(143);
   });
+}
+if (EXIT_CODE_ON_SIGTERM !== null) {
+  process.on('SIGTERM', () => exit(EXIT_CODE_ON_SIGTERM));
 }
 
 // Append one line per session-bind method (`new` / `load`) to the file named by
@@ -480,7 +497,8 @@ stdin.on('end', () => {
   stdout.end();
   // Mirror real ACP runtimes that exit on EOF so the host's child.on('close')
   // fires promptly and the chat run can finalize.
-  process.exit(0);
+  if (EXIT_DELAY_AFTER_EOF_MS > 0) setTimeout(() => process.exit(EXIT_CODE_AFTER_EOF), EXIT_DELAY_AFTER_EOF_MS);
+  else process.exit(EXIT_CODE_AFTER_EOF);
 });
 
 // `vela login`: the daemon's /api/integrations/vela/login route spawns this

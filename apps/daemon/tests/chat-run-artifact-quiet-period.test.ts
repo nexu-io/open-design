@@ -285,6 +285,41 @@ describe('classifyChatRunCloseStatus (#1451 close-handler classification)', () =
     ).toBe('succeeded');
   });
 
+  it('returns succeeded when the daemon force-closed a completed ACP attempt (Windows code 1)', () => {
+    expect(
+      classifyChatRunCloseStatus({
+        ...base,
+        code: 1,
+        signal: null,
+        acpCleanCompletion: true,
+        acpCompletionShutdownRequested: true,
+      }),
+    ).toBe('succeeded');
+  });
+
+  it('returns failed on code 1 after clean ACP completion when the daemon did not close it', () => {
+    expect(
+      classifyChatRunCloseStatus({
+        ...base,
+        code: 1,
+        signal: null,
+        acpCleanCompletion: true,
+      }),
+    ).toBe('failed');
+  });
+
+  it('returns failed when shutdown was requested but the ACP prompt never completed cleanly', () => {
+    expect(
+      classifyChatRunCloseStatus({
+        ...base,
+        code: 1,
+        signal: null,
+        acpCleanCompletion: false,
+        acpCompletionShutdownRequested: true,
+      }),
+    ).toBe('failed');
+  });
+
   it('returns failed on Vela ACP code 130 before clean ACP completion', () => {
     expect(
       classifyChatRunCloseStatus({

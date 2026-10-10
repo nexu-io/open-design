@@ -13953,9 +13953,10 @@ export async function startServer({
     };
     let forcedChildShutdownTimers = [];
     let acpAttemptTermination = null;
+    let acpCompletionShutdownRequested = false;
     const beginAcpAttemptTermination = (
       reason = 'acp_terminal',
-      { gracefulWaitMs = 0 } = {},
+      { gracefulWaitMs = 0, onChildSignal = undefined as (() => void) | undefined } = {},
     ) => {
       if (acpAttemptTermination) return acpAttemptTermination;
       acpAttemptTermination = design.runs.terminateProcessTree(
@@ -13967,6 +13968,7 @@ export async function startServer({
           termGraceMs: inactivityKillGraceMs,
           killGraceMs: inactivityKillGraceMs,
           reason,
+          onChildSignal,
         },
       );
       return acpAttemptTermination;
@@ -15745,7 +15747,15 @@ export async function startServer({
         onPromptComplete: () => clearFirstOutputWatchdog(),
         onTerminal: (kind) => beginAcpAttemptTermination(
           `acp_${kind}`,
-          { gracefulWaitMs: kind === 'completed' ? 500 : 0 },
+          kind === 'completed'
+            ? {
+              gracefulWaitMs: 500,
+              // Only an exit the daemon causes speaks for the completed
+              // turn; vela exiting non-zero on its own during the grace
+              // wait is still its own failure.
+              onChildSignal: () => { acpCompletionShutdownRequested = true; },
+            }
+            : { gracefulWaitMs: 0 },
         ),
         send: (event, data, meta) => {
           if (event === 'error') {
@@ -16479,12 +16489,12 @@ export async function startServer({
       // signal exit). `completedSuccessfully()` reports whether the ACP
       // session resolved without a fatal error or abort.
       //
-      // Scope the override narrowly to the exact forced-shutdown shape this
-      // PR introduces: code is null AND signal is SIGTERM AND the ACP
-      // session reported clean completion. Any other post-response failure
-      // (non-zero exit code, SIGKILL, SIGSEGV, etc.) still propagates as
-      // `failed`, preserving the existing close-status behavior for genuine
-      // post-response process problems.
+      // The override covers SIGTERM (or vela's code 130) after clean
+      // completion, and any exit after the daemon itself signalled the
+      // completed attempt (`acpCompletionShutdownRequested`; Windows reports
+      // that kill as code 1 with no signal). Other post-response failures,
+      // including a non-zero exit during the grace wait, still propagate as
+      // `failed`.
       const acpCleanCompletion =
         typeof acpSession?.completedSuccessfully === 'function' &&
         acpSession.completedSuccessfully();
@@ -16494,6 +16504,7 @@ export async function startServer({
         code,
         signal,
         acpCleanCompletion,
+        acpCompletionShutdownRequested,
         artifactQuietShutdownRequested,
         turnCompletedCleanly: !!run.turnCompletedCleanly,
         artifactProducedThisRun:
