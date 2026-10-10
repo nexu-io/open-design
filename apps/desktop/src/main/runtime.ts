@@ -782,6 +782,8 @@ export async function mintHomeWorkingDirToken(
   return { baseDir, ok: true, token: mint(deps.desktopAuthSecret, baseDir) };
 }
 
+const MAC_TRAFFIC_LIGHT_POSITION = { x: 12, y: 16 };
+
 const MAC_WINDOW_CHROME =
   process.platform === "darwin"
     ? ({
@@ -799,7 +801,7 @@ const MAC_WINDOW_CHROME =
         // carried a stale override before, and the offset must follow what
         // actually renders. apps/web/tests/styles/top-chrome-height.test.ts
         // pins the 44 on the web side; window-chrome.test.ts pins this 16.
-        trafficLightPosition: { x: 12, y: 16 },
+        trafficLightPosition: MAC_TRAFFIC_LIGHT_POSITION,
         // Frosted-glass window: the desktop wallpaper blurs through the whole
         // window (NSVisualEffectView). The web shell keeps html/body
         // transparent in desktop mode (see apps/web app-wash.css) so the
@@ -810,6 +812,21 @@ const MAC_WINDOW_CHROME =
         backgroundColor: "#00000000",
       })
     : {};
+
+// The splash wears the same inset traffic lights as the main window, at the
+// same position, so the reveal swap keeps the lights still instead of making
+// them pop in. Fullscreen is off: the splash is not resizable, and a splash
+// that entered its own fullscreen Space would hand off to a windowed main
+// window. Other platforms stay frameless; the splash page carries its own
+// drag strip (`.splash-drag`) either way.
+const SPLASH_WINDOW_CHROME =
+  process.platform === "darwin"
+    ? ({
+        fullscreenable: false,
+        titleBarStyle: "hiddenInset" as const,
+        trafficLightPosition: MAC_TRAFFIC_LIGHT_POSITION,
+      })
+    : ({ frame: false } as const);
 
 const MAC_WINDOW_CHROME_CSS = `
   .app-chrome-header {
@@ -962,6 +979,17 @@ function createPendingHtml(): string {
         display: flex;
         justify-content: center;
       }
+      /* Window drag strip, the height of the main window's 44px top chrome, so
+         the splash can be moved during a slow cold boot. */
+      .splash-drag {
+        height: 44px;
+        left: 0;
+        position: fixed;
+        right: 0;
+        top: 0;
+        z-index: 10;
+        -webkit-app-region: drag;
+      }
 ${SPLASH_PIXEL_SCAN_STYLE}
       .boot-stage {
         bottom: 56px;
@@ -1015,6 +1043,7 @@ ${SPLASH_PIXEL_SCAN_STYLE}
     </style>
   </head>
   <body>
+    <div class="splash-drag" aria-hidden="true"></div>
 ${SPLASH_PIXEL_SCAN_MARKUP}
     <div class="boot-progress" aria-hidden="true">
       <div class="boot-progress-fill" id="boot-progress-fill" data-pct="${initialPct}" style="width: ${initialPct}%;"></div>
@@ -1523,7 +1552,7 @@ export function createSplashWindow(): SplashWindowHandle {
   const splash = new BrowserWindow({
     autoHideMenuBar: true,
     backgroundColor: "#f2f4f5",
-    frame: false,
+    ...SPLASH_WINDOW_CHROME,
     height: 900,
     resizable: false,
     show: true,
@@ -1783,6 +1812,32 @@ export type WindowFullscreenSurface = {
 export type MainWindowCloseSurface = {
   on: (event: 'closed', listener: () => void) => unknown;
 };
+
+export type SplashCloseSurface = {
+  once: (event: "closed", listener: () => void) => unknown;
+};
+
+/**
+ * Closing the splash before the main window is revealed is the user cancelling
+ * the launch. The main window still exists (hidden), so `window-all-closed`
+ * never fires on its own; without this the app would keep booting with no
+ * window and then pop the main window up on its own later. The runtime's own
+ * closes (reveal, teardown) happen after `revealed` / `stopped` flip, so they
+ * are not mistaken for a cancel.
+ */
+export function attachSplashCloseShutdown(
+  splash: SplashCloseSurface,
+  options: {
+    isRevealed: () => boolean;
+    isStopped: () => boolean;
+    requestQuit?: () => void;
+  },
+): void {
+  splash.once("closed", () => {
+    if (options.isRevealed() || options.isStopped()) return;
+    options.requestQuit?.();
+  });
+}
 
 export function attachNonDarwinMainWindowCloseShutdown(
   window: MainWindowCloseSurface,
@@ -2799,10 +2854,17 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   let pendingUpdateDialogRequest: OpenDesignHostUpdaterOpenDialogRequest | null = null;
   let revealed = false;
   let revealing = false;
+  attachSplashCloseShutdown(splash, {
+    isRevealed: () => revealed,
+    isStopped: () => stopped,
+    requestQuit: options.requestQuit,
+  });
 
   const revealMainWindow = (): void => {
     if (revealed || window.isDestroyed()) return;
     revealed = true;
+    // The splash can be dragged; open the app where the user left it.
+    if (splash != null && !splash.isDestroyed()) window.setBounds(splash.getBounds());
     showWindowButtons(window);
     window.show();
     window.focus();
