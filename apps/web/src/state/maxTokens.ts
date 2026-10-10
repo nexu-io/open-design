@@ -84,12 +84,22 @@ export function modelMaxTokensDefault(model: string): number {
   return OVERRIDES[model] ?? LITELLM_MODELS[model] ?? FALLBACK_MAX_TOKENS;
 }
 
-function isValidOverride(value: number | undefined): value is number {
+// The upper bound the Settings control accepts for a given model. A few
+// shipped defaults (deepseek-v4-pro/flash, qwen3-coder:480b) sit above the
+// 200000 baseline, so the bound rises to the model's own default —
+// otherwise the placeholder shows a value the field can never re-accept
+// once the user edits it (#8048). The baseline still guards every model
+// whose default fits inside it.
+export function maxTokensUpperBound(model: string): number {
+  return Math.max(MAX_MAX_TOKENS, modelMaxTokensDefault(model));
+}
+
+function isValidOverride(value: number | undefined, model: string): value is number {
   return (
     typeof value === 'number' &&
     Number.isInteger(value) &&
     value >= MIN_MAX_TOKENS &&
-    value <= MAX_MAX_TOKENS
+    value <= maxTokensUpperBound(model)
   );
 }
 
@@ -97,6 +107,6 @@ export function effectiveMaxTokens(cfg: Pick<AppConfig, 'maxTokens' | 'model'>):
   // Out-of-range or non-integer overrides (stale localStorage, hand-edited
   // config, future schema drift) fall back to the model default rather
   // than silently shipping an invalid `max_tokens` upstream.
-  if (isValidOverride(cfg.maxTokens)) return cfg.maxTokens;
+  if (isValidOverride(cfg.maxTokens, cfg.model)) return cfg.maxTokens;
   return modelMaxTokensDefault(cfg.model);
 }
