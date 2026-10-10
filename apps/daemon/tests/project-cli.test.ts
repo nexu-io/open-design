@@ -119,7 +119,11 @@ async function startProjectStubServer(deleteResponse: unknown = { ok: true }, sh
       }
       if (['POST', 'GET'].includes(captured.method)
         && captured.url === '/api/projects/project-1/files/nested%2Findex.html/publish-public') {
-        if (shareResponse !== undefined) { res.statusCode = shareStatus; res.end(JSON.stringify(shareResponse)); return; }
+        if (shareResponse !== undefined) {
+          res.statusCode = shareStatus;
+          res.end(typeof shareResponse === 'string' ? shareResponse : JSON.stringify(shareResponse));
+          return;
+        }
         const publication = { url: 'https://example.invalid/returned-link', slug: 'returned-slug', fileName: 'nested/index.html' };
         res.end(JSON.stringify(captured.method === 'GET' ? { publication } : publication));
         return;
@@ -252,6 +256,55 @@ async function runCli(args: string[]): Promise<{ stdout: string; stderr: string;
 }
 
 describe('od project CLI', () => {
+  describe.each([false, true])('share error classification, json=%s', json => {
+    const args = ['project', 'share', 'publish', 'project-1', '--path', 'nested/index.html', ...(json ? ['--json'] : [])];
+
+    it.each(['flat', 'nested'])('preserves numeric size metadata from a real HTTP 413 (%s)', async shape => {
+      const data = { bytes: 51_000_000, limit: 50_000_000 };
+      const body = shape === 'flat'
+        ? { error: 'too_large', ...data, plan: { internal: 'do-not-print' } }
+        : { error: { code: 'too_large', message: 'Share exceeds size limit.', data }, plan: { internal: 'do-not-print' } };
+      stub = await startProjectStubServer(undefined, body, 413);
+      const result = await runCli([...args, '--daemon-url', stub.baseUrl]);
+      expect(result.code).toBe(1);
+      expect(result.stdout).toBe('');
+      expect(JSON.parse(result.stderr).error).toMatchObject({ code: 'too_large', data });
+      expect(result.stderr).not.toContain('do-not-print');
+      expect(stub.requests).toHaveLength(1);
+    });
+
+    it.each([
+      { error: 'Internal human explanation', plan: { internal: 'do-not-print' } },
+      { error: 'Internal human explanation', message: 'Not a machine code', plan: { internal: 'do-not-print' } },
+      '<html>do-not-print</html>',
+    ])('does not classify an unknown HTTP 500 as a connection failure (%j)', async body => {
+      stub = await startProjectStubServer(undefined, body, 500);
+      const result = await runCli([...args, '--daemon-url', stub.baseUrl]);
+      expect(result.code).toBe(1);
+      expect(result.stdout).toBe('');
+      expect(JSON.parse(result.stderr)).toEqual({ error: { code: 'http-error', message: 'HTTP 500', data: {} } });
+    });
+
+    it('keeps actual connection failures classified as daemon-not-running', async () => {
+      const closed = await startProjectStubServer();
+      await closed.close();
+      const result = await runCli([...args, '--daemon-url', closed.baseUrl]);
+      expect(result.code).toBe(1);
+      expect(result.stdout).toBe('');
+      expect(JSON.parse(result.stderr).error.code).toBe('daemon-not-running');
+    });
+
+    it('preserves the existing oversized preflight success exit without blockers', async () => {
+      const plan = { fileCount: 1, totalBytes: 51_000_000, exceedsSizeLimit: true, exclusions: [] };
+      stub = await startProjectStubServer(undefined, undefined, 200, plan);
+      const result = await runCli(['project', 'share', 'preflight', 'project-1', '--path', 'nested/index.html', '--daemon-url', stub.baseUrl, ...(json ? ['--json'] : [])]);
+      expect(result.code).toBe(0);
+      expect(result.stderr).toBe('');
+      if (json) expect(JSON.parse(result.stdout)).toEqual(plan);
+      else expect(result.stdout).toContain('Share plan: 1 files, 51000000 bytes.');
+      expect(stub.requests).toHaveLength(1);
+    });
+  });
   it.each([false, true])('resume reports missing workspace rather than an unavailable daemon; nested=%s', async nested => {
     const code = 'WORKSPACE_CONTEXT_REQUIRED';
     const message = 'an explicit workspace context is required';

@@ -7235,6 +7235,36 @@ Common options:
   --json               Emit the raw daemon JSON response.`);
 }
 
+/** HTTP refusals are not transport failures; only recognized DTO fields reach stderr. */
+async function projectShareHttpFailure(resp) {
+  const body = await resp.json().catch(() => null);
+  // Legacy publish returns this exact flat code without a message or data envelope.
+  if (resp.status === 413 && body?.error === 'too_large') {
+    const data = {};
+    for (const key of ['bytes', 'limit']) {
+      if (typeof body[key] === 'number' && Number.isFinite(body[key])) data[key] = body[key];
+    }
+    return exitWithStructuredError({ code: 'too_large', message: 'Share exceeds size limit.', data });
+  }
+  const nested = typeof body?.error === 'object' && body.error !== null;
+  const error = nested
+    ? body.error
+    : typeof body?.error === 'string' && typeof body.message === 'string'
+      ? { ...body, code: body.error }
+      : null;
+  // Flat human explanations must not become machine codes. Existing share DTO
+  // codes use uppercase identifiers, except for the size-limit refusal.
+  const code = error?.code;
+  if (typeof code === 'string' && code && (nested || code === 'too_large' || /^[A-Z][A-Z0-9_]*$/.test(code))) {
+    return exitWithStructuredError({
+      code: normalizeRecoverableErrorCode(code, error.message),
+      message: typeof error.message === 'string' ? error.message : `HTTP ${resp.status}`,
+      data: structuredErrorData(error),
+    });
+  }
+  return exitWithStructuredError({ code: 'http-error', message: `HTTP ${resp.status}` });
+}
+
 async function runProjectShare(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     printProjectShareHelp();
@@ -7296,7 +7326,7 @@ async function runProjectShare(args) {
         return exitWithStructuredError({ code: body.error.code, message: body.error.message, data });
       }
     }
-    return structuredHttpFailure(resp);
+    return projectShareHttpFailure(resp);
   }
   const data = await resp.json();
   // A preflight with blockers means publish would be refused: exit non-zero
