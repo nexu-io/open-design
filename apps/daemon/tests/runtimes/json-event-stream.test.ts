@@ -908,7 +908,13 @@ test('cursor stream emits partial text once and usage events', () => {
   const { events, handler } = collectEvents('cursor-agent');
 
   handler.feed(
-    JSON.stringify({ type: 'system', subtype: 'init', model: 'GPT-5 Mini' }) + '\n' +
+    JSON.stringify({
+      type: 'system',
+      subtype: 'init',
+      model: 'GPT-5 Mini',
+      session_id: 'cursor-chat-1',
+    }) +
+    '\n' +
     JSON.stringify({
       type: 'assistant',
       timestamp_ms: 1,
@@ -935,7 +941,12 @@ test('cursor stream emits partial text once and usage events', () => {
   );
 
   assert.deepEqual(events, [
-    { type: 'status', label: 'initializing', model: 'GPT-5 Mini' },
+    {
+      type: 'status',
+      label: 'initializing',
+      model: 'GPT-5 Mini',
+      sessionId: 'cursor-chat-1',
+    },
     { type: 'text_delta', delta: 'OD' },
     { type: 'text_delta', delta: '_OK' },
     {
@@ -943,6 +954,33 @@ test('cursor stream emits partial text once and usage events', () => {
       usage: { input_tokens: 5, output_tokens: 2, cached_read_tokens: 1, cached_write_tokens: 0 },
       durationMs: 120,
     },
+  ]);
+});
+
+test('cursor stream surfaces a late session id as a status sessionId', () => {
+  const { events, handler } = collectEvents('cursor-agent');
+
+  handler.feed(
+    JSON.stringify({
+      type: 'assistant',
+      session_id: 'cursor-chat-late',
+      timestamp_ms: 1,
+      message: { role: 'assistant', content: [{ type: 'text', text: 'hello' }] },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'assistant',
+      session_id: 'cursor-chat-late',
+      timestamp_ms: 2,
+      message: { role: 'assistant', content: [{ type: 'text', text: ' again' }] },
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    { type: 'status', label: 'running', sessionId: 'cursor-chat-late' },
+    { type: 'text_delta', delta: 'hello' },
+    { type: 'text_delta', delta: ' again' },
   ]);
 });
 
