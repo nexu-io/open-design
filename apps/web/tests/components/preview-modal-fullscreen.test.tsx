@@ -35,6 +35,28 @@ describe('PreviewModal fullscreen exit', () => {
     setNativeFullscreenElement(null);
   });
 
+  it('uses the shared fill-based icon for both fullscreen states', () => {
+    const { container } = render(
+      <PreviewModal {...baseProps} onClose={() => {}} />,
+    );
+    const fsButton = container.querySelector(
+      'button[title="Fullscreen"]',
+    ) as HTMLButtonElement;
+    const enterIcon = fsButton.querySelector('svg.od-icon');
+    const enterPath = enterIcon?.querySelector('path')?.getAttribute('d');
+
+    expect(enterIcon?.getAttribute('fill')).toBe('currentColor');
+    expect(enterPath).toBeTruthy();
+
+    fireEvent.click(fsButton);
+
+    const exitIcon = fsButton.querySelector('svg.od-icon');
+    const exitPath = exitIcon?.querySelector('path')?.getAttribute('d');
+    expect(exitIcon?.getAttribute('fill')).toBe('currentColor');
+    expect(exitPath).toBeTruthy();
+    expect(exitPath).not.toBe(enterPath);
+  });
+
   it('drops the fullscreen overlay when the browser exits native fullscreen', () => {
     const onClose = vi.fn();
     const { container } = render(

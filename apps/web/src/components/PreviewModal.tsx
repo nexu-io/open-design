@@ -948,23 +948,7 @@ export function PreviewModal({
                 title={fullscreen ? t('common.exitFullscreen') : t('common.fullscreen')}
                 aria-label={fullscreen ? t('common.exitFullscreen') : t('common.fullscreen')}
               >
-                <svg
-                  width="15"
-                  height="15"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  {fullscreen ? (
-                    <path d="M9 3v6H3M3 9l6-6M15 21v-6h6M21 15l-6 6" />
-                  ) : (
-                    <path d="M3 9V3h6M3 3l6 6M21 15v6h-6M21 21l-6-6" />
-                  )}
-                </svg>
+                <Icon name={fullscreen ? 'minimize' : 'maximize'} size={15} />
               </button>
             ) : null}
             {isCustomView ? (
