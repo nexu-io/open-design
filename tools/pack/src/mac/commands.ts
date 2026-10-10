@@ -3,6 +3,7 @@ import { spawn, type SpawnOptionsWithoutStdio } from "node:child_process";
 import { createPackageManagerInvocation } from "@open-design/platform";
 
 import type { ToolPackConfig } from "../config/index.js";
+import { productionInstallEnv } from "../production-install.js";
 
 type LoggedCommandOptions = Pick<SpawnOptionsWithoutStdio, "cwd" | "env" | "windowsVerbatimArguments">;
 
@@ -68,7 +69,7 @@ export async function runPnpm(
 export async function runNpmInstall(appRoot: string): Promise<void> {
   await execFileAsync("npm", ["install", "--omit=dev", "--no-package-lock"], {
     cwd: appRoot,
-    env: process.env,
+    env: productionInstallEnv(process.env),
   });
 }
 
