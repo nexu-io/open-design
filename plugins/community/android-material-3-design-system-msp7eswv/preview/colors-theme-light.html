@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Material 3 light surface hierarchy</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%236750a4'/%3E%3Ctext x='32' y='41' text-anchor='middle' font-family='sans-serif' font-size='25' fill='white'%3EM3%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="preview.css">
+  <style>
+    .stack { display: grid; gap: 16px; padding: 24px; border-radius: 28px; background: var(--md-sys-color-surface); border: 1px solid var(--md-sys-color-outline-variant); }
+    .surface { min-height: 92px; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 20px; padding: 20px; border-radius: 16px; }
+    .low { background: var(--md-sys-color-surface-container-low); }
+    .base { background: var(--md-sys-color-surface-container); }
+    .high { background: var(--md-sys-color-surface-container-high); }
+    .chip { border-radius: 999px; padding: 8px 12px; color: var(--md-sys-color-on-secondary-container); background: var(--md-sys-color-secondary-container); font: var(--md-sys-type-label-large); }
+    .surface h2 { margin: 0 0 4px; font: var(--md-sys-type-title-medium); }
+    .surface p { margin: 0; color: var(--md-sys-color-on-surface-variant); font: var(--md-sys-type-body-medium); }
+  </style>
+</head>
+<body>
+  <main class="preview-shell">
+    <p class="eyebrow">Color / light theme</p>
+    <h1>Hierarchy starts with tonal surfaces</h1>
+    <p class="lede">Use low, default, and high surface containers to communicate nesting. Reserve elevation shadows for genuinely floating elements rather than every card.</p>
+    <section class="stack" aria-label="Light theme surface hierarchy">
+      <article class="surface low"><div><h2>Low container</h2><p>Page regions and broad grouping.</p></div><span class="chip">Level 0</span></article>
+      <article class="surface base"><div><h2>Default container</h2><p>Cards, navigation, and grouped content.</p></div><span class="chip">Tonal</span></article>
+      <article class="surface high"><div><h2>High container</h2><p>Focused content, menus, and stronger separation.</p></div><span class="chip">Emphasis</span></article>
+    </section>
+  </main>
+</body>
+</html>
