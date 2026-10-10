@@ -4,7 +4,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { BrowserWindow, Menu, app, dialog, globalShortcut, shell, type MenuItemConstructorOptions } from "electron";
+import { BrowserWindow, Menu, app, dialog, globalShortcut, powerMonitor, shell, type MenuItemConstructorOptions } from "electron";
 
 import {
   APP_KEYS,
@@ -43,10 +43,11 @@ import { createDesktopRuntime, type DesktopRuntime } from "./runtime.js";
 import { dispatchInviteDeeplink, registerInviteDeeplink } from "./invite-deeplink.js";
 import { focusDesktopForDeeplink } from "./deeplink-focus.js";
 import { setUpDesktopCrashReporter, writeDesktopGpuInfo } from "./crash-diagnostics.js";
-import { beginDesktopSession, clearReportedCrash, endDesktopSessionCleanly, markDesktopSessionRunning } from "./session-lifecycle.js";
+import { beginDesktopSession, clearReportedCrash, endDesktopSessionCleanly, markDesktopSessionRunning, recordDesktopHostEvent } from "./session-lifecycle.js";
 import {
   attachDesktopChildProcessCrashReporter,
   reportDesktopObservabilityEvent,
+  attachDesktopHostLifecycleRecorder,
   reportPriorDesktopUncleanExits,
 } from "./observability.js";
 import { attachDesktopProcessErrorFilter } from "./uncaught-exception.js";
@@ -775,6 +776,19 @@ export async function runDesktopMain(
     version: app.getVersion(),
     now: () => new Date(),
   });
+  // Sleep, shutdown, session end and an unfinished quit are recorded into this
+  // run's marker, so a later unclean exit can say how the run ended.
+  attachDesktopHostLifecycleRecorder({
+    powerMonitor,
+    window: {
+      // Windows delivers `session-end` per window; cover current and later ones.
+      on(event, listener) {
+        for (const window of BrowserWindow.getAllWindows()) window.on(event as "session-end", listener);
+        app.on("browser-window-created", (_created, window) => window.on(event as "session-end", listener));
+      },
+    },
+    record: (event) => recordDesktopHostEvent({ stateFilePath: sessionStatePath }, event),
+  });
 
   let desktop: DesktopRuntime | null = null;
   let disposeMenu: () => void = () => undefined;
@@ -837,6 +851,7 @@ export async function runDesktopMain(
   // requests while sidecars are still draining.
   function shutdown(): Promise<void> {
     shutdownRequestCount += 1;
+    if (shutdownPromise == null) recordDesktopHostEvent({ stateFilePath: sessionStatePath }, { kind: "quit-requested" });
     shutdownPromise ??= Promise.resolve().then(async () => {
       const startedAt = Date.now();
       let shutdownFailed = false;

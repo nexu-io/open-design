@@ -30,6 +30,10 @@ describe("desktop observability wiring", () => {
       previous_session_id: "acked",
       previous_started_at: "2026-07-09T12:00:00.000Z",
       current_version: "0.14.1",
+      // No host event recorded: the cause is stated as unknown.
+      exit_hint: "unknown",
+      ended_suspended: false,
+      quit_requested: false,
     });
     expect(clearReported).toHaveBeenCalledTimes(1);
     expect(clearReported).toHaveBeenCalledWith({ stateFilePath: "session-state.json" }, "acked");
