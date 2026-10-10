@@ -7898,6 +7898,17 @@ export async function startServer({
             diagnostic_object_key: JSON.parse(receipt).object_key, run_id: evidence.runId,
             fault_kind: evidence.kind } }).catch(() => {});
       },
+      // Explains a bundle that never arrived: permanently rejected, expired,
+      // evicted for space, or still failing after several attempts.
+      // A discarded report is retried until this resolves, so its insert id is
+      // stable per incident to keep a re-sent report from counting twice.
+      onUndelivered: (report) => analyticsService.captureSafety({ eventName: 'diagnostic_bundle_undelivered',
+        appVersion: currentAppVersion(),
+        ...(report.outcome === 'discarded' ? { insertId: `diagnostic_bundle_undelivered:${report.incidentId}` } : {}),
+        properties: { diagnostic_incident_id: report.incidentId,
+          run_id: report.runId, fault_kind: report.kind, outcome: report.outcome, reason: report.reason,
+          attempts: report.attempts, bundle_bytes: report.bytes, stage: report.state,
+          age_ms: report.ageMs } }),
     });
     automaticDiagnostics.start();
   } catch { console.warn('[diagnostics] local outbox unavailable'); }
