@@ -2660,6 +2660,13 @@ async function testAgentConnectionInternal(
       ...baseEnv,
       ...(mmdRouteLaunchEnv || {}),
     }, executableResolution);
+    // A smoke probe must not leave a session behind in the user's real state
+    // home — Reasonix would persist `sessions/*.jsonl` that then migrates into
+    // the desktop default workspace as a stray conversation. REASONIX_STATE_HOME
+    // moves state (sessions/archive/memory) only; config.toml and the `.env`
+    // provider credentials stay under REASONIX_HOME, so auth is unaffected.
+    // tempDir is removed in the finally block, so probe sessions vanish with it.
+    if (def.id === 'reasonix') env.REASONIX_STATE_HOME = tempDir;
     model = await resolveConnectionTestModelForAgent(
       def,
       model,
