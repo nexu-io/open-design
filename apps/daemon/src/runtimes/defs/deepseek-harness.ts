@@ -99,6 +99,7 @@ export const deepseekHarnessAgentDef = {
   promptViaStdin: true,
   streamFormat: 'dsh-profile-jsonl',
   resumesSessionViaProfileStdio: true,
+  nativeSessionCompatibility: 'profile-ready',
   capturesSessionIdFromStream: true,
   supportsCustomModel: false,
 } satisfies RuntimeAgentDef;

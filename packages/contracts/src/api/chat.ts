@@ -574,6 +574,8 @@ export type NativeSessionRecoveryReason =
   | 'cwd_changed'
   | 'conversation_advanced'
   | 'missing_cursor'
+  | 'compatibility_generation_missing'
+  | 'compatibility_generation_changed'
   | 'resume_failed'
   | 'unsupported'
   | 'none';

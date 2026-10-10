@@ -5,6 +5,7 @@ import type { ChildProcess } from 'node:child_process';
 import { createDshProfileJsonlStream } from './stream.js';
 import type {
   DshProfileExecuteCommand,
+  DshProfileReadyFrame,
   DshProfileResultStatus,
   DshProfileRuntimeFrame,
 } from './types.js';
@@ -17,9 +18,16 @@ export type AttachDshProfileSessionOptions = {
   model?: string | null;
   reasoningEffort?: string | null;
   resumeSessionId?: string | null;
+  selectExecution?: (ready: DshProfileReadyFrame) => {
+    readonly prompt: string;
+    readonly resumeSessionId: string | null;
+  } | {
+    readonly rejection: { readonly code: string; readonly message: string };
+  };
   send: (event: string, payload: unknown) => void;
   onReady?: () => void;
   onSession?: () => void;
+  onAbort?: () => void;
   onComplete?: () => void;
 };
 
@@ -56,9 +64,11 @@ export function attachDshProfileSession({
   model,
   reasoningEffort,
   resumeSessionId,
+  selectExecution,
   send,
   onReady,
   onSession,
+  onAbort,
   onComplete,
 }: AttachDshProfileSessionOptions) {
   if (!child.stdin || !child.stdout) {
@@ -205,7 +215,7 @@ export function attachDshProfileSession({
             fail('DeepSeek Harness profile rejected a different session.', 'DSH_PROFILE_RESUME_MISMATCH');
             return;
           }
-          fail('DeepSeek Harness could not resume the saved session.', frame.error?.code ?? 'DSH_PROFILE_RESUME_REJECTED');
+          fail('DeepSeek Harness could not resume the saved session.', 'DSH_PROFILE_RESUME_REJECTED');
           return;
         }
         if (!sessionId && frame.status === 'failed') {
@@ -247,6 +257,15 @@ export function attachDshProfileSession({
           finish('cancelled');
           return;
         }
+        if (selectExecution) {
+          const execution = selectExecution(frame);
+          if ('rejection' in execution) {
+            fail(execution.rejection.message, execution.rejection.code);
+            return;
+          }
+          prompt = execution.prompt;
+          resumeSessionId = execution.resumeSessionId;
+        }
         sendExecute();
         return;
       }
@@ -271,6 +290,7 @@ export function attachDshProfileSession({
     abort() {
       if (finished || aborted) return;
       aborted = true;
+      onAbort?.();
       sendCommand({ v: 1, type: 'cancel', request_id: requestId });
     },
     hasFatalError() {

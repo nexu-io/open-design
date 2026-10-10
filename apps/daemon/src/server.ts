@@ -11911,6 +11911,8 @@ export async function startServer({
     // Set from the `status` event's `sessionId` in `sendAgentEvent` below.
     const agentCapturesSessionId = def.capturesSessionIdFromStream === true;
     let capturedSessionId: string | null = null;
+    let activeCompatibilityGeneration: string | null = null;
+    const requiresReadyCompatibility = def.nativeSessionCompatibility === 'profile-ready';
     // --- Model resolution hoisted above the resume-identity guard ---
     // The guard (and the persisted `agent_sessions.model`) must key off the
     // model identity actually requested for this turn. Explicit `default` is
@@ -12021,7 +12023,7 @@ export async function startServer({
             currentCwd: effectiveCwd,
             currentAssistantMessageId: run.assistantMessageId ?? null,
           })
-        : { storedSessionId: null as string | null, resumeSessionId: null as string | null, newSessionId: undefined as string | undefined, isResuming: false, storedStablePromptHash: null as string | null, storedInputTokens: null as number | null, storedStableSections: null as StableSectionHashes | null, invalidationReason: null };
+        : { storedCompatibilityGeneration: null as string | null, storedSessionId: null as string | null, resumeSessionId: null as string | null, newSessionId: undefined as string | undefined, isResuming: false, storedStablePromptHash: null as string | null, storedInputTokens: null as number | null, storedStableSections: null as StableSectionHashes | null, invalidationReason: null };
     // A same-run post-tool recovery resumes the exact session id captured from
     // the interrupted attempt. The ordinary cross-turn cursor guard cannot
     // admit it yet because the current assistant placeholder is still in
@@ -12031,7 +12033,7 @@ export async function startServer({
       pendingNativeSessionContinue != null &&
       (runtimeResumesSessionById(def) || (def.id === 'amr' && !!pendingNativeSessionContinue.amrContinuation)) &&
       pendingNativeSessionContinue.sessionId.length > 0;
-    const agentResumeCtx = forceInternalResume
+    let agentResumeCtx = forceInternalResume
       ? {
           ...resolvedAgentResumeCtx,
           storedSessionId: pendingNativeSessionContinue.sessionId,
@@ -12071,7 +12073,7 @@ export async function startServer({
       pendingNativeSessionContinue?.lastInputTokens ?? null,
     );
     const observedInputTokensForSession = physicalSessionUsage.inputTokens;
-    run.nativeSessionRecovery = initialNativeSessionRecoveryMetadata({
+    run.nativeSessionRecovery = requiresReadyCompatibility ? null : initialNativeSessionRecoveryMetadata({
       agent: def,
       supportsSessionResume: agentSupportsSessionResume,
       isResuming: agentResumeCtx.isResuming,
@@ -12111,14 +12113,14 @@ export async function startServer({
           }
         })()
       : [];
-    const agentResumePromptPolicy = resolveAgentResumePromptPolicy(agentResumeCtx);
+    let agentResumePromptPolicy = resolveAgentResumePromptPolicy(agentResumeCtx);
     // A continuation directive whose stored session the daemon just refused has
     // to be told which request it is continuing; see
     // `resolveResumeContinuationSeed`. Callers that ship their own transcript
     // never set `resumeContinuation`, so this stays null for them.
     const resumeContinuationSeed = resolveResumeContinuationSeed({
       isContinuation: resumeContinuation === true,
-      requiresFullTranscript: agentResumePromptPolicy.requiresFullTranscript,
+      requiresFullTranscript: agentResumePromptPolicy.requiresFullTranscript || requiresReadyCompatibility,
       storedSessionId: agentResumeCtx.storedSessionId,
       storedLastMessageId: agentResumeCtx.storedLastMessageId,
     });
@@ -12148,7 +12150,7 @@ export async function startServer({
           {
             skipTranscript: agentResumePromptPolicy.skipTranscript,
             previousTurnTaskList,
-            resumeContinuationOriginalRequest,
+            resumeContinuationOriginalRequest: agentResumePromptPolicy.requiresFullTranscript ? resumeContinuationOriginalRequest : null,
           },
         );
     // The stable instruction slice (daemon prompt + tool contract + system
@@ -12339,7 +12341,7 @@ export async function startServer({
           odNextTaskInputSnapshot?.requestInputText ?? '',
         ].filter(Boolean).join('\n\n---\n\n')
       : '';
-    const composedResult = strategyTaskAtStart
+    const composePayload = (includeStableForPayload: boolean, userRequestPrompt: string) => strategyTaskAtStart
       ? {
           composedPrompt: persistedStrategyFinalText!,
           clientInstructionPrompt: '',
@@ -12376,6 +12378,14 @@ export async function startServer({
       imageReferences: promptImagePaths.map((p) => `@${p}`).join(' '),
       strategyInputStage: strategyTaskAtStart?.inputStage ?? null,
         });
+    const composedResult = composePayload(includeStableForPayload, userRequestPrompt);
+    const fullTranscriptCandidate = requiresReadyCompatibility
+      ? composePayload(true, composeChatUserRequestForAgent(message, currentPrompt, {
+          skipTranscript: false,
+          previousTurnTaskList,
+          resumeContinuationOriginalRequest,
+        })).composedPrompt
+      : null;
     const {
       composedPrompt: composed,
       clientInstructionPrompt,
@@ -13055,6 +13065,7 @@ export async function startServer({
           conversationId: run.conversationId,
           agentId: def.id,
           sessionId: liveSessionId,
+          compatibilityGeneration: activeCompatibilityGeneration,
           stablePromptHash: currentStableHash,
           stablePromptSections: currentStableSectionsJson,
           model: safeModel ?? null,
@@ -13178,6 +13189,7 @@ export async function startServer({
           conversationId: run.conversationId,
           agentId: def.id,
           sessionId: liveSessionId,
+          compatibilityGeneration: activeCompatibilityGeneration,
           stablePromptHash: currentStableHash,
           stablePromptSections: currentStableSectionsJson,
           model: safeModel ?? null,
@@ -13821,6 +13833,7 @@ export async function startServer({
           upsertAgentSession(db, {
             conversationId: run.conversationId,
             agentId: def.id,
+            compatibilityGeneration: activeCompatibilityGeneration,
             sessionId: createTurnSessionId,
             stablePromptHash: currentStableHash,
             stablePromptSections: currentStableSectionsJson,
@@ -13849,6 +13862,7 @@ export async function startServer({
           upsertAgentSession(db, {
             conversationId: run.conversationId,
             agentId: def.id,
+            compatibilityGeneration: activeCompatibilityGeneration,
             sessionId: agentResumeCtx.resumeSessionId,
             stablePromptHash: currentStableHash,
             stablePromptSections: currentStableSectionsJson,
@@ -15895,8 +15909,54 @@ export async function startServer({
         ...(agentResumeCtx.isResuming && agentResumeCtx.resumeSessionId
           ? { resumeSessionId: agentResumeCtx.resumeSessionId }
           : {}),
+        ...(requiresReadyCompatibility ? {
+          selectExecution: (ready) => {
+            activeCompatibilityGeneration = ready.compatibility_generation ?? null;
+            agentResumePromptPolicy = resolveAgentResumePromptPolicy(agentResumeCtx, {
+              storedGeneration: agentResumeCtx.storedCompatibilityGeneration,
+              activeGeneration: activeCompatibilityGeneration,
+            });
+            agentResumeCtx = {
+              ...agentResumeCtx,
+              isResuming: agentResumePromptPolicy.skipTranscript,
+              resumeSessionId: agentResumePromptPolicy.resumeSessionId,
+              invalidationReason: agentResumePromptPolicy.invalidationReason,
+            };
+            run.nativeSessionRecovery = initialNativeSessionRecoveryMetadata({
+              agent: def,
+              supportsSessionResume: agentSupportsSessionResume,
+              ...agentResumeCtx,
+            });
+            publishNativeSessionRecoveryMetadata();
+            run.promptCache = describeStablePromptCache({
+              isResuming: agentResumePromptPolicy.skipTranscript,
+              storedStablePromptHash: agentResumeCtx.storedStablePromptHash,
+              currentStableHash,
+              storedStableSections: agentResumeCtx.storedStableSections,
+              currentStableSections,
+            });
+            if (strategyTaskAtStart && !isOdNextInitialRun && !agentResumeCtx.isResuming) {
+              const blocked = blockAutomaticContinuation(db, { runId: run.id });
+              if (blocked) run.strategyTask = projectStrategyTask(blocked, run.id);
+              return {
+                rejection: {
+                  code: 'AGENT_SESSION_RESUME_FAILED',
+                  message: 'The locked OD Next native session is unavailable; the task was blocked without cold re-seeding.',
+                },
+              };
+            }
+            return {
+              prompt: agentResumePromptPolicy.skipTranscript ? composed : fullTranscriptCandidate ?? composed,
+              resumeSessionId: agentResumePromptPolicy.resumeSessionId,
+            };
+          },
+        } : {}),
         onReady: () => noteCliReadyAt(),
-        onSession: () => noteSessionInitDoneAt(),
+        onSession: () => {
+          noteSessionInitDoneAt();
+          if (run.cancelRequested) persistCanceledProfileSession();
+        },
+        onAbort: () => persistCanceledProfileSession(),
         onComplete: () => clearFirstOutputWatchdog(),
         send: (event, data) => {
           noteAgentActivity();
@@ -16080,25 +16140,28 @@ export async function startServer({
     // must not emit errors, unregister the new sink, or make a terminal retry
     // decision for the new attempt.
     const attemptStillOwnsRun = () => run.child === child;
+    function persistCanceledProfileSession() {
+      // Harness has already durably established the session by the time its
+      // validated `session` frame reaches `capturedSessionId`. Preserve that
+      // handle when the user cancels the current process so a later OD run
+      // can cold-resume the same conversation. Keep this scoped to the
+      // profile-stdio contract: other capture-style CLIs do not promise that
+      // a session interrupted mid-turn is safe to continue.
+      if (run.cancelRequested && def.resumesSessionViaProfileStdio === true && capturedSessionId) {
+        try {
+          persistDeliveredAgentSessionState();
+        } catch (err) {
+          console.warn('[sessions] canceled profile session persistence failed', err);
+        }
+      }
+    }
     const finishCanceledIfRequested = (
       code: number | null,
       signal: NodeJS.Signals | null,
     ): boolean => {
       if (!run.cancelRequested) return false;
       if (!design.runs.isTerminal(run.status)) {
-        // Harness has already durably established the session by the time its
-        // validated `session` frame reaches `capturedSessionId`. Preserve that
-        // handle when the user cancels the current process so a later OD run
-        // can cold-resume the same conversation. Keep this scoped to the
-        // profile-stdio contract: other capture-style CLIs do not promise that
-        // a session interrupted mid-turn is safe to continue.
-        if (def.resumesSessionViaProfileStdio === true && capturedSessionId) {
-          try {
-            persistDeliveredAgentSessionState();
-          } catch (err) {
-            console.warn('[sessions] canceled profile session persistence failed', err);
-          }
-        }
+        persistCanceledProfileSession();
         markRpcCloseReason('cancel_requested');
         finishWithRetryDecision('canceled', code, signal);
       }
