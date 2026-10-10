@@ -1,6 +1,9 @@
-/* OD-LAYOUT-PRIMITIVES v1 — structure only: display, flex/grid, overflow, wrapping, ratio.
-   Put this @layer first; product CSS outside the layer always wins. */
+/* OD-LAYOUT-PRIMITIVES v1 — structure only: display, flex/grid, overflow, wrapping, ratio, hidden visibility.
+   Put this @layer first; product CSS outside the layer wins except for native hidden visibility. */
 @layer od-layout {
+  /* Keep native hidden authoritative even when a component uses flex/grid. */
+  [hidden]:not([hidden="until-found" i]) { display: none !important; }
+
   :where(.od-stack,.od-row,.od-row-top,.od-cluster,.od-grid,.od-field,.od-stat,.od-cell,.od-tile) > :where(*) { min-width: 0; }
 
   /* containers */
