@@ -11,7 +11,7 @@ export { inspectPrototypeScripts } from './prototype-quality-static.js';
 
 export const PROTOTYPE_HOST_BUDGET_MS = 30_000;
 const ORIGIN = 'https://prototype.invalid';
-// Category rails scroll within the current page; they are outside the primary-navigation contract.
+// Plain category rails scroll within the page. Explicit role=tab controls remain in the segmented-tab contract.
 const CONTROL_SELECTOR = 'nav:not([aria-label*="分类"]):not([aria-label*="categor" i]) a,nav:not([aria-label*="分类"]):not([aria-label*="categor" i]) button,[role="tab"],[data-mode]';
 
 export function qualityStatus(checks: DeliverableQualityCheck[], complete: boolean): DeliverableQualityEvidence['status'] {
@@ -148,7 +148,7 @@ async function visibleContent(page: Page): Promise<string> {
         next = walker.nextNode();
       }
       return text.join(' ').replace(/\s+/g, ' ').trim();
-    }).join('|').replace(/\d+(?:[.,]\d+)*/g, '#'));
+    }).join('|'));
 }
 
 export async function checkPrototypeQuality(input: {
@@ -231,9 +231,11 @@ export async function checkPrototypeQuality(input: {
         await clickControl(page, control); await page.waitForTimeout(80);
         let visible = await awaitTarget(page, control, deadline);
         if (visible === true) visible = await selectedControl(page, control);
-        if (visible === true && !control.mode && !alreadyAtTarget) {
+        if (visible === true && !control.mode && !control.target && !alreadyAtTarget) {
           const afterContent = await visibleContent(page);
-          visible = !afterContent ? null : afterContent === beforeContent ? false : true;
+          // Numeric-only changes may be counters or legitimate business data; never infer a switch.
+          visible = !afterContent ? null : afterContent === beforeContent ? false
+            : afterContent.replace(/\d+(?:[.,]\d+)*/g, '#') === beforeContent.replace(/\d+(?:[.,]\d+)*/g, '#') ? null : true;
         }
         if (visible === true) {
           if (control.mode) {

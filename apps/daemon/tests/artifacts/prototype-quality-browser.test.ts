@@ -41,12 +41,12 @@ describe.skipIf(!findBrowserExecutable())('real isolated browser navigation', { 
     ['wrong selection', `document.addEventListener('click',e=>{if(e.target.dataset.page){document.querySelector('h1').textContent=e.target.dataset.page;document.querySelector('main').textContent=e.target.dataset.page+'其他业务内容';}});`, ''],
     ['heading only', `document.addEventListener('click',e=>{if(e.target.dataset.page)document.querySelector('h1').textContent=e.target.dataset.page;});`, ''],
     ['heading and selection only', `document.addEventListener('click',e=>{const b=e.target.closest('[data-page]');if(b){document.querySelectorAll('nav[aria-label="主导航"] button').forEach(t=>t.setAttribute('aria-current',t===b?'page':'false'));document.querySelector('h1').textContent=b.dataset.page;}});`, ''],
-    ['heading selection and arbitrary counter', `document.addEventListener('click',e=>{const b=e.target.closest('[data-page]');if(b){document.querySelectorAll('nav[aria-label="主导航"] button').forEach(t=>t.setAttribute('aria-current',t===b?'page':'false'));document.querySelector('h1').textContent=b.dataset.page;counter.textContent=Number(counter.textContent)+1;}});`, '<main id="counter">0</main>'],
+    ['heading selection and arbitrary counter', `document.addEventListener('click',e=>{const b=e.target.closest('[data-page]');if(b){document.querySelectorAll('nav[aria-label="主导航"] button').forEach(t=>t.setAttribute('aria-current',t===b?'page':'false'));document.querySelector('h1').textContent=b.dataset.page;counter.textContent=Number(counter.textContent)+1;}});`, '<main id="counter">0</main>', 'incomplete'],
     ['highlight only', `document.addEventListener('click',e=>{if(e.target.dataset.page)e.target.classList.add('active');});`, ''],
     ['hidden target', `document.addEventListener('click',e=>{if(e.target.dataset.page)document.querySelector('#hidden').textContent=e.target.dataset.page;});`, '<h1 id="hidden" hidden></h1>'],
     ['overlay', '', '<div style="position:fixed;inset:0;z-index:99;background:white"></div>'],
     ['lost binding after replacement', `document.querySelectorAll('button').forEach(b=>b.onclick=()=>{document.querySelector('h1').textContent=b.dataset.page;document.querySelector('nav').innerHTML='<button data-page="今日">今日</button><button data-page="药品">药品</button>';});`, ''],
-  ])('rejects %s', async (_name, script, extra) => { expect((await check(script, extra)).status).toBe('fail'); });
+  ])('does not pass %s', async (_name, script, extra, expected = 'fail') => { expect((await check(script, extra)).status).toBe(expected); });
   it('missing requested mode is a failure', async () => {
     await fs.writeFile(path.join(root, 'index.html'), '<h1>选择方式</h1>');
     const result = await checkPrototypeQuality({ projectRoot: root, entryFile: 'index.html', userBrief: '提供堂食和自提入口' });
@@ -69,6 +69,15 @@ describe.skipIf(!findBrowserExecutable())('real isolated browser navigation', { 
   it('accepts real semantic panel selection with inactive panels hidden', async () => {
     await fs.writeFile(path.join(root, 'index.html'), `<div role="tablist"><button role="tab" aria-selected="true" aria-controls="a">今日</button><button role="tab" aria-selected="false" aria-controls="b">药品</button></div><div id="a" role="tabpanel">今日服药记录</div><div id="b" role="tabpanel" hidden>药物清单</div><script>document.addEventListener('click',e=>{const b=e.target.closest('[role="tab"]');if(b){document.querySelectorAll('[role="tab"]').forEach(t=>t.setAttribute('aria-selected',t===b?'true':'false'));document.querySelectorAll('[role="tabpanel"]').forEach(p=>p.hidden=p.id!==b.getAttribute('aria-controls'));}})</script>`);
     expect((await checkPrototypeQuality({ projectRoot: root, entryFile: 'index.html', userBrief: 'App，Tabs：今日、药品' })).status).toBe('pass');
+  });
+  it('accepts distinct exclusive ARIA panels whose business content differs only numerically', async () => {
+    await fs.writeFile(path.join(root, 'index.html'), `<div role="tablist"><button role="tab" aria-selected="true" aria-controls="a">账户一</button><button role="tab" aria-selected="false" aria-controls="b">账户二</button></div><div id="a" role="tabpanel">余额100元</div><div id="b" role="tabpanel" hidden>余额200元</div><script>document.addEventListener('click',e=>{const b=e.target.closest('[role="tab"]');if(b){document.querySelectorAll('[role="tab"]').forEach(t=>t.setAttribute('aria-selected',t===b?'true':'false'));document.querySelectorAll('[role="tabpanel"]').forEach(p=>p.hidden=p.id!==b.getAttribute('aria-controls'));}})</script>`);
+    expect((await checkPrototypeQuality({ projectRoot: root, entryFile: 'index.html', userBrief: 'App，Tabs：账户一、账户二' })).status).toBe('pass');
+  });
+  it('keeps an explicitly declared category tab with unmapped target incomplete', async () => {
+    const result = await check(`document.addEventListener('click',e=>{const b=e.target.closest('[data-page]');if(b){document.querySelectorAll('nav[aria-label="主导航"] button').forEach(t=>t.setAttribute('aria-current',t===b?'page':'false'));document.querySelector('h1').textContent=b.dataset.page;document.querySelector('main').textContent=b.dataset.page+'实际业务内容';}});`, '<nav aria-label="商品分类"><button role="tab" aria-selected="true">荤菜</button></nav>');
+    expect(result.status).toBe('incomplete');
+    expect(result.checks).toContainEqual(expect.objectContaining({control:'荤菜', status:'incomplete'}));
   });
   it('accepts a delayed semantic switch within the control deadline', async () => {
     const result = await check(`document.addEventListener('click',e=>{const b=e.target.closest('[data-page]');if(b)setTimeout(()=>{document.querySelectorAll('nav button').forEach(item=>item.setAttribute('aria-current',item===b?'page':'false'));document.querySelector('h1').textContent=b.dataset.page;document.querySelector('main').textContent=b.dataset.page+'实际业务内容';},250);});`);
