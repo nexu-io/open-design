@@ -14,11 +14,11 @@
      width exactly — see .home-hero__plugin-presets-wrap. */
   container-type: inline-size;
 }
-/* Empty workspace: no recent projects rendered below, so the hero column
-   centers vertically in the scroll viewport instead of hugging the top. */
+/* Empty Home centers when it fits. If the hero is taller than the available
+   space, start at the top so all content stays in the scrollable area. */
 .home-view--centered {
   min-height: 100%;
-  justify-content: center;
+  justify-content: safe center;
 }
 /* `.home-hero`'s own fixed top padding (below) is tuned for the OTHER
    variant — hugging the top of the scroll column so a specific reference
@@ -3163,7 +3163,7 @@
 
 /* One example per row (per product — the thumbnail cards were dropped): its
    name on the first line, the prompt it seeds on the second. Four rows are
-   visible; the rest scroll. */
+   visible; the rest scroll. At either end, wheel input continues to Home. */
 .home-hero__plugin-presets {
   /* One row's height: 12px top padding + 56px poster + 12px bottom padding.
      The POSTER is what sets it now — enlarged per product, it is taller than
@@ -3180,7 +3180,6 @@
   gap: 0;
   max-height: calc(4 * var(--preset-row-h));
   overflow-y: auto;
-  overscroll-behavior-y: contain;
   padding: 1px 0 8px;
   /* No visible scrollbar — wheel/trackpad covers it, as on the rail before. */
   scrollbar-width: none;
