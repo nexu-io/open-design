@@ -90,8 +90,8 @@ Resolve applicability before precedence. A prototype project may host an image
 request without changing the project's type or asking for a scenario switch.
 For standalone image generation, deliver the actual image file. Do not add an
 HTML wrapper, presentation page, or extra export just to satisfy a scenario.
-When the user asks to insert an image into a page or deck, generate or acquire
-the image and integrate it into that requested artifact; the image alone is not
+When the user asks to insert an image into a page or deck, acquire the image
+and integrate it into that requested artifact; the image alone is not
 the full delivery. First establish whether the user requested artifact creation
 at all. Missing output-format instructions do not authorize creating an artifact.
 Scenario defaults may fill in implementation details only for artifact work the
@@ -226,23 +226,51 @@ explicit user requirements still take precedence.
 - **Continued editability:** centralize colors, type sizes, spacing, and
   motion values once through variables or styles; never scatter hard-coded
   values.
-- **Authentic imagery, real-first:** when content references a real-world
-  entity — a named book cover, a real product, a brand mark, a real place —
-  obtain the real image via search/fetch and localize it into the project;
-  never generate a fake stand-in for a real referent, which is a factual
-  error of the same class as inventing user data. For illustrative or
-  fictional subjects prefer fetched real photography; fall back to image
-  generation only when no suitable asset can be acquired — generation is
-  slow, so spend it on the few surfaces that change the result. Every image
-  lands as a local file or inline data URI referenced relatively; never
-  hotlink. If neither route is available, design the placeholder — never ship
-  a gray box. A task profile may declare a scoped licensing or channel
-  override for outward-facing deliverables — restricting real photography to
-  licensed assets, or preferring generation for fictional subjects; such an
-  override changes sourcing discipline only, never the ban on fabricating a
-  named real referent, and does not count as loosening this baseline. Demo
-  and sample content defaults to real, well-known referents with their real
-  images; never de-realize content to avoid acquiring the real asset.
+- **Imagery by type:** use suitable user assets first; otherwise search for
+  licensed images.
+  - Real referents — a named book cover, a real product, a brand mark, a real
+    place, person, or event — use the real image: user- or brand-supplied
+    first, otherwise a licensed stock photo. Never generate a stand-in for a
+    real referent; that is a factual error of the same class as inventing
+    user data.
+  - Generic dishes, example people and scenes, hero and background imagery,
+    and other illustrative subjects also use user assets or licensed stock
+    images by default. A category such as Peking duck, mapo tofu, or a latte
+    can use a matching stock image; a named real restaurant's own dish or one
+    brand's product requires the correct real image.
+  - Charts, diagrams, icons, and text-heavy images are built in code (SVG,
+    CSS, HTML text), not photographed or generated.
+  - Stock photos come from Pexels first, then Pixabay. Never take images from
+    Wikipedia or Wikimedia Commons, or from random-image services such as
+    picsum.photos or loremflickr. A real referent neither library shows may
+    come from its official page. When `PEXELS_API_KEY` or `PIXABAY_API_KEY`
+    is set, fetch every searched slot in one
+    `"$OD_NODE_BIN" "$OD_BIN" media stock-search --slots '<json>'` call
+    instead of writing download scripts; `od-next-media-inputs` has the slot
+    format and the keyless route.
+  - Never read downloaded or generated images back into the conversation to
+    check them; decide fit from the source's title, alt text, or tags, or from
+    the generation prompt. An image read into context stays there and slows
+    every later step.
+
+  Only consider image generation when the user explicitly asks to generate
+  images. Such a request permits you to decide whether generation fits the
+  task; it does not require a generation call. A need for imagery, a style
+  preference, a missing stock result, or a search timeout does not authorize
+  generation. Honor an explicit request for real photos and the factual
+  referent boundary above.
+
+  Every image lands as a local file or inline data URI referenced relatively;
+  never hotlink. If no route works for a slot, design the placeholder and
+  disclose it — never ship a gray box. A task profile may declare a scoped
+  licensing or channel override for outward-facing deliverables, such as
+  restricting real photography to licensed assets; such an override changes
+  sourcing discipline only, never the ban on fabricating a named real
+  referent, and does not count as loosening this baseline. Demo and sample
+  content defaults to real, well-known referents with their real images;
+  never de-realize content to avoid acquiring the real asset. This decides
+  which named entities appear; generic categories still use matching stock
+  images by default.
 - **Image geometry (measure, then size):** before writing styles for a
   localized image, read its intrinsic width and height from the file — a
   one-line shell probe during Build; probing an input asset is Build work,

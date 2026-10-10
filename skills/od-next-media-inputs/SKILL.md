@@ -36,7 +36,43 @@ Reuse suitable user assets and the same asset across pages. Deduplicate work,
 not distinct subjects or required states. Do not add a new plan, manifest,
 approval step, or review Agent. Preserve every required asset and quality
 condition, including semantic fit, authenticity, licensing, local or inline
-references, and image geometry. Do not hotlink or fabricate real referents.
+references, and image geometry.
+
+## Route each image slot
+
+Decide each slot's route, and which libraries a stock search may use, with
+the Core imagery-by-type rule; it is the only source of those rules.
+
+## Search stock photos
+
+- With `PEXELS_API_KEY` or `PIXABAY_API_KEY` in the environment, fetch every
+  slot in one call:
+  `"$OD_NODE_BIN" "$OD_BIN" media stock-search --slots '[{"id":"hero","query":"black eyeglasses frame","width":1200,"orientation":"landscape"}]'`.
+  Write each query in English with the subject first. The command searches,
+  re-ranks by alt text, downloads at `width` into `assets/stock/`, records
+  credits in `assets/stock/credits.json`, and prints each slot's `path`,
+  `alt`, and `status`. Use a slot's `alt` to judge fit; for `not_found`,
+  retry that slot once with a broader query. Exit code 5 means no key: use
+  the keyless path below.
+- Without a key, the sites' search pages block scripts (HTTP 403). Open the
+  search results page with the web fetch tool instead, for example
+  `https://www.pexels.com/search/<query>/` or
+  `https://pixabay.com/images/search/<query>/`, and read each result's photo
+  ID or image URL together with its alt text.
+  - Pexels file:
+    `https://images.pexels.com/photos/<id>/pexels-photo-<id>.jpeg?auto=compress&cs=tinysrgb&w=<display width>`
+  - Pixabay file: the `cdn.pixabay.com/photo/...` URL listed in the results.
+- Choose candidates from their alt text and titles. Download every slot in
+  one batched command: concurrent requests, a 10–15 s timeout per request,
+  and about 3 minutes in total. Do not poll with sleep or retry one slot in a
+  loop; on HTTP 403 or 429, switch to another candidate or library.
+- Download at display size (long edge 1600 px or less) and keep each JPEG or
+  WebP under about 400 KB.
+- Record each photo's page URL, author when shown, and license (Pexels
+  License or Pixabay Content License) in a comment or sidecar next to the
+  asset.
+- When the time budget runs out, keep the files that succeeded. Use a
+  disclosed placeholder for any remaining slot.
 
 ## Reuse capabilities and recover by cause
 
@@ -62,7 +98,8 @@ Classify failures before retrying:
 
 Retry only when the change addresses the cause, the relevant state changes,
 or existing guidance permits retrying a temporary failure.
-Do not impose a new tool-count cap or sacrifice quality to reduce calls.
+Do not sacrifice required quality to reduce calls; bound stock photo search
+with its time budget.
 
 ## Batch independent input work
 
@@ -70,14 +107,17 @@ When the tools support it and inputs are independent, batch search, fetch,
 download, format handling, and intrinsic width/height measurements. Preserve
 each item's result and failures; keep dependent requests ordered. Reuse valid
 measurements for unchanged files; after transformation, remeasure affected
-files before sizing their containers. HTTP success and file/size probes do not
-prove semantic fit. A read invocation alone does not prove the image was seen.
+files before sizing their containers.
+
+HTTP success and file/size probes do not prove semantic fit; decide it as the
+Core imagery rule describes, without reading images back into the
+conversation.
 
 ## Collect results and stop when complete
 
 Retain each actual job ID, status, returned cursor, original response, and
 output location. Use only supported wait or batch operations. Submission and
-exit success alone do not prove generation finished. Stop polling a job after
+exit success alone do not prove an asset is ready. Stop polling a job after
 an explicit terminal result with complete output/error information; a failed
 or interrupted terminal result is not a usable asset. Continue necessary
 retrieval for running jobs, incomplete results, or new errors. Parse the saved

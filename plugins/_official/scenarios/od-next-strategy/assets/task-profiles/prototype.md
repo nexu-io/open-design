@@ -277,19 +277,16 @@ reaches product UI.
   unified style.
 - Never fabricate brand facts, feature promises, or business data the user
   has not provided or confirmed.
-- **Imagery:** real entities appearing in the interface (book covers,
-  products, brand marks, real places) use real images obtained via
-  search/fetch and localized into the project; never fabricate them with
-  image generation. For illustrative and atmospheric imagery, prefer fetched
-  real photography; image generation is the fallback, spent only on the key
-  visual surfaces.
+- **Imagery:** follow the Core imagery-by-type rule for every image in the
+  interface, localized into the project.
 - **Demo content defaults to real referents:** sample data in a prototype
   defaults to real, well-known entities with their real fetched images — a
   bookshelf shows real books with real covers; a music app shows real albums
   with real art. Fictional stand-ins are the exception: use them only when
   the user asks for fictional content or licensing forbids real assets, and
   disclose the substitution in the delivery notes. Do not de-realize demo
-  content to avoid the fetch.
+  content to avoid the fetch. How generic categories such as dishes are
+  sourced is decided by the Core imagery rule, not by this default.
 
 ### Quality floor
 
