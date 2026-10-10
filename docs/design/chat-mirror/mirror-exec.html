@@ -355,7 +355,8 @@
  * 覆盖值是产品单独指定的色号,与全局 token 无关,所以这里写字面量;
  * 其余一律映射到全局 token,零漂移。
  *
- * 产品当前强制亮色(appearance.ts: FORCED_APP_THEME = 'light')。
+ * 主题是用户偏好(light / dark / system,见 src/state/appearance.ts),
+ * 但 chat 内部仍然只认 --chat-*:暗色作用域随 data-theme="dark" 自动生效。
  * 暗色作用域里设计稿没给值的,按「同值」处理,不自行发明。
  */
 

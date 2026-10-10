@@ -156,8 +156,8 @@ AMR 系统 E2E 还会校验真实 run start 事件暴露的 token deadline。
 - Plan 首次生成与 regeneration 自动打开或 refocus HTML
 - plugin authoring 从 Plugins Add 面板进入，并生成 scaffold、assistant 文件列表和操作卡
 - Connectors / MCP visual capture 从 Home composer 的当前入口进入，不再 skip
-- 已删除与 light-only 产品契约相反的 system-theme 动态切换旧用例；强制 light 的迁移
-  契约由 `force-light-theme.test.ts` 覆盖
+- 主题偏好回归由 `tests/state/theme-preference.test.ts` 覆盖(此前为强制 light 的
+  `force-light-theme.test.ts`;主题已恢复为 light / dark / system 用户偏好)
 
 插件用例同时锁定两项完成态契约：终态文件列表必须绕过旧的共享读取缓存，且
 `producedFiles` 必须合并“本轮新增文件”和 daemon 报告的“既有文件修改”。这样 `.md`、
