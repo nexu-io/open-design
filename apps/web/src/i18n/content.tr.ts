@@ -1062,6 +1062,7 @@ export const TR_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   'stripe': 'Ödeme altyapısı. İmza niteliğindeki mor gradyanlar, weight-300 zarafeti.',
   'supabase': 'Açık kaynaklı Firebase alternatifi. Koyu zümrüt tema, kod öncelikli.',
   'superhuman': 'Hızlı e-posta istemcisi. Premium koyu arayüz, klavye öncelikli, mor parıltı.',
+  'terracotta': 'Güneşte pişmiş terracotta editoryali. Sıcak krem yüzeyler, serif mürekkep, tek terracotta vurgu.',
   'tesla': 'Elektrikli otomotiv. Radikal çıkarma, tam görüntü alanı fotoğrafçılığı, neredeyse sıfır arayüz.',
   'tetris': 'Eğlenceli renkler, cesur gösterim fontları ve kompakt, yüksek enerjili düzenlerle klasik blok-oyun esinli tasarım.',
   'theverge': 'Teknoloji editöryal medyası. Asit-nane ve ultraviyole vurgular, Manuka gösterim tipografisi, rave-broşürü hikaye karoları.',
