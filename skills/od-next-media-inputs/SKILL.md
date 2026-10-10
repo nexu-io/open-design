@@ -71,9 +71,8 @@ the Core imagery-by-type rule; it is the only source of those rules.
 - Record each photo's page URL, author when shown, and license (Pexels
   License or Pixabay Content License) in a comment or sidecar next to the
   asset.
-- When the time budget runs out, keep the files that succeeded. Generate the
-  remaining illustrative slots; use a disclosed placeholder for any remaining
-  real referent.
+- When the time budget runs out, keep the files that succeeded. Use a
+  disclosed placeholder for any remaining slot.
 
 ## Reuse capabilities and recover by cause
 
@@ -106,11 +105,9 @@ with its time budget.
 
 When the tools support it and inputs are independent, batch search, fetch,
 download, format handling, and intrinsic width/height measurements. Preserve
-each item's result and failures; keep dependent requests ordered. Submit
-independent generation jobs together and request the smallest output profile
-that covers the display size (usually 1K). Reuse valid measurements for
-unchanged files; after transformation, remeasure affected files before sizing
-their containers.
+each item's result and failures; keep dependent requests ordered. Reuse valid
+measurements for unchanged files; after transformation, remeasure affected
+files before sizing their containers.
 
 HTTP success and file/size probes do not prove semantic fit; decide it as the
 Core imagery rule describes, without reading images back into the
@@ -120,7 +117,7 @@ conversation.
 
 Retain each actual job ID, status, returned cursor, original response, and
 output location. Use only supported wait or batch operations. Submission and
-exit success alone do not prove generation finished. Stop polling a job after
+exit success alone do not prove an asset is ready. Stop polling a job after
 an explicit terminal result with complete output/error information; a failed
 or interrupted terminal result is not a usable asset. Continue necessary
 retrieval for running jobs, incomplete results, or new errors. Parse the saved

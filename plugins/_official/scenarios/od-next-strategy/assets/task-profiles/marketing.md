@@ -83,7 +83,7 @@ scope; this profile's defaults fill only what is left unspecified.
   licensed assets; a web-fetched image of a real entity is a disclosed
   placeholder only, never final photography — and generating a fake stand-in
   for a named real referent remains forbidden. Fictional or illustrative
-  subjects follow the core default and are generated. When a required real
+  subjects follow the core sourcing rule. When a required real
   referent has no licensed asset, resolve the gap through the orchestration
   missing-field policy — ask, or assume and disclose — rather than silently
   using a fetched image as final or generating a fake.
