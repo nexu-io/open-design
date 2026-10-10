@@ -1778,7 +1778,7 @@ async function runMediaScaffold(rawArgs) {
   }
   const compositionDir = flags['composition-dir'];
   if (!compositionDir) {
-    console.error('--composition-dir required (expected .hyperframes-cache/<id>)');
+    console.error('--composition-dir required (expected .hyperframes-cache/<id> or motion-source/<id>)');
     process.exit(2);
   }
 
@@ -2252,7 +2252,7 @@ function printMediaHelp() {
 Scaffold:
   Creates hyperframes.json, meta.json, and index.html without running
   HyperFrames init or installing global skills. The target must be new and
-  live directly under .hyperframes-cache.
+  live directly under .hyperframes-cache or motion-source (visible editable source).
   --json is accepted for consistency; scaffold output is always one JSON line.
 
 Generate required:

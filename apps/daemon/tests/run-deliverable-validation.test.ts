@@ -409,3 +409,43 @@ describe('project deliverable validation', () => {
     })).resolves.toMatchObject({ valid: false, validation: 'project_missing' });
   });
 });
+
+const motionSource = '<!doctype html><meta name="od-motion-output" content="video"><link rel="alternate" type="video/mp4" href="../../film.mp4"><main>Film</main>';
+const motionMp4 = '\x00\x00\x00\x20ftypisom' + ' '.repeat(64);
+const motionMetadata = { kind: 'video', intent: 'motion-design', videoModel: 'hyperframes-html' } as const;
+
+describe('motion source and MP4 delivery', () => {
+  it.each([
+    ['missing render', undefined],
+    ['empty render', ''],
+    ['renamed HTML', '<html>not a video</html>'],
+  ])('rejects HTML-only completion: %s', async (_name, video) => {
+    const fixture = await projectFixture({
+      'motion-source/film/index.html': motionSource,
+      ...(video === undefined ? {} : { 'film.mp4': video }),
+    });
+    expect((await validateRunDeliverable({ ...fixture, projectMetadata: motionMetadata, runStatus: 'succeeded', artifactCount: 1 })).valid).toBe(false);
+  });
+
+  it('accepts the paired source and newly rendered MP4 while preserving source as the editable entry', async () => {
+    const fixture = await projectFixture({ 'motion-source/film/index.html': motionSource, 'film.mp4': motionMp4 });
+    expect(await validateRunDeliverable({ ...fixture, projectMetadata: motionMetadata, runStatus: 'succeeded', artifactCount: 2, touchedPaths: ['motion-source/film/index.html', 'film.mp4'] })).toMatchObject({ valid: true, entryFile: 'motion-source/film/index.html' });
+    expect((await validateRunDeliverable({ ...fixture, projectMetadata: motionMetadata, runStatus: 'succeeded', artifactCount: 1, touchedPaths: ['motion-source/film/index.html'] })).valid).toBe(false);
+  });
+
+  it('accepts explicitly interactive motion without requiring a flattened video', async () => {
+    const fixture = await projectFixture({ 'index.html': '<meta name="od-motion-output" content="interactive"><button>Animate</button>' });
+    expect((await validateRunDeliverable({ ...fixture, projectMetadata: motionMetadata, runStatus: 'succeeded', artifactCount: 1 })).valid).toBe(true);
+  });
+
+  it('rejects a source that omits the output mode instead of silently assuming HTML delivery', async () => {
+    const fixture = await projectFixture({ 'index.html': '<main>Unrendered film</main>' });
+    expect((await validateRunDeliverable({ ...fixture, projectMetadata: motionMetadata, runStatus: 'succeeded', artifactCount: 1 })).valid).toBe(false);
+  });
+
+  it('rejects a video link outside the project', async () => {
+    const fixture = await projectFixture({ 'motion-source/film/index.html': motionSource.replace('../../film.mp4', '../../../outside.mp4') });
+    await fs.writeFile(path.join(fixture.projectsRoot, 'outside.mp4'), motionMp4);
+    expect((await validateRunDeliverable({ ...fixture, projectMetadata: motionMetadata, runStatus: 'succeeded', artifactCount: 1 })).valid).toBe(false);
+  });
+});

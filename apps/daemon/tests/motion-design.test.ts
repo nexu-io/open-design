@@ -32,7 +32,11 @@ describe('Motion Design official skill and OD Next route', () => {
     expect(binding.selectedTaskProfile.taskType).toBe('motion-design');
     expect(() => assertOdNextPlanningBuildOnlyV2(loaded.taskSkill, 'motion-design')).not.toThrow();
     expect(loaded.coreStrategy).toContain('OD Next Core Strategy');
-    expect(loaded.generalOrchestration.length).toBeGreaterThan(100);
+    expect(loaded.generalOrchestration).toContain('Contracted media');
+    expect(loaded.coreStrategy).toContain('A contracted media render is production');
+    expect(loaded.taskSkill).toContain('media generate --project');
+    expect(loaded.taskSkill).toContain('od-motion-output');
+    expect(loaded.taskSkill).not.toContain('MP4 is a separate product export');
   });
 
   it('admits the exact automatic motion route without widening ordinary video or explicit plugins', () => {

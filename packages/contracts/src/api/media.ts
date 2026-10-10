@@ -358,7 +358,7 @@ export function mediaExecutionPolicyDenial(
 
 /** Request for Open Design's deterministic local HyperFrames scaffold. */
 export interface HyperFramesScaffoldRequest {
-  /** Project-relative path in the form `.hyperframes-cache/<id>`. */
+  /** Project-relative path in the form `.hyperframes-cache/<id>` or visible `motion-source/<id>`. */
   compositionDir: string;
 }
 

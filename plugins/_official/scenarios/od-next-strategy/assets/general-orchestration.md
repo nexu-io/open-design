@@ -82,7 +82,11 @@ recognizable in the resolved Task Profile.
 
 ## The ship-on-write boundary (non-negotiable)
 
-Writing the primary HTML deliverable to disk IS the delivery. Never perform
+Writing every required deliverable to disk IS the delivery. Contracted media
+rendering is Build production, not post-generation quality checking: author
+the source, dispatch the supplied host renderer, and wait for success. Do not
+stop at HTML when the task requires MP4. A failed render leaves the task
+blocked and its editable source preserved. Never perform
 any post-generation action on a generated artifact for the purpose of quality
 checking:
 
@@ -186,7 +190,8 @@ delivery. Before Build:
 
 The main Agent then modifies only the user-authorized scope and completes the
 Build, keeping affected regions and dependent regions consistent as part of
-the writing itself. The change is delivered the moment it is written; no
+the writing itself. The change is delivered when all affected source and contracted render outputs
+are written; no
 post-generation check, acceptance, or fix action follows. Direct Edit always
 uses simple mode and never starts Build Children.
 
@@ -458,15 +463,15 @@ pass while writing, not checked and patched afterwards.
 Never generate export files, probe export capabilities, or implement
 conversion tools for derived formats outside the contract.
 
-The moment the artifact hits disk, delivery begins, under the ship-on-write
-boundary: no screen captures, no rendering, no preview, no playback, no
+The moment all required outputs hit disk, delivery begins, under the ship-on-write
+boundary: no screen captures, no additional rendering for quality checks, no preview, no playback, no
 validation runs, no acceptance Children, no formal acceptance, and no fix
 round based on any check. Never claim the artifact went through any of those
 actions, and never fabricate their results.
 
 Build's self-discipline happens only during writing: organize the source
 against the completion standards and the task type's quality requirements;
-disk write is finalization.
+writing all required outputs, including contracted renders, is finalization.
 
 ### Source reads and writes
 

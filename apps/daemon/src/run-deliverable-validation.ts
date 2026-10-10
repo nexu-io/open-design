@@ -10,6 +10,7 @@ import type {
 } from '@open-design/contracts';
 
 import { listFiles, resolveProjectDir } from './projects.js';
+import { validateMotionDelivery } from './artifacts/motion-delivery.js';
 import { findTouchedLinkedPage } from './artifacts/linked-page-delivery.js';
 
 export type RunDeliverableValidation =
@@ -268,10 +269,14 @@ async function resolveDeliverable(
   const baselineEntry = isPrototype && input.touchedPaths
     ? safeRelativeFile(input.baselineEntryFile)
     : null;
+  const motionSources = input.projectMetadata?.intent === 'motion-design'
+    ? files.filter((file) => file.kind === 'html')
+    : [];
+  const motionSource = motionSources.length === 1 ? motionSources[0] : null;
   const selected = declared
     ? files.find((file) => filePath(file) === declared) ?? null
     : (baselineEntry ? files.find((file) => filePath(file) === baselineEntry) ?? null : null)
-      ?? inferredEntry(files, acceptedKinds);
+      ?? motionSource ?? inferredEntry(files, acceptedKinds);
   if (!selected) {
     return { valid: false, validation: 'entry_missing' };
   }
@@ -336,6 +341,15 @@ async function resolveDeliverable(
     await handle.close();
   } catch {
     return { valid: false, validation: 'entry_unreadable', ...facts };
+  }
+
+  if (input.projectMetadata?.intent === 'motion-design') {
+    const validMotion = selected.kind === 'html' && await validateMotionDelivery({
+      projectRoot,
+      sourceFile: entryFile,
+      ...(runScoped && input.touchedPaths ? { touchedPaths: input.touchedPaths } : {}),
+    });
+    if (!validMotion) return { valid: false, validation: 'type_mismatch', ...facts };
   }
 
   return {

@@ -11,18 +11,18 @@ describe('HyperFrames composition scaffold', () => {
     await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
   });
 
-  it('creates the daemon-owned minimal composition without running HyperFrames init', async () => {
+  it.each(['.hyperframes-cache', 'motion-source'])('creates the daemon-owned minimal composition without running HyperFrames init in %s', async (rootName) => {
     const projectDir = await mkdtemp(path.join(tmpdir(), 'od-hyperframes-scaffold-'));
     roots.push(projectDir);
 
     const result = await scaffoldHyperFramesComposition({
       projectDir,
-      compositionDir: '.hyperframes-cache/launch-video',
+      compositionDir: `${rootName}/launch-video`,
       now: new Date('2026-08-18T00:00:00.000Z'),
     });
 
     expect(result).toEqual({
-      compositionDir: '.hyperframes-cache/launch-video',
+      compositionDir: `${rootName}/launch-video`,
       files: ['hyperframes.json', 'meta.json', 'index.html'],
     });
     await expect(readFile(path.join(projectDir, result.compositionDir, 'hyperframes.json'), 'utf8'))

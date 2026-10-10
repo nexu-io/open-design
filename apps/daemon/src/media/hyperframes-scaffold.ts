@@ -1,7 +1,7 @@
 import { lstat, mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-const HYPERFRAMES_CACHE_DIR = '.hyperframes-cache';
+const COMPOSITION_ROOTS = new Set(['.hyperframes-cache', 'motion-source']);
 const COMPOSITION_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 const HYPERFRAMES_CONFIG = `${JSON.stringify({
@@ -68,22 +68,23 @@ export async function scaffoldHyperFramesComposition(input: {
   const compositionId = parts[1] ?? '';
   if (
     parts.length !== 2
-    || parts[0] !== HYPERFRAMES_CACHE_DIR
+    || !COMPOSITION_ROOTS.has(parts[0] ?? '')
     || !COMPOSITION_ID_RE.test(compositionId)
   ) {
-    throw new Error('compositionDir must be inside .hyperframes-cache as .hyperframes-cache/<id>');
+    throw new Error('compositionDir must be inside .hyperframes-cache or motion-source as <root>/<id>');
   }
-  const cacheDir = path.join(input.projectDir, HYPERFRAMES_CACHE_DIR);
+  const compositionRoot = parts[0]!;
+  const cacheDir = path.join(input.projectDir, compositionRoot);
   await mkdir(cacheDir, { recursive: true });
   const cacheStat = await lstat(cacheDir);
   if (!cacheStat.isDirectory() || cacheStat.isSymbolicLink()) {
-    throw new Error('.hyperframes-cache must be a real directory inside the project');
+    throw new Error(`${compositionRoot} must be a real directory inside the project`);
   }
 
   const targetDir = path.join(cacheDir, compositionId);
   try {
     await lstat(targetDir);
-    throw new Error(`composition already exists: ${HYPERFRAMES_CACHE_DIR}/${compositionId}`);
+    throw new Error(`composition already exists: ${compositionRoot}/${compositionId}`);
   } catch (error: any) {
     if (error?.code !== 'ENOENT') throw error;
   }
@@ -108,7 +109,7 @@ export async function scaffoldHyperFramesComposition(input: {
   }
 
   return {
-    compositionDir: `${HYPERFRAMES_CACHE_DIR}/${compositionId}`,
+    compositionDir: `${compositionRoot}/${compositionId}`,
     files: [...files],
   };
 }
