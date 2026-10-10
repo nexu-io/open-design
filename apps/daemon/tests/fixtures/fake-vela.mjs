@@ -81,6 +81,13 @@
  *   FAKE_VELA_MODELS             – newline-separated `vela models` stdout
  *   FAKE_VELA_MODEL_PRESET_JSON  – JSON stdout for `model preset --format json`
  *   FAKE_VELA_MODEL_LIST_JSON    – JSON stdout for `model list --all --format json`
+ *   FAKE_VELA_MODEL_LIST_DELAY_MS – delay that remote `model list` answer, so a
+ *                                   run can start before the per-user catalog
+ *   FAKE_VELA_LOG_SET_MODEL_REQUEST – when '1', log every requested set_model id,
+ *                                   including ones rejected below
+ *   FAKE_VELA_ALLOWED_MODELS     – comma-separated ids the caller's plan allows;
+ *                                   session/set_model rejects any other id the
+ *                                   way vela does against its per-user catalog
  *   FAKE_VELA_REQUIRE_SET_MODEL  – strict gate (default on); set to '0' to
  *                                   accept session/prompt without prior
  *                                   session/set_model (legacy behaviour)
@@ -321,6 +328,14 @@ function handleMessage(msg) {
         return;
       }
       const next = typeof params?.modelId === 'string' ? params.modelId.trim() : '';
+      if (env.FAKE_VELA_LOG_SET_MODEL_REQUEST === '1') {
+        logInvocation(`set_model_request:${next || '<empty>'}`);
+      }
+      const allowed = (env.FAKE_VELA_ALLOWED_MODELS || '').split(',').map((m) => m.trim()).filter(Boolean);
+      if (allowed.length > 0 && !allowed.includes(next)) {
+        writeError(id, 'session/set_model modelId is not available', -32602);
+        return;
+      }
       const sessionId = typeof params?.sessionId === 'string' ? params.sessionId : SESSION_ID;
       if (next) currentModelId = next;
       if (env.FAKE_VELA_LOG_SET_MODEL === '1') {
@@ -477,6 +492,8 @@ stdin.on('data', (chunk) => {
 
 stdin.on('end', () => {
   if (argv[2] === 'login') return;
+  // A delayed `model list` finishes on its own timer.
+  if (argv[2] === 'model') return;
   stdout.end();
   // Mirror real ACP runtimes that exit on EOF so the host's child.on('close')
   // fires promptly and the chat run can finalize.
@@ -727,7 +744,10 @@ if (argv[2] === 'model' && argv.includes('--format') && argv.includes('json')) {
     exit(0);
   }
   if (argv[3] === 'list') {
-    stdout.write(`${env.FAKE_VELA_MODEL_LIST_JSON || DEFAULT_MODEL_LIST_JSON}\n`);
-    exit(0);
+    const delayMs = Number(env.FAKE_VELA_MODEL_LIST_DELAY_MS) || 0;
+    setTimeout(() => {
+      stdout.write(`${env.FAKE_VELA_MODEL_LIST_JSON || DEFAULT_MODEL_LIST_JSON}\n`);
+      exit(0);
+    }, delayMs);
   }
 }

@@ -9,7 +9,11 @@ const AMR_MODELS_TIMEOUT_MS = 10_000;
 const AMR_MODELS_RETRY_DELAYS_MS = [250, 750] as const;
 export type VelaModelJsonSource = 'preset' | 'remote';
 
+// deepseek-v4.1-flash leads because it is the one chat model every plan
+// (including free) is entitled to; a list without per-caller `enabled` flags
+// (the preset seed) otherwise resolves `default` to a model the caller cannot use.
 const PREFERRED_AMR_CHAT_MODEL_ORDER = [
+  'deepseek-v4.1-flash',
   'deepseek-v4-flash',
   'deepseek-v4-pro',
 ] as const;
