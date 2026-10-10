@@ -1346,8 +1346,8 @@ export const SHARE_BRIDGE_LIMITS = {
   /** A UUID string. */
   nonceLength: 36,
   idMaxLength: 200,
-  elementIdMaxLength: 1000,
-  selectorMaxLength: 2000,
+  elementIdMaxLength: 4100,
+  selectorMaxLength: 4096,
   htmlHintMaxLength: 2000,
   /** Bounds for positions, dimensions AND right/bottom edges in CSS pixels. */
   coordinateAbsMax: 1_000_000,
