@@ -8,6 +8,10 @@ export const kimiAgentDef = {
     versionArgs: ['--version'],
     fallbackModels: [
       DEFAULT_MODEL_OPTION,
+      // Moonshot's June 2026 coding-focused release. Listed before the
+      // older k2-turbo-preview so the picker surfaces the current default
+      // when the live `kimi` model-discovery call returns nothing.
+      { id: 'kimi-k2.7-code', label: 'kimi-k2.7-code' },
       { id: 'kimi-k2-turbo-preview', label: 'kimi-k2-turbo-preview' },
       { id: 'moonshot-v1-8k', label: 'moonshot-v1-8k' },
       { id: 'moonshot-v1-32k', label: 'moonshot-v1-32k' },
