@@ -8,7 +8,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { DesignSystemSummary } from '@open-design/contracts';
 
 import { DesignSystemsSection } from '../../src/components/DesignSystemsSection';
-import { fetchDesignSystems, updateDesignSystemDraft } from '../../src/providers/registry';
+import { I18nProvider } from '../../src/i18n';
+import {
+  fetchDesignSystems,
+  importLocalDesignSystem,
+  updateDesignSystemDraft,
+} from '../../src/providers/registry';
 import type { AppConfig } from '../../src/types';
 
 const memoryCss = readFileSync(resolve(process.cwd(), 'src/styles/viewer/memory.css'), 'utf8');
@@ -63,6 +68,11 @@ vi.mock('../../src/providers/registry', async () => {
     ...actual,
     fetchDesignSystems: vi.fn(async () => [editable, builtIn]),
     updateDesignSystemDraft: vi.fn(async () => ({ ...editable, title: 'Acme v2', body: '' })),
+    // Default to a successful response so unrelated tests don't hit the real fetch.
+    // Individual tests override with `mockResolvedValueOnce` to assert error paths.
+    importLocalDesignSystem: vi.fn(
+      async () => ({ designSystem: editable }) as Awaited<ReturnType<typeof actual.importLocalDesignSystem>>,
+    ),
   };
 });
 
@@ -197,5 +207,71 @@ describe('DesignSystemsSection rename (issue #2811)', () => {
       expect(repeatMatch).toBeTruthy();
       expect(Number(repeatMatch![1])).toBe(buttonCount);
     }
+  });
+});
+
+// Issue #2686: when the daemon rejects a design-system import, the Settings
+// form must not surface its raw English message in a non-English UI. Today
+// the import-error slot renders `result.error.message` directly, so a Chinese
+// (or any other non-English) locale sees an English error inline. The red
+// spec anchors the contract: after a failed import, the daemon's English
+// text must not be visible in the rendered form. The fix will route the
+// error envelope through a localized formatter (`formatDesignSystemImportError`)
+// that maps `code` to an i18n key and keeps the raw detail under a details
+// disclosure.
+describe('DesignSystemsSection import error localization (issue #2686)', () => {
+  it('does not surface the daemon raw English message in the import form under zh-CN', async () => {
+    vi.mocked(importLocalDesignSystem).mockResolvedValueOnce({
+      error: {
+        code: 'BAD_REQUEST',
+        message: 'local project path must be a directory',
+      },
+    });
+
+    render(
+      <I18nProvider initial="zh-CN">
+        <DesignSystemsSection cfg={cfg} setCfg={() => {}} />
+      </I18nProvider>,
+    );
+
+    // Open the import form (collapsible +Add design system panel).
+    const addButton = await screen.findByRole('button', {
+      name: /add design system|添加设计系统/i,
+    });
+    fireEvent.click(addButton);
+
+    // Fill in the local-import path field.
+    const pathInput = await screen.findByPlaceholderText(/\/path\/to\/project/);
+    fireEvent.change(pathInput, { target: { value: '/tmp/non-existent' } });
+
+    // Submit. The button text is localized ("从项目导入" in zh-CN) — match on a unique substring.
+    const submit = screen.getByRole('button', {
+      name: /从项目导入/i,
+    });
+    fireEvent.click(submit);
+
+    // Sanity: the import client was actually invoked with our typed path.
+    await waitFor(() => {
+      expect(importLocalDesignSystem).toHaveBeenCalledWith(
+        expect.objectContaining({ baseDir: '/tmp/non-existent' }),
+      );
+    });
+
+    // The localized Chinese summary replaces the raw English as the
+    // user-facing message. The raw detail stays under <details>.
+    await waitFor(() => {
+      expect(screen.getByText(/无法导入设计系统/)).toBeInTheDocument();
+    });
+
+    // Raw daemon detail is still accessible for diagnostics.
+    const detail = document.querySelector('.library-install-error-detail code');
+    expect(detail).toBeTruthy();
+    expect(detail!.textContent).toBe('local project path must be a directory');
+
+    // Review point from #6075: <details> is not valid inside a <p>, so the
+    // block must wrap a sibling paragraph rather than nest the disclosure.
+    expect(detail!.closest('p')).toBeNull();
+    const block = document.querySelector('.library-install-error');
+    expect(block?.tagName).toBe('DIV');
   });
 });
