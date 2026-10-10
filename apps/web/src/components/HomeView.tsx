@@ -625,6 +625,12 @@ export function HomeView({
   // removed), so every Home create runs in the default design mode; the
   // per-conversation picker still lives in the project chat composer.
   const sessionMode: ChatSessionMode = 'design';
+  // Automatic task routes do not apply the placeholder plugin. Its legacy
+  // required fields must not block the free-form brief that the route owns.
+  const activeAutomaticStrategyTaskProfile = sessionMode === 'design'
+    && !pinsPluginOverAutomaticRoute(active, active?.chipId ?? null)
+    ? automaticStrategyTaskProfileForRouteId(active?.chipId ?? null)
+    : null;
   const [activeSkill, setActiveSkill] = useState<SkillSummary | null>(null);
   const [activeSkillCatalogScope, setActiveSkillCatalogScope] =
     useState<LocalCatalogScope | null>(null);
@@ -2808,10 +2814,7 @@ export function HomeView({
     // Prototype task profile already branches on — and carries no chip id of
     // its own, so it has nothing to swap the route its parent chose for.
     const submittedRouteChipId = submittedActive?.chipId ?? null;
-    const automaticStrategyTaskProfile = sessionMode === 'design'
-      && !pinsPluginOverAutomaticRoute(submittedActive, submittedRouteChipId)
-      ? automaticStrategyTaskProfileForRouteId(submittedRouteChipId)
-      : null;
+    const automaticStrategyTaskProfile = activeAutomaticStrategyTaskProfile;
     // The example's identity, sent in place of a plugin pin. Non-null only on
     // the same picks the gate above releases to the automatic route, so it can
     // never accompany a pinned plugin.
@@ -2824,6 +2827,7 @@ export function HomeView({
     // through and report whatever the daemon decides (below).
     if (
       submittedActive &&
+      !automaticStrategyTaskProfile &&
       !submittedActive.inputsValid &&
       requiredInputsAreUserFillable(submittedActive)
     ) {
@@ -3204,7 +3208,8 @@ export function HomeView({
           // Only let missing required inputs disable Send where the user has a
           // surface to fill them; otherwise a seeded 「使用」 brief would sit next
           // to a permanently dead button (see requiredInputsAreUserFillable).
-          Boolean(active && !active.inputsValid && requiredInputsAreUserFillable(active))
+          Boolean(active && !activeAutomaticStrategyTaskProfile
+            && !active.inputsValid && requiredInputsAreUserFillable(active))
         }
         onPickPlugin={(record, nextPrompt) => addPluginContext(record, nextPrompt)}
         onPickExamplePlugin={useExamplePlugin}
