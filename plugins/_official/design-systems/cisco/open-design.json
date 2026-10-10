@@ -1,0 +1,113 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-cisco",
+  "title": "Cisco",
+  "title_i18n": {
+    "zh-CN": "Cisco",
+    "zh-TW": "Cisco",
+    "ja": "Cisco",
+    "ko": "Cisco",
+    "de": "Cisco",
+    "fr": "Cisco",
+    "ru": "Cisco",
+    "es": "Cisco",
+    "pt-BR": "Cisco",
+    "it": "Cisco",
+    "vi": "Cisco",
+    "pl": "Cisco",
+    "id": "Cisco",
+    "nl": "Cisco",
+    "ar": "Cisco",
+    "tr": "Cisco",
+    "uk": "Cisco",
+    "en": "Cisco"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-08-04T09:00:00Z",
+  "description": "Enterprise infrastructure brand. Dark trust surfaces, Cisco Blue signal, technical clarity.",
+  "description_i18n": {
+    "zh-CN": "企业基础设施品牌。深色信任底色、思科蓝信号、技术清晰感。",
+    "zh-TW": "企業基礎設施品牌。深色信任底色、思科藍訊號、技術清晰感。",
+    "ja": "エンタープライズ向けインフラブランド。ダークな信頼感のある面、Cisco Blueの信号、技術的な明瞭さ。",
+    "ko": "엔터프라이즈 인프라 브랜드. 어두운 신뢰 표면, Cisco Blue 시그널, 기술적인 명확함.",
+    "de": "Enterprise-Infrastrukturmarke. Dunkle Vertrauensflächen, Cisco-Blau-Signal, technische Klarheit.",
+    "fr": "Marque d’infrastructure d’entreprise. Surfaces sombres de confiance, signal Cisco Blue, clarté technique.",
+    "ru": "Бренд корпоративной инфраструктуры. Тёмные поверхности доверия, сигнал Cisco Blue, техническая ясность.",
+    "es": "Marca de infraestructura empresarial. Superficies oscuras de confianza, señal Cisco Blue, claridad técnica.",
+    "pt-BR": "Marca de infraestrutura empresarial. Superfícies escuras de confiança, sinal Cisco Blue, clareza técnica.",
+    "it": "Brand di infrastruttura enterprise. Superfici scure di fiducia, segnale Cisco Blue, chiarezza tecnica.",
+    "vi": "Thương hiệu hạ tầng doanh nghiệp. Bề mặt tối mang cảm giác tin cậy, tín hiệu xanh Cisco, rõ ràng về kỹ thuật.",
+    "pl": "Marka infrastruktury enterprise. Ciemne powierzchnie zaufania, sygnał Cisco Blue, techniczna klarowność.",
+    "id": "Merek infrastruktur enterprise. Permukaan gelap yang tepercaya, sinyal Cisco Blue, kejelasan teknis.",
+    "nl": "Enterprise-infrastructuurmerk. Donkere vertrouwensvlakken, Cisco Blue-signaal, technische helderheid.",
+    "ar": "علامة بنية تحتية للمؤسسات. أسطح داكنة توحي بالثقة، إشارة Cisco Blue، وضوح تقني.",
+    "tr": "Kurumsal altyapı markası. Koyu güven yüzeyleri, Cisco Blue sinyali, teknik netlik.",
+    "uk": "Бренд корпоративної інфраструктури. Темні поверхні довіри, сигнал Cisco Blue, технічна ясність.",
+    "en": "Enterprise infrastructure brand. Dark trust surfaces, Cisco Blue signal, technical clarity."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "backend-data"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Cisco design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Cisco design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "cisco",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}
