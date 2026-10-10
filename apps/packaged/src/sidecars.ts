@@ -17,6 +17,7 @@ import {
   type WebStatusSnapshot,
 } from "@open-design/sidecar-proto";
 import {
+  findSidecarProcesses,
   getSidecarStatus,
   invokeSidecar,
   spawnSidecar,
@@ -265,6 +266,11 @@ const DAEMON_MIGRATION_STATUS_TIMEOUT_MS = 30 * 60 * 1000;
 // cold start.
 const STATUS_POLL_INITIAL_MS = 150;
 const STATUS_POLL_MAX_MS = 1500;
+
+// Liveness probe budget for retireExistingSidecar's fast path: only needs to
+// cover one connect+status round trip against a live endpoint. A dead endpoint
+// rejects at connect time (~2ms), so this ceiling only bites for a hung pipe.
+const RETIRE_PROBE_TIMEOUT_MS = 400;
 
 // Baseline status wait budget by platform, before the daemon-only legacy
 // migration override. win32 gets the wider AV-scan headroom, linux gets the
@@ -543,13 +549,72 @@ export async function waitForStatus<T>(
   }
 }
 
+/**
+ * Probe whether a prior generation is listening on the stamp's private IPC
+ * endpoint. Resolves `true` only when the endpoint demonstrably answered, `false`
+ * when it demonstrably did not (transport-level ENOENT / ECONNREFUSED), and
+ * `null` when the probe was inconclusive (timeout, application error while the
+ * runtime is still starting, or any unexpected transport failure).
+ *
+ * The classification is transport-faithful: `requestJsonIpc` surfaces OS
+ * connect failures as the raw socket error (with a `code`, e.g. ENOENT for a
+ * Windows named pipe that does not exist), while an endpoint whose server
+ * accepted the connection rejects with a reconstructed `Error` carrying no
+ * `code` — e.g. "sidecar runtime is starting" from the pre-ready gate. Only
+ * that answered shape counts as alive so a booting prior generation is still
+ * retired through the full flow rather than raced.
+ */
+async function probeSidecarEndpointAnswered(
+  stamp: SidecarStamp,
+  deps: { getSidecarStatus?: typeof getSidecarStatus } = {},
+): Promise<boolean | null> {
+  const getStatus = deps.getSidecarStatus ?? getSidecarStatus;
+  try {
+    await getStatus(stamp, { timeoutMs: RETIRE_PROBE_TIMEOUT_MS });
+    return true;
+  } catch (error) {
+    const code = (error as { code?: unknown } | null)?.code;
+    if (code === "ENOENT" || code === "ECONNREFUSED") return false;
+    return null;
+  }
+}
+
+/**
+ * Windows process enumeration (powershell Get-CimInstance) costs ~2.2-2.6s per
+ * invocation, and the retire atomic inside `stopSidecar` runs it two to three
+ * times per spawn — measured 5.7-6.1s per sidecar spawn even when no prior
+ * generation exists, where the flow's only possible outcome is alreadyStopped.
+ * Probe the cheap signals first and only enter the full flow when something is
+ * actually there to retire (see #8056).
+ */
 export async function retireExistingSidecar(
   stamp: SidecarStamp,
   logPath: string,
   deps: {
     stop?: typeof stopSidecar;
+    findSidecarProcesses?: typeof findSidecarProcesses;
+    getSidecarStatus?: typeof getSidecarStatus;
   } = {},
 ): Promise<void> {
+  const answered = await probeSidecarEndpointAnswered(stamp, deps);
+  if (answered === false) {
+    const findProcesses = deps.findSidecarProcesses ?? findSidecarProcesses;
+    const prior = await findProcesses(stamp).catch(() => null);
+    if (prior != null && prior.length === 0) {
+      // Confirmed dead endpoint (transport-level ENOENT/ECONNREFUSED) and the
+      // precise process scan finds no stamped generation: the full retire flow
+      // could only return alreadyStopped, so skip it and its repeated
+      // enumerations. Skipping is safe for the child about to spawn: the IPC
+      // server unlinks a stale endpoint before binding
+      // (createJsonIpcServer/prepareIpcPath), so no leftover state can break
+      // the new bind.
+      await appendSidecarLifecycleLog(
+        logPath,
+        `[open-design packaged] no prior ${stamp.app} generation found; skipping retire`,
+      );
+      return;
+    }
+  }
   await appendSidecarLifecycleLog(
     logPath,
     `[open-design packaged] retiring prior ${stamp.app} generation before launch`,
