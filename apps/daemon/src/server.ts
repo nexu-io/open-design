@@ -15328,17 +15328,23 @@ export async function startServer({
         // upstream) for agents without a tailored probe (Claude Code, codex,
         // …), so the chat shows an accurate reason instead of the generic
         // execution-failed bucket.
+        // The provider's own verdict (OpenCode APIError isRetryable), when the
+        // stream reported one, wins on every path so the failure is not
+        // retried blindly.
+        const streamRetryable = typeof ev.retryable === 'boolean' ? ev.retryable : undefined;
+        const details = ev.raw ? { raw: ev.raw } : undefined;
         const serviceCode = classifyAgentServiceFailure(failureText);
         if (serviceCode) {
           send('error', createSseErrorPayload(serviceCode, agentStreamError, {
-            details: ev.raw ? { raw: ev.raw } : undefined,
-            retryable: true,
+            details,
+            retryable: streamRetryable ?? true,
           }));
           return;
         }
         send('error', withAcpHandshakeFailureGuidance(
           createSseErrorPayload('AGENT_EXECUTION_FAILED', agentStreamError, {
-            details: ev.raw ? { raw: ev.raw } : undefined,
+            details,
+            ...(streamRetryable === undefined ? {} : { retryable: streamRetryable }),
           }),
           agentFailureIdentity(def),
         ));

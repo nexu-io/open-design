@@ -3478,6 +3478,87 @@ process.exit(1);
     );
   });
 
+  // OPEND-3527: real frames from 0.24.x bundles. OpenCode exits 0 after a
+  // provider's explicit verdict; it must not become a retried network error.
+  it.each([
+    ['context overflow', 'OPENCODE_CONTEXT_OVERFLOW_FRAME', 'prompt_too_large', 'prompt_too_large', "longer than the model's context length"],
+    ['insufficient funds', 'OPENCODE_INSUFFICIENT_FUNDS_FRAME', 'rate_limit', 'hard_quota', 'Insufficient account funds'],
+  ] as const)('classifies an OpenCode provider %s by its verdict, without a same-run retry (OPEND-3527)', async (_label, frameName, category, detail, reason) => {
+    const frames = await import('./fixtures/opencode-provider-error-frames.js');
+    const frame = JSON.stringify((frames as Record<string, unknown>)[frameName]);
+    await withFakeAgent(
+      'opencode',
+      `
+console.log(${JSON.stringify(frame)});
+process.exit(0);
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agentId: 'opencode', message: 'hello' }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+        await waitForRunStatus(baseUrl, runId);
+        const eventsController = new AbortController();
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, { signal: eventsController.signal });
+        const eventsBody = await readSseUntil(eventsResponse, 'event: end');
+        eventsController.abort();
+        const statusResponse = await fetch(`${baseUrl}/api/runs/${runId}`);
+        const statusBody = await statusResponse.json() as {
+          status: string; failureCategory: string | null; failureDetail: string | null;
+        };
+
+        expect(eventsBody).toContain(reason);
+        expect(eventsBody).not.toContain('run_retry_attempted');
+        expect(statusBody).toMatchObject({ status: 'failed', failureCategory: category, failureDetail: detail });
+      },
+    );
+  });
+
+  // A service-shaped verdict (here RATE_LIMITED) must keep the provider's
+  // isRetryable: false too, not only the generic execution-failed path.
+  it('keeps a non-retryable OpenCode HTTP 429 verdict out of the same-run retry (OPEND-3527)', async () => {
+    const { OPENCODE_RATE_LIMIT_FRAME } = await import('./fixtures/opencode-provider-error-frames.js');
+    const frame = JSON.stringify({
+      ...OPENCODE_RATE_LIMIT_FRAME,
+      error: {
+        ...OPENCODE_RATE_LIMIT_FRAME.error,
+        data: { ...OPENCODE_RATE_LIMIT_FRAME.error.data, isRetryable: false },
+      },
+    });
+    await withFakeAgent(
+      'opencode',
+      `
+console.log(${JSON.stringify(frame)});
+process.exit(0);
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agentId: 'opencode', message: 'hello' }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+        await waitForRunStatus(baseUrl, runId);
+        const eventsController = new AbortController();
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, { signal: eventsController.signal });
+        const eventsBody = await readSseUntil(eventsResponse, 'event: end');
+        eventsController.abort();
+        const errorPayload = eventsBody
+          .split('\n\n')
+          .filter((block) => block.split('\n').includes('event: error'))
+          .map((block) => JSON.parse(block.slice(block.indexOf('data: ') + 6)) as { error?: { code?: string; retryable?: boolean } })
+          .at(-1);
+
+        expect(errorPayload?.error).toMatchObject({ code: 'RATE_LIMITED', retryable: false });
+        expect(eventsBody).not.toContain('run_retry_attempted');
+      },
+    );
+  });
+
   it('prefers a terminal Claude prompt-length error over auth-shaped stderr (#6979)', async () => {
     await withFakeAgent(
       'claude',

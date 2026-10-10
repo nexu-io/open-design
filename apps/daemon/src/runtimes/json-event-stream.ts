@@ -113,6 +113,47 @@ function connectorToolSelectionErrorMessage(content: string): string | null {
   return `${target} Re-list the connector catalog and choose one of the currently allowed read-only tools.`;
 }
 
+const GENERIC_PROVIDER_ERROR = /^provider returned error$/i;
+const PROVIDER_REASON_MAX_CHARS = 400;
+
+/**
+ * The provider's own words from an AI SDK APIError body. OpenRouter nests the
+ * upstream reply under error.metadata.raw, itself often JSON with a message.
+ */
+function providerErrorReason(responseBody: unknown): string {
+  const body = typeof responseBody === 'string' ? safeParseJson(responseBody) : responseBody;
+  if (!isRecord(body)) return '';
+  const error = isRecord(body.error) ? body.error : body;
+  const metadata = isRecord(error.metadata) ? error.metadata : null;
+  const raw = metadata && typeof metadata.raw === 'string' ? metadata.raw : '';
+  const rawParsed = raw ? safeParseJson(raw) : null;
+  const candidates = [
+    isRecord(rawParsed) && typeof rawParsed.message === 'string' ? rawParsed.message : raw,
+    typeof error.message === 'string' ? error.message : '',
+  ];
+  const reason = candidates.map((text) => text.trim()).find((text) => text && !GENERIC_PROVIDER_ERROR.test(text)) ?? '';
+  return reason.length > PROVIDER_REASON_MAX_CHARS ? `${reason.slice(0, PROVIDER_REASON_MAX_CHARS)}…` : reason;
+}
+
+/**
+ * OpenCode reports a provider's verdict as an APIError whose message is often
+ * the bare "Provider returned error"; the status, the provider's reason and
+ * its retryability sit beside it. Name them so the failure can be classified.
+ */
+function describeOpenCodeApiError(error: unknown, message: string): { message: string; retryable?: boolean } {
+  if (!isRecord(error) || !isRecord(error.data)) return { message };
+  const data = error.data;
+  const retryable = typeof data.isRetryable === 'boolean' ? data.isRetryable : undefined;
+  const status = typeof data.statusCode === 'number' ? data.statusCode : undefined;
+  if (status === undefined) return { message, ...(retryable === undefined ? {} : { retryable }) };
+  const reason = providerErrorReason(data.responseBody);
+  const withStatus = `${message} (HTTP ${status})`;
+  return {
+    message: reason && !message.includes(reason) ? `${withStatus}: ${reason}` : withStatus,
+    ...(retryable === undefined ? {} : { retryable }),
+  };
+}
+
 function extractErrorMessage(value: unknown, fallback: string): string {
   if (typeof value === 'string') {
     const parsed = safeParseJson(value);
@@ -288,11 +329,11 @@ function handleOpenCodeEvent(obj: unknown, onEvent: StreamEventHandler, state: P
     // Shape mirrors the qoder-stream contract (`{type, message, raw}`) so
     // the daemon's existing error-handling path recognises it without
     // further wiring.
-    const message = extractErrorMessage(
-      obj.error ?? obj.message,
-      'OpenCode error',
+    const described = describeOpenCodeApiError(
+      obj.error,
+      extractErrorMessage(obj.error ?? obj.message, 'OpenCode error'),
     );
-    onEvent({ type: 'error', message, raw: stringifyContent(obj) });
+    onEvent({ type: 'error', ...described, raw: stringifyContent(obj) });
     return true;
   }
 
