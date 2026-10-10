@@ -1,3 +1,4 @@
+import { composeOdNextStrategyContinuationV2 } from '@open-design/contracts';
 import type { OpenDesignPlanContractV2 } from '@open-design/contracts';
 import { describe, expect, it } from 'vitest';
 
@@ -334,4 +335,16 @@ it('normalizes only the motion source null derivation while retaining required v
   expect(parse().normalizations).toContain('od_next_protocol_motion_source_null_derivation_normalized');
   motion.taskProfile.requiredDeliverables[1].derivesFrom = null;
   expect(parse().issues.some((issue)=>issue.code==='od_next_protocol_plan_contract_invalid_schema')).toBe(true);
+});
+
+it('parses the actual production closing example with the strict stream parser', () => {
+  const instruction = composeOdNextStrategyContinuationV2({ stage:'production', nativeSessionResume:true, taskExecutionId:'task',taskRunIndex:1,planContractHash:'a'.repeat(64),executionMode:'simple' });
+  const open = '<open-design-runtime-state>';
+  const close = '</open-design-runtime-state>';
+  const start = instruction.indexOf(open);
+  const wire = instruction.slice(start, instruction.indexOf(close,start)+close.length);
+  const stream = new OdNextMachineProtocolStream(); stream.push(wire);
+  const parsed = stream.finish();
+  expect(parsed.issues).toEqual([]);
+  expect(parsed.runtimeState).toMatchObject({inputStage:'production',outcome:'completed',executionMode:'simple'});
 });

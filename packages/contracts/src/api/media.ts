@@ -365,5 +365,5 @@ export interface HyperFramesScaffoldRequest {
 /** Files created before the agent authors the composition HTML. */
 export interface HyperFramesScaffoldResponse {
   compositionDir: string;
-  files: ['hyperframes.json', 'meta.json', 'index.html'];
+  files: ['hyperframes.json', 'meta.json', 'index.html', ...string[]];
 }

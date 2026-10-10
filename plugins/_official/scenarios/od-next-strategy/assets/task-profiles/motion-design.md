@@ -223,9 +223,11 @@ Open Design scaffolds and embeds a shared source player with play/pause, scrub
 and replay. Preserve its `script[data-od-motion-source-player]`. Do not create
 competing controls or start a second playback clock. The renderer sets
 `window.__odMotionRender` before author scripts to disable preview chrome and
-scaling during capture. Use a local GSAP file (download the pinned 3.14.2 build
-into the source directory if needed) so reopening the source does not require
-a CDN. For an existing standalone source without the host player, put controls outside the
+scaling during capture. The scaffold includes pinned GSAP 3.14.2 at
+`./gsap.min.js`; preserve and reference that local file. No download is needed. Prefer installed/system fonts with Chinese coverage; an unrequested font
+must not block delivery. If an optional download fails, use an available font
+instead of probing more mirrors, installing font tools or creating environments.
+For an existing standalone source without the host player, put controls outside the
 composition and connect them to the same master timeline. Scale the whole stage
 uniformly to fit; do not reflow scene layout when the viewport changes. Controls
 must not appear in the exported frames. Keep a useful poster when reduced motion

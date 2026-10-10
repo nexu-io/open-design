@@ -75,6 +75,7 @@ describe("win standalone prebundle policy", () => {
       "better-sqlite3",
       "blake3-wasm",
       "hyperframes",
+      "gsap",
       "node-pty",
     ]);
     expect(WIN_PREBUNDLE_POLICIES.daemonSidecar.externals).toEqual([
@@ -83,6 +84,7 @@ describe("win standalone prebundle policy", () => {
       "better-sqlite3",
       "blake3-wasm",
       "hyperframes",
+      "gsap",
       "node-pty",
     ]);
     expect(WIN_PREBUNDLE_POLICIES.webSidecar.externals).toEqual(["@open-design/sidecar"]);
@@ -95,6 +97,7 @@ describe("win standalone prebundle policy", () => {
       "better-sqlite3": "12.10.0",
       "blake3-wasm": "2.1.5",
       "hyperframes": "0.8.1",
+      "gsap": "3.14.2",
       "node-pty": "1.1.0",
       "sharp": "0.35.3",
     });

@@ -54,7 +54,7 @@ const PLAYER = `<script data-od-motion-source-player>
         var time = tl.time(); slider.value = String(time);
         play.textContent = tl.paused() || time >= duration ? '播放' : '暂停';
         status.textContent = time.toFixed(1) + ' / ' + duration.toFixed(1) + ' s';
-        requestAnimationFrame(update);
+        setTimeout(update, tl.paused() || time >= duration ? 200 : 33);
       }
       update();
     }
