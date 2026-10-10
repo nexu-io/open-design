@@ -148,6 +148,34 @@ export async function startDaemonRuntime(options: DaemonRuntimeOptions = {}): Pr
   };
 }
 
+export function installGracefulShutdownSignals(
+  shutdown: () => Promise<void>,
+  onComplete: () => void,
+): () => void {
+  let inFlight: Promise<void> | null = null;
+  const signals = ['SIGINT', 'SIGTERM'] as const;
+  const listeners = signals.map((signal) => {
+    const listener = () => {
+      if (inFlight) {
+        console.warn(`[od] ${signal} ignored: shutdown already in progress (send SIGKILL to force)`);
+        return;
+      }
+      inFlight = shutdown()
+        .catch((error: unknown) => console.error('[od] shutdown failed', error))
+        .finally(() => {
+          dispose();
+          onComplete();
+        });
+    };
+    process.on(signal, listener);
+    return [signal, listener] as const;
+  });
+  const dispose = () => {
+    for (const [signal, listener] of listeners) process.off(signal, listener);
+  };
+  return dispose;
+}
+
 export async function runDaemonCliStartup(argv: string[], options: { printHelp?: () => void } = {}): Promise<void> {
   const parsed = parseDaemonCliStartupArgs(argv);
   if (!parsed.ok) {
@@ -167,14 +195,5 @@ export async function runDaemonCliStartup(argv: string[], options: { printHelp?:
     openBrowser: open,
     port,
   });
-  let shuttingDown = false;
-  const stop = () => {
-    if (shuttingDown) {
-      process.exit(0);
-    }
-    shuttingDown = true;
-    void runtime.stop().finally(() => process.exit(0));
-  };
-  process.on('SIGINT', stop);
-  process.on('SIGTERM', stop);
+  installGracefulShutdownSignals(() => runtime.stop(), () => process.exit(0));
 }
