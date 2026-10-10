@@ -15,7 +15,7 @@ import { parseDesignSystemRenameArgs } from './design-systems/rename-args.js';
 import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
 import { runDeliverableSyntaxToolCli } from './tools-deliverable-syntax-cli.js';
 import { splitResearchSubcommand } from './research/cli-args.js';
-import { resolveDaemonUrl } from './daemon-url.js';
+import { resolveDaemonUrl, resolveDaemonUrlDetailed } from './daemon-url.js';
 import { SidecarFactory } from '@open-design/sidecar';
 import { APP_KEYS, SIDECAR_MESSAGES } from '@open-design/sidecar-proto';
 import { EXPORT_FORMATS, EXPORT_IMAGE_FORMATS, mediaFailureNextStep } from '@open-design/contracts';
@@ -2236,12 +2236,12 @@ function repeatableFlagValues(argv, name) {
   return values;
 }
 
-async function cliDaemonUrl(flags) {
-  return resolveDaemonUrl({ flagUrl: flags?.['daemon-url'] });
+async function cliDaemonUrl(flags, resolveOptions = {}) {
+  return resolveDaemonUrl({ flagUrl: flags?.['daemon-url'], ...resolveOptions });
 }
 
-async function cliDaemonBaseUrl(flags) {
-  return (await cliDaemonUrl(flags)).replace(/\/$/, '');
+async function cliDaemonBaseUrl(flags, resolveOptions = {}) {
+  return (await cliDaemonUrl(flags, resolveOptions)).replace(/\/$/, '');
 }
 
 function printMediaHelp() {
@@ -2436,8 +2436,18 @@ To register this server into a coding agent's own config automatically:
 // Codex one-click install use), so every install path configures byte-for-
 // byte the same command. Falls back to a minimal `od mcp --daemon-url`
 // spec when the daemon is unreachable.
+//
+// MCP installation can discover packaged sidecars from a plain terminal.
+// Refuse ambiguous discovery before fetching or persisting any launch spec.
 async function resolveMcpLaunchSpec(flags) {
-  const base = await cliDaemonBaseUrl(flags);
+  const { url: rawBase, ambiguous } = await resolveDaemonUrlDetailed({
+    flagUrl: flags?.['daemon-url'],
+    allowConventionalIpcDiscovery: true,
+  });
+  if (ambiguous) {
+    return null;
+  }
+  const base = rawBase.replace(/\/$/, '');
   try {
     const resp = await fetch(`${base}/api/mcp/install-info`);
     if (resp.ok) {
@@ -2453,11 +2463,24 @@ async function resolveMcpLaunchSpec(flags) {
   } catch {
     // daemon not running / unreachable — fall through to the minimal spec
   }
+  // Bare `od` collides with the system octal-dump utility on macOS/Linux
+  // (issue #5120). Self-reinvoke via the absolute interpreter + entry-point
+  // paths this very process was launched with instead — the same pattern
+  // already used for plugin-validate above — so the degraded spec still
+  // resolves to a real executable even when discovery keeps failing.
   return {
-    command: 'od',
-    args: ['mcp', '--daemon-url', base],
-    env: {},
+    command: process.execPath,
+    args: [process.argv[1], 'mcp', '--daemon-url', base],
+    env: selfReinvocationRuntimeEnv(),
   };
+}
+
+// Preserve the current interpreter mode and explicit daemon data root on fallback.
+function selfReinvocationRuntimeEnv() {
+  const env = {};
+  if (process.env.OD_DATA_DIR) env.OD_DATA_DIR = process.env.OD_DATA_DIR;
+  if (process.env.ELECTRON_RUN_AS_NODE === '1') env.ELECTRON_RUN_AS_NODE = '1';
+  return env;
 }
 
 function emitInstallResult(useJson, result) {
@@ -2510,8 +2533,33 @@ async function runMcpInstall(args) {
   const dryRun = Boolean(flags.print || flags['dry-run']);
   const serverName = flags.name || 'open-design';
 
+  // Uninstall never needs a live daemon: planAgentInstall's remove-side
+  // fields (removeArgv, configPath/keyPath/serverKey for the JSON planners)
+  // never derive from `spec` -- only the add-side fields do. Skip discovery
+  // (and its ambiguous-discovery refusal below) entirely on this path, so
+  // "two packaged channels happen to be running" can never strand a stale
+  // MCP registration in an agent's config that the user is trying to clean
+  // up. planAgentInstall still needs SOME spec argument to build the full
+  // plan object (it computes the add-side shape unconditionally even when
+  // only the remove-side is about to be used) -- this placeholder is inert
+  // and never reaches an actual command line on the uninstall path.
+  const spec = uninstall
+    ? { command: '', args: [], env: {} }
+    : await resolveMcpLaunchSpec(flags);
+  if (spec == null) {
+    // Ambiguous discovery (see resolveMcpLaunchSpec's doc comment): more
+    // than one packaged channel is simultaneously live and this install
+    // cannot know which one the caller meant. Refuse the whole install
+    // rather than persist a --daemon-url that would silently target
+    // whatever later happens to own that port -- see the #6425 review
+    // discussion. (Never reached for `uninstall`, which takes the
+    // placeholder-spec branch above instead.)
+    const msg = `${slug}: multiple Open Design channels are currently running; refusing to guess which one to install against. Stop the extra instance(s), or pass --daemon-url explicitly, then retry.`;
+    emitInstallResult(useJson, { ok: false, agent: slug, message: msg });
+    process.exit(2);
+  }
+
   const os = await import('node:os');
-  const spec = await resolveMcpLaunchSpec(flags);
   const plan = planAgentInstall(slug, spec, {
     home: os.homedir(),
     platform: process.platform,

@@ -9,13 +9,23 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 const execFileAsync = promisify(execFile);
 const daemonRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-let compiledResolver: string;
+const compiledModules = new Map<string, string>();
 
 beforeAll(async () => {
-  compiledResolver = ts.transpileModule(
-    await fs.readFile(path.join(daemonRoot, "src/daemon-url.ts"), "utf8"),
-    { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } },
-  ).outputText;
+  // Keep real local imports in the relocated runtime, not just the entrypoint.
+  for (const file of [
+    "daemon-url",
+    "http/local-daemon-request",
+    "http/api-errors",
+    "http/api-failure-journal",
+    "services/diagnostics-evidence",
+    "services/diagnostics-environment",
+  ]) {
+    compiledModules.set(file, ts.transpileModule(
+      await fs.readFile(path.join(daemonRoot, "src", `${file}.ts`), "utf8"),
+      { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } },
+    ).outputText);
+  }
 });
 
 type Layout = "mac" | "payload" | "source" | "dist";
@@ -38,8 +48,11 @@ async function runDiscovery(options: {
     const modulePath = path.join(root, source
       ? `apps/daemon/${options.layout === "dist" ? "dist" : "src"}/daemon-url.mjs`
       : "prebundled/daemon/chunks/discovery.mjs");
-    await fs.mkdir(path.dirname(modulePath), { recursive: true });
-    await fs.writeFile(modulePath, compiledResolver);
+    for (const [file, compiled] of compiledModules) {
+      const outputPath = file === "daemon-url" ? modulePath : path.join(path.dirname(modulePath), `${file}.js`);
+      await fs.mkdir(path.dirname(outputPath), { recursive: true });
+      await fs.writeFile(outputPath, compiled);
+    }
     // Production dependencies are read through a link; no package manager is run.
     await fs.symlink(path.join(daemonRoot, "node_modules"), path.join(root, "node_modules"), "junction");
     await fs.writeFile(path.join(root, "package.json"), JSON.stringify({ name: "open-design", type: "module" }));
