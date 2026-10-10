@@ -121,6 +121,7 @@ import type {
   AppVersionInfo,
   ConnectionTestResponse,
   DesignSystemGenerationJob,
+  MediaProviderCredentials,
   OrbitRunSummary,
   OrbitStatusResponse,
   ExecMode,
@@ -139,7 +140,8 @@ import {
   liveArtifactPreviewUrl,
   openExternalUrl,
 } from '../providers/registry';
-import { MEDIA_PROVIDERS } from '../media/models';
+import { MEDIA_PROVIDERS, IMAGE_MODELS } from '../media/models';
+import type { CustomImageFormat } from '../media/models';
 import { useByokImageModelOptions, useByokVideoModelOptions, useByokSpeechModelOptions } from '../media/aihubmix-image-models';
 import { isVisualStabilityMode } from '../utils/visualStability';
 import { byokProviderRequiresApiKey } from '../utils/byokProvider';
@@ -3838,13 +3840,19 @@ export function SettingsDialog({
           ? Array.from(new Set(selectedProvider.preferredModels))
           : [];
       }
+      // hideSuggestedModels: once the account catalogue is loaded, drop
+      // the hand-curated suggestions so the picker shows only models the
+      // provider actually exposes. Before a fetch they stay as fallback.
+      if (cfg.hideSuggestedModels && fetchedApiModelOptions.length > 0) {
+        return [];
+      }
       return Array.from(new Set(
         selectedProvider?.preferredModels.length
           ? selectedProvider.preferredModels
           : SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol],
       ));
     },
-    [apiProtocol, selectedProvider, providerModelDiscoveryUnavailable],
+    [apiProtocol, selectedProvider, providerModelDiscoveryUnavailable, cfg.hideSuggestedModels, fetchedApiModelOptions],
   );
   const apiModelOptions = useMemo(
     () => mergeProviderModelOptions(
@@ -5776,6 +5784,20 @@ export function SettingsDialog({
                   updateApiConfig({ model: nextValue });
                 }}
               />
+              <label className="field">
+                <span className="field-label">
+                  <input
+                    type="checkbox"
+                    checked={cfg.hideSuggestedModels === true}
+                    aria-label={t('settings.hideSuggestedModels')}
+                    onChange={(e) =>
+                      setCfg((current) => ({ ...current, hideSuggestedModels: e.target.checked }))
+                    }
+                  />
+                  {t('settings.hideSuggestedModels')}
+                </span>
+                <p className="hint">{t('settings.hideSuggestedModelsHint')}</p>
+              </label>
               <details className="agent-cli-env settings-memory-advanced">
                 <summary className="agent-cli-env-summary">
                   <span className="agent-cli-env-summary-title">
@@ -7720,6 +7742,21 @@ function OrbitSection({
   );
 }
 
+// custom-image wire-format picker options. `value` mirrors the daemon's
+// CUSTOM_IMAGE_FORMATS (the media-config.json `format` contract);
+// `labelKey` is a literal so the i18n layer stays type-checked.
+const CUSTOM_IMAGE_FORMAT_OPTIONS: ReadonlyArray<{
+  value: CustomImageFormat;
+  labelKey:
+    | 'settings.mediaProviderFormatOpenaiImages'
+    | 'settings.mediaProviderFormatGeminiNative'
+    | 'settings.mediaProviderFormatOpenaiChat';
+}> = [
+  { value: 'openai-images', labelKey: 'settings.mediaProviderFormatOpenaiImages' },
+  { value: 'gemini-native', labelKey: 'settings.mediaProviderFormatGeminiNative' },
+  { value: 'openai-chat', labelKey: 'settings.mediaProviderFormatOpenaiChat' },
+];
+
 function MediaProvidersSection({
   cfg,
   setCfg,
@@ -7767,14 +7804,22 @@ function MediaProvidersSection({
   //     disabled placeholders. Hiding them behind a <details> keeps the
   //     primary list focused (was 16 cards, now 8) without dropping the
   //     informational value.
+  // A tombstoned entry (deleted: true) is an explicit "cleared" marker
+  // the daemon keeps on disk so the chat-side key mirror cannot resurrect
+  // the provider. Every "is this provider configured?" surface here —
+  // pill status dots, list sorting, the Clear affordance — must treat it
+  // as unconfigured while isStoredMediaProviderEntryPresent keeps it in
+  // the save map (present ≠ configured).
+  const isEntryConfigured = (entry: MediaProviderCredentials | null | undefined): boolean =>
+    isStoredMediaProviderEntryPresent(entry) && !entry?.deleted;
   const availableProviders = visibleProviders
     .filter((p) => p.integrated)
     .slice()
     .sort((a, b) => {
       const aEntry = cfg.mediaProviders?.[a.id];
       const bEntry = cfg.mediaProviders?.[b.id];
-      const aConfigured = isStoredMediaProviderEntryPresent(aEntry);
-      const bConfigured = isStoredMediaProviderEntryPresent(bEntry);
+      const aConfigured = isEntryConfigured(aEntry);
+      const bConfigured = isEntryConfigured(bEntry);
       if (aConfigured !== bConfigured) return aConfigured ? -1 : 1;
       return a.label.localeCompare(b.label);
     });
@@ -7788,6 +7833,8 @@ function MediaProvidersSection({
       apiKey?: string;
       baseUrl?: string;
       model?: string;
+      format?: string;
+      deleted?: boolean;
       apiKeyConfigured?: boolean;
       apiKeyTail?: string;
     },
@@ -7796,6 +7843,7 @@ function MediaProvidersSection({
     setCfg((curr) => {
       const prev = curr.mediaProviders?.[provider.id] ?? { apiKey: '', baseUrl: '', model: '' };
       const next = { ...prev, ...patch };
+      if (patch.deleted !== true) delete next.deleted;
       const map = { ...(curr.mediaProviders ?? {}) };
       if (isStoredMediaProviderEntryEmpty(next)) {
         delete map[provider.id];
@@ -7886,9 +7934,39 @@ function MediaProvidersSection({
   const activeIsSavedState = Boolean(
     activeEntry && (activeHasPendingEdit || activeEntry.apiKeyConfigured) && !activeHasPendingEdit,
   );
-  const activeClearable = Boolean(activeEntry && isStoredMediaProviderEntryPresent(activeEntry));
+  const activeClearable = Boolean(
+    activeEntry && isStoredMediaProviderEntryPresent(activeEntry) && !activeEntry.deleted,
+  );
   const activeApiKeyVisible = activeProvider ? visibleApiKeys.has(activeProvider.id) : false;
   const activeRequiresCredentials = activeProvider?.credentialsRequired !== false;
+  // Options for the global default image model: registry image models
+  // whose provider the user has actually configured. A tombstoned or
+  // absent provider contributes nothing; custom-image shows its
+  // configured wire model so the entry is identifiable in the list.
+  const defaultImageModelOptions = useMemo(() => {
+    const entries = cfg.mediaProviders ?? {};
+    const out: Array<{ value: string; label: string }> = [];
+    const seen = new Set<string>();
+    for (const model of IMAGE_MODELS) {
+      const entry = entries[model.provider];
+      const provider = MEDIA_PROVIDERS.find((candidate) => candidate.id === model.provider);
+      if (!provider?.integrated || !entry || entry.deleted) continue;
+      const ready = model.provider === 'custom-image'
+        ? Boolean(entry.baseUrl?.trim() && entry.model?.trim())
+        : Boolean(entry.apiKey?.trim() || entry.apiKeyConfigured);
+      if (!ready) continue;
+      if (seen.has(model.id)) continue;
+      seen.add(model.id);
+      const wireModel = entry.model?.trim();
+      out.push({
+        value: model.id,
+        label: wireModel && wireModel !== model.id
+          ? `${model.label} · ${wireModel}`
+          : model.label,
+      });
+    }
+    return out;
+  }, [cfg.mediaProviders]);
 
   return (
     <section className="settings-section">
@@ -7960,7 +8038,7 @@ function MediaProvidersSection({
               const active = activeProvider?.id === provider.id;
               const entry = cfg.mediaProviders?.[provider.id];
               const connected = provider.credentialsRequired === false
-                || isStoredMediaProviderEntryPresent(entry);
+                || isEntryConfigured(entry);
               const statusLabel = connected
                 ? t('settings.mediaProviderConfigured')
                 : t('settings.mediaProviderUnset');
@@ -8078,6 +8156,22 @@ function MediaProvidersSection({
                   onChange={(e) => updateProvider(activeProvider, { model: e.target.value })}
                 />
               </label>
+              {activeProvider.id === 'custom-image' ? (
+                <label className="media-provider-detail-field">
+                  <span>{t('settings.mediaProviderImageFormat')}</span>
+                  <select
+                    value={activeEntry.format || 'openai-images'}
+                    aria-label={`${activeProvider.label} ${t('settings.mediaProviderImageFormat')}`}
+                    onChange={(e) => updateProvider(activeProvider, { format: e.target.value })}
+                  >
+                    {CUSTOM_IMAGE_FORMAT_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {t(option.labelKey)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
             </div>
           ) : (
             <div className="media-provider-no-key">
@@ -8137,10 +8231,17 @@ function MediaProvidersSection({
                 ) {
                   return;
                 }
+                // Clear writes an explicit tombstone instead of dropping
+                // the entry: the daemon keeps the marker so the chat-side
+                // key mirror (seedProviderIfMissing) cannot resurrect the
+                // provider on the next message. Re-entering any field
+                // clears the marker via updateProvider.
                 updateProvider(activeProvider, {
                   apiKey: '',
                   baseUrl: '',
                   model: '',
+                  format: '',
+                  deleted: true,
                   apiKeyConfigured: false,
                   apiKeyTail: '',
                 });
@@ -8150,6 +8251,38 @@ function MediaProvidersSection({
             </button>
           </div>
         </article>
+      ) : null}
+      {defaultImageModelOptions.length > 0 || cfg.defaultImageModel ? (
+        // Global default for the agent's image-generation dispatch. The
+        // daemon folds this into every run's media defaults, so a plain
+        // "draw me a …" stops falling back to the OpenDesign Cloud
+        // catalogue on BYOK setups. Empty = keep the built-in defaults.
+        <div className="media-provider-default-model">
+          <label className="media-provider-detail-field">
+            <span>{t('settings.mediaProviderDefaultImageModel')}</span>
+            <select
+              value={cfg.defaultImageModel ?? ''}
+              aria-label={t('settings.mediaProviderDefaultImageModel')}
+              onChange={(e) =>
+                setCfg((curr) => ({
+                  ...curr,
+                  defaultImageModel: e.target.value || undefined,
+                }))
+              }
+            >
+              <option value="">{t('settings.byokModelDefaultOption')}</option>
+              {cfg.defaultImageModel && !defaultImageModelOptions.some((option) => option.value === cfg.defaultImageModel) ? (
+                <option value={cfg.defaultImageModel}>{cfg.defaultImageModel}</option>
+              ) : null}
+              {defaultImageModelOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="hint">{t('settings.mediaProviderDefaultImageModelHint')}</p>
+        </div>
       ) : null}
       {comingSoonProviders.length > 0 ? (
         // Roadmap drawer. We still want to advertise that we know

@@ -540,6 +540,8 @@ export interface Dict {
   'settings.fetchModelsUnsupported': string;
   'settings.fetchModelsFailed': string;
   'settings.suggestedModelsHint': string;
+  'settings.hideSuggestedModels': string;
+  'settings.hideSuggestedModelsHint': string;
   'settings.maxTokens': string;
   'settings.maxTokensHint': string;
   'settings.baseUrl': string;
@@ -621,6 +623,12 @@ export interface Dict {
   'settings.mediaProviderModelProviders': string;
   'settings.mediaProviderModel': string;
   'settings.mediaProviderModelPlaceholder': string;
+  'settings.mediaProviderImageFormat': string;
+  'settings.mediaProviderFormatOpenaiImages': string;
+  'settings.mediaProviderFormatGeminiNative': string;
+  'settings.mediaProviderFormatOpenaiChat': string;
+  'settings.mediaProviderDefaultImageModel': string;
+  'settings.mediaProviderDefaultImageModelHint': string;
   'settings.mediaProviderDocsTitle': string;
   'settings.mediaProviderDocsHint': string;
   'settings.mediaProviderSaveHint': string;

@@ -465,9 +465,24 @@ describe('SettingsDialog media providers', () => {
     expect(screen.getByRole('heading', { name: 'OpenAI' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Clear configuration' }));
 
+    // Clear now writes an explicit tombstone instead of dropping the
+    // entry, so the daemon keeps the marker and the chat-side key mirror
+    // cannot resurrect the provider on the next message.
     await waitFor(() => {
       expect(onPersist).toHaveBeenCalledWith(
-        expect.objectContaining({ mediaProviders: {} }),
+        expect.objectContaining({
+          mediaProviders: {
+            openai: {
+              apiKey: '',
+              baseUrl: '',
+              model: '',
+              format: '',
+              deleted: true,
+              apiKeyConfigured: false,
+              apiKeyTail: '',
+            },
+          },
+        }),
         expect.objectContaining({ forceMediaProviderSync: true }),
       );
     });
@@ -509,7 +524,19 @@ describe('SettingsDialog media providers', () => {
 
     await waitFor(() => {
       expect(onPersist).toHaveBeenCalledWith(
-        expect.objectContaining({ mediaProviders: {} }),
+        expect.objectContaining({
+          mediaProviders: {
+            nanobanana: {
+              apiKey: '',
+              baseUrl: '',
+              model: '',
+              format: '',
+              deleted: true,
+              apiKeyConfigured: false,
+              apiKeyTail: '',
+            },
+          },
+        }),
         expect.objectContaining({ forceMediaProviderSync: true }),
       );
     });
@@ -560,3 +587,125 @@ function saveableConfig(): AppConfig {
     agentId: 'codex',
   };
 }
+
+describe('SettingsDialog media providers — format, clear tombstone, default image model', () => {
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  it('allows configuring a provider again after clearing it', async () => {
+    const onPersist = vi.fn();
+    renderDialog({
+      ...saveableConfig(),
+      mediaProviders: { openai: { apiKey: '', baseUrl: '', deleted: true } },
+    }, { onPersist });
+    fireEvent.click(screen.getByRole('tab', { name: /OpenAI/ }));
+    fireEvent.change(screen.getByLabelText('OpenAI API key'), {
+      target: { value: 'replacement-key' },
+    });
+    await waitFor(() => expect(onPersist).toHaveBeenCalled());
+    const saved = onPersist.mock.lastCall![0] as AppConfig;
+    expect(saved.mediaProviders?.openai?.apiKey).toBe('replacement-key');
+    expect(saved.mediaProviders?.openai?.deleted).not.toBe(true);
+  });
+
+  it('keeps a request format selected before entering credentials', async () => {
+    const onPersist = vi.fn();
+    renderDialog(saveableConfig(), { onPersist });
+    fireEvent.click(screen.getByRole('tab', { name: /Custom Image API/ }));
+    fireEvent.change(screen.getByLabelText('Custom Image API Request format'), {
+      target: { value: 'openai-chat' },
+    });
+    expect((screen.getByLabelText('Custom Image API Request format') as HTMLSelectElement).value)
+      .toBe('openai-chat');
+    await waitFor(() => expect(onPersist).toHaveBeenCalled());
+    expect(onPersist.mock.lastCall![0].mediaProviders['custom-image'].format).toBe('openai-chat');
+  });
+
+  it('persists the custom-image request format pick', async () => {
+    const onPersist = vi.fn();
+    renderDialog(
+      {
+        ...saveableConfig(),
+        mediaProviders: {
+          'custom-image': {
+            apiKey: 'relay-key',
+            baseUrl: 'http://relay.example.test',
+            model: 'gemini-3.1-flash-image',
+          },
+        },
+      },
+      { onPersist },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Custom Image API/ }));
+    fireEvent.change(screen.getByLabelText('Custom Image API Request format'), {
+      target: { value: 'gemini-native' },
+    });
+
+    await waitFor(() => {
+      expect(onPersist).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mediaProviders: expect.objectContaining({
+            'custom-image': expect.objectContaining({ format: 'gemini-native' }),
+          }),
+        }),
+        expect.objectContaining({ forceMediaProviderSync: true }),
+      );
+    });
+  });
+
+  it('offers configured providers in the global default image model picker', async () => {
+    const onPersist = vi.fn();
+    renderDialog(
+      {
+        ...saveableConfig(),
+        mediaProviders: {
+          nanobanana: {
+            apiKey: 'nb-key',
+            baseUrl: 'http://relay.example.test',
+            model: 'gemini-3.1-flash-image',
+          },
+        },
+      },
+      { onPersist },
+    );
+
+    const select = screen.getByLabelText('Default image model') as HTMLSelectElement;
+    expect(select.value).toBe('');
+    expect(
+      Array.from(select.options).some((o) => o.value === 'gemini-3.1-flash-image-preview'),
+    ).toBe(true);
+
+    fireEvent.change(select, { target: { value: 'gemini-3.1-flash-image-preview' } });
+
+    await waitFor(() => {
+      expect(onPersist).toHaveBeenCalledWith(
+        expect.objectContaining({ defaultImageModel: 'gemini-3.1-flash-image-preview' }),
+        expect.anything(),
+      );
+    });
+  });
+
+  it('restores the saved default image model into the picker', () => {
+    const onPersist = vi.fn();
+    renderDialog(
+      {
+        ...saveableConfig(),
+        defaultImageModel: 'gemini-3.1-flash-image-preview',
+        mediaProviders: {
+          nanobanana: {
+            apiKey: 'nb-key',
+            baseUrl: 'http://relay.example.test',
+            model: 'gemini-3.1-flash-image',
+          },
+        },
+      },
+      { onPersist },
+    );
+
+    expect((screen.getByLabelText('Default image model') as HTMLSelectElement).value)
+      .toBe('gemini-3.1-flash-image-preview');
+  });
+});

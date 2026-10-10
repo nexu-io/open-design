@@ -241,6 +241,10 @@ export interface MediaProviderCredentials {
   apiKey: string;
   baseUrl: string;
   model?: string;
+  /** custom-image wire format: 'openai-images' | 'gemini-native' | 'openai-chat'. */
+  format?: string;
+  /** Explicit "cleared" marker round-tripped from the daemon tombstone. */
+  deleted?: boolean;
   apiKeyConfigured?: boolean;
   apiKeyTail?: string;
   source?: string;
@@ -421,6 +425,15 @@ export interface AppConfig {
   // this is set so refreshing the page doesn't re-prompt.
   onboardingCompleted?: boolean;
   mediaProviders?: Record<string, MediaProviderCredentials>;
+  /** Global default image model for media generation. Folded into every
+   *  run's BYOK media defaults by the daemon, so a request that names no
+   *  model routes to the user's configured provider instead of the
+   *  OpenDesign Cloud catalogue. Carries a media-registry image model id. */
+  defaultImageModel?: string;
+  /** BYOK only — hide the hand-curated suggested-model list once a
+   *  provider catalogue has been fetched, keeping the picker to the
+   *  models the account actually exposes. Default false (show both). */
+  hideSuggestedModels?: boolean;
   composio?: ComposioSettings;
   // Per-CLI model picker state, keyed by agent id (e.g. `gemini`, `codex`).
   // Pre-existing configs without this field fall through to the agent's
