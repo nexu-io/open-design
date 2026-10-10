@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "skripter-mqrj7ovq",
+  "title": "Skripter",
+  "version": "0.1.0",
+  "description": "--- name: skripter description: > Expert scripting skill for content creators — distilled from documentary and short-form reel scripting frameworks used by top Indian creators (Dhruv Rathee, Saklin Khan, Nitish Rajput, A",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}
