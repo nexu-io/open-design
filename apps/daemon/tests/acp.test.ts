@@ -1041,6 +1041,51 @@ test('attachAcpSession preserves AMR assistant and model-step lifecycle diagnost
   });
 });
 
+test('attachAcpSession shows AMR stream-interruption retries as an in-place reconnect row', () => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'build a page',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'model_retry',
+    attempt: 1,
+    reason: '[code=upstream_stream_interrupted] Error reading stream: read tcp 10.0.0.1:40000->3.173.21.63:443: read: connection reset by peer',
+    errorClass: 'upstream_error',
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'model_retry',
+    attempt: 1,
+    reason: 'Upstream stream interrupted; continuing with completed tool results',
+  });
+  writeAcpUpdate(child, { sessionUpdate: 'model_retry', attempt: 1, reason: 'Bad Gateway' });
+  writeAcpResult(child, 3, {});
+
+  const agentEvents = events
+    .filter((entry) => entry.event === 'agent')
+    .map((entry) => entry.payload as Record<string, unknown>);
+  assert.deepEqual(
+    agentEvents.filter((payload) => payload.label === 'agent_reconnecting'),
+    [
+      { type: 'status', label: 'agent_reconnecting', detail: '1/2' },
+      { type: 'status', label: 'agent_reconnecting', detail: '1/2' },
+    ],
+  );
+  assert.equal(
+    agentEvents.filter((payload) => payload.type === 'diagnostic' && payload.name === 'model_retry').length,
+    3,
+  );
+});
+
 test('attachAcpSession consumes bounded tool execution lifecycle diagnostics out of band', () => {
   const child = new FakeAcpChild();
   const events: Array<{ event: string; payload: unknown }> = [];
