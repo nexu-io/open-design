@@ -71,6 +71,7 @@ describe.skip('OPEND-2623 standing user constraint across a question-form answer
   it('carries the constraint into the OD Next production stage prompt', () => {
     const production = composeOdNextStrategyContinuationV2({
       stage: 'production',
+      executionMode: 'simple',
       nativeSessionResume: true,
       taskExecutionId: 'odnext_opend2623',
       taskRunIndex: 2,
@@ -84,6 +85,7 @@ describe.skip('OPEND-2623 standing user constraint across a question-form answer
   it('does not order an unconditional file delivery on the production stage', () => {
     const production = composeOdNextStrategyContinuationV2({
       stage: 'production',
+      executionMode: 'simple',
       nativeSessionResume: true,
       taskExecutionId: 'odnext_opend2623',
       taskRunIndex: 2,
