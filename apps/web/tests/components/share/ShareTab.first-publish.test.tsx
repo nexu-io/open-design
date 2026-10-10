@@ -2,14 +2,19 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { ComponentProps } from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildWorkspacePermissions, buildWorkspaceSeatSummary, type WorkspaceCollabContext } from '@open-design/contracts';
 import { parse } from 'postcss';
 import { zhCN } from '../../../src/i18n/locales/zh-CN';
 import { ShareTab } from '../../../src/components/share/ShareTab';
 import { readShareCss } from '../../helpers/read-share-css';
 
+beforeEach(() => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({
+    fileCount: 1, totalBytes: 12, exceedsSizeLimit: false, exclusions: [],
+  })));
+});
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 type Props = ComponentProps<typeof ShareTab>;
@@ -21,6 +26,7 @@ const authenticatedWorkspace: WorkspaceCollabContext = {
 };
 function props(overrides: Partial<Props> = {}): Props {
   return {
+    projectId: 'p1', filePath: 'index.html',
     menuOrigin: 'artifact-card', workspaceContext: authenticatedWorkspace, t: (key) => key,
     shareAccess: 'private', shareAccessMenuOpen: false, shareAccessBusy: false,
     viewerOnly: false, setShareAccessMenuOpen: vi.fn(), setWorkspaceShareAccess: vi.fn(),
@@ -101,7 +107,7 @@ describe('S1 first-publish visual seam', () => {
     const { container } = render(<ShareTab {...firstProps()} />);
     expect(container.firstElementChild?.className).toContain('panel');
   });
-  it('S1 starts link-access selected without publishing and only the primary action creates the link', () => {
+  it('S1 starts link-access selected without publishing and only the primary action creates the link', async () => {
     const input = firstProps();
     render(<ShareTab {...input} />);
     const toggle = screen.getByRole('switch', { name: 'fileViewer.linkAccessTitle' });
@@ -118,7 +124,7 @@ describe('S1 first-publish visual seam', () => {
     expect(toggle).toHaveAttribute('aria-checked', 'true');
     expect(input.publishCurrentFilePublic).not.toHaveBeenCalled();
     fireEvent.click(generate);
-    expect(input.publishCurrentFilePublic).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(input.publishCurrentFilePublic).toHaveBeenCalledTimes(1));
   });
 
   it('binds the canvas button style, Chinese label and 13px upload icon', () => {
@@ -151,7 +157,7 @@ describe('S1 first-publish visual seam', () => {
     expect(publish).toHaveBeenCalledTimes(1);
   });
 
-  it('renders no plan-unavailable warning (2026 UI audit: deleted, no lighter replacement) while requiring explicit generation after selection', async () => {
+  it('3639: keeps the existing no-banner presentation but refuses publishing after plan failure', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
     const publish = vi.fn().mockResolvedValue(undefined);
     render(<ShareTab {...firstProps({ projectId: 'p1', filePath: 'index.html', publishCurrentFilePublic: publish })} />);
@@ -167,8 +173,8 @@ describe('S1 first-publish visual seam', () => {
     expect(generate).toBeDisabled();
     expect(publish).not.toHaveBeenCalled();
     fireEvent.click(toggle);
-    fireEvent.click(generate);
-    expect(publish).toHaveBeenCalledTimes(1);
+    await act(async () => { fireEvent.click(generate); });
+    expect(publish).not.toHaveBeenCalled();
   });
 
   it('surfaces a pre-check too-large plan through the shared red ShareErrorRow, not a yellow banner, and keeps publish blocked', async () => {
@@ -205,11 +211,11 @@ describe('S1 first-publish visual seam', () => {
     await waitFor(() => expect(toggle).toBeEnabled());
   });
 
-  it('uses only the existing publish callback and leaves deployment outside the seam', () => {
+  it('uses only the existing publish callback and leaves deployment outside the seam', async () => {
     const input = firstProps({ menuOrigin: 'toolbar' });
     render(<ShareTab {...input} />);
     fireEvent.click(screen.getByRole('menuitem', { name: 'fileViewer.generateAndCopyLink' }));
-    expect(input.publishCurrentFilePublic).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(input.publishCurrentFilePublic).toHaveBeenCalledTimes(1));
     expect(input.copyPublishedFileLink).not.toHaveBeenCalled();
     expect(input.unpublishCurrentFilePublic).not.toHaveBeenCalled();
     expect(screen.queryByRole('menuitem', { name: 'Deploy' })).toBeNull();
@@ -237,14 +243,14 @@ describe('S1 first-publish visual seam', () => {
     }
   });
 
-  it.each(['fileViewer.publishFileFailed', 'fileViewer.publishFileTooLarge'] as const)('keeps %s and retry callback', (publishFailureKey) => {
+  it.each(['fileViewer.publishFileFailed', 'fileViewer.publishFileTooLarge'] as const)('keeps %s and retry callback', async (publishFailureKey) => {
     const input = firstProps({ publishFailureKey });
     render(<ShareTab {...input} />);
     expect(screen.getByRole('status')).toHaveTextContent(publishFailureKey);
     const retry = screen.getByRole('menuitem', { name: 'preview.retry' });
     expect(retry).toBeEnabled();
     fireEvent.click(retry);
-    expect(input.publishCurrentFilePublic).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(input.publishCurrentFilePublic).toHaveBeenCalledTimes(1));
   });
 
   it('preserves an observed public link on workspace auth loss without allowing mutation', () => {

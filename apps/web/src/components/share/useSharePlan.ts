@@ -48,14 +48,17 @@ export function useSharePlan({ projectId, filePath, workspaceContext, enabled, c
     if (entry.waiting) return Promise.resolve();
     const blocked = (plan: SharePlanSummary | null) => plan?.exceedsSizeLimit || Boolean(plan?.blockers?.length);
     if (blocked(entry.plan)) return Promise.resolve();
-    if (entry.plan || !entry.pending) return action();
+    if (entry.plan) return action();
+    // A missing/failed first plan is not permission to publish. Reopening the
+    // panel retries the read; a queued click must wait for a successful plan.
+    if (!entry.pending) return Promise.resolve();
     entry.waiting = true;
     changed();
     return (async () => {
       try {
         const plan = await entry.pending;
         // A file/content/account change invalidates both cache and queued intent.
-        if (!mounted.current || entryRef.current !== entry || blocked(plan)) return;
+        if (!mounted.current || entryRef.current !== entry || !plan || blocked(plan)) return;
         await action();
       } finally {
         entry.waiting = false;

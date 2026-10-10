@@ -114,8 +114,8 @@ function stubFetch(
     if (url.includes('/api/workspace/context')) {
       return new Response(JSON.stringify({ context: teamWorkspaceContext() }), { status: 200 });
     }
-    if (url.includes('/share-plan') && options.sharePlan) {
-      return Response.json(options.sharePlan());
+    if (url.includes('/share-plan')) {
+      return Response.json(options.sharePlan?.() ?? { fileCount: 1, totalBytes: 1024, exceedsSizeLimit: false, exclusions: [] });
     }
     if (url.includes('publish-public')) {
       if (init?.method === 'POST') {
@@ -175,6 +175,68 @@ async function setup(options: Parameters<typeof stubFetch>[0] = { publishBody: p
   vi.useFakeTimers();
   return { fetch, view };
 }
+
+it.each(['allowed', 'oversize', 'blocked', 'failed'] as const)('3639: routing-only 3 MiB uses original-file preflight (%s), never uploads preview text', async outcome => {
+  const fallback = stubFetch();
+  const pending = deferred<Response>();
+  const fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url.includes('/text-preview/')) return Promise.resolve(Response.json({
+      text: '<html><body>Routing preview only</body></html>', truncated: true,
+      poweredPreview: { required: false },
+    }));
+    if (url.includes('/share-plan')) return pending.promise;
+    return fallback(input, init);
+  });
+  vi.stubGlobal('fetch', fetch);
+  renderProjectFileViewer(teamWorkspaceContext(), { ...props, liveHtml: undefined,
+    file: { ...htmlFile(), size: 3 * 1024 * 1024 } });
+  await vi.waitFor(() => expect(fetch.mock.calls.some(([url]) => String(url).includes('/text-preview/'))).toBe(true));
+  const share = screen.getByRole('button', { name: /^share$/i });
+  expect(share).toBeEnabled();
+  expect(screen.queryByRole('button', { name: /^export$/i })).toBeNull();
+  fireEvent.click(share);
+  fireEvent.click(await screen.findByRole('menuitem', { name: /generate and copy link/i }));
+  expect(posts(fetch)).toHaveLength(0);
+  await act(async () => pending.resolve(outcome === 'failed' ? new Response('{}', { status: 503 }) : Response.json({
+    fileCount: 1, totalBytes: outcome === 'oversize' ? SHARE_MAX_TOTAL_BYTES + 1 : 3 * 1024 * 1024,
+    exceedsSizeLimit: outcome === 'oversize', exclusions: [],
+    ...(outcome === 'blocked' ? { blockers: [{ code: 'entry_index_conflict' }] } : {}),
+  })));
+  if (outcome === 'allowed') {
+    await vi.waitFor(() => expect(posts(fetch)).toHaveLength(1));
+    expect(posts(fetch)[0]).toEqual([
+      '/api/projects/s15-project/files/index.html/publish-public', expect.objectContaining({ method: 'POST' }),
+    ]);
+    expect(posts(fetch)[0]?.[1]?.body).toBeUndefined();
+  } else {
+    expect(posts(fetch)).toHaveLength(0);
+    if (outcome === 'failed') {
+      fireEvent.click(screen.getByRole('menuitem', { name: /generate and copy link/i }));
+      expect(posts(fetch)).toHaveLength(0);
+    }
+  }
+  expect(fetch.mock.calls.some(([url]) => String(url).includes('/raw/'))).toBe(false);
+});
+
+it.each(['viewerOnly', 'streaming'] as const)('3639: routing-only preview preserves %s publication guard', async restriction => {
+  const fallback = stubFetch();
+  const fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
+    String(input).includes('/text-preview/') ? Promise.resolve(Response.json({
+      text: '<html><body>Preview</body></html>', truncated: true, poweredPreview: { required: false },
+    })) : fallback(input, init));
+  vi.stubGlobal('fetch', fetch);
+  renderProjectFileViewer(teamWorkspaceContext(), { ...props, liveHtml: undefined,
+    file: { ...htmlFile(), size: 3 * 1024 * 1024 }, [restriction]: true });
+  const share = screen.getByRole('button', { name: /^share$/i });
+  if (restriction === 'viewerOnly') expect(share).toBeDisabled();
+  else {
+    fireEvent.click(share);
+    expect(await screen.findByRole('menuitem', { name: /generate and copy link/i })).toBeDisabled();
+  }
+  expect(posts(fetch)).toHaveLength(0);
+  expect(fetch.mock.calls.some(([url]) => String(url).includes('/raw/'))).toBe(false);
+});
 
 it('reopens unchanged content with usable controls while the second preflight is pending (OPEND-3536)', async () => {
   const fallback = stubFetch();
