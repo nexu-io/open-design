@@ -897,7 +897,10 @@ export function createLinuxDesktopLaunchEnv(
   _stamp: SidecarStamp,
   baseEnv: NodeJS.ProcessEnv = process.env,
 ): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...baseEnv, [DESKTOP_LOG_ECHO_ENV]: "0" };
+  // NO_CLEANUP keeps the AppImage runtime from deleting its extract-and-run
+  // directory once the launcher exits; the detached daemon/web sidecars keep
+  // loading modules from that tree for the rest of the session.
+  const env: NodeJS.ProcessEnv = { ...baseEnv, [DESKTOP_LOG_ECHO_ENV]: "0", NO_CLEANUP: "1" };
   delete env.ELECTRON_RUN_AS_NODE;
   return env;
 }

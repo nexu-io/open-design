@@ -71,6 +71,7 @@ import {
   sanitizeNamespace,
   stopPackedLinuxHeadless,
 } from "@/linux.js";
+import { linuxResources } from "@/resources/index.js";
 
 async function pathExists(path: string): Promise<boolean> {
   try {
@@ -626,6 +627,11 @@ MimeType=x-scheme-handler/od;
     expect(out).toMatch(/^Exec=.*--appimage-extract-and-run .*%U$/m);
   });
 
+  it("sets NO_CLEANUP=1 on the shipped template's Exec= line so the extract-and-run tree outlives the launcher", () => {
+    const shipped = readFileSync(linuxResources.desktopTemplate, "utf-8");
+    expect(shipped).toMatch(/^Exec=env -u ELECTRON_RUN_AS_NODE NO_CLEANUP=1 .*--appimage-extract-and-run %U$/m);
+  });
+
   it("leaves no @@...@@ tokens unsubstituted", () => {
     const out = renderDesktopTemplate(template, {
       namespace: "ns",
@@ -754,6 +760,19 @@ describe("createLinuxDesktopLaunchEnv", () => {
     expect(env.ELECTRON_RUN_AS_NODE).toBeUndefined();
     expect(env.KEEP_ME).toBe("yes");
     expect(env.OD_SIDECAR_BASE).toBeUndefined();
+  });
+
+  it("sets NO_CLEANUP so the extract-and-run tree outlives the launcher for the detached sidecars", () => {
+    const config = makeConfig();
+    const stamp = {
+      app: APP_KEYS.DESKTOP,
+      channel: "stable",
+      mode: SIDECAR_MODES.RUNTIME,
+      namespace: "default",
+      source: SIDECAR_SOURCES.TOOLS_PACK,
+    };
+
+    expect(createLinuxDesktopLaunchEnv(config, stamp, {}).NO_CLEANUP).toBe("1");
   });
 });
 
