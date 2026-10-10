@@ -112,6 +112,7 @@ OpenDesign 是**协作式设计 Agent 工作区**。从需求描述出发，使�
 | [Trae](https://www.trae.ai/) | ✅ 支持 | `od mcp install trae` |
 | [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) | ✅ 支持 | `od mcp install kimi` |
 | [Kiro](https://kiro.dev) | ✅ 支持 | `od mcp install kiro` |
+| [Kilo Code CLI](https://kilo.ai/docs/code-with-ai/platforms/cli) | ✅ 原生运行时 | `npm install -g @kilocode/cli` |
 | [Pi Agent](https://github.com/badlogic/pi-mono) | ✅ 支持 | `od mcp install pi` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | ✅ 支持 | `od mcp install vibe` |
 | [Hermes Agent](https://github.com/nousresearch/hermes-agent) | ✅ 支持 | `od mcp install hermes` |
