@@ -387,7 +387,8 @@ const SEVERITY_LABELS = new Set([
  */
 export const OWN_AGENT_COMMAND_NAMES: ReadonlySet<string> = new Set([
   'agy', 'aider', 'amp', 'amr', 'antigravity', 'atomcode', 'byok-opencode',
-  'claude', 'codebuddy', 'codex', 'copilot', 'cursor-agent', 'deepseek',
+  'claude', 'cmdc', 'codebuddy', 'codex', 'command-code', 'commandcode',
+  'copilot', 'cursor-agent', 'deepseek',
   'deepseek-harness', 'devin', 'dsh', 'grok', 'grok-build', 'hermes', 'kilo',
   'kimi', 'kiro', 'kiro-cli', 'mimo', 'opencode', 'opencode-cli', 'pi',
   'qoder', 'qodercli', 'qwen', 'reasonix', 'trae-cli', 'traecli', 'vela',
@@ -561,6 +562,13 @@ function hasProbeSatisfyingAuth(agentId: string, env: RuntimeEnv): boolean {
       hasNonEmptyEnv(env, ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN']) ||
       hasClaudeEnterpriseProviderAuth(env)
     );
+  }
+  // Command Code authenticates through its own `login`, but headless runs
+  // accept COMMAND_CODE_API_KEY in place of that account. Without this a
+  // BYOK/keyed install reports "sign in" from a `whoami` probe that only ever
+  // spoke about the account session.
+  if (agentId === 'command-code') {
+    return hasNonEmptyEnv(env, ['COMMAND_CODE_API_KEY']);
   }
   return false;
 }

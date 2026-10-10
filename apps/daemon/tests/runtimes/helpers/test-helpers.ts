@@ -93,6 +93,7 @@ export const grokBuild = requireAgent('grok-build');
 export const aider = requireAgent('aider');
 export const antigravity = requireAgent('antigravity');
 export const codebuddy = requireAgent('codebuddy');
+export const commandCode = requireAgent('command-code');
 export const deepseekMaxPromptArgBytes = (() => {
   assert.ok(
     deepseek.maxPromptArgBytes !== undefined,

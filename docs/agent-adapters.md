@@ -142,6 +142,7 @@ definitions currently group by transport as follows:
 | `json-event-stream` | `codex`, `cursor-agent`, `opencode`, `mimo`, `byok-opencode` |
 | `copilot-stream-json` | `copilot` |
 | `qoder-stream-json` | `qoder` |
+| `command-code-stream-json` | `command-code` |
 | `acp-json-rpc` | `amr` (Vela), `devin`, `hermes`, `kimi`, `kiro`, `kilo`, `reasonix`, `trae-cli`, `vibe` |
 | `pi-rpc` | `pi` |
 | `dsh-profile-jsonl` | `deepseek-harness` |
@@ -454,6 +455,84 @@ At run completion, the daemon scans the captured plain stdout for `<artifact>` b
 
 The identifier is slugged before use, collisions receive `-2`, `-3`, etc., and outputs without a supported `<artifact>` block are left unchanged. This daemon-side extraction keeps headless runs and web-attached runs aligned: the project file exists even when no browser is present to parse the chat stream.
 
+### 5.14 Command Code
+
+- Install: `npm i -g command-code` (Node 22+). The package ships four bin names —
+  `command-code`, `cmdc`, `commandcode`, and `cmd`; the adapter probes
+  `command-code`, falls back to `cmdc`/`commandcode`, and **never probes `cmd`**,
+  which on Windows is the shell rather than this CLI.
+- Invocation: `command-code -p --output-format json --skip-onboarding --yolo
+  [--trust] [--model <id>] [--effort <level>] [--add-dir <dir> …] [--resume
+  <session-id>]`. No query argument is passed: the composed prompt goes to
+  stdin (`promptViaStdin`), which the CLI auto-detects with a piped stdin, so
+  the adapter needs no argv budget. `--yolo` is mandatory — headless mode
+  denies file writes and shell commands without it. `--trust` and
+  `--skip-onboarding` exist because the daemon spawns without a TTY: the
+  project-trust prompt and taste onboarding would otherwise block the run.
+- Streaming: `--output-format json` emits NDJSON — one
+  `{"type":"event","event":…}` frame per progress event, then a single terminal
+  `{"type":"result",…}` frame carrying `finalText`, `sessionId`, `usage`,
+  `durationMs`, `stopReason`, and `subtype` (`success` / `error` /
+  `max_turns`). `runtimes/command-code-stream.ts` maps that vocabulary onto the
+  shared UI events; the format is Command Code's own (not Claude's stream-json,
+  not Codex's item stream), which is why it has its own `streamFormat`. The
+  vocabulary below was read off CLI 1.69.0, because the published docs describe
+  only the result frame and one example frame:
+  - `run_start` announces the session id **before any model call**, which is
+    what makes a run that dies mid-turn still resumable.
+  - `text_delta` streams the assistant text; the result frame repeats it in
+    full, so `finalText` is used only when no delta arrived (otherwise the
+    answer would render twice).
+  - `tool_queued` carries a call's real input (`file_path`, `command`, …),
+    `tool_running` follows with a `description` that may be `null`, and
+    `tool_completed` / `tool_errored` carry the result content. Tool rows
+    therefore show a live row with its path or command, and settle with real
+    output and a real duration.
+  - `message_update` repeats the ENTIRE message after every delta, and
+    `message_end` / `run_end` carry it again (the last one alongside the whole
+    session state). Those frames are dropped rather than stored as `raw` events:
+    kept verbatim they grow quadratically and say nothing new.
+  - The parser still settles a call that never reports a terminal frame (a
+    cancelled or crashed run) at stream end, with empty content and no
+    `completedAt`, so a row can never stay in-flight forever.
+- Models: live discovery via `--list-models`, which prints a **human-readable
+  two-column table** (section headers such as `Open Source`, then
+  `id<pad>description` rows, plus example and docs lines). The parser keeps a
+  row only when the leading token is id-shaped, carries a `/` or `-`, and any
+  description after it sits behind the table's 2+ space gutter — the header,
+  section names, `cmdc --model …` examples and `Docs:` footer are all excluded.
+  Ids are lowercase exactly as printed — `org/name` for open models, bare for
+  Anthropic/OpenAI — and an unknown id is rejected by the CLI, so the live list
+  is the authority. `fallbackModels` carries a small curated slice for the
+  window before discovery lands. Reasoning effort is per-model: each fallback
+  model lists the exact `--effort` levels that model accepts, led by a synthetic
+  `default` sentinel that omits the flag. There is deliberately no def-level
+  `reasoningOptions`, so a model with unknown effort support is never sent an
+  `--effort` it may reject.
+- Sessions: capture-style resume. The session id arrives on `run_start` (and
+  again in the terminal result frame, which the parser only uses as a
+  fallback); the daemon persists it and later turns continue the same headless
+  session with `--resume <id>`. A bare `--resume` errors in print mode, so the
+  flag is only appended when a stored id exists.
+- Authentication: the probe is `whoami`. Signed in it prints the account
+  (`Name` / `Email` / `Username`) and exits 0; signed out it exits non-zero with
+  `Not authenticated. Please login using "cmdc auth login"`, which the daemon's
+  shared classifier reads as a missing credential so Settings offers the sign-in
+  instead of guessing. `COMMAND_CODE_API_KEY` short-circuits the probe for a
+  headless/keyed install, mirroring the CLI's own acceptance of that key in
+  place of an account login.
+- External MCP: Command Code's project scope is `<project>/.mcp.json` with the
+  same `mcpServers` shape Claude Code reads, so the adapter reuses the
+  `claude-mcp-json` injection path. There is no per-run MCP CLI flag.
+- Permission posture: same trust boundary as running `command-code -p … --yolo`
+  directly in the selected project directory. Provider/org policy inside
+  Command Code still applies.
+- **Gotcha:** the adapter does not declare `supportsImagePaths` — headless
+  `-p` is text-only. `todo_write` is restored with `--tools-enable todo_write`
+  only when the installed build advertises that flag in `--help`, because
+  headless runs withhold it by default and without it the chat has no plan
+  pill. `ask_user_question` stays withheld: the web has no answer path for it.
+
 ## 6. Runtime metadata and UI
 
 There is no public `agents.capabilities()` method and no generalized
@@ -581,6 +660,7 @@ apps/daemon/src/
 │   ├── models.ts           # live/fallback models · prompt-budget.ts — argv size guards
 │   ├── local-profiles.ts   # user-defined local agent profiles merged into AGENT_DEFS
 │   ├── claude-stream.ts    # streamFormat="claude-stream-json": stream-json JSONL → UI events
+│   ├── command-code-stream.ts # streamFormat="command-code-stream-json": event/result NDJSON → UI events
 │   ├── qoder-stream.ts     # streamFormat="qoder-stream-json": stream-json JSONL → UI events
 │   ├── json-event-stream.ts# streamFormat="json-event-stream": generic JSONL → UI events
 │   └── plain-stream.ts     # streamFormat="plain": scans stdout for <artifact> blocks → project files

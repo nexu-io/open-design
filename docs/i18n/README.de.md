@@ -117,7 +117,7 @@ Dieser Ablauf ist offen und erweiterbar. Als **quelloffene Alternative zu Claude
 `od mcp install <agent> --print` für eine Trockenlauf-Vorschau · `--uninstall` zum Entfernen · vollständige Liste mit `od mcp install --help`.
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 25 coding-agent CLIs OpenDesign supports — Claude Code · Codex · OpenCode · Hermes · Antigravity · Vela · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Amp · CodeBuddy · Mimo · AtomCode · Devin · Trae" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 26 coding-agent CLIs OpenDesign supports — Claude Code · Codex · Command Code · OpenCode · Hermes · Antigravity · Vela · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Amp · CodeBuddy · Mimo · AtomCode · Devin · Trae" width="100%" />
 </p>
 
 **Kein CLI installiert?** Der BYOK-Proxy unter `POST /api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream` gibt dir dieselbe Schleife (ohne Prozess-Spawn) — füge `baseUrl` + `apiKey` + `model` ein, mit Unterstützung für OpenAI, Anthropic, Azure OpenAI, Google Gemini, Ollama, LM Studio, vLLM oder jeden OpenAI-kompatiblen Endpunkt. Pro-Ziel-SSRF-Schutz blockiert interne IPs / Link-Local / CGNAT am Daemon-Rand.

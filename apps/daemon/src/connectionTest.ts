@@ -41,6 +41,7 @@ import { createClaudeStreamHandler } from './runtimes/claude-stream.js';
 import { diagnoseClaudeCliFailure } from './claude-diagnostics.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
 import { createJsonEventStreamHandler } from './runtimes/json-event-stream.js';
+import { createCommandCodeStreamHandler } from './runtimes/command-code-stream.js';
 import { agentCliEnvForAgent, validateAgentCliEnv } from './app-config.js';
 import {
   antigravityAuthGuidance,
@@ -2240,6 +2241,29 @@ function attachAgentStreamHandlers(
       handler.feed(chunk);
     });
     child.on('close', () => handler.flush());
+  } else if (def.streamFormat === 'command-code-stream-json') {
+    // The parser's terminal result frame carries the assistant text as a
+    // `text_delta` and the run's `usage`, which is exactly what the collector
+    // above consumes — without this branch the NDJSON would reach the panel as
+    // raw stdout chunks instead.
+    const handler = createCommandCodeStreamHandler((ev: unknown) => {
+      const data = (ev ?? {}) as { type?: unknown; message?: unknown };
+      if (data.type === 'error') {
+        send('error', {
+          message:
+            typeof data.message === 'string'
+              ? data.message
+              : 'agent stream error',
+        });
+        return;
+      }
+      send('agent', ev);
+    });
+    child.stdout?.on('data', (chunk: string) => {
+      appendRawStdout?.(chunk);
+      handler.feed(chunk);
+    });
+    child.on('close', () => handler.flush());
   } else {
     child.stdout?.on('data', (chunk: string) => send('stdout', { chunk }));
   }
@@ -2265,6 +2289,8 @@ function runQuietCommand(command: string, args: string[], cwd: string): Promise<
       cwd,
       stdio: 'ignore',
       shell: false,
+      // Same Windows rule as the agent spawn below: no console window.
+      windowsHide: true,
     });
     child.once('error', reject);
     child.once('close', (code, signal) => {
@@ -2706,6 +2732,9 @@ async function testAgentConnectionInternal(
       stdio: [stdinMode, 'pipe', 'pipe'],
       cwd: tempDir,
       shell: false,
+      // See `runtimes/agent-process.ts`: a Windows agent shim is a `.cmd` file,
+      // so the smoke run would otherwise open a console window.
+      windowsHide: true,
       windowsVerbatimArguments: invocation.windowsVerbatimArguments,
     });
     childExit = new Promise<AgentChildExit>((resolve) => {

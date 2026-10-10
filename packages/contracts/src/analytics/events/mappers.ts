@@ -225,6 +225,8 @@ export function agentIdToTracking(agentId: string | null | undefined): TrackingC
       return 'antigravity';
     case 'codebuddy':
       return 'codebuddy';
+    case 'command-code':
+      return 'command_code';
     case 'reasonix':
       return 'reasonix';
     case 'mimo':

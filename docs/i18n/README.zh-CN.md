@@ -121,7 +121,7 @@ OpenDesign 是**协作式设计 Agent 工作区**。从需求描述出发，使�
 ¹ Claude Desktop 的自动 MCP 配置目前仅在 macOS 和 Windows 上支持。
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="OpenDesign 支持的 26 个编码 Agent CLI — DeepSeek Harness · Claude Code · Codex · OpenCode · Hermes · Antigravity · Vela · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Amp · CodeBuddy · Mimo · AtomCode · Devin · Trae" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="OpenDesign 支持的 27 个编码 Agent CLI — DeepSeek Harness · Claude Code · Codex · Command Code · OpenCode · Hermes · Antigravity · Vela · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Amp · CodeBuddy · Mimo · AtomCode · Devin · Trae" width="100%" />
 </p>
 
 **未安装任何 CLI？** `POST /api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream` 的 BYOK 代理提供同样的循环（无需 spawn 进程）——粘贴 `baseUrl` + `apiKey` + `model`，支持 OpenAI、Anthropic、Azure OpenAI、Google Gemini、Ollama、LM Studio、vLLM 或任何 OpenAI 兼容端点。每个目标的 SSRF 防护在守护进程边缘拦截内网 IP / link-local / CGNAT。

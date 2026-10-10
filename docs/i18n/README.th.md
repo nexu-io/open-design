@@ -117,7 +117,7 @@ OpenDesign คือ**พื้นที่ทำงานร่วมกับ�
 ใช้ `od mcp install <agent> --print` เพื่อ preview แบบ dry-run · ใช้ `--uninstall` เพื่อลบ · ดูรายการเต็มด้วย `od mcp install --help`.
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="CLI coding-agent 25 ตัวที่ OpenDesign รองรับ — Claude Code · Codex · OpenCode · Hermes · Antigravity · Vela · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Amp · CodeBuddy · Mimo · AtomCode · Devin · Trae" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="CLI coding-agent 26 ตัวที่ OpenDesign รองรับ — Claude Code · Codex · Command Code · OpenCode · Hermes · Antigravity · Vela · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Amp · CodeBuddy · Mimo · AtomCode · Devin · Trae" width="100%" />
 </p>
 
 **ยังไม่มี CLI ติดตั้ง?** BYOK proxy ที่ `POST /api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream` ให้ loop แบบเดียวกัน (ไม่ต้อง spawn process) — วาง `baseUrl` + `apiKey` + `model` ได้เลย พร้อมรองรับ OpenAI, Anthropic, Azure OpenAI, Google Gemini, Ollama, LM Studio, vLLM หรือ endpoint ที่เข้ากันได้กับ OpenAI. การป้องกัน SSRF ต่อ target จะบล็อก internal IPs / link-local / CGNAT ที่ daemon edge.

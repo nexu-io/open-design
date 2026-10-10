@@ -214,6 +214,7 @@ export type TrackingCliProviderId =
   | 'grok_build'
   | 'antigravity'
   | 'codebuddy'
+  | 'command_code'
   | 'reasonix'
   | 'mimo'
   | 'atomcode'
