@@ -17,6 +17,7 @@ import {
 import { createPortal } from 'react-dom';
 import type { Project } from '../types';
 import { Icon } from './Icon';
+import { mergeProjectCatalogs } from '../collab/all-projects-list';
 import { useT } from '../i18n';
 import { relativeTimeLong } from '../utils/chatTime';
 import { projectCover, projectCategory, ProjectTag } from './RecentProjectsStrip';
@@ -38,10 +39,7 @@ export function buildProjectSearchCatalog(
   draftProjects: readonly Project[],
   sharedProjects: readonly Project[],
 ): Project[] {
-  const projectsById = new Map<string, Project>();
-  for (const project of draftProjects) projectsById.set(project.id, project);
-  for (const project of sharedProjects) projectsById.set(project.id, project);
-  return [...projectsById.values()];
+  return mergeProjectCatalogs(draftProjects, sharedProjects);
 }
 
 export function ProjectSearchModal({
