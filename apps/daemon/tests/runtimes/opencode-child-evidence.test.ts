@@ -812,9 +812,10 @@ describe('native OpenCode child evidence', () => {
     await expect(load('ses_child_synthetic')).resolves.toMatchObject({
       info: { id: 'ses_child_synthetic', parentID: 'ses_root_synthetic' },
     });
+    // OpenCode 2.x serves this as `session export`; 1.x as `export`.
     expect(execAgentFileMock).toHaveBeenCalledWith(
       '/opt/open-design/opencode',
-      ['export', 'ses_child_synthetic', '--sanitize', '--pure'],
+      ['session', 'export', 'ses_child_synthetic', '--sanitize'],
       expect.objectContaining({
         env: { XDG_DATA_HOME: '/run/od/share' },
         timeout: expect.any(Number),
@@ -834,6 +835,38 @@ describe('native OpenCode child evidence', () => {
       candidates: [candidate!],
       loadSanitizedExport: load,
     })).resolves.toEqual([]);
+  });
+
+  it('falls back to the 1.x export shape when the CLI does not know session export', async () => {
+    const data = fixture();
+    execAgentFileMock.mockRejectedValueOnce(Object.assign(new Error('exit 1'), {
+      stdout: '',
+      stderr: 'Unrecognized command: session in command opencode session',
+    }));
+    execAgentFileMock.mockResolvedValueOnce({
+      stdout: JSON.stringify(data.sanitizedChildExport),
+      stderr: '',
+    });
+    const load = createOpenCodeSanitizedExportLoader({
+      launchPath: '/opt/open-design/opencode',
+      env: { XDG_DATA_HOME: '/run/od/share' },
+    });
+    await expect(load('ses_child_synthetic')).resolves.toMatchObject({
+      info: { id: 'ses_child_synthetic', parentID: 'ses_root_synthetic' },
+    });
+    expect(execAgentFileMock).toHaveBeenCalledTimes(2);
+    expect(execAgentFileMock).toHaveBeenNthCalledWith(
+      1,
+      '/opt/open-design/opencode',
+      ['session', 'export', 'ses_child_synthetic', '--sanitize'],
+      expect.anything(),
+    );
+    expect(execAgentFileMock).toHaveBeenNthCalledWith(
+      2,
+      '/opt/open-design/opencode',
+      ['export', 'ses_child_synthetic', '--sanitize'],
+      expect.anything(),
+    );
   });
 
   it('labels the fixture contract-only so it cannot become production evidence', () => {
