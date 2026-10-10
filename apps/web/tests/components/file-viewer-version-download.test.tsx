@@ -219,7 +219,7 @@ describe('FileViewer version download actions', () => {
     expect(exportAsPdfMock).not.toHaveBeenCalled();
   });
 
-  it('shows main export errors for historical version PDFs', async () => {
+  it('shows the generic export-failed copy (not the raw renderer error) for historical version PDFs', async () => {
     isOpenDesignHostAvailableMock.mockReturnValue(true);
     exportProjectScreenshotPdfMock.mockResolvedValueOnce({ ok: false, error: 'version renderer failed' });
     const { file } = setupVersionFetch();
@@ -228,7 +228,10 @@ describe('FileViewer version download actions', () => {
     openVersionDownloadMenu(versionDialog);
     fireEvent.click(within(versionDialog).getByRole('menuitem', { name: 'Export as PDF' }));
 
-    expect(await screen.findByText(/version renderer failed/)).toBeTruthy();
+    // OPEND-2849 / S26: raw renderer strings never reach the user.
+    expect(await screen.findByText('Export failed')).toBeTruthy();
+    expect(screen.getByText('This export did not complete. Please try again.')).toBeTruthy();
+    expect(screen.queryByText(/version renderer failed/)).toBeNull();
     expect(requestPreviewSnapshotMock).not.toHaveBeenCalled();
     expect(captureHostIframeSnapshotMock).not.toHaveBeenCalled();
     expect(exportSnapshotAsPdfMock).not.toHaveBeenCalled();

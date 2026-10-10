@@ -157,11 +157,12 @@ describe('AmrAccountControl', () => {
       onSignIn: vi.fn(),
     });
 
+    // OPEND-2849 S32a:标题 + 正文两段;下面的登录页链接仍在。
+    expect(screen.getByText('Couldn’t open the sign-in page')).toBeTruthy();
     expect(
-      screen.getByText(
-        'Couldn’t open your browser automatically. Open the sign-in page below to continue.',
-      ),
+      screen.getByText('Your browser didn’t open automatically. Please try signing in again.'),
     ).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Open sign-in page' })).toBeTruthy();
   });
 
   it('does not render the activation block before vela has printed a URL', () => {

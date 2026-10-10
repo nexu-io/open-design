@@ -247,14 +247,14 @@ describe('标题', () => {
   it('是这张卡的主标题,不是标题栏里的一行小字', () => {
     renderDialog();
     expect(
-      screen.getByRole('heading', { name: '请联系团队所有者充值' }),
+      screen.getByRole('heading', { name: '团队额度不足' }),
       '稿子里标题坐在插画下面、18px 居中;我们把它塞进了一条 12px 的标题栏',
     ).toBeTruthy();
   });
 
   it('居中、600', () => {
     renderDialog();
-    const title = screen.getByRole('heading', { name: '请联系团队所有者充值' });
+    const title = screen.getByRole('heading', { name: '团队额度不足' });
     const computed = getComputedStyle(title);
     expect(computed.textAlign).toBe('center');
     expect(computed.fontWeight).toBe('600');
@@ -265,7 +265,7 @@ describe('正文', () => {
   it('居中、400,下面留 18px 到按钮', () => {
     renderDialog();
     const message = screen.getByText(
-      '当前仅团队所有者可以为团队充值，请联系团队所有者完成充值后再继续使用。',
+      '当前团队额度不足，请联系团队管理员充值或升级订阅。',
     );
     const computed = getComputedStyle(message);
     expect(computed.textAlign).toBe('center');
@@ -273,13 +273,17 @@ describe('正文', () => {
     expect(computed.marginBottom).toBe('18px');
   });
 
-  it('Owner 名字加粗成一档,和普通正文分得开', () => {
+  /*
+   * ⚠️ OPEND-2849 换过:原来这里钉「Owner 名字加粗成一档」。产品《报错文案》S06 团队那格
+   * 定稿句「当前团队额度不足，请联系团队管理员充值或升级订阅。」里没有名字的位置,于是名字不再出现 —— 加粗那一档无从谈起。
+   * 改为钉住「拿得到名字也不插、正文仍是一整段 400」,防止有人把名字拼回定稿句。
+   */
+  it('拿得到 Owner 名字时正文仍是定稿那一整段,名字不出现', () => {
     renderDialog({ ownerName: '张三' });
-    // 加粗的是名字本身;两边那对「」是句子的标点,留在正文里(稿子里那个位置
-    // 压根没有括号,所以「括号算不算名字的一部分」没有稿面依据,不自行发挥)。
-    const emphasised = screen.getByText('张三');
-    // 稿子实测:`.owner-name { font-weight: 700 }`,正文是 400 —— 差整整三档。
-    expect(getComputedStyle(emphasised).fontWeight).toBe('700');
+    const message = screen.getByText('当前团队额度不足，请联系团队管理员充值或升级订阅。');
+    expect(getComputedStyle(message).fontWeight).toBe('400');
+    expect(message.querySelector('strong')).toBeNull();
+    expect(screen.queryByText('张三')).toBeNull();
   });
 });
 

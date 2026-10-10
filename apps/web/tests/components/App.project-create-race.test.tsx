@@ -1560,6 +1560,62 @@ describe('App project creation routing', () => {
     clearHomeComposerAttachments();
   });
 
+  /*
+   * OPEND-2849(产品《报错文案》S28a / S03):首页发送是乐观建项目,建项目请求失败时
+   * 用户看到的是 App 这枚回滚 Toast,不是 HomeView 自己的错误块。所以这两格的定稿
+   * 要落在这里:请求没到 daemon → S28a;daemon 说未登录(AMR_AUTH_REQUIRED)→ S03。
+   * 原始英文报错(`Failed to fetch` / daemon 的 AMR 文案)不许原样露出。
+   */
+  it.each([
+    [
+      'S28a: the create request never reached the daemon',
+      () => new TypeError('Failed to fetch'),
+      'Local connection lost',
+      'Can’t reach the Open Design service on this computer right now. Please restart the app.',
+      /Failed to fetch/,
+    ],
+    [
+      'S28a: the web proxy could not reach the daemon',
+      () => new ProjectCreateError('Could not reach the local OpenDesign service', null, null, true, null),
+      'Local connection lost',
+      'Can’t reach the Open Design service on this computer right now. Please restart the app.',
+      /Could not reach the local OpenDesign service/,
+    ],
+    [
+      'S03: the daemon rejected the create as not signed in',
+      () => new ProjectCreateError(
+        'AMR sign-in is required. Sign in to AMR Cloud again, then retry this run.',
+        401,
+        'AMR_AUTH_REQUIRED',
+        false,
+        null,
+      ),
+      'Open Design is not signed in',
+      'Sign in to see your projects and continue the conversation.',
+      /AMR sign-in is required/,
+    ],
+  ] as const)('maps a failed Home create to the product copy (%s)', async (_label, makeError, title, body, raw) => {
+    mockedListProjects.mockResolvedValue([]);
+    const creation = deferred<{
+      project: Project;
+      conversationId: string;
+    }>();
+    mockedCreateProject.mockImplementation(() => creation.promise);
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Create prompted project' }));
+    await screen.findByTestId('project-creation-pending-view');
+
+    creation.reject(makeError());
+
+    await screen.findByTestId('entry-home-surface');
+    const alert = screen.getByRole('alert');
+    expect(alert.querySelector('.od-toast-message')?.textContent).toBe(title);
+    expect(alert.querySelector('.od-toast-details')?.textContent).toBe(body);
+    expect(alert.textContent).not.toMatch(raw);
+    clearHomeComposerAttachments();
+  });
+
   it('hands attachments to an already-mounted Home when the user backed out before the create failed', async () => {
     mockedListProjects.mockResolvedValue([]);
     const creation = deferred<{

@@ -80,3 +80,23 @@
   margin-top: 16px;
   gap: 12px;
 }
+
+/* Reserved area under the primary button. Its layers share one grid cell, so
+   the cell is as tall as the tallest state and the button above (centered with
+   the rest of the column) never shifts when the state below it changes. */
+.belowAction {
+  display: grid;
+  width: 100%;
+}
+
+.belowLayer {
+  grid-area: 1 / 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+}
+
+.belowLayerHidden {
+  visibility: hidden;
+}

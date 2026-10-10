@@ -3302,7 +3302,8 @@ export function projectRawUrl(
     .split('/')
     .map((seg) => encodeURIComponent(seg))
     .join('/');
-  return withWebBasePath(`/api/projects/${encodeURIComponent(projectId)}/raw/${safePath}`);
+  const route = withWebBasePath(`/api/projects/${encodeURIComponent(projectId)}/raw/`);
+  return `${route}${safePath}`;
 }
 
 export function designSystemStaticUrl(

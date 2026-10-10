@@ -399,16 +399,14 @@ test('[P1] onboarding lands on the home composer without a recommended-start str
   await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
 
   // Cloud-first onboarding no longer contains the legacy runtime/About-you/
-  // Product-design survey. A signed-in user accepts the recommended Hosted
-  // source and lands directly on Home.
+  // Product-design survey or a model-source chooser. A signed-in user's
+  // "Continue (signed in)" completes onboarding with OpenDesign Hosted and
+  // lands directly on Home.
   const cloudPrimary = page.locator('.onboarding-cloud__primary');
   await expect(cloudPrimary).toBeEnabled();
   await cloudPrimary.click();
-  await expect(page.getByRole('heading', { name: /Choose your model source|选择模型来源/i })).toBeVisible();
-  await page.getByRole('radio', { name: /OpenDesign Hosted/i }).click();
-  await page.getByRole('button', { name: /^Continue$/i }).click();
 
-  // Finishing model-source setup lands the user on Home with the composer
+  // Finishing onboarding lands the user on Home with the composer
   // ready — and NOT on the old recommended-start strip. That strip (sparkle +
   // 「Start with your first project」 + 全部类型 / 开始创作) sat between the
   // composer and the template line, offering a third way to say what the two

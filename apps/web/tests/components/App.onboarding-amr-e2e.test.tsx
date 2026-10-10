@@ -378,14 +378,9 @@ describe('onboarding -> home AMR selection (end to end)', () => {
     });
     fireEvent.click(runtimeContinue);
 
-    // The streamlined flow lands on the model-source chooser. Hosted is the
-    // default and completes onboarding directly; the removed About-you,
+    // Continue (signed in) completes onboarding directly with OpenDesign
+    // Hosted; there is no model-source chooser, and the removed About-you,
     // Newsletter, and design-system steps must not be part of this witness.
-    const hostedSource = await screen.findByRole('radio', {
-      name: /OpenDesign Hosted/i,
-    });
-    expect(hostedSource.getAttribute('aria-checked')).toBe('true');
-    fireEvent.click(await screen.findByRole('button', { name: /^Continue$/i }));
 
     // Now on home: the inline model switcher chip must reflect AMR, not the
     // Claude default the App-level auto-select used to snap to while AMR was

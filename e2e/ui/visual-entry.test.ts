@@ -67,14 +67,10 @@ test('[P2] captures the onboarding Local Agent CLI list surface', async ({ page 
   await page.goto('/onboarding', { waitUntil: 'domcontentloaded' });
   await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
 
-  await page
-    .getByRole('button', { name: /Continue \(signed in\)|继续（已登录）/i })
-    .click();
   await expect(
-    page.getByRole('heading', { name: /Choose your model source|选择模型来源/i }),
+    page.getByRole('button', { name: /Continue \(signed in\)|继续（已登录）/i }),
   ).toBeVisible({ timeout: T.medium });
-  await page.getByRole('radio', { name: /Local Agent|本地 Agent/i }).click();
-  await page.getByRole('button', { name: /^(Continue|继续)$/ }).click();
+  await page.getByRole('button', { name: /Local AI|本地 AI/i }).click();
 
   const panel = page.locator('.onboarding-view__setup-panel');
   await expect(panel).toBeVisible({ timeout: T.medium });

@@ -22,6 +22,15 @@ function jsonResponse(body: unknown): Response {
 }
 
 describe('browser requests under a configured web base path', () => {
+  it('preserves absolute attachment paths from recorded agent output', () => {
+    expect(registry.projectFileUrl('p', '/tmp/odmedia.sh')).toBe(
+      '/open-design/api/projects/p/raw//tmp/odmedia.sh',
+    );
+    expect(registry.projectRawUrl('p', 'docs/A B.png')).toBe(
+      '/open-design/api/projects/p/raw/docs/A%20B.png',
+    );
+  });
+
   it('tests the current provider through the prefixed daemon route', async () => {
     const reply = { ok: true, kind: 'success', latencyMs: 12, model: 'test-model' };
     const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse(reply));

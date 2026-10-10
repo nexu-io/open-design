@@ -4516,6 +4516,14 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   color: var(--text-faint);
   font-size: var(--font-size-14);
 }
+/* 产品《报错文案》S24a / S24c(OPEND-2849):状态词是标题,紧跟一句正文。
+   正文比状态词低一档、颜色同为 faint,和状态词同一行流式排布(窄时自然折行)。 */
+.assistant-footer .assistant-label-detail {
+  margin-inline-end: 4px;
+  font-weight: 400;
+  color: var(--text-faint);
+  font-size: var(--font-size-13, 13px);
+}
 .assistant-footer .assistant-stats {
   font-variant-numeric: tabular-nums;
   color: var(--text-faint);

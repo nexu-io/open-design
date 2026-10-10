@@ -296,6 +296,23 @@ describe('SettingsDialog about update control', () => {
     });
   });
 
+  // OPEND-2849 S31c:下载失败(updater 报 `download-failed`)不再笼统说「更新失败」。
+  it('names a failed update download as an unfinished download', () => {
+    const control = deriveAboutUpdateControl(
+      deriveUpdaterModel(
+        updateStatus({ state: 'error', error: { code: 'download-failed', message: 'socket hang up' } }),
+        { hostAvailable: true },
+      ),
+      packagedVersion,
+    );
+
+    expect(control).toMatchObject({
+      primaryLabelKey: 'settings.updateRetry',
+      statusKey: 'updater.downloadFailedTitle',
+      statusTone: 'error',
+    });
+  });
+
   it('retries updater errors from the last actionable phase', () => {
     const downloadRetry = deriveAboutUpdateControl(
       deriveUpdaterModel(

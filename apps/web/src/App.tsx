@@ -919,6 +919,33 @@ export async function hydrateReadyTeamProject(
   return summary.project;
 }
 
+/**
+ * What the user reads when a Home send's optimistic project creation fails.
+ *
+ * Product copy (OPEND-2849, 《报错文案｜精简版》): a create request that never
+ * reached the local daemon is S28a 「本地连接已断开」; a daemon that rejects the
+ * create as not signed in (`AMR_AUTH_REQUIRED`) is S03 「Open Design 尚未登录」.
+ * Both are "title\nbody" keys, rendered as the toast's title + details. The
+ * transport classification is the same one `HomeView` uses for its own error
+ * block. Any other failure keeps its existing text.
+ */
+function homeCreateFailureNotice(
+  err: unknown,
+  t: (key: 'home.createTimedOut' | 'home.daemonRecovering' | 'entry.authExpiredBody') => string,
+  fallback: string,
+): string {
+  if (err instanceof ProjectCreateError && err.code === 'PROJECT_CREATE_PREPARATION_TIMEOUT') {
+    return t('home.createTimedOut');
+  }
+  if (err instanceof TypeError || (err instanceof ProjectCreateError && err.status === null)) {
+    return t('home.daemonRecovering');
+  }
+  if (err instanceof ProjectCreateError && err.code === 'AMR_AUTH_REQUIRED') {
+    return t('entry.authExpiredBody');
+  }
+  return fallback;
+}
+
 export function App() {
   // `reducedMotion="user"` makes every motion/react component honor the OS
   // `prefers-reduced-motion` setting: transform/layout animations are zeroed
@@ -3256,10 +3283,7 @@ function AppInner() {
           rollbackOptimisticProjectCreation(
             optimisticProjectId,
             stagedFiles,
-            err instanceof ProjectCreateError
-            && err.code === 'PROJECT_CREATE_PREPARATION_TIMEOUT'
-              ? t('home.createTimedOut')
-              : errorCode,
+            homeCreateFailureNotice(err, t, errorCode),
           );
           return false;
         }
@@ -5892,7 +5916,10 @@ function AppInner() {
       ) : null}
       {projectCreateError ? (
         <Toast
-          message={projectCreateError}
+          // 「标题\n正文」两行的定稿(S28a / S03,见 `homeCreateFailureNotice`)拆成
+          // Toast 的标题 + 正文;单行的照旧只有标题。
+          message={projectCreateError.split('\n')[0] ?? projectCreateError}
+          details={projectCreateError.includes('\n') ? projectCreateError.slice(projectCreateError.indexOf('\n') + 1) : null}
           role="alert"
           tone="error"
           onDismiss={() => setProjectCreateError(null)}
