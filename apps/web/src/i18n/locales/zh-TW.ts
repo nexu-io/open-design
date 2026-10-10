@@ -1,6 +1,10 @@
 import type { Dict } from "../types";
 
 export const zhTW: Dict = {
+  'chat.runError.title.artifactsWithoutSummary': "產物已生成，缺少最終說明",
+  'chat.runError.artifactsWithoutSummaryMessage': "可用檔案：{files}。AI 未提供最終說明，你可以開啟或下載上方的檔案。",
+  'chat.runError.availableArtifacts': "可用檔案：{files}。你可以開啟或下載上方的檔案。",
+  'chat.artifact.missingSummary': "產物已生成，但 AI 未提供最終說明。",
   'billing.wallet': '錢包餘額',
   'billing.codingPlanDesignPlan': 'Design Plan',
   'billing.codingPlanPeriodHours': '{count} 小時',

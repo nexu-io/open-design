@@ -1,6 +1,10 @@
 import type { Dict } from '../types';
 
 export const fa: Dict = {
+  'chat.runError.title.artifactsWithoutSummary': "فایل‌ها ایجاد شدند؛ خلاصه موجود نیست",
+  'chat.runError.artifactsWithoutSummaryMessage': "فایل‌های موجود: {files}. هوش مصنوعی خلاصه نهایی ارائه نکرد. می‌توانید فایل‌های بالا را باز کنید یا دانلود کنید.",
+  'chat.runError.availableArtifacts': "فایل‌های موجود: {files}. می‌توانید آن‌ها را در بالا باز کنید یا دانلود کنید.",
+  'chat.artifact.missingSummary': "فایل‌ها ایجاد شدند، اما هوش مصنوعی خلاصه نهایی ارائه نکرد.",
   'billing.wallet': 'موجودی کیف پول',
   'billing.codingPlanDesignPlan': 'Design Plan',
   'billing.codingPlanPeriodHours': '{count} ساعت',

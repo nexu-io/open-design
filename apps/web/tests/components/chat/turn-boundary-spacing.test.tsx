@@ -154,7 +154,14 @@ const chrome = spawn(process.env.GAP_CHROME, [
   '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
   '--hide-scrollbars', '--force-color-profile=srgb', '--window-size=1200,1000',
   '--remote-debugging-port=' + PORT, '--user-data-dir=' + process.env.GAP_PROFILE, 'about:blank',
-], { stdio: 'ignore' });
+], { stdio: ['ignore', 'ignore', 'pipe'] });
+let chromeStderr = '';
+chrome.stderr.on('data', (data) => {
+  chromeStderr = (chromeStderr + data).slice(-8192);
+});
+chrome.on('error', (error) => {
+  chromeStderr = (chromeStderr + '\\n' + error.message).slice(-8192);
+});
 let url = null;
 for (let i = 0; i < 80 && !url; i += 1) {
   try {
@@ -163,7 +170,11 @@ for (let i = 0; i < 80 && !url; i += 1) {
   } catch {}
   if (!url) await sleep(250);
 }
-if (!url) { chrome.kill('SIGKILL'); throw new Error('headless chrome did not come up'); }
+if (!url) {
+  const exit = 'code=' + chrome.exitCode + ', signal=' + chrome.signalCode;
+  chrome.kill('SIGKILL');
+  throw new Error('headless chrome did not come up (' + exit + ')\\nstderr:\\n' + chromeStderr);
+}
 const sock = new WebSocket(url);
 await new Promise((r) => sock.addEventListener('open', r));
 let seq = 0;

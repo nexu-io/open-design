@@ -1,6 +1,10 @@
 import type { Dict } from '../types';
 
 export const ja: Dict = {
+  'chat.runError.title.artifactsWithoutSummary': "ファイルは生成済み、最終説明がありません",
+  'chat.runError.artifactsWithoutSummaryMessage': "利用できるファイル：{files}。AI が最終説明を提供しませんでした。上のファイルを開くかダウンロードできます。",
+  'chat.runError.availableArtifacts': "利用できるファイル：{files}。上から開くかダウンロードできます。",
+  'chat.artifact.missingSummary': "ファイルは生成されましたが、AI が最終説明を提供しませんでした。",
   'billing.wallet': 'ウォレット残高',
   'billing.codingPlanDesignPlan': 'Design Plan',
   'billing.codingPlanPeriodHours': '{count} 時間',

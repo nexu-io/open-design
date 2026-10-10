@@ -1,6 +1,10 @@
 import type { Dict } from '../types';
 
 export const pl: Dict = {
+  'chat.runError.title.artifactsWithoutSummary': "Pliki utworzone; brak podsumowania",
+  'chat.runError.artifactsWithoutSummaryMessage': "Dostępne pliki: {files}. AI nie dostarczyła końcowego podsumowania. Możesz otworzyć lub pobrać pliki powyżej.",
+  'chat.runError.availableArtifacts': "Dostępne pliki: {files}. Możesz je otworzyć lub pobrać powyżej.",
+  'chat.artifact.missingSummary': "Pliki zostały utworzone, ale AI nie dostarczyła końcowego podsumowania.",
   'billing.wallet': 'Saldo portfela',
   'billing.codingPlanDesignPlan': 'Design Plan',
   'billing.codingPlanPeriodHours': '{count} godz.',

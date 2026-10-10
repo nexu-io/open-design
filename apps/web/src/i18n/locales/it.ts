@@ -1,6 +1,10 @@
 import type { Dict } from '../types';
 
 export const it: Dict = {
+  'chat.runError.title.artifactsWithoutSummary': "File generati; riepilogo mancante",
+  'chat.runError.artifactsWithoutSummaryMessage': "File disponibili: {files}. L’IA non ha fornito un riepilogo finale. Puoi aprire o scaricare i file qui sopra.",
+  'chat.runError.availableArtifacts': "File disponibili: {files}. Puoi aprirli o scaricarli qui sopra.",
+  'chat.artifact.missingSummary': "I file sono stati generati, ma l’IA non ha fornito un riepilogo finale.",
   'billing.wallet': 'Saldo del portafoglio',
   'billing.codingPlanDesignPlan': 'Design Plan',
   'billing.codingPlanPeriodHours': '{count} ore',

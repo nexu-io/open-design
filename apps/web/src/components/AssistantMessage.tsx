@@ -1,6 +1,7 @@
 import { Fragment, memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCharReveal } from "./chat/useCharReveal";
 import { ExecutionShell } from "./chat/ExecutionShell";
+import { ArtifactSummaryNotice } from "./chat/ArtifactSummaryNotice";
 import { buildTurnBlocks } from "../runtime/chat/build-turn-blocks";
 import { copyableTurnText } from "../runtime/chat/copyable-turn";
 import type { ExecutionShell as ExecutionShellData } from "../runtime/chat/contract";
@@ -1398,6 +1399,9 @@ function AssistantMessageImpl({
              */
             artifactRefs={messageArtifactRefs(message)}
           />
+        ) : null}
+        {runSucceeded && !message.content.trim() && turnArtifactPanelEntries.length > 0 ? (
+          <ArtifactSummaryNotice />
         ) : null}
         {showCompletionRow ? (
           <div className="assistant-completion-row">

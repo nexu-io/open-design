@@ -69,8 +69,10 @@ export function RunErrorCardBlockedNote({ children }: PropsWithChildren): ReactE
 
 export interface RunErrorCardProps {
   title: string;
+  severity?: 'error' | 'warning';
   /** 一句人话:出了什么事、影响到哪 —— 稿子这一行走 `--text-muted`,不跟着标题变红 */
   description: ReactNode;
+  availableArtifacts?: ReactNode;
   /** 靠右那一排动作。顺序由调用方定(稿子:次要动作在左,主动作在最右) */
   actions?: ReactNode;
   /** 展开的诊断信息等附加内容,接在说明之后 */
@@ -99,15 +101,20 @@ function AlertIcon(): ReactElement {
   );
 }
 
-export function RunErrorCard({ title, description, actions, children, dataKind }: RunErrorCardProps): ReactElement {
+export function RunErrorCard({ title, description, availableArtifacts, actions, children, dataKind, severity = 'error' }: RunErrorCardProps): ReactElement {
   return (
     <div
-      className={styles.card}
+      className={[styles.card, severity === 'warning' ? styles.warning : ''].filter(Boolean).join(' ')}
       data-testid="chat-run-error-card"
+      data-severity={severity}
       {...(dataKind ? { 'data-user-action-card': dataKind } : {})}
     >
       <div className={styles.title}>
-        <AlertIcon />
+        {severity === 'warning' ? (
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+            <path d="M12 2L23 21H1L12 2ZM11 9V14H13V9H11ZM11 16V18H13V16H11Z" />
+          </svg>
+        ) : <AlertIcon />}
         {title}
       </div>
       {/* `data-testid` 是稳定钩子:测试要能只看「给用户的那句话」,
@@ -115,6 +122,11 @@ export function RunErrorCard({ title, description, actions, children, dataKind }
       <div className={styles.description} data-testid="chat-run-error-description">
         {description}
       </div>
+      {availableArtifacts ? (
+        <div className={styles.availableArtifacts} data-testid="chat-run-error-artifacts">
+          {availableArtifacts}
+        </div>
+      ) : null}
       {children}
       {actions ? (
         /* `data-user-action-footer` 同样是保留下来的稳定钩子:测试与 e2e 用它

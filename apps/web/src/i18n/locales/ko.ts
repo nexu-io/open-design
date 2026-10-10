@@ -1,6 +1,10 @@
 import type { Dict } from '../types';
 
 export const ko: Dict = {
+  'chat.runError.title.artifactsWithoutSummary': "파일 생성 완료, 최종 설명 없음",
+  'chat.runError.artifactsWithoutSummaryMessage': "사용 가능한 파일: {files}. AI가 최종 설명을 제공하지 않았습니다. 위의 파일을 열거나 다운로드할 수 있습니다.",
+  'chat.runError.availableArtifacts': "사용 가능한 파일: {files}. 위에서 열거나 다운로드할 수 있습니다.",
+  'chat.artifact.missingSummary': "파일은 생성되었지만 AI가 최종 설명을 제공하지 않았습니다.",
   'billing.wallet': '지갑 잔액',
   'billing.codingPlanDesignPlan': 'Design Plan',
   'billing.codingPlanPeriodHours': '{count}시간',

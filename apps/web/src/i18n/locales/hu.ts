@@ -1,6 +1,10 @@
 import type { Dict } from '../types';
 
 export const hu: Dict = {
+  'chat.runError.title.artifactsWithoutSummary': "Fájlok létrehozva; az összefoglaló hiányzik",
+  'chat.runError.artifactsWithoutSummaryMessage': "Elérhető fájlok: {files}. Az AI nem adott végső összefoglalót. A fenti fájlokat megnyithatod vagy letöltheted.",
+  'chat.runError.availableArtifacts': "Elérhető fájlok: {files}. Fent megnyithatod vagy letöltheted őket.",
+  'chat.artifact.missingSummary': "A fájlok létrejöttek, de az AI nem adott végső összefoglalót.",
   'billing.wallet': 'Tárca egyenlege',
   'billing.codingPlanDesignPlan': 'Design Plan',
   'billing.codingPlanPeriodHours': '{count} óra',

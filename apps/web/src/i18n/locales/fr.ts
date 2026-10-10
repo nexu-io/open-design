@@ -1,6 +1,10 @@
 import type { Dict } from '../types';
 
 export const fr: Dict = {
+  'chat.runError.title.artifactsWithoutSummary': "Fichiers générés ; résumé manquant",
+  'chat.runError.artifactsWithoutSummaryMessage': "Fichiers disponibles : {files}. L’IA n’a pas fourni de résumé final. Vous pouvez ouvrir ou télécharger les fichiers ci-dessus.",
+  'chat.runError.availableArtifacts': "Fichiers disponibles : {files}. Vous pouvez les ouvrir ou les télécharger ci-dessus.",
+  'chat.artifact.missingSummary': "Des fichiers ont été générés, mais l’IA n’a pas fourni de résumé final.",
   'billing.wallet': 'Solde du portefeuille',
   'billing.codingPlanDesignPlan': 'Design Plan',
   'billing.codingPlanPeriodHours': '{count} heures',

@@ -1,6 +1,10 @@
 import type { Dict } from '../types';
 
 export const th: Dict = {
+  'chat.runError.title.artifactsWithoutSummary': "สร้างไฟล์แล้ว แต่ไม่มีสรุปสุดท้าย",
+  'chat.runError.artifactsWithoutSummaryMessage': "ไฟล์ที่พร้อมใช้งาน: {files} AI ไม่ได้ให้สรุปสุดท้าย คุณสามารถเปิดหรือดาวน์โหลดไฟล์ด้านบนได้",
+  'chat.runError.availableArtifacts': "ไฟล์ที่พร้อมใช้งาน: {files} คุณสามารถเปิดหรือดาวน์โหลดได้จากด้านบน",
+  'chat.artifact.missingSummary': "สร้างไฟล์แล้ว แต่ AI ไม่ได้ให้สรุปสุดท้าย",
   'billing.wallet': 'ยอดเงินในกระเป๋าเงิน',
   'billing.codingPlanDesignPlan': 'Design Plan',
   'billing.codingPlanPeriodHours': '{count} ชั่วโมง',
