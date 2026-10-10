@@ -9,6 +9,7 @@ import {
   collectCrossAppImportViolationsFromSource,
   isCrossAppImportSourceFile,
   loadAppDirectoryRegistry,
+  sourceMayImportAnotherApp,
 } from "../../../scripts/check-cross-app-imports.ts";
 
 const registry: AppDirectoryRegistry = {
@@ -17,6 +18,79 @@ const registry: AppDirectoryRegistry = {
     ["web", "@open-design/web"],
   ]),
 };
+
+test("cross-app import prefilter keeps possible targets and escaped specifiers", () => {
+  assert.equal(
+    sourceMayImportAnotherApp(
+      "apps/web/src/runtime.ts",
+      "import { run } from '@open-design/daemon';",
+      registry,
+    ),
+    true,
+  );
+  assert.equal(
+    sourceMayImportAnotherApp(
+      "apps/web/src/runtime.ts",
+      "import { run } from '../../daemon/src/server.ts';",
+      registry,
+    ),
+    true,
+  );
+  assert.equal(
+    sourceMayImportAnotherApp(
+      "apps/web/src/runtime.ts",
+      String.raw`import { run } from '@open-design/\u0064aemon';`,
+      registry,
+    ),
+    true,
+  );
+  assert.equal(
+    sourceMayImportAnotherApp(
+      "apps/web/src/runtime.ts",
+      String.raw`import { run } from '@open-design/\daemon';`,
+      registry,
+    ),
+    true,
+  );
+  assert.equal(
+    sourceMayImportAnotherApp(
+      "apps/web/src/runtime.ts",
+      "import { Button } from '@open-design/components';",
+      registry,
+    ),
+    false,
+  );
+
+  const escapedViolations = collectCrossAppImportViolationsFromSource(
+    "apps/web/src/runtime.ts",
+    String.raw`import { run } from '@open-design/\u0064aemon';`,
+    registry,
+  );
+  assert.equal(escapedViolations.length, 1);
+  assert.equal(escapedViolations[0]?.targetApp, "daemon");
+});
+
+test("cross-app import prefilter never skips a file the collector would flag", () => {
+  // Every spelling below cooks to a daemon specifier in the parser, so the
+  // prefilter has to send the file through the collector.
+  const cookedSources: Array<[label: string, source: string]> = [
+    ["identity escape", String.raw`import { run } from '@open-design/\daemon';`],
+    ["CR line continuation", "import { run } from '@open-design/dae\\\rmon';"],
+    ["CRLF line continuation", "import { run } from '@open-design/dae\\\r\nmon';"],
+    ["U+2028 line continuation", "import { run } from '@open-design/dae\\\u2028mon';"],
+    ["U+2029 line continuation", "import { run } from '@open-design/dae\\\u2029mon';"],
+    ["U+2028 continuation in a relative path", "import { run } from '../../dae\\\u2028mon/src/server.ts';"],
+    ["legacy octal require", 'const daemon = require("@open-design/\\144aemon");'],
+    ["legacy octal dynamic import", 'const daemon = await import("@open-design/\\144aemon");'],
+  ];
+
+  for (const [label, source] of cookedSources) {
+    assert.equal(sourceMayImportAnotherApp("apps/web/src/runtime.ts", source, registry), true, label);
+    const violations = collectCrossAppImportViolationsFromSource("apps/web/src/runtime.ts", source, registry);
+    assert.equal(violations.length, 1, label);
+    assert.equal(violations[0]?.targetApp, "daemon", label);
+  }
+});
 
 test("cross-app import check rejects web importing daemon src via relative path", () => {
   const violations = collectCrossAppImportViolationsFromSource(
