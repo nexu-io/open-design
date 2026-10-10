@@ -176,6 +176,7 @@ import {
   mergeDaemonConfig,
   mergeDaemonMediaProviders,
   saveConfig,
+  shouldSyncBootConfigToDaemon,
   shouldSyncLocalMediaProvidersToDaemon,
   syncComposioConfigToDaemon,
   syncConfigToDaemon,
@@ -2349,7 +2350,12 @@ function AppInner() {
         // Migrate localStorage prefs to daemon on first boot with the new
         // endpoint. If daemon already had values the merge above used them;
         // writing back is idempotent and keeps both sides in sync.
-        void syncConfigToDaemon(next);
+        // Skip when the daemon read failed or was aborted: the local copy is
+        // non-authoritative in that case and must not overwrite daemon-owned
+        // values like the telemetry opt-out (#8560).
+        if (shouldSyncBootConfigToDaemon(daemonConfig)) {
+          void syncConfigToDaemon(next);
+        }
         latestPersistedConfigRef.current = next;
         setConfig(next);
 
@@ -2364,7 +2370,9 @@ function AppInner() {
         }
         setDaemonConfigLoaded(true);
         // Only a non-null GET payload means we actually observed daemon prefs.
-        setDaemonAppConfigReady(daemonConfig != null);
+        // This is the same predicate that gates the bootstrap PUT above and
+        // the two auto-pick PUTs below (#8560).
+        setDaemonAppConfigReady(shouldSyncBootConfigToDaemon(daemonConfig));
         // Composio key hydration is part of this same daemon-config
         // fetch — by the time we land here the daemon has either
         // returned the saved-key shape (apiKeyConfigured + tail) or
@@ -2433,11 +2441,18 @@ function AppInner() {
       if (prev.agentId) return prev;
       const next: AppConfig = { ...prev, agentId: firstAvailable.id };
       saveConfig(next);
-      void syncConfigToDaemon(next);
+      // Only PUT back when the boot daemon read actually succeeded (#8560):
+      // with a failed/aborted read the local copy is client defaults and a
+      // whole-config PUT would clobber daemon-owned values like the
+      // telemetry opt-out. The in-memory pick above is still fine.
+      if (daemonAppConfigReady) {
+        void syncConfigToDaemon(next);
+      }
       return next;
     });
   }, [
     daemonConfigLoaded,
+    daemonAppConfigReady,
     agentsLoading,
     agents,
     config.agentId,
@@ -2456,10 +2471,16 @@ function AppInner() {
       if (prev.designSystemId) return prev;
       const next: AppConfig = { ...prev, designSystemId: id };
       saveConfig(next);
-      void syncConfigToDaemon(next);
+      // Same guard as the agent auto-pick above (#8560): a failed/aborted
+      // boot read leaves daemonAppConfigReady false, and this whole-config
+      // PUT would wipe daemon-owned values like the telemetry opt-out.
+      // Filling the in-memory slot is still fine.
+      if (daemonAppConfigReady) {
+        void syncConfigToDaemon(next);
+      }
       return next;
     });
-  }, [daemonConfigLoaded, dsLoading, designSystems, config.designSystemId]);
+  }, [daemonConfigLoaded, daemonAppConfigReady, dsLoading, designSystems, config.designSystemId]);
 
   // One-shot self-healing migration for pets adopted before the
   // overlay learned atlas-row switching. If the stored pet is a
