@@ -68,6 +68,10 @@ export class AmrModelLoadingCache {
     this.states.delete(cacheKey);
   }
 
+  invalidateAll(): void {
+    this.states.clear();
+  }
+
   resetForTests(): void {
     this.states.clear();
   }

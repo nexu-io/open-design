@@ -80,6 +80,7 @@ test('openDesignAmrTraceEnv forwards an exact persisted workspace id for AMR run
   });
 
   assert.equal(env.OPEN_DESIGN_WORKSPACE_ID, 'workspace_team_123');
+  assert.equal(env.VELA_WORKSPACE_ID, 'workspace_team_123');
 });
 
 test('openDesignAmrTraceEnv forwards a persisted Personal workspace id too', () => {
@@ -90,6 +91,7 @@ test('openDesignAmrTraceEnv forwards a persisted Personal workspace id too', () 
     workspaceId: ' workspace_personal_123 ',
   });
   assert.equal(env.OPEN_DESIGN_WORKSPACE_ID, 'workspace_personal_123');
+  assert.equal(env.VELA_WORKSPACE_ID, 'workspace_personal_123');
 });
 
 // Null/undefined/blank means the caller found no persisted binding at all.
@@ -102,6 +104,7 @@ test('openDesignAmrTraceEnv omits OPEN_DESIGN_WORKSPACE_ID only without a persis
     workspaceId: null,
   });
   assert.equal('OPEN_DESIGN_WORKSPACE_ID' in withNull, false);
+  assert.equal('VELA_WORKSPACE_ID' in withNull, false);
 
   const withUndefined = openDesignAmrTraceEnv({
     agentId: 'amr',
@@ -109,6 +112,7 @@ test('openDesignAmrTraceEnv omits OPEN_DESIGN_WORKSPACE_ID only without a persis
     runAttempt: 0,
   });
   assert.equal('OPEN_DESIGN_WORKSPACE_ID' in withUndefined, false);
+  assert.equal('VELA_WORKSPACE_ID' in withUndefined, false);
 
   const withBlank = openDesignAmrTraceEnv({
     agentId: 'amr',
@@ -117,6 +121,7 @@ test('openDesignAmrTraceEnv omits OPEN_DESIGN_WORKSPACE_ID only without a persis
     workspaceId: '   ',
   });
   assert.equal('OPEN_DESIGN_WORKSPACE_ID' in withBlank, false);
+  assert.equal('VELA_WORKSPACE_ID' in withBlank, false);
 });
 
 test('openDesignAmrTraceEnv never forwards workspaceId for non-AMR agents', () => {

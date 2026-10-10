@@ -1148,7 +1148,10 @@ import {
   bindProjectToPersistedAutomationWorkspace,
   normalizePersistedAutomationWorkspaceScope,
 } from './automations/workspace-scope.js';
-import { resolveAmrModelProbe } from './runtimes/amr-model-probe.js';
+import {
+  buildAmrRememberedLiveModelScope,
+  resolveAmrModelProbe,
+} from './runtimes/amr-model-probe.js';
 import { createPluginInstallationHelpers, normalizeProjectPluginFolderPath, resolveProjectChildDirectory } from './services/plugin-installation.js';
 import { createPluginShareTaskStore } from './services/plugin-share-tasks.js';
 import { getRouteRegistrationInventory, installRouteRegistrationGuard } from './route-registration-guard.js';
@@ -11927,10 +11930,13 @@ export async function startServer({
       configuredAgentEnv = {};
     }
     const requestedLiveModelScope = def.id === 'amr'
-      ? resolveAmrProfile({
-          ...process.env,
-          ...(def.env || {}),
-          ...configuredAgentEnv,
+      ? buildAmrRememberedLiveModelScope({
+          profile: resolveAmrProfile({
+            ...process.env,
+            ...(def.env || {}),
+            ...configuredAgentEnv,
+          }),
+          workspaceId: run.workspaceScope?.workspaceId ?? null,
         })
       : null;
     const configuredModel =
@@ -11981,7 +11987,12 @@ export async function startServer({
       // same rewrite before spawn; keeping this earlier copy aligned prevents
       // stored concrete session models from comparing against raw `default`.
       try {
-        const resumeProbe = await resolveAmrModelProbe({ dataDir: RUNTIME_DATA_DIR, env: process.env, readAppConfig });
+        const resumeProbe = await resolveAmrModelProbe({
+          dataDir: RUNTIME_DATA_DIR,
+          env: process.env,
+          readAppConfig,
+          workspaceId: run.workspaceScope?.workspaceId ?? null,
+        });
         const resumeCatalog = await amrModelLoadingCache.get(resumeProbe.cacheKey, {
           fetchPreset: () => fetchVelaPresetModels(resumeProbe.launchPath, resumeProbe.env),
           fetchRemote: () => fetchVelaRemoteModelsWithRetry(resumeProbe.launchPath, resumeProbe.env),
@@ -13402,7 +13413,10 @@ export async function startServer({
             agentLaunch,
           )
         : null;
-      const amrModelScope = resolveAmrProfile(modelProbeEnv ?? process.env);
+      const amrModelScope = buildAmrRememberedLiveModelScope({
+        profile: resolveAmrProfile(modelProbeEnv ?? process.env),
+        workspaceId: run.workspaceScope?.workspaceId ?? null,
+      });
       // Resolve the AMR model catalog through the SAME shared cache the UI's
       // `/api/amr/models` endpoint serves (AmrModelLoadingCache): a cached
       // authoritative `vela model list` when it is hot, otherwise the offline
@@ -13421,7 +13435,12 @@ export async function startServer({
       // of fail-closing; vela's own `session/set_model` remains the final gate.
       let liveModels = [];
       try {
-        const probe = await resolveAmrModelProbe({ dataDir: RUNTIME_DATA_DIR, env: process.env, readAppConfig });
+        const probe = await resolveAmrModelProbe({
+          dataDir: RUNTIME_DATA_DIR,
+          env: process.env,
+          readAppConfig,
+          workspaceId: run.workspaceScope?.workspaceId ?? null,
+        });
         const catalog = await amrModelLoadingCache.get(probe.cacheKey, {
           fetchPreset: () => fetchVelaPresetModels(probe.launchPath, probe.env),
           fetchRemote: () => fetchVelaRemoteModelsWithRetry(probe.launchPath, probe.env),
