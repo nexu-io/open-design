@@ -88,7 +88,8 @@ export type ByokChatProtocol =
   | 'google'
   | 'ollama'
   | 'senseaudio'
-  | 'aihubmix';
+  | 'aihubmix'
+  | 'bedrock';
 
 export interface ByokChatProviderConfig {
   protocol: ByokChatProtocol;
@@ -97,6 +98,15 @@ export interface ByokChatProviderConfig {
   apiVersion?: string;
   /** Explicit run-scoped provider policy for presets that do not require bearer credentials. */
   requiresApiKey?: boolean;
+  /**
+   * Amazon Bedrock only. Named profile from `~/.aws/config` resolved through
+   * the AWS credential chain (IAM Identity Center / SSO, assumed roles, static
+   * keys). When set, `apiKey` is ignored and `requiresApiKey` is `false`; when
+   * absent, `apiKey` carries a long-term Bedrock API key (bearer token). The
+   * AWS region is derived from `baseUrl`, the regional `bedrock-runtime`
+   * endpoint (or a VPC endpoint carrying the region in its hostname).
+   */
+  awsProfile?: string;
   /**
    * Run-scoped chat model id selected in the chat UI. Forwarded to the daemon
    * so BYOK-backed utilities (e.g. memory extraction) can honor the user's

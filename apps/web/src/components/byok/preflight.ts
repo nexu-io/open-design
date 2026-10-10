@@ -1,12 +1,12 @@
 import type { TrackingByokPreflightBlockReason } from '@open-design/contracts/analytics';
 import { KNOWN_PROVIDERS } from '../../state/config';
 import type { AppConfig } from '../../types';
-import { byokProviderRequiresApiKey } from '../../utils/byokProvider';
+import { byokProviderRequiresApiKey, resolveBedrockAuthMode } from '../../utils/byokProvider';
 import { blockingByokDraftIssues, validateByokDraft } from './validation';
 
 type ByokPreflightConfig = Pick<
   AppConfig,
-  'apiKey' | 'apiProtocol' | 'apiProviderBaseUrl' | 'baseUrl' | 'model'
+  'apiKey' | 'apiProtocol' | 'apiProviderBaseUrl' | 'baseUrl' | 'model' | 'awsAuthMode' | 'awsProfile'
 >;
 
 export function byokPreflightBlockReason(
@@ -19,6 +19,8 @@ export function byokPreflightBlockReason(
       provider.baseUrl === config.baseUrl &&
       (config.apiProviderBaseUrl == null || provider.baseUrl === config.apiProviderBaseUrl),
   );
+  const bedrockProfileMode =
+    protocol === 'bedrock' && resolveBedrockAuthMode(config.awsAuthMode) === 'profile';
   const validation = validateByokDraft(
     protocol,
     {
@@ -31,6 +33,7 @@ export function byokPreflightBlockReason(
         protocol,
         selectedProvider,
         config.baseUrl,
+        { awsAuthMode: config.awsAuthMode },
       ),
     },
   );
@@ -55,6 +58,12 @@ export function byokPreflightBlockReason(
   }
   if (config.model.trim().toLowerCase() === 'default') {
     missingReasons.add('model_default');
+  }
+  // Profile mode has no key to validate; the profile name is the credential
+  // slot, and the validation module has no field for it, so report it as an
+  // invalid configuration rather than a missing key.
+  if (bedrockProfileMode && !(config.awsProfile ?? '').trim()) {
+    invalidReasons.add('config_invalid');
   }
   // A missing activation field is the actionable run blocker even when a
   // second field also fails stricter Settings validation. This keeps the
