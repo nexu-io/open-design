@@ -100,4 +100,37 @@ describe.skipIf(!findBrowserExecutable())('real isolated browser navigation', { 
     const result = await checkPrototypeQuality({ projectRoot: root, entryFile: 'index.html', userBrief: '设计品牌海报' });
     expect(result.status).toBe('not_applicable');
   });
+  it('keeps an unrecognized greeting heading incomplete rather than claiming a wrong page', async () => {
+    await fs.writeFile(path.join(root, 'index.html'), '<h2>您好，李女士</h2><div class="h-title">今日用药</div><main>服药时间线</main><nav><button aria-current="page">今日</button></nav>');
+    const result = await checkPrototypeQuality({ projectRoot: root, entryFile: 'index.html', userBrief: 'App' });
+    expect(result.status).toBe('incomplete');
+    expect(result.checks.find(c => c.control === '今日')?.status).toBe('incomplete');
+  });
+  it('keeps a named requested entry outside supported nav incomplete rather than missing', async () => {
+    await fs.writeFile(path.join(root, 'index.html'), '<h1>今日</h1><main>服药记录</main><button aria-label="提醒设置">设置</button><nav><button aria-current="page">今日</button></nav>');
+    const result = await checkPrototypeQuality({ projectRoot: root, entryFile: 'index.html', userBrief: 'App，还需要提醒设置入口' });
+    expect(result.status).toBe('incomplete');
+    expect(result.checks).toContainEqual(expect.objectContaining({ control: '提醒', status: 'incomplete', reason: 'required_entry_outside_supported_navigation' }));
+  });
+  it('cannot pass a switch with no identifiable origin for return', async () => {
+    await fs.writeFile(path.join(root, 'index.html'), `<h1>欢迎</h1><main>主页内容</main><nav><button aria-current="false">药品</button></nav><script>document.querySelector('button').onclick=e=>{e.target.setAttribute('aria-current','page');document.querySelector('h1').textContent='药品';document.querySelector('main').textContent='药物清单';}</script>`);
+    const result = await checkPrototypeQuality({ projectRoot: root, entryFile: 'index.html', userBrief: 'App' });
+    expect(result.status).toBe('incomplete');
+    expect(result.checks.find(c => c.control === '药品')?.observed).toContain('返回=null');
+  });
+  it.each([false, true])('checks the return origin for navigation discovered after a mode entry (broken=%s)', async broken => {
+    await fs.writeFile(path.join(root, 'index.html'), `<section id="choose"><button data-mode="堂食">堂食</button><button data-mode="自提">自提</button></section><section id="menu" hidden><h1 id="title">点餐</h1><span data-current-mode></span><button id="back">切换用餐方式</button><main id="body">商品列表</main><nav><button data-page="点餐" aria-current="page">点餐</button><button data-page="我的订单" aria-current="false">我的订单</button></nav></section><script>
+      document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+      if(b.dataset.mode){choose.hidden=true;menu.hidden=false;document.querySelector('[data-current-mode]').textContent=b.dataset.mode;}
+      if(b.id==='back'){choose.hidden=false;menu.hidden=true;}
+      if(b.dataset.page){if(${broken}&&title.textContent==='我的订单'&&b.dataset.page==='点餐')return;document.querySelectorAll('nav button').forEach(t=>t.setAttribute('aria-current',t===b?'page':'false'));title.textContent=b.dataset.page;body.textContent=b.dataset.page==='点餐'?'商品列表':'订单明细';}
+      });</script>`);
+    const result = await checkPrototypeQuality({ projectRoot: root, entryFile: 'index.html', userBrief: '堂食和自提，主导航：点餐、我的订单' });
+    expect(result.status).toBe(broken ? 'fail' : 'pass');
+    const order = result.checks.find(c => c.control === '我的订单');
+    expect(order?.expected).toContain('点击');
+    expect(order?.observed).toContain('起点=');
+    expect(order?.observed).toContain(`返回=${!broken}`);
+    if (!broken) expect(order?.observed).toContain('再次切换=true');
+  });
 });

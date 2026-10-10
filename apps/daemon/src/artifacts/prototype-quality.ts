@@ -91,7 +91,9 @@ async function targetVisible(page: Page, control: Control): Promise<boolean | nu
   }
   const terms = aliases[label] ?? [label];
   if (!label || !titles.length) return null;
-  return titles.some(title => terms.some(term => title.includes(term)));
+  if (titles.some(title => terms.some(term => title.includes(term)))) return true;
+  // A greeting or an unrecognized title does not prove that the intended page is absent.
+  return titles.some(title => Object.values(aliases).flat().some(term => title.includes(term))) ? false : null;
 }
 async function selectedControl(page: Page, control: Control): Promise<boolean | null> {
   if (control.mode) return true; // Business mode is asserted in the actual ordering screen.
@@ -149,6 +151,16 @@ async function visibleContent(page: Page): Promise<string> {
       }
       return text.join(' ').replace(/\s+/g, ' ').trim();
     }).join('|'));
+}
+
+async function visibleEntryLabels(page: Page): Promise<string[]> {
+  return page.locator('button,a,[role="button"]').filter({ visible: true }).evaluateAll(nodes => nodes.map(node =>
+    (node.getAttribute('aria-label') || node.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 100)));
+}
+async function viewEvidence(page: Page): Promise<string> {
+  const headings = await page.locator('h1,h2,[role="heading"],main[aria-label]').filter({ visible: true }).evaluateAll(nodes =>
+    nodes.map(node => (node.getAttribute('aria-label') || node.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 100)));
+  return `${new URL(page.url()).pathname}${new URL(page.url()).hash}; ${headings.join(' / ')}`.slice(0, 240);
 }
 
 export async function checkPrototypeQuality(input: {
@@ -218,13 +230,23 @@ export async function checkPrototypeQuality(input: {
     for (const item of found) if (!item.mode && await targetVisible(page, item) === true) { origin = item; break; }
     let lastMode: Control | undefined;
     const requirements = prototypeRequiredControls(input.userBrief);
+    const entryLabelsSeen = new Set(await visibleEntryLabels(page));
     if (!found.length && required) checks.push({ id: 'navigation-discovery', kind: 'navigation', status: 'incomplete', reason: 'required_navigation_not_reached' });
     while (todo.length && seen.size < 24 && !deadline()) {
       const control = todo.shift()!; if (seen.has(control.label)) continue; seen.add(control.label); expected++;
+      let start = 'unavailable'; let reached: boolean | null = null; let returned: boolean | null = null; let repeated: boolean | null = null;
+      const expectation = `点击「${control.label}」→对应可见内容及适用选中态→返回起点→再次切换`.slice(0, 500);
       try {
         if (!control.mode && lastMode && !(await controls(page)).some(item => item.label === control.label)) {
           await clickControl(page, lastMode); await page.waitForTimeout(80);
         }
+        if (!control.mode && !origin) {
+          for (const item of await controls(page)) {
+            if (!item.mode && await targetVisible(page, item) === true && await selectedControl(page, item) === true) { origin = item; break; }
+          }
+        }
+        start = await viewEvidence(page);
+        for (const label of await visibleEntryLabels(page)) entryLabelsSeen.add(label);
         const beforeContent = await visibleContent(page);
         const alreadyAtTarget = await targetVisible(page, control) === true && await selectedControl(page, control) === true;
         // Reacquire nodes after every render; never invoke generated handlers or set hashes directly.
@@ -237,24 +259,29 @@ export async function checkPrototypeQuality(input: {
           visible = !afterContent ? null : afterContent === beforeContent ? false
             : afterContent.replace(/\d+(?:[.,]\d+)*/g, '#') === beforeContent.replace(/\d+(?:[.,]\d+)*/g, '#') ? null : true;
         }
+        reached = visible;
         if (visible === true) {
           if (control.mode) {
             lastMode = control;
             const back = page.getByRole('button', { name: /切换用餐方式|返回用餐方式/ }).filter({ visible: true }).first();
             if (!await back.count()) visible = null;
-            else { await back.click(); await clickControl(page, control); visible = await awaitTarget(page, control, deadline); }
+            else { await back.click(); returned = (await controls(page)).some(item => item.label === control.label); await clickControl(page, control); repeated = await awaitTarget(page, control, deadline); visible = returned ? repeated : false; }
           } else {
-            if (origin && origin.label !== control.label) {
+            if (!origin) visible = null;
+            else if (origin.label !== control.label) {
               await clickControl(page, origin); await page.waitForTimeout(80);
-              if (await awaitTarget(page, origin, deadline) !== true) visible = false;
-            }
-            if (visible === true) { await clickControl(page, control); visible = await awaitTarget(page, control, deadline); }
+              returned = await awaitTarget(page, origin, deadline);
+              if (returned !== true) visible = returned;
+            } else returned = true; // Clicking the current tab may legitimately leave the page unchanged.
+            if (visible === true) { await clickControl(page, control); repeated = await awaitTarget(page, control, deadline); visible = repeated; }
           }
         }
         checks.push({ id: `navigation-${seen.size}`, kind: 'navigation', control: control.label,
+          expected: expectation, observed: `起点=${start}; 实际=${await viewEvidence(page)}; 首次目标与选中=${reached}; 返回=${returned}; 再次切换=${repeated}`.slice(0, 500),
           status: visible === true ? 'pass' : visible === false && !blockedExecutable ? 'fail' : 'incomplete',
           reason: visible === true ? 'visible_semantic_target_and_repeat' : visible === false ? 'semantic_target_not_visible' : 'target_cannot_be_determined' });
         checked++;
+        for (const label of await visibleEntryLabels(page)) entryLabelsSeen.add(label);
         const next = await controls(page); for (const item of next) if (!seen.has(item.label) && !todo.some(c => c.label === item.label)) todo.push(item);
         if (control.mode) {
           const back = page.getByRole('button', { name: /切换用餐方式|返回用餐方式/ }).filter({ visible: true }).first();
@@ -262,12 +289,16 @@ export async function checkPrototypeQuality(input: {
         }
       } catch {
         const interrupted = deadline() || blockedExecutable || !browser.isConnected();
-        checks.push({ id: `navigation-${seen.size}`, kind: 'navigation', control: control.label, status: interrupted ? 'incomplete' : 'fail', reason: input.signal?.aborted ? 'canceled' : deadline() ? 'host_budget_exhausted' : interrupted ? 'check_environment_incomplete' : 'control_unreachable_or_binding_lost' }); checked++;
+        checks.push({ id: `navigation-${seen.size}`, kind: 'navigation', control: control.label, expected: expectation,
+          observed: `起点=${start}; 操作中断; 返回=${returned}; 再次切换=${repeated}`.slice(0, 500), status: interrupted ? 'incomplete' : 'fail', reason: input.signal?.aborted ? 'canceled' : deadline() ? 'host_budget_exhausted' : interrupted ? 'check_environment_incomplete' : 'control_unreachable_or_binding_lost' }); checked++;
       }
     }
     for (const label of requirements.labels) if (![...seen].some(name => semanticLabel(name) === semanticLabel(label))) {
       expected++;
-      checks.push({ id: `missing-${checks.length}`, kind: 'navigation', control: label, status: blockedExecutable || deadline() ? 'incomplete' : 'fail', reason: 'required_entry_missing' });
+      const outsideScope = [...entryLabelsSeen].some(name => name.includes(label));
+      checks.push({ id: `missing-${checks.length}`, kind: 'navigation', control: label,
+        expected: `存在可操作的「${label}」入口`, observed: outsideScope ? '已见对应可见控件，当前导航规则无法验证' : '已到达页面未发现对应入口',
+        status: outsideScope || blockedExecutable || deadline() ? 'incomplete' : 'fail', reason: outsideScope ? 'required_entry_outside_supported_navigation' : 'required_entry_missing' });
     }
     if (requirements.unresolved) checks.push({ id: 'requirements', kind: 'navigation', status: 'incomplete', reason: 'required_navigation_scope_unresolved' });
     if (blockedExecutable) checks.push({ id: 'dependencies', kind: 'navigation', status: 'incomplete', reason: 'executable_dependency_unavailable_in_isolation' });
