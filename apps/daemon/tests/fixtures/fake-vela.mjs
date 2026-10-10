@@ -47,6 +47,9 @@
  *   FAKE_VELA_LOGIN_USER_PLAN    – plan written into the saved profile
  *   FAKE_VELA_SESSION_NEW_ERROR  – when set, session/new returns a JSON-RPC error
  *   FAKE_VELA_SET_MODEL_ERROR    – when set, session/set_model returns a JSON-RPC error
+ *   FAKE_VELA_SET_MODEL_UNAVAILABLE – comma-separated model ids that
+ *                                   session/set_model rejects the way real vela
+ *                                   rejects ids outside its catalog
  *   FAKE_VELA_PROMPT_ERROR       – when set, session/prompt returns a JSON-RPC error
  *   FAKE_VELA_PROMPT_ERROR_ON_LOAD – when set, session/prompt errors only after session/load
  *   FAKE_VELA_STALL_AFTER_PROMPT – when set to '1', session/prompt never completes
@@ -109,6 +112,7 @@ const ASSISTANT_TEXT = Object.prototype.hasOwnProperty.call(env, 'FAKE_VELA_TEXT
 const THOUGHT_TEXT = env.FAKE_VELA_THOUGHT || '';
 const SESSION_NEW_ERROR = env.FAKE_VELA_SESSION_NEW_ERROR || '';
 const SET_MODEL_ERROR = env.FAKE_VELA_SET_MODEL_ERROR || '';
+const unavailableModels = new Set((env.FAKE_VELA_SET_MODEL_UNAVAILABLE || '').split(',').map((id) => id.trim()).filter(Boolean));
 const PROMPT_ERROR = env.FAKE_VELA_PROMPT_ERROR || '';
 const PROMPT_ERROR_ON_LOAD = env.FAKE_VELA_PROMPT_ERROR_ON_LOAD || '';
 const STALL_AFTER_PROMPT = env.FAKE_VELA_STALL_AFTER_PROMPT === '1';
@@ -322,6 +326,11 @@ function handleMessage(msg) {
       }
       const next = typeof params?.modelId === 'string' ? params.modelId.trim() : '';
       const sessionId = typeof params?.sessionId === 'string' ? params.sessionId : SESSION_ID;
+      if (unavailableModels.has(next)) {
+        if (env.FAKE_VELA_LOG_SET_MODEL === '1') logInvocation(`set_model_rejected:${next}`);
+        writeError(id, 'session/set_model modelId is not available', -32602);
+        return;
+      }
       if (next) currentModelId = next;
       if (env.FAKE_VELA_LOG_SET_MODEL === '1') {
         logInvocation(`set_model:${next || '<empty>'}`);

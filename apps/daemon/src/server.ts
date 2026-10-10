@@ -13385,6 +13385,9 @@ export async function startServer({
       ));
     };
 
+    // The catalog default an AMR turn switches to when vela rejects the
+    // selected model, e.g. one that has left the catalog since it was saved.
+    let amrFallbackModel = null;
     if (def.id === 'amr' && resolvedBin && agentLaunch.launchPath) {
       const launchPath = agentLaunch.launchPath ?? resolvedBin;
       const modelProbeEnv = launchPath
@@ -13503,6 +13506,7 @@ export async function startServer({
         ));
         return finishStrategyAwarePhysicalRun('failed', 1, null);
       }
+      amrFallbackModel = defaultRunModel && defaultRunModel !== safeModel ? defaultRunModel : null;
       // NOTE: when the selected model is absent from the (possibly preset-only
       // or stale) catalog we intentionally do NOT fail-close. The cached/preset
       // catalog can lag the live one, and a logged-in user picked a concrete
@@ -15734,6 +15738,7 @@ export async function startServer({
         executionProfile,
         completePromptOnTurnEnd: def.acpTurnEndCompletesPrompt === true,
         ...(def.id === 'amr' ? { modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE' } : {}),
+        ...(def.id === 'amr' && amrFallbackModel ? { fallbackModel: amrFallbackModel } : {}),
         // Resume the prior upstream session (drives `session/load`) when the
         // resume-identity guard says it is safe; otherwise a fresh session/new.
         ...(def.resumesSessionViaAcpLoad === true && agentResumePromptPolicy.resumeSessionId

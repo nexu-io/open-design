@@ -145,7 +145,7 @@ describe('/api/chat', () => {
     };
   }
 
-  async function runAmrModelRequest(model: string): Promise<{
+  async function runAmrModelRequest(model: string, extraEnv: Record<string, string> = {}): Promise<{
     body: string;
     invocations: string[];
     responseOk: boolean;
@@ -159,7 +159,9 @@ describe('/api/chat', () => {
     const previousLogSetModel = process.env.FAKE_VELA_LOG_SET_MODEL;
     const previousLogPrompt = process.env.FAKE_VELA_LOG_PROMPT;
     const invocationLog = join(tmpdir(), `od-amr-model-request-${randomUUID()}.jsonl`);
+    const previousExtraEnv = Object.fromEntries(Object.keys(extraEnv).map((key) => [key, process.env[key]]));
     try {
+      Object.assign(process.env, extraEnv);
       process.env.VELA_RUNTIME_KEY = `fake-runtime-key-${randomUUID()}`;
       process.env.VELA_LINK_URL = 'https://amr-link.open-design.ai/v1';
       process.env.FAKE_VELA_INVOCATION_LOG = invocationLog;
@@ -214,6 +216,10 @@ child.on('exit', (code, signal) => {
       return { body, invocations, responseOk };
     } finally {
       rmSync(invocationLog, { force: true });
+      for (const [key, value] of Object.entries(previousExtraEnv)) {
+        if (value == null) delete process.env[key];
+        else process.env[key] = value;
+      }
       if (previousRuntimeKey == null) delete process.env.VELA_RUNTIME_KEY;
       else process.env.VELA_RUNTIME_KEY = previousRuntimeKey;
       if (previousLinkUrl == null) delete process.env.VELA_LINK_URL;
@@ -1233,6 +1239,24 @@ process.exit(1);
     expect(body).not.toContain('AMR_MODEL_UNAVAILABLE');
     expect(body).toContain('"type":"text_delta","delta":"Hello from fake "');
     expect(body).toContain('"type":"text_delta","delta":"vela."');
+    expect(body).toContain('"status":"succeeded"');
+  });
+
+  // AMR 0.24.1, 10/5-10/7: 9 runs from 7 users failed with "session/set_model
+  // modelId is not available" because the saved model had left the AMR catalog.
+  it('switches to the AMR catalog default when vela rejects a delisted model', async () => {
+    const { body, invocations, responseOk } = await runAmrModelRequest('claude-opus-4.8', {
+      FAKE_VELA_SET_MODEL_UNAVAILABLE: 'claude-opus-4.8',
+    });
+
+    expect(responseOk).toBe(true);
+    expect(invocations[0]).toBe('new');
+    expect(invocations[1]).toBe('set_model_rejected:claude-opus-4.8');
+    expect(invocations[2]).toMatch(/^set_model:(deepseek-v4-flash|deepseek-v3\.2)$/);
+    expect(invocations[3]).toBe('prompt');
+    expect(body).toContain('"label":"model_fallback"');
+    expect(body).toContain('claude-opus-4.8 is no longer available in AMR.');
+    expect(body).not.toContain('AMR_MODEL_UNAVAILABLE');
     expect(body).toContain('"status":"succeeded"');
   });
 

@@ -392,6 +392,97 @@ test('attachAcpSession stops an AMR turn when session/set_model rejects the sele
   }
 });
 
+// AMR 0.24.1, 10/5-10/7: 9 runs from 7 users ended with "session/set_model
+// modelId is not available" because the saved model (deepseek-v4-flash,
+// claude-opus-4.8, claude-sonnet-5, gemini-3.1-pro-preview) had left the AMR
+// catalog. Vela's rejection is authoritative, so the turn switches once to the
+// catalog default the daemon supplies and says so, instead of failing.
+test('attachAcpSession switches an AMR turn to the fallback model when the selected model was delisted', () => {
+  const child = new FakeAcpChild();
+  const writes: string[] = [];
+  const events: Array<{ event: string; payload: unknown }> = [];
+  child.stdin.on('data', (chunk) => writes.push(String(chunk)));
+
+  const session = attachAcpSession({
+    child: child as never,
+    prompt: 'hello',
+    cwd: '/tmp/od-project',
+    model: 'deepseek-v4-flash',
+    fallbackModel: 'deepseek-v4.1-flash',
+    mcpServers: [],
+    modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE',
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  try {
+    writeAcpResult(child, 1, {});
+    writeAcpResult(child, 2, { sessionId: 'session-1', models: { currentModelId: null } });
+    writeAcpError(child, 3, { code: -32602, message: 'session/set_model modelId is not available' });
+    writeAcpResult(child, 4, {});
+
+    const requests = parseRpcWrites(writes);
+    assert.deepEqual(
+      requests.filter((entry) => entry.method === 'session/set_model').map((entry) => entry.params),
+      [
+        { sessionId: 'session-1', modelId: 'deepseek-v4-flash' },
+        { sessionId: 'session-1', modelId: 'deepseek-v4.1-flash' },
+      ],
+    );
+    assert.equal(requests.some((entry) => entry.method === 'session/prompt'), true);
+    assert.deepEqual(events.filter((entry) => entry.event === 'error'), []);
+    assert.equal(session.hasFatalError(), false);
+    assert.deepEqual(agentModelStatuses(events), ['deepseek-v4.1-flash']);
+    assert.deepEqual(
+      events.filter((entry) => (entry.payload as { label?: unknown }).label === 'model_fallback').map((entry) => entry.payload),
+      [{
+        type: 'status',
+        label: 'model_fallback',
+        detail: 'deepseek-v4-flash is no longer available in AMR. This turn uses deepseek-v4.1-flash.',
+        requestedModel: 'deepseek-v4-flash',
+        model: 'deepseek-v4.1-flash',
+      }],
+    );
+  } finally {
+    session.abort();
+  }
+});
+
+test('attachAcpSession fails an AMR turn when the fallback model is rejected too', () => {
+  const child = new FakeAcpChild();
+  const writes: string[] = [];
+  const events: Array<{ event: string; payload: unknown }> = [];
+  child.stdin.on('data', (chunk) => writes.push(String(chunk)));
+
+  const session = attachAcpSession({
+    child: child as never,
+    prompt: 'hello',
+    cwd: '/tmp/od-project',
+    model: 'deepseek-v4-flash',
+    fallbackModel: 'deepseek-v4.1-flash',
+    mcpServers: [],
+    modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE',
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  try {
+    writeAcpResult(child, 1, {});
+    writeAcpResult(child, 2, { sessionId: 'session-1', models: { currentModelId: null } });
+    writeAcpError(child, 3, { code: -32602, message: 'session/set_model modelId is not available' });
+    writeAcpError(child, 4, { code: -32602, message: 'session/set_model modelId is not available' });
+
+    const requests = parseRpcWrites(writes);
+    assert.equal(requests.filter((entry) => entry.method === 'session/set_model').length, 2);
+    assert.equal(requests.some((entry) => entry.method === 'session/prompt'), false);
+    assert.equal(session.hasFatalError(), true);
+    assert.deepEqual(
+      events.filter((entry) => entry.event === 'error').map((entry) => (entry.payload as { error?: { code?: unknown } }).error?.code),
+      ['AMR_MODEL_UNAVAILABLE'],
+    );
+  } finally {
+    session.abort();
+  }
+});
+
 test('attachAcpSession preserves default-model recovery for other ACP agents', () => {
   const child = new FakeAcpChild();
   const writes: string[] = [];
