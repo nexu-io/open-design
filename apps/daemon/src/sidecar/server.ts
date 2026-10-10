@@ -141,9 +141,16 @@ export async function startDaemonSidecar(
     desktopSlideRenderer: async (input: DesktopRenderSlidesInput): Promise<DesktopRenderSlidesResult> => {
       return await invokeDesktop<DesktopRenderSlidesResult>(SIDECAR_MESSAGES.RENDER_SLIDES, input, 600_000);
     },
-    desktopArtifactExporter: async (input: DesktopExportArtifactInput): Promise<DesktopExportArtifactResult> => {
-      return await invokeDesktop<DesktopExportArtifactResult>(SIDECAR_MESSAGES.EXPORT_ARTIFACT, input, 600_000);
-    },
+    desktopArtifactExporter: Object.assign(
+      async (input: DesktopExportArtifactInput): Promise<DesktopExportArtifactResult> =>
+        await invokeDesktop<DesktopExportArtifactResult>(SIDECAR_MESSAGES.EXPORT_ARTIFACT, input, 600_000),
+      {
+        supportsFrozenResources: async (): Promise<boolean> => {
+          const status = await statusDesktop(5_000);
+          return status.state === "running" && status.capabilities?.frozenArtifactResources === true;
+        },
+      },
+    ),
     ...(options.inheritedEnvironment == null ? {} : { inheritedEnvironment: options.inheritedEnvironment }),
     port: options.port ?? parsePort(process.env[DAEMON_PORT_ENV]),
     runtime,

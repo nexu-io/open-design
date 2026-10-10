@@ -207,6 +207,8 @@ export type DesktopStatusSnapshot = {
   capabilities?: {
     /** Hidden Electron Chromium can deterministically capture authored frame timelines. */
     frameRenderer?: boolean;
+    /** Isolated thumbnail renderer accepts immutable local resource bytes. */
+    frozenArtifactResources?: boolean;
   };
   pid?: number | null;
   /**
@@ -433,7 +435,31 @@ export type DesktopArtifactCaptureErrorCode =
 // Generic programmatic export (PDF / image). The desktop renderer writes
 // the result to a temporary file and returns its path; the daemon streams those
 // bytes to the HTTP caller (the `od export` CLI), then removes the temp file.
+export const DESKTOP_FROZEN_RESOURCE_LIMITS = Object.freeze({
+  entryBytes: 2 * 1024 * 1024,
+  assetBytes: 50 * 1024 * 1024,
+  rawBytes: 52 * 1024 * 1024,
+  wireBytes: 100 * 1024 * 1024,
+  resourceCount: 2_500,
+});
+
+export type DesktopFrozenResource = {
+  path: string;
+  mime: string;
+  bytesBase64: string;
+  /** SHA-256 of the decoded bytes, lowercase hexadecimal. */
+  sha256: string;
+};
+
+export type DesktopFrozenResources = {
+  version: 1;
+  /** Original entry path; its bytes are supplied by the existing html field. */
+  entryPath: string;
+  resources: DesktopFrozenResource[];
+};
+
 export type DesktopExportArtifactInput = {
+  frozenResources?: DesktopFrozenResources;
   baseHref?: string;
   /**
    * Omitted means `full_page_export`. Left optional and undefaulted on the wire
@@ -1033,9 +1059,69 @@ const DESKTOP_ARTIFACT_CAPTURE_MODE_VALUES: readonly DesktopArtifactCaptureMode[
 const DESKTOP_EXPORT_ARTIFACT_FORMATS: readonly DesktopExportArtifactFormat[] = ["pdf", "image"];
 const DESKTOP_EXPORT_ARTIFACT_IMAGE_FORMATS: readonly DesktopExportArtifactImageFormat[] = ["png", "jpeg"];
 
+
+function utf8ByteLength(value: string): number {
+  let bytes = 0;
+  for (const character of value) {
+    const point = character.codePointAt(0)!;
+    bytes += point <= 0x7f ? 1 : point <= 0x7ff ? 2 : point <= 0xffff ? 3 : 4;
+  }
+  return bytes;
+}
+
+function normalizeFrozenResourcePath(input: unknown): string {
+  if (typeof input !== "string" || !input.trim() || /[\\\u0000-\u001f\u007f]/u.test(input) || input.split('/').some((part) => !part || part.startsWith('.'))) {
+    throw new Error("invalid frozen artifact resource path");
+  }
+  return input;
+}
+
+function isFrozenResourceBase64(value: string): boolean {
+  if (value.length % 4 !== 0) return false;
+  const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0;
+  const end = value.length - padding;
+  for (let index = 0; index < end; index += 1) {
+    const code = value.charCodeAt(index);
+    if (!((code >= 65 && code <= 90) || (code >= 97 && code <= 122) || (code >= 48 && code <= 57) || code === 43 || code === 47)) return false;
+  }
+  return padding === 0 || end >= 2;
+}
+
+function normalizeDesktopFrozenResources(input: unknown, html: string): DesktopFrozenResources {
+  const value = assertObject(input, "frozen artifact resources");
+  assertKnownKeys(value, ["version", "entryPath", "resources"], "frozen artifact resources");
+  if (value.version !== 1 || !Array.isArray(value.resources) || value.resources.length > DESKTOP_FROZEN_RESOURCE_LIMITS.resourceCount) {
+    throw new Error("invalid frozen artifact resources version or count");
+  }
+  const entryPath = normalizeFrozenResourcePath(value.entryPath);
+  let rawBytes = utf8ByteLength(html);
+  if (rawBytes > DESKTOP_FROZEN_RESOURCE_LIMITS.entryBytes) throw new Error("frozen artifact entry exceeds byte limit");
+  const paths = new Set([entryPath]);
+  const resources = value.resources.map((item): DesktopFrozenResource => {
+    const resource = assertObject(item, "frozen artifact resource");
+    assertKnownKeys(resource, ["path", "mime", "bytesBase64", "sha256"], "frozen artifact resource");
+    const resourcePath = normalizeFrozenResourcePath(resource.path);
+    if (paths.has(resourcePath)) throw new Error("duplicate frozen artifact resource path");
+    paths.add(resourcePath);
+    const mime = normalizeNonEmptyString(resource.mime, "frozen artifact resource MIME");
+    if (mime.length > 160 || /[\r\n\0]/u.test(mime) || !/^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+(?:;.*)?$/iu.test(mime)) throw new Error("invalid frozen artifact resource MIME");
+    const bytesBase64 = resource.bytesBase64;
+    if (typeof bytesBase64 !== "string" || bytesBase64.length > Math.ceil(DESKTOP_FROZEN_RESOURCE_LIMITS.assetBytes / 3) * 4 || !isFrozenResourceBase64(bytesBase64)) {
+      throw new Error("invalid frozen artifact resource base64");
+    }
+    const byteSize = bytesBase64.length / 4 * 3 - (bytesBase64.endsWith('==') ? 2 : bytesBase64.endsWith('=') ? 1 : 0);
+    rawBytes += byteSize;
+    if (byteSize > DESKTOP_FROZEN_RESOURCE_LIMITS.assetBytes || rawBytes > DESKTOP_FROZEN_RESOURCE_LIMITS.rawBytes) throw new Error("frozen artifact resources exceed byte limit");
+    const sha256 = resource.sha256;
+    if (typeof sha256 !== "string" || !/^[a-f0-9]{64}$/u.test(sha256)) throw new Error("invalid frozen artifact resource digest");
+    return { path: resourcePath, mime, bytesBase64, sha256 };
+  });
+  return { version: 1, entryPath, resources };
+}
+
 function normalizeDesktopExportArtifactInput(input: unknown): DesktopExportArtifactInput {
   const value = assertObject(input, "desktop artifact export input");
-  assertKnownKeys(value, ["baseHref", "captureMode", "deck", "format", "html", "imageFormat", "title", "width", "height"], "desktop artifact export input");
+  assertKnownKeys(value, ["baseHref", "captureMode", "deck", "format", "html", "imageFormat", "title", "width", "height", "frozenResources"], "desktop artifact export input");
   if (!DESKTOP_EXPORT_ARTIFACT_FORMATS.includes(value.format as DesktopExportArtifactFormat)) {
     throw new Error(`unsupported artifact export format: ${String(value.format)}`);
   }
@@ -1057,12 +1143,21 @@ function normalizeDesktopExportArtifactInput(input: unknown): DesktopExportArtif
   if (value.imageFormat != null && !DESKTOP_EXPORT_ARTIFACT_IMAGE_FORMATS.includes(value.imageFormat as DesktopExportArtifactImageFormat)) {
     throw new Error(`unsupported artifact export image format: ${String(value.imageFormat)}`);
   }
+  const html = normalizeNonEmptyString(value.html, "desktop artifact export html");
+  const frozenResources = value.frozenResources == null ? undefined : normalizeDesktopFrozenResources(value.frozenResources, html);
+  if (frozenResources && (value.captureMode !== DESKTOP_ARTIFACT_CAPTURE_MODES.FIRST_VIEWPORT_THUMBNAIL || value.format !== "image" || value.baseHref != null)) {
+    throw new Error("frozen artifact resources require an image thumbnail without baseHref");
+  }
+  if (frozenResources && utf8ByteLength(JSON.stringify(value)) > DESKTOP_FROZEN_RESOURCE_LIMITS.wireBytes) {
+    throw new Error("frozen artifact input exceeds wire byte limit");
+  }
   return {
+    ...(frozenResources ? { frozenResources } : {}),
     ...(value.baseHref == null ? {} : { baseHref: normalizeNonEmptyString(value.baseHref, "desktop artifact export baseHref") }),
     ...(value.captureMode == null ? {} : { captureMode: value.captureMode as DesktopArtifactCaptureMode }),
     deck: normalizeBoolean(value.deck, "desktop artifact export deck"),
     format: value.format as DesktopExportArtifactFormat,
-    html: normalizeNonEmptyString(value.html, "desktop artifact export html"),
+    html,
     ...(value.imageFormat == null ? {} : { imageFormat: value.imageFormat as DesktopExportArtifactImageFormat }),
     title: normalizeNonEmptyString(value.title, "desktop artifact export title"),
     ...(value.width == null ? {} : { width: normalizeOptionalPositiveNumber(value.width, "desktop artifact export width")! }),
