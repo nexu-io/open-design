@@ -5,6 +5,7 @@ import path from 'node:path';
 import { createInterface } from 'node:readline';
 import {
   strategyTaskProvesDelivery,
+  strategyTaskRefusedBeforeProduction,
   todoSnapshotHasUnfinishedWork,
   turnEndedByAskingUser,
 } from '@open-design/contracts';
@@ -1660,6 +1661,12 @@ export function createChatRunService({
     // it asked on the way out. Truncation stays independent and still wins.
     const endedByAskingUser =
       status === 'succeeded' && turnEndedByAskingUser(run.askUserScanText);
+    // A task the strategy gate refused before production ended this turn with
+    // the agent's own reply, a plan or an answer. The build its TodoWrite list
+    // names never started, so the list is not work the turn stopped on. Gated
+    // on `succeeded` like the ask rule above; truncation still wins.
+    const refusedBeforeProduction =
+      status === 'succeeded' && strategyTaskRefusedBeforeProduction(run.strategyTask);
     // Counter-evidence the host holds against its own turn. It is a term of its
     // own, deliberately OUTSIDE the marker/todo clause below, because that whole
     // clause is the agent's account of its own work: the completion marker, the
@@ -1679,6 +1686,7 @@ export function createChatRunService({
       || (!strategyTaskProvesDelivery(run.strategyTask)
         && !authenticatedDoneProvesDelivery
         && !endedByAskingUser
+        && !refusedBeforeProduction
         && todoSnapshotHasUnfinishedWork(run.lastTodoSnapshot));
     // Commit the terminal Run snapshot before exposing its terminal event. The
     // optional outbox hook is local-only and synchronous by contract.

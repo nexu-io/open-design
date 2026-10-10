@@ -81,6 +81,17 @@ describe('strategyBlockedMessageFields', () => {
     });
   });
 
+  it('records the stage the task was refused at on the Run it ended on only', () => {
+    const producedAt = blockedProjection({ inputStage: 'production', executionMode: 'simple' });
+    expect(strategyBlockedMessageFields(producedAt, 'run-1'))
+      .toMatchObject({ strategyTaskInputStage: 'production' });
+    // A probe of the planning Run sees the same terminal projection; the
+    // production stage is not that Run's.
+    expect(strategyBlockedMessageFields(producedAt, 'run-planning'))
+      .not.toHaveProperty('strategyTaskInputStage');
+    expect(strategyBlockedMessageFields(producedAt)).not.toHaveProperty('strategyTaskInputStage');
+  });
+
   it('keeps the blocked flag with a null text when the gate left no visible text', () => {
     expect(strategyBlockedMessageFields(blockedProjection({
       blockedContext: {

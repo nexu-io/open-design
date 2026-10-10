@@ -38,19 +38,34 @@ export async function resolveQuestionFormStrategyTaskExecutionId(input: {
  * text (trimmed; null when the gate left none, so the UI falls back to its
  * generic localized notice).
  *
+ * `runId` is the stamped message's own Run. The stage the task was refused at
+ * is recorded only when the task ended on that Run: a probe of an earlier Run
+ * in the same task sees the same terminal projection, and that Run's stage is
+ * not the task's.
+ *
  * Returns null for anything that is not a blocked terminal projection —
  * callers then leave the message untouched.
  */
 export function strategyBlockedMessageFields(
   strategyTask: StrategyTaskProjectionV2 | undefined,
-): { strategyTaskBlocked: true; strategyTaskBlockedText: string | null } | null {
+  runId?: string,
+): StrategyBlockedMessageFields | null {
   if (!strategyTask?.terminal || strategyTask.outcome !== 'blocked') return null;
   const visibleText = strategyTask.blockedContext?.visibleText?.trim();
   return {
     strategyTaskBlocked: true,
     strategyTaskBlockedText: visibleText ? visibleText : null,
+    ...(runId !== undefined && strategyTask.activeRunId === runId
+      ? { strategyTaskInputStage: strategyTask.inputStage }
+      : {}),
   };
 }
+
+type StrategyBlockedMessageFields = {
+  strategyTaskBlocked: true;
+  strategyTaskBlockedText: string | null;
+  strategyTaskInputStage?: StrategyTaskProjectionV2['inputStage'];
+};
 
 /**
  * Message fields persisting ANY terminal strategy-task verdict.
@@ -68,11 +83,12 @@ export function strategyBlockedMessageFields(
  */
 export function strategySettledMessageFields(
   strategyTask: StrategyTaskProjectionV2 | undefined,
+  runId?: string,
 ):
-  | { strategyTaskBlocked: true; strategyTaskBlockedText: string | null }
+  | StrategyBlockedMessageFields
   | { strategyTaskDelivered: true }
   | null {
-  const blocked = strategyBlockedMessageFields(strategyTask);
+  const blocked = strategyBlockedMessageFields(strategyTask, runId);
   if (blocked) return blocked;
   if (strategyTask?.terminal && strategyTask.outcome === 'completed') {
     return { strategyTaskDelivered: true };
