@@ -3,6 +3,56 @@ import * as bridge from '../src/api/share';
 
 const rect = { left: 10, top: 20, width: 28, height: 28, viewportWidth: 1440, viewportHeight: 904 };
 
+describe('share bridge pin snapshot metadata (not receiver state)', () => {
+  it('keeps legacy payloads and adds metadata without changing item shapes', () => {
+    const legacy: bridge.ShareBridgePinsPayload = { items: [] };
+    const clear: bridge.ShareBridgePinsPayload = {
+      items: [], snapshot: { epoch: 1, offset: 0, total: 0 },
+    };
+    expect(Object.keys(legacy)).toEqual(['items']);
+    expect(bridge.isShareBridgePinsSnapshot(clear.snapshot, clear.items.length)).toBe(true);
+  });
+  it.each([
+    [0, 200, 1], [0, 200, 200], [199, 200, 1], [0, 1, 1], [0, 0, 0],
+  ])('accepts offset %i, total %i, count %i', (offset, total, count) => {
+    expect(bridge.isShareBridgePinsSnapshot({ epoch: 1, offset, total }, count)).toBe(true);
+  });
+  it.each([
+    [0, 201, 1], [200, 200, 1], [199, 200, 2], [1, 0, 0], [0, 0, 1],
+    [0, 1, 0], [1, 1, 0], [0, 200, 201],
+  ])('rejects offset %i, total %i, count %i', (offset, total, count) => {
+    expect(bridge.isShareBridgePinsSnapshot({ epoch: 1, offset, total }, count)).toBe(false);
+  });
+  it.each(['epoch', 'offset', 'total', 'itemCount'])('requires safe integer %s', key => {
+    for (const invalid of [-1, 0.5, NaN, Infinity, -Infinity, Number.MAX_SAFE_INTEGER + 1, '1', null, undefined]) {
+      const metadata = { epoch: 1, offset: 0, total: 1 };
+      expect(bridge.isShareBridgePinsSnapshot(
+        key === 'itemCount' ? metadata : { ...metadata, [key]: invalid },
+        key === 'itemCount' ? invalid : 1,
+      )).toBe(false);
+    }
+    expect(bridge.isShareBridgePinsSnapshot({ epoch: 0, offset: 0, total: 1 }, 1)).toBe(false);
+  });
+  it.each([
+    null, [], {}, { epoch: 1, offset: 0 }, { epoch: 1, total: 1 }, { offset: 0, total: 1 },
+    { epoch: 1, offset: 0, total: 1, group: 'extra' },
+    { epoch: 1, offset: 0, total: 1, extra: undefined },
+    Object.create({ epoch: 1, offset: 0, total: 1 }),
+  ])('rejects non-exact metadata %j', value => {
+    expect(bridge.isShareBridgePinsSnapshot(value, 1)).toBe(false);
+  });
+  it('validates the epoch domain without claiming to reject temporally stale epochs', () => {
+    for (const epoch of [1, Number.MAX_SAFE_INTEGER, 2, 1]) {
+      const metadata = Object.freeze({ epoch, offset: 0, total: 1 });
+      expect(bridge.isShareBridgePinsSnapshot(metadata, 1)).toBe(true);
+      expect(metadata).toEqual({ epoch, offset: 0, total: 1 });
+    }
+    const invalid = Object.freeze({ epoch: 1, offset: 1, total: 1 });
+    expect(bridge.isShareBridgePinsSnapshot(invalid, 1)).toBe(false);
+    expect(invalid).toEqual({ epoch: 1, offset: 1, total: 1 });
+  });
+});
+
 describe('share bridge v2 wire boundaries', () => {
   it('requires v2 and registers geometry only in the frame-to-host direction', () => {
     expect(bridge.SHARE_VIEWER_BRIDGE_VERSION).toBe(2);

@@ -1233,8 +1233,28 @@ export interface ShareBridgeLocatePayload {
   elementId: string;
   selector: string;
 }
-/** host → frame. The full pin set to draw; replaces whatever is drawn. */
+/**
+ * Exact snapshot metadata; nonce + epoch identifies one full pin set.
+ * epoch is a positive safe integer, increasing for each snapshot within a nonce.
+ * offset and total are nonnegative safe integers; total <= pinsMaxItems.
+ * offset + items.length <= total. Positive totals require nonempty chunks;
+ * total=0 permits only offset=0 and no items (an atomic clear).
+ */
+export interface ShareBridgePinsSnapshot {
+  epoch: number;
+  offset: number;
+  total: number;
+}
+
+/**
+ * host → frame. Exact payload variants: {items} OR {items, snapshot}.
+ * Legacy {items} immediately replaces the whole drawn set, including an empty
+ * clear; it invalidates pending chunks and fences their epoch against revival.
+ * Metadata chunks follow the atomic receiver rules below. Items retain their
+ * existing exact keys, original locators and id/display/geometry guards.
+ */
 export interface ShareBridgePinsPayload {
+  snapshot?: ShareBridgePinsSnapshot;
   items: ReadonlyArray<{
     id: string;
     elementId: string;
@@ -1356,7 +1376,7 @@ export const SHARE_BRIDGE_LIMITS = {
   viewportMax: 32_768,
   pinLabelMaxLength: 3,
   paletteSize: 30,
-  /** Items in one `share:pins`. */
+  /** Items in one `share:pins` AND in a complete staged pin snapshot. */
   pinsMaxItems: 200,
   /** Bytes of one serialized envelope. */
   messageMaxBytes: 64 * 1024,
@@ -1369,6 +1389,22 @@ function shareBridgeExactRecord(value: unknown, keys: readonly string[]): value 
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const own = Object.keys(value);
   return own.length === keys.length && keys.every(key => Object.prototype.hasOwnProperty.call(value, key));
+}
+
+/**
+ * Pure exact metadata/count guard, not an item/envelope or temporal validator.
+ * Receiver state must enforce epoch freshness, offsets and unique comment ids.
+ */
+export function isShareBridgePinsSnapshot(value: unknown, itemCount: unknown): value is ShareBridgePinsSnapshot {
+  if (!shareBridgeExactRecord(value, ['epoch', 'offset', 'total'])) return false;
+  const { epoch, offset, total } = value;
+  return typeof epoch === 'number' && Number.isSafeInteger(epoch) && epoch > 0
+    && typeof offset === 'number' && Number.isSafeInteger(offset) && offset >= 0
+    && typeof total === 'number' && Number.isSafeInteger(total) && total >= 0
+    && total <= SHARE_BRIDGE_LIMITS.pinsMaxItems
+    && typeof itemCount === 'number' && Number.isSafeInteger(itemCount) && itemCount >= 0
+    && offset + itemCount <= total
+    && (total === 0 ? offset === 0 && itemCount === 0 : itemCount > 0);
 }
 
 export function isShareBridgeViewportRect(value: unknown): value is ShareBridgeViewportRect {
@@ -1438,8 +1474,39 @@ export function isShareBridgePinDisplay(value: unknown): value is ShareBridgePin
  * Coalesce changed geometry and obey messagesPerSecond across ALL messages,
  * not per type. No snapshot/metadata polling is introduced by geometry updates.
  *
+ * **Atomic pin snapshots.** Preserve the last COMPLETE rendered snapshot while
+ * staging at most one epoch and <=200 unique comment ids. A first chunk must
+ * have offset=0 and an epoch higher than any completed/fenced or pending epoch;
+ * a valid higher epoch replaces only pending state. Continuations must match
+ * the pending epoch and immutable total, with offset equal to the staged item
+ * count. Reject duplicate ids, duplicate/out-of-order chunks, mismatched totals
+ * and stale epochs (including equal completed epochs). Validate the entire
+ * chunk before mutation: invalid metadata/items leave rendered AND valid pending
+ * state unchanged. Append in supplied order; atomically replace the rendered
+ * set only when the staged count equals total, including an empty atomic clear.
+ * Legacy {items} atomically replaces immediately, discards pending state and
+ * fences its epoch; late chunks must never resurrect it.
+ *
+ * New hosts use metadata for ALL snapshots, including single packets and clears,
+ * with monotonically increasing safe epochs; never wrap/reuse an exhausted epoch
+ * within a nonce. This avoids ambiguous metadata/legacy ordering. No ack, retry
+ * queue, persistence, capability negotiation or automatic downgrade is implied.
+ * Each actual envelope remains <=64KiB and all chunks share the existing 20/s
+ * directional budget with other messages. A complete <=200-item snapshot may
+ * span multiple envelopes over time; no truncation or locator rewriting is allowed.
+ * Same-revision canonical/generated consumers are required: old strict receivers
+ * reject metadata fail-closed, not backwards-compatible deployment negotiation.
+ *
+ * Nonce/frame/identity changes, disabling or revocation discard pending snapshots
+ * and stale-epoch bookkeeping along with the existing lifecycle cleanup. Selection
+ * mode changes retain their original semantics: merely ending selection does not
+ * clear ordinary pins. Source, nonce, readiness and authorization gates apply to
+ * every chunk. These are runtime obligations, not proved by the pure shape guard.
+ *
  * **Strict schemas.** Envelopes and every payload/nested item use exact keys;
- * display is the only optional pin-item key. Unknown/missing keys and v1 fail
+ * pins accept exactly {items} or {items, snapshot}, with snapshot exactly
+ * {epoch, offset, total}. Pin-item optional keys remain display, forceGhost and
+ * ghostPosition as declared above. Unknown/missing keys and v1 fail
  * closed. A failed handshake must surface bridge unavailability, not a working
  * comment affordance. JSON strings, byte limits and rate ceilings still apply.
  *
