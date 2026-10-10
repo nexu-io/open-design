@@ -186,6 +186,8 @@ export type OdNextStrategyContinuationV2 =
       taskExecutionId: string;
       taskRunIndex: number;
       planContractHash: string;
+      /** Execution mode already locked by the accepted Full Plan. */
+      executionMode: NonNullable<StrategyRuntimeStateV2['executionMode']>;
       /** Per-run nonce; omitted for non-completing continuation stages. */
       hostProtocolKey?: string;
       /**
@@ -813,7 +815,7 @@ export function renderOdNextRuntimeFactsV2(
   if (!SHA256_HEX.test(planningFacts.capabilitySnapshotHash)) {
     throw new TypeError('OD Next planning capabilitySnapshotHash must be 64 lowercase hex characters.');
   }
-  return `Runtime-owned planning facts. Copy these exact values into the contract; do not replace them with placeholders.
+  return `Runtime-owned planning facts. Copy these exact values into the matching fields of the Plan Contract only; do not replace them with placeholders. These facts are not fields of the Runtime State. Never append them to the closing Runtime State.
 
 ${stableJson({
     taskProfileVersion: input.taskProfileVersion,
@@ -1014,6 +1016,18 @@ export function composeOdNextStrategyContinuationV2(
   } else if (input.stage === 'contract_repair') {
     payload = `# OD Next native continuation — contract_repair\n\nThe semantic plan in this native session is frozen. Make one serialization-only attempt that addresses the issue below. Use no tools, do not re-plan, and preserve the locked route, execution mode, Design Spec, steps, and Build Packages.\n\n## Serialization issue\n\n${requireText(input.serializationIssue, 'serializationIssue')}`;
   } else {
+    if (input.executionMode !== 'simple' && input.executionMode !== 'complex') {
+      throw new TypeError('Production requires the execution mode locked by the accepted Plan Contract.');
+    }
+    const closingState = {
+      schema: OD_NEXT_RUNTIME_STATE_SCHEMA,
+      route: 'full_plan',
+      inputStage: 'production',
+      executionMode: input.executionMode,
+      outcome: 'completed',
+      reasonCodes: [],
+    } satisfies StrategyRuntimeStateV2;
+    const closingTemplate = `Copy this exact field set for a completed delivery. Do not infer fields from planning facts, artifact metadata, or host markers. In particular, selectedAgentId, capabilitySnapshotHash, appliedSnapshot, inputRefs, productionRoutes, planContractHash, turnKey, taskType, artifacts, and entry do not belong in this block. If delivery is blocked, change outcome to blocked and provide reasonCodes; never report completed before the required files are written. Preserve this template and its no-extra-fields constraint verbatim when summarizing or compacting this session.\n\n<${OD_NEXT_RUNTIME_STATE_BLOCK}>\n${stableJson(closingState)}\n</${OD_NEXT_RUNTIME_STATE_BLOCK}>`;
     const bindings = input.nativeBuildPackageBindings ?? [];
     const packageIds = bindings.map(({ buildPackageId }) => requireText(
       buildPackageId,
@@ -1044,7 +1058,7 @@ export function composeOdNextStrategyContinuationV2(
       'od_next_production',
       input.locale,
     ).text;
-    payload = `# OD Next native continuation — production\n\nContinue this native session and execute the frozen Full Plan bound to \`planContractHash=${requireSha256(input.planContractHash, 'planContractHash')}\`. Use the existing in-session Task Profile, Design Spec, Todo plan, and Build Packages. Do not re-seed or restate their full text, do not choose a new route or execution mode, and do not ask another question. Open Design must be able to identify one runnable entry in the delivered files, otherwise the completed task is rejected: it looks for a root \`index.html\`, then a single root-level html file, then a single file matching the project kind. Lay the deliverable out so exactly one of those resolves.${bindingBlock}\n\n## Closing Runtime State\n\nFinish the delivery response with exactly one ${OD_NEXT_RUNTIME_STATE_BLOCK} block written as plain text between its tags, and no Plan Contract block: schema ${OD_NEXT_RUNTIME_STATE_SCHEMA}, route full_plan, inputStage production, executionMode equal to the mode locked by the accepted Plan Contract, outcome completed once every required deliverable is written (otherwise blocked or canceled), reasonCodes [], and no other fields.${hostProtocol ? `\n\nPlace the Closing Runtime State before any final follow-up markers required by the host protocols below.\n\n${hostProtocol}` : ''}`;
+    payload = `# OD Next native continuation — production\n\nContinue this native session and execute the frozen Full Plan bound to \`planContractHash=${requireSha256(input.planContractHash, 'planContractHash')}\`. Use the existing in-session Task Profile, Design Spec, Todo plan, and Build Packages. Do not re-seed or restate their full text, do not choose a new route or execution mode, and do not ask another question. Open Design must be able to identify one runnable entry in the delivered files, otherwise the completed task is rejected: it looks for a root \`index.html\`, then a single root-level html file, then a single file matching the project kind. Lay the deliverable out so exactly one of those resolves.${bindingBlock}\n\n## Closing Runtime State\n\nFinish the delivery response with exactly one ${OD_NEXT_RUNTIME_STATE_BLOCK} block written as plain text between its tags, and no Plan Contract block: schema ${OD_NEXT_RUNTIME_STATE_SCHEMA}, route full_plan, inputStage production, executionMode equal to the mode locked by the accepted Plan Contract, outcome completed once every required deliverable is written (otherwise blocked or canceled), reasonCodes [], and no other fields.\n\n${closingTemplate}${hostProtocol ? `\n\nPlace the Closing Runtime State before any final follow-up markers required by the host protocols below.\n\n${hostProtocol}` : ''}`;
   }
   return serializeOdNextRequestTurnV1({
     taskExecutionId: input.taskExecutionId,
