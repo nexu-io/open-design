@@ -26,6 +26,7 @@ import {
   odNextTurnMayInferDirectEditCompletion,
   odNextTurnMayInferProductionCompletion,
 } from './coordinator.js';
+import type { ResumeInvalidationReason } from '../../agent-session-resume.js';
 import type { OdNextMachineProtocolStream } from './protocol.js';
 import type { OdNextExecutionPreflightInput } from './resolver.js';
 import {
@@ -700,19 +701,46 @@ export function completeAutomaticSimpleProduction(db: SqliteDb, input: {
   });
 }
 
+/**
+ * Why a non-initial OD Next Run could not resume its task's native session:
+ * the resume guard's invalidation reason when a stored session was refused,
+ * otherwise whether there was no stored session at all or the runtime cannot
+ * resume one.
+ */
+export type OdNextNativeSessionGuardReason =
+  | ResumeInvalidationReason
+  | 'no_stored_session'
+  | 'unsupported';
+
+export function odNextNativeSessionGuardReason(input: {
+  supportsSessionResume: boolean;
+  storedSessionId: string | null;
+  invalidationReason: ResumeInvalidationReason | null;
+}): OdNextNativeSessionGuardReason {
+  if (!input.supportsSessionResume) return 'unsupported';
+  if (input.invalidationReason) return input.invalidationReason;
+  return input.storedSessionId == null ? 'no_stored_session' : 'unsupported';
+}
+
 /** Fail closed when a continuation cannot prove native-session continuity. */
 export function blockAutomaticContinuation(db: SqliteDb, input: {
   runId: string;
+  /** Recorded beside the primary code so the blocked task names its cause. */
+  guardReason?: OdNextNativeSessionGuardReason;
   updatedAt?: number;
 }): StrategyTaskExecutionRecord | null {
   const current = getStrategyTaskExecutionByRunId(db, input.runId);
   if (!current) return null;
   if (current.latestRunId !== input.runId || current.outcome !== 'running') return current;
+  const reasonCodes = [
+    'od_next_native_session_continuity_unproven',
+    ...(input.guardReason ? [`od_next_native_session_guard_${input.guardReason}`] : []),
+  ];
   console.warn('[od-next-task] blocked', {
     taskExecutionId: current.taskExecutionId,
     runId: input.runId,
     inputStage: current.inputStage,
-    reasonCodes: ['od_next_native_session_continuity_unproven'],
+    reasonCodes,
   });
   return compareAndTransitionStrategyTaskExecution(db, {
     taskExecutionId: current.taskExecutionId,
@@ -724,7 +752,7 @@ export function blockAutomaticContinuation(db: SqliteDb, input: {
       executionMode: current.executionMode,
     },
     blockedContext: {
-      reasonCodes: ['od_next_native_session_continuity_unproven'],
+      reasonCodes,
       visibleText: null,
     },
     ...(input.updatedAt === undefined ? {} : { updatedAt: input.updatedAt }),

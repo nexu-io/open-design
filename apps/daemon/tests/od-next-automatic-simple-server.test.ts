@@ -2502,6 +2502,44 @@ process.exit(127);
     expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(3);
   }, 90_000);
 
+  it('records why native-session continuity was unproven before blocking a continuation', async () => {
+    // Production bundles carried only "cold re-seeding is forbidden": the
+    // guard threw before the Run published its native-session recovery
+    // metadata, so no event or task field said whether the stored session was
+    // missing or invalidated (model/cwd/cursor). The guard must leave that.
+    const fixture = await createFixture('repair');
+    await writeFile(`${fixture.logPath}.no-native-session`, '1');
+    queueFixtureIds(fixture);
+    await postRun(started!.url, createRunRequest(fixture, 'Build the operator prototype.'));
+    const task = await waitForTask(fixture.taskExecutionId, 'blocked');
+    expect(task.runs.map((run) => run.inputStage)).toEqual(['request', 'contract_repair']);
+    expect(task.blockedContext?.reasonCodes).toEqual([
+      'od_next_native_session_continuity_unproven',
+      'od_next_native_session_guard_no_stored_session',
+    ]);
+    const terminal = await waitForRunTerminal(started!.url, task.latestRunId);
+    expect(terminal.status).toBe('failed');
+    const records = (await readFile(terminal.eventsLogPath, 'utf8')).trim().split('\n')
+      .map((line) => JSON.parse(line));
+    const recovery = records.find((event) => event.data?.type === 'native_session_recovery');
+    expect(recovery?.data?.nativeSessionRecovery).toMatchObject({
+      agentId: 'codex',
+      state: 'no_recoverable_session',
+      handle: { present: false },
+    });
+    const guard = records.find((event) => event.data?.type === 'od_next_native_session_guard');
+    expect(guard?.data).toMatchObject({
+      guardReason: 'no_stored_session',
+      storedSessionPresent: false,
+      agentId: 'codex',
+    });
+    // The attribution precedes the terminal error the guard raises.
+    const errorIndex = records.findIndex((event) => event.event === 'error');
+    expect(errorIndex).toBeGreaterThan(records.indexOf(guard));
+    expect(records[errorIndex]?.data?.message ?? JSON.stringify(records[errorIndex]))
+      .toContain('cold re-seeding is forbidden');
+  }, 90_000);
+
   it("ends a refused planning turn as the agent's reply instead of a failed Run", async () => {
     const fixture = await createFixture('repair');
     await writeFile(`${fixture.logPath}.refused-request`, '1');
@@ -3827,7 +3865,11 @@ function finish() {
   if (appliedSnapshot) {
     text = text.replaceAll(${JSON.stringify(plan.strategy.snapshotId)}, appliedSnapshot);
   }
-  console.log(JSON.stringify({ type: 'thread.started', thread_id: ${JSON.stringify(THREAD_ID)} }));
+  // '.no-native-session' models a runtime that never reports a resumable
+  // thread, so the daemon stores no native session for the task.
+  if (!fs.existsSync(logPath + '.no-native-session')) {
+    console.log(JSON.stringify({ type: 'thread.started', thread_id: ${JSON.stringify(THREAD_ID)} }));
+  }
   console.log(JSON.stringify({ type: 'turn.started' }));
   if (stdin.includes('native continuation — production') && fs.existsSync(logPath + '.blocked-production')) {
     // Replay the host-observed failure boundary: completed tools and progress text,

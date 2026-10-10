@@ -470,6 +470,8 @@ export async function reconcileDurableRunTerminals(
       runId: state.id,
       status: state.status,
       updatedAt: state.updatedAt,
+      source: 'startup_reconciliation',
+      runTerminalTrigger: state.terminalTrigger ?? null,
     })) {
       result.strategyTasksReconciled += 1;
     }

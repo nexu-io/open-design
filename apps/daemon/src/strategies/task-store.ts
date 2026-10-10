@@ -821,6 +821,19 @@ export function cancelStrategyTaskExecution(
 }
 
 /**
+ * Which daemon path converged a task through the Run-terminal bridge below.
+ * Logged with the writing process identity so a diagnostic bundle can tell a
+ * startup sweep (possibly a second daemon on the same data dir) apart from the
+ * live Run that actually ended.
+ */
+export type StrategyTaskRunTerminalSource =
+  | 'startup_reconciliation'
+  | 'live_run_end'
+  | 'continuation_start_failed';
+
+const PROCESS_STARTED_AT = Math.round(Date.now() - process.uptime() * 1000);
+
+/**
  * Converge a logical task after startup reconciles its latest physical Run.
  * Successful Runs still require Coordinator-owned protocol interpretation, so
  * this narrow bridge only maps process failure -> blocked and cancellation ->
@@ -832,6 +845,9 @@ export function reconcileStrategyTaskRunTerminal(
     runId: string;
     status: 'failed' | 'canceled';
     updatedAt?: number;
+    source?: StrategyTaskRunTerminalSource;
+    /** The physical Run's own terminal trigger, e.g. `daemon_restart`. */
+    runTerminalTrigger?: string | null;
   },
 ): boolean {
   try {
@@ -863,8 +879,20 @@ export function reconcileStrategyTaskRunTerminal(
         current.revision,
         input.runId,
       );
-      if (result.changes === 1) failIntentResolutionRecord(db, current.taskExecutionId);
-      return result.changes === 1;
+      if (result.changes !== 1) return false;
+      failIntentResolutionRecord(db, current.taskExecutionId);
+      console.warn('[od-next-task] run terminal reconciled', {
+        taskExecutionId: current.taskExecutionId,
+        runId: input.runId,
+        inputStage: current.inputStage,
+        outcome: input.status === 'canceled' ? 'canceled' : 'blocked',
+        reasonCodes: input.status === 'canceled' ? [] : ['od_next_physical_run_interrupted'],
+        source: input.source ?? 'unspecified',
+        runTerminalTrigger: input.runTerminalTrigger ?? null,
+        pid: process.pid,
+        processStartedAt: PROCESS_STARTED_AT,
+      });
+      return true;
     });
     return reconcile.immediate();
   } catch (error) {
