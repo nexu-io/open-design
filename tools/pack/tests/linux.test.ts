@@ -58,19 +58,27 @@ import {
   buildDockerArgs,
   cleanupPackedLinuxNamespace,
   createLinuxDesktopLaunchEnv,
+  findBuiltArtifact,
   inspectPackedLinuxApp,
   LINUX_APPIMAGE_EXECUTABLE_ARGS,
+  linuxBuildsAppImage,
+  linuxBundledFilePatterns,
   matchesAppImageProcess,
   renderDesktopTemplate,
+  resolveLinuxBuilderTargets,
   renderLinuxAppImageAppRun,
   renderLinuxPackagedMainEntry,
   resolveLinuxLifecycleMode,
+  resolveLinuxPaths,
   resolveProductionInstallCommand,
   shouldRejectLinuxHeadlessInspectOptions,
   stopPackedLinuxApp,
   sanitizeNamespace,
   stopPackedLinuxHeadless,
+  writeLinuxBuilderConfig,
+  writeWebStandaloneHookConfig,
 } from "@/linux.js";
+import { linuxResources } from "@/resources/index.js";
 
 async function pathExists(path: string): Promise<boolean> {
   try {
@@ -781,6 +789,210 @@ describe("resolveLinuxLifecycleMode", () => {
   });
 });
 
+describe("linuxBundledFilePatterns", () => {
+  // Paths as they appear in the assembled app, relative to its root.
+  const bundledCruft = [
+    "node_modules/@ffmpeg-installer/ffmpeg/index.js~",
+    "node_modules/@ffmpeg-installer/ffmpeg/lib/manifest.js~",
+    "node_modules/node-pty/prebuilds/win32-x64/pty.node",
+    "node_modules/node-pty/prebuilds/darwin-arm64/spawn-helper",
+    "node_modules/onnxruntime-node/bin/napi-v3/darwin/x64/libonnxruntime.1.21.1.dylib",
+    "node_modules/onnxruntime-node/bin/napi-v3/win32/arm64/onnxruntime_binding.node",
+    "node_modules/onnxruntime-node/bin/napi-v3/linux/x64/libonnxruntime_providers_cuda.so",
+    "node_modules/onnxruntime-node/bin/napi-v3/linux/x64/libonnxruntime_providers_tensorrt.so",
+  ];
+  const linuxX64Runtime = [
+    "node_modules/node-pty/prebuilds/linux-x64/pty.node",
+    "node_modules/onnxruntime-node/bin/napi-v3/linux/x64/onnxruntime_binding.node",
+    "node_modules/onnxruntime-node/bin/napi-v3/linux/x64/libonnxruntime.so.1",
+    "node_modules/onnxruntime-node/bin/napi-v3/linux/x64/libonnxruntime_providers_shared.so",
+    "node_modules/@ffmpeg-installer/ffmpeg/index.js",
+  ];
+
+  // Mirrors electron-builder's `files` semantics closely enough for these
+  // patterns: the last matching rule wins, `!` negates.
+  function bundled(patterns: string[], file: string): boolean {
+    let keep = false;
+    for (const pattern of patterns) {
+      const negated = pattern.startsWith("!");
+      const glob = negated ? pattern.slice(1) : pattern;
+      if (globMatches(glob, file)) keep = !negated;
+    }
+    return keep;
+  }
+  function expandBraces(glob: string): string[] {
+    const match = /\{([^{}]*)\}/.exec(glob);
+    if (!match) return [glob];
+    return match[1]
+      .split(",")
+      .flatMap((alt) => expandBraces(glob.slice(0, match.index) + alt + glob.slice(match.index + match[0].length)));
+  }
+  function globMatches(glob: string, file: string): boolean {
+    return expandBraces(glob).some((variant) => {
+      const source = variant
+        .split(/(\*\*\/|\*\*|\*)/)
+        .map((part) => (part === "**/" ? "(?:.*/)?" : part === "**" ? ".*" : part === "*" ? "[^/]*" : escape(part)))
+        .join("");
+      return new RegExp(`^${source}$`).test(file);
+    });
+  }
+  function escape(value: string): string {
+    return value.replace(/[.+^$()|[\]\\?]/g, "\\$&");
+  }
+
+  it("drops foreign-platform binaries, GPU providers and backup files on x64", () => {
+    const patterns = linuxBundledFilePatterns("x64");
+    for (const file of bundledCruft) expect(bundled(patterns, file), file).toBe(false);
+    for (const file of linuxX64Runtime) expect(bundled(patterns, file), file).toBe(true);
+    expect(bundled(patterns, "node_modules/onnxruntime-node/bin/napi-v3/linux/arm64/libonnxruntime.so.1")).toBe(false);
+  });
+
+  it("keeps the arm64 linux runtime and drops x64 when building on arm64", () => {
+    const patterns = linuxBundledFilePatterns("arm64");
+    expect(bundled(patterns, "node_modules/onnxruntime-node/bin/napi-v3/linux/arm64/libonnxruntime.so.1")).toBe(true);
+    expect(bundled(patterns, "node_modules/onnxruntime-node/bin/napi-v3/linux/x64/libonnxruntime.so.1")).toBe(false);
+    expect(bundled(patterns, "node_modules/onnxruntime-node/bin/napi-v3/linux/arm64/libonnxruntime_providers_cuda.so")).toBe(false);
+  });
+});
+
+describe("resolveLinuxBuilderTargets", () => {
+  it("maps deb to the electron-builder deb target", () => {
+    expect(resolveLinuxBuilderTargets("deb")).toEqual(["deb"]);
+  });
+
+  it("maps rpm to the electron-builder rpm target", () => {
+    expect(resolveLinuxBuilderTargets("rpm")).toEqual(["rpm"]);
+  });
+
+  it("maps dir to an unpacked build", () => {
+    expect(resolveLinuxBuilderTargets("dir")).toEqual(["dir"]);
+  });
+
+  it("defaults appimage and all to AppImage", () => {
+    expect(resolveLinuxBuilderTargets("appimage")).toEqual(["AppImage"]);
+    expect(resolveLinuxBuilderTargets("all")).toEqual(["AppImage"]);
+  });
+});
+
+describe("linuxBuildsAppImage", () => {
+  it("is true only for appimage/all so deb, rpm, and dir skip the AppRun wrapper", () => {
+    expect(linuxBuildsAppImage("appimage")).toBe(true);
+    expect(linuxBuildsAppImage("all")).toBe(true);
+    expect(linuxBuildsAppImage("deb")).toBe(false);
+    expect(linuxBuildsAppImage("rpm")).toBe(false);
+    expect(linuxBuildsAppImage("dir")).toBe(false);
+  });
+});
+
+describe("writeLinuxBuilderConfig", () => {
+  it("generates the rpm target and rpm identity for --to rpm", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-linux-rpm-config-"));
+    try {
+      const config: ToolPackConfig = {
+        ...makeConfig(),
+        to: "rpm",
+        appVersion: "0.24.1",
+        roots: {
+          ...makeConfig().roots,
+          output: {
+            ...makeConfig().roots.output,
+            namespaceRoot: join(root, "out", "linux", "namespaces", "default"),
+            appBuilderRoot: join(root, "out", "linux", "namespaces", "default", "builder"),
+          },
+        },
+      };
+      const paths = resolveLinuxPaths(config);
+
+      await writeLinuxBuilderConfig(config, paths);
+
+      const builderConfig = JSON.parse(await readFile(paths.appBuilderConfigPath, "utf8")) as {
+        linux: { target: string[] };
+        rpm?: { packageName: string; artifactName?: string; fpm: string[] };
+        deb?: unknown;
+      };
+      expect(builderConfig.linux.target).toEqual(["rpm"]);
+      expect(builderConfig.rpm).toEqual({
+        packageName: "open-design",
+        // Release-friendly filename (electron-builder substitutes ${version} and
+        // ${arch} — x86_64 for rpm), so release-notes globs like
+        // ./open-design_*.rpm match the real artifact instead of the default
+        // "Open Design ..." product name carrying a space.
+        artifactName: "open-design_${version}_${arch}.rpm",
+        fpm: ["--license", "Apache-2.0"],
+        // Post-install fixup: the rpm entry/icon keep the spaced product
+        // name, and the icon ships into the undeclared hicolor/1024x1024 —
+        // the after-install template relocates both (issues #8587/#8588).
+        afterInstall: expect.stringContaining("after-install.tpl"),
+      });
+      // The referenced template must ship with the checkout (fpm runs it at
+      // install time on the user's machine, not at build time). It has to
+      // carry the electron-builder default boilerplate (executable symlink,
+      // sandbox perms, mime/desktop databases) plus the icon relocation.
+      const afterInstallTemplate = builderConfig.rpm.afterInstall as string;
+      const afterInstallContent = await readFile(afterInstallTemplate, "utf8");
+      expect(afterInstallContent).toMatch(/^#!/m);
+      expect(afterInstallContent).toContain("update-alternatives");
+      expect(afterInstallContent).toContain("512x512/apps");
+      expect(afterInstallContent).toContain("open-design.png");
+      expect(afterInstallContent).toContain("Icon=open-design");
+      // Explicit targets only: --to rpm must not leak the deb block (and
+      // --to all never produces an rpm; resolveLinuxBuilderTargets owns that).
+      expect(builderConfig.deb).toBeUndefined();
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+});
+
+describe("findBuiltArtifact", () => {
+  it("locates the built .rpm in the electron-builder output directory", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-linux-rpm-artifact-"));
+    try {
+      const config: ToolPackConfig = {
+        ...makeConfig(),
+        roots: {
+          ...makeConfig().roots,
+          output: {
+            ...makeConfig().roots.output,
+            appBuilderRoot: join(root, "out", "linux", "namespaces", "default", "builder"),
+          },
+        },
+      };
+      const paths = resolveLinuxPaths(config);
+      await mkdir(paths.appBuilderOutputRoot, { recursive: true });
+      const rpmPath = join(paths.appBuilderOutputRoot, "Open Design-default.rpm");
+      await writeFile(rpmPath, "rpm-bytes");
+
+      expect(await findBuiltArtifact(paths, ".rpm")).toBe(rpmPath);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("returns null when the output directory holds no .rpm", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-linux-rpm-artifact-empty-"));
+    try {
+      const config: ToolPackConfig = {
+        ...makeConfig(),
+        roots: {
+          ...makeConfig().roots,
+          output: {
+            ...makeConfig().roots.output,
+            appBuilderRoot: join(root, "out", "linux", "namespaces", "default", "builder"),
+          },
+        },
+      };
+      const paths = resolveLinuxPaths(config);
+      await mkdir(paths.appBuilderOutputRoot, { recursive: true });
+      await writeFile(join(paths.appBuilderOutputRoot, "Open Design-default.AppImage"), "appimage-bytes");
+
+      expect(await findBuiltArtifact(paths, ".rpm")).toBeNull();
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+});
+
 describe("shouldRejectLinuxHeadlessInspectOptions", () => {
   it("allows status-only headless inspect", () => {
     expect(shouldRejectLinuxHeadlessInspectOptions({})).toBe(false);
@@ -946,5 +1158,144 @@ describe("matchesAppImageProcess", () => {
       installPath,
     );
     expect(ok).toBe(false);
+  });
+});
+
+describe("resolveLinuxPaths web standalone hook paths", () => {
+  it("places the hook config and audit report under the namespace root like the mac lane", () => {
+    const paths = resolveLinuxPaths(makeConfig());
+
+    expect(paths.webStandaloneHookConfigPath).toBe(
+      "/work/.tmp/tools-pack/out/linux/namespaces/default/web-standalone-after-pack-config.json",
+    );
+    expect(paths.webStandaloneHookAuditPath).toBe(
+      "/work/.tmp/tools-pack/out/linux/namespaces/default/web-standalone-after-pack-audit.json",
+    );
+  });
+});
+
+describe("writeWebStandaloneHookConfig", () => {
+  async function writeStandaloneFixture(workspaceRoot: string): Promise<void> {
+    const serverPath = join(
+      workspaceRoot,
+      "apps",
+      "web",
+      ".next",
+      "standalone",
+      "apps",
+      "web",
+      "server.js",
+    );
+    await mkdir(dirname(serverPath), { recursive: true });
+    await writeFile(serverPath, "// standalone server fixture\n", "utf8");
+  }
+
+  function configWithWorkspace(workspaceRoot: string, root?: string): ToolPackConfig {
+    const outputNamespaceRoot = root == null
+      ? makeConfig().roots.output.namespaceRoot
+      : join(root, "out", "linux", "namespaces", "default");
+    return {
+      ...makeConfig(),
+      containerized: false,
+      webOutputMode: "standalone",
+      workspaceRoot,
+      roots: {
+        ...makeConfig().roots,
+        output: {
+          ...makeConfig().roots.output,
+          namespaceRoot: outputNamespaceRoot,
+          appBuilderRoot: join(outputNamespaceRoot, "builder"),
+        },
+      },
+    };
+  }
+
+  it("throws with the shared mac/win clarity when no standalone server was produced", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-linux-webstandalone-missing-"));
+    try {
+      // The throw happens before any file is written, so the unreachable
+      // /work-shaped default roots do not matter for this assertion.
+      await expect(writeWebStandaloneHookConfig(configWithWorkspace(root), resolveLinuxPaths(configWithWorkspace(root))))
+        .rejects.toThrow("Next.js standalone server output was not produced under apps/web/.next/standalone");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("writes the hook config consumed by the linux after-pack hook", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-linux-webstandalone-config-"));
+    try {
+      await writeStandaloneFixture(root);
+      const config = configWithWorkspace(root, root);
+      const paths = resolveLinuxPaths(config);
+
+      const configPath = await writeWebStandaloneHookConfig(config, paths);
+      expect(configPath).toBe(paths.webStandaloneHookConfigPath);
+
+      const hookConfig = JSON.parse(await readFile(configPath, "utf8")) as Record<string, unknown>;
+      expect(hookConfig).toEqual({
+        auditReportPath: paths.webStandaloneHookAuditPath,
+        // Must equal the packaged app's resolvePackagedWebStandaloneRoot default.
+        resourceName: "open-design-web-standalone",
+        standaloneSourceRoot: join(root, "apps", "web", ".next", "standalone"),
+        version: 1,
+        webPublicSourceRoot: join(root, "apps", "web", "public"),
+        webStaticSourceRoot: join(root, "apps", "web", ".next", "static"),
+        workspaceRoot: root,
+      });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+});
+
+describe("writeLinuxBuilderConfig web standalone", () => {
+  function configWithRoot(root: string, overrides: Partial<ToolPackConfig> = {}): ToolPackConfig {
+    return {
+      ...makeConfig(),
+      ...overrides,
+      roots: {
+        ...makeConfig().roots,
+        output: {
+          ...makeConfig().roots.output,
+          namespaceRoot: join(root, "out", "linux", "namespaces", "default"),
+          appBuilderRoot: join(root, "out", "linux", "namespaces", "default", "builder"),
+        },
+      },
+    };
+  }
+
+  it("registers the linux web-standalone after-pack hook for standalone builds", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-linux-buildercfg-standalone-"));
+    try {
+      const config = configWithRoot(root, { appVersion: "0.24.1", webOutputMode: "standalone" });
+      const paths = resolveLinuxPaths(config);
+
+      await writeLinuxBuilderConfig(config, paths);
+
+      const builderConfig = JSON.parse(await readFile(paths.appBuilderConfigPath, "utf8")) as {
+        afterPack?: string;
+      };
+      expect(builderConfig.afterPack).toBe(linuxResources.webStandaloneAfterPackHook);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("omits the after-pack hook for server-mode builds", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-linux-buildercfg-server-"));
+    try {
+      const config = configWithRoot(root, { appVersion: "0.24.1", webOutputMode: "server" });
+      const paths = resolveLinuxPaths(config);
+
+      await writeLinuxBuilderConfig(config, paths);
+
+      const builderConfig = JSON.parse(await readFile(paths.appBuilderConfigPath, "utf8")) as {
+        afterPack?: string;
+      };
+      expect(builderConfig.afterPack).toBeUndefined();
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
   });
 });

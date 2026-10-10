@@ -85,6 +85,46 @@ describe("resolveToolPackConfig win build target", () => {
   });
 });
 
+describe("resolveToolPackConfig linux build target", () => {
+  it("accepts the community rpm target alongside the existing linux targets and rejects unsupported values", () => {
+    expect(resolveToolPackConfig("linux", { to: "appimage" }).to).toBe("appimage");
+    expect(resolveToolPackConfig("linux", { to: "deb" }).to).toBe("deb");
+    expect(resolveToolPackConfig("linux", { to: "rpm" }).to).toBe("rpm");
+    expect(resolveToolPackConfig("linux", { to: "all" }).to).toBe("all");
+    expect(() => resolveToolPackConfig("linux", { to: "nsis" })).toThrow(/unsupported linux --to target: nsis/);
+  });
+});
+
+describe("resolveToolPackConfig web output mode", () => {
+  const savedWebOutputMode = process.env.OD_WEB_OUTPUT_MODE;
+
+  afterEach(() => {
+    if (savedWebOutputMode == null) delete process.env.OD_WEB_OUTPUT_MODE;
+    else process.env.OD_WEB_OUTPUT_MODE = savedWebOutputMode;
+  });
+
+  it("defaults every packaged platform to standalone web output", () => {
+    // Linux previously stayed pinned to server mode, which made the packaged
+    // web sidecar load next.config.ts from the packaged @open-design/web
+    // package and die on workspace-root reads that only exist inside the repo.
+    expect(resolveToolPackConfig("linux").webOutputMode).toBe("standalone");
+    expect(resolveToolPackConfig("mac").webOutputMode).toBe("standalone");
+    expect(resolveToolPackConfig("win").webOutputMode).toBe("standalone");
+  });
+
+  it("honors an explicit OD_WEB_OUTPUT_MODE on linux like the desktop platforms", () => {
+    process.env.OD_WEB_OUTPUT_MODE = "server";
+    expect(resolveToolPackConfig("linux").webOutputMode).toBe("server");
+    process.env.OD_WEB_OUTPUT_MODE = "standalone";
+    expect(resolveToolPackConfig("linux").webOutputMode).toBe("standalone");
+  });
+
+  it("rejects unsupported OD_WEB_OUTPUT_MODE values on linux", () => {
+    process.env.OD_WEB_OUTPUT_MODE = "bogus";
+    expect(() => resolveToolPackConfig("linux")).toThrow(/unsupported OD_WEB_OUTPUT_MODE value: bogus/);
+  });
+});
+
 describe("resolveToolPackConfig cache root", () => {
   it("keeps the default cache outside custom tools-pack roots", () => {
     const config = resolveToolPackConfig("win", {

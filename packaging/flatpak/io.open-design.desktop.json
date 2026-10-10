@@ -1,0 +1,45 @@
+{
+    "id": "io.opendesign.desktop",
+    "runtime": "org.freedesktop.Platform",
+    "runtime-version": "26.08",
+    "sdk": "org.freedesktop.Sdk",
+    "base": "org.electronjs.Electron2.BaseApp",
+    "base-version": "26.08",
+    "command": "open-design",
+    "appstream-compose": false,
+    "finish-args": [
+        "--share=network",
+        "--share=ipc",
+        "--socket=x11",
+        "--socket=wayland",
+        "--socket=pulseaudio",
+        "--socket=session-bus",
+        "--device=dri",
+        "--filesystem=home",
+        "--talk-name=org.freedesktop.Notifications"
+    ],
+    "modules": [
+        {
+            "name": "open-design",
+            "buildsystem": "simple",
+            "build-commands": [
+                "mkdir -p /app/open-design /app/bin /app/lib /app/share/applications /app/share/icons/hicolor/512x512/apps",
+                "cp -aT . /app/open-design && ln -sfn \"$(ls /app/open-design | grep -xE 'Open Design|open-design' | head -n1)\" /app/open-design/app-bin",
+                "cat > /app/bin/open-design <<'EOF'\n#!/bin/bash\n# Open Design Flatpak launcher.\nAPP=\"/app/open-design/app-bin\"\n# The sidecar daemon and spawned agent CLIs expect a reachable session\n# bus; flatpak scrubs the variable when it is not set explicitly.\nexport DBUS_SESSION_BUS_ADDRESS=\"${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}\"\n# Electron's chrome-sandbox cannot work inside the Flatpak sandbox, so\n# apps normally route through zypak (shipped by the Electron BaseApp).\n# zypak 26.08 however re-spawns app children inside its own bwrap\n# sandbox with a scrubbed environment; this app's sidecar supervisor\n# then SIGABRTs in zypak-helper while probing the D-Bus portal\n# (DetermineZygoteStrategy). Until that interplay is resolved, disable\n# Chromium's INNER sandbox and rely on the Flatpak sandbox as the outer\n# boundary (documented in packaging/flatpak/README.md).\nexport ELECTRON_DISABLE_SANDBOX=1\nexec \"$APP\" \"$@\"\nEOF\nchmod +x /app/bin/open-design",
+                "cat > /app/share/applications/io.opendesign.desktop.desktop <<'EOF'\n[Desktop Entry]\nType=Application\nName=Open Design\nGenericName=Open Design\nComment=AI-native design agent workspace (community Flatpak build)\nExec=open-design\nIcon=io.opendesign.desktop\nCategories=Development;Utility;\nStartupWMClass=Open Design\nStartupNotify=true\nTerminal=false\nMimeType=x-scheme-handler/od;\nX-Flatpak=io.opendesign.desktop\nEOF",
+                "gdk-pixbuf-thumbnailer -s 512 icon.png icon-512.png",
+                "install -Dm644 icon-512.png /app/share/icons/hicolor/512x512/apps/io.opendesign.desktop.png"
+            ],
+            "sources": [
+                {
+                    "type": "dir",
+                    "path": "../../.tmp/tools-pack/out/linux/namespaces/default/builder/linux-unpacked"
+                },
+                {
+                    "type": "file",
+                    "path": "../../tools/pack/resources/linux/icon.png"
+                }
+            ]
+        }
+    ]
+}

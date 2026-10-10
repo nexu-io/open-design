@@ -149,6 +149,9 @@ const residualAllowedExactPaths = new Set([
   "tools/pack/resources/mac/notarize.cjs",
   // electron-builder hook path; CJS compatibility entry used by tools-pack desktop builds.
   "tools/pack/resources/web-standalone-after-pack.cjs",
+  // electron-builder hook path; Linux counterpart of the shared web-standalone
+  // after-pack hook, registered by the tools-pack linux build lane.
+  "tools/pack/resources/linux/web-standalone-after-pack.cjs",
 ]);
 
 const residualAllowedPathPrefixes = [
