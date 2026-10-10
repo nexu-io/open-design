@@ -1,4 +1,4 @@
-# OD Next Prototype Task Profile v2.2.2
+# OD Next Prototype Task Profile v2.2.6
 
 > Rollout: active
 
@@ -238,6 +238,16 @@ pointer-only styles live under `@media (hover: hover)`. An `<img>` keeps its
 never a CSS height on the image. A card, tile, or row built on `<a>` sets its
 own `color` and `text-decoration: none`; browser-default link styling never
 reaches product UI.
+
+### Keep dynamic structure and data separate
+
+For dynamic UI, prefer separating DOM structure from data. Use `textContent`
+for plain text and DOM properties or `setAttribute` for attributes. When
+generating HTML, prefer template literals with `${...}` for complex fragments
+instead of long concatenation chains with nested quote delimiters; escape data
+for its insertion context. Reuse a render function for repeated fragments only
+when their structure and meaning match. Keep simple code simple; do not add
+abstractions solely to follow this guidance.
 
 ### Design usable forms and feedback
 
