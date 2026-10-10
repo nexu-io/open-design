@@ -23,4 +23,22 @@ describe('Home image composer metadata', () => {
       imageModel: 'gpt-image-2',
     });
   });
+
+  it('persists the configured provider model when it is the preferred image route', () => {
+    const composer = buildHomeMediaComposer('image', [], {}, [], {
+      imageModels: [
+        {
+          id: 'minimax-image-01',
+          label: 'image-01',
+          hint: 'MiniMax',
+          provider: 'minimax',
+        },
+      ],
+    });
+
+    expect(metadataForHomeMediaComposer('image', composer.inputs, [])).toEqual({
+      kind: 'image',
+      imageModel: 'minimax-image-01',
+    });
+  });
 });

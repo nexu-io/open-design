@@ -72,6 +72,7 @@ import {
 } from '../i18n/content';
 import { fetchElevenLabsVoiceOptions } from '../providers/elevenlabs-voices';
 import { IMAGE_MODELS } from '../media/models';
+import { prioritizeConfiguredMediaModels } from '../media/provider-readiness';
 import {
   mergeAihubmixImageModels,
   useAIHubMixImageModels,
@@ -90,6 +91,7 @@ import type {
   ProjectMetadata,
   PromptTemplateSummary,
   SkillSummary,
+  MediaProviderCredentials,
 } from '../types';
 import { inlineMentionToken, mentionTokenPresent } from '../utils/inlineMentions';
 import { smoothScrollToTop } from '../utils/smoothScrollToTop';
@@ -295,6 +297,8 @@ interface Props {
   skillsLoading?: boolean;
   connectors?: ConnectorDetail[];
   promptTemplates?: PromptTemplateSummary[];
+  /** Used to make a configured image provider the default composer route. */
+  mediaProviders?: Record<string, MediaProviderCredentials>;
   // Personalized first-run starting point (spec §7). Null unless the user just
   // finished the About-you survey this session; EntryShell owns the state.
   // Accepted for API compatibility but no longer rendered — see
@@ -513,6 +517,7 @@ export function HomeView({
   skillsLoading = false,
   connectors = EMPTY_CONNECTORS,
   promptTemplates = EMPTY_PROMPT_TEMPLATES,
+  mediaProviders,
   recommendation = null,
   onRecommendationStart,
   onRecommendationDismiss,
@@ -833,8 +838,11 @@ export function HomeView({
   // picker (replaces the static aihubmix seeds when the fetch resolves).
   const aihubmixImageModels = useAIHubMixImageModels();
   const composerImageModels = useMemo(
-    () => mergeAihubmixImageModels(IMAGE_MODELS, aihubmixImageModels),
-    [aihubmixImageModels],
+    () => prioritizeConfiguredMediaModels(
+      mergeAihubmixImageModels(IMAGE_MODELS, aihubmixImageModels),
+      mediaProviders,
+    ),
+    [aihubmixImageModels, mediaProviders],
   );
   const [elevenLabsVoicesLoaded, setElevenLabsVoicesLoaded] = useState(false);
   const [elevenLabsVoicesError, setElevenLabsVoicesError] = useState<string | null>(null);
@@ -2849,6 +2857,17 @@ export function HomeView({
       // Composer inputs are forwarded as-is; the deferred footer/media fields are
       // stripped from this set just below to form the run-facing inputs.
       const submittedApplyInputs = submittedActive ? submittedActive.inputs : defaultInputs;
+      // A chosen image route is project metadata, not a run-facing plugin
+      // input. Keep it before deferred inputs are removed so the created
+      // project retains the configured provider route while the agent can
+      // still ask about other hidden media settings.
+      const submittedProjectMetadata = submittedActive?.mediaSurface
+        ? metadataForHomeMediaComposer(
+            submittedActive.mediaSurface,
+            submittedApplyInputs,
+            promptTemplates,
+          )
+        : null;
       // Inputs forwarded to the run AND used to build the run-facing snapshot:
       // drop every now-hidden footer/media setting so the first-turn
       // question-form flow collects them instead of inheriting a baked-in
@@ -2942,13 +2961,12 @@ export function HomeView({
       const contextLinkedDirs = contextLinkedDirCandidates;
       const submittedProjectKind =
         submittedActive?.projectKind ?? fallbackProjectKind ?? projectKindForSkill(activeSkill) ?? 'other';
-      const submittedProjectMetadata = submittedActive?.mediaSurface
-        ? metadataForHomeMediaComposer(submittedActive.mediaSurface, submittedActive.inputs, promptTemplates)
-        : homeCreateProjectMetadata(
-            submittedProjectKind,
-            submittedActive?.inputs ?? null,
-            submittedActive?.projectMetadata ?? fallbackProjectMetadata ?? null,
-          );
+      const resolvedProjectMetadata = submittedProjectMetadata
+        ?? homeCreateProjectMetadata(
+          submittedProjectKind,
+          submittedActive?.inputs ?? null,
+          submittedActive?.projectMetadata ?? fallbackProjectMetadata ?? null,
+        );
       // A mentioned Skill travels with whatever the composer selected, rather
       // than replacing it: the pick decides the route, the Skill is material
       // inside it. In Design mode, free-form prompts route through the default
@@ -3010,7 +3028,7 @@ export function HomeView({
           : submittedActive?.result?.appliedPlugin?.taskKind ?? null,
         ...(!automaticStrategyTaskProfile ? { pluginInputs: submittedPluginInputs } : {}),
         projectKind: submittedProjectKind,
-        projectMetadata: submittedProjectMetadata,
+        projectMetadata: resolvedProjectMetadata,
         designSystemId: submittedDesignSystemId,
         ...(submittedDesignSystemId && designSystemCatalogScope
           ? { designSystemCatalogScope }

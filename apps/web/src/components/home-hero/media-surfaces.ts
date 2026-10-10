@@ -56,10 +56,11 @@ export function buildHomeMediaComposer(
   } = {},
 ): HomeMediaComposerState {
   const imageModels = options.imageModels ?? IMAGE_MODELS;
+  const defaultImageModel = imageModels[0]?.id ?? DEFAULT_IMAGE_MODEL;
   const inputs = normalizeHomeMediaInputs(
     surface,
     {
-      ...defaultInputsForSurface(surface, promptTemplates),
+      ...defaultInputsForSurface(surface, promptTemplates, defaultImageModel),
       ...seedInputs,
     },
     promptTemplates,
@@ -95,7 +96,11 @@ export function normalizeHomeMediaInputs(
       aspect: ratio,
       template: validTemplateId(surface, stringValue(raw.template), promptTemplates),
       designSystem: stringValue(raw.designSystem) || 'the active project design system',
-      model: validOption(stringValue(raw.model), imageModels.map((m) => m.id), DEFAULT_IMAGE_MODEL),
+      model: validOption(
+        stringValue(raw.model),
+        imageModels.map((m) => m.id),
+        imageModels[0]?.id ?? DEFAULT_IMAGE_MODEL,
+      ),
       ratio,
       resolution: validOption(stringValue(raw.resolution), MEDIA_RESOLUTIONS, DEFAULT_MEDIA_RESOLUTION),
     };
@@ -311,12 +316,13 @@ function queryTemplateForSurface(surface: HomeComposerMediaSurface, inputs: Reco
 function defaultInputsForSurface(
   surface: HomeComposerMediaSurface,
   promptTemplates: PromptTemplateSummary[],
+  defaultImageModel: string,
 ): Record<string, unknown> {
   if (surface === 'image') {
     return {
       template: firstTemplateId(surface, promptTemplates),
       designSystem: 'the active project design system',
-      model: DEFAULT_IMAGE_MODEL,
+      model: defaultImageModel,
       ratio: '16:9',
       resolution: DEFAULT_MEDIA_RESOLUTION,
     };
