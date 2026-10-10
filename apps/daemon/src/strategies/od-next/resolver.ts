@@ -1,3 +1,4 @@
+import { readMotionDeliveryContract } from '@open-design/contracts';
 import type { StrategyExecutionModeV2, StrategyRouteV2 } from '@open-design/contracts';
 
 export const OD_NEXT_RESOLVER_SOURCE_AUTHORITY = {
@@ -281,6 +282,7 @@ const DAEMON_OWNED_PRODUCTION_ROUTES = {
   ppt: new Set(['ppt-html', 'html', 'deck-html']),
   marketing: new Set(['marketing-html', 'html', 'image-html']),
   hyperframes: new Set(['hyperframes-html', 'html']),
+  'motion-design': new Set(['hyperframes-html', 'html']),
 } as const;
 
 const DAEMON_OWNED_OUTPUT_KINDS = {
@@ -288,6 +290,7 @@ const DAEMON_OWNED_OUTPUT_KINDS = {
   ppt: new Set(['presentation', 'ppt', 'deck', 'html', 'source']),
   marketing: new Set(['image', 'marketing', 'html', 'source']),
   hyperframes: new Set(['video', 'hyperframes', 'html', 'source', 'rendered-video']),
+  'motion-design': new Set(['video', 'html', 'source', 'rendered-video']),
 } as const;
 
 export function daemonOwnedOdNextPlanningCatalog(
@@ -309,12 +312,13 @@ export function resolveDaemonOwnedOdNextExecutionPreflight(
   plan: import('@open-design/contracts').OpenDesignPlanContractV2,
 ): OdNextExecutionPreflightInput {
   const taskType = plan.taskProfile.taskType as keyof typeof DAEMON_OWNED_PRODUCTION_ROUTES;
+  const motionVideo = readMotionDeliveryContract(plan)?.mode === 'video';
   const routes = DAEMON_OWNED_PRODUCTION_ROUTES[taskType];
   const outputKinds = DAEMON_OWNED_OUTPUT_KINDS[taskType];
   return {
     productionRoutes: plan.runManifest.productionRoutes.map((id) => ({
       id,
-      available: Boolean(routes?.has(id)),
+      available: Boolean(routes?.has(id) || (motionVideo && id === 'hyperframes-html')),
     })),
     dependencies: [],
     inputs: plan.runManifest.inputRefs.map((id) => ({
@@ -326,7 +330,7 @@ export function resolveDaemonOwnedOdNextExecutionPreflight(
     templates: [],
     outputKinds: plan.taskProfile.requiredDeliverables.map(({ kind }) => ({
       id: kind,
-      supported: Boolean(outputKinds?.has(kind)),
+      supported: Boolean(outputKinds?.has(kind) || (motionVideo && ['video', 'rendered-video'].includes(kind))),
     })),
   };
 }

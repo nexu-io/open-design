@@ -225,6 +225,17 @@ describe('hyperframes-html media renderer preflight', () => {
     expect(injected).toContain('setTimeout(finish, 100)');
   });
 
+  it.each([['video', false], ['interactive', true], ['', true]])('keeps procedural drawing callbacks only for declared motion video: %s', async (mode, expectedSuppression) => {
+    const source = `<!doctype html><html><head><meta name="od-motion-output" content="${mode}"></head><body>
+      <script>window.__renderReady=true; window.__player={getDuration:()=>20,renderSeek:(time,options)=>{window.capture={time,options,renderMode:window.__odMotionRender};}};</script>
+      </body></html>`;
+    const dom = new JSDOM(injectHyperFramesFrameBridge(source, ''), { pretendToBeVisual:true, runScripts:'dangerously' });
+    try {
+      await dom.window.__odFrameRenderer.seek(5);
+      expect(dom.window.capture).toEqual({time:5,options:{suppressEvents:expectedSuppression},renderMode:true});
+    } finally { dom.window.close(); }
+  });
+
   it('honors the declared duration when the internal timeline runs longer', async () => {
     const ready = async (durationAttribute: string) => {
       const source = `<!doctype html><body>

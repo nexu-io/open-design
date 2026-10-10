@@ -31,7 +31,7 @@ export const SKILL_ID_ALIASES = Object.freeze({
   "taste-skill": "design-taste-frontend",
 });
 
-type SkillMode = "image" | "video" | "audio" | "deck" | "design-system" | "template" | "prototype";
+type SkillMode = "utility" | "image" | "video" | "audio" | "deck" | "design-system" | "template" | "prototype";
 type SkillSurface = "web" | "image" | "video" | "audio";
 type SkillPlatform = "desktop" | "mobile" | null;
 type JsonRecord = Record<string, unknown>;
@@ -418,6 +418,7 @@ export async function listSkills(
   // does whenever the request carries no `x-od-workspace-id` header — must
   // still go through `skillVisibleFromWorkspace` below so a claimed skill is
   // hidden from a headerless reader instead of silently passing through here.
+  out.sort((a, b) => (a.featured ?? Number.POSITIVE_INFINITY) - (b.featured ?? Number.POSITIVE_INFINITY));
   if (!options.db || options.workspaceId === undefined) return out;
   const scopeDb = options.db;
   const scopeId = options.workspaceId;
@@ -754,7 +755,7 @@ function inferMode(body: unknown, description: unknown): SkillMode {
 function normalizeMode(value: unknown, body: unknown, description: unknown): SkillMode {
   if (
     value === "image" || value === "video" || value === "audio" || value === "deck" ||
-    value === "design-system" || value === "template" || value === "prototype"
+    value === "design-system" || value === "template" || value === "prototype" || value === "utility"
   ) return value;
   return inferMode(body, description);
 }

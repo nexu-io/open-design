@@ -1384,6 +1384,9 @@ export interface Dict {
   'homeHero.chip.deck': string;
   'homeHero.chip.image': string;
   'homeHero.chip.video': string;
+  'homeHero.chip.motionDesign': string;
+  'homeHero.chip.motionDesignDesc': string;
+  'homeHero.chip.motionDesignHint': string;
   'homeHero.chip.hyperframes': string;
   'homeHero.chip.audio': string;
   'homeHero.chip.createBrandKit': string;

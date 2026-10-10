@@ -1,3 +1,4 @@
+import { readMotionDeliveryContract } from '@open-design/contracts';
 import {
   composeOdNextStrategyContinuationV2,
   type StrategyTaskProjectionV2,
@@ -258,6 +259,8 @@ export function prepareAutomaticSimpleProductionRun<
     taskExecutionId: task.taskExecutionId,
     taskRunIndex: task.runs.length,
     planContractHash: task.planContractHash,
+    executionMode: task.planContract!.fullPlan.executionMode,
+    ...(readMotionDeliveryContract(task.planContract) ? { motionDelivery: readMotionDeliveryContract(task.planContract)! } : {}),
     hostProtocolKey,
     ...(input.locale ? { locale: input.locale } : {}),
   });
@@ -526,6 +529,8 @@ export function prepareAutomaticStrategyContinuation<
           taskExecutionId: input.task.taskExecutionId,
           taskRunIndex: input.task.runs.length,
           planContractHash: strategyPlanContractHash(input.parsed.planContract!),
+          executionMode: input.parsed.planContract!.fullPlan.executionMode,
+          ...(readMotionDeliveryContract(input.parsed.planContract) ? { motionDelivery: readMotionDeliveryContract(input.parsed.planContract)! } : {}),
           hostProtocolKey: hostProtocolKey!,
           ...(input.locale ? { locale: input.locale } : {}),
           ...(nativeBuildPackageBindings.length > 0

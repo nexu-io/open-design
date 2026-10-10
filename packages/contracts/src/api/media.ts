@@ -358,12 +358,12 @@ export function mediaExecutionPolicyDenial(
 
 /** Request for Open Design's deterministic local HyperFrames scaffold. */
 export interface HyperFramesScaffoldRequest {
-  /** Project-relative path in the form `.hyperframes-cache/<id>`. */
+  /** Project-relative path in the form `.hyperframes-cache/<id>` or visible `motion-source/<id>`. */
   compositionDir: string;
 }
 
 /** Files created before the agent authors the composition HTML. */
 export interface HyperFramesScaffoldResponse {
   compositionDir: string;
-  files: ['hyperframes.json', 'meta.json', 'index.html'];
+  files: ['hyperframes.json', 'meta.json', 'index.html', ...string[]];
 }

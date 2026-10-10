@@ -50,6 +50,7 @@ export function isProjectScenarioBinding(value: unknown): value is ProjectScenar
       || binding.taskProfile === 'ppt'
       || binding.taskProfile === 'marketing'
       || binding.taskProfile === 'hyperframes'
+      || binding.taskProfile === 'motion-design'
     );
 }
 

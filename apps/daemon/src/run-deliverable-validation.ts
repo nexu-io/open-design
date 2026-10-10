@@ -4,12 +4,14 @@ import path from 'node:path';
 import { HYPERFRAMES_VIDEO_MODEL } from '@open-design/contracts';
 import type {
   ChatRunStatus,
+  MotionDeliveryContract,
   ProjectFile,
   ProjectFileKind,
   ProjectMetadata,
 } from '@open-design/contracts';
 
 import { listFiles, resolveProjectDir } from './projects.js';
+import { validateMotionDelivery } from './artifacts/motion-delivery.js';
 import { findTouchedLinkedPage } from './artifacts/linked-page-delivery.js';
 
 export type RunDeliverableValidation =
@@ -32,6 +34,7 @@ export interface RunDeliverableValidationResult {
 }
 
 interface ValidateRunDeliverableInput {
+  motionDelivery?: MotionDeliveryContract;
   projectsRoot: string;
   projectId: string | null;
   projectMetadata?: Partial<ProjectMetadata> | Record<string, unknown> | null;
@@ -268,10 +271,16 @@ async function resolveDeliverable(
   const baselineEntry = isPrototype && input.touchedPaths
     ? safeRelativeFile(input.baselineEntryFile)
     : null;
-  const selected = declared
+  const motionSources = input.projectMetadata?.intent === 'motion-design'
+    ? files.filter((file) => file.kind === 'html')
+    : [];
+  const motionSource = motionSources.length === 1 ? motionSources[0] : null;
+  const contractedSource = input.motionDelivery
+    ? files.find((file) => filePath(file) === input.motionDelivery!.sourcePath) ?? null : null;
+  const selected = input.motionDelivery ? contractedSource : declared
     ? files.find((file) => filePath(file) === declared) ?? null
     : (baselineEntry ? files.find((file) => filePath(file) === baselineEntry) ?? null : null)
-      ?? inferredEntry(files, acceptedKinds);
+      ?? motionSource ?? inferredEntry(files, acceptedKinds);
   if (!selected) {
     return { valid: false, validation: 'entry_missing' };
   }
@@ -336,6 +345,16 @@ async function resolveDeliverable(
     await handle.close();
   } catch {
     return { valid: false, validation: 'entry_unreadable', ...facts };
+  }
+
+  if (input.motionDelivery) {
+    const validMotion = selected.kind === 'html' && await validateMotionDelivery({
+      projectRoot,
+      sourceFile: entryFile,
+      contract: input.motionDelivery,
+      ...(runScoped && input.touchedPaths ? { touchedPaths: input.touchedPaths } : {}),
+    });
+    if (!validMotion) return { valid: false, validation: 'type_mismatch', ...facts };
   }
 
   return {

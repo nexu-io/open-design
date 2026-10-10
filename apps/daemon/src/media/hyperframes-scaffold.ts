@@ -1,7 +1,12 @@
-import { lstat, mkdir, rm, writeFile } from 'node:fs/promises';
+import type { HyperFramesScaffoldResponse } from '@open-design/contracts';
+import { createRequire } from 'node:module';
+import { injectMotionSourcePlayer } from '@open-design/contracts/runtime/motion-source-player';
+import { lstat, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-const HYPERFRAMES_CACHE_DIR = '.hyperframes-cache';
+const require = createRequire(import.meta.url);
+
+const COMPOSITION_ROOTS = new Set(['.hyperframes-cache', 'motion-source']);
 const COMPOSITION_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 const HYPERFRAMES_CONFIG = `${JSON.stringify({
@@ -49,10 +54,7 @@ const BLANK_COMPOSITION_HTML = `<!doctype html>
 </html>
 `;
 
-export interface HyperFramesScaffoldResult {
-  compositionDir: string;
-  files: ['hyperframes.json', 'meta.json', 'index.html'];
-}
+export type HyperFramesScaffoldResult = HyperFramesScaffoldResponse;
 
 export async function scaffoldHyperFramesComposition(input: {
   projectDir: string;
@@ -68,28 +70,29 @@ export async function scaffoldHyperFramesComposition(input: {
   const compositionId = parts[1] ?? '';
   if (
     parts.length !== 2
-    || parts[0] !== HYPERFRAMES_CACHE_DIR
+    || !COMPOSITION_ROOTS.has(parts[0] ?? '')
     || !COMPOSITION_ID_RE.test(compositionId)
   ) {
-    throw new Error('compositionDir must be inside .hyperframes-cache as .hyperframes-cache/<id>');
+    throw new Error('compositionDir must be inside .hyperframes-cache or motion-source as <root>/<id>');
   }
-  const cacheDir = path.join(input.projectDir, HYPERFRAMES_CACHE_DIR);
+  const compositionRoot = parts[0]!;
+  const cacheDir = path.join(input.projectDir, compositionRoot);
   await mkdir(cacheDir, { recursive: true });
   const cacheStat = await lstat(cacheDir);
   if (!cacheStat.isDirectory() || cacheStat.isSymbolicLink()) {
-    throw new Error('.hyperframes-cache must be a real directory inside the project');
+    throw new Error(`${compositionRoot} must be a real directory inside the project`);
   }
 
   const targetDir = path.join(cacheDir, compositionId);
   try {
     await lstat(targetDir);
-    throw new Error(`composition already exists: ${HYPERFRAMES_CACHE_DIR}/${compositionId}`);
+    throw new Error(`composition already exists: ${compositionRoot}/${compositionId}`);
   } catch (error: any) {
     if (error?.code !== 'ENOENT') throw error;
   }
 
   await mkdir(targetDir);
-  const files = ['hyperframes.json', 'meta.json', 'index.html'] as const;
+  const files: HyperFramesScaffoldResult['files'] = ['hyperframes.json', 'meta.json', 'index.html', ...(compositionRoot === 'motion-source' ? ['gsap.min.js'] : [])];
   try {
     const createdAt = (input.now ?? new Date()).toISOString();
     const metadata = `${JSON.stringify({
@@ -97,10 +100,16 @@ export async function scaffoldHyperFramesComposition(input: {
       name: compositionId,
       createdAt,
     }, null, 2)}\n`;
+    const source = compositionRoot === 'motion-source'
+      ? injectMotionSourcePlayer(BLANK_COMPOSITION_HTML.replace('https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js', './gsap.min.js'))
+      : BLANK_COMPOSITION_HTML;
+    const gsap = compositionRoot === 'motion-source'
+      ? await readFile(require.resolve('gsap/dist/gsap.min.js')) : null;
     await Promise.all([
-      writeFile(path.join(targetDir, files[0]), HYPERFRAMES_CONFIG, { encoding: 'utf8', flag: 'wx' }),
-      writeFile(path.join(targetDir, files[1]), metadata, { encoding: 'utf8', flag: 'wx' }),
-      writeFile(path.join(targetDir, files[2]), BLANK_COMPOSITION_HTML, { encoding: 'utf8', flag: 'wx' }),
+      writeFile(path.join(targetDir, files[0]!), HYPERFRAMES_CONFIG, { encoding: 'utf8', flag: 'wx' }),
+      writeFile(path.join(targetDir, files[1]!), metadata, { encoding: 'utf8', flag: 'wx' }),
+      writeFile(path.join(targetDir, files[2]!), source, { encoding: 'utf8', flag: 'wx' }),
+      ...(gsap ? [writeFile(path.join(targetDir, 'gsap.min.js'), gsap, { flag: 'wx' })] : []),
     ]);
   } catch (error) {
     await rm(targetDir, { recursive: true, force: true });
@@ -108,7 +117,7 @@ export async function scaffoldHyperFramesComposition(input: {
   }
 
   return {
-    compositionDir: `${HYPERFRAMES_CACHE_DIR}/${compositionId}`,
+    compositionDir: `${compositionRoot}/${compositionId}`,
     files: [...files],
   };
 }
