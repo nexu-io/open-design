@@ -419,6 +419,21 @@ describe('packaged child Vite+ environment forwarding', () => {
     expect(env.RANDOM_INTERNAL_FLAG).toBeUndefined();
   });
 
+  it('forwards OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS so the packaged daemon can honour the operator watchdog override (#8548)', () => {
+    const env = resolvePackagedChildBaseEnv({
+      HOME: '/Users/tester',
+      OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS: '1800000',
+      OD_CHAT_RUN_FIRST_OUTPUT_TIMEOUT_MS: '120000',
+      RANDOM_INTERNAL_FLAG: 'drop-me',
+    });
+
+    expect(env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS).toBe('1800000');
+    // Only variables named in the allowlist cross the boundary — the sibling
+    // watchdog knob is deliberately not one of them yet.
+    expect(env.OD_CHAT_RUN_FIRST_OUTPUT_TIMEOUT_MS).toBeUndefined();
+    expect(env.RANDOM_INTERNAL_FLAG).toBeUndefined();
+  });
+
   it('adds custom VP_HOME/bin to the packaged PATH builder', () => {
     const vpHome = mkdtempSync(join(tmpdir(), 'od-packaged-vp-home-'));
     const originalVpHome = process.env.VP_HOME;
