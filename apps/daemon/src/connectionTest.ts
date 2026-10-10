@@ -950,11 +950,15 @@ function inspectProviderCompletion(
     const responseModel = typeof obj.model === 'string' ? obj.model : '';
     const normalizedResponseModel = responseModel.trim();
     const normalizedRequestedModel = requestedModel.trim();
+    const requestedAfterFirstSlash = normalizedRequestedModel.includes('/')
+      ? normalizedRequestedModel.slice(normalizedRequestedModel.indexOf('/') + 1)
+      : '';
     const isGatewayNormalizedEcho =
       normalizedResponseModel !== '' &&
       normalizedRequestedModel !== '' &&
       normalizedResponseModel !== normalizedRequestedModel &&
-      normalizedRequestedModel.endsWith(`/${normalizedResponseModel}`);
+      requestedAfterFirstSlash === normalizedResponseModel &&
+      !requestedAfterFirstSlash.includes('/');
     if (
       // AIHubMix is omitted from the strict response-model check (like Azure):
       // its gateway routes by model name and may echo a normalized id.
