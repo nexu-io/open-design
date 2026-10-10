@@ -971,7 +971,10 @@ function AppInner() {
     accountGeneration: number;
   } | null>(null);
   workspaceContextRef.current = workspaceContext;
-  const deletedShares = useDeletedShareNotices(workspaceContext);
+  const deletedShares = useDeletedShareNotices(
+    workspaceResourceReadContext(workspaceContextState),
+    workspaceContextState.resourceReadIdentity?.generation,
+  );
   workspaceContextStateRef.current = workspaceContextState;
   const listCurrentWorkspaceProjects = useCallback(
     (options?: { throwOnError?: boolean; workspaceView?: WorkspaceProjectListView }) => {
