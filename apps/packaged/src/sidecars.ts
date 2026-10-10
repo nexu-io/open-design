@@ -50,6 +50,9 @@ const PACKAGED_CHILD_ENV_ALLOWLIST = [
   "LANG",
   "LC_ALL",
   "LOGNAME",
+  // Adds a CA bundle (e.g. a TLS-inspecting corporate proxy root) on top of
+  // the default trust store; certificate verification stays on.
+  "NODE_EXTRA_CA_CERTS",
   "ALL_PROXY",
   "NODE_USE_ENV_PROXY",
   "NO_PROXY",

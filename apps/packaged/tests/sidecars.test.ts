@@ -419,6 +419,39 @@ describe('packaged child Vite+ environment forwarding', () => {
     expect(env.RANDOM_INTERNAL_FLAG).toBeUndefined();
   });
 
+  it('forwards NODE_EXTRA_CA_CERTS to the daemon without forwarding TLS or runtime overrides', () => {
+    // Same arguments spawnSidecarChild passes for the daemon sidecar.
+    const env = resolvePackagedChildBaseEnv(
+      {
+        HOME: '/Users/tester',
+        NODE_EXTRA_CA_CERTS: '/Users/tester/Corp Certs/corp-root-ca.pem',
+        NODE_OPTIONS: '--use-system-ca',
+        NODE_TLS_REJECT_UNAUTHORIZED: '0',
+      },
+      true,
+      {},
+      false,
+    );
+
+    expect(env.NODE_EXTRA_CA_CERTS).toBe('/Users/tester/Corp Certs/corp-root-ca.pem');
+    expect(env.NODE_OPTIONS).toBeUndefined();
+    expect(env.NODE_TLS_REJECT_UNAUTHORIZED).toBeUndefined();
+  });
+
+  it('does not forward an empty NODE_EXTRA_CA_CERTS', () => {
+    const env = resolvePackagedChildBaseEnv(
+      {
+        HOME: '/Users/tester',
+        NODE_EXTRA_CA_CERTS: '',
+      },
+      true,
+      {},
+      false,
+    );
+
+    expect('NODE_EXTRA_CA_CERTS' in env).toBe(false);
+  });
+
   it('adds custom VP_HOME/bin to the packaged PATH builder', () => {
     const vpHome = mkdtempSync(join(tmpdir(), 'od-packaged-vp-home-'));
     const originalVpHome = process.env.VP_HOME;
