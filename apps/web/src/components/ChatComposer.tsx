@@ -89,6 +89,7 @@ import {
 } from '../runtime/design-toolbox';
 import { ComposerPluginPreview } from './ComposerPluginPreview';
 import { computeToolboxDetailPosition } from './composer-detail-position';
+import { pruneStagedToCatalogue } from './composer-staged-prune';
 import { PluginDetailsModal } from "./PluginDetailsModal";
 import { SkillDetailsModal } from './SkillDetailsModal';
 import { PluginsSection, type PluginsSectionHandle } from "./PluginsSection";
@@ -696,6 +697,21 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     // strip the chip when the user removes the corresponding `@<skill>`
     // token from the draft, keeping draft and chips in sync.
     const [stagedSkills, setStagedSkills] = useState<SkillSummary[]>([]);
+    // Deleting a skill elsewhere in the app (the Skills settings section)
+    // refetches `skills`, but `handleEditorChange` only prunes the staged chip
+    // against the draft the user is editing — nothing reacts to the catalogue
+    // changing on its own. Without this, a chip for a just-deleted skill stays
+    // mounted with no backing entity and keeps the staged-context row (and its
+    // wrapped layout) in the wrong shape (issue #2637). Prune against the
+    // refreshed catalogue once it has loaded at least once, so a never-loaded
+    // or mid-refetch empty catalogue can't wipe chips the user staged.
+    const stagedSkillCatalogueLoadedRef = useRef(false);
+    useEffect(() => {
+      if (skills.length > 0) stagedSkillCatalogueLoadedRef.current = true;
+      if (!stagedSkillCatalogueLoadedRef.current) return;
+      const catalogueIds = new Set(skills.map((skill) => skill.id));
+      setStagedSkills((prev) => pruneStagedToCatalogue(prev, catalogueIds, true));
+    }, [skills]);
     // Legacy standalone design-toolbox popover. The next-step card now renders
     // its own cascading skill menu, so nothing opens this anymore; kept compiling
     // behind `openDesignToolbox` until the panel subsystem is removed wholesale.
