@@ -23,6 +23,14 @@ function stageSections(content: string): { build: string; runtime: string } {
 }
 
 describe("deploy/Dockerfile content directories", () => {
+  it('[P1] persists the supplied app version in the runtime image', async () => {
+    const { runtime } = stageSections(await readFile(dockerfile, 'utf8'));
+
+    // A build-stage ARG or an OCI label alone cannot reach /api/health.
+    expect(runtime).toMatch(/^ARG OD_APP_VERSION(?:=)?$/m);
+    expect(runtime).toMatch(/^ENV OD_APP_VERSION=\$\{OD_APP_VERSION\}$/m);
+  });
+
   it("copies the self-contained postinstall consumer", async () => {
     const content = await readFile(dockerfile, "utf8");
     const { build } = stageSections(content);
