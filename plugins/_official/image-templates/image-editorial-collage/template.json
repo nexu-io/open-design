@@ -1,0 +1,17 @@
+{
+  "id": "image-editorial-collage",
+  "surface": "image",
+  "title": "Editorial Cut-Paper Collage",
+  "summary": "A bright, physically assembled editorial collage with one hero subject, expressive paper layers, and sparse exact typography.",
+  "category": "Editorial Design",
+  "tags": ["editorial", "collage", "fashion", "cut-paper", "print"],
+  "model": "vela/gpt-image-2",
+  "aspect": "4:5",
+  "prompt": "Create a flat vertical editorial fashion collage using only these exact text strings: 'SECOND SKIN' and 'MATERIAL STUDY 02'. One adult woman with close-cropped hair is the hero cutout, wearing a brilliant azure architectural suit with a vivid coral translucent organza layer. Assemble the page physically on bright warm-white uncoated paper. Place a large saturated sun-yellow circle behind the figure; overlap pale-mint botanical paper printed with deep-emerald leaves, one irregular silver torn-foil shard, and two small photocopied texture fragments. Add one hot-pink grease-pencil gesture crossing the lower half. Show authentic construction: scissor nicks, torn paper fibers, glue wrinkles, a small translucent tape edge, graphite crop marks, uneven halftone, and slight photocopy grain. Set SECOND SKIN vertically in large condensed cobalt type along one edge. Set MATERIAL STUDY 02 as a compact vermilion caption at the bottom. Keep the hero face and body believable, the organza translucent, and all layer shadows consistent with a single soft overhead light. Preserve generous white paper and saturated clean colors. No extra text, logos, watermark, repeated face crops, extra limbs, smooth digital stickers, perfect vector edges, random scrapbook decoration, glossy 3D, dark background, or imitation publication masthead. Output only the finished collage page.",
+  "source": {
+    "repo": "nexu-io/open-design",
+    "license": "Apache-2.0",
+    "author": "OpenDesign",
+    "url": "https://github.com/nexu-io/open-design"
+  }
+}
