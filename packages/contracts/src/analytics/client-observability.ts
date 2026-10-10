@@ -460,6 +460,67 @@ export interface ChatScrollFreezeProps extends ChatCorrelationProps {
   packaged: boolean;
 }
 
+/** What the self-heal decided after a freeze verdict. */
+export type ChatScrollHealOutcome =
+  /** One frame of `will-change: transform` and the next wheel moved the log as asked. */
+  | 'healed'
+  /** The next wheel still stuck, fell short or snapped back; JS now drives the scroller. */
+  | 'takeover';
+
+/**
+ * `client_chat_scroll_heal` — what happened AFTER `client_chat_scroll_frozen`.
+ *
+ * Joined to its freeze by `probe_id`. Exactly one per freeze that reached a
+ * verdict; a surface released before its observation notch arrived sends
+ * nothing, so `frozen − heal` is the count of freezes nobody scrolled past.
+ *
+ * The kick is a one-frame `will-change: transform` on the chat log, meant to
+ * make Blink rebuild the scroller's compositing state from the current layout.
+ * It changes no layout and writes no `scrollTop`, and the six `kick_*`
+ * numbers exist to prove that per event. The notch is the first downward wheel
+ * after the kick, let through natively and measured: `notch_expected_px` is the
+ * request clamped to the room layout had left, `notch_moved_px` is what the
+ * scroller actually did. `healed` means the two agree within the detector's
+ * own 8px yardstick.
+ *
+ * Structural only: pixels, counts, durations, enums, the probe id.
+ */
+export interface ChatScrollHealProps extends ChatCorrelationProps {
+  outcome: ChatScrollHealOutcome;
+  /** The `probe_id` of the `client_chat_scroll_frozen` this answers. */
+  probe_id: string;
+  /** The freeze's own trigger, repeated so the heal can be sliced by it alone. */
+  trigger: ChatScrollFreezeTrigger;
+
+  // -- the kick -------------------------------------------------------------
+  kick_scroll_top_before: number;
+  kick_scroll_height_before: number;
+  kick_client_height_before: number;
+  kick_scroll_top_after: number;
+  kick_scroll_height_after: number;
+  kick_client_height_after: number;
+  /** ms from the freeze verdict to the first notch of the observation. */
+  kick_to_notch_ms: number;
+
+  // -- the observation notch ------------------------------------------------
+  /** Downward wheel events folded into the observation. */
+  notch_wheel_count: number;
+  /** Pixels those wheels asked for, normalised exactly as the detector does. */
+  notch_requested_px: number;
+  /** The request clamped to the travel layout actually had left. */
+  notch_expected_px: number;
+  /** `notch_scroll_top_after − notch_scroll_top_before`; negative is a snap-back. */
+  notch_moved_px: number;
+  notch_scroll_top_before: number;
+  notch_scroll_top_after: number;
+  /** `scrollHeight − clientHeight` when the verdict was taken. */
+  notch_layout_max_after: number;
+  /** Scroll events the notch produced before the verdict. Zero is "stuck". */
+  notch_scroll_event_count: number;
+  /** Notches discarded because the log had no room to show anything. */
+  notch_inconclusive_count: number;
+}
+
 /**
  * The full `client_chat_*` event surface. Adding a member here is the
  * only sanctioned way to introduce a new chat observability event.
@@ -472,6 +533,7 @@ export type ChatObservabilityEvent =
   | { event: 'client_chat_interaction_latency'; props: ChatInteractionLatencyProps }
   | { event: 'client_chat_protocol_anomaly'; props: ChatProtocolAnomalyProps }
   | { event: 'client_chat_recovery'; props: ChatRecoveryProps }
-  | { event: 'client_chat_scroll_frozen'; props: ChatScrollFreezeProps };
+  | { event: 'client_chat_scroll_frozen'; props: ChatScrollFreezeProps }
+  | { event: 'client_chat_scroll_heal'; props: ChatScrollHealProps };
 
 export type ChatObservabilityEventName = ChatObservabilityEvent['event'];
