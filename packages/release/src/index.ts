@@ -36,6 +36,7 @@ export type ReleaseChannelDescriptor = {
 
 export type ReleaseInstallIdentity = {
   appId: string;
+  displayName: string;
   executableName: string;
   productName: string;
 };
@@ -54,6 +55,7 @@ export const RELEASE_PLATFORM_NAMESPACE_SUFFIXES = Object.freeze({
 } as const satisfies Record<ReleasePlatform, string>);
 
 const PRODUCT_NAME = "Open Design";
+const DISPLAY_NAME = "OpenDesign";
 const DEFAULT_NAMESPACE = "open-design";
 
 const descriptors: Record<"prerelease" | "stable", ReleaseChannelDescriptor> = {
@@ -137,8 +139,10 @@ export function releaseNamespace(channel: ReleaseChannel, platform: ReleasePlatf
 
 export function releaseInstallIdentity(channel: ReleaseChannel): ReleaseInstallIdentity {
   const descriptor = releaseChannelDescriptor(channel);
+  const displayName = channel === "stable" ? DISPLAY_NAME : `${DISPLAY_NAME} ${descriptor.displayLabel}`;
   return {
     appId: descriptor.appId,
+    displayName,
     executableName: descriptor.productName,
     productName: descriptor.productName,
   };
