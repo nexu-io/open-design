@@ -10,6 +10,18 @@ function assistant(over: Record<string, unknown>): ChatMessage {
 }
 
 describe('foldStrategyTaskTurns', () => {
+  it('does not reuse quality confirmation from an earlier physical Run', () => {
+    const quality = { status: 'pass', candidateHash: 'old' };
+    const folded = foldStrategyTaskTurns([
+      assistant({ id: 'a1', runId: 'r1', strategyTaskExecutionId: 'task', strategyTaskRunIndex: 0,
+        runStatus: 'succeeded', deliverableQuality: quality }),
+      assistant({ id: 'a2', runId: 'r2', strategyTaskExecutionId: 'task', strategyTaskRunIndex: 1,
+        runStatus: 'running', events: [{ kind: 'done_key', key: '2222222222222222' }] }),
+    ]);
+    expect(folded).toHaveLength(1);
+    expect(folded[0]?.deliverableQuality).toBeUndefined();
+  });
+
   it('renders one turn for a Full Plan task without duplicating its output', () => {
     const folded = foldStrategyTaskTurns([
       { id: 'u1', role: 'user', content: '做一个原型' } as ChatMessage,

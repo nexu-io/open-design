@@ -1,6 +1,15 @@
 import type { Dict } from '../types';
 
 export const th: Dict = {
+  'chat.quality.checking': "สร้างแล้ว กำลังตรวจสอบ",
+  'chat.quality.pass': "ยืนยันการส่งมอบ: การตรวจสอบของระบบผ่าน",
+  'chat.quality.fail': "สร้างแล้ว การตรวจสอบไม่ผ่าน",
+  'chat.quality.incomplete': "สร้างแล้ว การตรวจสอบยังไม่ครบ",
+  'chat.quality.not_applicable': "ไม่ใช้การตรวจสอบการโต้ตอบหลัก",
+  'chat.quality.unknown': "สร้างแล้ว ไม่มีหลักฐานคุณภาพ",
+  'chat.quality.coverage': "ตรวจสอบรายการที่จำเป็น {checked} / {expected}",
+  'chat.quality.scope': "ครอบคลุมเฉพาะไวยากรณ์ เหตุการณ์แบบคงที่ และการโต้ตอบหลักที่เกี่ยวข้อง",
+
   'billing.wallet': 'ยอดเงินในกระเป๋าเงิน',
   'billing.codingPlanDesignPlan': 'Design Plan',
   'billing.codingPlanPeriodHours': '{count} ชั่วโมง',

@@ -1,6 +1,15 @@
 import type { Dict } from '../types';
 
 export const ko: Dict = {
+  'chat.quality.checking': "생성됨, 검사 중",
+  'chat.quality.pass': "전달 확인: 호스트 검사 통과",
+  'chat.quality.fail': "생성됨, 검사 실패",
+  'chat.quality.incomplete': "생성됨, 검사 미완료",
+  'chat.quality.not_applicable': "주요 상호작용 검사 해당 없음",
+  'chat.quality.unknown': "생성됨, 품질 증거 없음",
+  'chat.quality.coverage': "필수 항목 {checked} / {expected} 검사",
+  'chat.quality.scope': "구문, 정적 이벤트 및 적용 가능한 주요 상호작용을 검사합니다.",
+
   'billing.wallet': '지갑 잔액',
   'billing.codingPlanDesignPlan': 'Design Plan',
   'billing.codingPlanPeriodHours': '{count}시간',

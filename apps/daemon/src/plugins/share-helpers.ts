@@ -43,7 +43,7 @@ export interface RunLike {
 }
 
 export interface RunWaiter {
-  wait(run: RunLike): Promise<{ status: string; cancelOrigin?: string | null }>;
+  wait(run: RunLike): Promise<{ status: string; cancelOrigin?: string | null; deliverableQuality?: import('@open-design/contracts').DeliverableQualityEvidence }>;
 }
 
 export interface SkillPluginCandidateLike {
@@ -267,6 +267,10 @@ export function reconcileAssistantMessageOnRunEnd(
   void runs
     .wait(run)
     .then((finalStatus) => {
+      if (finalStatus.deliverableQuality) {
+        db.prepare(`UPDATE messages SET deliverable_quality_json = ? WHERE id = ? AND run_id = ?`)
+          .run(JSON.stringify(finalStatus.deliverableQuality), run.assistantMessageId, run.id);
+      }
       db.prepare(
         `UPDATE messages
             SET run_status = ?, ended_at = COALESCE(ended_at, ?)

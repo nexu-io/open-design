@@ -1,6 +1,15 @@
 import type { Dict } from '../types';
 
 export const uk: Dict = {
+  'chat.quality.checking': "Створено, триває перевірка",
+  'chat.quality.pass': "Передачу підтверджено: перевірки системи пройдено",
+  'chat.quality.fail': "Створено, перевірку не пройдено",
+  'chat.quality.incomplete': "Створено, перевірку не завершено",
+  'chat.quality.not_applicable': "Перевірка основних дій не застосовується",
+  'chat.quality.unknown': "Створено, докази якості відсутні",
+  'chat.quality.coverage': "Перевірено {checked} / {expected} обов’язкових пунктів",
+  'chat.quality.scope': "Лише синтаксис, статичні події та відповідні основні дії.",
+
   'billing.wallet': 'Баланс гаманця',
   'billing.codingPlanDesignPlan': 'Design Plan',
   'billing.codingPlanPeriodHours': '{count} год',

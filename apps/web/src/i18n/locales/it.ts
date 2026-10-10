@@ -1,6 +1,15 @@
 import type { Dict } from '../types';
 
 export const it: Dict = {
+  'chat.quality.checking': "Generato, verifica in corso",
+  'chat.quality.pass': "Consegna confermata: controlli del sistema superati",
+  'chat.quality.fail': "Generato, verifiche fallite",
+  'chat.quality.incomplete': "Generato, verifiche incomplete",
+  'chat.quality.not_applicable': "Verifica delle interazioni principali non applicabile",
+  'chat.quality.unknown': "Generato, evidenza di qualità non disponibile",
+  'chat.quality.coverage': "Verificati {checked} / {expected} elementi richiesti",
+  'chat.quality.scope': "Copre solo sintassi, eventi statici e interazioni principali applicabili.",
+
   'billing.wallet': 'Saldo del portafoglio',
   'billing.codingPlanDesignPlan': 'Design Plan',
   'billing.codingPlanPeriodHours': '{count} ore',

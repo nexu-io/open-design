@@ -4,6 +4,8 @@ import { isDeepStrictEqual } from 'node:util';
 
 import { OD_NEXT_INTENT_RESOLUTION_TURN_SCHEMA, parseOdNextIntentResolutionTurnV1, type StrategyInputStageV2 } from '@open-design/contracts';
 
+import { OD_NEXT_QUALITY_REPAIR_TURN_SCHEMA, parsePrototypeQualityRepairTurn } from './strategies/od-next/prototype-quality-repair-turn.js';
+
 import { redactSecrets } from './redact.js';
 import type { StrategyTaskFinalTextIdentity } from './strategies/task-store.js';
 
@@ -472,7 +474,7 @@ export function bindOdNextExactSendPromptEvidence(input: {
   finalText: string;
   persisted: StrategyTaskFinalTextIdentity;
   stage: StrategyInputStageV2;
-  purpose?: 'intent_resolution' | undefined;
+  purpose?: 'intent_resolution' | 'quality_repair' | undefined;
 }): PromptStackTelemetry {
   const utf8Bytes = byteLength(input.finalText);
   const sha256Hex = createHash('sha256').update(input.finalText, 'utf8').digest('hex');
@@ -486,6 +488,12 @@ export function bindOdNextExactSendPromptEvidence(input: {
       'OD Next exact-send Prompt does not match its persisted SHA-256 and UTF-8 byte identity.',
     );
   }
+  const correction = input.purpose === 'quality_repair';
+  if ((input.persisted.schema === OD_NEXT_QUALITY_REPAIR_TURN_SCHEMA) !== correction) throw new InvalidOdNextExactSendPromptError('OD Next quality correction mapping mismatch.');
+  if (correction) {
+    try { if (parsePrototypeQualityRepairTurn(input.finalText).stage !== input.stage) throw new Error(); }
+    catch { throw new InvalidOdNextExactSendPromptError('OD Next quality correction identity mismatch.'); }
+  }
   const resolution = input.purpose === 'intent_resolution';
   if ((input.persisted.schema === OD_NEXT_INTENT_RESOLUTION_TURN_SCHEMA) !== resolution) {
     throw new InvalidOdNextExactSendPromptError('OD Next exact-send Prompt kind does not match its mapped task stage.');
@@ -497,7 +505,7 @@ export function bindOdNextExactSendPromptEvidence(input: {
       throw new InvalidOdNextExactSendPromptError('OD Next exact-send Prompt kind does not match its mapped task stage.');
     }
   }
-  const expectedKind = input.stage === 'request' && !resolution ? 'bundle' : 'turn';
+  const expectedKind = input.stage === 'request' && !resolution && !correction ? 'bundle' : 'turn';
   if (input.persisted.kind !== expectedKind) {
     throw new InvalidOdNextExactSendPromptError(
       'OD Next exact-send Prompt kind does not match its mapped task stage.',
@@ -526,7 +534,7 @@ export function assertOdNextExactSendPromptEvidence(input: {
   telemetry: PromptStackTelemetry;
   persisted: StrategyTaskFinalTextIdentity;
   stage: StrategyInputStageV2;
-  purpose?: 'intent_resolution' | undefined;
+  purpose?: 'intent_resolution' | 'quality_repair' | undefined;
 }): void {
   const expected = bindOdNextExactSendPromptEvidence({
     telemetry: buildPromptStackTelemetry({

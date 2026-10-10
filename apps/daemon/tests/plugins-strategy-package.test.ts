@@ -87,13 +87,27 @@ describe('bundled OD Next strategy package identity', () => {
     ]);
     expect(prototype.selectedTaskProfile).toEqual(expect.objectContaining({
       taskType: 'prototype',
-      version: '2.3.1',
+      version: '2.3.3',
       path: './assets/task-profiles/prototype.md',
     }));
     expect(hyperframes.packageHash).not.toBe(prototype.packageHash);
     expect(hyperframes.selectedTaskProfile.sha256).not.toBe(
       prototype.selectedTaskProfile.sha256,
     );
+  });
+
+  it('keeps the host delivery boundary without releasing the unvalidated generation candidate', async () => {
+    const manifest = JSON.parse(await readFile(path.join(SOURCE, 'open-design.json'), 'utf8'));
+    const profile = await readFile(path.join(SOURCE, 'assets/task-profiles/prototype.md'), 'utf8');
+    expect(profile).toContain('Writing the primary HTML entry submits an editable candidate.');
+    expect(profile).toContain('delivery confirmation comes only from the');
+    expect(profile).toContain('Never\nclaim a self-check or successful walkthrough without received host results.');
+    expect(profile).toContain("bounded host-requested correction");
+    expect(profile).not.toContain('### Main interaction implementation');
+    expect(profile).not.toContain('listen for `hashchange`');
+    expect(profile).not.toContain('consistent quote and');
+    expect(manifest.od.strategy.assets.core.version).toBe('2.2.2');
+    expect(manifest.od.strategy.assets.orchestration.version).toBe('2.0.3');
   });
 
   it('decodes the prototype device shells as task resources and locks them into the package identity', async () => {
@@ -282,7 +296,7 @@ describe('hash-gated internal strategy activation and snapshot persistence', () 
     if (!activated || !activated.ok) throw new Error('expected strategy snapshot');
     expect(activated.snapshot.strategy).toEqual(expect.objectContaining({
       id: 'od-next-strategy',
-      version: '2.0.4',
+      version: '2.0.6',
       packageHash: expect.stringMatching(/^[a-f0-9]{64}$/),
       selectedTaskProfile: expect.objectContaining({ taskType: 'prototype' }),
     }));

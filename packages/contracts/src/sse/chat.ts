@@ -1,3 +1,4 @@
+import type { DeliverableQualityEvidence } from '../api/deliverable-quality.js';
 import type { LiveArtifactRefreshStatus } from '../api/live-artifacts.js';
 import type {
   AgentEventPayloadTruncation,
@@ -156,6 +157,7 @@ export interface ChatSseEndPayload {
   deliverableSyntaxRepair?: DeliverableSyntaxRepairState;
   /** Latest parse-only syntax evidence for the canonical Web deliverable. */
   deliverableSyntaxValidation?: DeliverableSyntaxValidationEvidence;
+  deliverableQuality?: DeliverableQualityEvidence;
   /** The daemon's verdict on the same failure: what the user should do, and
    *  whether re-running can help at all. Carried on the terminal frame for the
    *  same reason as the classification above — the chat decides which button

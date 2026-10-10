@@ -95,6 +95,7 @@ to the **host**, not to either strategy — if a strategy is retired, these stay
 | `@media print` block | Share → PDF multi-page stitching | ✅ | ✅ |
 | `<question-form>` | `AssistantMessage.tsx` → `QuestionFormView`; `runAskedUserQuestion` analytics | ✅ `discovery.ts` | ✅ `od-next-strategy.ts:434` |
 | `.od-frames/` device shells | prototype device frames | ❌ | ✅ OD Next only |
+| `HOST_PROTOTYPE_QUALITY_CONTRACT_V1` | daemon settled-candidate syntax/static/navigation check, finite quality repair and Web quality status | out of scope: legacy delivery unchanged | ✅ prototype profile only; fixed literal shared by request and bundle composers |
 
 Two things to read off this table.
 

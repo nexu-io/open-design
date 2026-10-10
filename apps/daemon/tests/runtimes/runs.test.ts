@@ -1489,6 +1489,27 @@ describe('run event log persistence', () => {
     });
   });
 
+  it('persists candidate quality separately from physical success and keeps repair budgets internal', () => {
+    const runs = createRunsWithLog(tmpDir);
+    const run = runs.create({ projectId: 'p1', conversationId: 'c1' }) as any;
+    const quality = { schema: 'open-design.deliverable-quality/v1', checker: 'prototype-interaction@1',
+      status: 'fail', candidateHash: 'a'.repeat(64), entryFile: 'index.html', checkedAt: Date.now(),
+      durationMs: 100, coverage: { expected: 2, checked: 1, complete: false },
+      checks: [{ id: 'main-nav', kind: 'navigation', status: 'fail', reason: 'content_unchanged' }] };
+    run.deliverableQuality = quality;
+    run.prototypeQualityAttempt = { attempts: 1, hostDurationMs: 100, agentDurationMs: 900, history: [] };
+    runs.persistState(run);
+    expect(JSON.parse(fs.readFileSync(path.join(tmpDir, run.id, 'state.json'), 'utf8')))
+      .toMatchObject({ deliverableQuality: quality, prototypeQualityAttempt: { attempts: 1, agentDurationMs: 900 } });
+    expect(runs.statusBody(run)).toMatchObject({ deliverableQuality: quality });
+    expect(runs.statusBody(run)).not.toHaveProperty('prototypeQualityAttempt');
+    runs.finish(run, 'succeeded', 0, null);
+    expect(run.events.at(-1)).toMatchObject({ event: 'end', data: { status: 'succeeded', deliverableQuality: quality } });
+    expect(run.events.at(-1).data).not.toHaveProperty('prototypeQualityAttempt');
+    const restored = createRunsWithLog(tmpDir).get(run.id) as any;
+    expect(restored).toMatchObject({ deliverableQuality: quality, prototypeQualityAttempt: { attempts: 1, agentDurationMs: 900 } });
+  });
+
   it('persists a restart-safe terminal state and telemetry checkpoints', () => {
     const runs = createRunsWithLog(tmpDir);
     const run = runs.create({

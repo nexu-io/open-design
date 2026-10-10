@@ -105,6 +105,32 @@ async function failedRunEndingWith(
   return surfaced;
 }
 
+describe('SSE candidate quality is independent of physical run status', () => {
+  const originalFetch = globalThis.fetch;
+  afterEach(() => { globalThis.fetch = originalFetch; });
+  it('forwards an explicit failed quality result while keeping succeeded execution', async () => {
+    const evidence = { schema: 'open-design.deliverable-quality/v1', checker: 'prototype-interaction@1',
+      status: 'fail', candidateHash: 'a'.repeat(64), entryFile: 'index.html', checkedAt: 1, durationMs: 2,
+      coverage: { expected: 1, checked: 1, complete: true }, checks: [
+        { id: 'nav', kind: 'navigation', status: 'fail', control: '药品', reason: 'target did not change' },
+      ],
+    };
+    const reader = makeFiniteReader([enc(sseEvent(1, 'end', { code: 0, signal: null,
+      status: 'succeeded', deliverableQuality: evidence }))]);
+    globalThis.fetch = vi.fn(async () => streamResponse(reader));
+    const onQuality = vi.fn();
+    const onRunStatus = vi.fn();
+    const onError = vi.fn();
+    await reattachDaemonRun({ runId: 'quality-run', signal: new AbortController().signal,
+      onDeliverableQuality: onQuality, onRunStatus,
+      handlers: { onDelta: () => {}, onAgentEvent: () => {}, onDone: () => {}, onError },
+    });
+    expect(onQuality).toHaveBeenCalledWith(evidence);
+    expect(onRunStatus).toHaveBeenCalledWith('succeeded');
+    expect(onError).not.toHaveBeenCalled();
+  });
+});
+
 describe('SSE end frame carries the daemon failure verdict', () => {
   const originalFetch = globalThis.fetch;
 

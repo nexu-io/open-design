@@ -20,6 +20,7 @@ import {
   OD_NEXT_PROMPT_STAGE_CONTRACT_V2,
   parseOdNextPromptBundleV2,
   parseOdNextIntentResolutionTurnV1,
+  type DeliverableQualityEvidence,
 } from '@open-design/contracts';
 
 const codexArchiveBoundary = vi.hoisted(() => ({
@@ -2998,6 +2999,83 @@ process.exit(127);
     },
   );
 
+  it.each(['recovered', 'exhausted', 'disabled'] as const)('real HTTP/SSE persists prototype quality and bounded continuation: %s', async (result) => {
+    const originalRepairSetting = process.env.OD_PROTOTYPE_QUALITY_REPAIR;
+    if (result === 'disabled') process.env.OD_PROTOTYPE_QUALITY_REPAIR = '0';
+    else delete process.env.OD_PROTOTYPE_QUALITY_REPAIR;
+    try {
+      const fixture = await createFixture('repair');
+      await writeFile(fixture.logPath + '.quality-fail', '1');
+      if (result === 'exhausted') await writeFile(fixture.logPath + '.quality-still-fail', '1');
+      queueFixtureIds(fixture);
+      await postRun(started!.url, createRunRequest(fixture, 'Build a 点餐应用，支持堂食和自提 tab 切换。'));
+      const task = await waitForTask(fixture.taskExecutionId, 'quality_terminal', 60_000);
+      for (const mapping of task.runs) await waitForRunTerminal(started!.url, mapping.runId);
+      const repairRuns = task.runs.filter(mapping => mapping.purpose === 'quality_repair');
+      expect(repairRuns).toHaveLength(result === 'disabled' ? 0 : result === 'recovered' ? 1 : 2);
+      const source = task.runs.find(mapping => mapping.inputStage === 'production' && !mapping.purpose)!;
+      const sourceStatus = await getRun(started!.url, source.runId) as RunStatus & { deliverableQuality: DeliverableQualityEvidence };
+      expect(sourceStatus).toMatchObject({ status: 'succeeded', deliverableQuality: { status: 'fail', initialStatus: 'fail' } });
+      const sseResponse = await fetch(`${started!.url}/api/runs/${task.latestRunId}/events`);
+      expect(sseResponse.headers.get('content-type')).toContain('text/event-stream');
+      const replay = await sseResponse.text();
+      expect(replay).toContain('event: end');
+      expect(replay).toContain('deliverableQuality');
+      const latest = await getRun(started!.url, task.latestRunId) as RunStatus & { deliverableQuality: DeliverableQualityEvidence };
+      expect(task.outcome, JSON.stringify({ outcome: task.outcome, quality: latest.deliverableQuality })).toBe(result === 'recovered' ? 'completed' : 'blocked');
+      expect(latest.deliverableQuality).toMatchObject({ status: result === 'recovered' ? 'pass' : 'fail', initialStatus: 'fail',
+        repair: { attempts: repairRuns.length, maxAttempts: 2 } });
+      expect(latest.deliverableQuality.history).toHaveLength(repairRuns.length + 1);
+      if (result === 'recovered') expect(latest.deliverableQuality.candidateHash).not.toBe(sourceStatus.deliverableQuality.candidateHash);
+      if (result === 'exhausted') expect(latest.deliverableQuality.repair?.reason).toBe('repair_attempt_limit');
+      if (result === 'disabled') expect(latest.deliverableQuality.repair?.reason).toBe('repair_disabled');
+      const calls = await readProjectInvocations(fixture.logPath, fixture.projectId);
+      expect(calls.filter(call => call.stdin.includes('open-design.od-next-quality-repair-turn/v1'))).toHaveLength(repairRuns.length);
+      for (const mapping of repairRuns) {
+        const call = calls.find(call => call.stdin === mapping.finalText.text)!;
+        expect(call.argv).toContain('resume');
+        const events = await readFile((await getRun(started!.url, mapping.runId)).eventsLogPath, 'utf8');
+        expect(events).toContain('"event":"end"');
+        expect(events).toContain('"deliverableQuality"');
+      }
+      const response = await fetch(`${started!.url}/api/projects/${fixture.projectId}/conversations/${fixture.conversationId}/messages`);
+      const history = JSON.stringify(await response.json());
+      expect(history).toContain('deliverableQuality');
+      expect(history).toContain(latest.deliverableQuality.candidateHash);
+      const persisted = await readDurableRunState(task.latestRunId);
+      expect(persisted).toMatchObject({ deliverableQuality: latest.deliverableQuality,
+        prototypeQualityAttempt: { attempts: repairRuns.length } });
+    } finally {
+      if (originalRepairSetting === undefined) delete process.env.OD_PROTOTYPE_QUALITY_REPAIR;
+      else process.env.OD_PROTOTYPE_QUALITY_REPAIR = originalRepairSetting;
+    }
+  }, 90_000);
+
+  it('real HTTP cancellation stops a quality correction without confirming an unchecked candidate', async () => {
+    const fixture = await createFixture('repair');
+    await writeFile(fixture.logPath + '.quality-fail', '1');
+    await writeFile(fixture.logPath + '.quality-hold', '1');
+    queueFixtureIds(fixture);
+    await postRun(started!.url, createRunRequest(fixture, 'Build a 点餐应用，支持堂食和自提 tab 切换。'));
+    let repairRunId = '';
+    await vi.waitFor(async () => {
+      const task = getStrategyTaskExecution(database(), fixture.taskExecutionId);
+      const repair = task?.runs.find(mapping => mapping.purpose === 'quality_repair');
+      expect(repair).toBeTruthy(); repairRunId = repair!.runId;
+      const calls = await readProjectInvocations(fixture.logPath, fixture.projectId);
+      expect(calls.some(call => call.stdin.includes('open-design.od-next-quality-repair-turn/v1'))).toBe(true);
+    }, { timeout: 30_000 });
+    const response = await fetch(`${started!.url}/api/runs/${repairRunId}/cancel`, { method: 'POST' });
+    expect(response.status).toBe(200);
+    const terminal = await waitForRunTerminal(started!.url, repairRunId) as RunStatus & { deliverableQuality: DeliverableQualityEvidence };
+    expect(terminal).toMatchObject({ status: 'canceled', deliverableQuality: { status: 'incomplete', candidateHash: '',
+      initialStatus: 'fail', repair: { attempts: 1, reason: 'user_canceled' } } });
+    const task = await waitForTask(fixture.taskExecutionId, 'canceled');
+    expect(task.runs.filter(mapping => mapping.purpose === 'quality_repair')).toHaveLength(1);
+    const replay = await fetch(`${started!.url}/api/runs/${repairRunId}/events`);
+    expect(await replay.text()).toContain('user_canceled');
+  }, 90_000);
+
   async function createFixture(
     mode: 'repair' | 'direct' | 'complex' | IntentServerMode,
     {
@@ -3703,6 +3781,7 @@ async function writeStrategyCodex(
     inputStage: 'production',
     outcome: 'completed',
   }));
+  const qualityPage = '<!doctype html><div role="tablist"><button role="tab" aria-selected="true" aria-controls="order" id="dine">堂食</button><button role="tab" aria-selected="false" aria-controls="order" id="pickup">自提</button></div><main id="order" role="tabpanel"><h1 id="mode">堂食点餐</h1><p id="detail">堂食桌号 A01，餐品将由服务员送至座位，请确认用餐人数和桌号。</p></main><script>function change(pickup){document.getElementById("mode").textContent=pickup?"自提点餐":"堂食点餐";document.getElementById("detail").textContent=pickup?"自提订单，请选择到店时间并核对门店地址，餐品制作完成后凭取餐码领取。":"堂食桌号 A01，餐品将由服务员送至座位，请确认用餐人数和桌号。";document.getElementById("pickup").setAttribute("aria-selected",String(pickup));document.getElementById("dine").setAttribute("aria-selected",String(!pickup));}document.getElementById("pickup").onclick=()=>change(true);document.getElementById("dine").onclick=()=>change(false);</script>';
   const direct = machineBlock('open-design-runtime-state', runtimeState({
     route: 'direct_edit',
     outcome: 'completed',
@@ -3763,7 +3842,20 @@ function finish() {
     process.exit(2);
   }
   let text;
-  if (mode.startsWith('intent-')) {
+  if (stdin.includes('"schema":"open-design.od-next-quality-repair-turn/v1"')) {
+    const turn = JSON.parse(stdin);
+    fs.writeFileSync(path.join(process.cwd(), 'index.html'), fs.existsSync(logPath + '.quality-still-fail')
+      ? '<!doctype html><button role="tab">堂食</button><button role="tab">自提</button><script>const value=;</script>'
+      : ${JSON.stringify(qualityPage)});
+    if (fs.existsSync(logPath + '.quality-hold')) {
+      console.log(JSON.stringify({ type: 'thread.started', thread_id: ${JSON.stringify(THREAD_ID)} }));
+      console.log(JSON.stringify({ type: 'turn.started' }));
+      setInterval(() => {}, 1000); return;
+    }
+    text = '<open-design-runtime-state>\\n' + JSON.stringify({ schema: 'open-design.strategy-state/v2',
+      route: turn.route, inputStage: turn.stage, outcome: 'completed', executionIntent: 'produce',
+      executionMode: turn.executionMode, reasonCodes: [] }) + '\\n</open-design-runtime-state>';
+  } else if (mode.startsWith('intent-')) {
     if (stdin.startsWith('<open_design_intent_resolution_turn ')) {
       if (mode === 'intent-fail') { process.stderr.write('fixture intent supplement exited\\n'); process.exit(2); }
       const stage = / stage="(request|clarification)"/.exec(stdin)?.[1];
@@ -3803,7 +3895,9 @@ function finish() {
     staleTodoList = true;
     text = 'Working on the lesson.';
   } else if (stdin.includes('native continuation — production')) {
-    fs.writeFileSync(path.join(process.cwd(), 'index.html'), '<!doctype html><title>Production</title>');
+    fs.writeFileSync(path.join(process.cwd(), 'index.html'), fs.existsSync(logPath + '.quality-fail')
+      ? '<!doctype html><button role="tab">堂食</button><button role="tab">自提</button><script>const value=;</script>'
+      : '<!doctype html><title>Production</title>');
     staleTodoList = true;
     text = ${JSON.stringify(production)};
   } else if (!argv.includes('resume') && fs.existsSync(logPath + '.refused-request')) {
@@ -4073,13 +4167,13 @@ async function waitForRunTerminal(url: string, runId: string): Promise<RunStatus
   throw new Error(`run ${runId} did not finish: ${JSON.stringify(latest)}`);
 }
 
-async function waitForTask(taskExecutionId: string, outcome: string) {
-  const deadline = Date.now() + 10_000;
+async function waitForTask(taskExecutionId: string, outcome: string, timeoutMs = 10_000) {
+  const deadline = Date.now() + timeoutMs;
   let latest = null;
   while (Date.now() < deadline) {
     const task = getStrategyTaskExecution(database(), taskExecutionId);
     latest = task;
-    if (task?.outcome === outcome) return task;
+    if (task?.outcome === outcome || outcome === 'quality_terminal' && task && ['completed', 'blocked', 'canceled'].includes(task.outcome)) return task;
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
   throw new Error(
