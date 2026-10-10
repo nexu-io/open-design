@@ -3012,7 +3012,11 @@ process.exit(127);
       const task = await waitForTask(fixture.taskExecutionId, 'quality_terminal', 60_000);
       for (const mapping of task.runs) await waitForRunTerminal(started!.url, mapping.runId);
       const repairRuns = task.runs.filter(mapping => mapping.purpose === 'quality_repair');
-      expect(repairRuns).toHaveLength(result === 'disabled' ? 0 : result === 'recovered' ? 1 : 2);
+      const repairEvidence = await Promise.all(repairRuns.map(async mapping => ({
+        runId: mapping.runId,
+        quality: ((await getRun(started!.url, mapping.runId)) as RunStatus & { deliverableQuality?: DeliverableQualityEvidence }).deliverableQuality,
+      })));
+      expect(repairRuns, JSON.stringify(repairEvidence)).toHaveLength(result === 'disabled' ? 0 : result === 'recovered' ? 1 : 2);
       const source = task.runs.find(mapping => mapping.inputStage === 'production' && !mapping.purpose)!;
       const sourceStatus = await getRun(started!.url, source.runId) as RunStatus & { deliverableQuality: DeliverableQualityEvidence };
       expect(sourceStatus).toMatchObject({ status: 'succeeded', deliverableQuality: { status: 'fail', initialStatus: 'fail' } });
@@ -3781,7 +3785,9 @@ async function writeStrategyCodex(
     inputStage: 'production',
     outcome: 'completed',
   }));
-  const qualityPage = '<!doctype html><div role="tablist"><button role="tab" aria-selected="true" aria-controls="order" id="dine">堂食</button><button role="tab" aria-selected="false" aria-controls="order" id="pickup">自提</button></div><main id="order" role="tabpanel"><h1 id="mode">堂食点餐</h1><p id="detail">堂食桌号 A01，餐品将由服务员送至座位，请确认用餐人数和桌号。</p></main><script>function change(pickup){document.getElementById("mode").textContent=pickup?"自提点餐":"堂食点餐";document.getElementById("detail").textContent=pickup?"自提订单，请选择到店时间并核对门店地址，餐品制作完成后凭取餐码领取。":"堂食桌号 A01，餐品将由服务员送至座位，请确认用餐人数和桌号。";document.getElementById("pickup").setAttribute("aria-selected",String(pickup));document.getElementById("dine").setAttribute("aria-selected",String(!pickup));}document.getElementById("pickup").onclick=()=>change(true);document.getElementById("dine").onclick=()=>change(false);</script>';
+  // The checker verifies mapped tabs through distinct panels and their selected state.
+  // A shared mutable aria-controls panel does not prove that its sibling switched away.
+  const qualityPage = '<!doctype html><meta charset="utf-8"><div role="tablist"><button role="tab" aria-selected="true" aria-controls="dine-order" id="dine">堂食</button><button role="tab" aria-selected="false" aria-controls="pickup-order" id="pickup">自提</button></div><main><section id="dine-order" role="tabpanel" aria-labelledby="dine"><h1>堂食点餐</h1><p>堂食桌号 A01，餐品将由服务员送至座位，请确认用餐人数和桌号。</p></section><section id="pickup-order" role="tabpanel" aria-labelledby="pickup" hidden><h1>自提点餐</h1><p>自提订单，请选择到店时间并核对门店地址，餐品制作完成后凭取餐码领取。</p></section></main><script>function change(pickup){document.getElementById("dine-order").hidden=pickup;document.getElementById("pickup-order").hidden=!pickup;document.getElementById("pickup").setAttribute("aria-selected",String(pickup));document.getElementById("dine").setAttribute("aria-selected",String(!pickup));}document.getElementById("pickup").onclick=()=>change(true);document.getElementById("dine").onclick=()=>change(false);</script>';
   const direct = machineBlock('open-design-runtime-state', runtimeState({
     route: 'direct_edit',
     outcome: 'completed',

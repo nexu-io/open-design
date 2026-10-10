@@ -79,6 +79,13 @@ describe.skipIf(!findBrowserExecutable())('real isolated browser navigation', { 
     expect(result.status).toBe('incomplete');
     expect(result.checks).toContainEqual(expect.objectContaining({control:'荤菜', status:'incomplete'}));
   });
+
+  it('keeps genuinely switching tabs with a reused panel incomplete rather than claiming failure', async () => {
+    await fs.writeFile(path.join(root, 'index.html'), `<h1>堂食</h1><div role="tablist"><button role="tab" aria-controls="order" aria-selected="true">堂食</button><button role="tab" aria-controls="order" aria-selected="false">自提</button></div><main id="order">堂食桌号 A12</main><script>document.addEventListener('click',e=>{const b=e.target.closest('[role="tab"]');if(b){document.querySelectorAll('[role="tab"]').forEach(t=>t.setAttribute('aria-selected',String(t===b)));document.querySelector('h1').textContent=b.textContent;document.querySelector('main').textContent=b.textContent==='自提'?'自提取餐号码 B34':'堂食桌号 A12';}});</script>`);
+    const result = await checkPrototypeQuality({ projectRoot: root, entryFile: 'index.html', userBrief: '堂食和自提 Tab' });
+    expect(result.status).toBe('incomplete');
+    expect(result.checks.filter(c => c.kind === 'navigation').every(c => c.status === 'incomplete')).toBe(true);
+  });
   it('accepts a delayed semantic switch within the control deadline', async () => {
     const result = await check(`document.addEventListener('click',e=>{const b=e.target.closest('[data-page]');if(b)setTimeout(()=>{document.querySelectorAll('nav button').forEach(item=>item.setAttribute('aria-current',item===b?'page':'false'));document.querySelector('h1').textContent=b.dataset.page;document.querySelector('main').textContent=b.dataset.page+'实际业务内容';},250);});`);
     expect(result.status).toBe('pass');

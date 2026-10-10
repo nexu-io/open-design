@@ -67,6 +67,8 @@ async function targetVisible(page: Page, control: Control): Promise<boolean | nu
       // Selection plus an arbitrary counter change is insufficient: sibling tab panels must switch away.
       for (const peer of group.querySelectorAll('[role="tab"][aria-controls]')) {
         if (peer === same) continue;
+        // A reused panel needs content-specific evidence; it is not a visible inactive panel.
+        if (peer.getAttribute('aria-controls') === same.getAttribute('aria-controls')) return null;
         const panel = same.ownerDocument.getElementById(peer.getAttribute('aria-controls')!);
         if (!panel) return null;
         const box = panel.getBoundingClientRect();
