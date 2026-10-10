@@ -631,6 +631,7 @@ describe('OD Next V2 prompt recipe', () => {
       taskExecutionId: 'task-1',
       taskRunIndex: 1,
       planContractHash: A,
+      executionMode: 'simple',
       hostProtocolKey: '0123456789abcdef',
     });
 
@@ -682,6 +683,28 @@ describe('OD Next V2 prompt recipe', () => {
     expect(production).not.toContain('task is locked to executionIntent plan_only');
   });
 
+  it.each(['simple', 'complex'] as const)('carries a schema-valid closing template for the locked %s production mode', (executionMode) => {
+    const production = composeOdNextStrategyContinuationV2({
+      stage: 'production',
+      nativeSessionResume: true,
+      taskExecutionId: 'task-closing-state',
+      taskRunIndex: 2,
+      planContractHash: A,
+      executionMode,
+    });
+    // Real failed deliveries either omitted schema or copied planning facts
+    // into this strict state. The continuation must carry a complete wire
+    // shape, independently of the earlier planning prompt's request example.
+    const state = StrategyRuntimeStateV2Schema.parse(parseWireBlock(production, OD_NEXT_RUNTIME_STATE_BLOCK));
+    expect(state).toEqual({
+      schema: 'open-design.strategy-state/v2', route: 'full_plan',
+      inputStage: 'production', executionMode, outcome: 'completed', reasonCodes: [],
+    });
+    expect(StrategyRuntimeStateV2Schema.safeParse({ ...state, selectedAgentId: 'amr' }).success).toBe(false);
+    const { schema: _schema, ...missingSchema } = state;
+    expect(StrategyRuntimeStateV2Schema.safeParse(missingSchema).success).toBe(false);
+  });
+
   it('emits native-session-only deltas and gives Production the frozen plan plus terminal state shape', () => {
     const clarification = composeOdNextStrategyContinuationV2({
       stage: 'clarification',
@@ -703,6 +726,7 @@ describe('OD Next V2 prompt recipe', () => {
       taskExecutionId: 'task-1',
       taskRunIndex: 1,
       planContractHash: A,
+      executionMode: 'simple',
       hostProtocolKey: '0123456789abcdef',
     });
 
@@ -746,6 +770,7 @@ describe('OD Next V2 prompt recipe', () => {
       taskExecutionId: 'task-1',
       taskRunIndex: 2,
       planContractHash: A,
+      executionMode: 'complex',
       nativeBuildPackageBindings: [{
         buildPackageId: 'shell',
         nativeAgentHandle: 'od-build-1-0123456789abcdef',
@@ -768,6 +793,7 @@ describe('OD Next V2 prompt recipe', () => {
       taskExecutionId: 'task-1',
       taskRunIndex: 2,
       planContractHash: A,
+      executionMode: 'complex',
       nativeBuildPackageBindings: [{
         buildPackageId: 'shell',
         nativeAgentHandle: 'shell-from-prose',
@@ -778,6 +804,7 @@ describe('OD Next V2 prompt recipe', () => {
       stage: 'production',
       nativeSessionResume: false,
       planContractHash: A,
+      executionMode: 'simple',
     } as never)).toThrow(/native session resume/i);
   });
 });
