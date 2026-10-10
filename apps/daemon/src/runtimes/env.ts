@@ -339,6 +339,10 @@ function finalizeRuntimeEnv(
 ): NodeJS.ProcessEnv {
   const finalizedEnv = reapplySandboxRuntimeEnv(env, sandboxRuntime);
   applyWindowsUserCacheEnv(finalizedEnv);
+  // ODEval keyless experiment only: keep the optimized prompts identical to
+  // the API arm, but remove stock credentials after every environment merge.
+  // This branch must stay a draft and must not replace the production policy.
+  stripKeysCaseInsensitive(finalizedEnv, ['PEXELS_API_KEY', 'PIXABAY_API_KEY']);
   return finalizedEnv;
 }
 
