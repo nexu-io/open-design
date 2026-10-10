@@ -301,6 +301,12 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+// The workspace-tabs strip is a button group: each tab button carries
+// aria-pressed, and per-tab close buttons do not.
+function getWorkspaceTabs(): HTMLElement[] {
+  return screen.getAllByRole('button').filter((button) => button.hasAttribute('aria-pressed'));
+}
+
 describe('App project list across a workspace switch', () => {
   beforeEach(() => {
     resetWorkspaceContextCache();
@@ -999,7 +1005,7 @@ describe('App project list across a workspace switch', () => {
     await waitFor(() => {
       expect(screen.getByTestId('project-title').textContent).toBe('Renamed from deep link');
       expect(
-        screen.getAllByRole('tab').some((tab) =>
+        getWorkspaceTabs().some((tab) =>
           tab.textContent?.includes('Renamed from deep link')),
       ).toBe(true);
     });
@@ -1008,7 +1014,7 @@ describe('App project list across a workspace switch', () => {
     await act(async () => Promise.resolve());
     expect(screen.getByTestId('project-title').textContent).toBe('Renamed from deep link');
     expect(
-      screen.getAllByRole('tab').some((tab) =>
+      getWorkspaceTabs().some((tab) =>
         tab.textContent?.includes('Foreign workspace title')),
     ).toBe(false);
   });
