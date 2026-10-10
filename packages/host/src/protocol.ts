@@ -408,6 +408,7 @@ export type OpenDesignHostBridge = {
   shell: {
     openExternal(url: string): Promise<OpenDesignHostActionResult>;
     openPath(projectId: string): Promise<OpenDesignHostActionResult>;
+    revealFile?(projectId: string, relativePath: string): Promise<OpenDesignHostActionResult>;
   };
   // Desktop only. Absent in Web and old clients; callers must fail closed.
   updater: {

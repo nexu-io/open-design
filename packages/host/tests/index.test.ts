@@ -21,6 +21,7 @@ import {
   pickAndImportHostProject,
   printHostPdf,
   openHostProjectPath,
+  revealHostFile,
   quitHostAfterUpdaterInstallerOpen,
   setHostUpdaterMenuLabels,
   setHostPetVisible,
@@ -92,6 +93,28 @@ describe("open-design host contract", () => {
       ...createMockOpenDesignHost(),
       updater: updaterWithoutClearCache,
     })).toBe(false);
+  });
+
+  it("accepts an older otherwise-valid host bridge without revealFile", () => {
+    const host = createMockOpenDesignHost();
+    const { revealFile: _revealFile, ...shellWithoutRevealFile } = host.shell;
+    const olderHost = {
+      ...host,
+      shell: shellWithoutRevealFile,
+    };
+    expect(isOpenDesignHostBridge(olderHost)).toBe(true);
+  });
+
+  it("rejects a host bridge with a non-function revealFile", () => {
+    const host = createMockOpenDesignHost();
+    const invalidHost = {
+      ...host,
+      shell: {
+        ...host.shell,
+        revealFile: "not-a-function" as unknown as typeof host.shell.revealFile,
+      },
+    };
+    expect(isOpenDesignHostBridge(invalidHost)).toBe(false);
   });
 
   it("reads the bridge through the package-owned global accessor", () => {
@@ -206,6 +229,7 @@ describe("open-design host contract", () => {
   it("routes all host actions through package-owned helpers", async () => {
     const openExternal = vi.fn(async () => ({ ok: true as const }));
     const openPath = vi.fn(async () => ({ ok: true as const }));
+    const revealFile = vi.fn(async () => ({ ok: true as const }));
     const clearData = vi.fn(async () => ({ ok: true as const }));
     const pickAndImport = vi.fn(async () => ({
       ok: true as const,
@@ -218,7 +242,7 @@ describe("open-design host contract", () => {
     const scope: Record<string, unknown> = {};
     scope[OPEN_DESIGN_HOST_GLOBAL] = createMockOpenDesignHost({
       browser: { clearData },
-      shell: { openExternal, openPath },
+      shell: { openExternal, openPath, revealFile },
       project: { pickAndImport },
       pdf: { print },
       pet: { setVisible },
@@ -226,6 +250,7 @@ describe("open-design host contract", () => {
 
     await expect(openHostExternalUrl("https://example.com", scope)).resolves.toEqual({ ok: true });
     await expect(openHostProjectPath("project-2", scope)).resolves.toEqual({ ok: true });
+    await expect(revealHostFile("project-2", "src/App.tsx", scope)).resolves.toEqual({ ok: true });
     await expect(clearHostBrowserData({ cookies: true }, scope)).resolves.toEqual({ ok: true });
     await expect(pickAndImportHostProject({ skillId: "skill-1" }, scope)).resolves.toMatchObject({
       ok: true,
@@ -236,6 +261,7 @@ describe("open-design host contract", () => {
 
     expect(openExternal).toHaveBeenCalledWith("https://example.com");
     expect(openPath).toHaveBeenCalledWith("project-2");
+    expect(revealFile).toHaveBeenCalledWith("project-2", "src/App.tsx");
     expect(clearData).toHaveBeenCalledWith({ cookies: true });
     expect(pickAndImport).toHaveBeenCalledWith({ skillId: "skill-1" });
     expect(print).toHaveBeenCalledWith("<html></html>", "nonce", { deck: true });
@@ -350,6 +376,21 @@ describe("open-design host contract", () => {
     await expect(checkHostUpdater(undefined, scope)).resolves.toEqual({
       ok: false,
       reason: "updater failed",
+    });
+  });
+
+  it("reports unavailable when host shell does not support revealing files", async () => {
+    const host = createMockOpenDesignHost();
+    const { revealFile: _revealFile, ...shellWithoutRevealFile } = host.shell;
+    const scope: Record<string, unknown> = {
+      [OPEN_DESIGN_HOST_GLOBAL]: {
+        ...host,
+        shell: shellWithoutRevealFile,
+      },
+    };
+    await expect(revealHostFile("project-1", "file.txt", scope)).resolves.toEqual({
+      ok: false,
+      reason: "Host shell does not support revealing files",
     });
   });
 
