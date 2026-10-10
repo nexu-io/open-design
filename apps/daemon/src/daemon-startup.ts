@@ -1,6 +1,8 @@
 import type { Server } from 'node:http';
 
 import type { StartServerOptions } from './server.js';
+import { readCurrentAppVersionInfo } from './app-version.js';
+import { startMemoryDiagnostics } from './services/memory-diagnostics.js';
 
 type StartedServer = {
   server: Server;
@@ -117,35 +119,44 @@ export async function closeHttpServer(
 
 export async function startDaemonRuntime(options: DaemonRuntimeOptions = {}): Promise<StartedDaemonRuntime> {
   const { openBrowser: shouldOpenBrowser = false, logListening = false, ...serverOptions } = options;
-  const { startServer } = await import('./server.js');
-  const started = await startServer({
-    ...serverOptions,
-    returnServer: true,
-  }) as string | StartedServer;
-  if (typeof started === 'string') {
-    throw new Error('daemon startServer did not return a server handle');
-  }
+  const version = await readCurrentAppVersionInfo().catch(() => null);
+  const stopDiagnostics = startMemoryDiagnostics(version);
+  try {
+    const { startServer } = await import('./server.js');
+    const started = await startServer({
+      ...serverOptions,
+      returnServer: true,
+    }) as string | StartedServer;
+    if (typeof started === 'string') {
+      throw new Error('daemon startServer did not return a server handle');
+    }
 
-  const stop = async () => {
-    const closePromise = closeHttpServer(started.server);
-    const shutdownPromise = started.shutdown?.().catch((error: unknown) => {
-      console.error('daemon shutdown cleanup failed', error);
-    }) ?? Promise.resolve();
-    await Promise.allSettled([shutdownPromise, closePromise]);
-  };
+    started.server.once('close', stopDiagnostics);
+    const stop = async () => {
+      stopDiagnostics();
+      const closePromise = closeHttpServer(started.server);
+      const shutdownPromise = started.shutdown?.().catch((error: unknown) => {
+        console.error('daemon shutdown cleanup failed', error);
+      }) ?? Promise.resolve();
+      await Promise.allSettled([shutdownPromise, closePromise]);
+    };
 
-  if (logListening) {
-    console.log(`[od] listening on ${started.url}`);
-  }
-  if (shouldOpenBrowser) {
-    const { openBrowser } = await import('./browser/index.js');
-    openBrowser(started.url);
-  }
+    if (logListening) {
+      console.log(`[od] listening on ${started.url}`);
+    }
+    if (shouldOpenBrowser) {
+      const { openBrowser } = await import('./browser/index.js');
+      openBrowser(started.url);
+    }
 
-  return {
-    ...started,
-    stop,
-  };
+    return {
+      ...started,
+      stop,
+    };
+  } catch (error) {
+    stopDiagnostics();
+    throw error;
+  }
 }
 
 export async function runDaemonCliStartup(argv: string[], options: { printHelp?: () => void } = {}): Promise<void> {
