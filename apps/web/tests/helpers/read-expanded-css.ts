@@ -27,7 +27,7 @@ function expandCssSegments(filePath: string, seen = new Set<string>()): string[]
   }
   seen.add(filePath);
 
-  const css = readFileSync(filePath, 'utf8');
+  const css = readFileSync(filePath, 'utf8').replace(/\r\n/g, '\n');
   const segments: string[] = [];
   let cursor = 0;
   for (const match of css.matchAll(CSS_IMPORT)) {
