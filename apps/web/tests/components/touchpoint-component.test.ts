@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
 	hasWebTouchpointCloseControl,
+	trapWebTouchpointModalFocus,
 	OpenDesignTouchpointElement,
 	verifyWebTouchpoint,
 	type WebTouchpointContent,
@@ -265,4 +266,37 @@ describe("verifyWebTouchpoint multi-placement resource closure", () => {
 			verifyWebTouchpoint(mutate(content("opend.home.campaign-modal"))),
 		).rejects.toThrow("touchpoint_integrity_failed");
 	});
+});
+
+
+describe("modal tab traversal", () => {
+  it("skips negative-tabIndex shadow controls in both directions and wraps", () => {
+    const modal = document.createElement("div");
+    modal.tabIndex = -1;
+    const host = document.createElement("div");
+    const shadow = host.attachShadow({ mode: "open" });
+    const [a, b, c] = [0, -1, 0].map(tabIndex => {
+      const button = document.createElement("button");
+      button.tabIndex = tabIndex;
+      return button;
+    });
+    shadow.append(a!, b!, c!);
+    modal.append(host);
+    document.body.append(modal);
+    try {
+      a!.focus();
+      for (const [shiftKey, expected] of [[false, c], [true, a], [true, c], [false, a]] as const) {
+        const event = new KeyboardEvent("keydown", { key: "Tab", shiftKey, cancelable: true });
+        trapWebTouchpointModalFocus(event, modal);
+        expect(event.defaultPrevented).toBe(true);
+        expect(shadow.activeElement).toBe(expected);
+      }
+      a!.remove();
+      c!.remove();
+      trapWebTouchpointModalFocus(new KeyboardEvent("keydown", { key: "Tab", cancelable: true }), modal);
+      expect(document.activeElement).toBe(modal);
+    } finally {
+      modal.remove();
+    }
+  });
 });

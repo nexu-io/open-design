@@ -10,8 +10,9 @@
 //
 //   1. A request the daemon holds nothing for is byte-for-byte today's request
 //      and today's response — no new parameters, no `contentOmitted`.
-//   2. Anything that goes wrong behind the daemon costs bandwidth, never the
-//      campaign. A trimmed reply it cannot rebuild is re-asked in full.
+//   2. Once durable authority admission succeeds, content-cache failures cost
+//      bandwidth, never the online campaign. A trimmed reply it cannot rebuild
+//      is re-asked in full. Failed authority admission must not dispatch upstream.
 
 import { createHash } from 'node:crypto';
 import express from 'express';
@@ -151,10 +152,20 @@ let errorBody: unknown;
 let upstreamHandler: UpstreamHandler | null;
 
 const listen = (server: Server) =>
-  new Promise<AddressInfo>((resolve) => {
-    server.listen(0, '127.0.0.1', () => resolve(server.address() as AddressInfo));
+  new Promise<AddressInfo>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      server.off('error', reject);
+      resolve(server.address() as AddressInfo);
+    });
   });
-const close = (server: Server) => new Promise<void>((resolve) => server.close(() => resolve()));
+const lifecycles = new Map<Server, ReturnType<typeof registerVelaRoutes>>();
+const close = async (server: Server) => {
+  if (!server) return; // A rejected setup has no daemon to close.
+  await lifecycles.get(server)?.close();
+  lifecycles.delete(server);
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+};
 
 beforeEach(async () => {
   dataDir = mkdtempSync(path.join(tmpdir(), 'od-touchpoint-assembly-'));
@@ -191,7 +202,7 @@ beforeEach(async () => {
   const upstreamAddress = await listen(upstream);
   const app = express();
   app.use(express.json());
-  registerVelaRoutes(app, {
+  const lifecycle = registerVelaRoutes(app, {
     paths: { RUNTIME_DATA_DIR: dataDir },
     appConfig: { readAppConfig: async () => ({ agentCliEnv: {} }) as AppConfigPrefs },
     http: {},
@@ -201,6 +212,7 @@ beforeEach(async () => {
     },
   });
   daemon = createServer(app);
+  lifecycles.set(daemon, lifecycle);
   const daemonAddress = await listen(daemon);
   baseUrl = `http://127.0.0.1:${daemonAddress.port}`;
 });
@@ -232,9 +244,9 @@ const decisionUrl = () =>
  * `fetch` transparently decompresses, which would hide the difference between
  * a body this proxy forwarded still compressed and one it expanded itself.
  */
-const rawDecide = () =>
+const rawDecide = (headers: Record<string, string> = {}) =>
   new Promise<{ status: number; headers: IncomingHttpHeaders; body: Buffer }>((resolve, reject) => {
-    const request = httpRequest(decisionUrl(), (response) => {
+    const request = httpRequest(decisionUrl(), { headers }, (response) => {
       const chunks: Buffer[] = [];
       response.on('data', (chunk: Buffer) => chunks.push(chunk));
       response.on('end', () =>
@@ -367,16 +379,75 @@ describe('daemon touchpoint content assembly', () => {
     expect(calls[0]?.heldContentId).toBe('version-1');
   });
 
-  it('keeps serving the campaign when the cache cannot be written at all', async () => {
+  it('refuses before upstream dispatch when the authority root cannot be written', async () => {
     const root = path.join(dataDir, 'touchpoint-content-cache');
     fs.mkdirSync(root, { recursive: true });
     fs.chmodSync(root, 0o500);
-    const first = await decide();
-    const second = await decide();
-    expect(first.text).toBe(JSON.stringify(FULL_RESPONSE));
-    expect(second.text).toBe(JSON.stringify(FULL_RESPONSE));
-    expect(calls.every((call) => call.heldContentId === null)).toBe(true);
+    try {
+      const first = await decide();
+      const second = await decide();
+      expect(first.status).toBe(503);
+      expect(second.status).toBe(503);
+      expect(JSON.parse(first.text)).toEqual({ error: 'touchpoint_authority_unavailable' });
+      expect(JSON.parse(second.text)).toEqual({ error: 'touchpoint_authority_unavailable' });
+      expect(calls).toHaveLength(0);
+      expect(upstreamBytes).toHaveLength(0);
+    } finally {
+      fs.chmodSync(root, 0o700);
+    }
+    const recovered = await decide();
+    expect(recovered.status).toBe(200);
+    expect(recovered.text).toBe(JSON.stringify(FULL_RESPONSE));
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.heldContentId).toBeNull();
   });
+
+  it.each(['blobs', 'modules', 'assemblies'] as const)(
+    'forwards valid online content when only %s writes fail after durable admission',
+    async (failedDirectory) => {
+      expect((await decide()).status).toBe(200);
+      const scope = scopeDir();
+      const journal = path.join(scope, 'replay-authority.json');
+      const generation = JSON.parse(fs.readFileSync(journal, 'utf8')).generation;
+      // Remove only reusable content so the next response must attempt writes.
+      // The authority journal and owner database stay writable and untouched.
+      for (const directory of ['blobs', 'modules', 'assemblies']) {
+        const contentDirectory = path.join(scope, directory);
+        fs.rmSync(contentDirectory, { recursive: true, force: true });
+        fs.mkdirSync(contentDirectory);
+      }
+      const blocked = path.join(scope, failedDirectory);
+      fs.chmodSync(blocked, 0o500);
+      calls = [];
+      upstreamBytes = [];
+      const admitted: Array<{ generation: string; pending: string[] }> = [];
+      upstreamHandler = (_req, res) => {
+        // Observe the real durable journal at the HTTP boundary, not a mock of
+        // begin(): every dispatched request must already carry a pending token.
+        admitted.push(JSON.parse(fs.readFileSync(journal, 'utf8')));
+        res.setHeader('content-type', 'application/json');
+        res.end(JSON.stringify(FULL_RESPONSE));
+      };
+      try {
+        const first = await decide();
+        const second = await decide();
+        expect(first.status).toBe(200);
+        expect(second.status).toBe(200);
+        expect(first.text).toBe(JSON.stringify(FULL_RESPONSE));
+        expect(second.text).toBe(JSON.stringify(FULL_RESPONSE));
+        expect(calls).toHaveLength(2);
+        expect(calls.every((call) => call.heldContentId === null)).toBe(true);
+        expect(admitted).toHaveLength(2);
+        for (const admission of admitted) {
+          expect(admission.generation).toBe(generation);
+          expect(admission.pending.length).toBeGreaterThan(0);
+        }
+        expect(fs.readdirSync(blocked)).toHaveLength(0);
+      } finally {
+        fs.chmodSync(blocked, 0o700);
+      }
+    },
+  );
 
   it('keeps serving the campaign against a Vela that ignores the new parameters', async () => {
     await decide();
@@ -422,6 +493,58 @@ describe('daemon touchpoint content assembly', () => {
       heldContentId: 'someone-elses',
       heldContentLocale: 'fr-FR',
     });
+  });
+
+  // Chromium 123+ (and so every Electron build the desktop app ships) advertises
+  // `zstd`, and Vela honours it. The trimmed reply is only a skeleton; if the
+  // daemon lets upstream pick an encoding it cannot read, it can neither see
+  // `contentOmitted` nor rebuild the content, and the browser is handed a
+  // decision with no content -- which it drops as a mismatch, so the campaign
+  // never shows after the first visit.
+  it('REGRESSION: rebuilds a trimmed reply when the browser advertises encodings the daemon cannot read', async () => {
+    // Node 24 ships zstd; the pinned @types/node predates it.
+    const zstd = zlib as typeof zlib & {
+      zstdCompressSync(input: Buffer): Buffer;
+      zstdDecompressSync(input: Buffer): Buffer;
+    };
+    const seen: Array<string | undefined> = [];
+    upstreamHandler = (req, res, held) => {
+      const accepted = String(req.headers['accept-encoding'] ?? '');
+      seen.push(req.headers['accept-encoding']);
+      const payload = Buffer.from(decisionPayload(FULL_RESPONSE, held));
+      res.setHeader('content-type', 'application/json');
+      if (/\bzstd\b/.test(accepted)) {
+        res.setHeader('content-encoding', 'zstd');
+        res.end(zstd.zstdCompressSync(payload));
+      } else if (/\bgzip\b/.test(accepted)) {
+        res.setHeader('content-encoding', 'gzip');
+        res.end(zlib.gzipSync(payload));
+      } else {
+        res.end(payload);
+      }
+    };
+    const browser = { 'accept-encoding': 'gzip, deflate, br, zstd' };
+    const readJson = (reply: { headers: IncomingHttpHeaders; body: Buffer }) => {
+      const encoding = reply.headers['content-encoding'];
+      const body =
+        encoding === 'gzip'
+          ? zlib.gunzipSync(reply.body)
+          : encoding === 'zstd'
+            ? zstd.zstdDecompressSync(reply.body)
+            : reply.body;
+      return JSON.parse(body.toString('utf8')) as Record<string, unknown>;
+    };
+
+    // Whichever caller first fills the store -- here one that only speaks
+    // gzip -- the next refresh is trimmed, and that is the reply the browser's
+    // own encoding preference must not make unreadable.
+    const cold = await rawDecide({ 'accept-encoding': 'gzip' });
+    const warm = await rawDecide(browser);
+
+    expect(calls[1]).toMatchObject({ heldContentId: 'version-1', heldContentLocale: LOCALE });
+    expect(readJson(cold)).toEqual(FULL_RESPONSE);
+    expect(readJson(warm)).toEqual(FULL_RESPONSE);
+    for (const value of seen) expect(value ?? '').not.toMatch(/zstd/);
   });
 
   // Before this route began reading bodies it forwarded them as a stream, so
@@ -626,16 +749,17 @@ describe('daemon touchpoint content assembly', () => {
     // The daemon resolves Vela per request, so rebinding the same port is not
     // required: re-register against the new address.
     const address = await listen(upstream);
+    await close(daemon);
     const app = express();
     app.use(express.json());
-    registerVelaRoutes(app, {
+    const lifecycle = registerVelaRoutes(app, {
       paths: { RUNTIME_DATA_DIR: dataDir },
       appConfig: { readAppConfig: async () => ({ agentCliEnv: {} }) as AppConfigPrefs },
       http: {},
       env: { VELA_CONTROL_KEY: 'ck-test', VELA_API_URL: `http://127.0.0.1:${address.port}` },
     });
-    await close(daemon);
     daemon = createServer(app);
+  lifecycles.set(daemon, lifecycle);
     const daemonAddress = await listen(daemon);
     baseUrl = `http://127.0.0.1:${daemonAddress.port}`;
     const next = await decide();

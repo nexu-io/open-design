@@ -6,6 +6,7 @@ export const pl: Dict = {
   'billing.codingPlanPeriodHours': '{count} godz.',
   'billing.codingPlanPeriodDays': '{count} dni',
   'billing.codingPlanRemainingPercent': 'Pozostało {percent}%',
+  "campaign.testReplay": "Otwórz ponownie aktywność testową",
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

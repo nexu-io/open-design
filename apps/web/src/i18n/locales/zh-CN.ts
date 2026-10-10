@@ -6,6 +6,7 @@ export const zhCN: Dict = {
   'billing.codingPlanPeriodHours': '{count} 小时',
   'billing.codingPlanPeriodDays': '{count} 天',
   'billing.codingPlanRemainingPercent': '剩余 {percent}%',
+  "campaign.testReplay": "重新查看测试活动",
   'invite.header.eyebrow': "团队邀请",
   'invite.loading': "正在加载邀请…",
   'invite.landing.title': "加入团队",

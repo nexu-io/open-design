@@ -6,6 +6,7 @@ export const ptBR: Dict = {
   'billing.codingPlanPeriodHours': '{count} horas',
   'billing.codingPlanPeriodDays': '{count} dias',
   'billing.codingPlanRemainingPercent': 'Resta {percent}%',
+  "campaign.testReplay": "Reabrir atividade de teste",
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

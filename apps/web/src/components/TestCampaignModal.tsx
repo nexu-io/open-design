@@ -6,6 +6,7 @@ import {
 import type {
 	TestRuntimeContext,
 	TestRuntimeDecision,
+	TestRuntimeContextMismatch,
 } from "@open-design/contracts/api/touchpointTestRuntime";
 import { getOpenDesignHost, OPEN_DESIGN_HOST_VERSION } from "@open-design/host";
 import { mountTouchpoint } from "./touchpoint-lifecycle";
@@ -18,6 +19,7 @@ import {
 	TEST_MAX_AUTHORIZATION_MS,
 	type TouchpointLifecycleLoad,
 	resolveAuthorizationDeadline,
+	touchpointWithdrawsDisplay,
 	useTouchpointLifecycle,
 } from "./touchpoint-lifecycle";
 import {
@@ -45,6 +47,7 @@ import {
 	TEST_CAMPAIGN_PLACEMENTS,
 	type TestCampaignPlacement,
 	type TestDeployment,
+	sameTestDeployment,
 	useTestDeploymentSelection,
 } from "./test-deployment-selection";
 export {
@@ -72,13 +75,43 @@ export type TestRuntimeSession = Readonly<{
 	deployment: TestDeployment;
 	context: TestContext;
 	decisions: ReadonlyMap<TestCampaignPlacement, TestDecision>;
-	isAuthorized: () => boolean;
+	isAuthorized: (placementKey?: TestCampaignPlacement) => boolean;
 }>;
-type TestRuntimeValue = Omit<TestRuntimeSession, "isAuthorized">;
+type TestPlacementAuthority = Readonly<{ received: TestClock; validForMs: number }>;
+type TestRuntimeValue = Omit<TestRuntimeSession, "isAuthorized"> & Readonly<{
+	authorizations: ReadonlyMap<TestCampaignPlacement, TestPlacementAuthority>;
+}>;
+
+/** Only an existing short grant survives a route remount in this process. */
+let retainedTestRuntime: { owner: string; locale: string; value: TestRuntimeValue } | null = null;
+let retainedTestEpoch = 0;
+let retainedTestScope: string | null = null;
+function invalidateRetainedTestRuntime(): void {
+	retainedTestRuntime = null;
+	retainedTestEpoch += 1;
+}
+
+/** The shell observes identity even while the home-only Test hosts are absent. */
+export function observeTestRuntimeIdentity(authenticated: boolean, owner: string | null, locale: string): void {
+	const scope = supportsHost(authenticated) && owner ? JSON.stringify([owner, locale]) : null;
+	if (retainedTestScope === scope) return;
+	invalidateRetainedTestRuntime();
+	retainedTestScope = scope;
+}
 
 let currentTestSession: TestRuntimeSession | null = null;
 const testRuntimeListeners = new Set<() => void>();
-const acceptanceState = new Map<string, "in-flight" | "accepted">();
+/**
+ * One entry per visible snapshot placement while its receipt is being
+ * delivered or after the server accepted it. A failed delivery removes its
+ * entry, so only a later visibility can start another one.
+ */
+type AcceptanceDelivery = { controller: AbortController; accepted: boolean };
+const acceptanceState = new Map<string, AcceptanceDelivery>();
+function resetAcceptanceDelivery(): void {
+	for (const delivery of acceptanceState.values()) delivery.controller.abort();
+	acceptanceState.clear();
+}
 function subscribeTestRuntime(listener: () => void): () => void {
 	testRuntimeListeners.add(listener);
 	return () => testRuntimeListeners.delete(listener);
@@ -96,32 +129,62 @@ export function useTestRuntime(): TestRuntimeSession | null {
 export function setTestRuntimeSession(
 	session: TestRuntimeSession | null,
 ): void {
-	if (currentTestSession?.selectionKey !== session?.selectionKey)
-		acceptanceState.clear();
+	if (
+		!session?.decisions.size ||
+		currentTestSession?.selectionKey !== session?.selectionKey ||
+		currentTestSession?.context.testerMemberId !==
+			session?.context.testerMemberId ||
+		currentTestSession?.deployment.snapshotHash !==
+			session?.deployment.snapshotHash
+	)
+		resetAcceptanceDelivery();
 	currentTestSession = session;
 	for (const listener of testRuntimeListeners) listener();
 }
 export function clearTestRuntimeSession(): void {
+	invalidateRetainedTestRuntime();
+	unpublishTestRuntimeSession();
+}
+function unpublishTestRuntimeSession(): void {
 	if (!currentTestSession) return;
 	currentTestSession = null;
-	acceptanceState.clear();
+	resetAcceptanceDelivery();
 	for (const listener of testRuntimeListeners) listener();
 }
 
-/** Test decisions are valid only for the exact selected deployment and clock snapshot. */
+/** The acquired context pins the protocol; malformed/partial bundles never downgrade. */
+type TestContextMode = "legacy" | "immutable" | "invalid";
+function testContextMode(context: TestContext | null | undefined): TestContextMode {
+	if (!context || typeof context !== "object") return "invalid";
+	const fields = ["contextId", "generation", "contextToken"] as const;
+	if (fields.every((key) => !(key in context))) return "legacy";
+	return typeof context.contextId === "string" && /^ctx-v1:[a-f0-9]{64}$/.test(context.contextId) &&
+		typeof context.generation === "string" && /^(0|[1-9][0-9]*)$/.test(context.generation) && context.generation.length <= 32 &&
+		typeof context.contextToken === "string" && /^ctx-token-v1:[a-f0-9]{64}$/.test(context.contextToken) &&
+		typeof context.testerMemberId === "string" && context.testerMemberId.length > 0
+		? "immutable" : "invalid";
+}
+
+/** Negotiated identity matching, independent of immutable-mode timestamps. */
+function sameTestContext(left: TestContext, right: TestContext): boolean {
+	const mode = testContextMode(left);
+	return mode !== "invalid" && testContextMode(right) === mode &&
+		left.deploymentId === right.deploymentId && left.scenario === right.scenario &&
+		left.testerMemberId === right.testerMemberId &&
+		(mode === "immutable"
+			? left.contextId === right.contextId && left.generation === right.generation && left.contextToken === right.contextToken
+			: left.updatedAt === right.updatedAt);
+}
+
+/** Test decisions must match the negotiated context and exact selected placement. */
 export function isSelectedTestCampaignDecision(
 	next: TestDecision,
 	context: TestContext,
 	placementKey: string = TEST_CAMPAIGN_MODAL_PLACEMENT,
 ): boolean {
-	return (
-		next.deploymentId === context.deploymentId &&
-		next.placementKey === placementKey &&
-		next.content?.placementKey === placementKey &&
-		next.testContext?.deploymentId === context.deploymentId &&
-		next.testContext?.scenario === context.scenario &&
-		next.testContext?.updatedAt === context.updatedAt
-	);
+	return Boolean(next && next.deploymentId === context.deploymentId &&
+		next.placementKey === placementKey && next.content?.placementKey === placementKey &&
+		next.testContext && sameTestContext(context, next.testContext));
 }
 
 /**
@@ -130,9 +193,168 @@ export function isSelectedTestCampaignDecision(
  * context that is still stale after its one refetch reports as before.
  */
 class StaleTestContextError extends Error {
-	constructor() {
+	constructor(readonly detail?: string) {
 		super("touchpoint_decision_mismatch");
 	}
+}
+
+/**
+ * A Test runtime refusal ends the selected campaign's display authority.
+ * Authentication/authorization refusal and deployment withdrawal cancel the
+ * whole attempt immediately, even while a sibling or catalog request hangs.
+ * Transport failures keep only the original short Test lease.
+ */
+class TestRuntimeResponseError extends Error {
+	readonly touchpointWithdrawal: boolean;
+	constructor(code: string, status: number) {
+		super(code);
+		this.touchpointWithdrawal = [401, 403, 410].includes(status);
+	}
+}
+
+/**
+ * One placement that did not answer within its own budget. It is dropped like
+ * any failed presentation so the healthy ones still show, but it never
+ * replaces a presentation that is already on screen.
+ */
+class TestPlacementTimeoutError extends Error {
+	constructor(readonly placementKey: TestCampaignPlacement) {
+		super("touchpoint_test_placement_timeout");
+	}
+}
+
+/**
+ * Budget of one placement request, below the lifecycle's whole-attempt budget
+ * so a hung placement settles before the attempt is abandoned.
+ */
+export const TEST_PLACEMENT_REQUEST_TIMEOUT_MS = 10_000;
+
+/** One placement answer that passed every selection and schedule check. */
+type LoadedTestPlacement = Readonly<{
+	placementKey: TestCampaignPlacement;
+	decision: TestDecision;
+	startsAt: number;
+	endsAt: number;
+	serverTime: number;
+	validForMs: number;
+	received: TestClock;
+}>;
+
+/** Elapsed time measured on both clocks, as the lifecycle measures its leases. */
+type TestClock = Readonly<{ monotonic: number; wall: number }>;
+const testClock = (): TestClock => ({ monotonic: performance.now(), wall: Date.now() });
+const elapsedTestClocks = new WeakMap<TestClock, number>();
+const testElapsed = (start: TestClock) => {
+	const elapsed = Math.max(elapsedTestClocks.get(start) ?? 0, performance.now() - start.monotonic, Date.now() - start.wall);
+	elapsedTestClocks.set(start, elapsed);
+	return elapsed;
+};
+
+function retainedTestValue(owner: string | null, locale: string): TestRuntimeValue | null {
+	const retained = retainedTestRuntime;
+	if (!retained) return null;
+	if (retained.owner !== owner || retained.locale !== locale) {
+		invalidateRetainedTestRuntime();
+		return null;
+	}
+	if (![...retained.value.authorizations.values()].some((grant) => testElapsed(grant.received) < grant.validForMs)) {
+		// Expiry spends only this grant. A server renewal already in flight may
+		// still install a fresh grant; withdrawal and identity changes fence it.
+		retainedTestRuntime = null;
+		return null;
+	}
+	return retained.value;
+}
+
+/** A decision that disagrees with the selection, carrying both identities. */
+class TestDecisionMismatchError extends Error {
+	readonly touchpointWithdrawal = true;
+	constructor(readonly detail: string) {
+		super("touchpoint_decision_mismatch");
+	}
+}
+
+/** Diagnostics carry bounded scalars only; malformed token contents are never logged. */
+const diagnosticScalar = (value: unknown): string | number | boolean | null => {
+	if (typeof value === "string") return value.replace(/[\u0000-\u001f\u007f]/g, "?").slice(0, 256);
+	if (typeof value === "boolean" || (typeof value === "number" && Number.isFinite(value))) return value;
+	return null;
+};
+function diagnosticContext(context: TestContext | null | undefined) {
+	if (!context) return null;
+	return {
+		deploymentId: diagnosticScalar(context.deploymentId), scenario: diagnosticScalar(context.scenario),
+		updatedAt: diagnosticScalar(context.updatedAt), testerMemberId: diagnosticScalar(context.testerMemberId),
+		mode: testContextMode(context), contextId: typeof context.contextId === "string" && /^ctx-v1:[a-f0-9]{64}$/.test(context.contextId) ? context.contextId : null,
+		generation: typeof context.generation === "string" && /^(0|[1-9][0-9]*)$/.test(context.generation) ? diagnosticScalar(context.generation) : null,
+		tokenFingerprint: typeof context.contextToken === "string" && /^ctx-token-v1:[a-f0-9]{64}$/.test(context.contextToken)
+			? context.contextToken.slice(13, 25) : null,
+	};
+}
+function contextMismatchReason(expected: TestContext, received: TestContext | null | undefined): string {
+	if (testContextMode(received) === "invalid") return "context_identity_invalid";
+	if (testContextMode(expected) !== testContextMode(received)) return "context_protocol_mismatch";
+	if (expected.testerMemberId !== received?.testerMemberId) return "tester_mismatch";
+	if (testContextMode(expected) === "immutable") return expected.contextToken !== received?.contextToken
+		? "context_token_mismatch" : "context_identity_mismatch";
+	return "context_timestamp_mismatch";
+}
+function decisionMismatchDetail(
+	decision: TestDecision | null | undefined,
+	context: TestContext,
+	deployment: TestDeployment,
+	placementKey: TestCampaignPlacement,
+	trace: { correlation: string; retry: number; reason?: string; receivedContext?: TestContext } = { correlation: "selection", retry: 0 },
+): string {
+	return JSON.stringify({
+		deploymentId: diagnosticScalar(deployment.id), placementKey, mode: testContextMode(context),
+		reason: trace.reason ?? (decision && !decisionFactsMatchSelection(decision, context, deployment, placementKey)
+			? "selected_facts_mismatch" : contextMismatchReason(context, decision?.testContext)),
+		correlation: trace.correlation, retry: trace.retry,
+		expected: {
+			activityId: diagnosticScalar(deployment.activityId), snapshotHash: diagnosticScalar(deployment.snapshotHash),
+			contentVersionId: diagnosticScalar(deployment.snapshot.contentVersionId), manifestHash: diagnosticScalar(deployment.snapshot.manifestHash),
+			artifactHash: diagnosticScalar(deployment.snapshot.artifactHash), context: diagnosticContext(context),
+		},
+		received: decision ? {
+			deploymentId: diagnosticScalar(decision.deploymentId), activityId: diagnosticScalar(decision.activityId),
+			placementKey: diagnosticScalar(decision.placementKey), snapshotHash: diagnosticScalar(decision.snapshotHash),
+			contentVersionId: diagnosticScalar(decision.content?.id), manifestHash: diagnosticScalar(decision.manifestHash),
+			artifactHash: diagnosticScalar(decision.artifactHash), context: diagnosticContext(decision.testContext),
+		} : trace.receivedContext ? { context: diagnosticContext(trace.receivedContext) } : null,
+	});
+}
+
+/** The diagnostic a failed Test load reports, keeping any identities it carries. */
+function testLoadDiagnostic(error: unknown): { code: string; detail?: string } {
+	const code =
+		error instanceof Error ? error.message : "touchpoint_test_load_failed";
+	const detail =
+		error instanceof TestDecisionMismatchError ||
+		error instanceof StaleTestContextError
+			? error.detail
+			: undefined;
+	return detail === undefined ? { code } : { code, detail };
+}
+
+/**
+ * Placements that are presented together. A failure hides only its own
+ * presentation: the hover entry and its layer stay atomic, while the modal and
+ * the badge are independent of each other and of the hover.
+ */
+const TEST_PRESENTATIONS: readonly (readonly TestCampaignPlacement[])[] = [
+	["opend.home.account-badge"],
+	["opend.home.campaign-modal"],
+	["opend.home.hover-entry", "opend.home.hover-layer"],
+];
+function testPresentationOf(
+	placementKey: TestCampaignPlacement,
+): readonly TestCampaignPlacement[] {
+	return (
+		TEST_PRESENTATIONS.find((group) => group.includes(placementKey)) ?? [
+			placementKey,
+		]
+	);
 }
 
 /**
@@ -144,14 +366,25 @@ class StaleTestContextError extends Error {
 function isContextGenerationDrift(
 	decision: TestDecision,
 	context: TestContext,
+	deployment: TestDeployment,
+	placementKey: TestCampaignPlacement,
 ): boolean {
-	return (
-		decision.deploymentId === context.deploymentId &&
-		decision.testContext?.deploymentId === context.deploymentId &&
-		decision.testContext.scenario === context.scenario &&
-		(decision.testContext.updatedAt !== context.updatedAt ||
-			decision.testContext.testerMemberId !== context.testerMemberId)
-	);
+	return Boolean(decision && decision.testContext &&
+		decisionFactsMatchSelection(decision, context, deployment, placementKey) &&
+		validIso(decision.serverTime) && validIso(decision.startsAt) && validIso(decision.endsAt) &&
+		validIso(decision.authorizationExpiresAt) && Date.parse(decision.startsAt) < Date.parse(decision.endsAt) &&
+		decision.testContext.scheduleState === (Date.parse(decision.serverTime) < Date.parse(decision.startsAt) ? "before"
+			: Date.parse(decision.serverTime) < Date.parse(decision.endsAt) ? "active" : "ended") &&
+		supportsWebTouchpointCapabilities(decision.content, decision.requiredCapabilities,
+			placementKey === TEST_CAMPAIGN_MODAL_PLACEMENT ? supportedCapabilities : placementCapabilities) &&
+		isLegitimateContextDrift(decision.testContext, context));
+}
+function isLegitimateContextDrift(received: TestContext, expected: TestContext): boolean {
+	const mode = testContextMode(expected);
+	return mode !== "invalid" && testContextMode(received) === mode &&
+		received.deploymentId === expected.deploymentId && received.scenario === expected.scenario &&
+		received.testerMemberId === expected.testerMemberId && validIso(received.updatedAt) &&
+		!("simulatedAt" in received) && !sameTestContext(expected, received);
 }
 
 /** Only the current live, authorized Test snapshot can navigate a registered action. */
@@ -167,7 +400,7 @@ export async function dispatchTestCampaignAction(
 	if (
 		session &&
 		placement &&
-		session.isAuthorized() &&
+		session.isAuthorized(placement) &&
 		session.decisions.get(placement) === decision &&
 		decision.testContext.scheduleState === "active" &&
 		decisionMatchesSelection(
@@ -226,26 +459,32 @@ function expectedSnapshotMatches(
 	);
 }
 
+/** Every non-context fact must agree before drift can justify a context refresh. */
+function decisionFactsMatchSelection(
+	decision: TestDecision,
+	context: TestContext,
+	deployment: TestDeployment,
+	placementKey: TestCampaignPlacement,
+): boolean {
+	return Boolean(decision && decision.deploymentId === deployment.id &&
+		decision.placementKey === placementKey && decision.content?.placementKey === placementKey &&
+		decision.activityId === deployment.activityId && decision.testContext &&
+		decision.testContext.deploymentId === context.deploymentId && decision.testContext.scenario === context.scenario &&
+		decision.testContext.testerMemberId === context.testerMemberId &&
+		["before", "active", "ended"].includes(decision.testContext.scheduleState) &&
+		expectedSnapshotMatches(decision, deployment) && Array.isArray(decision.content?.manifest?.placements) &&
+		touchpointStaticActionsMatch(decision.staticActions,
+			decision.content.manifest.placements.find((placement) => placement.key === placementKey)?.staticActions ?? []) &&
+		decision.content.id.length > 0);
+}
 function decisionMatchesSelection(
 	decision: TestDecision,
 	context: TestContext,
 	deployment: TestDeployment,
 	placementKey: TestCampaignPlacement,
 ): boolean {
-	return (
-		isSelectedTestCampaignDecision(decision, context, placementKey) &&
-		decision.activityId === deployment.activityId &&
-		decision.testContext.testerMemberId === context.testerMemberId &&
-		["before", "active", "ended"].includes(decision.testContext.scheduleState) &&
-		expectedSnapshotMatches(decision, deployment) &&
-		touchpointStaticActionsMatch(
-			decision.staticActions,
-			decision.content.manifest.placements.find(
-				(placement) => placement.key === placementKey,
-			)?.staticActions ?? [],
-		) &&
-		decision.content.id.length > 0
-	);
+	return isSelectedTestCampaignDecision(decision, context, placementKey) &&
+		decisionFactsMatchSelection(decision, context, deployment, placementKey);
 }
 
 function acceptanceEvidence(
@@ -291,11 +530,13 @@ export async function recordTestAcceptance(
 		scenario: Scenario;
 		hostVersion?: string;
 	}>,
+	signal?: AbortSignal,
 ): Promise<unknown> {
 	const response = await fetch(
 		`/api/touchpoints/test-runtime/test-deployments/${encodeURIComponent(input.deploymentId)}/acceptances`,
 		{
 			method: "POST",
+			signal,
 			headers: { "content-type": "application/json" },
 			body: JSON.stringify({
 				placementKey: input.placementKey,
@@ -340,32 +581,185 @@ export function recordVisibleTestTouchpoint(
 ): void {
 	if (
 		currentTestSession !== session ||
-		!session.isAuthorized() ||
+		!session.isAuthorized(placementKey) ||
 		session.decisions.get(placementKey) !== decision ||
 		session.context.scenario !== "realtime" ||
 		decision.testContext.scheduleState !== "active"
 	)
 		return;
-	const key = `${session.deployment.id}:${session.deployment.snapshotHash ?? decision.snapshotHash ?? ""}:${placementKey}`;
+	const snapshotHash =
+		session.deployment.snapshotHash ?? decision.snapshotHash ?? "";
+	const key = `${session.deployment.id}:${snapshotHash}:${placementKey}`;
 	if (acceptanceState.has(key)) return;
-	acceptanceState.set(key, "in-flight");
-	void recordTestAcceptance({
-		deploymentId: session.deployment.id,
-		snapshotHash: session.deployment.snapshotHash ?? decision.snapshotHash ?? "",
-		placementKey,
-		locale: decision.content.locale,
-		scenario: session.context.scenario,
-	})
-		.then(() => acceptanceState.set(key, "accepted"))
-		.catch((error) => {
-			acceptanceState.delete(key);
+	const delivery: AcceptanceDelivery = {
+		controller: new AbortController(),
+		accepted: false,
+	};
+	acceptanceState.set(key, delivery);
+	// Visibility is evidence for this snapshot only. A renewed lease may replace
+	// the session object, but the evidence never transfers to another snapshot,
+	// tester or schedule state.
+	const isCurrent = () => {
+		const current = currentTestSession;
+		const currentDecision = current?.decisions.get(placementKey);
+		return (
+			acceptanceState.get(key) === delivery &&
+			!delivery.controller.signal.aborted &&
+			current?.selectionKey === session.selectionKey &&
+			current.isAuthorized(placementKey) &&
+			current.context.testerMemberId === session.context.testerMemberId &&
+			current.context.scenario === "realtime" &&
+			current.deployment.id === session.deployment.id &&
+			(current.deployment.snapshotHash ?? currentDecision?.snapshotHash ?? "") ===
+				snapshotHash &&
+			currentDecision?.testContext.scheduleState === "active"
+		);
+	};
+	void deliverTestAcceptance(
+		{
+			deploymentId: session.deployment.id,
+			snapshotHash,
+			placementKey,
+			locale: decision.content.locale,
+			scenario: session.context.scenario,
+		},
+		delivery.controller.signal,
+		isCurrent,
+	)
+		.then((accepted) => {
+			if (accepted && isCurrent()) delivery.accepted = true;
+		})
+		.finally(() => {
+			if (!delivery.accepted && acceptanceState.get(key) === delivery)
+				acceptanceState.delete(key);
+		});
+}
+
+/** Backoff before each retry of one visibility's receipt (OPEND-3327). */
+export const TEST_ACCEPTANCE_RETRY_MS = [1_000, 3_000, 10_000, 30_000] as const;
+/** Deadline of one receipt POST; a hanging request counts as a transport failure. */
+export const TEST_ACCEPTANCE_REQUEST_TIMEOUT_MS = 10_000;
+
+/** Server answers that can change on retry; every other 4xx is final. */
+function retriesTestAcceptance(error: unknown): boolean {
+	const status = /^touchpoint_test_acceptance_http_(\d+)$/.exec(
+		error instanceof Error ? error.message : "",
+	);
+	if (!status) return true;
+	const code = Number(status[1]);
+	return code >= 500 || code === 408 || code === 429;
+}
+
+function waitForRetry(ms: number, signal: AbortSignal): Promise<void> {
+	return new Promise<void>((resolve) => {
+		const finish = () => {
+			clearTimeout(timer);
+			signal.removeEventListener("abort", finish);
+			resolve();
+		};
+		const timer = setTimeout(finish, ms);
+		signal.addEventListener("abort", finish, { once: true });
+		if (signal.aborted) finish();
+	});
+}
+
+/**
+ * Resolves once the page is shown again, or at once when it is not hidden.
+ *
+ * A hidden page is not a revoked session: `isCurrent` reads `!document.hidden`
+ * through the lease, so without this pause a retry that fell while the tab was
+ * in the background would end delivery for good, and the watcher that produced
+ * the visibility has already stopped and will not produce another one.
+ */
+function waitUntilShown(signal: AbortSignal): Promise<void> {
+	return new Promise<void>((resolve) => {
+		const check = () => {
+			if (document.hidden && !signal.aborted) return;
+			document.removeEventListener("visibilitychange", check);
+			signal.removeEventListener("abort", check);
+			resolve();
+		};
+		document.addEventListener("visibilitychange", check);
+		signal.addEventListener("abort", check, { once: true });
+		check();
+	});
+}
+
+/**
+ * Delivers one visible placement's receipt at most once per success.
+ *
+ * A single visibility is the only evidence the watcher produces, so a lost
+ * POST (5xx, transport failure, timeout) must be retried here rather than
+ * waiting for a visibility that may never recur. Retries are bounded by
+ * {@link TEST_ACCEPTANCE_RETRY_MS}, each attempt by its own deadline, and all
+ * stop the moment `isCurrent` says the lease, decision or selection is gone.
+ * The server stays the acceptance gate: a non-retryable 4xx ends delivery.
+ */
+async function deliverTestAcceptance(
+	input: Parameters<typeof recordTestAcceptance>[0],
+	signal: AbortSignal,
+	isCurrent: () => boolean,
+): Promise<boolean> {
+	for (let attempt = 0; attempt <= TEST_ACCEPTANCE_RETRY_MS.length; attempt++) {
+		if (attempt > 0) {
+			await waitForRetry(TEST_ACCEPTANCE_RETRY_MS[attempt - 1]!, signal);
+		}
+		if (document.hidden) await waitUntilShown(signal);
+		if (!isCurrent()) return false;
+		const request = new AbortController();
+		const cancel = () => request.abort();
+		signal.addEventListener("abort", cancel, { once: true });
+		const timeout = setTimeout(cancel, TEST_ACCEPTANCE_REQUEST_TIMEOUT_MS);
+		// A transport that ignores the abort signal must not hold delivery forever.
+		const abandoned = new Promise<never>((_resolve, reject) =>
+			request.signal.addEventListener(
+				"abort",
+				() => reject(new Error("touchpoint_test_acceptance_timeout")),
+				{ once: true },
+			),
+		);
+		try {
+			await Promise.race([recordTestAcceptance(input, request.signal), abandoned]);
+			return isCurrent();
+		} catch (error) {
+			// Hidden is paused, not revoked: the next attempt waits to be shown.
+			if (!isCurrent() && !document.hidden) return false;
 			emitWebTouchpointDiagnostic({
 				code:
 					error instanceof Error
 						? error.message
 						: "touchpoint_test_acceptance_failed",
+				detail: JSON.stringify({
+					deploymentId: input.deploymentId,
+					snapshotHash: input.snapshotHash,
+					placementKey: input.placementKey,
+					attempt: attempt + 1,
+				}),
 			});
-		});
+			if (!retriesTestAcceptance(error)) return false;
+		} finally {
+			clearTimeout(timeout);
+			signal.removeEventListener("abort", cancel);
+		}
+	}
+	return false;
+}
+
+/**
+ * A campaign CTA hands the user to its target and ends the presentation with
+ * it: an accepted action closes the host modal, while a refused, expired or
+ * failed one rejects to the component and leaves the modal where it is. The
+ * close applies only to the presentation that dispatched the action; one
+ * replaced, revoked or unmounted while the navigation was pending is left to
+ * its own lifecycle.
+ */
+export async function completeCampaignAction(
+	accepted: Promise<boolean>,
+	requestClose: (() => void) | undefined,
+	stillCurrent: () => boolean,
+): Promise<void> {
+	requireCampaignAction(await accepted);
+	if (stillCurrent()) requestClose?.();
 }
 
 export type TestTouchpointMountProps = Readonly<{
@@ -380,6 +774,11 @@ export type TestTouchpointMountProps = Readonly<{
 	requestClose?: () => void;
 	isAuthorized: () => boolean;
 	onCloseControlChange?: (available: boolean | null) => void;
+	/**
+	 * Reports that content became ready (`true`) or failed to verify or mount
+	 * (`false`). A replacement in flight reports nothing until it settles.
+	 */
+	onPresentedChange?: (presented: boolean) => void;
 }>;
 
 /** Mounts one immutable v2 placement in the real OpenDesign Shadow DOM host. */
@@ -392,6 +791,7 @@ export function TestTouchpointMount({
 	requestClose,
 	isAuthorized,
 	onCloseControlChange,
+	onPresentedChange,
 }: TestTouchpointMountProps) {
 	const containerRef = useRef<HTMLDivElement | null>(null);
 	const [ready, setReady] = useState(false);
@@ -399,11 +799,13 @@ export function TestTouchpointMount({
 		const container = containerRef.current;
 		if (!container) return;
 		setReady(false);
+		let active = true;
 		const authorized = () =>
+			active &&
 			isAuthorized() &&
-			currentTestSession?.isAuthorized() === true &&
+			currentTestSession?.isAuthorized(placementKey) === true &&
 			currentTestSession.decisions.get(placementKey) === decision;
-		return mountTouchpoint(container, {
+		const dispose = mountTouchpoint(container, {
 			content: decision.content,
 			placementKey,
 			staticActions: decision.staticActions,
@@ -413,25 +815,39 @@ export function TestTouchpointMount({
 			locale: decision.content.locale,
 			isCurrent: authorized,
 			dispatchAction: async (id) => {
-				requireCampaignAction(await dispatchTestCampaignAction(decision, id));
+				// Only the modal ends with its CTA; a hover entry stays in place.
+				await completeCampaignAction(
+					dispatchTestCampaignAction(decision, id),
+					placementKey === "opend.home.campaign-modal" ? requestClose : undefined,
+					authorized,
+				);
 			},
 			requestClose,
 			onCloseControlChange,
 			onReady: () => {
-				if (authorized()) setReady(true);
+				if (!authorized()) return;
+				setReady(true);
+				onPresentedChange?.(true);
 			},
 			onVisible: () => {
 				if (authorized()) onVisible(decision, placementKey);
 			},
-			onError: (error) =>
+			onError: (error) => {
 				emitWebTouchpointDiagnostic({
 					code: error,
-				}),
+				});
+				onPresentedChange?.(false);
+			},
 		});
+		return () => {
+			active = false;
+			dispose();
+		};
 	}, [
 		decision,
 		isAuthorized,
 		onCloseControlChange,
+		onPresentedChange,
 		onVisible,
 		placementKey,
 		requestClose,
@@ -444,6 +860,45 @@ export function TestTouchpointMount({
 			hidden={!ready}
 		/>
 	);
+}
+
+/**
+ * Keeps the placements whose whole presentation loaded (OPEND-3298 P1).
+ *
+ * A withdrawal anywhere withdraws the deployment, so it is rethrown. When
+ * every presentation failed, the first failure is rethrown so the lifecycle
+ * keeps its error handling. Otherwise each failed presentation is reported
+ * and dropped, and the healthy ones are returned in placement order.
+ */
+function isolateTestPresentationFailures<T>(
+	placements: readonly TestCampaignPlacement[],
+	settled: readonly PromiseSettledResult<T>[],
+): T[] {
+	const failed = new Map<TestCampaignPlacement, unknown>();
+	settled.forEach((result, index) => {
+		if (result.status === "rejected") failed.set(placements[index]!, result.reason);
+	});
+	const withdrawal = [...failed.values()].find(touchpointWithdrawsDisplay);
+	if (withdrawal) throw withdrawal;
+	if (!failed.size)
+		return settled.map((result) => (result as PromiseFulfilledResult<T>).value);
+	const healthy: T[] = [];
+	settled.forEach((result, index) => {
+		const placementKey = placements[index]!;
+		const presentation = testPresentationOf(placementKey).filter((key) =>
+			placements.includes(key),
+		);
+		if (
+			result.status === "fulfilled" &&
+			!presentation.some((key) => failed.has(key))
+		)
+			healthy.push(result.value);
+	});
+	const [first] = failed.values();
+	if (!healthy.length) throw first;
+	for (const error of failed.values())
+		emitWebTouchpointDiagnostic(testLoadDiagnostic(error));
+	return healthy;
 }
 
 function validIso(value: unknown): value is string {
@@ -467,6 +922,27 @@ export function TestCampaignModal({
 	const { locale } = useI18n();
 	const compatible = supportsHost(authenticated);
 	const owner = sessionSubject ?? null;
+	// Render-time authority fences even a transport that ignores abort, before effects run.
+	const selectionAuthority = useRef({ compatible, owner, locale });
+	selectionAuthority.current = { compatible, owner, locale };
+	observeTestRuntimeIdentity(authenticated, owner, locale);
+	const retained = retainedTestValue(owner, locale);
+	const remountValue = useRef(retained);
+	// Directory and runtime failures pause the whole Test loading chain. Each
+	// successful recovery clears only the failure owned by that request chain.
+	const requests = useRef({ scope: JSON.stringify([owner, locale]), catalog: false, runtime: false });
+	const scope = JSON.stringify([owner, locale]);
+	if (requests.current.scope !== scope) requests.current = { scope, catalog: false, runtime: false };
+	const pauseAutomaticRequests = useCallback(() => requests.current.catalog || requests.current.runtime, []);
+	const catalogResult = useCallback((failed: boolean) => { requests.current.catalog = failed; }, []);
+	const selectedRef = useRef<TestDeployment | null>(retained?.deployment ?? null);
+	const selectionChanged = useCallback((selected: TestDeployment | null) => {
+		if (!selected || (selectedRef.current && !sameTestDeployment(selectedRef.current, selected))) {
+			invalidateRetainedTestRuntime();
+			requests.current.runtime = false;
+		}
+		selectedRef.current = selected;
+	}, []);
 	const [showControls] = useState(
 		() =>
 			typeof window !== "undefined" &&
@@ -480,8 +956,14 @@ export function TestCampaignModal({
 		enabled: compatible,
 		owner,
 		manual: showControls,
+		initialSelection: retained?.deployment,
+		onSelection: selectionChanged,
+		pauseAutomaticRequests,
+		onRequestResult: catalogResult,
 	});
+	selectedRef.current = deployment;
 	const publishedSession = useRef<TestRuntimeSession | null>(null);
+	const [progressive, setProgressive] = useState<{ adapter: object; epoch: number; value: TestRuntimeValue | null } | null>(null);
 	useEffect(() => {
 		ensureWebTouchpointElement();
 	}, []);
@@ -489,7 +971,15 @@ export function TestCampaignModal({
 	const adapter = useMemo(() => {
 		if (!deployment) return null;
 		const selected = deployment;
+		const inherited = retainedTestRuntime?.value === remountValue.current &&
+			remountValue.current && sameTestDeployment(remountValue.current.deployment, selected)
+			? remountValue.current : null;
+		const inheritedEpoch = retainedTestEpoch;
 		const placements = testPlacementIds(selected);
+		const independent = TEST_PRESENTATIONS.filter((group) => group.some((key) => placements.includes(key))).length > 1;
+		// A failed presentation waits for an existing recovery event; its healthy
+		// siblings keep their normal renewals rather than retrying the failed I/O.
+		const failedPresentations = new Map<TestCampaignPlacement, unknown>();
 		// A snapshot may be renewed without remounting only within the same UI language.
 		const selectionKey = JSON.stringify([
 			selected.id,
@@ -497,11 +987,36 @@ export function TestCampaignModal({
 			locale,
 		]);
 		let context: TestContext | null = null;
+		let negotiatedMode: TestContextMode | null = inherited ? testContextMode(inherited.context) : null;
+		let round = 0;
+		const correlation = crypto.randomUUID();
+		const ownsSelection = () => selectionAuthority.current.compatible &&
+			selectionAuthority.current.owner === owner && selectionAuthority.current.locale === locale &&
+			!!selectedRef.current && sameTestDeployment(selectedRef.current, selected);
 		let contextRequest: Promise<TestContext | null> | null = null;
 		let windowBounds: Readonly<{ startsAt: number; endsAt: number }> | null =
 			null;
-		/** Resolves `null` for a context response this selection cannot use. */
-		const fetchContext = async (signal: AbortSignal): Promise<TestContext | null> => {
+		/**
+		 * The last answer each placement received, with the monotonic time its
+		 * authority runs out. A renewal whose placement is merely slow presents
+		 * that answer again, but only within the authority it already granted.
+		 */
+		const lastAuthorized = new Map<
+			TestCampaignPlacement,
+			{ context: TestContext; item: LoadedTestPlacement }
+		>();
+		// A resumed visible placement is also a held presentation for renewal.
+		// Keep its original receipt and duration so a slow sibling cannot spend
+		// it early, and a route remount cannot issue it any additional time.
+		for (const [placementKey, decision] of inherited?.decisions ?? []) {
+			const authority = inherited!.authorizations.get(placementKey)!;
+			lastAuthorized.set(placementKey, { context: inherited!.context, item: {
+				placementKey, decision, received: authority.received, validForMs: authority.validForMs,
+				startsAt: Date.parse(decision.startsAt), endsAt: Date.parse(decision.endsAt), serverTime: Date.parse(decision.serverTime),
+			} });
+		}
+		/** Acquires a validated context only while this request owns the selection. */
+		const fetchContext = async (signal: AbortSignal, ownsRequest: () => boolean): Promise<TestContext | null> => {
 			const response = await fetch("/api/touchpoints/test-runtime/context", {
 				method: "POST",
 				headers: { "content-type": "application/json" },
@@ -511,65 +1026,206 @@ export function TestCampaignModal({
 				}),
 				signal,
 			});
-			if (!response.ok) throw new Error("realtime_test_runtime_required");
+			if (!ownsRequest()) return null;
+			if (!response.ok)
+				throw new TestRuntimeResponseError(
+					"realtime_test_runtime_required",
+					response.status,
+				);
 			const next = (await response.json()) as TestContext;
-			return next &&
-				next.deploymentId === selected.id &&
-				next.scenario === "realtime" &&
-				!("simulatedAt" in next) &&
-				validIso(next.updatedAt)
-				? next
-				: null;
+			if (!ownsRequest()) return null;
+			const mode = testContextMode(next);
+			if (!(next && next.deploymentId === selected.id && next.scenario === "realtime" &&
+				!("simulatedAt" in next) && validIso(next.updatedAt) && mode !== "invalid" &&
+				(negotiatedMode === null || mode === negotiatedMode) &&
+				(mode !== "immutable" || (!!owner && next.testerMemberId === owner))))
+				throw new TestDecisionMismatchError(decisionMismatchDetail(null,
+					context ?? inherited?.context ?? { deploymentId: selected.id, scenario: "realtime", updatedAt: "" },
+					selected, placements[0]!, { correlation, retry: 0, reason: "context_identity_invalid", receivedContext: next }));
+			return inherited && sameTestContext(inherited.context, next) ? inherited.context : next;
 		};
 		/**
 		 * Single-flight: every caller that needs a context while one is being
 		 * fetched shares that request, and only the in-flight request installs
 		 * its result.
 		 */
-		const acquireContext = (signal: AbortSignal): Promise<TestContext | null> => {
+		const acquireContext = (signal: AbortSignal, ownsRequest: () => boolean): Promise<TestContext | null> => {
 			if (!contextRequest) {
-				const request: Promise<TestContext | null> = fetchContext(signal)
+				// Release an aborted single flight immediately; late fetch/body completion
+				// may neither install its context nor clear a newer request's ownership.
+				const release = () => { if (contextRequest === request) contextRequest = null; };
+				const request: Promise<TestContext | null> = fetchContext(signal, ownsRequest)
 					.then((next) => {
-						if (contextRequest === request) context = next;
+						if (contextRequest !== request || !ownsRequest()) return null;
+						if (next) negotiatedMode ??= testContextMode(next);
+						context = next;
 						return next;
 					})
-					.finally(() => {
-						if (contextRequest === request) contextRequest = null;
-					});
+					.finally(() => { release(); signal.removeEventListener("abort", release); });
 				contextRequest = request;
+				signal.addEventListener("abort", release, { once: true });
+				if (signal.aborted) release();
+				return request;
 			}
 			return contextRequest;
 		};
 		const load = async (
 			signal: AbortSignal,
 			active: TestRuntimeValue | null,
+			publish: (value: TestRuntimeValue | null) => void,
 		): Promise<TouchpointLifecycleLoad<TestRuntimeValue>> => {
-			const current = () => !signal.aborted;
-			if (!placements.length) return { kind: "clear" };
+			active ??= inheritedEpoch === retainedTestEpoch ? inherited : null;
+			const started = testClock();
+			const requestRound = ++round;
+			let retry = 0;
+			const trace = () => ({ correlation: `${correlation}:${requestRound}`, retry });
+			const current = () => !signal.aborted && round === requestRound && ownsSelection();
+			if (!current()) return { kind: "retain" };
+			if (!placements.length) { requests.current.runtime = false; return { kind: "clear" }; }
 			// A held context must not add a turn before the placement requests start.
 			let selectedContext: TestContext;
 			if (context) selectedContext = context;
 			else {
-				const acquired = await acquireContext(signal);
+				const acquired = await acquireContext(signal, current);
 				if (!current()) return { kind: "retain" };
-				if (!acquired) return { kind: "clear" };
+				if (!acquired) { requests.current.runtime = false; return { kind: "clear" }; }
 				selectedContext = acquired;
 			}
-			const loadPlacements = (selectedContext: TestContext) => Promise.all(
-				placements.map(async (placementKey) => {
+			/**
+			 * A withdrawal from any placement is the server's answer for the whole
+			 * campaign, so it must not wait behind a sibling that hangs until the
+			 * lifecycle's request budget aborts the attempt — an aborted attempt is
+			 * retained, and the withdrawal it collected would be lost with it. The
+			 * first withdrawal cancels the siblings and settles the attempt at once.
+			 */
+			const loadPlacements = async (selectedContext: TestContext) => {
+				const siblings = new AbortController();
+				const cancelSiblings = () => siblings.abort();
+				signal.addEventListener("abort", cancelSiblings, { once: true });
+				let withdrawal: unknown = null;
+				const ready = new Map<TestCampaignPlacement, LoadedTestPlacement>();
+				let rejectRound!: (error: unknown) => void;
+				const interrupted = new Promise<never>((_resolve, reject) => { rejectRound = reject; });
+				/** Publish only complete presentations, with their own original grant clocks. */
+				const publishReady = (item: LoadedTestPlacement | null) => {
+					if (!item || !current() || siblings.signal.aborted) return;
+					if (windowBounds && (windowBounds.startsAt !== item.startsAt || windowBounds.endsAt !== item.endsAt))
+						throw new TestDecisionMismatchError(JSON.stringify({ deploymentId: diagnosticScalar(selected.id), expected: windowBounds, received: { startsAt: item.startsAt, endsAt: item.endsAt } }));
+					windowBounds = { startsAt: item.startsAt, endsAt: item.endsAt };
+					ready.set(item.placementKey, item);
+					if ([...ready.values()].some((answer) => answer.decision.testContext.scheduleState !== "active")) { publish(null); return; }
+					const decisions = new Map<TestCampaignPlacement, TestDecision>();
+					const authorizations = new Map<TestCampaignPlacement, TestPlacementAuthority>();
+					for (const group of TEST_PRESENTATIONS) {
+						const keys = group.filter((key) => placements.includes(key));
+						if (!keys.length) continue;
+						const complete = keys.every((key) => {
+							const answer = ready.get(key);
+							return answer && answer.decision.testContext.scheduleState === "active" && answer.validForMs > testElapsed(answer.received);
+						});
+						const held = active?.context === selectedContext && keys.every((key) => {
+							const grant = active.authorizations.get(key);
+							return active.decisions.has(key) && grant && grant.validForMs > testElapsed(grant.received);
+						});
+						if (!complete && !held) continue;
+						for (const key of keys) {
+							const answer = complete ? ready.get(key)! : null;
+							decisions.set(key, (active?.context === selectedContext && active.decisions.get(key)) || answer!.decision);
+							authorizations.set(key, answer ? { received: answer.received, validForMs: answer.validForMs } : active!.authorizations.get(key)!);
+						}
+					}
+					if (independent && decisions.size) publish(Object.freeze({ selectionKey, deployment: selected, context: selectedContext, decisions, authorizations }));
+				};
+				try {
+					const settled = await Promise.race([Promise.allSettled(
+						placements.map((placementKey) => {
+							if (failedPresentations.has(placementKey)) return Promise.reject(failedPresentations.get(placementKey));
+							// A hung placement must not hold back its healthy siblings until the
+							// lifecycle abandons the whole attempt.
+							const request = new AbortController();
+							const cancelRequest = () => request.abort();
+							siblings.signal.addEventListener("abort", cancelRequest, { once: true });
+							let timer: ReturnType<typeof setTimeout> | undefined;
+							const expired = new Promise<never>((_resolve, reject) => {
+								timer = setTimeout(() => {
+									request.abort();
+									reject(new TestPlacementTimeoutError(placementKey));
+								}, TEST_PLACEMENT_REQUEST_TIMEOUT_MS);
+							});
+							return Promise.race([
+								loadPlacement(selectedContext, placementKey, request.signal),
+								expired,
+							])
+								.then((item) => { publishReady(item); return item; })
+								.catch((error: unknown) => {
+									if (!siblings.signal.aborted && (touchpointWithdrawsDisplay(error) || error instanceof StaleTestContextError || error instanceof TestDecisionMismatchError)) {
+										withdrawal ??= error;
+										if (independent || !(error instanceof StaleTestContextError)) publish(null);
+										lastAuthorized.clear();
+										siblings.abort();
+										rejectRound(error);
+									} else if (current() && !siblings.signal.aborted) {
+										for (const key of testPresentationOf(placementKey)) failedPresentations.set(key, error);
+									}
+									throw error;
+								})
+								.finally(() => {
+									clearTimeout(timer);
+									siblings.signal.removeEventListener("abort", cancelRequest);
+								});
+						}),
+					), interrupted]).catch((error: unknown) => {
+						if (error instanceof StaleTestContextError) return placements.map(() => ({ status: "rejected" as const, reason: error }));
+						throw error;
+					});
+					if (withdrawal && !(withdrawal instanceof StaleTestContextError)) throw withdrawal;
+					return settled;
+				} finally {
+					signal.removeEventListener("abort", cancelSiblings);
+				}
+			};
+			const loadPlacement = async (
+				selectedContext: TestContext,
+				placementKey: (typeof placements)[number],
+				requestSignal: AbortSignal,
+			) => {
 					const query = new URLSearchParams({
 						deploymentId: selected.id,
 						placementKey,
 						locale,
 					});
+					if (testContextMode(selectedContext) === "immutable") query.set("contextToken", selectedContext.contextToken!);
+					// Server time precedes its awaited reads; request and body latency consume the grant.
+					const received = testClock();
 					const response = await fetch("/api/touchpoints/test-runtime?" + query, {
 						cache: "no-store",
-						signal,
+						signal: requestSignal,
 					});
-					if (!current()) return null;
-					if (!response.ok) throw new Error("touchpoint_test_load_failed");
+					if (!current() || requestSignal.aborted) return null;
+					if (response.status === 409) {
+						const mismatch = (await response.json()) as TestRuntimeContextMismatch;
+						if (!current() || requestSignal.aborted) return null;
+						const receivedContext = mismatch?.testContext;
+						const legitimate = mismatch?.error === "test_context_mismatch" && mismatch.reason === "context_token_mismatch" &&
+							testContextMode(selectedContext) === "immutable" && receivedContext?.testerMemberId === owner &&
+							isLegitimateContextDrift(receivedContext, selectedContext);
+						const detail = decisionMismatchDetail(null, selectedContext, selected, placementKey,
+							{ ...trace(), reason: legitimate ? "context_token_mismatch" : "context_mismatch_metadata_invalid", receivedContext });
+						throw legitimate ? new StaleTestContextError(detail) : new TestDecisionMismatchError(detail);
+					}
+					if (!response.ok)
+						throw new TestRuntimeResponseError(
+							"touchpoint_test_load_failed",
+							response.status,
+						);
 					const decision = (await response.json()) as TestDecision;
-					if (!current()) return null;
+					if (!current() || requestSignal.aborted) return null;
+					// A response with no decision identity is a failed renewal, like
+					// unreadable JSON. It cannot renew the grant or revoke the still-valid
+					// one. An explicit/partial identity below is checked fail-closed.
+					if (!decision || typeof decision !== "object" ||
+						(!("deploymentId" in decision) && !("testContext" in decision)))
+						throw new Error("touchpoint_test_load_failed");
 					if (
 						!decision ||
 						!decisionMatchesSelection(
@@ -579,9 +1235,26 @@ export function TestCampaignModal({
 							placementKey,
 						)
 					)
-						throw isContextGenerationDrift(decision, selectedContext)
-							? new StaleTestContextError()
-							: new Error("touchpoint_decision_mismatch");
+						throw isContextGenerationDrift(decision, selectedContext, selected, placementKey) &&
+							(!windowBounds || (Date.parse(decision.startsAt) === windowBounds.startsAt && Date.parse(decision.endsAt) === windowBounds.endsAt))
+							? new StaleTestContextError(
+									decisionMismatchDetail(
+										decision,
+										selectedContext,
+										selected,
+										placementKey,
+										trace(),
+									),
+								)
+							: new TestDecisionMismatchError(
+									decisionMismatchDetail(
+										decision,
+										selectedContext,
+										selected,
+										placementKey,
+										trace(),
+									),
+								);
 					if (
 						!validIso(decision.serverTime) ||
 						!validIso(decision.startsAt) ||
@@ -594,7 +1267,7 @@ export function TestCampaignModal({
 					const serverTime = Date.parse(decision.serverTime);
 					const startsAt = Date.parse(decision.startsAt);
 					const endsAt = Date.parse(decision.endsAt);
-					if (startsAt >= endsAt) throw new Error("realtime_test_runtime_required");
+					if (startsAt >= endsAt) throw new TestDecisionMismatchError(decisionMismatchDetail(decision, selectedContext, selected, placementKey, trace()));
 					const expected =
 						serverTime < startsAt
 							? "before"
@@ -602,7 +1275,7 @@ export function TestCampaignModal({
 								? "active"
 								: "ended";
 					if (decision.testContext.scheduleState !== expected)
-						throw new Error("realtime_test_runtime_required");
+						throw new TestDecisionMismatchError(decisionMismatchDetail(decision, selectedContext, selected, placementKey, trace()));
 					const capabilities =
 						placementKey === TEST_CAMPAIGN_MODAL_PLACEMENT
 							? supportedCapabilities
@@ -623,6 +1296,7 @@ export function TestCampaignModal({
 							endsAt,
 							serverTime,
 							validForMs: 0,
+							received,
 						};
 					const deadline = resolveAuthorizationDeadline(decision, TEST_MAX_AUTHORIZATION_MS);
 					if (deadline === null) throw new Error("realtime_test_runtime_required");
@@ -633,28 +1307,76 @@ export function TestCampaignModal({
 						endsAt,
 						serverTime,
 						validForMs: deadline - serverTime,
+						received,
 					};
-				}),
-			);
-			let loaded: Awaited<ReturnType<typeof loadPlacements>>;
-			try {
-				loaded = await loadPlacements(selectedContext);
-			} catch (error) {
-				if (!(error instanceof StaleTestContextError) || !current()) throw error;
+			};
+			let settled = await loadPlacements(selectedContext);
+			if (!current()) return { kind: "retain" };
+			const failures = (results: typeof settled) =>
+				results.flatMap((result) =>
+					result.status === "rejected" ? [result.reason as unknown] : [],
+				);
+			if (failures(settled).some((error) => error instanceof StaleTestContextError)) {
+				const withdrawal = failures(settled).find(touchpointWithdrawsDisplay);
+				if (withdrawal) throw withdrawal;
+				retry = 1;
+				const drift = failures(settled).find((error): error is StaleTestContextError => error instanceof StaleTestContextError)!;
+				// Successful repair must remain observable without dumping the identity token.
+				emitWebTouchpointDiagnostic({ code: "touchpoint_test_context_drift", detail: drift.detail
+					? JSON.stringify({ ...JSON.parse(drift.detail), retry }) : undefined });
 				// The server moved to a new context generation. Refetch it once for
 				// this attempt; a server refusal throws and never restores the old one.
 				if (context === selectedContext) context = null;
-				const refreshed = context ?? (await acquireContext(signal));
+				const refreshed = context ?? (await acquireContext(signal, current));
 				if (!current()) return { kind: "retain" };
-				if (!refreshed) return { kind: "clear" };
+				if (!refreshed) { requests.current.runtime = false; return { kind: "clear" }; }
 				selectedContext = refreshed;
-				loaded = await loadPlacements(selectedContext);
+				settled = await loadPlacements(selectedContext);
+				if (!current()) return { kind: "retain" };
 			}
+			const unrepaired = failures(settled).find((error): error is StaleTestContextError => error instanceof StaleTestContextError);
+			if (unrepaired) throw new TestDecisionMismatchError(unrepaired.detail ?? decisionMismatchDetail(null, selectedContext, selected, placements[0]!, trace()));
+			// A wholly failed round enters request recovery. A partial placement
+			// failure remains isolated: live sibling answers still renew normally
+			// (OPEND-3298), and a held failed grant keeps its own original deadline.
+			requests.current.runtime = settled.length > 0 && settled.every(result => result.status === "rejected");
+			// Record every fresh answer, then let a placement that is on screen but
+			// merely slow present its last answer again. Only that placement is
+			// held back, and only within the authority its answer granted: its
+			// healthy siblings still adopt their own renewals, so one hung request
+			// can no longer freeze the whole session until the first lease lapses.
+			settled = settled.map((result, index): (typeof settled)[number] => {
+				const placementKey = placements[index]!;
+				if (result.status === "fulfilled") {
+					if (result.value)
+						lastAuthorized.set(placementKey, {
+							context: selectedContext,
+							item: result.value,
+						});
+					return result;
+				}
+				if (
+					!(result.reason instanceof TestPlacementTimeoutError) ||
+					!active?.decisions.has(placementKey)
+				)
+					return result;
+				const previous = lastAuthorized.get(placementKey);
+				if (!previous || previous.context !== selectedContext) return result;
+				const remaining =
+					previous.item.validForMs - testElapsed(previous.item.received);
+				// Each placement expires independently; a short hold cannot cap its siblings.
+				if (remaining <= 0) return result;
+				return {
+					status: "fulfilled",
+					value: previous.item,
+				};
+			});
+			const loaded = isolateTestPresentationFailures(placements, settled);
 			if (!current()) return { kind: "retain" };
 			const decisions = loaded.filter(
 				(item): item is NonNullable<typeof item> => item !== null,
 			);
-			if (decisions.length !== placements.length) return { kind: "retain" };
+			if (decisions.length !== loaded.length) return { kind: "retain" };
 			const first = decisions[0];
 			if (
 				!first ||
@@ -662,13 +1384,29 @@ export function TestCampaignModal({
 					(item) => item.startsAt !== first.startsAt || item.endsAt !== first.endsAt,
 				)
 			)
-				throw new Error("touchpoint_decision_mismatch");
+				throw new TestDecisionMismatchError(
+					JSON.stringify({
+						deploymentId: diagnosticScalar(selected.id),
+						placements: decisions.map((item) => ({
+							placementKey: item.placementKey,
+							startsAt: diagnosticScalar(item.decision.startsAt),
+							endsAt: diagnosticScalar(item.decision.endsAt),
+						})),
+					}),
+				);
 			if (
 				windowBounds &&
 				(windowBounds.startsAt !== first.startsAt ||
 					windowBounds.endsAt !== first.endsAt)
 			)
-				throw new Error("touchpoint_decision_mismatch");
+				throw new TestDecisionMismatchError(
+					JSON.stringify({
+						deploymentId: diagnosticScalar(selected.id),
+						placementKey: first.placementKey,
+						expected: windowBounds,
+						received: { startsAt: first.startsAt, endsAt: first.endsAt },
+					}),
+				);
 			windowBounds = { startsAt: first.startsAt, endsAt: first.endsAt };
 			if (
 				decisions.some(
@@ -687,65 +1425,153 @@ export function TestCampaignModal({
 						...decisions.map((item) => item.startsAt - item.serverTime),
 					),
 				};
-			const validForMs = Math.min(...decisions.map((item) => item.validForMs));
-			if (validForMs <= 0) return { kind: "clear" };
-			// A refreshed context is a new authorization generation: publish its
-			// decisions under a new lease key instead of renewing the stale session.
-			const session =
-				active?.selectionKey === selectionKey && active.context === selectedContext
-					? active
-					: Object.freeze<TestRuntimeValue>({
-							selectionKey,
-							deployment: selected,
-							context: selectedContext,
-							decisions: new Map(
-								decisions.map((item) => [item.placementKey, item.decision]),
-							),
-						});
+			const remaining = (item: LoadedTestPlacement) => item.validForMs - testElapsed(item.received);
+			const authorized = decisions.filter((item) => remaining(item) > 0);
+			if (!authorized.length) return { kind: "clear" };
+			// The session lasts through its longest grant. Its placements are pruned
+			// separately at their own deadlines, without rebuilding healthy hosts.
+			const sameContext = active?.selectionKey === selectionKey && active.context === selectedContext;
+			const session = Object.freeze<TestRuntimeValue>({
+				selectionKey,
+				deployment: selected,
+				context: selectedContext,
+				decisions: new Map(authorized.map((item) => [
+					item.placementKey,
+					(sameContext && active?.decisions.get(item.placementKey)) || item.decision,
+				])),
+				authorizations: new Map(authorized.map((item) => [item.placementKey, {
+					received: item.received, validForMs: item.validForMs,
+				}])),
+			});
 			return {
 				kind: "decision",
 				value: session,
 				key: JSON.stringify([
 					selectionKey,
-					selectedContext.updatedAt,
+					testContextMode(selectedContext),
+					...(testContextMode(selectedContext) === "immutable"
+						? [selectedContext.contextId, selectedContext.generation, selectedContext.contextToken]
+						: [selectedContext.updatedAt]),
 					selectedContext.testerMemberId ?? null,
 				]),
-				validForMs,
+				// Convert the remaining placement grants to the lifecycle's load-start baseline.
+				validForMs: Math.max(...authorized.map(remaining)) + testElapsed(started),
+				replaceValue: true,
 			};
 		};
-		return { selectionKey, load };
-	}, [deployment, locale]);
+		return { selectionKey, independent, load, ownsSelection, recover: () => failedPresentations.clear() };
+	}, [deployment, locale, owner]);
+	useEffect(() => {
+		const recover = () => { if (!document.hidden) adapter?.recover(); };
+		for (const event of ["online", "focus", "pageshow"]) window.addEventListener(event, recover);
+		document.addEventListener("visibilitychange", recover);
+		return () => {
+			for (const event of ["online", "focus", "pageshow"]) window.removeEventListener(event, recover);
+			document.removeEventListener("visibilitychange", recover);
+		};
+	}, [adapter]);
 
 	const load = useCallback(
-		(signal: AbortSignal, active: TestRuntimeValue | null) =>
-			adapter
-				? adapter.load(signal, active)
-				: Promise.resolve({ kind: "clear" } as const),
-		[adapter],
+		async (signal: AbortSignal, active: TestRuntimeValue | null): Promise<TouchpointLifecycleLoad<TestRuntimeValue>> => {
+			let epoch = retainedTestEpoch;
+			const publish = (value: TestRuntimeValue | null) => {
+				if (signal.aborted || epoch !== retainedTestEpoch || !adapter?.ownsSelection()) return;
+				if (value && owner) retainedTestRuntime = { owner, locale, value };
+				else {
+					invalidateRetainedTestRuntime();
+					epoch = retainedTestEpoch;
+					setTestRuntimeSession(Object.freeze<TestRuntimeSession>({
+						selectionKey: adapter.selectionKey, deployment: deployment!,
+						context: { deploymentId: deployment!.id, scenario: "realtime", updatedAt: "" },
+						decisions: new Map<TestCampaignPlacement, TestDecision>(), isAuthorized: () => false,
+					}));
+				}
+				setProgressive({ adapter, epoch, value });
+			};
+			try {
+				const result = adapter ? await adapter.load(signal, active, publish) : { kind: "clear" } as const;
+				if (signal.aborted || epoch !== retainedTestEpoch || !adapter?.ownsSelection()) return { kind: "retain" };
+				if (result.kind === "decision") publish(result.value);
+				else if (result.kind === "clear" || result.kind === "waiting") publish(null);
+				return result;
+			} catch (error) {
+				if (signal.aborted || epoch !== retainedTestEpoch || !adapter?.ownsSelection()) return { kind: "retain" };
+				requests.current.runtime = true;
+				if (touchpointWithdrawsDisplay(error) || error instanceof TestDecisionMismatchError) publish(null);
+				throw error;
+			}
+		},
+		[adapter, owner, locale, deployment],
 	);
 	const lifecycle = useTouchpointLifecycle<TestRuntimeValue>({
 		enabled: compatible && adapter !== null,
 		identity: adapter ? owner + ":" + adapter.selectionKey : null,
 		load,
-		onError: (error) =>
-			emitWebTouchpointDiagnostic({
-				code:
-					error instanceof Error ? error.message : "touchpoint_test_load_failed",
-			}),
+		stopOnFailure: true,
+		pauseAutomaticRequests,
+		onError: (error) => {
+			requests.current.runtime = true;
+			emitWebTouchpointDiagnostic(testLoadDiagnostic(error));
+		},
 	});
-	const runtimeSession = useMemo(
-		() =>
-			lifecycle.current &&
-			Object.freeze<TestRuntimeSession>({
-				...lifecycle.current,
-				isAuthorized: () => lifecycle.isCurrent(lifecycle.generation),
-			}),
-		[lifecycle.current, lifecycle.generation, lifecycle.isCurrent],
-	);
+	// Only the grant this route mount inherited may fill its initial load gap.
+	// Once a server answer replaces it, the lifecycle owns normal revalidation.
+	const restored = retained === remountValue.current && retained && deployment && sameTestDeployment(retained.deployment, deployment) ? retained : null;
+	const currentValue = !compatible ? null : progressive?.adapter === adapter
+		? progressive.epoch === retainedTestEpoch ? progressive.value : null
+		: lifecycle.current ?? restored;
+	const authorityRef = useRef(currentValue);
+	authorityRef.current = currentValue;
+	const expired = useRef(new WeakSet<TestClock>());
+	const [, expirePlacement] = useState(0);
+	const authorityEpoch = retainedTestEpoch;
+	// Admitting a sibling or committing the whole round must not remount healthy
+	// hosts. The callback stays stable while reading the current lifecycle fence.
+	const lifecycleRef = useRef(lifecycle);
+	lifecycleRef.current = lifecycle;
+	const isSessionAuthorized = useCallback((placementKey?: TestCampaignPlacement) => {
+		const current = authorityRef.current;
+		const liveLifecycle = lifecycleRef.current;
+		if (authorityEpoch !== retainedTestEpoch || !current || document.hidden || !(liveLifecycle.isCurrent(liveLifecycle.generation) ||
+			(compatible && retainedTestRuntime?.value === current && retainedTestRuntime.owner === owner && retainedTestRuntime.locale === locale))) return false;
+		if (!placementKey) return [...current.authorizations.values()].some((grant) => testElapsed(grant.received) < grant.validForMs);
+		const grant = authorityRef.current?.authorizations.get(placementKey);
+		return !!grant && !expired.current.has(grant.received) && testElapsed(grant.received) < grant.validForMs;
+	}, [adapter, compatible, owner, locale, authorityEpoch]);
+	// A held placement may end between polls, even while another round is in flight.
+	// Retire that grant once; a later clock correction cannot revive it.
+	const live: TestCampaignPlacement[] = [];
+	let nextExpiry = Infinity;
+	for (const placementKey of currentValue?.decisions.keys() ?? []) {
+		const grant = currentValue!.authorizations.get(placementKey)!;
+		const remaining = grant.validForMs - testElapsed(grant.received);
+		if (remaining <= 0) expired.current.add(grant.received);
+		if (!expired.current.has(grant.received)) {
+			live.push(placementKey);
+			nextExpiry = Math.min(nextExpiry, remaining);
+		}
+	}
+	const liveKey = live.join("\n");
+	useEffect(() => {
+		if (!Number.isFinite(nextExpiry)) return;
+		const timer = setTimeout(() => expirePlacement((tick) => tick + 1), nextExpiry);
+		return () => clearTimeout(timer);
+	}, [currentValue, nextExpiry, liveKey]);
+	// Publish a new session only when the lease or its live placements change.
+	const runtimeSession = useMemo(() => {
+		const current = currentValue;
+		if (!current) return null;
+		const keys = liveKey ? (liveKey.split("\n") as TestCampaignPlacement[]) : [];
+		return Object.freeze<TestRuntimeSession>({
+			...current,
+			decisions: new Map(keys.map((key) => [key, current.decisions.get(key)!])),
+			isAuthorized: isSessionAuthorized,
+		});
+	}, [currentValue, liveKey, isSessionAuthorized]);
 	useEffect(() => {
 		if (!deployment) {
 			publishedSession.current = null;
-			clearTestRuntimeSession();
+			unpublishTestRuntimeSession();
 			return;
 		}
 		const session =
@@ -769,7 +1595,7 @@ export function TestCampaignModal({
 	useEffect(
 		() => () => {
 			if (currentTestSession === publishedSession.current)
-				clearTestRuntimeSession();
+				unpublishTestRuntimeSession();
 		},
 		[],
 	);

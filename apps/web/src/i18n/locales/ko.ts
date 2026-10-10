@@ -6,6 +6,7 @@ export const ko: Dict = {
   'billing.codingPlanPeriodHours': '{count}시간',
   'billing.codingPlanPeriodDays': '{count}일',
   'billing.codingPlanRemainingPercent': '{percent}% 남음',
+  "campaign.testReplay": "테스트 활동 다시 열기",
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

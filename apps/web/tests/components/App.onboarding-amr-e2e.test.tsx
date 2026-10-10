@@ -10,7 +10,7 @@
 // boundaries and CMS content hosts are mocked; AMR (vela) detection is made to lag
 // the first agent probe — the exact window in which the bug surfaces.
 
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { installMockOpenDesignHost } from '@open-design/host/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -29,8 +29,11 @@ import {
 } from '../../src/providers/registry';
 import { fetchAmrModels } from '../../src/providers/daemon';
 import { listProjects, listTemplates } from '../../src/state/projects';
+import { I18nProvider, useI18n } from '../../src/i18n';
+import { clearTestRuntimeSession, observeTestRuntimeIdentity, useTestRuntime } from '../../src/components/TestCampaignModal';
 
 const analyticsMocks = vi.hoisted(() => ({ track: vi.fn() }));
+const cmsTestMocks = vi.hoisted(() => ({ realCoordinator: false }));
 
 // App owns route eligibility; the host suites separately exercise authorization,
 // network cancellation and verified content. These stand-ins expose whether App
@@ -39,11 +42,16 @@ vi.mock('../../src/components/ProductionCampaignModal', () => ({
   ProductionCampaignModal: ({ authenticated }: { authenticated: boolean }) =>
     authenticated ? <div role="dialog" aria-label="Production campaign witness" /> : null,
 }));
-vi.mock('../../src/components/TestCampaignModal', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../src/components/TestCampaignModal')>()),
-  TestCampaignModal: ({ authenticated }: { authenticated: boolean }) =>
-    authenticated ? <div role="dialog" aria-label="Test campaign witness" /> : null,
-}));
+vi.mock('../../src/components/TestCampaignModal', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/components/TestCampaignModal')>();
+  return {
+    ...actual,
+    observeTestRuntimeIdentity: vi.fn(actual.observeTestRuntimeIdentity),
+    TestCampaignModal: (props: { authenticated: boolean; sessionSubject: string | null }) => cmsTestMocks.realCoordinator
+      ? <actual.TestCampaignModal {...props} />
+      : props.authenticated ? <div role="dialog" aria-label="Test campaign witness" /> : null,
+  };
+});
 
 // The badge and the hover entry are the top-right CMS touchpoints. Their own
 // suites cover authorization and content; here they only report whether App's
@@ -182,6 +190,8 @@ function firstRunConfig(): AppConfig {
 }
 
 beforeEach(() => {
+  cmsTestMocks.realCoordinator = false;
+  clearTestRuntimeSession();
   // jsdom polyfills the full EntryView tree expects.
   if (!window.matchMedia) {
     window.matchMedia = ((query: string) => ({
@@ -258,6 +268,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  clearTestRuntimeSession();
   vi.unstubAllGlobals();
   vi.clearAllMocks();
   analyticsMocks.track.mockReset();
@@ -325,6 +336,58 @@ describe('CMS campaigns outside the home view', () => {
     await screen.findByTestId('production-campaign-badge-witness');
     await screen.findByTestId('production-campaign-hover-witness');
   }
+
+  it.each(['account', 'logout', 'locale'] as const)('spends cached Test authority when %s changes away from home, even if it changes back', async (boundary) => {
+    cmsTestMocks.realCoordinator = true;
+    const owner = 'account-a';
+    let currentOwner = owner;
+    let loggedIn = true;
+    let failed = false;
+    const placements = ['opend.home.campaign-modal', 'opend.home.account-badge', 'opend.home.hover-entry', 'opend.home.hover-layer'];
+    const context = { deploymentId: 'test-deployment', scenario: 'realtime', updatedAt: new Date().toISOString(), testerMemberId: owner };
+    const fetchMock = vi.mocked(fetch);
+    const original = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes('/api/integrations/vela/status')) return Response.json({ loggedIn, profile: 'prod', user: { id: currentOwner, email: `${currentOwner}@example.com` }, configPath: '/x' });
+      if (!url.includes('/api/touchpoints/test-runtime')) return original(input, init);
+      if (failed) throw new TypeError('DNS unavailable');
+      if (url.includes('/deployments')) return Response.json({ deployments: [{ id: context.deploymentId, activityId: 'test-activity', snapshotHash: 'snapshot', snapshot: { contentVersionId: 'test-content', manifestHash: 'manifest', artifactHash: 'artifact', placementKeys: placements } }] });
+      if (url.includes('/context')) return Response.json(context);
+      const placementKey = new URL(url, 'http://localhost').searchParams.get('placementKey')!;
+      return Response.json({
+        deploymentId: context.deploymentId, activityId: 'test-activity', snapshotHash: 'snapshot', manifestHash: 'manifest', artifactHash: 'artifact', placementKey, requiredCapabilities: [], staticActions: [],
+        serverTime: context.updatedAt, startsAt: new Date(Date.parse(context.updatedAt) - 60_000).toISOString(), endsAt: new Date(Date.parse(context.updatedAt) + 3_600_000).toISOString(), authorizationExpiresAt: new Date(Date.parse(context.updatedAt) + 60_000).toISOString(), testContext: { ...context, scheduleState: 'active' },
+        content: { id: 'test-content', placementKey, locale: 'en', manifestHash: 'manifest', entryPath: 'entry.js', entryModule: 'export {}', entryDigest: 'entry', resources: [], runtime: { kind: 'web-component', apiVersion: 1, wrapperVersion: 'vela-touchpoint-wrapper-v1', sdkVersion: 'vela-touchpoint-sdk-v1' }, manifest: { formatVersion: 2, runtimeKind: 'web-component', runtimeApiVersion: 1, platformWrapperVersion: 'vela-touchpoint-wrapper-v1', sdkVersion: 'vela-touchpoint-sdk-v1', contentLine: 'production', resources: ['entry.js'], images: [], placements: [{ key: placementKey, entry: 'entry.js', resources: [], locales: ['en'], requiredCapabilities: [], staticActions: [] }] } },
+      });
+    });
+    let setLocale!: ReturnType<typeof useI18n>['setLocale'];
+    function LocaleController() { setLocale = useI18n().setLocale; return null; }
+    window.history.replaceState(null, '', '/onboarding');
+    render(<I18nProvider initial="en"><LocaleController /><App /></I18nProvider>);
+    const probe = renderHook(() => useTestRuntime());
+    await screen.findByRole('button', { name: /Continue \(signed in\)/i });
+    await act(async () => navigate({ kind: 'home', view: 'home' }));
+    await waitFor(() => expect(probe.result.current?.decisions.size).toBe(4));
+    await act(async () => navigate({ kind: 'home', view: 'onboarding' }));
+    expect(probe.result.current).toBeNull();
+    failed = true;
+    if (boundary === 'locale') {
+      await act(async () => setLocale('ja'));
+      await act(async () => setLocale('en'));
+    } else {
+      if (boundary === 'account') currentOwner = 'account-b';
+      else loggedIn = false;
+      await act(async () => fireEvent(window, new Event('focus')));
+      await waitFor(() => expect(observeTestRuntimeIdentity).toHaveBeenCalledWith(loggedIn, currentOwner, 'en'));
+      currentOwner = owner; loggedIn = true;
+      await act(async () => fireEvent(window, new Event('focus')));
+      await waitFor(() => expect(observeTestRuntimeIdentity).toHaveBeenLastCalledWith(true, owner, 'en'));
+    }
+    await act(async () => navigate({ kind: 'home', view: 'home' }));
+    expect(probe.result.current?.decisions.size ?? 0).toBe(0);
+    expect(probe.result.current?.isAuthorized() ?? false).toBe(false);
+  });
 
   it('withdraws every host on another entry view and restores them on home', async () => {
     await arriveOnHome();

@@ -95,7 +95,7 @@ import {
   type SettingsHighlight,
 } from './components/SettingsDialog';
 import { PrivacyConsentModal } from './components/PrivacyConsentModal';
-import { TestCampaignModal } from './components/TestCampaignModal';
+import { TestCampaignModal, observeTestRuntimeIdentity } from './components/TestCampaignModal';
 import { ProductionCampaignModal } from './components/ProductionCampaignModal';
 import {
   clearHomeComposerAttachments,
@@ -963,7 +963,7 @@ export function App() {
 }
 
 function AppInner() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const iframeKeepAlivePool = useIframeKeepAlivePool();
   const clientType = useMemo(() => detectClientType(), []);
   const hostPlatform = useMemo(() => getOpenDesignHost()?.client.platform, []);
@@ -1753,6 +1753,13 @@ function AppInner() {
   // globals effect below reads it; the sync effects live next to the
   // other AMR plumbing further down.
   const [amrLoginStatus, setAmrLoginStatus] = useState<VelaLoginStatus | null>(null);
+  const testRuntimeAuthenticated = isAmrSessionAuthenticated(amrLoginStatus);
+  const testRuntimeOwner = amrLoginStatus?.user?.id ?? null;
+  useEffect(() => {
+    // Home hosts unmount on navigation; identity changes elsewhere still
+    // spend their in-process replay grants, including a change back later.
+    observeTestRuntimeIdentity(testRuntimeAuthenticated, testRuntimeOwner, locale);
+  }, [testRuntimeAuthenticated, testRuntimeOwner, locale]);
   // Inline AMR auth can invalidate the caller identity and intentionally tear
   // down ProjectView before the login poll reports success. Keep only the
   // exact failed-turn continuation above that authorization lifetime; the
