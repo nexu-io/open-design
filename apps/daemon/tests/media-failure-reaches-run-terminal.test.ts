@@ -148,7 +148,8 @@ process.stdin.on('error', () => {});
   ${plan.emitDoneMarker ? `emit({ type: 'text', part: { text: '<od-done key="' + doneKey + '"/>' } });` : ''}
   ${plan.conclusion ? `emit({ type: 'text', part: { text: ${JSON.stringify(plan.conclusion)} } });` : ''}
   emit({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } });
-  ${plan.waitToBeCanceled ? 'await new Promise(() => {});' : 'process.exit(0);'}
+  // Let HTTP handles drain before exiting; a forced exit can crash libuv on Windows.
+  ${plan.waitToBeCanceled ? 'await new Promise(() => {});' : 'process.exitCode = 0;'}
 })();
 `;
 }
@@ -473,6 +474,18 @@ describe('a media generation the host watched fail reaches its run terminal', ()
     });
 
     expect(terminal.status).toBe('succeeded');
+    expect(terminal.endedWithUnfinishedWork).toBe(false);
+    expect(terminal.mediaTaskFailures ?? []).toEqual([]);
+  }, 90_000);
+
+  it('does not treat a media error code mentioned in prose as a host failure', async () => {
+    const { terminal } = await runTurn({
+      conclusion: 'MEDIA_DISPATCH_FAILED means a media request failed; this is only an explanation.',
+      message: 'Explain the MEDIA_DISPATCH_FAILED error code.',
+    });
+
+    expect(terminal.status).toBe('succeeded');
+    expect(terminal.exitCode).toBe(0);
     expect(terminal.endedWithUnfinishedWork).toBe(false);
     expect(terminal.mediaTaskFailures ?? []).toEqual([]);
   }, 90_000);
