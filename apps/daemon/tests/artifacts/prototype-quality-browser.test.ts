@@ -1,7 +1,8 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { chromium } from 'playwright-core';
 import { checkPrototypeQuality } from '../../src/artifacts/prototype-quality.js';
 import { findBrowserExecutable } from '../../src/browser-sessions.js';
 
@@ -95,12 +96,53 @@ describe.skipIf(!findBrowserExecutable())('real isolated browser navigation', { 
     expect(result.status).toBe('incomplete'); expect(result.durationMs).toBeLessThan(2_000);
   });
   it('canceling a check is not a generated-artifact failure', async () => {
-    await fs.writeFile(path.join(root, 'index.html'), '<h1>今日</h1><nav aria-label="主导航"><button aria-current="page">今日</button></nav>');
+    // Keep the real click pending so fast CI cannot finish the check before cancellation.
+    await fs.writeFile(path.join(root, 'index.html'), '<h1>今日</h1><nav aria-label="主导航"><button aria-current="page">今日</button></nav><div style="position:fixed;inset:0;z-index:99"></div>');
     const abort = new AbortController(); const timer = setTimeout(() => abort.abort(), 500);
     try {
       const result = await checkPrototypeQuality({ projectRoot: root, entryFile: 'index.html', userBrief: 'App', signal: abort.signal });
       expect(result.status).toBe('incomplete'); expect(result.checks).toContainEqual(expect.objectContaining({ reason: 'canceled' }));
     } finally { clearTimeout(timer); }
+  });
+  it.each([
+    ['TargetClosedError', 'Target page, context or browser has been closed', 1, 'incomplete'],
+    ['TimeoutError', 'Protocol response timed out without actionability evidence', 1, 'incomplete'],
+    ['Error', 'Transport connection interrupted', 4, 'fail'],
+  ])('keeps %s inconclusive without discarding an earlier definite failure', async (name, message, atClick, status) => {
+    const handler = atClick === 4 ? '' : `document.addEventListener('click',e=>{const b=e.target.closest('nav button');if(b){document.querySelectorAll('nav button').forEach(t=>t.setAttribute('aria-current',t===b?'page':'false'));document.querySelector('h1').textContent=b.textContent;document.querySelector('main').textContent=b.textContent+'实际业务内容';}})`;
+    await fs.writeFile(path.join(root, 'index.html'), `<h1>今日</h1><main>今日服药记录</main><nav><button aria-current="page">今日</button><button aria-current="false">药品</button><button aria-current="false">我的</button></nav><script>${handler}</script>`);
+    const connect = chromium.connect.bind(chromium);
+    let restoreClick = () => {};
+    let clicks = 0;
+    // Inject a transport failure at the browser boundary; the checker and page remain real.
+    const connection = vi.spyOn(chromium, 'connect').mockImplementationOnce(async (...args) => {
+      const browser = await connect(...args);
+      const newContext = browser.newContext.bind(browser);
+      vi.spyOn(browser, 'newContext').mockImplementationOnce(async options => {
+        const context = await newContext(options);
+        const newPage = context.newPage.bind(context);
+        vi.spyOn(context, 'newPage').mockImplementationOnce(async () => {
+          const page = await newPage();
+          const prototype = Object.getPrototypeOf(page.locator('body')) as { click: ReturnType<typeof page.locator>['click'] };
+          const click = prototype.click;
+          const injection = vi.spyOn(prototype, 'click').mockImplementation(async function (this: ReturnType<typeof page.locator>, options) {
+            if (++clicks === atClick) { const error = new Error(message); error.name = name; throw error; }
+            return click.call(this, options);
+          });
+          restoreClick = () => injection.mockRestore();
+          return page;
+        });
+        return context;
+      });
+      return browser;
+    });
+    try {
+      const result = await checkPrototypeQuality({ projectRoot: root, entryFile: 'index.html', userBrief: 'App' });
+      expect(clicks).toBeGreaterThanOrEqual(atClick);
+      expect(result.status, JSON.stringify(result)).toBe(status);
+      expect(result.checks).toContainEqual(expect.objectContaining({status:'incomplete', reason:'check_environment_incomplete'}));
+      if (status === 'fail') expect(result.checks).toContainEqual(expect.objectContaining({control:'药品', status:'fail', reason:'semantic_target_not_visible'}));
+    } finally { restoreClick(); connection.mockRestore(); }
   });
   it('static display is not applicable', async () => {
     await fs.writeFile(path.join(root, 'index.html'), '<h1>品牌海报</h1>');
@@ -133,7 +175,7 @@ describe.skipIf(!findBrowserExecutable())('real isolated browser navigation', { 
       if(b.dataset.page){if(${broken}&&title.textContent==='我的订单'&&b.dataset.page==='点餐')return;document.querySelectorAll('nav button').forEach(t=>t.setAttribute('aria-current',t===b?'page':'false'));title.textContent=b.dataset.page;body.textContent=b.dataset.page==='点餐'?'商品列表':'订单明细';}
       });</script>`);
     const result = await checkPrototypeQuality({ projectRoot: root, entryFile: 'index.html', userBrief: '堂食和自提，主导航：点餐、我的订单' });
-    expect(result.status).toBe(broken ? 'fail' : 'pass');
+    expect(result.status, JSON.stringify(result)).toBe(broken ? 'fail' : 'pass');
     const order = result.checks.find(c => c.control === '我的订单');
     expect(order?.expected).toContain('点击');
     expect(order?.observed).toContain('起点=');

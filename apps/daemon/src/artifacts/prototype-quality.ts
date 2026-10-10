@@ -289,10 +289,14 @@ export async function checkPrototypeQuality(input: {
           const back = page.getByRole('button', { name: /切换用餐方式|返回用餐方式/ }).filter({ visible: true }).first();
           if (await back.count()) await back.click();
         }
-      } catch {
-        const interrupted = deadline() || blockedExecutable || !browser.isConnected();
+      } catch (error) {
+        // A transport or generic timeout does not prove the generated control is broken.
+        // Only a concrete actionability obstruction is a definite click failure here.
+        const obstruction = error instanceof Error && error.name === 'TimeoutError'
+          && /intercepts pointer events|element is not visible/.test(error.message);
+        const interrupted = deadline() || blockedExecutable || !browser.isConnected() || page.isClosed() || !obstruction;
         checks.push({ id: `navigation-${seen.size}`, kind: 'navigation', control: control.label, expected: expectation,
-          observed: `起点=${start}; 操作中断; 返回=${returned}; 再次切换=${repeated}`.slice(0, 500), status: interrupted ? 'incomplete' : 'fail', reason: input.signal?.aborted ? 'canceled' : deadline() ? 'host_budget_exhausted' : interrupted ? 'check_environment_incomplete' : 'control_unreachable_or_binding_lost' }); checked++;
+          observed: `起点=${start}; 操作中断(${error instanceof Error ? error.name : 'unknown'}); 返回=${returned}; 再次切换=${repeated}`.slice(0, 500), status: interrupted ? 'incomplete' : 'fail', reason: input.signal?.aborted ? 'canceled' : deadline() ? 'host_budget_exhausted' : interrupted ? 'check_environment_incomplete' : 'control_unreachable_or_binding_lost' }); checked++;
       }
     }
     for (const label of requirements.labels) if (![...seen].some(name => semanticLabel(name) === semanticLabel(label))) {
