@@ -1,3 +1,36 @@
+/** Request dialects supported by the Custom Image API provider. */
+export const CUSTOM_IMAGE_FORMATS = ['openai-images', 'gemini-native', 'openai-chat'] as const;
+export type CustomImageFormat = (typeof CUSTOM_IMAGE_FORMATS)[number];
+
+export interface MediaProviderConfigWriteEntry {
+  apiKey?: string;
+  preserveApiKey?: boolean;
+  baseUrl?: string;
+  model?: string;
+  /** Unknown values are discarded; absent means openai-images. */
+  format?: string;
+  /** Suppress stored and borrowed credentials and automatic BYOK seeding. */
+  deleted?: boolean;
+}
+
+export interface MediaConfigWriteRequest {
+  providers: Record<string, MediaProviderConfigWriteEntry>;
+  force?: boolean;
+}
+
+export interface MediaConfigResponse {
+  providers: Record<string, {
+    configured: boolean;
+    source: string;
+    apiKeyTail: string;
+    baseUrl: string;
+    model?: string;
+    format?: CustomImageFormat;
+    deleted?: boolean;
+  }>;
+  aliases: { effective: Record<string, string>; env: Record<string, string>; stored: Record<string, string> };
+}
+
 export const MEDIA_EXECUTION_MODES = [
   'enabled',
   'disabled',
