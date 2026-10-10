@@ -45,6 +45,7 @@ import { listProviderModels } from '../src/integrations/provider-models.js';
 import { readVelaCredentialRevision } from '../src/integrations/vela.js';
 import { startServer } from '../src/server.js';
 import { getRememberedLiveModels, rememberLiveModels } from '../src/runtimes/models.js';
+import { resolveSandboxRuntimeConfig } from '../src/sandbox-mode.js';
 import { amrModelLoadingCache } from '../src/runtimes/amr-model-cache.js';
 import { buildAmrModelCacheKey } from '../src/runtimes/amr-model-probe.js';
 
@@ -90,6 +91,7 @@ async function withFakeAgent<T>(
 ): Promise<T> {
   const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-conn-test-bin-'));
   const oldPath = process.env.PATH;
+  const oldZcodeBin = process.env.ZCODE_BIN;
   try {
     if (process.platform === 'win32') {
       const runner = path.join(dir, `${binName}-test-runner.cjs`);
@@ -98,15 +100,19 @@ async function withFakeAgent<T>(
         path.join(dir, `${binName}.cmd`),
         `@echo off\r\nnode "${runner}" %*\r\n`,
       );
+      if (binName === 'zcode') process.env.ZCODE_BIN = path.join(dir, `${binName}.cmd`);
     } else {
       const bin = path.join(dir, binName);
       await fsp.writeFile(bin, `#!/usr/bin/env node\n${script}`);
       await fsp.chmod(bin, 0o755);
+      if (binName === 'zcode') process.env.ZCODE_BIN = bin;
     }
     process.env.PATH = `${dir}${path.delimiter}${oldPath ?? ''}`;
     return await run();
   } finally {
     process.env.PATH = oldPath;
+    if (oldZcodeBin === undefined) delete process.env.ZCODE_BIN;
+    else process.env.ZCODE_BIN = oldZcodeBin;
     await fsp.rm(dir, { recursive: true, force: true });
   }
 }
@@ -173,6 +179,104 @@ async function withFakeDeepSeek<T>(script: string, run: () => Promise<T>): Promi
 
 async function withFakeKimi<T>(script: string, run: () => Promise<T>): Promise<T> {
   return withFakeAgent('kimi', script, run);
+}
+
+async function withFakeZcode<T>(script: string, run: () => Promise<T>): Promise<T> {
+  return withFakeAgent('zcode', script, run);
+}
+
+async function withFakeZcodeAppBundle<T>(
+  script: string,
+  run: (appPath: string, binaryPath: string) => Promise<T>,
+): Promise<T> {
+  const root = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-conn-test-zcode-app-'));
+  const appPath = path.join(root, 'Pinned', 'ZCode.app');
+  const binaryPath = path.join(
+    appPath,
+    'Contents',
+    'Resources',
+    'glm',
+    'zcode.cjs',
+  );
+  const oldPath = process.env.PATH;
+  const oldAgentHome = process.env.OD_AGENT_HOME;
+  const oldZcodeBin = process.env.ZCODE_BIN;
+  try {
+    await fsp.mkdir(path.dirname(binaryPath), { recursive: true });
+    await fsp.writeFile(binaryPath, `#!/usr/bin/env node\n${script}`);
+    await fsp.chmod(binaryPath, 0o755);
+    process.env.PATH = path.dirname(process.execPath);
+    process.env.OD_AGENT_HOME = path.join(root, 'home-without-zcode');
+    delete process.env.ZCODE_BIN;
+    return await run(appPath, binaryPath);
+  } finally {
+    process.env.PATH = oldPath;
+    if (oldAgentHome === undefined) delete process.env.OD_AGENT_HOME;
+    else process.env.OD_AGENT_HOME = oldAgentHome;
+    if (oldZcodeBin === undefined) delete process.env.ZCODE_BIN;
+    else process.env.ZCODE_BIN = oldZcodeBin;
+    await fsp.rm(root, { recursive: true, force: true });
+  }
+}
+
+async function withFakeZcodeSavedConfig<T>(
+  run: (tracePath: string) => Promise<T>,
+  options: { sandboxHome?: boolean } = {},
+): Promise<T> {
+  const daemonHome = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-conn-test-zcode-home-'));
+  const dataDir = options.sandboxHome
+    ? await fsp.mkdtemp(path.join(os.tmpdir(), 'od-conn-test-zcode-data-'))
+    : null;
+  const zcodeHome = dataDir
+    ? resolveSandboxRuntimeConfig(true, dataDir).roots.agentHomeDir
+    : daemonHome;
+  const oldHome = process.env.HOME;
+  const oldUserProfile = process.env.USERPROFILE;
+  const oldTracePath = process.env.OD_ZCODE_FAKE_TRACE_PATH;
+  const oldSandboxMode = process.env.OD_SANDBOX_MODE;
+  const oldDataDir = process.env.OD_DATA_DIR;
+  const tracePath = path.join(daemonHome, 'trace.jsonl');
+  try {
+    await fsp.mkdir(path.join(zcodeHome, '.zcode', 'v2'), { recursive: true });
+    await fsp.writeFile(
+      path.join(zcodeHome, '.zcode', 'v2', 'config.json'),
+      JSON.stringify({
+        provider: {
+          'builtin:bigmodel': {
+            kind: 'anthropic',
+            source: 'custom',
+            options: {
+              apiKey: 'fake-zcode-api-key',
+              baseURL: 'https://open.bigmodel.cn/api/anthropic',
+            },
+            models: { 'GLM-5.2': {} },
+          },
+        },
+      }),
+      'utf8',
+    );
+    process.env.HOME = daemonHome;
+    process.env.USERPROFILE = daemonHome;
+    process.env.OD_ZCODE_FAKE_TRACE_PATH = tracePath;
+    if (dataDir) {
+      process.env.OD_SANDBOX_MODE = '1';
+      process.env.OD_DATA_DIR = dataDir;
+    }
+    return await run(tracePath);
+  } finally {
+    if (oldHome === undefined) delete process.env.HOME;
+    else process.env.HOME = oldHome;
+    if (oldUserProfile === undefined) delete process.env.USERPROFILE;
+    else process.env.USERPROFILE = oldUserProfile;
+    if (oldTracePath === undefined) delete process.env.OD_ZCODE_FAKE_TRACE_PATH;
+    else process.env.OD_ZCODE_FAKE_TRACE_PATH = oldTracePath;
+    if (oldSandboxMode === undefined) delete process.env.OD_SANDBOX_MODE;
+    else process.env.OD_SANDBOX_MODE = oldSandboxMode;
+    if (oldDataDir === undefined) delete process.env.OD_DATA_DIR;
+    else process.env.OD_DATA_DIR = oldDataDir;
+    await fsp.rm(daemonHome, { recursive: true, force: true });
+    if (dataDir) await fsp.rm(dataDir, { recursive: true, force: true });
+  }
 }
 
 async function withFakeAntigravity<T>(script: string, run: () => Promise<T>): Promise<T> {
@@ -2769,6 +2873,552 @@ setImmediate(() => process.exit(0));
     );
   });
 
+  it('reports success for a fake ZCode app-server model availability probe after text starts', async () => {
+    await withFakeZcodeSavedConfig(async (tracePath) =>
+      withFakeZcode(
+        `
+const fs = require('node:fs');
+
+if (process.argv[2] === '--version') {
+  console.log('zcode 0.14.9');
+  process.exit(0);
+}
+if (process.argv[2] !== 'app-server') {
+  console.error('unexpected args: ' + process.argv.slice(2).join(' '));
+  process.exit(1);
+}
+
+const tracePath = process.env.OD_ZCODE_FAKE_TRACE_PATH;
+function trace(entry) {
+  if (tracePath) fs.appendFileSync(tracePath, JSON.stringify(entry) + '\\n');
+}
+function send(frame) {
+  process.stdout.write(JSON.stringify(frame) + '\\n');
+}
+function respond(id, result) {
+  send({ id, result });
+}
+
+let input = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  input += chunk;
+  const lines = input.split('\\n');
+  input = lines.pop() || '';
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const request = JSON.parse(trimmed);
+    if (!request.method) continue;
+    trace({ method: request.method, params: request.params });
+    switch (request.method) {
+      case 'workspace/upsertModelProvider':
+      case 'workspace/setDefaultModel':
+        respond(request.id, { ok: true });
+        break;
+      case 'session/create':
+        respond(request.id, { session: { sessionId: 'sess-health-check' } });
+        break;
+      case 'session/subscribe':
+        respond(request.id, {
+          eventSeq: 0,
+          events: [],
+          sessionId: request.params.sessionId,
+        });
+        break;
+      case 'session/send':
+        respond(request.id, {
+          accepted: true,
+          sessionId: request.params.sessionId,
+          stateRevision: 1,
+        });
+        setTimeout(() => {
+          send({
+            method: 'state.updated',
+            params: {
+              reason: 'prompt_started',
+              sessionId: request.params.sessionId,
+              revision: 2,
+              scope: 'session',
+              patch: {},
+            },
+          });
+          send({
+            method: 'session/event',
+            params: {
+              seq: 1,
+              sessionId: request.params.sessionId,
+              payload: { kind: 'text_delta', delta: 'ok' },
+            },
+          });
+          send({
+            method: 'state.updated',
+            params: {
+              reason: 'prompt_completed',
+              sessionId: request.params.sessionId,
+              revision: 3,
+              scope: 'session',
+              patch: {},
+            },
+          });
+        }, 10);
+        break;
+      default:
+        send({ id: request.id, error: { message: 'unexpected method ' + request.method } });
+    }
+  }
+});
+process.on('SIGTERM', () => process.exit(0));
+setInterval(() => {}, 1000);
+`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'zcode' });
+        expect(result).toMatchObject({
+          ok: true,
+          kind: 'success',
+          agentName: 'ZCode',
+          sample: 'ok',
+        });
+        const trace = (await fsp.readFile(tracePath, 'utf8'))
+          .trim()
+          .split('\n')
+          .map((line) => JSON.parse(line) as { method?: string });
+        expect(trace.map((entry) => entry.method).filter(Boolean)).toEqual([
+          'workspace/upsertModelProvider',
+          'workspace/setDefaultModel',
+          'session/create',
+          'session/subscribe',
+          'session/send',
+        ]);
+      },
+      ),
+      { sandboxHome: true },
+    );
+  });
+
+  it('reports a failed ZCode connection test when app-server closes stdin before replying', async () => {
+    await withFakeZcodeSavedConfig(async () =>
+      withFakeZcode(
+        `
+if (process.argv[2] === '--version') {
+  console.log('zcode 0.14.9');
+  process.exit(0);
+}
+if (process.argv[2] !== 'app-server') {
+  console.error('unexpected args: ' + process.argv.slice(2).join(' '));
+  process.exit(1);
+}
+
+process.stdin.destroy();
+setImmediate(() => process.exit(0));
+process.on('SIGTERM', () => process.exit(0));
+setInterval(() => {}, 1000);
+`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'zcode' });
+        expect(result).toMatchObject({
+          ok: false,
+          kind: 'agent_spawn_failed',
+          agentName: 'ZCode',
+        });
+        expect(result.detail).toMatch(
+          /stdin failed|EPIPE|closed|exited before responding|exited before model availability check completed/i,
+        );
+      },
+      ),
+      { sandboxHome: true },
+    );
+  });
+
+  it('reports a failed ZCode connection test when app-server exits after accepting the prompt', async () => {
+    await withFakeZcodeSavedConfig(async () =>
+      withFakeZcode(
+        `
+if (process.argv[2] === '--version') {
+  console.log('zcode 0.14.9');
+  process.exit(0);
+}
+if (process.argv[2] !== 'app-server') {
+  console.error('unexpected args: ' + process.argv.slice(2).join(' '));
+  process.exit(1);
+}
+
+function send(frame) {
+  process.stdout.write(JSON.stringify(frame) + '\\n');
+}
+function respond(id, result) {
+  send({ id, result });
+}
+
+let input = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  input += chunk;
+  const lines = input.split('\\n');
+  input = lines.pop() || '';
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const request = JSON.parse(trimmed);
+    switch (request.method) {
+      case 'workspace/upsertModelProvider':
+      case 'workspace/setDefaultModel':
+        respond(request.id, { ok: true });
+        break;
+      case 'session/create':
+        respond(request.id, { session: { sessionId: 'sess-exits-after-send' } });
+        break;
+      case 'session/subscribe':
+        respond(request.id, {
+          eventSeq: 0,
+          events: [],
+          sessionId: request.params.sessionId,
+        });
+        break;
+      case 'session/send':
+        respond(request.id, {
+          accepted: true,
+          sessionId: request.params.sessionId,
+          stateRevision: 1,
+        });
+        console.error('zcode died after session/send');
+        setImmediate(() => process.exit(7));
+        break;
+      default:
+        send({ id: request.id, error: { message: 'unexpected method ' + request.method } });
+    }
+  }
+});
+process.on('SIGTERM', () => process.exit(0));
+setInterval(() => {}, 1000);
+`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'zcode' });
+        expect(result).toMatchObject({
+          ok: false,
+          kind: 'agent_spawn_failed',
+          agentName: 'ZCode',
+        });
+        expect(result.detail).toMatch(/exited before model availability check completed/i);
+        expect(result.detail).toMatch(/exit 7|zcode died after session\/send/i);
+      },
+      ),
+      { sandboxHome: true },
+    );
+  });
+
+  it('keeps ZCode connection tests pending after text until a terminal success arrives', async () => {
+    await withFakeZcodeSavedConfig(async () =>
+      withFakeZcode(
+        `
+if (process.argv[2] === '--version') {
+  console.log('zcode 0.14.9');
+  process.exit(0);
+}
+if (process.argv[2] !== 'app-server') process.exit(1);
+
+function send(frame) {
+  process.stdout.write(JSON.stringify(frame) + '\\n');
+}
+function respond(id, result) {
+  send({ id, result });
+}
+
+let input = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  input += chunk;
+  const lines = input.split('\\n');
+  input = lines.pop() || '';
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const request = JSON.parse(trimmed);
+    switch (request.method) {
+      case 'workspace/upsertModelProvider':
+      case 'workspace/setDefaultModel':
+        respond(request.id, { ok: true });
+        break;
+      case 'session/create':
+        respond(request.id, { session: { sessionId: 'sess-text-then-fail' } });
+        break;
+      case 'session/subscribe':
+        respond(request.id, { eventSeq: 0, events: [], sessionId: request.params.sessionId });
+        break;
+      case 'session/send':
+        respond(request.id, { accepted: true, sessionId: request.params.sessionId, stateRevision: 1 });
+        setTimeout(() => {
+          send({
+            method: 'session/event',
+            params: {
+              seq: 1,
+              sessionId: request.params.sessionId,
+              payload: { kind: 'text_delta', delta: 'partial ok' },
+            },
+          });
+          send({
+            method: 'session/event',
+            params: {
+              seq: 2,
+              sessionId: request.params.sessionId,
+              payload: {
+                error: {
+                  message: 'model failed after partial text',
+                  detail: 'zcode model availability failed after first delta',
+                },
+              },
+            },
+          });
+          send({
+            method: 'state.updated',
+            params: {
+              reason: 'prompt_failed',
+              sessionId: request.params.sessionId,
+              revision: 3,
+              scope: 'session',
+              patch: {},
+            },
+          });
+        }, 10);
+        break;
+      default:
+        send({ id: request.id, error: { message: 'unexpected method ' + request.method } });
+    }
+  }
+});
+process.on('SIGTERM', () => process.exit(0));
+setInterval(() => {}, 1000);
+`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'zcode' });
+        expect(result).toMatchObject({
+          ok: false,
+          kind: 'agent_spawn_failed',
+          agentName: 'ZCode',
+        });
+        expect(result.detail).toContain('model failed after partial text');
+      },
+      ),
+    );
+  });
+
+  it.skipIf(process.platform !== 'darwin')('uses a custom ZCode app bundle path for Settings connection tests', async () => {
+    await withFakeZcodeSavedConfig(async () =>
+      withFakeZcodeAppBundle(
+        `
+if (process.argv[2] === '--version') {
+  console.log('zcode 0.14.9');
+  process.exit(0);
+}
+if (process.argv[2] !== 'app-server') {
+  console.error('unexpected args: ' + process.argv.slice(2).join(' '));
+  process.exit(1);
+}
+
+function send(frame) {
+  process.stdout.write(JSON.stringify(frame) + '\\n');
+}
+function respond(id, result) {
+  send({ id, result });
+}
+
+let input = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  input += chunk;
+  const lines = input.split('\\n');
+  input = lines.pop() || '';
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const request = JSON.parse(trimmed);
+    if (!request.method) continue;
+    switch (request.method) {
+      case 'workspace/upsertModelProvider':
+      case 'workspace/setDefaultModel':
+        respond(request.id, { ok: true });
+        break;
+      case 'session/create':
+        respond(request.id, { session: { sessionId: 'sess-custom-app-path' } });
+        break;
+      case 'session/subscribe':
+        respond(request.id, {
+          eventSeq: 0,
+          events: [],
+          sessionId: request.params.sessionId,
+        });
+        break;
+      case 'session/send':
+        respond(request.id, {
+          accepted: true,
+          sessionId: request.params.sessionId,
+          stateRevision: 1,
+        });
+        setTimeout(() => {
+          send({
+            method: 'session/event',
+            params: {
+              seq: 1,
+              sessionId: request.params.sessionId,
+              payload: { kind: 'text_delta', delta: 'ok from custom app' },
+            },
+          });
+          send({
+            method: 'state.updated',
+            params: {
+              reason: 'prompt_completed',
+              sessionId: request.params.sessionId,
+              revision: 3,
+              scope: 'session',
+              patch: {},
+            },
+          });
+        }, 10);
+        break;
+      default:
+        send({ id: request.id, error: { message: 'unexpected method ' + request.method } });
+    }
+  }
+});
+process.on('SIGTERM', () => process.exit(0));
+setInterval(() => {}, 1000);
+`,
+        async (appPath, binaryPath) => {
+          const expectCustomBundleSuccess = async (body: Record<string, unknown>) => {
+            const res = await realFetch(`${baseUrl}/api/test/connection`, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({
+                mode: 'agent',
+                agentId: 'zcode',
+                ...body,
+              }),
+            });
+            expect(res.status).toBe(200);
+            const result = await res.json();
+            expect(result).toMatchObject({
+              ok: true,
+              kind: 'success',
+              agentName: 'ZCode',
+              sample: 'ok from custom app',
+              diagnostics: {
+                binaryPath,
+              },
+            });
+          };
+
+          await expectCustomBundleSuccess({ zcodeAppPath: appPath });
+
+          const configResponse = await realFetch(`${baseUrl}/api/app-config`);
+          expect(configResponse.status).toBe(200);
+          const previousConfig = (await configResponse.json()) as {
+            config?: { zcodeAppPath?: unknown };
+          };
+          const hadPreviousZcodeAppPath = Object.prototype.hasOwnProperty.call(
+            previousConfig.config ?? {},
+            'zcodeAppPath',
+          );
+          const previousZcodeAppPath = previousConfig.config?.zcodeAppPath;
+          try {
+            const writeResponse = await realFetch(`${baseUrl}/api/app-config`, {
+              method: 'PUT',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ zcodeAppPath: appPath }),
+            });
+            expect(writeResponse.status).toBe(200);
+            await expectCustomBundleSuccess({});
+          } finally {
+            await realFetch(`${baseUrl}/api/app-config`, {
+              method: 'PUT',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({
+                zcodeAppPath: hadPreviousZcodeAppPath ? previousZcodeAppPath : null,
+              }),
+            });
+          }
+        },
+      ),
+    );
+  });
+
+  it('classifies ZCode balance/resource-package failures as rate_limited', async () => {
+    await withFakeZcodeSavedConfig(async () =>
+      withFakeZcode(
+        `
+if (process.argv[2] === '--version') {
+  console.log('zcode 0.14.9');
+  process.exit(0);
+}
+if (process.argv[2] !== 'app-server') process.exit(1);
+
+function send(frame) {
+  process.stdout.write(JSON.stringify(frame) + '\\n');
+}
+function respond(id, result) {
+  send({ id, result });
+}
+
+let input = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  input += chunk;
+  const lines = input.split('\\n');
+  input = lines.pop() || '';
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const request = JSON.parse(trimmed);
+    switch (request.method) {
+      case 'workspace/upsertModelProvider':
+      case 'workspace/setDefaultModel':
+        respond(request.id, { ok: true });
+        break;
+      case 'session/create':
+        respond(request.id, { session: { sessionId: 'sess-balance-check' } });
+        break;
+      case 'session/subscribe':
+        respond(request.id, { eventSeq: 0, events: [], sessionId: request.params.sessionId });
+        break;
+      case 'session/send':
+        respond(request.id, { accepted: true, sessionId: request.params.sessionId, stateRevision: 1 });
+        setTimeout(() => {
+          send({
+            method: 'session/event',
+            params: {
+              seq: 1,
+              sessionId: request.params.sessionId,
+              payload: {
+                error: {
+                  message: '[1113][余额不足或无可用资源包,请充值。][req-1]',
+                  detail: 'provider=builtin:bigmodel provider_code=1113 model=glm-5.2 reason=unknown',
+                },
+              },
+            },
+          });
+        }, 10);
+        break;
+      default:
+        send({ id: request.id, error: { message: 'unexpected method ' + request.method } });
+    }
+  }
+});
+process.on('SIGTERM', () => process.exit(0));
+setInterval(() => {}, 1000);
+`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'zcode', model: 'glm-5.2' });
+        expect(result).toMatchObject({
+          ok: false,
+          kind: 'rate_limited',
+          agentName: 'ZCode',
+          model: 'glm-5.2',
+        });
+        expect(result.detail).toContain('余额不足');
+      },
+      ),
+    );
+  });
+
   it('keeps service tier overrides when connection tests omit model but settings has one', async () => {
     if (!process.env.OD_DATA_DIR) {
       throw new Error('OD_DATA_DIR is required for service tier settings tests');
@@ -4078,7 +4728,7 @@ setInterval(() => {}, 1000);
     },
   );
 
-  it('launches Kimi connection tests through the ACP transport', async () => {
+  it('launches Kimi connection tests through ACP so prompts and MCP stay off argv', async () => {
     const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-kimi-argv-'));
     const argvFile = path.join(markerDir, 'argv.json');
     try {
@@ -4087,11 +4737,61 @@ setInterval(() => {}, 1000);
 const fs = require('node:fs');
 const args = process.argv.slice(2);
 fs.writeFileSync(${JSON.stringify(argvFile)}, JSON.stringify(args));
-if (args.length !== 1 || args[0] !== 'acp') {
-  console.error('missing acp transport arg');
+if (args[0] === '--version') {
+  console.log('kimi 0.6.0');
+  process.exit(0);
+}
+if (JSON.stringify(args) !== JSON.stringify(['acp'])) {
+  console.error('unexpected args: ' + JSON.stringify(args));
   process.exit(1);
 }
-console.log(JSON.stringify({ jsonrpc: '2.0', method: 'session/update', params: { update: { sessionUpdate: 'agent_message_chunk', content: { text: 'ok' } } } }));
+
+function send(frame) {
+  process.stdout.write(JSON.stringify(frame) + '\\n');
+}
+let input = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  input += chunk;
+  const lines = input.split('\\n');
+  input = lines.pop() || '';
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const request = JSON.parse(trimmed);
+    switch (request.method) {
+      case 'initialize':
+        send({ id: request.id, result: {} });
+        break;
+      case 'session/new':
+        send({ id: request.id, result: { sessionId: 'kimi-session-1' } });
+        break;
+      case 'session/set_model':
+        send({ id: request.id, result: { model: request.params.modelId } });
+        break;
+      case 'session/prompt':
+        send({
+          method: 'session/update',
+          params: {
+            update: {
+              sessionUpdate: 'agent_message_chunk',
+              content: 'ok',
+            },
+          },
+        });
+        send({
+          id: request.id,
+          result: { usage: { inputTokens: 1, outputTokens: 1 } },
+        });
+        break;
+      default:
+        send({ id: request.id, error: { message: 'unexpected method ' + request.method } });
+    }
+  }
+});
+process.stdin.on('end', () => process.exit(0));
+process.on('SIGTERM', () => process.exit(0));
+setInterval(() => {}, 1000);
 `,
         async () => {
           const res = await realFetch(`${baseUrl}/api/test/connection`, {

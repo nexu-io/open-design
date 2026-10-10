@@ -119,6 +119,30 @@ describe('resolveAgentResumeContext', () => {
     expect(ctx.invalidationReason).toBeNull();
   });
 
+  it('resumes a stored ZCode native session when the identity still matches', () => {
+    const db = seed();
+    seedMessage(db, 'asst-1', 'assistant');
+    upsertAgentSession(db, {
+      conversationId: 'conv-1',
+      agentId: 'zcode',
+      sessionId: 'sess-zcode-1',
+      lastMessageId: 'asst-1',
+      model: 'glm-5.2',
+      cwd: '/work/project',
+      stablePromptHash: 'hash-zcode',
+    });
+    const ctx = resolveAgentResumeContext(db, {
+      conversationId: 'conv-1',
+      agentId: 'zcode',
+      currentModel: 'glm-5.2',
+      currentCwd: '/work/project',
+    });
+    expect(ctx.isResuming).toBe(true);
+    expect(ctx.resumeSessionId).toBe('sess-zcode-1');
+    expect(ctx.storedStablePromptHash).toBe('hash-zcode');
+    expect(ctx.invalidationReason).toBeNull();
+  });
+
   it('exposes stored input usage only as resume observability context', () => {
     const db = seed();
     seedMessage(db, 'asst-1', 'assistant');

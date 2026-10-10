@@ -41,6 +41,9 @@ import { createClaudeStreamHandler } from './runtimes/claude-stream.js';
 import { diagnoseClaudeCliFailure } from './claude-diagnostics.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
 import { createJsonEventStreamHandler } from './runtimes/json-event-stream.js';
+import { createZcodeProtocolClient } from './runtimes/zcode-protocol.js';
+import { resolveZcodeSavedProvider } from './runtimes/zcode-config.js';
+import { startZcodeProtocolTurn } from './runtimes/zcode-session.js';
 import { agentCliEnvForAgent, validateAgentCliEnv } from './app-config.js';
 import {
   antigravityAuthGuidance,
@@ -906,6 +909,10 @@ function isLikelyModelErrorText(text: string): boolean {
   );
 }
 
+function isLikelyRateLimitOrQuotaText(text: string): boolean {
+  return /(?:rate[_ -]?limit|quota|billing|credit|insufficient balance|余额不足|资源包|请充值)/i.test(text);
+}
+
 function isLikelyAuthErrorText(text: string): boolean {
   return /(?:api[_ -]?key|x-goog-api-key|unauthorized|unauthenticated|permission denied|invalid credentials|authentication credentials|access denied|invalid key)/i.test(
     text,
@@ -1024,7 +1031,7 @@ function statusToKind(status: number, detailText = ''): ConnectionTestKind {
       ? 'not_found_model'
       : 'invalid_base_url';
   }
-  if (status === 429) return 'rate_limited';
+  if (status === 429 || isLikelyRateLimitOrQuotaText(detailText)) return 'rate_limited';
   if (status >= 500) return 'upstream_unavailable';
   return 'unknown';
 }
@@ -2345,7 +2352,9 @@ async function testAgentConnectionInternal(
     validateAgentCliEnv(input.agentCliEnv),
     input.agentId,
   );
-  const executableResolution = resolveAgentLaunch(def, configuredAgentEnv);
+  const executableResolution = resolveAgentLaunch(def, configuredAgentEnv, {
+    zcodeAppPath: input.agentId === 'zcode' ? input.zcodeAppPath ?? null : null,
+  });
   const resolvedBin = executableResolution.selectedPath;
   if (!resolvedBin || !executableResolution.launchPath) {
     return {
@@ -2438,6 +2447,24 @@ async function testAgentConnectionInternal(
     const rawSample = truncateSample(text);
     const sample = redactSecrets(rawSample);
     const resolvedModel = sink.getResolvedModel();
+    if (rawSample && isLikelyRateLimitOrQuotaText(rawSample)) {
+      const detail = redactSecrets(smokeFailureDetail(rawSample));
+      console.warn(
+        `[test:agent] ${def.name} → rate_limited: ${detail}`,
+      );
+      return {
+        ok: false,
+        kind: 'rate_limited',
+        latencyMs,
+        model,
+        agentName: def.name,
+        detail,
+        diagnostics: buildDiagnostics({
+          phase: 'output_parse',
+          ...(exit ? { exitCode: exit.code, signal: exit.signal } : {}),
+        }),
+      };
+    }
     if (rawSample && isLikelyModelErrorText(rawSample)) {
       const detail = redactSecrets(smokeFailureDetail(rawSample));
       console.warn(
@@ -2502,6 +2529,20 @@ async function testAgentConnectionInternal(
         agentName: def.name,
         detail: auth.message ?? cursorAuthGuidance(),
         diagnostics: buildDiagnostics(),
+      };
+    }
+    if (detail && isLikelyRateLimitOrQuotaText(detail)) {
+      console.warn(
+        `[test:agent] ${def.name} → rate_limited: ${detail}`,
+      );
+      return {
+        ok: false,
+        kind: 'rate_limited',
+        latencyMs,
+        model,
+        agentName: def.name,
+        detail,
+        diagnostics: buildDiagnostics({ phase: 'output_parse' }),
       };
     }
     if (detail && isLikelyModelErrorText(detail)) {
@@ -2632,7 +2673,10 @@ async function testAgentConnectionInternal(
       };
     }
     const stdinMode =
-      def.promptViaStdin || def.streamFormat === 'acp-json-rpc' || def.streamFormat === 'dsh-profile-jsonl'
+      def.promptViaStdin ||
+        def.streamFormat === 'acp-json-rpc' ||
+        def.streamFormat === 'zcode-protocol' ||
+        def.streamFormat === 'dsh-profile-jsonl'
         ? 'pipe'
         : 'ignore';
     const baseEnv = spawnEnvForAgent(
@@ -2718,6 +2762,157 @@ async function testAgentConnectionInternal(
         resolve({ kind: 'exit', code, signal });
       });
     });
+    const cancellationPromise = new Promise<{ kind: 'timeout' } | { kind: 'aborted' }>((resolve) => {
+      timer = setTimeout(() => resolve({ kind: 'timeout' }), agentTimeoutMs());
+      abortHandler = () => resolve({ kind: 'aborted' });
+      if (input.signal?.aborted) {
+        abortHandler();
+      } else {
+        input.signal?.addEventListener('abort', abortHandler, { once: true });
+      }
+    });
+
+    if (def.streamFormat === 'zcode-protocol') {
+      child.stdout?.setEncoding('utf8');
+      child.stderr?.setEncoding('utf8');
+      child.stdout?.on('data', (chunk: string) => sink.appendRawStdout(chunk));
+      child.stderr?.on('data', (chunk: string) => sink.send('stderr', { chunk }));
+      phase = 'connection_smoke_test';
+
+      const zcode = createZcodeProtocolClient(child);
+      const zcodeTurnCleanups: Array<() => void> = [];
+      try {
+        const zcodeHomeDir = env.HOME?.trim() || env.USERPROFILE?.trim();
+        const providerSelection = resolveZcodeSavedProvider({
+          modelId: input.model ?? null,
+          ...(zcodeHomeDir ? { homeDir: zcodeHomeDir } : {}),
+        });
+        let sample = '';
+        const modelAvailability = new Promise<string>((resolve, reject) => {
+          let sawTerminalStatus = false;
+          const rejectOnce = (error: Error) => {
+            if (sawTerminalStatus) return;
+            sawTerminalStatus = true;
+            reject(error);
+          };
+          const resolveOnce = (text: string) => {
+            if (sawTerminalStatus) return;
+            sawTerminalStatus = true;
+            resolve(text);
+          };
+          void startZcodeProtocolTurn({
+            client: zcode,
+            cwd: tempDir,
+            mode: null,
+            prompt: SMOKE_PROMPT,
+            providerSelection,
+            requestTimeoutMs: agentTimeoutMs(),
+            ...(input.signal ? { signal: input.signal } : {}),
+            onEvent: (event) => {
+              if (event.type === 'text_delta' && typeof event.delta === 'string') {
+                sample += event.delta;
+                return;
+              }
+              if (event.type === 'error') {
+                const message = typeof event.message === 'string'
+                  ? event.message
+                  : 'ZCode model availability check failed';
+                const raw = typeof event.raw === 'string' ? event.raw : '';
+                rejectOnce(new Error(raw ? `${message}: ${raw}` : message));
+                return;
+              }
+              if (event.type === 'status' && event.label === 'failed') {
+                rejectOnce(new Error('ZCode model availability check failed'));
+                return;
+              }
+              if (event.type === 'status' && event.label === 'completed') {
+                const text = sample.trim();
+                if (text) {
+                  resolveOnce(text);
+                } else {
+                  rejectOnce(new Error('ZCode model availability check completed without text'));
+                }
+              }
+            },
+          }).then((turn) => {
+            zcodeTurnCleanups.push(turn.unsubscribe);
+          }, rejectOnce);
+        });
+        const zcodeChildExit = childExit.then((exit) => ({
+          kind: 'childExit' as const,
+          exit,
+        }));
+        const resultFromZcodeChildExit = (winner: AgentChildExit): ConnectionTestResponse => {
+          const latencyMs = Date.now() - start;
+          if (winner.kind === 'spawnError') {
+            const detail = redactSecrets(winner.error.message);
+            const errnoCode = (winner.error as NodeJS.ErrnoException).code;
+            const isMissing = errnoCode === 'ENOENT';
+            return {
+              ok: false,
+              kind: isMissing ? 'agent_not_installed' : 'agent_spawn_failed',
+              latencyMs,
+              model,
+              agentName: def.name,
+              detail,
+              diagnostics: buildDiagnostics({
+                phase: isMissing ? 'binary_resolution' : 'spawn',
+              }),
+            };
+          }
+
+          const stderrTail = sink.getStderrTail().trim();
+          const rawStdoutTail = sink.getRawStdoutTail().trim();
+          const detail = redactSecrets(
+            [
+              'ZCode app-server exited before model availability check completed',
+              winner.code != null ? `exit ${winner.code}` : null,
+              winner.signal ? `signal ${winner.signal}` : null,
+              stderrTail ? `stderr: ${stderrTail.slice(-200)}` : null,
+              rawStdoutTail ? `stdout: ${rawStdoutTail.slice(-200)}` : null,
+            ]
+              .filter(Boolean)
+              .join(' · '),
+          );
+          return {
+            ok: false,
+            kind: 'agent_spawn_failed',
+            latencyMs,
+            model,
+            agentName: def.name,
+            detail,
+            diagnostics: buildDiagnostics({
+              phase: 'connection_smoke_test',
+              exitCode: winner.code,
+              signal: winner.signal,
+            }),
+          };
+        };
+
+        const winner = await Promise.race([
+          modelAvailability.then((sampleText) => ({
+            kind: 'response' as const,
+            sampleText,
+          })),
+          cancellationPromise,
+          zcodeChildExit,
+        ]);
+
+        if (winner.kind === 'timeout' || winner.kind === 'aborted') {
+          return resultFromCancellation(winner.kind);
+        }
+        if (winner.kind === 'childExit') {
+          return resultFromZcodeChildExit(winner.exit);
+        }
+
+        return resultFromAgentText(winner.sampleText);
+      } catch (error) {
+        return resultFromStreamError(error);
+      } finally {
+        for (const cleanup of zcodeTurnCleanups) cleanup();
+        zcode.dispose();
+      }
+    }
 
     const { acpSession } = attachAgentStreamHandlers(
       def,
@@ -3038,15 +3233,6 @@ async function testAgentConnectionInternal(
       });
       child.stdin.end(formatPromptForAgentStdin(def, SMOKE_PROMPT), 'utf8');
     }
-    const cancellationPromise = new Promise<{ kind: 'timeout' } | { kind: 'aborted' }>((resolve) => {
-      timer = setTimeout(() => resolve({ kind: 'timeout' }), agentTimeoutMs());
-      abortHandler = () => resolve({ kind: 'aborted' });
-      if (input.signal?.aborted) {
-        abortHandler();
-      } else {
-        input.signal?.addEventListener('abort', abortHandler, { once: true });
-      }
-    });
     const streamError = sink.streamError.then((error) => ({
       kind: 'streamError' as const,
       error,
@@ -3154,7 +3340,9 @@ export async function testAgentConnection(
   const configuredAgentEnv = agentCliEnvForAgent(validatedPrefs, input.agentId);
   const def = getAgentDef(input.agentId);
   const executableResolution = def
-    ? resolveAgentLaunch(def, configuredAgentEnv)
+    ? resolveAgentLaunch(def, configuredAgentEnv, {
+        zcodeAppPath: input.agentId === 'zcode' ? input.zcodeAppPath ?? null : null,
+      })
     : {
         configuredOverridePath: null,
         pathResolvedPath: null,

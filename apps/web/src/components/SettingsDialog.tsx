@@ -113,6 +113,7 @@ import {
   modelMaxTokensDefault,
 } from '../state/maxTokens';
 import type {
+  AgentDiagnostic,
   AgentInfo,
   AgentModelChoice,
   ApiProtocol,
@@ -138,6 +139,7 @@ import {
   fetchDesignTemplates,
   liveArtifactPreviewUrl,
   openExternalUrl,
+  openZcodeAppDialog,
 } from '../providers/registry';
 import { MEDIA_PROVIDERS } from '../media/models';
 import { useByokImageModelOptions, useByokVideoModelOptions, useByokSpeechModelOptions } from '../media/aihubmix-image-models';
@@ -530,6 +532,7 @@ function telemetryPrefsEqual(
 export interface AgentRefreshOptions {
   throwOnError?: boolean;
   agentCliEnv?: AppConfig['agentCliEnv'];
+  zcodeAppPath?: AppConfig['zcodeAppPath'];
 }
 
 // When AMR sign-in completes, vela's live `models` catalog can lag the
@@ -598,6 +601,11 @@ function sanitizeHttpsUrl(url: string | undefined): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+function isZcodeAppPath(path: string): boolean {
+  const normalized = path.trim().replace(/[\\/]+$/, '');
+  return /(^|[/\\])ZCode\.app$/i.test(normalized);
 }
 
 type RescanNotice =
@@ -860,6 +868,8 @@ const AGENT_SHORT_DESCRIPTIONS: Record<string, string> = {
   claude: 'Anthropic official CLI',
   codex: 'OpenAI official CLI',
   'cursor-agent': 'Cursor command line',
+  zcode: 'Zhipu AI coding CLI',
+  gemini: 'Google official CLI',
   opencode: 'Open-source agent CLI',
   qwen: 'Qwen coding CLI',
   copilot: 'GitHub coding CLI',
@@ -1350,6 +1360,9 @@ export function agentRefreshOptionsForConfig(cfg: AppConfig): AgentRefreshOption
   return {
     throwOnError: true,
     agentCliEnv: cfg.agentCliEnv ?? {},
+    ...(Object.prototype.hasOwnProperty.call(cfg, 'zcodeAppPath')
+      ? { zcodeAppPath: cfg.zcodeAppPath ?? null }
+      : {}),
   };
 }
 
@@ -1693,9 +1706,12 @@ export function SettingsDialog({
   const [dshSetup, setDshSetup] = useState<{ busy: boolean; error: string | null } | null>(null);
   const [agentRescanNotice, setAgentRescanNotice] =
     useState<RescanNotice | null>(null);
+  const [zcodeAppNotice, setZcodeAppNotice] = useState<string | null>(null);
+  const supportsZcodeAppPicker = appVersionInfo?.platform === 'darwin';
   const [agentTestState, setAgentTestState] = useState<TestState>({
     status: 'idle',
   });
+  const [pendingCliEnvFocusAgentId, setPendingCliEnvFocusAgentId] = useState<string | null>(null);
   const [amrCardStatus, setAmrCardStatus] = useState<VelaLoginStatus | null>(null);
   const [amrCardStatusReady, setAmrCardStatusReady] = useState(false);
   const amrCardSignedIn = isAmrSessionAuthenticated(amrCardStatus);
@@ -2363,8 +2379,73 @@ export function SettingsDialog({
         kind: 'success',
         count: availableVisibleAgentCount(nextAgents),
       });
+      const focusedCliEnvAgent = pendingCliEnvFocusAgentId
+        ? nextAgents.find((agent) => agent.id === pendingCliEnvFocusAgentId)
+        : null;
+      if (focusedCliEnvAgent?.available) {
+        setCfg((current) => ({
+          ...current,
+          mode: 'daemon',
+          agentId: focusedCliEnvAgent.id,
+        }));
+        setPendingCliEnvFocusAgentId(null);
+      }
     } catch {
       setAgentRescanNotice({ kind: 'error' });
+    } finally {
+      setAgentRescanRunning(false);
+    }
+  };
+  const chooseZcodeApp = async () => {
+    setZcodeAppNotice(null);
+    if (!supportsZcodeAppPicker) {
+      setZcodeAppNotice(t('settings.zcodeAppPathUnsupported'));
+      return;
+    }
+    const result = await openZcodeAppDialog();
+    if (result.status === 'cancelled') {
+      setZcodeAppNotice(t('settings.zcodeAppPathNoSelection'));
+      return;
+    }
+    if (result.status === 'unsupported') {
+      setZcodeAppNotice(t('settings.zcodeAppPathUnsupported'));
+      return;
+    }
+    if (result.status === 'error') {
+      setZcodeAppNotice(t('settings.zcodeAppPathPickerError'));
+      return;
+    }
+    const selected = result.path;
+    if (!isZcodeAppPath(selected)) {
+      setZcodeAppNotice(t('settings.zcodeAppPathInvalid', { path: selected }));
+      return;
+    }
+    setAgentRescanRunning(true);
+    setAgentRescanNotice(null);
+    try {
+      const refreshed = await onRefreshAgents({
+        ...agentRefreshOptionsForConfig(cfg),
+        zcodeAppPath: selected,
+      });
+      const nextAgents = Array.isArray(refreshed) ? refreshed : agents;
+      const zcode = nextAgents.find((agent) => agent.id === 'zcode');
+      setAgentRescanNotice({
+        kind: 'success',
+        count: nextAgents.filter((agent) => agent.available).length,
+      });
+      setCfg((current) => ({
+        ...current,
+        ...(zcode?.available ? { mode: 'daemon', agentId: 'zcode' } : {}),
+        zcodeAppPath: selected,
+      }));
+      setZcodeAppNotice(
+        zcode?.available
+          ? t('settings.zcodeAppPathSelected', { path: selected })
+          : t('settings.zcodeAppPathSelectedPending', { path: selected }),
+      );
+    } catch {
+      setAgentRescanNotice({ kind: 'error' });
+      setZcodeAppNotice(t('settings.zcodeAppPathVerifyError'));
     } finally {
       setAgentRescanRunning(false);
     }
@@ -2446,6 +2527,14 @@ export function SettingsDialog({
         : {}),
     };
   };
+  const cliEnvDetailsRef = useRef<HTMLDetailsElement | null>(null);
+  useEffect(() => {
+    if (!pendingCliEnvFocusAgentId) return;
+    const details = cliEnvDetailsRef.current;
+    if (!details) return;
+    details.open = true;
+    details.scrollIntoView({ block: 'nearest' });
+  }, [pendingCliEnvFocusAgentId]);
   useEffect(() => {
     const handleReturnToSettings = () => {
       if (
@@ -2553,6 +2642,9 @@ export function SettingsDialog({
           reasoning: choice.reasoning || undefined,
           serviceTier: choice.serviceTier || undefined,
           agentCliEnv: cfg.agentCliEnv ?? {},
+          ...(Object.prototype.hasOwnProperty.call(cfg, 'zcodeAppPath')
+            ? { zcodeAppPath: cfg.zcodeAppPath ?? null }
+            : {}),
         },
         controller.signal,
       );
@@ -4879,6 +4971,7 @@ export function SettingsDialog({
                                         },
                                       );
                                     }
+                                    setPendingCliEnvFocusAgentId(null);
                                     // Until a session is confirmed (including before the
                                     // first status read lands), only select it here.
                                     if (isAmrAgent && !amrCardSignedIn) {
@@ -5132,6 +5225,34 @@ export function SettingsDialog({
                                   ))
                                 : null}
                               {active ? renderAgentModelConfig(a) : null}
+                              {active && a.id === 'zcode' && supportsZcodeAppPicker ? (
+                                <div className="agent-cli-env" data-testid="settings-zcode-app-path">
+                                  <div className="agent-cli-env-body">
+                                    <div className="agent-card-model-summary">
+                                      <span>{t('settings.zcodeAppPathTitle')}</span>
+                                      <strong>
+                                        {cfg.zcodeAppPath?.trim() || t('settings.zcodeAppPathAuto')}
+                                      </strong>
+                                    </div>
+                                    <p className="hint">{t('settings.zcodeAppPathHint')}</p>
+                                    <div className="settings-test-actions-row">
+                                      <button
+                                        type="button"
+                                        className="agent-card-link agent-card-link--ghost"
+                                        onClick={() => void chooseZcodeApp()}
+                                        disabled={agentRescanRunning}
+                                      >
+                                        {t('settings.zcodeAppPathChoose')}
+                                      </button>
+                                    </div>
+                                    {zcodeAppNotice ? (
+                                      <p className="hint" role="status">
+                                        {zcodeAppNotice}
+                                      </p>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              ) : null}
                             </div>
                           );
                           if (active && agentTestState.status !== 'idle') {
@@ -5247,14 +5368,32 @@ export function SettingsDialog({
                         {unavailableAgents.map((a) => {
                           const installUrl = sanitizeHttpsUrl(a.installUrl);
                           const docsUrl = sanitizeHttpsUrl(a.docsUrl);
+                          const hasZcodeAppPicker = a.id === 'zcode' && supportsZcodeAppPicker;
+                          const hasCliEnvPathField = AGENT_CLI_ENV_FIELDS.some(
+                            (field) => field.agentId === a.id,
+                          );
                           const description = AGENT_SHORT_DESCRIPTIONS[a.id];
                           const agentName = displayAgentName(a);
                           const diagnosticHandlers = diagnosticHandlersForAgent(a);
+                          const diagnostics: AgentDiagnostic[] =
+                            hasZcodeAppPicker && (a.diagnostics ?? []).length === 0
+                              ? [
+                                  {
+                                    reason: 'not-on-path',
+                                    severity: 'error',
+                                    message: t('settings.zcodeAppPathHint'),
+                                    fixActions: [{ kind: 'openInstall' }, { kind: 'rescan' }],
+                                  },
+                                ]
+                              : (a.diagnostics ?? []);
                           const cardLabel = `${agentName} · ${t('common.notInstalled')}`;
                           return (
                             <div
                               key={a.id}
-                              className="agent-card disabled agent-card-unavailable"
+                              className={
+                                'agent-card disabled agent-card-unavailable' +
+                                (a.id === 'zcode' ? ' agent-card-unavailable--zcode' : '')
+                              }
                               role="group"
                               aria-label={cardLabel}
                             >
@@ -5277,7 +5416,7 @@ export function SettingsDialog({
                                   logo/name. Rendered message-only: the fix
                                   actions are hoisted into the shared footer bar
                                   so every control lives on one row. */}
-                              {(a.diagnostics ?? []).map((diagnostic, i) => (
+                              {diagnostics.map((diagnostic, i) => (
                                 <AgentDiagnosticRow
                                   key={`${diagnostic.reason}-${i}`}
                                   diagnostic={diagnostic}
@@ -5285,10 +5424,27 @@ export function SettingsDialog({
                               ))}
                               {/* Every action for the card collapses into one
                                   horizontal bar at the foot, fenced from the
-                                  content above by a hair divider: Docs + Rescan
-                                  as quiet icon buttons, Install as the primary
-                                  labelled CTA holding the right edge. */}
+                                  content above by a hair divider. */}
                               <div className="agent-card-footer">
+                                {hasZcodeAppPicker ? (
+                                  <button
+                                    type="button"
+                                    className="agent-card-link agent-card-link--ghost agent-card-link--zcode-picker"
+                                    onClick={() => void chooseZcodeApp()}
+                                    disabled={agentRescanRunning}
+                                  >
+                                    {t('settings.zcodeAppPathChoose')}
+                                  </button>
+                                ) : null}
+                                {hasCliEnvPathField ? (
+                                  <button
+                                    type="button"
+                                    className="agent-card-link agent-card-link--ghost"
+                                    onClick={() => setPendingCliEnvFocusAgentId(a.id)}
+                                  >
+                                    {t('settings.agentInstall.configurePath')}
+                                  </button>
+                                ) : null}
                                 {docsUrl ? (
                                   <a
                                     href={docsUrl}
@@ -5331,6 +5487,11 @@ export function SettingsDialog({
                                   </a>
                                 ) : null}
                               </div>
+                              {hasZcodeAppPicker && zcodeAppNotice ? (
+                                <p className="hint" role="status">
+                                  {zcodeAppNotice}
+                                </p>
+                              ) : null}
                             </div>
                           );
                         })}
@@ -5418,22 +5579,25 @@ export function SettingsDialog({
                   the Codex fields were just visual filler (and vice
                   versa), and the section hijacked Settings real estate
                   on every open even though nine in ten users never
-                  touch it. Now: filtered to the *currently selected*
-                  agent only, and folded into a collapsed disclosure
+                  touch it. Now: filtered to the currently selected agent
+                  or the unavailable agent whose path fields the user is
+                  configuring, and folded into a collapsed disclosure
                   that opens to "Advanced: proxy & custom paths" — power
                   users who route through LiteLLM or installed the
                   binary out-of-PATH still have one click access; new
                   users no longer wonder "are these fields I forgot to
                   fill in?".
                 */
+                const cliEnvAgentId = pendingCliEnvFocusAgentId ?? cfg.agentId;
                 const cliEnvFields = AGENT_CLI_ENV_FIELDS.filter(
-                  (field) => field.agentId === cfg.agentId,
+                  (field) => field.agentId === cliEnvAgentId,
                 );
                 if (cliEnvFields.length === 0) return null;
                 return (
                   <details
                     className="agent-cli-env"
                     data-testid="settings-cli-env"
+                    ref={cliEnvDetailsRef}
                   >
                     <summary className="agent-cli-env-summary">
                       <span className="agent-cli-env-summary-title">
