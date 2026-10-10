@@ -264,6 +264,16 @@ describe('packaged stale sidecar retirement', () => {
 });
 
 describe('packaged child Vite+ environment forwarding', () => {
+  it('forwards JSON IPC tracing without forwarding unrelated variables', () => {
+    const env = resolvePackagedChildBaseEnv({
+      OD_JSON_IPC_TRACE: '1',
+      RANDOM_INTERNAL_FLAG: 'drop-me',
+    });
+
+    expect(env.OD_JSON_IPC_TRACE).toBe('1');
+    expect(env.RANDOM_INTERNAL_FLAG).toBeUndefined();
+  });
+
   it('forwards CODEX_HOME so isolated and managed Codex installs never fall back to another user config', () => {
     const env = resolvePackagedChildBaseEnv({
       CODEX_HOME: '/tmp/isolated-codex-home',
