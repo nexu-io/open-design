@@ -84,7 +84,7 @@ export function TemplatePicker({
         {templates.map((chip) => <button key={chip.id} type="button" role="option" data-chip={chip.id}
           aria-selected={chip.id === activeChipId}
           className={`home-hero__footer-select-item${chip.id === activeChipId ? ' is-selected' : ''}`}
-          onClick={() => { setOpen(false); if (chip.id !== activeChipId) onPick?.(chip); triggerRef.current?.focus(); }}>
+          onClick={() => { setOpen(false); onPick?.(chip); triggerRef.current?.focus(); }}>
           <Icon name={chip.icon} size={16} />
           <span>{labelFor(chip.id)}</span>
           {chip.id === activeChipId ? <Icon name="check" size={14} /> : null}

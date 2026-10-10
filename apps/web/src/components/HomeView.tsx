@@ -199,6 +199,8 @@ export interface ActivePlugin {
   // legitimately equal the chip's default plugin id (e.g. the prototype rail's
   // `example-web-prototype`).
   explicitPick: boolean;
+  // Only the untouched Home default, never a user-selected task type.
+  automaticTypeSeed?: boolean;
   // True when this pick came from an OFFICIAL EXAMPLE CARD on a task type's
   // example rail, as opposed to the Community grid / details modal / plugins-
   // page hand-off. Always accompanies `explicitPick` — an example card is an
@@ -342,13 +344,17 @@ const EMPTY_PROMPT_TEMPLATES: PromptTemplateSummary[] = [];
 // system vanish when the user steps away and comes back. Persist those two
 // serializable, user-visible fields to localStorage so they survive the
 // unmount/remount, mirroring ChatComposer's draft persistence. Object-valued
-// selections (active template, skill, staged files, working directory) are
+// selections (active template, staged files, working directory) are
 // intentionally NOT persisted here — they reference live catalogue records /
 // File handles / a desktop auth token that cannot round-trip through JSON
 // safely.
 const HOME_COMPOSER_PROMPT_KEY = 'open-design:home-composer:prompt';
 const HOME_COMPOSER_DESIGN_SYSTEM_KEY = 'open-design:home-composer:design-system';
 const HOME_COMPOSER_DESIGN_SYSTEM_SCOPE_KEY = 'open-design:home-composer:design-system-scope';
+// Preserve only the skill identity and its catalogue owner, never the live
+// record. App unmounts Home during optimistic creation, including failed runs.
+const HOME_COMPOSER_SKILL_KEY = 'open-design:home-composer:skill';
+const HOME_COMPOSER_SKILL_SCOPE_KEY = 'open-design:home-composer:skill-scope';
 // The active type-chip + bound plugin (the "创作类型" + "示例提示词" pick) is a
 // third piece of composer state that used to fall through this same crack:
 // `active` (below) held only a live `InstalledPluginRecord` + resolved apply
@@ -373,6 +379,7 @@ interface HomeComposerChipDraft {
   // identity, so it is persisted with it.
   explicitPick?: boolean;
   examplePick?: boolean;
+  automaticTypeSeed?: boolean;
 }
 // `EntryShell` keeps `HomeView` permanently mounted and toggles it with CSS
 // visibility instead of unmounting it on every Home/Community/... view
@@ -455,6 +462,7 @@ function readHomeComposerChipDraft(): HomeComposerChipDraft | null {
       // they restore as the plain type-chip binding they always did.
       explicitPick: parsed.explicitPick === true,
       examplePick: parsed.examplePick === true,
+      automaticTypeSeed: parsed.automaticTypeSeed === true,
     };
   } catch {
     return null;
@@ -471,6 +479,8 @@ function clearHomeComposerDraft(): void {
   writeHomeComposerDraft(HOME_COMPOSER_PROMPT_KEY, null);
   writeHomeComposerDraft(HOME_COMPOSER_DESIGN_SYSTEM_KEY, null);
   writeHomeComposerDraft(HOME_COMPOSER_DESIGN_SYSTEM_SCOPE_KEY, null);
+  writeHomeComposerDraft(HOME_COMPOSER_SKILL_KEY, null);
+  writeHomeComposerDraft(HOME_COMPOSER_SKILL_SCOPE_KEY, null);
   writeHomeComposerChipDraft(null);
 }
 
@@ -625,6 +635,13 @@ export function HomeView({
   // removed), so every Home create runs in the default design mode; the
   // per-conversation picker still lives in the project chat composer.
   const sessionMode: ChatSessionMode = 'design';
+  const [pendingSkillRestore, setPendingSkillRestore] = useState(() => {
+    const skillId = ownsComposerDraft ? readHomeComposerDraft(HOME_COMPOSER_SKILL_KEY)?.trim() : null;
+    return skillId ? {
+      skillId,
+      catalogScope: readLocalCatalogScopeDraft(HOME_COMPOSER_SKILL_SCOPE_KEY),
+    } : null;
+  });
   const [activeSkill, setActiveSkill] = useState<SkillSummary | null>(null);
   const [activeSkillCatalogScope, setActiveSkillCatalogScope] =
     useState<LocalCatalogScope | null>(null);
@@ -742,6 +759,15 @@ export function HomeView({
         : null,
     );
   }, [designSystemCatalogScope, designSystemId, ownsComposerDraft]);
+  useEffect(() => {
+    // Do not erase the saved identity while its catalogue is still loading.
+    if (!ownsComposerDraft || pendingSkillRestore) return;
+    writeHomeComposerDraft(HOME_COMPOSER_SKILL_KEY, activeSkill?.id ?? null);
+    writeHomeComposerDraft(
+      HOME_COMPOSER_SKILL_SCOPE_KEY,
+      activeSkill && activeSkillCatalogScope ? JSON.stringify(activeSkillCatalogScope) : null,
+    );
+  }, [activeSkill, activeSkillCatalogScope, pendingSkillRestore, ownsComposerDraft]);
   // Persist the active chip/plugin identity the same way — only the
   // serializable fields, not `active` itself (see the module note above).
   // Clearing on `active === null` covers the explicit-clear (×) and the
@@ -759,6 +785,7 @@ export function HomeView({
               : {}),
             ...(active.explicitPick ? { explicitPick: true } : {}),
             ...(active.examplePick ? { examplePick: true } : {}),
+            ...(active.automaticTypeSeed ? { automaticTypeSeed: true } : {}),
           }
         : null,
     );
@@ -1154,6 +1181,7 @@ export function HomeView({
     }
 
     setActive(null);
+    setPendingSkillRestore(null);
     setActiveSkill(null);
     setActiveSkillCatalogScope(null);
     setSelectedPluginContexts([]);
@@ -1321,6 +1349,23 @@ export function HomeView({
   }, [pluginCatalogKey, plugins, pluginsLoading]);
 
   useEffect(() => {
+    if (!pendingSkillRestore || skillsLoading || workspaceContextState.loading
+      || workspaceContextState.identityChangePending) return;
+    const currentScope = localCatalogScopeFromWorkspaceContext(workspaceContext);
+    const savedScope = pendingSkillRestore.catalogScope;
+    const sameScope = currentScope?.workspaceId === savedScope?.workspaceId
+      && currentScope?.workspaceMemberId === savedScope?.workspaceMemberId;
+    if (!activeSkill && sameScope && promptHandoff?.source !== 'plugin-authoring') {
+      setActiveSkill(selectableSkills.find((skill) => skill.id === pendingSkillRestore.skillId) ?? null);
+      setActiveSkillCatalogScope(currentScope);
+    }
+    // Removed skills and another workspace/member's draft must not resurrect.
+    // Restore only the selection: the saved user-edited prompt stays untouched.
+    setPendingSkillRestore(null);
+  }, [pendingSkillRestore, skillsLoading, selectableSkills, activeSkill, workspaceContext, promptHandoff?.source,
+    workspaceContextState.loading, workspaceContextState.identityChangePending]);
+
+  useEffect(() => {
     if (skillsLoading) return;
     setActiveSkill((current) => {
       if (!current) return current;
@@ -1466,6 +1511,7 @@ export function HomeView({
       // feel instant; submit() still resolves the snapshot before sending.
       deferApply?: boolean;
       focusPrompt?: boolean;
+      automaticTypeSeed?: boolean;
       // True when the user explicitly picked this plugin (example-prompt preset
       // or Community card / detail modal) rather than a type chip's default
       // plugin. Stored on `active.explicitPick`; gates the chip's clear button.
@@ -1542,6 +1588,7 @@ export function HomeView({
       suppressPromptSync: suppressPromptUpdate,
       explicitPick: options?.explicitPick === true,
       examplePick: options?.examplePick === true,
+      automaticTypeSeed: options?.automaticTypeSeed === true,
     });
     setFallbackProjectKind(null);
     setFallbackProjectMetadata(null);
@@ -1698,6 +1745,7 @@ export function HomeView({
       // made with.
       explicitPick?: boolean;
       examplePick?: boolean;
+      automaticTypeSeed?: boolean;
     },
   ) {
     const inputFields = options?.inputFields ?? record.manifest?.od?.inputs ?? [];
@@ -1941,6 +1989,7 @@ export function HomeView({
       // binding would quietly change what the next Send does.
       explicitPick: restore.explicitPick === true,
       examplePick: restore.examplePick === true,
+      automaticTypeSeed: restore.automaticTypeSeed === true,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingChipRestore, pluginsLoading, plugins, active, pendingPluginUseHandoff]);
@@ -1951,11 +2000,12 @@ export function HomeView({
   const defaultTypePending = ownsComposerDraft && !defaultTypeSettled && !active;
   useEffect(() => {
     if (!ownsComposerDraft || defaultTypeSettled) return;
-    if (active || promptHandoff || pendingPluginUseHandoff || hasPendingHomeChip(variant)) {
+    // A restored skill-only retry owns its route, just like a live handoff.
+    if (active || activeSkill || promptHandoff || pendingPluginUseHandoff || hasPendingHomeChip(variant)) {
       setDefaultTypeSettled(true);
       return;
     }
-    if (pluginsLoading || pendingChipRestore) return;
+    if (pluginsLoading || pendingChipRestore || pendingSkillRestore) return;
     setDefaultTypeSettled(true);
     const chip = findChip('prototype');
     if (chip?.action.kind !== 'apply-scenario') return;
@@ -1972,10 +2022,12 @@ export function HomeView({
       suppressPromptUpdate: true,
       focusPrompt: false,
       deferApply: true,
+      automaticTypeSeed: true,
     });
     // usePlugin reads this render's catalog/context; it is not an effect trigger.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ownsComposerDraft, defaultTypeSettled, active, promptHandoff, pendingPluginUseHandoff, variant, pluginsLoading, pendingChipRestore, plugins]);
+  }, [ownsComposerDraft, defaultTypeSettled, active, activeSkill, promptHandoff, pendingPluginUseHandoff,
+    variant, pluginsLoading, pendingChipRestore, pendingSkillRestore, plugins]);
 
   function addPluginContext(record: InstalledPluginRecord, nextPrompt: string | null) {
     setSelectedPluginContexts((prev) => {
@@ -2392,6 +2444,11 @@ export function HomeView({
   // order already ranks a user-selected Skill above its own), so nothing has
   // to be discarded to keep the rule defined.
   function useSkill(skill: SkillSummary, nextPrompt: string | null) {
+    // A Skill handoff supersedes an untouched default, but must preserve an
+    // intentional task-type choice (#2972). Keep that distinction on reload.
+    setDefaultTypeSettled(true);
+    setActive((current) => current?.automaticTypeSeed ? null : current);
+    setPendingSkillRestore(null);
     setActiveSkill(skill);
     setActiveSkillCatalogScope(localCatalogScopeFromWorkspaceContext(workspaceContext));
     setError(null);
@@ -2455,6 +2512,7 @@ export function HomeView({
     const nextPrompt = buildPluginAuthoringPromptForInputs(nextInputs);
     runWithReplacementConfirmation('Plugin authoring', nextPrompt, async () => {
       setActive(null);
+      setPendingSkillRestore(null);
       setActiveSkill(null);
       setActiveSkillCatalogScope(null);
       setFallbackProjectKind('other');
@@ -2530,6 +2588,13 @@ export function HomeView({
       projectMetadata?: ProjectMetadata | null;
     },
   ) {
+    setDefaultTypeSettled(true);
+    // Confirming the already-selected default is an intentional choice too.
+    // Do not reapply it or reset its inputs just to update provenance.
+    if (!selection && active?.chipId === chip.id && !active.explicitPick) {
+      setActive((current) => current ? { ...current, automaticTypeSeed: false } : current);
+      return;
+    }
     setError(null);
     releaseWebCloneScaffold(chip.id);
     const activeChipId = chip.id;
@@ -2789,7 +2854,7 @@ export function HomeView({
   async function submit() {
     // The send button disables itself while sending, but the Enter-to-send
     // path lands here directly — swallow re-entry during the in-flight window.
-    if (sending || defaultTypePending) return;
+    if (sending || defaultTypePending || pendingSkillRestore) return;
     const trimmed = prompt.trim();
     if (!trimmed && stagedFiles.length === 0) return;
     // P0 ui_click area=chat_composer element=send_button. Fires before the
@@ -2952,8 +3017,9 @@ export function HomeView({
       // A mentioned Skill travels with whatever the composer selected, rather
       // than replacing it: the pick decides the route, the Skill is material
       // inside it. In Design mode, free-form prompts route through the default
-      // design router; in Ask mode they stay plain chat conversations with no
-      // hidden router plugin.
+      // design router, but an explicit Skill without another route must not
+      // inherit that hidden default. In Ask mode, submits stay plain chat
+      // conversations with no hidden router plugin.
       const resolvedSkillId = activeSkill?.id ?? null;
       const submittedChip = submittedRouteChipId
         ? findChip(submittedRouteChipId)
@@ -2965,7 +3031,8 @@ export function HomeView({
         automaticStrategyTaskProfile
           ? null
           : sessionMode === 'design'
-          ? submittedActive?.record.id ?? DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID
+          ? submittedActive?.record.id
+            ?? (resolvedSkillId ? null : DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID)
           : submittedActive?.record.id ?? null;
       const pluginSelectionProvenance = sessionMode === 'design'
         && (!submittedActive || productAutomaticScenario)
@@ -3198,6 +3265,7 @@ export function HomeView({
         submitDisabled={
           defaultTypePending ||
           Boolean(pendingChipRestore) ||
+          Boolean(pendingSkillRestore) ||
           Boolean(pendingPluginUseHandoff) ||
           Boolean(pendingApplyId) ||
           Boolean(pendingAuthoringChipId) ||

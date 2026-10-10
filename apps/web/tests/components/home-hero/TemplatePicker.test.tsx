@@ -74,12 +74,12 @@ describe('TemplatePicker', () => {
     expect(screen.queryByTestId('home-hero-template-clear')).toBeNull();
   });
 
-  it('does not reapply an already selected type', () => {
+  it('reports an intentional confirmation of the already selected type to the host', () => {
     const onPick = vi.fn();
     render(<TemplatePicker templates={templates} activeChipId="prototype" onPick={onPick} labelFor={labelFor} />);
     fireEvent.click(screen.getByTestId('home-hero-template-trigger').querySelector('button')!);
     fireEvent.click(screen.getByRole('option', { name: labelFor('prototype') }));
-    expect(onPick).not.toHaveBeenCalled();
+    expect(onPick).toHaveBeenCalledWith(chipById('prototype'));
     expect(screen.queryByRole('listbox')).toBeNull();
   });
 
