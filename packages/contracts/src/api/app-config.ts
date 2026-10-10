@@ -67,14 +67,18 @@ export interface AppConfigPrefs {
   /** Project location id used for new projects when the create request does not choose one explicitly. */
   defaultProjectLocationId?: string | null;
   /**
-   * Whether this installation opts into the OD Next design strategy, and in
-   * which mode.
+   * Which mode this installation runs the OD Next design strategy in.
    *
-   * OD Next is opt-in: an installation that never chose runs the ordinary
-   * strategy route, so absent (and `null`) mean `off`. Setting this to
-   * `'active'` is the whole configuration step — the next run admits through
-   * the strategy without restarting the daemon, because the run route reads
-   * this field per request rather than latching it at boot.
+   * OD Next is the default route: an installation that never chose runs the
+   * strategy, so absent (and `null`) mean `active`. Setting this to `'off'` is
+   * the whole opt-out step — the next run takes the ordinary route without
+   * restarting the daemon, because the run route reads this field per request
+   * rather than latching it at boot.
+   *
+   * A packaged install has no other control: the packaged child environment
+   * allowlist carries no `OD_NEXT_*` key, so this field is what the Labs
+   * switch writes and the only thing standing between an opted-out user and
+   * the default.
    *
    * `OD_NEXT_STRATEGY_ROLLOUT` still outranks this when it is set, so an
    * operator, a packaged smoke run, or a test can pin a mode for one process

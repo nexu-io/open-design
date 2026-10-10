@@ -1,3 +1,4 @@
+import type { EvalContextV2 } from './observability/eval-context.js';
 // Langfuse trace forwarding for completed agent runs.
 //
 // This module is intentionally dependency-free (no `langfuse` SDK). It builds
@@ -25,6 +26,7 @@ import {
   type SafeObservationStreamTailV1,
   type SafeObservationTextV1,
   type SafeRunDiagnosticsV1,
+  type SafeDeliverableSyntaxTelemetryV1,
   type SafeRunProcessOutcomeV1,
   type SafeRunQualityV1,
 } from '@open-design/contracts';
@@ -242,6 +244,7 @@ export interface TraceSafeObjectManifestBase {
 }
 
 export interface AttachmentManifestEntry extends TraceSafeObjectManifestBase {
+  source_path_hash?: string;
   object_class: 'attachment';
   attachment_id: string;
 }
@@ -299,6 +302,8 @@ export interface EventsSummary {
   durationMs: number;
 }
 
+export type DeliverableSyntaxTelemetry = SafeDeliverableSyntaxTelemetryV1;
+
 export interface RuntimeInfo {
   /** Node.js runtime version (`process.version`, e.g. 'v22.22.0'). */
   nodeVersion?: string;
@@ -346,6 +351,7 @@ export interface TurnInfo {
 }
 
 export interface ReportContext {
+  evalContextV2?: EvalContextV2;
   installationId: string | null;
   projectId: string;
   conversationId: string;
@@ -361,6 +367,8 @@ export interface ReportContext {
   tools?: ToolCallSummary[];
   agentEvents?: AgentEventSummary[];
   eventsSummary: EventsSummary;
+  /** Content-free syntax gate facts safe for shallow Langfuse filtering. */
+  deliverableSyntax?: DeliverableSyntaxTelemetry;
   prefs: TelemetryPrefs;
   langfuse?: LangfuseDeliveryState;
   /** Per-turn config (model + skill + DS). May vary turn-to-turn within a session. */
@@ -410,6 +418,8 @@ export interface ReportFeedbackOpts {
  */
 export interface FeedbackReportContext {
   runId: string;
+  /** Server-resolved Task identity; score IDs remain owned by the physical Run. */
+  traceId?: string;
   installationId: string | null;
   prefs: TelemetryPrefs;
   rating: 'positive' | 'negative';
@@ -1730,6 +1740,8 @@ function safeQualityManifestEntry(
  * local-path masking, and never admits raw provider attributes.
  */
 export function buildSafeRunQualityProjectionV1(input: {
+  /** Object snapshots keep complete policy-redacted content; transport still enforces its object size cap. */
+  contentStorage?: 'object';
   prefs: TelemetryPrefs;
   messageOutput?: string;
   errorMessage?: string;
@@ -1745,10 +1757,11 @@ export function buildSafeRunQualityProjectionV1(input: {
   stderr?: StreamTailSummary;
   stdout?: StreamTailSummary;
   diagnostics?: RunDiagnosticsAnalytics;
+  deliverableSyntax?: DeliverableSyntaxTelemetry;
 }): SafeRunQualityV1 | undefined {
   const wantsContent = input.prefs.metrics === true && input.prefs.content === true;
   const output = wantsContent
-    ? safeQualityText(input.messageOutput, OUTPUT_MAX_BYTES)
+    ? safeQualityText(input.messageOutput, input.contentStorage === 'object' ? Infinity : OUTPUT_MAX_BYTES)
     : undefined;
   const errorMessage = safeQualityText(input.errorMessage, OUTPUT_MAX_BYTES);
   const error = errorMessage || input.errorCode || input.failure
@@ -1768,16 +1781,16 @@ export function buildSafeRunQualityProjectionV1(input: {
           : {}),
       }
     : undefined;
-  const tools = wantsContent ? input.tools?.slice(0, 256).map((tool) => {
+  const tools = wantsContent ? input.tools?.slice(0, input.contentStorage === 'object' ? undefined : 256).map((tool) => {
     const safeInput = safeQualityText(
       traceSafeToolPayload(tool.name, 'input',
         tool.input === undefined ? undefined : redactSecrets(tool.input)),
-      TOOL_INPUT_MAX_BYTES,
+      input.contentStorage === 'object' ? Infinity : TOOL_INPUT_MAX_BYTES,
     );
     const safeOutput = safeQualityText(
       traceSafeToolPayload(tool.name, 'output',
         tool.output === undefined ? undefined : redactSecrets(tool.output)),
-      TOOL_OUTPUT_MAX_BYTES,
+      input.contentStorage === 'object' ? Infinity : TOOL_OUTPUT_MAX_BYTES,
     );
     return {
       callHash: createHash('sha256').update(tool.id, 'utf8').digest('hex'),
@@ -1816,6 +1829,9 @@ export function buildSafeRunQualityProjectionV1(input: {
     schema: SAFE_RUN_QUALITY_V1_SCHEMA,
     ...(output || error ? { result: { ...(output ? { output } : {}), ...(error ? { error } : {}) } } : {}),
     ...(processOutcome ? { process: processOutcome } : {}),
+    ...(input.deliverableSyntax
+      ? { deliverableSyntax: input.deliverableSyntax }
+      : {}),
     ...(tools && tools.length > 0 ? { tools } : {}),
     ...(hasManifests
       ? {
@@ -1896,6 +1912,7 @@ export function buildTracePayload(
     ...(ctx.manifestCompleteness !== undefined
       ? { manifestCompleteness: ctx.manifestCompleteness }
       : {}),
+    ...(ctx.deliverableSyntax ? { deliverableSyntax: ctx.deliverableSyntax } : {}),
   });
   const safeRunError = safeQuality?.result?.error?.message?.text;
 
@@ -1967,6 +1984,7 @@ export function buildTracePayload(
 
   const success = ctx.run.status === 'succeeded';
   const traceId = ctx.run.runId;
+  const environment = readTelemetryEnvironment();
   const langfuseDelivery =
     ctx.langfuse ??
     deriveLangfuseDeliveryState(ctx.prefs, readRunTelemetrySinkConfig());
@@ -2013,8 +2031,14 @@ export function buildTracePayload(
   // here. Fields are flat (Langfuse stores it as JSON but indexes shallow
   // keys best). All entries are anonymous — no PII, no credentials.
   const traceMetadata: Record<string, unknown> = {
+    ...(ctx.evalContextV2 && wantsContent ? { eval_context_v2: wantsArtifacts ? ctx.evalContextV2 : {
+      ...ctx.evalContextV2,
+      attachments: { turnDelta: { semantics: 'current_user_turn', entries: [] }, effectiveContext: { semantics: 'conversation_context_before_run', entries: [] } },
+      artifacts: { snapshotStatus: 'unavailable', entries: [] },
+      completeness: { status: 'partial', reasons: [...ctx.evalContextV2.completeness.reasons, 'artifact_manifest_consent_off'] },
+    } } : {}),
     success,
-    env: readTelemetryEnvironment(),
+    env: environment,
     status: ctx.run.status,
     error: safeRunError,
     error_code: ctx.run.errorCode,
@@ -2086,6 +2110,54 @@ export function buildTracePayload(
       ctx.run.retryOriginalFailure?.failure_detail,
     retryOriginalFailureStage:
       ctx.run.retryOriginalFailure?.failure_stage,
+    deliverable_syntax_schema_version: ctx.deliverableSyntax?.schemaVersion,
+    deliverable_syntax_applicable: ctx.deliverableSyntax?.applicable,
+    deliverable_syntax_status: ctx.deliverableSyntax?.status,
+    deliverable_syntax_source: ctx.deliverableSyntax?.source,
+    deliverable_syntax_checker: ctx.deliverableSyntax?.checker,
+    deliverable_syntax_checked_file_count: ctx.deliverableSyntax?.checkedFileCount,
+    deliverable_syntax_check_count: ctx.deliverableSyntax?.checkCount,
+    deliverable_syntax_checker_duration_ms: ctx.deliverableSyntax?.checkerDurationMs,
+    deliverable_syntax_repair_window_duration_ms:
+      ctx.deliverableSyntax?.repairWindowDurationMs,
+    deliverable_syntax_repair_to_delivery_duration_ms:
+      ctx.deliverableSyntax?.repairToDeliveryDurationMs,
+    deliverable_syntax_repair_to_terminal_duration_ms:
+      ctx.deliverableSyntax?.repairToTerminalDurationMs,
+    deliverable_syntax_terminal_run_status: ctx.deliverableSyntax?.terminalRunStatus,
+    deliverable_syntax_finalization_action: ctx.deliverableSyntax?.finalization?.action,
+    deliverable_syntax_finalization_reason: ctx.deliverableSyntax?.finalization?.reason,
+    deliverable_syntax_finalization_refusal: ctx.deliverableSyntax?.finalization?.refusal,
+    deliverable_syntax_summary_version: ctx.deliverableSyntax?.finalization?.summaryVersion,
+    deliverable_syntax_initial_status: ctx.deliverableSyntax?.finalization?.initialStatus,
+    deliverable_syntax_repair_engine: ctx.deliverableSyntax?.finalization?.repairEngine,
+    deliverable_syntax_staged_patch_count: ctx.deliverableSyntax?.finalization?.stagedPatchCount,
+    deliverable_syntax_committed_patch_count: ctx.deliverableSyntax?.finalization?.committedPatchCount,
+    deliverable_syntax_committed_repair_rules:
+      ctx.deliverableSyntax?.finalization?.committedRepairRules?.join(','),
+    deliverable_syntax_repair_executor: ctx.deliverableSyntax?.repairExecutor,
+    deliverable_syntax_repair_duration_ms: ctx.deliverableSyntax?.repairDurationMs,
+    deliverable_syntax_applied_repair_rules:
+      ctx.deliverableSyntax?.appliedRepairRules?.join(','),
+    deliverable_syntax_safe_fix_proposal_count: ctx.deliverableSyntax?.safeFixProposalCount,
+    deliverable_syntax_safe_fix_proposal_duration_ms: ctx.deliverableSyntax?.safeFixProposalDurationMs,
+    deliverable_syntax_repairable_check_count:
+      ctx.deliverableSyntax?.repairableCheckCount,
+    deliverable_syntax_initial_diagnostic_count:
+      ctx.deliverableSyntax?.initialDiagnosticCount,
+    deliverable_syntax_latest_diagnostic_count:
+      ctx.deliverableSyntax?.latestDiagnosticCount,
+    deliverable_syntax_repair_triggered: ctx.deliverableSyntax?.repairTriggered,
+    deliverable_syntax_repair_attempts: ctx.deliverableSyntax?.repairAttempts,
+    deliverable_syntax_max_repair_attempts:
+      ctx.deliverableSyntax?.maxRepairAttempts,
+    deliverable_syntax_repair_outcome: ctx.deliverableSyntax?.repairOutcome,
+    deliverable_syntax_recovered_delivery_count:
+      ctx.deliverableSyntax?.recoveredDeliveryCount,
+    deliverable_syntax_blocked_broken_delivery_count:
+      ctx.deliverableSyntax?.blockedBrokenDeliveryCount,
+    deliverable_syntax_delivered_with_syntax_warning_count:
+      ctx.deliverableSyntax?.deliveredWithSyntaxWarningCount,
     ...promptStackFlatMetadata,
     ...promptStackBlameMetadata,
   };
@@ -2119,6 +2191,7 @@ export function buildTracePayload(
         sessionId,
         userId: ctx.installationId ?? undefined,
         tags: buildTagList(ctx),
+        environment,
         input: inputText,
         output: outputText,
         metadata: traceMetadata,
@@ -2155,6 +2228,18 @@ export function buildTracePayload(
       },
     },
   ];
+
+  if (ctx.deliverableSyntax?.finalization?.reason === 'internal_error') {
+    batch.push({
+      id: randomUUID(), type: 'event-create', timestamp: nowIso,
+      body: {
+        id: `${traceId}-syntax-internal-error`, traceId, parentObservationId: agentSpanId,
+        name: 'deliverable-syntax-internal-error', startTime: endTimeIso,
+        level: 'ERROR', statusMessage: 'Syntax finalizer internal error',
+        metadata: { reason: 'internal_error', deliveryStatus: ctx.run.status },
+      },
+    });
+  }
 
   if (createGeneration) {
     batch.push({
@@ -3113,7 +3198,7 @@ export function reportRunCompleted(
 // thread `removedReasonCodes` through and emit overwriting "cleared"
 // scores for them; not done here to keep this PR scoped to the bridge.
 export function buildFeedbackPayload(ctx: FeedbackReportContext): unknown[] {
-  const traceId = ctx.runId;
+  const traceId = ctx.traceId ?? ctx.runId;
   const nowIso = new Date().toISOString();
   const batch: unknown[] = [];
 
@@ -3125,6 +3210,7 @@ export function buildFeedbackPayload(ctx: FeedbackReportContext): unknown[] {
     customReason: ctx.customReason || undefined,
     installationId: ctx.installationId ?? undefined,
     ...(ctx.metadata ?? {}),
+    ...(ctx.traceId ? { runId: ctx.runId } : {}),
   };
 
   batch.push({
@@ -3132,7 +3218,7 @@ export function buildFeedbackPayload(ctx: FeedbackReportContext): unknown[] {
     type: 'score-create',
     timestamp: nowIso,
     body: {
-      id: `${traceId}-rating`,
+      id: `${ctx.runId}-rating`,
       traceId,
       name: 'user_rating',
       value: ctx.rating === 'positive' ? 1 : -1,
@@ -3149,7 +3235,7 @@ export function buildFeedbackPayload(ctx: FeedbackReportContext): unknown[] {
       timestamp: nowIso,
       body: {
         // Stable per (run, code) so re-submission overwrites cleanly.
-        id: `${traceId}-reason-${code}`,
+        id: `${ctx.runId}-reason-${code}`,
         traceId,
         name: 'user_rating_reason',
         value: code,

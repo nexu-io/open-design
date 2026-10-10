@@ -1,4 +1,6 @@
 import http from 'node:http';
+import path from 'node:path';
+import { stat, writeFile } from 'node:fs/promises';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import {
@@ -8,7 +10,9 @@ import {
   openDatabase,
 } from '../../src/db.js';
 import { insertMediaTask, listMediaTasksByProject } from '../../src/media/tasks.js';
+import { ensureProject, renameProjectFile } from '../../src/projects.js';
 import { startServer } from '../../src/server.js';
+import { resolveMediaTaskProjectFile } from '../../src/routes/media.js';
 import { toolTokenRegistry } from '../../src/tool-tokens.js';
 
 describe('media task route recovery', () => {
@@ -27,6 +31,122 @@ describe('media task route recovery', () => {
     vi.unstubAllEnvs();
     toolTokenRegistry.clear();
     closeDatabase();
+  });
+
+  it('lists image tasks with persisted run ownership for ChatPanel progress', async () => {
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required by the daemon test harness');
+    const db = openDatabase(process.cwd(), dataDir === undefined ? {} : { dataDir });
+    const projectId = `project_${randomUUID()}`;
+    const runId = `run_${randomUUID()}`;
+    const now = Date.now();
+    insertProject(db, {
+      id: projectId,
+      name: 'ChatPanel media project',
+      createdAt: now,
+      updatedAt: now,
+    });
+    const projectDir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+    await writeFile(path.join(projectDir, 'generated.png'), Buffer.from('png'));
+    insertMediaTask(db, {
+      id: `task_${randomUUID()}`,
+      projectId,
+      runId,
+      status: 'done',
+      surface: 'image',
+      progress: ['done'],
+      file: { name: 'generated.png', size: 3, kind: 'image', mime: 'image/png' },
+      startedAt: now - 500,
+      endedAt: now,
+    });
+
+    const started = await startServer({ port: 0, returnServer: true }) as {
+      url: string;
+      server: http.Server;
+    };
+    server = started.server;
+    const response = await fetch(
+      `${started.url}/api/projects/${encodeURIComponent(projectId)}/media/tasks?includeDone=1`,
+    );
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      tasks: [{ runId, status: 'done', surface: 'image', file: { name: 'generated.png' } }],
+    });
+  });
+
+  it('fails closed when generation metadata matches more than one moved file', () => {
+    expect(resolveMediaTaskProjectFile(
+      { name: 'missing.png', size: 3, mtime: 1234 },
+      [
+        { name: 'a.png', size: 3, mtime: 1234, kind: 'image', mime: 'image/png' },
+        { name: 'b.png', size: 3, mtime: 1234, kind: 'image', mime: 'image/png' },
+      ],
+    )).toBeNull();
+  });
+
+  it('reconciles a completed media task to the uniquely renamed project file', async () => {
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required by the daemon test harness');
+    const db = openDatabase(process.cwd(), { dataDir });
+    const projectId = `project_${randomUUID()}`;
+    const taskId = `task_${randomUUID()}`;
+    const now = Date.now();
+    insertProject(db, {
+      id: projectId,
+      name: 'Renamed media project',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const projectsRoot = path.join(dataDir, 'projects');
+    const projectDir = await ensureProject(projectsRoot, projectId);
+    const originalName = 'generated.png';
+    const originalPath = path.join(projectDir, originalName);
+    await writeFile(originalPath, Buffer.from('generated-image-bytes'));
+    const originalStat = await stat(originalPath);
+    insertMediaTask(db, {
+      id: taskId,
+      projectId,
+      runId: `run_${randomUUID()}`,
+      status: 'done',
+      surface: 'image',
+      progress: ['done'],
+      file: {
+        name: originalName,
+        size: originalStat.size,
+        mtime: originalStat.mtimeMs,
+        kind: 'image',
+        mime: 'image/png',
+      },
+      startedAt: now - 500,
+      endedAt: now,
+    });
+    await renameProjectFile(
+      projectsRoot,
+      projectId,
+      originalName,
+      'final/generated-renamed.png',
+    );
+
+    const started = await startServer({ port: 0, returnServer: true }) as {
+      url: string;
+      server: http.Server;
+    };
+    server = started.server;
+
+    const response = await fetch(
+      `${started.url}/api/projects/${encodeURIComponent(projectId)}/media/tasks?includeDone=1`,
+    );
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      tasks: [{
+        taskId,
+        status: 'done',
+        file: { name: 'final/generated-renamed.png' },
+      }],
+    });
+    expect(listMediaTasksByProject(db, projectId, { includeTerminal: true })[0]?.file)
+      .toMatchObject({ name: 'final/generated-renamed.png' });
   });
 
   it('accepts only a same-project token explicitly allowed to poll media tasks', async () => {
@@ -288,6 +408,67 @@ describe('media task route recovery', () => {
     const authorized = await waitForMissingTask();
     expect(authorized.status).toBe(404);
     expect(authorityRequests).toBe(startupAuthorityRequests);
+  });
+
+  it.each([
+    ['treats a forwarded foreign Basic credential as a proxy-authenticated browser request',
+     `Basic ${Buffer.from('proxy-user:proxy-pass').toString('base64')}`, 200],
+    ['still routes foreign Bearer credentials to the run-scoped tool-token lane',
+     'Bearer forged-tool-token', 401],
+    ['fails closed on a malformed Bearer credential with no token',
+     'Bearer ', 401],
+    ['fails closed on a bare Bearer scheme',
+     'Bearer', 401],
+  ] as const)('%s', async (_label, authorization, expected) => {
+    // Given: a running task that a header-free browser request can already read.
+    const dataDir = process.env.OD_DATA_DIR;
+    const db = openDatabase(process.cwd(), dataDir === undefined ? {} : { dataDir });
+    const projectId = `project_${randomUUID()}`;
+    const taskId = `task_${randomUUID()}`;
+    const now = Date.now() - 5_000;
+
+    insertProject(db, {
+      id: projectId,
+      name: 'Proxy-authenticated media project',
+      createdAt: now,
+      updatedAt: now,
+    });
+    insertMediaTask(db, {
+      id: taskId,
+      projectId,
+      status: 'running',
+      surface: 'video',
+      model: 'seedance-2',
+      progress: ['provider task accepted'],
+      startedAt: now,
+      updatedAt: now,
+    });
+
+    const started = await startServer({ port: 0, returnServer: true }) as {
+      url: string;
+      server: http.Server;
+    };
+    server = started.server;
+
+    // When: the credential reaches the dual-lane wait route.
+    const response = await fetch(`${started.url}/api/media/tasks/${encodeURIComponent(taskId)}/wait`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization },
+      body: JSON.stringify({ since: 0, timeoutMs: 0 }),
+    });
+    const body = await response.text();
+
+    // Then: only Bearer claims the tool-token lane. A proxy's Basic header
+    // stays on project authorization like a header-free browser request,
+    // while a foreign Bearer token still fails closed in the registry.
+    expect(response.status, body).toBe(expected);
+    if (expected === 401) {
+      // A forged token is INVALID; a Bearer scheme carrying no token at all is
+      // MISSING. Both must stay on the tool-token lane and fail closed rather
+      // than downgrading to browser project authority.
+      const code = (JSON.parse(body) as { error?: { code?: string } }).error?.code;
+      expect(code).toMatch(/^TOOL_TOKEN_(INVALID|MISSING)$/);
+    }
   });
 
   it('recovers a pre-restart running task so wait returns interrupted instead of 404', async () => {

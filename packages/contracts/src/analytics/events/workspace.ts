@@ -57,6 +57,11 @@ export interface AccountMenuClickProps extends TrackingWorkspaceDimensions {
   element:
     | 'upgrade'
     | 'credits'
+    // The account menu's 账单 row. Distinct from 'credits' (the balance row in
+    // the hover panel) even though both open B's console: they are two
+    // different rows on two different surfaces, and folding them into one
+    // element would make the menu's own usage unreadable.
+    | 'billing'
     | 'settings'
     | 'message_center'
     | 'github_help'

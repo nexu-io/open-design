@@ -107,6 +107,7 @@ export interface PostToolResumeRecoveryInput {
   sideEffects?: RunRetrySideEffectState;
   supportsNativeSessionContinue: boolean;
   hasNativeSession: boolean;
+  hasVerifiedAmrContinuation?: boolean;
 }
 
 export function decidePostToolResumeRecovery(
@@ -143,7 +144,10 @@ export function decidePostToolResumeRecovery(
     !input.supportsNativeSessionContinue ||
     !input.hasNativeSession ||
     !sideEffects.toolCallSeen ||
-    !isPostToolTransientFailure
+    !(isPostToolTransientFailure || (
+      failure?.failure_detail === 'continuation_incomplete' &&
+      failure.failure_stage === 'post_tool_resume' && input.hasVerifiedAmrContinuation === true
+    ))
   ) {
     return null;
   }
@@ -211,6 +215,12 @@ function transientSuppressedReason(
     }
     return detail === 'qoder_stop_sequence' ||
       detail === 'session_resume_expired' ||
+      // A lost credential-refresh lock resolves as soon as the contending
+      // holder finishes, so the replay is the fix. Like `session_resume_expired`
+      // it is admitted at any stage, `session_init` included: it is raised
+      // before a request is sent, so that stage is the only one it can occur at
+      // and excluding it would make the entry dead on arrival.
+      detail === 'credential_refresh_contention' ||
       detail === 'stream_error' ||
       detail === 'fatal_rpc_error'
       ? null
@@ -245,6 +255,9 @@ export function decideSafeRunRetry(
 
   const failure = input.failure;
   if (!failure) return suppress('missing_failure_signal');
+  if (failure.failure_detail === 'continuation_incomplete') {
+    return suppress(attemptCount >= retryMaxAttempts ? 'attempt_limit_reached' : 'unsafe_failure_stage');
+  }
   if (failure?.failure_detail === 'hard_quota') return suppress('hard_quota');
   const transientReason = transientSuppressedReason(
     failure.failure_category,

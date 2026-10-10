@@ -1,5 +1,5 @@
 import { expect, test } from '@/playwright/suite';
-import { routeAgents } from '@/playwright/mock-factory';
+import { routeAgents, suppressWhatsNew } from '@/playwright/mock-factory';
 import { ensureRailOpen } from '@/playwright/rail';
 import type { Page } from '@playwright/test';
 
@@ -9,6 +9,10 @@ const READ_KEY = 'open-design.message-center.anonymous-read-ids.v1';
 test.describe.configure({ timeout: 30_000 });
 
 async function seedEntryHome(page: Page, options?: { locale?: string }) {
+  // The entry home mounts `WhatsNewPopup` (EntryShell.tsx) and its backdrop sits
+  // at z-index 1500 — above the z-index 120 chrome that owns the rail/settings
+  // controls this spec clicks. A live release card would swallow those clicks.
+  await suppressWhatsNew(page);
   await page.addInitScript(({ key, locale }) => {
     window.localStorage.clear();
     window.sessionStorage.clear();
@@ -128,26 +132,37 @@ test('[P1] message center uses account read APIs when Vela is signed in', async 
   await gotoEntryHome(page);
 
   const trigger = page.getByTestId('entry-nav-message-center');
-  await expect(trigger.locator('.entry-nav-rail__btn-dot')).toBeVisible();
+  await expect(trigger.locator('.entry-nav-rail__menu-item-dot')).toBeVisible();
   await trigger.click();
 
   const dialog = page.getByTestId('message-center-dialog');
   await expect(dialog.getByText('Build output recovered')).toBeVisible();
   await dialog.getByRole('button', { name: /Build output recovered/i }).click();
   await expect.poll(() => readMessageIds).toEqual(['msg-account-build']);
-  await expect(trigger.locator('.entry-nav-rail__btn-dot')).toBeVisible();
+  await expect(trigger.locator('.entry-nav-rail__menu-item-dot')).toBeVisible();
   await expect
     .poll(() => page.evaluate((key) => window.localStorage.getItem(key), READ_KEY))
     .toBeNull();
 
-  await dialog.getByRole('button', { name: 'Mark all read' }).click();
-  await expect.poll(() => readAllCalls).toBe(1);
-  await expect(trigger.locator('.entry-nav-rail__btn-dot')).toHaveCount(0);
+  // One flat inbox: no read filters and no bulk mark-all control remain.
+  await expect(dialog.getByRole('button', { name: 'All', exact: true })).toHaveCount(0);
+  await expect(dialog.getByRole('button', { name: 'Unread', exact: true })).toHaveCount(0);
+  await expect(dialog.getByRole('button', { name: 'Read', exact: true })).toHaveCount(0);
+  await expect(dialog.getByRole('button', { name: 'Mark all read' })).toHaveCount(0);
+  expect(readAllCalls).toBe(0);
+  await expect(dialog.getByText('Build output recovered')).toBeVisible();
+  await expect(dialog.getByText('Prerelease channel ready')).toBeVisible();
 
-  await dialog.getByRole('button', { name: 'Unread' }).click();
-  await expect(dialog.getByText('All caught up')).toBeVisible();
-
-  await dialog.getByRole('button', { name: 'Read', exact: true }).click();
+  // Archiving is local (no server field): the unread message leaves the inbox
+  // and the rail dot with it, and the header shelf toggle is the way back.
+  await dialog.getByTestId('message-center-archive').last().click();
+  await expect(dialog.getByText('Prerelease channel ready')).toHaveCount(0);
+  await expect(trigger.locator('.entry-nav-rail__menu-item-dot')).toHaveCount(0);
+  await dialog.getByTestId('message-center-shelf-toggle').click();
+  await expect(dialog.getByText('Prerelease channel ready')).toBeVisible();
+  await expect(dialog.getByText('Build output recovered')).toHaveCount(0);
+  await dialog.getByTestId('message-center-archive').click();
+  await dialog.getByTestId('message-center-shelf-toggle').click();
   await expect(dialog.getByText('Build output recovered')).toBeVisible();
   await expect(dialog.getByText('Prerelease channel ready')).toBeVisible();
 });

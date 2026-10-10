@@ -388,7 +388,7 @@
 }
 .slash-popover-hint {
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   text-transform: none;
   letter-spacing: 0;
   color: var(--text-muted);
@@ -517,9 +517,11 @@
 .qs-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(13, 12, 10, 0.32);
-  /* Sits in the modal tier (alongside prompt-template-modal-overlay) so
-   * the palette renders above any open context menus or popovers. */
+  background: var(--scrim-tint);
+  -webkit-backdrop-filter: var(--scrim-backdrop);
+  backdrop-filter: var(--scrim-backdrop);
+  /* Sits in the modal tier so the palette renders above any open context
+   * menus or popovers. */
   z-index: 1500;
   display: flex;
   align-items: flex-start;
@@ -544,7 +546,7 @@
   background: transparent;
   padding: 14px 16px;
   font-size: 16px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text);
   border-bottom: 1px solid var(--border-soft);
 }
@@ -726,7 +728,7 @@
   min-width: 0;
 }
 .library-filter-select-label {
-  font-weight: 500;
+  font-weight: 600;
   flex: 0 0 auto;
 }
 .library-filter-select select {
@@ -771,7 +773,7 @@
   border-color: var(--text);
   background-color: var(--bg-subtle);
   color: var(--text);
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .library-content {
@@ -798,7 +800,7 @@
 }
 
 .library-group-count {
-  font-weight: 500;
+  font-weight: 600;
   font-size: 12px;
   opacity: 0.6;
 }
@@ -857,7 +859,7 @@
   border-radius: var(--radius-xs);
   background: var(--accent-tint);
   color: var(--accent);
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .library-card-desc {
@@ -1381,7 +1383,9 @@
   display: grid;
   place-items: center;
   padding: 0;
-  background: color-mix(in srgb, var(--overlay-scrim, rgba(0, 0, 0, 0.42)) 72%, transparent);
+  background: var(--scrim-tint);
+  -webkit-backdrop-filter: var(--scrim-backdrop);
+  backdrop-filter: var(--scrim-backdrop);
 }
 
 .memory-action-modal {
@@ -1862,7 +1866,7 @@
   text-overflow: ellipsis;
   color: var(--text-muted);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1.2;
   white-space: nowrap;
 }

@@ -1,6 +1,7 @@
 import { expect, test } from '@/playwright/suite';
 import type { Page } from '@playwright/test';
 import { openSettingsDialog } from '../lib/playwright/amr.js';
+import { suppressWhatsNew } from '../lib/playwright/mock-factory.js';
 
 const STORAGE_KEY = 'open-design:config';
 
@@ -35,6 +36,11 @@ async function openSettings(page: Page, theme: Theme) {
   await page.route('**/api/health', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
   });
+
+  // The entry home mounts `WhatsNewPopup` (EntryShell.tsx) and its backdrop sits
+  // at z-index 1500 — above the z-index 120 chrome that owns the rail/settings
+  // controls this spec clicks. A live release card would swallow those clicks.
+  await suppressWhatsNew(page);
 
   await page.emulateMedia({ colorScheme: theme });
   await page.goto('/');

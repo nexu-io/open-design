@@ -102,6 +102,20 @@ function downloadProgressFromStatus(
   };
 }
 
+/**
+ * The desktop updater reports every download-phase transport failure under this
+ * code (`apps/desktop/src/main/updater.ts` → `desktopDownloadError`). It is the
+ * only signal that tells "the update download did not finish" (product copy
+ * S31c, OPEND-2849) apart from a failed update check.
+ */
+export const UPDATER_DOWNLOAD_FAILED_CODE = 'download-failed';
+
+export function isUpdaterDownloadFailure(
+  status: Pick<OpenDesignHostUpdaterStatusSnapshot, 'error'> | null | undefined,
+): boolean {
+  return status?.error?.code === UPDATER_DOWNLOAD_FAILED_CODE;
+}
+
 export function deriveUpdaterModel(
   status: OpenDesignHostUpdaterStatusSnapshot | null,
   options: { hostAvailable?: boolean } = {},

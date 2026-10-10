@@ -7,13 +7,10 @@
   gap: 0;
 }
 
-/* Frosted sheet over the page — a translucent glass shape that carries the
-   blur (per the Liquid Glass material tokens), not a raw blur of the view. */
-.backdrop.backdrop {
-  background: var(--glass-regular);
-  backdrop-filter: blur(var(--glass-regular-blur, 28px));
-  -webkit-backdrop-filter: blur(var(--glass-regular-blur, 28px));
-}
+/* No scrim override: this used to wear the Liquid Glass material
+   (--glass-regular + a 28px glass blur), which is the language of PANELS, not
+   of the sheet behind them. It now takes the shared `<Dialog>` scrim like
+   every other overlay. */
 
 /* The cover sits inset as its own card, at the image's natural aspect ratio. */
 .cover {

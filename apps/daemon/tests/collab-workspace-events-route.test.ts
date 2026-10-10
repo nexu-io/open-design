@@ -86,6 +86,29 @@ async function readUntil(
 }
 
 describe('GET /api/workspace/events', () => {
+  it('keeps private quota notifications inside the verified member scope', async () => {
+    const sinks: WorkspaceEventSinksByWorkspace = new Map();
+    const base = await startServer(sinks);
+    const controller = new AbortController();
+    const response = await fetch(`${base}/api/workspace/events?workspaceId=workspace-a&workspaceMemberId=member-a`, { signal: controller.signal });
+    const reader = response.body!.getReader();
+    try {
+      await readUntil(reader, (text) => text.includes('event: ready'));
+      const event = {
+        type: 'coding-plan-usage-changed' as const, workspaceId: 'workspace-a',
+        workspaceMemberId: 'member-a', eventId: '43',
+      };
+      emitWorkspaceEventToScope(sinks, 'workspace-a', { ...event, workspaceMemberId: 'member-other', eventId: '41' });
+      emitWorkspaceEventToScope(sinks, 'workspace-a', { ...event, workspaceId: 'workspace-other', eventId: '42' });
+      emitWorkspaceEventToScope(sinks, 'workspace-a', event);
+      const framed = await readUntil(reader, (text) => text.includes('"eventId":"43"'));
+      expect(framed).not.toContain('"eventId":"41"');
+      expect(framed).not.toContain('"eventId":"42"');
+    } finally {
+      controller.abort();
+      await reader.cancel().catch(() => undefined);
+    }
+  });
   it('registers a sink, streams a pushed thin event, and drops the sink on disconnect', async () => {
     const sinks: WorkspaceEventSinksByWorkspace = new Map();
     const releaseInterest = vi.fn();

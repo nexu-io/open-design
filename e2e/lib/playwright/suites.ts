@@ -32,6 +32,13 @@ export const uiP0Groups = {
       "ui/entry-chrome-flows.test.ts",
       "ui/entry-configuration-flows.test.ts",
       "ui/home-hero-rail.test.ts",
+      // Enrolled 2026-09-18: the Home → project hand-off specs (OPEND-2614 /
+      // 2170 / 3207) pin what only a running browser can see — the optimistic
+      // frame's timing, the balance dialog's placement and the split width.
+      // They were merged without enrollment, so no merge lane had executed them.
+      "ui/home-amr-pending.test.ts",
+      "ui/home-send-single-loading.test.ts",
+      "ui/home-send-split-width.test.ts",
       "ui/amr-onboarding.test.ts",
       "ui/api-empty-response.test.ts",
       "ui/settings-api-protocol.test.ts",
@@ -45,6 +52,7 @@ export const uiP0Groups = {
     workers: 1,
     files: [
       "ui/app.test.ts",
+      "ui/fork-note-ellipsis.test.ts",
       "ui/project-management-flows.test.ts",
       "ui/workspace-keyboard-flows.test.ts",
     ],
@@ -114,6 +122,7 @@ const uiP0CoverageFiles = [
   "ui/critical-smoke.test.ts",
   "ui/entry-chrome-flows.test.ts",
   "ui/entry-configuration-flows.test.ts",
+  "ui/fork-note-ellipsis.test.ts",
   "ui/home-hero-rail.test.ts",
   "ui/project-management-flows.test.ts",
   "ui/real-daemon-run.test.ts",

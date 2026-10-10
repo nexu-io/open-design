@@ -170,9 +170,9 @@ function config(): AppConfig {
 }
 
 /**
- * Scope queries to the open account menu's billing card. A pure read — the
- * menu is opened once, by hand, and `useDismissOnOutsideInteraction` only
- * closes it on a pointerdown outside or Escape, so it survives the switch.
+ * Scope queries to the billing card hanging under the top-right credits pill.
+ * A pure read — the panel is opened once, by hand (a pointer-enter on the
+ * pill), and only a pointer-leave closes it, so it survives the switch.
  */
 function billingCard() {
   const el = document.querySelector('.entry-nav-rail__menu-credits');
@@ -193,10 +193,11 @@ const BADGE_VIEWBOX_WIDTH: Record<string, string> = {
 };
 
 // 320a36ac1 moved the account module into the floating top-right cluster and
-// made its trigger avatar-only — the nameplate (label + badge) now lives in
-// the hover menu's billing card, which the harness already opens and scopes
-// through `billingCard()`. Read the badge from there; the trigger no longer
-// renders one.
+// made its trigger avatar-only; the account then moved to the foot of the rail
+// and the billing card to the hover panel under the credits pill — the
+// nameplate (label + badge) lives there now, which the harness already opens
+// and scopes through `billingCard()`. Read the badge from there; the trigger
+// never renders one.
 function accountRowBadgeViewBox(): string | null {
   const badge = document
     .querySelector('.entry-nav-rail__menu-credits-plan')
@@ -294,6 +295,8 @@ async function mountHomeShell(initial: WorkspaceCollabContext): Promise<Harness>
         onConfigPersist={vi.fn()}
         onRefreshAgents={vi.fn(() => [agent()])}
         onCreateProject={vi.fn(async () => true)}
+        onBeginProjectCreation={() => ({ projectId: 'optimistic-project', rollback: () => undefined })}
+        onAmrBalanceGateBlockChange={() => undefined}
         onCreatePluginShareProject={vi.fn()}
         onImportClaudeDesign={vi.fn()}
         onOpenProject={vi.fn()}
@@ -310,7 +313,7 @@ async function mountHomeShell(initial: WorkspaceCollabContext): Promise<Harness>
 
   await waitFor(() => expect(contextReads).toBeGreaterThan(0));
   await waitFor(() => expect(billingReads).toContain(initial.workspaceId));
-  fireEvent.click(await screen.findByTestId('entry-nav-account'));
+  fireEvent.pointerEnter(await screen.findByTestId('entry-top-right-credits'));
   await waitFor(() => expect(billingCard()).toBeTruthy());
 
   return {
@@ -357,7 +360,7 @@ describe('account menu plan nameplate follows the selected workspace', () => {
   it('names the workspace subscription, not the account subscription', async () => {
     const home = await mountHomeShell(PAID_TEAM);
 
-    await waitFor(() => expect(home.card().getByText('$12.34')).toBeTruthy());
+    await waitFor(() => expect(home.card().getByText('US$12.34')).toBeTruthy());
     const card = home.card();
     expect(card.queryByText('专业版')).toBeNull();
     expect(card.getByText('团队版')).toBeTruthy();
@@ -368,13 +371,13 @@ describe('account menu plan nameplate follows the selected workspace', () => {
   // workspace must move the nameplate, not only the wallet.
   it('moves both the wallet and the nameplate when the workspace switches', async () => {
     const home = await mountHomeShell(PAID_TEAM);
-    await waitFor(() => expect(home.card().getByText('$12.34')).toBeTruthy());
+    await waitFor(() => expect(home.card().getByText('US$12.34')).toBeTruthy());
 
     await home.switchTo(FREE_TEAM);
 
     // The money half already follows the switch — that is the half the reporter
     // saw working ("但是额度是对的").
-    await waitFor(() => expect(home.card().getByText('$0.00')).toBeTruthy());
+    await waitFor(() => expect(home.card().getByText('US$0.00')).toBeTruthy());
 
     // The plan half must follow it too. Before the fix this still read
     // 专业版 + the PLUS wordmark, because it came from the account summary
@@ -388,7 +391,7 @@ describe('account menu plan nameplate follows the selected workspace', () => {
     const card = home.card();
     expect(card.queryByText('专业版')).toBeNull();
     expect(card.queryByText('团队版')).toBeNull();
-    expect(card.getByText('免费')).toBeTruthy();
+    expect(card.getByText('免费版')).toBeTruthy();
     expect(accountRowBadgeViewBox()).toBe(BADGE_VIEWBOX_WIDTH.team);
   });
 });

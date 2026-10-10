@@ -10,6 +10,8 @@ export interface WhatsNewLocaleContent {
   title?: string;
   body?: string;
   linkUrl?: string;
+  /** Optional plain-text action label; omitted uses the client's localized default. */
+  ctaLabel?: string;
 }
 
 export interface WhatsNewContent {
@@ -21,6 +23,8 @@ export interface WhatsNewContent {
   imageUrl?: string;
   /** HTTPS link the "view the release notes" action opens. */
   linkUrl?: string;
+  /** Optional plain-text action label; omitted uses the client's localized default. */
+  ctaLabel?: string;
   locales?: Record<string, WhatsNewLocaleContent>;
 }
 

@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { pickHomeTemplate as pickTypePill } from '../helpers/home-template-picker';
 //
 // The Website-clone chip is the one create chip that writes into the composer:
 // an empty composer gets a localized "clone this site:" scaffold, because the
@@ -119,16 +120,12 @@ function renderHome() {
         projects={[]}
         onSubmit={() => undefined}
         onOpenProject={() => undefined}
-        onViewAllProjects={() => undefined}
       />
     </I18nProvider>,
   );
 }
 
-async function pickTypePill(id: string) {
-  const pill = await screen.findByTestId(`home-hero-type-pill-${id}`);
-  fireEvent.click(pill);
-}
+
 
 function composerText(): string {
   return (screen.getByTestId('home-hero-input').textContent ?? '');
@@ -216,7 +213,6 @@ describe('Website-clone composer scaffold is host-authored, not a draft', () => 
           projects={[]}
           onSubmit={() => undefined}
           onOpenProject={() => undefined}
-          onViewAllProjects={() => undefined}
         />
       </I18nProvider>,
     );

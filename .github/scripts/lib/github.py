@@ -77,7 +77,33 @@ def run_artifacts(repository: str, run_id: int) -> list[dict[str, Any]]:
         page += 1
 
 
-def unique_run_artifact(repository: str, run_id: int, name: str) -> dict[str, Any] | None:
+def run_jobs(repository: str, run_id: int, attempt: int) -> list[dict[str, Any]]:
+    """Read exactly one attempt; never borrow a previous attempt's success."""
+    if type(run_id) is not int or run_id <= 0 or type(attempt) is not int or attempt <= 0:
+        raise GitHubError("job lookup requires a positive run id and attempt")
+    quoted_repository = "/".join(urllib.parse.quote(part, safe="") for part in repository.split("/"))
+    jobs: list[dict[str, Any]] = []
+    page = 1
+    while True:
+        value = api_json(f"/repos/{quoted_repository}/actions/runs/{run_id}/attempts/{attempt}/jobs?per_page=100&page={page}")
+        if not isinstance(value, dict) or not isinstance(value.get("jobs"), list):
+            raise GitHubError("GitHub jobs response has an invalid shape")
+        batch = value["jobs"]
+        if any(not isinstance(job, dict) for job in batch):
+            raise GitHubError("GitHub job entry has an invalid shape")
+        jobs.extend(batch)
+        if len(batch) < 100:
+            return jobs
+        page += 1
+
+
+def latest_run_artifact(repository: str, run_id: int, name: str) -> dict[str, Any] | None:
+    """Select the newest surviving artifact across workflow run attempts.
+
+    Failed-job reruns retain artifacts from earlier attempts and may upload the
+    same name again. Consumers still validate the downloaded handoff's attempt,
+    so an older artifact can never become accepted evidence for a newer attempt.
+    """
     matches = [
         artifact
         for artifact in run_artifacts(repository, run_id)
@@ -85,12 +111,13 @@ def unique_run_artifact(repository: str, run_id: int, name: str) -> dict[str, An
     ]
     if not matches:
         return None
-    if len(matches) != 1:
-        raise GitHubError(f"expected exactly one current-run artifact named {name!r}, found {len(matches)}")
-    artifact_id = matches[0].get("id")
-    if not isinstance(artifact_id, int) or artifact_id <= 0:
-        raise GitHubError(f"artifact {name!r} has an invalid id")
-    return matches[0]
+    for artifact in matches:
+        artifact_id = artifact.get("id")
+        if not isinstance(artifact_id, int) or artifact_id <= 0:
+            raise GitHubError(f"artifact {name!r} has an invalid id")
+        if not isinstance(artifact.get("created_at"), str) or not artifact["created_at"]:
+            raise GitHubError(f"artifact {name!r} has an invalid creation time")
+    return max(matches, key=lambda artifact: (artifact["created_at"], artifact["id"]))
 
 
 def download_artifact(repository: str, artifact_id: int, destination: Path) -> None:

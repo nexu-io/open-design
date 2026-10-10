@@ -17,14 +17,13 @@ import {
   useState,
   type CSSProperties,
   type Dispatch,
-  type KeyboardEvent as ReactKeyboardEvent,
+  type MutableRefObject,
   type ReactNode,
   type SetStateAction,
 } from 'react';
 import {
   automaticStrategyTaskProfileForProjectMetadata,
   defaultScenarioPluginIdForProjectMetadata,
-  type AmrWalletSnapshot,
   type ChatSessionMode,
   type ConnectorDetail,
   type CreateProjectExampleReference,
@@ -112,20 +111,23 @@ import { LibrarySection } from './LibrarySection';
 import { UpdaterPopup } from './UpdaterPopup';
 import { WhatsNewPopup } from './WhatsNewPopup';
 import { DeepSeekHarnessSetupDialog } from './DeepSeekHarnessSetupDialog';
-import { AmrBalanceDialog } from './AmrBalanceDialog';
+import type { HomeAmrBalanceGateBlock } from './HomeAmrBalanceGateDialogs';
+import {
+  amrBalanceBlockedDialog,
+  amrBalanceDialogUpgradeIntent,
+  resolveAmrBalanceBranch,
+} from '../runtime/amr-balance-branch';
 import { installDeepSeekHarnessCompanion } from '../providers/agent-companion';
-import { AmrLowBalanceDialog, type AmrLowBalanceDecision } from './AmrLowBalanceDialog';
 import {
   amrBalanceGateScopeForWorkspaceContext,
   checkAmrBalanceGate,
   retryUnavailableAmrBalanceGate,
   type AmrBalanceGateScope,
 } from '../runtime/amr-balance-gate';
-import { isPaidAmrPlan, resolveAmrPlan } from '../runtime/amr-low-balance-plan';
 import { HomeView, seedHomeComposerPrompt } from './HomeView';
 import { entryStrategyRoutingFields } from './entry-strategy-routing';
 import { EntryBlankState } from './EntryBlankState';
-import { RecentProjectsStrip } from './RecentProjectsStrip';
+import { RecentProjectsStrip, type ProjectCollectionScope } from './RecentProjectsStrip';
 import {
   createPluginAuthoringHandoff,
   createPluginUseHandoff,
@@ -137,6 +139,7 @@ import type { OnboardingEntry } from '../onboarding/onboarding-entry';
 import type { PluginUseAction } from './plugins-home/useActions';
 import { Icon } from './Icon';
 import { Button } from '@open-design/components';
+import styles from './EntryShell.module.css';
 import {
   defaultAgentModelId,
   effectiveAgentModelChoice,
@@ -162,6 +165,8 @@ import { resolvePlanLabelTier } from '../collab/team-plan';
 import { resolveDeepSeekV4FlashCampaignAudience } from '../campaigns/deepseek-v4-flash';
 import { useDeepSeekV4FlashCampaignVisibility } from '../campaigns/use-deepseek-v4-flash-campaign';
 import { WorkbenchCampaignBadge } from './WorkbenchCampaignBadge';
+import { canRenderProductionCampaignBadge, ProductionCampaignBadge } from './ProductionCampaignBadge';
+import { ProductionCampaignHover } from './ProductionCampaignHover';
 import {
   beginWorkspaceScopedRead,
   workspaceIdentityCacheKey,
@@ -234,11 +239,16 @@ import {
 import {
   ENTRY_RAIL_STATE_EVENT,
   ENTRY_RAIL_TOGGLE_EVENT,
+  ENTRY_SEARCH_OPEN_EVENT,
   RAIL_OPEN_STORAGE_KEY,
   readStoredRailOpen,
 } from './entryRailBridge';
 import { resolveByokModelPreference } from './byok/validation';
-import onboardingSourceStyles from './OnboardingModelSource.module.css';
+import onboardingWelcomeStyles from './OnboardingWelcome.module.css';
+import { AmrActivationHintText } from './AmrActivationHintText';
+
+// How long a cloud sign-in waits for the browser before offering to reopen it.
+const ACTIVATION_HINT_DELAY_MS = 5000;
 
 // Persist the entry nav-rail open/collapsed state so it survives both a
 // home -> project -> home navigation (EntryShell unmounts on the project
@@ -260,7 +270,10 @@ function writeStoredRailOpen(open: boolean): void {
 
 const ONBOARDING_DROPDOWN_OPEN_EVENT = 'open-design:onboarding-dropdown-open';
 
-type OnboardingAgentTestState =
+// Agent and provider validation share one shape: idle until an attempt starts,
+// then keyed by the inputs that attempt is proving, so a result that no longer
+// describes the current selection can be told apart from one that does.
+type OnboardingRuntimeTestState =
   | { status: 'idle' }
   | { status: 'running'; inputKey: string }
   | { status: 'done'; inputKey: string; result: ConnectionTestResponse };
@@ -279,6 +292,47 @@ type OnboardingAgentTestState =
 // `specs/current/plugin-driven-flow-plan.md`.
 const ONBOARDING_BYOK_AUTO_FETCH_DELAY_MS = 300;
 const ONBOARDING_BYOK_AUTO_TEST_DELAY_MS = 500;
+// Validating a local runtime spawns the agent CLI and waits for a real model
+// reply, so the debounce is long enough that browsing the agent strip does not
+// start one spawn per chip — only a selection the user rests on validates.
+export const ONBOARDING_LOCAL_AUTO_TEST_DELAY_MS = 500;
+
+type OnboardingInlineTestRun = {
+  inputKey: string;
+  controller: AbortController;
+  promise: Promise<ConnectionTestResponse | null>;
+};
+
+/**
+ * Start `run` for `inputKey`, or hand back the attempt already validating
+ * exactly those inputs.
+ *
+ * Onboarding validates the chosen runtime from two places: the background pass
+ * that starts as soon as a selection settles, and the Continue click that must
+ * not finish onboarding on an unproven runtime. Both have to resolve to ONE
+ * round trip — a Continue landing mid-flight joins the pass in progress rather
+ * than being swallowed or spawning the agent a second time.
+ *
+ * An attempt whose inputs the user has already moved past can only produce a
+ * result that gets discarded (see `continueAttemptStillCurrent`), so it is
+ * aborted instead of being left to hold the runtime and race the replacement's
+ * state writes. The daemon cancels the connection test with the request.
+ */
+function startOrJoinInlineTest(
+  ref: MutableRefObject<OnboardingInlineTestRun | null>,
+  inputKey: string,
+  run: (signal: AbortSignal) => Promise<ConnectionTestResponse | null>,
+): Promise<ConnectionTestResponse | null> {
+  const current = ref.current;
+  if (current?.inputKey === inputKey) return current.promise;
+  current?.controller.abort();
+  const controller = new AbortController();
+  const promise = run(controller.signal).finally(() => {
+    if (ref.current?.controller === controller) ref.current = null;
+  });
+  ref.current = { inputKey, controller, promise };
+  return promise;
+}
 
 type EntryCreateProjectInput = Omit<CreateInput, 'metadata'> & {
   metadata?: CreateInput['metadata'];
@@ -298,12 +352,30 @@ type EntryCreateProjectInput = Omit<CreateInput, 'metadata'> & {
   autoSendFirstMessage?: boolean;
   /** Exact workspace/member authority checked by the Home AMR preflight. */
   amrGatePrecheckWitness?: AmrBalanceGateScope;
+  /**
+   * The optimistic project already flushed by `onBeginProjectCreation`. The
+   * create reuses this id (the daemon accepts a caller-minted id) instead of
+   * starting a second hand-off.
+   */
+  optimisticProjectId?: string;
   requestId?: string;
   pendingFiles?: File[];
   userWorkingDirToken?: string;
   linkedDirs?: string[] | null;
   onboardingEntry?: OnboardingEntry;
 };
+
+/**
+ * What App hands back once a Home send has entered the project frame
+ * optimistically: the client-minted project id the create must reuse, and the
+ * way to undo the hand-off (drop the optimistic row, return to Home with the
+ * draft and staged files intact) when no project is going to be created —
+ * a dismissed balance dialog, or a gate that could not answer.
+ */
+export interface OptimisticProjectCreationHandoff {
+  projectId: string;
+  rollback: (options?: { notice?: string }) => void;
+}
 
 function defaultPluginIdForMetadata(metadata: ProjectMetadata): string | null {
   return defaultScenarioPluginIdForProjectMetadata(metadata);
@@ -412,6 +484,7 @@ interface Props {
   skillsLoading?: boolean;
   designSystemsLoading?: boolean;
   projectsLoading?: boolean;
+  projectsLoadFailed?: boolean;
   // Execution / model-switching context. Threaded down from `App` so the
   // top-bar `InlineModelSwitcher` can render the active mode/agent/model
   // and persist changes through the same callbacks the project view uses.
@@ -435,6 +508,7 @@ interface Props {
    * `unknown` while billing summary leaves `membershipTier` empty.
    */
   amrAccountPlan?: string | null;
+  amrAccountId?: string | null;
   daemonLive: boolean;
   onModeChange: (mode: ExecMode) => void;
   onAgentChange: (id: string) => void;
@@ -453,6 +527,19 @@ interface Props {
   onSkillsChanged?: (affectedSkillId?: string) => void;
   onRefreshAgents: () => Promise<AgentInfo[]> | AgentInfo[];
   onCreateProject: (input: EntryCreateProjectInput) => Promise<boolean> | boolean | void;
+  /**
+   * Flush the optimistic project frame for a Home send on the click tick,
+   * before any admission check. Owned by App because the hand-off leaves the
+   * Home route (and unmounts this shell).
+   */
+  onBeginProjectCreation: (input: EntryCreateProjectInput) => OptimisticProjectCreationHandoff;
+  /**
+   * Publish (or clear) the AMR balance-gate hard block for App to render. The
+   * dialog cannot live here: by the time the gate answers, the send is already
+   * on the project route and this shell is unmounted (see
+   * `HomeAmrBalanceGateDialogs`).
+   */
+  onAmrBalanceGateBlockChange: (block: HomeAmrBalanceGateBlock | null) => void;
   onCreatePluginShareProject: (
     pluginId: string,
     action: PluginShareAction,
@@ -555,6 +642,7 @@ export function EntryShell({
   skillsLoading = false,
   designSystemsLoading = false,
   projectsLoading = false,
+  projectsLoadFailed = false,
   config,
   providerModelsCache: sharedProviderModelsCache,
   onProviderModelsCacheChange,
@@ -563,6 +651,7 @@ export function EntryShell({
   amrLoggedIn = null,
   amrSessionState,
   amrAccountPlan = null,
+  amrAccountId = null,
   daemonLive,
   onModeChange,
   onAgentChange,
@@ -576,6 +665,8 @@ export function EntryShell({
   onSkillsChanged,
   onRefreshAgents,
   onCreateProject,
+  onBeginProjectCreation,
+  onAmrBalanceGateBlockChange,
   onImportClaudeDesign,
   onImportFolder,
   onImportFolderResponse,
@@ -621,6 +712,7 @@ export function EntryShell({
     ? null
     : workspaceContext;
   const usesOpenDesignCloud = config.mode === 'daemon' && config.agentId === 'amr';
+  const amrProfile = config.agentCliEnv?.amr?.OPEN_DESIGN_AMR_PROFILE ?? null;
   const amrAuthRequired =
     workspaceContextState.failure === 'reauth-required'
     || (
@@ -684,6 +776,10 @@ export function EntryShell({
     deepSeekV4FlashCampaignAudience === 'unknown'
       ? null
       : deepSeekV4FlashCampaignAudience;
+  // The CMS touchpoints this rail hosts are home placements (`opend.home.*`).
+  // The rail itself rides every entry view, so the home view — not the rail —
+  // is what decides whether they may be on screen.
+  const homeCampaignHostsVisible = view === 'home';
   const workspaceBalanceUsd = workspaceBillingBalanceUsd(
     workspaceBillingResponse,
     workspaceContext,
@@ -933,6 +1029,17 @@ export function EntryShell({
   // placeholder, then ProjectView opens while the daemon materializes content in
   // the background. The placeholder stamp keeps every content writer fail-closed.
   const [pullingProjectId, setPullingProjectId] = useState<string | null>(null);
+  // The 全部项目 page's collection tab (OPEND-3108). The legacy `all-projects`
+  // view is a deep link to the 团队项目 tab; every other entry keeps whatever
+  // tab the user last picked.
+  const [projectsCollection, setProjectsCollection] = useState<ProjectCollectionScope>('recent');
+  useEffect(() => {
+    // Entering the page from the rail opens 最近浏览过 (the Demo's strip
+    // remounts on every visit, so it never carries a tab over); the legacy
+    // `/all-projects` view is the one deep link that lands on 团队项目.
+    if (view === 'all-projects') setProjectsCollection('teamProjects');
+    else if (view === 'drafts') setProjectsCollection('recent');
+  }, [view]);
   async function handleOpenAllProjects(id: string): Promise<boolean> {
     // The grid already reconciled the local row with the authoritative team
     // catalog (notably the owner's current project name). Carry its title and
@@ -1036,9 +1143,11 @@ export function EntryShell({
   }
   // Workspace-only destinations. Personal and team workspaces both use these;
   // signed-out/local state falls back to home once the context has resolved.
-  // `community` is allowed in both states, so it is not guarded.
+  // `community` is allowed in both states, so it is not guarded, and neither
+  // is `drafts` any more (OPEND-3140): without a workspace it is the local
+  // project list — `buildDraftsList` folds to every local project — and the
+  // rail's 项目 item opens it on both branches.
   const isWorkspaceOnlyView =
-    view === 'drafts' ||
     view === 'all-projects' ||
     view === 'members' ||
     view === 'board' ||
@@ -1050,28 +1159,12 @@ export function EntryShell({
     }
   }, [workspaceLoading, isWorkspaceOnlyView, hasWorkspaceContext]);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
-  // Hard block from the pre-run balance gate on a home submit (empty wallet
-  // or signed out); non-null renders the AmrBalanceDialog on the home page —
-  // the project is never created, so the composer draft stays put. The dialog
-  // resolves the promise the submit handler is awaiting: 'retry' (sign-in
-  // completed / recharge landed) re-runs the gate and continues the very same
-  // create-and-run; 'dismiss' hands the composer back to the user.
-  const [amrBalanceGateBlock, setAmrBalanceGateBlock] = useState<
-    {
-      reason: 'insufficient' | 'signed_out';
-      snapshot: AmrWalletSnapshot;
-      resolve: (decision: 'retry' | 'dismiss') => void;
-    } | null
-  >(null);
-  // Soft low-balance warning holding a pending home submit: the dialog
-  // resolves the promise the submit handler is awaiting ('proceed' continues
-  // the very same create-and-run).
-  const [amrLowBalanceWarn, setAmrLowBalanceWarn] = useState<
-    {
-      snapshot: AmrWalletSnapshot;
-      resolve: (decision: AmrLowBalanceDecision) => void;
-    } | null
-  >(null);
+  // Home has NO low-balance surface, and since T66 (product 2026-09-07) neither
+  // does anywhere else: a positive balance produces nothing at all and the run
+  // just starts. Home reached that end state first — ruling 2026-09-06 (T53),
+  // "什么都不显示,有余额就允许运行" — and the project page has now been pulled
+  // level with it, so `handlePluginLoopSubmit` having no low-balance branch is
+  // simply the shape of the gate: there is no such result kind to handle.
   // The entry nav rail is collapsed by default (Manus-style) so the entry
   // view opens clean and full-width; the panel toggle in the topbar opens it
   // as an overlay that dismisses on selection / backdrop click / Escape.
@@ -1134,6 +1227,14 @@ export function EntryShell({
     const onToggle = () => setRailOpen((v) => !v);
     window.addEventListener(ENTRY_RAIL_TOGGLE_EVENT, onToggle);
     return () => window.removeEventListener(ENTRY_RAIL_TOGGLE_EVENT, onToggle);
+  }, []);
+  // Same story for the search button, which sits in that chrome row beside the
+  // rail toggle (per product: 搜索和收起跟 home icon 一起放在顶部) while the
+  // palette it opens is owned here.
+  useEffect(() => {
+    const onOpen = () => setProjectSearchOpen(true);
+    window.addEventListener(ENTRY_SEARCH_OPEN_EVENT, onOpen);
+    return () => window.removeEventListener(ENTRY_SEARCH_OPEN_EVENT, onOpen);
   }, []);
   const [localProviderModelsCache, setLocalProviderModelsCache] =
     useState<ProviderModelsCache>({});
@@ -1335,18 +1436,28 @@ export function EntryShell({
       navigate({ kind: 'home', view: 'onboarding' }, { replace: true });
       return 'blocked' as const;
     }
+    const createInput = pluginLoopCreateInput(payload);
+    const isAmrSend = config.mode === 'daemon' && config.agentId === 'amr';
+    const amrModelId = isAmrSend
+      ? effectiveAgentModelId(
+          agents.find((agent) => agent.id === 'amr'),
+          config.agentModels?.amr,
+        )
+      : undefined;
+    // OPEND-2614: the project frame opens on the click tick for EVERY agent,
+    // before any admission check. Everything below runs behind that frame —
+    // this shell is unmounted the moment the hand-off navigates, so nothing
+    // after this line may rely on this instance's state or DOM. App owns the
+    // hand-off and the way back.
+    const handoff = onBeginProjectCreation(createInput);
     // OpenDesign Cloud pre-run balance gate: hard blocks (empty wallet or
-    // signed out) and the soft low-balance reminder both fire BEFORE the
-    // project is created, so the dialog appears right here on the home page
-    // and the composer keeps its draft. In-project sends are gated separately
-    // in ProjectView.handleSend.
+    // signed out) fire BEFORE the project is created — the dialog now sits over
+    // the pending frame, and a dismiss rolls the hand-off back to Home with the
+    // composer draft intact. In-project sends are gated separately in
+    // ProjectView.handleSend.
     let amrGatePrecheckWitness: AmrBalanceGateScope | undefined;
     let amrGatePrecheckPassed = false;
-    if (config.mode === 'daemon' && config.agentId === 'amr') {
-      const amrModelId = effectiveAgentModelId(
-        agents.find((agent) => agent.id === 'amr'),
-        config.agentModels?.amr,
-      );
+    if (isAmrSend) {
       // PRODUCT INVARIANT: Send never starts Workspace identity discovery.
       // Billing consumes the shell's current in-memory snapshot; if it has not
       // arrived yet, the existing account-scoped gate is used. The daemon's
@@ -1372,33 +1483,55 @@ export function EntryShell({
         // wallet is empty) → the dialog re-shows with the fresh snapshot.
         while (gate.kind === 'hard') {
           const blocked = gate;
+          // 「哪张弹窗」和「它的主按钮去哪」问的是同一个 branch 快照,免得两次
+          // 分别求值之间的一次工作区切换让两者各说各话(规格 §6.V / T58)。
+          const blockedBranch = resolveAmrBalanceBranch({
+            context: gateWorkspaceContext,
+            billing: workspaceBilling,
+          });
           const decision = await new Promise<'retry' | 'dismiss'>((resolve) => {
-            setAmrBalanceGateBlock({
+            onAmrBalanceGateBlockChange({
               reason: blocked.reason,
+              // 被登出说的是登录不是钱,无条件走原来那张(主按钮是应用内登录,
+              // 落点那一位那时用不上)。余额耗尽才按身份 × 订阅分支。
+              dialog:
+                blocked.reason === 'signed_out'
+                  ? 'upgrade'
+                  : amrBalanceBlockedDialog(blockedBranch),
+              upgradeIntent:
+                blocked.reason === 'signed_out'
+                  ? 'pricing'
+                  : amrBalanceDialogUpgradeIntent(blockedBranch),
               snapshot: blocked.snapshot,
+              modelId: amrModelId,
+              fundingScope: gateScope,
               resolve,
             });
           });
-          setAmrBalanceGateBlock(null);
-          if (decision === 'dismiss') return 'blocked' as const;
+          onAmrBalanceGateBlockChange(null);
+          if (decision === 'dismiss') {
+            // The dialog was the feedback; the composer gets its draft back
+            // without a second error on top.
+            handoff.rollback();
+            return 'blocked' as const;
+          }
           gate = await retryUnavailableAmrBalanceGate(
             () => checkAmrBalanceGate(gateScope, amrModelId),
           );
         }
-        if (gate.kind === 'unavailable') return false;
-        if (gate.kind === 'soft') {
-          // Hold THIS submit while the reminder waits for a decision; 'proceed'
-          // resumes the same create-and-run below, so HomeView's normal accept
-          // path (draft clearing, context consumption) still applies.
-          const plan = await resolveAmrPlan(gate.snapshot);
-          if (isPaidAmrPlan(plan)) {
-            const decision = await new Promise<AmrLowBalanceDecision>((resolve) => {
-              setAmrLowBalanceWarn({ snapshot: gate.snapshot, resolve });
-            });
-            setAmrLowBalanceWarn(null);
-            if (decision !== 'proceed') return 'blocked' as const;
-          }
+        if (gate.kind === 'unavailable') {
+          handoff.rollback({ notice: t('home.amrGateUnavailable') });
+          return false;
         }
+        // Everything else falls through and the run starts. Home used to hold
+        // the submit open behind a centered reminder dialog ("额度不多了" + 仍要
+        // 发起任务 / 去充值). Product ruled it away on 2026-09-06 — "软提醒弹窗
+        // 就是产品告诉我不要这个的" — and ruled Home's replacement to be nothing
+        // at all: "什么都不显示,有余额就允许运行" (T53). T66 (2026-09-07) then
+        // retired the low-balance tier everywhere, so there is no longer even a
+        // result kind here to consider handling. `empty_not_blocked` also falls
+        // through on purpose: it is a stood-down hard block, and Home has no
+        // conversation to hang its card on. Do not re-add a branch here.
         if (
           currentWorkspaceAccountGeneration() !== gateAccountGeneration
           || workspaceIdentityCacheKey(
@@ -1413,8 +1546,36 @@ export function EntryShell({
         amrGatePrecheckPassed = true;
         break;
       }
-      if (!amrGatePrecheckPassed) return false;
+      if (!amrGatePrecheckPassed) {
+        handoff.rollback({ notice: t('home.createFailed') });
+        return false;
+      }
     }
+    const create = () => Promise.resolve(onCreateProject({
+      ...createInput,
+      optimisticProjectId: handoff.projectId,
+      ...(amrGatePrecheckWitness ? { amrGatePrecheckWitness } : {}),
+    }));
+    try {
+      return await create();
+    } catch (error) {
+      if (
+        error instanceof ProjectCreateError
+        && error.code === 'AMR_AUTH_REQUIRED'
+      ) {
+        navigate({ kind: 'home', view: 'onboarding' }, { replace: true });
+        return 'blocked' as const;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * The create request a Home composer send turns into. Pure: it reads only
+   * the payload, so it can be computed before the optimistic hand-off and
+   * reused by the create that follows the admission check.
+   */
+  function pluginLoopCreateInput(payload: PluginLoopSubmit): EntryCreateProjectInput {
     const summarizedName = summarizeProjectNameFromPrompt(payload.prompt);
     const head = payload.prompt.trim().split(/\s+/).slice(0, 8).join(' ');
     const firstAttachmentName = payload.attachments?.[0]?.name ?? '';
@@ -1459,7 +1620,7 @@ export function EntryShell({
       } : {}),
     };
     const strategyRoutingFields = entryStrategyRoutingFields(payload, metadata);
-    const createInput: EntryCreateProjectInput = {
+    return {
       name,
       ...strategyRoutingFields,
       ...(strategyRoutingFields.skillId && payload.skillCatalogScope
@@ -1493,21 +1654,7 @@ export function EntryShell({
       // not need the desktop main-process trust token that baseDir imports
       // require for write access.
       autoSendFirstMessage: true,
-      ...(amrGatePrecheckWitness ? { amrGatePrecheckWitness } : {}),
     };
-    const create = () => Promise.resolve(onCreateProject(createInput));
-    try {
-      return await create();
-    } catch (error) {
-      if (
-        error instanceof ProjectCreateError
-        && error.code === 'AMR_AUTH_REQUIRED'
-      ) {
-        navigate({ kind: 'home', view: 'onboarding' }, { replace: true });
-        return 'blocked' as const;
-      }
-      throw error;
-    }
   }
 
   /**
@@ -1605,6 +1752,39 @@ export function EntryShell({
     />
   );
 
+  // Everything a HomeView needs except which surface it is on. Home renders
+  // one as the page; the community view docks a second at its bottom, and both
+  // must submit through the SAME handlers — a docked composer that created
+  // projects down a second path would drift from Home's the first time either
+  // changed.
+  const homeViewProps = {
+    projects: homeProjectsList,
+    projectsLoading,
+    designSystems,
+    designSystemsLoading,
+    defaultDesignSystemId,
+    onSubmit: handlePluginLoopSubmit,
+    onOpenProject,
+    // The Add menu's "Add plugin" row lands on the plugins page.
+    onBrowseRegistry: () => changeView('plugins'),
+    onOpenIntegrations: () => openIntegrationTab('connectors'),
+    onOpenMcp: () => openIntegrationTab('mcp'),
+    onOpenNewProject: (tab: 'template') => {
+      openNewProject(tab);
+    },
+    onStartBlankProject: startBlankProjectFromRail,
+    projectOwnerMemberIds: teamProjectOwnerMemberIds,
+    skills,
+    skillsLoading,
+    connectors,
+    promptTemplates,
+    artifactUpgradeSlot,
+    deepSeekV4FlashCampaignAudience,
+    onDeepSeekV4FlashCampaignUseNow: applyDeepSeekCampaignModel,
+    deepSeekV4FlashCampaignMetricsConsent: config.telemetry?.metrics === true,
+    deepSeekV4FlashCampaignInstallationId: config.installationId ?? null,
+  };
+
   return (
     <div className="entry-shell entry-shell--no-header">
       <div
@@ -1626,19 +1806,32 @@ export function EntryShell({
           }}
           onOpenSearch={() => setProjectSearchOpen(true)}
           open={railOpen}
-          topRightSlot={
-            topRightCampaignAudience ? (
-              <WorkbenchCampaignBadge
-                audience={topRightCampaignAudience}
-                page="home"
-                metricsConsent={config.telemetry?.metrics === true}
-                installationId={config.installationId}
-                loggedIn={amrLoggedIn}
-              />
-            ) : null
-          }
+          topRightSlot={topRightCampaignAudience || (homeCampaignHostsVisible && amrLoggedIn === true) ? (
+            <>
+              {topRightCampaignAudience ? (
+                <WorkbenchCampaignBadge
+                  audience={topRightCampaignAudience}
+                  page="home"
+                  metricsConsent={config.telemetry?.metrics === true}
+                  installationId={config.installationId}
+                  loggedIn={amrLoggedIn}
+                />
+              ) : null}
+              {homeCampaignHostsVisible
+                && canRenderProductionCampaignBadge(amrLoggedIn === true, amrAccountId) ? <ProductionCampaignBadge authenticated sessionSubject={amrAccountId} /> : null}
+              {/* The requirements-specific hover entry is its own authorized
+                  touchpoint, beside—not renamed from—the account badge. */}
+              {homeCampaignHostsVisible ? (
+                <ProductionCampaignHover
+                  authenticated={amrLoggedIn === true}
+                  sessionSubject={amrAccountId}
+                />
+              ) : null}
+            </>
+          ) : null}
           context={railWorkspaceContext}
           billing={workspaceBilling}
+          billingResponse={workspaceBillingResponse}
           balanceUsd={workspaceBalanceUsd}
           onOpenSettings={onOpenSettings}
           onInvite={() => changeView('members')}
@@ -1650,14 +1843,26 @@ export function EntryShell({
           // only a successful null context (or known local sign-out) may show
           // the sign-in card.
           footerNotice={accountFooterNotice}
-          priorityAnnouncementActive={
-            view === 'home'
-            && goPlanSunsetMessagePending
-            && amrBalanceGateBlock == null
-            && amrLowBalanceWarn == null
-          }
+          /* Same catalog and same opener the 全部项目 grid uses below, so the
+             rail's 最近浏览过 list and that view's 最近浏览过 tab are two views of
+             ONE list rather than two sorts of two lists. */
+          recentProjects={projectSearchProjects}
+          onOpenRecentProject={handleOpenAllProjects}
+          /* Same handlers the projects grid drives its own row menu with, so a
+             rename or a delete from the rail lands in exactly one place. */
+          onRenameRecentProject={onRenameProject}
+          onDeleteRecentProject={onDeleteProject}
+          onDuplicateRecentProject={onDuplicateProject}
+          /* And the same shared-state answer + optimistic markers the grids
+             get, so 转入团队空间 from the rail updates every list at once. */
+          isSharedRecentProject={isSharedProject}
+          recentProjectOwnerMemberIds={teamProjectOwnerMemberIds}
+          onRecentProjectShared={markProjectShared}
+          onRecentProjectShareFailed={markProjectShareFailed}
+          priorityAnnouncementActive={view === 'home' && goPlanSunsetMessagePending}
           onPriorityAnnouncementPendingChange={setGoPlanSunsetMessagePending}
           priorityAnnouncementCurrentPlanId={deepSeekCampaignPlan}
+          priorityAnnouncementAmrProfile={amrProfile}
           priorityAnnouncementMetricsConsent={config.telemetry?.metrics === true}
         />
         {projectSearchOpen ? (
@@ -1678,28 +1883,6 @@ export function EntryShell({
           <WhatsNewPopup active={view === 'home' && !goPlanSunsetMessagePending} />
           {/* The campaign badge lives in EntryNavRail's top-right cluster so it
               stays beside the account module across every entry tab. */}
-          {amrBalanceGateBlock ? (
-            <AmrBalanceDialog
-              reason={amrBalanceGateBlock.reason}
-              balanceUsd={amrBalanceGateBlock.snapshot.balanceUsd}
-              profile={amrBalanceGateBlock.snapshot.profile}
-              entrySource="home_balance_gate_upgrade"
-              metricsConsent={config.telemetry?.metrics === true}
-              installationId={config.installationId}
-              onClose={() => amrBalanceGateBlock.resolve('dismiss')}
-              onResolved={() => amrBalanceGateBlock.resolve('retry')}
-            />
-          ) : null}
-          {amrLowBalanceWarn ? (
-            <AmrLowBalanceDialog
-              balanceUsd={amrLowBalanceWarn.snapshot.balanceUsd}
-              profile={amrLowBalanceWarn.snapshot.profile}
-              entrySource="home_low_balance_warn_recharge"
-              metricsConsent={config.telemetry?.metrics === true}
-              installationId={config.installationId}
-              onDecision={amrLowBalanceWarn.resolve}
-            />
-          ) : null}
           <div
             className={[
               'entry-main__inner',
@@ -1708,41 +1891,15 @@ export function EntryShell({
           >
             <div className="entry-main__view-home" data-testid="entry-view-home" data-active={view === 'home' ? 'true' : 'false'} {...inactiveViewProps(view === 'home')}>
               <HomeView
+                {...homeViewProps}
                 isActive={view === 'home'}
-                projects={homeProjectsList}
-                projectsLoading={projectsLoading}
-                designSystems={designSystems}
-                designSystemsLoading={designSystemsLoading}
-                defaultDesignSystemId={defaultDesignSystemId}
-                onSubmit={handlePluginLoopSubmit}
-                onOpenProject={onOpenProject}
-                onViewAllProjects={() => changeView('projects')}
-                onDeleteProject={onDeleteProject}
-                onDuplicateProject={onDuplicateProject}
-                onRenameProject={onRenameProject}
-                onBrowseRegistry={() => changeView('plugins')}
-                onOpenIntegrations={() => openIntegrationTab('connectors')}
-                onOpenMcp={() => openIntegrationTab('mcp')}
-                onOpenNewProject={(tab) => {
-                  openNewProject(tab);
-                }}
-                onStartBlankProject={startBlankProjectFromRail}
+                /* Home is the one composer in the shell and consumes the page
+                   handoff. The community view used to dock a second HomeView
+                   (`variant="dock"`) with a handoff of its own; that mount
+                   was taken out (OPEND-2793) until phase three gives it a
+                   template-bound shape. */
                 promptHandoff={homePromptHandoff}
-                isSharedProject={isSharedProject}
-                onProjectShared={markProjectShared}
-                onProjectShareFailed={markProjectShareFailed}
-                onProjectUnshared={markProjectUnshared}
-                projectOwnerMemberIds={teamProjectOwnerMemberIds}
-                skills={skills}
-                skillsLoading={skillsLoading}
-                connectors={connectors}
-                promptTemplates={promptTemplates}
                 executionSwitcher={view === 'home' ? homeExecutionSwitcher : undefined}
-                artifactUpgradeSlot={artifactUpgradeSlot}
-                deepSeekV4FlashCampaignAudience={deepSeekV4FlashCampaignAudience}
-                onDeepSeekV4FlashCampaignUseNow={applyDeepSeekCampaignModel}
-                deepSeekV4FlashCampaignMetricsConsent={config.telemetry?.metrics === true}
-                deepSeekV4FlashCampaignInstallationId={config.installationId ?? null}
               />
             </div>
             <div data-testid="entry-view-projects" data-active={view === 'projects' ? 'true' : 'false'} {...inactiveViewProps(view === 'projects')}>
@@ -1901,9 +2058,13 @@ export function EntryShell({
                   })();
                 }}
                 onUsePrompt={(target) => {
-                  // Seed the Home composer with the template's starting prompt,
-                  // then switch to Home to review + send it (keep in sync with
-                  // the standalone /community branch in App.tsx).
+                  // Hands off to Home (OPEND-2793, product decision B): the
+                  // community view no longer docks a composer at its foot —
+                  // that bar had no relation to the gallery, the filters or
+                  // the card under it, and phase three will bring it back in
+                  // a template-bound shape. Same seed + binding pair the
+                  // standalone /community route in App.tsx uses, so Use
+                  // lands the prompt AND the plugin driver in Home's composer.
                   seedHomeComposerPrompt(target.prompt);
                   setHomePromptHandoff(createPluginUseHandoff(Date.now(), target.templateId, {
                     action: 'use',
@@ -1928,12 +2089,33 @@ export function EntryShell({
                 view is provided by another lane (B = members/board, D = team
                 project spaces / workspace settings), rendered as a placeholder
                 until those land. */}
-            {view === 'drafts' ? (
-              projectsLoading ? (
+            {view === 'drafts' || view === 'all-projects' ? (
+              // 全部项目 (OPEND-3108): ONE catalog — the same list the rail's
+              // 最近浏览过 shows — split by the strip's 最近浏览过 / 个人项目 /
+              // 团队项目 tabs. The legacy `all-projects` view (the
+              // `/all-projects` deep link) is this page opened on its 团队项目
+              // tab. The team half of the catalog comes from `teamProjects`,
+              // which has its own loading state and restarts from empty
+              // whenever the entry shell remounts (e.g. returning from a
+              // project); wait for BOTH reads before calling the page empty.
+              !projectsLoading && projectSearchProjects.length === 0 && (projectsLoadFailed || teamProjects.error) ? (
+                <div className="entry-section">
+                  <header className="entry-section__head">
+                    <h1 className="entry-section__title">{t('entry.navDrafts')}</h1>
+                  </header>
+                  <div className={styles.projectListError} role="alert">
+                    <p>{t('entry.projectsLoadFailed')}</p>
+                    <Button onClick={() => {
+                      teamProjects.reload();
+                      void Promise.resolve(onProjectsRefresh?.()).catch(() => {});
+                    }}>{t('preview.retry')}</Button>
+                  </div>
+                </div>
+              ) : projectsLoading || (projectSearchProjects.length === 0 && teamProjects.loading) ? (
                 <div className="entry-section">
                   <CenteredLoader label={t('common.loading')} />
                 </div>
-              ) : draftProjectsList.length === 0 ? (
+              ) : projectSearchProjects.length === 0 ? (
                 <EntryBlankState
                   heading={t('entry.navDrafts')}
                   description={t('entry.blankDraftsDescription')}
@@ -1943,58 +2125,25 @@ export function EntryShell({
               ) : (
                 <div className="entry-section">
                   <RecentProjectsStrip
-                    projects={draftProjectsList}
+                    projects={projectSearchProjects}
                     designSystems={designSystems}
                     limit={1000}
                     heading={t('entry.navDrafts')}
                     space="drafts"
-                    isSharedProject={isSharedProject}
-                    onProjectShared={markProjectShared}
-                    onProjectShareFailed={markProjectShareFailed}
-                    onProjectUnshared={markProjectUnshared}
-                    projectOwnerMemberIds={teamProjectOwnerMemberIds}
-                    onOpen={(id) => onOpenProject(id)}
-                    onViewAll={() => {}}
-                    onDelete={onDeleteProject}
-                    onRename={onRenameProject}
-                  />
-                </div>
-              )
-            ) : null}
-            {view === 'all-projects' ? (
-              // The all-projects grid is fed by `teamProjects`, which has its own
-              // loading state and restarts from empty whenever the entry shell
-              // remounts (e.g. returning from a project). Gating only on
-              // `projectsLoading` flashed the "还没有团队项目" empty state during
-              // that team read; wait for BOTH before deciding the grid is empty.
-              projectsLoading || teamProjects.loading ? (
-                <div className="entry-section">
-                  <CenteredLoader label={t('common.loading')} />
-                </div>
-              ) : allProjectsList.length === 0 ? (
-                <EntryBlankState
-                  heading={t('entry.navAllProjects')}
-                  description={t('entry.blankAllProjectsDescription')}
-                  actionLabel={t('entry.blankCreate')}
-                  onCreate={() => startBlankProjectFromRail()}
-                />
-              ) : (
-                <div className="entry-section">
-                  <RecentProjectsStrip
-                    projects={allProjectsList}
-                    designSystems={designSystems}
-                    limit={1000}
-                    heading={t('entry.navAllProjects')}
-                    space="team"
+                    collection={projectsCollection}
+                    onCollectionChange={setProjectsCollection}
                     isSharedProject={isSharedProject}
                     onProjectShared={markProjectShared}
                     onProjectShareFailed={markProjectShareFailed}
                     onProjectUnshared={markProjectUnshared}
                     projectOwnerMemberIds={teamProjectOwnerMemberIds}
                     openingProjectId={pullingProjectId}
+                    // Pull-first opener: a 团队项目 row that is not local yet
+                    // materializes before it opens, like the old team grid.
                     onOpen={handleOpenAllProjects}
                     onViewAll={() => {}}
                     onDelete={onDeleteProject}
+                    onDuplicate={onDuplicateProject}
                     onRename={onRenameProject}
                     canAssignInviteRoles={workspaceContext?.permissions.canInviteMembers === true}
                     canManageProjectCollection={workspaceContext?.permissions.canShareProjects === true}
@@ -2082,11 +2231,6 @@ function OnboardingView({
   const analytics = useAnalytics();
   const [step, setStep] = useState(0);
   const [runtime, setRuntime] = useState<'amr' | 'local' | 'byok' | null>(null);
-  const [runtimeSetupEntry, setRuntimeSetupEntry] = useState<'cloud' | 'chooser'>('chooser');
-  const [modelSource, setModelSource] = useState<'amr' | 'local' | 'byok'>('amr');
-  const modelSourceOptionRefs = useRef<
-    Record<'amr' | 'local' | 'byok', HTMLButtonElement | null>
-  >({ amr: null, local: null, byok: null });
   const [apiKeyVisible, setApiKeyVisible] = useState(false);
   const [cliScanStatus, setCliScanStatus] = useState<'idle' | 'scanning' | 'done'>('idle');
   const [amrStatus, setAmrStatus] = useState<VelaLoginStatus | null>(null);
@@ -2098,24 +2242,30 @@ function OnboardingView({
   const [amrLoginCancelPending, setAmrLoginCancelPending] = useState(false);
   const passiveReauthCompletedRef = useRef(false);
   const [amrLoginError, setAmrLoginError] = useState<string | null>(null);
-  // Local dismissal for the cloud landing's activation-retry card only (its
-  // own × close, distinct from "取消登录" which cancels the whole vela login).
-  // Reset whenever a login attempt isn't in flight, so a canceled-then-retried
-  // attempt shows the hint again instead of staying hidden from a prior dismiss.
-  const [activationHintClosed, setActivationHintClosed] = useState(false);
+  // The cloud landing's "sign-in page didn't open?" line is a fallback, so it
+  // waits a few seconds into a login attempt before appearing — the browser
+  // usually opens on its own. A failed browser open skips the wait (see the
+  // render). Resets whenever no attempt is in flight.
+  const [activationHintDue, setActivationHintDue] = useState(false);
+  const amrLoginAttemptActive = amrLoginPending || amrStatus?.loginInFlight === true;
   useEffect(() => {
-    if (!amrLoginPending) setActivationHintClosed(false);
-  }, [amrLoginPending]);
+    if (!amrLoginAttemptActive) {
+      setActivationHintDue(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setActivationHintDue(true), ACTIVATION_HINT_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [amrLoginAttemptActive]);
   const [visibleAgentIds, setVisibleAgentIds] = useState<string[]>([]);
   const [dshSetup, setDshSetup] = useState<{ busy: boolean; error: string | null } | null>(null);
-  const [providerTestState, setProviderTestState] = useState<
-    | { status: 'idle' }
-    | { status: 'running'; inputKey: string }
-    | { status: 'done'; inputKey: string; result: ConnectionTestResponse }
-  >({ status: 'idle' });
-  const [agentTestState, setAgentTestState] = useState<OnboardingAgentTestState>({
+  const [providerTestState, setProviderTestState] =
+    useState<OnboardingRuntimeTestState>({ status: 'idle' });
+  const [agentTestState, setAgentTestState] = useState<OnboardingRuntimeTestState>({
     status: 'idle',
   });
+  // True only while a Continue click is itself waiting on validation, never for
+  // the background pass — see `awaitRuntimeValidation`.
+  const [continuePending, setContinuePending] = useState(false);
   const [providerModelsState, setProviderModelsState] = useState<
     | { status: 'idle' }
     | { status: 'running'; inputKey: string }
@@ -2149,6 +2299,9 @@ function OnboardingView({
   const amrAuthAttemptIdRef = useRef<string | null>(null);
   const providerModelsAutoFetchKeyRef = useRef<string | null>(null);
   const providerAutoTestKeyRef = useRef<string | null>(null);
+  const agentAutoTestKeyRef = useRef<string | null>(null);
+  const agentTestRunRef = useRef<OnboardingInlineTestRun | null>(null);
+  const providerTestRunRef = useRef<OnboardingInlineTestRun | null>(null);
   const providerModelAutoSelectRef = useRef({
     model: config.model,
     providerModelsInputKey: '',
@@ -2228,13 +2381,18 @@ function OnboardingView({
   const canTestAgent = Boolean(selectedAgent) && daemonLive;
   const runtimeSetupStep = step === 2;
   const localRuntimeConfigured = selectedAgent?.available === true;
+  // A setup-required entry (DeepSeek Harness before its companion is installed)
+  // stays in the picker and can be the saved selection, but it is not something
+  // to prove on the user's behalf: the daemon resolves its binary and really
+  // does try to start the runtime, so the panel would answer with a failure
+  // while the same screen is still telling the user to finish installing it.
+  // Only a selection the step would actually let them continue on is worth
+  // spending an unprompted spawn on. Pressing Test stays their call.
+  const agentValidationWorthStarting = canTestAgent && localRuntimeConfigured;
   const byokRuntimeConfigured = canTestProvider;
   const connectStepRuntimeReady =
     (runtime === 'local' && localRuntimeConfigured) ||
     (runtime === 'byok' && byokRuntimeConfigured);
-  const connectStepTestRunning =
-    (runtime === 'local' && visibleAgentTestState.status === 'running') ||
-    (runtime === 'byok' && visibleProviderTestState.status === 'running');
   const connectStepBlocked = runtimeSetupStep && !connectStepRuntimeReady;
   // What the user is looking at RIGHT NOW. `handlePrimaryAction` awaits a
   // validation round trip before it persists anything, and its closure is
@@ -2437,9 +2595,6 @@ function OnboardingView({
     stepName: TrackingOnboardingStepName;
   } {
     if (stepIdx === 0) return { area: 'runtime', stepIndex: '1', stepName: 'connect' };
-    if (stepIdx === 1) {
-      return { area: 'model_source', stepIndex: '2', stepName: 'model_source' };
-    }
     return { area: 'runtime_setup', stepIndex: '3', stepName: 'runtime_setup' };
   }
   function emitOnboardingClick(
@@ -2580,6 +2735,38 @@ function OnboardingView({
     agentRevealTimersRef.current = [];
   }
 
+  /**
+   * Undo whichever runtime validation is still in flight.
+   *
+   * A validation is not free to abandon: proving a local runtime spawns a real
+   * agent CLI, and left alone that child occupies the daemon until its own
+   * timeout — so a user who opens the setup step, looks, and leaves would pay
+   * for a check nobody can consume. Aborting hands the child back immediately.
+   *
+   * Undoing means the bookkeeping too. An aborted run deliberately writes no
+   * result, so leaving `*AutoTestKeyRef` claiming these inputs were validated
+   * would strand the panel on a `running` state no run will ever finish, and
+   * the auto-validation effect would skip them for good on the way back in.
+   * A run that already finished is left alone — its result is still the truth
+   * about the current selection, and re-proving it would cost another spawn.
+   */
+  function abortRuntimeValidations(): void {
+    if (agentTestRunRef.current) {
+      agentTestRunRef.current.controller.abort();
+      agentTestRunRef.current = null;
+      agentAutoTestKeyRef.current = null;
+      setAgentTestState((current) => (current.status === 'running' ? { status: 'idle' } : current));
+    }
+    if (providerTestRunRef.current) {
+      providerTestRunRef.current.controller.abort();
+      providerTestRunRef.current = null;
+      providerAutoTestKeyRef.current = null;
+      setProviderTestState((current) => (
+        current.status === 'running' ? { status: 'idle' } : current
+      ));
+    }
+  }
+
   function selectDefaultCliAgent(availableAgents: AgentInfo[]): AgentInfo | null {
     const selectedAgent =
       availableAgents.find((agent) => agent.id === config.agentId) ?? availableAgents[0] ?? null;
@@ -2668,7 +2855,7 @@ function OnboardingView({
     emitOnboardingClick('back', 'back');
     clearAgentRevealTimers();
     setRuntime(null);
-    setStep(runtimeSetupEntry === 'cloud' ? 0 : 1);
+    setStep(0);
   }
 
   function completeStreamlinedOnboarding(
@@ -2689,7 +2876,14 @@ function OnboardingView({
       onFinish();
       return;
     }
-    setStep(1);
+    emitOnboardingClick('amr_cloud', 'select_runtime', {
+      runtime_type: 'amr_cloud',
+      is_recommended: true,
+    });
+    setRuntime('amr');
+    onModeChange('daemon');
+    onAgentChange('amr');
+    completeStreamlinedOnboarding('amr_cloud');
   }
 
   function startHydratedAmrLoginPoll(): void {
@@ -2714,61 +2908,6 @@ function OnboardingView({
       });
   }
 
-  function handleModelSourceKeyDown(
-    event: ReactKeyboardEvent<HTMLButtonElement>,
-    currentSource: 'amr' | 'local' | 'byok',
-  ): void {
-    const sources = ['amr', 'local', 'byok'] as const;
-    const currentIndex = sources.indexOf(currentSource);
-    let nextIndex: number | null = null;
-
-    if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
-      nextIndex = (currentIndex + 1) % sources.length;
-    } else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
-      nextIndex = (currentIndex - 1 + sources.length) % sources.length;
-    } else if (event.key === 'Home') {
-      nextIndex = 0;
-    } else if (event.key === 'End') {
-      nextIndex = sources.length - 1;
-    }
-
-    if (nextIndex === null) return;
-    event.preventDefault();
-    const nextSource = sources[nextIndex];
-    if (!nextSource) return;
-    setModelSource(nextSource);
-    modelSourceOptionRefs.current[nextSource]?.focus();
-  }
-
-  function continueWithModelSource(): void {
-    if (modelSource === 'amr') {
-      emitOnboardingClick('amr_cloud', 'select_runtime', {
-        runtime_type: 'amr_cloud',
-        is_recommended: true,
-      });
-      setRuntime('amr');
-      onModeChange('daemon');
-      onAgentChange('amr');
-      completeStreamlinedOnboarding('amr_cloud');
-      return;
-    }
-
-    if (modelSource === 'local') {
-      emitOnboardingClick('local_coding_agent', 'select_runtime', {
-        runtime_type: 'local_cli',
-      });
-      setRuntime('local');
-      setRuntimeSetupEntry('chooser');
-      void scanCliAgents({ preferExisting: true });
-      setStep(2);
-      return;
-    }
-
-    emitOnboardingClick('byok', 'select_runtime', { runtime_type: 'byok' });
-    setRuntime('byok');
-    setRuntimeSetupEntry('chooser');
-    setStep(2);
-  }
   /**
    * Whether the Continue attempt that started against `startedInputKey` still
    * describes what the user is looking at.
@@ -2795,14 +2934,45 @@ function OnboardingView({
       : now.providerTestInputKey === startedInputKey;
   }
 
+  /**
+   * The already-validated result for what the user is looking at, or null when
+   * Continue still has to prove the runtime itself.
+   *
+   * The background pass usually has an answer waiting by the time Continue is
+   * pressed; taking it here is what keeps the click instant instead of paying
+   * for another agent spawn.
+   */
+  function settledRuntimeValidation(
+    state: OnboardingRuntimeTestState,
+  ): ConnectionTestResponse | null {
+    return state.status === 'done' && state.result.ok ? state.result : null;
+  }
+
+  /**
+   * Wait out a validation the user is actively blocked on, with the button
+   * showing it.
+   *
+   * A background pass runs on its own and must leave Continue pressable, so
+   * only the wait a click actually owns is allowed to make the button busy.
+   */
+  async function awaitRuntimeValidation(
+    validate: () => Promise<ConnectionTestResponse | null>,
+  ): Promise<ConnectionTestResponse | null> {
+    setContinuePending(true);
+    try {
+      return await validate();
+    } finally {
+      setContinuePending(false);
+    }
+  }
+
   async function handlePrimaryAction() {
-    if (connectStepBlocked || connectStepTestRunning) return;
+    if (connectStepBlocked || continuePending) return;
     if (runtime === 'local' && selectedAgent) {
       const startedInputKey = agentTestInputKey;
       const testResult =
-        visibleAgentTestState.status === 'done' && visibleAgentTestState.result.ok
-          ? visibleAgentTestState.result
-          : await testAgentInline();
+        settledRuntimeValidation(visibleAgentTestState)
+        ?? (await awaitRuntimeValidation(testAgentInline));
       if (!testResult?.ok) return;
       if (!continueAttemptStillCurrent('local', startedInputKey)) return;
       await onConfigPersist({
@@ -2817,9 +2987,8 @@ function OnboardingView({
     if (runtime === 'byok') {
       const startedInputKey = providerTestInputKey;
       const testResult =
-        visibleProviderTestState.status === 'done' && visibleProviderTestState.result.ok
-          ? visibleProviderTestState.result
-          : await testProviderInline();
+        settledRuntimeValidation(visibleProviderTestState)
+        ?? (await awaitRuntimeValidation(testProviderInline));
       if (!testResult?.ok) return;
       if (!continueAttemptStillCurrent('byok', startedInputKey)) return;
       await onConfigPersist({ ...config, mode: 'api' });
@@ -2829,9 +2998,9 @@ function OnboardingView({
     }
   }
 
-  // Cloud login establishes identity only. The model source is deliberately
-  // chosen on the following screen so signing in never overwrites a restored
-  // Local/BYOK configuration.
+  // Cloud login lands on Hosted directly (see `continueAfterCloudSignIn`),
+  // except when a completed setup has a restorable Local/BYOK configuration,
+  // which signing in never overwrites.
   async function handleCloudSignIn() {
     if (amrLoginBusy || amrLoginCancelPending) return;
     const cardAttribution = recordAmrEntry(
@@ -3168,65 +3337,78 @@ function OnboardingView({
     }
   }
 
-  async function testProviderInline(): Promise<ConnectionTestResponse | null> {
-    if (!canTestProvider || providerTestState.status === 'running') return null;
+  function testProviderInline(): Promise<ConnectionTestResponse | null> {
+    if (!canTestProvider) return Promise.resolve(null);
     const inputKey = providerTestInputKey;
-    providerAutoTestKeyRef.current = inputKey;
-    setProviderTestState({ status: 'running', inputKey });
-    try {
-      const result = await testApiProvider({
-        protocol: apiProtocol,
-        baseUrl: config.baseUrl,
-        apiKey: config.apiKey,
-        model: config.model,
-        apiVersion:
-          apiProtocol === 'azure'
-            ? config.apiVersion?.trim() || undefined
-            : undefined,
-      });
-      setProviderTestState({ status: 'done', inputKey, result });
-      return result;
-    } catch (error) {
-      const result: ConnectionTestResponse = {
-        ok: false,
-        kind: 'unknown',
-        latencyMs: 0,
-        model: config.model,
-        detail: error instanceof Error ? error.message : 'Test request failed',
-      };
-      setProviderTestState({ status: 'done', inputKey, result });
-      return result;
-    }
+    const protocol = apiProtocol;
+    const baseUrl = config.baseUrl;
+    const apiKey = config.apiKey;
+    const model = config.model;
+    const apiVersion =
+      protocol === 'azure' ? config.apiVersion?.trim() || undefined : undefined;
+    return startOrJoinInlineTest(providerTestRunRef, inputKey, async (signal) => {
+      providerAutoTestKeyRef.current = inputKey;
+      setProviderTestState({ status: 'running', inputKey });
+      try {
+        const result = await testApiProvider(
+          { protocol, baseUrl, apiKey, model, apiVersion },
+          signal,
+        );
+        setProviderTestState({ status: 'done', inputKey, result });
+        return result;
+      } catch (error) {
+        // A superseded attempt leaves the state to the run that replaced it.
+        if (signal.aborted) return null;
+        const result: ConnectionTestResponse = {
+          ok: false,
+          kind: 'unknown',
+          latencyMs: 0,
+          model,
+          detail: error instanceof Error ? error.message : 'Test request failed',
+        };
+        setProviderTestState({ status: 'done', inputKey, result });
+        return result;
+      }
+    });
   }
 
-  async function testAgentInline(): Promise<ConnectionTestResponse | null> {
-    if (!selectedAgent || !canTestAgent || agentTestState.status === 'running') return null;
+  function testAgentInline(): Promise<ConnectionTestResponse | null> {
+    if (!selectedAgent || !canTestAgent) return Promise.resolve(null);
     const inputKey = agentTestInputKey;
     const agent = selectedAgent;
     const model = selectedAgentTestModel;
     const reasoning = selectedAgentTestReasoning;
-    setAgentTestState({ status: 'running', inputKey });
-    try {
-      const result = await testAgent({
-        agentId: agent.id,
-        model: model || undefined,
-        reasoning: reasoning || undefined,
-        agentCliEnv: config.agentCliEnv ?? {},
-      });
-      setAgentTestState({ status: 'done', inputKey, result });
-      return result;
-    } catch (error) {
-      const result: ConnectionTestResponse = {
-        ok: false,
-        kind: 'unknown',
-        latencyMs: 0,
-        model: model || 'default',
-        agentName: agent.name,
-        detail: error instanceof Error ? error.message : 'Test request failed',
-      };
-      setAgentTestState({ status: 'done', inputKey, result });
-      return result;
-    }
+    const agentCliEnv = config.agentCliEnv ?? {};
+    return startOrJoinInlineTest(agentTestRunRef, inputKey, async (signal) => {
+      agentAutoTestKeyRef.current = inputKey;
+      setAgentTestState({ status: 'running', inputKey });
+      try {
+        const result = await testAgent(
+          {
+            agentId: agent.id,
+            model: model || undefined,
+            reasoning: reasoning || undefined,
+            agentCliEnv,
+          },
+          signal,
+        );
+        setAgentTestState({ status: 'done', inputKey, result });
+        return result;
+      } catch (error) {
+        // A superseded attempt leaves the state to the run that replaced it.
+        if (signal.aborted) return null;
+        const result: ConnectionTestResponse = {
+          ok: false,
+          kind: 'unknown',
+          latencyMs: 0,
+          model: model || 'default',
+          agentName: agent.name,
+          detail: error instanceof Error ? error.message : 'Test request failed',
+        };
+        setAgentTestState({ status: 'done', inputKey, result });
+        return result;
+      }
+    });
   }
 
   async function confirmDshSetup() {
@@ -3254,15 +3436,32 @@ function OnboardingView({
       const effectiveChoice = effectiveAgentModelChoice(installed, choice) ?? choice;
       const model = effectiveChoice.model ?? defaultAgentModelId(installed) ?? '';
       const reasoning = choice.reasoning ?? '';
-      const inputKey = [installed.id, model, reasoning, JSON.stringify(config.agentCliEnv ?? {})].join('\n');
-      setAgentTestState({ status: 'running', inputKey });
-      const result = await testAgent({
-        agentId: installed.id,
-        model: model || undefined,
-        reasoning: reasoning || undefined,
-        agentCliEnv: config.agentCliEnv ?? {},
+      const agentCliEnv = config.agentCliEnv ?? {};
+      const inputKey = [installed.id, model, reasoning, JSON.stringify(agentCliEnv)].join('\n');
+      // Register the post-install validation the way the background pass does,
+      // so neither that pass nor Continue spawns the freshly installed
+      // companion a second time while this one is still proving it.
+      await startOrJoinInlineTest(agentTestRunRef, inputKey, async (signal) => {
+        agentAutoTestKeyRef.current = inputKey;
+        setAgentTestState({ status: 'running', inputKey });
+        try {
+          const result = await testAgent(
+            {
+              agentId: installed.id,
+              model: model || undefined,
+              reasoning: reasoning || undefined,
+              agentCliEnv,
+            },
+            signal,
+          );
+          setAgentTestState({ status: 'done', inputKey, result });
+          return result;
+        } catch (error) {
+          // A superseded attempt leaves the state to the run that replaced it.
+          if (signal.aborted) return null;
+          throw error;
+        }
       });
-      setAgentTestState({ status: 'done', inputKey, result });
     } catch (error) {
       setDshSetup({
         busy: false,
@@ -3336,22 +3535,66 @@ function OnboardingView({
     step,
   ]);
 
+  // No "already running" bail in either auto-validation effect below:
+  // `startOrJoinInlineTest` serializes the runs, so skipping while one is in
+  // flight would only leave the pass proving inputs the user has already moved
+  // off — an edited key would not start validating until the request it
+  // replaced finished running out its own seconds.
   useEffect(() => {
     if (runtime !== 'byok' || !runtimeSetupStep) return;
     if (!canTestProvider) return;
-    if (providerTestState.status === 'running') return;
     if (providerAutoTestKeyRef.current === providerTestInputKey) return;
     const timer = window.setTimeout(() => {
+      // Re-read at fire time: a manual Test press does not disturb this
+      // effect's inputs, so an armed debounce would otherwise spend a second
+      // request on inputs that were just validated by hand.
+      if (providerAutoTestKeyRef.current === providerTestInputKey) return;
       void testProviderInline();
     }, ONBOARDING_BYOK_AUTO_TEST_DELAY_MS);
     return () => window.clearTimeout(timer);
-  }, [
-    canTestProvider,
-    providerTestInputKey,
-    providerTestState.status,
-    runtime,
-    step,
-  ]);
+  }, [canTestProvider, providerTestInputKey, runtime, step]);
+
+  // Validate the local runtime as soon as the selection settles, the way BYOK
+  // already validates a settled provider. Continue cannot finish onboarding on
+  // an unproven runtime, and proving one costs a full agent spawn plus a model
+  // reply — seconds, not milliseconds. Charging that to the click is what makes
+  // Continue feel stuck; starting it here overlaps it with the time the user
+  // spends reading the panel and picking a model, so the click usually has an
+  // answer waiting for it.
+  useEffect(() => {
+    if (runtime !== 'local' || !runtimeSetupStep) return;
+    if (!agentValidationWorthStarting) return;
+    if (agentAutoTestKeyRef.current === agentTestInputKey) return;
+    const timer = window.setTimeout(() => {
+      // Re-read at fire time: a manual Test press does not disturb this
+      // effect's inputs, so an armed debounce would otherwise spend a second
+      // agent spawn on inputs that were just validated by hand.
+      if (agentAutoTestKeyRef.current === agentTestInputKey) return;
+      void testAgentInline();
+    }, ONBOARDING_LOCAL_AUTO_TEST_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [agentTestInputKey, agentValidationWorthStarting, runtime, step]);
+
+  // A validation only has a consumer while the setup step can still act on its
+  // verdict. Leaving the step (Back, a runtime switch, closing onboarding) ends
+  // that, and so does staying put while the inputs stop being testable at all —
+  // a cleared BYOK key or a daemon that went away leaves a request nothing can
+  // consume, exactly like walking out. Both release the runtime through the
+  // same cleanup, and React runs it on unmount too.
+  // Deliberately the wider `canTestAgent` rather than the narrower condition
+  // that governs starting: a run the user began by hand on a setup-required
+  // entry still has to be released when they leave. What may start on its own
+  // is a stricter question than what must be cleaned up.
+  const runtimeValidationConsumable =
+    runtimeSetupStep
+    && ((runtime === 'local' && canTestAgent) || (runtime === 'byok' && canTestProvider));
+
+  useEffect(() => {
+    if (!runtimeValidationConsumable) return;
+    return () => {
+      abortRuntimeValidations();
+    };
+  }, [runtime, runtimeValidationConsumable]);
 
   const primaryActionLabel = t('settings.onboardingContinue');
 
@@ -3369,258 +3612,155 @@ function OnboardingView({
           <div className="onboarding-cloud__center">
             <h1 className="onboarding-cloud__title">{t('settings.onboardingCloudTitle')}</h1>
             <p className="onboarding-cloud__body">{t('settings.onboardingCloudBody')}</p>
-            <button
-              type="button"
-              className="onboarding-cloud__primary"
-              onClick={() => {
-                if (amrStatusResolving) return;
-                if (amrSignedIn) {
-                  recordAmrEntry(analytics.track, 'onboarding_amr_card', new Date(), {
-                    metricsConsent: config.telemetry?.metrics === true,
-                  });
-                  recordAmrEntry(
-                    analytics.track,
-                    'onboarding_amr_sign_in_continue',
-                    new Date(),
-                    {
+            <div className={onboardingWelcomeStyles.signInAction}>
+              {!amrSignedIn && !amrStatusResolving && !cloudBusy ? (
+                <span className={onboardingWelcomeStyles.creditCorner}>
+                  <span
+                    className={`${onboardingWelcomeStyles.credits} od-tooltip`}
+                    data-tooltip={t('settings.onboardingFreeCreditsHint')}
+                    aria-label={t('settings.onboardingFreeCreditsHint')}
+                    tabIndex={0}
+                  >
+                    <span className={onboardingWelcomeStyles.creditLabel}>
+                      {t('settings.onboardingFreeCredits')}
+                    </span>
+                  </span>
+                </span>
+              ) : null}
+              <button
+                type="button"
+                className="onboarding-cloud__primary"
+                onClick={() => {
+                  if (amrStatusResolving) return;
+                  if (amrSignedIn) {
+                    recordAmrEntry(analytics.track, 'onboarding_amr_card', new Date(), {
                       metricsConsent: config.telemetry?.metrics === true,
-                      reuseExistingFrom: ['onboarding_amr_card'],
-                    },
-                  );
-                  continueAfterCloudSignIn();
-                  return;
-                }
-                void handleCloudSignIn();
-              }}
-              disabled={cloudBusy || amrLoginCancelPending || amrStatusResolving}
-              aria-busy={cloudBusy || amrStatusResolving ? true : undefined}
-            >
-              <Icon name="log-in" size={17} />
-              <span>
-                {cloudBusy
-                  ? t('settings.amrSigningIn')
-                  : amrStatusResolving
-                    ? t('common.loading')
-                    : amrSignedIn
-                      ? t('settings.onboardingCloudContinue')
-                      : t('settings.onboardingCloudSignIn')}
-              </span>
-            </button>
+                    });
+                    recordAmrEntry(
+                      analytics.track,
+                      'onboarding_amr_sign_in_continue',
+                      new Date(),
+                      {
+                        metricsConsent: config.telemetry?.metrics === true,
+                        reuseExistingFrom: ['onboarding_amr_card'],
+                      },
+                    );
+                    continueAfterCloudSignIn();
+                    return;
+                  }
+                  void handleCloudSignIn();
+                }}
+                disabled={cloudBusy || amrLoginCancelPending || amrStatusResolving}
+                aria-busy={cloudBusy || amrStatusResolving ? true : undefined}
+              >
+                <Icon name="log-in" size={17} />
+                <span>
+                  {cloudBusy
+                    ? t('settings.amrSigningIn')
+                    : amrStatusResolving
+                      ? t('common.loading')
+                      : amrSignedIn
+                        ? t('settings.onboardingCloudContinue')
+                        : t('settings.onboardingCloudSignIn')}
+                </span>
+              </button>
+            </div>
             {amrLoginError ? (
               <span className="onboarding-cloud__error" role="alert">
                 {amrLoginError}
               </span>
             ) : null}
-            {/* Manual device-auth fallback, mirroring Settings' AmrLoginPill:
-                vela auto-opens the browser, but when that fails silently (e.g.
-                corp-managed hosts) the pending login otherwise looks like a
-                dead button — surface the activation link the status poll
-                already carries. */}
-            {cloudBusy && amrStatus?.activationUrl && !activationHintClosed ? (
-              <div className="amr-login-activation onboarding-cloud__activation" role="group">
-                <span className="amr-login-activation__hint">
-                  {amrStatus.browserOpenFailed
-                    ? t('settings.amrActivationBrowserFailed')
-                    : t('settings.amrActivationHint')}
-                </span>
-                <div className="amr-login-activation__actions">
-                  <a
-                    className="amr-login-activation__open"
-                    href={amrStatus.activationUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    {t('settings.amrActivationOpen')}
-                  </a>
-                  <button
-                    type="button"
-                    className="onboarding-cloud__activation-dismiss"
-                    onClick={() => setActivationHintClosed(true)}
-                  >
-                    {t('common.cancel')}
-                  </button>
+            {/* Everything under the primary button shares one grid cell, so
+                the cell is always as tall as its tallest state and switching
+                between "own AI" choices and the pending sign-in controls never
+                moves the button. The idle layer stays mounted (hidden) while
+                signing in to keep reserving that height. */}
+            <div className={onboardingWelcomeStyles.belowAction}>
+              <div
+                className={`${onboardingWelcomeStyles.belowLayer} ${
+                  cloudBusy ? onboardingWelcomeStyles.belowLayerHidden : ''
+                }`}
+                aria-hidden={cloudBusy ? true : undefined}
+              >
+                <div className={onboardingWelcomeStyles.alternatives}>
+                  <div className={onboardingWelcomeStyles.divider}>
+                    {t('settings.onboardingOwnAi')}
+                  </div>
+                  <div className={`onboarding-cloud__alts ${onboardingWelcomeStyles.options}`}>
+                    <Button
+                      variant="subtle"
+                      className="onboarding-cloud__alt-btn"
+                      onClick={() => {
+                        emitOnboardingClick('local_coding_agent', 'select_runtime', {
+                          runtime_type: 'local_cli',
+                        });
+                        setRuntime('local');
+                        void scanCliAgents({ preferExisting: true });
+                        setStep(2);
+                      }}
+                    >
+                      <Icon name="robot" size={16} />
+                      {t('settings.onboardingLocalAi')}
+                    </Button>
+                    <Button
+                      variant="subtle"
+                      className="onboarding-cloud__alt-btn"
+                      onClick={() => {
+                        emitOnboardingClick('byok', 'select_runtime', { runtime_type: 'byok' });
+                        setRuntime('byok');
+                        setStep(2);
+                      }}
+                    >
+                      <Icon name="key" size={16} />
+                      {t('settings.onboardingApiKey')}
+                    </Button>
+                  </div>
                 </div>
               </div>
-            ) : null}
-            {cloudBusy ? (
-              <button
-                type="button"
-                className="onboarding-cloud__cancel"
-                onClick={handleCancelAmrLogin}
-                disabled={amrLoginCancelPending}
-              >
-                {t('settings.amrCancelSignIn')}
-              </button>
-            ) : (
-              <div className="onboarding-cloud__alts">
-                <Button
-                  variant="subtle"
-                  className="onboarding-cloud__alt-btn"
-                  onClick={() => {
-                    emitOnboardingClick('local_coding_agent', 'select_runtime', {
-                      runtime_type: 'local_cli',
-                    });
-                    setRuntime('local');
-                    setRuntimeSetupEntry('cloud');
-                    void scanCliAgents({ preferExisting: true });
-                    setStep(2);
-                  }}
-                >
-                  <Icon name="robot" size={16} />
-                  {t('settings.onboardingLocalTitle')}
-                </Button>
-                <span className="onboarding-cloud__alts-or">
-                  {t('settings.onboardingCloudOr')}
-                </span>
-                <Button
-                  variant="subtle"
-                  className="onboarding-cloud__alt-btn"
-                  onClick={() => {
-                    emitOnboardingClick('byok', 'select_runtime', { runtime_type: 'byok' });
-                    setRuntime('byok');
-                    setRuntimeSetupEntry('cloud');
-                    setStep(2);
-                  }}
-                >
-                  <Icon name="key" size={16} />
-                  {t('settings.onboardingByokTitle')}
-                </Button>
-              </div>
-            )}
+              {cloudBusy ? (
+                <div className={onboardingWelcomeStyles.belowLayer}>
+                  {/* Manual device-auth fallback, mirroring Settings' AmrLoginPill:
+                      vela auto-opens the browser, but when that fails silently (e.g.
+                      corp-managed hosts) the pending login otherwise looks like a
+                      dead button — surface the activation link the status poll
+                      already carries. */}
+                  {amrStatus?.activationUrl
+                  && (activationHintDue || amrStatus.browserOpenFailed) ? (
+                    <p className="onboarding-cloud__activation" role="status">
+                      <span>
+                        {amrStatus.browserOpenFailed
+                          ? <AmrActivationHintText browserOpenFailed />
+                          : t('settings.onboardingActivationPrompt')}
+                      </span>
+                      <a
+                        className="onboarding-cloud__activation-link"
+                        href={amrStatus.activationUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {amrStatus.browserOpenFailed
+                          ? t('settings.amrActivationOpen')
+                          : t('settings.onboardingActivationReopen')}
+                        <Icon name="external-link" size={12} />
+                      </a>
+                    </p>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="onboarding-cloud__cancel"
+                    onClick={handleCancelAmrLogin}
+                    disabled={amrLoginCancelPending}
+                  >
+                    {t('settings.amrCancelSignIn')}
+                  </button>
+                </div>
+              ) : null}
+            </div>
           </div>
           <footer className="onboarding-cloud__footer">
             <LanguageMenu placement="up" align="start" />
             <span>
               © {new Date().getFullYear()} OpenDesign · {t('settings.onboardingCloudRights')}
-            </span>
-          </footer>
-        </div>
-        <div className="onboarding-cloud__art" aria-hidden="true">
-          <img src="/onboarding/onboarding-cloud-art.webp" alt="" />
-        </div>
-      </section>
-    );
-  }
-
-  if (step === 1) {
-    return (
-      <section
-        className="onboarding-view onboarding-view--cloud"
-        aria-label={t('settings.onboardingExecutionTitle')}
-      >
-        <div className={`onboarding-cloud__pane ${onboardingSourceStyles.pane}`}>
-          <div className={`onboarding-cloud__center ${onboardingSourceStyles.center}`}>
-            <h1 className="onboarding-cloud__title">
-              {t('settings.onboardingExecutionTitle')}
-            </h1>
-            <p className="onboarding-cloud__body">
-              {t('settings.onboardingExecutionBody')}
-            </p>
-            <div
-              className={onboardingSourceStyles.options}
-              role="radiogroup"
-              aria-label={t('settings.onboardingExecutionTitle')}
-            >
-              <Button
-                ref={(node) => {
-                  modelSourceOptionRefs.current.amr = node;
-                }}
-                variant="subtle"
-                role="radio"
-                aria-checked={modelSource === 'amr'}
-                tabIndex={modelSource === 'amr' ? 0 : -1}
-                className={`${onboardingSourceStyles.option} ${
-                  onboardingSourceStyles.hostedOption
-                } ${modelSource === 'amr' ? onboardingSourceStyles.optionActive : ''}`}
-                onClick={() => setModelSource('amr')}
-                onKeyDown={(event) => handleModelSourceKeyDown(event, 'amr')}
-              >
-                <span className={onboardingSourceStyles.optionIcon}>
-                  <Icon name="sparkles" size={17} />
-                </span>
-                <span className={onboardingSourceStyles.optionCopy}>
-                  <span className={onboardingSourceStyles.optionHeading}>
-                    <strong className={onboardingSourceStyles.optionTitle}>
-                      {t('settings.onboardingAmrModelSourceLabel')}
-                    </strong>
-                    <span className={onboardingSourceStyles.recommendedBadge}>
-                      {t('settings.onboardingRecommended')}
-                    </span>
-                  </span>
-                  <span className={onboardingSourceStyles.optionBody}>
-                    {t('settings.onboardingAmrCloudBenefitModels')}
-                  </span>
-                </span>
-                <span className={onboardingSourceStyles.radio} aria-hidden="true" />
-              </Button>
-              <Button
-                ref={(node) => {
-                  modelSourceOptionRefs.current.local = node;
-                }}
-                variant="subtle"
-                role="radio"
-                aria-checked={modelSource === 'local'}
-                tabIndex={modelSource === 'local' ? 0 : -1}
-                className={`${onboardingSourceStyles.option} ${
-                  modelSource === 'local' ? onboardingSourceStyles.optionActive : ''
-                }`}
-                onClick={() => setModelSource('local')}
-                onKeyDown={(event) => handleModelSourceKeyDown(event, 'local')}
-              >
-                <span className={onboardingSourceStyles.optionIcon}>
-                  <Icon name="robot" size={17} />
-                </span>
-                <span className={onboardingSourceStyles.optionCopy}>
-                  <strong className={onboardingSourceStyles.optionTitle}>
-                    {t('settings.onboardingLocalTitle')}
-                  </strong>
-                  <span className={onboardingSourceStyles.optionBody}>
-                    {t('settings.onboardingLocalBody')}
-                  </span>
-                </span>
-                <span className={onboardingSourceStyles.radio} aria-hidden="true" />
-              </Button>
-              <Button
-                ref={(node) => {
-                  modelSourceOptionRefs.current.byok = node;
-                }}
-                variant="subtle"
-                role="radio"
-                aria-checked={modelSource === 'byok'}
-                tabIndex={modelSource === 'byok' ? 0 : -1}
-                className={`${onboardingSourceStyles.option} ${
-                  modelSource === 'byok' ? onboardingSourceStyles.optionActive : ''
-                }`}
-                onClick={() => setModelSource('byok')}
-                onKeyDown={(event) => handleModelSourceKeyDown(event, 'byok')}
-              >
-                <span className={onboardingSourceStyles.optionIcon}>
-                  <Icon name="key" size={17} />
-                </span>
-                <span className={onboardingSourceStyles.optionCopy}>
-                  <strong className={onboardingSourceStyles.optionTitle}>
-                    {t('settings.onboardingByokTitle')}
-                  </strong>
-                  <span className={onboardingSourceStyles.optionBody}>
-                    {t('settings.onboardingByokBody')}
-                  </span>
-                </span>
-                <span className={onboardingSourceStyles.radio} aria-hidden="true" />
-              </Button>
-            </div>
-            <button
-              type="button"
-              className="onboarding-cloud__primary"
-              onClick={continueWithModelSource}
-            >
-              {t('settings.onboardingContinue')}
-            </button>
-          </div>
-          <footer className="onboarding-cloud__footer">
-            <LanguageMenu placement="up" align="start" />
-            <span>
-              © {new Date().getFullYear()} OpenDesign ·{' '}
-              {t('settings.onboardingCloudRights')}
             </span>
           </footer>
         </div>
@@ -3745,12 +3885,14 @@ function OnboardingView({
               type="button"
               className={`onboarding-view__primary${connectGateTooltip ? ' od-tooltip' : ''}`}
               onClick={handlePrimaryAction}
-              disabled={amrLoginPending || amrLoginCancelPending || connectStepTestRunning}
+              disabled={amrLoginPending || amrLoginCancelPending || continuePending}
               aria-disabled={connectStepBlocked || undefined}
+              aria-busy={continuePending || undefined}
               data-tooltip={connectGateTooltip ?? undefined}
               data-tooltip-placement="top"
             >
-              <span>{primaryActionLabel}</span>
+              {continuePending ? <Icon name="spinner" size={15} className="icon-spin" /> : null}
+              <span>{continuePending ? t('settings.testRunning') : primaryActionLabel}</span>
             </button>
           </div>
         </div>
@@ -3794,7 +3936,7 @@ function OnboardingCliSetupPanel({
   onRefresh: () => void;
   onSelectAgent: (agentId: string) => void;
   onSelectModel: (model: string) => void;
-  testState: OnboardingAgentTestState;
+  testState: OnboardingRuntimeTestState;
   canTest: boolean;
   onTest: () => void;
 }) {

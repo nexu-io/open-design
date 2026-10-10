@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-od-preview-ready="false">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -285,6 +285,7 @@
       preloader.style.transition = 'none';
       houseInner.classList.add('lift-done');
       updateHousePosition();
+      document.documentElement.setAttribute('data-od-preview-ready', 'true');
     }, LIFT_AT + 2100);
 
     /* ---------- Nav scroll color (dark sections at viewport top) ---------- */

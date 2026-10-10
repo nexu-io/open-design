@@ -69,6 +69,14 @@ function fillAudience(container: HTMLElement): void {
   fireEvent.change(input, { target: { value: 'Designers' } });
 }
 
+// NOTE(sync/main): origin/main wrote this against the pre-refactor question
+// form, whose submit button read "Send answers". This branch's stepped form
+// labels the final step's confirm button `qf.submitDefault` ("Next").
+// Only the accessible name moved — the behaviour under test (blocked notice +
+// disabled submit) is unchanged, so the selector is retargeted rather than
+// the assertions relaxed.
+const QUESTION_FORM_SUBMIT_LABEL = 'Next';
+
 describe('AssistantMessage blocked strategy task', () => {
   it('stops accepting form submissions and shows the gate visible text', () => {
     const onSubmitQuestionForm = vi.fn();
@@ -87,7 +95,7 @@ describe('AssistantMessage blocked strategy task', () => {
     );
 
     fillAudience(container);
-    const send = screen.getByRole('button', { name: 'Send answers' }) as HTMLButtonElement;
+    const send = screen.getByRole('button', { name: QUESTION_FORM_SUBMIT_LABEL }) as HTMLButtonElement;
     expect(send.disabled).toBe(true);
     fireEvent.click(send);
     expect(onSubmitQuestionForm).not.toHaveBeenCalled();
@@ -113,7 +121,7 @@ describe('AssistantMessage blocked strategy task', () => {
 
     fillAudience(container);
     expect(
-      (screen.getByRole('button', { name: 'Send answers' }) as HTMLButtonElement).disabled,
+      (screen.getByRole('button', { name: QUESTION_FORM_SUBMIT_LABEL }) as HTMLButtonElement).disabled,
     ).toBe(true);
     expect(screen.getByTestId('question-form-blocked-notice').textContent).toBe(
       'This task was stopped by the strategy quality gate, so this form can no longer be submitted. Start a new request to continue.',
@@ -135,7 +143,7 @@ describe('AssistantMessage blocked strategy task', () => {
 
     fillAudience(container);
     expect(screen.queryByTestId('question-form-blocked-notice')).toBeNull();
-    const send = screen.getByRole('button', { name: 'Send answers' }) as HTMLButtonElement;
+    const send = screen.getByRole('button', { name: QUESTION_FORM_SUBMIT_LABEL }) as HTMLButtonElement;
     expect(send.disabled).toBe(false);
     fireEvent.click(send);
     expect(onSubmitQuestionForm).toHaveBeenCalledTimes(1);

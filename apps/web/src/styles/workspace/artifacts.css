@@ -171,7 +171,7 @@
   border-radius: var(--radius-sm);
   background: var(--bg-panel);
   color: var(--text);
-  font: 11.5px/1.6 var(--mono);
+  font: 500 11.5px/1.6 var(--mono);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -350,7 +350,7 @@
   align-items: center;
   padding: 2px 9px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: transparent;
@@ -584,7 +584,7 @@
 }
 .settings-about-toggle-copy .hint {
   font-size: 12px;
-  font-weight: 400;
+  font-weight: 600;
   line-height: 1.45;
 }
 .diagnostics-export-row {
@@ -1011,7 +1011,7 @@
 .section-head h3 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.01em; }
 .section-head .hint { margin-top: 2px; }
 .field { display: flex; flex-direction: column; gap: 4px; }
-.field-label { font-size: 12px; font-weight: 500; color: var(--text-muted); }
+.field-label { font-size: 12px; font-weight: 600; color: var(--text-muted); }
 .memory-model-inline__select {
   width: 100%;
   min-width: 0;
@@ -1130,7 +1130,7 @@
   padding: 0 var(--spacing-42) 0 var(--spacing-16);
   font: inherit;
   font-size: var(--font-size-14);
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1.25;
   outline: 0;
   cursor: pointer;
@@ -1198,6 +1198,24 @@
   color: var(--text-strong);
   font-size: 14px;
   font-weight: 600;
+}
+/* Same sparkle chip as the home rail's free-credits card, so both entry
+   points open with the same mark. */
+.settings-cloud-signin-callout strong.settings-cloud-signin-callout__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.settings-cloud-signin-callout__title-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-pill, 999px);
+  background: color-mix(in srgb, var(--brand) 40%, var(--brand-soft));
+  color: var(--brand-text);
 }
 .settings-cloud-signin-callout p {
   margin: 4px 0 0;
@@ -1291,7 +1309,7 @@
   background: var(--accent-tint);
   border-color: var(--accent);
   color: var(--accent);
-  font-weight: 500;
+  font-weight: 600;
 }
 .settings-language-tile.active .settings-language-tile-title { color: var(--accent); }
 .settings-language-tile.active:hover { background: var(--accent-soft); }
@@ -1668,6 +1686,12 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
   align-self: flex-start;
   margin: 13px 16px 0 8px;
 }
+/* Signed out, the card's sign-in wears the callout button's solid pill
+   (taller than the account pills), so drop it to sit centered on the
+   32px logo + name row instead of hugging the card's top edge. */
+.amr-auth-anchor.amr-auth-anchor--sign-in {
+  margin-top: 22px;
+}
 .amr-coachmark {
   position: absolute;
   /* Horizontally centered on the button, sitting low — the hand's fingertip
@@ -1762,7 +1786,7 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
   background: var(--bg-panel);
   color: var(--text);
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
 }
 .agent-card-installed .agent-card-test-btn:hover:not(:disabled) {
   background: color-mix(in srgb, var(--accent-tint) 58%, transparent);
@@ -1782,7 +1806,11 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
 }
 /* One continuous fill for the whole active card — header + model config share
    it, so there is no tone seam between the two halves (they are one module). */
-.agent-card-installed.active {
+/* The hover variant matters: `.agent-card.active:hover` above repaints a flat
+   fill, and a gradient can't transition to it, so hovering the selected card
+   snapped its tone (a visible flash). Keep the same fill on hover. */
+.agent-card-installed.active,
+.agent-card-installed.active:hover:not(.disabled) {
   background:
     linear-gradient(
       180deg,
@@ -1877,7 +1905,7 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
 }
 .agent-card-link {
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-muted);
   text-decoration: none;
   transition: color 120ms var(--ease-out);
@@ -1893,7 +1921,7 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
    color change — to keep visual weight low. */
 .agent-card-link--muted {
   color: var(--text-muted);
-  font-weight: 500;
+  font-weight: 600;
 }
 .agent-card-link--muted:hover {
   color: var(--text);
@@ -2014,7 +2042,7 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
 .agent-card-name-divider,
 .agent-card-tagline {
   color: var(--text-muted);
-  font-weight: 500;
+  font-weight: 600;
 }
 .agent-card-tagline {
   flex: 1 1 auto;
@@ -2042,7 +2070,7 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
   margin-top: 4px;
   color: var(--text-muted);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   line-height: 1.35;
   white-space: nowrap;
@@ -2122,7 +2150,7 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
   min-width: 0;
   color: var(--text-soft);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2230,7 +2258,7 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
   overflow: hidden;
   color: var(--text-muted);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2282,6 +2310,53 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
   cursor: default;
   opacity: 0.62;
 }
+/* Pending sign-in inside the solid callout pill (Settings callout + the
+   OpenDesign card): "Signing in…" and Cancel share the callout's green ink,
+   split by a hairline, so both surfaces read identically. */
+.settings-cloud-signin-callout__button .amr-account-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.settings-cloud-signin-callout__button .amr-account-control__status,
+.agent-card-amr-auth.settings-cloud-signin-callout__button .amr-account-control__status {
+  max-width: none;
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  opacity: 0.72;
+}
+.settings-cloud-signin-callout__button .amr-account-control__status-text {
+  overflow: visible;
+  text-overflow: clip;
+}
+/* Hover variants included: the flatten rule's `:hover:not(:disabled)`
+   outranks a plain selector and would drop the divider, shrinking the pill. */
+.settings-cloud-signin-callout__button .amr-account-control--signing-in .amr-account-control__action,
+.settings-cloud-signin-callout__button .amr-account-control--signing-in .amr-account-control__action:hover:not(:disabled),
+.agent-card-amr-auth.settings-cloud-signin-callout__button .amr-account-control--signing-in .amr-account-control__action,
+.agent-card-amr-auth.settings-cloud-signin-callout__button .amr-account-control--signing-in .amr-account-control__action:hover:not(:disabled) {
+  padding-left: 10px;
+  border-left: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+  border-radius: 0;
+}
+/* Signed-out card sign-in wears the callout's solid pill (see
+   .settings-cloud-signin-callout__button); flatten the card's own action
+   chrome so only that outer shell paints, as the callout does. */
+.agent-card-amr-auth.settings-cloud-signin-callout__button .amr-account-control__action,
+.agent-card-amr-auth.settings-cloud-signin-callout__button .amr-account-control__action:hover:not(:disabled) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  font: inherit;
+}
 .agent-card-amr-auth .amr-account-control--error {
   width: 100%;
   flex-wrap: wrap;
@@ -2330,6 +2405,15 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
   font-size: 12px;
   line-height: 1.35;
   color: var(--text-muted, #6b7280);
+}
+/* 浏览器没能自动打开(产品《报错文案》S32a,OPEND-2849):标题 + 正文两行。 */
+.amr-login-activation__title {
+  display: block;
+  font-weight: 600;
+  color: var(--text, inherit);
+}
+.amr-login-activation__body {
+  display: block;
 }
 .amr-login-activation__actions {
   display: flex;
@@ -2391,6 +2475,13 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
   /* Transparent: the card owns one continuous fill (see the active-card rule),
      so the header and this model section read as a single module with no seam. */
   background: transparent;
+}
+/* Signed out, the OpenDesign header has only its name row (no email /
+   balance line), so the header's min-height already leaves room under the
+   logo; the usual top padding on top of that left the model section floating.
+   Tighten it so logo→MODEL roughly matches the card's top inset. */
+.agent-card--amr-signed-out .agent-card-config {
+  padding-top: 4px;
 }
 .agent-card-config select,
 .agent-card-config input,
@@ -2468,7 +2559,7 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
   color: var(--text);
   box-shadow: var(--shadow-md);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1.45;
   letter-spacing: 0;
   white-space: normal;
@@ -2531,7 +2622,7 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
 .settings-section-byok .field-label-link {
   color: var(--selected);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
 }
 .settings-section-byok .field-label-link:hover,
 .settings-section-byok .field-label-link:focus-visible {
@@ -2567,7 +2658,7 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
   box-shadow: none;
   color: var(--text);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   transform: translateY(-50%);
 }
 .settings-section-byok .settings-byok-key-toggle:hover:not(:disabled),
@@ -2592,7 +2683,7 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
   background: var(--bg-panel);
   color: var(--selected);
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   white-space: nowrap;
   text-decoration: none;
 }
@@ -2614,7 +2705,7 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
   margin-left: 8px;
   color: var(--red);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1.35;
 }
 .settings-byok-connection-test {
@@ -2654,7 +2745,7 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
 .settings-memory-summary-value {
   color: var(--text-muted);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
 }
 .agent-card-config .field,
 .agent-model-row .field { gap: 4px; }
@@ -2702,7 +2793,7 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
   background: transparent;
   color: var(--text-muted);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
 }
 .agent-model-source-badge.fallback::before {
   content: '·';
@@ -2841,7 +2932,7 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
   flex: 0 0 auto;
   color: var(--text-faint);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
 }
 .model-select-searchable__company-name {
   display: inline-flex;
@@ -2976,7 +3067,7 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
   color: var(--model-tag-color);
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--bg-panel) 72%, white 28%);
   font-size: 10.5px;
-  font-weight: 680;
+  font-weight: 600;
   line-height: 1.05;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3279,7 +3370,7 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
   background: var(--accent);
   animation: pulse 1.2s ease-in-out infinite;
 }
-.activity-title { font-weight: 500; }
+.activity-title { font-weight: 600; }
 .activity-stats {
   margin-left: auto;
   color: var(--text-muted);
@@ -3310,7 +3401,7 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
   padding: 1px 6px;
   border-radius: var(--radius-xs);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: 0.02em;
   background: var(--bg-subtle);
   color: var(--text-muted);
@@ -3473,7 +3564,7 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
   background: transparent;
   font-size: 12.5px;
   color: var(--text-muted);
-  font-weight: 500;
+  font-weight: 600;
   border: 1px solid transparent;
   border-radius: var(--radius-pill);
   position: relative;
@@ -3531,7 +3622,7 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
 .newproj-title {
   margin: 0;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -3705,7 +3796,7 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
   display: block;
   padding: 7px 8px 8px;
   font-size: 11.5px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text);
   line-height: 1.3;
   overflow: hidden;
@@ -3726,7 +3817,7 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
 .newproj-label {
   font-size: 12px;
   color: var(--text-muted);
-  font-weight: 500;
+  font-weight: 600;
 }
 .newproj-media-options {
   display: flex;
@@ -3917,7 +4008,7 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
 }
 .skill-radio input { width: auto; margin-top: 2px; }
 .skill-radio-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.skill-radio-name { font-weight: 500; font-size: 13px; }
+.skill-radio-name { font-weight: 600; font-size: 13px; }
 .skill-radio-desc { font-size: 12px; color: var(--text-muted); line-height: 1.4; }
 .newproj-empty {
   font-size: 12px; color: var(--text-muted);
@@ -3953,7 +4044,7 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
 }
 .audio-card-name {
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text);
   text-align: center;
   word-break: break-word;
@@ -4046,7 +4137,7 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
 .fidelity-label {
   text-align: center;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text);
 }
 
@@ -4096,7 +4187,7 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
 }
 .toggle-row-label {
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text);
 }
 .toggle-row-hint {
@@ -4329,7 +4420,7 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
 }
 .template-option-name {
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text);
 }
 .template-option-desc {
@@ -4348,7 +4439,7 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
 }
 .template-howto-title {
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text);
 }
 .template-howto-body {
@@ -4368,7 +4459,7 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
 .newproj-connectors-manage {
   padding: 2px 8px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--text-muted);
   background: transparent;
@@ -4417,7 +4508,7 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
   flex: none;
 }
 .newproj-connector-name {
-  font-weight: 500;
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -4479,7 +4570,7 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
 }
 .newproj-connectors-empty-title {
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text);
 }
 .newproj-connectors-empty-body {
@@ -4490,6 +4581,6 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
 .newproj-connectors-empty-cta {
   margin-top: 4px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--accent);
 }

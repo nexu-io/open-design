@@ -27,8 +27,6 @@ import {
 } from '../analytics/events';
 import styles from './UpdaterPopup.module.css';
 
-const INSTALL_HANDOFF_WATCHDOG_MS = 10_000;
-
 /** Rocket badge from the update visual language, on the ready indicator. */
 function RocketBadgeIcon({ className }: { className?: string }) {
   return (
@@ -122,7 +120,6 @@ export function UpdaterPopup({
   const t = useT();
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const actionInFlightRef = useRef(false);
-  const handoffWatchdogRef = useRef<number | null>(null);
   const [model, setModel] = useState<UpdaterModel>(() => deriveUpdaterModel(null));
   const [panelOpen, setPanelOpen] = useState(false);
   const [installState, setInstallState] = useState<InstallState>('idle');
@@ -146,28 +143,6 @@ export function UpdaterPopup({
       mountedRef.current = false;
     };
   }, []);
-
-  const clearHandoffWatchdog = useCallback(() => {
-    if (handoffWatchdogRef.current == null) return;
-    window.clearTimeout(handoffWatchdogRef.current);
-    handoffWatchdogRef.current = null;
-  }, []);
-
-  const recoverFromInstallerHandoff = useCallback(() => {
-    handoffWatchdogRef.current = null;
-    actionInFlightRef.current = false;
-    setInstallState('recoverable');
-    setPanelOpen(true);
-  }, []);
-
-  const startHandoffWatchdog = useCallback(() => {
-    clearHandoffWatchdog();
-    // The quit IPC can resolve before Electron has actually torn down the
-    // renderer. Keep the handoff UI up, but do not leave it stuck forever.
-    handoffWatchdogRef.current = window.setTimeout(recoverFromInstallerHandoff, INSTALL_HANDOFF_WATCHDOG_MS);
-  }, [clearHandoffWatchdog, recoverFromInstallerHandoff]);
-
-  useEffect(() => clearHandoffWatchdog, [clearHandoffWatchdog]);
 
   useEffect(() => {
     if (installState !== 'idle') return;
@@ -256,7 +231,7 @@ export function UpdaterPopup({
 
   const ready = model.environment === 'desktop' && model.shouldShowControl;
   const installBusy = installState === 'opening' || installState === 'handoff' || installState === 'quitting';
-  const quitRecoverable = installState === 'recoverable' || installState === 'quitting';
+  const quitRecoverable = installState === 'recoverable';
   const canStartInstall = ready || installState === 'recoverable';
   const showControl = ready || installState !== 'idle';
   const installFailureText = model.canOpenInstaller ? t('updater.openFailedFallback') : t('updater.failed');
@@ -344,7 +319,6 @@ export function UpdaterPopup({
   const installAndQuit = async (force: boolean) => {
     if (actionInFlightRef.current || !canStartInstall) return;
     actionInFlightRef.current = true;
-    clearHandoffWatchdog();
     setInstallError(null);
     setRestartSafety(null);
     setInstallState('opening');
@@ -402,8 +376,9 @@ export function UpdaterPopup({
       }
       setModel(result.model);
       setInstallError(null);
+      // An accepted quit may still be draining background processes. Only a
+      // failed quit response permits recovery; elapsed time is not failure.
       setInstallState('handoff');
-      startHandoffWatchdog();
       trackUpdateInstallResult(analytics.track, {
         page_name: 'home',
         area: 'update_prompt',
@@ -417,13 +392,11 @@ export function UpdaterPopup({
           setInstallError(restartSafetyText(t, quitSafety));
           setRestartSafety(quitSafety);
         }
-        clearHandoffWatchdog();
         actionInFlightRef.current = false;
         setInstallState('recoverable');
         setPanelOpen(true);
       }
     } catch (error) {
-      clearHandoffWatchdog();
       actionInFlightRef.current = false;
       setInstallError(installFailureText);
       setInstallState('idle');
@@ -440,10 +413,9 @@ export function UpdaterPopup({
   const retryQuit = async (force: boolean) => {
     if (actionInFlightRef.current || installState !== 'recoverable') return;
     actionInFlightRef.current = true;
-    clearHandoffWatchdog();
+    setInstallError(null);
     setRestartSafety(null);
     setInstallState('quitting');
-    startHandoffWatchdog();
     try {
       const quitResult = await quitAfterUpdaterInstallerOpen(installOptions(force));
       if (quitResult.ok) return;
@@ -463,7 +435,6 @@ export function UpdaterPopup({
     } catch {
       // Keep the explicit quit recovery action available.
     }
-    clearHandoffWatchdog();
     actionInFlightRef.current = false;
     setInstallState('recoverable');
     setPanelOpen(true);

@@ -15,10 +15,10 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 - `packages/plugin-runtime`: pure TypeScript plugin manifest/marketplace parsers, source adapters, merge/ref resolution, validation, digesting, and pipeline-fallback selection. Daemon, web, and CI inject I/O rather than adding filesystem access here.
 - `packages/registry-protocol`: pure TypeScript plugin-registry backend protocol and schemas. Owns backend list/search/resolve/manifest/doctor plus optional publish/yank interfaces, not concrete network or storage integrations.
 - `packages/release`: pure release-domain primitives. Owns release channel names, version parsing/formatting, metadata field derivation, storage prefixes, release namespaces, and app identity data. It must not read/write files, call GitHub/R2, spawn build tools, or own workflow execution.
-- `packages/sidecar-proto`: OpenDesign sidecar business protocol. Owns app/mode/source constants, namespace validation, stamp descriptor/fields/flags, IPC message schema, status shapes, error semantics, and default product path constants.
-- `packages/sidecar`: generic sidecar runtime primitives. Includes bootstrap, IPC transport, path/runtime resolution, launch env, and JSON runtime file helpers; it must not hard-code OpenDesign app keys or IPC business messages.
+- `packages/sidecar-proto`: OpenDesign sidecar business protocol. Owns business action names and DTO/status shapes; it does not own process identity, private transport, or lifecycle mechanics.
+- `packages/sidecar`: complete business-agnostic sidecar client boundary and protocol implementation. Owns the five-field identity, private transport and endpoint derivation, resource ownership, generation fencing, and lifecycle atomics; it must not hard-code OpenDesign app keys or IPC business messages.
 - `packages/standalone`: shell-neutral exact distribution protocol and runtime. It owns signed metadata validation, canonical digests, content-addressed materialization, namespace bindings, generation state, required/lazy resolution, and fossil-to-versioned launcher handoff. It must not depend on a product app or shell.
-- `packages/platform`: generic OS process primitives. Includes stamp serialization, command parsing, process matching/search, and well-known user-toolchain bin discovery; it must consume the `sidecar-proto` descriptor and must not hard-code `--od-stamp-*` details. The toolchain helper is the single source of truth shared by the daemon runtime executable resolver (`apps/daemon/src/runtimes/executables.ts`) and the packaged sidecar PATH builder (`apps/packaged/src/sidecars.ts`) so neither layer can drift the search list.
+- `packages/platform`: generic OS process primitives only. Includes generic process-contract serialization, command parsing, process matching/search, and well-known user-toolchain bin discovery; it must not own sidecar stamp fields or hard-code `--od-stamp-*` details. The toolchain helper is the single source of truth shared by the daemon runtime executable resolver (`apps/daemon/src/runtimes/executables.ts`) and the packaged sidecar PATH builder (`apps/packaged/src/sidecars.ts`) so neither layer can drift the search list.
 
 ## Removed directories
 
@@ -31,7 +31,7 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 - Keep cross-runtime DTO and plugin wire-shape validation schemas in `contracts` when callers need the same runtime parser, while keeping app-specific parsing, I/O, and enforcement in the owning app or package.
 - Do not let app packages depend directly on sidecar control-plane details.
 - Do not hard-code OpenDesign app/source/mode constants in `sidecar` or `platform`.
-- Keep stamp fields limited to five: `app`, `mode`, `namespace`, `ipc`, and `source`.
+- Keep stamp fields limited to five: `channel`, `namespace`, `source`, `mode`, and `app`. IPC is private implementation detail and is never a stamp field.
 
 ## Common package commands
 

@@ -9,15 +9,14 @@
   max-width: calc(100vw - 24px);
   display: flex;
   flex-direction: column;
-  /* Frosted glass restored (dogfood 2026-07-28): the launcher goes back to
-     the glass material — the solid-panel swap from the popover-simplification
-     batch dropped the depth the rest of the floating chrome carries. */
-  background: var(--glass-regular);
-  -webkit-backdrop-filter: var(--glass-backdrop);
-  backdrop-filter: var(--glass-backdrop);
-  border: 1px solid var(--material-separator);
+  /* Opaque panel (product decision 2026-09-16): the workspace preview behind
+     the launcher must not bleed through, so the 2026-07-28 frosted glass is
+     withdrawn in favour of the same recipe the K1 action menus use — `--bg`
+     ground, soft edge, md shadow, no backdrop filter. */
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-md);
   overflow: hidden;
   /* Enter animation per the workspace UI philosophy: ease-out, ~180ms. */
   animation: launcher-in 180ms cubic-bezier(0.23, 1, 0.32, 1);

@@ -4,7 +4,6 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
   OdNextRolloutControlStatus,
-  OdNextRolloutLatchStatus,
   OdNextRolloutMode,
   OdNextRolloutModeSource,
 } from '@open-design/contracts';
@@ -20,7 +19,6 @@ vi.mock('../../src/analytics/provider', () => ({
 function status(overrides: {
   requestedMode?: OdNextRolloutMode;
   requestedModeSource?: OdNextRolloutModeSource;
-  latch?: OdNextRolloutLatchStatus | null;
 } = {}): OdNextRolloutControlStatus {
   const requestedMode = overrides.requestedMode ?? 'off';
   return {
@@ -29,11 +27,6 @@ function status(overrides: {
     requestedMode,
     requestedModeSource: overrides.requestedModeSource ?? 'default',
     effectiveMode: requestedMode,
-    latch: overrides.latch ?? null,
-    revision: 0,
-    updatedAt: null,
-    lastEvent: null,
-    resetAllowed: false,
   };
 }
 
@@ -597,39 +590,6 @@ describe('LabsSection', () => {
     ).toBeTruthy();
   });
 
-  it('locks the switch and explains when the local safety latch has tripped', async () => {
-    stubFetch({
-      rolloutStatus: status({
-        requestedMode: 'active',
-        requestedModeSource: 'app_config',
-        latch: { mode: 'observe', reasonCode: 'quality_regression', latchedAt: 1 },
-      }),
-    });
-    renderSection();
-    await waitFor(() => expect(switchEl().getAttribute('aria-disabled')).toBe('true'));
-    expect(
-      screen.getByText('Paused automatically after a problem was detected. Generation is using the original approach.'),
-    ).toBeTruthy();
-  });
-
-  it('reports the latch, not the environment, when both would lock the switch', async () => {
-    stubFetch({
-      rolloutStatus: status({
-        requestedMode: 'active',
-        requestedModeSource: 'env',
-        latch: { mode: 'off', reasonCode: 'machine_contract_leak', latchedAt: 1 },
-      }),
-    });
-    renderSection();
-    await waitFor(() => expect(switchEl().getAttribute('aria-disabled')).toBe('true'));
-    expect(
-      screen.getByText('Paused automatically after a problem was detected. Generation is using the original approach.'),
-    ).toBeTruthy();
-    expect(
-      screen.queryByText('An environment variable is controlling this setting, so it cannot be changed here.'),
-    ).toBeNull();
-  });
-
   it('keeps the page usable when the daemon cannot be reached', async () => {
     const { writes } = stubFetch({ rolloutFails: true });
     renderSection();
@@ -664,5 +624,40 @@ describe('LabsSection', () => {
     fireEvent.click(trigger);
     expect(writes).toEqual([]);
     expect(switchEl().getAttribute('aria-checked')).toBe('false');
+  });
+
+  it('lets a failed status read be retried from the switch itself', async () => {
+    // The state this guards against: the read fails once, the row renders
+    // locked, and nothing the user can do inside Settings clears it. That is
+    // only survivable while some other control exists, and for a packaged
+    // install this switch is the only one.
+    let attempt = 0;
+    const status = {
+      strategyId: 'od-next-strategy' as const,
+      scope: 'daemon_instance' as const,
+      requestedMode: 'active' as const,
+      requestedModeSource: 'default' as const,
+      effectiveMode: 'active' as const,
+    };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes('/api/strategies/od-next/rollout')) {
+        attempt += 1;
+        if (attempt === 1) return new Response('nope', { status: 500 });
+        return new Response(JSON.stringify({ status }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response('{}', { status: 200 });
+    }));
+
+    render(<I18nProvider><LabsSection /></I18nProvider>);
+    const control = await screen.findByRole('switch');
+    await waitFor(() => expect(control).toHaveAttribute('aria-disabled', 'true'));
+
+    fireEvent.click(control);
+
+    await waitFor(() => expect(control).toHaveAttribute('aria-disabled', 'false'));
+    expect(attempt).toBe(2);
   });
 });

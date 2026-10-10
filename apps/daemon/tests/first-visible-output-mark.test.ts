@@ -225,10 +225,24 @@ describe('first_visible_output is stamped at emission, not at first token', () =
     if (options.strategyRollout === 'active') {
       expect(created.pluginId).toBe('od-next-strategy');
       expect(created.strategyTask).toBeDefined();
+      // The deliberately incomplete state still releases the withheld tail,
+      // and the strategy gate records the refusal on the task. The verdict
+      // stays on the task; the Run keeps the clean exit the process actually
+      // made.
+      expect(run).toMatchObject({
+        status: 'succeeded',
+        exitCode: 0,
+        strategyTask: {
+          outcome: 'blocked',
+          inputStage: 'request',
+          blockedContext: { reasonCodes: ['od_next_protocol_runtime_state_invalid_schema'] },
+        },
+      });
+      expect((run as { errorCode?: string }).errorCode ?? null).toBeNull();
     } else {
       expect(created.strategyTask).toBeUndefined();
+      expect(run.status).toBe('succeeded');
     }
-    expect(run.status).toBe('succeeded');
     const flush = async () => {
       await Promise.resolve(started?.shutdown?.());
     };

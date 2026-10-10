@@ -23,12 +23,10 @@ function fakePaths(root: string): PackagedNamespacePaths {
   return {
     cacheRoot: join(root, "cache"),
     dataRoot: join(root, "data"),
-    desktopIdentityPath: join(root, "runtime", "desktop-root.json"),
     desktopLogPath: join(root, "logs", "desktop", "latest.log"),
     desktopLogsRoot: join(root, "logs", "desktop"),
     electronSessionDataRoot: join(root, "user-data", "session"),
     electronUserDataRoot: join(root, "user-data"),
-    headlessIdentityPath: join(root, "runtime", "headless-root.json"),
     installationRoot: root,
     installerObservationRoot: join(root, "data", "observations", "installer"),
     logsRoot: join(root, "logs"),
@@ -36,7 +34,6 @@ function fakePaths(root: string): PackagedNamespacePaths {
     resourceRoot: join(root, "resources", "open-design"),
     runtimeRoot: join(root, "runtime"),
     updateRoot: join(root, "updates"),
-    webIdentityPath: join(root, "runtime", "web-root.json"),
   };
 }
 
@@ -138,10 +135,12 @@ describe("claimPackagedSingleInstanceLock", () => {
     const show = vi.fn();
 
     try {
-      await expect(inspectExistingDesktopForLauncher("release-beta-win", {
+      await expect(inspectExistingDesktopForLauncher({
+        app: "desktop", channel: "beta", mode: "runtime", namespace: "release-beta-win", source: "packaged",
+      }, {
         deeplinkUrl,
         paths: fakePaths(root),
-        requestIpc: vi.fn(async () => {
+        getStatus: vi.fn(async () => {
           throw new Error("desktop IPC is not ready");
         }),
       })).resolves.toEqual({ action: "continue", reason: "inspect-failed" });

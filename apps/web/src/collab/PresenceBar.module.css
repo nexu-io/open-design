@@ -118,7 +118,7 @@
 
 .popoverHeader strong {
   font-size: 13px;
-  font-weight: 780;
+  font-weight: 700;
 }
 
 .popoverHeader span {
@@ -197,7 +197,7 @@
   min-width: 0;
   color: var(--text, #111827);
   font-size: 13px;
-  font-weight: 740;
+  font-weight: 700;
 }
 
 .memberName:first-child {
@@ -213,7 +213,7 @@
   background: color-mix(in srgb, var(--accent, #c85f3d) 12%, transparent);
   color: var(--text-muted, #64748b);
   font-size: 10px;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .memberMeta {

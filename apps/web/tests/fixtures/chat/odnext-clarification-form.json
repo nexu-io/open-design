@@ -1,0 +1,134 @@
+{
+  "runId": "fixture-odnext-clarification-run",
+  "formId": "b2b-sales-deck",
+  "events": [
+    {
+      "kind": "done_key",
+      "key": "a7f3c91ed2b40561"
+    },
+    {
+      "kind": "text",
+      "text": "我先确认几个关键点,再动手写提案。\n\n<question-form id="
+    },
+    {
+      "kind": "text",
+      "text": "\"b2b-sales-deck\" title=\"销售提案简报 — 30 秒"
+    },
+    {
+      "kind": "text",
+      "text": "\">\n{\n  \"description\": \"我会据此锁定叙事、证据链和 "
+    },
+    {
+      "kind": "text",
+      "text": "ROI 口径,再输出逐页文案。不填的项我会按推荐默认值处理。\",\n  \"q"
+    },
+    {
+      "kind": "text",
+      "text": "uestions\": [\n    {\n      \"id\": \"audie"
+    },
+    {
+      "kind": "text",
+      "text": "nce\",\n      \"label\": \"谁是这份提案的经济型买家与决策"
+    },
+    {
+      "kind": "text",
+      "text": "目标?\",\n      \"type\": \"radio\",\n      \"o"
+    },
+    {
+      "kind": "text",
+      "text": "ptions\": [\n        \"设计组织负责人(VP Design"
+    },
+    {
+      "kind": "text",
+      "text": " / Head of Design)— 以设计效率与一致性为决策点\",\n "
+    },
+    {
+      "kind": "text",
+      "text": "       \"产品与工程负责人(CPO / VP Engineering"
+    },
+    {
+      "kind": "text",
+      "text": ")— 以交付速度与工程集成为决策点\",\n        \"采购与 IT(P"
+    },
+    {
+      "kind": "text",
+      "text": "rocurement / IT)— 以合规、采购与总拥有成本为决策点\",\n"
+    },
+    {
+      "kind": "text",
+      "text": "        \"CEO / 业务负责人 — 以营收与组织杠杆为决策点\"\n"
+    },
+    {
+      "kind": "text",
+      "text": "      ],\n      \"required\": true,\n    "
+    },
+    {
+      "kind": "text",
+      "text": "  \"allowCustom\": true\n    },\n    {\n  "
+    },
+    {
+      "kind": "text",
+      "text": "    \"id\": \"evidence\",\n      \"label\": "
+    },
+    {
+      "kind": "text",
+      "text": "\"证据与数据口径用哪种?是否有必须保留的真实数据?\",\n      \"ty"
+    },
+    {
+      "kind": "text",
+      "text": "pe\": \"radio\",\n      \"options\": [\n    "
+    },
+    {
+      "kind": "text",
+      "text": "    \"真实公开信息 + 明确标注的占位数据(推荐,不编造任何指标)\","
+    },
+    {
+      "kind": "text",
+      "text": "\n        \"我有内部真实数据(留存、用量、ROI 基线),随后提供"
+    },
+    {
+      "kind": "text",
+      "text": "\",\n        \"只用定性价值论述,不放任何数字\"\n      ],"
+    },
+    {
+      "kind": "text",
+      "text": "\n      \"required\": true,\n      \"allow"
+    },
+    {
+      "kind": "text",
+      "text": "Custom\": true\n    },\n    {\n      \"id\""
+    },
+    {
+      "kind": "text",
+      "text": ": \"scope\",\n      \"label\": \"篇幅与交付形态?\","
+    },
+    {
+      "kind": "text",
+      "text": "\n      \"type\": \"radio\",\n      \"option"
+    },
+    {
+      "kind": "text",
+      "text": "s\": [\n        \"12–15 页完整提案:痛点 / 价值 / "
+    },
+    {
+      "kind": "text",
+      "text": "ROI / 落地路线 / 决策请求(推荐)\",\n        \"8–10"
+    },
+    {
+      "kind": "text",
+      "text": " 页精简版:聚焦价值主张与决策请求\",\n        \"18–20 页评"
+    },
+    {
+      "kind": "text",
+      "text": "审完整版:含反方观点、安全与合规、实施细节\"\n      ],\n     "
+    },
+    {
+      "kind": "text",
+      "text": " \"required\": true,\n      \"allowCustom"
+    },
+    {
+      "kind": "text",
+      "text": "\": true\n    }\n  ]\n}\n</question-form>"
+    }
+  ]
+}

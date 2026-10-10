@@ -2,11 +2,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AmrWalletSnapshot } from '@open-design/contracts';
-import {
-  isFreeAmrPlan,
-  isPaidAmrPlan,
-  resolveAmrPlan,
-} from '../../src/runtime/amr-low-balance-plan';
+import { resolveAmrPlan } from '../../src/runtime/amr-low-balance-plan';
 import { fetchVelaLoginStatus } from '../../src/providers/daemon';
 
 vi.mock('../../src/providers/daemon', () => ({
@@ -32,25 +28,14 @@ afterEach(() => {
   mockedFetchStatus.mockReset();
 });
 
-describe('AMR plan eligibility', () => {
-  it('shows the low-balance soft gate only to the three paid tiers', () => {
-    expect(isPaidAmrPlan('plus')).toBe(true);
-    expect(isPaidAmrPlan(' PRO ')).toBe(true);
-    expect(isPaidAmrPlan('Max')).toBe(true);
-
-    expect(isPaidAmrPlan('free')).toBe(false);
-    expect(isPaidAmrPlan('enterprise')).toBe(false);
-    expect(isPaidAmrPlan(null)).toBe(false);
-    expect(isPaidAmrPlan(undefined)).toBe(false);
-  });
-
-  it('recognizes only the explicit free tier for post-success upgrades', () => {
-    expect(isFreeAmrPlan(' free ')).toBe(true);
-    expect(isFreeAmrPlan('FREE')).toBe(true);
-    expect(isFreeAmrPlan('plus')).toBe(false);
-    expect(isFreeAmrPlan(null)).toBe(false);
-  });
-});
+/*
+ * `isFreeAmrPlan` used to be pinned here. It is gone (T55, 2026-09-06): the
+ * balance gate's stand-down no longer asks "is this tier free", it asks whether
+ * the tier could be read at all, and that question is `amrPlanTierUnreadable`
+ * in `amr-balance-gate.ts`. The behavior those cases defended — an unreadable
+ * tier is never hard-blocked by a failed read — is pinned in
+ * `amr-balance-gate-personal-tiers.test.ts` instead.
+ */
 
 describe('resolveAmrPlan', () => {
   it('prefers the live billing account over a stale snapshot plan', async () => {

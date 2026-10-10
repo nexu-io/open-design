@@ -1,3 +1,4 @@
+import { UPDATE_LIFECYCLE_STAGES, parseUpdateLifecycleObservation, type UpdateLifecycleObservedProps } from '@open-design/contracts/analytics';
 import { readdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -304,4 +305,61 @@ export async function observePendingInstallerApplyAttempts(
     observed += 1;
   }
   return { observed };
+}
+
+/** Replay immutable stage records independently of version-apply classification. */
+export async function observeUpdateLifecycleStages(
+  options: ObservePendingInstallerApplyAttemptsOptions,
+): Promise<{ queued: number }> {
+  const root = installerObservationRoot(options.dataRoot);
+  const now = options.now?.() ?? new Date();
+  let entries;
+  try { entries = await readdir(root, { withFileTypes: true }); } catch { return { queued: 0 }; }
+  const config = await (options.readConfig ?? readAppConfig)(options.dataRoot).catch(() => ({} as AppConfigPrefs));
+  const decision = deliveryForConfig(config, options.env ?? process.env, now.toISOString());
+  const channel = normalizeUpdateObservationChannel(options.currentVersion, options.currentChannel);
+  let queued = 0;
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !isSafeFlowId(entry.name)) continue;
+    const summary = await readSummary(summaryPath(root, entry.name));
+    if (summary == null || summary.flowId !== entry.name || summary.namespace !== options.namespace || summary.channel !== channel) continue;
+    const age = now.getTime() - Date.parse(summary.attemptedAt);
+    if (!Number.isFinite(age) || age < 0 || age > INSTALLER_OBSERVATION_TTL_MS) continue;
+    for (const stage of UPDATE_LIFECYCLE_STAGES) {
+      const file = path.join(root, entry.name, 'lifecycle', `${stage}.json`);
+      const receipt = `${file}.receipt`;
+      try {
+        const prior = JSON.parse(await readFile(receipt, 'utf8'));
+        if (prior.status === 'queued' || String(prior.status).startsWith('skipped_')) continue;
+      } catch { /* No receipt: retry an unsubmitted stage. */ }
+      try {
+        const raw = JSON.parse(await readFile(file, 'utf8'));
+        const observation = parseUpdateLifecycleObservation(raw);
+        const occurredAt = Date.parse(raw.occurred_at);
+        if (raw.observation_version !== 1 || raw.flow_id !== summary.flowId || observation?.stage !== stage ||
+            !Number.isFinite(occurredAt) || occurredAt < Date.parse(summary.attemptedAt) || occurredAt > now.getTime()) continue;
+        let status: string = decision.delivery.status;
+        const insertId = `update_lifecycle_observed:${summary.flowId}:${stage}`;
+        if (decision.context != null) {
+          const properties: UpdateLifecycleObservedProps = {
+            ...observation, flow_id: summary.flowId, from_version: summary.fromVersion,
+            to_version: summary.toVersion, channel: summary.channel, platform: summary.platform,
+            arch: summary.arch, occurred_at: new Date(occurredAt).toISOString(), observation_version: 1,
+          };
+          const capture = await options.analytics.capture({
+            eventName: 'update_lifecycle_observed', context: decision.context,
+            appVersion: options.appVersion, properties, insertId,
+          });
+          // Queue acknowledgement is not remote ingestion acknowledgement.
+          if (capture?.status !== 'queued') continue;
+          status = 'queued';
+          queued += 1;
+        }
+        const temporary = `${receipt}.${process.pid}.tmp`;
+        await writeFile(temporary, JSON.stringify({ status, insertId, updatedAt: now.toISOString() }));
+        await rename(temporary, receipt);
+      } catch { /* Offline, malformed, or unavailable observations never fail startup. */ }
+    }
+  }
+  return { queued };
 }

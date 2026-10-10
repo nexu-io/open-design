@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { forwardRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -92,7 +92,7 @@ function refusedMessage(overrides: Partial<ChatMessage> = {}): ChatMessage {
   } as ChatMessage;
 }
 
-function renderChat(message: ChatMessage) {
+function renderChat(message: ChatMessage, onSwitchToAmrAndRetry = vi.fn()) {
   return render(
     <ChatPane
       messages={[message]}
@@ -104,6 +104,7 @@ function renderChat(message: ChatMessage) {
       onSend={vi.fn()}
       onStop={vi.fn()}
       onRetry={vi.fn()}
+      onSwitchToAmrAndRetry={onSwitchToAmrAndRetry}
       conversations={[
         { projectId: 'project-1', id: 'conv-1', title: 'Current', createdAt: 1, updatedAt: 1 },
       ]}
@@ -132,7 +133,7 @@ describe('ChatPane — ACP CLI session refusal card', () => {
 
     // The body is a dictionary key resolved at render time — which is exactly
     // what a daemon-authored English sentence can never be.
-    const description = container.querySelector('.run-error__description');
+    const description = container.querySelector('[data-testid="chat-run-error-description"]');
     expect(description).toBeTruthy();
     expect(description!.textContent).toContain('chat.runError.cliSessionRefusedMessage');
     // Rendered with nothing left to interpolate. A `{…}` slot surviving in the
@@ -146,21 +147,34 @@ describe('ChatPane — ACP CLI session refusal card', () => {
     expect(description!.textContent).not.toContain('Details:');
   });
 
-  it('shows the raw agent line exactly once, in the diagnostics block', () => {
+  /*
+   * NOTE(sync/main): origin/main asserted the raw agent line appears exactly
+   * once, INSIDE the card's 「错误详情」 diagnostics block. This branch removed
+   * that collapse from the error card outright (product ruling), so there is no
+   * diagnostics block left to put it in and main's assertion cannot be kept as
+   * written.
+   *
+   * What survives is the half that still has a home: the raw daemon prose must
+   * not leak into the card at all, so the localized sentence is the only thing
+   * the user reads. Pinned here so removing the collapse cannot quietly become
+   * "the raw line got reinstated somewhere else on the card".
+   */
+  it('keeps the raw agent line out of the card entirely', () => {
     const { container } = renderChat(refusedMessage());
 
-    const diagnostic = container.querySelector('.run-error__diagnostic pre');
-    expect(diagnostic).toBeTruthy();
-    expect(diagnostic!.textContent).toContain(RAW_AGENT_LINE);
-    expect(diagnostic!.textContent).toContain('error_code: AGENT_CLI_SESSION_REFUSED');
-
     const card = container.querySelector('[data-user-action-card="run-recovery"]')!;
-    expect(occurrences(card.textContent ?? '', RAW_AGENT_LINE)).toBe(1);
+    expect(occurrences(card.textContent ?? '', RAW_AGENT_LINE)).toBe(0);
+    expect(container.querySelector('.run-error__diagnostic')).toBeNull();
   });
 
-  it('offers Retry — the CLI build is the user\'s to change, then re-run', () => {
-    renderChat(refusedMessage());
-    expect(screen.getByRole('button', { name: 'promptTemplates.retry' })).toBeTruthy();
+  it('offers Cloud switching for the refused CLI run, without a second Retry action', () => {
+    const message = refusedMessage();
+    const onSwitchToAmrAndRetry = vi.fn();
+    renderChat(message, onSwitchToAmrAndRetry);
+
+    fireEvent.click(screen.getByRole('button', { name: 'chat.amrCard.switchCta' }));
+    expect(onSwitchToAmrAndRetry).toHaveBeenCalledExactlyOnceWith(message);
+    expect(screen.queryByRole('button', { name: 'promptTemplates.retry' })).toBeNull();
   });
 
   // The daemon may ship extra structured facts on the same event (it already
@@ -182,7 +196,7 @@ describe('ChatPane — ACP CLI session refusal card', () => {
       } as Partial<ChatMessage>),
     );
 
-    const description = container.querySelector('.run-error__description');
+    const description = container.querySelector('[data-testid="chat-run-error-description"]');
     expect(description!.textContent).toContain('chat.runError.cliSessionRefusedMessage');
     expect(description!.textContent).not.toContain('undefined');
   });

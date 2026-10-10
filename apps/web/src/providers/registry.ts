@@ -30,6 +30,7 @@ import type {
   ProjectFileVersionSource,
   ProjectFileVersionResponse,
   ProjectFileVersionsResponse,
+  ProjectMediaTasksResponse,
   RestoreProjectFileVersionResponse,
   SocialShareRequest,
   SocialShareResponse,
@@ -106,6 +107,30 @@ import {
   currentWorkspaceAccountGeneration,
 } from '../collab/workspace-identity';
 import { PublicFilePublishError } from '../collab/public-file-publish';
+import { clientRequestIdHeaders, withDaemonFailure } from '../analytics/failure-detail';
+
+/**
+ * `coalescedGet` ttl for reads that may only JOIN a request still on the wire.
+ *
+ * Zero means nothing is retained once the read settles: a caller that starts
+ * after the previous one finished always issues its own request. That is the
+ * whole safety argument — such a read can never hand anyone a body it did not
+ * itself trigger, so it cannot serve stale state. It can only remove a request
+ * the browser would have opened *concurrently* with an identical one.
+ *
+ * Why that is worth doing: several of these endpoints are read by one effect
+ * that legitimately runs twice (React StrictMode replays mount effects in dev;
+ * a settling dependency replays them in prod), and the replay always lands
+ * while the first request is still open. Measured on one cold conversation
+ * open: /api/editors ×2 1ms apart, /deployments ×2 6ms apart, /folders ×2 2ms
+ * apart, /api/health ×2 4ms apart. The daemon answers each in 3-7ms, so the
+ * cost is not server time — it is a slot in the browser's ~6-connection budget
+ * for this origin, which the same page is already oversubscribing.
+ *
+ * Use this ttl, not a positive one, unless the endpoint has an explicit reason
+ * a settled body stays true for a while.
+ */
+const IN_FLIGHT_SHARE_ONLY_MS = 0;
 
 export const DEFAULT_DEPLOY_PROVIDER_ID = 'vercel-self';
 export const CLOUDFLARE_PAGES_PROVIDER_ID = 'cloudflare-pages';
@@ -266,6 +291,21 @@ export async function fetchSkills(
   } catch {
     return [];
   }
+}
+
+export async function fetchProjectMediaTasks(
+  projectId: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): Promise<ProjectMediaTasksResponse> {
+  const resp = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/media/tasks?includeDone=1`,
+    {
+      cache: 'no-store',
+      ...(workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : {}),
+    },
+  );
+  if (!resp.ok) throw new Error(`media tasks ${resp.status}`);
+  return await resp.json() as ProjectMediaTasksResponse;
 }
 
 // Design templates — the rendering catalogue (decks, prototypes, image/
@@ -1244,12 +1284,18 @@ export async function fetchPromptTemplate(
 }
 
 export async function daemonIsLive(): Promise<boolean> {
-  try {
-    const resp = await fetch('/api/health');
-    return resp.ok;
-  } catch {
-    return false;
-  }
+  return coalescedGet(
+    'daemon-health',
+    async () => {
+      try {
+        const resp = await fetch('/api/health');
+        return resp.ok;
+      } catch {
+        return false;
+      }
+    },
+    IN_FLIGHT_SHARE_ONLY_MS,
+  );
 }
 
 export async function fetchConnectors(): Promise<ConnectorDetail[]> {
@@ -1802,17 +1848,27 @@ export async function fetchProjectDeployments(
   projectId: string,
   workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<WebDeploymentInfo[]> {
-  try {
-    const resp = await fetch(
-      `/api/projects/${encodeURIComponent(projectId)}/deployments`,
-      workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : undefined,
-    );
-    if (!resp.ok) return [];
-    const json = (await resp.json()) as ProjectDeploymentsResponse;
-    return (json.deployments ?? []) as WebDeploymentInfo[];
-  } catch {
-    return [];
-  }
+  // HtmlViewer reads this from its identity-load effect and again when the
+  // Share/Export popover opens; those can overlap. Retaining nothing after the
+  // read settles keeps the popover's on-demand refresh a real request — it
+  // exists precisely to observe a deploy that happened since the mount read.
+  return coalescedGet(
+    `project-deployments:${projectId}:${workspaceIdentityCacheKey(workspaceContext)}`,
+    async () => {
+      try {
+        const resp = await fetch(
+          `/api/projects/${encodeURIComponent(projectId)}/deployments`,
+          workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : undefined,
+        );
+        if (!resp.ok) return [];
+        const json = (await resp.json()) as ProjectDeploymentsResponse;
+        return (json.deployments ?? []) as WebDeploymentInfo[];
+      } catch {
+        return [];
+      }
+    },
+    IN_FLIGHT_SHARE_ONLY_MS,
+  );
 }
 
 export async function deployProjectFile(
@@ -1822,6 +1878,7 @@ export async function deployProjectFile(
   cloudflarePages?: WebCloudflarePagesDeploySelection,
   target?: 'preview' | 'production',
   workspaceContext?: WorkspaceCollabContext | null,
+  requestId?: string,
 ): Promise<WebDeployProjectFileResponse> {
   const body = {
     fileName,
@@ -1834,12 +1891,13 @@ export async function deployProjectFile(
     headers: {
       'Content-Type': 'application/json',
       ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
+      ...clientRequestIdHeaders(requestId),
     },
     body: JSON.stringify(body),
   });
   if (!resp.ok) {
     const payload = (await resp.json().catch(() => null)) as
-      | { error?: { message?: string; code?: string }; code?: string; message?: string }
+      | { error?: { message?: string; code?: string; failure?: unknown }; code?: string; message?: string }
       | null;
     const message = payload?.error?.message || payload?.message || `Deploy failed (${resp.status})`;
     // Preserve a queryable failure code for analytics (`deployErrorCode` reads
@@ -1853,7 +1911,9 @@ export async function deployProjectFile(
     // one code.
     const rawCode = payload?.error?.code || payload?.code;
     const code = rawCode && !GENERIC_DEPLOY_ENVELOPE_CODES.has(rawCode) ? rawCode : `HTTP_${resp.status}`;
-    throw Object.assign(new Error(message), { code });
+    throw withDaemonFailure(Object.assign(new Error(message), { code }), {
+      failure: payload?.error?.failure,
+    });
   }
   return (await resp.json()) as WebDeployProjectFileResponse;
 }
@@ -1887,6 +1947,7 @@ export async function publishProjectFilePublic(
   projectId: string,
   fileName: string,
   workspaceContext?: WorkspaceCollabContext | null,
+  requestId?: string,
 ): Promise<WebPublicProjectFileResponse> {
   // Carry the active workspace identity so the daemon's `canShareProjectsForRequest`
   // gate (apps/daemon/src/routes/collab-sync.ts) reads the real permission bit
@@ -1896,7 +1957,14 @@ export async function publishProjectFilePublic(
     `/api/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(fileName)}/publish-public`,
     {
       method: 'POST',
-      ...(workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : {}),
+      ...(workspaceContext || requestId
+        ? {
+            headers: {
+              ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
+              ...clientRequestIdHeaders(requestId),
+            },
+          }
+        : {}),
     },
   );
   if (!resp.ok) {
@@ -1904,6 +1972,7 @@ export async function publishProjectFilePublic(
       | {
           error?: { code?: unknown; message?: unknown; data?: unknown } | string;
           message?: unknown;
+          failure?: unknown;
         }
       | null;
     const structuredError = payload?.error && typeof payload.error === 'object'
@@ -1925,13 +1994,16 @@ export async function publishProjectFilePublic(
     const recoveryData = code === PUBLIC_FILE_MANUAL_REVOKE_REQUIRED
       ? parsePublicFileManualRevokeData(structuredError?.data)
       : undefined;
-    throw new PublicFilePublishError(
-      errorMessage || `Publish failed (${resp.status})`,
-      resp.status,
-      code,
-      recoveryData?.projectId === projectId && recoveryData.fileName === fileName
-        ? recoveryData
-        : undefined,
+    throw withDaemonFailure(
+      new PublicFilePublishError(
+        errorMessage || `Publish failed (${resp.status})`,
+        resp.status,
+        code,
+        recoveryData?.projectId === projectId && recoveryData.fileName === fileName
+          ? recoveryData
+          : undefined,
+      ),
+      { failure: payload?.failure, daemonErrorCode: code },
     );
   }
   return (await resp.json()) as WebPublicProjectFileResponse;
@@ -1967,6 +2039,7 @@ export async function unpublishProjectFilePublic(
   fileName: string,
   slug: string,
   workspaceContext?: WorkspaceCollabContext | null,
+  requestId?: string,
 ): Promise<{ ok: true; slug: string; fileName: string }> {
   const resp = await fetch(
     `/api/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(fileName)}/publish-public`,
@@ -1975,13 +2048,14 @@ export async function unpublishProjectFilePublic(
       headers: {
         'content-type': 'application/json',
         ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
+        ...clientRequestIdHeaders(requestId),
       },
       body: JSON.stringify({ slug }),
     },
   );
   if (!resp.ok) {
     const payload = (await resp.json().catch(() => null)) as
-      | { error?: { message?: string } | string; message?: string }
+      | { error?: { message?: string; code?: unknown } | string; message?: string; failure?: unknown }
       | null;
     const errorMessage =
       typeof payload?.error === 'object'
@@ -1989,7 +2063,10 @@ export async function unpublishProjectFilePublic(
         : typeof payload?.error === 'string'
           ? payload.error
           : payload?.message;
-    throw new Error(errorMessage || `Unpublish failed (${resp.status})`);
+    throw withDaemonFailure(new Error(errorMessage || `Unpublish failed (${resp.status})`), {
+      failure: payload?.failure,
+      daemonErrorCode: typeof payload?.error === 'object' ? payload.error.code : payload?.error,
+    });
   }
   return (await resp.json()) as { ok: true; slug: string; fileName: string };
 }
@@ -2161,17 +2238,26 @@ export async function fetchProjectFolders(
   projectId: string,
   workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<ProjectFolder[]> {
-  try {
-    const resp = await fetch(
-      `/api/projects/${encodeURIComponent(projectId)}/folders`,
-      workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : undefined,
-    );
-    if (!resp.ok) return [];
-    const json = (await resp.json()) as { folders?: ProjectFolder[] };
-    return json.folders ?? [];
-  } catch {
-    return [];
-  }
+  // Keyed by the authority the request is made under as well as the project:
+  // two readers may only share a request that carries the same Workspace
+  // headers, or one identity's answer could satisfy another's read.
+  return coalescedGet(
+    `project-folders:${projectId}:${workspaceIdentityCacheKey(workspaceContext)}`,
+    async () => {
+      try {
+        const resp = await fetch(
+          `/api/projects/${encodeURIComponent(projectId)}/folders`,
+          workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : undefined,
+        );
+        if (!resp.ok) return [];
+        const json = (await resp.json()) as { folders?: ProjectFolder[] };
+        return json.folders ?? [];
+      } catch {
+        return [];
+      }
+    },
+    IN_FLIGHT_SHARE_ONLY_MS,
+  );
 }
 
 export async function createProjectFolder(
@@ -3398,9 +3484,15 @@ export async function replaceProjectWorkingDir(
 export async function fetchHostEditors(): Promise<
   import('@open-design/contracts').HostEditorsResponse
 > {
-  const resp = await fetch('/api/editors');
-  if (!resp.ok) throw new Error(`GET /api/editors failed: ${resp.status}`);
-  return (await resp.json()) as import('@open-design/contracts').HostEditorsResponse;
+  return coalescedGet(
+    'host-editors',
+    async () => {
+      const resp = await fetch('/api/editors');
+      if (!resp.ok) throw new Error(`GET /api/editors failed: ${resp.status}`);
+      return (await resp.json()) as import('@open-design/contracts').HostEditorsResponse;
+    },
+    IN_FLIGHT_SHARE_ONLY_MS,
+  );
 }
 
 export async function openProjectInEditor(

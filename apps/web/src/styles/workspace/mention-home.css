@@ -79,7 +79,7 @@
   color: var(--text-muted);
   font: inherit;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 18px;
   white-space: nowrap;
   cursor: pointer;
@@ -312,7 +312,7 @@
    =========================================================== */
 .modal-backdrop {
   position: fixed; inset: 0;
-  background: rgba(28, 27, 26, 0.42);
+  background: var(--scrim-tint);
   -webkit-backdrop-filter: var(--scrim-backdrop);
   backdrop-filter: var(--scrim-backdrop);
   -webkit-app-region: no-drag;
@@ -361,8 +361,7 @@
      This base rule serves the signed-out fallback home, where the host
      (`.entry-updater-menu`) sits in the rail footer at the bottom of the nav
      rail — a top-anchored panel grew down past the window edge and the
-     「更新已就绪」 copy was clipped mid-sentence. `.entry-help-popover` already
-     anchors this way for exactly the same reason. The signed-in home (the
+     「更新已就绪」 copy was clipped mid-sentence. The signed-in home (the
      floating account row, top-right) opens downward via the override below. */
   bottom: 0;
   left: calc(100% + 12px);
@@ -567,7 +566,7 @@
   padding: 8px 18px;
   border-radius: var(--radius-pill);
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   border: 1px solid var(--border);
   background: var(--bg-subtle);
@@ -606,7 +605,7 @@
   padding: 8px 18px;
   border-radius: var(--radius-pill);
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   border: 1px solid var(--border);
   background: var(--bg-subtle);
@@ -650,7 +649,7 @@
   padding: 1px 7px;
   border-radius: var(--radius-pill);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1.5;
   letter-spacing: 0.01em;
   background: var(--bg-subtle);
@@ -960,7 +959,7 @@
   padding: 4px 10px;
   border-radius: var(--radius-pill);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: 0.005em;
   color: var(--text-muted);
   background: color-mix(in srgb, var(--bg-panel) 90%, transparent);
@@ -1512,7 +1511,7 @@
 .settings-nav-item strong {
   color: currentColor;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1.3;
   overflow-wrap: anywhere;
 }
@@ -1725,7 +1724,7 @@
 }
 .seg-btn .seg-title {
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
@@ -1788,7 +1787,7 @@
   border-radius: var(--radius-pill);
   padding: 4px 12px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-muted);
   cursor: pointer;
   white-space: nowrap;
@@ -2465,7 +2464,7 @@
 }
 .orbit-next-run-value.muted {
   color: var(--text-muted);
-  font-weight: 500;
+  font-weight: 600;
 }
 
 @media (max-width: 620px) {
@@ -2526,7 +2525,7 @@
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, #c47a2c 10%, var(--bg-panel));
   color: #8a5217;
-  font-weight: 500;
+  font-weight: 600;
 }
 .orbit-automation-sub-warning svg {
   color: #c47a2c;
@@ -2586,7 +2585,7 @@
   padding: 8px 32px 8px 12px;
   font: inherit;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text);
   background: var(--bg-subtle);
   border: 1px solid var(--border);
@@ -2680,7 +2679,7 @@
 }
 .orbit-receipt-timestamp.muted {
   color: var(--text-muted);
-  font-weight: 500;
+  font-weight: 600;
 }
 .orbit-trigger-pill {
   padding: 2px 10px;

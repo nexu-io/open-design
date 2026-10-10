@@ -18,6 +18,10 @@
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
+  "dependencies": {
+    "@open-design/download": "workspace:*",
+    "jszip": "3.10.1"
+  },
   "devDependencies": {
     "@types/node": "24.12.2",
     "esbuild": "0.28.0",

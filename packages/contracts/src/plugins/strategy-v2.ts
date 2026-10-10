@@ -9,6 +9,19 @@ export const OD_NEXT_PLAN_CONTRACT_BLOCK = 'open-design-plan-contract' as const;
 export const OD_NEXT_RUNTIME_STATE_BLOCK = 'open-design-runtime-state' as const;
 export const OD_NEXT_BUNDLED_STRATEGY_SCHEMA = 'open-design.bundled-strategy/v2' as const;
 
+/**
+ * The reason a task carries when the agent itself declared the turn blocked and
+ * raised no machine code of its own.
+ *
+ * Shared because it is the one blocked verdict whose visible text can be taken
+ * as the explanation. Every other block is a gate the agent did not ask for —
+ * a missing Runtime State, an unresolvable deliverable, an unproven session —
+ * and the prose sitting next to it is the agent's ordinary reply, not an
+ * account of the stop. Reading the code, rather than the presence of text,
+ * keeps those two apart.
+ */
+export const OD_NEXT_AGENT_DECLARED_BLOCK_REASON = 'od_next_agent_declared_block' as const;
+
 export const StrategyTaskTypeV2Schema = z.enum([
   'prototype',
   'ppt',
@@ -435,8 +448,12 @@ export const OpenDesignPlanContractV2Schema = z.object({
 }).strict().superRefine(rejectForbiddenStrategySemantics);
 export type OpenDesignPlanContractV2 = z.infer<typeof OpenDesignPlanContractV2Schema>;
 
+export const StrategyExecutionIntentV2Schema = z.enum(['produce', 'plan_only']);
+export type StrategyExecutionIntentV2 = z.infer<typeof StrategyExecutionIntentV2Schema>;
+
 export const StrategyRuntimeStateV2Schema = z.object({
   schema: z.literal(OD_NEXT_RUNTIME_STATE_SCHEMA),
+  executionIntent: StrategyExecutionIntentV2Schema.optional(),
   route: StrategyRouteV2Schema,
   inputStage: StrategyInputStageV2Schema,
   outcome: StrategyOutcomeV2Schema,
@@ -444,6 +461,17 @@ export const StrategyRuntimeStateV2Schema = z.object({
   reasonCodes: z.array(z.string().min(1)),
 }).strict().superRefine((value, context) => {
   rejectForbiddenStrategySemantics(value, context);
+
+  if (value.executionIntent === 'plan_only') {
+    if (value.route !== 'full_plan' || !['request', 'clarification'].includes(value.inputStage)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['executionIntent'],
+        message: 'Planning intent is confined to Full Plan request and clarification.',
+      });
+    }
+    if (value.outcome === 'completed') return;
+  }
 
   if (value.route === 'direct_edit') {
     if (value.inputStage !== 'request') {
@@ -704,8 +732,16 @@ export const StrategyTaskProjectionV2Schema = z.object({
   outcome: z.union([z.literal('running'), StrategyOutcomeV2Schema]),
   route: StrategyRouteV2Schema.nullable(),
   executionMode: StrategyExecutionModeV2Schema.nullable(),
+  executionIntent: StrategyExecutionIntentV2Schema.optional(),
   activeRunId: z.string().min(1),
   nextRunId: z.string().min(1).optional(),
+  /** Daemon-owned positions for the viewed, active and next physical Runs.
+   * Optional for old daemon compatibility; never infer positions from stages.
+   */
+  runMappings: z.array(z.object({
+    runId: z.string().min(1),
+    taskRunIndex: z.number().int().nonnegative(),
+  }).strict()).max(3).optional(),
   terminal: z.boolean(),
   blockedContext: StrategyTaskBlockedContextV2Schema.optional(),
 }).strict().superRefine((value, context) => {
@@ -759,6 +795,7 @@ export const StrategyTaskProjectionV2Schema = z.object({
       inputStage: value.inputStage,
       outcome: value.outcome,
       executionMode: value.executionMode,
+      executionIntent: value.executionIntent,
       reasonCodes: [],
     });
     if (!state.success) {
@@ -803,7 +840,7 @@ export const StrategyTaskProjectionV2Schema = z.object({
       message: 'Production projections require a locked execution mode.',
     });
   }
-  if (value.outcome === 'completed' && value.inputStage !== 'production') {
+  if (value.outcome === 'completed' && value.inputStage !== 'production' && value.executionIntent !== 'plan_only') {
     context.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['outcome'],

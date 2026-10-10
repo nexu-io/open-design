@@ -1,0 +1,147 @@
+name: catalog-publish
+
+# Publish immutable product catalog snapshots to R2 after merge to main.
+# Standalone (not part of ci.yml). Pack job has no secrets; publish job
+# uses the same Cloudflare R2 release credentials as DSH bootstrap.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "skills/**"
+      - "design-templates/**"
+      - "design-systems/**"
+      - "craft/**"
+      - "templates/live-artifacts/**"
+      - "plugins/**"
+      - "data/plugin-previews/**"
+      - "tools/release/src/catalog/**"
+      - "tools/release/src/storage/publish-catalog.ts"
+      - "tools/release/src/storage/common.ts"
+      - "tools/release/src/storage/s3-upload.ts"
+      - "tools/release/package.json"
+      - ".github/workflows/catalog-publish.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: catalog-publish
+  cancel-in-progress: false
+
+jobs:
+  pack:
+    name: export render pack
+    if: github.repository == 'nexu-io/open-design' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    # Preview bytes are published below a commit-addressed immutable prefix.
+    # Pin the complete browser/font/system environment so rerunning one commit
+    # cannot produce different pixels after a runner-image update.
+    container:
+      image: mcr.microsoft.com/playwright:v1.60.0-noble@sha256:9bd26ad900bb5e0f4dee75839e957a89ae89c2b7ab1e76050e559790e946b948
+      options: --ipc=host
+    timeout-minutes: 60
+    outputs:
+      source_commit: ${{ github.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      # Container uid/gid differs from the runner-owned workspace. Checkout's
+      # set-safe-directory did not cover later git calls; Meta then wrote an
+      # empty source_commit because `sh -e` does not fail command substitution.
+      - name: Trust checkout directory
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build tools-release
+        run: pnpm --filter @open-design/tools-release build
+
+      - name: Export catalog
+        env:
+          CATALOG_SOURCE_COMMIT: ${{ github.sha }}
+          CATALOG_STAGING_DIR: .tmp/catalog-snapshot
+        run: pnpm exec tools-release export-catalog
+
+      - name: Render previews
+        env:
+          CATALOG_SOURCE_COMMIT: ${{ github.sha }}
+          CATALOG_STAGING_DIR: .tmp/catalog-snapshot
+        run: pnpm exec tools-release render-catalog-previews
+
+      - name: Install pinned zstd
+        run: apt-get update && apt-get install -y --no-install-recommends zstd=1.5.5+dfsg2-2build1.1
+
+      - name: Pack catalog
+        env:
+          CATALOG_SOURCE_COMMIT: ${{ github.sha }}
+          CATALOG_STAGING_DIR: .tmp/catalog-snapshot
+        run: pnpm exec tools-release pack-catalog
+
+      - name: Upload snapshot artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: catalog-snapshot
+          path: .tmp/catalog-snapshot
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: publish to R2
+    needs: pack
+    if: github.repository == 'nexu-io/open-design' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: release
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build tools-release
+        run: pnpm --filter @open-design/tools-release build
+
+      - name: Download snapshot artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: catalog-snapshot
+          path: .tmp/catalog-snapshot
+
+      - name: Publish catalog
+        env:
+          CATALOG_SOURCE_COMMIT: ${{ needs.pack.outputs.source_commit }}
+          CATALOG_STAGING_DIR: .tmp/catalog-snapshot
+          RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          RELEASE_STORAGE_REGION: auto
+          RELEASE_BRANCH: ${{ github.ref_name }}
+          RELEASE_COMMIT: ${{ needs.pack.outputs.source_commit }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+          RELEASE_RUN_ID: ${{ github.run_id }}
+          RELEASE_RUN_ATTEMPT: ${{ github.run_attempt }}
+          RELEASE_WORKFLOW: ${{ github.workflow }}
+        run: pnpm exec tools-release publish-catalog

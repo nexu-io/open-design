@@ -1,0 +1,178 @@
+/*
+ * 音频产物(设计稿组件 24 · 第 43 / 44 格)。
+ *
+ * 稿子 `.aud`:一条胶囊,里面是「图标 + 已播时长 + 波形 + 总时长」,右边一颗播放键和一颗下载。
+ * 波形是一排定宽小竖条(`.wave > i`),高度来自采样值 `--h`;已播那截换成 `--text-strong`。
+ *
+ * 采样从哪来:契约里没有波形数据(T17)。所以这一层接受**外部给的采样数组**,
+ * 拿不到就按音频时长生成一条稳定的伪采样 —— 宁可画一条不跳动的假波形,
+ * 也不要一条会随每次渲染变形的随机波形。
+ */
+.aud {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  /* 稿子 `.aud-demo { width: 406px; max-width: 100% }` —— 卡不跟着聊天列宽摊开 */
+  max-width: 100%;
+  padding: 3px;
+  border-radius: var(--chat-radius-lg);
+  background: var(--chat-bg-subtle);
+}
+/* 一轮里可能出来好几段音频(逐段配音就是这个形状),稿子只画了一条,
+   所以堆叠的间距在稿子里没有对应值。锚到同一片区域里已有的那一档:
+   产物卡 `.arts { gap: 8px }`(产品 `.artifact-cards` 同值)——
+   同一块「这一轮产出了什么」里的东西,间距不该有两种。
+   写成相邻兄弟而不是给外层容器加 gap:外层 `.file-ops-audio` 由
+   `FileOpsSummary.tsx` 拼,那是别人的文件;这里自己管好自己就够了。 */
+.aud + .aud {
+  margin-top: 8px;
+}
+
+/* 稿子 `.aud-in { position:relative; display:flex; align-items:center; gap:7px;
+   flex:1; min-width:0; padding: 3px 7px; border-radius: var(--radius); background: var(--bg) }` */
+.inner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1;
+  min-width: 0;
+  padding: 3px 7px;
+  border-radius: var(--chat-radius);
+  background: var(--chat-bg);
+}
+
+.icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: var(--chat-text-soft);
+}
+.icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* 稿子 `.aud-t { flex:none; width:26px; font-size: var(--t-cap);
+   color: var(--text-muted); font-variant-numeric: tabular-nums }` */
+.time {
+  flex: none;
+  width: 26px;
+  font-size: var(--chat-t-cap);
+  color: var(--chat-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.timeEnd {
+  text-align: end;
+}
+
+/* 稿子 `.wave { display:flex; align-items:center; gap:3px; flex:1; min-width:0;
+   height:30px; overflow:hidden }` */
+.wave {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  overflow: hidden;
+}
+/* 稿子 `.wave > i { width:3px; border-radius:999px; height: calc(var(--h) * .68px);
+   background: var(--text-faint) }` + `.is-on { background: var(--text-strong) }` */
+.wave > i {
+  flex: none;
+  width: 3px;
+  border-radius: 999px;
+  height: calc(var(--h) * 0.68px);
+  background: var(--chat-text-faint);
+  transition: background-color var(--chat-dur-quick) var(--chat-ease-out);
+}
+.wave > i.on {
+  background: var(--chat-text-strong);
+}
+
+/* 播着的时候整条轻轻起伏(稿子 `.aud[data-playing] .wave > i`,0.72 → 1 → 0.78,
+   逐根错开 18ms)。
+   ------------------------------------------------------------
+   这一下**不表示音量** —— 音量已经由柱高 `--h` 定死了;它表示的是【还在响】,
+   和进度条那种「走到哪了」是两件事。所以是**全条一起动**,不只动已播那截:
+   已播那截的事由 `.on` 换色说完了,再让它单独动就是把同一件事说两遍。
+
+   错开靠每根柱子自己的序号 `--i`(由 `AudioArtifact.tsx` 写在 style 上)。
+   少了它四十根柱子会齐步走 —— 那看着像一整块在呼吸,不像一条波形。 */
+.aud[data-playing] .wave > i {
+  animation: wave-pulse 0.55s var(--chat-ease-out) infinite;
+  animation-delay: calc(var(--i) * 18ms);
+}
+@keyframes wave-pulse {
+  0% {
+    transform: scaleY(0.72);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+  100% {
+    transform: scaleY(0.78);
+  }
+}
+/* 降级动画时整条停下。柱高不变,已播那截仍然是实色 ——
+   「还在响」这件事交回给播放键上的暂停图标去说。 */
+@media (prefers-reduced-motion: reduce) {
+  .aud[data-playing] .wave > i {
+    animation: none;
+  }
+}
+
+/* 稿子 `.aud-b { width:26px; height:26px; border-radius:50%;
+   background: var(--text-strong); color: var(--bg) }` */
+.play {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--chat-text-strong);
+  color: var(--chat-bg);
+  cursor: pointer;
+  transition: opacity var(--chat-dur-quick) var(--chat-ease-out);
+}
+.play:hover {
+  opacity: 0.86;
+}
+.play svg {
+  width: 12px;
+  height: 12px;
+}
+/* 稿子 `.aud-b .ic-play { transform: translateX(1px) }` —— 三角形视觉重心偏左,右挪 1px 才居中 */
+.playGlyph {
+  transform: translateX(1px);
+}
+
+/* 稿子 `.aud-x { width:26px; height:26px; border-radius: var(--radius-sm);
+   color: var(--text-soft) }` */
+.download {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--chat-radius-sm);
+  background: none;
+  color: var(--chat-text-soft);
+  cursor: pointer;
+  transition: background-color var(--chat-dur-quick) var(--chat-ease-out),
+    color var(--chat-dur-quick) var(--chat-ease-out);
+}
+.download:hover {
+  background: var(--chat-bg-fill-secondary);
+  color: var(--chat-text-strong);
+}
+.download svg {
+  width: 14px;
+  height: 14px;
+}

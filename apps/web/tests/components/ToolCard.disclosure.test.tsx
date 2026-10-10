@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { ToolCard } from '../../src/components/ToolCard';
@@ -21,6 +21,50 @@ function renderTool(use: ToolUse, result?: ToolResult) {
 afterEach(() => cleanup());
 
 describe('ToolCard secondary result disclosures', () => {
+  it('does not announce a completed Todo snapshot as Done while its run is still active', () => {
+    render(
+      <I18nProvider initial="en">
+        <ToolCard
+          use={{
+            kind: 'tool_use',
+            id: 'todo-active-after-checklist',
+            name: 'TodoWrite',
+            input: {
+              todos: [
+                { content: 'Inspect', status: 'completed' },
+                { content: 'Implement', status: 'completed' },
+              ],
+            },
+          }}
+          runStreaming
+          runSucceeded={false}
+        />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByText('2/2')).toBeTruthy();
+    expect(screen.queryByText('Done')).toBeNull();
+  });
+
+  it('announces the same completed Todo snapshot once its run succeeds', () => {
+    render(
+      <I18nProvider initial="en">
+        <ToolCard
+          use={{
+            kind: 'tool_use',
+            id: 'todo-terminal-success',
+            name: 'TodoWrite',
+            input: { todos: [{ content: 'Implement', status: 'completed' }] },
+          }}
+          runStreaming={false}
+          runSucceeded
+        />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByText('Done')).toBeTruthy();
+  });
+
   it('shows model, aspect, and output while an od media generation command is running', () => {
     const { container } = render(
       <I18nProvider initial="en">

@@ -8,7 +8,7 @@ import {
 } from '@open-design/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { EntryShell } from '../../src/components/EntryShell';
+import { EntryShellWithGateHost } from '../helpers/entry-shell-gate-host';
 import {
   notifyWorkspaceContextRefresh,
   resetTeamProjectsCache,
@@ -189,7 +189,7 @@ describe('EntryShell AMR workspace precheck race', () => {
 
       render(
         <I18nProvider initial="en">
-          <EntryShell
+          <EntryShellWithGateHost
             skills={[]}
             designTemplates={[]}
             designSystems={[]}
@@ -271,7 +271,7 @@ describe('EntryShell AMR workspace precheck race', () => {
 
     render(
       <I18nProvider initial="en">
-        <EntryShell
+        <EntryShellWithGateHost
           skills={[]}
           designTemplates={[]}
           designSystems={[]}
@@ -353,7 +353,7 @@ describe('EntryShell AMR workspace precheck race', () => {
 
     render(
       <I18nProvider initial="en">
-        <EntryShell
+        <EntryShellWithGateHost
           skills={[]}
           designTemplates={[]}
           designSystems={[]}
@@ -426,7 +426,7 @@ describe('EntryShell AMR workspace precheck race', () => {
 
     render(
       <I18nProvider initial="en">
-        <EntryShell
+        <EntryShellWithGateHost
           skills={[]}
           designTemplates={[]}
           designSystems={[]}
@@ -514,7 +514,7 @@ describe('EntryShell AMR workspace precheck race', () => {
 
     render(
       <I18nProvider initial="en">
-        <EntryShell
+        <EntryShellWithGateHost
           skills={[]}
           designTemplates={[]}
           designSystems={[]}
@@ -560,7 +560,10 @@ describe('EntryShell AMR workspace precheck race', () => {
       await Promise.resolve();
     });
     expect(mockedCheckAmrBalanceGate).toHaveBeenCalledTimes(1);
-    expect(screen.getByTestId('home-hero-submit').getAttribute('aria-busy')).toBe('true');
+    // The Home arrow never flashes a busy treatment (the destination Chat frame
+    // owns progress); the in-flight window is only visible as the disabled lock.
+    expect((screen.getByTestId('home-hero-submit') as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByTestId('home-hero-submit').getAttribute('aria-busy')).toBe('false');
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(400);
@@ -598,7 +601,7 @@ describe('EntryShell AMR workspace precheck race', () => {
 
     render(
       <I18nProvider initial="en">
-        <EntryShell
+        <EntryShellWithGateHost
           skills={[]}
           designTemplates={[]}
           designSystems={[]}
@@ -666,7 +669,7 @@ describe('EntryShell AMR workspace precheck race', () => {
 
     render(
       <I18nProvider initial="en">
-        <EntryShell
+        <EntryShellWithGateHost
           skills={[]}
           designTemplates={[]}
           designSystems={[]}
@@ -704,7 +707,7 @@ describe('EntryShell AMR workspace precheck race', () => {
     );
 
     expect(
-      await screen.findByRole('heading', { name: 'Sign in to OpenDesign' }),
+      await screen.findByRole('heading', { name: 'Welcome to OpenDesign' }),
     ).toBeTruthy();
     expect(window.location.pathname).toBe('/onboarding');
     expect(screen.queryByRole('alertdialog')).toBeNull();
@@ -750,7 +753,7 @@ describe('EntryShell AMR workspace precheck race', () => {
 
     render(
       <I18nProvider initial="en">
-        <EntryShell
+        <EntryShellWithGateHost
           skills={[]}
           designTemplates={[]}
           designSystems={[]}
@@ -796,7 +799,7 @@ describe('EntryShell AMR workspace precheck race', () => {
     await waitFor(() => expect(onCreateProject).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(window.location.pathname).toBe('/onboarding'));
     expect(
-      await screen.findByRole('heading', { name: 'Sign in to OpenDesign' }),
+      await screen.findByRole('heading', { name: 'Welcome to OpenDesign' }),
     ).toBeTruthy();
     expect(window.localStorage.getItem('open-design:home-composer:prompt')).toBe(
       'Keep this draft through Cloud reauthentication',
@@ -849,7 +852,7 @@ describe('EntryShell AMR workspace precheck race', () => {
 
     render(
       <I18nProvider initial="en">
-        <EntryShell
+        <EntryShellWithGateHost
           skills={[]}
           designTemplates={[]}
           designSystems={[]}

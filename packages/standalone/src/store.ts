@@ -1,63 +1,76 @@
+import { createHash, randomUUID } from "node:crypto";
 import { mkdir, open, readFile, rename, stat, unlink, writeFile, type FileHandle } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
-import { canonicalJson, EXACT_CHANNEL_PATTERN, sha256Hex, verifyStandaloneMetadata, type SignedStandaloneMetadata, type StandaloneComponent, type StandaloneTrustedKeyRing } from "./protocol.js";
+import {
+  canonicalJson,
+  compareVersions,
+  validateShellIdentity,
+  validateStandaloneScope,
+  verifyStandaloneMetadata,
+  type SignedStandaloneMetadata,
+  type StandaloneMaterialization,
+  type StandaloneShellIdentity,
+  type StandaloneTrustedKeyRing,
+} from "./protocol.js";
+import { ensureStandaloneBlob, materializeStandaloneBlob, type StandaloneBlobCandidate } from "./blob.js";
+import { StandaloneFeedbackEmitter, type StandaloneFeedbackHandler } from "./feedback.js";
+import { withStandaloneMaintenanceLock } from "./maintenance.js";
+import {
+  INITIAL_GENERATION_STATE,
+  StandaloneStateConflictError,
+  reduceGenerationState,
+  validateGenerationState,
+  type ActivationAuthority,
+  type ActivationCause,
+  type ActivationIntent,
+  type ActivationLaunchProof,
+  type GenerationState,
+  type GenerationStateCommand,
+} from "./state-machine.js";
 
-export type ArtifactReader = (url: string) => Promise<Uint8Array>;
+export type { ActivationAuthority, ActivationCause, ActivationIntent, ActivationLaunchProof, GenerationState } from "./state-machine.js";
+
+export type StandalonePrepareOptions = Readonly<{
+  candidates?: Readonly<Record<string, readonly StandaloneBlobCandidate[]>>;
+  feedback?: StandaloneFeedbackHandler;
+  fetch?: typeof globalThis.fetch;
+  signal?: AbortSignal;
+}>;
 
 export type GenerationRecord = {
-  schemaVersion: 1;
+  schemaVersion: 4;
   id: string;
   channel: string;
   releaseVersion: string;
   standaloneVersion: string;
   sourceCommit: string;
-  components: Record<string, { entrypoint: string; mode: "required" | "lazy"; path: string; sha256: string; size: number; url: string }>;
+  minimumShellVersions: Record<string, string>;
+  launcher: Readonly<{
+    protocol: "standalone-launcher-v1";
+    resourceId: string;
+    blobSha256: string;
+    entrypoint: string;
+    path: string;
+  }>;
+  resources: Record<string, {
+    component: "standalone.launcher" | "standalone.resource";
+    blobSha256: string;
+    entrypoint: string;
+    materialization: StandaloneMaterialization;
+    mediaType: string;
+    path: string;
+    size: number;
+    sync: true;
+  }>;
 };
 
-export type GenerationState = {
-  schemaVersion: 1;
-  attempt: string | null;
-  active: string | null;
-  lastSuccessful: string | null;
-};
-
-const INITIAL_STATE: GenerationState = { schemaVersion: 1, attempt: null, active: null, lastSuccessful: null };
 let atomicSequence = 0;
 
-function assertNamespace(value: string): void {
-  if (!/^[a-z0-9][a-z0-9._-]{0,63}$/.test(value)) throw new Error(`invalid standalone namespace: ${value}`);
-}
-
-function versionOrder(value: string, channel: string): number[] {
-  const match = new RegExp(`^(\\d+)\\.(\\d+)\\.(\\d+)-${channel}\\.(\\d+)$`).exec(value);
-  if (match == null) throw new Error(`invalid ${channel} release version: ${value}`);
-  return match.slice(1).map(Number);
-}
-
-function compareVersions(left: string, right: string, channel: string): number {
-  const a = versionOrder(left, channel);
-  const b = versionOrder(right, channel);
-  for (let index = 0; index < a.length; index += 1) {
-    if (a[index] !== b[index]) return a[index]! - b[index]!;
-  }
-  return 0;
-}
-
-async function writeJsonAtomic(path: string, value: unknown): Promise<void> {
-  await mkdir(dirname(path), { recursive: true });
-  const temporary = `${path}.${process.pid}.${Date.now()}.${atomicSequence++}.tmp`;
-  await writeFile(temporary, canonicalJson(value), { encoding: "utf8", flag: "wx" });
-  try { await replaceFile(temporary, path); }
-  catch (error) {
-    await unlink(temporary).catch(() => undefined);
-    throw error;
-  }
-}
-
 export async function replaceFile(from: string, to: string): Promise<void> {
-  try { await rename(from, to); }
-  catch (error) {
+  try {
+    await rename(from, to);
+  } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
     if (process.platform !== "win32" || (code !== "EPERM" && code !== "EEXIST")) throw error;
     await unlink(to).catch((unlinkError: NodeJS.ErrnoException) => {
@@ -65,6 +78,14 @@ export async function replaceFile(from: string, to: string): Promise<void> {
     });
     await rename(from, to);
   }
+}
+
+async function writeJsonAtomic(path: string, value: unknown): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
+  const temporary = `${path}.${process.pid}.${Date.now()}.${atomicSequence++}.tmp`;
+  await writeFile(temporary, canonicalJson(value), { encoding: "utf8", flag: "wx" });
+  try { await replaceFile(temporary, path); }
+  catch (error) { await unlink(temporary).catch(() => undefined); throw error; }
 }
 
 async function readJson<T>(path: string): Promise<T> {
@@ -77,28 +98,28 @@ function delay(milliseconds: number): Promise<void> {
 
 export class StandaloneStore {
   readonly root: string;
+  readonly channel: string;
   readonly namespace: string;
 
-  constructor(root: string, namespace: string) {
-    assertNamespace(namespace);
-    this.root = root;
-    this.namespace = namespace;
+  constructor(root: string, scope: Readonly<{ channel: string; namespace: string }>) {
+    validateStandaloneScope(scope);
+    this.root = resolve(root);
+    this.channel = scope.channel;
+    this.namespace = scope.namespace;
   }
 
-  private get statePath(): string { return join(this.root, "namespaces", this.namespace, "state.json"); }
-  private get bindingPath(): string { return join(this.root, "namespaces", this.namespace, "binding.json"); }
-  private get stateLockPath(): string { return join(this.root, "namespaces", this.namespace, "state.lock"); }
-  private generationPath(id: string): string { return join(this.root, "generations", `${id}.json`); }
-  private blobPath(sha256: string): string { return join(this.root, "blobs", "sha256", sha256); }
+  private get namespaceRoot(): string { return join(this.root, "channels", this.channel, "namespaces", this.namespace); }
+  private get statePath(): string { return join(this.namespaceRoot, "state.json"); }
+  private get stateLockPath(): string { return join(this.namespaceRoot, "state.lock"); }
+  private generationPath(id: string): string { return join(this.root, "channels", this.channel, "generations", `${id}.json`); }
 
   private async withStateTransaction<T>(operation: () => Promise<T>): Promise<T> {
     await mkdir(dirname(this.stateLockPath), { recursive: true });
     let handle: FileHandle | undefined;
+    const owner = canonicalJson({ owner: randomUUID(), pid: process.pid, acquiredAt: new Date().toISOString() });
     for (let attempt = 0; attempt < 250; attempt += 1) {
-      try {
-        handle = await open(this.stateLockPath, "wx");
-        break;
-      } catch (error) {
+      try { handle = await open(this.stateLockPath, "wx"); break; }
+      catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
         let age: number;
         try { age = Date.now() - (await stat(this.stateLockPath)).mtimeMs; }
@@ -106,157 +127,229 @@ export class StandaloneStore {
           if ((statError as NodeJS.ErrnoException).code === "ENOENT") continue;
           throw statError;
         }
-        if (age > 120_000) {
-          await unlink(this.stateLockPath).catch(() => undefined);
-          continue;
-        }
+        if (age > 120_000) { await unlink(this.stateLockPath).catch(() => undefined); continue; }
         await delay(20);
       }
     }
-    if (handle === undefined) throw new Error(`timed out acquiring generation state transaction: ${this.namespace}`);
+    if (handle === undefined) throw new Error(`timed out acquiring generation state transaction: ${this.channel}/${this.namespace}`);
     try {
-      await handle.writeFile(canonicalJson({ pid: process.pid, acquiredAt: new Date().toISOString() }));
+      await handle.writeFile(owner);
       return await operation();
     } finally {
       await handle.close();
-      await unlink(this.stateLockPath).catch((error: NodeJS.ErrnoException) => {
-        if (error.code !== "ENOENT") throw error;
+      const currentOwner = await readFile(this.stateLockPath, "utf8").catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return null;
+        throw error;
       });
+      if (currentOwner === owner) await unlink(this.stateLockPath).catch((error: NodeJS.ErrnoException) => { if (error.code !== "ENOENT") throw error; });
     }
   }
 
   async readState(): Promise<GenerationState> {
-    try { return await readJson<GenerationState>(this.statePath); }
-    catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return { ...INITIAL_STATE };
+    try {
+      return validateGenerationState(await readJson<unknown>(this.statePath));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return structuredClone(INITIAL_GENERATION_STATE);
       throw error;
     }
   }
 
-  async bindChannel(channel: string): Promise<void> {
-    if (!EXACT_CHANNEL_PATTERN.test(channel) || channel === "local") throw new Error(`invalid exact channel binding: ${channel}`);
-    try {
-      await mkdir(dirname(this.bindingPath), { recursive: true });
-      await writeFile(this.bindingPath, canonicalJson({ schemaVersion: 1, channel }), { encoding: "utf8", flag: "wx" });
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-    }
-    const binding = await readJson<{ schemaVersion: 1; channel: string }>(this.bindingPath);
-    if (binding.schemaVersion !== 1 || binding.channel !== channel) throw new Error(`namespace ${this.namespace} is already bound to ${binding.channel}`);
+  private async applyStateCommand(command: GenerationStateCommand): Promise<GenerationState> {
+    const current = await this.readState();
+    const next = reduceGenerationState(current, command);
+    if (next !== current) await writeJsonAtomic(this.statePath, next);
+    return next;
   }
 
-  private async materialize(component: StandaloneComponent, readArtifact: ArtifactReader): Promise<string> {
-    const destination = this.blobPath(component.artifact.sha256);
-    try {
-      const existing = await readFile(destination);
-      if (existing.byteLength !== component.artifact.size || sha256Hex(existing) !== component.artifact.sha256) throw new Error(`existing blob failed verification: ${component.name}`);
-      return destination;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    }
-    const bytes = await readArtifact(component.artifact.url);
-    if (bytes.byteLength !== component.artifact.size) throw new Error(`artifact size mismatch: ${component.name}`);
-    if (sha256Hex(bytes) !== component.artifact.sha256) throw new Error(`artifact digest mismatch: ${component.name}`);
-    await mkdir(dirname(destination), { recursive: true });
-    const temporary = `${destination}.${process.pid}.${Date.now()}.${atomicSequence++}.tmp`;
-    await writeFile(temporary, bytes, { flag: "wx" });
-    try { await replaceFile(temporary, destination); }
-    catch (error) {
-      await unlink(temporary).catch(() => undefined);
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-    }
-    return destination;
+  async readGeneration(id: string): Promise<GenerationRecord> {
+    const generation = await readJson<GenerationRecord>(this.generationPath(id));
+    if (generation.schemaVersion !== 4 || generation.id !== id || generation.channel !== this.channel) throw new Error(`invalid generation record: ${id}`);
+    return generation;
   }
 
-  async prepare(envelope: SignedStandaloneMetadata, trustedKeys: StandaloneTrustedKeyRing, readArtifact: ArtifactReader): Promise<GenerationRecord> {
+  async prepare(envelope: SignedStandaloneMetadata, trustedKeys: StandaloneTrustedKeyRing, options: StandalonePrepareOptions = {}): Promise<GenerationRecord> {
     verifyStandaloneMetadata(envelope, trustedKeys);
-    await this.bindChannel(envelope.metadata.channel);
-    const id = sha256Hex(canonicalJson(envelope.metadata));
-    const components: GenerationRecord["components"] = {};
-    for (const component of envelope.metadata.components) {
-      const path = component.mode === "required" ? await this.materialize(component, readArtifact) : this.blobPath(component.artifact.sha256);
-      components[component.name] = { entrypoint: component.artifact.entrypoint, mode: component.mode, path, sha256: component.artifact.sha256, size: component.artifact.size, url: component.artifact.url };
+    if (envelope.metadata.channel !== this.channel) throw new Error(`metadata channel ${envelope.metadata.channel} escaped Store channel ${this.channel}`);
+    return withStandaloneMaintenanceLock(this.root, () => this.prepareVerified(envelope, options));
+  }
+
+  private async prepareVerified(envelope: SignedStandaloneMetadata, options: StandalonePrepareOptions): Promise<GenerationRecord> {
+    const id = createHash("sha256").update(canonicalJson(envelope.metadata)).digest("hex");
+    const feedback = new StandaloneFeedbackEmitter(randomUUID(), { channel: this.channel, namespace: this.namespace }, options.feedback);
+    const syncBlobs = new Set(envelope.metadata.resources.map((resource) => resource.blob));
+    feedback.emit({ phase: "sync-planning", state: "complete", generationId: id, totalBytes: [...syncBlobs].reduce((total, digest) => total + envelope.metadata.blobs[digest]!.size, 0) });
+    const resources: GenerationRecord["resources"] = {};
+    for (const resource of envelope.metadata.resources) {
+      const blob = envelope.metadata.blobs[resource.blob]!;
+      const ensured = await ensureStandaloneBlob(this.root, blob, {
+        candidates: options.candidates?.[blob.sha256],
+        ...(options.fetch == null ? {} : { fetch: options.fetch }),
+        ...(options.signal == null ? {} : { signal: options.signal }),
+        feedback,
+        resourceId: resource.id,
+      });
+      const materialized = await materializeStandaloneBlob(this.root, blob, ensured.path, resource.materialization, { feedback, resourceId: resource.id });
+      resources[resource.id] = {
+        component: resource.component,
+        blobSha256: blob.sha256,
+        entrypoint: materialized.entrypoint,
+        materialization: resource.materialization,
+        mediaType: blob.mediaType,
+        path: materialized.path,
+        size: blob.size,
+        sync: true,
+      };
     }
+    feedback.emit({ phase: "sync-ready", state: "complete", generationId: id });
+    const launcherEntry = Object.entries(resources).find(([, resource]) => resource.component === "standalone.launcher");
+    if (launcherEntry == null) throw new Error("prepared generation lacks standalone.launcher");
+    const [launcherResourceId, launcherResource] = launcherEntry;
     const generation: GenerationRecord = {
-      schemaVersion: 1,
+      schemaVersion: 4,
       id,
       channel: envelope.metadata.channel,
       releaseVersion: envelope.metadata.releaseVersion,
       standaloneVersion: envelope.metadata.standaloneVersion,
       sourceCommit: envelope.metadata.sourceCommit,
-      components,
+      minimumShellVersions: Object.fromEntries(envelope.metadata.shellRequirements.map(({ type, minVersion }) => [type, minVersion])),
+      launcher: {
+        protocol: "standalone-launcher-v1",
+        resourceId: launcherResourceId,
+        blobSha256: launcherResource.blobSha256,
+        entrypoint: launcherResource.entrypoint,
+        path: launcherResource.path,
+      },
+      resources,
     };
     await writeJsonAtomic(this.generationPath(id), generation);
     await this.withStateTransaction(async () => {
       const state = await this.readState();
-      for (const existingId of new Set([state.active, state.attempt])) {
-        if (existingId === null || existingId === id) continue;
-        const existing = await readJson<GenerationRecord>(this.generationPath(existingId));
-        const order = compareVersions(existing.releaseVersion, generation.releaseVersion, generation.channel);
-        if (order > 0) throw new Error(`channel head would downgrade ${existing.releaseVersion} to ${generation.releaseVersion}`);
-        if (order === 0) throw new Error(`release version ${generation.releaseVersion} has conflicting metadata generations ${existing.id} and ${generation.id}`);
-      }
-      await writeJsonAtomic(this.statePath, { ...state, attempt: id });
+      await this.applyStateCommand({ type: "prepare", expectedRevision: state.revision, generationId: id });
     });
+    feedback.emit({ phase: "generation-prepared", state: "complete", generationId: id });
     return generation;
   }
 
-  async commit(id: string): Promise<void> {
-    await readJson<GenerationRecord>(this.generationPath(id));
-    await this.withStateTransaction(async () => {
-      const state = await this.readState();
-      if (state.attempt !== id) throw new Error(`generation ${id} is not the prepared attempt`);
-      await writeJsonAtomic(this.statePath, { ...state, active: id });
+  async authorizePrepared(
+    expectedGenerationId: string,
+    authority: ActivationAuthority,
+    cause: ActivationCause,
+    expectedRevision: number,
+  ): Promise<ActivationIntent> {
+    return this.withStateTransaction(async () => {
+      await this.readGeneration(expectedGenerationId);
+      const state = await this.applyStateCommand({
+        type: "authorize",
+        expectedRevision,
+        generationId: expectedGenerationId,
+        authority,
+        cause,
+        authorizedAt: new Date().toISOString(),
+      });
+      if (state.activationIntent == null) throw new Error("activation authorization was not retained");
+      return state.activationIntent;
     });
   }
 
-  async activatePrepared(): Promise<GenerationRecord | null> {
+  async revokeSilentAuthorization(expectedGenerationId: string, expectedRevision: number): Promise<GenerationState> {
+    return this.withStateTransaction(() => this.applyStateCommand({
+      type: "revoke-silent",
+      expectedRevision,
+      generationId: expectedGenerationId,
+    }));
+  }
+
+  async activatePrepared(expectedGenerationId: string, shell: StandaloneShellIdentity, expectedRevision: number): Promise<GenerationRecord> {
+    validateShellIdentity(shell);
     return this.withStateTransaction(async () => {
       const state = await this.readState();
-      if (state.attempt === null) return null;
-      const generation = await readJson<GenerationRecord>(this.generationPath(state.attempt));
-      await writeJsonAtomic(this.statePath, { ...state, active: state.attempt });
+      if (state.revision !== expectedRevision) throw new StandaloneStateConflictError("revision-conflict", `stale generation state revision: expected ${expectedRevision}, current ${state.revision}`);
+      const generation = await this.readGeneration(expectedGenerationId);
+      const minimum = generation.minimumShellVersions[shell.type];
+      if (minimum == null || compareVersions(shell.version, minimum) < 0) throw new Error(`Shell ${shell.type} ${shell.version} is incompatible with prepared generation`);
+      await this.applyStateCommand({ type: "activate", expectedRevision, generationId: expectedGenerationId, attemptId: randomUUID() });
       return generation;
     });
   }
 
-  async markSuccessful(id: string): Promise<void> {
+  async beginActiveAttempt(shell: StandaloneShellIdentity): Promise<{ proof: ActivationLaunchProof | null; generation: GenerationRecord; attempted: boolean }> {
+    validateShellIdentity(shell);
+    return this.withStateTransaction(async () => {
+      let state = await this.readState();
+      if (state.activationAttempt != null && state.activationAttempt.launchCount >= 2) {
+        state = await this.applyStateCommand({ type: "rollback", expectedRevision: state.revision, attemptId: state.activationAttempt.attemptId });
+      }
+      if (state.active == null) throw new Error("no active standalone generation");
+      const generation = await this.readGeneration(state.active);
+      const minimum = generation.minimumShellVersions[shell.type];
+      if (minimum == null || compareVersions(shell.version, minimum) < 0) throw new Error(`Shell ${shell.type} ${shell.version} is incompatible with active generation`);
+      if (state.activationAttempt != null) {
+        const launchId = randomUUID();
+        const next = await this.applyStateCommand({
+          type: "begin-launch",
+          expectedRevision: state.revision,
+          attemptId: state.activationAttempt.attemptId,
+          launchId,
+        });
+        const attempt = next.activationAttempt!;
+        return { proof: { attemptId: attempt.attemptId, generationId: attempt.generationId, launchId }, generation, attempted: true };
+      }
+      return { proof: null, generation, attempted: false };
+    });
+  }
+
+  async confirmAttempt(proof: ActivationLaunchProof): Promise<void> {
     await this.withStateTransaction(async () => {
       const state = await this.readState();
-      if (state.active !== id) throw new Error(`generation ${id} is not active`);
-      await writeJsonAtomic(this.statePath, { ...state, attempt: null, lastSuccessful: id });
+      await this.applyStateCommand({ type: "confirm-launch", expectedRevision: state.revision, proof });
     });
+  }
+
+  async recoverInterruptedAttempt(): Promise<GenerationRecord | null> {
+    return this.withStateTransaction(async () => {
+      const state = await this.readState();
+      if (state.activationAttempt == null) return state.active == null ? null : this.readGeneration(state.active);
+      const fallback = state.lastHealthy;
+      const generation = fallback == null ? null : await this.readGeneration(fallback);
+      await this.applyStateCommand({ type: "rollback", expectedRevision: state.revision, attemptId: state.activationAttempt.attemptId });
+      return generation;
+    });
+  }
+
+  async rollbackFailedAttempt(proof: ActivationLaunchProof): Promise<GenerationRecord | null> {
+    return this.withStateTransaction(async () => {
+      const state = await this.readState();
+      if (state.activationAttempt == null) return state.active == null ? null : this.readGeneration(state.active);
+      const fallback = state.lastHealthy;
+      const generation = fallback == null ? null : await this.readGeneration(fallback);
+      if (state.activationAttempt.attemptId !== proof.attemptId || state.activationAttempt.launchId !== proof.launchId) {
+        throw new StandaloneStateConflictError("identity-conflict", "activation launch proof is stale");
+      }
+      await this.applyStateCommand({ type: "rollback", expectedRevision: state.revision, attemptId: proof.attemptId });
+      return generation;
+    });
+  }
+
+  async preparedGeneration(): Promise<GenerationRecord | null> {
+    const state = await this.readState();
+    return state.prepared == null ? null : this.readGeneration(state.prepared);
   }
 
   async activeGeneration(): Promise<GenerationRecord> {
     const state = await this.readState();
-    if (state.active === null) throw new Error("no active standalone generation");
-    return readJson<GenerationRecord>(this.generationPath(state.active));
+    if (state.active == null) throw new Error("no active standalone generation");
+    return this.readGeneration(state.active);
   }
 
-  generation(id: string): Promise<GenerationRecord> {
-    return readJson<GenerationRecord>(this.generationPath(id));
-  }
-
-  async resolveComponent(name: string, readArtifact: ArtifactReader): Promise<string> {
-    const generation = await this.activeGeneration();
-    const component = generation.components[name];
-    if (component == null) throw new Error(`unknown standalone component: ${name}`);
-    return this.materialize({ name, mode: component.mode, artifact: { entrypoint: component.entrypoint, sha256: component.sha256, size: component.size, url: component.url } }, readArtifact);
-  }
-
-  async rollbackFailedActivation(): Promise<GenerationRecord | null> {
-    return this.withStateTransaction(async () => {
-      const state = await this.readState();
-      const fallback = state.lastSuccessful;
-      const generation = fallback === null ? null : await readJson<GenerationRecord>(this.generationPath(fallback));
-      await writeJsonAtomic(this.statePath, { ...state, attempt: null, active: fallback });
-      return generation;
-    });
-  }
-
-  async lastSuccessfulGeneration(): Promise<GenerationRecord | null> {
+  async lastHealthyGeneration(): Promise<GenerationRecord | null> {
     const state = await this.readState();
-    return state.lastSuccessful === null ? null : readJson<GenerationRecord>(this.generationPath(state.lastSuccessful));
+    return state.lastHealthy == null ? null : this.readGeneration(state.lastHealthy);
+  }
+
+  async resolveResource(name: string): Promise<string> {
+    const generation = await this.activeGeneration();
+    const resource = generation.resources[name];
+    if (resource == null) throw new Error(`unknown standalone resource: ${name}`);
+    return resource.entrypoint;
   }
 }

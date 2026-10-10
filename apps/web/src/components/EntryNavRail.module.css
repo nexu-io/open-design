@@ -17,7 +17,7 @@
   gap: 6px;
 }
 
-/* Stretch the reused WorkspaceSwitcher trigger to fill the rail width. */
+/* Stretch the legacy workspace trigger slot to fill the rail width. */
 .workspaceRow > :global(div) {
   flex: 1;
   min-width: 0;
