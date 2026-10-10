@@ -80,6 +80,10 @@ Success looks like:
 
 ## Step 6: Open OpenDesign in Your Browser
 
+For a headless integration with your own model provider, follow
+[Headless BYOK runs over REST](../headless-byok.md) instead of opening the UI.
+The guide covers the OpenCode runtime prerequisite and per-run provider payload.
+
 Open:
 - `http://127.0.0.1:7456/`
 
