@@ -3,7 +3,10 @@ import { test } from 'vitest';
 import {
   AGENT_DEFS, aider, antigravity, assert, claude, codex, copilot, cursorAgent, deepseek, devin, detectAgents, grokBuild, join, kilo, kimi, kiro, mkdtempSync, opencode, pi, qoder, qwen, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
 } from './helpers/test-helpers.js';
-import { writeAntigravityModelSelection } from '../../src/runtimes/defs/antigravity.js';
+import {
+  parseAgyModels,
+  writeAntigravityModelSelection,
+} from '../../src/runtimes/defs/antigravity.js';
 import { parseOpenCodeModels } from '../../src/runtimes/defs/opencode.js';
 import { agentCapabilities } from '../../src/runtimes/capabilities.js';
 import {
@@ -671,8 +674,9 @@ test('antigravity passes prompt via -p argument (print mode)', () => {
     'write hello world',
   ]);
 
-  // No `--model` flag exists upstream, so buildArgs argv must stay the
-  // same regardless of which label the user picks.
+  // `agy` ≥1.2 does have a `--model` flag, but OD still routes selection
+  // through settings.json, so buildArgs argv must stay the same
+  // regardless of which label the user picks.
   // Pass a temp antigravitySettingsPath so buildArgs does not touch the
   // real ~/.gemini/antigravity-cli/settings.json during a unit test run.
   const settingsDir = mkdtempSync(join(tmpdir(), 'od-agy-argv-'));
@@ -716,31 +720,71 @@ test('antigravity passes prompt via -p argument (print mode)', () => {
 
   assert.equal(antigravity.maxPromptArgBytes, undefined);
 
-  // Picker exposes the synthetic Default + the 8 labels agy's TUI
-  // Switch-Model surfaces for consumer-tier accounts. The set is small
-  // enough to ship statically; revisit when upstream adds an `agy
-  // models` subcommand (also tracked under issue #35).
+  // Fallback list mirrors the `agy models` catalog of v1.2.14; the live
+  // listModels probe covers current releases, this list only serves
+  // when the probe cannot run.
   assert.deepEqual(
     antigravity.fallbackModels.map((m) => m.id),
     [
       'default',
+      'Gemini 3.8 Flash (High)',
+      'Gemini 3.8 Flash (Medium)',
+      'Gemini 3.8 Flash (Low)',
+      'Gemini 3.7 Flash (High)',
+      'Gemini 3.7 Flash (Medium)',
+      'Gemini 3.7 Flash (Low)',
+      'Gemini 3.6 Flash (High)',
+      'Gemini 3.6 Flash (Medium)',
+      'Gemini 3.6 Flash (Low)',
       'Gemini 3.1 Pro (High)',
       'Gemini 3.1 Pro (Low)',
-      'Gemini 3.5 Flash (High)',
-      'Gemini 3.5 Flash (Medium)',
-      'Gemini 3.5 Flash (Low)',
       'Claude Sonnet 4.6 (Thinking)',
       'Claude Opus 4.6 (Thinking)',
       'GPT-OSS 120B (Medium)',
     ],
   );
 
-  // `agy` v1.0.3 has no `--model` flag (upstream #35), no `models`
-  // subcommand, and no `/model` slash command — a user-typed model id
-  // would be silently ignored at spawn, looking like an OD bug. The
-  // settings UI hides the "Custom (fill below)" option when this is
-  // `false`. Remove this opt-out once upstream wires #35.
+  // The label set is a server-side enum — a free-text id agy doesn't
+  // recognise resolves to a silent `availableModels` cache miss and an
+  // empty print-mode response, looking like an OD bug. The settings UI
+  // hides the "Custom (fill below)" option when this is `false`.
   assert.equal(antigravity.supportsCustomModel, false);
+});
+
+test('antigravity parses `agy models` TSV into label-keyed options', () => {
+  // Real `agy models` output shape on v1.2.14: a progress line, then
+  // `slug\tLabel` rows.
+  const stdout = [
+    'Fetching available models...',
+    'gemini-3.8-flash-high\tGemini 3.8 Flash (High)',
+    'gemini-3.8-flash-medium\tGemini 3.8 Flash (Medium)',
+    'gemini-3.1-pro-high\tGemini 3.1 Pro (High)',
+    'claude-sonnet-4-6\tClaude Sonnet 4.6 (Thinking)',
+    '',
+  ].join('\n');
+  const models = parseAgyModels(stdout);
+  assert.deepEqual(models, [
+    { id: 'default', label: 'Default (CLI config)' },
+    { id: 'Gemini 3.8 Flash (High)', label: 'Gemini 3.8 Flash (High)' },
+    { id: 'Gemini 3.8 Flash (Medium)', label: 'Gemini 3.8 Flash (Medium)' },
+    { id: 'Gemini 3.1 Pro (High)', label: 'Gemini 3.1 Pro (High)' },
+    { id: 'Claude Sonnet 4.6 (Thinking)', label: 'Claude Sonnet 4.6 (Thinking)' },
+  ]);
+
+  // The id must be the label, not the slug: `waitForAgyToReadModel`
+  // greps agy's --log-file for `label="<id>"` to release the model lock,
+  // and agy logs the resolved label even when a slug was written.
+  assert.equal(models?.[1]?.id, 'Gemini 3.8 Flash (High)');
+
+  // Rows without a tab are ignored; duplicate/blank labels deduped.
+  assert.deepEqual(parseAgyModels('noise\nok-id\tok-label\n\t\n'), [
+    { id: 'default', label: 'Default (CLI config)' },
+    { id: 'ok-label', label: 'ok-label' },
+  ]);
+
+  // A catalog-less output (e.g. older agy that errors out) yields null
+  // so detection falls back to fallbackModels.
+  assert.equal(parseAgyModels('Fetching available models...\n'), null);
 });
 
 test('antigravity gates non-interactive permission bypass on the detected CLI capability', () => {
