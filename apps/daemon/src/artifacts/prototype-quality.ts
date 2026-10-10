@@ -11,7 +11,8 @@ export { inspectPrototypeScripts } from './prototype-quality-static.js';
 
 export const PROTOTYPE_HOST_BUDGET_MS = 30_000;
 const ORIGIN = 'https://prototype.invalid';
-const CONTROL_SELECTOR = 'nav a,nav button,[role="tab"],[data-mode]' ;
+// Category rails scroll within the current page; they are outside the primary-navigation contract.
+const CONTROL_SELECTOR = 'nav:not([aria-label*="分类"]):not([aria-label*="categor" i]) a,nav:not([aria-label*="分类"]):not([aria-label*="categor" i]) button,[role="tab"],[data-mode]';
 
 export function qualityStatus(checks: DeliverableQualityCheck[], complete: boolean): DeliverableQualityEvidence['status'] {
   if (checks.some(check => check.status === 'fail')) return 'fail';

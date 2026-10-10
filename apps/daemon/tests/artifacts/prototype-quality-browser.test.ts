@@ -32,6 +32,10 @@ describe.skipIf(!findBrowserExecutable())('real isolated browser navigation', { 
     await fs.writeFile(path.join(root, 'index.html'), `<h1>今日</h1><main>今日服药记录</main><nav><button data-page="今日" aria-current="page">今日</button><button data-page="药品" aria-current="false">药物</button></nav><script>document.addEventListener('click',e=>{const b=e.target.closest('[data-page]');if(b){document.querySelectorAll('nav button').forEach(t=>t.setAttribute('aria-current',t===b?'page':'false'));document.querySelector('h1').textContent=b.dataset.page;document.querySelector('main').textContent=b.dataset.page+'实际业务内容';}})</script>`);
     expect((await checkPrototypeQuality({ projectRoot: root, entryFile: 'index.html', userBrief: 'App，主导航有今日和药品' })).status).toBe('pass');
   });
+  it('does not confuse an in-page category rail with primary page navigation', async () => {
+    const result = await check(`document.addEventListener('click',e=>{const b=e.target.closest('[data-page]');if(b){document.querySelectorAll('nav[aria-label="主导航"] button').forEach(t=>t.setAttribute('aria-current',t===b?'page':'false'));document.querySelector('h1').textContent=b.dataset.page;document.querySelector('main').textContent=b.dataset.page+'实际业务内容';}});`, '<nav aria-label="商品分类"><button data-cat="meat">荤菜</button></nav>');
+    expect(result.status).toBe('pass'); expect(result.coverage.expected).toBe(2);
+  });
   it.each([
     ['URL only', `document.addEventListener('click',e=>{if(e.target.dataset.page)location.hash=e.target.dataset.page;});`, ''],
     ['wrong selection', `document.addEventListener('click',e=>{if(e.target.dataset.page){document.querySelector('h1').textContent=e.target.dataset.page;document.querySelector('main').textContent=e.target.dataset.page+'其他业务内容';}});`, ''],
