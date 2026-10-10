@@ -14,6 +14,7 @@ import type {
 import {
   applyPlugin,
   listPlugins,
+  pluginApplyFailed,
   resolvedWorkspaceContextForWrite,
 } from '../state/projects';
 import { useProjectCollabContext } from '../collab/collab-context';
@@ -25,6 +26,7 @@ import {
 import { useWorkspaceInvalidation } from '../collab/workspace-events';
 import { useWorkspaceSnapshotActivation } from '../collab/workspace-snapshot-activation';
 import { useI18n } from '../i18n';
+import { formatPluginApplyFailure } from '../i18n/pluginApplyErrors';
 import { localizePluginDescription, localizePluginTitle } from './plugins-home/localization';
 
 interface Props {
@@ -57,7 +59,7 @@ interface Props {
 }
 
 export function InlinePluginsRail(props: Props) {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const shellWorkspace = useWorkspaceContext();
   const projectCollab = useProjectCollabContext();
   const workspaceContext = props.projectId
@@ -176,9 +178,11 @@ export function InlinePluginsRail(props: Props) {
     });
     if (workspaceIdentityRef.current !== issuedIdentity) return;
     setPendingId(null);
-    if (!result) {
+    if (!result || pluginApplyFailed(result)) {
       setError(
-        `Failed to apply ${record.title}. Make sure the daemon is reachable.`,
+        pluginApplyFailed(result)
+          ? formatPluginApplyFailure(result, t, record.title)
+          : `Failed to apply ${record.title}. Make sure the daemon is reachable.`,
       );
       return;
     }
