@@ -30,14 +30,14 @@ The full one-page setup lives in [`QUICKSTART.md`](QUICKSTART.md). The TL;DR for
 ```bash
 git clone https://github.com/nexu-io/open-design.git
 cd open-design
-corepack enable           # selects the pinned pnpm from packageManager
+corepack enable           # macOS/Linux/WSL2; Windows fallback is in docs/windows-troubleshooting.md
 pnpm install
 pnpm tools-dev run web    # daemon + web foreground loop
 pnpm typecheck            # tsc -b --noEmit
 pnpm --filter @open-design/web build  # web package build when needed
 ```
 
-Node `~24` and pnpm `10.33.x` are required. `nvm` / `fnm` are optional; use `nvm install 24 && nvm use 24` or `fnm install 24 && fnm use 24` if you prefer managing Node that way. macOS, Linux, and WSL2 are the primary paths. Windows native is supported; see [`docs/windows-troubleshooting.md`](docs/windows-troubleshooting.md) for the common setup gotchas.
+Node `~24` and pnpm `10.33.x` are required. `nvm` / `fnm` are optional; use `nvm install 24 && nvm use 24` or `fnm install 24 && fnm use 24` if you prefer managing Node that way. macOS, Linux, and WSL2 are the primary paths. Windows native is supported; see [`docs/windows-troubleshooting.md`](docs/windows-troubleshooting.md) for the common setup gotchas, including the pnpm fallback when Corepack cannot write its shim.
 
 ## Docker Setup
 
@@ -236,20 +236,10 @@ For step-by-step instructions on adding a new locale (UI dictionary, README, lan
 
 ## Code style
 
-We're not pedantic about formatting (Prettier on save is fine), but two rules are non-negotiable because they show up in the prompt stack and the user-facing API:
-
-1. **Single quotes in JS/TS.** Strings are single-quoted unless escaping makes them ugly. The codebase is already consistent — please match.
-2. **Comments in English.** Even if the PR is translating something into Deutsch or 中文, code comments stay in English so we can keep one set of greppable references.
-
-Beyond that:
-
-- **Don't narrate.** No `// import the module`, no `// loop through items`. If the code reads obviously, the comment is noise. Save comments for non-obvious intent or constraints the code can't express.
-- **TypeScript-first.** Keep project-owned entrypoints, modules, scripts, tests,
-  reporters, and configs in TypeScript, including code in `apps/web/src/` and
-  `apps/daemon/src/`. New `.js`, `.mjs`, or `.cjs` files need an explicit
-  generated, vendored, or compatibility reason and must pass `pnpm guard`.
-- **No new top-level dependencies** without a paragraph in the PR description on what we get vs. what bytes we ship. The dep list in [`package.json`](package.json) is small on purpose.
-- **Run `pnpm typecheck`** before pushing. CI runs it; failing it earns a "please fix" comment.
+Repository-wide coding, UI, testing, and validation rules live in
+[`CODING_STANDARDS.md`](CODING_STANDARDS.md). Read it before changing code or
+tests. This guide keeps contribution process, PR scope, and issue-first policy;
+the style rules have one owner.
 
 ---
 
@@ -330,3 +320,4 @@ By contributing, you agree your contribution is licensed under the [Apache-2.0 L
 [guizang]: https://github.com/op7418/guizang-ppt-skill
 [acd2]: https://github.com/VoltAgent/awesome-design-md
 [ocod]: https://github.com/OpenCoworkAI/open-codesign
+

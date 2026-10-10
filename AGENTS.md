@@ -1,475 +1,213 @@
-# Directory guide
+# Repository entry guide
 
-This file is the single source of truth for agents entering this repository. Read this file first; after entering `apps/`, `packages/`, `tools/`, or `e2e/`, read that layer's `AGENTS.md` for module-level details. Do not copy module details back into the root file; root stays focused on cross-repository boundaries, workflow, and commands.
+This file routes repository-wide work. Read it first, then load the nearest
+path-local `AGENTS.md` before editing code. `CODING_STANDARDS.md` owns coding
+and validation conventions; `CONTRIBUTING.md` owns contribution and PR policy;
+the repository, package manifests, local guides, and product specs own their
+facts and contracts.
 
-## Core documentation index
+## Load order
 
-- Product and onboarding: `README.md`, `docs/i18n/README.zh-CN.md`, `QUICKSTART.md`.
-- Contribution and environment: `CONTRIBUTING.md`, `docs/i18n/CONTRIBUTING.zh-CN.md`.
-- Architecture and protocols: `docs/architecture.md`, `docs/skills-protocol.md`, `docs/agent-adapters.md`, `docs/modes.md`.
-- Historical product baseline: `docs/spec.md`, `docs/roadmap.md` (both explicitly archived; do not treat their dated decisions as current behavior).
-- References and current plans: `docs/references.md`, `docs/code-review-guidelines.md`, `specs/current/maintainability-roadmap.md`, `specs/current/ci.md` (CI scope confidence methodology — required before changing planner confidence, routing, or omission policy in `.github/config/scopes.json` and `.github/scripts/scopes.py`), `specs/current/chat-panel-next.md` (ChatPanel 重构:基线、任务进度规格、决策记录、踩过的坑 — 改 chat 渲染管线/工具调用展示/执行记录前必读), `specs/current/chat-panel-next-plan.md` (交付计划与纠偏节点).
-- Directory-level agent guidance: `.github/AGENTS.md`, `apps/AGENTS.md`, `packages/AGENTS.md`, `tools/AGENTS.md`, `e2e/AGENTS.md`, `apps/web/src/components/chat/AGENTS.md` (chat 组件分层、`--chat-*` 样式接缝、降级形态与测试规约).
-- Packaged auto-update architecture and high-confidence local harness: read `tools/pack/AGENTS.md` section "Packaged auto-update architecture and harness" before touching packaged updater code, release-channel identity, installer behavior, or updater UI.
-- Packaged build cache contract: `tools/pack/CACHE.md` (determinant rules, materialization-time parameters, confidence grading — required before changing any build-cache node key).
-- Prompt composition has two independent implementations behind a rollout switch: `docs/prompt-composition.md` (fork point, variant axes, host runtime contract table, worked examples — required before changing any prompt text, in `apps/daemon/src/prompts/`, `packages/contracts/src/prompts/`, or under `plugins/_official/scenarios/od-next-strategy/`). See "Prompt variants" below.
+1. Read this file for repository boundaries and routing.
+2. Read the nearest `AGENTS.md` for the changed path. The `.github/`, `apps/`,
+   `packages/`, `tools/`, `e2e/`, `skills/`, and `design-templates/` guides
+   each own their subtree.
+3. Load the conditional document named by the change: `CODING_STANDARDS.md`
+   for code, UI, tests, and validation; `CONTRIBUTING.md` for contribution
+   policy; and the linked architecture, release, prompt, or CI document for
+   those surfaces.
+4. Treat executable checks and configuration as the source of truth when a
+   prose copy disagrees with them. Do not copy local rules back into this file.
 
-## Workspace directories
+## Documentation map
 
-- Workspace packages come from `pnpm-workspace.yaml`: `apps/*`, `packages/*`, `shells/*`, `tools/*`, and `e2e`.
-- Top-level content directories: `skills/` (functional skills the agent invokes mid-task — utilities, briefs, packagers; see `skills/AGENTS.md`), `design-templates/` (rendering catalogue: decks, prototypes, image/video/audio templates; see `design-templates/AGENTS.md` and `specs/current/skills-and-design-templates.md`), `design-systems/` (brand `DESIGN.md` files), `craft/` (universal brand-agnostic craft rules a skill can opt into via `od.craft.requires`), `mocks/` (replay-based mock CLIs for `opencode`/`claude`/`codex`/`gemini`/`cursor-agent`/`deepseek`/`qwen`/`grok`, the ACP family `devin`/`hermes`/`kilo`/`kimi`/`kiro`/`vibe`, and the AMR `vela` CLI (login + models + ACP), built from anonymized Langfuse traces — PATH-overlay drop-in for tests and self-validation; see `mocks/README.md`).
-- `apps/web` is the Next.js 16 App Router + React 18 web runtime; do not restore `apps/nextjs`.
-- `apps/daemon` is the local privileged daemon and `od` bin. It owns `/api/*`, agent spawning, skills, design systems, artifacts, and static serving.
-- `apps/desktop` is the Electron shell; it consumes web/daemon status through the sidecar client boundary.
-- `apps/packaged` is the thin packaged Electron runtime entry; it starts packaged sidecars and owns the `od://` entry glue only.
-- `apps/closure` owns the independently distributable OpenDesign Closure content. It does not own acquisition, generation state, or shell policy.
-- `packages/contracts` is the pure TypeScript web/daemon app contract layer.
-- `packages/sidecar-proto` owns business DTOs and action names; `packages/sidecar` owns the complete business-agnostic sidecar client boundary and protocol implementation; `packages/platform` owns generic OS process primitives.
-- `packages/standalone` owns the shell-neutral exact metadata, verification, materialization, generation, and launcher contract.
-- `shells/terminal` owns the official Node carrier and terminal-facing lifecycle commands. Shells consume standalone contracts and must not import Closure app source.
-- `tools/dev` is the local development lifecycle control plane.
-- `tools/pack` is the local packaged build/start/stop/logs control plane, packaged updater harness, installer identity/registry validation surface, and mac beta release artifact preparation surface.
-- `tools/serve` is the local fixture-service control plane; first service is `tools-serve start updater` for deterministic updater metadata and artifacts.
-- `tools/release` owns release metadata, storage publishing, release reports, and notification-facing data contracts; packaged artifact construction and smoke testing remain in `tools/pack`.
-- `e2e` owns user-level end-to-end smoke tests and Playwright UI automation; read `e2e/AGENTS.md` before editing its tests or commands.
+- Product and setup: `README.md`, `QUICKSTART.md`, and `CONTRIBUTING.md`.
+- Coding, UI, tests, and bug evidence: `CODING_STANDARDS.md`.
+- Architecture and protocols: `docs/architecture.md`, `docs/skills-protocol.md`,
+  `docs/agent-adapters.md`, and `docs/modes.md`.
+- Review: `docs/code-review-guidelines.md`.
+- CI scope and convergence: `specs/current/ci.md` and `.github/AGENTS.md`.
+- Prompt variants: `docs/prompt-composition.md`.
+- Packaged updater, release channels, and build cache: `tools/pack/AGENTS.md`
+  and `tools/pack/CACHE.md`.
+- Windows setup exceptions: `docs/windows-troubleshooting.md`.
 
-## Inactive or placeholder directories
+## Repository topology
 
-- `apps/nextjs`, `packages/shared`, and `apps/landing-page` have been removed; do not recreate or reference them.
-- Local runtime data, `.tmp/`, Playwright reports, and agent scratch directories must stay out of git. For daemon-managed data paths, read and follow **Daemon data directory contract** below; do not restate or improvise path conventions elsewhere.
+- Workspace roots come from `pnpm-workspace.yaml`: `apps/*`, `packages/*`,
+  `shells/*`, `tools/*`, and `e2e`.
+- `apps/daemon` owns REST/SSE APIs, the `od` CLI, agent runtimes, and daemon
+  state. `apps/web` owns the web UI; `apps/desktop` owns the Electron shell;
+  `apps/packaged` owns packaged entry glue; `apps/closure` owns Closure content.
+- `packages/contracts` owns shared web/daemon DTOs. `packages/sidecar-proto`,
+  `packages/sidecar`, `packages/platform`, and `packages/standalone` own their
+  documented protocol and runtime boundaries.
+- `tools/dev`, `tools/pack`, `tools/serve`, and `tools/release` own their
+  control planes. `shells/terminal` owns the terminal carrier.
+- Read the local guide before changing `apps/`, `packages/`, `tools/`, `e2e/`,
+  `.github/`, `skills/`, or `design-templates/`. The retired `apps/nextjs`,
+  `packages/shared`, and `apps/landing-page` paths are not active repository
+  surfaces.
 
-# Development workflow
+## Development boundaries
 
-## Environment baseline
+### Environment and lifecycle
 
-- Runtime target is Node `~24` and `pnpm@10.33.2`; use Corepack so the pnpm version pinned in `package.json` is selected.
-- New project-owned entrypoints, modules, scripts, tests, reporters, and configs should default to TypeScript.
-- Residual JavaScript is limited to generated output, vendored dependencies, explicitly documented compatibility build artifacts, and the allowlist in `scripts/guard.ts`.
+Use the Node and pnpm versions declared in `package.json`. `QUICKSTART.md` and
+`docs/windows-troubleshooting.md` own installation details and platform
+exceptions. Use `pnpm tools-dev` as the local lifecycle entry point; do not add
+root `dev`, `dev:all`, `daemon`, `preview`, or `start` aliases. Ports come from
+`tools-dev` flags and use `OD_PORT` / `OD_WEB_PORT`.
 
-## Windows native
-
-- macOS, Linux, and WSL2 are the primary supported paths. Windows native is best-effort — file an issue if it doesn't work.
-- Historical Windows-specific friction is documented in closed issues #10, #96, #100, #203, and #315; check the issue tracker for the current state before filing new reports.
-- Install Node 24. Either `winget install OpenJS.NodeJS.LTS` (currently Node 24.x) or download from https://nodejs.org. After install, verify with `node --version` — the WinGet LTS pointer rolls to the next major in October 2026, so re-verify if you re-run the install command later. Do not use Node 22 — see FAQ.
-- `corepack enable` fails with EPERM on Windows (cannot write shims to `Program Files`). Use `npm install -g pnpm@10.33.2` instead.
-- `better-sqlite3` has no prebuilt binary for win32/Node 24; `pnpm install` will compile it from source via node-gyp (~2 min). Requires Visual Studio Build Tools 2022 or newer. This is expected — not a sign of version incompatibility.
-- For `tools-dev` start/stop/status usage, see "Local lifecycle" below.
-
-## Local lifecycle
-
-- Use `pnpm tools-dev` as the only local development lifecycle entry point.
-- Do not add or restore root lifecycle aliases: `pnpm dev`, `pnpm dev:all`, `pnpm daemon`, `pnpm preview`, or `pnpm start`.
-- Ports are governed by `tools-dev` flags: `--daemon-port` and `--web-port`.
-- `tools-dev` exports `OD_PORT` for the web proxy target and `OD_WEB_PORT` for the web listener; do not use `NEXT_PORT`.
-
-## Daemon data directory contract
+### Daemon data directory contract
 
 This section is the only repository-wide source of truth for daemon-managed
 data paths. Every README, guide, deployment note, and operational handoff that
 mentions daemon data paths must point here instead of restating the rules.
 
-This boundary is strict. Do not introduce concrete filesystem examples for the
-daemon data directory, recommended data directory, shared data directory,
-deployment mount, or example data directory. If existing code exposes a legacy
-fallback, treat it as implementation detail or a known escape candidate, not as
-a documentation pattern to copy. If a change needs a data-path rule that is not
-covered here, request a core-maintainer decision in the PR instead of inventing
-a new convention.
+The daemon resolves `OD_DATA_DIR` once at startup as `RUNTIME_DATA_DIR`. Every
+daemon-owned path must derive from that value or a constant derived from it,
+including projects, artifacts, SQLite, app config, memory, MCP tokens,
+automation and plugin state, connector credentials, generated files, logs, and
+agent runtime homes. Imported-folder projects are the explicit exception: they
+use the user-selected `metadata.baseDir`. Agent subprocesses inherit the
+resolved root through `OD_DATA_DIR`.
 
-The daemon has one active data-root truth source:
+`tools-dev` owns developer orchestration and must pass an isolated `OD_DATA_DIR`
+when a run needs isolated daemon state. `tools-pack` and `apps/packaged` resolve
+the final namespace-scoped root before spawning the packaged daemon. Daemon code
+must not infer it from app names, Electron `userData`, ports, channel names, or
+namespace names.
 
-- On daemon startup, `apps/daemon/src/server.ts` resolves `OD_DATA_DIR` into
-  `RUNTIME_DATA_DIR`.
-- All daemon-owned data paths must derive from `RUNTIME_DATA_DIR` or from a
-  constant derived from it, such as `PROJECTS_DIR` or `ARTIFACTS_DIR`.
-- `PROJECTS_DIR` is the managed-project root. Imported-folder projects are the
-  explicit exception: they use `metadata.baseDir` for the user-selected
-  external workspace.
-- `ARTIFACTS_DIR`, SQLite, app config, memory, MCP config/tokens, automation
-  state, plugin state, connector credentials, generated files, logs owned by
-  sandbox mode, and agent runtime homes are daemon data and must remain under
-  the resolved daemon data root unless this file names a specific exception.
-- Agent subprocesses receive the resolved daemon data root as `OD_DATA_DIR`.
-  They must inherit the daemon's truth source instead of guessing their own
-  data path.
+`OD_MEDIA_CONFIG_DIR` overrides only `media-config.json`. `OD_LEGACY_DATA_DIR`
+is a migration source, not an active root. `CODEX_HOME` and other external tool
+homes are integration inputs. Skill staging aliases, manifest metadata keys,
+and CSS identifiers are not daemon data roots.
 
-Development propagation:
+Do not introduce concrete data-root examples or cwd-relative fallbacks. Do not
+recompute the root from `process.env.OD_DATA_DIR` in helpers that can receive
+`RUNTIME_DATA_DIR`, and pass the resolved root to database helpers. If a needed
+path rule is unclear, stop and request a core-maintainer decision.
 
-- `tools-dev` consumes sidecar launch/discovery/lifecycle atomics and owns only developer orchestration policy.
-- `tools-dev --namespace <name>` does not, by itself, define daemon data
-  isolation.
-- A development run that needs an isolated daemon data root must pass
-  `OD_DATA_DIR` into the daemon process environment. After that, the daemon
-  resolves it once and all daemon data paths flow from `RUNTIME_DATA_DIR`.
+### Root command boundary
 
-Packaged propagation:
+Keep root scripts for `pnpm guard`, `pnpm typecheck`, `pnpm tools-dev`,
+`pnpm tools-pack`, and `pnpm tools-serve`. Keep build and test commands
+package-scoped or tool-scoped. E2E command ownership stays in `e2e/AGENTS.md`.
 
-- `tools-pack` / `apps/packaged` own packaged channel and namespace layout.
-- Packaged code resolves the final namespace-scoped daemon data root before
-  spawning the daemon.
-- The packaged daemon receives that final data root as `OD_DATA_DIR`; daemon
-  code must not infer packaged data paths from app names, Electron `userData`,
-  ports, channel names, or namespace names.
+### Cross-package architecture
 
-Sanctioned exceptions:
-
-- `OD_MEDIA_CONFIG_DIR` is a narrow override for `media-config.json` only. It
-  is not a second daemon data root.
-- `OD_LEGACY_DATA_DIR` is a migration source for legacy data import only. It is
-  not an active daemon data root.
-- External tool homes such as `CODEX_HOME` are integration inputs, not daemon
-  data roots. The daemon must not describe them as OpenDesign runtime data.
-- Agent/project-cwd skill staging aliases are not daemon data roots.
-- Manifest metadata keys and CSS identifiers are semantic namespaces, not
-  filesystem path conventions.
-
-Known escape candidates that must not be reused:
-
-- Module-level defaults that point at a cwd-relative legacy data directory.
-- Helper defaults such as `defaultRegistryRoots()` that recompute a data root
-  from `process.env.OD_DATA_DIR` or a cwd fallback instead of receiving
-  `RUNTIME_DATA_DIR`.
-- `openDatabase(projectRoot)` calls that rely on its fallback instead of
-  passing the resolved data root.
-- Script help text or examples that suggest concrete legacy data directories.
-
-Do not extend these escape patterns. When a fix is obvious, route the path
-through `RUNTIME_DATA_DIR` or an explicit data-root argument. When it is not
-obvious, block the PR and request core-maintainer guidance.
-
-## Root command boundary
-
-- Keep root scripts reserved for true repo-level checks and tools control-plane entrypoints: `pnpm guard`, `pnpm typecheck`, `pnpm tools-dev`, `pnpm tools-pack`, and `pnpm tools-serve`.
-- Do not add root aggregate `pnpm build` or `pnpm test` aliases. Build/test commands must stay package-scoped (`pnpm --filter <package> ...`) or tool-scoped (`pnpm tools-pack ...`).
-- Do not add root e2e aliases; e2e package commands and ownership rules live in `e2e/AGENTS.md`.
-
-## GitHub automation boundary
-
-Read `.github/AGENTS.md` before editing `.github/workflows/`, `.github/scripts/`, `.github/actions/`, PR follow-on automation, `workflow_run` trusted writes, CI handoff artifacts, or the workflow topology checks that guard those surfaces.
-
-CI-related GitHub automation uses a two-layer architecture:
-
-- Business layer workflows own product or validation decisions. `ci.yml` is the main low-privilege PR, merge-queue, and manual validation workflow. It detects scope, runs checks, and produces typed handoff artifacts.
-- Atomic capability workflows own reusable trusted operations. `comment.atom.yml` publishes pure text PR comments, `autofix.atom.yml` applies same-repository patches, and `report.atom.yml` materializes advanced comments that need trusted dependencies, secrets, or report generation before upsert.
-
-Do not add a new business-named follow-on workflow such as `foo.comment.atom.yml` or `bar.autofix.atom.yml` without first trying to express the flow as a `ci.yml` producer plus the existing `comment`, `autofix`, or `report` capability. Keep artifact naming, storage layout, and parser behavior centralized in `.github/scripts/handoff.py`; do not let individual workflows invent parallel handoff conventions.
-
-## CI test-set orchestration guidance
-
-Use the following as a recommended convergence model, not a repository-wide
-conformance gate. Existing workflows and coarse test lanes may remain while
-their boundaries are understood. Do not block an unrelated change or require it
-to repay adjacent orchestration debt solely because it touches an existing
-lane. Apply these recommendations incrementally when the local scope and
-measured scheduling benefit justify the migration.
-
-Prefer one selection direction: changed paths → source units → test sets →
-execution workloads. Because the `plan` job runs before and governs downstream
-jobs, new omission policy should live in the planner rather than rely on a
-downstream guard to justify it after scheduling has already occurred.
-
-When a CI area is being reorganized, prefer three named responsibilities:
-
-- **Source units** name stable ownership or behavior boundaries in production,
-  test, fixture, and control-plane paths. Prefer composing repeated selectors
-  under a named unit instead of copying prefixes into unrelated rules.
-- **Test sets** name independently useful semantic validation groups. Their
-  membership and execution contract should converge on one authoritative
-  declaration instead of accumulating more matrix or file-list copies across
-  planner configuration, workflow YAML, and framework-local registries.
-- **Routes** map source units to the test sets required to validate them. Routes
-  should express impact rather than runner mechanics; runner image, setup,
-  sharding, and job packing can remain execution concerns derived after
-  selection.
-
-Good split candidates have a stable boundary, change work that can actually be
-omitted, and carry enough runtime cost or diagnostic value to justify another
-scheduling identity. Directory size, file count, or the ability to write a
-narrower glob is weak evidence on its own. Prefer a small number of composable
-semantic units over per-file mappings, exception lists, or negative-rule
-forests. Treat existing duplicated or implicit declarations as migration
-surfaces without requiring every nearby change to remove them.
-
-Before promoting a new route from observation to active omission, retain
-conservative behavior such as:
-
-- unknown, mixed, unresolved, invalid, or below-threshold input selects the
-  conservative full plan;
-- editing a test, fixture, or suite manifest selects the test set that consumes
-  it; shared harness, contract, setup, or lockfile changes fan out to every
-  affected set;
-- making a selected test-set identifier that the executor cannot run fail
-  visibly instead of being ignored;
-- direct planner tests cover representative in-bound, out-of-bound, mixed, and
-  fallback inputs without reimplementing the evaluator in another language.
-
-Keep scope routing and reusable-result convergence conceptually orthogonal:
-scope answers which test sets are necessary for a change, while convergence
-answers whether an identically declared workload already has a validated,
-reusable successful result. New designs should not use result availability to
-weaken source-to-test coverage or copy route policy into
-`.github/config/convergence.json`. Prefer productless reusable workloads; when a
-workload owns products, declare the complete typed reuse manifest with it.
-
-For work whose purpose is CI orchestration, start by inventorying the current
-chain from changed path to match, effect, workload, job command, and concrete
-test cases. Prefer naming or removing implicit joins before making them finer.
-Changes under `.github/` must also follow `.github/AGENTS.md` and the current
-confidence methodology in `specs/current/ci.md`.
-
-## Release channel model
-
-- `beta` is the daily R&D/development validation channel. It is optimized for fast development feedback and is not part of the stable promotion gate.
-- `prerelease` is the internal validation channel for stable delivery. Stable releases remain gated by validated prerelease artifacts.
-- Prerelease builds macOS x64 (Intel) on every run. `release-prerelease.yml` takes an `enable_mac_x64` input that defaults to `true`, and `notify-release-feishu.yml` (the push-to-`release/**` entry point) forwards `true` on push. The switch stays because Intel is the pipeline's critical path — it runs on the slower `macos-15-intel` fleet, ~33 min against ~21 min for every other platform — so a run that is explicitly not about Intel can buy that time back. Turning it off costs that build its promotion eligibility, so it is not a routine choice.
-- **A prerelease built without `enable_mac_x64` cannot be promoted to stable.** Stable ships Intel and stable's gate is validated prerelease artifacts, so an Intel-less prerelease has not validated the Intel artifact stable will ship. This is enforced, not merely documented: `validateStablePrereleaseMetadata` in `tools/release/src/metadata/prepare-stable.ts` requires `platforms.macIntel` (with `enabled: true`, `arch: "x64"`, `signed: true`, and versioned dmg/zip URLs) in the promoted prerelease's metadata, so promoting an Intel-less prerelease fails the stable `metadata` job instead of silently shipping an unvalidated Intel build. `platforms.linux` is deliberately not required there.
-- The `notify-release-feishu.yml` forwarding for a default-on boolean must be `${{ github.event_name != 'workflow_dispatch' || inputs.<flag> }}`, never `${{ inputs.<flag> || true }}`. `inputs` is unset on push, so the second form reads correctly there — but on a dispatch where the operator UNCHECKED the box, `false || true` is also true and the switch becomes unturnoffable. (A default-*off* boolean uses `${{ inputs.<flag> || false }}` for the mirror-image reason: a bare `${{ inputs.<flag> }}` forwards `''` to a `type: boolean` callee input.)
-- `enable_smoke` and `enable_tests` also default to `true`, because neither costs the build anything any more — see "Prerelease validation runs outside the pipeline" below. `mac_sign_mode` (default `sign-only`) codesigns without the Apple notary round-trip; `notarize` is the pre-stable setting, since stable ships notarized. `win_x64_smoke_mode` still chooses how deep the Windows smoke goes, and applies only when `enable_smoke` is on.
-- **Signing is not optional for a prerelease that will be promoted.** `validateStablePrereleaseMetadata` requires `platforms.mac.signed == true` and `platforms.macIntel.signed == true`, so `mac_sign_mode: no` produces a prerelease that cannot become a stable release. Notarization has no metadata field and is therefore not checked — which is exactly why it, and not signing, is what the fast default drops.
-- **Automated tests do not gate prerelease delivery.** A prerelease exists so a person can install it and test it by hand; machine CI is a parallel opinion about the same commit rather than a valve on delivery, and a flaky suite must never cost the team a day's package. Do not reintroduce a test job into `build_*` or `publish`'s `needs`/`if`; if a check must genuinely block delivery, that is a channel-policy decision, not a workflow edit.
-- **Prerelease validation runs outside the pipeline.** `release-prerelease.yml` holds one repository-wide concurrency group (`open-design-release-prerelease`, `cancel-in-progress: false`), so any job that outlives `publish` keeps that group held and stops the NEXT prerelease from *starting*. Making the test jobs advisory was therefore not enough — they still blocked the next build. The workflow now contains only `metadata → build_* → publish` plus two fire-and-forget dispatcher jobs, and the validation lives in three dispatched workflows with concurrency groups scoped to the origin run:
-  - `release-prerelease-tests.yml` — `functional_e2e`, `e2e_vitest`, `daemon_unit_tests`, `verify`, dispatched as soon as the build commit resolves.
-  - `release-prerelease-smoke.yml` — the packaged mac/Windows smoke, dispatched after `publish`. It does **not** test a local build directory: `.github/scripts/release/smoke-artifacts.ts` reads the published version metadata, downloads the DMG / setup.exe a user would get, verifies its sha256 sidecar, and writes it to the one path `tools-pack <platform> install` reads. Linux keeps its in-job smoke, because the whole Linux lane is opt-in behind `vars.ENABLE_STABLE_LINUX` and is on nobody's critical path.
-  - `release-prerelease-card.yml` — the progressive Feishu card.
-  All three are dispatched through `.github/scripts/release/dispatch-validation.sh`, which aims `gh workflow run` at the built branch first and the default branch second, so a release branch cut before these lanes existed still gets validated. A dispatch failure is loud and non-blocking: nothing depends on the dispatcher jobs.
-- **One writer owns the release card.** A Feishu `PATCH` replaces the entire card, so build jobs updating "their own" row would each erase the other two's. `release-prerelease-card.yml` therefore owns the message alone and learns everything by polling the jobs API of the three runs; `tools/release/src/notifications/prerelease-card.ts` renders the card as a total function of that state (unit-tested in `tools/release/tests/prerelease-card.test.ts`) and `feishu-app.ts` is the application-bot transport. The card is posted on the watcher's first poll, before any package exists, and every later state edits that same message: the channel learns a release is under way rather than waiting out the build window in silence. The rule that used to withhold it (a "构建中…" card left standing forever when a build dies) is now carried by rendering instead — a dead lane renders its own terminal state, `allPlatformsFailed` turns the card red once every expected platform has reported without shipping, and the watcher's timeout stamps the card rather than abandoning it. Per-platform durations and the whole-round clock come from the `started_at` / `completed_at` the watcher already polls; live numbers are quantized to the minute so the card does not PATCH itself on every poll.
-- **`version_metadata_url` is the authoritative "did a package ship?" signal, not the workflow conclusion.** The conclusion goes red for anything anywhere in the release run, including work that happens after publication, so keying a notification off it paints the card red while its own download buttons work. The progressive card takes that answer from the published metadata it verifies rather than from a job conclusion, and `tools/release/src/notifications/feishu.ts` keeps the same rule (`VERSION_METADATA_URL` outranks `BUILD_STATE`, falling back to it only for callers that do not pass a URL) for the daily beta stream.
-- **The prerelease Feishu notification has exactly one source: `release-prerelease-card.yml`.** The transitional one-shot webhook card that lived in `notify-release-feishu.yml`'s `notify` job was retired once the progressive card had carried four real releases; that workflow now only builds. Do not add a second prerelease notifier — the card is a PATCH-in-place message with a single writer, and a second poster produces the duplicate the transition existed to end. `tools/release/src/notifications/feishu.ts` and the `FEISHU_RELEASE_WEBHOOK` / `FEISHU_RELEASE_SIGN_SECRET` secrets stay: `notify-daily-feishu.yml` still renders the beta download card through them, and `cut-release`, `cut-patch-release`, `backport-automerge`, `bake-plugin-previews-automerge`, `main-prerelease-win-smoke`, and `dsh-upstream-drift` all post through the same webhook.
-- `preview` is an independent early-access channel with stable-like release rigor. It should use preview versions such as `X.Y.Z-preview.N`, publish to the `preview` R2 channel, publish updater feeds under `preview/latest`, and follow stable's platform policy including the existing optional Linux enablement.
-- `stable` is the formal delivery channel. Do not make stable promotion depend on preview; stable continues to depend on prerelease only.
-- Public packaged app identity must stay channel-distinct: stable uses `Open Design`, beta uses `Open Design Beta`, prerelease uses `Open Design Prerelease`, and preview uses `Open Design Preview`. Do not ship beta, prerelease, or preview mac DMGs whose drag-install app bundle is `Open Design.app`.
-- Windows beta updater validation must use the real beta namespace `release-beta-win`; otherwise a local beta-like namespace can create a separate uninstall registry key while looking like the same `Open Design Beta` app. See `tools/pack/AGENTS.md` for the architecture map and high-confidence acceptance harness.
-
-## Boundary constraints
-
-- Tests under `apps/`, `packages/`, and `tools/` live in a package/app/tool-level `tests/` directory sibling to `src/`; keep `src/` source-only and do not add new `*.test.ts` or `*.test.tsx` files under `src/`. Playwright UI automation belongs to `e2e/ui/`, not app packages.
-- App packages must not import another app's private `src/` or `tests/` implementation as a shared helper. In particular, `apps/web/**` must not import `apps/daemon/src/**`; web/daemon integration belongs behind HTTP APIs, `packages/contracts`, and app-local provider boundaries.
-- Cross-app, cross-runtime, or repository-resource consistency checks belong in `e2e/tests/` when they need to observe more than one app/package boundary; promote reusable logic to a pure package instead of borrowing another app's private source.
-- Keep shared API DTOs, SSE event unions, error shapes, task shapes, and example payloads in `packages/contracts`; update contracts before wiring divergent web/daemon request or response shapes.
-- Keep `packages/contracts` pure TypeScript and free of Next.js, Express, Node filesystem/process APIs, browser APIs, SQLite, daemon internals, and sidecar control-plane dependencies.
-- Keep project-owned entrypoints, modules, scripts, tests, reporters, and configs TypeScript-first; generated `dist/*.js` is runtime output, and source edits belong in `.ts` files.
-- New `.js`, `.mjs`, or `.cjs` files need an explicit generated/vendor/compatibility reason and must pass `pnpm guard`.
-- App business logic must not know about sidecar/control-plane concepts. Keep sidecar awareness in `apps/<app>/sidecar` or the desktop sidecar entry wrapper.
-- Shared web/daemon app contracts belong in `packages/contracts`; that package must not depend on Next.js, Express, Node filesystem/process APIs, browser APIs, SQLite, daemon internals, or the sidecar control-plane protocol.
-- Sidecar process stamps must have exactly five fields: `channel`, `namespace`, `source`, `mode`, and `app`. IPC is private implementation detail and is never a stamp field.
-- Sidecar identity is argv-only. Do not create identity/state files derived from a stamp.
-- Orchestration layers (`tools-dev`, `tools-pack`, packaged launchers) must call `@open-design/sidecar` client/atomic primitives; do not expose argv assembly, IPC paths, or process scans.
-- Packaged runtime paths must be namespace-scoped and independent from daemon/web ports; ports are transient transport details only.
-- Default runtime files live under `<project-root>/.tmp/<source>/<namespace>/...`; private IPC endpoints are derived by `@open-design/sidecar` from the five-field stamp and the current OS principal. POSIX endpoints use a principal-scoped, hashed directory under the OS temporary directory; callers must treat the concrete path as opaque.
+- Keep tests beside each package or app under `tests/`; keep `src/` source-only.
+  Cross-boundary browser tests belong in `e2e/tests/` or `e2e/ui/`.
+- Apps must not import another app's private `src/` or `tests/`. Cross-app
+  behavior uses HTTP APIs, `packages/contracts`, or an app-local provider.
+- Keep shared DTOs, SSE events, errors, task shapes, and example payloads in
+  `packages/contracts`. That package stays pure TypeScript and has no app,
+  filesystem, browser, SQLite, or sidecar-runtime dependencies.
+- Sidecar identity uses the five-field argv stamp `channel`, `namespace`,
+  `source`, `mode`, and `app`. IPC paths and process details remain opaque to
+  apps and orchestrators; packaged paths stay namespace-scoped and independent
+  from ports.
+- TypeScript-first and file-placement rules are executable through `pnpm guard`;
+  their detailed conventions live in `CODING_STANDARDS.md`.
 
 ## Capability exposure (UI/CLI dual-track)
 
-Every user-facing capability must be reachable through both the web UI **and** the `od` CLI (`apps/daemon/src/cli.ts`). Shipping a feature with only one of the two surfaces is a regression.
+Every user-facing capability must be reachable through both the web UI and the
+`od` CLI. Both surfaces call the same daemon `/api/*` contract, with shared
+DTOs in `packages/contracts`. A new capability lands its endpoint, UI surface,
+and CLI subcommand together. An internal-only capability may omit a surface
+only when the PR records why it is genuinely inapplicable. Read
+`apps/daemon/AGENTS.md` before changing CLI or API behavior.
 
-- The CLI is the embeddability contract. External agents (hermes-agent, openclaw, custom Slack/Discord bots, packaged runtimes invoked from another shell) drive OpenDesign through `od` subcommands — they do not render the web UI. If a capability is UI-only, it cannot be composed into those external agents.
-- Both surfaces must call the same `/api/*` endpoints; do not let the CLI talk to one shape and the UI to another. The daemon HTTP layer is the single source of truth, with `packages/contracts` carrying the shared DTOs.
-- The CLI form must support `--json` for machine-readable output and accept long-form prompts via `--prompt-file <path|->`, so jobs that pipe through `xargs`, `jq`, and `<heredoc` stay clean.
-- Adding a new capability is a three-step closure: HTTP endpoint in `apps/daemon/src/*-routes.ts` (with a contract type in `packages/contracts/src/api/`), UI surface in `apps/web/src/`, and `od <capability>` subcommand in `apps/daemon/src/cli.ts` registered through `SUBCOMMAND_MAP`. Land all three in the same PR; do not stage them across PRs.
-- The PR template's Surface area checklist must reflect *both* surfaces. If you ticked UI, tick CLI too — and vice-versa — or explain in the PR body why the missing surface is genuinely not applicable (e.g. an internal-only daemon health probe). "I'll do the CLI later" is not a valid reason.
-- Existing reference points: `od automation …` mirrors the Automations tab against `/api/routines`; `od plugin …`, `od ui …`, `od project …`, `od media …`, `od mcp …`, `od research …` follow the same shape. Copy that pattern for new capabilities.
+## Conditional workflow pointers
 
-## Git commit policy
+### GitHub automation boundary
 
-- Git commits must not include `Co-authored-by` trailers or any other co-author metadata.
+Before changing `.github/workflows/`, `.github/scripts/`, `.github/actions/`, or
+trusted follow-on automation, read `.github/AGENTS.md` and `specs/current/ci.md`.
 
-## Pull request expectations
+### CI test-set orchestration guidance
 
-- Opening a PR uses `.github/pull_request_template.md`; fill every section, not just the title.
-- "Why" must answer both the author's use case (what made you write this PR) and the pain being addressed (user problem, technical debt, prod issue, or unblocker), not just a one-line restatement of the title.
-- "What users will see" describes the change from a user's perspective — what they click, what new thing appears, what default behavior changed — not from a code perspective.
-- The Surface area checklist must reflect actual surfaces touched; check every box that applies, including extension points (`skills/`, `design-systems/`, `design-templates/`, `craft/`), CLI flags, env vars, i18n keys, and new root `package.json` dependencies.
-- If any UI surface is checked, attach screenshots showing the entry point — where users discover the change — not just the feature in isolation; before/after is best for behavior changes.
-- For bug-fix PRs, link the red-spec test that reproduces the bug and confirm it went red on `main` and green on the branch, per the `Bug follow-up workflow` section above.
-- `CONTRIBUTING.md` covers PR scope, title format, dependency policy, and the issue-first rule for non-trivial features; `docs/code-review-guidelines.md` is the reviewer-facing complement.
+For planner scope, test-set routing, or reusable-result convergence, follow the
+current methodology in `specs/current/ci.md`; do not copy CI policy into this
+entry guide.
 
-## Code review guide
+### Release channel model
 
-- Use `docs/code-review-guidelines.md` as the repository-wide review standard. That document is the operational guide; this `AGENTS.md` is the source of truth when the two disagree.
-- Walk reviews top-down through `docs/code-review-guidelines.md`: Product relevance test → forbidden surfaces → ownership/scope → matching lane → checklist → comments → approval bar.
-- Pick the matching review lane: default code/tests, contract and protocol changes, design-system additions, skill additions, or craft additions.
-- Before reviewing changes under `apps/`, `packages/`, `tools/`, or `e2e/`, read that directory's `AGENTS.md` and apply its local boundaries.
-- Blocking review feedback should focus on correctness, security/secrets, data integrity, repository boundary violations, contract/migration breakage, missing required validation, or high-risk maintainability issues.
-- Only maintainers may close a PR instead of requesting changes, and only when the change is not salvageable on the existing branch (wrong target product, foreign test harness, DOM/API assumptions absent from this repo, or scripts that conflict with lifecycle rules).
+For channel identity, updater behavior, release validation, and packaged smoke,
+read `tools/pack/AGENTS.md`, `tools/pack/CACHE.md`, and the owning release docs.
 
-## PR-duty tooling
+### Prompt variants (two implementations, one switch)
 
-This repository no longer ships a maintainer PR-duty control plane. The former
-`pnpm tools-pr` workflow has moved to the standalone `PerishCode/duty` project
-so personal review-lane automation does not become product workspace
-maintenance surface. Do not recreate `tools/pr`, `@open-design/tools-pr`, or a
-root `pnpm tools-pr` script without a new explicit maintainer decision.
+Before changing prompt text in daemon prompts, contract prompts, or the OD Next
+scenario assets, read `docs/prompt-composition.md` and the nearest local guide.
 
-## Prompt variants (two implementations, one switch)
+### Agent runtime conventions
 
-A generation run is composed by ONE of two independent prompt implementations. `composeSystemPrompt` returns early at `apps/daemon/src/prompts/system.ts:905` when a run carries an OD Next recipe, so the entire legacy stack below that line is skipped. The API/BYOK mirror at `packages/contracts/src/prompts/system.ts:318` forks the same way. The two sides share no composition floor: a rule added to one holds only for the runs that take that side.
+Before changing stream formats, runtime definitions, turn boundaries, or recorded
+CLI fixtures, read `apps/daemon/AGENTS.md` and the fixture README it names.
 
-- **Legacy side**: `apps/daemon/src/prompts/` (mirrored for API/BYOK in `packages/contracts/src/prompts/`).
-- **OD Next side**: `plugins/_official/scenarios/od-next-strategy/assets/**` (markdown sent to the model verbatim) plus TypeScript in `packages/contracts/src/prompts/od-next-strategy.ts`, which is where OD Next carries host runtime contracts such as `<question-form>` and the deck framework — not in the task profiles.
-- **Switch**: Settings → Labs → Design Harness, app-config `odNextStrategyMode`, or `OD_NEXT_STRATEGY_ROLLOUT`. Eligibility is re-evaluated per run by `evaluateOdNextRollout` (`apps/daemon/src/strategies/od-next/rollout.ts:138`) and can be latched down mid-session by a runtime signal, so which side a run takes varies on one machine with the switch unchanged. Divergence between the sides therefore surfaces as an intermittent bug.
+### Starting a physical Run
 
-Before changing any prompt text — in any of those locations — read `docs/prompt-composition.md`. It carries the variant axes, a host runtime contract table naming which path carries each contract today, the asset roster and package-hash rules for the plugin side, and the known gaps. A host contract should have one source that every path consumes: `packages/contracts/src/prompts/deck-framework.ts` is the worked example, feeding classic, BYOK, and OD Next from one scaffold. Repository-maintenance notes must never be written into files under that plugin's `assets/`; they are sent to the model verbatim.
+Start physical runs through the service choke point documented by
+`apps/daemon/AGENTS.md`; `pnpm guard` enforces the allowed start path.
 
-## Agent runtime conventions
+### Asking the user questions
 
-- `RuntimeAgentDef.promptInputFormat` selects how the daemon writes the prompt to a child's stdin. The default `'text'` writes the composed prompt and ends stdin immediately. `'stream-json'` wraps the prompt as one JSONL `user` message and KEEPS stdin open so the daemon can stream further user messages back in mid-turn. Claude (`apps/daemon/src/runtimes/defs/claude.ts`) ships `'stream-json'` together with `--input-format stream-json` as generic mid-turn input infrastructure; the daemon closes stdin once the turn terminates cleanly. Every other agent stays on `'text'`.
-- `apps/daemon/src/server.ts` tracks `run.stdinOpen` on the run object. `applyClaudeStreamJsonRunBookkeeping` closes stdin (and records `turnCompletedCleanly`) when a `turn_end` (or `usage`) event arrives with a non `tool_use` `stop_reason`. The `tool_use` stop reason means the model paused mid tool (waiting on claude-code's internal runner); closing stdin there would truncate the follow up response.
-- `claude-stream.ts` reads the turn's `stop_reason` from **three** frames, because Claude Code moved the field and the daemon does not control which build a user has installed. In order of precedence per message: (1) `stream_event` → `message_delta` → `delta.stop_reason`, the only place Claude Code 2.1.259 carries it, available only when `--include-partial-messages` is negotiated; (2) `assistant` → `message.stop_reason`, the legacy shape, which 2.1.259 leaves `null` on every frame but which older CLIs and argv-compatible forks still populate; (3) the terminal `result` frame, surfaced as `usage`, present on every build and flag combination. `emitTurnEndOnce` dedupes them by assistant message id so a build that fills both (1) and (2) announces one turn once. There is deliberately no version gate — nothing tells us which release stopped filling the legacy field, and forks version themselves independently.
-- Whichever source fires, `turn_end` is emitted AFTER every tool_use of the message has been emitted, so the daemon never closes stdin before it has seen the turn's tool calls. Only a main-turn frame may fire it: a forwarded Task sub-agent frame carries a non-null top-level `parent_tool_use_id` and is refused (#5487).
-- A `result` frame ends one **user turn**, not the CLI process: a stream-json session whose stdin stays open emits one `result` per turn and keeps reading. That makes it a valid per-turn reset point for `claude-stream.ts`'s artifact-echo dedup, and on a build with no in-stream boundary at all it is the only one.
-- Verbatim CLI recordings backing all of the above live in `apps/daemon/tests/fixtures/claude-cli-recordings/` (see its `README.md`). Assert new turn-boundary behavior against those, **not** against the older hand-built Claude fixtures elsewhere in `apps/daemon/tests/` — those put `stop_reason` on the `assistant` wrapper and describe a stream the current CLI no longer produces.
-- The host asks the user clarifying questions through the `<question-form>` artifact (see "Asking the user questions" below), NOT through a stdin-injected `tool_result`. There is no `AskUserQuestion` tool wiring, no `/api/runs/:id/tool-result` endpoint, and no host-answer return path. The stream-json input skeleton is generic infrastructure, and its one product consumer is `POST /api/runs/:id/steer` (「引导对话」, B11): the USER pushes a further message into a turn that is still running, which is the opposite direction from `<question-form>`. Admissibility lives in `apps/daemon/src/runtimes/run-steering.ts` (`classifyRunSteering`) — do not re-derive it at a call site, and do not extend it into a host-question path.
+For question forms or answer routing, read the daemon prompt guidance, the web
+artifact implementation, and the nearest local `AGENTS.md` before editing.
 
-## Starting a physical Run
+### Chat UI conventions
 
-- Every physical Run is started through `internalRunCreation.start(run, analytics, starter)` (`apps/daemon/src/services/internal-run-service.ts`). Calling the run registry's `start` directly bypasses the Run analytics lifecycle, so the Run reports no `run_created` and no `run_finished` and nothing says so. `pnpm guard`'s "run start choke point" check enforces this; the only allowed caller of `.runs.start(` is the service itself.
-- The `analytics` argument is required on purpose. A caller with no identity to attribute the Run to — a scheduled Automation, a background refresh — passes `requestAnalyticsContext: null` explicitly; the lifecycle then stays silent instead of inventing one. Stating "no identity" is a decision the code has to record, not a step a caller can skip.
-- A daemon-created Run that continues an existing task inherits its analytics identity and lineage from the Run that caused it, via `inheritedRunLineageHints` (`apps/daemon/src/services/run-analytics-lifecycle.ts`). Resolve lineage through that helper rather than from the source Run's `analyticsRecovery`: the lifecycle re-reads host facts before it captures, so a short Run can hand off before its own recovery record exists.
+Chat rendering contracts belong to `apps/web/src/components/chat/AGENTS.md` and
+the current chat specs. Load those documents before changing chat execution
+records, plans, iframe bridges, or message rendering.
 
-## Asking the user questions
+## Coding, validation, and review pointers
 
-- There is exactly one mechanism for clarifying user intent: the `<question-form>` markdown artifact the model emits inline. `AssistantMessage.tsx` renders `QuestionFormView` directly inside the originating assistant message, and answers flow back as the next user message (`formatFormAnswers` in `apps/web/src/artifacts/question-form.ts` → `POST /api/chat`). There is no separate Questions tab or native tool card.
-- `<question-form>` is valid on ANY turn, not just turn-1 discovery. Use it for turn-1 discovery briefs AND for mid-conversation clarification (e.g. an ambiguous annotation). The system-prompt guidance lives in `apps/daemon/src/prompts/system.ts` and `discovery.ts`; the API/BYOK-mode wording is mirrored through `packages/contracts/src/prompts/system.ts`.
-- `run-artifacts.ts:runAskedUserQuestion` powers the `run_finished.asked_user_question` analytics signal by scanning the run's streamed text for a `<question-form` marker (reassembled across `text_delta` chunks), not by detecting any tool call.
+### Web CSS ownership
 
-## Chat UI conventions
+See `CODING_STANDARDS.md#web-css-ownership` and the nearest web `AGENTS.md`.
 
-- `apps/web/src/components/file-viewer-render-mode.ts` decides URL-load vs srcDoc for HTML previews. Bridges (deck, comment/inspect selection, palette, edit, tweaks) can ONLY inject through the srcDoc path. Add a new disqualifier to `UrlLoadDecision` whenever a feature needs a srcDoc-only bridge; pass it from `FileViewer.tsx` based on a source-content heuristic where appropriate (e.g. `hasTweaksTemplate`). The host keeps both iframes mounted simultaneously and swaps CSS visibility so toggling render mode does not cause an iframe reload flash; `iframeRef.current` stays aligned with the active iframe via `useEffect`. Receive filters use `isOurIframe(ev.source)` to accept messages from either iframe but signals that should ONLY come from the active iframe (e.g. `od:tweaks-available`) re-check `ev.source === iframeRef.current?.contentWindow`.
-- TodoWrite has **no pinned card above the composer**. The task list appears in full exactly once, inside the turn's execution record, as `执行计划 · N 步` plus one drawer per step (`components/chat/ExecutionShell.tsx`, decisions D29 / B17 in `specs/current/chat-panel-next.md`). The old `PinnedTodoSlot` in `ChatPane.tsx` was removed when the new execution record landed; do not reintroduce it.
-- What *is* pinned above the composer is the **Plan pill** (`components/chat/PlanPill.tsx`, delivered-matrix cell #71): a one-line `第 N / M 步` capsule, with the whole list in a hover-only popover that opens **upward**. It is a second view of the same TodoWrite snapshot, not a second copy of the card — `N` is *which step is running now* (not `{done}/{total}`), and the pill disappears entirely once the run ends or nothing in the list is unfinished. Visibility, `N`/`M`, and the per-step mark all live in the pure `runtime/chat/plan-pill.ts`; the component only draws. The expanded standalone Plan card (cell #70) stays **not built** (D33 / S9).
-- Because the pill sits **outside** the `.chat-log` scroll container, it is wired into the same auto-scroll plumbing as `QueuedSendStrip`: it takes a `containerRef`, `ChatPane`'s `ResizeObserver` observes that element, and the pane-level `MutationObserver` re-attaches the observation whenever it mounts or unmounts. Any future pinned element there needs the same three pieces or new messages stop scrolling into view. The pill renders **before** `QueuedSendStrip` in DOM order so a growing queue pushes it up instead of overlapping it.
-- `latestTodoWriteInputFromMessages` is the conversation-level discovery link (used by the pill); `unfinishedTodosFromEvents` (the daemon's own criterion) is untouched.
-- One capability travelled on that pinned card and has **not** been re-homed yet: continuing a turn's remaining tasks (`onContinueRemainingTasks`). The delivered design never drew it, so where it goes is an open product decision (T33). `AssistantMessage` still accepts the prop; nothing renders it today.
-- Clarifying questions render through the `<question-form>` artifact directly inside the chat — see "Asking the user questions" above.
-- Tool group rendering uses `dedupeSnapshotToolRetries` to collapse `TodoWrite` snapshots (only the most recent call survives, since each call is a state replace). `SNAPSHOT_TOOL_NAMES` lists the snapshot-style tools; non-snapshot tools pass through untouched.
+### Web component reuse
 
-## Web CSS ownership
+See `CODING_STANDARDS.md#web-component-reuse` and `packages/components` guidance.
 
-- `apps/web/src/index.css` is an import-only cascade entrypoint. Do not add selectors or declarations there; add imports only when a truly global stylesheet is needed, and keep import order intentional.
-- Shared global styles belong in `apps/web/src/styles/`: design tokens, base/reset rules, primitives, app-shell layout, and legacy cross-component selectors that cannot safely be scoped yet. Keep domain-level global files grouped by owner (for example `styles/viewer/` and `styles/workspace/`) instead of adding more large files directly under `styles/`.
-- New component-owned UI styles should default to CSS Modules next to the component (`Component.module.css`) instead of expanding global stylesheets. This is preferred for isolated components, panels, menus, drawers, toolbars, cards, and form sections.
-- When touching an existing component with nearby global styles, prefer migrating that component's local selectors to a CSS Module as part of the change if it is small and testable. Do not mix a large mechanical move with behavior/styling changes in the same patch.
-- Keep global class names only for deliberate shared contracts: reusable primitives, theme hooks, third-party/content styling, cross-component layout, or selectors that rely on global cascade/specificity. Document any new global selector group with its owning feature.
-- CSS refactors must preserve cascade semantics. For mechanical splits, verify expanded import content/order matches the previous stylesheet; for CSS Module migrations, validate the affected UI path with `pnpm --filter @open-design/web typecheck` and a focused build/test or visual check when practical.
+### i18n keys
 
-## Web component reuse
+See `CODING_STANDARDS.md#i18n-keys` and `TRANSLATIONS.md` for locale maintenance.
 
-- New `apps/web` UI should reuse shared primitives from `@open-design/components` when one exists instead of styling plain HTML elements directly. For example, use `Button` for app buttons and `VisuallyHidden` for screen-reader-only text/status content.
-- Do not add new raw primitive classes such as `primary`, `primary-ghost`, `ghost`, `subtle`, `icon-btn`, or `sr-only` for new UI. Those classes are legacy compatibility surface for existing markup until it is migrated.
-- If a needed primitive is missing, prefer adding a small focused primitive to `packages/components` with colocated CSS Modules, then consume it from the app. Keep product-specific layout and workflow styling in the app, not in `packages/components`.
-- Keep semantic plain HTML when it is content markup or a specialized control that the shared package does not model yet; do not force a migration that would hide native behavior or make a custom widget harder to reason about.
-- `apps/web` transpiles `@open-design/components` from source during dev, so component and CSS Module edits should work through the normal web dev loop without rebuilding the package.
+### UI animation philosophy
 
-## i18n keys
+See `CODING_STANDARDS.md#motion` for motion and reduced-motion conventions.
 
-- `apps/web/src/i18n/types.ts` is the typed `Dict`; every key must be defined in all 19 locale files under `apps/web/src/i18n/locales/*.ts` (`ar`, `de`, `en`, `es-ES`, `fa`, `fr`, `hu`, `id`, `it`, `ja`, `ko`, `pl`, `pt-BR`, `ru`, `th`, `tr`, `uk`, `zh-CN`, `zh-TW`). Add the key to `types.ts` first; missing translations produce a typecheck error.
+### Validation strategy
 
-## UI animation philosophy
+See `CODING_STANDARDS.md#validation` for the check matrix and completion bar.
 
-- Default ease-out for UI transitions: `cubic-bezier(0.23, 1, 0.32, 1)`. Built-in `ease` is too weak; `ease-in` is forbidden for UI elements because it feels sluggish.
-- Asymmetric durations: enter around 200ms, exit around 140ms. Exit reads as decisive because the user has already chosen to dismiss.
-- Accordion expand and collapse uses `grid-template-rows: 0fr -> 1fr` (modern auto height pattern). Pair with opacity fade and the easing above. The shared `.accordion-collapsible` + `.accordion-collapsible-inner` class pair (defined in `apps/web/src/index.css`) is the canonical implementation; reuse it for new disclosure UI.
-- Never animate from `transform: scale(0)`. Start from `scale(0.9)` or higher with `opacity: 0`.
-- For elements that show conditionally, keep them mounted and toggle a CSS class (e.g. `.chat-jump-btn-active`). React unmounts skip the exit transition entirely.
+### Bug follow-up workflow
 
-## Validation strategy
+See `CODING_STANDARDS.md#bug-fixes-and-review-evidence` and
+`docs/code-review-guidelines.md` for review evidence.
 
-- Before adding, repairing, or optimizing tests, follow
-  [`docs/testing/test-efficiency.zh-CN.md`](docs/testing/test-efficiency.zh-CN.md)
-  for completion signals, virtual-clock usage, isolation, and performance
-  validation.
-- After package, workspace, or command-entry changes, run `pnpm install` so workspace links and generated dist entries stay fresh.
-- For agent-stream / parser changes (`apps/daemon/src/runtimes/claude-stream.ts`, `json-event-stream.ts`, `qoder-stream.ts`, etc.), replay a recorded session through the mock CLIs in `mocks/` to verify event shapes round-trip without burning provider budget. PATH-overlay activation: `export PATH="$PWD/mocks/bin:$PATH" OD_MOCKS_TRACE=<8-char-id> OD_MOCKS_NO_DELAY=1`. See `mocks/README.md` for the trace catalog and selection knobs.
-- Docker image smoke/publish lives only in `.github/workflows/docker-image.yml` and is outside the core `ci.yml` / `Validate workspace` / merge queue gate.
-- Before marking regular work ready, run at least `pnpm guard` and `pnpm typecheck`, plus the package-scoped tests/builds that match the files changed. Do not use or add root `pnpm test`/`pnpm build` aliases.
-- For local web runtime loops, prefer `pnpm tools-dev run web --daemon-port <port> --web-port <port>`.
-- For e2e tests that need a tools-dev daemon/web runtime, use the shared tools-dev harness under `e2e/lib/tools-dev/` and the framework suite adapters (`e2e/lib/playwright/suite.ts`, `e2e/lib/vitest/suite.ts`). Do not hand-spawn `tools-dev` from test cases or duplicate lifecycle helpers under framework-specific folders.
-- Playwright UI tests must import `test`/`expect` from `@/playwright/suite`, not directly from `@playwright/test`; type-only imports from `@playwright/test` remain fine. The suite owns one isolated tools-dev daemon/web/data root per Playwright worker. Do not add a shared-runtime fallback; set Playwright workers to `1` when constrained.
-- Playwright suite code must not own workspace prebuild policy. CI and callers keep the existing prebuild steps; `tools-dev` daemon freshness checks are only a fallback guard.
-- On a GUI-capable machine, validate desktop by running `pnpm tools-dev`, then `pnpm tools-dev inspect desktop status`.
-- Stamp/namespace changes must validate two concurrent namespaces and run desktop `inspect eval` plus `inspect screenshot` for each namespace.
-- Path/log changes must run `pnpm tools-dev logs --namespace <name> --json` and confirm log paths are under `.tmp/tools-dev/<namespace>/...`.
+### Git commit policy
 
-## Bug follow-up workflow
+See `CONTRIBUTING.md` for commit and contribution policy. The retired local
+PR-duty tool remains documented in `tools/AGENTS.md`.
 
-The following is a working playbook for routine bug follow-ups, distilled from recent practice. Treat it as a default action shape, not a contract — production reality always has edges these bullets can't anticipate, so use judgment when the situation doesn't fit cleanly.
+### Pull request expectations
 
-- **Lead with a red spec.** Default to encoding the bug as a falsifiable test that goes red before any source change, so the fix is anchored in observable behavior rather than source-code intuition. If a red spec can't be written cheaply, that's usually a signal to clarify scope rather than push forward on a guess.
-- **Try the cheapest layer first.** Reach for the lightest test layer that can still see the symptom (e2e Vitest at the daemon HTTP boundary → app-local Vitest → Playwright UI → platform-native harnesses), and drop down only when the cheaper layer can't.
-- **Hold the spec's scope.** Defects discovered outside the bug's described boundary belong in a follow-up — their own red spec, their own PR — not in this fix. List them in the PR body's "Adjacent issues" section with the rationale and move on.
-- **Let the fix read as an invariant.** Prefer a named helper whose docblock describes what must hold over a bolt-on `if` guard with apologetic history-comments. The call site should read as intent.
-- **Diff against the baseline.** When neighboring suites have pre-existing failures, stash or check out upstream before claiming "no new failures."
-- **Link the issue from the PR body.** Use `Fixes #N` / `Closes #N` / `Resolves #N` so the issue auto-closes on merge and the release-time reverse lookup (`gh issue view N --json closedByPullRequestsReferences` → `git tag --contains <merge sha>`) actually has a chain to follow. The repo's PR template prompts for this; deleting the prompt is fine when the PR genuinely closes nothing.
-- **Stage human verification for visible bugs.** When the symptom needs an eye to confirm — UI, platform-native behavior, animations, race conditions a unit test can't see — green specs alone aren't acceptance. Stand up a buggy-vs-fix comparison the reviewer can drive themselves (typical shape: two namespaced runtimes, one on `main`, one on the fix branch), and seed any required data only through production HTTP APIs; source-level test backdoors invalidate the verification because they prove a fake flow rather than the real one.
+Use `.github/pull_request_template.md`, `CONTRIBUTING.md`, and
+`docs/code-review-guidelines.md`; fill every applicable template section.
 
-For a worked example of one full loop (red e2e spec → fix → green), see `e2e/tests/dialog/stop-reconciles-message.test.ts` (issue #135).
+### Code review guide
 
-# Common commands
+Use `docs/code-review-guidelines.md` as the reviewer workflow and read every
+applicable local `AGENTS.md` before judging implementation details.
 
-```bash
-pnpm install
-pnpm tools-dev
-pnpm tools-serve start updater
-pnpm tools-dev start web
-pnpm tools-dev run web --daemon-port 17456 --web-port 17573
-pnpm tools-dev status --json
-pnpm tools-dev logs --json
-pnpm tools-dev inspect desktop status --json
-pnpm tools-dev inspect desktop screenshot --path /tmp/open-design.png
-pnpm tools-dev stop
-pnpm tools-dev check
-```
+### Common commands
 
-```bash
-pnpm guard
-pnpm typecheck
-```
+Use `QUICKSTART.md`, `CONTRIBUTING.md`, and the nearest local `AGENTS.md` for
+commands. This heading remains as a stable pointer for older specifications.
 
-```bash
-pnpm --filter @open-design/web typecheck
-pnpm --filter @open-design/web test
-pnpm --filter @open-design/web build
-pnpm --filter @open-design/daemon test
-pnpm --filter @open-design/daemon build
-pnpm --filter @open-design/desktop build
-pnpm --filter @open-design/tools-dev build
-pnpm --filter @open-design/tools-pack build
-pnpm --filter @open-design/tools-serve build
-```
-
-```bash
-pnpm tools-pack mac build --to all
-pnpm tools-pack mac install
-pnpm tools-pack mac cleanup
-pnpm tools-pack win build --to nsis
-pnpm tools-pack win install
-pnpm tools-pack win cleanup
-pnpm tools-pack linux build --to appimage
-pnpm tools-pack linux install
-pnpm tools-pack linux build --containerized
-```
-
-# FAQ
-
-## Why is there no root `pnpm dev` / `pnpm start`?
-
-To avoid starting daemon, web, and desktop through inconsistent env, port, namespace, or log paths. All local lifecycle flows must go through `pnpm tools-dev`.
-
-## Why should `apps/nextjs` not be restored?
-
-The current web runtime is `apps/web`. The historical `apps/nextjs` layout has been removed from the active repo shape; restoring it would reintroduce duplicate app boundaries and stale scripts.
-
-## How does desktop discover the web URL?
-
-Desktop queries runtime status through its sidecar client. The web URL comes from client status, not from desktop guessing ports, IPC paths, or reading web internals.
-
-## How are sidecar-proto, sidecar, and platform split?
-
-`@open-design/sidecar-proto` owns OpenDesign business action names and DTO/status shapes. `@open-design/sidecar` is the unique truth source for five-field argv stamps, private IPC, OS resources, process discovery, launch, invocation, and terminal lifecycle. `@open-design/platform` provides generic OS process primitives beneath sidecar and must not leak those implementation details into apps or orchestrators.
-
-## When is `pnpm install` required?
-
-Run `pnpm install` after changing package manifests, workspace layout, command entrypoints, bin/link-related content, or after adding/removing workspace packages.
-
-## Can I use Node 22 instead of Node 24?
-
-No. `package.json#engines` specifies `node: "~24"`, which is the only supported runtime. The current lockfile pins `better-sqlite3@11.10.0`; on Windows it has no prebuilt binary for Node 24 and is built from source via node-gyp (see the Windows native section). Older Node versions are not tested and may hit lockfile or dependency incompatibilities.

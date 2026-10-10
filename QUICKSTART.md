@@ -27,7 +27,10 @@ fnm install 24
 fnm use 24
 ```
 
-Then enable Corepack and let the repo select pnpm:
+On macOS, Linux, and WSL2, enable Corepack and let the repo select pnpm. On
+Windows native, use the pinned global pnpm fallback in
+[`docs/windows-troubleshooting.md`](docs/windows-troubleshooting.md) when
+Corepack cannot write its shim:
 
 ```bash
 corepack enable
@@ -170,7 +173,7 @@ This Quickstart MUST NOT restate that contract or define storage paths.
 ## One-shot (dev mode)
 
 ```bash
-corepack enable
+corepack enable # Windows native fallback: see docs/windows-troubleshooting.md
 pnpm install
 pnpm tools-dev run web # starts daemon + web in the foreground
 # open the web URL printed by tools-dev
@@ -355,3 +358,4 @@ This Quickstart is the runnable seed of the spec in [`docs/`](docs/). The spec d
 - `docs/skills-protocol.md` describes the current `SKILL.md`/`od:` frontmatter and the split between functional skills and rendering templates. The parser and normalization source of truth is `apps/daemon/src/skills.ts`.
 - `docs/agent-adapters.md` describes the adapter contract. Runtime-specific launch, argument, model, and stream settings live in `apps/daemon/src/runtimes/defs/`, with registration in `apps/daemon/src/runtimes/registry.ts`; `apps/daemon/src/agents.ts` is a compatibility export surface.
 - `docs/modes.md` distinguishes the six New Project tabs from the seven normalized registry modes (`prototype`, `deck`, `template`, `design-system`, `image`, `video`, and `audio`).
+
