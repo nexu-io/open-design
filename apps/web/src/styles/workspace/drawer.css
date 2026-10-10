@@ -2569,7 +2569,7 @@
 }
 .ws-tabs-bar.is-overflowing + .ws-add-tab {
   padding-left: 4px;
-  background: #fff;
+  background: var(--bg);
   box-shadow: -8px 0 10px -9px color-mix(in srgb, var(--text) 30%, transparent);
 }
 .ws-tab-add {

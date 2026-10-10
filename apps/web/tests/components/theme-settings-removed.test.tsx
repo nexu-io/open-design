@@ -1,13 +1,6 @@
 // @vitest-environment jsdom
 //
-// Product removed the theme setting outright: the workspace surfaces have no
-// dark tokens, so offering dark mode only produced a broken-looking app. Two
-// surfaces used to write `config.theme` — the Settings → General appearance
-// segmented control and the onboarding welcome page's sun/moon toggle. These
-// specs pin both as gone, so a later refactor cannot quietly reintroduce a
-// path back into dark mode.
-
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EntryShell } from '../../src/components/EntryShell';
@@ -51,6 +44,7 @@ class ResizeObserverMock {
 
 afterEach(() => {
   cleanup();
+  document.documentElement.removeAttribute('data-theme');
   globalThis.ResizeObserver = originalResizeObserver;
   analyticsMocks.track.mockReset();
 });
@@ -60,9 +54,9 @@ beforeEach(() => {
   analyticsMocks.track.mockReset();
 });
 
-describe('Settings → General (theme setting removed)', () => {
-  function renderGeneralSettings() {
-    return render(
+describe('Settings → General appearance', () => {
+  function renderGeneralSettings(onPersist = vi.fn()) {
+    render(
       <I18nProvider initial="en">
         <SettingsDialog
           presentation="page"
@@ -71,27 +65,33 @@ describe('Settings → General (theme setting removed)', () => {
           daemonLive
           appVersionInfo={null}
           initialSection="general"
-          onPersist={vi.fn()}
+          onPersist={onPersist}
           onPersistComposioKey={vi.fn()}
           onClose={vi.fn()}
           onRefreshAgents={vi.fn()}
         />
       </I18nProvider>,
     );
+    return onPersist;
   }
 
-  it('renders no appearance group', () => {
-    renderGeneralSettings();
+  it('renders the theme picker, previews selection immediately, and persists the change', async () => {
+    const onPersist = renderGeneralSettings();
+    const group = screen.getByRole('group', { name: 'Appearance' });
+    const buttons = THEME_CONTROL_LABELS.map((label) => screen.getByRole('button', { name: label }));
+    const darkButton = screen.getByRole('button', { name: 'Dark' });
 
-    expect(screen.queryByRole('group', { name: 'Appearance' })).toBeNull();
-  });
+    expect(buttons).toHaveLength(3);
+    expect(screen.getByRole('button', { name: 'Light' })).toHaveAttribute('aria-pressed', 'true');
 
-  it('renders no System / Light / Dark theme buttons', () => {
-    renderGeneralSettings();
+    fireEvent.click(darkButton);
 
-    for (const label of THEME_CONTROL_LABELS) {
-      expect(screen.queryByRole('button', { name: label })).toBeNull();
-    }
+    expect(darkButton).toHaveAttribute('aria-pressed', 'true');
+    expect(document.documentElement.dataset.theme).toBe('dark');
+    await waitFor(() => {
+      expect(onPersist).toHaveBeenCalledWith(expect.objectContaining({ theme: 'dark' }), expect.anything());
+    });
+    expect(group).toBeTruthy();
   });
 
   it('keeps the neighbouring General settings intact', () => {
@@ -104,7 +104,7 @@ describe('Settings → General (theme setting removed)', () => {
   });
 });
 
-describe('Onboarding welcome (theme toggle removed)', () => {
+describe('Onboarding welcome appearance', () => {
   function baseConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     return {
       mode: 'daemon',
@@ -168,7 +168,7 @@ describe('Onboarding welcome (theme toggle removed)', () => {
     expect(container.querySelector('.onboarding-cloud__theme')).toBeNull();
   });
 
-  it('exposes no theme control by accessible name', () => {
+  it('has no separate System / Light / Dark theme buttons', () => {
     renderOnboarding();
 
     for (const label of THEME_CONTROL_LABELS) {

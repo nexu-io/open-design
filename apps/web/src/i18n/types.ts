@@ -572,6 +572,10 @@ export interface Dict {
   'settings.dshSetupRequired': string;
   'settings.anthropicApi': string;
   'settings.noAgentSelected': string;
+  'settings.appearance': string;
+  'settings.themeSystem': string;
+  'settings.themeLight': string;
+  'settings.themeDark': string;
   'settings.language': string;
   'settings.languageHint': string;
   'settings.agentModelHead': string;
