@@ -25,6 +25,7 @@ const AGENT_BIN_ENV_KEYS = new Map<string, string>([
   ['deepseek-harness', 'DSH_BIN'],
   ['devin', 'DEVIN_BIN'],
   ['hermes', 'HERMES_BIN'],
+  ['kimchi', 'KIMCHI_BIN'],
   ['kimi', 'KIMI_BIN'],
   ['kiro', 'KIRO_BIN'],
   ['kilo', 'KILO_BIN'],
