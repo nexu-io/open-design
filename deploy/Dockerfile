@@ -33,8 +33,13 @@ RUN corepack enable && \
     pnpm install --frozen-lockfile
 
 COPY apps ./apps
+# `next build` type-checks apps/web in a worker that outgrows V8's default heap
+# ceiling, which is at most 2 GB on hosts with less than 15 GiB of RAM (an
+# 8 GiB Docker Desktop VM, say). Raise it for this step only, to the 4096 MB
+# tools/pack uses (#8212). A NODE_OPTIONS from the base image goes after ours,
+# so its own --max-old-space-size still wins.
 RUN pnpm --filter @open-design/daemon build && \
-    pnpm --filter @open-design/web build && \
+    NODE_OPTIONS="--max-old-space-size=4096 ${NODE_OPTIONS:-}" pnpm --filter @open-design/web build && \
     pnpm --filter @open-design/daemon deploy --legacy --prod /app/deploy/daemon && \
     pnpm store prune && \
     rm -rf \
