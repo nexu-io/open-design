@@ -37,10 +37,11 @@ const ANTIGRAVITY_SKIP_PERMISSIONS_FLAG = '--dangerously-skip-permissions';
 // `availableModels` cache miss + empty print-mode output, which surfaces
 // to the user as a generic "empty response" error.
 //
-// The 8 model labels mirror what `Switch Model` in agy's TUI lists for
-// consumer-tier accounts as of 2026-05-28. The set is small and stable
-// enough to ship statically until upstream adds a programmatic
-// `agy models` subcommand (also tracked under issue #35).
+// The model labels mirror what `Switch Model` in agy's TUI lists
+// (https://antigravity.google/docs/models/). Claude Sonnet 5.5 and Opus 5.5
+// are available on Google AI Pro (non-trial) and Ultra plans; 4.6 remains
+// available until scheduled sunset on November 2, 2026. Upstream programmatic
+// catalog discovery via `agy models` is tracked under #8546.
 const ANTIGRAVITY_SETTINGS_PATH = join(
   homedir(),
   '.gemini',
@@ -185,6 +186,14 @@ export const antigravityAgentDef = {
     { id: 'Gemini 3.5 Flash (High)', label: 'Gemini 3.5 Flash (High)' },
     { id: 'Gemini 3.5 Flash (Medium)', label: 'Gemini 3.5 Flash (Medium)' },
     { id: 'Gemini 3.5 Flash (Low)', label: 'Gemini 3.5 Flash (Low)' },
+    {
+      id: 'Claude Sonnet 5.5 (Thinking)',
+      label: 'Claude Sonnet 5.5 (Thinking)',
+    },
+    {
+      id: 'Claude Opus 5.5 (Thinking)',
+      label: 'Claude Opus 5.5 (Thinking)',
+    },
     {
       id: 'Claude Sonnet 4.6 (Thinking)',
       label: 'Claude Sonnet 4.6 (Thinking)',

@@ -729,6 +729,8 @@ test('antigravity passes prompt via -p argument (print mode)', () => {
       'Gemini 3.5 Flash (High)',
       'Gemini 3.5 Flash (Medium)',
       'Gemini 3.5 Flash (Low)',
+      'Claude Sonnet 5.5 (Thinking)',
+      'Claude Opus 5.5 (Thinking)',
       'Claude Sonnet 4.6 (Thinking)',
       'Claude Opus 4.6 (Thinking)',
       'GPT-OSS 120B (Medium)',
