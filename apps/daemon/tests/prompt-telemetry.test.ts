@@ -9,6 +9,8 @@ import {
   buildSafeChildPromptTelemetry,
   buildPromptStackTelemetry,
   bindOdNextExactSendPromptEvidence,
+  assertOdNextExactSendPromptEvidence,
+  type PromptStackTelemetry,
   promptStackWithoutContent,
   redactLocalPaths,
 } from '../src/prompt-telemetry.js';
@@ -74,6 +76,42 @@ describe('prompt telemetry builder', () => {
       },
       stage: 'contract_repair',
     })).toThrow(/does not match its persisted SHA-256/u);
+  });
+
+  it('tolerates pre-4681 legacy durable telemetry without additive cacheablePrefix keys in assertOdNextExactSendPromptEvidence', () => {
+    const finalText = '<open_design_request_turn>review</open_design_request_turn>';
+    const persisted = {
+      kind: 'bundle' as const,
+      schema: 'open-design.od-next-prompt-bundle/v2' as const,
+      text: finalText,
+      utf8Bytes: Buffer.byteLength(finalText, 'utf8'),
+      sha256: createHash('sha256').update(finalText, 'utf8').digest('hex'),
+    };
+    const fullTelemetry = bindOdNextExactSendPromptEvidence({
+      telemetry: buildPromptStackTelemetry({
+        composedPrompt: finalText,
+        sections: [{ kind: 'odNextExactFinalText', content: finalText }],
+      }),
+      finalText,
+      persisted,
+      stage: 'request',
+    });
+
+    // Simulate pre-4681 durable state which omitted additive cacheablePrefix* properties
+    const {
+      cacheablePrefixFingerprint: _fp,
+      cacheablePrefixSectionCount: _sc,
+      cacheablePrefixContiguous: _cc,
+      ...legacyTelemetry
+    } = fullTelemetry;
+
+    expect(() =>
+      assertOdNextExactSendPromptEvidence({
+        telemetry: legacyTelemetry as unknown as PromptStackTelemetry,
+        persisted,
+        stage: 'request',
+      }),
+    ).not.toThrow();
   });
 
   it('builds bounded child-injected Prompt telemetry with the shared secret and path redaction', () => {
@@ -426,6 +464,9 @@ describe('prompt telemetry builder', () => {
 
     const flat = buildPromptStackFlatMetadata(telemetry);
     expect(Object.keys(flat).sort()).toEqual([
+      'promptStack_cacheablePrefixContiguous',
+      'promptStack_cacheablePrefixFingerprint',
+      'promptStack_cacheablePrefixSectionCount',
       'promptStack_promptFingerprint',
       'promptStack_redactedContentBudgetBytes',
       'promptStack_redactedContentBytes',
