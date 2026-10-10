@@ -667,9 +667,9 @@ async function startDaemon(
     }
     if (shouldRefreshWebOrigin && daemonTrustedWebOriginPort !== webPort) {
       if (existingWeb?.url != null) {
-        await stopApp(config, APP_KEYS.WEB);
+        await stopAppForRestart(config, APP_KEYS.WEB);
       }
-      await stopApp(config, APP_KEYS.DAEMON);
+      await stopAppForRestart(config, APP_KEYS.DAEMON);
       existing = null;
     } else {
       return { app: APP_KEYS.DAEMON, created: false, logPath: config.apps.daemon.latestLogPath, status: existing };
@@ -916,6 +916,27 @@ function formatStopAppResult(appName: ToolDevAppName, stop: Awaited<ReturnType<t
 
 async function stopApp(config: ToolDevConfig, appName: ToolDevAppName) {
   return formatStopAppResult(appName, await stopSidecar(createConvergedAppStamp(config, appName)));
+}
+
+/**
+ * Stop an app that is about to be started again. The stop's post-retirement
+ * verification can fail (e.g. the OS process listing is unparseable) after the
+ * app has already accepted the stop; aborting there would leave the namespace
+ * with nothing running. If the app's IPC is gone, warn and let the caller
+ * continue to the restart, whose own stale-process and spawn checks still apply.
+ */
+async function stopAppForRestart(config: ToolDevConfig, appName: typeof APP_KEYS.DAEMON | typeof APP_KEYS.WEB) {
+  try {
+    return await stopApp(config, appName);
+  } catch (error) {
+    const lookup = runtimeLookup(config);
+    const stillRunning = appName === APP_KEYS.DAEMON
+      ? await inspectDaemonRuntime(lookup)
+      : await inspectWebRuntime(lookup);
+    if (stillRunning?.url != null) throw error;
+    process.stderr.write(`[tools-dev] ${appName} stop verification failed after it stopped; restarting anyway: ${formatError(error)}\n`);
+    return null;
+  }
 }
 
 async function inspectAppStatus(config: ToolDevConfig, appName: ToolDevAppName) {

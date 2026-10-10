@@ -406,11 +406,51 @@ export async function captureProcessSnapshotsByPids(pids: readonly number[]): Pr
   return parseWindowsProcessSnapshots(stdout);
 }
 
+/**
+ * @internal Escape raw U+0000–U+001F characters that appear inside JSON string
+ * literals. Windows PowerShell 5.1 `ConvertTo-Json` leaves some control
+ * characters (e.g. 0x1A from a mangled non-ASCII byte in a CommandLine)
+ * unescaped, which makes the whole process table unparseable. Characters
+ * outside string literals are untouched so structural whitespace stays valid.
+ */
+export function escapeRawControlCharsInJsonStrings(text: string): string {
+  if (!/[\u0000-\u001f]/.test(text)) return text;
+  let out = "";
+  let inString = false;
+  let escaped = false;
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index]!;
+    if (!inString) {
+      if (char === "\"") inString = true;
+      out += char;
+      continue;
+    }
+    if (escaped) {
+      escaped = false;
+      out += char;
+      continue;
+    }
+    if (char === "\\") {
+      escaped = true;
+      out += char;
+      continue;
+    }
+    if (char === "\"") {
+      inString = false;
+      out += char;
+      continue;
+    }
+    const code = char.charCodeAt(0);
+    out += code < 0x20 ? `\\u${code.toString(16).padStart(4, "0")}` : char;
+  }
+  return out;
+}
+
 /** @internal Parse the JSON emitted by the Windows process enumeration command. */
 export function parseWindowsProcessSnapshots(stdout: string): ProcessSnapshot[] {
   const payload = stdout.trim();
   if (!payload) return [];
-  const records = JSON.parse(payload) as WindowsProcessRecord | WindowsProcessRecord[];
+  const records = JSON.parse(escapeRawControlCharsInJsonStrings(payload)) as WindowsProcessRecord | WindowsProcessRecord[];
   return (Array.isArray(records) ? records : [records])
     .map((record) => {
       const pid = Number(record.ProcessId);

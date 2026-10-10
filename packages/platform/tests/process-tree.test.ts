@@ -125,6 +125,18 @@ describe("parseWindowsProcessSnapshots", () => {
       StartedAtMs: null,
     }))).toEqual([{ command: "node fixture.js", pid: 20, ppid: 10 }]);
   });
+
+  it("parses PowerShell 5.1 output that leaves a raw 0x1A inside a CommandLine", () => {
+    // Windows PowerShell 5.1 ConvertTo-Json does not escape every control
+    // character; a "→" mangled to 0x1A arrives raw inside the string literal.
+    const stdout = '[{"ProcessId":20,"ParentProcessId":10,"CommandLine":"bash -c \\"echo a \u001a b\\"","StartedAtMs":1724490000123},' +
+      '{"ProcessId":21,"ParentProcessId":20,"CommandLine":"node \\\\path\\\\fixture.js","StartedAtMs":1724490000124}]\r\n';
+    expect(() => JSON.parse(stdout)).toThrow(/control character/i);
+    expect(parseWindowsProcessSnapshots(stdout)).toEqual([
+      { command: "bash -c \"echo a \u001a b\"", pid: 20, ppid: 10, startedAtMs: 1_724_490_000_123 },
+      { command: "node \\path\\fixture.js", pid: 21, ppid: 20, startedAtMs: 1_724_490_000_124 },
+    ]);
+  });
 });
 
 describe("processCommandExactlyRunsExecutable", () => {
