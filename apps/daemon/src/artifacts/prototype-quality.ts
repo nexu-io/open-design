@@ -11,7 +11,7 @@ export { inspectPrototypeScripts } from './prototype-quality-static.js';
 
 export const PROTOTYPE_HOST_BUDGET_MS = 30_000;
 const ORIGIN = 'https://prototype.invalid';
-const CONTROL_SELECTOR = 'nav[aria-label="主导航"] a,nav[aria-label="主导航"] button,[role="tab"],[data-mode],nav.bottombar a,nav.tabbar button';
+const CONTROL_SELECTOR = 'nav a,nav button,[role="tab"],[data-mode]' ;
 
 export function qualityStatus(checks: DeliverableQualityCheck[], complete: boolean): DeliverableQualityEvidence['status'] {
   if (checks.some(check => check.status === 'fail')) return 'fail';
@@ -51,7 +51,8 @@ async function controls(page: Page): Promise<Control[]> {
 function semanticLabel(label: string): string {
   if (/堂食/.test(label)) return '堂食';
   if (/自提/.test(label)) return '自提';
-  return label.replace(/\s+/g, '').slice(0, 40);
+  const name = label.replace(/\s+/g, '').slice(0, 40);
+  return ({ 药物: '药品', 今天: '今日', 个人: '我的', 菜单: '点餐', 订单: '我的订单' } as Record<string, string>)[name] ?? name;
 }
 async function targetVisible(page: Page, control: Control): Promise<boolean | null> {
   if (control.target) {

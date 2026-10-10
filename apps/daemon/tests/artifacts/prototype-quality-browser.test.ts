@@ -28,6 +28,10 @@ describe.skipIf(!findBrowserExecutable())('real isolated browser navigation', { 
     const result = await check(`document.addEventListener('click',e=>{const b=e.target.closest('[data-page]');if(b){document.querySelectorAll('nav button').forEach(item=>item.setAttribute('aria-current',item===b?'page':'false'));document.querySelector('h1').textContent=b.dataset.page;document.querySelector('main').textContent=b.dataset.page+'药物列表与实际业务内容';}});`);
     expect(result.status, JSON.stringify(result)).toBe('pass'); expect(result.coverage).toEqual({ expected: 2, checked: 2, complete: true });
   });
+  it('accepts native nav without a prescribed label and a known synonymous control label', async () => {
+    await fs.writeFile(path.join(root, 'index.html'), `<h1>今日</h1><main>今日服药记录</main><nav><button data-page="今日" aria-current="page">今日</button><button data-page="药品" aria-current="false">药物</button></nav><script>document.addEventListener('click',e=>{const b=e.target.closest('[data-page]');if(b){document.querySelectorAll('nav button').forEach(t=>t.setAttribute('aria-current',t===b?'page':'false'));document.querySelector('h1').textContent=b.dataset.page;document.querySelector('main').textContent=b.dataset.page+'实际业务内容';}})</script>`);
+    expect((await checkPrototypeQuality({ projectRoot: root, entryFile: 'index.html', userBrief: 'App，主导航有今日和药品' })).status).toBe('pass');
+  });
   it.each([
     ['URL only', `document.addEventListener('click',e=>{if(e.target.dataset.page)location.hash=e.target.dataset.page;});`, ''],
     ['wrong selection', `document.addEventListener('click',e=>{if(e.target.dataset.page){document.querySelector('h1').textContent=e.target.dataset.page;document.querySelector('main').textContent=e.target.dataset.page+'其他业务内容';}});`, ''],
