@@ -1,6 +1,7 @@
 import type { Express } from 'express';
 import fs from 'node:fs';
 import { SIDECAR_ENV } from '@open-design/sidecar-proto';
+import { agentCliEnvForAgent, readAppConfig } from './app-config.js';
 import { buildMcpInstallPayload, type McpInstallPayload } from './mcp-install-info.js';
 import { installCodexMcp, probeCodexInstall, refreshOwnedCodexMcp, uninstallCodexMcp } from './codex-cli.js';
 import { isManagedMcpBootstrapEnv } from './mcp-bootstrap.js';
@@ -117,6 +118,13 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
   // and only need to track its argv. See apps/daemon/src/codex-cli.ts.
   const CODEX_MCP_NAME = 'open-design';
 
+  // The Codex settings saved in Settings (executable path, CODEX_HOME), so
+  // every `codex mcp ...` call targets the same Codex the agent runtime runs.
+  async function configuredCodexEnv(): Promise<Record<string, string>> {
+    const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
+    return agentCliEnvForAgent(appConfig.agentCliEnv, 'codex');
+  }
+
   // Under a managed outer, keep this install's own Codex registration pointed
   // at the runtime that is running now. Registrations name a versioned
   // payload, and a payload version is only cleaned up after a newer one has
@@ -127,10 +135,12 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
     const timer = setTimeout(() => {
       const payload = computeInstallPayload();
       if (!payload.cliExists || !payload.nodeExists) return;
-      refreshOwnedCodexMcp(
-        { name: CODEX_MCP_NAME, command: payload.command, args: payload.args, env: payload.env },
-        (existing) => isCodexRegistrationOwnedBy(existing, payload),
-      )
+      configuredCodexEnv()
+        .then((codexEnv) => refreshOwnedCodexMcp(
+          { name: CODEX_MCP_NAME, command: payload.command, args: payload.args, env: payload.env },
+          (existing) => isCodexRegistrationOwnedBy(existing, payload),
+          codexEnv,
+        ))
         .then((outcome) => console.info('[mcp] codex registration refresh', { outcome }))
         .catch((err: unknown) => console.warn('[mcp] codex registration refresh failed', {
           error: err instanceof Error ? err.message : String(err),
@@ -144,7 +154,7 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     try {
-      const status = await probeCodexInstall(CODEX_MCP_NAME);
+      const status = await probeCodexInstall(CODEX_MCP_NAME, await configuredCodexEnv());
       res.json(status);
     } catch (err) {
       sendApiError(res, 500, 'CODEX_PROBE_FAILED', err instanceof Error ? err.message : String(err));
@@ -165,7 +175,7 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
         command: payload.command,
         args: payload.args,
         env: payload.env,
-      });
+      }, await configuredCodexEnv());
       res.json({ ok: true });
     } catch (err) {
       sendApiError(res, 500, 'CODEX_INSTALL_FAILED', err instanceof Error ? err.message : String(err));
@@ -177,7 +187,7 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     try {
-      await uninstallCodexMcp(CODEX_MCP_NAME);
+      await uninstallCodexMcp(CODEX_MCP_NAME, await configuredCodexEnv());
       res.json({ ok: true });
     } catch (err) {
       sendApiError(res, 500, 'CODEX_UNINSTALL_FAILED', err instanceof Error ? err.message : String(err));
