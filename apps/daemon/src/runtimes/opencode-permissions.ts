@@ -1,4 +1,4 @@
-import { agentCapabilities } from './capabilities.js';
+import { agentCapabilities, agentCapabilityProbePaths } from './capabilities.js';
 import type { RuntimeAgentDef } from './types.js';
 
 export const OPENCODE_SKIP_PERMISSIONS_FLAG = '--dangerously-skip-permissions';
@@ -13,13 +13,15 @@ export const OPENCODE_PERMISSION_CAPABILITY = {
 
 export function appendOpenCodePermissionBypass(args: string[], agentId: string): void {
   const capability = agentCapabilities.get(agentId)?.skipPermissions;
-  // BYOK OpenCode runs the same configured binary and asks it the same
-  // `opencode run --help` question as the local OpenCode adapter. Preserve a
-  // successful local probe if the separate BYOK probe is unavailable (for
-  // example, while the CLI is slow to start). An explicit BYOK `false` still
-  // wins: only an absent result may borrow the verified local capability.
+  const byokLaunchPath = agentCapabilityProbePaths.get(agentId)?.launchPath;
+  const localLaunchPath = agentCapabilityProbePaths.get('opencode')?.launchPath;
+  // Preserve a successful local probe only when BYOK is launching the exact
+  // same executable. An explicit BYOK `false` still wins; an unproven or
+  // differently-resolved binary keeps the optional flag off.
   const skipPermissions = capability ?? (
     agentId === 'byok-opencode'
+      && byokLaunchPath
+      && byokLaunchPath === localLaunchPath
       ? agentCapabilities.get('opencode')?.skipPermissions
       : undefined
   );
