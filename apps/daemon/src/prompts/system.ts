@@ -52,6 +52,7 @@ import {
   normalizePromptLocale,
   PROMPT_LOCALE_EXEMPT_TERMS_SENTENCE,
   promptLanguageName,
+  renderBrandProjectAuthoringDirective,
   SETTINGS_MEDIA_PROVIDERS_PATH,
   type ByokMediaDefaults,
   type ChatSessionMode,
@@ -1845,9 +1846,7 @@ function renderMetadataBlock(
     );
   }
   if (metadata.kind === 'brand') {
-    lines.push(
-      '- **brand extraction project**: this project was created by the Brands extractor. Treat `brand.json`, `DESIGN.md`, `BRAND-SYSTEM.md`, `tokens.*.json`, `theme.json`, `kit.html`, `kit.dark.html`, and `artifacts/{landing,deck,poster,email,newsletter,form}.html` as the source of truth. Do not restart extraction from scratch unless the user explicitly asks; explain the extracted kit, then iterate the saved files when requested.',
-    );
+    lines.push(...renderBrandProjectAuthoringDirective(metadata.brandId));
     if (metadata.brandId) lines.push(`- **brandId**: ${metadata.brandId}`);
     if (metadata.brandSourceUrl) lines.push(`- **brandSourceUrl**: ${metadata.brandSourceUrl}`);
     if (metadata.brandDesignSystemId) lines.push(`- **brandDesignSystemId**: ${metadata.brandDesignSystemId}`);

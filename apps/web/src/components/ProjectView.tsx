@@ -6130,7 +6130,7 @@ export function ProjectView({
                   {
                     kind: 'status',
                     label: 'design_system',
-                    detail: 'Rebuilt derived kit, assets, and registered design system from brand.json.',
+                    detail: 'Rebuilt derived kit, assets, and registered design system from brand.json and overrides/.',
                   },
                 ],
               }),

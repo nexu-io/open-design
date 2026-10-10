@@ -44,6 +44,7 @@ import {
 } from './od-next-strategy.js';
 import { SETTINGS_MEDIA_PROVIDERS_PATH } from '../settings-nav.js';
 import { normalizePromptLocale, promptLanguageName } from './ui-locale.js';
+import { renderBrandProjectAuthoringDirective } from './brand-kit-authoring.js';
 
 export const BASE_SYSTEM_PROMPT = OFFICIAL_DESIGNER_PROMPT;
 const ELEVENLABS_VOICE_PROMPT_OPTION_LIMIT = 100;
@@ -790,9 +791,7 @@ function brandLines(
 ): string[] {
   const out: string[] = [];
   if (metadata.kind === 'brand') {
-    out.push(
-      '- **brand extraction project**: this project was created by the Brands extractor. Treat `brand.json`, `DESIGN.md`, `BRAND-SYSTEM.md`, `tokens.*.json`, `theme.json`, `kit.html`, `kit.dark.html`, and `artifacts/{landing,deck,poster,email,newsletter,form}.html` as the source of truth. Do not restart extraction from scratch unless the user explicitly asks; explain the extracted kit, then iterate the saved files when requested.',
-    );
+    out.push(...renderBrandProjectAuthoringDirective(metadata.brandId));
     if (metadata.brandId) out.push(`- **brandId**: ${metadata.brandId}`);
     if (metadata.brandSourceUrl) out.push(`- **brandSourceUrl**: ${metadata.brandSourceUrl}`);
     if (metadata.brandDesignSystemId) out.push(`- **brandDesignSystemId**: ${metadata.brandDesignSystemId}`);

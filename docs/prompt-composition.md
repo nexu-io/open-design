@@ -95,6 +95,7 @@ to the **host**, not to either strategy — if a strategy is retired, these stay
 | `@media print` block | Share → PDF multi-page stitching | ✅ | ✅ |
 | `<question-form>` | `AssistantMessage.tsx` → `QuestionFormView`; `runAskedUserQuestion` analytics | ✅ `discovery.ts` | ✅ `od-next-strategy.ts:434` |
 | `.od-frames/` device shells | prototype device frames | ❌ | ✅ OD Next only |
+| Brand kit authoring (`overrides/`, edit inputs only) | the post-turn `POST /api/brands/:id/finalize` rebuild (`ProjectView` `auditDesignSystemWorkspaceAfterRun` → `apps/daemon/src/brands/overrides.ts`) | ✅ `brand-kit-authoring.ts` | n/a — `kind: 'brand'` maps to no OD Next task profile |
 
 Two things to read off this table.
 
