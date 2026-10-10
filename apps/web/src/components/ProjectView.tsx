@@ -4475,6 +4475,25 @@ export function ProjectView({
     [flushTabsDaemonSave, project.id],
   );
 
+  // A hard navigation (address bar, reload, closing the tab) tears the page
+  // down without running the React cleanup above, which would drop a write
+  // still inside the debounce window and leave the daemon an older tab state.
+  // Flush on the page-lifecycle signals instead; the PUT is `keepalive`, so it
+  // survives the unload. `visibilitychange` → hidden is the last event that is
+  // reliably delivered on mobile and on bfcache-eligible pages.
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') flushTabsDaemonSave();
+    };
+    window.addEventListener('pagehide', flushTabsDaemonSave);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.removeEventListener('pagehide', flushTabsDaemonSave);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [flushTabsDaemonSave]);
+
   const handleActiveWorkspaceContextChange = useCallback((next: WorkspaceContextItem | null) => {
     setActiveWorkspaceContext((current) =>
       workspaceContextItemEqual(current, next) ? current : next,

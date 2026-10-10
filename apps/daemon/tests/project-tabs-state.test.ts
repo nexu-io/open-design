@@ -90,4 +90,46 @@ describe('project tabs state persistence', () => {
       updatedAt: expect.any(Number),
     });
   });
+
+  // Clients order their local tab cache against this row by `updatedAt`, and
+  // stamp the cache when the change happened. If the row is stamped when the
+  // (debounced) write arrives instead, an older state that lands after a newer
+  // local change looks newer and wins the next restore.
+  it('stores the writer-supplied change time instead of the arrival time', () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    const now = Date.now();
+    insertProject(db, { id: 'proj-1', name: 'Project', createdAt: now, updatedAt: now });
+
+    const changedAt = now - 60_000;
+    setTabs(db, 'proj-1', {
+      tabs: ['secondary.png'],
+      active: 'secondary.png',
+      updatedAt: changedAt,
+    });
+
+    expect(listTabs(db, 'proj-1')).toMatchObject({
+      tabs: ['secondary.png'],
+      active: 'secondary.png',
+      updatedAt: changedAt,
+    });
+  });
+
+  it('falls back to the arrival time for a missing or invalid change time and clamps future ones', () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    const now = Date.now();
+    insertProject(db, { id: 'proj-1', name: 'Project', createdAt: now, updatedAt: now });
+
+    for (const updatedAt of [undefined, Number.NaN, -1, 0, 'yesterday', now + 3_600_000]) {
+      const before = Date.now();
+      setTabs(db, 'proj-1', {
+        tabs: ['index.html'],
+        active: 'index.html',
+        ...(updatedAt === undefined ? {} : { updatedAt: updatedAt as number }),
+      });
+      const after = Date.now();
+      const stored = listTabs(db, 'proj-1').updatedAt;
+      expect(stored).toBeGreaterThanOrEqual(before);
+      expect(stored).toBeLessThanOrEqual(after);
+    }
+  });
 });

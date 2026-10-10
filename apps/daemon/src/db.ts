@@ -5457,12 +5457,37 @@ export function listTabs(db: SqliteDb, projectId: string) {
   };
 }
 
+/**
+ * The `updated_at` a tab-state row is stored with. Clients order their local
+ * tab cache against the daemon copy by this value (`newestTabsState` in the
+ * web app), and they stamp the cache with the time the user made the change.
+ * The row therefore has to carry the writer's own change time, not the time
+ * the PUT happened to arrive: an older state whose (debounced) write lands
+ * after a newer local change would otherwise look newer than it is and win
+ * the next restore. A missing or invalid client stamp falls back to now, and
+ * a stamp from the future is clamped to now so one skewed clock cannot pin a
+ * row ahead of every later write.
+ */
+export function tabsStateUpdatedAt(clientUpdatedAt: unknown, now: number = Date.now()): number {
+  if (
+    typeof clientUpdatedAt !== 'number'
+    || !Number.isFinite(clientUpdatedAt)
+    || clientUpdatedAt <= 0
+  ) {
+    return now;
+  }
+  return Math.min(Math.trunc(clientUpdatedAt), now);
+}
+
 export function setTabs(
   db: SqliteDb,
   projectId: string,
   stateOrNames: ProjectTabsState | string[],
   activeName: string | null = null,
 ) {
+  const updatedAt = tabsStateUpdatedAt(
+    Array.isArray(stateOrNames) ? undefined : stateOrNames?.updatedAt,
+  );
   const state = normalizeProjectTabsState(
     Array.isArray(stateOrNames)
       ? { tabs: stateOrNames, active: activeName }
@@ -5475,7 +5500,7 @@ export function setTabs(
        ON CONFLICT(project_id) DO UPDATE SET
          updated_at = excluded.updated_at,
          state_json = excluded.state_json`,
-    ).run(projectId, Date.now(), JSON.stringify(state));
+    ).run(projectId, updatedAt, JSON.stringify(state));
     db.prepare(`DELETE FROM tabs WHERE project_id = ?`).run(projectId);
     const ins = db.prepare(
       `INSERT INTO tabs (project_id, name, position, is_active)
