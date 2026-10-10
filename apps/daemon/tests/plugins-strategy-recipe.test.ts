@@ -5,6 +5,8 @@ import Database from 'better-sqlite3';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   composeSystemPrompt as composeContractsSystemPrompt,
+  HOST_PROTOTYPE_QUALITY_CONTRACT_V1,
+  assertOdNextPlanningBuildOnlyV2,
   type AppliedPluginSnapshot,
   type InstalledPluginRecord,
   type OdNextStrategyRequestRecipeV2,
@@ -323,9 +325,11 @@ describe('OD Next V2 request recipe wiring', () => {
       /\bcritique\b/i,
       /revalidation/i,
       /post[- ]build[\s\S]{0,80}(?:verify|inspect|check|review)/i,
-      /(?:screenshot|browser|dom)[\s\S]{0,80}(?:verify|inspect|check|review)/i,
     ];
-    for (const pattern of forbidden) expect(prompt).not.toMatch(pattern);
+    expect(prompt).toContain(HOST_PROTOTYPE_QUALITY_CONTRACT_V1);
+    const agentInstructions = prompt.replace(HOST_PROTOTYPE_QUALITY_CONTRACT_V1, '');
+    for (const pattern of forbidden) expect(agentInstructions).not.toMatch(pattern);
+    expect(() => assertOdNextPlanningBuildOnlyV2(agentInstructions, 'loaded assets')).not.toThrow();
   });
 
   it('keeps a forged local plugin on the ordinary quality pipeline and out of the recipe', async () => {

@@ -43,6 +43,7 @@ import {
   terminalLifecycleSnapshot,
   terminalPersistenceErrorType,
 } from '../observability/run-terminal-lifecycle.js';
+import { interruptedPrototypeQuality, settlePrototypeCorrection } from '../strategies/od-next/prototype-quality-repair.js';
 import { mintRunDoneKey } from './run-done-key.js';
 import { normalizeTelemetryAppVersionInfo } from '../app-version.js';
 
@@ -657,6 +658,8 @@ function durableRunState(run) {
     ...(typeof run.deliverableArtifactKind === 'string'
       ? { deliverableArtifactKind: run.deliverableArtifactKind }
       : {}),
+    ...(run.deliverableQuality ? { deliverableQuality: run.deliverableQuality } : {}),
+    ...(run.prototypeQualityAttempt ? { prototypeQualityAttempt: run.prototypeQualityAttempt } : {}),
     ...(run.deliverableSyntaxRepair
       ? { deliverableSyntaxRepair: run.deliverableSyntaxRepair }
       : {}),
@@ -1096,6 +1099,8 @@ export function createChatRunService({
       artifactOutcome: undefined,
       deliverableSyntaxRepair: undefined,
       deliverableSyntaxValidation: undefined,
+      deliverableQuality: undefined,
+      prototypeQualityAttempt: undefined,
       eventsLogPath: runsLogDir ? path.join(runsLogDir, id, 'events.jsonl') : null,
       statePath: runsLogDir ? path.join(runsLogDir, id, 'state.json') : null,
       eventsLogStream: null,
@@ -1408,6 +1413,7 @@ export function createChatRunService({
     run.deliverableArtifactKind = undefined;
     run.deliverableSyntaxRepair = undefined;
     run.deliverableSyntaxValidation = undefined;
+    run.deliverableQuality = undefined;
     run.endedWithUnfinishedWork = false;
     // Host-observed failures belong to the attempt that produced them. A resume
     // that finally delivers must not inherit the previous attempt's verdict.
@@ -1601,6 +1607,7 @@ export function createChatRunService({
     ...(typeof run.deliverableArtifactKind === 'string'
       ? { deliverableArtifactKind: run.deliverableArtifactKind }
       : {}),
+    ...(run.deliverableQuality ? { deliverableQuality: run.deliverableQuality } : {}),
     ...(run.deliverableSyntaxRepair
       ? { deliverableSyntaxRepair: run.deliverableSyntaxRepair }
       : {}),
@@ -1712,6 +1719,7 @@ export function createChatRunService({
       ...(Array.isArray(run.artifactPaths) ? { artifactPaths: run.artifactPaths } : {}),
       failureCategory: run.failureCategory ?? null,
       failureDetail: run.failureDetail ?? null,
+      ...(run.deliverableQuality ? { deliverableQuality: run.deliverableQuality } : {}),
       ...(run.deliverableSyntaxRepair
         ? { deliverableSyntaxRepair: run.deliverableSyntaxRepair }
         : {}),
@@ -2458,6 +2466,11 @@ export function createChatRunService({
     if (TERMINAL_RUN_STATUSES.has(run.status)) return statusBody(run);
     run.cancelRequested = true;
     run.cancelOrigin = origin;
+    if (run.prototypeQualityAttempt) {
+      settlePrototypeCorrection(run.prototypeQualityAttempt);
+      run.deliverableQuality = interruptedPrototypeQuality(run.prototypeQualityAttempt, run.deliverableQuality,
+        run.prototypeQualityAttempt.stopReason ?? 'user_canceled');
+    }
     run.updatedAt = Date.now();
     if (origin === 'user_stop') observeDiagnosticLifecycle(run, 'user_cancel', run.updatedAt);
     clearPendingRetryRestart(run);

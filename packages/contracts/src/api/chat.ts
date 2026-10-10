@@ -1,3 +1,4 @@
+import type { DeliverableQualityEvidence } from './deliverable-quality.js';
 import type { ProjectFile, ProjectFileKind } from './files';
 import type { RunResultPackageResponse, RunWorkspace } from './workspaces.js';
 import type {
@@ -839,6 +840,7 @@ export interface ChatRunStatusResponse {
   deliverableSyntaxRepair?: DeliverableSyntaxRepairState;
   /** Latest parse-only syntax evidence from the Agent tool or run finalizer. */
   deliverableSyntaxValidation?: DeliverableSyntaxValidationEvidence;
+  deliverableQuality?: DeliverableQualityEvidence;
   /** Absolute path to the per-run JSONL event log the daemon mirrors
    *  the SSE stream to (see runs.ts `runsLogDir`). Null when the
    *  daemon was launched without event persistence configured. */
@@ -1342,6 +1344,7 @@ export function isChatArtifactStaticCoverReady(
 }
 
 export interface ChatMessage {
+  deliverableQuality?: DeliverableQualityEvidence;
   id: string;
   role: ChatRole;
   content: string;

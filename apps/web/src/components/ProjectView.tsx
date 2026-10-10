@@ -6895,6 +6895,7 @@ export function ProjectView({
             (prev) => ({
               ...prev,
               runStatus: status.status,
+              deliverableQuality: status.deliverableQuality,
               ...(status.resumable !== undefined ? { resumable: status.resumable } : {}),
             }),
             true,
@@ -7130,6 +7131,7 @@ export function ProjectView({
               ...prev,
               runId: reattachRunId,
               runStatus: status.status,
+              deliverableQuality: status.deliverableQuality,
               lastRunEventId: undefined,
               strategyTaskPrefixLength: message.content.length,
               strategyTaskPrefixEventCount: message.events?.length ?? 0,
@@ -7336,6 +7338,7 @@ export function ProjectView({
               (prev) => ({
                 ...prev,
                 runId: nextRunId,
+              deliverableQuality: undefined,
                 runStatus: 'running',
                 lastRunEventId: undefined,
                 strategyTaskPrefixLength: replayedContent.length,
@@ -7887,6 +7890,7 @@ export function ProjectView({
                       (prev) => ({
                         ...prev,
                         runStatus: latestRunStatus.status,
+                        deliverableQuality: latestRunStatus.deliverableQuality,
                         endedAt: latestRunStatus.updatedAt,
                         ...(latestRunStatus.resumable !== undefined
                           ? { resumable: latestRunStatus.resumable }
@@ -7921,6 +7925,9 @@ export function ProjectView({
                 scheduleConversationMessageRefresh(reattachConversationId);
               }
             },
+          },
+          onDeliverableQuality: (quality) => {
+            updateMessageById(message.id, (prev) => ({ ...prev, deliverableQuality: quality }), true);
           },
           onRunStatus: (runStatus) => {
             textBuffer.flush();
@@ -10160,6 +10167,7 @@ export function ProjectView({
                       ...prev,
                       endedAt: latestRunStatus.updatedAt,
                       runStatus: latestRunStatus.status,
+                      deliverableQuality: latestRunStatus.deliverableQuality,
                       ...(latestRunStatus.resumable !== undefined
                         ? { resumable: latestRunStatus.resumable }
                         : {}),
@@ -10438,6 +10446,7 @@ export function ProjectView({
               ...prev,
               runId,
               runStatus: 'queued',
+              deliverableQuality: undefined,
               taskAnalytics: resolvedTaskAnalytics,
               ...(strategyTaskExecutionId ? {
                 strategyTaskExecutionId,
@@ -10454,6 +10463,9 @@ export function ProjectView({
           },
           onArtifactPaths: (paths) => {
             authoritativeArtifactPaths = paths;
+          },
+          onDeliverableQuality: (quality) => {
+            updateMessageById(assistantId, (prev) => ({ ...prev, deliverableQuality: quality }), true);
           },
           onRunStatus: (runStatus) => {
             // streamViaDaemon reports `failed` before onError when POST
@@ -10676,6 +10688,7 @@ export function ProjectView({
               ...prev,
               runId,
               runStatus: 'queued',
+              deliverableQuality: undefined,
               taskAnalytics: resolvedTaskAnalytics,
               ...(strategyTaskExecutionId ? {
                 strategyTaskExecutionId,
@@ -10689,6 +10702,9 @@ export function ProjectView({
                 : {}),
               lastRunEventId: undefined,
             }));
+          },
+          onDeliverableQuality: (quality) => {
+            updateMessageById(assistantId, (prev) => ({ ...prev, deliverableQuality: quality }), true);
           },
           onRunStatus: (runStatus) => {
             const endedAt = isTerminalRunStatus(runStatus) ? Date.now() : undefined;

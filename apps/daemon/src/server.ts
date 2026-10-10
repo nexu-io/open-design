@@ -595,6 +595,13 @@ import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
 import { promptBudgetAnalyticsFromDiagnostic } from './run-diagnostics.js';
 import { classifyRunFailure, isResumableFailure } from './run-failure-classification.js';
 import {
+  emptyPrototypeQualityAttempt, prototypeOriginalBrief, recordPrototypeQuality,
+  settlePrototypeCorrection, prototypeQualityRepairDecision, startPrototypeCorrectionBudget,
+  PROTOTYPE_CHECK_BUDGET_MS,
+} from './strategies/od-next/prototype-quality-repair.js';
+import { composePrototypeQualityRepairTurn } from './strategies/od-next/prototype-quality-repair-turn.js';
+import { claimStrategyQualityRepair } from './strategies/task-store.js';
+import {
   deliverableSyntaxFinalizerEnabled,
   finalizeSuccessfulRunDeliverable,
 } from './artifacts/successful-run-deliverable-finalization.js';
@@ -10948,6 +10955,23 @@ export async function startServer({
     const persistedStrategyFinalText = strategyRunMapping?.finalText.text ?? null;
     const isOdNextInitialRun = Boolean(strategyTaskAtStart && isInitialStrategyTaskRun(strategyTaskAtStart, run.id));
     const isIntentResolution = Boolean(strategyTaskAtStart && isStrategyIntentResolutionRun(strategyTaskAtStart, run.id));
+    const isPrototypeQualityRepair = strategyRunMapping?.purpose === 'quality_repair';
+    let clearPrototypeCorrectionBudget = null;
+    if (isPrototypeQualityRepair && run.prototypeQualityAttempt) {
+      clearPrototypeCorrectionBudget = startPrototypeCorrectionBudget({
+        attempt: run.prototypeQualityAttempt,
+        onBudgetElapsed: () => {
+          if (design.runs.isTerminal(run.status)) return;
+          settlePrototypeCorrection(run.prototypeQualityAttempt);
+          run.prototypeQualityAttempt.stopReason = 'repair_time_budget';
+          if (run.deliverableQuality?.repair) run.deliverableQuality.repair.reason = 'repair_time_budget';
+          design.runs.persistState(run);
+          void design.runs.cancel(run, 'unknown');
+        },
+      });
+      design.runs.persistState(run);
+      void design.runs.wait(run).then(() => clearPrototypeCorrectionBudget?.(), () => clearPrototypeCorrectionBudget?.());
+    }
     const hasExplicitCurrentPrompt = Object.prototype.hasOwnProperty.call(
       chatBody,
       'currentPrompt',
@@ -11010,6 +11034,11 @@ export async function startServer({
       }
     };
     const finishRun = (status, code = null, signal = null) => {
+      clearPrototypeCorrectionBudget?.();
+      if (isPrototypeQualityRepair && run.prototypeQualityAttempt) {
+        settlePrototypeCorrection(run.prototypeQualityAttempt);
+        if (run.deliverableQuality?.repair) run.deliverableQuality.repair.durationMs = run.prototypeQualityAttempt.agentDurationMs;
+      }
       cleanupOdNextRunInputProjection();
       finalizeRunMessageEvents(db, run);
       return design.runs.finish(run, status, code, signal);
@@ -13035,7 +13064,7 @@ export async function startServer({
         hasNativeSession: !!run.conversationId && !!liveSessionId,
       });
       if (
-        allowRetry && !isIntentResolution &&
+        allowRetry && !isIntentResolution && !isPrototypeQualityRepair &&
         postToolResumeDecision?.shouldRetry &&
         !design.runs.isTerminal(run.status) &&
         run.conversationId &&
@@ -13095,7 +13124,7 @@ export async function startServer({
         attemptCount: run.retryAttemptCount ?? 0,
         sideEffects,
       });
-      if (allowRetry && !isIntentResolution && decision.shouldRetry && !design.runs.isTerminal(run.status)) {
+      if (allowRetry && !isIntentResolution && !isPrototypeQualityRepair && decision.shouldRetry && !design.runs.isTerminal(run.status)) {
         run.retryOriginalFailure ??= failure ?? undefined;
         if ((run.retryAttemptCount ?? 0) === 0) {
           run.retryOriginFailure = failure ? { ...failure } : null;
@@ -13144,7 +13173,7 @@ export async function startServer({
         sideEffects.liveArtifactSeen
       );
       const resumableFailure =
-        !isIntentResolution && result === 'failed' &&
+        !isIntentResolution && !isPrototypeQualityRepair && result === 'failed' &&
         runtimeResumesSessionById(def) &&
         !!run.conversationId &&
         !!liveSessionId &&
@@ -16845,24 +16874,58 @@ export async function startServer({
           processTreeQuiescentForFinalization = termination?.quiescent === true;
         }
         await resolveRunArtifactOutcomeBeforeFinishAsync();
-        const deliverableFinalization = await finalizeSuccessfulRunDeliverable({
-          ...(run.artifactOutcome?.diff && baselineEntryFile ? { baselineEntryFile } : {}),
-          projectsRoot: PROJECTS_DIR,
-          projectId: run.projectId ?? null,
-          projectMetadata: projectRecord?.metadata,
-          artifactCount: Number.isFinite(run.artifactCount) ? run.artifactCount : 0,
-          ...(Array.isArray(run.artifactPaths) ? { touchedPaths: run.artifactPaths } : {}),
-          relatedPaths:
-            run.artifactOutcome?.diff?.renderDependencyTouchedPaths ?? [],
-          processTreeQuiescent: processTreeQuiescentForFinalization,
-          syntaxFinalizerEnabled: deliverableSyntaxFinalizerEnabled(),
-          ...(run.deliverableSyntaxRepair
-            ? { repairState: run.deliverableSyntaxRepair }
-            : {}),
-          ...(run.deliverableSyntaxValidation?.metrics
-            ? { previousMetrics: run.deliverableSyntaxValidation.metrics }
-            : {}),
-        });
+        clearPrototypeCorrectionBudget?.();
+        if (isPrototypeQualityRepair && run.prototypeQualityAttempt) settlePrototypeCorrection(run.prototypeQualityAttempt);
+        const prototypeQualityApplicable = Boolean(strategyTaskAtStart && !strategyPlanningOnly
+          && (strategyTaskAtStart.inputStage === 'production'
+            || strategyTaskAtStart.route === 'direct_edit'
+            || strategyProtocolResult?.runtimeState?.route === 'direct_edit')
+          && getSnapshot(db, strategyTaskAtStart?.snapshotId)?.strategy?.selectedTaskProfile?.taskType === 'prototype'
+          && projectRecord?.metadata?.kind === 'prototype');
+        const qualityAttempt = run.prototypeQualityAttempt ?? emptyPrototypeQualityAttempt();
+        if (prototypeQualityApplicable) run.prototypeQualityAttempt = qualityAttempt;
+        const qualityAbort = new AbortController();
+        const qualityCancelWatch = prototypeQualityApplicable ? setInterval(() => {
+          if (run.cancelRequested || design.runs.isTerminal(run.status)) qualityAbort.abort();
+        }, 50) : null;
+        qualityCancelWatch?.unref?.();
+        let deliverableFinalization;
+        try {
+          deliverableFinalization = await finalizeSuccessfulRunDeliverable({
+            ...(run.artifactOutcome?.diff && baselineEntryFile ? { baselineEntryFile } : {}),
+            ...(prototypeQualityApplicable ? { prototypeQuality: {
+              userBrief: prototypeOriginalBrief(strategyTaskAtStart),
+              remainingBudgetMs: Math.max(0, PROTOTYPE_CHECK_BUDGET_MS - qualityAttempt.hostDurationMs),
+              signal: qualityAbort.signal,
+            } } : {}),
+            projectsRoot: PROJECTS_DIR,
+            projectId: run.projectId ?? null,
+            projectMetadata: projectRecord?.metadata,
+            artifactCount: Number.isFinite(run.artifactCount) ? run.artifactCount : 0,
+            ...(Array.isArray(run.artifactPaths) ? { touchedPaths: run.artifactPaths } : {}),
+            relatedPaths:
+              run.artifactOutcome?.diff?.renderDependencyTouchedPaths ?? [],
+            processTreeQuiescent: processTreeQuiescentForFinalization,
+            syntaxFinalizerEnabled: deliverableSyntaxFinalizerEnabled(),
+            ...(run.deliverableSyntaxRepair
+              ? { repairState: run.deliverableSyntaxRepair }
+              : {}),
+            ...(run.deliverableSyntaxValidation?.metrics
+              ? { previousMetrics: run.deliverableSyntaxValidation.metrics }
+              : {}),
+          });
+        } finally {
+          if (qualityCancelWatch) clearInterval(qualityCancelWatch);
+        }
+        if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
+        if (deliverableFinalization.quality) {
+          run.prototypeQualityAttempt = qualityAttempt;
+          run.deliverableQuality = recordPrototypeQuality(qualityAttempt, deliverableFinalization.quality);
+          design.runs.persistState(run);
+          if (run.assistantMessageId) db.prepare('UPDATE messages SET deliverable_quality_json = ? WHERE id = ? AND run_id = ?')
+            .run(JSON.stringify(run.deliverableQuality), run.assistantMessageId, run.id);
+          design.runs.emit(run, 'diagnostic', { type: 'deliverable_quality', ...run.deliverableQuality });
+        }
         const { deliverable } = deliverableFinalization;
         // Adding a second page must not erase an unambiguous pre-run entry.
         // Retain only a verified baseline identity, without replacing a user's
@@ -16890,7 +16953,8 @@ export async function startServer({
         }
         if (strategyCompletionCandidate) {
           design.runs.setDeliverableValidation?.(run, deliverable);
-          deliverableValid = deliverable.valid;
+          deliverableValid = deliverable.valid && (!prototypeQualityApplicable
+            || run.deliverableQuality?.status === 'pass' || run.deliverableQuality?.status === 'not_applicable');
           if (!deliverable.valid && strategyTaskAtStart) {
             console.info('[od-next-task] completion evidence rejected', {
               taskExecutionId: strategyTaskAtStart.taskExecutionId,
@@ -17023,7 +17087,75 @@ export async function startServer({
         } catch (err) {
           console.warn('[sessions] delivered session persistence failed', err);
         }
-        if (strategyTaskAtStart && strategyProtocolResult) {
+        if (prototypeQualityApplicable && run.deliverableQuality && strategyTaskAtStart) {
+          const decision = prototypeQualityRepairDecision(qualityAttempt, run.deliverableQuality,
+            run.cancelRequested || design.runs.isTerminal(run.status));
+          if (decision.allowed && strategyProtocolResult?.runtimeState) {
+            try {
+              const route = strategyTaskAtStart.route ?? strategyProtocolResult.runtimeState.route;
+              const executionMode = strategyTaskAtStart.executionMode ?? strategyProtocolResult.runtimeState.executionMode;
+              const instruction = composePrototypeQualityRepairTurn({
+                taskExecutionId: strategyTaskAtStart.taskExecutionId,
+                stage: strategyTaskAtStart.inputStage,
+                route, executionMode,
+                taskRunIndex: strategyTaskAtStart.runs.length,
+                sourceRunId: run.id, candidateHash: run.deliverableQuality.candidateHash,
+                round: qualityAttempt.attempts + 1,
+                promptBundleSha256: strategyTaskAtStart.promptBundle.sha256,
+                quality: run.deliverableQuality,
+              });
+              const identity = createHash('sha256').update(`${strategyTaskAtStart.taskExecutionId}:quality:${qualityAttempt.attempts + 1}`).digest('hex');
+              const correctionBody = {
+                ...chatBody,
+                analyticsHints: { ...(chatBody.analyticsHints ?? {}),
+                  ...inheritedRunLineageHints(run, chatBody, strategyTaskAtStart.runs.length) },
+                projectId: strategyTaskAtStart.projectId,
+                conversationId: strategyTaskAtStart.conversationId,
+                agentId: strategyTaskAtStart.selectedAgentId,
+                appliedPluginSnapshotId: strategyTaskAtStart.snapshotId,
+                pluginId: strategyTaskAtStart.strategyId,
+                assistantMessageId: `odnext_assistant_${identity.slice(0, 32)}`,
+                clientRequestId: `odnext_run_${identity.slice(0, 40)}`,
+                requestFingerprint: identity,
+                doneKey: undefined,
+                message: instruction, currentPrompt: instruction,
+                titleGeneration: undefined, userMessageId: undefined,
+                odNextTaskInputSnapshot: run.odNextTaskInputSnapshot ?? chatBody.odNextTaskInputSnapshot ?? null,
+              };
+              let claimedTask = null;
+              const prepared = internalRunCreation.prepare({ meta: correctionBody,
+                beforeClaimCommit: (nextRun) => {
+                  claimedTask = claimStrategyQualityRepair(db, {
+                    taskExecutionId: strategyTaskAtStart.taskExecutionId,
+                    expectedRevision: strategyTaskAtStart.revision,
+                    sourceRunId: run.id, nextRunId: nextRun.id, finalText: instruction,
+                  });
+                },
+              });
+              if (prepared.kind === 'ready' && claimedTask) {
+                qualityAttempt.attempts += 1;
+                run.deliverableQuality.repair.attempts = qualityAttempt.attempts;
+                run.strategyTask = projectStrategyTask(claimedTask, run.id);
+                prepared.run.strategyTask = projectStrategyTask(claimedTask, prepared.run.id);
+                prepared.run.prototypeQualityAttempt = structuredClone(qualityAttempt);
+                // The inherited internal history records the first fault. Public evidence
+                // stays unknown until this Run checks its own settled candidate.
+                prepared.run.deliverableQuality = undefined;
+                design.runs.persistState(run);
+                design.runs.persistState(prepared.run);
+                pendingStrategyContinuation = { run: prepared.run, chatBody: correctionBody };
+              }
+            } catch {
+              if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
+              run.deliverableQuality.repair.reason = 'repair_preparation_failed';
+              design.runs.persistState(run);
+            }
+          } else if (run.deliverableQuality.repair && run.deliverableQuality.status === 'fail') {
+            run.deliverableQuality.repair.reason = decision.allowed ? 'missing_runtime_identity' : decision.reason;
+            design.runs.persistState(run);
+          }
+        }
+        if (strategyTaskAtStart && strategyProtocolResult && !pendingStrategyContinuation) {
           let automaticContinuationChatBody = null;
           let executionPreflight;
           let complexRuntimeEvidence;

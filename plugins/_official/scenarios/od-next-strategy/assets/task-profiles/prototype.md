@@ -1,4 +1,4 @@
-# OD Next Prototype Task Profile v2.3.1
+# OD Next Prototype Task Profile v2.3.3
 
 > Rollout: active
 
@@ -40,12 +40,14 @@ The default delivery is a prototype that opens, runs, and remains editable:
 core flows genuinely work end-to-end from the entry point, and buttons,
 navigation, and key controls are never mere decoration.
 
-Writing the primary HTML deliverable to disk IS the delivery: no opening, no
-previewing, no walkthroughs, no second pass of any kind after the write. Meet
-the quality floor below in one pass, while writing the source. Report
-completed when the required deliverables exist and match the contract;
-disclose any residual quality risks in the prose summary — they do not change
-the outcome.
+Writing the primary HTML entry submits an editable candidate. It does not
+prove that the main interactions work. Report the generation outcome when
+required files match the contract; delivery confirmation comes only from the
+host's result for that candidate. Keep generated, checking, failed,
+incomplete, and confirmed states distinct in the visible summary. Never
+claim a self-check or successful walkthrough without received host results.
+Follow the general orchestration's bounded host-requested correction
+exception; do not independently open, test, or visually polish the candidate.
 
 ## Build Requirements
 

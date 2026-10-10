@@ -492,7 +492,7 @@ export function passThroughOrdinaryAssistantText(
  * every byte for validation, but its answer belongs only to its durable reply.
  * Ordinary runs retain both streamed text and the parser's close-time tail.
  */
-export function createOdNextRunProtocol(mapping: { purpose?: 'intent_resolution' } | null) {
+export function createOdNextRunProtocol(mapping: { purpose?: 'intent_resolution' | 'quality_repair' } | null) {
   const protocol = new OdNextMachineProtocolStream();
   const internalReply = mapping?.purpose === 'intent_resolution';
   let visibleEmitted = 0;

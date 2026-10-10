@@ -594,6 +594,7 @@ export interface DaemonStreamOptions {
   workspaceContext?: WorkspaceCollabContext | null;
   initialLastEventId?: string | null;
   onRunStatus?: (status: ChatRunStatus) => void;
+  onDeliverableQuality?: (quality: ChatRunStatusResponse['deliverableQuality']) => void;
   /** Authoritative project-relative artifacts created or modified by the run. */
   onArtifactPaths?: (paths: string[]) => void;
   onRunEventId?: (eventId: string) => void;
@@ -634,6 +635,7 @@ export interface DaemonReattachOptions {
   handlers: DaemonStreamHandlers;
   initialLastEventId?: string | null;
   onRunStatus?: (status: ChatRunStatus) => void;
+  onDeliverableQuality?: (quality: ChatRunStatusResponse['deliverableQuality']) => void;
   onArtifactPaths?: (paths: string[]) => void;
   onRunEventId?: (eventId: string) => void;
   /**
@@ -1068,6 +1070,7 @@ export async function streamViaDaemon({
   initialLastEventId,
   onRunCreated,
   onRunStatus,
+  onDeliverableQuality,
   onArtifactPaths,
   onRunEventId,
   onCancelOrigin,
@@ -1192,6 +1195,7 @@ export async function streamViaDaemon({
       handlers,
       initialLastEventId,
       onRunStatus: emitRunStatus,
+      onDeliverableQuality,
       onArtifactPaths,
       onRunEventId,
       onCancelOrigin,
@@ -1825,6 +1829,7 @@ async function consumeDaemonPhysicalRun({
   handlers,
   initialLastEventId,
   onRunStatus,
+  onDeliverableQuality,
   onArtifactPaths,
   onRunEventId,
   onCancelOrigin,
@@ -2219,6 +2224,7 @@ async function consumeDaemonPhysicalRun({
           }
 
           if (event.event === 'end') {
+            onDeliverableQuality?.(event.data.deliverableQuality);
             exitCode = typeof event.data.code === 'number' ? event.data.code : null;
             exitSignal = typeof event.data.signal === 'string' ? event.data.signal : null;
             if (event.data.resumable === true) endResumable = true;
@@ -2242,6 +2248,7 @@ async function consumeDaemonPhysicalRun({
       if (pendingStructuredError && endStatus === null) {
         const status = await fetchChatRunStatus(runId, workspaceContext).catch(() => null);
         if (status && isChatRunStatus(status.status) && status.status !== 'queued' && status.status !== 'running') {
+          onDeliverableQuality?.(status.deliverableQuality);
           endStatus = status.status;
           exitCode = status.exitCode ?? null;
           exitSignal = status.signal ?? null;
@@ -2288,6 +2295,7 @@ async function consumeDaemonPhysicalRun({
     if (endStatus === null) {
       const status = await fetchChatRunStatus(runId, workspaceContext);
       if (status && isChatRunStatus(status.status) && status.status !== 'queued' && status.status !== 'running') {
+        onDeliverableQuality?.(status.deliverableQuality);
         endStatus = status.status;
         exitCode = status.exitCode ?? null;
         exitSignal = status.signal ?? null;

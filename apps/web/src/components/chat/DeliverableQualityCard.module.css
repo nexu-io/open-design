@@ -1,0 +1,11 @@
+.card {
+  padding: 12px 16px;
+  border: 1px solid var(--chat-border);
+  border-radius: 12px;
+  color: var(--chat-text);
+  background: var(--chat-bg-panel);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.card p { margin: 4px 0 0; color: var(--chat-text-muted); }
+.card ul { margin: 8px 0 0; padding-left: 20px; }

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  HOST_PROTOTYPE_QUALITY_CONTRACT_V1,
+  assertOdNextPlanningBuildOnlyV2,
   composeOdNextStrategyBundleHeadV2,
   composeOdNextStrategyCorePromptV2,
   composeOdNextStrategyContinuationV2,
@@ -526,8 +528,10 @@ describe('OD Next V2 prompt recipe', () => {
     expect(prompt).toContain('decisionSummary');
   });
 
-  it('keeps post-Build quality semantics out of the recipe structure and text', () => {
-    const prompt = composeOdNextStrategyRequestPromptV2(recipe);
+  it('keeps Agent quality loops out while carrying the exact host prototype exception', () => {
+    const composed = composeOdNextStrategyRequestPromptV2(recipe);
+    expect(composed).toContain(HOST_PROTOTYPE_QUALITY_CONTRACT_V1);
+    const prompt = composed.replace(HOST_PROTOTYPE_QUALITY_CONTRACT_V1, '');
     expect(prompt).not.toMatch(/\bverification\b/i);
     expect(prompt).not.toMatch(/\bchecklist\b/i);
     expect(prompt).not.toMatch(/\bcritique(?:-theater)?\b/i);
@@ -535,6 +539,23 @@ describe('OD Next V2 prompt recipe', () => {
     expect(prompt).not.toMatch(/\bevidence plan\b|\bevidence bundle\b/i);
     expect(prompt).not.toMatch(/\bartifact repair\b|\brevalidation\b/i);
     expect(prompt).not.toMatch(/\bscreenshots?\b|\bbrowser\b|\bDOM\b/);
+  });
+
+  it('pins bounded host checking in both prototype composers and leaves other task types unchanged', () => {
+    const bundled = composeOdNextStrategyBundleHeadV2(recipe);
+    expect(bundled.sessionSkills.taskTypeSkill.body).toContain(HOST_PROTOTYPE_QUALITY_CONTRACT_V1);
+    expect(HOST_PROTOTYPE_QUALITY_CONTRACT_V1).toContain('two Agent rounds');
+    expect(HOST_PROTOTYPE_QUALITY_CONTRACT_V1).toContain('stale evidence cannot confirm delivery');
+    expect(composeOdNextStrategyRequestPromptV2({ ...recipe, taskType: 'ppt' }))
+      .not.toContain(HOST_PROTOTYPE_QUALITY_CONTRACT_V1);
+    expect(() => assertOdNextPlanningBuildOnlyV2(HOST_PROTOTYPE_QUALITY_CONTRACT_V1, 'host'))
+      .not.toThrow();
+    expect(() => assertOdNextPlanningBuildOnlyV2(
+      `${HOST_PROTOTYPE_QUALITY_CONTRACT_V1}\nReview the finished output in a browser.`, 'agent',
+    )).toThrow(/forbidden/i);
+    expect(() => assertOdNextPlanningBuildOnlyV2(
+      HOST_PROTOTYPE_QUALITY_CONTRACT_V1.replace('two Agent rounds', 'unlimited Agent rounds'), 'tampered',
+    )).toThrow(/forbidden/i);
   });
 
   it('fails closed when stages are incomplete or smuggle post-Build quality work', () => {

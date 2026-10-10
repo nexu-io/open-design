@@ -6,6 +6,7 @@ import { load } from 'cheerio';
 import { parse as parseJavaScript, type Token } from 'acorn';
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs/promises';
+import { closeSync, fsyncSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 import type { DeliverableSyntaxResult } from './deliverable-syntax.js';
@@ -419,7 +420,9 @@ export async function proposeDeliverableSyntaxSafeFix(input: {
  */
 export async function commitDeliverableSyntaxSafeFix(
   patch: DeliverableSyntaxSafeFixPatch,
+  options?: { synchronous?: boolean; deadlineAtMs?: number },
 ): Promise<DeliverableSyntaxSafeFixCommitResult> {
+  if (options?.synchronous) return commitSynchronously(patch, options.deadlineAtMs);
   let current: string;
   try {
     current = await fs.readFile(patch.targetPath, 'utf8');
@@ -457,4 +460,24 @@ export async function commitDeliverableSyntaxSafeFix(
     await fs.unlink(temporaryPath).catch(() => undefined);
     return { action: 'none', reason: 'write_failed' };
   }
+}
+
+/** Worker-only: no async fs requests remain in flight after worker termination.
+ * The deadline prevents a new rename; it cannot preempt an OS syscall already running.
+ */
+function commitSynchronously(patch: DeliverableSyntaxSafeFixPatch, deadlineAtMs?: number): DeliverableSyntaxSafeFixCommitResult {
+  const expired = () => deadlineAtMs !== undefined && Date.now() >= deadlineAtMs;
+  if (expired()) return { action: 'none', reason: 'write_failed' };
+  const temporaryPath = path.join(path.dirname(patch.targetPath), `.${path.basename(patch.targetPath)}.od-syntax-${randomBytes(6).toString('hex')}.tmp`);
+  try {
+    if (readFileSync(patch.targetPath, 'utf8') !== patch.expectedDiskContent) return { action: 'none', reason: 'concurrent_modification' };
+    const handle = openSync(temporaryPath, 'wx', patch.mode);
+    try { writeFileSync(handle, patch.content, 'utf8'); fsyncSync(handle); } finally { closeSync(handle); }
+    if (expired()) return { action: 'none', reason: 'write_failed' };
+    if (readFileSync(patch.targetPath, 'utf8') !== patch.expectedDiskContent) return { action: 'none', reason: 'concurrent_modification' };
+    if (expired()) return { action: 'none', reason: 'write_failed' };
+    renameSync(temporaryPath, patch.targetPath);
+    return { action: 'committed' };
+  } catch { return { action: 'none', reason: 'write_failed' }; }
+  finally { try { unlinkSync(temporaryPath); } catch { /* committed or not created */ } }
 }

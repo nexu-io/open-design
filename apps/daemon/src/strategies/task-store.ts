@@ -40,6 +40,8 @@ import {
   type StrategyIntentResolution,
 } from './od-next/intent-resolution-store.js';
 
+import { OD_NEXT_QUALITY_REPAIR_TURN_SCHEMA, parsePrototypeQualityRepairTurn } from './od-next/prototype-quality-repair-turn.js';
+
 type SqliteDb = Database.Database;
 type DbRow = Record<string, unknown>;
 
@@ -67,7 +69,7 @@ const COMPOSED_PROMPT_BUNDLE_SCHEMA = OD_NEXT_PROMPT_BUNDLE_SCHEMA_V2;
  */
 const ACCEPTED_FINAL_TEXT_SCHEMAS = {
   bundle: [OD_NEXT_PROMPT_BUNDLE_SCHEMA_V1, OD_NEXT_PROMPT_BUNDLE_SCHEMA_V2],
-  turn: [OD_NEXT_REQUEST_TURN_SCHEMA_V1, OD_NEXT_INTENT_RESOLUTION_TURN_SCHEMA],
+  turn: [OD_NEXT_REQUEST_TURN_SCHEMA_V1, OD_NEXT_INTENT_RESOLUTION_TURN_SCHEMA, OD_NEXT_QUALITY_REPAIR_TURN_SCHEMA],
 } as const satisfies Record<
   StrategyTaskFinalTextKind,
   ReadonlyArray<StrategyTaskFinalTextSchema>
@@ -80,7 +82,7 @@ export interface StrategyTaskRunMapping {
   inputStage: StrategyInputStageV2;
   taskRunIndex: number;
   sourceRunId?: string;
-  purpose?: 'intent_resolution';
+  purpose?: 'intent_resolution' | 'quality_repair';
   finalText: StrategyTaskFinalTextIdentity;
 }
 
@@ -95,7 +97,8 @@ export type StrategyTaskFinalTextSchema =
   | typeof OD_NEXT_PROMPT_BUNDLE_SCHEMA_V1
   | typeof OD_NEXT_PROMPT_BUNDLE_SCHEMA_V2
   | typeof OD_NEXT_REQUEST_TURN_SCHEMA_V1
-  | typeof OD_NEXT_INTENT_RESOLUTION_TURN_SCHEMA;
+  | typeof OD_NEXT_INTENT_RESOLUTION_TURN_SCHEMA
+  | typeof OD_NEXT_QUALITY_REPAIR_TURN_SCHEMA;
 
 export interface StrategyTaskFinalTextIdentity {
   kind: StrategyTaskFinalTextKind;
@@ -616,6 +619,39 @@ export function claimStrategyExecutionIntentResolution(db: SqliteDb, input: {
   return requireTask(db, input.taskExecutionId);
 }
 
+/** Host-only bounded correction; the frozen request and stage are retained atomically. */
+export function claimStrategyQualityRepair(db: SqliteDb, input: {
+  taskExecutionId: string; expectedRevision: number; sourceRunId: string;
+  nextRunId: string; finalText: string; updatedAt?: number;
+}): StrategyTaskExecutionRecord {
+  db.transaction(() => {
+    const current = requireTask(db, input.taskExecutionId);
+    const updatedAt = normalizeTimestamp(input.updatedAt ?? Date.now(), 'updatedAt');
+    const rounds = current.runs.filter(mapping => mapping.purpose === 'quality_repair').length;
+    if (current.revision !== input.expectedRevision || current.latestRunId !== input.sourceRunId
+      || current.outcome !== 'running' || current.executionIntent === 'plan_only'
+      || !(current.inputStage === 'production' || current.inputStage === 'request' && (current.route === 'direct_edit' || current.route === null))
+      || rounds >= 2 || updatedAt < current.updatedAt) throw new StrategyTaskTransitionConflictError('Quality correction no longer owns the current task.');
+    requireNonEmpty(input.nextRunId, 'nextRunId');
+    const turn = parsePrototypeQualityRepairTurn(input.finalText);
+    if (turn.taskExecutionId !== current.taskExecutionId || turn.stage !== current.inputStage
+      || turn.taskRunIndex !== current.runs.length || turn.sourceRunId !== current.latestRunId
+      || turn.promptBundleSha256 !== current.promptBundle.sha256 || turn.round !== rounds + 1
+      || (current.route !== null && current.route !== turn.route)
+      || (current.executionMode !== null && current.executionMode !== turn.executionMode)
+      || (current.inputStage === 'request' && (turn.route !== 'direct_edit' || turn.executionMode !== 'simple'))) throw new InvalidStrategyTaskTransitionError('Quality correction identity mismatch.');
+    const identity = finalTextIdentity({ kind: 'turn', schema: OD_NEXT_QUALITY_REPAIR_TURN_SCHEMA, text: input.finalText });
+    const result = db.prepare(`UPDATE strategy_task_executions SET revision=revision+1,latest_run_id=?,updated_at=?,route=COALESCE(route,?),execution_mode=COALESCE(execution_mode,?)
+      WHERE task_execution_id=? AND revision=? AND outcome='running'`).run(input.nextRunId, updatedAt, turn.route, turn.executionMode, current.taskExecutionId, current.revision);
+    if (result.changes !== 1) throw new StrategyTaskTransitionConflictError('Quality correction revision changed.');
+    db.prepare(`INSERT INTO strategy_task_runs(task_execution_id,run_id,input_stage,task_run_index,source_run_id,
+      final_text_kind,final_text_schema,final_text,final_text_utf8_bytes,final_text_sha256,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(current.taskExecutionId, input.nextRunId, current.inputStage, current.runs.length, input.sourceRunId,
+        identity.kind, identity.schema, identity.text, identity.utf8Bytes, identity.sha256, updatedAt);
+  }).immediate();
+  return requireTask(db, input.taskExecutionId);
+}
+
 /** Consume the already persisted reply under the current task revision; never launches a provider. */
 export function consumeStrategyExecutionIntentResolution(db: SqliteDb, input: {
   taskExecutionId: string; expectedRevision: number; runId: string;
@@ -1030,10 +1066,12 @@ function rowToTask(db: SqliteDb, row: DbRow): StrategyTaskExecutionRecord {
       inputStage: parseStage(mapping.inputStage),
       taskRunIndex,
       ...(intentResolution?.runId === mapping.runId ? { purpose: 'intent_resolution' as const } : {}),
+      ...(mapping.finalTextSchema === OD_NEXT_QUALITY_REPAIR_TURN_SCHEMA ? { purpose: 'quality_repair' as const } : {}),
     });
     return {
       runId: requireStoredString(mapping.runId, 'run_id'),
       ...(intentResolution?.runId === mapping.runId ? { purpose: 'intent_resolution' as const } : {}),
+      ...(mapping.finalTextSchema === OD_NEXT_QUALITY_REPAIR_TURN_SCHEMA ? { purpose: 'quality_repair' as const } : {}),
       inputStage: parseStage(mapping.inputStage),
       taskRunIndex,
       ...(mapping.sourceRunId == null
@@ -1079,6 +1117,10 @@ function rowToTask(db: SqliteDb, row: DbRow): StrategyTaskExecutionRecord {
     sha256: row['prompt_bundle_sha256'],
   });
   parseStoredPromptBundle(promptBundle);
+  for (const mapping of mappings) if (mapping.purpose === 'quality_repair') {
+    const turn = parsePrototypeQualityRepairTurn(mapping.finalText.text);
+    if (turn.promptBundleSha256 !== promptBundle.sha256 || turn.route !== route || turn.executionMode !== executionMode) throw new InvalidStrategyTaskRecordError('Quality repair changed frozen request identity.');
+  }
   if (!sameFinalTextIdentity(promptBundle, mappings[0]!.finalText)) {
     throw new InvalidStrategyTaskRecordError(
       'Initial strategy task Run text must exactly match the persisted Prompt Bundle.',
@@ -1356,7 +1398,7 @@ function validateMappedFinalText(
     taskExecutionId: string;
     inputStage: StrategyInputStageV2;
     taskRunIndex: number;
-    purpose?: 'intent_resolution';
+    purpose?: 'intent_resolution' | 'quality_repair';
   },
 ): void {
   if (mapping.taskRunIndex === 0) {
@@ -1366,6 +1408,12 @@ function validateMappedFinalText(
       );
     }
     parseStoredPromptBundle(identity);
+    return;
+  }
+  if (mapping.purpose === 'quality_repair') {
+    if (identity.kind !== 'turn' || identity.schema !== OD_NEXT_QUALITY_REPAIR_TURN_SCHEMA) throw new InvalidStrategyTaskRecordError('Invalid quality repair Turn.');
+    const parsed = parsePrototypeQualityRepairTurn(identity.text);
+    if (parsed.taskExecutionId !== mapping.taskExecutionId || parsed.stage !== mapping.inputStage || parsed.taskRunIndex !== mapping.taskRunIndex) throw new InvalidStrategyTaskRecordError('Quality repair Turn identity mismatch.');
     return;
   }
   if (mapping.purpose === 'intent_resolution') {
@@ -1508,7 +1556,13 @@ function validateRunChain(
       && previous.purpose !== 'intent_resolution'
       && ['request', 'clarification'].includes(current.inputStage)
       && previous.inputStage === current.inputStage;
-    if (!isResolution && !allowed.has(`${previous.inputStage}:${current.inputStage}`)) {
+    const isQualityRepair = current.purpose === 'quality_repair' && current.inputStage === previous.inputStage
+      && ['request', 'production'].includes(current.inputStage);
+    if (isQualityRepair) {
+      const turn = parsePrototypeQualityRepairTurn(current.finalText.text);
+      if (turn.sourceRunId !== previous.runId || turn.round !== mappings.slice(0, index + 1).filter(item => item.purpose === 'quality_repair').length) throw new InvalidStrategyTaskRecordError('Invalid quality repair round or source.');
+    }
+    if (!isResolution && !isQualityRepair && !allowed.has(`${previous.inputStage}:${current.inputStage}`)) {
       throw new InvalidStrategyTaskRecordError(
         'Strategy task Run stages must be ordered and cannot repeat or move backward.',
       );
@@ -1534,11 +1588,11 @@ function validateRunChain(
     );
   }
   if (route === 'direct_edit' && (
-    mappings.length !== 1
+    (mappings.length > 3 || mappings.slice(1).some(mapping => mapping.purpose !== 'quality_repair'))
     || mappings[0]?.inputStage !== 'request'
   )) {
     throw new InvalidStrategyTaskRecordError(
-      'Direct Edit can only own its single request Run.',
+      'Direct Edit only admits its original request and bounded host quality corrections.',
     );
   }
   if (route === null && mappings.length !== 1) {

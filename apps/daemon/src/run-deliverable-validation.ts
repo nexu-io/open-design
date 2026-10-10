@@ -20,7 +20,8 @@ export type RunDeliverableValidation =
   | 'entry_missing'
   | 'entry_not_touched'
   | 'entry_unreadable'
-  | 'type_mismatch';
+  | 'type_mismatch'
+  | 'validation_incomplete';
 
 export interface RunDeliverableValidationResult {
   valid: boolean;
