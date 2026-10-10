@@ -30,6 +30,11 @@ import {
   toolPackSidecarStamp,
 } from "./config/sidecar-stamps.js";
 import { domToPptxBundleResource } from "./dom-to-pptx-resource.js";
+import {
+  assertLinuxAppImageNativeModules,
+  assertLinuxNativeModules,
+  LINUX_NATIVE_INSTALL_POLICY,
+} from './linux/native-modules.js';
 import { copyBundledResourceTrees, linuxResources, packBundledDshRuntime } from "./resources/index.js";
 import { copyOptionalVelaCliBinary } from "./vela-cli.js";
 import { electronBuilderVersionForAppVersion, readRuntimeAppVersion } from "./versioning/index.js";
@@ -534,6 +539,7 @@ async function writeAssembledApp(
   const packageVersion = electronBuilderVersionForAppVersion(version);
   const packageJson = {
     name: "open-design-packaged",
+    ...LINUX_NATIVE_INSTALL_POLICY,
     version: packageVersion,
     private: true,
     main: "main.cjs",
@@ -571,6 +577,7 @@ async function writeAssembledApp(
   );
 
   await runProductionInstall(paths.assembledAppRoot);
+  await assertLinuxNativeModules(paths.assembledAppRoot, join(paths.resourceRoot, 'bin', 'node'));
 }
 
 async function writeLinuxAppImageAppRun(paths: LinuxPaths): Promise<void> {
@@ -720,6 +727,10 @@ export async function packLinux(config: ToolPackConfig): Promise<LinuxPackResult
   await runElectronBuilderLinux(config, paths);
 
   const appImagePath = config.to === "dir" ? null : await findBuiltAppImage(paths);
+  if (config.to !== 'dir') {
+    if (appImagePath == null) throw new Error('Linux build did not produce an AppImage to verify');
+    await assertLinuxAppImageNativeModules(appImagePath);
+  }
   return {
     appImagePath,
     outputRoot: paths.appBuilderOutputRoot,
