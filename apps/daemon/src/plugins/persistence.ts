@@ -5,7 +5,7 @@
 // (devloop audit + future per-iteration billing) and genui_surfaces
 // (cross-conversation cache, F8 lookup rules).
 //
-// `runs` lives in-memory in `apps/daemon/src/runs.ts` today, so the
+// `runs` lives in-memory in `apps/daemon/src/runtimes/runs.ts` today, so the
 // run-level snapshot link is carried on the in-memory run object plus
 // the messages.run_id row instead of a SQL ALTER TABLE.
 
