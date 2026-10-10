@@ -1053,6 +1053,32 @@ const CATALOGUE: CuratedSkill[] = [
     upstream: 'https://github.com/MiniMax-AI/skills',
     attribution: 'Curated from the MiniMax AI team.',
   },
+
+  // -------------------------------------------------------------------------
+  // Design ops & forms (Owl-Listener designer-skills)
+  // -------------------------------------------------------------------------
+  {
+    id: 'handoff-spec',
+    description:
+      'Write the implementation handoff — measurements, behaviours, assets, states, and edge cases. Use when engineering picks up the work. For verifying the result afterwards use design-qa-checklist.',
+    triggers: ['handoff spec', 'developer handoff', 'implementation handoff', 'engineering handoff', 'handoff measurements'],
+    mode: 'design-system',
+    category: 'creative-direction',
+    upstream: 'https://github.com/Owl-Listener/designer-skills/tree/main/design-ops/skills/handoff-spec',
+    attribution: 'Curated from Owl-Listener designer-skills (MIT).',
+  },
+  {
+    id: 'design-qa-checklist',
+    description:
+      'Build a QA checklist for verifying that a build matches the design. Use at implementation review. For the spec engineers build from, use handoff-spec.',
+    triggers: ['design qa checklist', 'implementation review checklist', 'visual qa check', 'verify build matches design', 'design qa'],
+    mode: 'design-system',
+    category: 'creative-direction',
+    upstream: 'https://github.com/Owl-Listener/designer-skills/tree/main/design-ops/skills/design-qa-checklist',
+    attribution: 'Curated from Owl-Listener designer-skills (MIT).',
+  },
+
+
 ];
 
 function buildBody(s: CuratedSkill): string {
