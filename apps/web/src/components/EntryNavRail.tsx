@@ -1310,7 +1310,6 @@ export function EntryTopRightCluster({
     window.open(billingUpgradeUrl, '_blank', 'noopener,noreferrer');
     window.setTimeout(() => {
       notifyWorkspaceBillingRefresh();
-      notifyWorkspaceContextRefresh();
     }, 3000);
   }
 
