@@ -8,6 +8,7 @@ import {
   buildLauncherAfterQuitArgs,
   buildLauncherHandoffResumeArgs,
   normalizeLauncherVersion,
+  readLauncherLaunchTarget,
   resolveLauncherPaths,
   resolveLauncherVersionPaths,
   validateLauncherAttemptDescriptor,
@@ -84,6 +85,8 @@ export type PreparedLegacyPayloadDesktopHandoff = {
   descriptor: LauncherDesktopHandoffDescriptor;
   kind: "prepared";
   launcherPaths: LauncherPaths;
+  platform?: NodeJS.Platform;
+  previousConfirmedHandoff?: LauncherDesktopHandoffDescriptor;
   runtimeRoot: string;
   source: SidecarSource;
 };
@@ -226,6 +229,29 @@ async function resolveInstalledOuterIdentity(options: {
   return { executablePath, pid: options.outerPid };
 }
 
+async function isRunningCanonicalDesktop(options: {
+  appVersion: string;
+  launcherPaths: LauncherPaths;
+  outer: LauncherDesktopHandoffDescriptor["outer"];
+  platform: NodeJS.Platform;
+  runtime: LauncherRuntimeDescriptor;
+  status: DesktopStatusSnapshot | null;
+}): Promise<boolean> {
+  const { status, runtime, outer, platform } = options;
+  if (platform !== "darwin" || status?.state !== "running" || status.pid !== outer.pid
+    || typeof status.executablePath !== "string" || runtime.active?.version !== options.appVersion
+    || !(await samePath(status.executablePath, outer.executablePath, platform))) return false;
+  // This proven live owner's active attempt is in progress. Supply the
+  // marker only after validating its status PID/path and inherited version;
+  // cold CLI callers retain the ordinary last-successful fallback selection.
+  const target = await readLauncherLaunchTarget({
+    ...options.launcherPaths, delegated: runtime.active, platform,
+  }).catch(() => null);
+  return target?.source === "canonical" && target.payloadExecutablePath != null
+    && target.version === runtime.active.version && target.generation === runtime.active.generation
+    && await samePath(status.executablePath, target.executablePath, platform);
+}
+
 async function resolveMacBundleExecutable(bundlePath: string): Promise<string | null> {
   const executableRoot = join(bundlePath, "Contents", "MacOS");
   const entries = await readdir(executableRoot, { withFileTypes: true }).catch(() => []);
@@ -297,6 +323,9 @@ export async function prepareLegacyPayloadDesktopHandoff(options: {
   ]);
   if (runtime == null) return { kind: "none", reason: "invalid-runtime" };
   if (outer == null) return { kind: "none", reason: "invalid-install-anchor" };
+  if (await isRunningCanonicalDesktop({ appVersion, launcherPaths, outer, platform, runtime, status: desktopStatus })) {
+    return { kind: "none", reason: "payload-desktop-active" };
+  }
   if (payloadExecutablePath != null && desktopStatus != null && desktopStatus.pid === outer.pid &&
       typeof desktopStatus.executablePath === "string" &&
       await samePath(desktopStatus.executablePath, payloadExecutablePath, platform)) {
@@ -376,6 +405,8 @@ export async function prepareLegacyPayloadDesktopHandoff(options: {
     descriptor,
     kind: "prepared",
     launcherPaths,
+    platform,
+    ...(existing?.state === "confirmed" ? { previousConfirmedHandoff: existing } : {}),
     runtimeRoot: options.runtimeRoot,
     source: options.source,
   };
@@ -388,7 +419,7 @@ async function waitForOuterConfirm(
     requestDesktop: (message: "shutdown" | "status") => Promise<unknown>;
     sleep: (durationMs: number) => Promise<unknown>;
   },
-): Promise<"confirmed" | "outer-not-confirmed" | "payload-desktop-active"> {
+): Promise<"confirmed" | "outer-not-confirmed" | "payload-desktop-active" | "canonical-desktop-active"> {
   const deadline = Date.now() + options.confirmTimeoutMs;
   while (Date.now() < deadline) {
     const [runtime, attempt, status] = await Promise.all([
@@ -396,6 +427,10 @@ async function waitForOuterConfirm(
       readAttempt(prepared.launcherPaths),
       options.requestDesktop("status").catch(() => null) as Promise<DesktopStatusSnapshot | null>,
     ]);
+    if (runtime != null && await isRunningCanonicalDesktop({
+      appVersion: prepared.descriptor.source.version, launcherPaths: prepared.launcherPaths,
+      outer: prepared.descriptor.outer, platform: prepared.platform ?? process.platform, runtime, status,
+    })) return "canonical-desktop-active";
     if (
       status?.pid === prepared.descriptor.outer.pid &&
       typeof status.executablePath === "string" &&
@@ -435,6 +470,19 @@ export async function executeLegacyPayloadDesktopHandoff(
     requestDesktop,
     sleep: options.sleep ?? (async (durationMs) => await sleep(durationMs)),
   });
+  if (confirmation === "canonical-desktop-active") {
+    // Preparation may precede desktop readiness. Undo only our own prepared
+    // journal, preserving the confirmed history and any newer journal writer.
+    const current = await readJsonFile<LauncherDesktopHandoffDescriptor>(prepared.launcherPaths.handoffPath);
+    if (JSON.stringify(current) === JSON.stringify(prepared.descriptor)) {
+      if (prepared.previousConfirmedHandoff != null) {
+        await writeJsonFile(prepared.launcherPaths.handoffPath, prepared.previousConfirmedHandoff);
+      } else {
+        await rm(prepared.launcherPaths.handoffPath, { force: true });
+      }
+    }
+    return { kind: "aborted", reason: "payload-desktop-active" };
+  }
   if (confirmation === "payload-desktop-active") {
     await rm(prepared.launcherPaths.handoffPath, { force: true });
     return { kind: "aborted", reason: confirmation };

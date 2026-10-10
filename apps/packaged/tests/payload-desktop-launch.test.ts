@@ -63,6 +63,15 @@ describe("payload desktop delegation", () => {
     });
   });
 
+  it.each(["active-delegated", "active-resume"] as const)("preserves the attempt binding when %s relaunches at the canonical path", (reason) => {
+    const runtime = fakeRuntime(false);
+    runtime.selection = { selected: true, pointer: { generation: 1, version: "1.2.3-beta.5" }, reason };
+    runtime.desktopExecutablePath = "/Applications/Open Design Beta.app/Contents/MacOS/Open Design Beta";
+    const plan = planPackagedPayloadDesktopDelegation(runtime);
+    expect(plan?.command).toBe(runtime.desktopExecutablePath);
+    expect(parseLauncherDelegatedArgs(plan?.args ?? [])).toEqual({ generation: 1, version: "1.2.3-beta.5" });
+  });
+
   it("forwards only the OS invite URL across an outer-to-payload cold start", () => {
     const deeplink = "opendesign://workspace/invite/continue?nonce=payload-cold-start";
     expect(findPackagedDeeplinkArg(["Open Design.exe", "--unrelated", deeplink])).toBe(deeplink);

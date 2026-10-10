@@ -1,12 +1,13 @@
 // @vitest-environment node
 
 import { execFile } from 'node:child_process';
-import { access, chmod, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
-import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
+import { access, chmod, lstat, mkdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
+import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { releaseInstallIdentity } from '@open-design/release';
 
 import { createFakeAgentRuntimes, type FakeAgentRuntime } from '@/fake-agents';
 import { T } from '@/timeouts';
@@ -392,6 +393,21 @@ type PayloadRuntimeAcceptance = {
   };
   identity: DesktopIdentityMarker;
   pptx: PptxExportEvalValue;
+  supportedLaunches?: SupportedMacLaunchAcceptance;
+};
+
+type PackagedLauncherCliTarget = {
+  channel: string; namespace: string; version: string; generation: number;
+  launchPath: string; executablePath: string; source: string; opened?: boolean;
+};
+type SupportedMacLaunchAcceptance = {
+  bundleId: string;
+  registeredAppPath: string;
+  bundleIdIdentity: DesktopIdentityMarker;
+  cliIdentity: DesktopIdentityMarker;
+  cliOpen: PackagedLauncherCliTarget;
+  cliPath: PackagedLauncherCliTarget;
+  cliVersion: PackagedLauncherCliTarget;
 };
 
 type UpdaterPopupEvalValue = {
@@ -733,7 +749,9 @@ macDescribe('packaged mac runtime smoke', () => {
         updateInstall = terminalUpdate.update;
 
         const identity = await readDesktopIdentityMarker();
-        assertPayloadDesktopIdentity(identity, postUpdateInspect.launcher, updaterVersion);
+        const canonicalLaunch = await assertUpdatedDesktopIdentity(
+          identity, postUpdateInspect.launcher, updaterVersion, install.installedAppPath,
+        );
         expect(postUpdateInspect.launcher.attempt).toBeNull();
         assertSettledDesktopHandoff(postUpdateInspect.launcher.handoff);
 
@@ -769,11 +787,17 @@ macDescribe('packaged mac runtime smoke', () => {
         expect(coldInspect.launcher.attempt).toBeNull();
         assertSettledDesktopHandoff(coldInspect.launcher.handoff);
         const coldIdentity = await readDesktopIdentityMarker();
-        assertPayloadDesktopIdentity(coldIdentity, coldInspect.launcher, updaterVersion);
+        expect(await assertUpdatedDesktopIdentity(
+          coldIdentity, coldInspect.launcher, updaterVersion, install.installedAppPath,
+        )).toBe(canonicalLaunch);
+        expect(coldIdentity.executablePath).toBe(identity.executablePath);
         expect(coldIdentity.pid).not.toBe(identity.pid);
         const coldPptxInspect = await runToolsPackJson<MacInspectResult>('inspect', ['--expr', persistedPptxExpression]);
         const coldPptx = assertPptxExportEvalValue(coldPptxInspect.eval?.value);
         expect(coldPptx.projectId).toBe(persistence.projectId);
+        const supportedLaunches = canonicalLaunch
+          ? await assertSupportedMacLaunches(install.installedAppPath, coldInspect.launcher, updaterVersion)
+          : undefined;
         payloadRuntime = {
           coldStart: {
             health: coldHealth,
@@ -784,27 +808,30 @@ macDescribe('packaged mac runtime smoke', () => {
           },
           identity,
           pptx,
+          ...(supportedLaunches == null ? {} : { supportedLaunches }),
         };
 
-        // Same-version reinstall + clear-cache recovery (mirrors the Windows
-        // lane's runSameVersionUpdaterRecoveryAcceptance): the physical outer
-        // is still the base install while the running payload is already at
-        // the target version, so only an installed-outer-aware floor can
-        // offer this installer reinstall. macOS has no silent DMG install to
-        // execute, so the installer open is asserted in dry-run mode instead
-        // of the Windows NSIS transaction.
+        // A promoted package needs a newer installer that satisfies its higher
+        // launcher floor; a legacy outer can reinstall the current release.
+        // macOS exposes the DMG open in dry-run mode, then clear-cache must
+        // recover the offer without changing the installed package.
         if (recoveryPayloadPath != null) {
+          const recoveryMinVersion = canonicalLaunch ? resolvePackagedUpdateScenario({
+            releaseChannel: updateScenario.channel,
+            releaseVersion: updaterVersion,
+          }).fixtureVersion : updaterVersion;
+          const recoveryVersion = canonicalLaunch ? recoveryMinVersion : updaterVersion;
           await payloadFixture?.close().catch((error: unknown) => {
             console.error('failed to close payload update fixture before recovery', error);
           });
           payloadFixture = null;
           recoveryFixture = await startToolsServeUpdaterFixture({
             channel: updateScenario.channel,
-            controlLauncherVersionMin: updaterVersion,
+            controlLauncherVersionMin: recoveryMinVersion,
             controlLauncherVersionUrl: 'https://example.test/updater-recovery',
-            payloadPath: recoveryPayloadPath,
+            ...(canonicalLaunch ? {} : { payloadPath: recoveryPayloadPath }),
             platform: 'mac',
-            version: updaterVersion,
+            version: recoveryVersion,
             workspaceRoot,
           });
           applyPackagedUpdateEnv(process.env, updateScenario, recoveryFixture.info.metadataUrl, { openDryRun: true });
@@ -821,19 +848,19 @@ macDescribe('packaged mac runtime smoke', () => {
             (inspect) =>
               inspect.update?.state === 'downloaded' &&
               inspect.update.artifact?.type === 'dmg' &&
-              inspect.update.availableVersion === updaterVersion,
-            'same-version reinstall downloaded',
+              inspect.update.availableVersion === recoveryVersion,
+            'launcher-floor installer downloaded',
           );
-          if (reinstallReady.update == null) throw new Error('same-version reinstall did not return updater status');
+          if (reinstallReady.update == null) throw new Error('launcher-floor installer did not return updater status');
           expect(reinstallReady.update.currentVersion).toBe(updaterVersion);
           expect(reinstallReady.update.reinstall).toEqual({
-            installedVersion: updateScenario.expectedCurrentVersion,
-            minVersion: updaterVersion,
+            installedVersion: canonicalLaunch ? updaterVersion : updateScenario.expectedCurrentVersion,
+            minVersion: recoveryMinVersion,
             reason: 'outer-below-min',
             url: 'https://example.test/updater-recovery',
           });
 
-          const reinstallPopup = await openReadyUpdaterPrompt(updaterVersion);
+          const reinstallPopup = await openReadyUpdaterPrompt(recoveryVersion);
           expect(reinstallPopup.visible).toBe(true);
           expect(reinstallPopup.installButtonVisible).toBe(true);
           expect(reinstallPopup.reinstallLinkVisible).toBe(true);
@@ -855,13 +882,20 @@ macDescribe('packaged mac runtime smoke', () => {
             (inspect) =>
               inspect.update?.state === 'downloaded' &&
               inspect.update.artifact?.type === 'dmg' &&
+              inspect.update.availableVersion === recoveryVersion &&
               inspect.update.reinstall != null,
             'post-clear reinstall recovery',
           );
           if (recovered.update == null) throw new Error('post-clear recovery did not return updater status');
+          expect(recovered.update.currentVersion).toBe(updaterVersion);
 
           const dryRunInstall = await runToolsPackJson<MacInspectResult>('inspect', ['--update-action', 'install']);
           expect(dryRunInstall.update?.installResult?.dryRun).toBe(true);
+          expect(dryRunInstall.update?.availableVersion).toBe(recoveryVersion);
+          expect(dryRunInstall.update?.currentVersion).toBe(updaterVersion);
+          expect(await assertUpdatedDesktopIdentity(
+            await readDesktopIdentityMarker(), dryRunInstall.launcher, updaterVersion, install.installedAppPath,
+          )).toBe(canonicalLaunch);
 
           // Leave a pristine updater behind for the final stop/uninstall.
           const resetInspect = await runToolsPackJson<MacInspectResult>('inspect', ['--update-action', 'clear-cache']);
@@ -1131,6 +1165,10 @@ macDescribe('packaged mac runtime smoke', () => {
       const rolledBackHealth = assertHealthEvalValue(rolledBack.eval?.value);
       expect(rolledBackHealth.health.version).toBe(updateScenario.expectedCurrentVersion);
       expect(rolledBack.launcher.lastSuccessful?.version).toBe(updateScenario.expectedCurrentVersion);
+      await assertUpdatedDesktopIdentity(
+        await readDesktopIdentityMarker(), rolledBack.launcher,
+        updateScenario.expectedCurrentVersion, install.installedAppPath, { allowUnpromotedRollback: true },
+      );
       // Degraded steady state: the broken pointer stays active with its
       // attempt as evidence until a healthy release replaces it.
       expect(rolledBack.launcher.active?.version).toBe(targetVersion);
@@ -1182,6 +1220,9 @@ macDescribe('packaged mac runtime smoke', () => {
       expect(healed.launcher.active?.version).toBe(healedVersion);
       expect(healed.launcher.lastSuccessful?.version).toBe(healedVersion);
       expect(healed.launcher.attempt).toBeNull();
+      await assertUpdatedDesktopIdentity(
+        await readDesktopIdentityMarker(), healed.launcher, healedVersion, install.installedAppPath,
+      );
     } finally {
       restoreUpdateEnv(updateEnv);
       await corruptFixture?.close().catch((error: unknown) => {
@@ -2746,15 +2787,174 @@ async function readDesktopIdentityMarker(): Promise<DesktopIdentityMarker> {
   return { appPath, executablePath: status.executablePath, pid: status.pid, version: 1 };
 }
 
-function assertPayloadDesktopIdentity(
+async function assertUpdatedDesktopIdentity(
   identity: DesktopIdentityMarker,
   launcher: LauncherSnapshot,
   version: string,
-): void {
+  installedAppPath: string,
+  options: { allowUnpromotedRollback?: boolean } = {},
+): Promise<boolean> {
   const payloadRoot = join(launcher.versionsRoot, version, 'payload');
   expect(identity.pid).toBeGreaterThan(0);
-  expectPathInside(identity.appPath, payloadRoot);
-  expectPathInside(identity.executablePath, payloadRoot);
+  const installIdentity = releaseInstallIdentity(updateScenario.channel);
+  // Custom test products with a different basename keep the payload launch
+  // fallback; the public product must prove its physical canonical binding.
+  if (basename(installedAppPath) !== `${installIdentity.productName}.app`) {
+    expectPathInside(identity.appPath, payloadRoot);
+    expectPathInside(identity.executablePath, payloadRoot);
+    return false;
+  }
+  const physicalAppPath = await realpath(installedAppPath);
+  const physicalExecutablePath = await realpath(identity.executablePath);
+  expect((await lstat(installedAppPath)).isSymbolicLink()).toBe(false);
+  expect((await lstat(installedAppPath)).isDirectory()).toBe(true);
+  expect(await realpath(identity.appPath)).toBe(physicalAppPath);
+  expect(physicalExecutablePath).toBe(join(physicalAppPath, 'Contents', 'MacOS', installIdentity.executableName));
+  expect(physicalAppPath.startsWith(`${await realpath(launcher.versionsRoot)}${sep}`)).toBe(false);
+  const pointer = launcher.active?.version === version ? launcher.active : launcher.lastSuccessful;
+  expect(pointer?.version).toBe(version);
+  const config = JSON.parse(await readFile(
+    join(physicalAppPath, 'Contents', 'Resources', 'open-design-config.json'), 'utf8',
+  )) as { appVersion?: string };
+  expect(config.appVersion).toBe(version);
+  const namespaceRoot = dirname(launcher.runtimePath);
+  const bindingPath = join(namespaceRoot, 'launch-entry.json');
+  // A payload that exits before its bootstrap never replaces the original
+  // package. Its last-successful fallback remains the proven installed app.
+  if (options.allowUnpromotedRollback === true && !(await pathExists(bindingPath))) {
+    expect(launcher.lastSuccessful).toEqual(pointer);
+    expect(launcher.active?.version).not.toBe(version);
+    expect(launcher.attempt?.version).toBe(launcher.active?.version);
+    expect(launcher.attempt?.generation).toBe(launcher.active?.generation);
+    expect(await pathExists(join(launcher.versionsRoot, version))).toBe(false);
+    const installed = JSON.parse(await readFile(join(namespaceRoot, 'install.json'), 'utf8')) as {
+      schemaVersion?: number; channel?: string; namespace?: string; launchPath?: string;
+    };
+    expect(installed).toMatchObject({
+      schemaVersion: 1, channel: launcher.channel, namespace: launcher.namespace, launchPath: physicalAppPath,
+    });
+    return true;
+  }
+  const binding = JSON.parse(await readFile(bindingPath, 'utf8')) as {
+    schemaVersion?: number;
+    channel?: string;
+    namespace?: string;
+    version?: string;
+    generation?: number;
+    launchPath?: string;
+    executablePath?: string;
+    payloadExecutablePath?: string;
+  };
+  expect(binding).toMatchObject({
+    schemaVersion: 1,
+    channel: launcher.channel,
+    namespace: launcher.namespace,
+    version,
+    generation: pointer?.generation,
+    launchPath: physicalAppPath,
+    executablePath: physicalExecutablePath,
+  });
+  if (typeof binding.payloadExecutablePath !== 'string') throw new Error('canonical launch has no retained payload');
+  expectPathInside(await realpath(binding.payloadExecutablePath), await realpath(payloadRoot));
+  expect(await pathExists(binding.payloadExecutablePath)).toBe(true);
+  return true;
+}
+
+async function runBundledLauncherCli(
+  appPath: string, launcher: LauncherSnapshot, command: 'path' | '--version' | 'open',
+): Promise<PackagedLauncherCliTarget> {
+  const resourcesPath = join(appPath, 'Contents', 'Resources');
+  const config = JSON.parse(await readFile(join(resourcesPath, 'open-design-config.json'), 'utf8')) as {
+    daemonCliEntryRelative?: string; nodeCommandRelative?: string;
+  };
+  if (typeof config.daemonCliEntryRelative !== 'string' || isAbsolute(config.daemonCliEntryRelative)) {
+    throw new Error('packaged app has no relative bundled daemon CLI entry');
+  }
+  const cliPath = join(resourcesPath, config.daemonCliEntryRelative);
+  const nodePath = join(resourcesPath, config.nodeCommandRelative ?? 'open-design/bin/node');
+  const bundledNode = await pathExists(nodePath);
+  const executable = bundledNode
+    ? nodePath : join(appPath, 'Contents', 'MacOS', releaseInstallIdentity(updateScenario.channel).executableName);
+  const staleConfigPath = join(dirname(launcher.runtimePath), 'cli-stale-other-channel-config.json');
+  await writeFile(staleConfigPath, JSON.stringify({
+    ...config,
+    appVersion: launcher.channel === 'stable' ? '1.0.0-beta.1' : '1.0.0',
+    namespace: launcher.namespace,
+    namespaceBaseRoot: join(launcher.root, 'namespaces'),
+  }));
+  const env = { ...process.env };
+  env.OD_PACKAGED_CONFIG_PATH = staleConfigPath;
+  if (bundledNode) delete env.ELECTRON_RUN_AS_NODE;
+  else env.ELECTRON_RUN_AS_NODE = '1';
+  const result = await execFileAsync(executable, [
+    cliPath, command, '--root', launcher.root, '--channel', launcher.channel,
+    '--namespace', launcher.namespace, '--json',
+  ], { env, timeout: 30_000, maxBuffer: 1024 * 1024 });
+  return JSON.parse(result.stdout) as PackagedLauncherCliTarget;
+}
+
+async function assertSupportedMacLaunches(
+  appPath: string, launcher: LauncherSnapshot, version: string,
+): Promise<SupportedMacLaunchAcceptance> {
+  const physicalAppPath = await realpath(appPath);
+  const physicalExecutable = join(physicalAppPath, 'Contents', 'MacOS', releaseInstallIdentity(updateScenario.channel).executableName);
+  const expectedTarget = {
+    channel: launcher.channel, namespace: launcher.namespace, version,
+    generation: launcher.active?.generation, launchPath: physicalAppPath,
+    executablePath: physicalExecutable, source: 'canonical',
+  };
+  const stop = await runToolsPackJson<MacStopResult>('stop');
+  expect(stop.status).not.toBe('partial');
+  expect(stop.remainingPids).toEqual([]);
+  expect((await runToolsPackJson<MacInspectResult>('inspect')).status).toBeNull();
+  const cliPath = await runBundledLauncherCli(appPath, launcher, 'path');
+  const cliVersion = await runBundledLauncherCli(appPath, launcher, '--version');
+  expect(cliPath).toMatchObject(expectedTarget);
+  expect(cliVersion).toMatchObject(expectedTarget);
+  expect((await runToolsPackJson<MacInspectResult>('inspect')).status).toBeNull();
+  const cliOpen = await runBundledLauncherCli(appPath, launcher, 'open');
+  expect(cliOpen).toMatchObject({ ...expectedTarget, opened: true });
+  const cliInspect = await waitForHealthyDesktopVersion(version, null);
+  const cliIdentity = await readDesktopIdentityMarker();
+  await assertUpdatedDesktopIdentity(cliIdentity, cliInspect.launcher, version, appPath);
+  expect(await runBundledLauncherCli(appPath, cliInspect.launcher, 'open')).toMatchObject({
+    ...expectedTarget, generation: cliInspect.launcher.active?.generation, opened: true,
+  });
+  await delay(1500);
+  expect((await waitForHealthyDesktopVersion(version, null)).status?.pid).toBe(cliIdentity.pid);
+  const bundleId = releaseInstallIdentity(updateScenario.channel).appId;
+  const registeredAppPath = await waitForCanonicalMacRegistration(bundleId, physicalAppPath);
+  const stopCli = await runToolsPackJson<MacStopResult>('stop');
+  expect(stopCli.status).not.toBe('partial');
+  expect(stopCli.remainingPids).toEqual([]);
+  await execFileAsync('/usr/bin/open', [
+    '-b', bundleId,
+    '--env', `OD_PACKAGED_NAMESPACE=${launcher.namespace}`,
+    '--env', `OD_PACKAGED_NAMESPACE_BASE_ROOT=${join(launcher.root, 'namespaces')}`,
+    '--env', 'OD_UPDATE_ENABLED=0',
+  ], { timeout: 30_000, maxBuffer: 1024 * 1024 });
+  const bundleIdInspect = await waitForHealthyDesktopVersion(version, cliIdentity.pid);
+  const bundleIdIdentity = await readDesktopIdentityMarker();
+  await assertUpdatedDesktopIdentity(bundleIdIdentity, bundleIdInspect.launcher, version, appPath);
+  expect(bundleIdIdentity.executablePath).toBe(cliIdentity.executablePath);
+  return { bundleId, registeredAppPath, bundleIdIdentity, cliIdentity, cliOpen, cliPath, cliVersion };
+}
+
+async function waitForCanonicalMacRegistration(bundleId: string, expectedAppPath: string): Promise<string> {
+  const script = `ObjC.import("AppKit");
+const url = $.NSWorkspace.sharedWorkspace.URLForApplicationWithBundleIdentifier(${JSON.stringify(bundleId)});
+JSON.stringify({appPath: url && typeof url.isKindOfClass === "function" && url.isKindOfClass($.NSURL) ? ObjC.unwrap(url.path) : null});`;
+  const deadline = Date.now() + 60_000;
+  let lastPath: string | null = null;
+  while (Date.now() < deadline) {
+    const result = await execFileAsync('/usr/bin/osascript', ['-l', 'JavaScript', '-e', script], {
+      timeout: 15_000, maxBuffer: 1024 * 1024,
+    });
+    lastPath = (JSON.parse(result.stdout) as { appPath: string | null }).appPath;
+    if (lastPath != null && await realpath(lastPath).catch(() => null) === expectedAppPath) return lastPath;
+    await delay(1000);
+  }
+  throw new Error(`LaunchServices selected ${lastPath ?? 'no application'} for ${bundleId}, expected ${expectedAppPath}`);
 }
 
 function assertPptxExportEvalValue(value: unknown): PptxExportEvalValue {

@@ -21,6 +21,7 @@ spec (`e2e/specs/mac.spec.ts` / `win.spec.ts` via `release-smoke.ts`),
 | win NSIS interactive UI install | M | human acceptance per `tools/pack/AGENTS.md` |
 | Channel identity (bundle name, registry key, install dir) | U, P | tools-pack `win-identity.test.ts`; specs |
 | First-boot bootstrap (current-package, runtime.json gen0, install.json) | U, P | packaged `launcher-runtime.test.ts`; specs |
+| Daemon-independent packaged CLI entry (`od open`, `od path`, `od --version`) | U, P | launcher-proto `launch-target.test.ts`; daemon `cli-packaged-launcher.test.ts` + `services/packaged-launcher-cli.test.ts`; mac spec shipped-CLI acceptance; [launch contract](../packaged-launcher-cli.md) |
 | Onboarding first run | P | mac/win onboarding smoke (`@electron-smoke`) |
 
 ## B. Steady-state check loop
@@ -32,7 +33,7 @@ spec (`e2e/specs/mac.spec.ts` / `win.spec.ts` via `release-smoke.ts`),
 | not-available / available / downloaded-stays-visible | U, P | desktop unit; specs |
 | Silent startup payload update (allowSilentUpdates) | U, P | desktop unit silent group; mac/win spec `applies a downloaded payload silently on the next cold start` |
 | Artifact selection (payload vs installer, context validity) | U, P | desktop unit routing group; specs |
-| Installer-reinstall floor (`control.launcher.version.min`): three reasons, same-version offer, clamp | U, P | desktop unit reseed group; spec recovery segment |
+| Installer-reinstall floor (`control.launcher.version.min`): three reasons, same-version offer, clamp | U, P | desktop unit reseed group; spec recovery uses a newer floor-satisfying installer after macOS promotion and a same-version installer for legacy outers |
 | Installed-outer version read (bundle config, env override) | U, P | desktop unit `resolveInstalledOuterVersion`; spec recovery segment reads the real outer |
 
 ## C. Download and integrity
@@ -48,12 +49,15 @@ spec (`e2e/specs/mac.spec.ts` / `win.spec.ts` via `release-smoke.ts`),
 | Node | Coverage | Owning tests |
 | --- | --- | --- |
 | activate (generation++) → after-quit takeover → confirm | U, P, F | packaged + desktop unit; specs; real-feed loop |
+| macOS canonical bundle promotion, alias, registration, and Dock repair | U, P | packaged `mac-launch-entry.test.ts`, `launcher-canonical-entry.test.ts`, `stable-launch-entry.test.ts`, `launcher-registration.test.ts`, `mac-dock-entry.test.ts`, `mac-launch-services.test.ts`, opt-in `mac-native-launch-entry.test.ts`; [native acceptance](macos-launch-services.md) |
+| macOS bundle-ID launch resolves the promoted physical application | U, P | opt-in `mac-native-launch-entry.test.ts`; mac spec native LaunchServices lookup and `open -b` acceptance |
 | Renderer quiescence before web/daemon retirement | U | desktop `shutdown.test.ts` P0 ordering/shared-cleanup cases; packaged `protocol.test.ts` no-forward/no-retry/abort cases |
 | Delegated pre-arm (`--od-launcher-delegated-*`) | U | launcher-proto selection; packaged delegation/launch tests; desktop activation test |
 | Crash rollback to lastSuccessful + self-heal on next release | P | mac/win spec `rolls back a crashing payload and self-heals on the next good update` |
 | Stale relaunch freeze scrub after rollback (installResult.activeVersion > running) | U, P | desktop unit stale-freeze spec; exercised by the spec's self-heal phase |
 | Exact desktop identity, cold-start reconvergence | P, F | specs; real-feed loop |
 | Historical-outer handoff bridge (prepared→armed→confirmed) | U, partial P | daemon handoff unit; win spec legacy-executable path |
+| Canonical desktop bypasses legacy migration during cold startup | U, P | daemon `payload-desktop-handoff.test.ts`; launcher-proto `launch-target.test.ts`; mac spec canonical cold relaunch |
 | Full historical-outer migration with a real legacy binary | M | needs a genuinely old installed generation |
 | Obsolete outer retirement (mac/win) | U | packaged `obsolete-installed-outer.test.ts` |
 | Reinstalled newer outer resets runtime (bound > active) | U | packaged `launcher-runtime.test.ts` supersede case |
