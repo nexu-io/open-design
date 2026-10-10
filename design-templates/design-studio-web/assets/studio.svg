@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1800" viewBox="0 0 1400 1800">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0A0A0B"/><stop offset=".6" stop-color="#14151B"/><stop offset="1" stop-color="#0B0E11"/></linearGradient>
+    <radialGradient id="orb"><stop offset="0" stop-color="#7CFFCB" stop-opacity=".88"/><stop offset=".35" stop-color="#4D7CFE" stop-opacity=".52"/><stop offset="1" stop-color="#4D7CFE" stop-opacity="0"/></radialGradient>
+    <filter id="blur"><feGaussianBlur stdDeviation="35"/></filter>
+    <filter id="grain"><feTurbulence type="fractalNoise" baseFrequency=".72" numOctaves="4" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter>
+  </defs>
+  <rect width="100%" height="100%" fill="url(#bg)"/>
+  <circle cx="644" cy="540" r="792" fill="url(#orb)" filter="url(#blur)" opacity=".7"/>
+  <g fill="none" stroke="#FFFFFF" stroke-opacity=".16">
+    <circle cx="644" cy="540" r="330"/>
+    <circle cx="644" cy="540" r="211" stroke-dasharray="5 12"/>
+    <path d="M 868 0 V 1800"/>
+    <path d="M 0 1404 H 1400"/>
+  </g>
+  <g transform="translate(742 324)">
+    <rect width="392" height="864" rx="25" fill="#FFFFFF" fill-opacity=".055" stroke="#FFFFFF" stroke-opacity=".14"/>
+    <rect x="35" y="63" width="322" height="342" rx="17" fill="#4D7CFE" fill-opacity=".16"/>
+    <path d="M 56 576 C 126 468, 196 756, 308 540" fill="none" stroke="#7CFFCB" stroke-width="2" stroke-opacity=".72"/>
+  </g>
+  <rect width="100%" height="100%" filter="url(#grain)" opacity=".055"/>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" fill="#F4F4F1">
+    <text x="63" y="144" font-size="21" letter-spacing="3" opacity=".85">DESIGN STUDIO / STUDIO</text>
+    <text x="63" y="1602" font-size="15" letter-spacing="2" opacity=".45">7:9 · 1400×1800 · STUDIO ATMOSPHERE</text>
+    <text x="63" y="1692" font-size="13" letter-spacing="1.5" opacity=".28">PLACEHOLDER / REPLACE WITH GENERATED OR ART-DIRECTED IMAGE</text>
+  </g>
+</svg>

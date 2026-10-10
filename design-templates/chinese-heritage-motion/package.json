@@ -1,0 +1,11 @@
+{
+  "name": "chinese-heritage-motion-template",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "placeholder": "node scripts/placeholder.ts ./assets/placeholders",
+    "build": "node scripts/compose.ts inputs.example.json example.html",
+    "build:out": "node scripts/compose.ts inputs.example.json ./out/index.html",
+    "prompts": "node scripts/imagegen.ts inputs.example.json --dry-run"
+  }
+}

@@ -1,0 +1,258 @@
+{
+  "version": 1,
+  "assets": [
+    {
+      "id": "encounter-master",
+      "chapter": "01-encounter",
+      "asset_class": "scene_master",
+      "derivation": "source",
+      "placeholder": "encounter-master.svg",
+      "generated": "encounter-master.webp",
+      "ratio": "16:10",
+      "required": true,
+      "alpha_mode": "opaque",
+      "overscan": 0.08,
+      "responsive_focus": {
+        "desktop": [
+          0.66,
+          0.5
+        ],
+        "mobile": [
+          0.58,
+          0.48
+        ]
+      },
+      "prompt": "full-bleed cinematic exterior, monument on the right, uncluttered blue-green sky on the left for large editorial type, tactile restrained photographic optics, no baked text"
+    },
+    {
+      "id": "verticality-master",
+      "chapter": "02-verticality",
+      "asset_class": "scene_master",
+      "derivation": "source",
+      "placeholder": "verticality-master.svg",
+      "generated": "verticality-master.webp",
+      "ratio": "4:5",
+      "required": true,
+      "alpha_mode": "opaque",
+      "overscan": 0.1,
+      "responsive_focus": {
+        "desktop": [
+          0.5,
+          0.46
+        ],
+        "mobile": [
+          0.52,
+          0.42
+        ]
+      },
+      "prompt": "reuse the exterior master when available for a continuous upward crop; do not independently invent a second view of the same architectural scene"
+    },
+    {
+      "id": "structure-master",
+      "chapter": "03-structure",
+      "asset_class": "scene_master",
+      "derivation": "source",
+      "placeholder": "structure-master.svg",
+      "generated": "structure-master.webp",
+      "ratio": "3:2",
+      "required": true,
+      "alpha_mode": "opaque",
+      "overscan": 0.06,
+      "responsive_focus": {
+        "desktop": [
+          0.6,
+          0.5
+        ],
+        "mobile": [
+          0.52,
+          0.5
+        ]
+      },
+      "prompt": "close architectural study of interlocking timber brackets, repeated diagonal rhythm, weathered warm wood, dark recesses, no exploded view or invented dimensions"
+    },
+    {
+      "id": "structure-diagram",
+      "chapter": "03-structure",
+      "asset_class": "independent",
+      "derivation": "vector-overlay",
+      "placeholder": "structure-diagram.svg",
+      "generated": "structure-diagram.svg",
+      "ratio": "3:2",
+      "required": false,
+      "alpha_mode": "alpha",
+      "overscan": 0,
+      "responsive_focus": {
+        "desktop": [
+          0.5,
+          0.5
+        ],
+        "mobile": [
+          0.5,
+          0.5
+        ]
+      },
+      "prompt": "SVG technical overlay only; leader lines and registration marks are authored, not image-generated"
+    },
+    {
+      "id": "detail-master",
+      "chapter": "04-detail",
+      "asset_class": "independent",
+      "derivation": "source",
+      "placeholder": "detail-master.svg",
+      "generated": "detail-master.webp",
+      "ratio": "4:3",
+      "required": true,
+      "alpha_mode": "opaque",
+      "overscan": 0.12,
+      "responsive_focus": {
+        "desktop": [
+          0.42,
+          0.55
+        ],
+        "mobile": [
+          0.5,
+          0.52
+        ]
+      },
+      "prompt": "tactile macro timber detail, warm raking light, no text; reuse the structure master for connected overview and detail crops"
+    },
+    {
+      "id": "interior-master",
+      "chapter": "05-interior",
+      "asset_class": "scene_master",
+      "derivation": "source",
+      "placeholder": "interior-master.svg",
+      "generated": "interior-master.webp",
+      "ratio": "16:10",
+      "required": true,
+      "alpha_mode": "opaque",
+      "overscan": 0.1,
+      "responsive_focus": {
+        "desktop": [
+          0.54,
+          0.5
+        ],
+        "mobile": [
+          0.5,
+          0.5
+        ]
+      },
+      "prompt": "full-bleed dark timber interior with a luminous doorway slightly right of centre, layered columns, intentional dark left area for text, no claim of documentary accuracy"
+    },
+    {
+      "id": "time-plate-a",
+      "chapter": "06-time",
+      "asset_class": "independent",
+      "derivation": "source",
+      "placeholder": "time-plate-a.svg",
+      "generated": "time-plate-a.webp",
+      "ratio": "4:5",
+      "required": true,
+      "alpha_mode": "opaque",
+      "overscan": 0.04,
+      "responsive_focus": {
+        "desktop": [
+          0.5,
+          0.5
+        ],
+        "mobile": [
+          0.5,
+          0.5
+        ]
+      },
+      "prompt": "material overview for a same-image detail comparison, no implied historical date or restoration sequence"
+    },
+    {
+      "id": "time-plate-b",
+      "chapter": "06-time",
+      "asset_class": "independent",
+      "derivation": "source",
+      "placeholder": "time-plate-b.svg",
+      "generated": "time-plate-b.webp",
+      "ratio": "4:5",
+      "required": false,
+      "alpha_mode": "opaque",
+      "overscan": 0.04,
+      "responsive_focus": {
+        "desktop": [
+          0.5,
+          0.5
+        ],
+        "mobile": [
+          0.5,
+          0.5
+        ]
+      },
+      "prompt": "reuse time plate A for the default magnified detail crop; only use a separate plate when the brief explicitly explains the comparison"
+    },
+    {
+      "id": "preservation-master",
+      "chapter": "07-preservation",
+      "asset_class": "independent",
+      "derivation": "source",
+      "placeholder": "preservation-master.svg",
+      "generated": "preservation-master.webp",
+      "ratio": "3:2",
+      "required": true,
+      "alpha_mode": "opaque",
+      "overscan": 0.03,
+      "responsive_focus": {
+        "desktop": [
+          0.45,
+          0.5
+        ],
+        "mobile": [
+          0.5,
+          0.5
+        ]
+      },
+      "prompt": "survey/documentation base image, neutral and technical, space for SVG overlays"
+    },
+    {
+      "id": "preservation-overlay",
+      "chapter": "07-preservation",
+      "asset_class": "independent",
+      "derivation": "vector-overlay",
+      "placeholder": "preservation-overlay.svg",
+      "generated": "preservation-overlay.svg",
+      "ratio": "3:2",
+      "required": false,
+      "alpha_mode": "alpha",
+      "overscan": 0,
+      "responsive_focus": {
+        "desktop": [
+          0.5,
+          0.5
+        ],
+        "mobile": [
+          0.5,
+          0.5
+        ]
+      },
+      "prompt": "SVG registration grid, measured-looking but no invented dimensions"
+    },
+    {
+      "id": "afterimage-master",
+      "chapter": "08-afterimage",
+      "asset_class": "independent",
+      "derivation": "source",
+      "placeholder": "afterimage-master.svg",
+      "generated": "afterimage-master.webp",
+      "ratio": "16:9",
+      "required": true,
+      "alpha_mode": "opaque",
+      "overscan": 0.02,
+      "responsive_focus": {
+        "desktop": [
+          0.5,
+          0.5
+        ],
+        "mobile": [
+          0.5,
+          0.5
+        ]
+      },
+      "prompt": "quiet final architectural afterimage, minimal field, atmospheric but not decorative"
+    }
+  ]
+}
