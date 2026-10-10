@@ -1,6 +1,15 @@
 import type { Dict } from '../types';
 
 export const hu: Dict = {
+  'chat.quality.checking': "Elkészült, ellenőrzés folyamatban",
+  'chat.quality.pass': "Átadás megerősítve: a rendszer ellenőrzései sikeresek",
+  'chat.quality.fail': "Elkészült, sikertelen ellenőrzés",
+  'chat.quality.incomplete': "Elkészült, hiányos ellenőrzés",
+  'chat.quality.not_applicable': "A fő interakciók ellenőrzése nem alkalmazható",
+  'chat.quality.unknown': "Elkészült, minőségi bizonyíték nem érhető el",
+  'chat.quality.coverage': "{checked} / {expected} kötelező elem ellenőrizve",
+  'chat.quality.scope': "Csak szintaxis, statikus események és alkalmazható fő interakciók.",
+
   'billing.wallet': 'Tárca egyenlege',
   'billing.codingPlanDesignPlan': 'Design Plan',
   'billing.codingPlanPeriodHours': '{count} óra',

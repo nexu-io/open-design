@@ -1,6 +1,15 @@
 import type { Dict } from '../types';
 
 export const ar: Dict = {
+  'chat.quality.checking': "تم الإنشاء، جارٍ الفحص",
+  'chat.quality.pass': "تم تأكيد التسليم: فحوصات النظام ناجحة",
+  'chat.quality.fail': "تم الإنشاء، فشل الفحص",
+  'chat.quality.incomplete': "تم الإنشاء، الفحص غير مكتمل",
+  'chat.quality.not_applicable': "فحص التفاعلات الرئيسية غير منطبق",
+  'chat.quality.unknown': "تم الإنشاء، دليل الجودة غير متاح",
+  'chat.quality.coverage': "تم فحص {checked} / {expected} من العناصر المطلوبة",
+  'chat.quality.scope': "يشمل البنية والأحداث الثابتة والتفاعلات الرئيسية المنطبقة فقط.",
+
   'billing.wallet': 'رصيد المحفظة',
   'billing.codingPlanDesignPlan': 'Design Plan',
   'billing.codingPlanPeriodHours': '{count} ساعات',

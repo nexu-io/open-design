@@ -1,6 +1,15 @@
 import type { Dict } from '../types';
 
 export const ja: Dict = {
+  'chat.quality.checking': "生成済み、確認中",
+  'chat.quality.pass': "納品確認済み：ホストの検査に合格",
+  'chat.quality.fail': "生成済み、確認に失敗",
+  'chat.quality.incomplete': "生成済み、確認未完了",
+  'chat.quality.not_applicable': "主要操作の確認は対象外",
+  'chat.quality.unknown': "生成済み、品質の記録なし",
+  'chat.quality.coverage': "必須項目 {checked} / {expected} を確認",
+  'chat.quality.scope': "対象は構文、静的イベント、適用される主要操作です。",
+
   'billing.wallet': 'ウォレット残高',
   'billing.codingPlanDesignPlan': 'Design Plan',
   'billing.codingPlanPeriodHours': '{count} 時間',

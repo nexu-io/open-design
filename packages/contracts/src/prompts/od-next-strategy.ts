@@ -247,6 +247,12 @@ export const OD_NEXT_PROMPT_STAGE_CONTRACT_V2 = [
   { id: 'generate', atoms: ['file-write', 'live-artifact'] },
 ] as const;
 
+/** Exact host-owned exception; arbitrary post-generation Agent loops remain forbidden. */
+export const HOST_PROTOTYPE_QUALITY_CONTRACT_V1 = `<host-prototype-quality-contract version="1">
+For OD Next editable HTML app prototypes, a written candidate is available to preview but delivery confirmation requires host verification of syntax, static event correctness, and visible main navigation or business-mode effects. The host checks the real entry in an isolated browser; URL or highlight changes alone are not success. Failed, incomplete, missing, or stale evidence cannot confirm delivery. Static-only tasks and other task types retain their applicable rules.
+The Agent does not initiate verification, browser inspection, screenshots, visual scoring, or open-ended artifact repair. Only an explicit host report of a definite candidate fault authorizes a targeted correction. Preserve the brief and design, submit the corrected candidate, and let the host recheck it. Stop on cancellation or the host limit: two Agent rounds, 120 seconds cumulative Agent correction time, and 30 seconds cumulative host checks. Unknown coverage or environment failure does not authorize speculative correction. Report only generated files and host results actually received; never fabricate self-check evidence.
+</host-prototype-quality-contract>`;
+
 const FORBIDDEN_POST_BUILD_SEMANTICS: ReadonlyArray<{
   label: string;
   pattern: RegExp;
@@ -333,8 +339,9 @@ export function assertOdNextPlanningBuildOnlyV2(
   value: string,
   field: string,
 ): void {
+  const agentInstructions = value.split(HOST_PROTOTYPE_QUALITY_CONTRACT_V1).join('');
   for (const forbidden of FORBIDDEN_POST_BUILD_SEMANTICS) {
-    if (forbidden.pattern.test(value)) {
+    if (forbidden.pattern.test(agentInstructions)) {
       throw new TypeError(
         `${field} contains forbidden ${forbidden.label} semantics.`,
       );
@@ -890,6 +897,7 @@ export function composeOdNextStrategyRequestPromptV2(
     `## OD Next core strategy\n\n${coreStrategy}`,
     `## OD Next general orchestration\n\n${generalOrchestration}`,
     `## Task Skill — ${input.taskType}\n\nExactly this one Task Skill is active for the logical task.\n\n${taskSkill}`,
+    input.taskType === 'prototype' ? HOST_PROTOTYPE_QUALITY_CONTRACT_V1 : '',
     ...stageBlocks,
     renderMachineOutputSection(input, context),
   ].filter((section) => section.length > 0);
@@ -981,7 +989,12 @@ export function composeOdNextStrategyBundleHeadV2(
         skillName: 'general_orchestration',
         body: verified.generalOrchestration,
       },
-      taskTypeSkill: { skillName: input.taskType, body: verified.taskSkill },
+      taskTypeSkill: {
+        skillName: input.taskType,
+        body: input.taskType === 'prototype'
+          ? `${verified.taskSkill}\n\n${HOST_PROTOTYPE_QUALITY_CONTRACT_V1}`
+          : verified.taskSkill,
+      },
     },
     activeStages: verified.stages,
   };

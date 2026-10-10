@@ -30,6 +30,15 @@ export const LOCALE_LABEL: Record<Locale, string> = {
 // flat (not deeply nested) so missing-key TS errors point straight at the
 // offending string instead of a generic object mismatch.
 export interface Dict {
+  'chat.quality.checking': string;
+  'chat.quality.pass': string;
+  'chat.quality.fail': string;
+  'chat.quality.incomplete': string;
+  'chat.quality.not_applicable': string;
+  'chat.quality.unknown': string;
+  'chat.quality.coverage': string;
+  'chat.quality.scope': string;
+
   'billing.wallet': string;
   /** The product name of the allowance pool; kept untranslated in every locale. */
   'billing.codingPlanDesignPlan': string;

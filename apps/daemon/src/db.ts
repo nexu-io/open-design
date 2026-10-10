@@ -452,6 +452,9 @@ function migrate(db: SqliteDb): void {
   if (!messageCols.some((c: DbRow) => c.name === 'run_status')) {
     db.exec(`ALTER TABLE messages ADD COLUMN run_status TEXT`);
   }
+  if (!messageCols.some((c: DbRow) => c.name === 'deliverable_quality_json')) {
+    db.exec(`ALTER TABLE messages ADD COLUMN deliverable_quality_json TEXT`);
+  }
   if (!messageCols.some((c: DbRow) => c.name === 'result_delivery_state')) {
     db.exec(`ALTER TABLE messages ADD COLUMN result_delivery_state TEXT`);
   }
@@ -2946,6 +2949,7 @@ function listMessagesUnobserved(db: SqliteDb, conversationId: string) {
       `SELECT id, role, content, agent_id AS agentId, agent_name AS agentName,
               run_id AS runId, run_status AS runStatus,
               result_delivery_state AS resultDeliveryState,
+              deliverable_quality_json AS deliverableQualityJson,
               last_run_event_id AS lastRunEventId,
               events_json AS eventsJson,
               attachments_json AS attachmentsJson,
@@ -3025,6 +3029,7 @@ export function getMessage(db: SqliteDb, id: string, conversationId?: string) {
       `SELECT id, role, content, agent_id AS agentId, agent_name AS agentName,
               run_id AS runId, run_status AS runStatus,
               result_delivery_state AS resultDeliveryState,
+              deliverable_quality_json AS deliverableQualityJson,
               last_run_event_id AS lastRunEventId,
               events_json AS eventsJson,
               attachments_json AS attachmentsJson,
@@ -3197,6 +3202,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
     db.prepare(
       `UPDATE messages
           SET role = ?, content = ?, agent_id = ?, agent_name = ?,
+              deliverable_quality_json = CASE WHEN run_id = ? THEN deliverable_quality_json ELSE NULL END,
               run_id = ?, run_status = ?, result_delivery_state = ?, last_run_event_id = ?,
               events_json = ?, attachments_json = ?, comment_attachments_json = ?,
               produced_files_json = ?, trace_object_files_json = ?, feedback_json = ?,
@@ -3215,6 +3221,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       nextContent,
       m.agentId ?? null,
       m.agentName ?? null,
+      m.runId ?? null,
       m.runId ?? null,
       m.runStatus ?? null,
       normalizeResultDeliveryStateForStorage(m.resultDeliveryState),
@@ -3307,6 +3314,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       `SELECT id, role, content, agent_id AS agentId, agent_name AS agentName,
               run_id AS runId, run_status AS runStatus,
               result_delivery_state AS resultDeliveryState,
+              deliverable_quality_json AS deliverableQualityJson,
               last_run_event_id AS lastRunEventId,
               events_json AS eventsJson,
               attachments_json AS attachmentsJson,
@@ -4991,6 +4999,7 @@ function normalizeMessage(
     runId: row.runId ?? undefined,
     runStatus: row.runStatus ?? undefined,
     resultDeliveryState: normalizeResultDeliveryState(row.resultDeliveryState),
+    deliverableQuality: parseJsonOrUndef(row.deliverableQualityJson),
     lastRunEventId: row.lastRunEventId ?? undefined,
     events:
       eventsJson !== null || materializedEvents.batchCount > 0

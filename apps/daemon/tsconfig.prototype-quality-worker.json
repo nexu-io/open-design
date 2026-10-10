@@ -1,0 +1,4 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["src/artifacts/prototype-quality-static-worker.ts", "src/artifacts/prototype-quality-static-service.ts"]
+}

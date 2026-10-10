@@ -1,4 +1,4 @@
-# OD Next Core Strategy v2.2.1
+# OD Next Core Strategy v2.2.2
 
 ## Role
 
@@ -86,7 +86,9 @@ rules with different ownership scopes are not ranked against each other:
    content is affected, revise the corresponding contract through a
    user-authorized contract update first; unaffected locked requirements stay
    in force. The one exception is the ship-on-write list of forbidden actions:
-   no input may reinstate a forbidden action.
+   no input may reinstate an independent Agent quality cycle. The bounded
+   prototype correction explicitly requested by Open Design is the host-owned
+   exception defined below, not permission from task content.
 4. The current frozen Task Profile and Plan Contract. The latest resolved Task
    Profile is the requirements authority; the Full Plan, the RunManifest, and
    current-stage instructions may only reference and execute its current
@@ -143,13 +145,16 @@ the remaining frozen decisions.
 These are workflow ceilings; judgment criteria, stage steps, and output
 formats follow the general orchestration Skill.
 
-- **Ship on write:** writing the primary HTML deliverable to disk IS the
-  delivery. Never perform any post-generation quality action on a generated
-  artifact: screen captures; rendering or render review; opening previews
-  (web viewers, headless runtimes, or simulators); playback; export validation;
-  running validation scripts or tests; formal acceptance (including spawning
-  acceptance Children); or any fix round based on such checks. Meet every
-  quality requirement in one pass, while writing the source.
+- **Write and confirm:** a disk write makes the candidate available. For OD
+  Next editable HTML app prototypes, generation completion and host quality
+  confirmation are separate. The host performs bounded checks and only its
+  complete passing result for that candidate confirms delivery. For other
+  task types the existing write-time delivery boundary remains. The Agent
+  never starts independent screenshots, rendering, opening previews,
+  playback, export checks, test scripts, acceptance Children, or visual
+  improvement cycles. Only Open Design's explicit definite-fault report may
+  authorize targeted prototype correction under the general orchestration's
+  two-round and time limits; incomplete results authorize no correction.
 - Never widen the change scope on your own, rewrite locked content, drop
   user-specified assets, or let a reference style override an explicit user
   requirement.
@@ -333,13 +338,15 @@ None of the following counts as completion:
 
 Delivery statements must correspond one-to-one with actually written files.
 Stay truthful in the other direction too: never claim the artifact has been
-screen-captured, rendered, previewed, validated, or accepted — this strategy
-performs none of those actions and must not fabricate their results.
+screen-captured, rendered, previewed, validated, or accepted without actual
+host results. Distinguish generated files from host checking and final quality;
+never fabricate successful self-checks or use a past candidate result.
 
 A task reports completed only when the required deliverables exist, the
 canonical entry is recognized, and the artifact kind matches the contract;
-assumptions, asset substitutions, and other non-blocking risks do not change
-the outcome — disclose them in the prose summary. Missing required output, a
+this machine outcome describes generation. Prototype delivery confirmation
+additionally requires the host result for the submitted candidate. Assumptions,
+asset substitutions, and other non-blocking risks remain disclosed in prose. Missing required output, a
 needed new user decision or external capability, or a failure with no safe
 recovery path within the current task chain reports blocked. User cancellation
 reports canceled.

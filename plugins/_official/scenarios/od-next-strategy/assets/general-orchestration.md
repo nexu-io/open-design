@@ -1,4 +1,4 @@
-# OD Next General Orchestration v2.0.2
+# OD Next General Orchestration v2.0.3
 
 ## Contract ownership
 
@@ -82,30 +82,29 @@ recognizable in the resolved Task Profile.
 
 ## The ship-on-write boundary (non-negotiable)
 
-Writing the primary HTML deliverable to disk IS the delivery. Never perform
-any post-generation action on a generated artifact for the purpose of quality
-checking:
+Writing a required artifact to disk makes that candidate available to the
+user. For OD Next editable HTML app prototypes, writing is generation
+completion, not confirmation that the main interactions work. Open Design
+runs bounded host-controlled syntax, static-event, and main-navigation checks
+on the submitted candidate. Only the host's result for that exact candidate
+can confirm delivery; missing, partial, failed, or outdated results cannot.
+Other task types retain their existing write-time delivery rule.
 
-- Screen captures, rendering, render review, or frame extraction.
-- Opening or previewing the artifact: web viewers, headless runtimes
-  (Playwright, Puppeteer, etc.), simulators, or players.
-- Running validation scripts, tests, or format checks against a generated
-  artifact.
-- Validating export results after exporting.
-- Spawning acceptance Children or performing formal acceptance of any kind.
-- Any fix round initiated on the basis of the checks above.
+The Agent never initiates its own post-generation screenshots, rendering,
+opening, playback, test scripts, export-result checks, acceptance Children,
+or visual improvement cycles. Build-time source reading and editing remain
+allowed inputs and writing work.
 
-Allowed actions, for boundary clarity: reading an existing artifact's source
-to continue editing it, and probing its technical form and design language,
-are Build inputs and outside this section's scope; routine code reading and
-modification during Build writing are Build itself. What is forbidden is any
-action taken after the artifact hits disk whose purpose is checking quality,
-confirming the result, or collecting evidence.
-
-Quality is not guaranteed by post-generation checks but by generation-time
-discipline: every quality requirement in the Task Profile, Design Spec,
-completion standards, and task-type profile must be satisfied in one pass,
-while writing the source.
+The single prototype exception is a correction requested explicitly by the
+host after it reports a definite fault, including the affected location,
+expected action and observed result. Correct only that fault, retain the
+user's design and scope, submit the candidate, and return control to the
+host. The host owns the stopping limits: at most two Agent correction rounds
+and 120 seconds total for those rounds; host checking has a shared 30-second
+budget. Never start an independent check, expand the task, or continue after
+cancellation or the host's stopping notice. An incomplete host check does
+not authorize a correction round. Describe only files actually generated
+and host results actually received; never invent a successful self-check.
 
 ## Identify the input stage
 
@@ -458,15 +457,11 @@ pass while writing, not checked and patched afterwards.
 Never generate export files, probe export capabilities, or implement
 conversion tools for derived formats outside the contract.
 
-The moment the artifact hits disk, delivery begins, under the ship-on-write
-boundary: no screen captures, no rendering, no preview, no playback, no
-validation runs, no acceptance Children, no formal acceptance, and no fix
-round based on any check. Never claim the artifact went through any of those
-actions, and never fabricate their results.
-
-Build's self-discipline happens only during writing: organize the source
-against the completion standards and the task type's quality requirements;
-disk write is finalization.
+The submitted write finishes Build and makes the candidate available. Apply
+the task-specific delivery boundary above: prototype confirmation waits for
+the host result, and the Agent may correct a definite fault only when the
+host explicitly requests the bounded prototype exception. Do not launch an
+independent post-generation quality cycle or claim checks that did not occur.
 
 ### Source reads and writes
 

@@ -1,6 +1,15 @@
 import type { Dict } from '../types';
 
 export const id: Dict = {
+  'chat.quality.checking': "Dibuat, sedang diperiksa",
+  'chat.quality.pass': "Penyerahan dikonfirmasi: pemeriksaan sistem lulus",
+  'chat.quality.fail': "Dibuat, pemeriksaan gagal",
+  'chat.quality.incomplete': "Dibuat, pemeriksaan belum lengkap",
+  'chat.quality.not_applicable': "Pemeriksaan interaksi utama tidak berlaku",
+  'chat.quality.unknown': "Dibuat, bukti kualitas tidak tersedia",
+  'chat.quality.coverage': "{checked} / {expected} item wajib diperiksa",
+  'chat.quality.scope': "Hanya mencakup sintaks, peristiwa statis, dan interaksi utama yang berlaku.",
+
   'billing.wallet': 'Saldo dompet',
   'billing.codingPlanDesignPlan': 'Design Plan',
   'billing.codingPlanPeriodHours': '{count} jam',

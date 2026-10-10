@@ -1,6 +1,15 @@
 import type { Dict } from '../types';
 
 export const fa: Dict = {
+  'chat.quality.checking': "تولید شد، در حال بررسی",
+  'chat.quality.pass': "تحویل تأیید شد: بررسی‌های میزبان موفق بودند",
+  'chat.quality.fail': "تولید شد، بررسی ناموفق",
+  'chat.quality.incomplete': "تولید شد، بررسی ناقص",
+  'chat.quality.not_applicable': "بررسی تعامل‌های اصلی کاربرد ندارد",
+  'chat.quality.unknown': "تولید شد، شواهد کیفیت موجود نیست",
+  'chat.quality.coverage': "{checked} / {expected} مورد الزامی بررسی شد",
+  'chat.quality.scope': "فقط نحو، رویدادهای ایستا و تعامل‌های اصلی قابل اعمال بررسی می‌شوند.",
+
   'billing.wallet': 'موجودی کیف پول',
   'billing.codingPlanDesignPlan': 'Design Plan',
   'billing.codingPlanPeriodHours': '{count} ساعت',

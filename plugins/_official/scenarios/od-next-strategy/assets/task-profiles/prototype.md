@@ -1,4 +1,4 @@
-# OD Next Prototype Task Profile v2.3.1
+# OD Next Prototype Task Profile v2.3.2
 
 > Rollout: active
 
@@ -40,12 +40,34 @@ The default delivery is a prototype that opens, runs, and remains editable:
 core flows genuinely work end-to-end from the entry point, and buttons,
 navigation, and key controls are never mere decoration.
 
-Writing the primary HTML deliverable to disk IS the delivery: no opening, no
-previewing, no walkthroughs, no second pass of any kind after the write. Meet
-the quality floor below in one pass, while writing the source. Report
-completed when the required deliverables exist and match the contract;
-disclose any residual quality risks in the prose summary — they do not change
-the outcome.
+Writing the primary HTML entry submits an editable candidate. It does not
+prove that the main interactions work. Report the generation outcome when
+required files match the contract; delivery confirmation comes only from the
+host's result for that candidate. Keep generated, checking, failed,
+incomplete, and confirmed states distinct in the visible summary. Never
+claim a self-check or successful walkthrough without received host results.
+Follow the general orchestration's bounded host-requested correction
+exception; do not independently open, test, or visually polish the candidate.
+
+### Main interaction implementation
+
+For each required entry, main navigation item, top-level Tab, and business
+mode selector, implement action → intended visible page or mode → return or
+switch back. The target content and selected state must agree. URL changes,
+button highlights, generic toasts, and hidden target content alone are not
+the requested effect. Static-only briefs do not need invented interactions.
+
+Use native events on their real dispatch targets: listen for `hashchange` on
+`window`, not `document`. Perform the initial route render as well as later
+route changes. Keep bindings working after dynamic replacement with stable
+event delegation or deliberate rebinding; preserve back and repeat switching.
+Use named, operable controls and matching target content. Bindings and
+referenced elements must exist before they are used.
+
+Keep inline JavaScript syntactically complete. Use consistent quote and
+template boundaries when constructing HTML strings; avoid nesting unescaped
+attribute quotes inside the same JavaScript quote delimiter. Write complete
+script blocks rather than assuming a later patch will close a string.
 
 ## Build Requirements
 

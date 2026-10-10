@@ -1,6 +1,15 @@
 import type { Dict } from '../types';
 
 export const tr: Dict = {
+  'chat.quality.checking': "Oluşturuldu, denetleniyor",
+  'chat.quality.pass': "Teslimat onaylandı: sistem kontrolleri geçti",
+  'chat.quality.fail': "Oluşturuldu, denetimler başarısız",
+  'chat.quality.incomplete': "Oluşturuldu, denetimler tamamlanmadı",
+  'chat.quality.not_applicable': "Ana etkileşim denetimi uygulanamaz",
+  'chat.quality.unknown': "Oluşturuldu, kalite kanıtı yok",
+  'chat.quality.coverage': "{checked} / {expected} zorunlu öğe denetlendi",
+  'chat.quality.scope': "Yalnızca sözdizimi, statik olaylar ve geçerli ana etkileşimleri kapsar.",
+
   'billing.wallet': 'Cüzdan bakiyesi',
   'billing.codingPlanDesignPlan': 'Design Plan',
   'billing.codingPlanPeriodHours': '{count} saat',

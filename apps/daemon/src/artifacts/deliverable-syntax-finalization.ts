@@ -65,6 +65,9 @@ async function finalizeCandidate(input: {
   monotonicNow?: () => number;
   /** Test seam for repair-window wall-clock timestamps. */
   wallNow?: () => number;
+  /** Only the isolated host worker uses synchronous commits, avoiding queued writes after termination. */
+  commitSynchronously?: boolean;
+  commitDeadlineAtMs?: number;
 }, summary: HostSummary, progress: { validation?: DeliverableSyntaxValidationEvidence }): Promise<DeliverableSyntaxFinalizationOutcome> {
   if (input.artifactKind !== 'html' || !input.entryFile) {
     return { action: 'skip' };
@@ -150,7 +153,10 @@ async function finalizeCandidate(input: {
         };
       }
       const commitStartedAt = input.monotonicNow?.() ?? performance.now();
-      const committed = await commitDeliverableSyntaxSafeFix(stagedPatch);
+      const committed = await commitDeliverableSyntaxSafeFix(stagedPatch, {
+        ...(input.commitSynchronously ? { synchronous: true } : {}),
+        ...(input.commitDeadlineAtMs !== undefined ? { deadlineAtMs: input.commitDeadlineAtMs } : {}),
+      });
       const commitDurationMs = Math.max(
         0,
         (input.monotonicNow?.() ?? performance.now()) - commitStartedAt,

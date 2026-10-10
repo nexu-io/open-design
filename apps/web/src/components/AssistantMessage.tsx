@@ -93,6 +93,7 @@ import { NextStepActions, type NextStepActionsVariant } from "./NextStepActions"
 import type { DesignToolboxActionId } from "../runtime/design-toolbox";
 import { copyToClipboard } from "../lib/copy-to-clipboard";
 import { useT } from "../i18n";
+import { DeliverableQualityCard } from "./chat/DeliverableQualityCard";
 import { deriveFileOps, type FileOpEntry } from "../runtime/file-ops";
 import { dedupeToolUsesById, dropSupersededInFlightToolUses } from "../runtime/tool-events";
 import {
@@ -1376,6 +1377,9 @@ function AssistantMessageImpl({
           最后一轮限定**(它讲的是「接下来做什么」,天然只对当前这一轮成立),
           那一处的 `isLast` 原样留着。
         */}
+        {message.deliverableQuality || (projectKind === 'prototype' && turnArtifactPanelEntries.some((entry) => /\.html?$/i.test(entry.path))) ? (
+          <DeliverableQualityCard quality={message.deliverableQuality} runStatus={message.runStatus} />
+        ) : null}
         {turnArtifactPanelEntries.length > 0 ? (
           <FileOpsSummary
             entries={turnArtifactPanelEntries}

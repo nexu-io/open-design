@@ -28,6 +28,7 @@ import {
   StrategyTaskTransitionConflictError,
   InvalidStrategyTaskRecordError,
   claimStrategyExecutionIntentResolution,
+  claimStrategyQualityRepair,
   consumeStrategyExecutionIntentResolution,
   isInitialStrategyTaskRun,
   reconcileStrategyTaskRunTerminal,
@@ -44,6 +45,8 @@ import {
   strategyTaskCreateIdentityFixture,
   strategyTaskTurnText,
 } from './strategy-task-test-fixtures.js';
+
+import { composePrototypeQualityRepairTurn } from '../../src/strategies/od-next/prototype-quality-repair-turn.js';
 
 import {
   readIntentResolution, recordStrategyRunWriteEvidence, readStrategyTaskWriteEvidence,
@@ -282,6 +285,34 @@ describe('durable strategy task store', () => {
     vi.restoreAllMocks();
     closeDatabase();
     fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('claims only two frozen host quality corrections and reads back exact identity', () => {
+    let task = createTask(db, snapshot);
+    task = compareAndTransitionStrategyTaskExecution(db, {
+      taskExecutionId: task.taskExecutionId, expectedRevision: task.revision,
+      to: { route: 'direct_edit', inputStage: 'request', outcome: 'running', executionMode: 'simple' },
+    });
+    for (const round of [1, 2] as const) {
+      const quality = { schema: 'open-design.deliverable-quality/v1' as const, checker: 'prototype-interaction@1' as const,
+        status: 'fail' as const, candidateHash: 'a'.repeat(64), entryFile: 'index.html', checkedAt: 1, durationMs: 1,
+        coverage: { expected: 1, checked: 1, complete: false }, checks: [{ id: 'x', kind: 'static' as const, status: 'fail' as const, reason: 'hashchange_requires_window' }] };
+      const finalText = composePrototypeQualityRepairTurn({ taskExecutionId: task.taskExecutionId, stage: 'request', route: 'direct_edit', executionMode: 'simple',
+        taskRunIndex: task.runs.length, sourceRunId: task.latestRunId, candidateHash: quality.candidateHash, round,
+        promptBundleSha256: task.promptBundle.sha256, quality });
+      const input = { taskExecutionId: task.taskExecutionId, expectedRevision: task.revision, sourceRunId: task.latestRunId,
+        nextRunId: `run-quality-${round}`, finalText, updatedAt: task.updatedAt + 1 };
+      expect(() => claimStrategyQualityRepair(db, { ...input, finalText: finalText.replace(quality.candidateHash, 'broken') })).toThrow();
+      task = claimStrategyQualityRepair(db, input);
+      expect(getStrategyTaskExecution(db, task.taskExecutionId)?.runs.at(-1)).toMatchObject({ purpose: 'quality_repair', runId: input.nextRunId, finalText: { text: finalText } });
+      const persisted = task.runs.at(-1)!.finalText;
+      const telemetry = bindOdNextExactSendPromptEvidence({ telemetry: buildPromptStackTelemetry({ composedPrompt: finalText, sections: [{ kind: 'odNextExactFinalText', content: finalText }] }), finalText, persisted, stage: 'request', purpose: 'quality_repair' });
+      expect(() => assertOdNextExactSendPromptEvidence({ telemetry, persisted, stage: 'request', purpose: 'quality_repair' })).not.toThrow();
+      expect(() => bindOdNextExactSendPromptEvidence({ telemetry, persisted, finalText, stage: 'request' })).toThrow();
+      expect(() => claimStrategyQualityRepair(db, input)).toThrow();
+    }
+    expect(() => claimStrategyQualityRepair(db, { taskExecutionId: task.taskExecutionId, expectedRevision: task.revision,
+      sourceRunId: task.latestRunId, nextRunId: 'third', finalText: task.runs.at(-1)!.finalText.text })).toThrow();
   });
 
   function claimResolution(task = createTask(db, snapshot)) {

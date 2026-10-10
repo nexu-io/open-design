@@ -1,6 +1,15 @@
 import type { Dict } from "../types";
 
 export const zhTW: Dict = {
+  'chat.quality.checking': "已生成，正在檢查",
+  'chat.quality.pass': "已確認交付：宿主檢查通過",
+  'chat.quality.fail': "已生成，檢查未通過",
+  'chat.quality.incomplete': "已生成，驗證未完成",
+  'chat.quality.not_applicable': "主要互動檢查不適用",
+  'chat.quality.unknown': "已生成，品質證據未知",
+  'chat.quality.coverage': "已檢查 {checked} / {expected} 個必要項目",
+  'chat.quality.scope': "檢查範圍：語法、靜態事件及適用的主要互動。",
+
   'billing.wallet': '錢包餘額',
   'billing.codingPlanDesignPlan': 'Design Plan',
   'billing.codingPlanPeriodHours': '{count} 小時',
