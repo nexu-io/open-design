@@ -289,7 +289,7 @@ describe('od project CLI', () => {
       const closed = await startProjectStubServer();
       await closed.close();
       const result = await runCli([...args, '--daemon-url', closed.baseUrl]);
-      expect(result.code).toBe(1);
+      expect(result.code).toBe(64);
       expect(result.stdout).toBe('');
       expect(JSON.parse(result.stderr).error.code).toBe('daemon-not-running');
     });
