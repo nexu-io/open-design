@@ -1,16 +1,23 @@
-import { access } from 'node:fs/promises';
-import { homedir, userInfo } from 'node:os';
+import { access, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { homedir, tmpdir, userInfo } from 'node:os';
 import { dirname, join } from 'node:path';
 
 import type { RequestHandler } from 'express';
 
 import {
   buildAgentCliLogSources,
+  buildAgentSessionSources,
   buildDiagnosticsZip,
   buildRunEventLogSources,
   DIAGNOSTICS_CONTENT_TYPE,
   DIAGNOSTICS_FILENAME_PREFIX,
   diagnosticsFileName,
+  readRunAgentSession,
+  AGENT_SESSION_TAIL_BYTES,
+  readAgentSessionWindow,
+  selectAgentSessionLines,
+  type AgentSessionAgent,
+  type AgentSessionTimeWindow,
   type AutomaticDiagnosticSource,
   type LogSource,
 } from '@open-design/diagnostics';
@@ -44,6 +51,7 @@ import {
 import { diagnosticId } from './services/diagnostics-environment.js';
 import { daemonHealthPaths } from './services/daemon-health.js';
 import { readVelaLoginStatus } from './integrations/vela.js';
+import { exportOpenCodeSession, openCodeDatabaseExists } from './opencode-session-export.js';
 
 interface ResolvedDiagnosticsAgentEnvironment {
   amrHome: string | null;
@@ -332,6 +340,128 @@ export async function buildAutomaticDiagnosticSources(
       const amrLogs = selected.filter((source) => source.name.startsWith('agent-cli-logs/amr/')).length;
       sources.push(...await buildAmrRuntimeLogSources(environment.amrHome, incident, amrLogs));
     }
+    if (isSessionAgent(incident.agentId) && incident.runId && options.runsDir) {
+      sources.push(...await buildRunAgentSessionSources(join(options.runsDir, incident.runId, 'events.jsonl'),
+        incident.agentId, environment));
+    }
+    if (incident.agentId === 'opencode' && incident.runId && options.runsDir) {
+      sources.push(...await buildRunOpenCodeSessionSources(join(options.runsDir, incident.runId, 'events.jsonl'), environment));
+    }
+  }
+  return sources;
+}
+
+const SESSION_AGENTS: readonly AgentSessionAgent[] = ['claude', 'codex'];
+function isSessionAgent(agentId: string | undefined): agentId is AgentSessionAgent {
+  return SESSION_AGENTS.includes(agentId as AgentSessionAgent);
+}
+
+/**
+ * The run's own Claude Code / Codex session record (main agent and subagents),
+ * limited to the run's time span. A missing record is reported, not dropped.
+ */
+async function buildRunAgentSessionSources(
+  eventsPath: string,
+  agent: AgentSessionAgent,
+  environment: ResolvedDiagnosticsAgentEnvironment,
+): Promise<AutomaticDiagnosticSource[]> {
+  const placeholder = (omitReason: string): AutomaticDiagnosticSource[] =>
+    [{ name: `agent-sessions/${agent}`, absolutePath: '', kind: 'text', omitReason }];
+  const session = await readRunAgentSession(eventsPath);
+  if (!session) return placeholder('session_id_unavailable');
+  const found = await buildAgentSessionSources(session, {
+    homeDir: homedir(), agents: [agent],
+    claudeConfigDir: environment.claudeConfigDir, codexHome: environment.codexHome,
+  });
+  if (found.length === 0) return placeholder('source_not_located');
+  // Select the run's records before any byte cap, fenced by the consent time.
+  return found.map(({ agent: _agent, ...source }) => ({
+    ...source,
+    render: (notBeforeMs: number | null) => readAgentSessionWindow(source.absolutePath, [session],
+      { maxBytes: source.tailBytes ?? AGENT_SESSION_TAIL_BYTES, notBeforeMs }),
+  }));
+}
+
+function openCodeXdgDataHome(environment: ResolvedDiagnosticsAgentEnvironment): string {
+  return environment.openCodeXdgDataHome ?? process.env.XDG_DATA_HOME?.trim() ?? join(homedir(), '.local', 'share');
+}
+
+/** The run's OpenCode session tree, exported from opencode.db at bundle time and fenced by record time. */
+async function buildRunOpenCodeSessionSources(
+  eventsPath: string,
+  environment: ResolvedDiagnosticsAgentEnvironment,
+): Promise<AutomaticDiagnosticSource[]> {
+  const placeholder = (omitReason: string): AutomaticDiagnosticSource[] =>
+    [{ name: 'agent-sessions/opencode', absolutePath: '', kind: 'text', omitReason }];
+  const session = await readRunAgentSession(eventsPath);
+  if (!session) return placeholder('session_id_unavailable');
+  const xdg = openCodeXdgDataHome(environment);
+  if (!openCodeDatabaseExists(xdg)) return placeholder('source_not_located');
+  return [{
+    name: `agent-sessions/opencode/${session.sessionId}.jsonl`,
+    absolutePath: join(xdg, 'opencode', 'opencode.db'),
+    kind: 'text',
+    tailBytes: AGENT_SESSION_TAIL_BYTES,
+    render: async (notBeforeMs) => exportOpenCodeSession(xdg, session.sessionId, [session], notBeforeMs),
+    selectLines: selectAgentSessionLines(session.startMs, session.endMs),
+  }];
+}
+
+/**
+ * Native sessions of the runs the export includes, one entry per file, written
+ * into `scratchDir` (removed by the caller after zipping): Claude Code / Codex
+ * session files reduced to the run's records, so the ZIP's tail cap cannot
+ * drop them, and OpenCode sessions exported from opencode.db. Runs that resume
+ * the same session share it, so the entry keeps every such run's records.
+ */
+async function buildExportedRunSessionSources(
+  runEventSources: LogSource[],
+  environment: ResolvedDiagnosticsAgentEnvironment,
+  scratchDir: string,
+): Promise<LogSource[]> {
+  const files = new Map<string, { source: LogSource; windows: AgentSessionTimeWindow[] }>();
+  const openCodeSessions = new Map<string, AgentSessionTimeWindow[]>();
+  const xdg = openCodeXdgDataHome(environment);
+  const openCodeDb = openCodeDatabaseExists(xdg);
+  for (const runSource of runEventSources) {
+    const session = await readRunAgentSession(runSource.absolutePath);
+    if (!session) continue;
+    const found = await buildAgentSessionSources(session, {
+      homeDir: homedir(), claudeConfigDir: environment.claudeConfigDir, codexHome: environment.codexHome,
+    });
+    for (const { agent: _agent, ...source } of found) {
+      const file = files.get(source.absolutePath);
+      if (file) file.windows.push(session);
+      else files.set(source.absolutePath, { source, windows: [session] });
+    }
+    if (found.length > 0 || !openCodeDb) continue;
+    const windows = openCodeSessions.get(session.sessionId);
+    if (windows) windows.push(session);
+    else openCodeSessions.set(session.sessionId, [session]);
+  }
+  const sources: LogSource[] = [];
+  for (const { source, windows } of files.values()) {
+    let selected: string;
+    try {
+      selected = await readAgentSessionWindow(source.absolutePath, windows,
+        { maxBytes: source.tailBytes ?? AGENT_SESSION_TAIL_BYTES });
+    } catch {
+      continue;
+    }
+    if (!selected) continue;
+    const absolutePath = join(scratchDir, `${sources.length}.jsonl`);
+    await writeFile(absolutePath, selected);
+    sources.push({ ...source, absolutePath });
+  }
+  for (const [sessionId, windows] of openCodeSessions) {
+    let exported = '';
+    try { exported = exportOpenCodeSession(xdg, sessionId, windows, null); } catch { continue; }
+    if (!exported) continue;
+    // Rows are already limited to the windows; this only stubs oversized lines.
+    const span = selectAgentSessionLines(Math.min(...windows.map((w) => w.startMs)), Math.max(...windows.map((w) => w.endMs)));
+    const absolutePath = join(scratchDir, `${sessionId}.jsonl`);
+    await writeFile(absolutePath, span(exported.split('\n')).join('\n'));
+    sources.push({ name: `agent-sessions/opencode/${sessionId}.jsonl`, absolutePath, kind: 'text', tailBytes: AGENT_SESSION_TAIL_BYTES });
   }
   return sources;
 }
@@ -339,6 +469,7 @@ export async function buildAutomaticDiagnosticSources(
 export function createDiagnosticsExportHandler(options: DiagnosticsHandlerOptions): RequestHandler {
   const evidence = options.evidence ?? getDiagnosticsEvidence() ?? createDiagnosticsEvidence();
   return async (_req, res) => {
+    const scratchDir = await mkdtemp(join(tmpdir(), 'od-diagnostics-sessions-'));
     try {
       const versionInfo = await readCurrentAppVersionInfo().catch(() => null);
       const home = homedir();
@@ -348,6 +479,7 @@ export function createDiagnosticsExportHandler(options: DiagnosticsHandlerOption
       const sources = [
         ...(await buildSidecarLogSources(options.runtime)),
         ...runEventSources,
+        ...(await buildExportedRunSessionSources(runEventSources, agentEnvironment, scratchDir)),
         ...(await buildAgentCliLogSources({
           homeDir: home,
           dataDir: options.dataDir ?? null,
@@ -493,6 +625,8 @@ export function createDiagnosticsExportHandler(options: DiagnosticsHandlerOption
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       res.status(500).json({ error: 'DIAGNOSTICS_EXPORT_FAILED', message });
+    } finally {
+      await rm(scratchDir, { recursive: true, force: true }).catch(() => undefined);
     }
   };
 }
