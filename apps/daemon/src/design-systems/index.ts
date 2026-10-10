@@ -2268,7 +2268,7 @@ function classifyDesignSystemFile(
 // each derived file. `collectDesignSystemFiles` skips dot-prefixed entries, so it
 // is excluded from file listings and ZIP archives; the pull/static allowlists are
 // default-deny, so it is never served either.
-const GENERATED_MANIFEST_FILENAME = '.od-generated.json';
+export const GENERATED_MANIFEST_FILENAME = '.od-generated.json';
 
 // Manifest keys are posix-relative paths under the design-system root, matching
 // the `collectDesignSystemFiles` relative-path convention.
@@ -2280,7 +2280,7 @@ function hashGeneratedContent(content: string): string {
   return createHash('sha256').update(content, 'utf8').digest('hex');
 }
 
-function serializeGeneratedManifest(manifest: Record<string, string>): string {
+export function serializeGeneratedManifest(manifest: Record<string, string>): string {
   const sorted: Record<string, string> = {};
   for (const [key, value] of Object.entries(manifest).sort(([a], [b]) => a.localeCompare(b))) {
     sorted[key] = value;
@@ -2292,7 +2292,7 @@ function serializeGeneratedManifest(manifest: Record<string, string>): string {
 // same-named file all degrade to "no manifest" (an empty record). That routes the
 // caller into the conservative legacy path (write-if-missing) instead of ever
 // trusting an untrusted file as a source of overwrite decisions.
-async function readGeneratedManifest(dir: string): Promise<Record<string, string>> {
+export async function readGeneratedManifest(dir: string): Promise<Record<string, string>> {
   const raw = await readFileOptional(path.join(dir, GENERATED_MANIFEST_FILENAME));
   if (raw === undefined) return {};
   let parsed: unknown;
