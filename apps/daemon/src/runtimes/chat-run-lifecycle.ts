@@ -206,111 +206,12 @@ export function resolveAcpStageTimeoutMs(agentDefault?: number): number | undefi
   return undefined;
 }
 
-type GeminiJsonEventStreamEvent = Record<string, unknown>;
-type BufferedStdoutChunk = { text: string; receivedAt: number };
-
-function parseGeminiJsonEventStreamEvents(text: string): GeminiJsonEventStreamEvent[] | null {
-  const lines = text
-    .split(/\r?\n/u)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  if (lines.length === 0) return null;
-  const events: GeminiJsonEventStreamEvent[] = [];
-  for (const line of lines) {
-    try {
-      const obj = JSON.parse(line);
-      if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null;
-      events.push(obj as GeminiJsonEventStreamEvent);
-    } catch {
-      return null;
-    }
-  }
-  return events;
-}
-
-function isGeminiJsonEventStream(events: GeminiJsonEventStreamEvent[] | null): boolean {
-  if (!events || events.length === 0) return false;
-  const [firstEvent] = events;
-  if (
-    !firstEvent ||
-    firstEvent.type !== 'init' ||
-    typeof firstEvent.session_id !== 'string' ||
-    firstEvent.session_id.length === 0 ||
-    typeof firstEvent.model !== 'string' ||
-    firstEvent.model.length === 0
-  ) {
-    return false;
-  }
-  return events.every((event) => {
-    const type = event?.type;
-    return (
-      type === 'init' ||
-      type === 'message' ||
-      type === 'tool_use' ||
-      type === 'tool_result' ||
-      type === 'error' ||
-      type === 'result'
-    );
-  });
-}
-
-function geminiJsonEventStreamHasVisibleAssistantText(
-  events: GeminiJsonEventStreamEvent[] | null,
-): boolean {
-  if (!events) return false;
-  return events.some((event) => (
-    event.type === 'message' &&
-    event.role === 'assistant' &&
-    typeof event.content === 'string' &&
-    event.content.length > 0
-  ));
-}
-
-export function looksLikeGeminiJsonEventStream(text: string): boolean {
-  return isGeminiJsonEventStream(parseGeminiJsonEventStreamEvents(text));
-}
-
-export function bufferedAntigravityGeminiFirstTokenAt(
-  chunks: readonly BufferedStdoutChunk[],
-): number | null {
-  if (chunks.length === 0) return null;
-  const text = chunks.map((chunk) => chunk.text).join('');
-  const events = parseGeminiJsonEventStreamEvents(text);
-  if (!isGeminiJsonEventStream(events)) return null;
-  if (!geminiJsonEventStreamHasVisibleAssistantText(events)) return null;
-
-  let offset = 0;
-  for (const line of text.split(/(\r?\n)/u)) {
-    const nextOffset = offset + line.length;
-    if (line.length > 0 && line.trim().length > 0) {
-      try {
-        const event = JSON.parse(line) as GeminiJsonEventStreamEvent;
-        if (
-          event?.type === 'message' &&
-          event.role === 'assistant' &&
-          typeof event.content === 'string' &&
-          event.content.length > 0
-        ) {
-          let consumed = 0;
-          for (const chunk of chunks) {
-            consumed += chunk.text.length;
-            if (consumed >= nextOffset) return chunk.receivedAt;
-          }
-          return chunks.at(-1)?.receivedAt ?? null;
-        }
-      } catch {
-        return null;
-      }
-    }
-    offset = nextOffset;
-  }
-  return null;
-}
-
 /**
- * Whether a runtime reads its whole prompt as plain text from stdin (and then
- * waits for EOF). Those runtimes get the prompt as a complete file-backed stdin
- * at spawn — see `openCompletePromptAsStdin` in `agent-process.ts`.
+ * Whether a runtime reads its whole prompt from stdin (and then waits for
+ * EOF). Those runtimes get the prompt — as plain text, or in the shape their
+ * `encodeStdinPrompt` produces — as a complete file-backed stdin at spawn; see
+ * `openCompletePromptAsStdin` in `agent-process.ts` and
+ * `agentStdinPromptPayload` below.
  *
  * Excluded are the runtimes whose stdin carries a framed protocol instead:
  * Claude's `stream-json` input (stdin stays open for mid-turn messages),
@@ -329,6 +230,19 @@ export function runtimeReadsPlainTextPromptFromStdin(def: {
     && def.streamFormat !== 'dsh-profile-jsonl'
     && (def.promptInputFormat ?? 'text') !== 'stream-json'
   );
+}
+
+/**
+ * The bytes a whole-prompt stdin runtime receives for the composed prompt:
+ * the raw text unless the runtime declares its own stdin framing (e.g.
+ * Antigravity's one-message stream-json NDJSON). Shared by the chat-run spawn
+ * and the connection test so the two can never hand a CLI different shapes.
+ */
+export function agentStdinPromptPayload(
+  def: { encodeStdinPrompt?: (prompt: string) => string },
+  prompt: string,
+): string {
+  return def.encodeStdinPrompt ? def.encodeStdinPrompt(prompt) : prompt;
 }
 
 /**

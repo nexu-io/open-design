@@ -647,19 +647,37 @@ test('qwen args check promptViaStdin, base args, model args and exclude `-` sent
   assert.equal(withModel.includes('-'), false);
 });
 
-// `agy` exposes `-p` (print mode, alias for `--print`) plus `-` as
-// the stdin sentinel — confirmed against `agy --help` on v1.0.3, where
-// `Available subcommands` is `changelog / help / install / plugin /
-// update` (no `chat`). Current agy treats `agy -p -` as a literal
-// prompt of "-" (stdin is ignored) — see #7161. OD therefore passes
-// the real prompt as the `-p` argument.
-test('antigravity passes prompt via -p argument (print mode)', () => {
+const AGY_STREAM_JSON_ARGS = [
+  '--input-format',
+  'stream-json',
+  '--output-format',
+  'stream-json',
+];
+
+function decodeAgyStdinFrame(stdin: string): unknown {
+  assert.ok(stdin.endsWith('\n'), 'agy stream-json input must be newline-terminated');
+  const lines = stdin.slice(0, -1).split('\n');
+  assert.equal(lines.length, 1, 'the prompt must be exactly one NDJSON message');
+  return JSON.parse(lines[0]!);
+}
+
+// OPEND-3495. agy only reads the prompt from stdin through its documented
+// `--input-format stream-json` channel; with `-p <text>` it ignores stdin
+// entirely (agy 1.1.1: "no longer reading stdin when a prompt is provided via
+// a flag"), and putting the whole prompt into `-p` overflows Windows'
+// CreateProcess command line (`spawn ENAMETOOLONG`). So argv must carry no
+// prompt and no `-p`, and stdin must carry the prompt as one agy `user`
+// message.
+test('antigravity runs headless stream-json with the prompt as one agy user message on stdin', () => {
   assert.equal(antigravity.bin, 'agy');
-  assert.equal(antigravity.streamFormat, 'plain');
-  assert.equal(antigravity.promptViaStdin, false);
+  assert.equal(antigravity.promptViaStdin, true);
+  assert.equal(antigravity.streamFormat, 'json-event-stream');
+  assert.equal(antigravity.eventParser, 'antigravity');
 
   const args = antigravity.buildArgs('write hello world', [], [], {}, {});
-  assert.deepEqual(args, ['-p', 'write hello world']);
+  assert.deepEqual(args, AGY_STREAM_JSON_ARGS);
+  assert.equal(args.includes('-p'), false);
+  assert.equal(args.includes('--print'), false);
 
   const argsWithLog = antigravity.buildArgs('write hello world', [], [], {}, {
     agentLogFilePath: '/tmp/od-agy-test.log',
@@ -667,14 +685,18 @@ test('antigravity passes prompt via -p argument (print mode)', () => {
   assert.deepEqual(argsWithLog, [
     '--log-file',
     '/tmp/od-agy-test.log',
-    '-p',
-    'write hello world',
+    ...AGY_STREAM_JSON_ARGS,
   ]);
 
-  // No `--model` flag exists upstream, so buildArgs argv must stay the
-  // same regardless of which label the user picks.
-  // Pass a temp antigravitySettingsPath so buildArgs does not touch the
-  // real ~/.gemini/antigravity-cli/settings.json during a unit test run.
+  assert.equal(typeof antigravity.encodeStdinPrompt, 'function');
+  assert.deepEqual(decodeAgyStdinFrame(antigravity.encodeStdinPrompt!('write hello world')), {
+    event: 'user',
+    message: { content: 'write hello world' },
+  });
+
+  // The model is chosen through agy's settings.json (see below), never
+  // through argv. Pass a temp antigravitySettingsPath so buildArgs does not
+  // touch the real ~/.gemini/antigravity-cli/settings.json in a unit test.
   const settingsDir = mkdtempSync(join(tmpdir(), 'od-agy-argv-'));
   try {
     const withModel = antigravity.buildArgs('hi', [], [], {
@@ -687,8 +709,7 @@ test('antigravity passes prompt via -p argument (print mode)', () => {
     assert.deepEqual(withModel, [
       '--log-file',
       '/tmp/od-agy-test.log',
-      '-p',
-      'hi',
+      ...AGY_STREAM_JSON_ARGS,
     ]);
   } finally {
     rmSync(settingsDir, { recursive: true, force: true });
@@ -705,15 +726,11 @@ test('antigravity passes prompt via -p argument (print mode)', () => {
   const followUp = antigravity.buildArgs('next message', [], [], {}, {
     hasPriorAssistantTurn: true,
   });
-  assert.deepEqual(followUp, ['-p', 'next message']);
+  assert.deepEqual(followUp, AGY_STREAM_JSON_ARGS);
   assert.equal(followUp.includes('-c'), false);
-
-  const firstTurn = antigravity.buildArgs('first', [], [], {}, {
-    hasPriorAssistantTurn: false,
-  });
-  assert.deepEqual(firstTurn, ['-p', 'first']);
   assert.equal(antigravity.resumesSessionViaCli, undefined);
 
+  // The prompt never rides argv, so no argv budget applies.
   assert.equal(antigravity.maxPromptArgBytes, undefined);
 
   // Picker exposes the synthetic Default + the 8 labels agy's TUI
@@ -743,20 +760,49 @@ test('antigravity passes prompt via -p argument (print mode)', () => {
   assert.equal(antigravity.supportsCustomModel, false);
 });
 
+// OPEND-3495: on Windows the composed OD prompt (system prompt + skills +
+// design system + transcript) routinely exceeds CreateProcess's 32_767-char
+// command-line cap. The whole prompt must reach agy through the stdin frame,
+// byte for byte, and argv must stay a small, prompt-independent size.
+test('antigravity keeps a large prompt out of argv and delivers it intact in the stdin frame', () => {
+  const marker = 'OPEND_3495_PROMPT_BODY_MARKER';
+  const prompt = `He said "use <artifact>" \\ ünïcode ✓\n${'Design system rule line that pads the composed prompt.\n'.repeat(1800)}${marker}`;
+  assert.ok(prompt.length > 90_000);
+
+  const args = antigravity.buildArgs(prompt, [], [], {}, {
+    agentLogFilePath: 'C:\\Users\\me\\AppData\\Local\\Temp\\od-agy-run.log',
+  });
+  assert.equal(args.some((arg: string) => arg.includes(marker)), false);
+  const commandLineLength = ['C:\\Users\\me\\.local\\bin\\agy.exe', ...args]
+    .map((arg) => (/[\s"]/.test(arg) ? `"${arg.replace(/"/g, '\\"')}"` : arg))
+    .join(' ').length;
+  assert.ok(
+    commandLineLength < 1_024,
+    `agy command line is ${commandLineLength} chars; it must not grow with the prompt`,
+  );
+
+  assert.equal(typeof antigravity.encodeStdinPrompt, 'function');
+  const frame = decodeAgyStdinFrame(antigravity.encodeStdinPrompt!(prompt)) as {
+    event: string;
+    message: { content: string };
+  };
+  assert.equal(frame.event, 'user');
+  assert.equal(frame.message.content, prompt);
+});
+
 test('antigravity gates non-interactive permission bypass on the detected CLI capability', () => {
   agentCapabilities.delete('antigravity');
   assert.deepEqual(antigravity.helpArgs, ['--help']);
   assert.deepEqual(antigravity.capabilityFlags, {
     '--dangerously-skip-permissions': 'skipPermissions',
   });
-  assert.deepEqual(antigravity.buildArgs('', [], [], {}), ['-p', '']);
+  assert.deepEqual(antigravity.buildArgs('', [], [], {}), AGY_STREAM_JSON_ARGS);
 
   agentCapabilities.set('antigravity', { skipPermissions: true });
   try {
     assert.deepEqual(antigravity.buildArgs('', [], [], {}), [
       '--dangerously-skip-permissions',
-      '-p',
-      '',
+      ...AGY_STREAM_JSON_ARGS,
     ]);
   } finally {
     agentCapabilities.delete('antigravity');
@@ -770,7 +816,7 @@ test('antigravity keeps log argv order when permission bypass is unavailable', (
       antigravity.buildArgs('', [], [], {}, {
         agentLogFilePath: '/tmp/od-agy-test.log',
       }),
-      ['--log-file', '/tmp/od-agy-test.log', '-p', ''],
+      ['--log-file', '/tmp/od-agy-test.log', ...AGY_STREAM_JSON_ARGS],
     );
   } finally {
     agentCapabilities.delete('antigravity');
@@ -788,8 +834,7 @@ test('antigravity places permission bypass after log args', () => {
         '--log-file',
         '/tmp/od-agy-test.log',
         '--dangerously-skip-permissions',
-        '-p',
-        '',
+        ...AGY_STREAM_JSON_ARGS,
       ],
     );
   } finally {

@@ -108,8 +108,11 @@ export function isCursorAuthFailureText(text: string): boolean {
 // The same TUI text is logged by `agy --log-file` as
 //   "You are not logged into Antigravity" and
 //   "error getting token source: You are not logged into Antigravity"
-// (confirmed via the `--log-file` dump on a cleared keyring). Any of
-// these is sufficient signal — match conservatively so the regex
+// (confirmed via the `--log-file` dump on a cleared keyring). Headless
+// stream-json runs fail fast instead (recorded from agy 1.3.1):
+//   stderr: "Error: authentication required. Run 'agy' to log in, then retry."
+//   result: {"status":"ERROR","error":"authentication failed or timed out"}
+// Any of these is sufficient signal — match conservatively so the regex
 // doesn't fire on prose containing the word "authentication" by accident.
 export function isAntigravityAuthFailureText(text: string): boolean {
   const value = String(text || '');
@@ -117,6 +120,8 @@ export function isAntigravityAuthFailureText(text: string): boolean {
   return (
     /authentication required.*please visit/i.test(value) ||
     /authentication timed out/i.test(value) ||
+    /authentication failed or timed out/i.test(value) ||
+    /authentication required\. run 'agy' to log in/i.test(value) ||
     /not logged into antigravity/i.test(value) ||
     /accounts\.google\.com\/o\/oauth2\/auth.*antigravity/i.test(value)
   );
