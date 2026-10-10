@@ -266,7 +266,7 @@ describe('OD Next V2 prompt recipe', () => {
     // were never given, which surfaced as a terminal
     // `od_next_canonical_deliverable_invalid` with no repair path.
     const prompt = composeOdNextStrategyRequestPromptV2(recipe);
-    expect(prompt).toContain('Direct Edit remains the only route allowed to perform Build work on the request stage.');
+    expect(prompt).toContain('A simple Full Plan then performs its Build in the same response, on the request or clarification stage');
     expect(prompt).toContain('canonical-deliverable check that gates production already applies');
     expect(prompt).toContain('it looks for a root `index.html`, then a single root-level html file, then a single file matching the project kind');
     // Writing outside the project directory yields `no_artifact`, which reads
@@ -307,8 +307,8 @@ describe('OD Next V2 prompt recipe', () => {
     expect(prompt).toContain('Design Spec');
     expect(prompt).toContain('Full Plan');
     expect(prompt).toContain('Build Packages');
-    expect(prompt).toContain('request and clarification stages are planning-only');
-    expect(prompt).toContain('Direct Edit remains the only route allowed to perform Build work');
+    expect(prompt).toContain('do not create, edit, render, or dispatch a deliverable until the Plan Contract and Execution Preflight are frozen');
+    expect(prompt).toContain('A complex Full Plan closes with `outcome: plan_ready`');
     expect(prompt).toContain(`strategy package: \`${A}\``);
     expect(prompt).toContain(`selected Task Skill digest: \`${B}\``);
   });
@@ -678,7 +678,8 @@ describe('OD Next V2 prompt recipe', () => {
 
     const production = composeOdNextStrategyContinuationV2({ ...input, executionIntent: 'produce' });
     expect(production).toContain('inputStage clarification (not request)');
-    expect(production).toContain('outcome plan_ready once the Full Plan is frozen for production');
+    expect(production).toContain('a simple plan performs its Build in this same response and reports outcome completed');
+    expect(production).toContain('a complex plan reports outcome plan_ready for production');
     expect(production).not.toContain('task is locked to executionIntent plan_only');
   });
 

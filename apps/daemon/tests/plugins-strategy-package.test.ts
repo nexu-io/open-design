@@ -282,7 +282,7 @@ describe('hash-gated internal strategy activation and snapshot persistence', () 
     if (!activated || !activated.ok) throw new Error('expected strategy snapshot');
     expect(activated.snapshot.strategy).toEqual(expect.objectContaining({
       id: 'od-next-strategy',
-      version: '2.0.4',
+      version: '2.1.0',
       packageHash: expect.stringMatching(/^[a-f0-9]{64}$/),
       selectedTaskProfile: expect.objectContaining({ taskType: 'prototype' }),
     }));
