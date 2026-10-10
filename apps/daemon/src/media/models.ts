@@ -114,6 +114,10 @@ export const IMAGE_MODELS: MediaModel[] = [
   { id: 'grok-imagine-image', label: 'grok-imagine-image', hint: 'xAI · 2K text-to-image', provider: 'grok', caps: ['t2i'] },
 
   { id: 'gemini-3.1-flash-image-preview', label: 'nano-banana-2', hint: 'Nano Banana · text-to-image', provider: 'nanobanana', caps: ['t2i'] },
+  { id: 'gemini-3.1-flash-lite-image', label: 'nano-banana-2-lite', hint: 'Nano Banana 2 Lite · fastest, 1K', provider: 'nanobanana', caps: ['t2i'] },
+  { id: 'gemini-3.1-flash-image', label: 'nano-banana-2 (stable)', hint: 'Nano Banana 2 · generalist, up to 4K', provider: 'nanobanana', caps: ['t2i'] },
+  { id: 'gemini-3-pro-image', label: 'nano-banana-pro', hint: 'Nano Banana Pro · highest fidelity', provider: 'nanobanana', caps: ['t2i'] },
+  { id: 'gemini-2.5-flash-image', label: 'nano-banana', hint: 'Nano Banana (Gemini 2.5 Flash Image, legacy)', provider: 'nanobanana', caps: ['t2i'] },
 
   { id: 'openai/gpt-image-2', label: 'openai/gpt-image-2', hint: 'ImageRouter · routed GPT Image', provider: 'imagerouter', caps: ['t2i'] },
   { id: 'openai/gpt-image-1.5', label: 'openai/gpt-image-1.5', hint: 'ImageRouter · routed GPT Image', provider: 'imagerouter', caps: ['t2i'] },
