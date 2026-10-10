@@ -30,6 +30,17 @@ export interface PublicFileStopRetryRequest {
   slug: string;
 }
 
+/** A persisted pending stop visible only to its current verified owner. */
+export interface PublicFileStopListItem extends PublicFileStopRetryRequest {
+  /** Eligible for the existing automatic retry budget, not proof of a running stop. */
+  retrying: boolean;
+}
+
+/** GET /api/public-file-stops; includes exhausted tasks until confirmed stopped. */
+export interface PublicFileStopListResponse {
+  tasks: ReadonlyArray<PublicFileStopListItem>;
+}
+
 export interface PublicFileStopRetryResponse extends PublicFileStopRetryRequest {
   status: 'stopped';
 }

@@ -822,11 +822,10 @@ export interface ProjectCommentReadRequest {
  *
  * ## Exactly once
  *
- * This is delivered on the delete response and nowhere else. The project is
- * gone, so there is no row left to hang a persistent indicator on, and no
- * later request will rediscover the condition. A surface that drops it drops
- * it permanently — which is why it rides the response every consumer already
- * reads rather than a separate channel one of them might not subscribe to.
+ * The deletion response is delivered once. The current verified owner can
+ * rediscover persisted pending stops after reload via GET /api/public-file-stops,
+ * even when the project is gone. That list includes exhausted tasks, but does
+ * not replay the deletion response or its diagnostic code.
  */
 export interface ProjectDeleteShareResidual {
   /**

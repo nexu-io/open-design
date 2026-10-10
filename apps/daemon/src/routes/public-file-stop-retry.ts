@@ -1,5 +1,5 @@
 import type { Express, Request } from 'express';
-import type { PublicFileStopRetryRequest, PublicFileStopRetryResponse } from '@open-design/contracts';
+import type { PublicFileStopListResponse, PublicFileStopRetryRequest, PublicFileStopRetryResponse } from '@open-design/contracts';
 import type { VerifiedWorkspaceRequestContextResult } from '../collab/request-workspace-context.js';
 import type { PublicFileMutations } from '../collab/public-file-mutations.js';
 import { createPublicFileStopStartup, type StopQueuePublicFilePublicationStore, type PreparePublicFileStop } from '../collab/public-file-publication-store.js';
@@ -25,6 +25,32 @@ function retryRequest(value: unknown): PublicFileStopRetryRequest | null {
 
 /** Only an original owner's persisted deletion intent authorizes this operation. */
 export function registerPublicFileStopRetryRoutes(app: Express, deps: PublicFileStopRetryDeps): void {
+  app.get('/api/public-file-stops', async (req, res) => {
+    try {
+      const verified = await deps.verify(req);
+      if (!verified.ok) return res.status(verified.status).json({ error: verified.code });
+      const context = verified.context;
+      if (context.memberStatus !== 'active' || context.lifecycleState !== 'active') {
+        return res.status(403).json({ error: 'WORKSPACE_ACCESS_DENIED' });
+      }
+      const ownsTask = (task: { resourceTeamId: string; ownerMemberId: string }) =>
+        task.resourceTeamId === (context.teamId ?? context.workspaceId)
+        && task.ownerMemberId === context.workspaceMemberId;
+      const taskKey = (task: PublicFileStopRetryRequest) =>
+        JSON.stringify([task.projectId, task.filePath, task.slug]);
+      const retryable = new Set(deps.store.listRetryableStops().filter(ownsTask).map(taskKey));
+      const response: PublicFileStopListResponse = {
+        tasks: deps.store.listStops().filter(ownsTask).map(task => ({
+          projectId: task.projectId, filePath: task.filePath, slug: task.slug,
+          retrying: retryable.has(taskKey(task)),
+        })),
+      };
+      return res.json(response);
+    } catch {
+      return res.status(503).json({ error: 'PUBLIC_FILE_STOP_LIST_UNAVAILABLE' });
+    }
+  });
+
   app.post('/api/public-file-stops/retry', async (req, res) => {
     const input = retryRequest(req.body);
     if (!input) return res.status(400).json({ error: 'INVALID_STOP_RETRY' });
