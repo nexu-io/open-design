@@ -9,6 +9,54 @@ describe('share bridge v2 wire boundaries', () => {
     expect(bridge.SHARE_VIEWER_BRIDGE_FRAME_TO_HOST).toContain('share:geometry');
     expect(bridge.SHARE_VIEWER_BRIDGE_HOST_TO_FRAME).not.toContain('share:geometry');
   });
+  // This package exports ceilings, not an envelope/anchor parser. Consumer
+  // acceptance, nonce/source/mode gates and serialized byte budgets are tested
+  // by the receiving runtime; these assertions freeze its length contract.
+  it('bounds original selectors and dom: identities in JavaScript UTF-16 units', () => {
+    expect(bridge.SHARE_BRIDGE_LIMITS.selectorMaxLength).toBe(4096);
+    expect(bridge.SHARE_BRIDGE_LIMITS.elementIdMaxLength).toBe(4100);
+    const selector = `#${'a'.repeat(4095)}`;
+    const elementId = `dom:${selector}`;
+    expect(selector.length).toBe(bridge.SHARE_BRIDGE_LIMITS.selectorMaxLength);
+    expect(`${selector}a`.length).toBeGreaterThan(bridge.SHARE_BRIDGE_LIMITS.selectorMaxLength);
+    expect(elementId.length).toBe(bridge.SHARE_BRIDGE_LIMITS.elementIdMaxLength);
+    expect(`${elementId}a`.length).toBeGreaterThan(bridge.SHARE_BRIDGE_LIMITS.elementIdMaxLength);
+  });
+  it.each(['界', '😀', 'e\u0301', '\\"'])('counts decoded %j strings, not graphemes or JSON bytes', unit => {
+    const selector = unit.repeat(4096 / unit.length);
+    const elementId = `dom:${selector}`;
+    const decoded = JSON.parse(JSON.stringify({ selector, elementId }));
+    expect(decoded).toEqual({ selector, elementId });
+    expect(decoded.selector.length).toBe(bridge.SHARE_BRIDGE_LIMITS.selectorMaxLength);
+    expect(`${decoded.selector}x`.length).toBeGreaterThan(bridge.SHARE_BRIDGE_LIMITS.selectorMaxLength);
+    expect(decoded.elementId.length).toBe(bridge.SHARE_BRIDGE_LIMITS.elementIdMaxLength);
+    expect(`${decoded.elementId}x`.length).toBeGreaterThan(bridge.SHARE_BRIDGE_LIMITS.elementIdMaxLength);
+    expect(new TextEncoder().encode(JSON.stringify(selector)).length).toBeGreaterThan(selector.length);
+  });
+  it('keeps ordinary marked and historical dom anchors within the ceilings unchanged', () => {
+    for (const anchor of [
+      { elementId: 'hero', selector: '[data-od-id="hero"]' },
+      { elementId: 'Home', selector: '[data-screen-label="Home"]' },
+      { elementId: 'dom:body > div:nth-of-type(1)', selector: 'body > div:nth-of-type(1)' },
+    ]) {
+      expect(anchor.selector.length).toBeLessThanOrEqual(bridge.SHARE_BRIDGE_LIMITS.selectorMaxLength);
+      expect(anchor.elementId.length).toBeLessThanOrEqual(bridge.SHARE_BRIDGE_LIMITS.elementIdMaxLength);
+      expect(JSON.parse(JSON.stringify(anchor))).toEqual(anchor);
+    }
+  });
+  it('does not move the other wire ceilings or ordering requirements', () => {
+    expect(bridge.SHARE_BRIDGE_LIMITS).toEqual({
+      nonceLength: 36, idMaxLength: 200, elementIdMaxLength: 4100,
+      selectorMaxLength: 4096, htmlHintMaxLength: 2000,
+      coordinateAbsMax: 1_000_000, viewportMax: 32_768,
+      pinLabelMaxLength: 3, paletteSize: 30, pinsMaxItems: 200,
+      messageMaxBytes: 64 * 1024, messagesPerSecond: 20,
+    });
+    expect(bridge.SHARE_BRIDGE_ORDERING_AND_REVOCATION_REQUIRED).toBe(true);
+    expect(bridge.SHARE_BRIDGE_NONCE_IS_FRESHNESS_NOT_PERMISSION).toBe(true);
+    expect(bridge.SHARE_BRIDGE_CARRIES_NO_PATHS_BODIES_OR_CREDENTIALS).toBe(true);
+    expect(bridge.SHARE_BRIDGE_SELECTOR_IS_DATA_NOT_CODE).toBe(true);
+  });
   it('accepts finite fractional viewport coordinates, including offscreen targets', () => {
     expect(bridge.isShareBridgeViewportRect(rect)).toBe(true);
     expect(bridge.isShareBridgeViewportRect({ ...rect, left: -12.5, top: 0.125, width: 0 })).toBe(true);
