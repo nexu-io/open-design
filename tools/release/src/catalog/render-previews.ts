@@ -3,8 +3,6 @@ import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import sharp from "sharp";
-
 import { stageCatalogEntryAssets } from "./entry-assets.ts";
 import { MINIMAL_WEBP, renderCardFromExternal, renderFallbackCard } from "./fallback-preview-card.ts";
 import type { CatalogDocument, CatalogRecord } from "./schema.ts";
@@ -326,6 +324,7 @@ export function createPlaywrightPreviewRenderer(
   options: PlaywrightPreviewRendererOptions = {},
 ): PreviewRenderer {
   let browserPromise: Promise<PlaywrightBrowser> | null = null;
+  const loadSharp = async () => (await import("sharp")).default;
 
   async function getBrowser(): Promise<PlaywrightBrowser> {
     if (!browserPromise) {
@@ -360,6 +359,7 @@ export function createPlaywrightPreviewRenderer(
     if (job.reuseFrom && existsSync(job.reuseFrom)) {
       try {
         const raw = readFileSync(job.reuseFrom);
+        const sharp = await loadSharp();
         const webp = await sharp(raw).webp({ quality: 80 }).toBuffer();
         return { bytes: webp, source: "reuse" };
       } catch (error) {
@@ -434,6 +434,7 @@ export function createPlaywrightPreviewRenderer(
           fullPage: false,
           clip: { x: 0, y: 0, width: 1440, height: 900 },
         });
+        const sharp = await loadSharp();
         const webp = await sharp(png).webp({ quality: 80 }).toBuffer();
         return {
           bytes: webp,

@@ -7,6 +7,7 @@ import {
   installPackedMacDmg,
   inspectPackedMacApp,
   packMac,
+  packageMac,
   readPackedMacLogs,
   startPackedMacApp,
   stopPackedMacApp,
@@ -19,6 +20,7 @@ import {
   inspectPackedWinApp,
   listPackedWinNamespaces,
   packWin,
+  packageWin,
   readPackedWinLogs,
   resetPackedWinNamespaces,
   startPackedWinApp,
@@ -87,6 +89,7 @@ const TO_HELP_BY_PLATFORM: Record<ToolPackPlatform, string> = {
 
 function addBuildOptions(command: CacCommand, platform: ToolPackPlatform) {
   return command
+    .option("--source-key <digest>", "package: verified source execution SHA-256 identity (Windows)")
     .option("--app-version <version>", "override packaged app version for release artifacts")
     .option("--portable", "do not bake local tools-pack runtime roots into the packaged config")
     .option("--require-vela-cli", "fail packaging when the bundled Vela CLI cannot be resolved")
@@ -97,6 +100,11 @@ function addBuildOptions(command: CacCommand, platform: ToolPackPlatform) {
 
 function addMacBuildOptions(command: CacCommand) {
   return addBuildOptions(command, "mac")
+    .option("--mac-runtime-product <path>", "validated restored Mac runtime product")
+    .option("--output <path>", "runtime product export/restore destination")
+    .option("--archive <path>", "local runtime product archive")
+    .option("--url <url>", "runtime product HTTPS URL")
+    .option("--sha256 <digest>", "runtime product SHA-256")
     .option("--mac-compression <mode>", "mac artifact compression: normal|maximum|store (default: normal)");
 }
 
@@ -114,6 +122,27 @@ function addWinLifecycleOptions(command: CacCommand) {
 
 const cli = cac("tools-pack");
 
+cli.command("workspace <action> <unit>", "Build, verify, export or import workspace outputs (packages|daemon|web|shell|javascript)")
+  .option("--web-output-mode <mode>", "web output: standalone|server", { default: "standalone" })
+  .option("--output <path>", "export built outputs to an archive directory")
+  .option("--scratch <path>", "isolated workspace import staging directory")
+  .option("--url <url>", "verified source archive URL")
+  .option("--sha256 <digest>", "expected source archive SHA-256")
+  .option("--sources <json>", "JavaScript source descriptors: unit, url and sha256")
+  .option("--json", "print JSON result metadata")
+  .action(async (action: string, unit: string, options: import("./workspace/command.js").WorkspaceCommandOptions) => {
+    const { workspaceCommand } = await import("./workspace/command.js");
+    printJson(await workspaceCommand(action, unit, options));
+  });
+
+cli.command("executor <action>", "Export a platform release executor")
+  .option("--output <path>", "executor archive output")
+  .action(async (action: string, options: {output?: string}) => {
+    if (action !== "export" || !options.output) throw new Error("executor export requires --output");
+    const { exportReleaseExecutorProduct } = await import("./executor/product.js");
+    printJson(await exportReleaseExecutorProduct({output:options.output}));
+  });
+
 cli.command('verify-runtime', 'Verify installed prerelease Vela/OpenCode identity against a release manifest')
   .option('--resources <path>', 'installed package Resources directory')
   .option('--manifest <path>', 'release platform manifest JSON')
@@ -125,13 +154,28 @@ cli.command('verify-runtime', 'Verify installed prerelease Vela/OpenCode identit
     printJson(await verifyPackagedRuntime({ ...options, expectedOpenCode: options.expectedOpencode }));
   });
 
-addMacBuildOptions(addSharedOptions(cli.command("mac <action>", "Mac packaging commands: build|install|start|stop|logs|uninstall|cleanup|inspect"))).action(
+addMacBuildOptions(addSharedOptions(cli.command("mac <action>", "Mac packaging commands: build|package|runtime-export|runtime-restore|install|start|stop|logs|uninstall|cleanup|inspect"))).action(
   async (action: string, options: CliOptions) => {
     const config = resolveToolPackConfig("mac", options);
     switch (action) {
       case "build":
         printJson(await packMac(config));
         return;
+      case "package":
+        printJson(await packageMac(config, options.macRuntimeProduct));
+        return;
+      case "runtime-export": {
+        if (!options.output) throw new Error("mac runtime-export requires --output");
+        const { exportMacRuntimeProduct } = await import("./mac/runtime-product.js");
+        printJson(await exportMacRuntimeProduct(config, options.output));
+        return;
+      }
+      case "runtime-restore": {
+        if (!options.output) throw new Error("mac runtime-restore requires --output");
+        const { restoreMacRuntimeProduct } = await import("./mac/runtime-product.js");
+        printJson(await restoreMacRuntimeProduct(config, { ...options, output: options.output }));
+        return;
+      }
       case "install":
         printJson(await installPackedMacDmg(config));
         return;
@@ -164,7 +208,7 @@ addWinLifecycleOptions(
     addSharedOptions(
       cli.command(
         "win <action>",
-        "Windows packaging commands: build|install|start|stop|logs|uninstall|cleanup|list|reset|inspect|diagnose-ipc|validate-payload",
+        "Windows packaging commands: build|package|install|start|stop|logs|uninstall|cleanup|list|reset|inspect|diagnose-ipc|validate-payload",
       ),
     ),
     "win",
@@ -174,6 +218,10 @@ addWinLifecycleOptions(
   switch (action) {
     case "build":
       printJson(await packWin(config));
+      return;
+    case "package":
+      if (!options.sourceKey) throw new Error("win package requires --source-key");
+      printJson(await packageWin(config, options.sourceKey));
       return;
     case "install":
       printJson(await installPackedWinApp(config));

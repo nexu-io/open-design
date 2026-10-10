@@ -10,7 +10,8 @@
     "build": "node ./esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly && node --experimental-strip-types ../../packages/metatool/src/cli.ts write .",
     "dev": "tsx ./src/index.ts",
     "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit",
+    "build:executor": "node ./esbuild.config.mjs --executor && tsc -p tsconfig.json --emitDeclarationOnly && node --experimental-strip-types ../../packages/metatool/src/cli.ts write ."
   },
   "dependencies": {
     "@open-design/launcher-proto": "workspace:*",

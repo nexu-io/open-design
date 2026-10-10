@@ -1,3 +1,8 @@
+import { workspaceBuildUnitResult } from "../workspace/source.js";
+import { WORKSPACE_BUILD_UNITS } from "../workspace/units.js";
+import { processWebSourcemaps } from "../web-sourcemaps.js";
+import { collectExistingWorkspaceTarballs, writeExistingAssembledApp } from "./existing-app.js";
+import { validateMacRuntimeProductRoot } from "./runtime-product.js";
 import { ToolPackCache } from "../cache/index.js";
 import type { ToolPackConfig } from "../config/index.js";
 import { collectWorkspaceTarballs, copyResourceTree, writeAssembledApp } from "./app.js";
@@ -19,6 +24,13 @@ function logMacBuildProgress(message: string, fields: Record<string, unknown> = 
 }
 
 export async function packMac(config: ToolPackConfig): Promise<MacPackResult> {
+  return executeMacPackaging(config, false);
+}
+export async function packageMac(config: ToolPackConfig, runtimeProductRoot?: string): Promise<MacPackResult> {
+  if (runtimeProductRoot) await validateMacRuntimeProductRoot(config, runtimeProductRoot);
+  return executeMacPackaging(config, true, runtimeProductRoot);
+}
+async function executeMacPackaging(config: ToolPackConfig, existing: boolean, runtimeProductRoot?: string): Promise<MacPackResult> {
   const paths = resolveMacPaths(config);
   const targets = resolveElectronBuilderTargets(config.to as MacBuildOutput);
   const cache = new ToolPackCache(config.roots.cacheRoot);
@@ -42,18 +54,22 @@ export async function packMac(config: ToolPackConfig): Promise<MacPackResult> {
     }
   };
 
-  await runPhase("workspace-build", async () => {
-    await ensureMacWorkspaceBuild(config, cache);
-  });
+  if (existing) {
+    await runPhase("workspace-inputs", async () => { for (const unit of WORKSPACE_BUILD_UNITS) await workspaceBuildUnitResult(config, unit); });
+    await runPhase("web-sourcemaps", async () => processWebSourcemaps(config));
+  } else {
+    await runPhase("workspace-build", async () => { await ensureMacWorkspaceBuild(config, cache); });
+  }
   await runPhase("seed-app-config", async () => {
     await seedPackagedAppConfig(config);
   });
   await runPhase("resource-tree", async () => {
     await copyResourceTree(config, paths);
   });
-  const tarballs = await runPhase("workspace-tarballs", async () => collectWorkspaceTarballs(config, paths));
+  const tarballs = await runPhase("workspace-tarballs", async () => runtimeProductRoot ? [] : existing ? collectExistingWorkspaceTarballs(config, paths) : collectWorkspaceTarballs(config, paths));
   await runPhase("assembled-app", async () => {
-    await writeAssembledApp(config, paths, tarballs);
+    if (existing) await writeExistingAssembledApp(config, paths, tarballs, runtimeProductRoot);
+    else await writeAssembledApp(config, paths, tarballs);
   });
   await runPhase("electron-builder", async () => {
     await runElectronBuilder(config, paths, targets);

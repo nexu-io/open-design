@@ -185,3 +185,15 @@ extend them.
    - mutating a **known non-input** (for example a package's `dist` tree)
      leaves the key unchanged.
 5. Never introduce prefix or best-effort matching inside the store.
+
+## Explicit existing-source packaging
+
+The additive Windows `package` command requires a caller-verified SHA-256
+source identity (`--source-key`). Its workspace input identity is a separate
+`existing-source` envelope carrying that identity and the legacy source-input
+key. Downstream tarball and packaged-app nodes carry this upstream identity
+through their existing links. It never reads or writes the legacy
+`<platform>.workspace-build` node and cannot collide with its full-build key.
+The caller owns the source identity and must bind it to the verified producer
+recipe and restored source closure; a product URL or arbitrary run ID is not
+a source identity. The old `build` command retains its existing key and graph.

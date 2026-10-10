@@ -158,3 +158,9 @@ export async function assertMacPrebundleMetafile(options: {
 export function renderMacPackagedMainEntry(usePrebundle: boolean): string {
   return renderPackagedMainEntry(usePrebundle);
 }
+
+export const MAC_STANDALONE_PREBUNDLE_RESOLVER_PACKAGES = [
+  "@open-design/daemon",
+  "@open-design/launcher-proto",
+  "@open-design/sidecar-proto",
+] as const;

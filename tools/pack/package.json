@@ -22,19 +22,29 @@
     "@open-design/sidecar-proto": "workspace:*",
     "cac": "6.7.14",
     "electron-builder": "26.8.1",
-    "resedit": "1.7.2"
+    "resedit": "1.7.2",
+    "@open-design/download": "workspace:*",
+    "electron": "41.3.0",
+    "esbuild": "0.28.0",
+    "pnpm": "10.33.2"
   },
   "optionalDependencies": {
-    "@powerformer/vela-cli": "0.1.4-test.0"
+    "@powerformer/vela-cli": "0.1.4-test.0",
+    "fsevents": "2.3.3"
   },
   "devDependencies": {
     "@types/node": "24.12.2",
-    "esbuild": "0.28.0",
     "tsx": "4.22.3",
     "typescript": "6.0.3",
-    "vitest": "4.1.6"
+    "vitest": "4.1.6",
+    "@open-design/metatool": "workspace:*"
   },
   "engines": {
     "node": "~24"
-  }
+  },
+  "files": [
+    "bin",
+    "dist",
+    "resources"
+  ]
 }

@@ -410,6 +410,11 @@ jobs:
       - name: Windows launcher payload archive tests
         run: pnpm --filter @open-design/tools-pack exec vitest run tests/launcher/windows/payload.test.ts
 
+      - name: Native archive and source product contracts
+        run: |
+          pnpm --filter @open-design/download exec vitest run tests/archive.test.ts
+          pnpm --filter @open-design/tools-pack exec vitest run tests/workspace/products.test.ts tests/workspace/source.test.ts tests/executor/product.test.ts
+
   web_workspace_tests:
     name: Web workspace tests (${{ matrix.shard }}/2)
     needs: [plan, runners]

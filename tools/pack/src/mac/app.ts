@@ -51,13 +51,14 @@ export async function toRelativeImportSpecifier(fromDirectory: string, targetPat
   return specifier.startsWith(".") ? specifier : `./${specifier}`;
 }
 
-async function buildPrebundledStandaloneRuntime(
+export async function buildPrebundledStandaloneRuntime(
   config: ToolPackConfig,
   paths: MacPaths,
+  execute: typeof runEsbuild = runEsbuild,
 ): Promise<void> {
   await mkdir(paths.assembledPrebundledRoot, { recursive: true });
   await mkdir(dirname(paths.packagedMainPrebundleMetaPath), { recursive: true });
-  await runEsbuild(config, [
+  await execute(config, [
     join(config.workspaceRoot, "apps", "packaged", "dist", "index.mjs"),
     "--bundle",
     "--platform=node",
@@ -71,7 +72,7 @@ async function buildPrebundledStandaloneRuntime(
     metafilePath: paths.packagedMainPrebundleMetaPath,
     policyName: "packagedMain",
   });
-  await runEsbuild(config, [
+  await execute(config, [
     join(config.workspaceRoot, "apps", "web", "dist", "sidecar", "index.js"),
     "--bundle",
     "--platform=node",
@@ -114,7 +115,7 @@ async function buildPrebundledStandaloneRuntime(
     ].join("\n"),
     "utf8",
   );
-  await runEsbuild(config, [
+  await execute(config, [
     paths.daemonSidecarPrebundleEntrypointPath,
     paths.daemonCliPrebundleEntrypointPath,
     "--bundle",
@@ -193,7 +194,9 @@ export async function copyMacPrebundleRuntimeDependencies(
   appRoot: string,
 ): Promise<void> {
   const daemonRequire = createRequire(join(config.workspaceRoot, "apps", "daemon", "package.json"));
-  const chokidarRequire = createRequire(daemonRequire.resolve("chokidar/package.json"));
+  const chokidarRequire = process.env.OD_TOOLS_PACK_WORKSPACE_ROOT
+    ? createRequire(import.meta.url)
+    : createRequire(daemonRequire.resolve("chokidar/package.json"));
   for (const [packageName, expectedVersion] of Object.entries(MAC_PREBUNDLE_COPIED_RUNTIME_DEPENDENCIES)) {
     const sourceManifestPath = chokidarRequire.resolve(`${packageName}/package.json`);
     const sourceRoot = dirname(sourceManifestPath);

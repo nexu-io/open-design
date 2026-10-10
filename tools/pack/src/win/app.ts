@@ -75,6 +75,10 @@ async function runNpmInstall(appRoot: string): Promise<void> {
 }
 
 async function runEsbuild(config: ToolPackConfig, args: string[]): Promise<void> {
+  if (process.env.OD_TOOLS_PACK_WORKSPACE_ROOT) {
+    const { runEsbuild } = await import("../mac/product-commands.js");
+    return runEsbuild(config, args);
+  }
   await runPnpm(config, ["--filter", "@open-design/packaged", "exec", "esbuild", ...args]);
 }
 
@@ -480,4 +484,16 @@ export async function prepareWinPackagedApp(
       : {},
   );
   return { appRoot: join(manifest.entryPath, "app"), key, packagedVersion };
+}
+
+export async function materializeWinWorkspaceOutputs(config: ToolPackConfig, sourceKey: string): Promise<string> {
+  const { workspaceBuildUnitResult, createExistingSourceIdentity } = await import("../workspace/source.js");
+  createExistingSourceIdentity(sourceKey, "");
+  const { WORKSPACE_BUILD_UNITS } = await import("../workspace/units.js");
+  const { createWorkspaceBuildCacheKey } = await import("../workspace-build.js");
+  const { processWebSourcemaps } = await import("../web-sourcemaps.js");
+  for (const unit of WORKSPACE_BUILD_UNITS) await workspaceBuildUnitResult(config, unit);
+  const key = createExistingSourceIdentity(sourceKey, await createWorkspaceBuildCacheKey(config));
+  await processWebSourcemaps(config);
+  return key;
 }

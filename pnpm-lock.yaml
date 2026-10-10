@@ -870,6 +870,9 @@ importers:
       '@electron/rebuild':
         specifier: 4.0.4
         version: 4.0.4
+      '@open-design/download':
+        specifier: workspace:*
+        version: link:../../packages/download
       '@open-design/launcher-proto':
         specifier: workspace:*
         version: link:../../packages/launcher-proto
@@ -888,19 +891,28 @@ importers:
       cac:
         specifier: 6.7.14
         version: 6.7.14
+      electron:
+        specifier: 41.3.0
+        version: 41.3.0
       electron-builder:
         specifier: 26.8.1
         version: 26.8.1(electron-builder-squirrel-windows@26.8.1)
+      esbuild:
+        specifier: 0.28.0
+        version: 0.28.0
+      pnpm:
+        specifier: 10.33.2
+        version: 10.33.2
       resedit:
         specifier: 1.7.2
         version: 1.7.2
     devDependencies:
+      '@open-design/metatool':
+        specifier: workspace:*
+        version: link:../../packages/metatool
       '@types/node':
         specifier: 24.12.2
         version: 24.12.2
-      esbuild:
-        specifier: 0.28.0
-        version: 0.28.0
       tsx:
         specifier: 4.22.3
         version: 4.22.3
@@ -914,6 +926,9 @@ importers:
       '@powerformer/vela-cli':
         specifier: 0.1.4-test.0
         version: 0.1.4-test.0
+      fsevents:
+        specifier: 2.3.3
+        version: 2.3.3
 
   tools/release:
     dependencies:
@@ -5695,6 +5710,11 @@ packages:
   pngjs@7.0.0:
     resolution: {integrity: sha512-LKWqWJRhstyYo9pGvgor/ivk2w94eSjE3RGVuzLGlr3NmD8bf7RcYGze1mNdEHRP6TRP6rMuDHk5t44hnTRyow==}
     engines: {node: '>=14.19.0'}
+
+  pnpm@10.33.2:
+    resolution: {integrity: sha512-qQ+vb+6rca1sblf5Tg/hoS9dzCLNdU20CulZPraj4LaxLjVAIYuzeuCDQEsfLObbKkEh6XmCm0r/lLmfSdoc+A==}
+    engines: {node: '>=18.12'}
+    hasBin: true
 
   points-on-curve@0.2.0:
     resolution: {integrity: sha512-0mYKnYYe9ZcqMCWhUjItv/oHjvgEsfKvnUTg8sAtnHr3GVy7rGkXCb6d5cSyqrWqL4k81b9CPg3urd+T7aop3A==}
@@ -11717,6 +11737,8 @@ snapshots:
       crc-32: 0.3.0
 
   pngjs@7.0.0: {}
+
+  pnpm@10.33.2: {}
 
   points-on-curve@0.2.0: {}
 

@@ -182,3 +182,71 @@ Linux desktop apps in this space split across formats: VS Code ships `.deb` + `.
 `--to dmg` is manual-install DMG output only. Any builder-generated updater metadata such as `latest-mac.yml` or
 `.blockmap` files is treated as scratch and cleaned from the builder directory; release-beta generates the authoritative
 `latest-mac.yml` feed during release asset preparation, pointing at the update ZIP.
+
+## Explicit source products and release executors
+
+The additive commands below prepare caller-selected capabilities. Existing
+`mac build`, `win build`, Linux commands, and release workflows retain their
+full-build behavior. These commands do not decide cache hits or publish release
+channels; the calling Plan owns source identity, provenance, and execution policy.
+
+```sh
+pnpm tools-pack workspace build packages --output /path/to/packages-product
+pnpm tools-pack workspace build daemon --output /path/to/daemon-product
+pnpm tools-pack workspace build shell --output /path/to/shell-product
+pnpm tools-pack workspace build web --output /path/to/web-product
+pnpm tools-pack workspace result javascript
+pnpm tools-pack workspace import daemon --url https://products.example/daemon.zip --sha256 <SHA256> --scratch /path/to/staging
+```
+
+A single unit requires its dependencies to have been built or restored first.
+`javascript` groups packages, daemon, and shell. Their schema-2 products contain
+portable JavaScript and declarations; Web's schema-1 product includes the native
+platform/architecture, Node version, and Web output mode. Products contain an
+`outputs.json` manifest and declared output directories. Transport wraps the
+`workspace.tar.gz` file in a ZIP and binds the ZIP bytes to a SHA-256 digest.
+Import validates the complete output closure before replacing it and rolls back
+failed replacements. Corrupt or incompatible products fail; the caller decides
+any permitted recovery from its frozen Plan.
+
+```sh
+pnpm --filter @open-design/tools-release build:executor
+pnpm --filter @open-design/tools-pack build
+pnpm tools-pack executor export --output /path/to/executor/workspace.tar.gz
+```
+
+The platform executor deploys tools-pack's production dependencies, Electron,
+esbuild, pnpm, and release resources. Its release entry uses the separately built
+`dist/executor/index.mjs` bundle; the ordinary tools-release entry retains its
+existing build mode. Export and restore require the current OS and architecture.
+`.github/scripts/release/executor.py` restores the ZIP-wrapped product without
+installing the application workspace. Use `pack/dist/index.mjs` and
+`release/dist/index.mjs` from the restored root directly, rather than the
+repository bin wrappers that check source build metadata.
+
+Set `OD_TOOLS_PACK_WORKSPACE_ROOT` explicitly to the source workspace when
+invoking a deployed executor. The ordinary CLI retains its installation-relative
+workspace default. The override also selects executor-owned native build tools;
+callers must not inherit it accidentally into unrelated local builds. Release
+packaging/report/metadata commands are supported; catalog preview rendering
+requires its own sharp/browser environment and is not part of this executor.
+
+```sh
+pnpm tools-pack mac runtime-export --namespace local-runtime --dir /path/to/producer --output /path/to/runtime/workspace.tar.gz
+pnpm tools-pack mac runtime-restore --archive /path/to/runtime/workspace.tar.gz --output /path/to/restored-runtime
+pnpm tools-pack mac package --to app --portable --app-version 0.23.1-beta.1 --namespace local-package --dir /path/to/consumer --mac-runtime-product /path/to/restored-runtime
+pnpm tools-pack win package --to nsis --portable --app-version 0.23.1-beta.1 --namespace local-package --dir /path/to/consumer --source-key <SOURCE_IDENTITY_SHA256>
+```
+
+`package` verifies all source units and never compiles missing source. Mac runtime
+products preserve the Electron ABI and host architecture, while target version,
+channel identity, endpoints, and packaged configuration are materialized at
+consumption. The explicit Mac assembly asserts that configuration and package
+identity match the target release. It uses a separate assembly adapter; the old
+Mac tarball and installation order remain available to `build`.
+
+Windows requires a caller-verified SHA-256 identity covering the complete restored
+source recipe. It contributes to a separate upstream cache identity, so the
+explicit path cannot reuse the old full-build identity. See [CACHE.md](CACHE.md).
+Signing, notarization, smoke validation, and release publication remain separate
+caller-owned steps. Producing an unsigned app is not signed release acceptance.

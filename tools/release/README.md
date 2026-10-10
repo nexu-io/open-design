@@ -36,3 +36,13 @@ This matrix is a quick check before changing or validating the stable lane.
 - The stable workflow should stay isomorphic with the other `release-*` lanes.
   Stable-specific policy belongs behind scripts, CLI options, and file
   contracts, not as leaked tool internals in workflow YAML.
+
+### Platform executor bundle
+
+`pnpm --filter @open-design/tools-release build:executor` additionally emits
+`dist/executor/index.mjs`, a self-contained Node 24 entry for deployment through
+`tools-pack executor export`. The default build and repository CLI retain their
+existing external dependency layout. The executor bundle leaves `sharp` external
+and loads it only for catalog rendering; catalog previews require a separately
+prepared browser/native dependency environment. Release metadata, publishing,
+and reports remain tools-release responsibilities.

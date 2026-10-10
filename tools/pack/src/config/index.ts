@@ -1,7 +1,5 @@
-import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 import {
@@ -11,27 +9,8 @@ import {
 import { resolveNamespace } from "@open-design/sidecar";
 import { releaseChannelFromVersion, releaseNamespace } from "@open-design/release";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-function resolveToolPackRoot(startDir: string): string {
-  let candidate = startDir;
-  while (true) {
-    const packageJsonPath = join(candidate, "package.json");
-    if (existsSync(packageJsonPath)) {
-      const require = createRequire(packageJsonPath);
-      const packageJson = require(packageJsonPath) as { name?: string };
-      if (packageJson.name === "@open-design/tools-pack") return candidate;
-    }
-
-    const parent = path.dirname(candidate);
-    if (parent === candidate) {
-      throw new Error(`could not locate @open-design/tools-pack package from ${startDir}`);
-    }
-    candidate = parent;
-  }
-}
-
-export const WORKSPACE_ROOT = resolve(resolveToolPackRoot(__dirname), "../..");
+import { WORKSPACE_ROOT } from "./workspace-root.js";
+export { WORKSPACE_ROOT } from "./workspace-root.js";
 
 export type ToolPackPlatform = "mac" | "win" | "linux";
 export type ToolPackBuildOutput = "all" | "app" | "appimage" | "dir" | "dmg" | "nsis" | "zip";
@@ -42,6 +21,12 @@ export type ToolPackVelaWebUrls = Partial<Record<ToolPackAmrProfile, string>>;
 
 export type ToolPackCliOptions = {
   appVersion?: string;
+  sourceKey?: string;
+  macRuntimeProduct?: string;
+  output?: string;
+  archive?: string;
+  url?: string;
+  sha256?: string;
   cacheDir?: string;
   containerized?: boolean;
   dir?: string;
@@ -87,6 +72,12 @@ export type ToolPackRoots = {
 
 export type ToolPackConfig = {
   appVersion?: string;
+  sourceKey?: string;
+  macRuntimeProduct?: string;
+  output?: string;
+  archive?: string;
+  url?: string;
+  sha256?: string;
   containerized: boolean;
   electronBuilderCliPath: string;
   electronDistPath: string;
@@ -373,7 +364,9 @@ function resolveElectronVersion(workspaceRoot: string): string {
 
 function resolveElectronDistPath(workspaceRoot: string): string {
   const require = createRequire(join(workspaceRoot, "apps/desktop/package.json"));
-  const electronEntry = require.resolve("electron");
+  const electronEntry = process.env.OD_TOOLS_PACK_WORKSPACE_ROOT
+    ? createRequire(import.meta.url).resolve("electron")
+    : require.resolve("electron");
   return join(path.dirname(electronEntry), "dist");
 }
 
