@@ -1,3 +1,4 @@
+{{- $webBasePath := include "open-design.webBasePath" . -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -8,6 +9,7 @@ data:
   OD_BIND_HOST: {{ .Values.config.bindHost | quote }}
   OD_PORT: {{ .Values.config.webPort | quote }}
   OD_WEB_PORT: {{ .Values.config.webPort | quote }}
+  OD_WEB_BASE_PATH: {{ $webBasePath | quote }}
   PROXY_PORT: {{ .Values.authProxy.port | quote }}
   NODE_ENV: {{ .Values.config.nodeEnv | quote }}
   NODE_OPTIONS: {{ .Values.config.nodeOptions | quote }}
@@ -22,7 +24,7 @@ data:
       {{- end }}
     {{- end }}
     {{- $scheme := ternary "https://" "http://" $isSecure }}
-    {{- $publicBaseUrl = printf "%s%s" $scheme $singleHost }}
+    {{- $publicBaseUrl = printf "%s%s%s" $scheme $singleHost $webBasePath }}
   {{- else if gt (len .Values.ingress.hosts) 1 }}
     {{- fail "CRITICAL ERROR: Multiple ingress hosts configured. You must explicitly set config.publicBaseUrl to define the canonical origin for OAuth callbacks." }}
   {{- end }}

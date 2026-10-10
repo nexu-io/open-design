@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 import type {
   AmrWalletSnapshot,
   WorkspaceCollabContext,
@@ -127,7 +128,7 @@ async function fetchWorkspaceWalletSnapshot(
   if (!workspaceId || !workspaceMemberId) return null;
   const includePreflight = options.includePreflight === true;
   const modelId = includePreflight ? options.modelId?.trim() : undefined;
-  const response = await fetch(
+  const response = await apiFetch(
     `/api/workspace/billing?scope=workspace&workspaceId=${encodeURIComponent(workspaceId)}&freshness=authoritative${includePreflight ? '&includePreflight=1' : ''}${modelId ? `&modelId=${encodeURIComponent(modelId)}` : ''}`,
     { cache: 'no-store' },
   );

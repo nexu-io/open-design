@@ -1,7 +1,8 @@
+import { apiFetch } from '@/runtime/web-path';
 import type { AgentCompanionSetupResponse } from '@open-design/contracts';
 
 export async function installDeepSeekHarnessCompanion(): Promise<AgentCompanionSetupResponse> {
-  const response = await fetch('/api/agents/deepseek-harness/companion/install', {
+  const response = await apiFetch('/api/agents/deepseek-harness/companion/install', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: '{}',

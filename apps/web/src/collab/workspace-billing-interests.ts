@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 import type {
   WorkspaceBillingInterestResponse,
   WorkspaceBillingInterestScope,
@@ -144,7 +145,7 @@ class WorkspaceBillingInterestRegistry {
     const url = `/api/workspace/billing/interests/${encodeURIComponent(this.clientId)}`;
     this.clearRenewTimer();
     let retryImmediately = false;
-    const operation = fetch(
+    const operation = apiFetch(
       interests.length > 0 ? url : `${url}?generation=${encodeURIComponent(generation)}`,
       interests.length > 0
         ? {

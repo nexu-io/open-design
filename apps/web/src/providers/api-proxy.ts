@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 import { effectiveMaxTokens } from '../state/maxTokens';
 import type { AppConfig, ChatMessage } from '../types';
 import type {
@@ -53,7 +54,7 @@ export async function streamProxyEndpoint(
 
   try {
     const messages = await buildProxyMessages(endpoint, history, context);
-    const resp = await fetch(endpoint, {
+    const resp = await apiFetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -223,7 +224,7 @@ async function readAnthropicImageBlock(
   workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<ProxyImageContentBlock | null> {
   try {
-    const resp = await fetch(projectFileUrl(projectId, path, workspaceContext), {
+    const resp = await apiFetch(projectFileUrl(projectId, path, workspaceContext), {
       cache: 'no-store',
       ...(workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : {}),
     });

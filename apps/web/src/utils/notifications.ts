@@ -1,3 +1,4 @@
+import { publicPath } from '@/runtime/web-path';
 import type { Dict } from '../i18n/types';
 import type { NotificationsConfig } from '../types';
 
@@ -31,7 +32,7 @@ type NotificationOptionsWithBrowserExtensions = NotificationOptions & {
 
 let ctx: AudioContext | null = null;
 const activeNotifications = new Set<Notification>();
-const SERVICE_WORKER_URL = '/od-notifications-sw.js';
+const SERVICE_WORKER_URL = publicPath('/od-notifications-sw.js');
 const COMPLETION_FEEDBACK_GESTURE_EVENT = 'od:completion-feedback-gesture';
 
 function getCtx(): AudioContext | null {

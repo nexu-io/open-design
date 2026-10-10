@@ -1,3 +1,4 @@
+import { apiFetch, apiEventSource } from '@/runtime/web-path';
 import {
   useCallback,
   useEffect,
@@ -193,20 +194,20 @@ function writePendingConnectorAuthIds(ids: Set<string>): void {
 // daemon made without having heard from it (OPEND-2606). Callers keep whatever
 // they last knew and, on first paint, keep claiming nothing.
 async function fetchMemoryList(): Promise<MemoryListResponse | null> {
-  const resp = await fetch('/api/memory');
+  const resp = await apiFetch('/api/memory');
   if (!resp.ok) return null;
   return (await resp.json()) as MemoryListResponse;
 }
 
 async function fetchMemoryTree(): Promise<MemoryTreeNode[]> {
-  const resp = await fetch('/api/memory/tree');
+  const resp = await apiFetch('/api/memory/tree');
   if (!resp.ok) return [];
   const json = (await resp.json()) as MemoryTreeListResponse;
   return json.tree ?? [];
 }
 
 async function fetchMemoryEntry(id: string): Promise<MemoryEntry | null> {
-  const resp = await fetch(`/api/memory/${encodeURIComponent(id)}`);
+  const resp = await apiFetch(`/api/memory/${encodeURIComponent(id)}`);
   if (!resp.ok) return null;
   const json = (await resp.json()) as { entry: MemoryEntry };
   return json.entry ?? null;
@@ -216,7 +217,7 @@ async function saveMemoryEntry(draft: DraftEntry): Promise<MemoryEntry | null> {
   const url = draft.id
     ? `/api/memory/${encodeURIComponent(draft.id)}`
     : '/api/memory';
-  const resp = await fetch(url, {
+  const resp = await apiFetch(url, {
     method: draft.id ? 'PUT' : 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(draft),
@@ -231,14 +232,14 @@ function memoryEntryIdForConnectorSuggestion(suggestion: MemorySuggestion): stri
 }
 
 async function deleteMemoryEntry(id: string): Promise<boolean> {
-  const resp = await fetch(`/api/memory/${encodeURIComponent(id)}`, {
+  const resp = await apiFetch(`/api/memory/${encodeURIComponent(id)}`, {
     method: 'DELETE',
   });
   return resp.ok;
 }
 
 async function saveMemoryIndex(index: string): Promise<boolean> {
-  const resp = await fetch('/api/memory/index', {
+  const resp = await apiFetch('/api/memory/index', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ index }),
@@ -247,7 +248,7 @@ async function saveMemoryIndex(index: string): Promise<boolean> {
 }
 
 async function setMemoryEnabled(enabled: boolean): Promise<boolean> {
-  const resp = await fetch('/api/memory/config', {
+  const resp = await apiFetch('/api/memory/config', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ enabled }),
@@ -262,7 +263,7 @@ async function patchMemoryConfigFlag(
   flag: MemoryHookKey,
   value: boolean,
 ): Promise<boolean> {
-  const resp = await fetch('/api/memory/config', {
+  const resp = await apiFetch('/api/memory/config', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ [flag]: value }),
@@ -271,14 +272,14 @@ async function patchMemoryConfigFlag(
 }
 
 async function fetchExtractions(): Promise<MemoryExtractionRecord[]> {
-  const resp = await fetch('/api/memory/extractions');
+  const resp = await apiFetch('/api/memory/extractions');
   if (!resp.ok) return [];
   const json = (await resp.json()) as MemoryExtractionsResponse;
   return json.extractions ?? [];
 }
 
 async function fetchMemoryConnectors(): Promise<ConnectorDetail[]> {
-  const resp = await fetch('/api/connectors/discovery?hydrateTools=false');
+  const resp = await apiFetch('/api/connectors/discovery?hydrateTools=false');
   if (!resp.ok) return [];
   const json = (await resp.json()) as ConnectorDiscoveryResponse;
   return json.connectors ?? [];
@@ -295,7 +296,7 @@ async function suggestConnectorMemories(
   } = { connectorIds };
   if (context.chatAgentId) body.chatAgentId = context.chatAgentId;
   if (context.chatModel) body.chatModel = context.chatModel;
-  const resp = await fetch('/api/memory/connectors/suggest', {
+  const resp = await apiFetch('/api/memory/connectors/suggest', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -533,7 +534,7 @@ function connectorWithPendingAuthorization(connector: ConnectorDetail): Connecto
 // listing always re-fetches from the SSE stream, so the UI doesn't need
 // the new state back here.
 async function deleteExtraction(id: string): Promise<boolean> {
-  const resp = await fetch(
+  const resp = await apiFetch(
     `/api/memory/extractions/${encodeURIComponent(id)}`,
     { method: 'DELETE' },
   );
@@ -541,7 +542,7 @@ async function deleteExtraction(id: string): Promise<boolean> {
 }
 
 async function clearExtractionHistory(): Promise<boolean> {
-  const resp = await fetch('/api/memory/extractions', { method: 'DELETE' });
+  const resp = await apiFetch('/api/memory/extractions', { method: 'DELETE' });
   return resp.ok;
 }
 
@@ -931,7 +932,7 @@ export function MemorySection({
   // so we just always reload on any change. EventSource auto-reconnects
   // on temporary daemon hiccups.
   useEffect(() => {
-    const es = new EventSource('/api/memory/events');
+    const es = apiEventSource('/api/memory/events');
     es.addEventListener('change', (raw) => {
       try {
         const ev = JSON.parse((raw as MessageEvent).data) as MemoryChangeEvent;

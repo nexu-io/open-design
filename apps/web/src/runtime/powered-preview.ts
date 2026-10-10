@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 /**
  * "Powered preview" — render an HTML artifact in a cross-origin-isolated
  * iframe so it can use capabilities the default opaque-origin preview sandbox
@@ -27,7 +28,7 @@ export function fetchPreviewIsolation(): Promise<ProjectPreviewIsolationResponse
   if (isolationProbe) return isolationProbe;
   isolationProbe = (async () => {
     try {
-      const resp = await fetch('/api/preview/isolation', { cache: 'no-store' });
+      const resp = await apiFetch('/api/preview/isolation', { cache: 'no-store' });
       if (!resp.ok) return null;
       const data = (await resp.json()) as ProjectPreviewIsolationResponse;
       if (!data || typeof data.baseOrigin !== 'string' || !data.baseOrigin) return null;

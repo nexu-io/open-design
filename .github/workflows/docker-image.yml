@@ -33,6 +33,7 @@ on:
   pull_request:
     paths:
       - "deploy/**"
+      - "charts/open-design/**"
       - ".dockerignore"
       - "package.json"
       - "pnpm-lock.yaml"
@@ -80,10 +81,12 @@ jobs:
           if [ -n "${RELEASE_VERSION:-}" ]; then
             echo "publish=true" >> "$GITHUB_OUTPUT"
             echo "platforms=linux/amd64,linux/arm64" >> "$GITHUB_OUTPUT"
+            echo "web_base_path=" >> "$GITHUB_OUTPUT"
           else
             # pull_request and standalone workflow_dispatch: smoke only
             echo "publish=false" >> "$GITHUB_OUTPUT"
             echo "platforms=linux/amd64" >> "$GITHUB_OUTPUT"
+            echo "web_base_path=/open-design" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Set up QEMU
@@ -158,6 +161,7 @@ jobs:
           file: source/deploy/Dockerfile
           platforms: ${{ steps.mode.outputs.platforms }}
           push: ${{ steps.mode.outputs.publish == 'true' }}
+          load: ${{ steps.mode.outputs.publish != 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           annotations: |
@@ -171,8 +175,33 @@ jobs:
           build-args: |
             NODE_IMAGE=public.ecr.aws/docker/library/node:24-alpine
             RUNTIME_IMAGE=public.ecr.aws/docker/library/node:24-alpine
+            OD_WEB_BASE_PATH=${{ steps.mode.outputs.web_base_path }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Set up Helm for deployment smoke
+        if: ${{ steps.mode.outputs.publish != 'true' }}
+        uses: azure/setup-helm@v4
+
+      - name: Validate Helm-rendered non-root image and runtime config
+        if: ${{ steps.mode.outputs.publish != 'true' }}
+        working-directory: source
+        shell: bash
+        env:
+          SMOKE_IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+          OD_HELM_SMOKE_WEB_BASE_PATH: ${{ steps.mode.outputs.web_base_path }}
+        run: |
+          set -euo pipefail
+          smoke_image="$(sed -n '1p' <<< "$SMOKE_IMAGE_TAGS")"
+          if [ -z "$smoke_image" ]; then
+            echo "Docker metadata did not produce a smoke image tag." >&2
+            exit 1
+          fi
+          export OD_HELM_SMOKE_IMAGE="$smoke_image"
+          node --experimental-strip-types --test \
+            charts/open-design/tests/ingress-render.test.ts \
+            charts/open-design/tests/base-path-image-render.test.ts \
+            charts/open-design/tests/base-path-image-runtime.test.ts
 
       - name: Verify public GHCR pull access
         id: verify

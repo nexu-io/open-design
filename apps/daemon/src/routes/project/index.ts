@@ -5752,7 +5752,8 @@ export function registerProjectArtifactRoutes(app: Express, ctx: RegisterProject
       const findings = lintArtifact(html);
       res.json({
         path: file,
-        url: `/artifacts/${path.basename(dir)}/index.html`,
+        url: ctx.http.getBrowserPath?.(`/artifacts/${path.basename(dir)}/index.html`)
+          ?? `/artifacts/${path.basename(dir)}/index.html`,
         lint: findings,
       });
     } catch (err: any) {
@@ -6362,10 +6363,10 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     const dirSuffix = ownerDir === '.'
       ? ''
       : `${encodeProjectPathForUrl(ownerDir)}/`;
-    const baseTag = `<base href="/api/projects/${encodeURIComponent(projectId)}`
-      + `/preview/${encodeURIComponent(scope)}/${dirSuffix}" data-od-project-preview-base>`;
-    const baseHref = `/api/projects/${encodeURIComponent(projectId)}`
+    const previewPath = `/api/projects/${encodeURIComponent(projectId)}`
       + `/preview/${encodeURIComponent(scope)}/${dirSuffix}`;
+    const baseHref = ctx.http.getBrowserPath?.(previewPath) ?? previewPath;
+    const baseTag = `<base href="${baseHref}" data-od-project-preview-base>`;
     const bridge = buildPreviewBaseHrefBridge({ href: baseHref, expiresAt });
     // Same structural rule as the bridge injectors above: a `<head>` inside a
     // script string is text, not this document's head.
@@ -6755,8 +6756,9 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         return;
       }
       /** @type {import('@open-design/contracts').ProjectPreviewUrlResponse} */
+      const previewPath = `/api/projects/${encodeURIComponent(project.id)}/preview/${scope}/${encodeProjectPathForUrl(meta.name)}`;
       const body = {
-        url: `/api/projects/${encodeURIComponent(project.id)}/preview/${scope}/${encodeProjectPathForUrl(meta.name)}`,
+        url: ctx.http.getBrowserPath?.(previewPath) ?? previewPath,
         file: meta.name,
         csp: projectPreviewCsp,
         iframeSandbox: projectPreviewIframeSandbox,

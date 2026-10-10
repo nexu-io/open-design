@@ -1,3 +1,4 @@
+import { createPathConfig, rewriteKnownInternalBrowserPaths } from '@open-design/path-config';
 import type { Express, Response } from 'express';
 import type Database from 'better-sqlite3';
 import path from 'node:path';
@@ -127,6 +128,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
     USER_SKILLS_DIR,
     PROMPT_TEMPLATES_DIR,
     BUNDLED_PETS_DIR,
+    WEB_BASE_PATH,
   } = ctx.paths;
   const {
     listAllSkills,
@@ -723,7 +725,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
   app.get('/api/codex-pets', async (_req, res) => {
     try {
       const result = await listCodexPets({
-        baseUrl: '',
+        baseUrl: WEB_BASE_PATH ?? '',
         bundledRoot: BUNDLED_PETS_DIR,
       });
       res.json(result);
@@ -957,7 +959,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
           const html = await fs.promises.readFile(candidate, 'utf8');
           return res
             .type('text/html')
-            .send(rewriteSkillAssetUrls(html, parent.id, workspaceQuery));
+            .send(rewriteSkillAssetUrls(html, parent.id, workspaceQuery, WEB_BASE_PATH));
         }
         return res
           .status(404)
@@ -975,7 +977,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
         const html = await fs.promises.readFile(baked, 'utf8');
         return res
           .type('text/html')
-          .send(rewriteSkillAssetUrls(html, skill.id, workspaceQuery));
+          .send(rewriteSkillAssetUrls(html, skill.id, workspaceQuery, WEB_BASE_PATH));
       }
 
       const tpl = path.join(skill.dir, 'assets', 'template.html');
@@ -987,7 +989,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
           const assembled = assembleExample(tplHtml, slidesHtml, skill.name);
           return res
             .type('text/html')
-            .send(rewriteSkillAssetUrls(assembled, skill.id, workspaceQuery));
+            .send(rewriteSkillAssetUrls(assembled, skill.id, workspaceQuery, WEB_BASE_PATH));
         } catch {
           // Fall through to raw template on read failure.
         }
@@ -996,14 +998,14 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
         const html = await fs.promises.readFile(tpl, 'utf8');
         return res
           .type('text/html')
-          .send(rewriteSkillAssetUrls(html, skill.id, workspaceQuery));
+          .send(rewriteSkillAssetUrls(html, skill.id, workspaceQuery, WEB_BASE_PATH));
       }
       const idx = path.join(skill.dir, 'assets', 'index.html');
       if (fs.existsSync(idx)) {
         const html = await fs.promises.readFile(idx, 'utf8');
         return res
           .type('text/html')
-          .send(rewriteSkillAssetUrls(html, skill.id, workspaceQuery));
+          .send(rewriteSkillAssetUrls(html, skill.id, workspaceQuery, WEB_BASE_PATH));
       }
 
       // Friendly fallback for skills that aggregate examples in a sibling
@@ -1031,7 +1033,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
             const html = await fs.promises.readFile(direct, 'utf8');
             return res
               .type('text/html')
-              .send(rewriteSkillAssetUrls(html, skill.id, workspaceQuery));
+              .send(rewriteSkillAssetUrls(html, skill.id, workspaceQuery, WEB_BASE_PATH));
           } catch {
             continue;
           }
@@ -1516,14 +1518,17 @@ export function rewriteSkillAssetUrls(
   html: string,
   skillId: string,
   workspaceQuery = '',
+  webBasePath = '',
 ) {
   if (typeof html !== 'string' || html.length === 0) return html;
-  return html.replace(
+  const publicPath = createPathConfig(webBasePath).withBasePath;
+  const rewritten = html.replace(
     /(\s(?:src|href)\s*=\s*)(['"])((?:\.\.\/([^/'"#?]+)\/)?(?:\.\/)?assets\/([^'"#?]+))(\2)/gi,
     (_match, attr, openQuote, _fullPath, siblingSkillId, relPath, closeQuote) => {
       const resolvedSkillId = siblingSkillId || skillId;
-      const prefix = `/api/skills/${encodeURIComponent(resolvedSkillId)}/assets/`;
+      const prefix = publicPath(`/api/skills/${encodeURIComponent(resolvedSkillId)}/assets/`);
       return `${attr}${openQuote}${prefix}${relPath}${workspaceQuery}${closeQuote}`;
     },
   );
+  return rewriteKnownInternalBrowserPaths(rewritten, webBasePath);
 }

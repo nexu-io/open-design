@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CollabMemberRole } from '@open-design/contracts';
 import { navigate } from '../router';
@@ -72,7 +73,7 @@ export function CollabDemoView({ projectId }: { projectId: string | null }) {
   const shareToTeam = async () => {
     if (!activeProjectId || !workspaceContext) return;
     const requestContext = workspaceContext;
-    await fetch(`/api/projects/${encodeURIComponent(activeProjectId)}/collab/sync-intent`, {
+    await apiFetch(`/api/projects/${encodeURIComponent(activeProjectId)}/collab/sync-intent`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',

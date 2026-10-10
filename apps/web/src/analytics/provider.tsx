@@ -1,4 +1,5 @@
 'use client';
+import { apiFetch, stripWebBasePath } from '@/runtime/web-path';
 
 import {
   createContext,
@@ -85,10 +86,9 @@ function isSameOriginApiCall(url: unknown): boolean {
   if (typeof window === 'undefined') return false;
   try {
     const parsed = new URL(url, window.location.origin);
-    return (
-      parsed.origin === window.location.origin &&
-      parsed.pathname.startsWith('/api/')
-    );
+    if (parsed.origin !== window.location.origin) return false;
+    const appPath = stripWebBasePath(parsed.pathname);
+    return appPath === '/api' || appPath?.startsWith('/api/') === true;
   } catch {
     return false;
   }
@@ -105,7 +105,7 @@ async function loadRuntimeAppVersion(): Promise<string | null> {
   if (!runtimeAppVersionPromise) {
     runtimeAppVersionPromise = (async () => {
       try {
-        const res = await fetch('/api/version');
+        const res = await apiFetch('/api/version');
         if (!res.ok) return null;
         const body = (await res.json()) as {
           version?: { version?: string; channel?: string };

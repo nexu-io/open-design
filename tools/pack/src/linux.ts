@@ -52,6 +52,7 @@ const CONTAINER_TOOLS_PACK_CLI_PATH = "tools/pack/bin/tools-pack.mjs";
 export const INTERNAL_PACKAGES = [
   { directory: "packages/release", name: "@open-design/release" },
   { directory: "packages/components", name: "@open-design/components" },
+  { directory: "packages/path-config", name: "@open-design/path-config" },
   { directory: "packages/contracts", name: "@open-design/contracts" },
   { directory: "packages/registry-protocol", name: "@open-design/registry-protocol" },
   { directory: "packages/sidecar-proto", name: "@open-design/sidecar-proto" },

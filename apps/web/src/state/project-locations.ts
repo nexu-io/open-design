@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 import type {
   ProjectLocation,
   ProjectLocationsResponse,
@@ -7,7 +8,7 @@ import type {
 
 export async function fetchProjectLocations(): Promise<ProjectLocation[]> {
   try {
-    const resp = await fetch('/api/project-locations');
+    const resp = await apiFetch('/api/project-locations');
     if (!resp.ok) return [];
     const json = (await resp.json()) as ProjectLocationsResponse;
     return Array.isArray(json.locations) ? json.locations : [];
@@ -20,7 +21,7 @@ export async function updateProjectLocations(
   locations: UpdateProjectLocationsRequest['locations'],
 ): Promise<ProjectLocation[] | null> {
   try {
-    const resp = await fetch('/api/project-locations', {
+    const resp = await apiFetch('/api/project-locations', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ locations }),
@@ -35,7 +36,7 @@ export async function updateProjectLocations(
 
 export async function scanProjectLocations(): Promise<ScanProjectLocationsResponse | null> {
   try {
-    const resp = await fetch('/api/project-locations/scan', { method: 'POST' });
+    const resp = await apiFetch('/api/project-locations/scan', { method: 'POST' });
     if (!resp.ok) return null;
     return (await resp.json()) as ScanProjectLocationsResponse;
   } catch {
@@ -45,7 +46,7 @@ export async function scanProjectLocations(): Promise<ScanProjectLocationsRespon
 
 export async function openProjectLocationFolderDialog(): Promise<string | null> {
   try {
-    const resp = await fetch('/api/dialog/open-folder', { method: 'POST' });
+    const resp = await apiFetch('/api/dialog/open-folder', { method: 'POST' });
     if (!resp.ok) return null;
     const json = (await resp.json()) as { path?: string | null };
     return typeof json.path === 'string' && json.path.trim() ? json.path : null;

@@ -1,3 +1,4 @@
+import { ensureWebBasePath } from '@/runtime/web-path';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
 
 /**
@@ -28,6 +29,7 @@ export function workspaceResourceUrl(
   path: string,
   context: WorkspaceCollabContext | null | undefined,
 ): string {
+  path = ensureWebBasePath(path);
   if (!context) return path;
   const separator = path.includes('?') ? '&' : '?';
   return `${path}${separator}workspaceId=${encodeURIComponent(context.workspaceId)}`

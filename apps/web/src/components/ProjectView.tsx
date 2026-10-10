@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 import { readRetriedErrorSurface, retriedErrorSurfaceKey, writeRetriedErrorSurface } from '../runtime/chat/retried-error-surface';
 import {
   startTransition,
@@ -10540,7 +10541,7 @@ export function ProjectView({
           : undefined;
         if (userText.length > 0) {
           try {
-            await fetch('/api/memory/extract', {
+            await apiFetch('/api/memory/extract', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({

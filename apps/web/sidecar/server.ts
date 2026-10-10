@@ -1,3 +1,4 @@
+import { createPathConfig, normalizeBasePath, type BasePath } from '@open-design/path-config';
 import { spawn, type ChildProcess } from "node:child_process";
 import {
   Agent as HttpAgent,
@@ -239,24 +240,33 @@ function resolveRequestPathname(requestUrl: string | undefined): string | null {
   }
 }
 
-function isDaemonProxyPathname(pathname: string): boolean {
+export function resolveWebBasePath(env: Partial<NodeJS.ProcessEnv> = process.env): BasePath {
+  return normalizeBasePath(env.OD_WEB_BASE_PATH);
+}
+
+function isDaemonProxyPathname(pathname: string, basePath: BasePath = resolveWebBasePath()): boolean {
+  const daemonPathname = createPathConfig(basePath).stripBasePath(pathname);
+  if (daemonPathname == null) return false;
   return (
-    pathname === "/api" ||
-    pathname.startsWith("/api/") ||
-    pathname === "/artifacts" ||
-    pathname.startsWith("/artifacts/") ||
-    pathname === "/frames" ||
-    pathname.startsWith("/frames/")
+    daemonPathname === "/api" ||
+    daemonPathname.startsWith("/api/") ||
+    daemonPathname === "/artifacts" ||
+    daemonPathname.startsWith("/artifacts/") ||
+    daemonPathname === "/frames" ||
+    daemonPathname.startsWith("/frames/")
   );
 }
 
 export function resolveDaemonProxyTarget(
   daemonOrigin: string,
   requestUrl: string | undefined,
+  basePath: BasePath = resolveWebBasePath(),
 ): URL | null {
   const target = resolveHttpProxyTarget(daemonOrigin, requestUrl);
-  if (target == null || !isDaemonProxyPathname(target.pathname)) return null;
-  return target;
+  if (target == null || !isDaemonProxyPathname(target.pathname, basePath)) return null;
+  const daemonPathname = createPathConfig(basePath).stripBasePath(target.pathname);
+  if (daemonPathname == null) return null;
+  return new URL(`${daemonPathname}${target.search}`, daemonOrigin);
 }
 
 function resolveHttpProxyTarget(
@@ -993,7 +1003,7 @@ async function createWebSidecarHandle(
     pid: process.pid,
     state: "running",
     updatedAt: new Date().toISOString(),
-    url: `http://${HOST}:${port}`,
+    url: `http://${HOST}:${port}${createPathConfig(resolveWebBasePath()).withBasePath("/")}`,
   };
   let stopped = false;
   let resolveStopped!: () => void;

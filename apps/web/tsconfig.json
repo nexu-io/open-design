@@ -20,6 +20,7 @@
     "allowJs": true,
     "incremental": true,
     "noEmit": true,
+    "baseUrl": ".",
     "plugins": [
       {
         "name": "next"
@@ -27,7 +28,7 @@
     ],
     "paths": {
       "@/*": [
-        "./*"
+        "./src/*"
       ]
     }
   },

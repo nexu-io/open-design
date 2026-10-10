@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 // Inline "Memory model" picker — sits right next to the chat model
 // dropdown (both in CLI mode and BYOK mode) inside Settings →
 // Execution mode.
@@ -161,7 +162,7 @@ function cliAgentLabel(agentId: string | null | undefined): string | null {
 
 async function fetchMemoryExtraction(): Promise<MemoryExtractionMaskedConfig | null> {
   try {
-    const resp = await fetch('/api/memory');
+    const resp = await apiFetch('/api/memory');
     if (!resp.ok) return null;
     const json = (await resp.json()) as MemoryListResponse;
     return json.extraction ?? null;
@@ -173,7 +174,7 @@ async function fetchMemoryExtraction(): Promise<MemoryExtractionMaskedConfig | n
 async function saveMemoryExtraction(
   extraction: MemoryExtractionConfigShape | null,
 ): Promise<MemoryExtractionMaskedConfig | null | undefined> {
-  const resp = await fetch('/api/memory/config', {
+  const resp = await apiFetch('/api/memory/config', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ extraction }),

@@ -12,6 +12,7 @@ import { bootstrapSidecarProcess, readCurrentSidecarStamp } from "@open-design/s
 import { releaseChannelFromNamespace } from "@open-design/release";
 
 import {
+  assertPackagedRootWebBasePath,
   PACKAGED_NAMESPACE_ENV,
   resolvePackagedAmrProfile,
   type PackagedConfig,
@@ -88,6 +89,7 @@ const headlessRequest = parsePackagedHeadlessRequest([
 ]);
 
 async function main(): Promise<void> {
+  assertPackagedRootWebBasePath();
   const config = resolveHeadlessConfig();
   const paths = resolvePackagedNamespacePaths(config, config.namespace, process.env);
   const currentStamp = (() => {
