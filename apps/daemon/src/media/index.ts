@@ -1142,15 +1142,23 @@ async function renderCustomOpenAIImage(ctx: MediaContext, credentials: ProviderC
   };
   let url = buildOpenAIImageUrl(baseUrl, false);
   if (ctx.imageRef?.dataUrl) {
-    // gpt-image-* does NOT accept response_format on /v1/images/edits
-    // (HTTP 400 "Unknown parameter: 'response_format'"). dall-e-2
-    // accepts it; the base b64 path is what callers expect either way,
-    // so we only set response_format for non-gpt-image models.
-    if (!wireModel.startsWith('gpt-image-')) {
-      body.response_format = 'b64_json';
+    if (isModelStudioCompatibleBaseUrl(baseUrl)) {
+      // Alibaba Model Studio compatible-mode publishes no /images/edits
+      // route (a reference-image POST there fails with a body-less 404).
+      // Its /images/generations endpoint takes the reference as a
+      // top-level `image` field (URL or data URI) instead.
+      body.image = ctx.imageRef.dataUrl;
+    } else {
+      // gpt-image-* does NOT accept response_format on /v1/images/edits
+      // (HTTP 400 "Unknown parameter: 'response_format'"). dall-e-2
+      // accepts it; the base b64 path is what callers expect either way,
+      // so we only set response_format for non-gpt-image models.
+      if (!wireModel.startsWith('gpt-image-')) {
+        body.response_format = 'b64_json';
+      }
+      body.images = [{ image_url: ctx.imageRef.dataUrl }];
+      url = buildOpenAIImageEditUrl(baseUrl);
     }
-    body.images = [{ image_url: ctx.imageRef.dataUrl }];
-    url = buildOpenAIImageEditUrl(baseUrl);
   }
 
   const resp = await fetchImageGenerationWithResponseRetry(
@@ -1247,6 +1255,41 @@ function detectAzureEndpoint(baseUrl: string): boolean {
   if (/\.azure\.com\b/i.test(baseUrl)) return true;
   if (/\/openai\/deployments\//i.test(baseUrl)) return true;
   return false;
+}
+
+/**
+ * Heuristic: does this base URL point at Alibaba Cloud Model Studio's
+ * OpenAI-compatible endpoint (Bailian / DashScope)?
+ *
+ *   true examples
+ *     https://ws-xxxx.cn-beijing.maas.aliyuncs.com/compatible-mode/v1
+ *     https://trial.cn-beijing.maas.aliyuncs.com/compatible-mode/v1
+ *     https://dashscope.aliyuncs.com/compatible-mode/v1
+ *     https://dashscope-intl.aliyuncs.com/compatible-mode/v1
+ *     https://dashscope-us.aliyuncs.com/compatible-mode/v1
+ *     https://cn-hongkong.dashscope.aliyuncs.com/compatible-mode/v1
+ *   false examples
+ *     https://api.openai.com/v1
+ *     https://images.example.cn-beijing.aliyuncs.com/v1
+ *     http://localhost:8080/v1
+ *
+ * Model Studio publishes no /images/edits route on any of its regional
+ * hosts, so custom-image reference-image requests must go to
+ * /images/generations with a top-level `image` field instead of failing
+ * on a body-less 404.
+ */
+function isModelStudioCompatibleBaseUrl(baseUrl: string): boolean {
+  if (typeof baseUrl !== 'string' || !baseUrl) return false;
+  try {
+    const host = new URL(baseUrl).hostname.toLowerCase();
+    return host === 'dashscope.aliyuncs.com'
+      || host === 'dashscope-intl.aliyuncs.com'
+      || host === 'dashscope-us.aliyuncs.com'
+      || host.endsWith('.dashscope.aliyuncs.com')
+      || host.endsWith('.maas.aliyuncs.com');
+  } catch {
+    return false;
+  }
 }
 
 /**
