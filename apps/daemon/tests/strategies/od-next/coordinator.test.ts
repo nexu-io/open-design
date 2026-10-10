@@ -982,6 +982,36 @@ describe('OD Next planning coordinator', () => {
     expect(final.reasonCodes).not.toContain('od_next_question_form_unrenderable');
   });
 
+  it('repairs a planning reply whose runtime-state blocks disagree instead of blocking the task', () => {
+    // Production AMR runs failed with OD_NEXT_CONTINUATION_FAILED when the
+    // model emitted two different Runtime State blocks next to a valid plan:
+    // nothing was written yet, so one serialization repair is safe.
+    prepareStrategyRequest(db, {
+      taskExecutionId: 'task-1',
+      preference: 'full_plan',
+      directEdit: directEligible,
+      intake: intakePassed,
+      updatedAt: 110,
+    });
+    const plan = planContract(snapshot);
+    const repair = finalizeStrategyPlanningTurn(db, {
+      taskExecutionId: 'task-1',
+      runId: 'run-request',
+      protocol: protocol([
+        block('open-design-plan-contract', plan),
+        block('open-design-runtime-state', runtimeState({ outcome: 'plan_ready', executionMode: 'simple' })),
+        block('open-design-runtime-state', runtimeState({ outcome: 'plan_ready', executionMode: null })),
+      ].join('\n')),
+      repairRun: { runId: 'run-repair', sourceRunId: 'run-request' },
+      toolUseCount: 2,
+      executionPreflight: executionPassed,
+      updatedAt: 120,
+    });
+    expect(repair.action).toBe('contract_repair');
+    expect(repair.reasonCodes).toContain('od_next_protocol_runtime_state_duplicate');
+    expect(repair.task).toMatchObject({ inputStage: 'contract_repair', planContractRepairAttempts: 1 });
+  });
+
   it('allows one serialization-only repair only with a durable semantic hash anchor', () => {
     prepareStrategyRequest(db, {
       taskExecutionId: 'task-1',
@@ -2012,6 +2042,181 @@ describe('OD Next planning coordinator', () => {
           latestRunId: 'run-contract-repair-live',
           planContractRepairAttempts: 1,
         },
+      },
+    });
+  });
+
+  it('sends duplicate runtime states that agree on produce straight to one repair Run', () => {
+    // The agreed intent is explicit, so the automatic continuation must not
+    // spend an intent-resolution turn before the serialization repair.
+    prepareStrategyRequest(db, {
+      taskExecutionId: 'task-1', preference: 'full_plan', directEdit: directEligible,
+      intake: intakePassed, updatedAt: 110,
+    });
+    const task = getStrategyTaskExecution(db, 'task-1')!;
+    expect(task.intentResolution?.state).toBe('unresolved');
+    const parsed = protocol([
+      block('open-design-plan-contract', planContract(snapshot)),
+      block('open-design-runtime-state', runtimeState({ outcome: 'plan_ready', executionMode: 'simple' })),
+      block('open-design-runtime-state', runtimeState({ outcome: 'plan_ready', executionMode: null })),
+    ].join('\n')).finish();
+    expect(parsed.agreedDuplicateExecutionIntent).toBe('produce');
+    const stages: string[] = [];
+    const transition = prepareAutomaticStrategyContinuation({
+      db,
+      task,
+      parsed,
+      toolUseCount: 0,
+      completionEvidence: { physicalStatus: 'succeeded', deliverableValid: false, filesWritten: 0, filesWrittenSource: 'filesystem' },
+      executionPreflight: executionPassed,
+      service: {
+        prepare(input) {
+          const run = { id: `run-${(input.meta as { stage: string }).stage}`, status: 'queued' };
+          db.transaction(() => input.beforeClaimCommit?.(run)).immediate();
+          return { kind: 'ready', run, creationKind: 'created', resumed: false };
+        },
+        start(run) { return run; },
+      },
+      createMeta: (stage, instruction) => { stages.push(stage); return { stage, instruction }; },
+      updatedAt: 120,
+    });
+    expect(stages).toEqual(['contract_repair']);
+    expect(transition).toMatchObject({
+      start: true,
+      stage: 'contract_repair',
+      result: {
+        action: 'contract_repair',
+        reasonCodes: expect.arrayContaining(['od_next_protocol_runtime_state_duplicate']),
+        task: {
+          inputStage: 'contract_repair',
+          executionIntent: 'produce',
+          latestRunId: 'run-contract_repair',
+          planContractRepairAttempts: 1,
+        },
+      },
+    });
+  });
+
+  it('still asks for intent when duplicate runtime states agree on plan_only', () => {
+    // Only the supplemental turn can complete a planning-only task; treating the
+    // agreement as explicit would block it at the repair gate instead.
+    prepareStrategyRequest(db, {
+      taskExecutionId: 'task-1', preference: 'full_plan', directEdit: directEligible,
+      intake: intakePassed, updatedAt: 110,
+    });
+    const planOnly = (executionMode: 'simple' | null) => ({
+      ...runtimeState({ outcome: 'completed', executionMode }), executionIntent: 'plan_only' as const,
+    });
+    const parsed = protocol([
+      'Here is the plan for the launch page; nothing will be written until you ask.',
+      block('open-design-plan-contract', planContract(snapshot)),
+      block('open-design-runtime-state', planOnly('simple')),
+      block('open-design-runtime-state', planOnly(null)),
+    ].join('\n')).finish();
+    expect(parsed.agreedDuplicateExecutionIntent).toBe('plan_only');
+    const stages: string[] = [];
+    const transition = prepareAutomaticStrategyContinuation({
+      db,
+      task: getStrategyTaskExecution(db, 'task-1')!,
+      parsed,
+      toolUseCount: 0,
+      completionEvidence: { physicalStatus: 'succeeded', deliverableValid: false, filesWritten: 0, filesWrittenSource: 'filesystem' },
+      executionPreflight: executionPassed,
+      service: {
+        prepare(input) {
+          const run = { id: `run-${(input.meta as { stage: string }).stage}`, status: 'queued' };
+          db.transaction(() => input.beforeClaimCommit?.(run)).immediate();
+          return { kind: 'ready', run, creationKind: 'created', resumed: false };
+        },
+        start(run) { return run; },
+      },
+      createMeta: (stage, instruction) => { stages.push(stage); return { stage, instruction }; },
+      updatedAt: 120,
+    });
+    expect(stages).toEqual(['intent_resolution']);
+    expect(transition).toMatchObject({ start: true, stage: 'intent_resolution' });
+
+    // The supplement's schema-validated plan_only state completes the
+    // planning-only task; the duplicate source has no state of its own.
+    startIntentResolution(db, 'task-1', 'run-intent_resolution');
+    const reply = protocol(block('open-design-runtime-state', planOnly('simple'))).finish();
+    expect(reply.issues).toEqual([]);
+    const completed = prepareAutomaticStrategyContinuation({
+      db,
+      task: getStrategyTaskExecution(db, 'task-1')!,
+      parsed: reply,
+      toolUseCount: 0,
+      completionEvidence: { physicalStatus: 'succeeded', deliverableValid: false, filesWritten: 0, filesWrittenSource: 'filesystem' },
+      executionPreflight: executionPassed,
+      service: {
+        prepare(input) {
+          const run = { id: `run-${(input.meta as { stage: string }).stage}`, status: 'queued' };
+          db.transaction(() => input.beforeClaimCommit?.(run)).immediate();
+          return { kind: 'ready', run, creationKind: 'created', resumed: false };
+        },
+        start(run) { return run; },
+      },
+      createMeta: (stage, instruction) => { stages.push(stage); return { stage, instruction }; },
+      updatedAt: 130,
+    });
+    expect(stages).toEqual(['intent_resolution']);
+    expect(completed).toMatchObject({
+      start: false,
+      result: { action: 'completed', task: { outcome: 'completed', executionIntent: 'plan_only' } },
+    });
+    expect(completed.result.task.planContract).toBeTruthy();
+  });
+
+  it('repairs duplicate runtime states once the intent-resolution turn answers produce', () => {
+    // AMR 0.24.1: 19 of 20 duplicate runtime-state failures went through the
+    // intent supplement first. The model answered `produce` with one clean
+    // block, then the original reply, still carrying the duplicate, was refused
+    // with "The parsed response was not eligible for contract repair."
+    prepareStrategyRequest(db, {
+      taskExecutionId: 'task-1', preference: 'full_plan', directEdit: directEligible,
+      intake: intakePassed, updatedAt: 110,
+    });
+    const withoutIntent = (executionMode: 'simple' | null) => {
+      const { executionIntent: _omitted, ...state } = runtimeState({ outcome: 'plan_ready', executionMode });
+      return state;
+    };
+    const planning = protocol([
+      block('open-design-plan-contract', planContract(snapshot)),
+      block('open-design-runtime-state', withoutIntent('simple')),
+      block('open-design-runtime-state', withoutIntent(null)),
+    ].join('\n')).finish();
+    expect(planning.agreedDuplicateExecutionIntent).toBeUndefined();
+    const stages: string[] = [];
+    const service = {
+      prepare(input: { meta: unknown; beforeClaimCommit?: (run: { id: string; status: string }) => void }) {
+        const run = { id: `run-${(input.meta as { stage: string }).stage}`, status: 'queued' };
+        db.transaction(() => input.beforeClaimCommit?.(run)).immediate();
+        return { kind: 'ready' as const, run, creationKind: 'created' as const, resumed: false };
+      },
+      start(run: { id: string; status: string }) { return run; },
+    };
+    const createMeta = (stage: string, instruction: string) => { stages.push(stage); return { stage, instruction }; };
+    const evidence = { physicalStatus: 'succeeded' as const, deliverableValid: false, filesWritten: 0, filesWrittenSource: 'filesystem' as const };
+    const asked = prepareAutomaticStrategyContinuation({
+      db, task: getStrategyTaskExecution(db, 'task-1')!, parsed: planning, toolUseCount: 0,
+      completionEvidence: evidence, executionPreflight: executionPassed, service, createMeta, updatedAt: 120,
+    });
+    expect(asked).toMatchObject({ start: true, stage: 'intent_resolution' });
+    startIntentResolution(db, 'task-1', 'run-intent_resolution');
+
+    const reply = protocol(block('open-design-runtime-state', runtimeState({ outcome: 'plan_ready', executionMode: 'simple' }))).finish();
+    expect(reply.issues).toEqual([]);
+    const transition = prepareAutomaticStrategyContinuation({
+      db, task: getStrategyTaskExecution(db, 'task-1')!, parsed: reply, toolUseCount: 0,
+      completionEvidence: evidence, executionPreflight: executionPassed, service, createMeta, updatedAt: 130,
+    });
+    expect(stages).toEqual(['intent_resolution', 'contract_repair']);
+    expect(transition).toMatchObject({
+      start: true,
+      stage: 'contract_repair',
+      result: {
+        action: 'contract_repair',
+        task: { inputStage: 'contract_repair', executionIntent: 'produce', planContractRepairAttempts: 1 },
       },
     });
   });

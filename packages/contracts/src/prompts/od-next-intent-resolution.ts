@@ -1,6 +1,10 @@
 import { z } from 'zod';
 
-import { OpenDesignPlanContractV2Schema, StrategyRuntimeStateV2Schema } from '../plugins/strategy-v2.js';
+import {
+  OpenDesignPlanContractV2Schema,
+  StrategyExecutionIntentV2Schema,
+  StrategyRuntimeStateV2Schema,
+} from '../plugins/strategy-v2.js';
 
 import {
   indexCanonicalXmlChildren,
@@ -91,6 +95,7 @@ const ProtocolResultSchema = z.object({
   runtimeState: StrategyRuntimeStateV2Schema.optional(),
   repairPlanContract: OpenDesignPlanContractV2Schema.optional(),
   repairRuntimeState: StrategyRuntimeStateV2Schema.optional(),
+  agreedDuplicateExecutionIntent: StrategyExecutionIntentV2Schema.optional(),
   normalizations: z.array(z.string()),
   issues: z.array(z.object({
     code: z.enum([

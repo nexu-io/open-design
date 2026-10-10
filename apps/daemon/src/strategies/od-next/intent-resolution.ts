@@ -47,9 +47,15 @@ export function isStrategyIntentResolutionRun(task: StrategyTaskExecutionRecord,
   return task.runs.some(mapping => mapping.runId === runId && mapping.purpose === 'intent_resolution');
 }
 
-/** Missing intent is tolerated at the question boundary, never at the production boundary. */
+/**
+ * Missing intent is tolerated at the question boundary, never at the production boundary.
+ * Duplicate Runtime State blocks that all declare `produce` already state the intent, so
+ * they go straight to the one serialization repair. A `plan_only` agreement still asks,
+ * because only the supplemental turn can complete a planning-only task.
+ */
 export function requiresStrategyIntentResolution(task: StrategyTaskExecutionRecord, parsed: OdNextMachineProtocolResult): boolean {
   if (task.intentResolution?.state !== 'unresolved' || parsed.runtimeState?.executionIntent !== undefined
+    || parsed.agreedDuplicateExecutionIntent === 'produce'
     || !['request', 'clarification'].includes(task.inputStage) || task.route === 'direct_edit') return false;
   const plan = parsed.planContract ?? parsed.repairPlanContract;
   return (parsed.issues.length === 0 && parsed.runtimeState?.outcome === 'plan_ready' && Boolean(plan))
@@ -130,6 +136,20 @@ function validateIntentResolutionReplyForRun(
     || reply.parsed.issues.length !== 0 || reply.parsed.visibleText.trim().length !== 0
     || reply.parsed.planContract || reply.parsed.repairPlanContract || reply.parsed.repairRuntimeState) {
     throw new TypeError('The parsed response was not eligible for contract repair.');
+  }
+  // A source whose only defect is a repeated Runtime State block has no
+  // declaration of its own; the parser keeps neither copy. For planning-only
+  // work the supplement is the one place that can finish it, so its
+  // schema-validated state completes the task while the source Plan Contract
+  // is kept. Any other source defect stays fail-closed.
+  const duplicateOnly = !sourceState && source.parsed.issues.length > 0
+    && source.parsed.issues.every((issue) => issue.code === 'od_next_protocol_runtime_state_duplicate');
+  if (duplicateOnly && state.executionIntent === 'plan_only') {
+    return {
+      source,
+      executionIntent: state.executionIntent,
+      parsed: { ...source.parsed, runtimeState: state, issues: [] },
+    };
   }
   return {
     source,
