@@ -1,0 +1,53 @@
+[
+  {
+    "adapter": "amr",
+    "capturedOn": "2026-10-06",
+    "distribution": "@powerformer/vela-cli@0.1.4-test.0 win32-x64",
+    "command": "vela agent run",
+    "supportsDelete": false,
+    "initializeResult": {
+      "agentInfo": { "name": "Vela OpenCode", "version": "0.0.0" },
+      "agentCapabilities": {
+        "_meta": { "com.open-design.nativeSessionContinue": { "version": 1 } },
+        "loadSession": true,
+        "promptCapabilities": { "resourceLink": true, "text": true }
+      },
+      "protocolVersion": 1
+    }
+  },
+  {
+    "adapter": "devin",
+    "capturedOn": "2026-10-06",
+    "distribution": "Devin CLI 3000.11.3 x86_64-pc-windows",
+    "bundleSha256": "dded69a40dc54012612eda47e0935f2fb394b97cd38cb4d7d84b1e1d71c5f7ea",
+    "command": "devin acp",
+    "supportsDelete": true,
+    "initializeResult": {
+      "agentInfo": { "name": "affogato", "title": "Devin Agent", "version": "0.0.0-dev" },
+      "agentCapabilities": {
+        "loadSession": true,
+        "promptCapabilities": { "image": true, "audio": false, "embeddedContext": true },
+        "mcpCapabilities": { "http": true, "sse": true },
+        "sessionCapabilities": { "list": {}, "delete": {}, "additionalDirectories": {} },
+        "auth": {},
+        "_meta": {
+          "cognition.ai/multiRootWorkspace": true,
+          "cognition.ai/sessionListOrderBy": ["updated_at", "created_at"],
+          "cognition.ai/sessionRename": true,
+          "cognition.ai/sessionShare": true,
+          "cognition.ai/documentLifecycle": true,
+          "cognition.ai/userEdits": true,
+          "cognition.ai/terminalLifecycle": true,
+          "cognition.ai/userConfig": true,
+          "cognition.ai/userShellCommand": true,
+          "cognition.ai/editableCommands": true,
+          "cognition.ai/commandRevision": true,
+          "cognition.ai/chains": true,
+          "cognition.ai/megaplan": true,
+          "cognition.ai/ruleMentions": true
+        }
+      },
+      "protocolVersion": 1
+    }
+  }
+]

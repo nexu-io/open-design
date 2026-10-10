@@ -2135,6 +2135,8 @@ interface AgentSpawnHandle {
   acpSession?: {
     hasFatalError?: () => boolean;
     completedSuccessfully?: () => boolean;
+    cleanupCompleted?: () => Promise<void>;
+    abort?: () => void;
   } | null;
 }
 
@@ -2152,6 +2154,8 @@ function attachAgentStreamHandlers(
   let acpSession: {
     hasFatalError?: () => boolean;
     completedSuccessfully?: () => boolean;
+    cleanupCompleted?: () => Promise<void>;
+    abort?: () => void;
   } | null = null;
   child.stdout?.setEncoding('utf8');
   child.stderr?.setEncoding('utf8');
@@ -2193,6 +2197,7 @@ function attachAgentStreamHandlers(
       // so ACP runtimes can use their upstream configured default.
       model: resolveModelForAgent(def as never, model ?? null, modelEnv, liveModelScope),
       mcpServers: [],
+      disposeSessionAfterPrompt: true,
       send,
     });
   } else if (def.streamFormat === 'dsh-profile-jsonl') {
@@ -2371,6 +2376,7 @@ async function testAgentConnectionInternal(
       ? path.join(tempDir, 'agy-connection-test.log')
       : null;
   let child: AgentChild | null = null;
+  let acpSession: AgentSpawnHandle['acpSession'];
   let childExit: Promise<AgentChildExit> | null = null;
   let childClosed = false;
   let promptFile: PreparedPromptFile | null = null;
@@ -2719,7 +2725,7 @@ async function testAgentConnectionInternal(
       });
     });
 
-    const { acpSession } = attachAgentStreamHandlers(
+    ({ acpSession } = attachAgentStreamHandlers(
       def,
       child,
       SMOKE_PROMPT,
@@ -2729,7 +2735,7 @@ async function testAgentConnectionInternal(
       liveModelScope,
       sendAgentEvent,
       sink.appendRawStdout,
-    );
+    ));
 
     const resultFromChildExit = async (
       winner: AgentChildExit,
@@ -3039,7 +3045,17 @@ async function testAgentConnectionInternal(
       child.stdin.end(formatPromptForAgentStdin(def, SMOKE_PROMPT), 'utf8');
     }
     const cancellationPromise = new Promise<{ kind: 'timeout' } | { kind: 'aborted' }>((resolve) => {
-      timer = setTimeout(() => resolve({ kind: 'timeout' }), agentTimeoutMs());
+      timer = setTimeout(() => {
+        // A terminal ACP prompt may still be awaiting bounded probe deletion.
+        // Give cleanup and the existing child shutdown a finite grace period
+        // without replacing the prompt's verdict with a cleanup-only timeout.
+        if (acpSession?.cleanupCompleted &&
+            (acpSession.completedSuccessfully?.() || acpSession.hasFatalError?.())) {
+          timer = setTimeout(() => resolve({ kind: 'timeout' }), AGENT_KILL_GRACE_MS);
+        } else {
+          resolve({ kind: 'timeout' });
+        }
+      }, agentTimeoutMs());
       abortHandler = () => resolve({ kind: 'aborted' });
       if (input.signal?.aborted) {
         abortHandler();
@@ -3106,6 +3122,10 @@ async function testAgentConnectionInternal(
     if (timer) clearTimeout(timer);
     if (abortHandler) {
       input.signal?.removeEventListener('abort', abortHandler);
+    }
+    if (acpSession?.cleanupCompleted) {
+      acpSession.abort?.();
+      await acpSession.cleanupCompleted();
     }
     sink.dispose();
     if (child && !childClosed) {
