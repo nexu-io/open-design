@@ -22,7 +22,9 @@ import {
   __forTestChatRunHandles,
   __forTestEmitLiveArtifactEvent,
   applyClaudeStreamJsonRunBookkeeping,
+  claudeStreamEventCountsAsActionableProgress,
   classifyChatRunCloseStatus,
+  productionRunMissingArtifact,
   resolveActiveInactivityTimeoutMs,
   resolveChatRunArtifactQuietPeriodMs,
 } from '../src/server.js';
@@ -30,6 +32,45 @@ import {
 const ENV_KEY = 'OD_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS';
 const ONE_MINUTE_MS = 60 * 1000;
 const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+
+describe('Claude stream actionable progress (#5036)', () => {
+  it('does not treat thinking frames or empty text deltas as actionable progress', () => {
+    expect(claudeStreamEventCountsAsActionableProgress({ type: 'thinking_delta', delta: 'thinking' })).toBe(false);
+    expect(claudeStreamEventCountsAsActionableProgress({ type: 'text_delta', delta: '' })).toBe(false);
+  });
+
+  it.each([
+    { type: 'text_delta', delta: 'answer' },
+    { type: 'tool_use', name: 'Write' },
+    { type: 'tool_result', content: 'written' },
+    { type: 'artifact' },
+    { type: 'turn_end', stopReason: 'end_turn' },
+  ])('treats $type as actionable progress', (event) => {
+    expect(claudeStreamEventCountsAsActionableProgress(event)).toBe(true);
+  });
+});
+
+describe('production artifact completion guard (#5036)', () => {
+  const base = {
+    code: 0,
+    cancelRequested: false,
+    artifactProducedThisRun: false,
+  };
+
+  it('rejects a clean production-stage exit without an artifact', () => {
+    expect(productionRunMissingArtifact({ ...base, inputStage: 'production' })).toBe(true);
+  });
+
+  it('allows non-production turns and production turns that created an artifact', () => {
+    expect(productionRunMissingArtifact({ ...base, inputStage: 'request' })).toBe(false);
+    expect(productionRunMissingArtifact({ ...base, inputStage: 'production', artifactProducedThisRun: true })).toBe(false);
+  });
+
+  it('does not turn a failed or canceled process into the missing-artifact failure', () => {
+    expect(productionRunMissingArtifact({ ...base, inputStage: 'production', code: 1 })).toBe(false);
+    expect(productionRunMissingArtifact({ ...base, inputStage: 'production', cancelRequested: true })).toBe(false);
+  });
+});
 
 describe('resolveChatRunArtifactQuietPeriodMs', () => {
   const originalEnv = process.env[ENV_KEY];
