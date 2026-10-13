@@ -1420,6 +1420,69 @@ describe('durable strategy task store', () => {
     });
   });
 
+  it('logs which writer marked a running task od_next_physical_run_interrupted', async () => {
+    // Production bundle: a healthy production Run was still streaming when its
+    // task flipped to blocked/od_next_physical_run_interrupted, and nothing in
+    // the daemon log said which path (startup reconciliation of a second
+    // daemon, or a live Run end) wrote it. The writer must leave its identity.
+    const task = createTask(db, snapshot);
+    const runDir = path.join(tempDir, 'runs', 'run-request');
+    fs.mkdirSync(runDir, { recursive: true });
+    fs.writeFileSync(path.join(runDir, 'state.json'), JSON.stringify({
+      schemaVersion: 1,
+      id: 'run-request',
+      projectId: 'project-1',
+      conversationId: 'conversation-1',
+      agentId: AGENT_ID,
+      status: 'running',
+      createdAt: 100,
+      updatedAt: 150,
+    }));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const result = await reconcileDurableRunTerminals({
+      analytics: { capture: vi.fn() },
+      appVersion: '0.24.1',
+      db,
+      reportLangfuse: vi.fn(),
+      runsLogDir: path.join(tempDir, 'runs'),
+    });
+
+    expect(result.strategyTasksReconciled).toBe(1);
+    expect(getStrategyTaskExecution(db, task.taskExecutionId)).toMatchObject({
+      outcome: 'blocked',
+      blockedContext: { reasonCodes: ['od_next_physical_run_interrupted'] },
+    });
+    const reconciled = warn.mock.calls.filter(
+      ([message]) => message === '[od-next-task] run terminal reconciled',
+    );
+    expect(reconciled).toHaveLength(1);
+    expect(reconciled[0]?.[1]).toMatchObject({
+      taskExecutionId: task.taskExecutionId,
+      runId: 'run-request',
+      outcome: 'blocked',
+      reasonCodes: ['od_next_physical_run_interrupted'],
+      source: 'startup_reconciliation',
+      runTerminalTrigger: 'daemon_restart',
+      pid: process.pid,
+    });
+    expect(reconciled[0]?.[1]).toHaveProperty('processStartedAt', expect.any(Number));
+
+    warn.mockClear();
+    const live = createTask(db, snapshot, 'run-live', 'task-live');
+    expect(reconcileStrategyTaskRunTerminal(db, {
+      runId: 'run-live',
+      status: 'failed',
+      source: 'live_run_end',
+    })).toBe(true);
+    expect(warn).toHaveBeenCalledWith('[od-next-task] run terminal reconciled', expect.objectContaining({
+      taskExecutionId: live.taskExecutionId,
+      runId: 'run-live',
+      source: 'live_run_end',
+      pid: process.pid,
+    }));
+  });
+
   it('keeps one unreadable Prompt Bundle from cancelling every sibling Run terminal', async () => {
     // Reshaping the v2 bundle's child tags kept the schema id
     // `open-design.od-next-prompt-bundle/v2`, so rows written by the previous
