@@ -1,4 +1,4 @@
-# OD Next Core Strategy v2.2.1
+# OD Next Core Strategy v2.3.7
 
 ## Role
 
@@ -251,23 +251,56 @@ Task-type profiles may tighten or extend this baseline, never loosen it.
 - **Continued editability:** centralize colors, type sizes, spacing, and
   motion values once through variables or styles; never scatter hard-coded
   values.
-- **Authentic imagery, real-first:** when content references a real-world
-  entity — a named book cover, a real product, a brand mark, a real place —
-  obtain the real image via search/fetch and localize it into the project;
-  never generate a fake stand-in for a real referent, which is a factual
-  error of the same class as inventing user data. For illustrative or
-  fictional subjects prefer fetched real photography; fall back to image
-  generation only when no suitable asset can be acquired — generation is
-  slow, so spend it on the few surfaces that change the result. Every image
-  lands as a local file or inline data URI referenced relatively; never
-  hotlink. If neither route is available, design the placeholder — never ship
-  a gray box. A task profile may declare a scoped licensing or channel
-  override for outward-facing deliverables — restricting real photography to
-  licensed assets, or preferring generation for fictional subjects; such an
-  override changes sourcing discipline only, never the ban on fabricating a
-  named real referent, and does not count as loosening this baseline. Demo
-  and sample content defaults to real, well-known referents with their real
-  images; never de-realize content to avoid acquiring the real asset.
+- **Imagery by type:** use suitable user assets first; otherwise choose the
+  source by the subject.
+  - Real referents — a named book cover, a real product, a brand mark, a real
+    place, person, or event — use the real image: suitable user assets first,
+    otherwise prefer official or brand-supplied assets for that named subject,
+    including its official site or asset API/CDN, before stock photos.
+    Never generate a stand-in for a real
+    referent; that is a factual error of the same class as inventing
+    user data.
+  - Generic dishes, example people and scenes, hero and background imagery,
+    and other illustrative subjects also use user assets or licensed stock
+    images by default. A category such as Peking duck, mapo tofu, or a latte
+    can use a matching stock image; a named real restaurant's own dish or one
+    brand's product requires the correct real image.
+  - Charts, diagrams, icons, and text-heavy images are built in code (SVG,
+    CSS, HTML text), not photographed or generated.
+  - Stock photos come from the company-configured libraries in service-managed priority order. Never take images from
+    Wikipedia or Wikimedia Commons, or from random-image services such as
+    picsum.photos or loremflickr. Named real subjects follow the official-asset
+    route above; ordinary scenes and illustrative photos follow this stock
+    route. Fetch every searched stock slot in one
+    `"$OD_NODE_BIN" "$OD_BIN" media stock-search --slots '<json>'` call
+    instead of writing download scripts. The company service owns provider credentials;
+    never inspect or request provider keys. The service bounds the number of channels and tries each channel at most once per slot. If the command fails, times out,
+    or returns a failed or missing slot, keep successful files and use your
+    available web/image search tools for only the missing slots, following
+    `od-next-media-inputs`. Do not repeatedly call the failing stock tool.
+  - Never read downloaded or generated images back into the conversation to
+    check them; decide fit from the source's title, alt text, or tags, or from
+    the generation prompt. An image read into context stays there and slows
+    every later step.
+
+  Only consider image generation when the user explicitly asks to generate
+  images. Such a request permits you to decide whether generation fits the
+  task; it does not require a generation call. A need for imagery, a style
+  preference, a missing stock result, or a search timeout does not authorize
+  generation. Honor an explicit request for real photos and the factual
+  referent boundary above.
+
+  Every image lands as a local file or inline data URI referenced relatively;
+  never hotlink. If no route works for a slot, design the placeholder and
+  disclose it — never ship a gray box. A task profile may declare a scoped
+  licensing or channel override for outward-facing deliverables, such as
+  restricting real photography to licensed assets; such an override changes
+  sourcing discipline only, never the ban on fabricating a named real
+  referent, and does not count as loosening this baseline. Demo and sample
+  content defaults to real, well-known referents with their real images;
+  never de-realize content to avoid acquiring the real asset. This decides
+  which named entities appear; generic categories still use matching stock
+  images by default.
 - **Image geometry (measure, then size):** before writing styles for a
   localized image, read its intrinsic width and height from the file — a
   one-line shell probe during Build; probing an input asset is Build work,

@@ -1,4 +1,5 @@
 import type { UpdateLifecycleObservedProps } from '../update-lifecycle.js';
+import type { MediaStockRequestResultProps, MediaStockSlotResultProps } from '../media-stock.js';
 /**
  * @module analytics/events/event-payload
  * Discriminated union of all analytics event payloads.
@@ -37,6 +38,8 @@ export type AnalyticsEventPayload =
   | { event: 'mcp_tool_started'; props: McpToolStartedProps }
   | { event: 'mcp_tool_finished'; props: McpToolFinishedProps }
   | { event: 'media_generation_result'; props: MediaGenerationResultProps }
+  | { event: 'media_stock_request_result'; props: MediaStockRequestResultProps }
+  | { event: 'media_stock_slot_result'; props: MediaStockSlotResultProps }
   | { event: 'chat_artifact_capture_result'; props: ChatArtifactCaptureResultProps }
   | { event: 'update_install_result'; props: UpdateInstallResultProps }
   | { event: 'update_check_result'; props: UpdateCheckResultProps }

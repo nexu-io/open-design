@@ -1,4 +1,4 @@
-# OD Next Prototype Task Profile v2.3.1
+# OD Next Prototype Task Profile v2.3.5
 
 > Rollout: active
 
@@ -148,6 +148,11 @@ fact and quotes its source in `device-frame-shell`.
 - Use the selected shell's markup and CSS as the document skeleton and put
   the product inside the `APP CONTENT START` / `APP CONTENT END` slot; the
   app mounts in `.phone-content` and nowhere else.
+- Keep the shell's `--phone-*` declarations in a separate `:root` block from
+  product tokens. Preserve the bundled `var(--phone-*, fallback)` values in
+  the shell CSS: replacing product tokens must never collapse the handset's
+  width, height, bezel, or safe areas. Do not depend on the preview host to
+  supply these values.
 - One handset persists across the whole prototype. Screen navigation and hash
   routes swap the content inside the screen; a new handset per route appears
   only when the user asks for a side-by-side board.
@@ -176,9 +181,16 @@ quotes it in the `layout-primitives` context fact. It is structure only —
 display, flex/grid, overflow, wrapping, ratio, and opt-in icon geometry — and
 sets no palette, type, spacing scale, or component look. Put the whole block
 into the document's own `<style>` as its first rule set (`@layer od-layout`
-must come first so the product's CSS always wins), keep the
-`OD-LAYOUT-PRIMITIVES v1` marker comments, and compose the shapes below from it
+must come first so the product's CSS wins except for native hidden
+visibility), keep the `OD-LAYOUT-PRIMITIVES v1` marker comments, and compose the shapes below from it
 instead of re-deriving them per card, row, tile, or chip.
+
+Preserve `[hidden]:not([hidden="until-found" i]) { display: none !important; }`
+from the bundled block. Use `hidden` for inactive screens, empty states,
+dialogs, and scrims; remove it only when showing that element. Component
+`display: flex/grid` must not make a hidden element visible. For exit
+animations, animate with a state class before setting `hidden`; do not override
+the hidden rule. Keep `hidden="until-found"` available for browser find-in-page.
 
 Two kinds of text, two treatments:
 
@@ -239,6 +251,16 @@ Treat functional inline SVGs as one component contract before writing markup:
   inside a button or a nav bar; a deliberately large UI glyph stays functional
   and takes its size from `--od-icon-size`.
 
+### Keep dynamic structure and data separate
+
+For dynamic UI, prefer separating DOM structure from data. Use `textContent`
+for plain text and DOM properties or `setAttribute` for attributes. When
+generating HTML, prefer template literals with `${...}` for complex fragments
+instead of long concatenation chains with nested quote delimiters; escape data
+for its insertion context. Reuse a render function for repeated fragments only
+when their structure and meaning match. Keep simple code simple; do not add
+abstractions solely to follow this guidance.
+
 ### Design usable forms and feedback
 
 - Every input has a persistently visible label — never a placeholder standing
@@ -290,19 +312,16 @@ Treat functional inline SVGs as one component contract before writing markup:
   unified style.
 - Never fabricate brand facts, feature promises, or business data the user
   has not provided or confirmed.
-- **Imagery:** real entities appearing in the interface (book covers,
-  products, brand marks, real places) use real images obtained via
-  search/fetch and localized into the project; never fabricate them with
-  image generation. For illustrative and atmospheric imagery, prefer fetched
-  real photography; image generation is the fallback, spent only on the key
-  visual surfaces.
+- **Imagery:** follow the Core imagery-by-type rule for every image in the
+  interface, localized into the project.
 - **Demo content defaults to real referents:** sample data in a prototype
   defaults to real, well-known entities with their real fetched images — a
   bookshelf shows real books with real covers; a music app shows real albums
   with real art. Fictional stand-ins are the exception: use them only when
   the user asks for fictional content or licensing forbids real assets, and
   disclose the substitution in the delivery notes. Do not de-realize demo
-  content to avoid the fetch.
+  content to avoid the fetch. How generic categories such as dishes are
+  sourced is decided by the Core imagery rule, not by this default.
 
 ### Quality floor
 

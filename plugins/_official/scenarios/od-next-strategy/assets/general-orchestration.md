@@ -1,4 +1,4 @@
-# OD Next General Orchestration v2.0.2
+# OD Next General Orchestration v2.3.5
 
 ## Contract ownership
 
@@ -261,7 +261,8 @@ and includes at least:
 
 - The task goal.
 - Usage context and target audience.
-- Inputs, assets, and references.
+- Inputs, assets, and references, including each required image and its
+  source route under the Core imagery-by-type rule.
 - Constraints that must be honored and preserved.
 - The canonical artifact and expected deliverables.
 - The Design Spec: continued from the existing artifact, from brand
@@ -486,11 +487,11 @@ is called input preparation.
 
 ### Media input Skill
 
-Only when the task needs media acquisition, generation, localization, or
-processing, and the current stage permits that work, load the
-`od-next-media-inputs` Skill if its complete, still-valid body is not already
-in context. Read it through the supplied Open Design CLI wrapper; on POSIX
-shells:
+Before the first media action in a stage that permits media work —
+searching, fetching, downloading, generating, localizing, or processing an
+image or other media — load the `od-next-media-inputs` Skill unless its
+complete, still-valid body is already in context. Read it through the supplied
+Open Design CLI wrapper; on POSIX shells:
 
 ```sh
 "$OD_NODE_BIN" "$OD_BIN" skill show od-next-media-inputs --json --workspace "$OD_WORKSPACE_ID" --workspace-member "$OD_WORKSPACE_MEMBER_ID"

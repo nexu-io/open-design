@@ -1,3 +1,4 @@
+import { MEDIA_STOCK_BATCH_LIMITS } from '@open-design/contracts/analytics';
 // Daemon-side PostHog capture. Mirrors apps/daemon/src/langfuse-trace.ts in
 // its env-gating discipline: without POSTHOG_KEY in the env every entry point
 // is a no-op, so dev builds and third-party forks impose zero overhead.
@@ -38,6 +39,7 @@ import {
 } from '@open-design/contracts/analytics';
 import { readAppConfig } from './app-config.js';
 import { readTelemetryEnvironment } from './telemetry-environment.js';
+import type { MediaStockTelemetryEvent } from '@open-design/contracts/analytics';
 
 const DEFAULT_HOST = 'https://us.i.posthog.com';
 
@@ -183,6 +185,54 @@ export function readPosthogConfig(
   if (!key) return null;
   const host = (env.POSTHOG_HOST?.trim() || DEFAULT_HOST).replace(/\/+$/, '');
   return { key, host, env: readTelemetryEnvironment(env) };
+}
+
+/** One consented, bounded HTTP batch. A 2xx receipt is not indexing proof. */
+export async function captureStockAnalyticsBatch(args: {
+  dataDir: string;
+  events: readonly MediaStockTelemetryEvent[];
+  sessionId: string;
+  context?: (Pick<AnalyticsContext, 'deviceId' | 'sessionId'> & Partial<Pick<AnalyticsContext, 'clientType' | 'locale'>>) | null;
+  appVersion: string;
+  env?: NodeJS.ProcessEnv;
+  fetch?: typeof fetch;
+  signal?: AbortSignal;
+}): Promise<'uploaded' | 'retry' | 'disabled'> {
+  const cfg = readPosthogConfig(args.env);
+  if (!cfg) return 'retry';
+  if (!args.events.length) return 'disabled';
+  if (args.events.length > MEDIA_STOCK_BATCH_LIMITS.events) return 'retry';
+  try {
+    const appCfg = await readAppConfig(args.dataDir);
+    if (appCfg.telemetry?.metrics !== true) return 'disabled';
+    // Explicit null means collection had no identity; never reassign it on retry.
+    const distinctId = args.context === null ? null : args.context?.deviceId ?? appCfg.installationId;
+    if (!distinctId) return 'retry';
+    const batch = args.events.map(({ id, event, timestamp, properties }) => ({
+      event, timestamp,
+      properties: {
+        ...properties,
+        distinct_id: distinctId,
+        $insert_id: id, event_id: id, event_schema_version: EVENT_SCHEMA_VERSION,
+        env: cfg.env, app_version: args.appVersion, ui_version: args.appVersion,
+        session_id: args.context?.sessionId ?? args.sessionId,
+        device_id: distinctId, capture_source: 'daemon/stock-search',
+        ...(args.context ? { client_type: args.context.clientType, locale: args.context.locale } : {}),
+        $os: DAEMON_OS_NAME, $os_version: DAEMON_OS_VERSION,
+      },
+    }));
+    const body = JSON.stringify({ token: cfg.key, batch });
+    if (Buffer.byteLength(body) > MEDIA_STOCK_BATCH_LIMITS.bytes) return 'retry';
+    const response = await (args.fetch ?? fetch)(`${cfg.host}/batch/`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body,
+      signal: args.signal ? AbortSignal.any([args.signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000),
+    });
+    if (!response.ok) return 'retry';
+    const receipt = await response.json() as { quota_limited?: unknown };
+    const limited = receipt.quota_limited;
+    return limited && (Array.isArray(limited) ? limited.length > 0 : Object.keys(Object(limited)).length > 0)
+      ? 'retry' : 'uploaded';
+  } catch { return 'retry'; }
 }
 
 // Baseline wire response for GET /api/analytics/config — checks only the

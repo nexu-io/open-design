@@ -1910,12 +1910,18 @@ export function createOpenDesignToolEnv({
   projectDir,
   projectId,
   workspaceScope,
+  runId,
+  conversationId,
+  analyticsContext,
 }: {
   daemonUrl: string;
   hyperFramesBin?: string;
   projectDir?: string | null;
   projectId?: string | null;
   workspaceScope?: RunWorkspaceScope | null;
+  runId?: string | null;
+  conversationId?: string | null;
+  analyticsContext?: AnalyticsContext | null;
 }): NodeJS.ProcessEnv {
   const scope = workspaceScope?.projectId === projectId ? workspaceScope : null;
   return {
@@ -1924,6 +1930,12 @@ export function createOpenDesignToolEnv({
     OD_HYPERFRAMES_BIN: hyperFramesBin,
     OD_NODE_BIN,
     OD_DAEMON_URL: daemonUrl,
+    OD_STOCK_RUN_ID: runId ?? '',
+    OD_STOCK_SESSION_ID: conversationId ?? '',
+    OD_STOCK_ANALYTICS_DEVICE_ID: analyticsContext?.deviceId ?? '',
+    OD_STOCK_ANALYTICS_SESSION_ID: analyticsContext?.sessionId ?? '',
+    OD_STOCK_ANALYTICS_CLIENT_TYPE: analyticsContext?.clientType ?? '',
+    OD_STOCK_ANALYTICS_LOCALE: analyticsContext?.locale ?? '',
     // Always overwrite ambient/configured identities, including unbound runs.
     // An older bound Run without a member keeps its Workspace id so the CLI
     // rejects the incomplete pair rather than silently reading another library.
@@ -14275,6 +14287,9 @@ export async function startServer({
       projectDir: cwd,
       projectId: typeof projectId === 'string' ? projectId : null,
       workspaceScope: run.workspaceScope,
+      runId: run.id,
+      conversationId: run.conversationId,
+      analyticsContext: run.analyticsContext ?? null,
     });
     if (run.cancelRequested || design.runs.isTerminal(run.status)) {
       cleanupPromptFile();
@@ -18002,6 +18017,7 @@ export async function startServer({
       }
       await terminalService.shutdownActive();
       await browserSessionService.shutdownActive();
+      await telemetry.flushStockTelemetry();
       await design.analytics.shutdown();
     };
     let server;
