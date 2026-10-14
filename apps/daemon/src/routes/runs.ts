@@ -57,14 +57,9 @@ import {
 } from '../db.js';
 import { readVelaLoginStatus } from '../integrations/vela.js';
 import {
-  ensureDetectedRuntimeCapabilities,
   ensureDetectedRuntimeVersions,
   getDetectedRuntimeVersions,
 } from '../runtimes/detection.js';
-import {
-  odNextAdvertisedCapabilityGap,
-  resolveBundledOdNextRuntimeCapability,
-} from '../runtimes/od-next-capability-gate.js';
 import { mintRunDoneKey } from '../runtimes/run-done-key.js';
 import {
   deriveLangfuseDeliveryState,
@@ -1509,9 +1504,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     }
     let resolvedSnapshot: SuccessfulRunSnapshotResolution | null = null;
     let strategyRolloutDecision: OdNextRolloutDecision | null = null;
-    let rolloutCapabilitySnapshot: ReturnType<
-      typeof resolveBundledOdNextRuntimeCapability
-    >['snapshot'] = null;
     let resolveAutomaticOrdinaryFallback: (() => ResolveSnapshotResult) | null = null;
     let automaticOrdinaryFallbackPluginId: string | null = null;
     let automaticSnapshotPreparationError: Error | null = null;
@@ -1690,8 +1682,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       }
       const rolloutPlugin = rolloutResolved?.ok ? rolloutResolved.record : null;
       let rolloutVersions: Awaited<ReturnType<typeof ensureDetectedRuntimeVersions>> | null = null;
-      let rolloutCapability: ReturnType<typeof resolveBundledOdNextRuntimeCapability> | null = null;
-      let advertisedCapabilityGap: string[] = [];
       if (routeApplicability === 'eligible' && rolloutPlugin) {
         try {
           if (effectiveAgentId) {
@@ -1699,54 +1689,13 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
               (rolloutAppConfig as { agentCliEnv?: AgentCliEnv }).agentCliEnv,
               effectiveAgentId,
             );
-            // Both probes read the same resolved launch path. The `--version`
-            // read establishes invocability; the `--help` read establishes
-            // which optional flags this installed build advertises. OD Next
-            // needs both, because the fixture registry below only proves what
-            // the runtime *path* can do, not what the user's build exposes.
-            const [versions, advertised] = await Promise.all([
-              ensureDetectedRuntimeVersions(effectiveAgentId, agentCliEnv),
-              ensureDetectedRuntimeCapabilities(effectiveAgentId, agentCliEnv),
-            ]);
-            rolloutVersions = versions;
-            advertisedCapabilityGap = odNextAdvertisedCapabilityGap({
-              agentId: effectiveAgentId,
-              advertised,
-            });
+            rolloutVersions = await ensureDetectedRuntimeVersions(effectiveAgentId, agentCliEnv);
           }
-          rolloutCapability = effectiveAgentId
-            ? resolveBundledOdNextRuntimeCapability({
-                agentId: effectiveAgentId,
-                ...(rolloutVersions?.agentCliVersion
-                  ? { agentCliVersion: rolloutVersions.agentCliVersion }
-                  : {}),
-                ...(rolloutVersions?.runtimeCompanionName
-                  ? { runtimeCompanionName: rolloutVersions.runtimeCompanionName }
-                  : {}),
-                ...(rolloutVersions?.runtimeCompanionVersion
-                  ? { runtimeCompanionVersion: rolloutVersions.runtimeCompanionVersion }
-                  : {}),
-              })
-            : null;
         } catch (error) {
           automaticAdmissionPreparationFailed = true;
-          console.warn('[od-next-rollout] automatic capability preparation failed; using ordinary default', error);
+          console.warn('[od-next-rollout] runtime detection failed; using ordinary default', error);
         }
       }
-      const nativeSubagents = rolloutCapability?.snapshot?.nativeSubagents;
-      const runtimeCapabilityVerified = Boolean(
-        (rolloutVersions as ({ invocable?: boolean } | null))?.invocable === true
-        && rolloutCapability?.reason === 'capability_resolved'
-        && rolloutCapability.snapshot?.nativeSessionContinuation.support === 'verified'
-        && nativeSubagents?.support === 'verified'
-        && (nativeSubagents.evidenceLevel === 'L2' || nativeSubagents.evidenceLevel === 'L3')
-        && advertisedCapabilityGap.length === 0
-      );
-      // An installed CLI that does not advertise what OD Next will demand at
-      // launch must lose admission here, not fail the user's Run at spawn.
-      const advertisedCapabilityReason = advertisedCapabilityGap.length > 0
-        ? 'advertised_capability_missing'
-        : null;
       strategyRolloutDecision = evaluateOdNextRollout({
         policy: rolloutPolicy,
         assignmentIdentity: `${requestBody.projectId}:${snapshotConversationId ?? ''}`,
@@ -1754,10 +1703,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         agentId: effectiveAgentId,
         agentVersion: rolloutVersions?.agentCliVersion ?? null,
         sourceKind: rolloutPlugin?.sourceKind ?? null,
-        runtimeCapabilityVerified,
-        runtimeCapabilityReason: advertisedCapabilityReason
-          ?? rolloutCapability?.reason
-          ?? 'runtime_out_of_scope',
         routeApplicability,
       });
       if (
@@ -1769,9 +1714,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           'od_next_rollout_prestart_preparation_failed',
         );
       }
-      if (strategyRolloutDecision.effectiveMode === 'active') {
-        rolloutCapabilitySnapshot = rolloutCapability?.snapshot ?? null;
-      }
       console.info('[od-next-rollout]', {
         decisionClass: strategyRolloutDecision.decisionClass,
         requestedMode: strategyRolloutDecision.requestedMode,
@@ -1782,9 +1724,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         sourceKind: rolloutPlugin?.sourceKind ?? null,
         assignmentClass: strategyRolloutDecision.eligible ? 'included' : 'not_included',
         primaryReasonCode: strategyRolloutDecision.primaryReasonCode,
-        ...(advertisedCapabilityGap.length > 0
-          ? { advertisedCapabilityGap }
-          : {}),
       });
       if (!explicitExecutablePlugin) {
         const projectRow = rolloutProject;
@@ -1950,9 +1889,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       // unbound project.
       workspaceScope: preparedWorkspaceScope,
       ...(strategyRolloutDecision ? { strategyRolloutDecision } : {}),
-      ...(strategyRolloutDecision?.effectiveMode === 'active' && rolloutCapabilitySnapshot
-        ? { runtimeCapabilitySnapshot: rolloutCapabilitySnapshot }
-        : {}),
     };
     if (resolvedSnapshot?.ok) {
       meta.appliedPluginSnapshotId = resolvedSnapshot.snapshotId;
@@ -2379,7 +2315,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         strategyRolloutDecision,
         'od_next_rollout_prestart_preparation_failed',
       );
-      rolloutCapabilitySnapshot = null;
       meta.strategyRolloutDecision = strategyRolloutDecision;
       delete meta.runtimeCapabilitySnapshot;
       delete meta.odNextTaskInputSnapshot;
@@ -2641,10 +2576,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
                       intake: {
                         inputRefs: [{ id: 'request', accessible: true }],
                         selectedAgentAvailable: true,
-                        nativeContinuation: strategyRolloutDecision.syntheticCanary
-                          ? 'verified'
-                          : rolloutCapabilitySnapshot?.nativeSessionContinuation.support
-                            ?? 'unknown',
                         taskProfileAvailable: true,
                         dependencies: [],
                       },

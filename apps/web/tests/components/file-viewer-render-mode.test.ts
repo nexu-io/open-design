@@ -368,6 +368,12 @@ describe('htmlNeedsPoweredPreview', () => {
     expect(htmlNeedsPoweredPreview('const b = new SharedArrayBuffer(16);')).toBe(true);
   });
 
+  it('uses real Web Storage for artifacts that save browser state across reloads', () => {
+    expect(htmlNeedsPoweredPreview('<script>localStorage.setItem("task", "saved")</script>')).toBe(true);
+    expect(htmlNeedsPoweredPreview('<script>window.sessionStorage.getItem("task")</script>')).toBe(true);
+    expect(htmlNeedsPoweredPreview('<p>Persistent form</p>')).toBe(false);
+  });
+
   it('matches Web Worker / SharedWorker construction', () => {
     expect(htmlNeedsPoweredPreview("const w = new Worker('sort.js');")).toBe(true);
     expect(htmlNeedsPoweredPreview('new SharedWorker(url)')).toBe(true);

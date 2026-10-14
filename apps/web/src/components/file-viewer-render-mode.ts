@@ -236,6 +236,9 @@ export function htmlNeedsFocusGuard(source: string): boolean {
  */
 export function htmlNeedsPoweredPreview(source: string | null | undefined): boolean {
   if (!source) return false;
+  // The opaque-origin shim only keeps per-document memory. Persisted browser
+  // state needs the existing isolated origin's native Web Storage instead.
+  if (/\b(?:local|session)Storage\b/.test(source)) return true;
   // Hard requirement — SharedArrayBuffer only exists in a crossOriginIsolated
   // document, which ONLY the powered path provides.
   if (/\bSharedArrayBuffer\b/.test(source)) return true;

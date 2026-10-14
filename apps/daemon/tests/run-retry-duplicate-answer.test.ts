@@ -89,6 +89,8 @@ describe('OPEND-2566 duplicate answer after an upstream reconnect', () => {
     await putConfig(started.url, {
       agentId: 'claude',
       agentCliEnv: { claude: { CLAUDE_BIN: fakeClaude } },
+      // Exercise ordinary Run retry persistence without OD Next reply buffering.
+      odNextStrategyMode: 'off',
       telemetry: { metrics: true, content: false, artifactManifest: false },
       privacyDecisionAt: Date.now(),
     });
@@ -279,6 +281,7 @@ async function createAndWaitForRun(url: string): Promise<RunStatus> {
   });
   expect(runResponse.status).toBe(202);
   const body = await runResponse.json() as { runId: string };
+  expect(body).not.toHaveProperty('strategyTask');
   return await waitForRun(url, body.runId);
 }
 

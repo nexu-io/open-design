@@ -31,7 +31,7 @@ describe('buildSrcdoc fragment navigation parity', () => {
     }));
 
     expect(result.title).toBe('Fragment deck');
-    expect(result.head.querySelector('style:not([data-od-edit-bridge-style])')?.textContent)
+    expect(result.head.querySelector('style:not([data-od-edit-bridge-style]):not([data-od-preview-hidden-guard])')?.textContent)
       .toContain('background: rgb(1, 2, 3)');
     expect(result.body.querySelector('main h1')?.textContent).toBe('Styled content');
     expect(result.body.querySelector('style')).toBeNull();

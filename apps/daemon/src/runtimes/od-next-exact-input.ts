@@ -227,10 +227,10 @@ export const OD_NEXT_EXACT_INPUT_MAP_V1 = [
   {
     id: 'runtime_facts',
     classification: 'initial_bundle',
-    source: 'renderOdNextRuntimeFactsV2()',
+    source: 'empty runtime facts slot',
     owner: 'bundle context serializer',
     textTarget: 'context/runtime_facts',
-    note: 'Runtime-owned planning facts the Agent copies verbatim; per-task, so excluded from the cache-stable head.',
+    note: 'The existing Bundle slot stays empty; runtime capability proof is no longer sent to the model.',
   },
   {
     id: 'runtime_tool_prompt',
@@ -558,15 +558,6 @@ export const OD_NEXT_SEMANTIC_REQUEST_FACT_MAP_V1 = [
     owner: 'Task 02 core recipe; Task 04 canonical task configuration',
     textTarget: 'task_metadata/task_type',
     note: 'Selects the verified core recipe and is serialized as the canonical Task 04 task type.',
-  },
-  {
-    id: 'strategy_runtime_capability_facts',
-    classification: 'initial_bundle',
-    producer: 'daemon_system_prompt',
-    source: 'odNextStrategyRecipe.planningFacts and capabilitySnapshotHash',
-    owner: 'Task 02 core recipe; Task 04 canonical task configuration',
-    textTarget: 'context/runtime_facts',
-    note: 'Runtime facts are per-task, so they are emitted as Bundle context instead of inside the cross-task-constant head; task_metadata carries only the stable allowlisted execution selection.',
   },
   {
     id: 'request_execution_configuration',

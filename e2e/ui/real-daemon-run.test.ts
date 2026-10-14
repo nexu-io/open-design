@@ -297,7 +297,7 @@ for (const strategyMode of ['active', 'off'] as const) {
   });
 }
 
-test('[P0] local OD Next clarification canary preserves one taskExecutionId through the public form', async ({ page }) => {
+test('[P0] local OD Next form answers start a new task after the question run ends', async ({ page }) => {
   test.skip(
     process.env.OD_NEXT_STRATEGY_ROLLOUT !== 'active'
       || process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY !== '1',
@@ -314,22 +314,23 @@ test('[P0] local OD Next clarification canary preserves one taskExecutionId thro
   await expect.poll(async () => {
     const response = await page.request.get(`/api/runs/${created.runId}`);
     return (await response.json() as { strategyTask?: { outcome: string } }).strategyTask?.outcome;
-  }, { timeout: 20_000 }).toBe('clarification_required');
+  }, { timeout: 20_000 }).toBe('completed');
 
   const form = page.locator('.question-form').first();
   await expect(form).toBeVisible();
   await form.getByText('Desktop web', { exact: true }).click();
   const clarificationResponsePromise = page.waitForResponse(isCreateRunResponse);
-  await form.getByRole('button', { name: 'Send answers' }).click();
+  await form.getByRole('button', { name: 'Next', exact: true }).click();
   const clarificationResponse = await clarificationResponsePromise;
   const clarificationText = await clarificationResponse.text();
   expect(clarificationResponse.ok(), clarificationText).toBeTruthy();
   const clarification = JSON.parse(clarificationText) as {
+    runId: string;
     taskExecutionId: string;
     strategyTask?: { inputStage: string };
   };
-  expect(clarification.taskExecutionId).toBe(created.taskExecutionId);
-  expect(clarification.strategyTask?.inputStage).toBe('clarification');
+  expect(clarification.taskExecutionId).not.toBe(created.taskExecutionId);
+  expect(clarification.strategyTask?.inputStage).toBe('request');
 
   const { projectId } = await currentProjectContext(page);
   await expectProjectFilesToContain(page, projectId, [OD_NEXT_CANARY_FILE]);
@@ -337,18 +338,18 @@ test('[P0] local OD Next clarification canary preserves one taskExecutionId thro
     'Created od-next-active-canary.html through the continued native session.',
   ).last()).toBeVisible();
   await expect.poll(async () => {
-    const response = await page.request.get(`/api/runs/${created.runId}`);
+    const response = await page.request.get(`/api/runs/${clarification.runId}`);
     return (await response.json() as {
       strategyTask?: { taskExecutionId: string; outcome: string; terminal: boolean };
     }).strategyTask;
   }, { timeout: 20_000 }).toMatchObject({
-    taskExecutionId: created.taskExecutionId,
+    taskExecutionId: clarification.taskExecutionId,
     outcome: 'completed',
     terminal: true,
   });
 });
 
-test('[P0] local OD Next public canaries project blocked and canceled terminal mappings', async ({ page }) => {
+test('[P0] local OD Next public canaries preserve normal no-artifact endings and cancellation', async ({ page }) => {
   test.skip(
     process.env.OD_NEXT_STRATEGY_ROLLOUT !== 'active'
       || process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY !== '1',
@@ -368,7 +369,7 @@ test('[P0] local OD Next public canaries project blocked and canceled terminal m
     }).strategyTask;
   }, { timeout: 20_000 }).toMatchObject({
     taskExecutionId: blocked.taskExecutionId,
-    outcome: 'blocked',
+    outcome: 'completed',
     terminal: true,
   });
 

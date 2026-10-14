@@ -502,7 +502,7 @@ export const fa: Dict = {
   'settings.cloudCalloutBody': 'Sign in to the cloud version to enable team spaces, shared projects, member permissions, and the audit dashboard.',
   'settings.cloudCalloutButton': 'Sign in / Register',
   'settings.modeApiMeta': 'ارائه‌دهندگان API',
-  'settings.byokNoFileToolsNotice': 'BYOK نمی‌تواند فایل‌های پروژه را بخواند، بنویسد یا ویرایش کند. وقتی به تغییرات کد نیاز دارید از Local CLI استفاده کنید.',
+  'settings.byokNoFileToolsNotice': 'BYOK برای خواندن، نوشتن و ویرایش فایل‌های پروژه از OpenCode استفاده می‌کند. OpenCode باید نصب‌شده و در دسترس باشد.',
   'settings.byokDraftNotice': 'برای ذخیره این ارائه‌دهنده، فیلدهای الزامی را تکمیل کنید. پیکربندی فعلی فعال می‌ماند.',
   'settings.codeAgent': 'عامل کد',
   'settings.codeAgentHint': 'با اسکن PATH شما شناسایی شده. CLI مورد نظر برای جریان تولیدات را انتخاب کنید.',

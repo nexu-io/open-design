@@ -3307,7 +3307,11 @@ describe('ProjectView conversation run isolation', () => {
     },
   );
 
-  it('routes keyless local Ollama BYOK chats through OpenCode with provider metadata', async () => {
+  it.each([
+    'http://localhost:11434',
+    'http://127.0.0.1:11434',
+    'http://[::1]:11434',
+  ])('routes keyless local Ollama BYOK chats at %s through OpenCode with provider metadata', async (baseUrl) => {
     listMessages.mockResolvedValue([]);
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }));
 
@@ -3316,7 +3320,7 @@ describe('ProjectView conversation run isolation', () => {
       mode: 'api',
       apiProtocol: 'ollama',
       apiKey: '',
-      baseUrl: 'http://localhost:11434',
+      baseUrl,
       model: 'llama3.2',
     });
 
@@ -3330,7 +3334,8 @@ describe('ProjectView conversation run isolation', () => {
       agentId: 'byok-opencode',
       byokProvider: expect.objectContaining({
         protocol: 'ollama',
-        baseUrl: 'http://localhost:11434',
+        apiKey: '',
+        baseUrl,
         model: 'llama3.2',
         requiresApiKey: false,
       }),

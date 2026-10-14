@@ -492,7 +492,7 @@ export const zhTW: Dict = {
   "settings.cloudCalloutButton": "登入 / 註冊",
   "settings.modeApiMeta": "API 供應商",
   "settings.byokNoFileToolsNotice":
-    "BYOK 無法讀取、寫入或編輯專案檔案。需要變更程式碼時，請使用 Local CLI。",
+    "BYOK 透過 OpenCode 讀取、寫入和編輯專案檔案，需要已安裝且可用的 OpenCode。",
   "settings.byokDraftNotice":
     "填寫必填欄位後即可儲存此供應商；目前的設定將繼續維持生效。",
   "settings.codeAgent": "程式碼代理",

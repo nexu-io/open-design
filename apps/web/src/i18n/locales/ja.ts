@@ -502,7 +502,7 @@ export const ja: Dict = {
   'settings.cloudCalloutBody': 'クラウド版にサインインすると、チームスペース、共有プロジェクト、メンバー権限、監査ダッシュボードが利用できます。',
   'settings.cloudCalloutButton': 'ログイン / 登録',
   'settings.modeApiMeta': 'API プロバイダー',
-  'settings.byokNoFileToolsNotice': 'BYOK ではプロジェクトファイルの読み取り、書き込み、編集はできません。コードを変更する場合は Local CLI を使用してください。',
+  'settings.byokNoFileToolsNotice': 'BYOK は OpenCode を使ってプロジェクトファイルを読み取り、書き込み、編集します。OpenCode がインストールされ、利用可能である必要があります。',
   'settings.byokDraftNotice': '必須項目を入力すると、このプロバイダーを保存できます。現在の設定は引き続き有効です。',
   'settings.codeAgent': 'コードエージェント',
   'settings.codeAgentHint': 'PATH をスキャンして検出されます。生成に使用する CLI を選択してください。',

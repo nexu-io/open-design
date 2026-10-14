@@ -492,7 +492,7 @@ export const zhCN: Dict = {
   "settings.cloudCalloutButton": "登录 / 注册",
   "settings.modeApiMeta": "API 提供商",
   "settings.byokNoFileToolsNotice":
-    "BYOK 无法读写或修改项目文件；需要改代码时请使用本机 CLI。",
+    "BYOK 通过 OpenCode 读取、写入和编辑项目文件，需要已安装且可用的 OpenCode。",
   "settings.byokDraftNotice":
     "填写必填项后即可保存此提供商；当前配置将继续保持生效。",
   "settings.codeAgent": "代码代理",

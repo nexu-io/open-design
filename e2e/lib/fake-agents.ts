@@ -223,6 +223,9 @@ if (args.includes('--version')) {
 } else if (agentId === 'claude' && args[0] === '-p' && args.includes('--help')) {
   process.stdout.write('--add-dir --include-partial-messages\\n');
   process.exitCode = 0;
+} else if (agentId === 'opencode' && args[0] === 'run' && args.includes('--help')) {
+  process.stdout.write('--format --dir --session --dangerously-skip-permissions\\n');
+  process.exitCode = 0;
 } else if ((agentId === 'opencode' || agentId === 'cursor-agent') && args[0] === 'models') {
   process.stdout.write('fake/default\\n');
   process.exitCode = 0;
@@ -566,16 +569,10 @@ function odNextPromptIdentity(promptText) {
       if (end < 0) throw new Error('OD Next fake could not finish recipe_identity.' + name);
       return identityMarker.slice(valueStart, end);
     };
-    const packageHashPrefix = '"packageHash": "';
-    const packageHashStart = promptText.indexOf(packageHashPrefix);
-    if (packageHashStart < 0) throw new Error('OD Next fake could not read packageHash');
-    const packageHashValueStart = packageHashStart + packageHashPrefix.length;
-    const packageHashEnd = promptText.indexOf('"', packageHashValueStart);
     const taskTypeMatch = /<task_type>\\s*([^<]+?)\\s*<\\/task_type>/.exec(promptText);
     const identity = {
       version: attribute('strategy_version'),
       snapshotId: attribute('applied_snapshot'),
-      packageHash: promptText.slice(packageHashValueStart, packageHashEnd),
       taskProfileVersion: attribute('task_profile_version'),
       taskType: taskTypeMatch ? taskTypeMatch[1].trim() : 'prototype',
     };
@@ -587,7 +584,6 @@ function odNextPromptIdentity(promptText) {
     const identity = {
       version: strategy[1],
       snapshotId: promptIdentity(promptText, 'applied snapshot'),
-      packageHash: promptIdentity(promptText, 'strategy package'),
       taskProfileVersion: '2.0.0',
       taskType: 'prototype',
     };

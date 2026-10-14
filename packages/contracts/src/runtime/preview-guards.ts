@@ -17,6 +17,11 @@ export const PREVIEW_REDIRECT_LOOP_MESSAGE = 'od:redirect-loop-blocked';
  */
 export const PREVIEW_URL_GUARD_MAX_HTML_BYTES = 2 * 1024 * 1024;
 
+/** Keep inactive controls hidden while allowing later explicit [hidden] overrides. */
+export function buildPreviewVisibilityGuard(): string {
+  return '<style data-od-preview-hidden-guard>:root [hidden]:where(:not([hidden="until-found" i])) { display: none; }</style>';
+}
+
 export function previewHtmlHasLoadTimeLocationNavigation(source: string): boolean {
   if (/\blocation\s*\.\s*(?:reload|replace|assign)\s*\(/i.test(source)) return true;
   if (/\blocation\s*\.\s*href\s*=[^=]/i.test(source)) return true;

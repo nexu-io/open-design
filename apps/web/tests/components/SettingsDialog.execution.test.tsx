@@ -821,19 +821,25 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     expect(screen.getByRole('combobox', { name: 'Model' }).textContent).toContain('gpt-4o');
   });
 
-  it('keeps BYOK file-editing limits discoverable from the provider heading (issue #1106)', () => {
-    // Regression cover: switching from Local CLI to BYOK previously gave no
-    // signal that file-editing tools (`Read`/`Write`/`Edit`) are absent on the
-    // API path. Users typed "continue adjusting the design" expecting edits
-    // and got an HTML monologue back. The notice now sits behind a heading
-    // info icon so it stays discoverable without competing with setup fields.
-    renderSettingsDialog();
+  it('keeps BYOK OpenCode file access discoverable from the provider heading', () => {
+    // BYOK now runs through OpenCode with project file tools. Keep that
+    // capability and its local runtime prerequisite discoverable in the
+    // existing provider-heading tooltip.
+    renderSettingsDialog({}, {
+      agents: [...availableAgents, {
+        id: 'byok-opencode', name: 'BYOK OpenCode', bin: 'opencode',
+        available: true, models: [{ id: 'default', label: 'Default' }],
+      }],
+    });
 
     const trigger = screen.getByTestId('settings-byok-no-file-tools-trigger');
     expect(trigger).toBeTruthy();
     const notice = screen.getByRole('tooltip');
-    expect(notice.textContent).toContain("BYOK can't read, write, or edit project files");
-    expect(notice.textContent).toContain('Local CLI');
+    expect(trigger.getAttribute('aria-label')).toBe(
+      'BYOK uses OpenCode to read, write, and edit project files. OpenCode must be installed and available.',
+    );
+    expect(notice.textContent).toContain('BYOK uses OpenCode to read, write, and edit project files');
+    expect(notice.textContent).toContain('OpenCode must be installed and available');
 
     fireEvent.click(screen.getByRole('tab', { name: 'OpenAI' }));
     expect(screen.getByTestId('settings-byok-no-file-tools-trigger')).toBeTruthy();
@@ -842,7 +848,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     expect(screen.getByTestId('settings-byok-no-file-tools-trigger')).toBeTruthy();
   });
 
-  it('hides the BYOK no-file-tools notice when Local CLI mode is selected', () => {
+  it('hides the BYOK OpenCode file-access notice when Local CLI mode is selected', () => {
     renderSettingsDialog({ mode: 'daemon' });
 
     expect(screen.queryByTestId('settings-byok-no-file-tools-notice')).toBeNull();
@@ -1067,6 +1073,66 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
       );
       expect(testConnectionCalls).toHaveLength(1);
     });
+  });
+
+  it.each([
+    'http://127.0.0.1:11434',
+    'http://[::1]:11434',
+  ])('saves and auto-tests a keyless custom Ollama provider at %s', async (baseUrl) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/workspace/context') {
+        return workspaceContextResponse(null);
+      }
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      expect(url).toBe('/api/test/connection');
+      expect(JSON.parse(String(init?.body))).toMatchObject({
+        mode: 'provider',
+        protocol: 'ollama',
+        apiKey: '',
+        baseUrl,
+        model: 'gemma3:4b',
+      });
+      return new Response(
+        JSON.stringify({ ok: true, kind: 'ok', latencyMs: 28, model: 'gemma3:4b' }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { onPersist } = renderSettingsDialog({
+      mode: 'api',
+      apiProtocol: 'ollama',
+      apiKey: '',
+      baseUrl,
+      apiProviderBaseUrl: null,
+      model: 'gemma3:4b',
+    });
+
+    expect(screen.getByRole('button', { name: 'Test' })).toBeTruthy();
+    fireEvent.change(screen.getByRole('spinbutton', { name: /Max tokens/ }), {
+      target: { value: '2048' },
+    });
+
+    await waitForPersist(onPersist, expect.objectContaining({
+      mode: 'api',
+      apiProtocol: 'ollama',
+      apiKey: '',
+      baseUrl,
+      model: 'gemma3:4b',
+      maxTokens: 2048,
+    }), {});
+    expect((onPersist.mock.calls.at(-1)?.[0] as AppConfig).byokPendingProviderKey).toBeUndefined();
+    await waitFor(() => {
+      expect(screen.getByText(/Connected\. Replied in 28 ms/)).toBeTruthy();
+    });
+    expect(fetchMock.mock.calls.filter(([input]) =>
+      input.toString() === '/api/test/connection',
+    )).toHaveLength(1);
   });
 
   it('keeps protocol drafts isolated without leaking API keys between tabs', () => {

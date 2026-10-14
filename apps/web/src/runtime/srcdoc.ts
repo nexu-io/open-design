@@ -36,6 +36,7 @@ import {
   PREVIEW_RUNTIME_STATE_VERSION,
 } from '@open-design/contracts/runtime/preview-runtime-state';
 import {
+  buildPreviewVisibilityGuard,
   PREVIEW_REDIRECT_GUARD_MAX_HOPS,
   PREVIEW_REDIRECT_GUARD_SELF_REFRESH_MIN_DELAY_MS,
   PREVIEW_REDIRECT_GUARD_WINDOW_MS,
@@ -48,6 +49,7 @@ import {
   findRealTagEnd,
   findRealTagOffset,
   HTML_TAG_PATTERNS,
+  prependAfterDoctype,
 } from '@open-design/contracts/runtime/html-injection-points';
 
 export {
@@ -356,7 +358,8 @@ export function buildSrcdoc(
   // sanitized title as the default filename — one that Microsoft Teams will
   // accept. Only the title text changes; visible page content is untouched.
   const withSafeTitle = sanitizeTitleInDoc(wrapped);
-  const withOdIds = annotateMissingOdIds(withSafeTitle);
+  const withVisibilityGuard = injectAfterHeadOpen(withSafeTitle, buildPreviewVisibilityGuard());
+  const withOdIds = annotateMissingOdIds(withVisibilityGuard);
   const withSourcePaths = options.editBridge ? annotateManualEditSourcePaths(withOdIds) : withOdIds;
   const withBase = options.baseHref ? injectBaseHref(withSourcePaths, options.baseHref) : withSourcePaths;
   const withPreviewBaseBridge = options.baseHref
@@ -1448,7 +1451,9 @@ function injectAtDocumentStart(doc: string, payload: string): string {
 function injectAfterHeadOpen(doc: string, payload: string): string {
   const headEnd = findRealTagEnd(doc, HTML_TAG_PATTERNS.headOpen);
   if (headEnd >= 0) return doc.slice(0, headEnd) + payload + doc.slice(headEnd);
-  return payload + doc;
+  const htmlEnd = findRealTagEnd(doc, HTML_TAG_PATTERNS.htmlOpen);
+  if (htmlEnd >= 0) return `${doc.slice(0, htmlEnd)}<head>${payload}</head>${doc.slice(htmlEnd)}`;
+  return prependAfterDoctype(doc, payload);
 }
 
 function injectBeforeHeadEnd(doc: string, payload: string): string {

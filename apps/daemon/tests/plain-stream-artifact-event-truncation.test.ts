@@ -8,7 +8,9 @@
 // the ring. runs-durable-replay.test.ts directly asserts that the real service's
 // in-memory ring remains exactly 2000 while replay restores the earlier records.
 //
-// Drive the real daemon HTTP API with a controlled plain-stream DeepSeek CLI.
+// Drive the ordinary Run path through the real daemon HTTP API with a
+// controlled plain-stream DeepSeek CLI. Strategy filtering is a separate
+// boundary and need not preserve one stdout chunk per replay event.
 // It prints a complete artifact first, floods more than 2000 stdout events,
 // and exits successfully. Both complete replay and persisted deliverables must
 // survive; increasing the ring or dropping the artifact assertions is not a fix.
@@ -437,7 +439,7 @@ async function putConfig(url: string, patch: Record<string, unknown>): Promise<v
   const response = await fetch(`${url}/api/app-config`, {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(patch),
+    body: JSON.stringify({ ...patch, odNextStrategyMode: 'off' }),
   });
   expect(response.status).toBe(200);
 }
@@ -475,7 +477,8 @@ async function createAndWaitForRun(url: string): Promise<{ run: RunStatus; proje
     }),
   });
   expect(runResponse.status).toBe(202);
-  const body = await runResponse.json() as { runId: string };
+  const body = await runResponse.json() as { runId: string; strategyTask?: unknown };
+  expect(body.strategyTask).toBeUndefined();
   const startedAt = Date.now();
   while (Date.now() - startedAt < 20_000) {
     const response = await fetch(`${url}/api/runs/${encodeURIComponent(body.runId)}`);

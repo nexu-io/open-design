@@ -32,9 +32,9 @@ function htmlFile(overrides: Partial<ProjectFile> = {}): ProjectFile {
 }
 
 function srcDocHtml(label: string): string {
-  // localStorage forces the same sandbox-shim/srcDoc transport used by the
-  // artifact in the reported diagnostics bundle.
-  return `<html><body><main>${label}</main><script>localStorage.setItem('deepflow', 'monthly')</script></body></html>`;
+  // An inline Babel script selects the sandbox-shim/srcDoc transport without
+  // requesting the isolated origin now used by Web Storage artifacts.
+  return `<html><body><main>${label}</main><script type="text/babel">const ready = true;</script></body></html>`;
 }
 
 function transportGeneration(frame: HTMLIFrameElement): string {

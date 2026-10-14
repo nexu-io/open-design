@@ -48,7 +48,6 @@ export function composeResumedRequest(task: Pick<StrategyTaskExecutionRecord, 'p
   const parts = [
     'Follow the current user request. For a new design deliverable, finish an actionable plan before production; do not build in the planning turn. For an existing actionable plan, continue directly when requested.',
     gate,
-    contextDelta('Runtime capabilities', runtimeCapabilities(context.runtimeFacts), runtimeCapabilities(prior.context.runtimeFacts)),
     contextDelta('Runtime tool environment', context.runtimeToolEnvironment, prior.context.runtimeToolEnvironment),
     contextDelta('Workspace input references', context.requestInputFacts, prior.context.requestInputFacts),
     contextDelta('Selected run context', context.runContext, prior.context.runContext),
@@ -65,16 +64,4 @@ function contextDelta(label: string, current: string | undefined, previous: stri
   return current?.trim()
     ? `${label} updated; this replaces the previous value:\n${current}`
     : `${label}: cleared. The previous value no longer applies to this turn.`;
-}
-
-/** Strip audit-only snapshot identifiers while retaining the actual capability facts. */
-function runtimeCapabilities(text: string | undefined): string {
-  if (!text?.trim()) return '';
-  const start = text.indexOf('{');
-  if (start < 0) return text;
-  try {
-    const facts = JSON.parse(text.slice(start)) as Record<string, unknown>;
-    const { appliedSnapshot: _snapshot, capabilitySnapshotHash: _hash, ...capabilities } = facts;
-    return JSON.stringify(capabilities);
-  } catch { return text; }
 }

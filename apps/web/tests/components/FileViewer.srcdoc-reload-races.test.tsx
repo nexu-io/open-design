@@ -597,7 +597,7 @@ describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions
   // reload must keep that transport stable while the source probe is pending.
   // ---------------------------------------------------------------------------
   it('keeps the guarded URL iframe active while source is null after Reload', async () => {
-    // localStorage requires the sandbox shim, but settled on-disk HTML can now
+    // An inline Babel script requires the sandbox shim, but settled on-disk HTML can
     // receive that shim from the daemon without taking the srcDoc transport.
     const shimFile: ProjectFile = {
       name: 'app.html',
@@ -609,7 +609,7 @@ describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions
       mime: 'text/html',
     };
     const shimHtml =
-      '<html><body><script>localStorage.setItem("key","val");</script><p>loaded</p></body></html>';
+      '<html><body><script type="text/babel">const ready = true;</script><p>loaded</p></body></html>';
 
     // Step 1: mount with shimHtml and wait for the guarded URL lane.
     vi.stubGlobal('fetch', fetchReturning(shimHtml));
@@ -1137,7 +1137,7 @@ describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions
   it('saves a Manual Edit patch while Reload exits through the URL standby', async () => {
     const initialSource =
       '<!doctype html><html><body>' +
-      '<script>localStorage.setItem("k","v");</script>' +
+      '<script type="text/babel">const ready = true;</script>' +
       '<h1 data-od-id="hero">Hello</h1>' +
       '</body></html>';
 

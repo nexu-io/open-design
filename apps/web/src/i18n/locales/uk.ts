@@ -502,7 +502,7 @@ export const uk: Dict = {
   'settings.cloudCalloutBody': 'Sign in to the cloud version to enable team spaces, shared projects, member permissions, and the audit dashboard.',
   'settings.cloudCalloutButton': 'Sign in / Register',
   'settings.modeApiMeta': 'Постачальники API',
-  'settings.byokNoFileToolsNotice': 'BYOK не може читати, записувати чи редагувати файли проєкту. Використовуйте Local CLI, коли потрібні зміни в коді.',
+  'settings.byokNoFileToolsNotice': 'BYOK використовує OpenCode для читання, запису та редагування файлів проєкту. OpenCode має бути встановлений і доступний.',
   'settings.byokDraftNotice': 'Заповніть обов’язкові поля, щоб зберегти цього постачальника. Поточна конфігурація залишатиметься активною.',
   'settings.codeAgent': 'Кодовий агент',
   'settings.codeAgentHint': 'Виявляється за допомогою сканування вашого PATH. Виберіть CLI, через який мають проходити генерації.',

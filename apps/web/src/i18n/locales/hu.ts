@@ -502,7 +502,7 @@ export const hu: Dict = {
   'settings.cloudCalloutBody': 'Sign in to the cloud version to enable team spaces, shared projects, member permissions, and the audit dashboard.',
   'settings.cloudCalloutButton': 'Sign in / Register',
   'settings.modeApiMeta': 'API-szolgáltatók',
-  'settings.byokNoFileToolsNotice': 'A BYOK nem tud projektfájlokat olvasni, írni vagy szerkeszteni. Ha kódmódosításra van szüksége, használja a Local CLI-t.',
+  'settings.byokNoFileToolsNotice': 'A BYOK az OpenCode-ot használja a projektfájlok olvasására, írására és szerkesztésére. Az OpenCode-nak telepítve és elérhetőnek kell lennie.',
   'settings.byokDraftNotice': 'Töltsd ki a kötelező mezőket a szolgáltató mentéséhez. A jelenlegi beállítás aktív marad.',
   'settings.codeAgent': 'Kód Agent',
   'settings.codeAgentHint': 'A PATH átvizsgálásával észlelve. Válaszd ki a CLI-t, amelyen át a generálásokat szeretnéd futtatni.',

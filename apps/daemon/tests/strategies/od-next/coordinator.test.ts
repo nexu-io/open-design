@@ -144,7 +144,6 @@ function planContract(snapshot: AppliedPluginSnapshot): OpenDesignPlanContractV2
 const intakePassed = {
   inputRefs: [{ id: 'request', accessible: true }],
   selectedAgentAvailable: true,
-  nativeContinuation: 'verified' as const,
   taskProfileAvailable: true,
   dependencies: [],
 };

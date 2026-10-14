@@ -205,15 +205,16 @@ export interface ProjectPreviewScopeRenewResponse {
  * preview sandbox cannot provide.
  *
  * `baseOrigin` is the daemon's own directly-reachable http origin. The web
- * host loads the powered iframe from a host-swapped loopback variant of it.
- * That reserved browser origin is cross-origin to the app shell and is allowed
- * to read `/powered/` file bytes, but the daemon rejects its browser requests
- * to normal `/api/*` routes. `null` when the daemon cannot resolve a usable
+ * host derives a separate loopback hostname per project when `projectOrigins`
+ * is advertised. That reserved browser origin can only read that project's
+ * `/powered/` file bytes. `null` when the daemon cannot resolve a usable
  * origin (powered mode is then unavailable and previews stay on the opaque
  * sandbox).
  */
 export interface ProjectPreviewIsolationResponse {
   supported: boolean;
+  /** Advertises enforcement of project-scoped powered browser origins. */
+  projectOrigins?: boolean;
   baseOrigin: string | null;
   /** URL path segment for the powered file route (`.../:id/<pathPrefix>/<file>`). */
   pathPrefix: string;

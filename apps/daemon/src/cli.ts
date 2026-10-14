@@ -16,6 +16,9 @@ import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
 import { runDeliverableSyntaxToolCli } from './tools-deliverable-syntax-cli.js';
 import { splitResearchSubcommand } from './research/cli-args.js';
 import { resolveDaemonUrl } from './daemon-url.js';
+import { byokProviderFromCliOptions } from './runtimes/byok-cli.js';
+import { BYOK_OPENCODE_AGENT_ID } from './runtimes/byok-opencode.js';
+import { redactSecrets } from './connectionTest.js';
 import { SidecarFactory } from '@open-design/sidecar';
 import { APP_KEYS, SIDECAR_MESSAGES } from '@open-design/sidecar-proto';
 import { EXPORT_FORMATS, EXPORT_IMAGE_FORMATS, mediaFailureNextStep } from '@open-design/contracts';
@@ -258,6 +261,11 @@ const PROJECT_RESOURCE_STRING_FLAGS = new Set([
   'workspace-member',
 ]);
 const PROJECT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'follow', 'thumbnail']);
+const RUN_START_STRING_FLAGS = new Set([
+  ...PROJECT_RESOURCE_STRING_FLAGS,
+  'byok-protocol', 'byok-base-url', 'byok-api-version', 'byok-key-env',
+]);
+const RUN_START_BOOLEAN_FLAGS = new Set([...PROJECT_BOOLEAN_FLAGS, 'byok-keyless']);
 const WORKSPACE_STRING_FLAGS = new Set([
   'model',
   'daemon-url', 'workspace', 'view', 'visibility', 'owner', 'project',
@@ -2710,10 +2718,10 @@ otherwise a minimal \`od mcp --daemon-url <url>\` command is used.`);
 // code + a JSON envelope on stderr. Code agents read these to decide
 // whether the failure is recoverable (re-grant capabilities, prompt
 // the user, retry with --grant-caps, etc.).
-function exitWithStructuredError({ code, message, data }) {
+function exitWithStructuredError({ code, message, data }, byokApiKey) {
   const exit = RECOVERABLE_EXIT_CODES[code] ?? 1;
   const envelope = { error: { code, message, data: data ?? {} } };
-  process.stderr.write(JSON.stringify(envelope) + '\n');
+  process.stderr.write(serializeRunCliJson(envelope, byokApiKey) + '\n');
   process.exit(exit);
 }
 
@@ -7822,7 +7830,9 @@ async function runRun(args) {
                [--prompt-file <path|->] [--task-execution <id>]
                [--client-request-id <id>]
                [--skill <id>[,<id>]] [--plugin <id>] [--inputs <json>] [--grant-caps a,b]
-               [--agent claude|codex|opencode] [--model <id>] [--service-tier <id>]
+               [--agent <id>] [--model <id>] [--service-tier <id>]
+               [--byok-protocol <protocol>] [--byok-base-url <url>]
+               [--byok-api-version <version>] [--byok-key-env <env>] [--byok-keyless]
                [--workspace <id> --workspace-member <id>] [--follow] [--json]
   od run redesign [--path <folder>] [--message "<text>" | --prompt-file <path|->]
                [--agent claude] [--model <id>] [--service-tier <id>] [--follow] [--json]
@@ -7841,6 +7851,16 @@ async function runRun(args) {
   od run result-package <runId> [--json]    Inspect run outputs and workspace
                                             provenance without applying them.
 
+BYOK start options:
+  BYOK requires --model <id>; Azure also requires --byok-base-url.
+  --byok-protocol <protocol>  anthropic|openai|azure|google|ollama|senseaudio|aihubmix.
+                              Selects byok-opencode unless --agent is explicit.
+  --byok-base-url <url>       Override the protocol's default service URL.
+  --byok-api-version <value>  Optional provider API version.
+  --byok-key-env <env>        Read the API key from this environment variable.
+  --byok-keyless             Explicitly use a provider without an API key.
+                              Use --model <id> to select the BYOK model.
+
 Common options:
   --daemon-url <url>         OpenDesign daemon HTTP base.
   --workspace <id>           Explicit Workspace id for a bound project.
@@ -7851,8 +7871,8 @@ Common options:
   const sub = args[0];
   const rest = args.slice(1);
   const flags = parseFlags(rest, {
-    string: PROJECT_RESOURCE_STRING_FLAGS,
-    boolean: PROJECT_BOOLEAN_FLAGS,
+    string: sub === 'start' ? RUN_START_STRING_FLAGS : PROJECT_RESOURCE_STRING_FLAGS,
+    boolean: sub === 'start' ? RUN_START_BOOLEAN_FLAGS : PROJECT_BOOLEAN_FLAGS,
   });
   const base = (await projectDaemonUrl(flags)).replace(/\/$/, '');
   const workspaceHeaders = workspaceHeadersFromExplicitFlags(flags) ?? {};
@@ -8096,7 +8116,21 @@ Common options:
         console.error('--project <projectId> is required');
         process.exit(2);
       }
+      let byokProvider;
+      try {
+        byokProvider = byokProviderFromCliOptions({
+          protocol: flags['byok-protocol'],
+          baseUrl: flags['byok-base-url'],
+          apiVersion: flags['byok-api-version'],
+          keyEnv: flags['byok-key-env'],
+          keyless: flags['byok-keyless'] === true,
+        }, process.env);
+      } catch (err) {
+        console.error(err.message);
+        process.exit(2);
+      }
       const body = { projectId: flags.project };
+      if (byokProvider) body.byokProvider = byokProvider;
       if (flags.conversation) body.conversationId = flags.conversation;
       const message = await readRunMessageFromFlags(flags);
       if (message) body.message = message;
@@ -8111,6 +8145,7 @@ Common options:
       }
       if (flags['design-system']) body.designSystemId = flags['design-system'];
       if (flags.agent) body.agentId = flags.agent;
+      else if (byokProvider) body.agentId = BYOK_OPENCODE_AGENT_ID;
       if (flags.model) body.model = flags.model;
       if (flags['service-tier']) body.serviceTier = flags['service-tier'];
       if (flags.inputs) {
@@ -8134,26 +8169,26 @@ Common options:
       if (!resp.ok) {
         if (resp.status === 409 && data?.error?.code === 'capabilities-required') {
           return exitWithStructuredError({
-            code:    'capabilities-required',
+            code:    data.error.code,
             message: data.error.message,
             data:    data.error.data,
-          });
+          }, byokProvider?.apiKey);
         }
         if (resp.status === 422 && data?.error?.code === 'missing-input') {
           return exitWithStructuredError({
-            code:    'missing-input',
+            code:    data.error.code,
             message: data.error.message,
             data:    data.error.data,
-          });
+          }, byokProvider?.apiKey);
         }
-        console.error(`POST /api/runs failed: ${resp.status} ${JSON.stringify(data)}`);
+        console.error(`POST /api/runs failed: ${resp.status} ${serializeRunCliJson(data, byokProvider?.apiKey)}`);
         process.exit(1);
       }
       if (flags.json && !flags.follow) {
-        return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+        return process.stdout.write(serializeRunCliJson(data, byokProvider?.apiKey, 2) + '\n');
       }
-      console.log(`[run] started ${data.runId}`);
-      if (flags.follow) await streamRunEvents(base, data.runId, workspaceHeaders);
+      console.log(redactSecrets(`[run] started ${data.runId}`, [byokProvider?.apiKey]));
+      if (flags.follow) await streamRunEvents(base, data.runId, workspaceHeaders, byokProvider?.apiKey);
       return;
     }
     default:
@@ -8162,15 +8197,23 @@ Common options:
   }
 }
 
+function serializeRunCliJson(value, byokApiKey, indentation) {
+  // Only redact printed values; Run ids and task-chain decisions keep raw data.
+  const secrets = byokApiKey ? [byokApiKey, JSON.stringify(byokApiKey).slice(1, -1)] : [];
+  return JSON.stringify(value, (_key, entry) => (
+    typeof entry === 'string' && byokApiKey ? redactSecrets(entry, secrets) : entry
+  ), indentation);
+}
+
 // Stream the SSE events at /api/runs/:id/events as ND-JSON on stdout.
 // Each line is one event: { event, data } so a code agent can parse it
 // without needing an SSE library.
-async function streamRunEvents(base, initialRunId, workspaceHeaders = {}) {
+async function streamRunEvents(base, initialRunId, workspaceHeaders = {}, byokApiKey) {
   let runId = initialRunId;
   const visited = new Set();
   while (true) {
     if (visited.has(runId)) {
-      console.error(`run watch failed: cyclic strategy task chain at ${runId}`);
+      console.error(redactSecrets(`run watch failed: cyclic strategy task chain at ${runId}`, [byokApiKey]));
       process.exit(1);
     }
     visited.add(runId);
@@ -8202,7 +8245,7 @@ async function streamRunEvents(base, initialRunId, workspaceHeaders = {}) {
         const dataRaw = dataLines.join('\n');
         let parsed;
         try { parsed = JSON.parse(dataRaw); } catch { parsed = dataRaw; }
-        process.stdout.write(JSON.stringify({ event, data: parsed }) + '\n');
+        process.stdout.write(serializeRunCliJson({ event, data: parsed }, byokApiKey) + '\n');
         if (event !== 'end') continue;
         const task = parsed?.strategyTask;
         if (task && task.terminal !== true) {
