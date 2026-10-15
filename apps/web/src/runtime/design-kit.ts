@@ -625,6 +625,10 @@ export interface DesignKitSource {
   workspaceContext?: WorkspaceCollabContext | null;
   /** Re-run Workspace resource reads when a newer directory witness lands. */
   workspaceReadGeneration?: string;
+  /** True while the caller is still fetching the detail that carries
+   *  `packageInfo`. A project-backed kit waits for it, so the first render does
+   *  not point at system files the package may not have. */
+  detailPending?: boolean;
 }
 
 function tryParseBrand(raw: string | null): Brand | null {
@@ -722,6 +726,7 @@ export function useDesignKit(source: DesignKitSource): { kit: DesignKit | null; 
     reloadKey,
     workspaceContext,
     workspaceReadGeneration,
+    detailPending,
   } = source;
   const [kit, setKit] = useState<DesignKit | null>(null);
   const [loading, setLoading] = useState(false);
@@ -751,6 +756,12 @@ export function useDesignKit(source: DesignKitSource): { kit: DesignKit | null; 
     }
 
     setLoading(true);
+    if (detailPending) {
+      setKit(null);
+      return () => {
+        cancelled = true;
+      };
+    }
     void (async () => {
       // Fetch brand.json (richest) and DESIGN.md (fallback) together so the kit
       // resolves in a single async hop — brand.json wins when it is a valid kit.
@@ -818,6 +829,7 @@ export function useDesignKit(source: DesignKitSource): { kit: DesignKit | null; 
     reloadKey,
     workspaceContext,
     workspaceReadGeneration,
+    detailPending,
   ]);
 
   return { kit, loading };
