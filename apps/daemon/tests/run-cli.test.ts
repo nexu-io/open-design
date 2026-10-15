@@ -37,7 +37,7 @@ afterEach(async () => {
   tempDir = null;
 });
 
-async function startRunStubServer(resumable: boolean): Promise<StubServer> {
+async function startRunStubServer(resumable: boolean, taskDisplay = false): Promise<StubServer> {
   const requests: CapturedRequest[] = [];
   let taskFollowEnabled = false;
   const server = http.createServer((req, res) => {
@@ -64,6 +64,7 @@ async function startRunStubServer(resumable: boolean): Promise<StubServer> {
           agentId: 'claude',
           status: 'failed',
           resumable,
+          ...(taskDisplay ? { strategyTask: { taskExecutionId: 'task-1', display: { id: 'display-1' } } } : {}),
         }));
         return;
       }
@@ -264,6 +265,24 @@ describe('od run CLI', () => {
     ]);
   });
 
+  it('binds explicit Continue to the daemon-confirmed display task', async () => {
+    stub = await startRunStubServer(true, true);
+    const result = await runCli(['run', 'continue', 'run-1', '--json', '--daemon-url', stub.baseUrl]);
+    expect(result.code, result.stderr).toBe(0);
+    expect(JSON.parse(stub.requests[1]!.body)).toMatchObject({
+      taskExecutionId: 'task-1',
+      taskDisplayContinuation: { sourceRunId: 'run-1', kind: 'resume' },
+    });
+  });
+
+  it('rejects an unpaired display continuation flag before sending a request', async () => {
+    stub = await startRunStubServer(true);
+    const result = await runCli(['run', 'start', '--project', 'project-1',
+      '--task-display-source', 'run-1', '--daemon-url', stub.baseUrl]);
+    expect(result.code).toBe(2);
+    expect(stub.requests).toHaveLength(0);
+  });
+
   it('forwards explicit Workspace scope through continue status and creation requests', async () => {
     stub = await startRunStubServer(true);
 
@@ -392,6 +411,8 @@ describe('od run CLI', () => {
       'project-1',
       '--task-execution',
       'task-1',
+      '--task-display-source', 'run-previous',
+      '--task-display-kind', 'question',
       '--prompt-file',
       promptFile,
       '--follow',
@@ -408,6 +429,7 @@ describe('od run CLI', () => {
     expect(JSON.parse(stub.requests[0]!.body)).toMatchObject({
       projectId: 'project-1',
       taskExecutionId: 'task-1',
+      taskDisplayContinuation: { sourceRunId: 'run-previous', kind: 'question' },
       message: 'Desktop first',
     });
     const events = result.stdout

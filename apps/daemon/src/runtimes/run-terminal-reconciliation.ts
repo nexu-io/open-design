@@ -18,6 +18,7 @@ import {
 } from '../analytics.js';
 
 import { reconcileStrategyTaskRunTerminal } from '../strategies/task-store.js';
+import { recordStrategyTaskRunLifecycle } from '../strategies/task-display.js';
 import { classifyRunFailure } from '../run-failure-classification.js';
 import { summarizeRunDiagnosticsForAnalytics } from '../run-diagnostics.js';
 import { readRunStorageAnalytics } from '../storage/run-storage-analytics.js';
@@ -465,6 +466,16 @@ export async function reconcileDurableRunTerminals(
   const statesByRunId = new Map(states.map((entry) => [entry.state.id, entry.state]));
   result.messagesReconciled = reconcileMessages(options.db, statesByRunId, now, deferredRunIds);
   for (const { state } of states) {
+    if (TERMINAL_STATUSES.has(state.status)) {
+      try {
+        recordStrategyTaskRunLifecycle(options.db, {
+          runId: state.id, phase: 'end', status: state.status,
+          at: state.terminalAt ?? state.updatedAt, attempt: state.manualResumeAttemptCount ?? 0,
+        });
+      } catch (error) {
+        console.warn('[runs] task display terminal reconciliation skipped', state.id, error);
+      }
+    }
     if (state.status !== 'failed' && state.status !== 'canceled') continue;
     if (reconcileStrategyTaskRunTerminalIsolated(options.db, {
       runId: state.id,

@@ -2892,6 +2892,7 @@ export interface Dict {
   'chat.antigravityError.launchTerminalCta': string;
   'chat.antigravityError.launchSwitchModelCta': string;
   'chat.connectionDropped': string;
+  'chat.taskSubmitPending': string;
   'chat.runError.title.authRequired': string;
   'chat.runError.title.balance': string;
   'chat.runError.title.connectionDropped': string;
@@ -5662,6 +5663,9 @@ export interface Dict {
    * 不查反向的「键有没有人用」,所以留着不会让任何检查变红(已核对)。
    */
   'chat.record.slowUpstream': string;
+  'chat.task.record': string;
+  'chat.task.waiting': string;
+  'chat.task.continuation': string;
   'chat.record.running': string;
   'chat.record.thinking': string;
   /** 思考行右边那个槽:「3.3k tokens」。`{count}` 已由 `formatThinkingTokens` 写好 */

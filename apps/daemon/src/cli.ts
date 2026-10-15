@@ -247,6 +247,7 @@ const PROJECT_STRING_FLAGS = new Set([
   'daemon-url', 'name', 'skill', 'design-system', 'plugin', 'metadata-json', 'task-type',
   'pending-prompt', 'project', 'conversation', 'message', 'prompt',
   'prompt-file', 'task-execution', 'path', 'dir', 'as', 'url',
+  'task-display-source', 'task-display-kind',
   'client-request-id',
   'agent', 'model', 'service-tier', 'snapshot-id', 'inputs', 'grant-caps', 'editor',
   'title', 'label', 'against', 'seed-from', 'fork-after', 'mode',
@@ -7836,6 +7837,7 @@ async function runRun(args) {
     console.log(`Usage:
   od run start --project <projectId> [--conversation <id>] [--message "<text>"]
                [--prompt-file <path|->] [--task-execution <id>]
+               [--task-display-source <runId> --task-display-kind question|resume]
                [--client-request-id <id>]
                [--skill <id>[,<id>]] [--plugin <id>] [--inputs <json>] [--grant-caps a,b]
                [--agent claude|codex|opencode] [--model <id>] [--service-tier <id>]
@@ -8027,6 +8029,10 @@ Common options:
         // the directive alone or reseed the original request alongside it.
         resumeContinuation: true,
         analyticsHints: { entryFrom: 'resume_continue' },
+        ...(status.strategyTask?.display ? {
+          taskExecutionId: status.strategyTask.taskExecutionId,
+          taskDisplayContinuation: { sourceRunId: id, kind: 'resume' },
+        } : {}),
         ...(status.agentId ? { agentId: status.agentId } : {}),
       };
       const data = await postJsonToDaemon(base, '/api/runs', body, workspaceHeaders);
@@ -8140,6 +8146,15 @@ Common options:
       }
       if (flags['snapshot-id']) body.appliedPluginSnapshotId = flags['snapshot-id'];
       if (flags['task-execution']) body.taskExecutionId = flags['task-execution'];
+      if (flags['task-display-source'] || flags['task-display-kind']) {
+        if (!flags['task-display-source'] || !['question', 'resume'].includes(flags['task-display-kind'])) {
+          console.error('--task-display-source requires --task-display-kind question|resume');
+          process.exit(2);
+        }
+        body.taskDisplayContinuation = {
+          sourceRunId: flags['task-display-source'], kind: flags['task-display-kind'],
+        };
+      }
       if (flags['client-request-id']) body.clientRequestId = flags['client-request-id'];
       const resp = await fetch(`${base}/api/runs`, {
         method:  'POST',

@@ -38,6 +38,7 @@ import {
 } from '../../../src/strategies/task-store.js';
 import {
   strategyTaskCreateIdentityFixture,
+  strategyTaskTurnText,
 } from '../strategy-task-test-fixtures.js';
 import { resolveStrategyHandoff, strategyHandoffTranscript } from '../../../src/strategies/od-next/task-handoff.js';
 import { OD_NEXT_PLAN_OUTPUT_INSTRUCTIONS } from '@open-design/contracts';
@@ -241,6 +242,32 @@ describe('OD Next planning coordinator', () => {
     const stream = createOdNextRunProtocol(null, '5e819e50c013db87');
     stream.push(text); return stream.finish().parsed;
   }
+
+  it('keeps same-request recovery attached while its automatic production successor is active', () => {
+    let answer = createStrategyTaskExecution(db, {
+      taskExecutionId: 'answer-task', projectId: 'project-1', conversationId: 'conversation-1',
+      snapshotId: snapshot.snapshotId, selectedAgentId: AGENT_ID, initialRunId: 'answer-run',
+      continuedFromTaskExecutionId: 'task-1', displayContinuationOfTaskExecutionId: 'task-1',
+      ...strategyTaskCreateIdentityFixture(), createdAt: 200,
+    });
+    answer = compareAndTransitionStrategyTaskExecution(db, {
+      taskExecutionId: answer.taskExecutionId, expectedRevision: answer.revision,
+      settlementReason: 'continued', settlementFacts: { physicalStatus: 'succeeded' },
+      to: { route: 'full_plan', inputStage: 'production', outcome: 'running', executionMode: 'simple' },
+      nextRun: { runId: 'answer-production', sourceRunId: 'answer-run',
+        finalText: strategyTaskTurnText({ taskExecutionId: answer.taskExecutionId, inputStage: 'production', taskRunIndex: 1 }),
+      },
+    });
+    const input = { projectId: 'project-1', conversationId: 'conversation-1',
+      taskExecutionId: 'task-1', clientRequestId: 'answer-request' };
+    const runs = [
+      { id: 'answer-run', status: 'succeeded', clientRequestId: 'answer-request' },
+      { id: 'answer-production', status: 'running', clientRequestId: 'odnext-successor' },
+    ];
+    expect(resolveStrategyHandoff(db, input, runs)?.taskExecutionId).toBe('task-1');
+    expect(() => resolveStrategyHandoff(db, { ...input, clientRequestId: 'different-request' }, runs)).toThrow('still active');
+    expect(() => resolveStrategyHandoff(db, input, [...runs, { id: 'unrelated-run', status: 'running' }])).toThrow('still active');
+  });
 
   it.each([
     `Build a landing page and a deck.\n${productionMarker}`,

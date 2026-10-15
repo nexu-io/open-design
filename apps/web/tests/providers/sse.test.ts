@@ -2057,6 +2057,51 @@ describe('streamViaDaemon', () => {
     expect(handlers.onDone).not.toHaveBeenCalled();
   });
 
+  it('recovers a lost task-answer create response with the same idempotent request', async () => {
+    const handlers = createDaemonHandlers();
+    const onRunStatus = vi.fn();
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValueOnce(jsonResponse({ runId: 'accepted-answer' }))
+      .mockResolvedValueOnce(sseResponse('event: end\ndata: {"code":0,"status":"succeeded"}\n\n'));
+    vi.stubGlobal('fetch', fetchMock);
+    await streamViaDaemon({ agentId: 'mock', history: [{ id: '1', role: 'user', content: 'Desktop' }],
+      systemPrompt: '', signal: new AbortController().signal, handlers, onRunStatus,
+      clientRequestId: 'answer-request', taskExecutionId: 'question-task',
+      taskDisplayContinuation: { sourceRunId: 'question-run', kind: 'question' },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls[1]![1]?.body).toBe(fetchMock.mock.calls[0]![1]?.body);
+    expect(onRunStatus).not.toHaveBeenCalledWith('failed');
+    expect(handlers.onError).not.toHaveBeenCalled();
+    expect(handlers.onDone).toHaveBeenCalled();
+  });
+
+  it('keeps an unconfirmed task-answer submission distinct from a failed run', async () => {
+    const handlers = createDaemonHandlers();
+    const onRunStatus = vi.fn();
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+    await streamViaDaemon({ agentId: 'mock', history: [{ id: '1', role: 'user', content: 'Desktop' }],
+      systemPrompt: '', signal: new AbortController().signal, handlers, onRunStatus,
+      clientRequestId: 'answer-request', taskDisplayContinuation: { sourceRunId: 'question-run', kind: 'question' },
+    });
+    expect(onRunStatus).not.toHaveBeenCalledWith('failed');
+    expect(handlers.onError).toHaveBeenCalledWith(expect.objectContaining({ code: 'RUN_CREATE_OUTCOME_UNKNOWN' }));
+  });
+
+  it('keeps a lost task-answer response unknown when its retry returns an HTTP outage', async () => {
+    const handlers = createDaemonHandlers();
+    const onRunStatus = vi.fn();
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValueOnce(new Response('upstream unavailable', { status: 503 })));
+    await streamViaDaemon({ agentId: 'mock', history: [{ id: '1', role: 'user', content: 'Desktop' }],
+      systemPrompt: '', signal: new AbortController().signal, handlers, onRunStatus,
+      clientRequestId: 'answer-request', taskDisplayContinuation: { sourceRunId: 'question-run', kind: 'question' },
+    });
+    expect(onRunStatus).not.toHaveBeenCalledWith('failed');
+    expect(handlers.onError).toHaveBeenCalledWith(expect.objectContaining({ code: 'RUN_CREATE_OUTCOME_UNKNOWN' }));
+  });
+
   it('automatically retries a retryable workspace-authority outage before creating the run', async () => {
     vi.useFakeTimers();
     try {

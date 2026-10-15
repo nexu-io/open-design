@@ -65,6 +65,12 @@ export function resolveStrategyHandoff(db: Database.Database, input: {
   appliedPluginSnapshotId?: unknown;
 }, runs: readonly { id: string; status: string; clientRequestId?: string | null; cancelRequested?: boolean }[]): StrategyTaskExecutionRecord | null {
   let task: StrategyTaskExecutionRecord | null = null;
+  const retry = typeof input.clientRequestId === 'string'
+    ? runs.find(run => run.clientRequestId === input.clientRequestId)
+    : null;
+  const retryTask = retry
+    ? readPreviousTask(retry.id, () => getStrategyTaskExecutionByRunId(db, retry.id))
+    : null;
   if (input.taskExecutionId !== undefined) {
     if (typeof input.taskExecutionId !== 'string' || !/^[A-Za-z0-9._-]+$/.test(input.taskExecutionId)) {
       throw new StrategyHandoffError(400, 'BAD_REQUEST', 'taskExecutionId must be a safe id');
@@ -78,12 +84,6 @@ export function resolveStrategyHandoff(db: Database.Database, input: {
     // The latest assistant, not any old task in this conversation, supplies context.
     // Explicitly selecting another plugin remains a new request for that plugin.
     if (input.pluginId && input.pluginId !== 'od-next-strategy') return null;
-    const retry = typeof input.clientRequestId === 'string'
-      ? runs.find(run => run.clientRequestId === input.clientRequestId)
-      : null;
-    const retryTask = retry
-      ? readPreviousTask(retry.id, () => getStrategyTaskExecutionByRunId(db, retry.id))
-      : null;
     const sourceTaskId = retryTask?.continuedFromTaskExecutionId;
     if (retry && sourceTaskId) {
       return readPreviousTask(retry.id, () => getStrategyTaskExecution(db, sourceTaskId));
@@ -99,7 +99,12 @@ export function resolveStrategyHandoff(db: Database.Database, input: {
   }
   if (!task) return null;
   const active = runs.find(run => holdsConversation(run)
-    && !(typeof input.clientRequestId === 'string' && run.clientRequestId === input.clientRequestId));
+    && !(typeof input.clientRequestId === 'string' && run.clientRequestId === input.clientRequestId)
+    // A lost response can be recovered after this request has already handed
+    // off to production. Its authenticated successor is still the same send;
+    // createOrReuse below retains the exact request-fingerprint check.
+    && !(retryTask?.continuedFromTaskExecutionId === task!.taskExecutionId
+      && retryTask.runs.some(mapping => mapping.runId === run.id)));
   if (active) throw new StrategyHandoffError(409, 'RUN_IN_PROGRESS', 'a run is still active in this conversation');
   return task;
 }

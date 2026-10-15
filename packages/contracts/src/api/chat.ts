@@ -114,6 +114,8 @@ export interface ByokMediaDefaults {
 }
 
 export interface ChatRequest {
+  /** Explicit presentation continuation, validated against the originating host Run. */
+  taskDisplayContinuation?: { sourceRunId: string; kind: 'question' | 'resume' };
   agentId: string;
   message: string;
   /**
@@ -1380,6 +1382,8 @@ export interface ChatMessage {
    * back explicitly and reload recovery follows its active physical Run.
    */
   strategyTaskExecutionId?: string;
+  /** Host-projected presentation fact; physical task handles remain unchanged. */
+  taskDisplay?: import('../plugins/strategy-v2.js').TaskDisplayProjection;
   /**
    * Position of this message's Run within its logical task chain. A Full Plan
    * turn spans several physical Runs (request -> production) that the user

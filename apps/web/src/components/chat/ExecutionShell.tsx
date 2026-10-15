@@ -63,6 +63,8 @@ export const SLOW_UPSTREAM_AFTER_MS = 60_000;
 export const WAITING_FIRST_OUTPUT_AFTER_MS = 60_000;
 
 export interface ExecutionShellProps {
+  /** Task aggregation keeps each Run's local row semantics without another outer shell. */
+  bodyOnly?: boolean;
   shell: ShellData;
   onOpenFile?: (path: string) => void;
   /**
@@ -119,6 +121,7 @@ export function ExecutionShell({
   imageSrc,
   deferCollapsedBodies = true,
   concluded = false,
+  bodyOnly = false,
   odCardScope,
   onBrandBrowserAssistConfirm,
 }: ExecutionShellProps): ReactElement {
@@ -342,18 +345,7 @@ export function ExecutionShell({
    */
   const hasTodo = shell.items.some((item) => item.kind === 'todo' || item.kind === 'plan');
 
-  return (
-    <Foldable
-      summary={head}
-      variant="flat"
-      elapsed={elapsed ?? undefined}
-      open={open}
-      onToggle={onToggle}
-      expandable={items.length > 0}
-      deferBody={deferCollapsedBodies}
-      className={hasTodo ? styles.hasTodo : undefined}
-    >
-      {items.length
+  const body = items.length
         ? items.map((item, i) => renderItem(item, i, {
             t, onOpenFile, fileScope,
             onRetryImage: runTerminal ? onRetryImage : undefined,
@@ -365,9 +357,11 @@ export function ExecutionShell({
             mutedThoughtsIndex: mutedThoughtsIndexOf(items, shell.items, firstThoughtsStack),
             odCardScope, onBrandBrowserAssistConfirm,
           }))
-        : null}
-    </Foldable>
-  );
+        : null;
+  if (bodyOnly) return <>{body}</>;
+  return <Foldable summary={head} variant="flat" elapsed={elapsed ?? undefined}
+    open={open} onToggle={onToggle} expandable={items.length > 0}
+    deferBody={deferCollapsedBodies} className={hasTodo ? styles.hasTodo : undefined}>{body}</Foldable>;
 }
 
 /**

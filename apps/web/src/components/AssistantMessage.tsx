@@ -1,6 +1,9 @@
 import { Fragment, memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCharReveal } from "./chat/useCharReveal";
 import { ExecutionShell } from "./chat/ExecutionShell";
+import { TaskExecutionRecord, TaskStatus } from "./chat/TaskExecutionRecord";
+import { automaticTaskProse, taskDisplayWithDeliveryState, type TaskPresentation, type TaskRecordContext } from "../runtime/chat/task-presentation";
+import { effectiveTurnRunStatus } from "../runtime/chat/turn-status";
 import { buildTurnBlocks } from "../runtime/chat/build-turn-blocks";
 import { copyableTurnText } from "../runtime/chat/copyable-turn";
 import type { ExecutionShell as ExecutionShellData } from "../runtime/chat/contract";
@@ -162,6 +165,8 @@ function textNeedsBrandBrowserAssistFallback(content: string): boolean {
 
 interface Props {
   message: ChatMessage;
+  taskPresentation?: TaskPresentation;
+  taskRecordContext?: TaskRecordContext;
   streaming: boolean;
   projectId?: string | null;
   // Analytics context for the assistant_feedback_* events. Defaults
@@ -293,6 +298,7 @@ interface Props {
 // cheap.
 const ASSISTANT_MESSAGE_COMPARED_PROPS: Array<keyof Props> = [
   'message',
+  'taskPresentation',
   'streaming',
   'projectId',
   'projectKind',
@@ -336,6 +342,14 @@ const ASSISTANT_MESSAGE_COMPARED_PROPS: Array<keyof Props> = [
 function areAssistantMessagePropsEqual(prev: Props, next: Props): boolean {
   for (const key of ASSISTANT_MESSAGE_COMPARED_PROPS) {
     if (!Object.is(prev[key], next[key])) return false;
+  }
+  // Like previousTodos, the lookup map is rebuilt as other messages stream.
+  // Only media belonging to this task can invalidate its settled process body.
+  for (const message of next.taskPresentation?.owner ? next.taskPresentation.messages : []) {
+    if (!message.runId) continue;
+    const a = prev.taskRecordContext?.mediaTasksByRunId?.get(message.runId) ?? [];
+    const b = next.taskRecordContext?.mediaTasksByRunId?.get(message.runId) ?? [];
+    if (a.length !== b.length || a.some((task, i) => task !== b[i])) return false;
   }
   return true;
 }
@@ -401,6 +415,8 @@ function useTickingNow(active: boolean, runId?: string): StreamClock {
 
 function AssistantMessageImpl({
   message,
+  taskPresentation,
+  taskRecordContext,
   streaming,
   projectId = null,
   projectKind = null,
@@ -536,20 +552,7 @@ function AssistantMessageImpl({
    *
    * 还有一条只对没有 runStatus 的历史消息生效,见 `legacyTurnFailed`。
    */
-  let turnRunStatus: NonNullable<ChatMessage['runStatus']>;
-  if (streaming) {
-    turnRunStatus = 'running';
-  } else if (message.runStatus === 'canceled') {
-    turnRunStatus = 'canceled';
-  } else if (
-    message.resultDeliveryState === 'no_result' ||
-    message.resultDeliveryState === 'delivery_failed' ||
-    (!message.runStatus && legacyTurnFailed(displayEvents, message.endedAt))
-  ) {
-    turnRunStatus = 'failed';
-  } else {
-    turnRunStatus = message.runStatus ?? 'succeeded';
-  }
+  const turnRunStatus = effectiveTurnRunStatus(message, streaming, displayEvents);
   /**
    * 这一轮的执行记录(规格 `chat-panel-next.md`)。
    *
@@ -557,7 +560,10 @@ function AssistantMessageImpl({
    * `buildTurnBlocks` 里,这里不做任何判断。
    */
   /** 壳头那颗秒表的「现在」+ S12 的静默起点,每秒同刻取一次(见 `useTickingNow`)。 */
-  const { nowMs, lastEventAtMs } = useTickingNow(streaming, message.runId);
+  const task = taskPresentation ?? (message.taskDisplay ? {
+    owner: true, display: taskDisplayWithDeliveryState(message.taskDisplay, [message]), messages: [message],
+  } : undefined);
+  const { nowMs, lastEventAtMs } = useTickingNow(streaming || !!task?.display.ticking, task?.display.currentRunId ?? message.runId);
   // A retried message keeps its creation date but carries the new run's start.
   const runStartedAt = message.startedAt ?? message.createdAt;
 
@@ -712,7 +718,7 @@ function AssistantMessageImpl({
         // key 认**第几段结论**,不认它在块序里的下标:空壳在轮次收尾那一刻会被丢掉
         // (`build-turn-blocks` 的 `kept`),下标会跟着挪,而挪一次就是把表单重挂一遍
         // —— 用户填了一半的草稿会当场清空。
-        : ({ kind: 'prose', key: `prose-${proseAt}`, at: proseAt++ } as const),
+        : ({ kind: 'prose', key: `prose-${proseAt}`, at: proseAt++, blockIndex: i } as const),
     );
   }, [nextTurn, turnDoneMarkerLanded]);
 
@@ -1139,7 +1145,7 @@ function AssistantMessageImpl({
    * 复制、时间这些**照旧**:它们说的是这段内容本身,不是某一轮的结果。
    */
   const hideRunStatus =
-    message.id === errorCardOwnerId
+    !!task || message.id === errorCardOwnerId
     || hasPendingQuestionForm
     || assistantMessageNeverHadARun(message)
     || failedTurnIsAnnouncedByTheShell;
@@ -1313,14 +1319,22 @@ function AssistantMessageImpl({
           <span className="role-name">{roleName}</span>
         </div>
       ) : null}
+      {task?.owner ? <TaskStatus display={task.display} nowMs={nowMs} /> : null}
       <div className="assistant-flow" data-testid="assistant-flow">
+        {task?.owner ? <TaskExecutionRecord key={task.display.id} task={task} nowMs={nowMs}
+          recordContext={taskRecordContext ?? {mediaTasksByRunId:new Map(message.runId ? [[message.runId,mediaTasks]] : []),
+            previousTodosByMessageId:new Map([[message.id,previousTodos]])}}
+          storageKey={`od-task-record:${projectId}:${conversationId}:${task.display.id}`}
+          onOpenFile={onRequestOpenFile} fileScope={recordFileScope} onRetryImage={onRetryImage}
+          runTerminal={!['running','preparing'].includes(task.display.state)} imageSrc={imageSrc}
+          odCardScope={`${projectId}:${conversationId}:${task.display.id}`} onBrandBrowserAssistConfirm={onBrandBrowserAssistConfirm} /> : null}
         {/*
           壳与结论段**按发生顺序交替**,不再「先把壳全画完再画结论」(OPEND-2592)。
           跨轮折叠的会话里,中途那张表单的收口就夹在两张壳中间;把壳整体提到前面
           会让「已确认」掉到整条消息的最底下,和用户实际回答的时刻对不上。
         */}
         {turnFlow.map((entry) =>
-          entry.kind === 'shell' ? (
+          entry.kind === 'shell' ? (task ? null : (
             <ExecutionShell
               key={entry.key}
               shell={entry.shell}
@@ -1345,13 +1359,13 @@ function AssistantMessageImpl({
               ].join(":")}
               onBrandBrowserAssistConfirm={onBrandBrowserAssistConfirm}
             />
-          ) : (
+          )) : (task && automaticTaskProse(nextTurn.blocks, entry.blockIndex, message, task.messages) ? null : (
             <Fragment key={entry.key}>
               {(proseGroups[entry.at] ?? []).map((b, i) =>
                 renderOuterBlock(b, `${entry.key}-${i}`),
               )}
             </Fragment>
-          ),
+          )),
         )}
         {/* 状态行 / 插件候选不属于执行记录,也没有流里的位置 —— 收在最后 */}
         {restBlocks.map((b, i) => renderOuterBlock(b, `rest-${i}`))}
@@ -3919,27 +3933,6 @@ type Block =
  * single tool-group block so the chat surface stays compact during chains
  * of edits / reads.
  */
-/**
- * 没有 `runStatus` 的历史消息:这一轮到底成没成,只能从事件里看。
- *
- * 判据原样来自老的执行记录卡(`TaskActivityCard` 的 `hasError`),搬过来是为了不把
- * 已经在线上的行为弄丢 —— 少了它,那些消息会顶着「已完成」,壳里却摆着一行红的失败调用。
- * 两种情况算失败:**有调用报错**,或者**这一轮连结束时间都没有、还挂着没回来的调用**。
- *
- * 新规格没给这条派生规则编决策号(壳的三态是按 run 状态定的),先按现状保留。
- */
-function legacyTurnFailed(events: AgentEvent[], endedAt: number | undefined): boolean {
-  const settled = new Set<string>();
-  for (const event of events) {
-    if (event.kind === "tool_result") settled.add(event.toolUseId);
-  }
-  return events.some((event) => {
-    if (event.kind === "tool_result") return event.isError === true;
-    if (event.kind !== "tool_use") return false;
-    return endedAt === undefined && !settled.has(event.id);
-  });
-}
-
 function stripTodoToolGroups(blocks: Block[]): Block[] {
   return blocks.filter(
     (block) =>

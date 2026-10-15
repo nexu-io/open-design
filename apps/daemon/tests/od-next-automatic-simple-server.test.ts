@@ -827,10 +827,13 @@ process.exit(127);
     const asked = await waitForTask(first.strategyTask!.taskExecutionId, 'completed');
     expect(asked.runs).toHaveLength(1);
     expect(asked.runs[0]!.settlementReason).toBe('question');
-    const answer = await postRun(started.url, {
+    const answerRequest = {
       ...publicRunRequest(fixture, 'Audience: developers.', 'answer-second'),
       taskExecutionId: asked.taskExecutionId,
-    });
+      taskDisplayContinuation: { sourceRunId: asked.latestRunId, kind: 'question' },
+    };
+    const answer = await postRun(started.url, answerRequest);
+    expect(answer.strategyTask!.display?.id).toBe(first.strategyTask!.display?.id);
     expect(answer.strategyTask!.taskExecutionId).not.toBe(asked.taskExecutionId);
     const task = await waitForTask(answer.strategyTask!.taskExecutionId, 'completed');
     expect(task.continuedFromTaskExecutionId).toBe(asked.taskExecutionId);
@@ -843,6 +846,14 @@ process.exit(127);
     expect(invocations[1]!.stdin).toContain('Audience: developers.');
     expect(invocations[2]!.stdin).toContain('This is the production turn');
     expect(await readFile(path.join(invocations[2]!.cwd, 'index.html'), 'utf8')).toContain('Developer landing');
+    const retry = await postRun(started.url, answerRequest);
+    expect(retry.runId).toBe(answer.runId);
+    expect(retry.strategyTask!.display?.id).toBe(first.strategyTask!.display?.id);
+    await stopServer(started); started = await startDaemon();
+    const afterRestart = await postRun(started.url, answerRequest);
+    expect(afterRestart.runId).toBe(answer.runId);
+    expect(afterRestart.strategyTask!.display?.runIds).toHaveLength(3);
+    expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(3);
   }, 45_000);
 
   it('continues once when a tool call separates the plan from its production marker', async () => {

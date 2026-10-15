@@ -1,3 +1,4 @@
+import { newerTaskDisplay } from '../runtime/chat/task-presentation';
 import { readRetriedErrorSurface, retriedErrorSurfaceKey, writeRetriedErrorSurface } from '../runtime/chat/retried-error-surface';
 import {
   startTransition,
@@ -488,6 +489,7 @@ type ProjectChatSendMeta = ChatSendMeta & {
   taskAnalytics?: ChatTaskExecutionAnalytics;
   /** Explicit daemon-issued OD Next continuation handle. */
   strategyTaskExecutionId?: string;
+  taskDisplayContinuation?: import('@open-design/contracts').ChatRequest['taskDisplayContinuation'];
 };
 
 export function mergeSavedPreviewComment(current: PreviewComment[], saved: PreviewComment): PreviewComment[] {
@@ -689,6 +691,7 @@ function mergeServerMessageWithLocal(
 ): ChatMessage {
   if (!local) return server;
   const merged: ChatMessage = { ...server };
+  merged.taskDisplay = newerTaskDisplay(local.taskDisplay, server.taskDisplay);
   if (local.role === 'assistant' && server.role === 'assistant' && !absorbedASuccessorRun) {
     if ((local.content?.length ?? 0) > (server.content?.length ?? 0)) {
       merged.content = local.content;
@@ -5509,8 +5512,10 @@ export function ProjectView({
         const next = curr.map((m) => {
           if (m.id !== messageId) return m;
           const updated = updater(m);
-          saved = updated;
-          return updated;
+          const taskDisplay = newerTaskDisplay(m.taskDisplay, updated.taskDisplay);
+          const merged = taskDisplay === updated.taskDisplay ? updated : {...updated, taskDisplay};
+          saved = merged;
+          return merged;
         });
         // Same phantom guard as persistMessage: skip writes for a daemon
         // assistant row that is still in-flight (active runStatus, no runId).
@@ -7338,6 +7343,7 @@ export function ProjectView({
                   ? {
                     strategyTaskExecutionId: strategyTask.taskExecutionId,
                     strategyTaskRunIndex: strategyTaskRunIndex(strategyTask, nextRunId),
+                    ...(strategySettledMessageFields(strategyTask) ?? {}),
                   }
                   : {}),
               }),
@@ -9967,6 +9973,16 @@ export function ProjectView({
           // existed, so keeping the optimistic placeholder would fabricate a
           // run and route the user to the wrong recovery action.
           if (config.mode === 'daemon' && !currentRunId) {
+            if (errorCode === 'RUN_CREATE_OUTCOME_UNKNOWN') {
+              // A missing create response is not proof of rejection. Keep the
+              // accepted-answer identity and last known task state, then read
+              // authoritative messages so normal reattachment can take over.
+              setProjectActionsToast({ message: t('chat.taskSubmitPending'), details: null, scope: 'chat-pane' });
+              setMessages(current => current.filter(message => message.id !== assistantId));
+              clearCurrentRunStreamingMarker(runConversationId, controller, cancelController);
+              await refreshConversationMessagesFromServer(runConversationId);
+              return;
+            }
             if (runMayFinalize) {
               setError(null);
               activeCompletionNotificationRunsRef.current.delete(assistantId);
@@ -10368,6 +10384,7 @@ export function ProjectView({
             : {}),
           titleGeneration: isFirstTurn ? { enabled: true } : undefined,
           locale,
+          ...(meta?.taskDisplayContinuation ? { taskDisplayContinuation: meta.taskDisplayContinuation } : {}),
           ...(meta?.strategyTaskExecutionId
             ? { taskExecutionId: meta.strategyTaskExecutionId }
             : {}),
@@ -10407,6 +10424,7 @@ export function ProjectView({
               ...(strategyTaskExecutionId ? {
                 strategyTaskExecutionId,
                 strategyTaskRunIndex: strategyTaskRunIndex(strategyTask, runId),
+                ...(strategySettledMessageFields(strategyTask) ?? {}),
               } : {}),
               ...(isTaskSuccessor
                 ? {
@@ -10432,6 +10450,7 @@ export function ProjectView({
               ...(strategyTaskExecutionId ? {
                 strategyTaskExecutionId,
                 strategyTaskRunIndex: strategyTaskRunIndex(strategyTask, runId),
+                ...(strategySettledMessageFields(strategyTask) ?? {}),
               } : {}),
               ...(isTaskSuccessor
                 ? {
@@ -10608,6 +10627,7 @@ export function ProjectView({
           }),
           titleGeneration: isFirstTurn ? { enabled: true } : undefined,
           locale,
+          ...(meta?.taskDisplayContinuation ? { taskDisplayContinuation: meta.taskDisplayContinuation } : {}),
           ...(meta?.strategyTaskExecutionId
             ? { taskExecutionId: meta.strategyTaskExecutionId }
             : {}),
@@ -10625,6 +10645,13 @@ export function ProjectView({
             taskRunIndex: taskAnalytics.taskRunIndex,
             recoveryActionType: taskAnalytics.recoveryActionType,
             recoveryActionInstanceId: taskAnalytics.recoveryActionInstanceId,
+          },
+          onStrategyTaskSettled: (strategyTask) => {
+            const settledFields = strategySettledMessageFields(strategyTask);
+            if (!settledFields) return;
+            latestAssistantMsg = {...latestAssistantMsg, ...settledFields,
+              taskDisplay:newerTaskDisplay(latestAssistantMsg.taskDisplay,strategyTask.display)};
+            updateMessageById(assistantId, prev => ({...prev,...settledFields}), true);
           },
           onRunCreated: (runId, strategyTask) => {
             observeMemoryRun(project.id, runConversationId, assistantId, runId);
@@ -10649,6 +10676,7 @@ export function ProjectView({
               ...(strategyTaskExecutionId ? {
                 strategyTaskExecutionId,
                 strategyTaskRunIndex: strategyTaskRunIndex(strategyTask, runId),
+                ...(strategySettledMessageFields(strategyTask) ?? {}),
               } : {}),
               ...(isTaskSuccessor
                 ? {
@@ -10670,6 +10698,7 @@ export function ProjectView({
               ...(strategyTaskExecutionId ? {
                 strategyTaskExecutionId,
                 strategyTaskRunIndex: strategyTaskRunIndex(strategyTask, runId),
+                ...(strategySettledMessageFields(strategyTask) ?? {}),
               } : {}),
               ...(isTaskSuccessor
                 ? {
@@ -11205,6 +11234,10 @@ export function ProjectView({
       if (currentConversationActionDisabled) return;
       void handleSend(RESUME_CONTINUE_PROMPT, [], [], {
         entryFrom: 'resume_continue',
+        ...(assistantMessage.strategyTaskExecutionId && assistantMessage.runId ? {
+          strategyTaskExecutionId: assistantMessage.strategyTaskExecutionId,
+          taskDisplayContinuation: { sourceRunId: assistantMessage.runId, kind: 'resume' },
+        } : {}),
         taskAnalytics: buildRecoveryTaskAnalytics(
           messages,
           assistantMessage,
@@ -11366,7 +11399,7 @@ export function ProjectView({
   const commentQueueOnSend = currentConversationBusy && !currentConversationQueueDisabled;
 
   const handleContinueRemainingTasks = useCallback(
-    async (_assistantMessage: ChatMessage, todos: TodoItem[]) => {
+    async (assistantMessage: ChatMessage, todos: TodoItem[]) => {
       if (currentConversationActionDisabled || todos.length === 0) return false;
       const remainingList = todos
         .map((todo, i) => {
@@ -11381,7 +11414,10 @@ export function ProjectView({
         `${remainingList}\n\n` +
         'Before making changes, inspect the current project files as needed. ' +
         'Update TodoWrite as you complete each remaining task.';
-      return handleSend(prompt, [], []);
+      return handleSend(prompt, [], [], assistantMessage.strategyTaskExecutionId && assistantMessage.runId ? {
+        strategyTaskExecutionId: assistantMessage.strategyTaskExecutionId,
+        taskDisplayContinuation: { sourceRunId: assistantMessage.runId, kind: 'resume' },
+      } : undefined);
     },
     [currentConversationActionDisabled, handleSend],
   );
@@ -13936,7 +13972,8 @@ export function ProjectView({
                     ? { taskAnalytics: questionTaskAnalytics }
                     : {}),
                   ...(strategyTaskExecutionId
-                    ? { strategyTaskExecutionId }
+                    ? { strategyTaskExecutionId,
+                        ...(sourceAssistant?.runId ? { taskDisplayContinuation: { sourceRunId: sourceAssistant.runId, kind: 'question' as const } } : {}) }
                     : {}),
                 });
               }}

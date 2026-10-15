@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useLayoutEffect, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -218,6 +218,7 @@ vi.mock('../../src/components/ChatPane', () => ({
         <article key={message.id} data-testid={`message-${message.role}`}>
           <span>{message.content}</span>
           <span>{message.runStatus ?? 'no-run-status'}</span>
+          {message.taskDisplay ? <span data-testid="task-state">{message.taskDisplay.state}:{message.taskDisplay.elapsedMs}</span> : null}
           {(message.events ?? []).map((event, index) => (
             <span key={index}>
               {event.kind === 'status' ? `${event.label}:${event.detail ?? ''}` : ''}
@@ -334,6 +335,28 @@ describe('ProjectView API empty response handling', () => {
     cleanup();
     vi.clearAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  it('consumes task status updates on the BYOK OpenCode path before history refresh', async () => {
+    let options: DaemonStreamOptions | undefined;
+    mockedStreamViaDaemon.mockImplementation(async value => { options = value; });
+    renderProjectView();
+    await sendTestPrompt();
+    await waitFor(() => expect(options).toBeDefined());
+    expect(options?.agentId).toBe('byok-opencode');
+    expect(options?.onStrategyTaskSettled).toBeTypeOf('function');
+    await act(async () => options!.onStrategyTaskSettled!({
+      taskExecutionId:'task', strategy:{id:'od-next-strategy',version:'2.0.0',packageHash:'a'.repeat(64),snapshotId:'snapshot'},
+      inputStage:'production',outcome:'running',route:'full_plan',executionMode:'simple',activeRunId:'run',terminal:false,
+      display:{id:'task',revision:2,currentRunId:'run',runIds:['run'],state:'running',elapsedMs:26_000,observedAt:Date.now(),ticking:true},
+    }));
+    expect(screen.getByTestId('task-state')).toHaveTextContent('running:26000');
+    await act(async () => options!.onStrategyTaskSettled!({
+      taskExecutionId:'task', strategy:{id:'od-next-strategy',version:'2.0.0',packageHash:'a'.repeat(64),snapshotId:'snapshot'},
+      inputStage:'request',outcome:'running',route:'full_plan',executionMode:null,activeRunId:'run',terminal:false,
+      display:{id:'task',revision:1,currentRunId:'run',runIds:['run'],state:'waiting',elapsedMs:18_000,observedAt:Date.now(),ticking:false},
+    }));
+    expect(screen.getByTestId('task-state')).toHaveTextContent('running:26000');
   });
 
   it('marks an empty API completion as a soft no-output state instead of succeeded', async () => {

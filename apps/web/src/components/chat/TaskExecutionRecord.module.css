@@ -1,0 +1,3 @@
+.status { display: flex; align-items: center; gap: 7px; margin: 8px 0 16px; font-size: var(--chat-t-body); line-height: var(--chat-lh-body); font-weight: 600; color: var(--chat-text-strong); }
+.status[data-state='failed'] { color: var(--chat-red); }
+.time { font-family: var(--chat-font-mono); font-size: var(--chat-t-cap); color: var(--chat-text-strong); font-variant-numeric: tabular-nums; white-space: nowrap; }

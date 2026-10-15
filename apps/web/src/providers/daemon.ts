@@ -551,6 +551,7 @@ export interface DaemonStreamOptions {
   analyticsHints?: ChatAnalyticsHints;
   /** Daemon-issued continuation handle used only for an explicit task reply. */
   taskExecutionId?: string;
+  taskDisplayContinuation?: ChatRequest['taskDisplayContinuation'];
   /** Called for the initial Run and every daemon-projected successor Run. */
   onRunCreated?: (runId: string, strategyTask?: StrategyTaskProjectionV2) => void;
   /** Called once the daemon projects the logical strategy task as terminal
@@ -1009,6 +1010,7 @@ export async function streamViaDaemon({
   onCancelOrigin,
   analyticsHints,
   taskExecutionId,
+  taskDisplayContinuation,
   onStrategyTaskSettled,
 }: DaemonStreamOptions): Promise<void> {
   const emitRunStatus = (status: ChatRunStatus) => {
@@ -1023,6 +1025,7 @@ export async function streamViaDaemon({
     agentId,
     message: transcript,
     ...(taskExecutionId ? { taskExecutionId } : {}),
+    ...(taskDisplayContinuation ? { taskDisplayContinuation } : {}),
     currentPrompt: latestUserPromptFromHistory(history),
     priorTranscript: buildDaemonPriorTranscript(history, agentId),
     projectId: projectId ?? null,
@@ -1050,30 +1053,47 @@ export async function streamViaDaemon({
     ...(analyticsHints ? { analyticsHints } : {}),
   };
   const body = JSON.stringify(request);
+  const recoverTaskSubmission = Boolean(taskDisplayContinuation && clientRequestId);
+  let unknownCreateOutcome = false;
 
   try {
     let createResp: Response;
+    let created: ChatRunCreateResponse | undefined;
     for (let attempt = 0; ; attempt += 1) {
-      createResp = await fetch('/api/runs', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          // Tells the daemon which front-end carrier started the run so the
-          // telemetry trace can be tagged 'client:desktop' vs 'client:web'.
-          // The daemon falls back to a User-Agent sniff when this header is
-          // absent (e.g. third-party clients), so omitting it in tests is OK.
-          'X-OD-Client': detectClientType(),
-          // Identifies the caller's workspace to the daemon's workspace-resource
-          // mutation gate (see `enforceWorkspaceProjectMutation` in
-          // apps/daemon/src/routes/runs.ts) — without it, a team member's own
-          // run on a team-bound project 401s exactly like an unauthenticated
-          // caller's would. Omitted (headers stay absent) for signed-out /
-          // personal usage, matching every other workspace-gated write.
-          ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
-        },
-        body,
-      });
-      if (createResp.ok) break;
+      try {
+        createResp = await fetch('/api/runs', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            // Tells the daemon which front-end carrier started the run so the
+            // telemetry trace can be tagged 'client:desktop' vs 'client:web'.
+            // The daemon falls back to a User-Agent sniff when this header is
+            // absent (e.g. third-party clients), so omitting it in tests is OK.
+            'X-OD-Client': detectClientType(),
+            // Identifies the caller's workspace to the daemon's workspace-resource
+            // mutation gate (see `enforceWorkspaceProjectMutation` in
+            // apps/daemon/src/routes/runs.ts) — without it, a team member's own
+            // run on a team-bound project 401s exactly like an unauthenticated
+            // caller's would. Omitted (headers stay absent) for signed-out /
+            // personal usage, matching every other workspace-gated write.
+            ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
+          },
+          body,
+        });
+        if (createResp.ok) {
+          created = await createResp.json() as ChatRunCreateResponse;
+          if (!created.runId) throw new Error('Run creation response is missing its run id');
+          break;
+        }
+      } catch (error) {
+        if (!recoverTaskSubmission || (error as Error).name === 'AbortError') throw error;
+        unknownCreateOutcome = true;
+        if (attempt >= 2 || signal.aborted || cancelSignal?.aborted) throw error;
+        // Reuse the original body/clientRequestId, including its source. The
+        // daemon either returns that accepted run or rejects the same send.
+        await new Promise<void>(resolve => setTimeout(resolve, 300 * (attempt + 1)));
+        continue;
+      }
 
       const errorBody = await createResp.clone().json().catch(() => null) as ApiErrorResponse | null;
       const error = errorBody?.error;
@@ -1089,14 +1109,17 @@ export async function streamViaDaemon({
 
     if (!createResp.ok) {
       const text = await createResp.text().catch(() => '');
+      // A rejected retry cannot establish whether the earlier, unanswered
+      // request was accepted. Re-read the task before declaring failure.
+      if (unknownCreateOutcome) throw daemonCreateRunError(createResp, text);
       emitRunStatus('failed');
       handlers.onError(daemonCreateRunError(createResp, text));
       return;
     }
 
-    const created = (await createResp.json()) as ChatRunCreateResponse;
-    const runId = created.runId;
-    if (created.strategyTask) onRunCreated?.(runId, created.strategyTask);
+    const runId = created!.runId;
+    unknownCreateOutcome = false;
+    if (created!.strategyTask) onRunCreated?.(runId, created!.strategyTask);
     else onRunCreated?.(runId);
     // Start the stuck-run watchdog. trackRunProgress is called inside the
     // SSE consumer below on every event; trackRunTerminal fires when the
@@ -1140,6 +1163,12 @@ export async function streamViaDaemon({
     });
   } catch (err) {
     if ((err as Error).name === 'AbortError') return;
+    if (unknownCreateOutcome) {
+      handlers.onError(Object.assign(err instanceof Error ? err : new Error(String(err)), {
+        code: 'RUN_CREATE_OUTCOME_UNKNOWN',
+      }));
+      return;
+    }
     emitRunStatus('failed');
     handlers.onError(err instanceof Error ? err : new Error(String(err)));
   }
@@ -2131,6 +2160,7 @@ async function consumeDaemonPhysicalRun({
 
           if (event.event === 'start') {
             const data = event.data as ChatSseStartPayload;
+            if (data.strategyTask) onStrategyTaskSettled?.(data.strategyTask);
             onRunStatus?.('running');
             handlers.onAgentEvent({
               kind: 'status',
