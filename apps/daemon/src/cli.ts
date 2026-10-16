@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // @ts-nocheck
-import { readFileSync, writeFileSync } from 'node:fs';
-import { basename } from 'node:path';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { basename, join as joinPath } from 'node:path';
 import { runDaemonCliStartup, startDaemonRuntime } from './daemon-startup.js';
 import { runLiveArtifactsMcpServer } from './mcp-live-artifacts-server.js';
 import { runArtifactsCli } from './artifacts-cli.js';
@@ -9765,6 +9765,7 @@ async function runSkills(args) {
   if (!args[0] || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
   od skill install <https://github.com/owner/repo|github:owner/repo|https://…tar.gz|https://…tgz> [--json]
+  od skill import <dir> [--json] [--workspace <id> --workspace-member <id>]
   od skill list [--workspace <id> --workspace-member <id>]
   od skill show <id> [--workspace <id> --workspace-member <id>]
   od skill uninstall <id>
@@ -9773,6 +9774,7 @@ async function runSkills(args) {
     process.exit(args[0] ? 0 : 2);
   }
   if (args[0] === 'install' || args[0] === 'add') return runSkillInstall(args.slice(1));
+  if (args[0] === 'import') return runSkillImport(args.slice(1));
   if (args[0] === 'uninstall' || args[0] === 'remove') return runSkillUninstall(args.slice(1));
   return runLibraryList('skills', args);
 }
@@ -9817,6 +9819,128 @@ async function runSkillInstall(rest) {
   } catch (err) {
     surfaceFetchError(err, base);
     process.exit(3);
+  }
+}
+
+// `od skill import <dir>` batch-imports local skill folders (issue #8753).
+// <dir> may be one skill folder (containing SKILL.md) or a parent folder of
+// several; each item posts through /api/skills/import-batch so outcomes stay
+// independent — one malformed or duplicate folder never blocks the rest.
+async function runSkillImport(rest) {
+  const flags = parseFlags(rest, {
+    string: LIBRARY_STRING_FLAGS,
+    boolean: LIBRARY_BOOLEAN_FLAGS,
+  });
+  const dir = positionalArgs(rest, LIBRARY_STRING_FLAGS)[0];
+  if (!dir) {
+    console.error('Usage: od skill import <dir> [--json] [--daemon-url <url>] [--workspace <id> --workspace-member <id>]');
+    process.exit(2);
+  }
+  const items = readSkillImportItemsFromDir(dir);
+  if (items.length === 0) {
+    console.error(`No SKILL.md found under ${dir} (expected <dir>/SKILL.md or <dir>/<skill>/SKILL.md).`);
+    process.exit(2);
+  }
+  const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
+  const workspaceHeaders = workspaceHeadersFromExplicitFlags(flags) ?? {};
+  let resp;
+  try {
+    resp = await fetch(`${base}/api/skills/import-batch`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...workspaceHeaders },
+      body: JSON.stringify({ skills: items }),
+    });
+  } catch (err) {
+    surfaceFetchError(err, base);
+    process.exit(3);
+  }
+  const body = await resp.json().catch(() => ({}));
+  if (!resp.ok) {
+    const message = body?.error ?? `Skill import failed (${resp.status})`;
+    if (flags.json) {
+      console.log(JSON.stringify({ ok: false, status: resp.status, error: message }));
+    } else {
+      console.error(`POST /api/skills/import-batch failed: ${resp.status} ${message}`);
+    }
+    process.exit(1);
+  }
+  if (flags.json) return process.stdout.write(JSON.stringify(body, null, 2) + '\n');
+  for (const result of body?.results ?? []) {
+    const label = result.status === 'imported' ? 'imported' : result.status;
+    const detail = result.error ? ` (${result.error})` : '';
+    console.log(`[${label}] ${result.name || '-'}${detail}`);
+  }
+}
+
+// Collects /api/skills/import-batch items from a local folder: the folder
+// itself when it holds SKILL.md, otherwise every direct subfolder that does.
+// Each item carries the ORIGINAL SKILL.md plus companion files so the daemon
+// materializes the folder verbatim instead of rebuilding it from parsed
+// fields (which dropped side files and mangled block-scalar descriptions).
+function readSkillImportItemsFromDir(dir) {
+  let entries;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch (err) {
+    console.error(`Cannot read directory ${dir}: ${err?.message ?? err}`);
+    process.exit(2);
+  }
+  const hasRootSkill = entries.some(
+    (entry) => entry.isFile() && entry.name.toUpperCase() === 'SKILL.MD',
+  );
+  const skillDirs = hasRootSkill
+    ? [dir]
+    : entries
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => joinPath(dir, entry.name))
+      .filter((skillDir) =>
+        readdirSync(skillDir).some((name) => name.toUpperCase() === 'SKILL.MD'));
+  return skillDirs.sort().map((skillDir) => readSkillImportItemFromDir(skillDir));
+}
+
+function readSkillImportItemFromDir(skillDir) {
+  let skillMd = '';
+  try {
+    skillMd = readFileSync(joinPath(skillDir, 'SKILL.md'), 'utf8');
+  } catch {
+    // Empty skillMd; the daemon reports this item as failed and the rest
+    // of the batch keeps going.
+  }
+  const files = [];
+  if (skillMd) collectSkillImportFiles(skillDir, '', 1, files);
+  return { fallbackName: basename(skillDir), skillMd, files };
+}
+
+function collectSkillImportFiles(absDir, relPrefix, depth, out) {
+  // Bounds mirror the daemon's side-file validation; the walk also refuses
+  // symlinks (same refusal as skill install) and dotfiles so a stray
+  // .DS_Store or link never fails or leaks into an import. Locals because
+  // the CLI dispatches at module-evaluation time, before module-level
+  // consts later in this file would initialize.
+  const MAX_FILES = 500;
+  const MAX_DEPTH = 6;
+  if (depth > MAX_DEPTH || out.length >= MAX_FILES) return;
+  let entries;
+  try {
+    entries = readdirSync(absDir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+    if (out.length >= MAX_FILES) return;
+    if (entry.name.startsWith('.') || entry.isSymbolicLink()) continue;
+    const rel = relPrefix ? `${relPrefix}/${entry.name}` : entry.name;
+    if (rel.toUpperCase() === 'SKILL.MD') continue;
+    const abs = joinPath(absDir, entry.name);
+    if (entry.isDirectory()) {
+      collectSkillImportFiles(abs, rel, depth + 1, out);
+    } else if (entry.isFile()) {
+      try {
+        out.push({ path: rel, contentBase64: readFileSync(abs).toString('base64') });
+      } catch {
+        // Unreadable file: skip rather than fail the whole folder.
+      }
+    }
   }
 }
 

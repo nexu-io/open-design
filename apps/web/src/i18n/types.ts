@@ -1765,6 +1765,11 @@ export interface Dict {
   'pluginsView.skillReadFailed': string;
   'pluginsView.skillMissingName': string;
   'pluginsView.skillEmptyBody': string;
+  'pluginsView.importBatchResultsTitle': string;
+  'pluginsView.importBatchImported': string;
+  'pluginsView.importBatchSkipped': string;
+  'pluginsView.importBatchFailed': string;
+  'pluginsView.importBatchUnnamed': string;
   'pluginCard.details': string;
   'pluginCard.use': string;
   'pluginCard.useWithQuery': string;

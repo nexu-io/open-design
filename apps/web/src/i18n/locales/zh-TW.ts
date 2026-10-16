@@ -1429,6 +1429,11 @@ export const zhTW: Dict = {
   "pluginsView.skillReadFailed": "Could not read SKILL.md. Try again.",
   "pluginsView.skillMissingName": "SKILL.md is missing a name field.",
   "pluginsView.skillEmptyBody": "SKILL.md content is empty.",
+  "pluginsView.importBatchResultsTitle": "匯入結果",
+  "pluginsView.importBatchImported": "已匯入",
+  "pluginsView.importBatchSkipped": "已略過",
+  "pluginsView.importBatchFailed": "匯入失敗",
+  "pluginsView.importBatchUnnamed": "未命名",
   "pluginsView.teamTitle": "私人團隊市集",
   "pluginsView.teamBody":
     "此區域保留給企業與團隊目錄、私人信任政策，以及共用的外掛生命週期控制。",
