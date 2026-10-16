@@ -7941,11 +7941,7 @@ export async function startServer({
     namespace: runtime?.namespace,
     readAppConfig,
     writeAppConfig,
-    onClientExperience: (evidence) => automaticDiagnostics?.record({
-      sourceId: `client:${evidence.occurrenceId}`, kind: evidence.category,
-      at: Date.now(), runId: evidence.runId, projectId: evidence.projectId,
-      conversationId: evidence.conversationId, errorCode: evidence.errorCode, detail: evidence,
-    }) ?? null,
+    onClientExperience: (evidence) => automaticDiagnostics?.recordClientExperience(evidence) ?? null,
     onHostFault: (event, properties) => automaticDiagnostics?.record({
       sourceId: `host:${event}:${typeof properties.previous_session_id === 'string' ? properties.previous_session_id : randomUUID()}`,
       kind: event, at: Date.now(), detail: properties,

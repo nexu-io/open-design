@@ -251,7 +251,8 @@ function captureException(
     handled: metadata.handled === true,
   };
 
-  reportExperienceEvent('client_exception', {});
+  // Benign layout-settling notices; keep them out of local diagnostic bundles.
+  if (!/^ResizeObserver loop /.test(String(scrubbed[0]?.value ?? ''))) reportExperienceEvent('client_exception', {});
   enqueue('$exception', properties);
 }
 

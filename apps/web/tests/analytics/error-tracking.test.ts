@@ -540,6 +540,22 @@ describe('error-tracking', () => {
  *      entry lands with neither field set — this is how a cross-origin
  *      "Script error." disappears.
  */
+describe('local diagnostic bridge', () => {
+  it('keeps ResizeObserver loop notices out of diagnostic bundles but still tracks real exceptions', async () => {
+    const { reportExperienceEvent } = await import('../../src/observability/experience-diagnostics');
+    const bridge = vi.mocked(reportExperienceEvent);
+    bridge.mockClear();
+    installErrorHandlers();
+    // Browsers report these as window errors although layout simply settled a frame later.
+    for (const message of ['ResizeObserver loop completed with undelivered notifications.', 'ResizeObserver loop limit exceeded']) {
+      window.dispatchEvent(new ErrorEvent('error', { message }));
+    }
+    expect(bridge).not.toHaveBeenCalledWith('client_exception', expect.anything());
+    window.dispatchEvent(new ErrorEvent('error', { message: 'boom', error: new TypeError('boom') }));
+    expect(bridge).toHaveBeenCalledWith('client_exception', {});
+  });
+});
+
 describe('exception attribution', () => {
   beforeEach(() => {
     setExceptionTrackingContext({
