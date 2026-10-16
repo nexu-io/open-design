@@ -274,9 +274,31 @@ export function renderLinuxPackagedMainEntry(): string {
   return 'import("@open-design/packaged").catch((error) => {\n  console.error("packaged entry failed", error);\n  process.exit(1);\n});\n';
 }
 
+// Guard emitted at the top of AppRun. Invariant: the packaged app never runs
+// from the AppImage's FUSE mount (/tmp/.mount_*). The runtime unmounts that
+// squashfs as soon as its direct child exits, so sidecars/crashpad that outlive
+// Electron (crash, forced shutdown) lose their mapped pages and die with
+// SIGBUS/SIGABRT. Re-exec the same AppImage in extract-and-run mode instead.
+//
+// The runtime *reads* APPIMAGE_EXTRACT_AND_RUN as the trigger but does not set
+// it for AppRun, so the variable must be exported here; re-execing with the
+// --appimage-extract-and-run flag alone recurses forever. The APPDIR mount
+// check keeps explicit --appimage-extract-and-run launches (.desktop Exec=,
+// `tools-pack linux start`) from extracting a second time. See #3759.
+const LINUX_APPIMAGE_EXTRACT_AND_RUN_GUARD = `if [ -z "$APPIMAGE_EXTRACT_AND_RUN" ] && [ -n "$APPIMAGE" ] && [ -f "$APPIMAGE" ]; then
+  case "$APPDIR" in
+    */.mount_*)
+      export APPIMAGE_EXTRACT_AND_RUN=1
+      exec "$APPIMAGE" "$@"
+      ;;
+  esac
+fi`;
+
 export function renderLinuxAppImageAppRun(): string {
   return `#!/bin/bash
 set -e
+
+${LINUX_APPIMAGE_EXTRACT_AND_RUN_GUARD}
 
 THIS="$0"
 args=("$@")
