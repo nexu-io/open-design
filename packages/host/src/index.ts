@@ -88,6 +88,7 @@ export {
 export {
   openHostExternalUrl,
   openHostProjectPath,
+  revealHostFile,
   clearHostBrowserData,
   captureHostPage,
   pickAndImportHostProject,
