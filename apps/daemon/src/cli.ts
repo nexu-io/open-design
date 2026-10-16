@@ -2751,7 +2751,9 @@ async function structuredHttpFailure(resp, fallbackCode = 'daemon-not-running') 
     });
   }
   exitWithStructuredError({
-    code:    fallbackCode,
+    // Any HTTP response proves the daemon answered, so a bare 404 is not
+    // `daemon-not-running` (#6116); only a failed connection is.
+    code:    fallbackCode === 'daemon-not-running' && resp.status === 404 ? 'not-found' : fallbackCode,
     message: errorObj?.message ?? `HTTP ${resp.status}${raw ? `: ${raw}` : ''}`,
     data:    structuredErrorData(errorObj),
   });
@@ -8966,7 +8968,8 @@ async function runConversation(args) {
                                            --fork-after stops the copy at one
                                            source message.
   od conversation list <projectId>           List conversations in a project.
-  od conversation info <conversationId>      Print one conversation.
+  od conversation info <conversationId> --project <projectId>
+                                           Print one conversation.
 
 Common options:
   --daemon-url <url>         OpenDesign daemon HTTP base.
@@ -8977,19 +8980,18 @@ Common options:
   }
   const sub = args[0];
   const rest = args.slice(1);
-  const conversationStringFlags =
-    sub === 'new' || sub === 'list'
-      ? PROJECT_RESOURCE_STRING_FLAGS
-      : PROJECT_STRING_FLAGS;
+  const projectScoped = sub === 'new' || sub === 'list' || sub === 'info';
+  const conversationStringFlags = projectScoped
+    ? PROJECT_RESOURCE_STRING_FLAGS
+    : PROJECT_STRING_FLAGS;
   const flags = parseFlags(rest, {
     string: conversationStringFlags,
     boolean: PROJECT_BOOLEAN_FLAGS,
   });
   const base = (await projectDaemonUrl(flags)).replace(/\/$/, '');
-  const workspaceHeaders =
-    sub === 'new' || sub === 'list'
-      ? workspaceHeadersFromExplicitFlags(flags) ?? {}
-      : {};
+  const workspaceHeaders = projectScoped
+    ? workspaceHeadersFromExplicitFlags(flags) ?? {}
+    : {};
   switch (sub) {
     case 'new': {
       const [id] = positionalArgs(rest, conversationStringFlags);
@@ -9038,12 +9040,16 @@ Common options:
       return;
     }
     case 'info': {
-      const id = rest.find((a) => !a.startsWith('-'));
-      if (!id) {
-        console.error('Usage: od conversation info <conversationId>');
+      const id = positionalArgs(rest, conversationStringFlags)[0];
+      const projectId = typeof flags.project === 'string' ? flags.project : '';
+      if (!id || !projectId) {
+        console.error('Usage: od conversation info <conversationId> --project <projectId>');
         process.exit(2);
       }
-      const resp = await fetch(`${base}/api/conversations/${encodeURIComponent(id)}`);
+      const resp = await fetch(
+        `${base}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(id)}`,
+        { headers: workspaceHeaders },
+      );
       if (!resp.ok) return structuredHttpFailure(resp);
       const data = await resp.json();
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');

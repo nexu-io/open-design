@@ -317,6 +317,16 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
     res.json({ conversation: conv });
   });
 
+  // `od conversation info` reads one conversation through its project (#6116).
+  app.get('/api/projects/:id/conversations/:cid', async (req, res) => {
+    if (!await authorizeProjectRequest(req, res, req.params.id, { mode: 'read' })) return;
+    const conv = getRoutableConversation(req.params.id, req.params.cid);
+    if (!conv) {
+      return res.status(404).json({ error: 'conversation not found' });
+    }
+    res.json({ conversation: conv });
+  });
+
   app.patch('/api/projects/:id/conversations/:cid', async (req, res) => {
     if (!await authorizeProjectRequest(
       req,
