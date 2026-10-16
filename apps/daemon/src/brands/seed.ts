@@ -10,6 +10,7 @@
 //
 // No SeedToken / Ant-Design coupling — just plain hex strings + a family name.
 
+import { isFrameworkDefaultColor } from './framework-colors.js';
 import type { PrefetchResult } from './prefetch.js';
 
 const DEFAULT_PRIMARY = '#1677ff';
@@ -218,6 +219,19 @@ function chooseSecondary(candidates: SeedCandidate[], primaryHex: string): strin
 }
 
 /**
+ * The candidates a brand color may be chosen from: stock framework colors are
+ * set aside whenever the page measured any other chromatic color, so a site's
+ * own color wins over the framework palette it never restyled. A page whose
+ * only chromatic colors are framework defaults keeps them — they are still the
+ * closest measured evidence, and the seed never invents a color.
+ */
+function brandColorCandidates(candidates: SeedCandidate[]): SeedCandidate[] {
+  const own = candidates.filter((c) => !isFrameworkDefaultColor(c.hex));
+  const ownChromatic = own.some((c) => Number.isFinite(chromaticScore(c)));
+  return ownChromatic ? own : candidates;
+}
+
+/**
  * Deterministically infer a small brand seed from raw prefetch material.
  * Same input always yields the same seed — no Date/random, no network.
  */
@@ -225,19 +239,20 @@ export function seedFromMaterial(material: PrefetchResult): BrandSeed {
   const candidates = (material.colors ?? [])
     .map((c) => ({ hex: normalizeHex(c.hex), count: c.count, sources: c.sources ?? [] }))
     .filter((c): c is SeedCandidate => c.hex !== null);
+  const brandCandidates = brandColorCandidates(candidates);
 
   // ── primary: prefer explicit human-readable brand evidence. If a site is
   // mostly monochrome and only has generic generated chromatic effects, allow
   // a dominant near-black to be the brand primary. Otherwise fall back to the
   // old chromatic heuristic.
   const primaryHex =
-    explicitSemanticPrimary(candidates) ??
-    dominantDarkPrimary(candidates) ??
-    fallbackChromaticPrimary(candidates);
+    explicitSemanticPrimary(brandCandidates) ??
+    dominantDarkPrimary(brandCandidates) ??
+    fallbackChromaticPrimary(brandCandidates);
 
   // ── link/secondary: strongest remaining chromatic evidence, with logo and
   // semantic sources preferred over generic generated decoration.
-  const linkHex = chooseSecondary(candidates, primaryHex);
+  const linkHex = chooseSecondary(brandCandidates, primaryHex);
 
   // ── light vs dark cast: count-weighted mean luminance over the measured
   // colors. Extremes are kept here on purpose — they reveal whether the canvas
