@@ -85,6 +85,9 @@ export const API_FAULT_DEDUPE_WINDOW_MS = 3600_000;
 /** Route templates contain no user filenames, query strings or request bodies. */
 export function diagnosticFaultFromApi(failure: RecentApiFailure): FaultEvidence | null {
   if (failure.status < 400 || /\/(telemetry|diagnostics|objects|health)(?:\/|$)/.test(failure.path)) return null;
+  // An expired preview scope is the viewer's recovery signal, not a fault: it
+  // mints a fresh scope through /preview-url, whose own failure is still captured.
+  if (failure.code === 'PREVIEW_SCOPE_NOT_FOUND' && /\/preview\/:scope\/renew$/.test(failure.path)) return null;
   let kind: string;
   if (/\/chat$|\/runs\/[^/]+\/(resume|retry)$/.test(failure.path)) kind = 'admission_failure';
   else if (/\/runs(?:\/|$)/.test(failure.path)) kind = 'run_api_failure';
