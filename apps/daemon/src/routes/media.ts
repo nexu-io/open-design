@@ -403,8 +403,9 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
        * of every file that DID land in time.
        *
        * Resolves the project directory exactly the way `generateMedia` does
-       * (`ensureProject(projectsRoot, projectId)` — no metadata), so this points
-       * at the bytes that were actually written.
+       * (`ensureProject(projectsRoot, projectId, project.metadata)`), so this
+       * points at the bytes that were actually written — `metadata.baseDir` for
+       * a project-location or imported-folder project (#8016).
        */
       const attachLateOutputToRunMessage = async (meta: unknown): Promise<void> => {
         const runId = options.grant?.runId;
@@ -416,7 +417,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
         try {
           await associateLateRunProducedFile(db, {
             runId,
-            projectRoot: resolveProjectDir(PROJECTS_DIR, projectId),
+            projectRoot: resolveProjectDir(PROJECTS_DIR, projectId, project.metadata),
             projectRelativePath: name,
           });
         } catch (err) {
@@ -440,6 +441,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
         projectRoot: PROJECT_ROOT,
         projectsRoot: PROJECTS_DIR,
         projectId,
+        projectMetadata: project.metadata,
         surface: req.body?.surface,
         model: req.body?.model,
         prompt: req.body?.prompt,
