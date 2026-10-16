@@ -71,19 +71,55 @@ type ComponentGroupDefinition = {
   elementMatchers: RegExp[];
 };
 
+/**
+ * English plural of a matcher word: sibilants take `-es` (`status` ->
+ * `statuses`), a consonant before `y` takes `-ies`, everything else `-s`.
+ */
+function pluralOf(word: string): string {
+  if (/(?:s|x|z|ch|sh)$/i.test(word)) return `${word}es`;
+  if (/[^aeiou]y$/i.test(word)) return `${word.slice(0, -1)}ies`;
+  return `${word}s`;
+}
+
+/**
+ * Match a whole class-name segment, singular or plural. Substring matching
+ * pulled unrelated classes into groups — `platform` into form fields,
+ * `icon-octagon` into buttons — while segment matching keeps the families each
+ * group owns: `status`, `statuses-list`, `icon-status` and `statusBadge` all
+ * reach the badges group, because callers also test the kebab-cased spelling
+ * (see `classNameVariants`).
+ */
+function classSegment(word: string): RegExp {
+  const forms = [pluralOf(word), word];
+  return new RegExp(`(?:^|[-_])(?:${forms.join('|')})(?:$|[-_])`, 'i');
+}
+
+/**
+ * A class name as written plus its kebab-cased spelling, so one segment matcher
+ * covers `icon-status`, `icon_status` and `iconStatus` without every matcher
+ * having to describe a case boundary. `HTMLButton` splits on the acronym edge
+ * as well, giving `HTML-Button`.
+ */
+function classNameVariants(className: string): string[] {
+  const kebab = className
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1-$2')
+    .replace(/([a-z0-9])([A-Z])/g, '$1-$2');
+  return kebab === className ? [className] : [className, kebab];
+}
+
 const COMPONENT_GROUPS: ComponentGroupDefinition[] = [
   {
     id: 'buttons',
     label: 'Buttons and calls to action',
     selectorMatchers: [/\bbutton\b/i, /\.btn(?:\b|[-_:])/i, /\[type=["']?(?:button|submit|reset)/i],
-    classMatchers: [/^btn(?:$|-)/i, /button/i, /cta/i],
+    classMatchers: [/^btn(?:$|-)/i, classSegment('button'), classSegment('cta')],
     elementMatchers: [/^button$/i],
   },
   {
     id: 'inputs',
     label: 'Form fields and controls',
     selectorMatchers: [/\binput\b/i, /\btextarea\b/i, /\bselect\b/i, /\.field(?:\b|[-_:])/i, /\blabel\b/i],
-    classMatchers: [/^field(?:$|-)/i, /input/i, /control/i, /form/i],
+    classMatchers: [/^field(?:$|-)/i, classSegment('input'), classSegment('control'), classSegment('form')],
     elementMatchers: [/^(input|textarea|select|label|form)$/i],
   },
   {
@@ -97,7 +133,7 @@ const COMPONENT_GROUPS: ComponentGroupDefinition[] = [
     id: 'badges',
     label: 'Badges, chips, and status labels',
     selectorMatchers: [/\.badge(?:\b|[-_:])/i, /\.chip(?:\b|[-_:])/i, /\.tag(?:\b|[-_:])/i, /\.pill(?:\b|[-_:])/i],
-    classMatchers: [/^badge(?:$|-)/i, /^chip(?:$|-)/i, /^tag(?:$|-)/i, /^pill(?:$|-)/i, /status/i],
+    classMatchers: [/^badge(?:$|-)/i, /^chip(?:$|-)/i, /^tag(?:$|-)/i, /^pill(?:$|-)/i, classSegment('status')],
     elementMatchers: [],
   },
   {
@@ -111,7 +147,7 @@ const COMPONENT_GROUPS: ComponentGroupDefinition[] = [
     id: 'keyboard',
     label: 'Keyboard hints',
     selectorMatchers: [/\bkbd\b/i, /\.kbd(?:\b|[-_:])/i],
-    classMatchers: [/^kbd(?:$|-)/i, /keyboard/i, /shortcut/i],
+    classMatchers: [/^kbd(?:$|-)/i, classSegment('keyboard'), classSegment('shortcut')],
     elementMatchers: [/^kbd$/i],
   },
   {
@@ -125,7 +161,7 @@ const COMPONENT_GROUPS: ComponentGroupDefinition[] = [
     id: 'typography',
     label: 'Typography scale and text utilities',
     selectorMatchers: [/\bh[1-6]\b/i, /\.lead(?:\b|[-_:])/i, /\.eyebrow(?:\b|[-_:])/i, /\.body-(?:muted|sm|small)\b/i],
-    classMatchers: [/^lead$/i, /^eyebrow$/i, /^body-(?:muted|sm|small)$/i, /caption/i],
+    classMatchers: [/^lead$/i, /^eyebrow$/i, /^body-(?:muted|sm|small)$/i, classSegment('caption')],
     elementMatchers: [/^h[1-6]$/i, /^p$/i],
   },
   {
@@ -139,7 +175,7 @@ const COMPONENT_GROUPS: ComponentGroupDefinition[] = [
       /\bmain\b/i,
       /\bnav\b/i,
     ],
-    classMatchers: [/^container$/i, /^stack-\d+$/i, /^row-(?:between|center|start|end)$/i, /grid/i, /layout/i],
+    classMatchers: [/^container$/i, /^stack-\d+$/i, /^row-(?:between|center|start|end)$/i, classSegment('grid'), classSegment('layout')],
     elementMatchers: [/^(main|section|nav|header|footer)$/i],
   },
 ];
@@ -227,7 +263,9 @@ function buildGroupManifest(
     definition.selectorMatchers.some((matcher) => matcher.test(selector)),
   );
   const classes = inventory.classes.filter((className) =>
-    definition.classMatchers.some((matcher) => matcher.test(className)),
+    classNameVariants(className).some((variant) =>
+      definition.classMatchers.some((matcher) => matcher.test(variant)),
+    ),
   );
   const elements = inventory.elements.filter((element) =>
     definition.elementMatchers.some((matcher) => matcher.test(element)),
@@ -257,23 +295,297 @@ function extractStyleBlocks(html: string): string[] {
   return blocks;
 }
 
+type ScannedCssRule = {
+  /** Raw prelude as written, whitespace-normalized. */
+  prelude: string;
+  /** Selectors with any nesting resolved against their ancestors. */
+  selectors: string[];
+  /** The rule's own declarations, excluding those of any nested rule. */
+  declarations: string;
+};
+
+type ScanCursor = {
+  declarations: string;
+  index: number;
+};
+
+type ScanScope = {
+  /** Selectors this level's rules nest inside, outermost already resolved. */
+  ancestors: string[];
+  /** False inside `@keyframes`, whose children are positions, not selectors. */
+  emitRules: boolean;
+  /** False at the top level, where a stray `}` is noise rather than an end. */
+  nested: boolean;
+};
+
+/**
+ * Walk CSS into rules. A regex cannot do this correctly: it cannot balance
+ * nested blocks, and any pattern that consumes the delimiter between two rules
+ * drops every other rule. Scanning is string-, escape-, comment-, and
+ * paren-aware so braces inside `content: "{"`, `.w-\{full\}`, or
+ * `url("a{b}.css")` do not open or close a block.
+ */
+function scanCssRules(css: string): ScannedCssRule[] {
+  const rules: ScannedCssRule[] = [];
+  scanCssStatements(css, 0, { ancestors: [], emitRules: true, nested: false }, rules);
+  return rules;
+}
+
+/** `@keyframes`, including the vendor-prefixed spellings. */
+function isKeyframesPrelude(prelude: string): boolean {
+  return /^@(?:-[a-z]+-)?keyframes\b/i.test(prelude);
+}
+
+/**
+ * Scan statements from `start` until the block closes or input ends, appending
+ * style rules to `rules`. Returns the declarations owned by this level, so a
+ * conditional at-rule nested in a style rule (`.card { @media … { … } }`) hands
+ * its declarations back to the rule that encloses it.
+ */
+function scanCssStatements(
+  css: string,
+  start: number,
+  scope: ScanScope,
+  rules: ScannedCssRule[],
+): ScanCursor {
+  let declarations = '';
+  let buffer = '';
+  let index = start;
+
+  const takeStatement = () => {
+    const statement = buffer.trim();
+    buffer = '';
+    // Statement at-rules (`@charset`, `@namespace`, `@import`, statement-form
+    // `@layer`) own no block and declare nothing.
+    if (statement.length > 0 && !statement.startsWith('@')) {
+      declarations += `${statement};`;
+    }
+  };
+
+  while (index < css.length) {
+    const char = css.charAt(index);
+
+    if (char === '/' && css[index + 1] === '*') {
+      // CSS ends an unterminated comment at EOF, so an unclosed `/*` legitimately
+      // comments out the remainder rather than being recovered from.
+      const close = css.indexOf('*/', index + 2);
+      index = close === -1 ? css.length : close + 2;
+      continue;
+    }
+
+    if (char === '\\') {
+      const next = skipCssEscape(css, index);
+      buffer += css.slice(index, next);
+      index = next;
+      continue;
+    }
+
+    if (char === '"' || char === "'") {
+      const end = readCssString(css, index);
+      buffer += css.slice(index, end);
+      index = end;
+      continue;
+    }
+
+    if (char === '(') {
+      const end = readCssParens(css, index);
+      buffer += css.slice(index, end);
+      index = end;
+      continue;
+    }
+
+    if (char === ';') {
+      takeStatement();
+      index += 1;
+      continue;
+    }
+
+    if (char === '}') {
+      takeStatement();
+      // Only a nested scan is closed by `}`. At the top level an unbalanced
+      // brace is malformed input, and skipping it keeps the rest of the
+      // stylesheet readable instead of discarding it.
+      if (scope.nested) return { declarations, index: index + 1 };
+      index += 1;
+      continue;
+    }
+
+    if (char === '{') {
+      const prelude = normalizeSelector(buffer);
+      buffer = '';
+      if (prelude.startsWith('@')) {
+        // Conditional groups (`@media`, `@supports`, `@container`, block-form
+        // `@layer`) do not change the selector their contents apply to, so they
+        // stay transparent. A `@keyframes` block is different: its children are
+        // animation positions, not component surface, so the block is scanned
+        // for balance but contributes no rules.
+        const block = scanCssStatements(
+          css,
+          index + 1,
+          {
+            ancestors: scope.ancestors,
+            emitRules: scope.emitRules && !isKeyframesPrelude(prelude),
+            nested: true,
+          },
+          rules,
+        );
+        declarations += block.declarations;
+        index = block.index;
+        continue;
+      }
+      const selectors = resolveNestedSelectors(prelude, scope.ancestors);
+      const block = scanCssStatements(
+        css,
+        index + 1,
+        { ancestors: selectors, emitRules: scope.emitRules, nested: true },
+        rules,
+      );
+      if (scope.emitRules) rules.push({ prelude, selectors, declarations: block.declarations });
+      index = block.index;
+      continue;
+    }
+
+    buffer += char;
+    index += 1;
+  }
+
+  takeStatement();
+  return { declarations, index };
+}
+
+/**
+ * Index just past the escape sequence starting at `start`. CSS preprocessing
+ * folds CRLF into one newline, so an escaped CRLF is a single line continuation
+ * rather than an escaped CR followed by a stray LF.
+ */
+function skipCssEscape(css: string, start: number): number {
+  return css.startsWith('\r\n', start + 1) ? start + 3 : start + 2;
+}
+
+/** CR, LF and form feed all end a line once CSS preprocessing is applied. */
+function isCssNewline(char: string): boolean {
+  return char === '\n' || char === '\r' || char === '\f';
+}
+
+/**
+ * Index just past the closing quote of the string starting at `start`. Any
+ * unescaped newline ends it, matching how CSS treats an unterminated string, so
+ * a stray quote does not swallow the rest of the stylesheet.
+ */
+function readCssString(css: string, start: number): number {
+  const quote = css[start];
+  let index = start + 1;
+  while (index < css.length) {
+    const char = css.charAt(index);
+    if (char === '\\') {
+      index = skipCssEscape(css, index);
+      continue;
+    }
+    if (isCssNewline(char)) return index;
+    if (char === quote) return index + 1;
+    index += 1;
+  }
+  return css.length;
+}
+
+/**
+ * Index just past the balanced `)` of the group starting at `start`. An
+ * unescaped, unquoted block brace ends the group instead: braces do not appear
+ * inside a function in well-formed CSS, so meeting one means the `(` was never
+ * closed, and stopping keeps the rest of the stylesheet readable rather than
+ * consuming it as part of the function.
+ */
+function readCssParens(css: string, start: number): number {
+  let depth = 0;
+  let index = start;
+  while (index < css.length) {
+    const char = css.charAt(index);
+    if (char === '\\') {
+      index = skipCssEscape(css, index);
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      index = readCssString(css, index);
+      continue;
+    }
+    if (char === '{' || char === '}') return index;
+    if (char === '(') depth += 1;
+    if (char === ')') {
+      depth -= 1;
+      if (depth === 0) return index + 1;
+    }
+    index += 1;
+  }
+  return css.length;
+}
+
+function resolveNestedSelectors(prelude: string, ancestors: string[]): string[] {
+  const parts = splitSelectorList(prelude)
+    .map((selector) => normalizeSelector(selector))
+    .filter((selector) => selector.length > 0);
+  if (ancestors.length === 0) return parts;
+
+  const resolved: string[] = [];
+  for (const ancestor of ancestors) {
+    for (const part of parts) {
+      resolved.push(
+        containsNestingSelector(part)
+          ? normalizeSelector(substituteNestingSelector(part, ancestor))
+          : `${ancestor} ${part}`,
+      );
+    }
+  }
+  return resolved;
+}
+
+/**
+ * `&` inside quoted text — `[data-state="&"]` — is part of a value, not the
+ * nesting selector, so quoted spans are copied through untouched.
+ */
+function substituteNestingSelector(selector: string, ancestor: string): string {
+  let result = '';
+  let index = 0;
+  while (index < selector.length) {
+    const char = selector.charAt(index);
+    if (char === '"' || char === "'") {
+      const end = readCssString(selector, index);
+      result += selector.slice(index, end);
+      index = end;
+      continue;
+    }
+    result += char === '&' ? ancestor : char;
+    index += 1;
+  }
+  return result;
+}
+
+function containsNestingSelector(selector: string): boolean {
+  return substituteNestingSelector(selector, '\u0000').includes('\u0000');
+}
+
+/**
+ * `:root` blocks declare tokens rather than component surface, and a keyframe
+ * stop list is a set of animation positions rather than selectors. `@keyframes`
+ * blocks already contribute no rules; this also covers a stop list reaching the
+ * consumers by any other route. Both are matched on the prelude as written so
+ * the rule is judged the way its author wrote it.
+ */
+function isTokenOrKeyframeRule(prelude: string): boolean {
+  return prelude.includes(':root') || isKeyframeStopList(prelude);
+}
+
+function isKeyframeStopList(prelude: string): boolean {
+  const stops = prelude.split(',').map((stop) => stop.trim()).filter((stop) => stop.length > 0);
+  return stops.length > 0 && stops.every((stop) => /^(?:from|to|\d+(?:\.\d+)?%)$/i.test(stop));
+}
+
 function extractCssSelectors(css: string): string[] {
   const selectors = new Set<string>();
-  const commentlessCss = stripContainerAtRuleHeaders(stripCssComments(css));
-  const selectorPattern = /(?:^|[{}])\s*([^@{}][^{}]*?)\s*\{/g;
-  let match: RegExpExecArray | null;
 
-  while ((match = selectorPattern.exec(commentlessCss)) !== null) {
-    const rawSelectorList = match[1]?.trim();
-    if (rawSelectorList == null || rawSelectorList.length === 0) continue;
-    if (rawSelectorList.includes(':root')) continue;
-    if (/^(?:from|to|\d+(?:\.\d+)?%)$/i.test(rawSelectorList)) continue;
-
-    for (const selector of splitSelectorList(rawSelectorList)) {
-      const normalized = normalizeSelector(selector);
-      if (normalized.length > 0 && !normalized.startsWith('@')) {
-        selectors.add(normalized);
-      }
+  for (const rule of scanCssRules(css)) {
+    if (isTokenOrKeyframeRule(rule.prelude)) continue;
+    for (const selector of rule.selectors) {
+      if (selector.length > 0) selectors.add(selector);
     }
   }
 
@@ -282,28 +594,19 @@ function extractCssSelectors(css: string): string[] {
 
 function extractSelectorTokenReferences(css: string): Map<string, string[]> {
   const referencesBySelector = new Map<string, Set<string>>();
-  const commentlessCss = stripContainerAtRuleHeaders(stripCssComments(css));
-  const rulePattern = /(?:^|[{}])\s*([^@{}][^{}]*?)\s*\{([^{}]*)\}/g;
-  let match: RegExpExecArray | null;
 
-  while ((match = rulePattern.exec(commentlessCss)) !== null) {
-    const rawSelectorList = match[1]?.trim();
-    const rawBody = match[2] ?? '';
-    if (rawSelectorList == null || rawSelectorList.length === 0) continue;
-    if (rawSelectorList.includes(':root')) continue;
-    if (/^(?:from|to|\d+(?:\.\d+)?%)$/i.test(rawSelectorList)) continue;
-
-    const tokenReferences = extractTokenReferences(rawBody);
+  for (const rule of scanCssRules(css)) {
+    if (isTokenOrKeyframeRule(rule.prelude)) continue;
+    const tokenReferences = extractTokenReferences(rule.declarations);
     if (tokenReferences.length === 0) continue;
 
-    for (const selector of splitSelectorList(rawSelectorList)) {
-      const normalized = normalizeSelector(selector);
-      if (normalized.length === 0 || normalized.startsWith('@')) continue;
-      const selectorReferences = referencesBySelector.get(normalized) ?? new Set<string>();
+    for (const selector of rule.selectors) {
+      if (selector.length === 0) continue;
+      const selectorReferences = referencesBySelector.get(selector) ?? new Set<string>();
       for (const token of tokenReferences) {
         selectorReferences.add(token);
       }
-      referencesBySelector.set(normalized, selectorReferences);
+      referencesBySelector.set(selector, selectorReferences);
     }
   }
 
@@ -400,10 +703,6 @@ function stripRootBlocks(css: string): string {
 
 function stripCssComments(css: string): string {
   return css.replace(/\/\*[\s\S]*?\*\//g, '');
-}
-
-function stripContainerAtRuleHeaders(css: string): string {
-  return css.replace(/@(media|supports|container|layer)\b[^{]*\{/gi, '{');
 }
 
 function countLiterals(css: string): ComponentManifestLiteralInventory {
