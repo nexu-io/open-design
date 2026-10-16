@@ -20,6 +20,7 @@ import {
   type RegistryView,
 } from '@open-design/plugin-runtime';
 import {
+  PluginManifestSchema,
   renderPluginBlock,
   resolveLocalizedText,
   type AppliedPluginSnapshot,
@@ -68,6 +69,15 @@ export class InternalBundledStrategyApplyError extends Error {
   }
 }
 
+export class PluginApplyConfigurationError extends Error {
+  readonly reason: 'manifest_invalid';
+  constructor(reason: 'manifest_invalid') {
+    super('Plugin manifest failed apply-time schema validation.');
+    this.reason = reason;
+    this.name = 'PluginApplyConfigurationError';
+  }
+}
+
 // Apply result narrows the trust tier to 'trusted' | 'restricted'. The
 // installed-plugin record can carry 'bundled' (per §5.3); we coerce to
 // 'trusted' at apply time so the snapshot's permission contract is binary.
@@ -106,6 +116,10 @@ export interface ApplyComputed {
 }
 
 export function applyPlugin(input: ApplyInput): ApplyComputed {
+  const parsedManifest = PluginManifestSchema.safeParse(input.plugin.manifest);
+  if (!parsedManifest.success) {
+    throw new PluginApplyConfigurationError('manifest_invalid');
+  }
   const isInternalStrategy = isInternalBundledStrategyV2(input.plugin);
   if (isInternalStrategy && !input.internalStrategyBinding) {
     throw new InternalBundledStrategyApplyError(input.plugin.id);
@@ -116,7 +130,7 @@ export function applyPlugin(input: ApplyInput): ApplyComputed {
   const strategy = input.internalStrategyBinding
     ? validateBundledStrategyActivationV2(input.plugin, input.internalStrategyBinding)
     : undefined;
-  const manifest = input.plugin.manifest;
+  const manifest = parsedManifest.data;
   const rawTrust: TrustTier = input.trust ?? input.plugin.trust;
   const trust: ApplyTrust = rawTrust === 'restricted' ? 'restricted' : 'trusted';
 
