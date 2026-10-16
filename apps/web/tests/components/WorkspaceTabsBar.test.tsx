@@ -115,28 +115,53 @@ function storedEntryTabView(): string | null {
   }
 }
 
-function mockTabRect(element: HTMLElement, left: number, width = 100) {
-  // Drop hit-testing measures tabs in LAYOUT space (offsetLeft/offsetWidth) so
-  // the FLIP reorder slide and the drag transform can't shift the rects it
-  // reads. jsdom reports 0 for both, so stub them alongside the visual rect —
-  // the strip itself sits at x=0 with scrollLeft 0, so the two coincide here.
-  Object.defineProperty(element, 'offsetLeft', { configurable: true, value: left });
-  Object.defineProperty(element, 'offsetWidth', { configurable: true, value: width });
-  Object.defineProperty(element, 'getBoundingClientRect', {
-    configurable: true,
-    value: () =>
-      ({
-        x: left,
-        y: 0,
-        left,
-        right: left + width,
-        top: 0,
-        bottom: 32,
-        width,
-        height: 32,
-        toJSON: () => ({}),
-      }) as DOMRect,
+function getWorkspaceTabs(): HTMLElement[] {
+  // The strip is a button group: each tab button carries aria-pressed. The
+  // per-tab close buttons and the pinned-Home brand-logo button do not.
+  return screen.getAllByRole('button').filter((button) => button.hasAttribute('aria-pressed'));
+}
+
+function getWorkspaceTab(name: RegExp | string): HTMLElement {
+  const isMatch = (label: string) =>
+    typeof name === 'string' ? label === name : name.test(label);
+  const matcher = isMatch as (label: string) => boolean;
+  const tab = getWorkspaceTabs().find((button) => {
+    const label = button.getAttribute('aria-label');
+    return (label != null && matcher(label)) || matcher(button.textContent ?? '');
   });
+  if (!tab) throw new Error(`Unable to find workspace tab matching ${name}`);
+  return tab;
+}
+
+function mockTabRect(element: HTMLElement, left: number, width = 100) {
+  // The drag machinery measures the per-tab wrapper ([data-workspace-tab-id]),
+  // not the inner button the helper returns, in LAYOUT space
+  // (offsetLeft/offsetWidth). jsdom reports 0 for both, so stub them alongside
+  // the visual rect on the element AND its closest tab wrapper — the strip
+  // itself sits at x=0 with scrollLeft 0, so the two coincide here.
+  const targets = [
+    element,
+    ...(element.closest<HTMLElement>('[data-workspace-tab-id]') ? [element.closest<HTMLElement>('[data-workspace-tab-id]')!] : []),
+  ];
+  for (const target of targets) {
+    Object.defineProperty(target, 'offsetLeft', { configurable: true, value: left });
+    Object.defineProperty(target, 'offsetWidth', { configurable: true, value: width });
+    Object.defineProperty(target, 'getBoundingClientRect', {
+      configurable: true,
+      value: () =>
+        ({
+          x: left,
+          y: 0,
+          left,
+          right: left + width,
+          top: 0,
+          bottom: 32,
+          width,
+          height: 32,
+          toJSON: () => ({}),
+        }) as DOMRect,
+    });
+  }
 }
 
 function dispatchDragEvent(
@@ -167,7 +192,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
       <WorkspaceTabsBar route={{ kind: 'home', view: 'home' }} projects={[project]} />,
     );
 
-    expect(screen.getAllByRole('tab')).toHaveLength(1);
+    expect(getWorkspaceTabs()).toHaveLength(1);
 
     // Asking for a new tab when a Home tab already exists should activate the
     // existing Home tab. #5517 removed the top-right "+" button, so ⌘/Ctrl+T is
@@ -177,7 +202,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     fireEvent.keyDown(document, { key: 't', metaKey: true });
 
     await waitFor(() => {
-      expect(screen.getAllByRole('tab')).toHaveLength(1);
+      expect(getWorkspaceTabs()).toHaveLength(1);
       // The active Home tab renders as the sidebar toggle (icon-only pill).
       expect(screen.getAllByTestId('workspace-home-rail-toggle')).toHaveLength(1);
     });
@@ -186,7 +211,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     rerender(<WorkspaceTabsBar route={{ ...projectRoute }} projects={[project]} />);
 
     await waitFor(() => {
-      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      const labels = getWorkspaceTabs().map((tab) => tab.textContent ?? '');
       expect(labels).toHaveLength(2);
       expect(labels.some((label) => label.includes('Home'))).toBe(true);
       expect(labels.some((label) => label.includes('Project Alpha'))).toBe(true);
@@ -196,7 +221,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     rerender(<WorkspaceTabsBar route={{ kind: 'home', view: 'home' }} projects={[project]} />);
 
     await waitFor(() => {
-      const tabs = screen.getAllByRole('tab');
+      const tabs = getWorkspaceTabs();
       const labels = tabs.map((tab) => tab.textContent ?? '');
       // Expect that we still have 2 tabs (Home and Project Alpha). The active
       // Home tab is the icon-only sidebar toggle, so assert its testid rather
@@ -252,7 +277,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     );
 
     await waitFor(() => {
-      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      const labels = getWorkspaceTabs().map((tab) => tab.textContent ?? '');
       expect(labels.some((label) => label.includes('Project Alpha'))).toBe(true);
     });
 
@@ -261,7 +286,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     rerender(<WorkspaceTabsBar route={{ kind: 'home', view: 'home' }} projects={[]} />);
 
     await waitFor(() => {
-      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      const labels = getWorkspaceTabs().map((tab) => tab.textContent ?? '');
       expect(labels.some((label) => label.includes('Project Alpha'))).toBe(true);
       expect(labels.some((label) => label.includes('Untitled'))).toBe(false);
     });
@@ -279,7 +304,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     await waitFor(() => {
       // The active entry tab is icon-only (Home nav pill) on non-home views,
       // so assert the parked Welcome view through the persisted tab state.
-      expect(screen.getAllByRole('tab')).toHaveLength(1);
+      expect(getWorkspaceTabs()).toHaveLength(1);
       expect(screen.getByTestId('workspace-home-nav')).toBeTruthy();
       expect(storedEntryTabView()).toBe('onboarding');
     });
@@ -295,7 +320,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     );
 
     await waitFor(() => {
-      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      const labels = getWorkspaceTabs().map((tab) => tab.textContent ?? '');
       expect(labels.some((label) => label.includes('Welcome'))).toBe(false);
       expect(labels.some((label) => label.includes('Home'))).toBe(true);
       expect(labels.some((label) => label.includes('Project Alpha'))).toBe(true);
@@ -312,7 +337,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getAllByRole('tab')).toHaveLength(1);
+      expect(getWorkspaceTabs()).toHaveLength(1);
       expect(screen.getByTestId('workspace-home-nav')).toBeTruthy();
       expect(storedEntryTabView()).toBe('onboarding');
     });
@@ -338,7 +363,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     );
 
     await waitFor(() => {
-      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      const labels = getWorkspaceTabs().map((tab) => tab.textContent ?? '');
       expect(labels.some((label) => label.includes('Design systems'))).toBe(false);
       expect(labels.some((label) => label.includes('Home'))).toBe(true);
       expect(labels.some((label) => label.includes('Project Alpha'))).toBe(true);
@@ -441,7 +466,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     const { rerender } = render(
       <WorkspaceTabsBar route={{ kind: 'home', view: 'home' }} projects={[project]} />,
     );
-    expect(screen.getAllByRole('tab')).toHaveLength(1);
+    expect(getWorkspaceTabs()).toHaveLength(1);
 
     const sections: Array<{ view: 'projects' | 'tasks' | 'design-systems' | 'plugins' | 'integrations'; label: string }> = [
       { view: 'projects', label: 'Projects' },
@@ -454,7 +479,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     for (const section of sections) {
       rerender(<WorkspaceTabsBar route={{ kind: 'home', view: section.view }} projects={[project]} />);
       await waitFor(() => {
-        const tabs = screen.getAllByRole('tab');
+        const tabs = getWorkspaceTabs();
         // Exactly one tab the whole time — the section just switches the view.
         // The active entry tab is the icon-only Home nav pill on non-home
         // sections, so read the section from the persisted tab state.
@@ -473,7 +498,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
       <WorkspaceTabsBar route={{ kind: 'home', view: 'design-systems' }} projects={[project]} />,
     );
     await waitFor(() => {
-      expect(screen.getAllByRole('tab')).toHaveLength(1);
+      expect(getWorkspaceTabs()).toHaveLength(1);
       expect(screen.getByTestId('workspace-home-nav')).toBeTruthy();
       expect(storedEntryTabView()).toBe('design-systems');
     });
@@ -482,7 +507,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     // not replace the entry tab.
     rerender(<WorkspaceTabsBar route={{ ...projectRoute }} projects={[project]} />);
     await waitFor(() => {
-      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      const labels = getWorkspaceTabs().map((tab) => tab.textContent ?? '');
       expect(labels).toHaveLength(2);
       expect(labels.some((label) => label.includes('Design systems'))).toBe(true);
       expect(labels.some((label) => label.includes('Project Alpha'))).toBe(true);
@@ -491,7 +516,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     // Switching to another section keeps the SAME entry tab and the project tab.
     rerender(<WorkspaceTabsBar route={{ kind: 'home', view: 'tasks' }} projects={[project]} />);
     await waitFor(() => {
-      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      const labels = getWorkspaceTabs().map((tab) => tab.textContent ?? '');
       expect(labels).toHaveLength(2);
       expect(storedEntryTabView()).toBe('tasks');
       expect(labels.some((label) => label.includes('Project Alpha'))).toBe(true);
@@ -511,7 +536,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     );
     render(<WorkspaceTabsBar route={{ kind: 'home', view: 'projects' }} projects={[project]} />);
     await waitFor(() => {
-      expect(screen.getAllByRole('tab')).toHaveLength(1);
+      expect(getWorkspaceTabs()).toHaveLength(1);
       expect(screen.getByTestId('workspace-home-nav')).toBeTruthy();
       expect(storedEntryTabView()).toBe('projects');
     });
@@ -523,7 +548,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     openWorkspaceTab({ ...projectRoute });
 
     await waitFor(() => {
-      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      const labels = getWorkspaceTabs().map((tab) => tab.textContent ?? '');
       expect(labels).toHaveLength(2);
       expect(labels.some((label) => label.includes('Home'))).toBe(true);
       expect(labels.some((label) => label.includes('Project Alpha'))).toBe(true);
@@ -535,13 +560,13 @@ describe('WorkspaceTabsBar navigation semantics', () => {
 
     openWorkspaceTab({ ...projectRoute });
     await waitFor(() => {
-      expect(screen.getAllByRole('tab')).toHaveLength(2);
+      expect(getWorkspaceTabs()).toHaveLength(2);
     });
 
     removeWorkspaceProjectTabs(project.id);
 
     await waitFor(() => {
-      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      const labels = getWorkspaceTabs().map((tab) => tab.textContent ?? '');
       expect(labels).toHaveLength(1);
       expect(labels.some((label) => label.includes('Project Alpha'))).toBe(false);
       const stored = JSON.parse(
@@ -559,7 +584,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     openWorkspaceTab({ ...projectRoute });
 
     await waitFor(() => {
-      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      const labels = getWorkspaceTabs().map((tab) => tab.textContent ?? '');
       expect(labels).toHaveLength(2);
       expect(labels.filter((label) => label.includes('Project Alpha'))).toHaveLength(1);
     });
@@ -577,7 +602,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     });
 
     await waitFor(() => {
-      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      const labels = getWorkspaceTabs().map((tab) => tab.textContent ?? '');
       expect(labels).toHaveLength(2);
       expect(labels.filter((label) => label.includes('Project Alpha'))).toHaveLength(1);
     });
@@ -607,7 +632,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     // Restoring a Home-less saved workspace immediately mints the permanent
     // Home tab pinned leftmost — Project Alpha sits to its right.
     await waitFor(() => {
-      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      const labels = getWorkspaceTabs().map((tab) => tab.textContent ?? '');
       expect(labels).toEqual([
         expect.stringContaining('Home'),
         expect.stringContaining('Project Alpha'),
@@ -618,7 +643,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     rerender(<WorkspaceTabsBar route={{ kind: 'home', view: 'home' }} projects={[project]} />);
 
     await waitFor(() => {
-      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      const labels = getWorkspaceTabs().map((tab) => tab.textContent ?? '');
       expect(labels).toHaveLength(2);
       // The active Home tab renders as the icon-only sidebar toggle.
       expect(screen.getAllByTestId('workspace-home-rail-toggle')).toHaveLength(1);
@@ -661,7 +686,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     render(<WorkspaceTabsBar route={{ ...projectRoute }} projects={[project, projectBeta]} />);
 
     await waitFor(() => {
-      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      const labels = getWorkspaceTabs().map((tab) => tab.textContent ?? '');
       expect(labels).toEqual([
         expect.stringContaining('Home'),
         expect.stringContaining('Project Alpha'),
@@ -705,7 +730,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     render(<WorkspaceTabsBar route={{ ...projectRoute }} projects={[project]} />);
 
     await waitFor(() => {
-      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      const labels = getWorkspaceTabs().map((tab) => tab.textContent ?? '');
       // Home + exactly one Project Alpha tab.
       expect(labels).toHaveLength(2);
       expect(labels.filter((label) => label.includes('Project Alpha'))).toHaveLength(1);
@@ -741,7 +766,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     await waitFor(() => {
       // Expect that the duplicate Home tabs are deduplicated to exactly one
       // Home tab — rendered as the sidebar toggle since it is active on home.
-      expect(screen.getAllByRole('tab')).toHaveLength(1);
+      expect(getWorkspaceTabs()).toHaveLength(1);
       expect(screen.getAllByTestId('workspace-home-rail-toggle')).toHaveLength(1);
     });
   });
@@ -753,9 +778,36 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     // no way to remove the last remaining tab.
     expect(screen.queryByRole('button', { name: 'Close' })).toBeNull();
 
-    expect(screen.getAllByRole('tab')).toHaveLength(1);
+    expect(getWorkspaceTabs()).toHaveLength(1);
     // Active on the home view, the pinned tab renders as the sidebar toggle.
     expect(screen.getByTestId('workspace-home-rail-toggle')).toBeTruthy();
+  });
+
+  it('keeps project tab close buttons available to keyboard and assistive tech users', async () => {
+    render(<WorkspaceTabsBar route={{ ...projectRoute }} projects={[project]} />);
+
+    await waitFor(() => {
+      expect(getWorkspaceTabs()).toHaveLength(2);
+    });
+
+    const closeProjectAlpha = screen.getByRole('button', { name: 'Close Project Alpha' });
+    // The close control is a real, discoverable button — not aria-hidden and
+    // not removed from the tab order.
+    expect(closeProjectAlpha.hasAttribute('aria-hidden')).toBe(false);
+    expect(closeProjectAlpha.getAttribute('tabindex')).toBeNull();
+
+    closeProjectAlpha.focus();
+    expect(document.activeElement).toBe(closeProjectAlpha);
+
+    fireEvent.click(closeProjectAlpha);
+
+    await waitFor(() => {
+      const tabs = getWorkspaceTabs();
+      expect(tabs).toHaveLength(1);
+      // The pinned Home tab remains, active on the home view — it renders as
+      // the icon-only sidebar-toggle brand-logo pill, not a labelled main tab.
+      expect(screen.getAllByTestId('workspace-home-rail-toggle')).toHaveLength(1);
+    });
   });
 
   it('maps the browser new-tab shortcut to the workspace new-tab action', async () => {
@@ -768,7 +820,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
 
     expect(allowedDefault).toBe(false);
     await waitFor(() => {
-      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      const labels = getWorkspaceTabs().map((tab) => tab.textContent ?? '');
       expect(labels).toHaveLength(2);
       // The shortcut activates the Home tab, which then renders as the
       // icon-only sidebar toggle.
@@ -794,7 +846,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     expect(allowedDefault).toBe(true);
     // Home is always pinned leftmost, so the project route renders Home + the
     // project tab. The deferred shortcut must not add or change tabs.
-    const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+    const labels = getWorkspaceTabs().map((tab) => tab.textContent ?? '');
     expect(labels).toEqual([
       expect.stringContaining('Home'),
       expect.stringContaining('Project Alpha'),
@@ -839,7 +891,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     await waitFor(() => {
       // Closing the project tab falls back to the Home tab, which is active on
       // the home view and therefore renders as the icon-only sidebar toggle.
-      expect(screen.getAllByRole('tab')).toHaveLength(1);
+      expect(getWorkspaceTabs()).toHaveLength(1);
       expect(screen.getByTestId('workspace-home-rail-toggle')).toBeTruthy();
     });
     expect(navigate).toHaveBeenCalledWith(homeRoute);
@@ -984,7 +1036,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     render(<WorkspaceTabsBar route={{ ...projectRoute }} projects={[project, projectBeta]} />);
 
     await waitFor(() => {
-      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      const labels = getWorkspaceTabs().map((tab) => tab.textContent ?? '');
       expect(labels).toEqual([
         expect.stringContaining('Home'),
         expect.stringContaining('Project Alpha'),
@@ -995,7 +1047,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     // Dragging a project tab onto Home's left edge must not place anything
     // before Home. Home is the permanent, pinned-leftmost tab; the drop should
     // resolve to "after Home" so Home stays first.
-    const [homeTab, , betaTab] = screen.getAllByRole('tab');
+    const [homeTab, , betaTab] = getWorkspaceTabs();
     mockTabRect(homeTab! as HTMLElement, 0);
     const dataTransfer = createDataTransfer();
     fireEvent.dragStart(betaTab!, { dataTransfer });
@@ -1003,7 +1055,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     dispatchDragEvent(homeTab! as HTMLElement, 'dragover', dataTransfer, 10);
 
     await waitFor(() => {
-      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      const labels = getWorkspaceTabs().map((tab) => tab.textContent ?? '');
       expect(labels).toEqual([
         expect.stringContaining('Home'),
         expect.stringContaining('Project Beta'),
@@ -1015,7 +1067,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     fireEvent.dragEnd(betaTab!, { dataTransfer });
 
     await waitFor(() => {
-      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      const labels = getWorkspaceTabs().map((tab) => tab.textContent ?? '');
       expect(labels).toEqual([
         expect.stringContaining('Home'),
         expect.stringContaining('Project Beta'),
@@ -1076,7 +1128,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     render(<WorkspaceTabsBar route={{ ...projectRoute }} projects={[project, projectBeta]} />);
 
     await waitFor(() => {
-      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      const labels = getWorkspaceTabs().map((tab) => tab.textContent ?? '');
       expect(labels).toEqual([
         expect.stringContaining('Home'),
         expect.stringContaining('Project Alpha'),
@@ -1084,14 +1136,14 @@ describe('WorkspaceTabsBar navigation semantics', () => {
       ]);
     });
 
-    const [, alphaTab, betaTab] = screen.getAllByRole('tab');
+    const [, alphaTab, betaTab] = getWorkspaceTabs();
     mockTabRect(alphaTab! as HTMLElement, 100);
     const dataTransfer = createDataTransfer();
     fireEvent.dragStart(betaTab!, { dataTransfer });
     dispatchDragEvent(alphaTab! as HTMLElement, 'dragover', dataTransfer, 110);
 
     await waitFor(() => {
-      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      const labels = getWorkspaceTabs().map((tab) => tab.textContent ?? '');
       expect(labels).toEqual([
         expect.stringContaining('Home'),
         expect.stringContaining('Project Beta'),
@@ -1145,7 +1197,7 @@ describe('WorkspaceTabsBar identity-scope tab reset', () => {
     );
 
     await waitFor(() => {
-      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      const labels = getWorkspaceTabs().map((tab) => tab.textContent ?? '');
       expect(labels).toHaveLength(2);
       expect(labels.some((label) => label.includes('Project Alpha'))).toBe(true);
     });
@@ -1176,7 +1228,7 @@ describe('WorkspaceTabsBar identity-scope tab reset', () => {
       />,
     );
     await waitFor(() => {
-      expect(screen.getAllByRole('tab')).toHaveLength(2);
+      expect(getWorkspaceTabs()).toHaveLength(2);
     });
 
     // Sign out: the account bucket flips to the fixed anon::none scope.
@@ -1189,7 +1241,7 @@ describe('WorkspaceTabsBar identity-scope tab reset', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getAllByRole('tab')).toHaveLength(1);
+      expect(getWorkspaceTabs()).toHaveLength(1);
       expect(screen.getByTestId('workspace-home-rail-toggle')).toBeTruthy();
     });
     // Route/tab-strip consistency: closing every tab down to Home also lands
@@ -1209,8 +1261,8 @@ describe('WorkspaceTabsBar identity-scope tab reset', () => {
       />,
     );
     await waitFor(() => {
-      expect(screen.getAllByRole('tab')).toHaveLength(2);
-      expect(screen.getByRole('tab', { name: /Project Alpha/ })).toBeTruthy();
+      expect(getWorkspaceTabs()).toHaveLength(2);
+      expect(getWorkspaceTab(/Project Alpha/)).toBeTruthy();
     });
     vi.mocked(navigate).mockClear();
 
@@ -1224,8 +1276,8 @@ describe('WorkspaceTabsBar identity-scope tab reset', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getAllByRole('tab')).toHaveLength(2);
-      expect(screen.getByRole('tab', { name: /Project Alpha/ }).getAttribute('aria-selected')).toBe('true');
+      expect(getWorkspaceTabs()).toHaveLength(2);
+      expect(getWorkspaceTab(/Project Alpha/).getAttribute('aria-pressed')).toBe('true');
     });
     expect(navigate).not.toHaveBeenCalled();
   });
@@ -1240,7 +1292,7 @@ describe('WorkspaceTabsBar identity-scope tab reset', () => {
       />,
     );
     await waitFor(() => {
-      expect(screen.getAllByRole('tab')).toHaveLength(2);
+      expect(getWorkspaceTabs()).toHaveLength(2);
     });
     vi.mocked(navigate).mockClear();
 
@@ -1254,8 +1306,8 @@ describe('WorkspaceTabsBar identity-scope tab reset', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getAllByRole('tab')).toHaveLength(2);
-      expect(screen.getByRole('tab', { name: /Project Alpha/ }).getAttribute('aria-selected')).toBe('true');
+      expect(getWorkspaceTabs()).toHaveLength(2);
+      expect(getWorkspaceTab(/Project Alpha/).getAttribute('aria-pressed')).toBe('true');
     });
     expect(navigate).not.toHaveBeenCalled();
   });
@@ -1270,8 +1322,8 @@ describe('WorkspaceTabsBar identity-scope tab reset', () => {
       />,
     );
     await waitFor(() => {
-      expect(screen.getAllByRole('tab')).toHaveLength(2);
-      expect(screen.getByRole('tab', { name: /Project Alpha/ })).toBeTruthy();
+      expect(getWorkspaceTabs()).toHaveLength(2);
+      expect(getWorkspaceTab(/Project Alpha/)).toBeTruthy();
     });
     vi.mocked(navigate).mockClear();
 
@@ -1314,7 +1366,7 @@ describe('WorkspaceTabsBar identity-scope tab reset', () => {
       />,
     );
     await waitFor(() => {
-      expect(screen.getAllByRole('tab')).toHaveLength(2);
+      expect(getWorkspaceTabs()).toHaveLength(2);
     });
     vi.mocked(navigate).mockClear();
 
@@ -1328,7 +1380,7 @@ describe('WorkspaceTabsBar identity-scope tab reset', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getAllByRole('tab')).toHaveLength(1);
+      expect(getWorkspaceTabs()).toHaveLength(1);
       expect(screen.getByTestId('workspace-home-rail-toggle')).toBeTruthy();
     });
     expect(navigate).toHaveBeenLastCalledWith(homeRoute);
@@ -1350,7 +1402,7 @@ describe('WorkspaceTabsBar identity-scope tab reset', () => {
       />,
     );
     await waitFor(() => {
-      expect(screen.getAllByRole('tab')).toHaveLength(2);
+      expect(getWorkspaceTabs()).toHaveLength(2);
     });
 
     rerender(
@@ -1362,7 +1414,7 @@ describe('WorkspaceTabsBar identity-scope tab reset', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getAllByRole('tab')).toHaveLength(1);
+      expect(getWorkspaceTabs()).toHaveLength(1);
       expect(screen.getByTestId('workspace-home-rail-toggle')).toBeTruthy();
     });
     expect(navigate).toHaveBeenLastCalledWith(homeRoute);
@@ -1398,13 +1450,13 @@ describe('WorkspaceTabsBar identity-scope tab reset', () => {
     );
     openWorkspaceTab(projectBetaRoute);
     await waitFor(() => {
-      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      const labels = getWorkspaceTabs().map((tab) => tab.textContent ?? '');
       expect(labels).toEqual([
         expect.stringContaining('Home'),
         expect.stringContaining('Project Alpha'),
         expect.stringContaining('Project Beta'),
       ]);
-      expect(screen.getByRole('tab', { name: /Project Beta/ }).getAttribute('aria-selected')).toBe('true');
+      expect(getWorkspaceTab(/Project Beta/).getAttribute('aria-pressed')).toBe('true');
     });
 
     rerender(
@@ -1415,7 +1467,7 @@ describe('WorkspaceTabsBar identity-scope tab reset', () => {
       />,
     );
     await waitFor(() => {
-      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      const labels = getWorkspaceTabs().map((tab) => tab.textContent ?? '');
       expect(labels).toHaveLength(1);
       expect(labels.some((label) => label.includes('Project Alpha'))).toBe(false);
       expect(labels.some((label) => label.includes('Project Beta'))).toBe(false);
@@ -1423,7 +1475,7 @@ describe('WorkspaceTabsBar identity-scope tab reset', () => {
 
     openWorkspaceTab(projectGammaRoute);
     await waitFor(() => {
-      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      const labels = getWorkspaceTabs().map((tab) => tab.textContent ?? '');
       expect(labels).toEqual([
         expect.stringContaining('Home'),
         expect.stringContaining('Project Gamma'),
@@ -1438,13 +1490,13 @@ describe('WorkspaceTabsBar identity-scope tab reset', () => {
       />,
     );
     await waitFor(() => {
-      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      const labels = getWorkspaceTabs().map((tab) => tab.textContent ?? '');
       expect(labels).toEqual([
         expect.stringContaining('Home'),
         expect.stringContaining('Project Alpha'),
         expect.stringContaining('Project Beta'),
       ]);
-      expect(screen.getByRole('tab', { name: /Project Beta/ }).getAttribute('aria-selected')).toBe('true');
+      expect(getWorkspaceTab(/Project Beta/).getAttribute('aria-pressed')).toBe('true');
     });
     expect(navigate).toHaveBeenLastCalledWith(projectBetaRoute);
 
@@ -1459,14 +1511,14 @@ describe('WorkspaceTabsBar identity-scope tab reset', () => {
       />,
     );
     await waitFor(() => {
-      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      const labels = getWorkspaceTabs().map((tab) => tab.textContent ?? '');
       expect(labels).toEqual([
         expect.stringContaining('Home'),
         expect.stringContaining('Project Gamma'),
       ]);
       expect(labels.some((label) => label.includes('Project Alpha'))).toBe(false);
       expect(labels.some((label) => label.includes('Project Beta'))).toBe(false);
-      expect(screen.getByRole('tab', { name: /Project Gamma/ }).getAttribute('aria-selected')).toBe('true');
+      expect(getWorkspaceTab(/Project Gamma/).getAttribute('aria-pressed')).toBe('true');
     });
   });
 
@@ -1506,7 +1558,7 @@ describe('WorkspaceTabsBar identity-scope tab reset', () => {
       />,
     );
     await waitFor(() => {
-      expect(screen.getAllByRole('tab')).toHaveLength(1);
+      expect(getWorkspaceTabs()).toHaveLength(1);
     });
 
     rerender(
@@ -1517,11 +1569,11 @@ describe('WorkspaceTabsBar identity-scope tab reset', () => {
       />,
     );
     await waitFor(() => {
-      expect(screen.getAllByRole('tab').map((tab) => tab.textContent ?? '')).toEqual([
+      expect(getWorkspaceTabs().map((tab) => tab.textContent ?? '')).toEqual([
         expect.stringContaining('Home'),
         expect.stringContaining('Project Alpha'),
       ]);
-      expect(screen.getByRole('tab', { name: /Project Alpha/ }).getAttribute('aria-selected')).toBe('true');
+      expect(getWorkspaceTab(/Project Alpha/).getAttribute('aria-pressed')).toBe('true');
     });
   });
 
@@ -1594,7 +1646,7 @@ describe('WorkspaceTabsBar identity-scope tab reset', () => {
     );
 
     await waitFor(() => {
-      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      const labels = getWorkspaceTabs().map((tab) => tab.textContent ?? '');
       expect(labels).toHaveLength(1);
       expect(labels.some((label) => label.includes('Project Alpha'))).toBe(false);
       expect(screen.getByTestId('workspace-home-rail-toggle')).toBeTruthy();
@@ -1613,7 +1665,7 @@ describe('WorkspaceTabsBar identity-scope tab reset', () => {
       />,
     );
     await waitFor(() => {
-      expect(screen.getAllByRole('tab')).toHaveLength(1);
+      expect(getWorkspaceTabs()).toHaveLength(1);
       expect(storedEntryTabView()).toBe('onboarding');
     });
 
@@ -1629,7 +1681,7 @@ describe('WorkspaceTabsBar identity-scope tab reset', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getAllByRole('tab')).toHaveLength(1);
+      expect(getWorkspaceTabs()).toHaveLength(1);
       expect(storedEntryTabView()).toBe('onboarding');
     });
     expect(navigate).not.toHaveBeenCalled();
@@ -1641,13 +1693,13 @@ describe('WorkspaceTabsBar identity-scope tab reset', () => {
     );
     rerender(<WorkspaceTabsBar route={{ ...projectRoute }} projects={[project]} />);
     await waitFor(() => {
-      expect(screen.getAllByRole('tab')).toHaveLength(2);
+      expect(getWorkspaceTabs()).toHaveLength(2);
     });
     // No identityScopeKey passed at all across any render — tabs must behave
     // exactly as they did before this feature existed.
     rerender(<WorkspaceTabsBar route={{ ...projectRoute }} projects={[projectBeta]} />);
     await waitFor(() => {
-      expect(screen.getAllByRole('tab')).toHaveLength(2);
+      expect(getWorkspaceTabs()).toHaveLength(2);
     });
   });
 
@@ -1668,7 +1720,7 @@ describe('WorkspaceTabsBar identity-scope tab reset', () => {
       <WorkspaceTabsBar route={{ ...projectRoute }} projects={[project]} />,
     );
     await waitFor(() => {
-      expect(screen.getAllByRole('tab')).toHaveLength(2);
+      expect(getWorkspaceTabs()).toHaveLength(2);
     });
 
     // workspaceContextLoading having gated the derivation, App.tsx never
@@ -1686,9 +1738,9 @@ describe('WorkspaceTabsBar identity-scope tab reset', () => {
     // resets, and no navigation away from the deep-linked/refreshed project
     // fires.
     await waitFor(() => {
-      expect(screen.getAllByRole('tab')).toHaveLength(2);
+      expect(getWorkspaceTabs()).toHaveLength(2);
       expect(
-        screen.getAllByRole('tab').some((tab) => (tab.textContent ?? '').includes('Project Alpha')),
+        getWorkspaceTabs().some((tab) => (tab.textContent ?? '').includes('Project Alpha')),
       ).toBe(true);
     });
     expect(navigate).not.toHaveBeenCalledWith(homeRoute);
@@ -1743,7 +1795,7 @@ describe('WorkspaceTabsBar identity-scope tab reset', () => {
     );
 
     await waitFor(() => {
-      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      const labels = getWorkspaceTabs().map((tab) => tab.textContent ?? '');
       expect(labels).toHaveLength(1);
       expect(labels.some((label) => label.includes('Project Alpha'))).toBe(false);
     });
@@ -1810,7 +1862,7 @@ describe('WorkspaceTabsBar identity-scope tab reset', () => {
     );
 
     await waitFor(() => {
-      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      const labels = getWorkspaceTabs().map((tab) => tab.textContent ?? '');
       expect(labels).toEqual([
         expect.stringContaining('Home'),
         expect.stringContaining('Project Alpha'),
@@ -1869,7 +1921,7 @@ describe('WorkspaceTabsBar identity-scope tab reset', () => {
     );
     // Precondition: the owner's own scope restores its own tabs — allowed.
     await waitFor(() => {
-      expect(screen.getAllByRole('tab')).toHaveLength(2);
+      expect(getWorkspaceTabs()).toHaveLength(2);
     });
 
     // Direct account swap mid-onboarding.
@@ -1883,7 +1935,7 @@ describe('WorkspaceTabsBar identity-scope tab reset', () => {
     );
 
     await waitFor(() => {
-      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      const labels = getWorkspaceTabs().map((tab) => tab.textContent ?? '');
       expect(labels.some((label) => label.includes('Project Alpha'))).toBe(false);
     });
     // Stays in the onboarding flow: no navigation fired, entry tab still on
