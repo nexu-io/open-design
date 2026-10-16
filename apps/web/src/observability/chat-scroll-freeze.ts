@@ -583,7 +583,9 @@ function onWheelDiscover(event: WheelEvent): void {
   if (!(target instanceof Element)) return;
   const element = target.closest(CHAT_LOG_SELECTOR);
   if (element == null) return;
-  ingestWheel(attach(element as HTMLElement), event);
+  // This event has not reached the log yet. Its newly attached capture
+  // listener will ingest it when dispatch continues down the same path.
+  attach(element as HTMLElement);
 }
 
 /**

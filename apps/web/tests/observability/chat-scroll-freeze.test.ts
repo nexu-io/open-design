@@ -649,6 +649,35 @@ describe('chat-scroll-freeze-detector — layer triggers', () => {
 // ---------------------------------------------------------------------------
 
 describe('observability/chat-scroll-freeze — probe', () => {
+  it.each(['log', 'descendant'] as const)(
+    'counts the first discovery wheel once when it targets the %s',
+    (targetKind) => {
+      const log = buildChatLog();
+      stubGeometry(log, { scrollTop: 91, scrollHeight: 2347, clientHeight: 583 });
+      const child = document.createElement('p');
+      log.appendChild(child);
+      const target = targetKind === 'log' ? log : child;
+      installChatScrollFreezeObserver();
+
+      // No preceding scroll: the first wheel discovers and attaches the log.
+      for (let i = 0; i < FREEZE_WHEEL_COUNT - 1; i += 1) {
+        advanceClock(16);
+        wheel(target, 120);
+        expect(eventsNamed('client_chat_scroll_frozen')).toHaveLength(0);
+      }
+
+      advanceClock(16);
+      wheel(target, 120);
+      expect(eventsNamed('client_chat_scroll_frozen')).toEqual([
+        expect.objectContaining({
+          trigger: 'wheel_stall',
+          wheel_count: FREEZE_WHEEL_COUNT,
+          wheel_requested_px: FREEZE_WHEEL_COUNT * 120,
+        }),
+      ]);
+    },
+  );
+
   it('reports the frozen ceiling once, with the geometry needed to date it', () => {
     const log = buildChatLog();
     stubGeometry(log, { scrollTop: 91, scrollHeight: 2347, clientHeight: 583 });
