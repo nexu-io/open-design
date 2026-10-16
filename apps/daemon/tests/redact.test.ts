@@ -144,6 +144,15 @@ describe('redactSecrets', () => {
     );
   });
 
+  it('does NOT redact Run IDs / UUIDs that partially match phone pattern', () => {
+    // UUIDs should not be mistaken for phone numbers — \w boundaries
+    // prevent matching digit-runs embedded in alphanumeric identifiers (#7444).
+    const uuid = 'a1440424-8224-46a7-b867-9581e61c7da7';
+    expect(redactSecrets(uuid)).toBe(uuid);
+    const receipt = '{"runId":"a1440424-8224-46a7-b867-9581e61c7da7"}';
+    expect(redactSecrets(receipt)).toBe(receipt);
+  });
+
   it('redacts a Luhn-valid credit-card number', () => {
     // 4111-1111-1111-1111 is a canonical Visa test number that satisfies Luhn.
     expect(redactSecrets('paid with 4111 1111 1111 1111 thanks')).toBe(
