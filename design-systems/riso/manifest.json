@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "od-design-system-project/v1",
+  "id": "riso",
+  "name": "Riso",
+  "category": "Creative & Artistic",
+  "description": "Playful two-color risograph aesthetic: warm paper canvas, fluorescent pink interaction accent, federal-blue structure.",
+  "source": {
+    "type": "bundled",
+    "origin": "https://github.com/bergside/awesome-design-skills/tree/main/skills/riso"
+  },
+  "files": {
+    "design": "DESIGN.md",
+    "tokens": "tokens.css",
+    "components": "components.html"
+  }
+}
