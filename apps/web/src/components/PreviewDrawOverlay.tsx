@@ -149,6 +149,13 @@ export function PreviewDrawOverlay({
   const strokesRef = useRef<Stroke[]>([]);
   const undoneStrokesRef = useRef<Stroke[]>([]);
   const drawingRef = useRef<Stroke | null>(null);
+  // The pointer that owns the in-flight ink gesture. Pointer capture keeps
+  // routing an abandoned pointer's events here after a mid-gesture tool
+  // switch (touch: finger 1 drags, finger 2 switches tools, finger 3 starts
+  // the new stroke before finger 1 lifts), so move/up/cancel from any other
+  // pointer must be ignored or finger 1's late pointerup would commit-and-
+  // clear the stroke finger 3 is still drawing.
+  const gesturePointerIdRef = useRef<number | null>(null);
   // Box-select accumulates: each drag commits another region, so the user can
   // mark several areas in one pass instead of one box replacing the last.
   const selectionBoxesRef = useRef<NormalizedRect[]>([]);
@@ -324,6 +331,43 @@ export function PreviewDrawOverlay({
     setRedoCount(undoneStrokesRef.current.length);
   }
 
+  // The single commit path for every ink-data mutation (strokes, boxes, and
+  // their in-flight gesture state). Invariant: by the time this returns, the
+  // canvas pixels, the toolbar's derived state (hasInk/hasBox/hasText/undo/
+  // redo), and the floating dock position all agree with the refs — no caller
+  // has to remember the redraw/sync/bump choreography itself. `coalesce` is
+  // for the pointermove hot path only: it repaints at most once per animation
+  // frame and defers the derived-state refresh to the gesture's commit point.
+  // One-shot mutations repaint synchronously and drop any pending coalesced
+  // frame so no redundant repaint outlives them.
+  function commitInkMutation(mutate: () => void, opts?: { coalesce?: boolean }) {
+    mutate();
+    if (opts?.coalesce) {
+      scheduleRedraw();
+      return;
+    }
+    if (redrawFrameRef.current !== null) {
+      cancelAnimationFrame(redrawFrameRef.current);
+      redrawFrameRef.current = null;
+    }
+    syncHistoryState();
+    redraw();
+    bumpLayoutRevision();
+  }
+
+  // Switching mark tools must never leave a half-finished gesture behind: a
+  // hanging box draft swallows the next pen stroke's pointermoves (the new ink
+  // never appears on screen), and a hanging pen stroke keeps growing from
+  // bare hover moves — both read as "annotations stop updating" (issue #549).
+  function cancelActiveGesture() {
+    gesturePointerIdRef.current = null;
+    if (!boxDraftRef.current && !drawingRef.current) return;
+    commitInkMutation(() => {
+      boxDraftRef.current = null;
+      drawingRef.current = null;
+    });
+  }
+
   // Text marks live in React state (they render DOM textareas) with a ref mirror
   // for the async capture read. Route every mutation through here so the two
   // never drift, then refresh the derived history flags.
@@ -411,62 +455,77 @@ export function PreviewDrawOverlay({
       setEditingTextId(id);
       return;
     }
+    // First pointer down owns the gesture; a second finger landing while a
+    // draft/stroke is in flight must not hijack and restart it. Ownership is
+    // stale once nothing is in flight (e.g. undo discarded the draft), so a
+    // fresh pointer may then claim it even if the old owner never lifted.
+    if (
+      gesturePointerIdRef.current !== null &&
+      gesturePointerIdRef.current !== e.pointerId &&
+      (boxDraftRef.current || drawingRef.current)
+    ) {
+      return;
+    }
+    gesturePointerIdRef.current = e.pointerId;
     (e.target as Element).setPointerCapture?.(e.pointerId);
     const point = pointFromEvent(e);
     if (markTool === 'box') {
       // Start a fresh draft on top of any already-committed boxes.
-      boxDraftRef.current = { start: point, current: point };
-      syncHistoryState();
-      redraw();
+      commitInkMutation(() => {
+        boxDraftRef.current = { start: point, current: point };
+      });
       return;
     }
-    drawingRef.current = { points: [point] };
-    redraw();
+    commitInkMutation(() => {
+      drawingRef.current = { points: [point] };
+    });
   }
   function onPointerMove(e: PointerEvent) {
     if (!active) return;
     e.preventDefault();
     if (sending) return;
+    if (gesturePointerIdRef.current !== e.pointerId) return;
     if (boxDraftRef.current) {
-      boxDraftRef.current.current = pointFromEvent(e);
-      scheduleRedraw();
+      const draft = boxDraftRef.current;
+      commitInkMutation(() => {
+        draft.current = pointFromEvent(e);
+      }, { coalesce: true });
       return;
     }
     if (!drawingRef.current) return;
-    drawingRef.current.points.push(pointFromEvent(e));
-    scheduleRedraw();
+    const drawing = drawingRef.current;
+    commitInkMutation(() => {
+      drawing.points.push(pointFromEvent(e));
+    }, { coalesce: true });
   }
   function onPointerUp(e: PointerEvent) {
     if (!active) return;
     e.preventDefault();
     if (sending) return;
-    // A final synchronous redraw follows; drop any pending move-frame.
-    if (redrawFrameRef.current !== null) {
-      cancelAnimationFrame(redrawFrameRef.current);
-      redrawFrameRef.current = null;
-    }
+    if (gesturePointerIdRef.current !== e.pointerId) return;
+    gesturePointerIdRef.current = null;
     if (boxDraftRef.current) {
-      boxDraftRef.current.current = pointFromEvent(e);
-      const next = normalizedRectFromPoints(boxDraftRef.current.start, boxDraftRef.current.current);
-      boxDraftRef.current = null;
-      // Commit the drawn region; ignore accidental micro-drags (click without move).
-      if (next.width >= 0.006 && next.height >= 0.006) {
-        selectionBoxesRef.current = [...selectionBoxesRef.current, next];
-        bumpLayoutRevision();
-      }
-      syncHistoryState();
-      redraw();
+      const draft = boxDraftRef.current;
+      commitInkMutation(() => {
+        draft.current = pointFromEvent(e);
+        const next = normalizedRectFromPoints(draft.start, draft.current);
+        boxDraftRef.current = null;
+        // Commit the drawn region; ignore accidental micro-drags (click without move).
+        if (next.width >= 0.006 && next.height >= 0.006) {
+          selectionBoxesRef.current = [...selectionBoxesRef.current, next];
+        }
+      });
       return;
     }
     if (!drawingRef.current) return;
-    if (drawingRef.current.points.length > 1) {
-      strokesRef.current.push(drawingRef.current);
-      undoneStrokesRef.current = [];
-      bumpLayoutRevision();
-      syncHistoryState();
-    }
-    drawingRef.current = null;
-    redraw();
+    const drawing = drawingRef.current;
+    commitInkMutation(() => {
+      if (drawing.points.length > 1) {
+        strokesRef.current.push(drawing);
+        undoneStrokesRef.current = [];
+      }
+      drawingRef.current = null;
+    });
   }
 
   function onCanvasWheel(e: WheelEvent<HTMLCanvasElement>) {
@@ -479,16 +538,15 @@ export function PreviewDrawOverlay({
   }
 
   function clearInk() {
-    strokesRef.current = [];
-    undoneStrokesRef.current = [];
-    drawingRef.current = null;
-    selectionBoxesRef.current = [];
-    boxDraftRef.current = null;
     resetTextEditingState();
     commitTextMarks([]);
-    syncHistoryState();
-    redraw();
-    bumpLayoutRevision();
+    commitInkMutation(() => {
+      strokesRef.current = [];
+      undoneStrokesRef.current = [];
+      drawingRef.current = null;
+      selectionBoxesRef.current = [];
+      boxDraftRef.current = null;
+    });
   }
 
   function resetTextEditingState() {
@@ -631,6 +689,7 @@ export function PreviewDrawOverlay({
 
   function selectMarkTool(nextTool: MarkTool) {
     onToolbarClick?.(nextTool === 'box' ? 'rect' : nextTool === 'text' ? 'text' : 'pen');
+    cancelActiveGesture();
     setMarkTool(nextTool);
   }
 
@@ -663,41 +722,39 @@ export function PreviewDrawOverlay({
     // Discard an in-progress draft first, then pop committed boxes one at a
     // time (most recent first) before falling back to freehand strokes.
     if (boxDraftRef.current) {
-      boxDraftRef.current = null;
-      syncHistoryState();
-      redraw();
-      bumpLayoutRevision();
+      commitInkMutation(() => {
+        boxDraftRef.current = null;
+      });
       onToolbarClick?.('undo');
       return;
     }
     if (selectionBoxesRef.current.length > 0) {
-      selectionBoxesRef.current = selectionBoxesRef.current.slice(0, -1);
-      syncHistoryState();
-      redraw();
-      bumpLayoutRevision();
+      commitInkMutation(() => {
+        selectionBoxesRef.current = selectionBoxesRef.current.slice(0, -1);
+      });
       onToolbarClick?.('undo');
       return;
     }
-    const stroke = strokesRef.current.pop();
+    const stroke = strokesRef.current.at(-1);
     if (!stroke) return;
     onToolbarClick?.('undo');
-    undoneStrokesRef.current.push(stroke);
-    drawingRef.current = null;
-    syncHistoryState();
-    redraw();
-    bumpLayoutRevision();
+    commitInkMutation(() => {
+      strokesRef.current.pop();
+      undoneStrokesRef.current.push(stroke);
+      drawingRef.current = null;
+    });
   }
 
   function redoStroke() {
     if (sending) return;
-    const stroke = undoneStrokesRef.current.pop();
+    const stroke = undoneStrokesRef.current.at(-1);
     if (!stroke) return;
     onToolbarClick?.('redo');
-    strokesRef.current.push(stroke);
-    drawingRef.current = null;
-    syncHistoryState();
-    redraw();
-    bumpLayoutRevision();
+    commitInkMutation(() => {
+      undoneStrokesRef.current.pop();
+      strokesRef.current.push(stroke);
+      drawingRef.current = null;
+    });
   }
 
   function closeOverlay() {
@@ -706,18 +763,17 @@ export function PreviewDrawOverlay({
 
   useEffect(() => {
     if (active) return;
-    strokesRef.current = [];
-    undoneStrokesRef.current = [];
-    drawingRef.current = null;
-    selectionBoxesRef.current = [];
-    boxDraftRef.current = null;
     resetTextEditingState();
     commitTextMarks([]);
     setExtraFiles([]);
     setPreviewIndex(null);
-    syncHistoryState();
-    redraw();
-    bumpLayoutRevision();
+    commitInkMutation(() => {
+      strokesRef.current = [];
+      undoneStrokesRef.current = [];
+      drawingRef.current = null;
+      selectionBoxesRef.current = [];
+      boxDraftRef.current = null;
+    });
   }, [active, redraw]);
 
   function normalizedRectToCanvasRect(box: NormalizedRect): Rect | null {
