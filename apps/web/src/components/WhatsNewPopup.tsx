@@ -1,5 +1,5 @@
 import { createPortal } from 'react-dom';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { Button, Dialog } from '@open-design/components';
 import { useI18n } from '../i18n';
@@ -51,6 +51,86 @@ function statedAppVersion(hookVersion: string, documentVersion: string): string 
   return null;
 }
 
+const COVER_WAIT_MS = 2500;
+type ReadyCover = { url: string; width: number; height: number; image: HTMLImageElement };
+
+// Resolve once, including failure/timeout. The caller owns cancellation when
+// Home is left or this request is superseded; a late load/decode cannot repaint.
+function prepareCover(url: string, done: (cover: ReadyCover | null) => void): () => void {
+  const image = new Image();
+  let settled = false;
+  const detach = () => {
+    clearTimeout(timer);
+    image.onload = null;
+    image.onerror = null;
+  };
+  const finish = (cover: ReadyCover | null) => {
+    if (settled) return;
+    settled = true;
+    detach();
+    done(cover);
+  };
+  const timer = setTimeout(() => finish(null), COVER_WAIT_MS);
+  image.onerror = () => finish(null);
+  image.onload = () => {
+    if (settled) return;
+    // A load event alone does not mean the browser can paint the image yet.
+    void (async () => {
+      try {
+        await image.decode();
+        finish(image.naturalWidth > 0 && image.naturalHeight > 0
+          ? { url, width: image.naturalWidth, height: image.naturalHeight, image }
+          : null);
+      } catch {
+        finish(null);
+      }
+    })();
+  };
+  image.src = url;
+  return () => {
+    settled = true;
+    detach();
+  };
+}
+
+// Mount the already-decoded HTMLImageElement directly before first paint so a
+// second <img> element cannot trigger a re-fetch under DevTools "Disable cache"
+// or short cache headers. Falls back to a plain <img> when tests stub Image
+// with a non-DOM mock.
+function DecodedCover({ cover }: { cover: ReadyCover }) {
+  const isDomImage = typeof HTMLImageElement !== 'undefined' && cover.image instanceof HTMLImageElement;
+  const slotRef = useRef<HTMLDivElement | null>(null);
+
+  useLayoutEffect(() => {
+    if (!isDomImage || slotRef.current == null) return;
+    const img = cover.image;
+    img.alt = '';
+    img.className = styles.cover ?? '';
+    img.dataset.testid = 'whats-new-cover';
+    img.width = cover.width;
+    img.height = cover.height;
+    slotRef.current.replaceChildren(img);
+    return () => {
+      img.remove();
+    };
+  }, [cover, isDomImage]);
+
+  if (isDomImage) {
+    return <div ref={slotRef} style={{ display: 'contents' }} />;
+  }
+
+  return (
+    <img
+      alt=""
+      className={styles.cover}
+      data-testid="whats-new-cover"
+      src={cover.url}
+      width={cover.width}
+      height={cover.height}
+    />
+  );
+}
+
 type CardModel = {
   /** Highlight identity — recorded as "seen" so the dialog shows once per id. */
   id: string;
@@ -63,7 +143,7 @@ type CardModel = {
   headline: string;
   /** Release highlights, one row per line of the document's body. */
   notes: string[];
-  imageUrl: string | null;
+  cover: ReadyCover | null;
   linkUrl: string;
   ctaLabel: string | null;
 };
@@ -88,27 +168,41 @@ export function WhatsNewPopup({ active }: { active: boolean }) {
   useEffect(() => {
     if (!active || decisionMadeRef.current) return;
     let cancelled = false;
+    let cancelCover: (() => void) | undefined;
     void fetchWhatsNew().then((info) => {
       // `cancelled` guards state updates after this effect invocation is torn
       // down; it does NOT re-arm the fetch, so a superseded fetch simply drops
       // and the surviving one records the decision.
       if (cancelled || info == null) return;
-      decisionMadeRef.current = true;
       const decision = resolveWhatsNewPrompt(info, readLastSeenWhatsNewId());
-      if (decision !== 'show' || info.id == null || info.content == null) return;
+      if (decision !== 'show' || info.id == null || info.content == null) {
+        decisionMadeRef.current = true;
+        return;
+      }
       const localized = localizedWhatsNewContent(info.content, locale);
-      setCard({
+      const nextCard: CardModel = {
         id: info.id,
         documentVersion: info.version,
         headline: localized.title,
         notes: whatsNewNotesFromBody(localized.body),
-        imageUrl: info.content.imageUrl ?? null,
+        cover: null,
         linkUrl: localized.linkUrl ?? RELEASES_INDEX_URL,
         ctaLabel: localized.ctaLabel,
-      });
+      };
+      const present = (cover: ReadyCover | null) => {
+        if (cancelled) return;
+        decisionMadeRef.current = true;
+        setCard({ ...nextCard, cover });
+      };
+      if (info.content.imageUrl) {
+        cancelCover = prepareCover(info.content.imageUrl, present);
+      } else {
+        present(null);
+      }
     });
     return () => {
       cancelled = true;
+      cancelCover?.();
     };
     // The dialog resolves once per Home activation; live locale switches keep
     // the copy it resolved with rather than refetching mid-display.
@@ -170,9 +264,7 @@ export function WhatsNewPopup({ active }: { active: boolean }) {
       data-testid="whats-new-popup"
       onClose={dismiss}
     >
-      {card.imageUrl != null ? (
-        <img alt="" className={styles.cover} data-testid="whats-new-cover" src={card.imageUrl} />
-      ) : null}
+      {card.cover != null ? <DecodedCover cover={card.cover} /> : null}
       <div className={styles.content}>
         <h2 className={styles.title} id="whats-new-popup-title">
           {t('whatsNew.updatedTitle', { version: appVersion })}

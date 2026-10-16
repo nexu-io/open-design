@@ -67,6 +67,24 @@ const SHOW_PAYLOAD: WhatsNewResponse = {
   },
 };
 
+// jsdom does not fetch/decode images. Drive those independent phases explicitly.
+let autoLoadCover = true;
+const coverImages: CoverImage[] = [];
+class CoverImage {
+  onload: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  naturalWidth = 1200;
+  naturalHeight = 600;
+  decode = vi.fn(() => Promise.resolve());
+  private url = '';
+  constructor() { coverImages.push(this); }
+  set src(value: string) {
+    this.url = value;
+    if (autoLoadCover) void Promise.resolve().then(() => this.onload?.());
+  }
+  get src() { return this.url; }
+}
+
 function renderCard(active: boolean, { strict }: { strict?: boolean } = {}) {
   const tree = (
     <I18nProvider>
@@ -79,6 +97,8 @@ function renderCard(active: boolean, { strict }: { strict?: boolean } = {}) {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
   window.localStorage.clear();
 });
 
@@ -86,6 +106,9 @@ beforeEach(() => {
   // A highlight id the user has not seen yet → decision resolves to "show".
   window.localStorage.setItem(WHATS_NEW_LAST_SEEN_STORAGE_KEY, 'highlight-0-15-0');
   appVersion.current = RUNNING_APP_VERSION;
+  autoLoadCover = true;
+  coverImages.length = 0;
+  vi.stubGlobal('Image', CoverImage);
 });
 
 describe('WhatsNewPopup fetch/show lifecycle', () => {
@@ -376,5 +399,124 @@ describe('WhatsNewPopup actions', () => {
     fireEvent.click(await screen.findByTestId('whats-new-cta'));
 
     expect(mockedOpenExternalUrl).toHaveBeenCalledWith(RELEASES_INDEX_URL);
+  });
+});
+
+
+describe('WhatsNewPopup cover readiness (OPEND-2966)', () => {
+  beforeEach(() => {
+    autoLoadCover = false;
+    vi.useFakeTimers();
+    mockedFetchWhatsNew.mockResolvedValue(SHOW_PAYLOAD);
+  });
+
+  async function start() {
+    const view = renderCard(true);
+    await act(async () => {});
+    return view;
+  }
+
+  it('withholds text and analytics on slow networks until load AND decode complete', async () => {
+    await start();
+    expect(screen.queryByTestId('whats-new-popup')).toBeNull();
+    expect(screen.queryByText('Design system sync')).toBeNull();
+    expect(track).not.toHaveBeenCalled();
+    await act(async () => { vi.advanceTimersByTime(2000); });
+    expect(screen.queryByTestId('whats-new-popup')).toBeNull();
+    let decoded!: () => void;
+    coverImages[0]!.decode.mockImplementation(() => new Promise<void>(resolve => { decoded = resolve; }));
+    await act(async () => { coverImages[0]!.onload?.(); });
+    expect(screen.queryByTestId('whats-new-popup')).toBeNull();
+    await act(async () => { decoded(); });
+    expect(screen.getByText('Design system sync')).toBeTruthy();
+    const cover = screen.getByTestId('whats-new-cover');
+    expect(cover.getAttribute('width')).toBe('1200');
+    expect(cover.getAttribute('height')).toBe('600');
+    expect(track).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['404', 'corrupt decode'])('settles to text only for %s', async failure => {
+    await start();
+    await act(async () => {
+      if (failure === '404') coverImages[0]!.onerror?.();
+      else {
+        coverImages[0]!.decode.mockRejectedValue(new Error('corrupt image'));
+        coverImages[0]!.onload?.();
+      }
+    });
+    expect(screen.getByText('Design system sync')).toBeTruthy();
+    expect(screen.queryByTestId('whats-new-cover')).toBeNull();
+    // Flush jsdom's 0ms selectionchange timer triggered by Dialog.focus(), then
+    // verify the 2500ms cover deadline timer was cleared on settlement.
+    await act(async () => { vi.advanceTimersByTime(0); });
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each(['load', 'decode'])('bounds waiting for %s and never inserts a late cover', async phase => {
+    await start();
+    let decoded!: () => void;
+    const lateLoad = coverImages[0]!.onload;
+    if (phase === 'decode') {
+      coverImages[0]!.decode.mockImplementation(() => new Promise<void>(resolve => { decoded = resolve; }));
+      await act(async () => { lateLoad?.(); });
+    }
+    await act(async () => { vi.advanceTimersByTime(2500); });
+    expect(screen.getByText('Design system sync')).toBeTruthy();
+    expect(screen.queryByTestId('whats-new-cover')).toBeNull();
+    await act(async () => { if (phase === 'load') lateLoad?.(); else decoded(); });
+    expect(screen.queryByTestId('whats-new-cover')).toBeNull();
+    fireEvent.click(screen.getByTestId('whats-new-dismiss'));
+    await act(async () => { lateLoad?.(); });
+    expect(screen.queryByTestId('whats-new-popup')).toBeNull();
+  });
+
+  it('cancels old decode on navigation and uses fresh content on return', async () => {
+    const view = await start();
+    let decoded!: () => void;
+    coverImages[0]!.decode.mockImplementation(() => new Promise<void>(resolve => { decoded = resolve; }));
+    await act(async () => { coverImages[0]!.onload?.(); });
+    view.rerender(<I18nProvider><WhatsNewPopup active={false} /></I18nProvider>);
+    expect(vi.getTimerCount()).toBe(0);
+    mockedFetchWhatsNew.mockResolvedValue({
+      ...SHOW_PAYLOAD, id: 'new-highlight',
+      content: { ...SHOW_PAYLOAD.content!, title: 'New content', imageUrl: 'https://cdn.example.test/new.jpg' },
+    });
+    view.rerender(<I18nProvider><WhatsNewPopup active /></I18nProvider>);
+    await act(async () => { decoded(); });
+    expect(screen.queryByTestId('whats-new-popup')).toBeNull();
+    expect(coverImages[1]!.src).toBe('https://cdn.example.test/new.jpg');
+    await act(async () => { coverImages[1]!.onload?.(); });
+    expect(screen.getByText('New content')).toBeTruthy();
+    expect(screen.queryByText('Design system sync')).toBeNull();
+  });
+
+  it('detaches handlers and ignores queued callbacks after unmount', async () => {
+    const view = await start();
+    const lateLoad = coverImages[0]!.onload;
+    view.unmount();
+    expect(coverImages[0]!.onload).toBeNull();
+    expect(coverImages[0]!.onerror).toBeNull();
+    expect(vi.getTimerCount()).toBe(0);
+    await act(async () => { lateLoad?.(); });
+    expect(track).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('whats-new-popup')).toBeNull();
+  });
+
+  it('mounts the exact preloaded HTMLImageElement to avoid a second network fetch', async () => {
+    const preloaded = document.createElement('img');
+    Object.defineProperty(preloaded, 'naturalWidth', { value: 1152 });
+    Object.defineProperty(preloaded, 'naturalHeight', { value: 494 });
+    preloaded.decode = vi.fn(() => Promise.resolve());
+    vi.stubGlobal('Image', function ImageCtor() { return preloaded; });
+
+    renderCard(true);
+    await act(async () => {});
+    expect(screen.queryByTestId('whats-new-popup')).toBeNull();
+
+    await act(async () => { preloaded.onload?.(new Event('load')); });
+    const rendered = screen.getByTestId('whats-new-cover');
+    expect(rendered).toBe(preloaded);
+    expect(rendered.getAttribute('width')).toBe('1152');
+    expect(rendered.getAttribute('height')).toBe('494');
   });
 });
