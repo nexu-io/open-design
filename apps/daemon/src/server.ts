@@ -505,6 +505,11 @@ import {
 } from './runtimes/auth.js';
 import { readOpenCodeServiceFailure } from './runtimes/opencode-log.js';
 import { applyOpenCodeEventPlugin } from './runtimes/opencode-event-plugin.js';
+import {
+  resolveOpenCodeCliGeneration,
+  withOpenCodeWorkspaceEnv,
+  type OpenCodeCliGeneration,
+} from './runtimes/opencode-permissions.js';
 import { createAgentStderrVisibilityFilter } from './amr-stderr-filter.js';
 import { createQoderStreamHandler } from './runtimes/qoder-stream.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
@@ -13793,11 +13798,17 @@ export async function startServer({
     let args;
     const observeClaudeNativeChildBehavior =
       def.id === 'claude' && strategyTaskAtStart !== null;
+    // Which OpenCode command line this Run was spawned with. Captured once
+    // the capability map is warm so the close path (child-evidence export)
+    // speaks the same generation as the argv, even if detection re-ran
+    // mid-run after an in-place CLI upgrade.
+    let openCodeCliGeneration: OpenCodeCliGeneration = 'unknown';
     try {
       // Optional argv flags are gated on the `--help` capability map, which used
       // to be filled only by `GET /api/agents`. Probe it here so a daemon that
       // has never served that route still builds the same argv as one that has.
       await ensureDetectedRuntimeCapabilities(def.id, configuredAgentEnv);
+      openCodeCliGeneration = resolveOpenCodeCliGeneration(def.id);
       args = def.buildArgs(
         composed,
         promptImagePaths,
@@ -14437,7 +14448,10 @@ export async function startServer({
         def.streamFormat === CODEX_APP_SERVER_STREAM_FORMAT
           ? 'pipe'
           : 'ignore';
-      const env = applyAgentLaunchEnv({
+      // OpenCode 2.x has no `--dir`; the spawn cwd is the workspace and `PWD`
+      // is pinned to it for the 2.0.x builds that consult `PWD` first. Other
+      // agents (and OpenCode 1.x, which carries `--dir`) get the env as is.
+      const env = withOpenCodeWorkspaceEnv(applyAgentLaunchEnv({
         ...agentSpawnEnv,
         ...(mmdRouteLaunchEnv || {}),
         ...odMediaEnv,
@@ -14516,7 +14530,7 @@ export async function startServer({
         ...(odNextTaskInputSnapshot
           ? { OD_TASK_INPUT_DIR: odNextTaskInputSnapshot.projectionDir }
           : {}),
-      }, agentLaunch);
+      }, agentLaunch), effectiveCwd, def.id);
       if (def.id === 'opencode' || def.id === 'byok-opencode') {
         try {
           const versions = await ensureDetectedRuntimeVersions('opencode', configuredAgentEnv);
@@ -16241,6 +16255,7 @@ export async function startServer({
               loadSanitizedExport: createOpenCodeSanitizedExportLoader({
                 launchPath,
                 env: spawnedAgentEnv,
+                cliGeneration: openCodeCliGeneration,
               }),
             });
             for (const fact of facts) {

@@ -99,6 +99,11 @@ import {
   BYOK_OPENCODE_PROVIDER_ID,
   buildOpenCodeByokProviderConfig,
 } from './runtimes/byok-opencode.js';
+import { ensureDetectedRuntimeCapabilities } from './runtimes/detection.js';
+import {
+  shouldUseOpenCodePureFlag,
+  withOpenCodeWorkspaceEnv,
+} from './runtimes/opencode-permissions.js';
 
 export { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 
@@ -2098,16 +2103,20 @@ function extractOpenCodeTextFromRawStdout(stdout: string): string {
   return text.join('');
 }
 
+// The argv is negotiated from `opencode run --help` (see
+// `runtimes/opencode-permissions.ts`), so a rejected flag means a build the
+// daemon does not know yet — on either side — rather than simply an old CLI.
 const OPENCODE_OUTDATED_CLI_DETAIL =
-  'OpenCode CLI appears to be outdated or incompatible with this connection test. Update it with `npm i -g opencode-ai@latest`, then retry the OpenCode connection test.';
+  'OpenCode rejected the command-line flags this connection test uses, so the installed OpenCode build and this OpenDesign build do not match. Update whichever is older (`npm i -g opencode-ai@latest` for OpenCode), then retry the OpenCode connection test.';
 const OPENCODE_PROVIDER_CONNECTIVITY_DETAIL_MAX_LENGTH = 240;
 
 function openCodeOutdatedCliDetail(output: string): string | null {
   const value = output.toLowerCase();
   const looksLikeOpenCodeHelp =
     /\bopencode\b/u.test(value) && /\b(?:usage|commands|options):/u.test(value);
+  // `unrecognized flag` is the OpenCode 2.x wording.
   const looksLikeUnsupportedArgs =
-    /\b(?:unknown option|unknown argument|unexpected argument|unrecognized option|invalid option|incompatible opencode args)\b/u.test(value);
+    /\b(?:unknown option|unknown argument|unexpected argument|unrecognized option|unrecognized flag|invalid option|incompatible opencode args)\b/u.test(value);
 
   return looksLikeOpenCodeHelp || looksLikeUnsupportedArgs
     ? OPENCODE_OUTDATED_CLI_DETAIL
@@ -2579,6 +2588,13 @@ async function testAgentConnectionInternal(
     if (input.agentId === 'opencode' || input.agentId === 'mimo') {
       if (input.agentId === 'opencode') await prepareOpenCodeConnectionTestCwd(tempDir);
     }
+    if (input.agentId === 'opencode' || input.agentId === 'byok-opencode') {
+      // The OpenCode argv is generation-aware (1.x `--dir`/`--pure` vs 2.x
+      // `--auto`/`--standalone`), decided by the `run --help` capability map.
+      // A daemon that never served `/api/agents` has not probed it yet, so a
+      // cold map would send the 1.x flags to a 2.x CLI and fail at spawn.
+      await ensureDetectedRuntimeCapabilities(input.agentId, configuredAgentEnv);
+    }
     let args: string[];
     try {
       promptFile = await preparePromptFileForAgent(def, SMOKE_PROMPT, 'connection-test');
@@ -2609,8 +2625,11 @@ async function testAgentConnectionInternal(
       // Connection tests should validate the adapter's core CLI path, not
       // fail on unrelated user-installed OpenCode plugins. `opencode run
       // --pure` keeps the smoke test isolated while regular chat runs retain
-      // the user's full plugin environment.
-      if ((input.agentId === 'opencode' || input.agentId === 'mimo') && !args.includes('--pure')) {
+      // the user's full plugin environment. OpenCode 2.x removed the flag;
+      // MiMo keeps the 1.x surface.
+      const isolateWithPure = input.agentId === 'mimo'
+        || (input.agentId === 'opencode' && shouldUseOpenCodePureFlag('opencode'));
+      if (isolateWithPure && !args.includes('--pure')) {
         args.push('--pure');
       }
       if ((input.agentId === 'opencode' || input.agentId === 'mimo') && !args.includes('--title')) {
@@ -2657,10 +2676,14 @@ async function testAgentConnectionInternal(
           model,
         ).catch(() => null)
       : null;
-    const env = applyAgentLaunchEnv({
-      ...baseEnv,
-      ...(mmdRouteLaunchEnv || {}),
-    }, executableResolution);
+    const env = withOpenCodeWorkspaceEnv(
+      applyAgentLaunchEnv({
+        ...baseEnv,
+        ...(mmdRouteLaunchEnv || {}),
+      }, executableResolution),
+      tempDir,
+      input.agentId,
+    );
     model = await resolveConnectionTestModelForAgent(
       def,
       model,
