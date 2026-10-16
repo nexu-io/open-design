@@ -1,9 +1,11 @@
 import { DEFAULT_MODEL_OPTION } from './shared.js';
+import { agentCapabilities } from '../capabilities.js';
 import {
   OPENCODE_PERMISSION_CAPABILITY,
   appendOpenCodePermissionBypass,
   appendOpenCodeWorkspaceDir,
 } from '../opencode-permissions.js';
+import { execAgentFile } from '../invocation.js';
 import { getRememberedLiveModels } from '../models.js';
 import type { RuntimeAgentDef, RuntimeModelOption } from '../types.js';
 
@@ -99,8 +101,13 @@ export function parseOpenCodeModels(stdout: string): RuntimeModelOption[] | null
 function supportsOpenCodeVariant(
   modelId: string | null | undefined,
   variant: string | null | undefined,
+  agentId: string = 'opencode',
 ): variant is string {
   if (!modelId || modelId === 'default' || !variant || variant === 'default') return false;
+  // OpenCode v2 dropped `--variant` from `run`: omit it once the `--help`
+  // probe reports it missing, even if a stale remembered catalog still lists
+  // variants for the model. Unprobed builds keep the historical behavior.
+  if (agentCapabilities.get(agentId)?.variant === false) return false;
   const live = getRememberedLiveModels('opencode').find((model) => model.id === modelId);
   return Boolean(live?.reasoningOptions?.some((option) => option.id === variant));
 }
@@ -123,13 +130,37 @@ export const opencodeAgentDef = {
       parse: parseOpenCodeModels,
       timeoutMs: 15_000,
     },
+    // OpenCode v2 dropped `--verbose` from `models` (the flag exits 1), while
+    // v1 needs it to expose per-model variant metadata. Probe the verbose
+    // form first and fall back to the plain listing, which `parseOpenCodeModels`
+    // already accepts as one-id-per-line. Detection merges the fallback models
+    // itself when this resolves null/empty.
+    fetchModels: async (resolvedBin, env) => {
+      for (const args of [['models', '--verbose'], ['models']] as const) {
+        try {
+          const { stdout } = await execAgentFile(resolvedBin, [...args], {
+            env,
+            timeout: 15_000,
+            // Models lists from popular CLIs (e.g. opencode) easily exceed the
+            // default 1MB buffer once you include every openrouter model.
+            maxBuffer: 8 * 1024 * 1024,
+          });
+          const parsed = parseOpenCodeModels(String(stdout));
+          if (parsed && parsed.length > 0) return parsed;
+        } catch {
+          // Unknown flag / unreachable registry: try the next form.
+        }
+      }
+      return null;
+    },
     fallbackModels: OPENCODE_FALLBACK_MODELS,
-    // OpenCode 1.18.x exposes provider/model-specific variants. Detection
+    // OpenCode v1 exposes provider/model-specific variants. Detection
     // reads the exact live variant keys from `models --verbose`. The fallback
     // keeps Sol/Terra/Luna model ids usable during a catalog outage but does
     // not guess their variants. Unknown model/variant pairs omit `--variant`
     // rather than inventing a provider capability or preventing the base
-    // model from running.
+    // model from running. OpenCode v2 has no `--verbose` listing, so no
+    // variants are advertised there and `--variant` is omitted the same way.
     //
     // Prompt delivered via stdin (`opencode run` with no message argv) to
     // avoid Windows `spawn ENAMETOOLONG` while preserving OpenCode's
@@ -142,7 +173,10 @@ export const opencodeAgentDef = {
         'json',
       ];
       appendOpenCodePermissionBypass(args, 'opencode');
-      appendOpenCodeWorkspaceDir(args, runtimeContext.cwd);
+      // `--dir` is appended only when the installed build advertises it
+      // (OpenCode v1). OpenCode v2 runs in the spawn cwd, which the daemon
+      // already sets to the project directory.
+      appendOpenCodeWorkspaceDir(args, 'opencode', runtimeContext.cwd);
       // Capture-style resume: OpenCode mints its own session id (reported on
       // the stream as `sessionID`, e.g. `ses_...`). On a follow-up turn the
       // daemon continues that session with `-s <id>` instead of re-sending the

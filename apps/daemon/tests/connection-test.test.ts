@@ -3908,6 +3908,13 @@ process.exit(1);
         `
 const fs = require('node:fs');
 const args = process.argv.slice(2);
+// Emulate an OpenCode v1 build: run --help advertises --dir/--pure (but
+// not --dangerously-skip-permissions, so the bypass stays off and the arg
+// compatibility check below keeps passing).
+if (args.includes('--help')) {
+  console.log('Usage: opencode run [flags]\\n  --dir <dir>  Working directory\\n  --pure  Run without plugins\\n  --format <format>\\n  --title <title>');
+  process.exit(0);
+}
 if (args[0] === 'models') {
   console.log('github-copilot/gpt-4o');
   process.exit(0);
@@ -3958,6 +3965,71 @@ process.stdin.on('end', () => {
             '-m',
             'github-copilot/gpt-4o',
             '--pure',
+            '--title',
+            'Connection test',
+          ]);
+          await expect(fsp.readFile(stdinFile, 'utf8')).resolves.toBe('Reply with only: ok');
+        },
+      );
+    } finally {
+      await fsp.rm(markerDir, { recursive: true, force: true });
+    }
+  });
+
+  it('omits --dir/--pure for OpenCode v2 builds that do not advertise them', async () => {
+    const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-opencode-argv-v2-'));
+    const argvFile = path.join(markerDir, 'argv.json');
+    const stdinFile = path.join(markerDir, 'stdin.txt');
+    try {
+      await withFakeOpenCode(
+        `
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+// Emulate an OpenCode v2 build: run --help no longer lists --dir/--pure,
+// so the daemon must run with a bare cwd instead of failing on unknown flags.
+if (args.includes('--help')) {
+  console.log('Usage: opencode run [flags]\\n  --format <format>\\n  --title <title>');
+  process.exit(0);
+}
+if (args[0] === 'models') {
+  console.log('github-copilot/gpt-4o');
+  process.exit(0);
+}
+fs.writeFileSync(${JSON.stringify(argvFile)}, JSON.stringify(args));
+let stdin = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { stdin += chunk; });
+process.stdin.on('end', () => {
+  fs.writeFileSync(${JSON.stringify(stdinFile)}, stdin);
+  console.log(JSON.stringify({ type: 'text', part: { text: 'ok' } }));
+});
+`,
+        async () => {
+          const res = await realFetch(`${baseUrl}/api/test/connection`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              mode: 'agent',
+              agentId: 'opencode',
+              model: 'github-copilot/gpt-4o',
+            }),
+          });
+          expect(res.status).toBe(200);
+          await expect(res.json()).resolves.toMatchObject({
+            ok: true,
+            kind: 'success',
+            agentName: 'OpenCode',
+            model: 'github-copilot/gpt-4o',
+            sample: 'ok',
+          });
+
+          const argv = JSON.parse(await fsp.readFile(argvFile, 'utf8')) as string[];
+          expect(argv.slice(0, 3)).toEqual(['run', '--format', 'json']);
+          expect(argv).not.toContain('--dir');
+          expect(argv).not.toContain('--pure');
+          expect(argv.slice(3)).toEqual([
+            '-m',
+            'github-copilot/gpt-4o',
             '--title',
             'Connection test',
           ]);

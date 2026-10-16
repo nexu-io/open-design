@@ -812,9 +812,11 @@ describe('native OpenCode child evidence', () => {
     await expect(load('ses_child_synthetic')).resolves.toMatchObject({
       info: { id: 'ses_child_synthetic', parentID: 'ses_root_synthetic' },
     });
+    // OpenCode v2 serves the export as `session export --sanitize` (no
+    // `--pure`: the flag no longer exists there).
     expect(execAgentFileMock).toHaveBeenCalledWith(
       '/opt/open-design/opencode',
-      ['export', 'ses_child_synthetic', '--sanitize', '--pure'],
+      ['session', 'export', 'ses_child_synthetic', '--sanitize'],
       expect.objectContaining({
         env: { XDG_DATA_HOME: '/run/od/share' },
         timeout: expect.any(Number),
@@ -834,6 +836,35 @@ describe('native OpenCode child evidence', () => {
       candidates: [candidate!],
       loadSanitizedExport: load,
     })).resolves.toEqual([]);
+  });
+
+  it('falls back to the legacy v1 export form when `session export` is unavailable', async () => {
+    const data = fixture();
+    execAgentFileMock.mockRejectedValueOnce(new Error('unknown command'))
+      .mockResolvedValueOnce({
+        stdout: JSON.stringify(data.sanitizedChildExport),
+        stderr: 'Exporting session: ses_child_synthetic',
+      });
+    const load = createOpenCodeSanitizedExportLoader({
+      launchPath: '/opt/open-design/opencode',
+      env: { XDG_DATA_HOME: '/run/od/share' },
+    });
+
+    await expect(load('ses_child_synthetic')).resolves.toMatchObject({
+      info: { id: 'ses_child_synthetic', parentID: 'ses_root_synthetic' },
+    });
+    expect(execAgentFileMock).toHaveBeenNthCalledWith(
+      1,
+      '/opt/open-design/opencode',
+      ['session', 'export', 'ses_child_synthetic', '--sanitize'],
+      expect.anything(),
+    );
+    expect(execAgentFileMock).toHaveBeenNthCalledWith(
+      2,
+      '/opt/open-design/opencode',
+      ['export', 'ses_child_synthetic', '--sanitize', '--pure'],
+      expect.anything(),
+    );
   });
 
   it('labels the fixture contract-only so it cannot become production evidence', () => {
