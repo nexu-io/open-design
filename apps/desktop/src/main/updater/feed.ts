@@ -1,10 +1,14 @@
 import { createHash } from "node:crypto";
-import { access, lstat, readFile } from "node:fs/promises";
-import { dirname, extname, join } from "node:path";
+import { access, lstat, readFile, realpath } from "node:fs/promises";
+import { basename, dirname, extname, join } from "node:path";
 
 import {
   LAUNCHER_SCHEMA_VERSION,
   compareLauncherVersions,
+  isLauncherPayloadAppPath,
+  launcherPayloadAppVersion,
+  resolveLauncherPaths,
+  resolveLauncherStableEntryPaths,
   validateLauncherRuntimeDescriptor,
   type LauncherRuntimeDescriptor,
 } from "@open-design/launcher-proto";
@@ -323,6 +327,14 @@ export function controlLauncherVersionUrl(metadata: Record<string, unknown>): st
  * The outer bundle's own `open-design-config.json` is the only fleet-wide
  * source (every packaged generation ships it), anchored by the launcher
  * launch path from `install.json`. Returns null when unreadable.
+ *
+ * Launcher-managed installs (see `isManagedLauncherStableEntry`) have no
+ * separate outer shell: the install path *is* the active payload behind
+ * `<namespace>/current`, so the read below resolves to the payload's version,
+ * which is the newest physical bundle on disk for that topology. The recency
+ * gate (`control.launcher.version.min`) therefore compares against the running
+ * payload there, and the `launcher.schema` axis remains the reseed boundary —
+ * the same axis that reseeds a real outer bundle.
  */
 export async function resolveInstalledOuterVersion(config: DesktopUpdaterConfig): Promise<string | null> {
   if (config.installedVersionOverride != null) return config.installedVersionOverride;
@@ -400,18 +412,76 @@ export async function fetchJson(fetchImpl: typeof globalThis.fetch, url: string)
   return body;
 }
 
+/**
+ * True when the install path is the launcher's own stable entry: a symlink that
+ * resolves to the payload app behind `<namespace>/current`.
+ *
+ * The packaged launcher links the install path at that alias so Dock tiles and
+ * scripts keep one path across updates. Those installs still run from the
+ * launcher's version tree, so they keep payload-update eligibility — the alias
+ * is re-pointed on activation, not stale. Any *other* symlink (a user-made one,
+ * a Homebrew-style link, a link to a different build) is still rejected below:
+ * we cannot prove where it points, so the installer is the safe route.
+ */
+export async function isManagedLauncherStableEntry(
+  config: DesktopUpdaterConfig,
+  activeVersion: string | null = null,
+): Promise<boolean> {
+  if (config.launcherRoot == null || config.launcherLaunchPath == null || config.namespace == null) {
+    return false;
+  }
+  // No active version means no proof: the alias could still be pointing at a
+  // superseded payload, which is exactly the state we must not trust.
+  if (activeVersion == null) return false;
+  try {
+    const launchEntry = await lstat(config.launcherLaunchPath);
+    if (!launchEntry.isSymbolicLink()) return false;
+    const paths = resolveLauncherPaths({
+      channel: config.channel,
+      namespace: config.namespace,
+      root: config.launcherRoot,
+    });
+    const stable = resolveLauncherStableEntryPaths({
+      appBundleName: basename(config.launcherLaunchPath),
+      channel: config.channel,
+      namespace: config.namespace,
+      root: config.launcherRoot,
+    });
+    // `realpath` on both sides: on macOS the launcher root can live under a
+    // symlinked prefix (/var -> /private/var), so comparing a resolved target
+    // against an unresolved root would reject a perfectly valid alias.
+    const [launchTarget, stableTarget, rootTarget, versionsTarget] = await Promise.all([
+      realpath(config.launcherLaunchPath),
+      realpath(stable.appPath),
+      realpath(paths.root),
+      realpath(paths.versionsRoot),
+    ]);
+    const resolvedPaths = { ...paths, root: rootTarget, versionsRoot: versionsTarget };
+    if (launchTarget !== stableTarget || !isLauncherPayloadAppPath(resolvedPaths, stableTarget)) return false;
+    // The alias must resolve to the ACTIVE version. A stale `current` (an
+    // activation that failed half way) is still a payload path under the
+    // launcher root, so path shape alone would accept it and keep an old
+    // payload eligible for updates.
+    return launcherPayloadAppVersion(resolvedPaths, stableTarget) === activeVersion;
+  } catch {
+    return false;
+  }
+}
+
 export async function hasValidLauncherPayloadContext(config: DesktopUpdaterConfig): Promise<boolean> {
   if (config.launcherRoot == null || config.launcherLaunchPath == null || config.launcherRuntimePath == null || config.namespace == null) {
     return false;
   }
   try {
-    await access(config.launcherLaunchPath);
-    const launcherTarget = await lstat(config.launcherLaunchPath);
-    if (launcherTarget.isSymbolicLink() || (!launcherTarget.isFile() && !launcherTarget.isDirectory())) {
-      return false;
-    }
     const runtime = await readJsonStrict<LauncherRuntimeDescriptor>(config.launcherRuntimePath);
     validateLauncherRuntimeDescriptor(runtime, { channel: config.channel, namespace: config.namespace });
+    await access(config.launcherLaunchPath);
+    const launcherTarget = await lstat(config.launcherLaunchPath);
+    if (launcherTarget.isSymbolicLink()) {
+      if (!(await isManagedLauncherStableEntry(config, runtime.active?.version ?? null))) return false;
+    } else if (!launcherTarget.isFile() && !launcherTarget.isDirectory()) {
+      return false;
+    }
     return true;
   } catch {
     return false;
