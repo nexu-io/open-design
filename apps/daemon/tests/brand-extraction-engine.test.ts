@@ -60,6 +60,18 @@ const NO_LOGO_FALLBACK = async () => ({ changed: false });
 // real fallback fetches the site's cover/hero images over the network).
 const NO_IMAGERY_FALLBACK = async () => ({ changed: false });
 
+function contrastRatio(foreground: string, background: string): number {
+  const luminance = (hex: string) => {
+    const channels = hex.match(/[0-9a-f]{2}/gi)?.map((channel) => parseInt(channel, 16) / 255) ?? [];
+    const [r = 0, g = 0, b = 0] = channels.map((value) =>
+      value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4,
+    );
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const [lighter = 0, darker = 0] = [luminance(foreground), luminance(background)].sort((a, b) => b - a);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
 // Injected palette/typography harvester that does nothing — keeps the engine
 // tests offline except for cases that explicitly stub a harvester behavior.
 const NO_SEED_FALLBACK = async () => ({ changed: false });
@@ -258,6 +270,29 @@ describe('agent-driven brand extraction engine', () => {
     expect(system.themes.dark.colorBgContainer).toBe('#141414');
     // ...and the exported ConfigProvider artifact stays on the light algorithm.
     expect(JSON.parse(system.files['theme.json'] ?? '').algorithm).toBe('default');
+  });
+
+  it('keeps primary text readable and separates light layout from container surfaces', () => {
+    const seed: SeedToken = {
+      ...defaultSeed,
+      colorPrimary: '#072c50',
+      colorBgBase: '#f0f2f5',
+    };
+
+    const tokens = deriveTokens(seed, 'default');
+
+    expect(contrastRatio(tokens.colorPrimaryText, tokens.colorPrimary)).toBeGreaterThanOrEqual(4.5);
+    expect(tokens.colorPrimaryText).toBe('#ffffff');
+    expect(tokens.colorBgLayout).toBe('#f0f2f5');
+    expect(tokens.colorBgContainer).toBe('#ffffff');
+  });
+
+  it('uses WCAG AA readable defaults for semantic colors on white', () => {
+    const tokens = deriveTokens(defaultSeed, 'default');
+
+    for (const color of [tokens.colorSuccess, tokens.colorWarning, tokens.colorError]) {
+      expect(contrastRatio(color, '#ffffff')).toBeGreaterThanOrEqual(4.5);
+    }
   });
 
   it('drops scraped CSS source junk from font families instead of corrupting the token block', () => {

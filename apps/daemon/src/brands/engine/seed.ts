@@ -39,12 +39,13 @@ const CODE_STACK =
 
 // ─────────────────────────── default seed ───────────────────────────────────
 
-/** The frozen Ant light-theme seed — also the source of every untouched field. */
+/** The light-theme seed — also the source of every untouched field. */
 export const defaultSeed: SeedToken = {
   colorPrimary: "#1677ff",
-  colorSuccess: "#52c41a",
-  colorWarning: "#faad14",
-  colorError: "#ff4d4f",
+  // Keep default semantic colors readable when they are used as text on white.
+  colorSuccess: "#237804",
+  colorWarning: "#874d00",
+  colorError: "#a8071a",
   colorInfo: "#1677ff",
   colorLink: "",
   colorTextBase: "#000000",
