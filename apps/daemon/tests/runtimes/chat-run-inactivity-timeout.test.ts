@@ -24,6 +24,7 @@ import {
 } from '../../src/server.js';
 import { amrAgentDef } from '../../src/runtimes/defs/amr.js';
 import { copilotAgentDef } from '../../src/runtimes/defs/copilot.js';
+import { deepseekHarnessAgentDef } from '../../src/runtimes/defs/deepseek-harness.js';
 
 const ENV_KEY = 'OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS';
 const FIRST_OUTPUT_ENV_KEY = 'OD_CHAT_RUN_FIRST_OUTPUT_TIMEOUT_MS';
@@ -224,6 +225,16 @@ describe('amrAgentDef.inactivityTimeoutMs', () => {
 
   it('ships a two-minute absolute first-output deadline', () => {
     expect(amrAgentDef.firstOutputTimeoutMs).toBe(120_000);
+  });
+});
+
+describe('deepseekHarnessAgentDef.inactivityTimeoutMs', () => {
+  it('ships a 30-minute inactivity hint so a blocking background-job wait is not killed at the 10-minute default (#8548)', () => {
+    // `job_output` / `job_list` are called with `wait: true` and a
+    // model-chosen `timeout_ms` of up to 15 minutes. The runtime emits no
+    // frames while one is outstanding, so the 600s default failed healthy
+    // runs 600.0s after the tool_use, four times out of four.
+    expect(deepseekHarnessAgentDef.inactivityTimeoutMs).toBe(THIRTY_MINUTES_MS);
   });
 });
 
