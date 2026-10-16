@@ -417,6 +417,23 @@ function migrate(db: SqliteDb): void {
   if (!cols.some((c: DbRow) => c.name === 'custom_instructions')) {
     db.exec(`ALTER TABLE projects ADD COLUMN custom_instructions TEXT`);
   }
+  if (!cols.some((c: DbRow) => c.name === 'last_user_query_at')) {
+    // One migration, not a history scan on each list read. Only timestamps are
+    // read; large message content/event payloads never enter JavaScript.
+    db.transaction(() => {
+      db.exec(`ALTER TABLE projects ADD COLUMN last_user_query_at INTEGER`);
+      db.exec(`
+        UPDATE projects SET last_user_query_at = history.sent_at
+        FROM (
+          SELECT c.project_id, MAX(m.created_at) AS sent_at
+          FROM conversations c JOIN messages m ON m.conversation_id = c.id
+          WHERE m.role = 'user'
+          GROUP BY c.project_id
+        ) AS history
+        WHERE projects.id = history.project_id
+      `);
+    })();
+  }
   const workspaceProjectCols = db.prepare(`PRAGMA table_info(workspace_projects)`).all() as DbRow[];
   if (!workspaceProjectCols.some((c: DbRow) => c.name === 'resource_hub_resource_id')) {
     db.exec(`ALTER TABLE workspace_projects ADD COLUMN resource_hub_resource_id TEXT`);
@@ -1069,6 +1086,7 @@ const PROJECT_COLS = `id, name, skill_id AS skillId,
   metadata_json AS metadataJson,
   applied_plugin_snapshot_id AS appliedPluginSnapshotId,
   custom_instructions AS customInstructions,
+  last_user_query_at AS lastUserQueryAt,
   created_at AS createdAt,
   updated_at AS updatedAt`;
 
@@ -1101,6 +1119,7 @@ export function listUnboundProjects(db: SqliteDb) {
               p.metadata_json AS metadataJson,
               p.applied_plugin_snapshot_id AS appliedPluginSnapshotId,
               p.custom_instructions AS customInstructions,
+              p.last_user_query_at AS lastUserQueryAt,
               p.created_at AS createdAt,
               p.updated_at AS updatedAt
          FROM projects p
@@ -1144,6 +1163,7 @@ export function listWorkspaceProjects(db: SqliteDb, workspaceId: string) {
               p.metadata_json AS metadataJson,
               p.applied_plugin_snapshot_id AS appliedPluginSnapshotId,
               p.custom_instructions AS customInstructions,
+              p.last_user_query_at AS lastUserQueryAt,
               p.created_at AS createdAt,
               p.updated_at AS updatedAt,
               wp.project_id AS workspaceProjectId,
@@ -1249,9 +1269,10 @@ export function getWorkspaceProjectByProjectId(db: SqliteDb, projectId: string) 
  *
  * A project's `updated_at` answers exactly one question for the UI — when did a
  * person last change this project's conversations, files, or name? The project
- * card renders it as one relative time and the list sorts by it, folding the
- * project row and its `workspace_projects` binding together with
- * `MAX(p.updated_at, wp.updated_at)` (see `listWorkspaceProjects` below and
+ * card renders it as one relative time, independent of `last_user_query_at`
+ * used for recent-project ordering. Content activity folds the project row
+ * and its workspace binding together with `MAX(p.updated_at, wp.updated_at)`
+ * (see `listWorkspaceProjects` below and
  * `normalizeWorkspaceProjectRow` in routes/project/index.ts). So BOTH rows have
  * to answer it, and only a local action may answer it with `Date.now()`.
  *
@@ -2027,7 +2048,23 @@ export function insertProject(db: SqliteDb, p: DbRow) {
   return getProject(db, p.id);
 }
 
+/** Record best-effort ordering metadata without affecting message persistence or content activity. */
+export function recordProjectUserQuery(db: SqliteDb, id: string, sentAt: unknown): void {
+  if (typeof sentAt !== 'number' || !Number.isSafeInteger(sentAt) || sentAt < 0) return;
+  try {
+    db.prepare(`UPDATE projects SET last_user_query_at = ?
+      WHERE id = ? AND (last_user_query_at IS NULL OR last_user_query_at < ?)`)
+      .run(sentAt, id, sentAt);
+  } catch {
+    // Ordering is expendable under storage pressure; the conversation is not.
+  }
+}
+
 export function updateProject(db: SqliteDb, id: string, patch: DbRow) {
+  if ('lastUserQueryAt' in patch) {
+    recordProjectUserQuery(db, id, patch.lastUserQueryAt);
+    if (Object.keys(patch).length === 1) return getProject(db, id);
+  }
   const existing = getProject(db, id);
   if (!existing) return null;
   const merged = {
@@ -2082,6 +2119,7 @@ function normalizeProject(row: DbRow) {
     customInstructions: row.customInstructions ?? undefined,
     createdAt: Number(row.createdAt),
     updatedAt: Number(row.updatedAt),
+    lastUserQueryAt: row.lastUserQueryAt == null ? null : Number(row.lastUserQueryAt),
   };
 }
 

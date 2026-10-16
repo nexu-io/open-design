@@ -4354,23 +4354,23 @@ function AppInner() {
     void patchProject(projectId, { pendingPrompt: null }, mutationContext);
   }, [route]);
 
-  const handleTouchProject = useCallback(() => {
+  const handleTouchProject = useCallback((sentAt = Date.now()) => {
     const projectId = route.kind === 'project' ? route.projectId : null;
     if (!projectId) return;
-    const updatedAt = Date.now();
-    setProjects((curr) =>
-      curr.map((p) => (p.id === projectId ? { ...p, updatedAt } : p)),
-    );
-    const mutationContext = workspaceContextRef.current;
+    const recordSend = (project: Project): Project => project.id === projectId
+      ? { ...project, lastUserQueryAt: Math.max(project.lastUserQueryAt ?? 0, sentAt) }
+      : project;
+    setProjects((curr) => curr.map(recordSend));
+    const mutationContext = projectRouteWorkspaceContextRef.current ?? workspaceContextRef.current;
     if (mutationContext) {
       patchProjectDisplaySnapshots({
         accountGeneration: currentWorkspaceAccountGeneration(),
         context: mutationContext,
-        patch: (cachedProjects) => cachedProjects.map((project) =>
-          project.id === projectId ? { ...project, updatedAt } : project),
+        patch: (cachedProjects) => cachedProjects.map(recordSend),
       });
     }
-    void patchProject(projectId, { updatedAt }, mutationContext);
+    // Best effort: no wait or retry on the message send path.
+    void patchProject(projectId, { lastUserQueryAt: sentAt }, mutationContext);
   }, [route]);
 
   const handleProjectChange = useCallback((updated: Project) => {

@@ -562,6 +562,13 @@ describe('POST /api/runs headless fallbacks', () => {
     const afterIds = afterBody.projects.map((p) => p.id);
     // Seeding the older project's user turn must promote it above the newer one.
     expect(afterIds.indexOf(older.projectId)).toBeLessThan(afterIds.indexOf(newer.projectId));
+    const detail = await fetch(`${started.url}/api/projects/${older.projectId}`);
+    const { project } = await detail.json() as import('@open-design/contracts').ProjectResponse;
+    expect(project.lastUserQueryAt).toEqual(expect.any(Number));
+    const messages = await fetch(`${started.url}/api/projects/${older.projectId}/conversations/${older.conversationId}/messages`);
+    const { messages: transcript } = await messages.json() as import('@open-design/contracts').MessagesResponse;
+    expect(transcript.find(message => message.role === 'user')?.createdAt)
+      .toBe(project.lastUserQueryAt);
   });
 
   it('preserves empty currentPrompt for attachments-only omit-pin sends', async () => {

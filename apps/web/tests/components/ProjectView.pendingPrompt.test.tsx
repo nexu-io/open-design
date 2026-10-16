@@ -807,6 +807,20 @@ describe('ProjectView pending prompt seeding', () => {
     expect(window.sessionStorage.getItem(`od:auto-send-first:${projectId}`)).toBeNull();
   });
 
+  it('records recency once at queue entry, not again when the queued send starts', async () => {
+    const projectId = 'queued-project-recency';
+    const onTouchProject = vi.fn();
+    renderProjectView(project(projectId), vi.fn(), { onTouchProject });
+    await screen.findByText(`conv-${projectId}`);
+    await waitFor(() => expect(chatPaneSpy).toHaveBeenCalled());
+    await act(async () => {
+      await chatPaneSpy.mock.calls.at(-1)?.[0].onSend('Queued request', [], [], { queueOnly: true });
+    });
+    await waitFor(() => expect(mockedSaveMessage.mock.calls.some(([, , message]) => message.role === 'user')).toBe(true));
+    expect(onTouchProject).toHaveBeenCalledTimes(1);
+    expect(onTouchProject).toHaveBeenCalledWith(expect.any(Number));
+  });
+
   it('holds the Home auto-send until the picked batch finishes uploading', async () => {
     // OPEND-2585. The project frame now opens while the Home batch is still
     // going up, so the auto-send is the only thing left waiting on it. If it

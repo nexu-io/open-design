@@ -217,6 +217,25 @@ class MockWorkspaceEventSource {
 }
 
 describe('RecentProjectsStrip', () => {
+  it('uses user send recency in the default all-projects order', () => {
+    const items = [
+      project({ id: 'a', name: 'A', updatedAt: 900, lastUserQueryAt: 10 }),
+      project({ id: 'b', name: 'B', updatedAt: 1, lastUserQueryAt: 20 }),
+      project({ id: 'c', name: 'C', updatedAt: 1000, lastUserQueryAt: null }),
+    ];
+    const { container, rerender } = render(
+      <RecentProjectsStrip projects={items} onOpen={() => {}} heading="All projects" />,
+    );
+    const ids = () => [...container.querySelectorAll('[data-project-id]')]
+      .map(node => node.getAttribute('data-project-id'));
+    expect(ids()).toEqual(['b', 'a', 'c']);
+    rerender(<RecentProjectsStrip
+      projects={items.map(item => item.id === 'a' ? { ...item, lastUserQueryAt: 30 } : item)}
+      onOpen={() => {}} heading="All projects"
+    />);
+    expect(ids()).toEqual(['a', 'b', 'c']);
+  });
+
   it('turns a script-activated deck into a deterministic visible first-page cover', () => {
     const cover = deckPreviewSrcDoc(`<!doctype html>
       <html><head><style>

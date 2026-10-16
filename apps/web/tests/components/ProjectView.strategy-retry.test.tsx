@@ -252,7 +252,7 @@ const agents = [
   { id: 'amr', name: 'OpenDesign Cloud', available: true, models: [] },
 ] as unknown as AgentInfo[];
 
-function renderProjectView(config: AppConfig = cloudConfig) {
+function renderProjectView(config: AppConfig = cloudConfig, onTouchProject = vi.fn()) {
   return render(
     <ProjectView
       project={project}
@@ -270,7 +270,7 @@ function renderProjectView(config: AppConfig = cloudConfig) {
       onOpenSettings={vi.fn()}
       onBack={vi.fn()}
       onClearPendingPrompt={vi.fn()}
-      onTouchProject={vi.fn()}
+      onTouchProject={onTouchProject}
       onProjectChange={vi.fn()}
       onProjectsRefresh={vi.fn()}
     />,
@@ -423,14 +423,19 @@ describe('strategy retry through ProjectView and the real ChatPane', () => {
     expect(conversationMessages[2]?.runStatus).toBe('failed');
   });
 
-  it('still sends one ordinary single-run retry through the same real button', async () => {
+  it('still sends one ordinary single-run retry and records the new user action time', async () => {
     conversationMessages = [originalUser, {
       ...productionAssistant, strategyTaskExecutionId: undefined, strategyTaskRunIndex: undefined,
     }];
-    renderProjectView();
+    const onTouchProject = vi.fn();
+    renderProjectView(cloudConfig, onTouchProject);
+    expect(onTouchProject).not.toHaveBeenCalled();
     await clickRetry();
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
     expectOriginalDispatch(originalUser);
+    expect(onTouchProject).toHaveBeenCalledTimes(1);
+    expect(onTouchProject.mock.calls[0]?.[0]).toBeGreaterThan(originalUser.createdAt!);
+    expect(conversationMessages[0]).toEqual(originalUser);
   });
 
   it.each(['request', 'production'] as const)(

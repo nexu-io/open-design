@@ -112,6 +112,30 @@ describe('workspace project routes', () => {
     return project;
   }
 
+  it('round-trips send recency through project detail and workspace lists without touching updatedAt', async () => {
+    const projectId = `project-recency-${Date.now()}`;
+    const member = 'recency-owner';
+    await createProjectInWorkspace(projectId, 'Recency', member);
+    const read = () => fetch(`${baseUrl}/api/projects/${projectId}`, { headers: headers(member) });
+    const before = await (await read()).json() as import('@open-design/contracts').ProjectResponse;
+    const response = await fetch(`${baseUrl}/api/projects/${projectId}`, {
+      method: 'PATCH', headers: headers(member),
+      body: JSON.stringify({ lastUserQueryAt: 100 }),
+    });
+    expect(response.status).toBe(200);
+    const updated = await response.json() as import('@open-design/contracts').ProjectResponse;
+    expect(updated.project).toMatchObject({
+      lastUserQueryAt: 100, updatedAt: before.project.updatedAt,
+    });
+    const body = await list(member, '?view=all');
+    expect(body.projects.find(item => item.id === projectId)?.project.lastUserQueryAt).toBe(100);
+    await fetch(`${baseUrl}/api/projects/${projectId}`, {
+      method: 'PATCH', headers: headers(member), body: JSON.stringify({ name: 'Renamed' }),
+    });
+    const renamed = await (await read()).json() as import('@open-design/contracts').ProjectResponse;
+    expect(renamed.project.lastUserQueryAt).toBe(100);
+  });
+
   it('rejects a project list when the route Workspace conflicts with the explicit request scope', async () => {
     const suffix = Date.now();
     const workspaceA = `${workspaceId}-route-a-${suffix}`;

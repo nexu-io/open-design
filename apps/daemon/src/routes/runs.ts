@@ -53,6 +53,7 @@ import {
   getProject,
   listProjectsAwaitingInput,
   normalizeConversationSessionMode,
+  recordProjectUserQuery,
   updateProject,
   upsertMessage,
 } from '../db.js';
@@ -2317,7 +2318,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     const seedRunUserMessage = () => {
       if (!runUserSeed) return;
       const now = Date.now();
-      upsertMessage(db, runUserSeed.conversationId, {
+      const savedUserMessage = upsertMessage(db, runUserSeed.conversationId, {
         id: runUserSeed.id,
         role: 'user',
         content: runUserSeed.content,
@@ -2336,6 +2337,12 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       // otherwise leave the project buried under more recent activity.
       if (typeof meta.projectId === 'string' && meta.projectId) {
         updateProject(db, meta.projectId, {});
+        // Web sends (including local queues/retries) record recency through
+        // their timestamp-only project PATCH. Headless sends have no such
+        // callback: use the persisted message time, never the Run finish time.
+        if (!clientUserMessageId) {
+          recordProjectUserQuery(db, meta.projectId, savedUserMessage?.createdAt);
+        }
       }
     };
     const fallbackAutomaticBeforeStart = async (error: unknown): Promise<boolean> => {
@@ -3449,6 +3456,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       });
       if (typeof run.projectId === 'string' && run.projectId) {
         updateProject(db, run.projectId, {});
+        recordProjectUserQuery(db, run.projectId, now);
       }
     }
     res.json({

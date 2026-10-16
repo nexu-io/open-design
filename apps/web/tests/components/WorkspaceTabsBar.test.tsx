@@ -1950,6 +1950,33 @@ describe('WorkspaceTabsBar dock dropdown run status', () => {
     dock.remove();
   });
 
+  it('pins the current project but orders the other tabs by user sends rather than visits', async () => {
+    render(<WorkspaceTabsBar
+      route={{ ...projectRoute, projectId: projectGamma.id }}
+      projects={[
+        { ...project, lastUserQueryAt: 5 },
+        { ...projectBeta, lastUserQueryAt: 10 },
+        { ...projectGamma, lastUserQueryAt: 20 },
+      ]}
+    />);
+    act(() => { openWorkspaceTab({ ...projectRoute, projectId: projectBeta.id }); });
+    act(() => { openWorkspaceTab({ ...projectRoute }); });
+    fireEvent.click(await screen.findByTestId('workspace-tabs-dropdown-trigger'));
+    const names = () => within(screen.getByRole('listbox')).getAllByRole('option')
+      .map(row => row.textContent);
+    expect(names()).toEqual([
+      expect.stringContaining('Project Alpha'),
+      expect.stringContaining('Project Gamma'),
+      expect.stringContaining('Project Beta'),
+    ]);
+    act(() => { openWorkspaceTab({ ...projectRoute, projectId: projectBeta.id }); });
+    expect(names()).toEqual([
+      expect.stringContaining('Project Beta'),
+      expect.stringContaining('Project Gamma'),
+      expect.stringContaining('Project Alpha'),
+    ]);
+  });
+
   it('marks a finished project with the unread dot and spends it when the row opens it', async () => {
     // OPEND-3133: the notice is the dot at the row's end, announced as the
     // finished status; the lead slot keeps the folder.

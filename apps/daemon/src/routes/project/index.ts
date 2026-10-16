@@ -2353,6 +2353,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       customInstructions: row.customInstructions ?? undefined,
       createdAt: row.createdAt,
       updatedAt: lastActivityAt,
+      lastUserQueryAt: row.lastUserQueryAt ?? null,
       // Carried on the nested project too, so a client that unwraps the summary
       // into a plain Project keeps the binding instead of dropping it.
       workspaceId: row.workspaceId ?? null,
