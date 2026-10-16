@@ -14,6 +14,11 @@ describe('agentIdToTracking', () => {
     expect(agentIdToTracking('amr')).toBe('amr');
   });
 
+  it('maps the Muse runtime to its own provider id', () => {
+    expect(agentIdToTracking('muse')).toBe('muse_code');
+    expect(feedbackAgentProviderIdToTracking('muse')).toBe('muse_code');
+  });
+
   it('keeps mapping known CLI agents and falls back to other for unknowns', () => {
     expect(agentIdToTracking('claude')).toBe('claude_code');
     expect(agentIdToTracking('opencode')).toBe('opencode');

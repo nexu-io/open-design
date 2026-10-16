@@ -75,6 +75,10 @@ const AGENT_INSTALL_LINKS: Record<
     installUrl: 'https://mimo.ai',
     docsUrl: 'https://mimo.ai/docs',
   },
+  muse: {
+    installUrl: 'https://dev.meta.ai/docs/muse-code',
+    docsUrl: 'https://dev.meta.ai/docs/muse-code',
+  },
   vibe: {
     installUrl: 'https://docs.mistral.ai',
     docsUrl: 'https://github.com/mistralai/vibe-acp',

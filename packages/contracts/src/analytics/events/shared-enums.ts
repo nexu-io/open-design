@@ -219,6 +219,7 @@ export type TrackingCliProviderId =
   | 'atomcode'
   | 'deepseek'
   | 'deepseek_harness'
+  | 'muse_code'
   | 'amr'
   | 'other';
 
