@@ -105,6 +105,23 @@ describe('AgentIcon', () => {
     expect(markup).not.toContain('<img src="/agent-icons/cursor-agent.svg"');
   });
 
+  it('renders the downloaded Command Code mark as a theme-aware mask', () => {
+    // The bundled asset is the vendor's single-colour mark fetched from
+    // commandcode.ai; it is dark-filled on disk so an <img> load stays
+    // legible, and masked here so it can inherit `currentColor`.
+    const commandCodeSvg = readFileSync(
+      new URL('../../public/agent-icons/command-code.svg', import.meta.url),
+      'utf8',
+    );
+    expect(commandCodeSvg).toMatch(/^<svg\b/);
+    expect(commandCodeSvg).toContain('fill="#1c1b1a"');
+
+    const markup = renderToStaticMarkup(<AgentIcon id="command-code" size={24} />);
+    expect(markup).toContain('class="agent-icon agent-icon-mono"');
+    expect(markup).toContain('mask-image:url(&quot;/agent-icons/command-code.svg&quot;)');
+    expect(markup).not.toContain('<img src="/agent-icons/command-code.svg"');
+  });
+
   it('falls back to an initial-letter pill for unknown agents', () => {
     const markup = renderToStaticMarkup(<AgentIcon id="unknown-agent" size={24} />);
 

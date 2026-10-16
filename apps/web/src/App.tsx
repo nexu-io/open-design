@@ -600,6 +600,7 @@ const CANONICAL_AGENT_ORDER = [
   'amr',
   'claude',
   'codex',
+  'command-code',
   'devin',
   'gemini',
   'opencode',

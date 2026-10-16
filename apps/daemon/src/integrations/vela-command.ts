@@ -325,6 +325,9 @@ export function runVelaCommand(
         env: childEnv,
         encoding: 'utf8',
         maxBuffer: options.maxBuffer ?? 16 * 1024 * 1024,
+        // The resolved vela binary is a `.cmd` shim on Windows; a background
+        // resource/team command must not open a console window.
+        windowsHide: true,
         windowsVerbatimArguments: invocation.windowsVerbatimArguments,
       },
       (error, stdout, stderr) => {

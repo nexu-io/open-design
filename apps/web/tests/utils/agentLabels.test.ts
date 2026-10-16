@@ -21,6 +21,13 @@ describe('agentDisplayName', () => {
     expect(agentDisplayName('DeepSeek Harness')).toBe('DeepSeek Harness');
   });
 
+  it('resolves Command Code from its id and from the shim names users have on PATH', () => {
+    expect(agentDisplayName('command-code')).toBe('Command Code');
+    expect(agentDisplayName('Command Code')).toBe('Command Code');
+    expect(agentDisplayName('cmdc')).toBe('Command Code');
+    expect(agentDisplayName('commandcode')).toBe('Command Code');
+  });
+
   it('matches embedded substrings such as cursor-agent in a longer path', () => {
     expect(agentDisplayName('/opt/bin/cursor-agent')).toBe('Cursor');
   });

@@ -1320,6 +1320,9 @@ async function spawnVelaLoginAttempt(
       stdio: ['ignore', 'pipe', 'pipe'],
       env,
       detached: false,
+      // The daemon drives the login flow through pipes, so no console window
+      // belongs on screen (the resolved vela shim is a `.cmd` on Windows).
+      windowsHide: true,
       windowsVerbatimArguments: invocation.windowsVerbatimArguments,
     });
   } catch (error) {
