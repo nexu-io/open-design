@@ -406,7 +406,8 @@ export interface SectionRules {
  *    via the `imagery_prompts` field on the inputs.
  * `'placeholder'` — emit SVG paper-textured frames into `out/assets/`
  *    so the layout is fully rendered even with no AI image budget.
- *    Users can swap real PNGs in later without touching markup.
+ *    The composer references `.svg` for this strategy. To use real PNGs,
+ *    switch strategies and re-compose without changing template code.
  * `'bring-your-own'` — assume the 16 PNGs are already at the configured
  *    `assets_path`; do nothing.
  */
