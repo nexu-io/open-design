@@ -474,6 +474,28 @@
   margin: 0;
 }
 
+/* The block now wraps a summary paragraph plus a details disclosure, so the
+   inner <p> needs the margin reset the block itself used to carry. */
+.library-install-error > p {
+  margin: 0;
+}
+
+.library-install-error-detail {
+  margin-top: 4px;
+}
+
+.library-install-error-detail > summary {
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.library-install-error-detail > code {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
 .library-install-status {
   display: flex;
   flex-wrap: wrap;
