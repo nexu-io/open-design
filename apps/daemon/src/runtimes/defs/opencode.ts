@@ -3,8 +3,10 @@ import {
   OPENCODE_PERMISSION_CAPABILITY,
   appendOpenCodePermissionBypass,
   appendOpenCodeWorkspaceDir,
+  shouldUseOpenCodeVariantFlag,
 } from '../opencode-permissions.js';
 import { getRememberedLiveModels } from '../models.js';
+import { execAgentFile } from '../invocation.js';
 import type { RuntimeAgentDef, RuntimeModelOption } from '../types.js';
 
 const OPENCODE_VARIANT_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u;
@@ -123,6 +125,39 @@ export const opencodeAgentDef = {
       parse: parseOpenCodeModels,
       timeoutMs: 15_000,
     },
+    // OpenCode 2.x removed `--verbose` from `opencode models --help`
+    // (verified on 2.0.24: plain `provider/model` per line). Detection prefers
+    // `fetchModels` over `listModels` when defined, so try the verbose shape
+    // first (1.x, with variant metadata) and fall back to the plain list (2.x)
+    // when the CLI rejects the flag. Both shapes parse through
+    // `parseOpenCodeModels`, which already accepts plain lists.
+    fetchModels: async (resolvedBin, env) => {
+      try {
+        const { stdout } = await execAgentFile(resolvedBin, ['models', '--verbose'], {
+          env: env as NodeJS.ProcessEnv,
+          timeout: 15_000,
+          maxBuffer: 8 * 1024 * 1024,
+        });
+        const parsed = parseOpenCodeModels(String(stdout));
+        if (parsed && parsed.length > 0) return parsed;
+      } catch (err) {
+        const text = `${(err as { stdout?: unknown })?.stdout ?? ''}\n${(err as { stderr?: unknown })?.stderr ?? ''}\n${err instanceof Error ? err.message : String(err)}`;
+        if (!/Unrecognized flag:\s*--verbose/.test(text) && !/unknown option/i.test(text)) {
+          return null;
+        }
+        // Fall through to the plain `models` list below.
+      }
+      try {
+        const { stdout } = await execAgentFile(resolvedBin, ['models'], {
+          env: env as NodeJS.ProcessEnv,
+          timeout: 15_000,
+          maxBuffer: 8 * 1024 * 1024,
+        });
+        return parseOpenCodeModels(String(stdout));
+      } catch {
+        return null;
+      }
+    },
     fallbackModels: OPENCODE_FALLBACK_MODELS,
     // OpenCode 1.18.x exposes provider/model-specific variants. Detection
     // reads the exact live variant keys from `models --verbose`. The fallback
@@ -142,7 +177,7 @@ export const opencodeAgentDef = {
         'json',
       ];
       appendOpenCodePermissionBypass(args, 'opencode');
-      appendOpenCodeWorkspaceDir(args, runtimeContext.cwd);
+      appendOpenCodeWorkspaceDir(args, runtimeContext.cwd, 'opencode');
       // Capture-style resume: OpenCode mints its own session id (reported on
       // the stream as `sessionID`, e.g. `ses_...`). On a follow-up turn the
       // daemon continues that session with `-s <id>` instead of re-sending the
@@ -158,10 +193,17 @@ export const opencodeAgentDef = {
         args.push('-s', resumeSessionId);
       }
       if (options.model && options.model !== 'default') {
-        args.push('-m', options.model);
-      }
-      if (supportsOpenCodeVariant(options.model, options.reasoning)) {
-        args.push('--variant', options.reasoning);
+        if (supportsOpenCodeVariant(options.model, options.reasoning)) {
+          if (shouldUseOpenCodeVariantFlag('opencode')) {
+            args.push('-m', options.model);
+            args.push('--variant', options.reasoning);
+          } else {
+            // OpenCode 2.x: variant folds into `-m provider/model#variant`.
+            args.push('-m', `${options.model}#${options.reasoning}`);
+          }
+        } else {
+          args.push('-m', options.model);
+        }
       }
       return args;
     },
