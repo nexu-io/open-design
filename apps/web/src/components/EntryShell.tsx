@@ -1849,6 +1849,7 @@ export function EntryShell({
     skillsLoading,
     connectors,
     promptTemplates,
+    mediaProviders: config.mediaProviders,
     artifactUpgradeSlot,
     deepSeekV4FlashCampaignAudience,
     onDeepSeekV4FlashCampaignUseNow: applyDeepSeekCampaignModel,

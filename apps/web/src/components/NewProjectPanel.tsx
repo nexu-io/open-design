@@ -23,7 +23,10 @@ import { localizeSkillDescription, localizeSkillName } from '../i18n/content';
 import type { Dict } from '../i18n/types';
 import { fetchPromptTemplate, openFolderDialog } from '../providers/registry';
 import { isStoredMediaProviderEntryPresent } from '../state/config';
-import { isMediaProviderPickerReady } from '../media/provider-readiness';
+import {
+  isMediaProviderPickerReady,
+  prioritizeConfiguredMediaModels,
+} from '../media/provider-readiness';
 import type {
   AudioKind,
   DesignSystemSummary,
@@ -361,7 +364,16 @@ export function NewProjectPanel({
   // Blank card: create routes through the tab's default skill. A template id
   // routes the project through that design template's SKILL.md instead.
   const [startTemplateId, setStartTemplateId] = useState<string | null>(null);
-  const [imageModel, setImageModel] = useState(DEFAULT_IMAGE_MODEL);
+  const preferredImageModel = useMemo(
+    () => prioritizeConfiguredMediaModels(IMAGE_MODELS, mediaProviders)[0]?.id ?? DEFAULT_IMAGE_MODEL,
+    [mediaProviders],
+  );
+  const [imageModel, setImageModel] = useState(preferredImageModel);
+  useEffect(() => {
+    setImageModel((current) => current === DEFAULT_IMAGE_MODEL
+      ? preferredImageModel
+      : current);
+  }, [preferredImageModel]);
   const [imageAspect, setImageAspect] = useState<MediaAspect>('1:1');
   const [videoModel, setVideoModel] = useState(DEFAULT_VIDEO_MODEL);
   const [videoModelTouched, setVideoModelTouched] = useState(false);
