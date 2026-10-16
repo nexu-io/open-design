@@ -1,0 +1,470 @@
+{
+  "$schema": "./schema.ts#DesignStudioWebInputs",
+  "brand": {
+    "name": "形流设计",
+    "mark": "形流",
+    "tagline": "为文化品牌与科技产品构建识别系统、数字体验与动态语言。",
+    "description": "形流设计是一家独立设计事务所，为有野心的文化品牌与科技产品构建识别系统、数字产品与动态语言。",
+    "locale": "zh-CN",
+    "location": "上海 · 新加坡 · 远程",
+    "coordinates": "31.2304° N · 121.4737° E",
+    "year": "2026",
+    "founded": "创立于 2021",
+    "contact_email": "hello@formshift.studio",
+    "status": "Q4 档期开放",
+    "edition": "工作室索引 / 26—09",
+    "languages": [
+      "中文",
+      "EN"
+    ],
+    "social": []
+  },
+  "nav": [
+    {
+      "label": "作品",
+      "href": "#work"
+    },
+    {
+      "label": "工作室",
+      "href": "#studio"
+    },
+    {
+      "label": "能力",
+      "href": "#capabilities"
+    },
+    {
+      "label": "联系",
+      "href": "#contact"
+    }
+  ],
+  "hero": {
+    "eyebrow": "独立设计事务所 · 2026",
+    "headline": [
+      {
+        "text": "我们设计"
+      },
+      {
+        "text": "会呼吸的",
+        "em": true
+      },
+      {
+        "text": "品牌系统",
+        "accent": true
+      },
+      {
+        "text": "。"
+      }
+    ],
+    "lead": "策略、识别、数字体验与动态语言，被构建为同一套持续运转的视觉操作系统。",
+    "primary": {
+      "label": "查看作品",
+      "href": "#work"
+    },
+    "secondary": {
+      "label": "开启项目",
+      "href": "mailto:hello@formshift.studio"
+    },
+    "stats": [
+      {
+        "value": "34",
+        "label": "次发布"
+      },
+      {
+        "value": "11",
+        "label": "个市场"
+      },
+      {
+        "value": "07",
+        "label": "项奖项"
+      }
+    ],
+    "scroll_label": "向下进入",
+    "art_label": "生成场 / 实时画布"
+  },
+  "manifesto": {
+    "kicker": "02 / 观点",
+    "headline": [
+      {
+        "text": "品牌需要的不是一种"
+      },
+      {
+        "text": "风格",
+        "em": true
+      },
+      {
+        "text": "，而是一套"
+      },
+      {
+        "text": "语言",
+        "accent": true
+      },
+      {
+        "text": "。"
+      }
+    ],
+    "paragraphs": [
+      "我们在识别、界面与动态交汇的地方工作。最终产出可能是一次发布、一个平台、一轮传播，也可能是对品牌行为方式的彻底重写。",
+      "我们的流程紧凑、由资深设计师主导、以原型先行。先把想法变成看得见的东西，再逐层打磨，直到体验显得理所当然。"
+    ],
+    "principles": [
+      {
+        "index": "01",
+        "title": "清晰先于装饰",
+        "body": "每一个视觉动作都要加强观点、层级或行动，否则不做。"
+      },
+      {
+        "index": "02",
+        "title": "动态即结构",
+        "body": "转场用来解释关系，而不是单纯制造热闹。"
+      },
+      {
+        "index": "03",
+        "title": "系统胜过单页",
+        "body": "我们设计的是规则，让品质在上线之后继续自我生产。"
+      }
+    ]
+  },
+  "work": {
+    "kicker": "03 / 精选作品",
+    "headline": [
+      {
+        "text": "四个项目，"
+      },
+      {
+        "text": "四种世界",
+        "em": true
+      },
+      {
+        "text": "，同一种对"
+      },
+      {
+        "text": "精度",
+        "accent": true
+      },
+      {
+        "text": "的执念。"
+      }
+    ],
+    "lead": "为科技、文化、酒店与新一代产品打造的识别与数字作品。",
+    "projects": [
+      {
+        "index": "01",
+        "title": "Aether Objects",
+        "client": "Aether",
+        "category": "品牌识别 · 商业系统",
+        "year": "2026",
+        "description": "围绕光、材质与编号逻辑，为收藏级器物品牌构建可触摸的识别体系与沉浸式产品体验。",
+        "services": [
+          "策略",
+          "识别",
+          "数字",
+          "动态"
+        ],
+        "metric": "发布转化 +68%",
+        "image_slot": "work-1",
+        "href": "#contact",
+        "theme": "dark"
+      },
+      {
+        "index": "02",
+        "title": "Field Notes 02",
+        "client": "North Journal",
+        "category": "内容平台 · 文化",
+        "year": "2026",
+        "description": "把长文、音频与档案影像放进同一条空间化阅读节奏里的电影感出版平台。",
+        "services": [
+          "艺术指导",
+          "体验",
+          "网站",
+          "编辑"
+        ],
+        "metric": "阅读深度 2.4×",
+        "image_slot": "work-2",
+        "href": "#contact",
+        "theme": "light"
+      },
+      {
+        "index": "03",
+        "title": "NOVA/AI",
+        "client": "Nova Systems",
+        "category": "AI 产品 · 数字系统",
+        "year": "2025",
+        "description": "把不可见的模型行为翻译成克制、可读的交互语言，形成一套可扩展的产品系统。",
+        "services": [
+          "产品",
+          "设计系统",
+          "动态",
+          "原型"
+        ],
+        "metric": "上手提速 41%",
+        "image_slot": "work-3",
+        "href": "#contact",
+        "theme": "dark"
+      },
+      {
+        "index": "04",
+        "title": "Still / Moving",
+        "client": "Mori House",
+        "category": "酒店 · 空间识别",
+        "year": "2025",
+        "description": "由光线变化、柔和排版与随时间调整的数字礼宾构成的一套安静酒店识别。",
+        "services": [
+          "品牌",
+          "艺术指导",
+          "数字",
+          "空间"
+        ],
+        "metric": "全球发布 / 6 座城市",
+        "image_slot": "work-4",
+        "href": "#contact",
+        "theme": "light"
+      }
+    ],
+    "archive_label": "讨论类似项目",
+    "archive_href": "#contact"
+  },
+  "capabilities": {
+    "kicker": "04 / 能力",
+    "headline": [
+      {
+        "text": "一间工作室，"
+      },
+      {
+        "text": "四门彼此相连的手艺",
+        "em": true
+      },
+      {
+        "text": "。"
+      }
+    ],
+    "lead": "我们按需组建最小规模的资深团队，让项目从策略想法一路走到可发布的表达，而不丢失一致性。",
+    "items": [
+      {
+        "index": "01",
+        "title": "品牌系统",
+        "body": "足够有逻辑的定位与识别系统，可以跨团队、跨市场、跨媒介持续生长。",
+        "services": [
+          "策略",
+          "命名",
+          "识别",
+          "规范"
+        ]
+      },
+      {
+        "index": "02",
+        "title": "数字体验",
+        "body": "把品牌原则翻译成界面行为与交互节奏的网站与产品。",
+        "services": [
+          "体验",
+          "界面",
+          "原型",
+          "设计系统"
+        ]
+      },
+      {
+        "index": "03",
+        "title": "动态语言",
+        "body": "让时间感成为品牌语气的动态识别、发布影片与界面动效。",
+        "services": [
+          "动态系统",
+          "3D",
+          "字体动画",
+          "微交互"
+        ]
+      },
+      {
+        "index": "04",
+        "title": "创意技术",
+        "body": "当一个概念值得拥有自己的媒介时，用生成图形、WebGL 与空间原型把它做出来。",
+        "services": [
+          "WebGL",
+          "生成艺术",
+          "AI",
+          "空间"
+        ]
+      }
+    ],
+    "lab_label": "交互材质实验 — 拖动参数"
+  },
+  "method": {
+    "kicker": "05 / 工作方法",
+    "headline": [
+      {
+        "text": "快到能保持节奏，"
+      },
+      {
+        "text": "深到值得深究",
+        "em": true
+      },
+      {
+        "text": "。"
+      }
+    ],
+    "lead": "四段式流程，把决策、原型与评审固定写进每一步。",
+    "steps": [
+      {
+        "index": "01",
+        "title": "框定",
+        "body": "定义真正的设计问题、受众、限制条件，以及这次工作需要解锁的那个决定。",
+        "note": "策略冲刺 · 3–5 天"
+      },
+      {
+        "index": "02",
+        "title": "探索",
+        "body": "先建立彼此对立的视觉领域与动态测试，再决定方向，而不是直接给出最安全的那一版。",
+        "note": "创意方向 · 1–2 周"
+      },
+      {
+        "index": "03",
+        "title": "系统化",
+        "body": "把选定的方向转化为字体、图像、版式、动态与界面层面可复用的规则。",
+        "note": "系统搭建 · 2–4 周"
+      },
+      {
+        "index": "04",
+        "title": "发布",
+        "body": "打磨边界情况与转场，准备好素材，并陪伴实现一直到正式上线。",
+        "note": "生产实现 · 视范围而定"
+      }
+    ]
+  },
+  "studio": {
+    "kicker": "06 / 工作室",
+    "headline": [
+      {
+        "text": "刻意保持小型，"
+      },
+      {
+        "text": "资深是默认配置",
+        "em": true
+      },
+      {
+        "text": "。"
+      }
+    ],
+    "body": "形流设计是一家独立设计事务所，与创始人、文化团队和产品负责人一起工作。核心指导始终贴近具体项目；当想法需要字体、代码、3D、影像或声音时，专项合作者才会加入。",
+    "image_slot": "studio",
+    "disciplines": [
+      "创意指导",
+      "品牌设计",
+      "数字设计",
+      "动态设计",
+      "创意开发",
+      "3D / 影像"
+    ],
+    "stats": [
+      {
+        "value": "05",
+        "label": "位核心成员"
+      },
+      {
+        "value": "12",
+        "label": "位专项伙伴"
+      },
+      {
+        "value": "62%",
+        "label": "复购客户"
+      }
+    ]
+  },
+  "proof": {
+    "kicker": "07 / 认可",
+    "quote": "他们找到了那个让产品突然显得理所当然的视觉想法，然后把它贯彻到每一个细节里。",
+    "quote_author": "林默",
+    "quote_role": "Nova Systems 创始人",
+    "clients": [
+      "NOVA",
+      "AETHER",
+      "MORI",
+      "NORTH",
+      "COMMON",
+      "FRAME",
+      "POLAR",
+      "LUMA"
+    ],
+    "awards": [
+      {
+        "year": "2026",
+        "title": "Awwwards · 荣誉提名",
+        "body": "Aether Objects — 数字体验"
+      },
+      {
+        "year": "2026",
+        "title": "CSS Design Awards · 当日最佳",
+        "body": "Field Notes 02 — 内容平台"
+      },
+      {
+        "year": "2025",
+        "title": "ADC · 铜奖",
+        "body": "NOVA/AI — 数字品牌系统"
+      }
+    ]
+  },
+  "contact": {
+    "kicker": "08 / 开始合作",
+    "headline": [
+      {
+        "text": "有一个需要"
+      },
+      {
+        "text": "全新视觉引力",
+        "em": true
+      },
+      {
+        "text": "的项目？"
+      }
+    ],
+    "lead": "告诉我们正在改变什么、需要发布什么，以及为什么是现在。通常两个工作日内回复。",
+    "email_label": "项目咨询",
+    "email": "hello@formshift.studio",
+    "availability": "正在预订 2026 Q4",
+    "timezone": "UTC+8 / 支持异步协作"
+  },
+  "footer": {
+    "closing_word": "FORM/SHIFT",
+    "note": "概念模板演示 · 项目、客户、评价、奖项及数据均为虚构。"
+  },
+  "imagery": {
+    "strategy": "placeholder",
+    "assets_path": "./assets/",
+    "prompts": {}
+  },
+  "motion": {
+    "intensity": 1,
+    "loader": true,
+    "custom_cursor": true,
+    "audio": false,
+    "adaptive_quality": true
+  },
+  "ui": {
+    "loading": "正在加载字体、图像场与动态系统。",
+    "menu": "菜单",
+    "close": "关闭",
+    "audio": "环境音",
+    "lab_title": "材质\n行为",
+    "lab_body": "把滑杆当作一个小样本：工作室如何把动态与计算当作设计材料，而不是装饰。",
+    "lab_hint": "指针 → 局部场 / 滚动 → 速度输入",
+    "lab_readout": "实时 GLSL / FBM 域场",
+    "lab_sliders": {
+      "noise": "噪声频率",
+      "flow": "流动速度",
+      "distortion": "域扭曲",
+      "chromatic": "色散"
+    },
+    "lab_presets": {
+      "default": "默认",
+      "subtle": "克制",
+      "warp": "扭曲",
+      "hyper": "高能"
+    },
+    "cursor": {
+      "view": "查看",
+      "top": "顶部",
+      "open": "打开",
+      "mail": "邮件"
+    },
+    "nav_aria": "页内导航",
+    "alt_project": "项目主视觉",
+    "alt_studio": "工作室氛围"
+  }
+}

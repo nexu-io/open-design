@@ -1,0 +1,225 @@
+{
+  "$schema": "./schema.ts",
+  "subject": {
+    "name_zh": "应县木塔",
+    "name_en": "Yingxian Wooden Pagoda",
+    "period": "Liao dynasty",
+    "location": "Shanxi",
+    "structural_type": "timber pagoda",
+    "short_description": "以木构结构、层级节奏与材料时间感为核心的沉浸式文化遗产叙事。",
+    "facts": [
+      {
+        "id": "fact-period",
+        "text": "应县木塔的示例 brief 将其置于辽代语境中。",
+        "status": "documented",
+        "source_ids": [
+          "brief"
+        ]
+      },
+      {
+        "id": "fact-location",
+        "text": "示例 brief 指定地点为山西。",
+        "status": "documented",
+        "source_ids": [
+          "brief"
+        ]
+      },
+      {
+        "id": "fact-dougong",
+        "text": "示例 brief 要求重点表现斗拱结构。",
+        "status": "documented",
+        "source_ids": [
+          "brief"
+        ]
+      },
+      {
+        "id": "fact-joinery",
+        "text": "示例 brief 要求强调木构榫接、少依赖金属钉件的结构叙事；最终发布前应以项目来源再次核验具体技术表述。",
+        "status": "unverified",
+        "source_ids": [
+          "brief"
+        ]
+      },
+      {
+        "id": "idea-time",
+        "text": "将风化、修补与表面痕迹作为“时间”的视觉入口。",
+        "status": "interpretive"
+      }
+    ],
+    "sources": [
+      {
+        "id": "brief",
+        "title": "关于这次观看",
+        "note": "建筑、木构与室内图像由 AI 生成，为艺术化视觉演绎，不作为应县木塔的实景记录、结构测绘或修复依据。"
+      }
+    ]
+  },
+  "visual_system": {
+    "dna": {
+      "vertical_rhythm": "层级与檐口形成反复的水平节奏，与整体上升感并置。",
+      "structural_motif": "斗拱、木构节点与层叠挑出关系。",
+      "material_character": "深色木材、纸张与矿物灰的低饱和组合。",
+      "silhouette_logic": "宽檐与向上收束的轮廓关系。",
+      "spatial_quality": "檐下阴影、内部暗部与层层框景形成深度。",
+      "weathering_character": "不均匀的木材色差、磨损和时间痕迹。"
+    },
+    "primary_theme": "night",
+    "accent": "oxide",
+    "image_finish": "documentary-soft",
+    "title_language": "bilingual"
+  },
+  "navigation": {
+    "label_zh": "章节",
+    "label_en": "Chapters",
+    "chapter_ids": [
+      "01-encounter",
+      "02-verticality",
+      "03-structure",
+      "04-detail",
+      "05-interior",
+      "06-time",
+      "07-preservation",
+      "08-afterimage"
+    ]
+  },
+  "chapters": [
+    {
+      "id": "01-encounter",
+      "index": "01",
+      "scene_type": "encounter",
+      "copy": {
+        "eyebrow": "初见 · 远望",
+        "title_zh": "檐影之间",
+        "title_en": "Encounter",
+        "body": "从远处望见层叠的屋檐，再沿着木色与阴影，走近这座建筑。"
+      },
+      "fact_ids": [
+        "fact-location"
+      ],
+      "asset_ids": [
+        "encounter-master"
+      ]
+    },
+    {
+      "id": "02-verticality",
+      "index": "02",
+      "scene_type": "verticality",
+      "copy": {
+        "eyebrow": "循檐 · 上升",
+        "title_zh": "循檐而上",
+        "title_en": "Vertical Rhythm",
+        "body": "檐口向两侧展开，轮廓向高处收束。视线在重复与变化之间，寻找建筑的节奏。"
+      },
+      "asset_ids": [
+        "verticality-master"
+      ]
+    },
+    {
+      "id": "03-structure",
+      "index": "03",
+      "scene_type": "structure",
+      "copy": {
+        "eyebrow": "构造 · 秩序",
+        "title_zh": "木构的秩序",
+        "title_en": "Assembly",
+        "body": "一层承托一层，一件回应一件。视线穿过檐下的阴影，看见木材之间反复出现的秩序。"
+      },
+      "fact_ids": [
+        "fact-dougong"
+      ],
+      "asset_ids": [
+        "structure-master"
+      ]
+    },
+    {
+      "id": "04-detail",
+      "index": "04",
+      "scene_type": "detail",
+      "copy": {
+        "eyebrow": "木纹 · 节点",
+        "title_zh": "木纹深处",
+        "title_en": "Material Detail",
+        "body": "靠近木材的表面，色差、纹理与接合处成为新的风景。"
+      },
+      "asset_ids": [
+        "detail-master"
+      ]
+    },
+    {
+      "id": "05-interior",
+      "index": "05",
+      "scene_type": "interior",
+      "copy": {
+        "eyebrow": "入境 · 幽深",
+        "title_zh": "步入幽深",
+        "title_en": "Interior",
+        "body": "从檐外的明亮走入深色的框景。光线停留在边缘，暗部延伸出另一种观看距离。"
+      },
+      "asset_ids": [
+        "interior-master"
+      ]
+    },
+    {
+      "id": "06-time",
+      "index": "06",
+      "scene_type": "time",
+      "copy": {
+        "eyebrow": "岁月 · 留痕",
+        "title_zh": "岁月留痕",
+        "title_en": "Traces of Time",
+        "body": "把目光从整体移向局部。拖动分界线，观察同一图像中不同观看距离下的木色与纹理。"
+      },
+      "fact_ids": [
+        "idea-time"
+      ],
+      "asset_ids": [
+        "time-plate-a",
+        "time-plate-b"
+      ]
+    },
+    {
+      "id": "07-preservation",
+      "index": "07",
+      "scene_type": "preservation",
+      "copy": {
+        "eyebrow": "留存 · 记录",
+        "title_zh": "为未来留存",
+        "title_en": "Preservation",
+        "body": "仔细观察，也认真记录。每一份有来源的图像与文字，都让后来的观看多一条线索。"
+      },
+      "asset_ids": [
+        "preservation-master"
+      ]
+    },
+    {
+      "id": "08-afterimage",
+      "index": "08",
+      "scene_type": "afterimage",
+      "copy": {
+        "eyebrow": "回望 · 余像",
+        "title_zh": "回望一瞬",
+        "title_en": "Afterimage",
+        "body": "让层叠的轮廓、木材的纹理与深处的光，停留片刻。"
+      },
+      "asset_ids": [
+        "afterimage-master"
+      ]
+    }
+  ],
+  "imagery": {
+    "strategy": "generate",
+    "assets_path": "./assets/",
+    "motion_tier": "high",
+    "provided_assets": {
+      "encounter-master": "assets/generated/pagoda.webp",
+      "verticality-master": "assets/generated/pagoda.webp",
+      "structure-master": "assets/generated/timber.webp",
+      "detail-master": "assets/generated/timber.webp",
+      "interior-master": "assets/generated/interior.webp",
+      "time-plate-a": "assets/generated/timber.webp",
+      "time-plate-b": "assets/generated/timber.webp",
+      "preservation-master": "assets/generated/pagoda.webp",
+      "afterimage-master": "assets/generated/pagoda.webp"
+    }
+  }
+}

@@ -1,0 +1,442 @@
+{
+  "$schema": "./schema.ts#DesignStudioWebInputs",
+  "brand": {
+    "name": "FORM/SHIFT",
+    "mark": "F/S",
+    "tagline": "Independent design studio for identities, digital products and moving systems.",
+    "description": "FORM/SHIFT is an independent design studio shaping identities, digital experiences and motion systems for ambitious cultural and technology brands.",
+    "locale": "en",
+    "location": "Shanghai · Singapore · Remote",
+    "coordinates": "31.2304° N · 121.4737° E",
+    "year": "2026",
+    "founded": "Est. 2021",
+    "contact_email": "hello@formshift.studio",
+    "status": "Available for Q4 collaborations",
+    "edition": "Studio Index / 26—09",
+    "languages": [
+      "EN",
+      "中文"
+    ],
+    "social": []
+  },
+  "nav": [
+    {
+      "label": "Work",
+      "href": "#work"
+    },
+    {
+      "label": "Studio",
+      "href": "#studio"
+    },
+    {
+      "label": "Capabilities",
+      "href": "#capabilities"
+    },
+    {
+      "label": "Contact",
+      "href": "#contact"
+    }
+  ],
+  "hero": {
+    "eyebrow": "Independent creative practice · 2026",
+    "headline": [
+      {
+        "text": "We design "
+      },
+      {
+        "text": "systems",
+        "em": true
+      },
+      {
+        "text": " that move "
+      },
+      {
+        "text": "brands",
+        "accent": true
+      },
+      {
+        "text": " forward."
+      }
+    ],
+    "lead": "Strategy, identity, digital experience and motion—built as one coherent visual operating system.",
+    "primary": {
+      "label": "Selected work",
+      "href": "#work"
+    },
+    "secondary": {
+      "label": "Start a project",
+      "href": "mailto:hello@formshift.studio"
+    },
+    "stats": [
+      {
+        "value": "34",
+        "label": "launches"
+      },
+      {
+        "value": "11",
+        "label": "markets"
+      },
+      {
+        "value": "07",
+        "label": "awards"
+      }
+    ],
+    "scroll_label": "Scroll to enter",
+    "art_label": "Generative field / live canvas"
+  },
+  "manifesto": {
+    "kicker": "02 / Point of view",
+    "headline": [
+      {
+        "text": "A studio for brands that need more than a "
+      },
+      {
+        "text": "look",
+        "em": true
+      },
+      {
+        "text": ". They need a "
+      },
+      {
+        "text": "language",
+        "accent": true
+      },
+      {
+        "text": "."
+      }
+    ],
+    "paragraphs": [
+      "We work at the point where identity, interface and motion become one system. The output can be a launch, a platform, a campaign or a complete reframe of how a brand behaves.",
+      "Our process is compact, senior-led and prototype-first. We make ideas tangible early, then refine every layer until the experience feels inevitable."
+    ],
+    "principles": [
+      {
+        "index": "01",
+        "title": "Clarity before decoration",
+        "body": "Every visual move must strengthen the idea, hierarchy or action."
+      },
+      {
+        "index": "02",
+        "title": "Motion is structure",
+        "body": "Transitions explain relationships, not just add spectacle."
+      },
+      {
+        "index": "03",
+        "title": "Systems beat screens",
+        "body": "We design rules that keep producing quality after launch."
+      }
+    ]
+  },
+  "work": {
+    "kicker": "03 / Selected work",
+    "headline": [
+      {
+        "text": "Four projects. Four "
+      },
+      {
+        "text": "different worlds",
+        "em": true
+      },
+      {
+        "text": ". One obsession with "
+      },
+      {
+        "text": "precision",
+        "accent": true
+      },
+      {
+        "text": "."
+      }
+    ],
+    "lead": "Identity and digital work for technology, culture, hospitality and next-generation products.",
+    "projects": [
+      {
+        "index": "01",
+        "title": "Aether Objects",
+        "client": "Aether",
+        "category": "Brand identity · Commerce",
+        "year": "2026",
+        "description": "A tactile identity and immersive product system for a collectible objects label built around light, material and seriality.",
+        "services": [
+          "Strategy",
+          "Identity",
+          "Digital",
+          "Motion"
+        ],
+        "metric": "+68% launch conversion",
+        "image_slot": "work-1",
+        "href": "#contact",
+        "theme": "dark"
+      },
+      {
+        "index": "02",
+        "title": "Field Notes 02",
+        "client": "North Journal",
+        "category": "Editorial platform · Culture",
+        "year": "2026",
+        "description": "A cinematic publishing platform where essays, audio and archival imagery move through a single spatial reading rhythm.",
+        "services": [
+          "Art direction",
+          "UX",
+          "Web",
+          "Editorial"
+        ],
+        "metric": "2.4× reading depth",
+        "image_slot": "work-2",
+        "href": "#contact",
+        "theme": "light"
+      },
+      {
+        "index": "03",
+        "title": "NOVA/AI",
+        "client": "Nova Systems",
+        "category": "AI product · Digital system",
+        "year": "2025",
+        "description": "A responsive product language translating invisible model behavior into a calm, legible interaction system.",
+        "services": [
+          "Product",
+          "Design system",
+          "Motion",
+          "Prototype"
+        ],
+        "metric": "41% faster onboarding",
+        "image_slot": "work-3",
+        "href": "#contact",
+        "theme": "dark"
+      },
+      {
+        "index": "04",
+        "title": "Still / Moving",
+        "client": "Mori House",
+        "category": "Hospitality · Spatial identity",
+        "year": "2025",
+        "description": "A quiet hospitality identity built from changing light, soft typography and a digital concierge that shifts with time of day.",
+        "services": [
+          "Brand",
+          "Art direction",
+          "Digital",
+          "Spatial"
+        ],
+        "metric": "Global launch / 6 cities",
+        "image_slot": "work-4",
+        "href": "#contact",
+        "theme": "light"
+      }
+    ],
+    "archive_label": "Discuss a similar project",
+    "archive_href": "#contact"
+  },
+  "capabilities": {
+    "kicker": "04 / Capabilities",
+    "headline": [
+      {
+        "text": "One studio. "
+      },
+      {
+        "text": "Four connected disciplines",
+        "em": true
+      },
+      {
+        "text": "."
+      }
+    ],
+    "lead": "We assemble the smallest senior team needed to move from strategic idea to launch-ready expression without losing coherence.",
+    "items": [
+      {
+        "index": "01",
+        "title": "Brand systems",
+        "body": "Positioning and identity systems with enough logic to scale across teams, markets and media.",
+        "services": [
+          "Strategy",
+          "Naming",
+          "Identity",
+          "Guidelines"
+        ]
+      },
+      {
+        "index": "02",
+        "title": "Digital experiences",
+        "body": "Websites and products that turn brand principles into interface behavior and interaction rhythm.",
+        "services": [
+          "UX",
+          "UI",
+          "Prototyping",
+          "Design systems"
+        ]
+      },
+      {
+        "index": "03",
+        "title": "Motion language",
+        "body": "Kinetic identities, launch films and interface motion where timing becomes part of the brand voice.",
+        "services": [
+          "Motion system",
+          "3D",
+          "Title design",
+          "Micro-interaction"
+        ]
+      },
+      {
+        "index": "04",
+        "title": "Creative technology",
+        "body": "Generative graphics, WebGL and spatial prototypes used when a concept deserves a medium of its own.",
+        "services": [
+          "WebGL",
+          "Generative",
+          "AI",
+          "Spatial"
+        ]
+      }
+    ],
+    "lab_label": "Interactive material lab — drag the parameters"
+  },
+  "method": {
+    "kicker": "05 / Working method",
+    "headline": [
+      {
+        "text": "Fast enough to keep momentum. "
+      },
+      {
+        "text": "Deep enough to matter",
+        "em": true
+      },
+      {
+        "text": "."
+      }
+    ],
+    "lead": "A four-stage process with decisions, prototypes and critique built into every step.",
+    "steps": [
+      {
+        "index": "01",
+        "title": "Frame",
+        "body": "Define the real design problem, audience, constraints and the decision the work needs to unlock.",
+        "note": "Strategy sprint · 3–5 days"
+      },
+      {
+        "index": "02",
+        "title": "Explore",
+        "body": "Build contrasting visual territories and motion tests before committing to one predictable answer.",
+        "note": "Creative directions · 1–2 weeks"
+      },
+      {
+        "index": "03",
+        "title": "Systemize",
+        "body": "Turn the chosen direction into repeatable rules across typography, imagery, layout, motion and UI.",
+        "note": "System build · 2–4 weeks"
+      },
+      {
+        "index": "04",
+        "title": "Launch",
+        "body": "Prototype edge cases, polish transitions, prepare assets and support implementation through release.",
+        "note": "Production · variable"
+      }
+    ]
+  },
+  "studio": {
+    "kicker": "06 / Studio",
+    "headline": [
+      {
+        "text": "Small by design. "
+      },
+      {
+        "text": "Senior by default",
+        "em": true
+      },
+      {
+        "text": "."
+      }
+    ],
+    "body": "FORM/SHIFT is an independent design practice working with founders, cultural teams and product leaders. Core direction stays close to the work; specialists join when the idea needs type, code, 3D, film or sound.",
+    "image_slot": "studio",
+    "disciplines": [
+      "Creative direction",
+      "Brand design",
+      "Digital design",
+      "Motion",
+      "Creative development",
+      "3D / image"
+    ],
+    "stats": [
+      {
+        "value": "05",
+        "label": "core collaborators"
+      },
+      {
+        "value": "12",
+        "label": "specialist partners"
+      },
+      {
+        "value": "62%",
+        "label": "repeat clients"
+      }
+    ]
+  },
+  "proof": {
+    "kicker": "07 / Selected recognition",
+    "quote": "They found the one visual idea that made the product suddenly feel obvious—and then carried it through every detail.",
+    "quote_author": "Mara Lin",
+    "quote_role": "Founder, Nova Systems",
+    "clients": [
+      "NOVA",
+      "AETHER",
+      "MORI",
+      "NORTH",
+      "COMMON",
+      "FRAME",
+      "POLAR",
+      "LUMA"
+    ],
+    "awards": [
+      {
+        "year": "2026",
+        "title": "Awwwards · Honorable Mention",
+        "body": "Aether Objects — Digital Experience"
+      },
+      {
+        "year": "2026",
+        "title": "CSS Design Awards · SOTD",
+        "body": "Field Notes 02 — Editorial Platform"
+      },
+      {
+        "year": "2025",
+        "title": "ADC · Bronze",
+        "body": "NOVA/AI — Digital Brand System"
+      }
+    ]
+  },
+  "contact": {
+    "kicker": "08 / Start something",
+    "headline": [
+      {
+        "text": "Have a project that needs a "
+      },
+      {
+        "text": "new visual gravity",
+        "em": true
+      },
+      {
+        "text": "?"
+      }
+    ],
+    "lead": "Tell us what is changing, what needs to launch, and why it matters now. We usually reply within two working days.",
+    "email_label": "Project enquiries",
+    "email": "hello@formshift.studio",
+    "availability": "Now booking Q4 2026",
+    "timezone": "UTC+8 / async-friendly"
+  },
+  "footer": {
+    "closing_word": "FORM/SHIFT",
+    "note": "Concept template demo · Projects, clients, quotes, awards and metrics are fictional."
+  },
+  "imagery": {
+    "strategy": "placeholder",
+    "assets_path": "../assets/",
+    "prompts": {}
+  },
+  "motion": {
+    "intensity": 1,
+    "loader": true,
+    "custom_cursor": true,
+    "audio": false,
+    "adaptive_quality": true
+  }
+}
