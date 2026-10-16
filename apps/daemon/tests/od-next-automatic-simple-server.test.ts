@@ -974,6 +974,8 @@ process.exit(127);
       'Hold the run open and drain slowly after a stop.', 'draining-first'));
     const firstRunId = first.runId as string;
     await vi.waitFor(async () => expect((await getRun(started!.url, firstRunId)).status).toBe('running'));
+    // Running status is published before the fake child has installed its stop handler.
+    await vi.waitFor(async () => expect(await readFile(fixture.logPath + '.drain-ready', 'utf8')).toBe('ready'), { timeout: 15_000 });
     const stopping = fetch(`${started.url}/api/runs/${encodeURIComponent(firstRunId)}/cancel`, {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}',
     });
@@ -3009,6 +3011,7 @@ process.stdin.on('end', () => {
   if (stdin.includes('Hold the run open and drain slowly after a stop.') && !stdin.includes('Historical task context.')) {
     // Stopping answers only after the process exits; keep that window open.
     process.on('SIGTERM', () => setTimeout(() => process.exit(0), 2500));
+    fs.writeFileSync(logPath + '.drain-ready', 'ready');
     setInterval(() => {}, 1 << 30);
     return;
   }

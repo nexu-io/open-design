@@ -27,6 +27,8 @@ import {
   applyOsLocaleSwitch,
   createSplashWindow,
   setSplashStage,
+  createDesktopStartupTiming,
+  type StartupTiming,
   type DesktopMainHandle,
 } from "@open-design/desktop/main";
 import { releaseChannelFromNamespace, releaseChannelFromVersion } from "@open-design/release";
@@ -76,11 +78,12 @@ import {
 import { findPackagedDeeplinkArg, launchPackagedPayloadDesktop } from "./payload-desktop-launch.js";
 import { packagedEntryUrl, registerOdProtocol } from "./protocol.js";
 import { startPackagedSidecars } from "./sidecars.js";
-import { reportStartupFailure, resolveStartupDistinctId } from "./startup-telemetry.js";
+import { classifyStartupFailure, reportLaunchEvent, reportStartupFailure, resolveStartupDistinctId } from "./startup-telemetry.js";
 import { resolvePackagedWindowTitle } from "./window-title.js";
 import { syncWindowsUninstallDisplayVersion } from "./windows-lifecycle.js";
 
 let packagedLogger: PackagedDesktopLogger | null = null;
+let packagedStartupTiming: StartupTiming | null = null;
 const secondInstanceHandoff = createPackagedSecondInstanceHandoff();
 
 // Telemetry context for the fatal-exit path. Populated once config + launcher
@@ -97,8 +100,13 @@ let startupTelemetryContext:
       source: string;
       installationRoot: string;
       nativeModulePath: string | null;
+      channel: string;
     }
   | null = null;
+
+async function reportPackagedLaunch(event: Parameters<typeof reportLaunchEvent>[0]["event"], properties: Record<string, unknown>) {
+  if (startupTelemetryContext) await reportLaunchEvent({ ...startupTelemetryContext, event, properties });
+}
 
 function applyPackagedUpdaterEnv(updateMetadataUrl: string | null): void {
   if (updateMetadataUrl == null) return;
@@ -263,6 +271,7 @@ async function main(): Promise<void> {
   // startPackagedSidecars call below is THE failure this covers (daemon/web
   // dying before reporting status, e.g. issue #4638's missing better-sqlite3).
   startupTelemetryContext = {
+    channel: launchStamp.channel,
     posthogKey: activeConfig.posthogKey,
     posthogHost: activeConfig.posthogHost,
     appVersion: activeConfig.appVersion,
@@ -284,6 +293,14 @@ async function main(): Promise<void> {
       "better_sqlite3.node",
     ),
   };
+
+  // Helper/delegating/headless-only processes are excluded. Node's origin
+  // includes ESM/config work in this process, but not an earlier OS click or
+  // a separate installed launcher process. Early events wait for identity.
+  if (!deferredHeadless) {
+    packagedStartupTiming = createDesktopStartupTiming({ appVersion: activeConfig.appVersion, startupType: "cold" });
+    packagedStartupTiming.mark("runtime_resolved");
+  }
 
   await ensurePackagedNamespacePaths(paths);
   const convergedStamp = launchStamp;
@@ -317,6 +334,7 @@ async function main(): Promise<void> {
     return;
   }
   await app.whenReady();
+  packagedStartupTiming?.mark("electron_ready");
 
   // Show the brand splash IMMEDIATELY, before we await the daemon/web sidecars
   // below. Cold boot otherwise leaves the user staring at no window at all for
@@ -369,6 +387,9 @@ async function main(): Promise<void> {
     // Both the "spawning" and "ready" edges are mapped so the step counter
     // advances the instant each long native wait clears.
     onPhase(phase) {
+      if (phase === "daemon-ready") packagedStartupTiming?.setReporter(reportPackagedLaunch);
+      packagedStartupTiming?.mark(phase === "daemon-spawning" ? "daemon_spawning"
+        : phase === "daemon-ready" ? "daemon_ready" : phase === "web-spawning" ? "web_spawning" : "web_ready");
       const stage =
         phase === "daemon-spawning"
           ? "engine"
@@ -404,6 +425,7 @@ async function main(): Promise<void> {
     return await desktopHandle.invoke(action, input);
   };
   const launchDesktop = async (): Promise<DesktopMainHandle> => await runDesktopMain(runtime, {
+    startupTiming: packagedStartupTiming ?? undefined,
     splashWindow: splash?.window,
     splashStartedAt: splash?.startedAt,
     async beforeShutdown(record) {
@@ -480,10 +502,13 @@ async function main(): Promise<void> {
         url: sidecars.currentWebUrl(),
       }),
       launch: async () => {
+        packagedStartupTiming = createDesktopStartupTiming({ appVersion: activeConfig.appVersion, startupType: "cold", report: reportPackagedLaunch });
         splash = createSplashWindow();
         return await launchDesktop();
       },
       onRestoreFailed: (error) => {
+        packagedStartupTiming?.finish("failed", "desktop_restore_failed");
+        packagedStartupTiming = null;
         packagedLogger?.error("failed to restore desktop from headless runtime", { error });
         if (splash != null && !splash.window.isDestroyed()) splash.window.destroy();
         splash = null;
@@ -536,6 +561,10 @@ async function main(): Promise<void> {
 
 void main().catch(async (error: unknown) => {
   const isPathAccess = error instanceof PackagedPathAccessError;
+  if (packagedStartupTiming != null) {
+    packagedStartupTiming.setReporter(reportPackagedLaunch);
+    packagedStartupTiming.finish("failed", classifyStartupFailure(error, isPathAccess).failureKind);
+  }
   if (isPathAccess) {
     try {
       dialog.showErrorBox(error.title, error.message);
@@ -551,7 +580,7 @@ void main().catch(async (error: unknown) => {
   // can neither block nor crash the exit. No-op when telemetry isn't armed yet
   // or the build has no PostHog key.
   if (startupTelemetryContext) {
-    await reportStartupFailure({
+    await Promise.all([packagedStartupTiming?.flush(), reportStartupFailure({
       error,
       isPathAccess,
       posthogKey: startupTelemetryContext.posthogKey,
@@ -564,7 +593,7 @@ void main().catch(async (error: unknown) => {
       namespace: startupTelemetryContext.namespace,
       source: startupTelemetryContext.source,
       nativeModulePath: startupTelemetryContext.nativeModulePath,
-    });
+    })]);
   }
   process.exit(resolveSidecarLauncherExitCode(error));
 });

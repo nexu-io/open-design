@@ -9,6 +9,9 @@ import {
   CLIENT_EXPERIENCE_DIAGNOSTIC_EVENT,
   parseClientExperienceDiagnostic,
   type ClientExperienceDiagnostic,
+  buildClientTelemetryParams,
+  isClientMetricEventName,
+  parseClientMetricEvent,
 } from '@open-design/contracts/analytics';
 import {
   createAnalyticsService,
@@ -17,7 +20,8 @@ import {
 } from '../analytics.js';
 import type { AnalyticsContext } from '../analytics.js';
 import type { readAppConfig, writeAppConfig } from '../app-config.js';
-import { readCurrentAppVersionInfo, UNKNOWN_APP_VERSION } from '../app-version.js';
+import { readCurrentAppVersionInfo, UNKNOWN_APP_VERSION, type AppVersionInfo } from '../app-version.js';
+import { readTelemetryEnvironment } from '../telemetry-environment.js';
 import { reportRunFeedbackFromDaemon } from '../langfuse-bridge.js';
 import { observePendingInstallerApplyAttempts } from '../migration/index.js';
 import {
@@ -133,7 +137,7 @@ export async function resolveTrustedMcpEventContext(
 export function registerTelemetryRoutes(app: Express, deps: RegisterTelemetryRoutesDeps): DaemonTelemetry {
   const { dataDir } = deps;
   const analyticsService = createAnalyticsService({ dataDir });
-  let cachedAppVersion: any = null;
+  let cachedAppVersion: AppVersionInfo | null = null;
 
   // PostHog runtime config.
   //
@@ -244,7 +248,7 @@ export function registerTelemetryRoutes(app: Express, deps: RegisterTelemetryRou
     await analyticsService.capture({
       eventName: body.event,
       context,
-      appVersion: cachedAppVersion?.version ?? UNKNOWN_APP_VERSION,
+      appVersion: (await appVersionPromise)?.version ?? UNKNOWN_APP_VERSION,
       properties,
       insertId: body.eventId,
     });
@@ -270,10 +274,29 @@ export function registerTelemetryRoutes(app: Express, deps: RegisterTelemetryRou
     }
     const incidentId = ['desktop_unclean_exit', 'desktop_renderer_crash', 'desktop_child_process_crash', 'packaged_runtime_failed'].includes(eventName)
       ? deps.onHostFault?.(eventName, properties) : null;
-    analyticsService.captureSafety({
+    if (eventName === 'client_process_memory_sample') {
+      const config = await deps.readAppConfig(dataDir);
+      if (config.telemetry?.metrics !== true) { res.json({ ok: true }); return; }
+    }
+    const metricCommon = buildClientTelemetryParams(properties, {
+      eventId: randomUUID(), deviceId: null, appVersion: (await appVersionPromise)?.version ?? null,
+      clientType: 'desktop', captureSource: 'desktop/observability', env: readTelemetryEnvironment(),
+      platform: process.platform, arch: process.arch, reportedAt: new Date().toISOString(),
+    });
+    const metric = isClientMetricEventName(eventName)
+      ? parseClientMetricEvent(eventName, {
+        ...properties, ...metricCommon,
+      }) : null;
+    if (isClientMetricEventName(eventName) && !metric) {
+      res.status(400).json({ error: 'invalid client metric properties' });
+      return;
+    }
+    const appVersion = await appVersionPromise;
+    await analyticsService.captureSafety({
       eventName,
-      appVersion: cachedAppVersion?.version ?? UNKNOWN_APP_VERSION,
-      properties: { ...properties, ...(incidentId ? { diagnostic_incident_id: incidentId } : {}) },
+      appVersion: appVersion?.version ?? UNKNOWN_APP_VERSION,
+      properties: { ...(metric ?? properties), ...(incidentId ? { diagnostic_incident_id: incidentId } : {}) },
+      ...(metric ? { insertId: metric.event_id as string } : {}),
     });
     res.json({ ok: true });
   });

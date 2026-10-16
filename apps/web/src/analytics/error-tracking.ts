@@ -35,9 +35,12 @@ import { reportExperienceEvent } from '../observability/experience-diagnostics';
 // single source of truth for browser exception capture.
 
 import {
-  EVENT_SCHEMA_VERSION,
+  buildClientTelemetryParams,
+  isClientMetricEventName,
+  parseClientMetricEvent,
   type AnalyticsClientType,
 } from '@open-design/contracts/analytics';
+import { isResolvedAppVersion } from './app-version';
 import { scrubExceptionList, scrubFilePath } from './scrub';
 
 export type BrowserOsName =
@@ -98,6 +101,11 @@ interface ExceptionTrackingContext {
   appVersion?: string;
   sessionId?: string;
   telemetryEnv?: string;
+  channel?: string;
+  appSessionId?: string;
+  platform?: string;
+  osVersion?: string;
+  arch?: string;
 }
 
 interface BufferedSafetyEvent {
@@ -122,7 +130,7 @@ const buffer: BufferedSafetyEvent[] = [];
 let installed = false;
 
 export function setExceptionTrackingContext(next: ExceptionTrackingContext): void {
-  context = next;
+  context = { ...next, appSessionId: next.appSessionId ?? context?.appSessionId };
   if (buffer.length === 0) return;
   const drain = buffer.splice(0, buffer.length);
   for (const item of drain) {
@@ -143,7 +151,7 @@ export function clearExceptionTrackingContext(): void {
 // resolves after the initial '0.0.0' placeholder). No-op if context hasn't
 // been set yet.
 export function patchExceptionTrackingAppVersion(version: string): void {
-  if (!context || !version) return;
+  if (!context || !isResolvedAppVersion(version)) return;
   context = { ...context, appVersion: version };
 }
 
@@ -274,7 +282,7 @@ export function reportSafetyEvent(
       options.currentUrlOverride
         ?? (typeof window !== 'undefined' ? window.location.href : ''),
     ),
-    $insert_id: randomId(),
+    $insert_id: typeof properties.event_id === 'string' ? properties.event_id : randomId(),
     capture_source: 'web/error-tracking',
   };
   enqueue(eventName, merged);
@@ -297,24 +305,34 @@ function enqueue(eventName: string, properties: Record<string, unknown>): void {
 
 function dispatch(item: BufferedSafetyEvent): void {
   if (context == null) return;
+  const original = item.body.properties;
+  const common = buildClientTelemetryParams(original, {
+    eventId: String(original.$insert_id), deviceId: context.distinctId,
+    appSessionId: context.appSessionId ?? context.sessionId ?? null,
+    appVersion: context.appVersion ?? null,
+    ...(context.channel ? { channel: context.channel } : {}),
+    clientType: context.clientType, captureSource: 'web/error-tracking',
+    env: context.telemetryEnv ?? 'unknown',
+    platform: context.platform ?? null, osVersion: context.osVersion ?? null,
+    arch: context.arch ?? null, occurredAt: item.timestamp, reportedAt: new Date().toISOString(),
+  });
+  const metric = isClientMetricEventName(item.eventName)
+    ? parseClientMetricEvent(item.eventName, { ...original, ...common }) : null;
+  if (isClientMetricEventName(item.eventName) && !metric) return;
   const payload = {
     api_key: context.apiKey,
     event: item.eventName,
-    distinct_id: context.distinctId,
-    properties: {
+    distinct_id: common.device_id ?? context.distinctId,
+    properties: metric ? { ...metric, $insert_id: common.event_id } : {
       ...item.body.properties,
-      // Keep the direct-fetch web safety envelope aligned with daemon and
-      // packaged-runtime telemetry. Stamp this after caller properties so a
-      // stale producer cannot accidentally override the canonical version.
-      event_schema_version: EVENT_SCHEMA_VERSION,
       $lib: 'web/error-tracking',
       $os: context.osName,
-      client_type: context.clientType,
-      ...(context.telemetryEnv ? { env: context.telemetryEnv } : {}),
-      ...(context.appVersion ? { app_version: context.appVersion, ui_version: context.appVersion } : {}),
       ...(context.sessionId ? { session_id: context.sessionId } : {}),
+      ...common,
+      ui_version: common.app_version,
+      $insert_id: common.event_id,
     },
-    timestamp: item.timestamp,
+    timestamp: common.occurred_at,
   };
   // `keepalive` ensures the request survives an immediate window unload —
   // important for events that fire during navigation that are followed by

@@ -387,6 +387,7 @@ export type DesktopStatusSnapshot = {
 };
 
 export type DesktopRuntime = {
+  ownsWebContents(id: number): boolean;
   close(): Promise<void>;
   click(input: DesktopClickInput): Promise<DesktopClickResult>;
   console(): DesktopConsoleResult;
@@ -2997,6 +2998,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   void tick();
 
   return {
+    ownsWebContents(id: number): boolean { return !window.isDestroyed() && window.webContents.id === id; },
     async click(input) {
       if (window.isDestroyed()) return { clicked: false, found: false };
       const selector = JSON.stringify(input.selector);

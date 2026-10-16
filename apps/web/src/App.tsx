@@ -164,6 +164,8 @@ import {
   stashHomePromptHandoff,
 } from './components/home-hero/plugin-authoring';
 import { goBack, navigate, useRoute, type Route } from './router';
+import { navigationTiming } from './observability/navigation-timing';
+import { useStartupReady } from './observability/startup-ready';
 import {
   fetchDaemonConfig,
   DEFAULT_CONFIG,
@@ -1425,6 +1427,19 @@ function AppInner() {
   // can't overwrite the saved state with `''` before hydration lands.
   const [composioConfigLoading, setComposioConfigLoading] = useState(true);
   const route = useRoute();
+  useStartupReady({
+    visible: route.kind === 'home' && daemonAppConfigReady,
+    interactive: route.kind === 'home' && daemonAppConfigReady && !projectsLoading
+      && !agentsLoading && !skillsLoading && !dsLoading && !promptTemplatesLoading,
+  });
+  useLayoutEffect(() => {
+    navigationTiming.observeRoute(route);
+  }, [route]);
+  useEffect(() => {
+    const onPageExit = () => navigationTiming.cancel('page_exit');
+    window.addEventListener('pagehide', onPageExit);
+    return () => window.removeEventListener('pagehide', onPageExit);
+  }, []);
   const routeRef = useRef(route);
   routeRef.current = route;
   const settingsReturnTargetRef = useRef<SettingsReturnTarget | null>(null);
@@ -3913,10 +3928,11 @@ function AppInner() {
     return { kind: 'resolved', name: authoritativeName };
   }, [rememberAuthoritativeProjectName]);
 
-  const handleOpenProject = useCallback(async (
+  const openProjectForNavigation = useCallback(async (
     id: string,
     fileName?: string,
     projectTitleHint?: ProjectTitleHint,
+    navigationId?: string,
   ): Promise<boolean> => {
     const routeFileName = fileName ?? null;
     const hintedProjectName = projectTitleHint?.name.trim() || null;
@@ -3975,6 +3991,7 @@ function AppInner() {
       openingContext,
     );
     const openingScopeIsCurrent = () => {
+      if (navigationId && !navigationTiming.isCurrent(navigationId)) return false;
       if (currentWorkspaceAccountGeneration() !== openingAccountGeneration) return false;
       if (!pendingContextWitness) {
         return projectAuthorizationGenerationRef.current === openingAuthorizationGeneration
@@ -3995,6 +4012,7 @@ function AppInner() {
       return !requiresBoundCatalogProject;
     };
     const navigateToOpenedProject = (project: Project) => {
+      if (!openingScopeIsCurrent()) return false;
       const projectWorkspaceId = project.workspaceId?.trim() ?? '';
       projectOpenWorkspaceWitnessRef.current =
         projectWorkspaceId
@@ -4009,7 +4027,9 @@ function AppInner() {
               accountGeneration: openingAccountGeneration,
             }
           : null;
-      navigate({ kind: 'project', projectId: id, fileName: routeFileName });
+      navigate({ kind: 'project', projectId: id, fileName: routeFileName }, {
+        onCancel: reason => { if (navigationId) navigationTiming.finish(navigationId, 'cancelled', reason); },
+      });
       return true;
     };
     const rememberHintAuthority = () => {
@@ -4142,6 +4162,37 @@ function AppInner() {
     rememberAuthoritativeProjectName,
     t,
   ]);
+
+  const handleOpenProject = useCallback(async (
+    id: string,
+    fileName?: string,
+    projectTitleHint?: ProjectTitleHint,
+  ): Promise<boolean> => {
+    const source = routeRef.current;
+    // Clicking an already-open project/file is not another project entry.
+    if (source.kind === 'project' && source.projectId === id) {
+      navigationTiming.cancel('superseded');
+      return openProjectForNavigation(id, fileName, projectTitleHint);
+    }
+    const openingAccountGeneration = currentWorkspaceAccountGeneration();
+    const openingAuthorizationGeneration = projectAuthorizationGenerationRef.current;
+    const navigationId = navigationTiming.begin(source, { projectId: id });
+    try {
+      const opened = await openProjectForNavigation(id, fileName, projectTitleHint, navigationId);
+      if (!opened) {
+        if (currentWorkspaceAccountGeneration() !== openingAccountGeneration
+          || projectAuthorizationGenerationRef.current !== openingAuthorizationGeneration) {
+          navigationTiming.finish(navigationId, 'cancelled', 'scope_changed');
+        } else {
+          navigationTiming.finish(navigationId, 'failed', 'open_unavailable');
+        }
+      }
+      return opened;
+    } catch (error) {
+      navigationTiming.finish(navigationId, 'failed', 'open_unavailable');
+      throw error;
+    }
+  }, [openProjectForNavigation]);
 
   useEffect(() => {
     if (!config.pet?.enabled || !daemonLive) {
@@ -4667,6 +4718,18 @@ function AppInner() {
     ? projectRouteWorkspaceContext.context
     : null;
   projectRouteWorkspaceContextRef.current = activeProjectWorkspaceContext;
+  useEffect(() => {
+    if (route.kind !== 'project') return;
+    const attempt = navigationTiming.getSnapshot();
+    if (!attempt || attempt.projectId !== route.projectId) return;
+    // These failures render an App-owned error surface, so ProjectView's
+    // business Ready hook will never mount to terminate the attempt.
+    if (projectRouteWorkspaceContext.failure) {
+      navigationTiming.finish(attempt.id, 'failed', 'scope_unavailable');
+    } else if (deepLinkResolutionFailure?.projectId === route.projectId) {
+      navigationTiming.finish(attempt.id, 'failed', 'project_unavailable');
+    }
+  }, [route, projectRouteWorkspaceContext.failure, deepLinkResolutionFailure]);
   // The post-generation upgrade gate belongs to the project that owns the
   // conversation, not whichever Workspace the navigation shell currently
   // selects. A bound project stays fail-closed until its exact membership and

@@ -348,6 +348,11 @@ ipcRenderer.on(APP_CONFIG_CHANGED_IPC_CHANNEL, () => {
 
 const hostBridge = {
   version: OPEN_DESIGN_HOST_VERSION,
+  startup: {
+    context: () => ipcRenderer.invoke('od:startup:context'),
+    signal: (value: Parameters<NonNullable<OpenDesignHostBridge['startup']>['signal']>[0]) =>
+      ipcRenderer.invoke('od:startup:business-ready', value),
+  },
   client: {
     type: 'desktop',
     platform: process.platform,

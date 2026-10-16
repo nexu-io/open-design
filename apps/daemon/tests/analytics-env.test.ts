@@ -1,4 +1,4 @@
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -191,4 +191,102 @@ describe('analytics telemetry environment', () => {
     });
     expect(posthogCapture).not.toHaveBeenCalled();
   });
+});
+
+
+describe('CS01 capture channel and shared identity', () => {
+  it.each([
+    [{ OD_APP_VERSION: '1.2.3-beta.1' }, 'production', 'beta', '1.2.3-beta.1'],
+    [{ OD_APP_VERSION: '1.2.3-prerelease.1' }, 'production', 'prerelease', '1.2.3-prerelease.1'],
+    [{ OD_APP_VERSION: '1.2.3' }, 'production', 'stable', '1.2.3'],
+    [{ OD_APP_VERSION: '1.2.3', OD_TELEMETRY_ENV: 'qa' }, 'qa', 'stable', '1.2.3'],
+    [{ NODE_ENV: 'development' }, 'development', 'development', '1.2.3'],
+    [{ NODE_ENV: 'test' }, 'test', 'development', '1.2.3'],
+  ])('reports %j consistently in config, metrics and safety', async (env, expectedEnv, channel, version) => {
+    posthogCapture.mockReset();
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'od-cs01-channel-'));
+    try {
+      await writeFile(path.join(dataDir, 'app-config.json'), JSON.stringify({
+        installationId: 'install-1', telemetry: { metrics: true },
+      }));
+      const { createAnalyticsService, readPublicConfigResponse } = await import('../src/analytics.js');
+      const settings = { ...env, POSTHOG_KEY: 'phc_test' };
+      expect(readPublicConfigResponse(settings).env).toBe(expectedEnv);
+      const analytics = createAnalyticsService({ dataDir, env: settings });
+      const context = {
+        deviceId: 'install-1', sessionId: 'session-1', clientType: 'desktop' as const,
+        locale: 'en', requestId: null,
+      };
+      await analytics.capture({ eventName: 'unit_event', context, appVersion: version, properties: {}, insertId: 'event-1' });
+      await analytics.captureSafety({ eventName: 'daemon_health', appVersion: version, properties: {}, insertId: 'event-2' });
+      expect(posthogCapture).toHaveBeenCalledTimes(2);
+      for (const [call] of posthogCapture.mock.calls) {
+        expect(call.properties).toMatchObject({
+          env: expectedEnv, channel, app_version: version, client_version: version,
+          device_id: 'install-1', event_id: call.properties.$insert_id,
+          occurred_at: expect.any(String), reported_at: expect.any(String),
+          os_version: process.platform === 'win32' ? expect.any(String) : null, arch: process.arch,
+        });
+      }
+      expect(posthogCapture.mock.calls[0]?.[0].properties.app_session_id).toBe('session-1');
+      await analytics.capture({
+        eventName: 'unit_event', context: { ...context, sessionId: context.deviceId },
+        appVersion: version, properties: {}, insertId: 'event-3',
+      });
+      // The legacy missing-session fallback is installationId, not an app session.
+      expect(posthogCapture.mock.calls[2]?.[0].properties.app_session_id).toBeNull();
+      await analytics.shutdown();
+    } finally { await rm(dataDir, { recursive: true, force: true }); }
+  });
+});
+
+it('fills missing capture versions from packaged metadata and preserves original metric attribution on replay', async () => {
+  posthogCapture.mockReset();
+  const dataDir = await mkdtemp(path.join(tmpdir(), 'od-cs01-replay-'));
+  try {
+    await writeFile(path.join(dataDir, 'app-config.json'), JSON.stringify({ installationId: 'install-1', telemetry: { metrics: true } }));
+    const { createAnalyticsService } = await import('../src/analytics.js');
+    const analytics = createAnalyticsService({ dataDir, env: {
+      POSTHOG_KEY: 'phc_test', OD_APP_VERSION: '2.0.0',
+    } });
+    await analytics.captureSafety({ eventName: 'daemon_health', appVersion: 'unknown', properties: {} });
+    expect(posthogCapture.mock.calls[0]?.[0].properties).toMatchObject({ app_version: '2.0.0', client_version: '2.0.0' });
+    const properties = {
+      metric_schema_version: 1, event_id: 'old-event', app_session_id: 'old-session',
+      app_version: '1.0.0-beta.1', client_version: '1.0.0-beta.1', channel: 'beta',
+      capture_source: 'desktop/main', client_type: 'desktop',
+      occurred_at: '2026-10-16T01:00:00.000Z', telemetry_capability: 'supported',
+      process_role: 'main', process_instance_id: 'old-process', uptime_ms: 60_000,
+      rss_bytes: 4096, heap_used_bytes: null, external_bytes: null,
+      sampled_at: '2026-10-16T01:00:00.000Z', sampling_interval_ms: 60_000,
+      prompt: 'private input', full_url: 'https://private.invalid',
+    };
+    for (let i = 0; i < 2; i++) {
+      await analytics.captureSafety({ eventName: 'client_process_memory_sample', appVersion: '2.0.0', properties });
+    }
+    for (const [call] of posthogCapture.mock.calls.slice(1)) {
+      expect(call).toMatchObject({ distinctId: 'install-1', properties: {
+        event_id: 'old-event', $insert_id: 'old-event', app_session_id: 'old-session',
+        app_version: '1.0.0-beta.1', channel: 'beta', client_type: 'desktop',
+        occurred_at: properties.occurred_at, reported_at: expect.any(String),
+      } });
+      expect(call.properties).not.toHaveProperty('prompt');
+      expect(call.properties).not.toHaveProperty('full_url');
+    }
+    expect(posthogCapture).toHaveBeenCalledTimes(3);
+    await analytics.shutdown();
+  } finally { await rm(dataDir, { recursive: true, force: true }); }
+});
+
+it('suppresses memory safety captures when metrics consent is disabled', async () => {
+  posthogCapture.mockReset();
+  const dataDir = await mkdtemp(path.join(tmpdir(), 'od-memory-optout-'));
+  try {
+    await writeFile(path.join(dataDir, 'app-config.json'), JSON.stringify({ installationId: 'install-1', telemetry: { metrics: false } }));
+    const { createAnalyticsService } = await import('../src/analytics.js');
+    const service = createAnalyticsService({ dataDir, env: { POSTHOG_KEY: 'phc_test' } });
+    await service.captureSafety({ eventName: 'client_process_memory_sample', appVersion: '1.0.0', properties: {} });
+    expect(posthogCapture).not.toHaveBeenCalled();
+    await service.shutdown();
+  } finally { await rm(dataDir, { recursive: true, force: true }); }
 });

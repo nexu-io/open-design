@@ -139,6 +139,11 @@ export function markChatOpenIntent(kind: ChatOpenKind, at?: number): void {
   pendingIntent = { kind, at: typeof at === 'number' ? at : performance.now() };
 }
 
+/** A cancelled navigation must not lend its clock to a later remount. */
+export function clearChatOpenIntent(): void {
+  pendingIntent = null;
+}
+
 /**
  * Begin monitoring a chat log element. Replaces (and tears down) any
  * previously attached surface, so a conversation switch cannot leave two

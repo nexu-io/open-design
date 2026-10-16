@@ -3,6 +3,7 @@
 // builds and forks impose zero runtime cost. All entry points are
 // fire-and-forget: capture failures must never propagate to product code.
 
+import { getOpenDesignHost } from '@open-design/host';
 import type { PostHog } from 'posthog-js';
 import {
   EVENT_SCHEMA_VERSION,
@@ -222,6 +223,7 @@ export function bootstrapExceptionTracking(context: AnalyticsContext): Promise<v
       const distinctId =
         (typeof cfg.installationId === 'string' && cfg.installationId) ||
         context.anonymousId;
+      const hostStartupContext = await getOpenDesignHost()?.startup?.context().catch(() => null);
       setExceptionTrackingContext({
         apiKey: cfg.key,
         host: cfg.host,
@@ -230,6 +232,7 @@ export function bootstrapExceptionTracking(context: AnalyticsContext): Promise<v
         osName: detectBrowserOsName(),
         appVersion: context.appVersion,
         sessionId: context.sessionId,
+        ...(hostStartupContext ? { appSessionId: hostStartupContext.app_session_id } : {}),
         telemetryEnv,
       });
     } catch {

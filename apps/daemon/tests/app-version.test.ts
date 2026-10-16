@@ -86,3 +86,11 @@ describe('app version helpers', () => {
     }).channel).toBe('preview');
   });
 });
+
+describe('telemetry version fallback', () => {
+  it('does not let an injected placeholder hide the real package version', () => {
+    expect(resolveAppVersionInfo({
+      env: { OD_APP_VERSION: '0.0.0' }, packageMetadata: { version: '1.2.3' },
+    }).version).toBe('1.2.3');
+  });
+});

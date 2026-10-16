@@ -12,6 +12,8 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../../src/App';
+import { navigationTiming } from '../../src/observability/navigation-timing';
+import { reportSafetyEvent } from '../../src/analytics/error-tracking';
 import { notifyAmrLoginStatusChanged } from '../../src/components/amrLoginPolling';
 import type {
   ProjectNameAuthorityResolution,
@@ -126,6 +128,11 @@ vi.mock('../../src/components/IframeKeepAlivePool', async (importOriginal) => ({
     subscribe: vi.fn(() => () => {}),
     revision: vi.fn(() => 0),
   }),
+}));
+
+vi.mock('../../src/analytics/error-tracking', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../../src/analytics/error-tracking')>(),
+  reportSafetyEvent: vi.fn(),
 }));
 
 vi.mock('../../src/components/EntryView', () => ({
@@ -843,6 +850,7 @@ function stubWorkspaceContext(
 
 describe('App project creation routing', () => {
   beforeEach(() => {
+    navigationTiming.cancel('page_exit');
     resetCoalescedGet();
     resetWorkspaceContextCache();
     resetTeamProjectsCache();
@@ -920,6 +928,7 @@ describe('App project creation routing', () => {
 
   afterEach(() => {
     cleanup();
+    navigationTiming.cancel('page_exit');
     vi.unstubAllGlobals();
     vi.clearAllMocks();
     resetWorkspaceContextCache();
@@ -2411,6 +2420,61 @@ describe('App project creation routing', () => {
     expect(mockedUploadProjectFiles).not.toHaveBeenCalled();
   });
 
+  it('reports a route authority failure even when ProjectView cannot mount', async () => {
+    const projectId = 'project-inaccessible';
+    mockedListProjects.mockResolvedValue([{ ...freshProject, id: projectId, workspaceId: 'ws-inaccessible' }]);
+    window.history.replaceState({}, '', `/projects/${projectId}`);
+    navigationTiming.begin({ kind: 'home' }, { projectId });
+    render(<App />);
+    await waitFor(() => {
+      const failed = vi.mocked(reportSafetyEvent).mock.calls.find(([name, props]) =>
+        name === 'client_navigation_result' && props?.status === 'failed');
+      expect(failed?.[1]?.reason).toBe('scope_unavailable');
+    });
+    expect(screen.queryByTestId('project-view')).toBeNull();
+  });
+
+  it('starts navigation timing before project lookup and cancels when the user leaves', async () => {
+    const lookup = deferred<Awaited<ReturnType<typeof getProject>>>();
+    mockedListProjects.mockResolvedValue([]);
+    mockedGetProject.mockReturnValue(lookup.promise);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Open missing project' }));
+    await waitFor(() => expect(mockedGetProject).toHaveBeenCalled());
+    const attempt = navigationTiming.getSnapshot();
+    expect(attempt?.projectId).toBe('project-missing');
+    expect(vi.mocked(reportSafetyEvent).mock.calls.some(([name, props]) =>
+      name === 'client_navigation_result' && props?.status === 'started')).toBe(true);
+    act(() => navigate({ kind: 'home', view: 'settings' }));
+    await waitFor(() => expect(navigationTiming.getSnapshot()).toBeNull());
+    await act(async () => { lookup.resolve(freshProject); });
+    expect(window.location.pathname).toBe('/settings');
+    const events = vi.mocked(reportSafetyEvent).mock.calls
+      .filter(([name]) => name === 'client_navigation_result').map(([, props]) => props);
+    expect(events.map((event) => event?.status)).toEqual(['started', 'cancelled']);
+  });
+
+  it('gives repeated project clicks new ids and prevents the superseded lookup from navigating', async () => {
+    const firstLookup = deferred<Awaited<ReturnType<typeof getProject>>>();
+    mockedListProjects.mockResolvedValue([]);
+    mockedGetProject.mockReturnValueOnce(firstLookup.promise).mockResolvedValueOnce(null);
+    render(<App />);
+    const open = await screen.findByRole('button', { name: 'Open missing project' });
+    fireEvent.click(open);
+    await waitFor(() => expect(mockedGetProject).toHaveBeenCalledTimes(1));
+    const firstId = navigationTiming.getSnapshot()?.id;
+    fireEvent.click(open);
+    await waitFor(() => expect(mockedGetProject).toHaveBeenCalledTimes(2));
+    await screen.findByRole('alert');
+    await act(async () => { firstLookup.resolve({ ...freshProject, id: 'project-missing' }); });
+    expect(window.location.pathname).toBe('/');
+    const events = vi.mocked(reportSafetyEvent).mock.calls
+      .filter(([name]) => name === 'client_navigation_result').map(([, props]) => props);
+    expect(events.map((event) => event?.status)).toEqual(['started', 'cancelled', 'started', 'failed']);
+    expect(events[1]?.navigation_id).toBe(firstId);
+    expect(events[2]?.navigation_id).not.toBe(firstId);
+  });
+
   it('surfaces a toast instead of silently bouncing when opening a missing project', async () => {
     mockedListProjects.mockResolvedValue([]);
     mockedGetProject.mockResolvedValue(null);
@@ -2426,6 +2490,10 @@ describe('App project creation routing', () => {
     });
     expect(window.location.pathname).toBe('/');
     expect(screen.queryByTestId('project-view')).toBeNull();
+    const events = vi.mocked(reportSafetyEvent).mock.calls
+      .filter(([name]) => name === 'client_navigation_result').map(([, props]) => props);
+    expect(events.map((event) => event?.status)).toEqual(['started', 'failed']);
+    expect(events[1]?.reason).toBe('open_unavailable');
   });
 
   it('renders the catalog title on the first project frame instead of the local placeholder', async () => {

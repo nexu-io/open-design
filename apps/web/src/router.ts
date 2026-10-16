@@ -242,6 +242,7 @@ export type NavigationGuard = () => boolean | Promise<boolean>;
 
 const navigationGuards = new Set<NavigationGuard>();
 let guardedNavigationSequence = 0;
+let cancelPendingNavigation: ((reason: 'superseded') => void) | null = null;
 
 interface AcceptedHistoryLocation {
   pathname: string;
@@ -280,17 +281,31 @@ async function navigationGuardsAllow(): Promise<boolean> {
   return true;
 }
 
-function runGuardedNavigation(action: (sequence: number) => void): void {
-  // Every newer navigation intent invalidates an older async guard, including
-  // the no-guard fast path and a same-path no-op.
+function runGuardedNavigation(action: (sequence: number) => void, onCancel?: (reason: 'guard_rejected' | 'superseded') => void): void {
+  // A newer intent cancels the previous one immediately, even if its guard
+  // never settles. Only one pending callback is retained.
+  cancelPendingNavigation?.('superseded');
   const sequence = ++guardedNavigationSequence;
   approvedHistoryTraversal = null;
-  if (navigationGuards.size === 0) {
+  let settled = false;
+  const cancel = (reason: 'guard_rejected' | 'superseded') => {
+    if (settled) return;
+    settled = true;
+    if (cancelPendingNavigation === cancel) cancelPendingNavigation = null;
+    onCancel?.(reason);
+  };
+  const commit = () => {
+    if (settled) return;
+    settled = true;
+    if (cancelPendingNavigation === cancel) cancelPendingNavigation = null;
     action(sequence);
-    return;
-  }
+  };
+  cancelPendingNavigation = cancel;
+  if (navigationGuards.size === 0) { commit(); return; }
   void navigationGuardsAllow().then((allowed) => {
-    if (allowed && sequence === guardedNavigationSequence) action(sequence);
+    if (sequence !== guardedNavigationSequence) cancel('superseded');
+    else if (allowed) commit();
+    else cancel('guard_rejected');
   });
 }
 
@@ -355,6 +370,7 @@ function maybeRemovePopstateCoordinator(): void {
   acceptedHistoryLocation = null;
   pendingHistoryRepair = null;
   approvedHistoryTraversal = null;
+  cancelPendingNavigation?.('superseded');
   guardedNavigationSequence += 1;
 }
 
@@ -394,6 +410,7 @@ function handlePopstate(): void {
   }
 
   const previous = acceptedHistoryLocation ?? target;
+  cancelPendingNavigation?.('superseded');
   const sequence = ++guardedNavigationSequence;
   if (navigationGuards.size === 0) {
     acceptedHistoryLocation = target;
@@ -418,11 +435,12 @@ function handlePopstate(): void {
 interface NavigationOptions {
   replace?: boolean;
   onCommit?: () => void;
+  onCancel?: (reason: 'guard_rejected' | 'superseded' | 'same_route') => void;
 }
 
 function commitNavigation(route: Route, opts: NavigationOptions = {}): void {
   const target = buildPath(route);
-  if (target === window.location.pathname) return;
+  if (target === window.location.pathname) { opts.onCancel?.('same_route'); return; }
   const index = readHistoryIndex();
   // `replace` keeps the current depth (it swaps the entry in place); a push
   // adds one level so the entry we are leaving becomes the "previous layer".
@@ -445,7 +463,7 @@ function commitNavigation(route: Route, opts: NavigationOptions = {}): void {
 }
 
 export function navigate(route: Route, opts: NavigationOptions = {}): void {
-  runGuardedNavigation(() => commitNavigation(route, opts));
+  runGuardedNavigation(() => commitNavigation(route, opts), opts.onCancel);
 }
 
 // Step back to the route the user actually came from. We pop the browser

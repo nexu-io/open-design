@@ -52,6 +52,8 @@ function shutdownHarness(options: {
   const recordHostEvent = vi.fn();
   const recordLifecycle = vi.fn(async (_event: unknown) => undefined);
   const sandbox = {
+    memorySampler: { stop: vi.fn() },
+    startupTiming: { finish: vi.fn() }, removeStartupIpc: vi.fn(),
     updater: { recordLifecycle },
     options: { beforeShutdown, quiesceRendererTransport }, desktop: { close }, app: { quit, on }, process: { exit },
     updateScheduler: { stop: vi.fn() }, disposeMenu: vi.fn(), removeDiagnosticsIpc: vi.fn(),
@@ -62,7 +64,7 @@ function shutdownHarness(options: {
   const api = runInNewContext(`${code}\n({ shutdown, shutdownAndExit })`, sandbox) as {
     shutdown(): Promise<void>; shutdownAndExit(): void;
   };
-  return { ...api, beforeShutdown, close, quiesceRendererTransport, quit, exit, endSession, finishCleanup, beforeQuit, recordLifecycle, recordHostEvent };
+  return { ...api, memorySampler: sandbox.memorySampler, beforeShutdown, close, quiesceRendererTransport, quit, exit, endSession, finishCleanup, beforeQuit, recordLifecycle, recordHostEvent };
 }
 
 async function flushPromises() {
@@ -75,6 +77,8 @@ describe("desktop shutdown", () => {
     void h.shutdown();
     void h.shutdown();
     await flushPromises();
+    expect(h.memorySampler.stop).toHaveBeenCalled();
+    expect(h.memorySampler.stop.mock.invocationCallOrder[0]).toBeLessThan(h.beforeShutdown.mock.invocationCallOrder[0]!);
     expect(h.recordHostEvent).toHaveBeenCalledTimes(1);
     expect(h.recordHostEvent).toHaveBeenCalledWith({ stateFilePath: "test-session" }, { kind: "quit-requested" });
     expect(h.beforeShutdown).toHaveBeenCalledTimes(1);

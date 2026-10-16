@@ -9,11 +9,10 @@
 // dashboard. This module lets the packaged MAIN process emit one structured
 // event on the fatal-exit path.
 //
-// ZERO startup side-effects by construction:
+// No import-time startup side-effects:
 //  - No work at import time (pure helpers + one async fn; no client, no I/O).
-//  - Invoked ONLY from index.ts's `main().catch(...)`, i.e. only when startup
-//    has ALREADY failed and the process is about to exit(1). The happy path
-//    never touches any of this.
+//  - Failure reports run on the fatal path. Launch timing reports reuse the
+//    bounded transport without awaiting network on the startup critical path.
 //  - capture() is fetch-based (no posthog-node SDK, no new dependency), wrapped
 //    in Promise.race with a hard timeout, and swallows every error — it can
 //    neither block nor crash the exit.
@@ -29,6 +28,7 @@
 // errors are module-resolution / daemon-exit messages, not user content, so this
 // bounds the exposure to build/OS strings rather than anything the user typed.
 
+import { buildClientTelemetryParams, isClientMetricEventName, parseClientMetricEvent } from "@open-design/contracts/analytics";
 import { readFile } from "node:fs/promises";
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -374,6 +374,7 @@ export async function captureStartupFailure(
     distinctId: string;
     event: string;
     properties: Record<string, unknown>;
+    occurredAt?: string;
   },
   deps: CaptureDeps = {},
 ): Promise<void> {
@@ -386,11 +387,15 @@ export async function captureStartupFailure(
   const insertId = deps.insertId ?? randomInsertId();
   const appVersion =
     typeof args.properties.app_version === "string" ? args.properties.app_version : null;
+  const metric = isClientMetricEventName(args.event) ? parseClientMetricEvent(args.event, args.properties) : null;
+  if (isClientMetricEventName(args.event) && !metric) return;
   const body = JSON.stringify({
     api_key: key,
     event: args.event,
     distinct_id: args.distinctId,
-    properties: {
+    // Metric envelopes are already normalized and validated; the legacy
+    // crash envelope below must not overwrite their schema or client type.
+    properties: metric ? { ...metric, $insert_id: insertId } : {
       ...args.properties,
       // Shared safety-event envelope, mirroring captureSafety in
       // apps/daemon/src/analytics.ts. posthog-node-style manual enrichment:
@@ -407,7 +412,7 @@ export async function captureStartupFailure(
       $os_version: release(),
       $insert_id: insertId,
     },
-    timestamp: now(),
+    timestamp: args.occurredAt ?? now(),
   });
 
   const send = (async () => {
@@ -428,6 +433,40 @@ export async function captureStartupFailure(
   });
   await Promise.race([send, timeout]);
   if (timer) clearTimeout(timer);
+}
+
+// CS02-local event names pending CS01 registry alignment. Unlike the legacy
+// crash path, launch denominators require a real installation identity: never
+// group unrelated installations under the synthetic namespace fallback.
+export async function reportLaunchEvent(args: {
+  posthogKey: string | null;
+  posthogHost: string | null;
+  installationRoot: string | null;
+  namespace: string;
+  appVersion: string | null;
+  channel: string;
+  event: "client_launch_attempt" | "client_business_ready" | "client_launch_result";
+  properties: Record<string, unknown>;
+}, deps: CaptureDeps = {}): Promise<void> {
+  try {
+    if (!args.posthogKey?.trim() || !args.installationRoot) return;
+    const identity = JSON.parse(readFileSync(join(args.installationRoot, "installation.json"), "utf8")) as { installationId?: unknown };
+    if (typeof identity.installationId !== "string" || !identity.installationId.trim()) return;
+    const occurredAt = args.properties.occurred_at;
+    const eventId = args.properties.event_id;
+    if (typeof occurredAt !== "string" || typeof eventId !== "string") return;
+    const common = buildClientTelemetryParams(args.properties, {
+      eventId, deviceId: identity.installationId, appVersion: args.appVersion,
+      channel: args.channel, clientType: 'desktop', captureSource: CAPTURE_SOURCE,
+      env: resolveTelemetryEnv(), platform: process.platform, arch: process.arch,
+      osVersion: typeof process.getSystemVersion === 'function' ? process.getSystemVersion() : null,
+      reportedAt: (deps.now ?? (() => new Date().toISOString()))(),
+    });
+    const properties = parseClientMetricEvent(args.event, { ...args.properties, ...common });
+    if (!properties) return;
+    await captureStartupFailure({ ...args, distinctId: identity.installationId, occurredAt, properties },
+      { ...deps, insertId: eventId });
+  } catch { /* Missing identity or telemetry must never break startup. */ }
 }
 
 export interface ReportStartupFailureArgs {

@@ -66,7 +66,8 @@ export type DaemonHealthEventName =
   | 'daemon_health_summary'
   | 'daemon_unclean_exit'
   | 'daemon_memory_pressure'
-  | 'daemon_storage_snapshot';
+  | 'daemon_storage_snapshot'
+  | 'client_process_memory_sample';
 
 export type DaemonHealthEventSink = (event: {
   eventName: DaemonHealthEventName;
@@ -152,8 +153,35 @@ export function daemonHealthPaths(dataRoot: string) {
 
 type Clock = () => number;
 
+/** Optional daemon curve context; the shared analytics layer owns event admission. */
+export type DaemonMemorySampleContext = {
+  app_session_id: string;
+  app_version: string | null;
+  environment: string | null;
+  platform: string;
+  arch: string;
+  os_version: string | null;
+};
+
+export type DaemonProcessMemorySample = DaemonMemorySampleContext & {
+  metric_schema_version: 1;
+  telemetry_capability: 'supported';
+  occurred_at: string;
+  process_role: 'daemon';
+  process_instance_id: string;
+  uptime_ms: number;
+  rss_bytes: number | null;
+  heap_used_bytes: number | null;
+  external_bytes: number | null;
+  sampled_at: string;
+  sampling_interval_ms: number;
+};
+
 export type DaemonHealthOptions = {
   dataRoot: string;
+  /** CS02 supplies the same desktop app session and environment to this process. */
+  memorySampling?: DaemonMemorySampleContext;
+  sampleIntervalMs?: number;
   /** Rotated log of the previous daemon session, when a launcher keeps one. */
   previousLogPath?: string | null;
   now?: Clock;
@@ -165,6 +193,13 @@ export type DaemonHealthOptions = {
 };
 
 export function createDaemonHealth(options: DaemonHealthOptions) {
+  const sampleIntervalMs = options.sampleIntervalMs ?? SAMPLE_INTERVAL_MS;
+  if (!Number.isInteger(sampleIntervalMs) || sampleIntervalMs < 1 || sampleIntervalMs > 2_147_483_647) {
+    throw new RangeError('Memory sampling interval must be an integer from 1 to 2147483647 ms');
+  }
+  const memoryContext = options.memorySampling ? { ...options.memorySampling } : null;
+  let memoryDeliveryBusy = false;
+  let memorySequence = 0;
   const now = options.now ?? Date.now;
   const pid = options.pid ?? process.pid;
   const readHeap = options.readHeap ?? readProcessHeap;
@@ -247,7 +282,7 @@ export function createDaemonHealth(options: DaemonHealthOptions) {
 
   function instrument(): void {
     safe(() => {
-      sampleTimer = setInterval(() => sample(), SAMPLE_INTERVAL_MS);
+      sampleTimer = setInterval(() => sample(), sampleIntervalMs);
       sampleTimer.unref?.();
       summaryTimer = setInterval(() => emitLiveSummary(), SUMMARY_INTERVAL_MS);
       summaryTimer.unref?.();
@@ -306,6 +341,7 @@ export function createDaemonHealth(options: DaemonHealthOptions) {
   }
 
   function sample(): void {
+    if (stopped) return;
     safe(() => {
       const value = readHeap();
       checkpoint.samples = [...checkpoint.samples, value].slice(-RECENT_SAMPLE_LIMIT);
@@ -314,7 +350,33 @@ export function createDaemonHealth(options: DaemonHealthOptions) {
       foldLoopDelay();
       evaluate(value, true);
       persist();
+      emitMemorySample(value);
     }, undefined);
+  }
+
+  function emitMemorySample(value: HeapSample): void {
+    // Reuse this tick's heap read. No unbounded telemetry queue before attach or
+    // behind an unresolved sink; the transport owner provides durable delivery.
+    if (!memoryContext || !sink || memoryDeliveryBusy || stopped) return;
+    const properties: DaemonProcessMemorySample = {
+      ...memoryContext,
+      metric_schema_version: 1, telemetry_capability: 'supported', occurred_at: new Date(now()).toISOString(),
+      app_version: checkpoint.appVersion ?? memoryContext.app_version,
+      process_role: 'daemon',
+      process_instance_id: checkpoint.bootId,
+      uptime_ms: Math.max(0, now() - checkpoint.startedAt),
+      rss_bytes: memoryBytes(value.rss),
+      heap_used_bytes: memoryBytes(value.heapUsed),
+      external_bytes: memoryBytes(value.external),
+      sampled_at: new Date(now()).toISOString(),
+      sampling_interval_ms: sampleIntervalMs,
+    };
+    const target = sink;
+    const insertId = `${checkpoint.bootId}-memory-${++memorySequence}`;
+    memoryDeliveryBusy = true;
+    void Promise.resolve().then(() => {
+      if (!stopped) return target({ eventName: 'client_process_memory_sample', properties, insertId });
+    }).catch(() => undefined).finally(() => { memoryDeliveryBusy = false; });
   }
 
   // Short sessions end before the first 60s sample, so shutdown folds too.
@@ -816,4 +878,8 @@ function safe<T>(action: () => T, fallback: T): T {
   } catch {
     return fallback;
   }
+}
+
+function memoryBytes(value: number): number | null {
+  return Number.isFinite(value) && value >= 0 ? Math.round(value) : null;
 }

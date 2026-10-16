@@ -4,7 +4,10 @@
  */
 // ---- Event names ---------------------------------------------------------
 
+import type { ClientMetricEventName } from '../client-metrics.js';
+
 export type AnalyticsEventName =
+  | ClientMetricEventName
   // Core triad
   | 'page_view'
   | 'ui_click'

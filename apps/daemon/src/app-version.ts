@@ -133,9 +133,10 @@ export function resolveAppVersionInfo({
   platform = process.platform,
   arch = process.arch,
 }: ResolveAppVersionInfoOptions = {}): AppVersionInfo {
-  const packaged = isPackagedRuntime({ resourcesPath, execPath, platform });
-  const version = cleanString(env.OD_APP_VERSION)
-    ?? cleanString(packageMetadata?.version)
+  const packaged = normalizeTelemetryAppVersion(env.OD_APP_VERSION) !== null
+    || isPackagedRuntime({ resourcesPath, execPath, platform });
+  const version = normalizeTelemetryAppVersion(env.OD_APP_VERSION)
+    ?? normalizeTelemetryAppVersion(packageMetadata?.version)
     ?? APP_VERSION_FALLBACK;
   const inferredChannel = inferReleaseChannelFromVersion(version);
   const channel = cleanString(env.OD_RELEASE_CHANNEL)

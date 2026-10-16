@@ -343,3 +343,33 @@ describe('goBack', () => {
     unregister();
   });
 });
+
+describe('navigation cancellation callbacks', () => {
+  it('reports a rejected guard without committing', async () => {
+    window.history.replaceState(null, '', '/');
+    const remove = registerNavigationGuard(async () => false);
+    const onCancel = vi.fn();
+    try {
+      navigate({ kind: 'project', projectId: 'a', fileName: null }, { onCancel });
+      await flushMicrotasks();
+      expect(onCancel).toHaveBeenCalledExactlyOnceWith('guard_rejected');
+      expect(window.location.pathname).toBe('/');
+    } finally { remove(); }
+  });
+  it('reports a superseded pending guard and a same-route no-op', async () => {
+    window.history.replaceState(null, '', '/');
+    let resolveGate!: (value: boolean) => void;
+    const gate = { promise: new Promise<boolean>(resolve => { resolveGate = resolve; }), resolve: (value: boolean) => resolveGate(value) };
+    const remove = registerNavigationGuard(() => gate.promise);
+    const first = vi.fn(); const second = vi.fn();
+    try {
+      navigate({ kind: 'project', projectId: 'a', fileName: null }, { onCancel: first });
+      navigate({ kind: 'home', view: 'home' }, { onCancel: second });
+      expect(first).toHaveBeenCalledExactlyOnceWith('superseded');
+      gate.resolve(true);
+      await flushMicrotasks();
+      expect(first).toHaveBeenCalledExactlyOnceWith('superseded');
+      expect(second).toHaveBeenCalledExactlyOnceWith('same_route');
+    } finally { remove(); }
+  });
+});

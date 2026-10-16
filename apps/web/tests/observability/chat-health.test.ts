@@ -9,6 +9,7 @@ import {
 import {
   __resetChatHealthForTest,
   markChatOpenIntent,
+  clearChatOpenIntent,
   openChatSurface,
 } from '../../src/observability/chat-health';
 
@@ -149,6 +150,17 @@ afterEach(() => {
 });
 
 describe('observability/chat-health — first paint', () => {
+  it('drops a cancelled intent before a later unrelated remount', () => {
+    markChatOpenIntent('project_switch');
+    clearChatOpenIntent();
+    clock = 800;
+    const surface = openChatSurface({ element: buildChatLog(1), messageCount: 1, virtualized: false });
+    surface.markFirstPaint({ renderedRowCount: 1 });
+    const [paint] = eventsNamed('client_chat_first_paint');
+    expect(paint?.open_kind).toBe('remount');
+    expect(paint?.duration_ms).toBe(0);
+  });
+
   it('measures from the open intent, not from surface construction', () => {
     // The user clicks a conversation at t=0. React does routing work,
     // fetches, and only mounts the chat surface at t=400. The number the

@@ -1,3 +1,4 @@
+import type { ClientMetricEventPayload } from '../client-metrics.js';
 import type { UpdateLifecycleObservedProps } from '../update-lifecycle.js';
 /**
  * @module analytics/events/event-payload
@@ -21,6 +22,7 @@ import type { ProjectCommentCreateResultProps, WorkspaceInviteResultProps, Works
 // ---- Discriminated union of all event payloads ---------------------------
 
 export type AnalyticsEventPayload =
+  | ClientMetricEventPayload
   | { event: 'packaged_runtime_failed'; props: PackagedRuntimeFailedProps }
   | { event: 'page_view'; props: PageViewProps }
   | { event: 'ui_click'; props: UiClickProps }

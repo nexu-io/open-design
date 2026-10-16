@@ -603,3 +603,46 @@ describe('exception attribution', () => {
     expect(list[0]!.stacktrace?.frames?.length).toBeGreaterThan(0);
   });
 });
+
+describe('CS01 safety envelope', () => {
+  it('does not replace a resolved version with placeholder or unknown', () => {
+    setExceptionTrackingContext({ apiKey: 'phc_test', host: 'https://ingest.invalid', distinctId: 'install-1', appVersion: '1.2.3' });
+    patchExceptionTrackingAppVersion('0.0.0');
+    patchExceptionTrackingAppVersion('unknown');
+    reportSafetyEvent('client_boot_timing');
+    expect(lastFetchedBody().properties).toMatchObject({ app_version: '1.2.3' });
+  });
+
+  it('stamps stable event/device identity and separate occurrence/report timestamps', () => {
+    reportSafetyEvent('client_boot_timing', { duration_ms: 12 });
+    setExceptionTrackingContext({ apiKey: 'phc_test', host: 'https://ingest.invalid', distinctId: 'install-1', appVersion: '1.2.3', sessionId: 'session-1', telemetryEnv: 'test' });
+    const body = lastFetchedBody();
+    const properties = body.properties as Record<string, unknown>;
+    expect(properties).toMatchObject({
+      device_id: 'install-1', app_session_id: 'session-1', client_version: '1.2.3',
+      env: 'test', occurred_at: body.timestamp, reported_at: expect.any(String),
+      event_id: properties.$insert_id,
+    });
+  });
+});
+
+it('preserves metric occurrence metadata across buffering and strips URL/content properties', () => {
+  const properties = {
+    metric_schema_version: 1, event_id: 'original-event', app_session_id: 'original-session',
+    app_version: '1.0.0-beta.1', client_version: '1.0.0-beta.1', channel: 'beta',
+    occurred_at: '2026-10-16T01:00:00.000Z', telemetry_capability: 'supported',
+    navigation_id: 'nav-1', navigation_type: 'project_enter', source_type: 'home',
+    target_type: 'project', result: 'cancelled', started_at: '2026-10-16T01:00:00.000Z', duration_ms: 100,
+    prompt: 'private input', full_url: 'https://private.invalid',
+  };
+  reportSafetyEvent('client_navigation_result', properties);
+  expect(fetchMock).not.toHaveBeenCalled();
+  setExceptionTrackingContext({ apiKey: 'phc_test', host: 'https://ingest.invalid', distinctId: 'install-1', appVersion: '2.0.0', sessionId: 'current-session', telemetryEnv: 'test' });
+  const body = lastFetchedBody();
+  expect(body).toMatchObject({ timestamp: properties.occurred_at, properties: {
+    event_id: 'original-event', $insert_id: 'original-event', app_session_id: 'original-session',
+    app_version: '1.0.0-beta.1', channel: 'beta', result: 'cancelled', env: 'test',
+    platform: null, os_version: null, arch: null,
+  } });
+  for (const key of ['prompt', 'full_url', '$current_url']) expect(body.properties).not.toHaveProperty(key);
+});

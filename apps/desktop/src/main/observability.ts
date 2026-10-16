@@ -30,11 +30,13 @@ export async function reportDesktopObservabilityEvent(
   discoverBaseUrl: () => Promise<string>,
   event: string,
   properties: Record<string, unknown>,
+  signal?: AbortSignal,
 ): Promise<boolean> {
   try {
     const baseUrl = await discoverBaseUrl();
     const res = await fetch(new URL("/api/observability/event", baseUrl).toString(), {
       method: "POST",
+      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(5000)]) : AbortSignal.timeout(5000),
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ event, properties }),
     });
