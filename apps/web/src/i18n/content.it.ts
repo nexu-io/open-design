@@ -1062,6 +1062,7 @@ export const IT_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   'stripe': 'Infrastruttura di pagamento. Gradienti viola distintivi, eleganza weight-300.',
   'supabase': 'Alternativa open-source a Firebase. Tema smeraldo scuro, code-first.',
   'superhuman': 'Client email veloce. UI scura premium, keyboard-first, bagliore viola.',
+  'terracotta': 'Editoriale terracotta cotta al sole. Superfici crema calde, inchiostro serif, un accento terracotta.',
   'tesla': 'Automotive elettrico. Sottrazione radicale, fotografia a tutto viewport, UI quasi inesistente.',
   'tetris': 'Design ispirato al classico gioco a blocchi con colori giocosi, font display decisi e layout compatti ed energici.',
   'theverge': 'Media editoriale tech. Accenti verde acido e ultravioletto, display Manuka, tessere narrative in stile volantino rave.',

@@ -1062,6 +1062,7 @@ export const PL_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   'stripe': 'Infrastruktura płatnicza. Charakterystyczne fioletowe gradienty, elegancja grubości 300.',
   'supabase': 'Otwartoźródłowa alternatywa dla Firebase. Ciemny szmaragdowy motyw, nacisk na kod.',
   'superhuman': 'Szybki klient poczty. Premium ciemny interfejs, sterowanie z klawiatury, fioletowa poświata.',
+  'terracotta': 'Wypalana słońcem terakotowa redakcja. Ciepłe kremowe powierzchnie, szeryfowy tusz, jeden terakotowy akcent.',
   'tesla': 'Motoryzacja elektryczna. Radykalna redukcja, fotografia na całą szerokość okna, niemal zerowy interfejs.',
   'tetris': 'Projekt inspirowany klasyczną grą w klocki, z żartobliwymi kolorami, śmiałymi fontami ekspozycyjnymi i zwartymi, pełnymi energii układami.',
   'theverge': 'Media o tematyce technologicznej. Akcenty w kolorze kwaśnej mięty i ultrafioletu, typografia Manuka, kafelki opowieści w stylu ulotek rave\'owych.',

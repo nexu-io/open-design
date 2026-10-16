@@ -286,6 +286,7 @@ export const RU_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   supabase: 'Open-source-альтернатива Firebase. Темная изумрудная тема, code-first.',
   superhuman: 'Быстрый почтовый клиент. Премиальный темный UI, keyboard-first, фиолетовое свечение.',
   tesla: 'Электромобили. Радикальная редукция, полноэкранная фотография, почти отсутствие UI.',
+  terracotta: 'Терракотовый editorial, опаленный солнцем. Теплые кремовые поверхности, чернила с засечками, один терракотовый акцент.',
   theverge:
     'Тех-издание. Акценты acid mint и ultraviolet, display Manuka, карточки сюжетов в духе rave-flyer.',
   'together-ai': 'Open-source AI-инфраструктура. Технический язык, дизайн в духе blueprint.',

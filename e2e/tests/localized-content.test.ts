@@ -18,6 +18,8 @@ type LocalizedContentModule = {
     template: PromptTemplateResource,
   ) => PromptTemplateResource;
   localizeSkillDescription: (locale: string, skill: SkillResource) => string;
+  LOCALIZED_CONTENT_IDS: Record<string, { designSystems: string[] }>;
+  DIRECT_LOCALE_DESIGN_SYSTEM_IDS: Record<string, string[]>;
 };
 
 type SkillResource = { id: string; description: string };
@@ -36,6 +38,8 @@ if (localizedContentModule == null) {
 }
 
 const {
+  DIRECT_LOCALE_DESIGN_SYSTEM_IDS,
+  LOCALIZED_CONTENT_IDS,
   localizeDesignSystemCategory,
   localizeDesignSystemSummary,
   localizePromptTemplateSummary,
@@ -367,7 +371,6 @@ describe('localized display content coverage', () => {
       }
     }
   });
-
   for (const locale of COVERAGE_LOCALES) {
     it(`[P2] falls back to source design-system and prompt-template metadata for ${locale} when dictionary entries are missing`, () => {
       const localized = localizePromptTemplateSummary(locale, {
@@ -390,4 +393,27 @@ describe('localized display content coverage', () => {
       );
     });
   }
+
+  it('[P2] covers terracotta in every direct designSystemSummaries dictionary', async () => {
+    // Regression coverage for the terracotta catalogue addition: an earlier
+    // head passed the generic fallback test while every localized picker
+    // showed English for the new system, because
+    // localizeDesignSystemSummary falls back to system.summary on a missing
+    // key. Assert through the all-locales id view (not the three-entry legacy
+    // LOCALIZED_CONTENT_IDS) while the fallback test above keeps covering
+    // genuinely untranslated external systems.
+    const systems = await readDesignSystemResources();
+    const ids = uniqueSorted(systems.map((system) => system.id));
+    expect(ids).toContain('terracotta');
+    const locales = uniqueSorted(Object.keys(DIRECT_LOCALE_DESIGN_SYSTEM_IDS));
+    expect(locales.length).toBeGreaterThanOrEqual(17);
+    for (const locale of locales) {
+      const dictionary = DIRECT_LOCALE_DESIGN_SYSTEM_IDS[locale] ?? [];
+      expect(dictionary, `expected ${locale} designSystemSummaries to be readable`).not.toEqual([]);
+      expect(
+        dictionary,
+        `${locale} designSystemSummaries is missing bundled design system terracotta (picker would show English fallback)`,
+      ).toContain('terracotta');
+    }
+  });
 });

@@ -1062,6 +1062,7 @@ export const ID_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   'stripe': 'Infrastruktur pembayaran. Gradien ungu khas, keanggunan weight-300.',
   'supabase': 'Alternatif Firebase open-source. Tema emerald gelap, mengutamakan kode.',
   'superhuman': 'Klien email cepat. UI gelap premium, mengutamakan keyboard, glow ungu.',
+  'terracotta': 'Editorial terakota panggang matahari. Permukaan krem hangat, tinta serif, satu aksen terakota.',
   'tesla': 'Otomotif listrik. Pengurangan radikal, fotografi full-viewport, UI nyaris nihil.',
   'tetris': 'Desain bergaya game balok klasik dengan warna playful, font display yang berani, dan tata letak ringkas berenergi tinggi.',
   'theverge': 'Media editorial teknologi. Aksen acid-mint dan ultraviolet, display Manuka, tile cerita bergaya flyer rave.',

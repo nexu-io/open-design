@@ -1062,6 +1062,7 @@ export const ES_ES_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   'stripe': 'Infraestructura de pagos. Característicos degradados púrpura, elegancia con grosor 300.',
   'supabase': 'Alternativa de código abierto a Firebase. Tema esmeralda oscuro, prioridad al código.',
   'superhuman': 'Cliente de correo rápido. Interfaz oscura premium, prioridad al teclado, resplandor púrpura.',
+  'terracotta': 'Editorial de terracota horneada al sol. Superficies crema cálidas, tinta serif, un acento terracota.',
   'tesla': 'Automoción eléctrica. Sustracción radical, fotografía a pantalla completa, interfaz casi inexistente.',
   'tetris': 'Diseño de inspiración clásica de juegos de bloques con colores desenfadados, tipografías display contundentes y diseños compactos y de alta energía.',
   'theverge': 'Medios editoriales de tecnología. Acentos verde menta ácido y ultravioleta, tipografía display Manuka, tarjetas de historia estilo flyer de rave.',

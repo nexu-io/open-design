@@ -432,6 +432,7 @@ const DE_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   supabase: 'Open-Source-Firebase-Alternative. Dunkles Smaragd-Theme, code-first.',
   superhuman: 'Schneller E-Mail-Client. Premium-dunkle UI, keyboard-first, violetter Glow.',
   tesla: 'Elektrisches Automobil. Radikale Reduktion, Full-Viewport-Fotografie, nahezu keine UI.',
+  terracotta: 'Sonnengebackenes Editorial in Ton. Warme Creme-Flächen, serifenbetonte Tinte, ein Terrakotta-Akzent.',
   theverge:
     'Tech-Editorial-Medium. Acid-Mint- und Ultraviolett-Akzente, Manuka-Display, Rave-Flyer-Story-Tiles.',
   'together-ai': 'Open-Source-AI-Infrastruktur. Technisch, blueprint-artiges Design.',
@@ -1227,6 +1228,16 @@ export const LOCALIZED_CONTENT_IDS = {
 export const GERMAN_CONTENT_IDS = LOCALIZED_CONTENT_IDS.de;
 export const RUSSIAN_CONTENT_IDS = LOCALIZED_CONTENT_IDS.ru;
 export const FRENCH_CONTENT_IDS = LOCALIZED_CONTENT_IDS.fr;
+
+// Every direct locale bundle keyed by locale, for regression tests that must
+// assert coverage across all 17 direct dictionaries rather than the three
+// legacy id exports above.
+export const DIRECT_LOCALE_DESIGN_SYSTEM_IDS: Record<string, string[]> = Object.fromEntries(
+  Object.entries(LOCALIZED_CONTENT).map(([locale, bundle]) => [
+    locale,
+    Object.keys(bundle.designSystemSummaries),
+  ]),
+);
 
 // True when a locale resolves a built-in-content bundle — either its own
 // registered bundle or an intentional script fallback (zh-TW -> zh-CN). When

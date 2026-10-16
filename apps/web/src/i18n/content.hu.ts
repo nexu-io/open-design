@@ -1062,6 +1062,7 @@ export const HU_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   'stripe': 'Fizetési infrastruktúra. Jellegzetes lila színátmenetek, weight-300 elegancia.',
   'supabase': 'Nyílt forráskódú Firebase alternatíva. Sötét smaragd téma, kód-központú.',
   'superhuman': 'Gyors email kliens. Prémium sötét felület, billentyűzet-központú, lila ragyogás.',
+  'terracotta': 'Napon sült terrakotta szerkesztőség. Meleg krémfelületek, szerif tinta, egyetlen terrakotta akcentus.',
   'tesla': 'Elektromos autóipar. Radikális elhagyás, teljes nézőteret kitöltő fotók, közel nulla felület.',
   'tetris': 'Klasszikus blokkjáték-ihlette dizájn játékos színekkel, merész kijelző-betűtípusokkal és kompakt, energikus elrendezésekkel.',
   'theverge': 'Tech szerkesztőségi média. Sav-menta és ultraibolya akcentusok, Manuka kijelző-betűtípus, rave-szórólap stílusú történet-csempék.',
