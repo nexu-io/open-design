@@ -14070,6 +14070,9 @@ export function ProjectView({
               messagesConversationId={messagesConversationId}
               onSelectConversation={handleSelectConversation}
               onDeleteConversation={handleDeleteConversation}
+              onRenameConversation={
+                projectMutationReadOnly ? undefined : handleRenameConversation
+              }
               config={config}
               onOpenSettings={onOpenSettings}
               amrBalanceCardUsd={amrBalanceCardUsd}
@@ -14325,7 +14328,9 @@ export function ProjectView({
           activeConversationId={activeConversationId}
           onSelectConversation={handleSelectConversation}
           onDeleteConversation={handleDeleteConversation}
-          onRenameConversation={handleRenameConversation}
+          onRenameConversation={
+            projectMutationReadOnly ? undefined : handleRenameConversation
+          }
           onConversationSessionModeChange={handleConversationSessionModeChange}
           onNewConversation={handleNewConversation}
           activeConversationChat={activeConversationChatState}

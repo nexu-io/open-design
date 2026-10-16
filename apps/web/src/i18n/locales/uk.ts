@@ -2226,6 +2226,7 @@ export const uk: Dict = {
   'chat.conversationsHeading': 'Розмови',
   'chat.emptyConversations': 'Розмов ще немає.',
   'chat.deleteConversation': 'Видалити розмову',
+  'chat.renameConversation': 'Перейменувати розмову',
   'chat.renameConversationLabel': 'Перейменувати "{title}"',
   'chat.deleteConversationConfirm': 'Видалити "{title}"? Це видалить усі її повідомлення.',
   'chat.untitledConversation': 'Розмова без назви',

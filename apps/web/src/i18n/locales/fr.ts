@@ -2226,6 +2226,7 @@ export const fr: Dict = {
   'chat.conversationsHeading': 'Conversations',
   'chat.emptyConversations': 'Aucune conversation pour l\'instant.',
   'chat.deleteConversation': 'Supprimer la conversation',
+  'chat.renameConversation': 'Renommer la conversation',
   'chat.renameConversationLabel': 'Renommer « {title} »',
   'chat.deleteConversationConfirm': 'Supprimer « {title} » ? Cela supprime ses messages.',
   'chat.untitledConversation': 'Conversation sans titre',

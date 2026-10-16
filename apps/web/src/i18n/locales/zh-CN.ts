@@ -2316,6 +2316,7 @@ export const zhCN: Dict = {
   "chat.conversationsHeading": "对话",
   "chat.emptyConversations": "还没有对话。",
   "chat.deleteConversation": "删除对话",
+  "chat.renameConversation": "修改会话名",
   "chat.renameConversationLabel": "重命名「{title}」",
   "chat.deleteConversationConfirm": "确定删除「{title}」？该操作会删除其消息。",
   "chat.untitledConversation": "未命名对话",

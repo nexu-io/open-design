@@ -49,9 +49,9 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-// Session rename was removed by design — chats are not renamed. These tests
-// cover what the session switcher does keep: the icon-only history trigger
-// opens a menu listing conversations, and selecting / deleting one calls back.
+// The icon-only history trigger opens a menu listing conversations; selecting
+// one calls back, and each row carries its own 「修改会话名」 entry (OPEND-3128)
+// that renames that conversation alone — the project name lives elsewhere.
 describe('ChatPane session switcher', () => {
   it('opens the conversation history menu from the icon trigger', () => {
     renderChatPane({
@@ -130,16 +130,89 @@ describe('ChatPane session switcher', () => {
     expect(screen.getByTestId('conversation-select-conv-1').textContent).toBe('chat.untitledConversation');
   });
 
-  it('does not expose any inline rename affordance', () => {
+  it('hides the rename entry when the viewer cannot rename', () => {
     renderChatPane({
       conversations: [conversation({ id: 'conv-1', title: 'Contract review draft' })],
       activeConversationId: 'conv-1',
     });
 
     fireEvent.click(screen.getByTestId('conversation-history-trigger'));
-    // The select button is a plain selector now — no rename input is rendered.
-    expect(screen.queryByTestId('chat-active-conversation-rename-input')).toBeNull();
+    expect(screen.queryByTestId('conversation-rename-conv-1')).toBeNull();
     expect(screen.queryByDisplayValue('Contract review draft')).toBeNull();
+  });
+
+  it('renames only the chosen conversation from its history row', () => {
+    const onSelectConversation = vi.fn();
+    const onRenameConversation = vi.fn();
+    renderChatPane({
+      conversations: [
+        conversation({ id: 'conv-1', title: 'Contract review draft' }),
+        conversation({ id: 'conv-2', title: 'Pricing page copy' }),
+      ],
+      activeConversationId: 'conv-1',
+      onSelectConversation,
+      onRenameConversation,
+    });
+
+    fireEvent.click(screen.getByTestId('conversation-history-trigger'));
+    const entry = screen.getByTestId('conversation-rename-conv-2');
+    expect(entry.getAttribute('data-tooltip')).toBe('chat.renameConversation');
+    fireEvent.click(entry);
+
+    const input = screen.getByTestId('conversation-rename-input-conv-2') as HTMLInputElement;
+    expect(input.value).toBe('Pricing page copy');
+    fireEvent.change(input, { target: { value: '  Pricing v2  ' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(onRenameConversation).toHaveBeenCalledTimes(1);
+    expect(onRenameConversation).toHaveBeenCalledWith('conv-2', 'Pricing v2');
+    // Renaming is not switching: the row was not selected, the menu stays.
+    expect(onSelectConversation).not.toHaveBeenCalled();
+    expect(screen.getByTestId('conversation-history-menu')).toBeTruthy();
+    expect(screen.queryByTestId('conversation-rename-input-conv-2')).toBeNull();
+  });
+
+  it('commits a rename on blur and skips an unchanged title', () => {
+    const onRenameConversation = vi.fn();
+    renderChatPane({
+      conversations: [
+        conversation({ id: 'conv-1', title: 'Contract review draft' }),
+        conversation({ id: 'conv-2', title: null }),
+      ],
+      activeConversationId: 'conv-1',
+      onRenameConversation,
+    });
+
+    fireEvent.click(screen.getByTestId('conversation-history-trigger'));
+    fireEvent.click(screen.getByTestId('conversation-rename-conv-1'));
+    fireEvent.blur(screen.getByTestId('conversation-rename-input-conv-1'));
+    expect(onRenameConversation).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('conversation-rename-conv-2'));
+    const input = screen.getByTestId('conversation-rename-input-conv-2');
+    fireEvent.change(input, { target: { value: 'Checkout flow' } });
+    fireEvent.blur(input);
+    expect(onRenameConversation).toHaveBeenCalledTimes(1);
+    expect(onRenameConversation).toHaveBeenCalledWith('conv-2', 'Checkout flow');
+  });
+
+  it('cancels a rename with Escape without closing the history menu', () => {
+    const onRenameConversation = vi.fn();
+    renderChatPane({
+      conversations: [conversation({ id: 'conv-1', title: 'Contract review draft' })],
+      activeConversationId: 'conv-1',
+      onRenameConversation,
+    });
+
+    fireEvent.click(screen.getByTestId('conversation-history-trigger'));
+    fireEvent.click(screen.getByTestId('conversation-rename-conv-1'));
+    const input = screen.getByTestId('conversation-rename-input-conv-1');
+    fireEvent.change(input, { target: { value: 'Discarded' } });
+    fireEvent.keyDown(input, { key: 'Escape' });
+
+    expect(onRenameConversation).not.toHaveBeenCalled();
+    expect(screen.getByTestId('conversation-history-menu')).toBeTruthy();
+    expect(screen.getByTestId('conversation-select-conv-1').textContent).toBe('Contract review draft');
   });
 
   // 原来这一条钉的是 `AMR_INSUFFICIENT_BALANCE`。用户 2026-09-02 裁决之后,
@@ -302,11 +375,14 @@ describe('ChatPane session switcher', () => {
   });
 });
 
-function renderChatPane(props: {
+type ChatPaneFixtureProps = {
   conversations: Conversation[];
   activeConversationId: string | null;
   onSelectConversation?: (id: string) => void;
-}) {
+  onRenameConversation?: (id: string, title: string) => void;
+};
+
+function renderChatPane(props: ChatPaneFixtureProps) {
   return render(chatPaneElement(props));
 }
 
@@ -314,11 +390,8 @@ function chatPaneElement({
   conversations,
   activeConversationId,
   onSelectConversation,
-}: {
-  conversations: Conversation[];
-  activeConversationId: string | null;
-  onSelectConversation?: (id: string) => void;
-}) {
+  onRenameConversation,
+}: ChatPaneFixtureProps) {
   return (
     <ChatPane
       messages={[]}
@@ -333,6 +406,7 @@ function chatPaneElement({
       activeConversationId={activeConversationId}
       onSelectConversation={onSelectConversation ?? vi.fn()}
       onDeleteConversation={vi.fn()}
+      onRenameConversation={onRenameConversation}
     />
   );
 }
