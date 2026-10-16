@@ -92,6 +92,19 @@ The image intentionally does not bundle Claude/Codex/Gemini CLI binaries. Keep
 those outside the image, or build a separate private runtime layer if a server
 deployment needs local code-agent CLIs installed in the container.
 
+## Runtime version
+
+Release builds pass their exact release version through the `OD_APP_VERSION`
+Docker build argument. The runtime image preserves it for `/api/health` and
+`/api/version`, independently of the source package versions. The standalone
+Docker workflow checks the running daemon's version against the image version
+before reporting successful reconciliation.
+
+For a custom build, set `--build-arg OD_APP_VERSION=<your-version>` when you need
+an explicit version. Omitting the argument preserves the daemon's existing
+package-metadata fallback. Previously published immutable tags are not rewritten
+by this change.
+
 ## Linux: mounting host agent CLIs
 
 On Linux you can mount host-installed agent CLIs (Claude Code, opencode, Codex,

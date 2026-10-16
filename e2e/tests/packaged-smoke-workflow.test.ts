@@ -507,6 +507,109 @@ describe("packaged smoke workflow", () => {
     expect(reportWorkflow).not.toContain("merge_group");
   });
 
+  it('[P1] carries the Docker tag version into the runtime and health check', async () => {
+    const workflow = await readFile(dockerImageWorkflowPath, 'utf8');
+    const build = sectionBetween(workflow, '      - name: Build and push', '      - name: Verify public GHCR pull access');
+    const smoke = sectionBetween(workflow, '      - name: Verify daemon version', '      - name: Publish reconciliation summary');
+
+    expect(build).toContain('OD_APP_VERSION=${{ inputs.release_version || steps.meta.outputs.version }}');
+    expect(build).toContain("load: ${{ steps.mode.outputs.publish != 'true' }}");
+    expect(smoke).toContain('EXPECTED_VERSION: ${{ inputs.release_version || steps.meta.outputs.version }}');
+    expect(smoke).toContain('PUBLISHED_DIGEST: ${{ steps.verify.outputs.digest }}');
+    expect(smoke).toContain('IMAGE="${IMAGE%:*}@$PUBLISHED_DIGEST"');
+    expect(smoke).toContain('token="$(openssl rand -hex 32)"');
+    expect(smoke).toContain('docker run --detach --network none --env OD_API_TOKEN="$token" "$IMAGE"');
+    expect(smoke).toContain('headers: { Authorization: `Bearer ${process.env.OD_API_TOKEN}` }');
+    expect(smoke).toContain('trap cleanup EXIT');
+    // The expected value belongs only to the probe, never the daemon env:
+    // overriding OD_APP_VERSION at docker run would hide a broken image.
+    expect(smoke).not.toMatch(/docker (?:run|exec)[^\n]*--env OD_APP_VERSION/);
+  });
+
+  it.each([
+    { name: 'complete legacy tag', publish: true, existing: 'complete', baked: [], probeExit: 1, probe: false, ok: true },
+    { name: 'new legacy release', publish: true, existing: 'missing', baked: [], probeExit: 1, probe: false, ok: true },
+    { name: 'incomplete legacy release', publish: true, existing: 'incomplete', baked: [], probeExit: 1, probe: false, ok: true },
+    { name: 'current release', publish: true, existing: 'missing', baked: ['OD_APP_VERSION=0.24.1'], probeExit: 0, probe: true, ok: true },
+    { name: 'broken current daemon', publish: true, existing: 'missing', baked: ['OD_APP_VERSION=0.24.1'], probeExit: 1, probe: true, ok: false },
+    { name: 'wrong baked version', publish: true, existing: 'missing', baked: ['OD_APP_VERSION=0.23.1'], probeExit: 0, probe: false, ok: false },
+    { name: 'empty baked version', publish: true, existing: 'missing', baked: ['OD_APP_VERSION='], probeExit: 0, probe: false, ok: false },
+    { name: 'smoke build missing version', publish: false, existing: '', baked: [], probeExit: 0, probe: false, ok: false },
+  ])('[P1] reconciles Docker runtime version for $name', async ({ publish, existing, baked, probeExit, probe, ok }) => {
+    const workflow = await readFile(dockerImageWorkflowPath, 'utf8');
+    const script = extractWorkflowRunScript(workflow, 'Verify daemon version');
+    const root = await mkdtemp(join(tmpdir(), 'docker-version-reconcile-'));
+    const callsFile = join(root, 'calls.jsonl');
+    const docker = join(root, 'docker');
+    const digest = `sha256:${'a'.repeat(64)}`;
+    try {
+      await writeFile(callsFile, '');
+      await writeFile(docker, `#!${process.execPath}
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+fs.appendFileSync(process.env.DOCKER_CALLS, JSON.stringify(args) + '\\n');
+if (args[0] === 'image' && args[1] === 'inspect') {
+  process.stdout.write(process.env.DOCKER_BAKED_ENV);
+} else if (args[0] === 'run') {
+  console.log('fixture-container');
+} else if (args[0] === 'exec') {
+  process.stdin.resume();
+  process.stdin.on('end', () => process.exit(Number(process.env.DOCKER_PROBE_EXIT)));
+}
+`);
+      await chmod(docker, 0o755);
+      const result = await execFileAsync('bash', ['-c', script], {
+        env: workflowFixtureEnv({
+          IMAGE: 'registry.test/od:0.24.1',
+          EXPECTED_VERSION: '0.24.1',
+          PUBLISH: String(publish),
+          EXISTING_STATE: existing,
+          PUBLISHED_DIGEST: publish ? digest : '',
+          DOCKER_CALLS: callsFile,
+          DOCKER_BAKED_ENV: JSON.stringify(baked),
+          DOCKER_PROBE_EXIT: String(probeExit),
+        }, root),
+      }).then(() => 0, (error: { code: number }) => error.code);
+      expect(result).toBe(ok ? 0 : 1);
+      const calls = (await readFile(callsFile, 'utf8')).trim().split('\n').filter(Boolean)
+        .map((line) => JSON.parse(line) as string[]);
+      expect(calls.some((args) => args[0] === 'exec')).toBe(probe);
+      expect(calls.some((args) => args[0] === 'rm')).toBe(probe);
+      if (existing === 'complete') {
+        expect(calls).toEqual([]);
+      } else if (publish) {
+        expect(calls).toContainEqual(['pull', `registry.test/od@${digest}`]);
+        expect(calls.some((args) => args[0] === 'image' && args.includes(`registry.test/od@${digest}`))).toBe(true);
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    ['0.24.1', true],
+    ['0.23.1', false],
+    [undefined, false],
+  ])('[P1] validates tagged Docker health version %s against the release', async (version, matches) => {
+    const workflow = await readFile(dockerImageWorkflowPath, 'utf8');
+    const script = extractWorkflowRunScript(workflow, 'Verify daemon version');
+    const probe = script.match(/<<'NODE'\n([\s\S]*?)\nNODE/)?.[1];
+    expect(probe).toBeTruthy();
+    const stub = `globalThis.fetch = async () => new Response(${JSON.stringify(JSON.stringify({ ok: true, version }))});\n`;
+    const result = execFileAsync(process.execPath, ['--input-type=module', '-e', stub + probe], {
+      env: { ...process.env, EXPECTED_VERSION: '0.24.1', OD_API_TOKEN: 'smoke-test-token' },
+    });
+
+    if (matches) {
+      expect((await result).stdout).toContain('Verified daemon version: 0.24.1');
+    } else {
+      await expect(result).rejects.toMatchObject({
+        code: 1,
+        stderr: expect.stringContaining('daemon version must match image version'),
+      });
+    }
+  });
+
   it("[P2] gates infra-cancel auto-rerun as a trusted workflow_run consumer", async () => {
     const [rerunWorkflow, rerunScript, ciWorkflow] = await Promise.all([
       readFile(rerunWorkflowPath, "utf8"),

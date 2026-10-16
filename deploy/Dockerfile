@@ -109,6 +109,11 @@ COPY --from=build --chown=open-design:open-design /app/plugins/_official ./plugi
 RUN mkdir -p /app/.od && \
     chown -R open-design:open-design /app
 
+# Release identity must reach the daemon, not only the image's OCI labels.
+# An unset value keeps local builds on the package-metadata fallback.
+ARG OD_APP_VERSION
+ENV OD_APP_VERSION=${OD_APP_VERSION}
+
 ENV NODE_ENV=production
 ENV NODE_OPTIONS=--max-old-space-size=192
 ENV OD_BIND_HOST=0.0.0.0
