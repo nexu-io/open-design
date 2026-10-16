@@ -287,6 +287,12 @@ docker compose up -d
 
 O template da Sealos App Store executa a imagem Docker publicada do OpenDesign com armazenamento persistente para o workspace e Basic Auth no proxy público. Para implantações Docker públicas ou compartilhadas personalizadas, siga as orientações de proxy reverso e `OPEN_DESIGN_ALLOWED_ORIGINS` em [`deploy/README.md`](../../deploy/README.md#local-compose).
 
+### 🚀 Implante no Pethost
+
+[![Deploy on Pethost](https://pethost.dev/button.svg)](https://pethost.dev/templates/open-design/)
+
+O template do Pethost executa a imagem publicada `ghcr.io/nexu-io/od` com os dados em um volume e o token da API como Basic Auth: o usuário é `open-design` e a senha, a informada no deploy.
+
 ### 🧑‍💻 Rode a partir do código-fonte
 
 ```bash

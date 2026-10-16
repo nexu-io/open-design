@@ -315,6 +315,12 @@ using `Authorization: Bearer <OD_API_TOKEN>`.
 
 The Sealos App Store template runs the published OpenDesign Docker image with persistent workspace storage and Basic Auth on the public proxy. For custom public or shared Docker deployments, follow the reverse-proxy and `OPEN_DESIGN_ALLOWED_ORIGINS` guidance in [`deploy/README.md`](deploy/README.md#local-compose).
 
+### 🚀 Deploy on Pethost
+
+[![Deploy on Pethost](https://pethost.dev/button.svg)](https://pethost.dev/templates/open-design/)
+
+The Pethost template runs the published `ghcr.io/nexu-io/od` image with its data in a volume and the API token as Basic Auth: the user name is `open-design`, the password the one given at deploy.
+
 ### 🧑‍💻 Run from source
 
 ```bash
