@@ -94,11 +94,27 @@ export const cursorAgentDef = {
       if (options.model && options.model !== 'default') {
         args.push('--model', options.model);
       }
+      // Resume the CLI's own chat across turns so it keeps working memory and
+      // the daemon can skip resending the full transcript (resumesSessionViaCli
+      // gate in server.ts). cursor-agent has no `--session-id`: it mints its
+      // own id on the create turn (captured from the event stream and stored by
+      // the daemon), so we only pass `--resume <chatId>` when a stored id
+      // exists — never the daemon-minted `newSessionId`, which the CLI would
+      // silently treat as a fresh chat.
+      if (typeof runtimeContext.resumeSessionId === 'string' && runtimeContext.resumeSessionId) {
+        args.push('--resume', runtimeContext.resumeSessionId);
+      }
       return args;
     },
     promptViaStdin: true,
     streamFormat: 'json-event-stream',
     eventParser: 'cursor-agent',
+    // cursor-agent's CLI carries multi-turn memory via `--resume <chatId>`.
+    // The daemon captures the emitted `session_id` from status events and
+    // replays it next turn, which lets the prompt path skip the transcript on
+    // follow-ups.
+    resumesSessionViaCli: true,
+    capturesSessionIdFromStream: true,
     // `cursor-agent status` is a cheap, side-effect-free auth check. Declaring
     // it here is what makes detection surface an "auth required" badge for
     // Cursor Agent (the generalized probe only runs for adapters that opt in).
