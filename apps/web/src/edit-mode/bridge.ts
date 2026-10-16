@@ -1238,6 +1238,24 @@ export function buildManualEditBridge(enabled: boolean): string {
       renderHoverRelation(targetFrom(lastHoverEl, false));
     });
   }, true);
+  // Undo/redo hotkey (Cmd/Ctrl+Z, +Shift to redo). Keyboard focus lives inside
+  // this iframe after any canvas click, so the host's own shortcut listener
+  // never hears the keys — forward them to the host's manual-edit history.
+  // Registered on documentElement for the same reason as the screenshot tap
+  // below: the keyboard guard wraps window/document keydown listeners.
+  document.documentElement.addEventListener('keydown', function(ev){
+    if (!enabled) return;
+    if (!(ev.metaKey || ev.ctrlKey) || ev.altKey) return;
+    if (!ev.key || ev.key.toLowerCase() !== 'z') return;
+    // A focused field owns its own undo stack — including the inline text
+    // session, which is a contenteditable. Routing to file history there would
+    // discard the user's in-progress typing instead of undoing a canvas edit.
+    var target = ev.target;
+    if (target && target.closest && target.closest('input,textarea,select,[role="textbox"],[contenteditable]')) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    window.parent.postMessage({ type: 'od-edit-history', op: ev.shiftKey ? 'redo' : 'undo' }, '*');
+  }, true);
   // Double-tap Command screenshot hotkey (edit mode only). Keyboard focus can
   // live inside the sandboxed iframe, where the host's window listener never
   // hears the keys — detect here and delegate the capture to the host. Two
