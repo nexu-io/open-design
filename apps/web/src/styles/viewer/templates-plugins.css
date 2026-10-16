@@ -1698,6 +1698,9 @@
   padding: 8px 10px 8px 14px;
   min-width: 0;
 }
+.settings-skills .skills-row-expanded .skills-row-head {
+  align-items: flex-start;
+}
 .settings-skills .skills-row-summary-btn {
   flex: 1;
   min-width: 0;
@@ -1712,6 +1715,10 @@
   cursor: pointer;
   color: inherit;
   font: inherit;
+}
+.settings-skills .skills-row-expanded .skills-row-summary-btn {
+  align-items: flex-start;
+  height: auto;
 }
 .settings-skills .skills-row-summary-btn:hover .skills-row-summary-name {
   color: var(--accent);
@@ -1795,6 +1802,12 @@
   font-size: 12px;
   color: var(--text-muted);
   line-height: 1.4;
+}
+.settings-skills .skills-row-expanded .skills-row-summary-desc {
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
 }
 .settings-skills .skills-row-chevron {
   display: inline-flex;
