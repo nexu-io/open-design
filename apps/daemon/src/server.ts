@@ -697,7 +697,12 @@ import {
   validateTarget as validateRoutineTarget,
 } from './routines.js';
 import { buildMcpInstallPayload } from './mcp-install-info.js';
-import { createDiagnosticsExportHandler, buildAutomaticDiagnosticSources, resolveDaemonPreviousLogPath } from './diagnostics-export.js';
+import {
+  createDiagnosticsExportHandler,
+  buildAutomaticDiagnosticSources,
+  registerDiagnosticsExportRoutes,
+  resolveDaemonPreviousLogPath,
+} from './diagnostics-export.js';
 import { AutomaticDiagnostics } from './services/automatic-diagnostics.js';
 import { createDiagnosticRunObserver, diagnosticFaultFromApi, diagnosticFaultFromLifecycle } from './services/diagnostic-faults.js';
 import { diagnosticRelayUrl } from './integrations/diagnostic-relay.js';
@@ -711,7 +716,7 @@ import {
   chatScrollForensicsBodyParser,
   chatScrollForensicsHandler,
 } from './diagnostics-client-evidence.js';
-import { DIAGNOSTIC_DELIVERY_LOG_PREFIX, DIAGNOSTICS_EXPORT_PATH } from '@open-design/diagnostics';
+import { DIAGNOSTIC_DELIVERY_LOG_PREFIX } from '@open-design/diagnostics';
 import {
   createProjectArchiveStream,
   createBatchArchiveStream,
@@ -8438,8 +8443,8 @@ export async function startServer({
     chatScrollForensicsHandler,
   );
 
-  app.get(
-    DIAGNOSTICS_EXPORT_PATH,
+  registerDiagnosticsExportRoutes(
+    app,
     requireLocalDaemonRequest,
     createDiagnosticsExportHandler({
       runtime,
