@@ -156,6 +156,7 @@ describe('GET /api/projects/:projectId/critique/:runId/artifact', () => {
     expect(headers.get('content-length')).toBe('31');
     expect(headers.get('x-content-type-options')).toBe('nosniff');
     expect(headers.get('content-security-policy')).toContain("default-src 'none'");
+    expect(headers.get('cache-control')).toBe('no-store');
     expect(body).toBe('<html><body>final</body></html>');
   });
 
