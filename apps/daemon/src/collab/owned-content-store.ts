@@ -1,6 +1,8 @@
 import type Database from 'better-sqlite3';
 
 export interface OwnedContentScope {
+  /** Exact trusted catalog root, when using the production transport. */
+  resourceId?: string;
   projectId: string;
   workspaceId: string;
   resourceTeamId: string;

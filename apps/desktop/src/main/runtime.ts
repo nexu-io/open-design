@@ -1867,12 +1867,20 @@ export function saveAsDialogOptionsForFilename(filename: string): SaveAsDialogOp
   return { title: "Save As", defaultPath: filename, filters, properties: ["dontAddToRecent"] };
 }
 
-function attachDownloadSaveAsDialog(window: BrowserWindow): void {
-  window.webContents.session.on("will-download", (_event, item) => {
+export function attachDownloadSaveAsDialog(window: BrowserWindow): void {
+  const contents = window.webContents;
+  const session = contents.session;
+  const onDownload = (_event: Electron.Event, item: Electron.DownloadItem, source: Electron.WebContents) => {
+    if (source !== contents) return;
     const options = saveAsDialogOptionsForFilename(item.getFilename());
-    if (!options) return;
-    item.setSaveDialogOptions(options);
-  });
+    if (options) item.setSaveDialogOptions(options);
+    const url = item.getURL();
+    item.once("done", (_done, state) => {
+      if (!contents.isDestroyed()) contents.send("od:download-finished", { url, state });
+    });
+  };
+  session.on("will-download", onDownload);
+  window.once("closed", () => session.removeListener("will-download", onDownload));
 }
 
 function parsePrintReadyPdfOptions(value: unknown): PrintReadyPdfOptions {

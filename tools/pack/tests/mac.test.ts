@@ -409,6 +409,7 @@ describe("runElectronBuilder", () => {
     await runElectronBuilder(config, paths, ["dir"]);
 
     return JSON.parse(await readFile(paths.appBuilderConfigPath, "utf8")) as {
+      files: string[];
       afterSign?: string;
       mac?: {
         notarize?: boolean;
@@ -423,6 +424,17 @@ describe("runElectronBuilder", () => {
 
       expect(builderConfig.afterSign).toContain("notarize.cjs");
       expect(builderConfig.mac).not.toHaveProperty("notarize");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("excludes dependency dotenv credentials from the packaged app", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-"));
+    try {
+      const builderConfig = await prepareElectronBuilderConfig(root, { macNotarize: false });
+
+      expect(builderConfig.files).toEqual(expect.arrayContaining(["!**/.env", "!**/.env.*"]));
     } finally {
       await rm(root, { force: true, recursive: true });
     }

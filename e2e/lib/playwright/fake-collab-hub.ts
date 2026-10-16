@@ -1,4 +1,5 @@
-import { chmod, cp, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
+import { chmod, cp, lstat, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
+import type { CommentFileFact, CommentFileMutation, CommentFileState } from '@open-design/contracts';
 import { createServer, type Server, type ServerResponse } from 'node:http';
 import { join } from 'node:path';
 
@@ -14,6 +15,7 @@ type TeamProjectRecord = {
   workspaceId: string;
   projectId: string;
   resourceId: string;
+  visibility: 'private' | 'team';
   ownerMemberId: string;
   displayName: string | null;
   syncState: string;
@@ -573,18 +575,43 @@ async function handleTeamProjectsCommand(input: {
   emit: (event: HubEvent) => void;
 }): Promise<string> {
   const [, command, projectId] = input.args;
-  if (command === '--help') return 'team-projects list get upsert remove\n';
+  if (command === '--help') return 'team-projects list get ensure-private visibility register-resource upsert remove\n';
   if (command === 'list' || command == null) {
     return jsonLine({
       workspaceId: input.workspaceId,
       projects: [...input.projects.values()].filter(
-        (project) => project.workspaceId === input.workspaceId,
+        (project) => project.workspaceId === input.workspaceId && project.visibility === 'team',
       ).map((project) => recordForIdentity(project, input.identity)),
     });
   }
+  if (command === 'ensure-private' && projectId) {
+    const previous = input.projects.get(projectId);
+    if (previous && previous.ownerMemberId !== input.identity.memberId) throw new Error('team_project_not_found');
+    if (previous) return jsonLine(recordForIdentity(previous, input.identity));
+    const now = new Date().toISOString();
+    const record: TeamProjectRecord = {
+      id: `catalog-${projectId}`, workspaceId: input.workspaceId, projectId,
+      resourceId: `server-root-${projectId}`, visibility: 'private',
+      ownerMemberId: input.identity.memberId, displayName: null, syncState: 'pending_upload',
+      lastSyncedVersionId: null, metadata: null, createdAt: now, updatedAt: now,
+      access: { canView: true, canComment: true, canEdit: true, frozen: false },
+    };
+    input.projects.set(projectId, record);
+    return jsonLine(recordForIdentity(record, input.identity));
+  }
+  if ((command === 'visibility' || command === 'register-resource') && projectId) {
+    const project = input.projects.get(projectId);
+    if (!project || project.ownerMemberId !== input.identity.memberId) throw new Error('team_project_not_found');
+    if (command === 'register-resource') return jsonLine({ ok: true });
+    const visibility = input.args[3];
+    if (visibility !== 'private' && visibility !== 'team') throw new Error('invalid visibility');
+    project.visibility = visibility;
+    input.emit({ type: 'team-projects-changed', workspaceId: input.workspaceId, projectId });
+    return jsonLine(recordForIdentity(project, input.identity));
+  }
   if (command === 'get' && projectId) {
     const project = input.projects.get(projectId);
-    if (!project) throw new Error('team_project_not_found');
+    if (!project || (project.visibility === 'private' && project.ownerMemberId !== input.identity.memberId)) throw new Error('team_project_not_found');
     return jsonLine(recordForIdentity(project, input.identity));
   }
   if (command === 'pull' && projectId) {
@@ -644,12 +671,13 @@ async function handleTeamProjectsCommand(input: {
       workspaceId: input.workspaceId,
       projectId,
       resourceId,
+      visibility: previous?.visibility ?? 'team',
       ownerMemberId: previous?.ownerMemberId ?? input.identity.memberId,
       displayName: flag(input.args, '--display-name') ?? previous?.displayName ?? null,
       syncState: flag(input.args, '--sync-state') ?? previous?.syncState ?? 'synced',
       lastSyncedVersionId:
         flag(input.args, '--last-synced-version-id') ?? previous?.lastSyncedVersionId ?? null,
-      metadata: parseJsonFlag(input.args, '--metadata-json') ?? previous?.metadata ?? null,
+      metadata: await admitRootCommentFiles(input, previous, parseJsonFlag(input.args, '--metadata-json')),
       createdAt: previous?.createdAt ?? now,
       updatedAt: now,
       access: {
@@ -673,6 +701,63 @@ async function handleTeamProjectsCommand(input: {
     return jsonLine({ ok: true });
   }
   throw new Error(`unsupported team-projects command: ${input.args.join(' ')}`);
+}
+
+/** This hub models root receipts only, backed by its actual copied snapshots.
+ * Mutation proposals become server state; replaying response state is rejected.
+ * Selected/mixed-receipt authority remains covered by the Vela-owned tests.
+ */
+async function admitRootCommentFiles(
+  input: { workspaceId: string; identity: ClientIdentity; resources: Map<string, ResourceRecord> },
+  previous: TeamProjectRecord | undefined,
+  metadata: Record<string, unknown> | null,
+): Promise<Record<string, unknown> | null> {
+  if (!metadata) return previous?.metadata ?? null;
+  const old = previous?.metadata?._commentFiles as CommentFileState | undefined;
+  if (metadata._commentFiles === undefined) {
+    return old ? { ...metadata, _commentFiles: old } : metadata;
+  }
+  const mutation = metadata._commentFiles as CommentFileMutation;
+  if (!previous || previous.workspaceId !== input.workspaceId || previous.ownerMemberId !== input.identity.memberId
+    || !mutation || mutation.schemaVersion !== 1 || !Array.isArray(mutation.files)
+    || mutation.baseRevision !== (old?.revision ?? 0)) throw new Error('comment_file_mutation_rejected');
+  const resource = input.resources.get(workspaceResourceKey(input.workspaceId, mutation.resourceId));
+  if (!resource || resource.projectId !== previous.projectId || resource.ownerMemberId !== input.identity.memberId
+    || resource.resourceId !== previous.resourceId || mutation.versionId !== `v${resource.version}`) {
+    throw new Error('comment_file_receipt_rejected');
+  }
+  const snapshot = resource.versions.get(resource.version);
+  if (!snapshot) throw new Error('comment_file_receipt_rejected');
+  const files = new Map<string, CommentFileFact>(old?.files.map(file => [file.sourceFileId, file]));
+  const ids = new Set<string>();
+  for (const file of mutation.files) {
+    if (file.receipt || typeof file.sourceFileId !== 'string' || ids.has(file.sourceFileId)
+      || typeof file.retired !== 'boolean' || typeof file.entryPath !== 'string'
+      || file.entryPath !== file.sourceFilePath || !/\.html?$/i.test(file.entryPath)
+      || file.entryPath.startsWith('/') || /[\\\\\0]/.test(file.entryPath)
+      || file.entryPath.split('/').some(part => !part || part === '.' || part === '..')) {
+      throw new Error('comment_file_mutation_rejected');
+    }
+    ids.add(file.sourceFileId);
+    const prior = files.get(file.sourceFileId);
+    if (prior && (prior.sourceFilePath !== file.sourceFilePath || (prior.retired && !file.retired))) {
+      throw new Error('comment_file_lifetime_conflict');
+    }
+    if (file.retired && (!prior || prior.resourceId !== mutation.resourceId || prior.versionId !== mutation.versionId)) {
+      throw new Error('comment_file_retirement_rejected');
+    }
+    if (!(await lstat(join(snapshot, file.entryPath))).isFile()) throw new Error('comment_file_entry_missing');
+    files.set(file.sourceFileId, { sourceFileId: file.sourceFileId, sourceFilePath: file.sourceFilePath,
+      entryPath: file.entryPath, retired: file.retired, resourceId: mutation.resourceId, versionId: mutation.versionId });
+  }
+  const activePaths = new Set<string>();
+  for (const file of files.values()) {
+    if (file.retired) continue;
+    if (activePaths.has(file.sourceFilePath)) throw new Error('comment_file_lifetime_conflict');
+    activePaths.add(file.sourceFilePath);
+  }
+  const state: CommentFileState = { schemaVersion: 1, revision: (old?.revision ?? 0) + 1, files: [...files.values()] };
+  return { ...metadata, _commentFiles: state };
 }
 
 async function handleResourceCommand(input: {
@@ -870,6 +955,7 @@ async function handleResourceCommand(input: {
 
 function handleCollabCommand(input: {
   args: string[];
+  stdin: string;
   identity: ClientIdentity;
   workspaceId: string;
   options: { clients: readonly ClientIdentity[] };
@@ -963,7 +1049,19 @@ function handleCollabCommand(input: {
     });
   }
   if (domain === 'comment' && command === 'push' && projectId) {
-    const parsed = parseJsonFlag(input.args, '--comment-json');
+    let parsed: Record<string, unknown> | null;
+    if (input.args.includes('--comment-file')) {
+      if (flag(input.args, '--comment-file') !== '-') {
+        throw new Error('fake comment push requires --comment-file -');
+      }
+      const payload: unknown = JSON.parse(input.stdin);
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+        throw new Error('comment push requires a JSON object');
+      }
+      parsed = payload as Record<string, unknown>;
+    } else {
+      parsed = parseJsonFlag(input.args, '--comment-json');
+    }
     if (!parsed) throw new Error('comment push missing payload');
     const projectComments = input.comments.get(projectId) ?? [];
     const seq = projectComments.reduce(
@@ -1058,8 +1156,12 @@ function fakeVelaScript(): string {
   return `#!/usr/bin/env node
 const args = process.argv.slice(2);
 let stdin = '';
-const requestsFileIndex = args.indexOf('--requests-file');
-if (requestsFileIndex >= 0 && args[requestsFileIndex + 1] === '-') {
+const readsStdin = ['--requests-file', '--comment-file'].some((flag) => {
+  const index = args.indexOf(flag);
+  return index >= 0 && args[index + 1] === '-';
+});
+if (readsStdin) {
+  process.stdin.setEncoding('utf8');
   for await (const chunk of process.stdin) stdin += chunk;
 }
 const response = await fetch(new URL('/__e2e/command', process.env.VELA_API_URL), {

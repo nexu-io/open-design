@@ -128,6 +128,9 @@ describe('OD Next V2 request recipe wiring', () => {
       if (!recipe) throw new Error('expected real OD Next recipe');
       const prompt = composeSystemPrompt({ odNextStrategyRecipe: recipe });
       expect(prompt).toBe(composeContractsSystemPrompt({ odNextStrategyRecipe: recipe }));
+      expect(prompt).toContain('Only when editing HTML that already contains data-od-comment-id');
+      expect(prompt).toContain('mint a fresh UUID for every copied or new node');
+      expect(prompt).toContain('never recycle a deleted identity');
       expect(prompt).toContain("The user's latest explicit request determines this turn's deliverables");
       expect(prompt).toContain('Do not add an HTML wrapper, presentation page, or extra export');
       expect(prompt).not.toContain('propose a task-type\n   switch and wait for confirmation');

@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../../src/App';
 import { notifyAmrLoginStatusChanged } from '../../src/components/amrLoginPolling';
+import type { ShareLoginReturn } from '../../src/components/share/share-login-return';
 import type {
   ProjectNameAuthorityResolution,
   ProjectRenameFenceToken,
@@ -408,6 +409,8 @@ vi.mock('../../src/components/ProjectView', () => ({
     onOpenSettings,
     workspaceContextOverride,
     onCreationHandoffSettled,
+    shareLoginReturn,
+    onShareLoginReturnChange,
   }: {
     onBack: () => void;
     onCreateProjectFromDesignSystem?: (designSystemId: string, title: string) => Promise<void> | void;
@@ -445,6 +448,8 @@ vi.mock('../../src/components/ProjectView', () => ({
     onOpenSettings?: () => void;
     workspaceContextOverride?: WorkspaceCollabContext | null;
     onCreationHandoffSettled?: (projectId: string) => void;
+    shareLoginReturn?: ShareLoginReturn | null;
+    onShareLoginReturnChange?: (request: ShareLoginReturn | null) => void;
   }) => {
     // The real view releases the hand-off card once its first transcript
     // settles; the stand-in has no transcript, so it settles on mount.
@@ -459,6 +464,11 @@ vi.mock('../../src/components/ProjectView', () => ({
     return (
     <main data-testid="project-view">
       <span data-testid="project-title">{project.name}</span>
+      <span data-testid="share-login-return">{shareLoginReturn?.filePath ?? 'none'}</span>
+      <button type="button" onClick={() => onShareLoginReturnChange?.({
+        projectId: project.id, filePath: 'index.html', expiresAt: Date.now() + 120_000,
+      })}>Report share login success</button>
+      <button type="button" onClick={() => onShareLoginReturnChange?.(null)}>Consume share login return</button>
       <span data-testid="project-authoritative-title">{authoritativeProjectName ?? 'none'}</span>
       <span data-testid="project-workspace-id">{project.workspaceId ?? 'unbound'}</span>
       <span data-testid="project-route-workspace-context">
@@ -828,10 +838,13 @@ function stubWorkspaceContext(
     'fetch',
     vi.fn(async (input: RequestInfo | URL) => {
       const pathname = new URL(String(input), 'http://d.local').pathname;
+      const shareProjectId = pathname.match(/^\/api\/projects\/([^/]+)\/share-state$/)?.[1];
       return {
         ok: true,
         json: async () =>
-          pathname.endsWith('/workspace/directory')
+          shareProjectId
+            ? { projectId: decodeURIComponent(shareProjectId), hasEverShared: false, bindingExists: false, publications: [] }
+            : pathname.endsWith('/workspace/directory')
             ? workspaceDirectoryFixture([workspaceContext(workspaceId, workspaceMemberId)])
             : pathname.endsWith('/workspace/context')
               ? workspaceContextPayload(workspaceId, workspaceMemberId)
@@ -920,6 +933,7 @@ describe('App project creation routing', () => {
 
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
     resetWorkspaceContextCache();
@@ -2158,12 +2172,13 @@ describe('App project creation routing', () => {
   });
 
   it('removes a locally deleted project from workspace tabs and ignores a stale list', async () => {
+    stubWorkspaceContext('ws-1', 'wm-1');
+    mockedDeleteProject.mockResolvedValue(true);
     const initialProjects = deferred<Project[]>();
     const staleRefreshProjects = deferred<Project[]>();
     mockedListProjects
       .mockReturnValueOnce(initialProjects.promise)
-      .mockReturnValueOnce(staleRefreshProjects.promise)
-      .mockResolvedValue([]);
+      .mockResolvedValue([freshProject]);
 
     render(<App />);
 
@@ -2184,14 +2199,16 @@ describe('App project creation routing', () => {
     workspaceTabsHarness.projectIds.add('project-new');
     expect(workspaceTabsHarness.projectIds.has('project-new')).toBe(true);
 
+    const listCallsBeforeRefresh = mockedListProjects.mock.calls.length;
+    mockedListProjects.mockReturnValueOnce(staleRefreshProjects.promise);
     fireEvent.click(screen.getByRole('button', { name: 'Refresh projects' }));
-    expect(mockedListProjects).toHaveBeenCalledTimes(2);
+    expect(mockedListProjects.mock.calls.length).toBeGreaterThan(listCallsBeforeRefresh);
 
     fireEvent.click(screen.getByRole('button', { name: 'Back to projects' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Delete Fresh project' }));
 
     await waitFor(() => {
-      expect(mockedDeleteProject).toHaveBeenCalledWith('project-new', null);
+      expect(mockedDeleteProject).toHaveBeenCalledWith('project-new', expect.objectContaining({ workspaceId: 'ws-1', workspaceMemberId: 'wm-1' }), expect.any(Function));
       expect(screen.queryByTestId('entry-project-project-new')).toBeNull();
       expect(workspaceTabsHarness.projectIds.has('project-new')).toBe(false);
     });
@@ -2428,6 +2445,84 @@ describe('App project creation routing', () => {
     expect(screen.queryByTestId('project-view')).toBeNull();
   });
 
+  it('OPEND-3691 keeps the exact panel continuation above the project authorization remount', async () => {
+    let member = 'wm-1';
+    const project: Project = { id: 'project-shared', name: 'Team project', skillId: null,
+      designSystemId: null, workspaceId: 'ws-1', createdAt: 20, updatedAt: 20 };
+    mockedListProjects.mockResolvedValue([project]);
+    mockedGetProject.mockResolvedValue(project);
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const pathname = new URL(String(input), 'http://d.local').pathname;
+      if (pathname.endsWith('/workspace/directory')) return new Response(JSON.stringify(
+        workspaceDirectoryFixture([workspaceContext('ws-1', member)])));
+      if (pathname.endsWith('/workspace/context')) return new Response(JSON.stringify(workspaceContextPayload('ws-1', member)));
+      if (pathname.endsWith('/workspace-scope')) return new Response(JSON.stringify({ scope: {
+        kind: 'team', projectId: project.id, workspaceId: 'ws-1', context: workspaceContext('ws-1', member),
+      } }));
+      if (pathname === `/api/projects/${project.id}`) return new Response(JSON.stringify({ project }));
+      if (pathname.endsWith('/workspace/projects/team')) return new Response(JSON.stringify({ projects: [{
+        projectId: project.id, name: project.name, ownerMemberId: member, sharedAt: '2026-10-11T00:00:00Z',
+      }] }));
+      return new Response('{}');
+    }));
+    render(<App />);
+    await screen.findByTestId('entry-project-project-shared');
+    fireEvent.click(screen.getByRole('button', { name: 'Open catalog project' }));
+    await screen.findByTestId('project-view');
+    fireEvent.click(screen.getByRole('button', { name: 'Report share login success' }));
+    await waitFor(() => expect(screen.getByTestId('share-login-return').textContent).toBe('index.html'));
+    member = 'wm-2';
+    act(() => notifyWorkspaceContextRefresh({ context: workspaceContext('ws-1', member) }));
+    await waitFor(() => expect(screen.getByTestId('project-route-workspace-context').textContent).toBe('ws-1:wm-2'));
+    expect(screen.getByTestId('share-login-return').textContent).toBe('index.html');
+    fireEvent.click(screen.getByRole('button', { name: 'Consume share login return' }));
+    expect(screen.getByTestId('share-login-return').textContent).toBe('none');
+    fireEvent.click(screen.getByRole('button', { name: 'Report share login success' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Back to projects' }));
+    await screen.findByTestId('entry-home-surface');
+    act(() => navigate({ kind: 'project', projectId: project.id, conversationId: null, fileName: 'index.html' }));
+    await screen.findByTestId('project-view');
+    expect(screen.getByTestId('share-login-return').textContent).toBe('none');
+  });
+
+  it('OPEND-3722 settles a deleted Team route instead of restarting absence resolution on its own list read', async () => {
+    let deleted = false;
+    const project: Project = { id: 'project-shared', name: 'Team project', skillId: null,
+      designSystemId: null, workspaceId: 'ws-1', createdAt: 20, updatedAt: 20 };
+    mockedListProjects.mockImplementation(async () => deleted ? [] : [project]);
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const pathname = new URL(String(input), 'http://d.local').pathname;
+      if (pathname.endsWith('/workspace/directory')) return new Response(JSON.stringify(
+        workspaceDirectoryFixture([workspaceContext('ws-1', 'wm-1')])));
+      if (pathname.endsWith('/workspace/context')) return new Response(JSON.stringify(workspaceContextPayload('ws-1', 'wm-1')));
+      if (pathname.endsWith('/workspace/projects/team')) return new Response(JSON.stringify({ projects: deleted ? [] : [{
+        projectId: project.id, name: project.name, ownerMemberId: 'owner', sharedAt: '2026-10-11T00:00:00Z',
+      }] }));
+      if (pathname.includes(project.id)) return new Response(JSON.stringify({ error: { code: 'PROJECT_NOT_FOUND' } }), { status: 404 });
+      return new Response('{}');
+    }));
+    render(<App />);
+    await screen.findByTestId('entry-project-project-shared');
+    fireEvent.click(screen.getByRole('button', { name: 'Open catalog project' }));
+    await screen.findByTestId('project-view');
+    // This is the App reconciliation boundary after the old page's handoff is
+    // refused. No successful Run or optimistic message is manufactured here.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    deleted = true;
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Refresh projects' })); });
+    // Commit between retry ticks, so effects see each finished absence read
+    // rather than starting their budget only after one huge clock jump.
+    for (let tick = 0; tick < 24; tick++) {
+      await act(async () => { await vi.advanceTimersByTimeAsync(600); });
+    }
+    expect(screen.getByRole('alert').textContent).toContain('This project has been deleted or no longer exists.');
+    expect(screen.queryByText('Loading workspace…')).toBeNull();
+    const reads = mockedListProjects.mock.calls.length;
+    await act(async () => { await vi.advanceTimersByTimeAsync(13_000); });
+    expect(mockedListProjects).toHaveBeenCalledTimes(reads);
+    expect(window.location.pathname).toBe('/projects/project-shared');
+  });
+
   it('renders the catalog title on the first project frame instead of the local placeholder', async () => {
     stubWorkspaceContext('ws-1', 'wm-1');
     mockedListProjects.mockResolvedValue([{
@@ -2505,9 +2600,7 @@ describe('App project creation routing', () => {
     });
 
     expect(window.location.pathname).toBe(`/projects/${workspaceProject.id}`);
-    expect(screen.getByTestId('project-route-workspace-context').textContent).toBe(
-      'ws-1:wm-1',
-    );
+    expect(screen.getByTestId('workspace-tabs-active-project-workspace').textContent).toBe('ws-1');
   });
 
   it('uses a title hint only after loading the workspace-bound local row', async () => {

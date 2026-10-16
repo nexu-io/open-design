@@ -341,7 +341,9 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
           insertId,
           requestId,
         });
-      })();
+      })().catch(() => {
+        // An asynchronous measurement failure cannot escape into the product.
+      });
     },
     [identity, locale, appVersion],
   );

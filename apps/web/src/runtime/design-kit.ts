@@ -16,7 +16,7 @@ import type {
   DesignSystemPackageInfo,
   WorkspaceCollabContext,
 } from '@open-design/contracts';
-import { designSystemStaticUrl, fetchProjectFileText, projectRawUrl } from '../providers/registry';
+import { designSystemStaticUrl, fetchDesignSystemStaticText, fetchProjectFileText, projectRawUrl } from '../providers/registry';
 import { parseDesignMd, type ParsedDesignMd } from './design-md-parse';
 
 // ── shared pure helpers (also re-exported from BrandPreviewCard) ──────────
@@ -342,6 +342,8 @@ export function mergeBrandKitWithDesignMd(
 // ── adapters ───────────────────────────────────────────────────────────────
 
 interface BrandKitOptions {
+  /** Read assets from the explicitly shared resource, not its private project. */
+  publishedAssets?: boolean;
   designSystemId?: string;
   brandId?: string;
   projectId?: string;
@@ -360,11 +362,14 @@ interface BrandKitOptions {
 export function brandToKit(brand: Brand, opts: BrandKitOptions): DesignKit {
   const { projectId } = opts;
   const ready = opts.ready !== false;
-  const showSystem = ready && Boolean(projectId);
-  const asset = (rel: string): string | null =>
-    projectId
-      ? withCacheBust(projectRawUrl(projectId, rel, opts.workspaceContext), opts.reloadKey)
-      : null;
+  const hasAssetSource = Boolean(projectId || (opts.publishedAssets && opts.designSystemId));
+  const showSystem = ready && hasAssetSource;
+  const assetUrl = (rel: string): string => opts.publishedAssets && opts.designSystemId
+    ? designSystemStaticUrl(opts.designSystemId, rel, opts.workspaceContext)
+    : projectRawUrl(projectId ?? '', rel, opts.workspaceContext);
+  const asset = (rel: string): string | null => hasAssetSource
+    ? withCacheBust(assetUrl(rel), opts.reloadKey)
+    : null;
   const host = opts.host || hostnameOf(brand.sourceUrl || '');
   const imagery: KitImagery | undefined = brand.imagery
     ? {
@@ -415,19 +420,19 @@ export function brandToKit(brand: Brand, opts: BrandKitOptions): DesignKit {
     system: showSystem
       ? {
           kitUrl: withCacheBust(
-            projectRawUrl(projectId!, 'system/kit.html', opts.workspaceContext),
+            assetUrl('system/kit.html'),
             opts.reloadKey,
           ),
           kitDarkUrl: withCacheBust(
-            projectRawUrl(projectId!, 'system/kit.dark.html', opts.workspaceContext),
+            assetUrl('system/kit.dark.html'),
             opts.reloadKey,
           ),
           tokensUrl: withCacheBust(
-            projectRawUrl(projectId!, 'system/tokens.default.json', opts.workspaceContext),
+            assetUrl('system/tokens.default.json'),
             opts.reloadKey,
           ),
           indexUrl: withCacheBust(
-            projectRawUrl(projectId!, 'system/index.html', opts.workspaceContext),
+            assetUrl('system/index.html'),
             opts.reloadKey,
           ),
         }
@@ -599,6 +604,8 @@ export function parsedToKit(parsed: ParsedDesignMd, opts: ParsedKitOptions): Des
 // ── kit loading hook ─────────────────────────────────────────────────────
 
 export interface DesignKitSource {
+  /** Team-synced copies are self-contained resource snapshots. */
+  publishedAssets?: boolean;
   designSystemId: string;
   title: string;
   projectId?: string;
@@ -671,14 +678,18 @@ function mergeLegacyBrandLogo(
   kit: DesignKit,
   logo: LegacyBrandLogo | null,
   options: {
-    projectId: string;
+    projectId?: string;
+    designSystemId?: string;
+    publishedAssets?: boolean;
     reloadKey?: number | string;
     workspaceContext?: WorkspaceCollabContext | null;
   },
 ): DesignKit {
-  if (!logo) return kit;
+  if (!logo || (!options.projectId && !(options.publishedAssets && options.designSystemId))) return kit;
   const asset = (filePath: string) => withCacheBust(
-    projectRawUrl(options.projectId, filePath, options.workspaceContext),
+    options.publishedAssets && options.designSystemId
+      ? designSystemStaticUrl(options.designSystemId, filePath, options.workspaceContext)
+      : projectRawUrl(options.projectId!, filePath, options.workspaceContext),
     options.reloadKey,
   );
   return {
@@ -699,6 +710,7 @@ function mergeLegacyBrandLogo(
  */
 export function useDesignKit(source: DesignKitSource): { kit: DesignKit | null; loading: boolean } {
   const {
+    publishedAssets = false,
     designSystemId,
     title,
     projectId,
@@ -731,7 +743,7 @@ export function useDesignKit(source: DesignKitSource): { kit: DesignKit | null; 
         workspaceContext,
       });
 
-    if (!projectId) {
+    if (!projectId && !publishedAssets) {
       setKit(fromDesignMd(body));
       setLoading(false);
       return () => {
@@ -743,24 +755,19 @@ export function useDesignKit(source: DesignKitSource): { kit: DesignKit | null; 
     void (async () => {
       // Fetch brand.json (richest) and DESIGN.md (fallback) together so the kit
       // resolves in a single async hop — brand.json wins when it is a valid kit.
+      const read = (filePath: string) => publishedAssets
+        ? fetchDesignSystemStaticText(designSystemId, filePath, workspaceContext)
+        : fetchProjectFileText(projectId!, filePath, { cache: 'no-store', cacheBustKey: reloadKey, workspaceContext });
       const [rawBrand, rawDesignMd] = await Promise.all([
-        fetchProjectFileText(projectId, 'brand.json', {
-          cache: 'no-store',
-          cacheBustKey: reloadKey,
-          workspaceContext,
-        }),
-        body != null
-          ? Promise.resolve(body)
-          : fetchProjectFileText(projectId, 'DESIGN.md', {
-              cache: 'no-store',
-              cacheBustKey: reloadKey,
-              workspaceContext,
-            }),
+        read('brand.json'),
+        body != null ? Promise.resolve(body) : read('DESIGN.md'),
       ]);
       if (cancelled) return;
       const brand = tryParseBrand(rawBrand);
       if (brand) {
         const brandKit = brandToKit(brand, {
+          publishedAssets,
+          ...(publishedAssets ? { ready: packageInfo?.availableFiles?.includes('system/kit.html') ?? false } : {}),
           designSystemId,
           projectId,
           editable,
@@ -784,7 +791,7 @@ export function useDesignKit(source: DesignKitSource): { kit: DesignKit | null; 
         setKit(mergeLegacyBrandLogo(
           fromDesignMd(rawDesignMd ?? ''),
           tryParseLegacyBrandLogo(rawBrand),
-          { projectId, reloadKey, workspaceContext },
+          { projectId, designSystemId, publishedAssets, reloadKey, workspaceContext },
         ));
       }
       setLoading(false);
@@ -794,6 +801,7 @@ export function useDesignKit(source: DesignKitSource): { kit: DesignKit | null; 
       cancelled = true;
     };
   }, [
+    publishedAssets,
     designSystemId,
     title,
     projectId,

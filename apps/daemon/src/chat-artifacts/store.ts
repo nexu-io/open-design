@@ -6,6 +6,7 @@
 // Running `migrateChatArtifacts` twice over the same file must be a no-op.
 
 import type Database from 'better-sqlite3';
+import { assertCommentFileNotPending, migrateCommentFileRetirements } from '../collab/comment-file-retirements.js';
 import { randomUUID } from 'node:crypto';
 
 import type {
@@ -246,6 +247,7 @@ export function migrateChatArtifacts(db: SqliteDb): void {
       ON message_artifacts(snapshot_id);
   `);
   dropLegacyOpenPolicyColumn(db);
+  migrateCommentFileRetirements(db);
   const columns = db.prepare("PRAGMA table_info(chat_artifact_snapshots)").all() as Array<{ name: string }>;
   if (!columns.some((column) => column.name === 'motion_preview_json')) {
     db.exec('ALTER TABLE chat_artifact_snapshots ADD COLUMN motion_preview_json TEXT');
@@ -342,6 +344,9 @@ export function ensureWorkspaceArtifactForPath(
     )
     .get(input.projectId, input.path) as WorkspaceArtifactRow | undefined;
   if (existing) {
+    // A prepared managed deletion may have crossed a crash before its local
+    // completion marker. Never reuse that exact old comment/artifact UUID.
+    assertCommentFileNotPending(db, input.projectId, { sourceFileId: existing.id });
     db.prepare(
       `UPDATE workspace_artifacts
           SET kind = ?, mime = COALESCE(?, mime),
@@ -451,6 +456,19 @@ export function deleteWorkspaceArtifact(
   if (!existing) return null;
   tombstoneWorkspaceArtifactRow(db, existing.id, now);
   return getWorkspaceArtifact(db, existing.id);
+}
+
+/** Explicit managed working-directory replacement ends the old project file lifetimes. */
+export function deleteProjectWorkspaceArtifacts(db: SqliteDb, projectId: string, now = Date.now()): void {
+  db.prepare('UPDATE workspace_artifacts SET current_path = NULL, deleted_at = ?, updated_at = ? WHERE project_id = ? AND deleted_at IS NULL')
+    .run(now, now, projectId);
+}
+
+/** Successful explicit folder deletion ends every local pointer in that subtree. */
+export function deleteWorkspaceArtifactsInFolder(db: SqliteDb, projectId: string, folderPath: string, now = Date.now()): void {
+  db.prepare(`UPDATE workspace_artifacts SET current_path = NULL, deleted_at = ?, updated_at = ?
+    WHERE project_id = ? AND deleted_at IS NULL AND substr(current_path, 1, length(?) + 1) = ? || '/'`)
+    .run(now, now, projectId, folderPath, folderPath);
 }
 
 function tombstoneWorkspaceArtifactRow(db: SqliteDb, id: string, now: number): void {

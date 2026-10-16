@@ -372,7 +372,16 @@ export type OpenDesignHostUpdaterOpenDialogRequest = {
 
 export type OpenDesignHostUpdaterOpenDialogListener = (request: OpenDesignHostUpdaterOpenDialogRequest) => void;
 
+export type OpenDesignHostDownloadResult = {
+  url: string;
+  state: "completed" | "cancelled" | "interrupted";
+};
+
 export type OpenDesignHostBridge = {
+  /** Optional on older hosts. Reports actual disk completion, never initiation. */
+  downloads?: {
+    subscribe(listener: (result: OpenDesignHostDownloadResult) => void): () => void;
+  };
   // Optional so older host builds still satisfy the bridge shape; callers
   // must feature-detect before invoking.
   appearance?: {

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useLayoutEffect, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -8,11 +8,14 @@ import { ProjectView } from '../../src/components/ProjectView';
 import { streamViaDaemon } from '../../src/providers/daemon';
 import type { DaemonStreamOptions } from '../../src/providers/daemon';
 import {
+  deletePreviewComment,
+  fetchPreviewComments,
   fetchProjectFilePreview,
   fetchProjectFileText,
   fetchProjectFiles,
   patchPreviewCommentStatus,
   writeProjectTextFile,
+  uploadProjectFiles,
 } from '../../src/providers/registry';
 import { listMessages, saveMessage } from '../../src/state/projects';
 import { playSound } from '../../src/utils/notifications';
@@ -25,15 +28,22 @@ import type {
   ChatMessage,
   Conversation,
   DesignSystemSummary,
+  PreviewComment,
   Project,
   SkillSummary,
 } from '../../src/types';
 
 const chatPaneMockState = vi.hoisted(() => ({
+  boardSend: null as null | ((comments: ChatCommentAttachment[], images?: File[]) => Promise<{ status: string; commentIds: string[] }>),
+  track: vi.fn(),
   attachments: [] as ChatAttachment[],
   commentAttachments: [] as ChatCommentAttachment[],
   fireResizeObserverOnFocusedLayout: false,
   resizeObserverCallbacks: [] as ResizeObserverCallback[],
+}));
+
+vi.mock('../../src/analytics/provider', () => ({
+  useAnalytics: () => ({ track: chatPaneMockState.track }),
 }));
 
 vi.mock('../../src/router', () => ({
@@ -82,6 +92,7 @@ vi.mock('../../src/providers/registry', async () => {
     fetchProjectFiles: vi.fn().mockResolvedValue([]),
     fetchSkill: vi.fn().mockResolvedValue(null),
     patchPreviewCommentStatus: vi.fn(),
+    uploadProjectFiles: vi.fn(),
     upsertPreviewComment: vi.fn(),
     writeProjectTextFile: vi.fn(),
   };
@@ -127,11 +138,18 @@ vi.mock('../../src/components/FileWorkspace', () => ({
     openRequest,
     focusMode = false,
     onFocusModeChange,
+    previewComments = [],
+    onSendBoardCommentAttachments,
+    commentSendDisabled,
   }: {
+    onSendBoardCommentAttachments: NonNullable<typeof chatPaneMockState.boardSend>;
+    commentSendDisabled: boolean;
+    previewComments?: PreviewComment[];
     openRequest?: { name: string; nonce: number } | null;
     focusMode?: boolean;
     onFocusModeChange?: (focused: boolean) => void;
   }) => {
+    chatPaneMockState.boardSend = onSendBoardCommentAttachments;
     useLayoutEffect(() => {
       if (!focusMode || !chatPaneMockState.fireResizeObserverOnFocusedLayout) return;
       for (const callback of chatPaneMockState.resizeObserverCallbacks) {
@@ -140,7 +158,12 @@ vi.mock('../../src/components/FileWorkspace', () => ({
     }, [focusMode]);
 
     return (
-      <div data-testid="file-workspace" data-open-request-name={openRequest?.name ?? ''}>
+      <div
+        data-testid="file-workspace"
+        data-open-request-name={openRequest?.name ?? ''}
+        data-preview-comments={previewComments.map((comment) => `${comment.id}:${comment.status}`).join(',')}
+        data-comment-send-disabled={String(commentSendDisabled)}
+      >
         {focusMode ? (
           <button
             type="button"
@@ -163,12 +186,14 @@ vi.mock('../../src/components/ChatPane', () => ({
   ChatPane: ({
     messages,
     onSend,
+    onStop,
     onRetry,
     error,
     projectHeader,
     onCollapse,
     collapseControlLifted,
   }: {
+    onStop?: () => void;
     messages: ChatMessage[];
     onSend: (
       prompt: string,
@@ -206,6 +231,9 @@ vi.mock('../../src/components/ChatPane', () => ({
       >
         send
       </button>
+      <button type="button" onClick={() => onStop?.()}>
+        stop
+      </button>
       {/* Mirrors the real ChatPane: when the collapse control is lifted into
           the tabs dock, the header slot renders nothing — otherwise two
           controls would share this testid. */}
@@ -239,6 +267,8 @@ const mockedListMessages = vi.mocked(listMessages);
 const mockedSaveMessage = vi.mocked(saveMessage);
 const mockedWriteProjectTextFile = vi.mocked(writeProjectTextFile);
 const mockedPatchPreviewCommentStatus = vi.mocked(patchPreviewCommentStatus);
+const mockedDeletePreviewComment = vi.mocked(deletePreviewComment);
+const mockedFetchPreviewComments = vi.mocked(fetchPreviewComments);
 const mockedPlaySound = vi.mocked(playSound);
 
 const config: AppConfig = {
@@ -305,6 +335,9 @@ function renderProjectView(
 
 describe('ProjectView API empty response handling', () => {
   beforeEach(() => {
+    localStorage.clear();
+    chatPaneMockState.track.mockReset();
+    chatPaneMockState.boardSend = null;
     chatPaneMockState.attachments = [];
     chatPaneMockState.commentAttachments = [];
     chatPaneMockState.fireResizeObserverOnFocusedLayout = false;
@@ -316,6 +349,7 @@ describe('ProjectView API empty response handling', () => {
     mockedFetchProjectFilePreview.mockResolvedValue(null);
     mockedFetchProjectFileText.mockResolvedValue(null);
     mockedFetchProjectFiles.mockResolvedValue([]);
+    vi.mocked(uploadProjectFiles).mockReset();
     mockedWriteProjectTextFile.mockResolvedValue({
       name: 'landing-page.html',
       path: 'landing-page.html',
@@ -326,7 +360,10 @@ describe('ProjectView API empty response handling', () => {
     });
     mockedListMessages.mockClear();
     mockedSaveMessage.mockClear();
-    mockedPatchPreviewCommentStatus.mockClear();
+    mockedPatchPreviewCommentStatus.mockReset();
+    mockedDeletePreviewComment.mockReset();
+    mockedFetchPreviewComments.mockReset();
+    mockedFetchPreviewComments.mockResolvedValue([]);
     mockedPlaySound.mockClear();
   });
 
@@ -334,6 +371,85 @@ describe('ProjectView API empty response handling', () => {
     cleanup();
     vi.clearAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  it.each(['noop', 'recording', 'throwing', 'pending'] as const)('observes board comment queue without changing it with %s measurement', async (measurement) => {
+    const events: Array<Record<string, unknown>> = [];
+    chatPaneMockState.track.mockImplementation((event, props) => {
+      if (event !== 'project_comment_send_result') return;
+      if (measurement !== 'noop') events.push(props);
+      if (measurement === 'throwing') throw new Error('measurement only');
+      if (measurement === 'pending') return new Promise(() => {});
+    });
+    renderProjectView();
+    await waitForBoardSendReady();
+    const attachment = (id: string, source?: ChatCommentAttachment['source']) => ({
+      id, source, order: 1, filePath: 'index.html', elementId: 'hero', selector: '#hero',
+      label: 'hero', comment: `note-${id}`, currentText: 'hero',
+      pagePosition: { x: 0, y: 0, width: 100, height: 24 }, htmlHint: '<h1>hero</h1>',
+    });
+    const input = [attachment('saved', 'saved-comment'), attachment('board', 'board-batch'), attachment('legacy'), attachment('saved', 'saved-comment')];
+    let result: { status: string; commentIds: string[] } | undefined;
+    await act(async () => { result = await chatPaneMockState.boardSend!(input); });
+    expect(result).toEqual({ status: 'queued', commentIds: ['saved', 'board', 'legacy', 'saved'] });
+    // Four independent tasks still enter the normal queue, with no measurement request options.
+    await waitFor(() => expect(mockedStreamViaDaemon).toHaveBeenCalledTimes(1));
+    expect(mockedStreamViaDaemon.mock.calls[0]![0].commentAttachments?.[0]?.id).toBe('saved');
+    const queue = JSON.parse(localStorage.getItem('od:chat-queued-sends:project-1:v1') ?? '[]');
+    expect(queue.map((item: { commentAttachments: ChatCommentAttachment[] }) => item.commentAttachments[0]?.id)).toEqual(['board', 'legacy', 'saved']);
+    expect(queue.map((item: { prompt: string }) => item.prompt)).toEqual(['note-board', 'note-legacy', 'note-saved']);
+    expect(mockedDeletePreviewComment).not.toHaveBeenCalled();
+    if (measurement !== 'noop') expect(events).toEqual([expect.objectContaining({
+      page_name: 'artifact', area: 'comment_popover', project_id: project.id,
+      result: 'queued', submitted_comment_ids: ['saved'], comment_ids: ['saved'],
+    })]);
+    await act(async () => { result = await chatPaneMockState.boardSend!([]); });
+    expect(result).toEqual({ status: 'rejected', commentIds: [] });
+    if (measurement !== 'noop') expect(events.at(-1)).toMatchObject({ result: 'rejected', submitted_comment_ids: [], comment_ids: [] });
+  });
+
+  it('reports only the accepted saved subset when preflight invalidates the rest of a batch', async () => {
+    renderProjectView();
+    await waitForBoardSendReady();
+    const first = {
+      id: 'first', source: 'saved-comment', order: 1, filePath: 'index.html', elementId: 'hero',
+      selector: '#hero', label: 'hero', comment: 'first note', currentText: 'hero',
+      pagePosition: { x: 0, y: 0, width: 100, height: 24 }, htmlHint: '<h1>hero</h1>',
+    } as ChatCommentAttachment;
+    const originalKey = config.apiKey;
+    // Controlled request-state invalidation at the next task boundary: the
+    // first task is durable, then the real BYOK preflight refuses task two.
+    const second = { ...first, id: 'second', get comment() { config.apiKey = ''; return 'second note'; } };
+    let result;
+    try {
+      await act(async () => { result = await chatPaneMockState.boardSend!([first, second]); });
+    } finally {
+      config.apiKey = originalKey;
+    }
+    expect(result).toEqual({ status: 'rejected', commentIds: ['first'] });
+    expect(chatPaneMockState.track).toHaveBeenCalledWith('project_comment_send_result', expect.objectContaining({
+      result: 'rejected', submitted_comment_ids: ['first', 'second'], comment_ids: ['first'],
+    }), undefined);
+    const queue = JSON.parse(localStorage.getItem('od:chat-queued-sends:project-1:v1') ?? '[]');
+    expect(queue.flatMap((item: { commentAttachments: ChatCommentAttachment[] }) => item.commentAttachments.map((comment) => comment.id))).not.toContain('second');
+  });
+
+  it('leaves upload rejection and original upload throws unchanged', async () => {
+    renderProjectView();
+    await waitForBoardSendReady();
+    const image = new File(['image'], 'image.png', { type: 'image/png' });
+    vi.mocked(uploadProjectFiles).mockResolvedValue({ uploaded: [], failed: [] } as never);
+    let result;
+    await act(async () => { result = await chatPaneMockState.boardSend!([], [image]); });
+    expect(result).toEqual({ status: 'rejected', commentIds: [] });
+    expect(uploadProjectFiles).toHaveBeenCalledWith(project.id, [image], undefined, null);
+    expect(mockedStreamViaDaemon).not.toHaveBeenCalled();
+    const eventsBeforeThrow = chatPaneMockState.track.mock.calls.filter(([event]) => event === 'project_comment_send_result').length;
+    const originalError = new Error('business upload failure');
+    vi.mocked(uploadProjectFiles).mockRejectedValue(originalError);
+    await act(async () => { await expect(chatPaneMockState.boardSend!([], [image])).rejects.toBe(originalError); });
+    expect(chatPaneMockState.track.mock.calls.filter(([event]) => event === 'project_comment_send_result')).toHaveLength(eventsBeforeThrow);
+    expect(mockedStreamViaDaemon).not.toHaveBeenCalled();
   });
 
   it('marks an empty API completion as a soft no-output state instead of succeeded', async () => {
@@ -447,49 +563,141 @@ describe('ProjectView API empty response handling', () => {
     }
   });
 
-  it('marks attached saved comments as failed when an API completion has no output', async () => {
-    chatPaneMockState.commentAttachments = [
-      {
-        id: 'comment-1',
-        order: 1,
-        filePath: 'index.html',
-        elementId: 'hero-title',
-        selector: '#hero-title',
-        label: 'Hero title',
-        comment: 'Make this clearer',
-        currentText: 'Old title',
-        pagePosition: { x: 0, y: 0, width: 100, height: 24 },
-        htmlHint: '<h1 id="hero-title">Old title</h1>',
-        source: 'saved-comment',
-      },
-    ];
-    mockedStreamViaDaemon.mockImplementation(async (options: DaemonStreamOptions) => {
-      const { handlers } = options;
-      handlers.onDone('');
-    });
-    renderProjectView();
+  describe('a saved comment handed to a run that does not succeed', () => {
+    const handedOffComment: PreviewComment = {
+      id: 'comment-1',
+      projectId: project.id,
+      conversationId: 'conv-project-1',
+      filePath: 'index.html',
+      elementId: 'hero-title',
+      selector: '#hero-title',
+      label: 'Hero title',
+      text: 'Old title',
+      position: { x: 0, y: 0, width: 100, height: 24 },
+      htmlHint: '<h1 id="hero-title">Old title</h1>',
+      note: 'Make this clearer',
+      status: 'open',
+      createdAt: 1,
+      updatedAt: 1,
+    };
 
-    await sendTestPrompt();
+    // The registry double keeps the one status the daemon would hold, so a
+    // refresh after the run reads back what the run last wrote.
+    function handOffSavedComment() {
+      let storedStatus: PreviewComment['status'] = 'open';
+      mockedFetchPreviewComments.mockImplementation(async () => [
+        { ...handedOffComment, status: storedStatus },
+      ]);
+      mockedPatchPreviewCommentStatus.mockImplementation(async (_project, _conversation, _id, status) => {
+        storedStatus = status;
+        return { ...handedOffComment, status };
+      });
+      chatPaneMockState.commentAttachments = [
+        {
+          id: handedOffComment.id,
+          order: 1,
+          filePath: 'index.html',
+          elementId: 'hero-title',
+          selector: '#hero-title',
+          label: 'Hero title',
+          comment: 'Make this clearer',
+          currentText: 'Old title',
+          pagePosition: { x: 0, y: 0, width: 100, height: 24 },
+          htmlHint: '<h1 id="hero-title">Old title</h1>',
+          source: 'saved-comment',
+        },
+      ];
+    }
 
-    await waitFor(() => {
-      // `patchPreviewCommentStatus` takes the acting workspace context as a
-      // fifth argument (1c15574c2), so the daemon can authorize the comment
-      // mutation. This harness has no cloud identity, so it is `null` — but the
-      // argument must still be matched: a four-argument matcher cannot match a
-      // five-argument call at all.
-      expect(mockedPatchPreviewCommentStatus).toHaveBeenCalledWith(
-        project.id,
-        'conv-project-1',
-        'comment-1',
-        'failed',
-        null,
-      );
+    function listedComments() {
+      return screen.getByTestId('file-workspace').getAttribute('data-preview-comments');
+    }
+
+    async function expectCommentReleasedToOpen() {
+      await waitFor(() => {
+        // `patchPreviewCommentStatus` takes the acting workspace context as a
+        // fifth argument (1c15574c2), so the daemon can authorize the comment
+        // mutation. This harness has no cloud identity, so it is `null` — but
+        // the argument must still be matched: a four-argument matcher cannot
+        // match a five-argument call at all.
+        expect(mockedPatchPreviewCommentStatus).toHaveBeenLastCalledWith(
+          project.id,
+          'conv-project-1',
+          'comment-1',
+          'open',
+          null,
+        );
+      });
+      await waitFor(() => expect(listedComments()).toBe('comment-1:open'));
+      const writtenStatuses = mockedPatchPreviewCommentStatus.mock.calls.map((call) => call[3]);
+      expect(writtenStatuses).not.toContain('failed');
+      expect(writtenStatuses).not.toContain('needs_review');
+      expect(mockedDeletePreviewComment).not.toHaveBeenCalled();
+    }
+
+    it('returns the comment to open when an API completion has no output', async () => {
+      handOffSavedComment();
+      mockedStreamViaDaemon.mockImplementation(async (options: DaemonStreamOptions) => {
+        const { handlers } = options;
+        handlers.onDone('');
+      });
+      renderProjectView();
+      await waitFor(() => expect(listedComments()).toBe('comment-1:open'));
+
+      await sendTestPrompt();
+
+      await expectCommentReleasedToOpen();
+      await waitFor(() => {
+        expect(hasSavedAssistantMessage((message) => (
+          message.runStatus === 'failed' &&
+          message.events?.some((event) => event.kind === 'status' && event.label === 'empty_response') === true
+        ))).toBe(true);
+      });
     });
-    await waitFor(() => {
-      expect(hasSavedAssistantMessage((message) => (
-        message.runStatus === 'failed' &&
-        message.events?.some((event) => event.kind === 'status' && event.label === 'empty_response') === true
-      ))).toBe(true);
+
+    it('returns the comment to open when the run fails', async () => {
+      handOffSavedComment();
+      mockedStreamViaDaemon.mockImplementation(async (options: DaemonStreamOptions) => {
+        options.onRunStatus?.('failed');
+        options.handlers.onError(new Error('model crashed'));
+      });
+      renderProjectView();
+      await waitFor(() => expect(listedComments()).toBe('comment-1:open'));
+
+      await sendTestPrompt();
+
+      await waitFor(() => expect(screen.getByText('model crashed')).toBeTruthy());
+      await expectCommentReleasedToOpen();
+    });
+
+    it('returns the comment to open when the daemon reports the run canceled', async () => {
+      handOffSavedComment();
+      mockedStreamViaDaemon.mockImplementation(async (options: DaemonStreamOptions) => {
+        options.onRunStatus?.('canceled');
+        options.handlers.onDone('Partial answer before the cancel.');
+      });
+      renderProjectView();
+      await waitFor(() => expect(listedComments()).toBe('comment-1:open'));
+
+      await sendTestPrompt();
+
+      await expectCommentReleasedToOpen();
+    });
+
+    it('returns the comment to open when the user stops the run', async () => {
+      handOffSavedComment();
+      // Stop aborts the stream, so no terminal callback ever reaches the view.
+      mockedStreamViaDaemon.mockImplementation(async (options: DaemonStreamOptions) => {
+        options.onRunStatus?.('running');
+      });
+      renderProjectView();
+      await waitFor(() => expect(listedComments()).toBe('comment-1:open'));
+
+      await sendTestPrompt();
+      await waitFor(() => expect(listedComments()).toBe('comment-1:applying'));
+      fireEvent.click(screen.getByRole('button', { name: 'stop' }));
+
+      await expectCommentReleasedToOpen();
     });
   });
 
@@ -1050,6 +1258,14 @@ describe('ProjectView API empty response handling', () => {
     );
   });
 });
+
+async function waitForBoardSendReady() {
+  // Starting the transcript request is not acceptance readiness. Observe the
+  // real gate passed to FileWorkspace after transcript/authority settlement.
+  await waitFor(() => {
+    expect(screen.getByTestId('file-workspace').getAttribute('data-comment-send-disabled')).toBe('false');
+  });
+}
 
 async function sendTestPrompt() {
   await waitFor(() => {

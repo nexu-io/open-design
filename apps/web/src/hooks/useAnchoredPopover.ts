@@ -120,6 +120,8 @@ function naturalSize(panel: HTMLElement, rect: DOMRect): { width: number; height
 }
 
 export interface AnchoredPopover {
+  /** Coordinates and avoidance decisions belong to the same measurement snapshot. */
+  anchorRect: DOMRect | null;
   placement: AnchoredPlacement;
   /**
    * 横向要往回收多少物理像素,才不越出夹取框。0 = 本来就放得下,别动它。
@@ -142,6 +144,7 @@ export interface AnchoredPopover {
 }
 
 const INITIAL: AnchoredPopover = {
+  anchorRect: null,
   placement: 'below',
   inlineShift: 0,
   maxInlineSize: null,
@@ -217,12 +220,18 @@ export function useAnchoredPopover(
    * 由调用方提供是因为只有它知道修正落在哪儿:搬走那份在包裹盒的 `left` 上,
    * 原地那份在菜单自己的 `transform` 上。
    */
-  readAppliedShift: MutableRefObject<() => number>,
-  options: { estimatedHeight: number; gap?: number; flipEnabled?: boolean } = { estimatedHeight: 0 },
+  readAppliedShift: MutableRefObject<(anchorRect: DOMRect) => number>,
+  options: {
+    estimatedHeight: number;
+    gap?: number;
+    flipEnabled?: boolean;
+    /** Reactive identity for anchors that can change while the popover stays open. */
+    anchorElement?: HTMLElement | null;
+  } = { estimatedHeight: 0 },
 ): AnchoredPopover {
-  const { estimatedHeight, gap = 6, flipEnabled = true } = options;
+  const { estimatedHeight, gap = 6, flipEnabled = true, anchorElement } = options;
   const [state, setState] = useState<AnchoredPopover>(INITIAL);
-  // 内联箭头每次渲染都是新的;放进 ref 后监听器只在开合时绑一次。
+  // Keep sizing options current without recreating the measurement callback.
   const optionsRef = useRef({ estimatedHeight, gap, flipEnabled });
   optionsRef.current = { estimatedHeight, gap, flipEnabled };
 
@@ -265,7 +274,7 @@ export function useAnchoredPopover(
      * 量不到面板时**保持现状**,不是归零 —— 归零会让浮层弹回锚点原位,而且
      * 之后没有任何事件再触发重算,它就停在那儿了(真机那一半)。
      */
-    const applied = readAppliedShift.current();
+    const applied = readAppliedShift.current(rect);
     let inlineShift = applied;
     let maxInlineSize: number | null = null;
     let maxBlockSize: number | null = null;
@@ -315,15 +324,21 @@ export function useAnchoredPopover(
       }
     }
 
-    setState((prev) =>
-      prev.placement === placement &&
-      prev.inlineShift === inlineShift &&
-      prev.maxInlineSize === maxInlineSize &&
-      prev.maxBlockSize === maxBlockSize &&
-      prev.anchorHidden === anchorHidden
+    setState((prev) => {
+      // Without a measured panel, preserve the correction, not stale wrapper/anchor drift.
+      const shift = panelRect && panelRect.width > 0 ? inlineShift : prev.inlineShift;
+      return prev.anchorRect?.left === rect.left &&
+        prev.anchorRect?.top === rect.top &&
+        prev.anchorRect?.width === rect.width &&
+        prev.anchorRect?.height === rect.height &&
+        prev.placement === placement &&
+        prev.inlineShift === shift &&
+        prev.maxInlineSize === maxInlineSize &&
+        prev.maxBlockSize === maxBlockSize &&
+        prev.anchorHidden === anchorHidden
         ? prev
-        : { placement, inlineShift, maxInlineSize, maxBlockSize, anchorHidden },
-    );
+        : { anchorRect: rect, placement, inlineShift: shift, maxInlineSize, maxBlockSize, anchorHidden };
+    });
     // `anchorRef` / `panelRef` 是稳定的 ref 对象,不进依赖 —— 进了就等于把
     // 「每帧新建一个 ref-like 对象」的调用方拖进死循环。
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -366,7 +381,7 @@ export function useAnchoredPopover(
       ro?.disconnect();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, measure]);
+  }, [open, measure, anchorElement]);
 
   return state;
 }

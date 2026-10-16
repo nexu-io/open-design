@@ -838,10 +838,16 @@ export function PreviewModal({
                             type="button"
                             className="share-menu-item"
                             role="menuitem"
-                            onClick={() => {
+                            onClick={async () => {
                               onSharePopoverItemClick?.('zip');
                               setTemplateShareOpen(false);
-                              if (activeHtml) exportAsZip(activeHtml, exportTitle);
+                              if (!activeHtml) return;
+                              try {
+                                await exportAsZip(activeHtml, exportTitle);
+                              } catch (error) {
+                                console.warn('[PreviewModal] ZIP export failed:', error);
+                                alert(`${t('fileViewer.exportFailedTitle')}\n${t('fileViewer.exportFailedDescription')}`);
+                              }
                             }}
                           >
                             <span className="share-menu-icon">

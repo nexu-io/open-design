@@ -34,22 +34,11 @@
  *
  * 往上翻的那一档由 `[data-placement="above"]` 覆写(见 `AnchoredMenuShell.module.css`)。
  *
- * ## 两条路都要夹,不是只夹搬走的那一份
+ * ## 位置修正
  *
- * 2026-08-27 用户第二次报「这个会超出去的问题怎么还没修好?」,配图是**预览区
- * 工具栏**上那枚「发布」点开的菜单被切掉一截。原因就在这层壳里:`anchorId`
- * 为空时它**直接 `return menu`**,既不 portal 也不量任何东西 —— 横向修正只
- * 覆盖了产物卡那条路,工具栏那条路从来没被修过。
- *
- * 现在两条路都过同一套测量,只是**修正落在不同的盒子上**:
- *  · 搬走那份:加在**包裹盒**的 `left` 上(包裹盒不可见也不吃事件,整体平移,
- *    菜单自己的 `right: 0` 一个字不用改)。
- *  · 原地那份:没有包裹盒可挪,加在**菜单自己**的 `transform: translateX()` 上。
- *    `.share-menu-popover` / `.chrome-unified-popover` 上没有任何 transform 或
- *    动画(查过),不会打架。
- *
- * **放得下就一个字节都不写。** 产品当初要求工具栏这条路「和搬动之前逐字一致」,
- * 所以修正是按需的:不越界时既不加 `transform` 也不加 `max-*`,DOM 和以前一样。
+ * 分享菜单的工具栏与产物卡入口都传入各自的按钮锚点；两者都经 body portal
+ * 脱离裁切容器。包裹盒随按钮定位并承载横向偏移，菜单保留既有 CSS。
+ * 未传锚点的其他调用方仍可原地渲染，横向偏移落在菜单的 transform 上。
  *
  * ## 锚点看不见了就收起来
  *
@@ -125,9 +114,10 @@ export function AnchoredMenuShell({
   testId,
   portalRef,
   onAnchorHidden,
+  onConversationScroll,
   children,
 }: {
-  /** null = 原地渲染(工具栏点开的那一条路)。位置修正**两条路都做**。 */
+  /** 锚点 ID = body portal；null = 原地渲染，供未锚定的其他调用方使用。 */
   anchorId: string | null;
   /** 菜单本体的类名 —— 原样照抄调用处,一个字都不改。 */
   className: string;
@@ -141,6 +131,8 @@ export function AnchoredMenuShell({
    * 这里是给调用方的信号 —— **要不要真的关掉是调用方的决定**,不是这层的。
    */
   onAnchorHidden?: () => void;
+  /** Opt-in dismissal for card sharing; other menus keep their existing behavior. */
+  onConversationScroll?: () => void;
   children: ReactNode;
 }) {
   /*
@@ -158,6 +150,17 @@ export function AnchoredMenuShell({
    * 「Maximum update depth exceeded」撞出来(写这段时踩过一次)。
    */
   const anchorRef = useRef<HTMLElement | null>(anchor);
+  useEffect(() => {
+    if (!onConversationScroll) return;
+    const conversation = anchor?.closest<HTMLElement>('.chat-log');
+    if (!conversation) return;
+    // Listen only to this list, not global capture scrolls or portal content.
+    const dismiss = (event: Event) => {
+      if (event.target === conversation) onConversationScroll();
+    };
+    conversation.addEventListener('scroll', dismiss, { passive: true });
+    return () => conversation.removeEventListener('scroll', dismiss);
+  }, [anchor, onConversationScroll]);
   // 菜单本体的引用:横向修正要量它**真实的盒子**,因为它的横向位置来自既有 CSS
   // (`.chrome-share-menu .share-menu-popover { right: 0 }`),不是这里算出来的。
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -179,29 +182,28 @@ export function AnchoredMenuShell({
   }, [portalRef]);
   /*
    * 「浮层身上现在有多少修正」—— 现读,不记账。两条路放的地方不一样:
-   *  · 搬走那份:包裹盒的 `left` 被写成 `锚点 left + 修正`,所以拿它现在的
-   *    **内联 left** 减去锚点现在的 left,就是它身上真实生效的修正。
+   *  · Portal menus use right:0. Subtract the measured anchor's right edge from
+   *    the wrapper's inline left + width to remove applied shift and stale geometry.
+   *    Use the hook's snapshot here rather than measuring the anchor again.
    *    读内联样式而不是 `getBoundingClientRect()`:前者是「盒子现在被摆在哪儿」
    *    的真值,而且同一帧里连量两次也不会变 —— 没有重排,它就还没动。
    *    (后者在 jsdom 里恒为 0,量不出来。)
    *  · 原地那份:菜单自己的 `transform: translateX()`,从计算样式里读回来。
    * 每次渲染重新赋值即可 —— 它进的是 ref,不参与任何 effect 的依赖。
    */
-  const readAppliedShift = useRef<() => number>(() => 0);
-  readAppliedShift.current = () => {
+  const readAppliedShift = useRef<(rect: DOMRect) => number>(() => 0);
+  readAppliedShift.current = (rect) => {
     if (!anchorId) return readTranslateX(menuRef.current);
     const wrap = wrapperRef.current;
-    const anchorEl = anchorRef.current;
-    if (!wrap || !anchorEl) return 0;
+    if (!wrap) return 0;
     const placed = Number.parseFloat(wrap.style.left);
-    if (!Number.isFinite(placed)) return 0;
-    return placed - anchorEl.getBoundingClientRect().left;
+    const width = Number.parseFloat(wrap.style.width);
+    if (!Number.isFinite(placed) || !Number.isFinite(width)) return 0;
+    return placed + width - rect.right;
   };
   if (anchorId) anchorRef.current = anchor;
-  // 包裹盒盖在按钮上,所以它的尺寸就是按钮的尺寸;菜单相对它排。
-  const rect = anchor?.getBoundingClientRect?.();
   const open = anchorId ? Boolean(anchor) : true;
-  const { placement, inlineShift, maxInlineSize, maxBlockSize, anchorHidden } = useAnchoredPopover(
+  const { anchorRect: rect, placement, inlineShift, maxInlineSize, maxBlockSize, anchorHidden } = useAnchoredPopover(
     open,
     anchorRef,
     menuRef,
@@ -215,6 +217,7 @@ export function AnchoredMenuShell({
        * 它连 `data-placement` 都不写 —— 给它算 `above` 只会让竖向预算配错方向。
        */
       flipEnabled: Boolean(anchorId),
+      anchorElement: anchorId ? anchor : undefined,
     },
   );
 
@@ -299,7 +302,7 @@ export function AnchoredMenuShell({
    * 游离节点的 rect 是它离开前的旧坐标,照着画就是一块悬在半空、跟谁都对不上的
    * 菜单 —— 正是截图里那个样子。
    */
-  if (!anchor || !rect) return null;
+  if (!anchor) return null;
   if (anchor.isConnected === false) return null;
 
   return createPortal(
@@ -308,15 +311,17 @@ export function AnchoredMenuShell({
       className={`${wrapperClassName} ${styles.anchored}`}
       style={{
         position: 'fixed',
-        top: rect.top,
+        // Mount for measurement, but don't paint until the layout-effect snapshot exists.
+        visibility: rect ? undefined : 'hidden',
+        top: rect?.top ?? 0,
         /*
          * 横向修正加在**包裹盒**上,不加在菜单上:包裹盒不可见也不吃事件,挪动它
          * 等于整体平移,而菜单自己的 `right: 0` 一个字不用改 —— 既有 CSS 继续
          * 干它本来的活。加在菜单上则要动 `transform`,会跟它自己的动画打架。
          */
-        left: rect.left + inlineShift,
-        width: rect.width,
-        height: rect.height,
+        left: (rect?.left ?? 0) + inlineShift,
+        width: rect?.width ?? 0,
+        height: rect?.height ?? 0,
       }}
       data-anchored-menu={anchorId}
     >

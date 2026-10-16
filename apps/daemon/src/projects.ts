@@ -826,6 +826,16 @@ export async function readProjectFile(projectsRoot, projectId, name, metadata?) 
   };
 }
 
+/** Managed deletion needs a canonical, confined path even on retry after unlink.
+ * Unlike preview/media resolution this does not require surviving bytes. */
+export async function resolveProjectDeletePath(projectsRoot, projectId, name, metadata?) {
+  assertVisibleForImportedProject(name, metadata);
+  const dir = resolveProjectDir(projectsRoot, projectId, metadata);
+  const filePath = await resolveSafeReal(dir, name);
+  const rootReal = await realpath(dir).catch(() => dir);
+  return { filePath, name: toProjectPath(path.relative(rootReal, filePath)) };
+}
+
 // Like readProjectFile but skips loading the file content into memory.
 // Used by the media streaming endpoint so large video files are never buffered.
 export async function resolveProjectFilePath(projectsRoot, projectId, name, metadata?) {

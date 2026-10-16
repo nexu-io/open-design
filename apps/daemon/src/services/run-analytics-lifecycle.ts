@@ -22,6 +22,7 @@ import {
   odNextBlockedAnalyticsFromStrategyTask,
   modelIdForTracking,
   sessionModeToTracking,
+  savedCommentIds,
   type RunTaskLineageProps,
   type TrackingDesignSystemEditSurface,
   type TrackingDesignSystemKind,
@@ -596,7 +597,18 @@ export function createRunAnalyticsLifecycle(
                 ? 'mark'
                 : 'chat'
             : undefined;
+        // A same-Run recovery snapshot is authoritative, including an explicit
+        // empty list. Source-run lineage must never supply comment identities.
+        // ChatRun exposes only recovery context; the durable record also holds
+        // the plain event properties written by this lifecycle.
+        const recoveredCommentIds = (run.analyticsRecovery as
+          | { properties?: Record<string, unknown> }
+          | undefined)?.properties?.comment_ids;
+        const commentIds = Array.isArray(recoveredCommentIds)
+          ? [...recoveredCommentIds]
+          : savedCommentIds(reqBody.commentAttachments);
         const baseProps: Record<string, unknown> = {
+          ...(commentIds !== undefined ? { comment_ids: commentIds } : {}),
           page_name: isDesignSystemRun ? 'design_system_project' : 'chat_panel',
           area: isDesignSystemRun ? 'design_system_generation' : 'chat_composer',
           ...configureGlobals,

@@ -3814,8 +3814,8 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     expect(within(amrCard).getByRole('button', { name: 'Cancel' })).toBeTruthy();
     const callout = document.querySelector('.settings-cloud-signin-callout');
     if (!(callout instanceof HTMLElement)) throw new Error('missing cloud callout');
-    // Each login pill applies the shared status asynchronously; a ready card does
-    // not mean the callout has finished updating yet.
+    // The card and the shared account control load independently. Observing
+    // the card's pending status is not the callout's completion signal.
     expect(await within(callout).findByRole('button', { name: 'Cancel' })).toBeTruthy();
   });
 

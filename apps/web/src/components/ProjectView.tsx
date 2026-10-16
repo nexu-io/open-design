@@ -1,4 +1,6 @@
 import { readRetriedErrorSurface, retriedErrorSurfaceKey, writeRetriedErrorSurface } from '../runtime/chat/retried-error-surface';
+import type { ObservedPublicShareLink, ObservedShareUpdateRequest } from './share/observed-public-share-link';
+import type { ShareLoginReturn } from './share/share-login-return';
 import {
   startTransition,
   useCallback,
@@ -57,11 +59,9 @@ import {
   fetchLiveArtifacts,
   fetchProjectFiles,
   fetchProjectFileText,
-  fetchSkill,
   invalidateProjectFilesCache,
   patchPreviewCommentSortKey,
   patchPreviewCommentStatus,
-  projectRawUrl,
   uploadProjectFiles,
   upsertPreviewComment,
   writeProjectTextFile,
@@ -92,7 +92,6 @@ import {
   type ByokChatProtocol,
   type ChatTaskExecutionAnalytics,
   type ProjectWorkspaceScope,
-  type ResearchOptions,
 } from '@open-design/contracts';
 import {
   anonymizeArtifactId,
@@ -114,11 +113,14 @@ import type {
   TrackingRunRecoveryActionType,
 } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
+import { savedCommentIds } from '@open-design/contracts/analytics';
+import { observeAnalytics } from '../analytics/observe';
 import {
   trackByokPreflightBlocked,
   trackComposerBarClick,
   trackConversationForkClick,
   trackConversationForkResult,
+  trackProjectCommentSendResult,
   trackDesignSystemApplyResult,
   trackDesignSystemEnrichClick,
   trackPageView,
@@ -331,6 +333,11 @@ import {
   type ProjectResourceAuthority,
 } from '../collab/collab-context';
 import { persistCommentAnchors } from '../collab/comment-anchor-client';
+import {
+  createSingleflightRunner,
+  reconcileAttachedComments,
+  reconcilePreviewComments,
+} from '../comments/comment-list-refresh';
 import type { AnchorWriteBack } from '../comments';
 import { PluginDetailsModal } from './PluginDetailsModal';
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
@@ -351,6 +358,7 @@ import {
   selectAutoOpenTurnArtifact,
   selectAutoOpenTurnArtifacts,
 } from './auto-open-file';
+import { nextShareRequestNonce } from './share-request-nonce';
 import { buildRepoImportPrompt, designSystemNeedsRepoConnect } from './design-system-github-evidence';
 import { isDesignSystemProject, resolveProjectDesignSystemId } from './design-system-project';
 import { collectReferencedJsxNames } from '../runtime/jsx-module-refs';
@@ -407,7 +415,6 @@ import { createBoundedConcurrency } from '../lib/bounded-concurrency';
 import { buildContinueInCliToast } from '../lib/build-continue-in-cli-toast';
 import { buildClipboardPrompt } from '../lib/build-clipboard-prompt';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
-import { effectiveMaxTokens } from '../state/maxTokens';
 import {
   dismissHomeAttachmentUpload,
   homeAttachmentUploadsFor,
@@ -871,6 +878,12 @@ interface Props {
   initialMaterializationPending?: boolean;
   /** Workspace/member authorization lifetime for async title reads. */
   projectAuthorizationKey?: string;
+  onObservedPublicShareLink?: (share: ObservedPublicShareLink | null) => void;
+  observedPublicShareLink?: ObservedPublicShareLink | null;
+  loginUpdateRequest?: ObservedShareUpdateRequest | null;
+  onLoginUpdateRequestHandled?: (nonce: number) => void;
+  shareLoginReturn?: ShareLoginReturn | null;
+  onShareLoginReturnChange?: (request: ShareLoginReturn | null) => void;
   amrAuthRetryContinuation?: AmrAuthRetryContinuation | null;
   onArmAmrAuthRetryContinuation?: (
     continuation: Omit<AmrAuthRetryContinuation, 'accountIdAtArm' | 'createdAtMs'>,
@@ -1020,7 +1033,7 @@ let liveArtifactEventSequence = 0;
 // The brand-extraction project's design-system (brand kit) preview tab. Mirrors
 // the daemon `BRAND_KIT_FILE` (apps/daemon/src/brands/kit-render.ts); kept as a
 // local literal to respect the web↔daemon boundary.
-const BRAND_KIT_FILE = 'brand.html';
+const _BRAND_KIT_FILE = 'brand.html';
 const BRAND_EMPTY_TRANSCRIPT_RETRY_DELAYS_MS = [120, 500, 1_200, 2_000] as const;
 const BYOK_OPENCODE_UNAVAILABLE_MESSAGE =
   'BYOK API runs require OpenCode. Install OpenCode, then rescan local agents in Settings before retrying.';
@@ -2142,6 +2155,12 @@ export function ProjectView({
   resolveAuthoritativeProjectName,
   routeFileName,
   routeConversationId = null,
+  onObservedPublicShareLink,
+  observedPublicShareLink,
+  loginUpdateRequest,
+  onLoginUpdateRequestHandled,
+  shareLoginReturn,
+  onShareLoginReturnChange,
   config,
   agents,
   skills,
@@ -4170,7 +4189,7 @@ export function ProjectView({
           requestWorkspaceContext,
         ).then((comments) => {
           if (cancelled || previewCommentsGenerationRef.current !== commentsGeneration) return;
-          setPreviewComments(comments);
+          setPreviewComments((current) => reconcilePreviewComments(current, comments));
         }).catch(() => {
           if (cancelled || previewCommentsGenerationRef.current !== commentsGeneration) return;
           if (!reloadingCurrentConversation) setPreviewComments([]);
@@ -6282,22 +6301,38 @@ export function ProjectView({
     ],
   );
 
-  const refreshPreviewComments = useCallback(async () => {
+  // One comment-list read at a time for this view. The generation guard only
+  // discards a stale answer; it does not stop N triggers (SSE bursts, poll,
+  // visibility, stream reconnect) from each starting a full read. The runner
+  // does: a trigger during a read buys exactly one trailing read, run with the
+  // latest trigger's closure. A different conversation starts its own read.
+  // Note: the daemon announces a pull round before this read's `/pull`
+  // response returns, so a read that itself merged rows always earns one
+  // trailing read. That read is cheap and keeps other tabs' signals honest;
+  // do not suppress it.
+  const [runPreviewCommentsRead] = useState(createSingleflightRunner);
+  const readPreviewCommentsOnce = useCallback(async () => {
     if (!activeConversationId) return;
     const commentsGeneration = ++previewCommentsGenerationRef.current;
     const next = await fetchPreviewComments(
       project.id,
       activeConversationId,
       projectRunWorkspaceContext,
+      true,
     );
     if (previewCommentsGenerationRef.current !== commentsGeneration) return;
-    setPreviewComments(next);
-    setAttachedComments((current) =>
-      current
-        .map((attached) => next.find((comment) => comment.id === attached.id))
-        .filter((comment): comment is PreviewComment => Boolean(comment)),
-    );
+    // Unchanged comments keep their objects and an unchanged list keeps its
+    // array, so a refresh that found nothing new does not re-render.
+    setPreviewComments((current) => reconcilePreviewComments(current, next));
+    setAttachedComments((current) => reconcileAttachedComments(current, next));
   }, [project.id, activeConversationId, projectRunWorkspaceContext]);
+  const refreshPreviewComments = useCallback(
+    () => runPreviewCommentsRead(
+      `${project.id}\u0000${activeConversationId ?? ''}`,
+      readPreviewCommentsOnce,
+    ),
+    [runPreviewCommentsRead, project.id, activeConversationId, readPreviewCommentsOnce],
+  );
 
   // Expose the latest refresher to the SSE handler (defined earlier) so a
   // pushed `comment-changed` can re-fetch immediately.
@@ -6573,6 +6608,64 @@ export function ProjectView({
       refreshPreviewComments,
       projectRunWorkspaceContext,
     ],
+  );
+
+  /**
+   * Invariant: handing a comment to the agent never deletes it. Only an
+   * explicit user delete emits a comment tombstone; the hand-off lifecycle is
+   * carried by `status` alone. A run that failed or was canceled did not act
+   * on the comments it was handed, so they return to 'open' and the list
+   * shows them again.
+   */
+  const releaseCommentsAfterUnsuccessfulRun = useCallback(
+    (comments: ReadonlyArray<Pick<PreviewComment, 'id' | 'conversationId'>>) => {
+      if (comments.length === 0) return;
+      const releasedIds = new Set(comments.map((comment) => comment.id));
+      commitPreviewComments((current) =>
+        current.map((comment) =>
+          releasedIds.has(comment.id) ? { ...comment, status: 'open' } : comment,
+        ),
+      );
+      void Promise.all(
+        comments.map((comment) =>
+          patchPreviewCommentStatus(
+            project.id,
+            comment.conversationId,
+            comment.id,
+            'open',
+            projectRunWorkspaceContext,
+          ),
+        ),
+      ).catch(() => {});
+    },
+    [project.id, commitPreviewComments, projectRunWorkspaceContext],
+  );
+
+  /**
+   * Invariant: a comment is 'applying' only while a run that carries it
+   * exists or is still going to be created. A queued send reserves its
+   * comments before any run exists, so every way that send can end without a
+   * run (held by a pre-run gate, stopped or failed before the run was
+   * created, taken out of the queue) gives them back to 'open'. A held send
+   * that starts later reserves them again when its run begins.
+   */
+  const releaseCommentsOfSendWithoutRun = useCallback(
+    (send: Pick<QueuedChatSend, 'conversationId' | 'commentAttachments'>) => {
+      const reservedCommentIds = new Set(
+        previewCommentsRef.current
+          .filter((comment) => comment.status === 'applying')
+          .map((comment) => comment.id),
+      );
+      releaseCommentsAfterUnsuccessfulRun(
+        send.commentAttachments
+          .filter(
+            (attachment) =>
+              attachment.source !== 'board-batch' && reservedCommentIds.has(attachment.id),
+          )
+          .map((attachment) => ({ id: attachment.id, conversationId: send.conversationId })),
+      );
+    },
+    [releaseCommentsAfterUnsuccessfulRun],
   );
 
   // Maximum number of times we will retry fetching a null status for a
@@ -8446,7 +8539,16 @@ export function ProjectView({
     commitQueuedChatSends(next);
   }, [commitQueuedChatSends]);
 
+  // The user taking a send out of the queue, as opposed to the drain removing
+  // one whose run has started.
+  const discardQueuedChatSend = useCallback((id: string) => {
+    const item = queuedChatSendsRef.current.find((candidate) => candidate.id === id);
+    removeQueuedChatSend(id);
+    if (item) releaseCommentsOfSendWithoutRun(item);
+  }, [releaseCommentsOfSendWithoutRun, removeQueuedChatSend]);
+
   const updateQueuedChatSend = useCallback((id: string, update: QueuedChatSendUpdate) => {
+    const edited = queuedChatSendsRef.current.find((item) => item.id === id);
     const next = queuedChatSendsRef.current.map((item) => {
       if (item.id !== id) return item;
       const meta = stripQueueOnlyFromMeta({ ...(item.meta ?? {}), ...(update.meta ?? {}) });
@@ -8461,7 +8563,16 @@ export function ProjectView({
       return updated;
     });
     commitQueuedChatSends(next);
-  }, [commitQueuedChatSends]);
+    if (edited) {
+      const keptCommentIds = new Set(update.commentAttachments.map((attachment) => attachment.id));
+      releaseCommentsOfSendWithoutRun({
+        conversationId: edited.conversationId,
+        commentAttachments: edited.commentAttachments.filter(
+          (attachment) => !keptCommentIds.has(attachment.id),
+        ),
+      });
+    }
+  }, [commitQueuedChatSends, releaseCommentsOfSendWithoutRun]);
 
   const prioritizeQueuedChatSend = useCallback((id: string) => {
     const item = queuedChatSendsRef.current.find((candidate) => candidate.id === id);
@@ -8499,6 +8610,9 @@ export function ProjectView({
     attachments: ChatAttachment[];
     commentAttachments: ChatCommentAttachment[];
     conversationId: string;
+    /** A pre-run gate is holding this send, so no run is coming on its own
+     *  and its comments are not reserved. */
+    heldBeforeRun?: boolean;
     meta?: ProjectChatSendMeta;
     prompt: string;
   }) => {
@@ -8526,7 +8640,7 @@ export function ProjectView({
       setAttachedComments((current) =>
         current.filter((comment) => !reservedCommentIds.has(comment.id)),
       );
-      if (reservedCommentIds.size > 0) {
+      if (reservedCommentIds.size > 0 && !input.heldBeforeRun) {
         commitPreviewComments((current) =>
           current.map((comment) =>
             reservedCommentIds.has(comment.id)
@@ -8676,8 +8790,9 @@ export function ProjectView({
           meta: { ...(meta ?? {}), sessionMode: runSessionMode, taskAnalytics },
         });
         // `true` means the send has been durably accepted by this view's
-        // queue. Callers that own persisted annotations may only remove them
-        // after this acknowledgement; preflight rejection remains `false`.
+        // queue. Callers that hold a saved comment in their composer may only
+        // let go of it after this acknowledgement; preflight rejection
+        // remains `false`. The comment itself is never deleted by a send.
         return true;
       }
       if (currentConversationBusy) {
@@ -8767,6 +8882,9 @@ export function ProjectView({
         commentAttachments: commentAttachments.length > 0 ? commentAttachments : undefined,
       };
       const runCommentAttachments = userMsg.commentAttachments ?? [];
+      const runSavedComments = runCommentAttachments
+        .filter((attachment) => attachment.source !== 'board-batch')
+        .map((attachment) => ({ id: attachment.id, conversationId: runConversationId }));
       const runAttachments = mergeChatAttachments(
         userMsg.attachments ?? [],
         ...runCommentAttachments.map((attachment) =>
@@ -8960,7 +9078,7 @@ export function ProjectView({
           //
           // ⚠️ An EXHAUSTED wallet is not one of those states — see
           // `rejectBlockedSend` below (OPEND-2719).
-          const queueGateSend = (): boolean => {
+          const queueGateSend = (heldBeforeRun = false): boolean => {
             // 判定拒绝 = 这一轮不会有 run。先把已经画出去的那一轮收回,再决定
             // 它去哪儿 —— 三条拒绝路(会话切走 / 拦截 / 读不到)都经过这里,
             // 所以收回只写一处。放行那两档(soft / allow)碰不到它。
@@ -8971,6 +9089,7 @@ export function ProjectView({
                 prompt,
                 attachments: effectiveAttachments,
                 commentAttachments,
+                heldBeforeRun,
                 meta: { ...(meta ?? {}), sessionMode: runSessionMode, taskAnalytics },
               });
               return true;
@@ -8978,7 +9097,7 @@ export function ProjectView({
             return false;
           };
           const parkBlockedSend = (): boolean => {
-            const queued = queueGateSend();
+            const queued = queueGateSend(true);
             amrGatePausedQueueConversationsRef.current.add(gateConversationId);
             return queued;
           };
@@ -9649,6 +9768,8 @@ export function ProjectView({
       );
       const cancelController = new AbortController();
       let authoritativeArtifactPaths: string[] | undefined;
+      // onDone is delivered for a canceled run too; onRunStatus says which.
+      let runReportedCanceled = false;
       abortRef.current = controller;
       cancelRef.current = cancelController;
       const handlers = {
@@ -9781,9 +9902,7 @@ export function ProjectView({
               true,
               { telemetryFinalized: true },
             );
-            if (runCommentAttachments.length > 0) {
-              void patchAttachedStatuses(runCommentAttachments, 'failed');
-            }
+            releaseCommentsAfterUnsuccessfulRun(runSavedComments);
             const ownsCurrentRun = clearCurrentRunStreamingMarker(
               runConversationId,
               controller,
@@ -9830,7 +9949,9 @@ export function ProjectView({
               && latestRunMessage?.id === assistantId;
           };
           if (finalizingRunId) finalizingLocalRunIdsRef.current.add(finalizingRunId);
-          if (runCommentAttachments.length > 0) {
+          if (runReportedCanceled) {
+            releaseCommentsAfterUnsuccessfulRun(runSavedComments);
+          } else if (runCommentAttachments.length > 0) {
             void patchAttachedStatuses(runCommentAttachments, 'needs_review');
           }
           const ownsCurrentRun = clearCurrentRunStreamingMarker(
@@ -10017,9 +10138,7 @@ export function ProjectView({
               });
               if (deliveryOutcome === 'no_result' || deliveryOutcome === 'delivery_failed') {
                 setError(artifactPersistenceError ?? DESIGN_RESULT_MISSING_DETAIL);
-                if (runCommentAttachments.length > 0) {
-                  void patchAttachedStatuses(runCommentAttachments, 'failed');
-                }
+                releaseCommentsAfterUnsuccessfulRun(runSavedComments);
               }
               await auditDesignSystemWorkspaceAfterRun(assistantId);
             } finally {
@@ -10082,6 +10201,14 @@ export function ProjectView({
           if (config.mode === 'daemon' && !currentRunId) {
             if (runMayFinalize) {
               setError(null);
+              if (errorCode === 'CONVERSATION_NOT_FOUND') {
+                setProjectActionsToast({
+                  message: t('chat.sendTargetMissing'),
+                  details: null,
+                  tone: 'error',
+                  scope: 'chat-pane',
+                });
+              }
               activeCompletionNotificationRunsRef.current.delete(assistantId);
               setConversations((current) =>
                 current.map((conversation) => {
@@ -10111,9 +10238,7 @@ export function ProjectView({
                 if (failedUser) persistMessage(failedUser);
                 return next;
               });
-              if (runCommentAttachments.length > 0) {
-                void patchAttachedStatuses(runCommentAttachments, 'failed');
-              }
+              releaseCommentsAfterUnsuccessfulRun(runSavedComments);
             }
             clearTraceTouchedFilePaths();
             clearCurrentRunStreamingMarker(
@@ -10147,9 +10272,7 @@ export function ProjectView({
                 : prev.runStatus,
               resumable,
             }));
-            if (runCommentAttachments.length > 0) {
-              void patchAttachedStatuses(runCommentAttachments, 'failed');
-            }
+            releaseCommentsAfterUnsuccessfulRun(runSavedComments);
           }
           // Mark the run as completed in the reattach registry so that
           // attachRecoverableRuns does not race it after streaming ends.
@@ -10566,6 +10689,7 @@ export function ProjectView({
             // no assistant run to finalize or persist; onError moves the failure
             // to the user row instead.
             if (!currentRunId && runStatus === 'failed') return;
+            runReportedCanceled = runStatus === 'canceled';
             const endedAt = isTerminalRunStatus(runStatus) ? Date.now() : undefined;
             const runMayFinalize =
               !supersededRunsRef.current.has(controller);
@@ -10798,6 +10922,7 @@ export function ProjectView({
             }));
           },
           onRunStatus: (runStatus) => {
+            runReportedCanceled = runStatus === 'canceled';
             const endedAt = isTerminalRunStatus(runStatus) ? Date.now() : undefined;
             const runMayFinalize = !supersededRunsRef.current.has(controller);
             // 见 CLI / AMR 路径同名回调:落终态就把重连那一行让出去。
@@ -10865,6 +10990,7 @@ export function ProjectView({
       persistMessageById,
       auditDesignSystemWorkspaceAfterRun,
       patchAttachedStatuses,
+      releaseCommentsAfterUnsuccessfulRun,
       updateMessageById,
       markStreamingConversation,
       observeMemoryRun,
@@ -11036,6 +11162,22 @@ export function ProjectView({
       controller.abort();
     }
     reattachControllersRef.current.clear();
+    // Stopping aborts the stream, so the stopped turn never reports a terminal
+    // status of its own. Release ONLY the in-flight run's comments: queued
+    // sends (including one being prioritized by "send now") also hold their
+    // attachments in 'applying', and those must stay reserved — the run that
+    // drains them re-applies them. The in-flight run's comments are exactly
+    // the 'applying' ones not owned by any queued send.
+    const queuedCommentIds = new Set(
+      queuedChatSendsRef.current.flatMap((send) =>
+        send.commentAttachments.map((attachment) => attachment.id),
+      ),
+    );
+    releaseCommentsAfterUnsuccessfulRun(
+      previewCommentsRef.current.filter(
+        (comment) => comment.status === 'applying' && !queuedCommentIds.has(comment.id),
+      ),
+    );
     setStreaming(false);
     streamingConversationIdRef.current = null;
     setStreamingConversationId(null);
@@ -11052,6 +11194,7 @@ export function ProjectView({
     onProjectsRefresh,
     persistMessage,
     projectDetail.refresh,
+    releaseCommentsAfterUnsuccessfulRun,
     requestOpenFile,
     refreshWorkspaceItems,
   ]);
@@ -11065,6 +11208,24 @@ export function ProjectView({
     if (!target) return;
     setSlideNavRequest({ name: target.filePath, slideIndex: target.slideIndex, nonce: Date.now() });
   }, []);
+
+  // Starts a queued send. One that ends without a run stays in the queue, but
+  // no longer holds its comments.
+  const startQueuedChatSend = useCallback(async (item: QueuedChatSend): Promise<boolean> => {
+    let started = false;
+    try {
+      started = await handleSend(
+        item.prompt,
+        item.attachments,
+        item.commentAttachments,
+        { ...(item.meta ?? {}), queueDrain: true },
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+    if (!started) releaseCommentsOfSendWithoutRun(item);
+    return started;
+  }, [handleSend, releaseCommentsOfSendWithoutRun]);
 
   const sendQueuedChatSendNow = useCallback((id: string) => {
     const item = queuedChatSendsRef.current.find((candidate) => candidate.id === id);
@@ -11086,56 +11247,17 @@ export function ProjectView({
       for (const controller of reattachControllersRef.current.values()) {
         supersededRunsRef.current.add(controller);
       }
-      // The interrupted turn moved its preview-comment attachments to
-      // 'applying' when it started; since we now suppress its terminal
-      // callbacks, reset them to 'open' so they don't stay stuck mid-apply.
-      // Reset ONLY the in-flight run's comments: queued sends (including the
-      // one being prioritized) also hold their attachments in 'applying', and
-      // those must stay reserved — the replacement run re-applies them. The
-      // in-flight run's comments are exactly the 'applying' ones not owned by
-      // any queued send.
-      const queuedCommentIds = new Set(
-        queuedChatSendsRef.current.flatMap((send) =>
-          send.commentAttachments.map((attachment) => attachment.id),
-        ),
-      );
-      const stuckApplying = previewCommentsRef.current.filter(
-        (comment) => comment.status === 'applying' && !queuedCommentIds.has(comment.id),
-      );
-      if (stuckApplying.length > 0) {
-        const resetIds = new Set(stuckApplying.map((comment) => comment.id));
-        commitPreviewComments((current) =>
-          current.map((comment) =>
-            resetIds.has(comment.id) ? { ...comment, status: 'open' } : comment,
-          ),
-        );
-        void Promise.all(
-          stuckApplying.map((comment) =>
-            patchPreviewCommentStatus(
-              project.id,
-              comment.conversationId,
-              comment.id,
-              'open',
-              projectRunWorkspaceContext,
-            ),
-          ),
-        ).catch(() => {});
-      }
+      // handleStop releases the interrupted turn's comments back to 'open'.
       prioritizeQueuedChatSend(id);
       handleStop();
       return;
     }
     void (async () => {
       armSlideNavForQueuedSend(item);
-      const started = await handleSend(
-        item.prompt,
-        item.attachments,
-        item.commentAttachments,
-        { ...(item.meta ?? {}), queueDrain: true },
-      );
+      const started = await startQueuedChatSend(item);
       if (started) removeQueuedChatSend(id);
     })();
-  }, [armSlideNavForQueuedSend, commitPreviewComments, currentConversationBusy, handleSend, handleStop, prioritizeQueuedChatSend, project.id, removeQueuedChatSend, projectRunWorkspaceContext]);
+  }, [armSlideNavForQueuedSend, currentConversationBusy, handleStop, prioritizeQueuedChatSend, removeQueuedChatSend, startQueuedChatSend]);
 
   /*
    * B11 「引导对话」 —— 队列行领头那颗按钮走的就是上面的
@@ -11190,12 +11312,7 @@ export function ProjectView({
     startingQueuedChatSendIdRef.current = next.id;
     armSlideNavForQueuedSend(next);
     void (async () => {
-      const started = await handleSend(
-        next.prompt,
-        next.attachments,
-        next.commentAttachments,
-        { ...(next.meta ?? {}), queueDrain: true },
-      );
+      const started = await startQueuedChatSend(next);
       if (!started) {
         if (startingQueuedChatSendIdRef.current === next.id) {
           startingQueuedChatSendIdRef.current = null;
@@ -11217,7 +11334,7 @@ export function ProjectView({
     currentConversationBusy,
     queuedAutoStartTick,
     queuedChatSends,
-    handleSend,
+    startQueuedChatSend,
     removeQueuedChatSend,
     scheduleProjectTimeout,
   ]);
@@ -11427,11 +11544,27 @@ export function ProjectView({
       commentAttachments: ChatCommentAttachment[],
       images: File[] = [],
     ): Promise<CommentSendResult> => {
+      const finish = (result: CommentSendResult): CommentSendResult => {
+        observeAnalytics(() => {
+          const submittedIds = savedCommentIds(commentAttachments) ?? [];
+          const returnedIds = new Set(result.commentIds);
+          trackProjectCommentSendResult(analytics.track, {
+            page_name: 'artifact',
+            area: 'comment_popover',
+            project_id: project.id,
+            project_kind: projectKindFromMetadataToTracking(project.metadata),
+            result: result.status,
+            submitted_comment_ids: submittedIds,
+            comment_ids: submittedIds.filter((id) => returnedIds.has(id)),
+          });
+        });
+        return result;
+      };
       if (currentConversationQueueDisabled) {
-        return { status: 'rejected', commentIds: [] };
+        return finish({ status: 'rejected', commentIds: [] });
       }
       if (commentAttachments.length === 0 && images.length === 0) {
-        return { status: 'rejected', commentIds: [] };
+        return finish({ status: 'rejected', commentIds: [] });
       }
       setWorkspaceFocused(false);
       setCommentInspectorActive(false);
@@ -11447,7 +11580,7 @@ export function ProjectView({
           projectRunWorkspaceContext,
         );
         if (result.uploaded.length !== images.length) {
-          return { status: 'rejected', commentIds: [] };
+          return finish({ status: 'rejected', commentIds: [] });
         }
         uploaded = result.uploaded;
       }
@@ -11455,10 +11588,10 @@ export function ProjectView({
         const queued = uploaded.length > 0
           ? await handleSend('', uploaded, [], { queueOnly: true, entryFrom: 'comment' })
           : false;
-        return {
+        return finish({
           status: queued ? 'queued' : 'rejected',
           commentIds: [],
-        };
+        });
       }
       const queuedCommentIds: string[] = [];
       for (let i = 0; i < commentAttachments.length; i++) {
@@ -11474,13 +11607,13 @@ export function ProjectView({
           { queueOnly: true, entryFrom: 'comment' },
         );
         if (!queued) {
-          return { status: 'rejected', commentIds: queuedCommentIds };
+          return finish({ status: 'rejected', commentIds: queuedCommentIds });
         }
         queuedCommentIds.push(commentAttachment.id);
       }
-      return { status: 'queued', commentIds: queuedCommentIds };
+      return finish({ status: 'queued', commentIds: queuedCommentIds });
     },
-    [handleSend, project.id, currentConversationQueueDisabled, projectRunWorkspaceContext],
+    [handleSend, project.id, project.metadata, analytics.track, currentConversationQueueDisabled, projectRunWorkspaceContext],
   );
   const commentQueueOnSend = currentConversationBusy && !currentConversationQueueDisabled;
 
@@ -12321,7 +12454,7 @@ export function ProjectView({
               ? retryPending.failedAssistantId : null,
             supersededErrorAssistantIds,
             onStop: handleStop,
-            onRemoveQueuedSend: removeQueuedChatSend,
+            onRemoveQueuedSend: discardQueuedChatSend,
             onUpdateQueuedSend: updateQueuedChatSend,
             onReorderQueuedSends: reorderCurrentConversationQueuedChatSends,
             // B11 「引导对话」: one button, always offered. The handler already
@@ -12349,7 +12482,7 @@ export function ProjectView({
       handleComposerSend,
       handleStop,
       messages,
-      removeQueuedChatSend,
+      discardQueuedChatSend,
       reorderCurrentConversationQueuedChatSends,
       sendQueuedChatSendNow,
       updateQueuedChatSend,
@@ -12620,7 +12753,11 @@ export function ProjectView({
   const handleArtifactShare = useCallback(
     (fileName: string, anchorId?: string) => {
       requestOpenFile(fileName);
-      setShareRequest({ name: fileName, nonce: Date.now(), ...(anchorId ? { anchorId } : {}) });
+      setShareRequest((previous) => ({
+        name: fileName,
+        nonce: nextShareRequestNonce(previous?.nonce, Date.now()),
+        ...(anchorId ? { anchorId } : {}),
+      }));
     },
     [requestOpenFile],
   );
@@ -13407,7 +13544,7 @@ export function ProjectView({
   // Continue in CLI / Finalize design package handlers + keyboard
   // shortcut wiring. Close to the JSX so the data flow is easy to
   // trace from the toolbar back to its sources.
-  const handleFinalize = useCallback(() => {
+  const _handleFinalize = useCallback(() => {
     const request = buildFinalizeRequest(config);
     if (!request) {
       setProjectActionsToast(buildFinalizeCredentialsMissingToast(config));
@@ -13418,7 +13555,7 @@ export function ProjectView({
     });
   }, [finalize, config, designMdState]);
 
-  const handleCancelFinalize = useCallback(() => {
+  const _handleCancelFinalize = useCallback(() => {
     finalize.cancel();
   }, [finalize]);
 
@@ -13979,7 +14116,7 @@ export function ProjectView({
               // 后台重挂可能发生在别的会话上,那一行不该串进这一屏。
               reconnect={reconnectViewForConversation(reconnectView, activeConversationId)}
               onManualReconnect={handleManualReconnect}
-              onRemoveQueuedSend={removeQueuedChatSend}
+              onRemoveQueuedSend={discardQueuedChatSend}
               onUpdateQueuedSend={updateQueuedChatSend}
               onReorderQueuedSends={reorderCurrentConversationQueuedChatSends}
               onSendQueuedNow={sendQueuedChatSendNow}
@@ -14256,6 +14393,12 @@ export function ProjectView({
           filesGeneration={committedFilesGeneration}
           onRefreshFiles={refreshFileWorkspace}
           onManualFileWritten={recordManualFileWrite}
+          onObservedPublicShareLink={onObservedPublicShareLink}
+          observedPublicShareLink={observedPublicShareLink}
+          loginUpdateRequest={loginUpdateRequest}
+          onLoginUpdateRequestHandled={onLoginUpdateRequestHandled}
+          shareLoginReturn={shareLoginReturn}
+          onShareLoginReturnChange={onShareLoginReturnChange}
           isDeck={isDeck}
           streaming={currentConversationActionDisabled}
           // The building preview needs a real run, not the disabled-actions
@@ -14265,6 +14408,7 @@ export function ProjectView({
           runInFlight={currentConversationStreaming || currentConversationHasActiveRun}
           commentQueueOnSend={commentQueueOnSend}
           commentSendDisabled={currentConversationQueueDisabled}
+          routeFileName={routeFileName}
           openRequest={openRequest}
           browserOpenRequest={browserOpenRequest}
           pinnedBrowserTabId={projectIsProgrammaticBrandExtraction ? BRAND_BROWSER_TAB_ID : null}
@@ -14701,7 +14845,7 @@ function normalizeProjectFileName(value: string): string {
   return value.replace(/\\/g, '/').replace(/^\.?\//, '').toLowerCase();
 }
 
-function assistantAgentDisplayName(
+function _assistantAgentDisplayName(
   agentId: string | null,
   fallbackName?: string,
 ): string | undefined {

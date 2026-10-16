@@ -665,7 +665,7 @@ function setInlineStyles(el: HTMLElement, styles: Partial<ManualEditStyles>): vo
 function setAttributes(el: Element, attributes: Record<string, string>): void {
   const protectedAttrs = new Set(['data-od-id', 'data-od-edit', 'data-od-label', 'data-od-runtime-id']);
   for (const [name, value] of Object.entries(attributes)) {
-    if (!isSafeAttributeName(name) || protectedAttrs.has(name)) continue;
+    if (!isSafeAttributeName(name) || protectedAttrs.has(name) || name.toLowerCase() === 'data-od-comment-id') continue;
     if (value.trim() === '') el.removeAttribute(name);
     else el.setAttribute(name, value);
   }
@@ -682,6 +682,11 @@ function replaceOuterHtml(doc: Document, el: Element, html: string): { ok: true 
   }
   if (el.getAttribute('data-od-edit') && !next.getAttribute('data-od-edit')) {
     next.setAttribute('data-od-edit', el.getAttribute('data-od-edit') ?? '');
+  }
+  // Only the same replacement root inherits a missing comment identity.
+  // Descendants are new markup, not identities inferred from text or position.
+  if (el.hasAttribute('data-od-comment-id') && !next.hasAttribute('data-od-comment-id')) {
+    next.setAttribute('data-od-comment-id', el.getAttribute('data-od-comment-id') ?? '');
   }
   el.replaceWith(next);
   return { ok: true };

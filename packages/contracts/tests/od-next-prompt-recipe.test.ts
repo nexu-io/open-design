@@ -37,6 +37,17 @@ const recipe: OdNextStrategyRequestRecipeV2 = {
   ],
 };
 
+describe('comment identity host contract', () => {
+  it.each(['API/BYOK legacy', 'API/BYOK OD Next', 'OD Next host'] as const)('carries the conditional edit rule in %s', (path) => {
+    const prompt = path === 'OD Next host'
+      ? composeOdNextStrategyRequestPromptV2(recipe)
+      : composeSystemPrompt(path === 'API/BYOK legacy' ? {} : { odNextStrategyRecipe: recipe });
+    expect(prompt).toContain('Only when editing HTML that already contains data-od-comment-id');
+    expect(prompt).toContain('mint a fresh UUID for every copied or new node');
+    expect(prompt).toContain('never recycle a deleted identity');
+  });
+});
+
 describe('OD Next V2 prompt recipe', () => {
   it('reports runtime capabilities without restricting deliverables to the scene catalog', () => {
     const facts = renderOdNextRuntimeFactsV2({ ...recipe, planningFacts: {
@@ -192,6 +203,7 @@ describe('OD Next V2 prompt recipe', () => {
         "## Native filesystem execution",
         "## Versioned recipe identity",
         "## Discovery, planning, and Build surface",
+        "## Stable request planning and Build context",
         "## OD Next core strategy",
         "# Core",
         "## OD Next general orchestration",
@@ -546,7 +558,9 @@ describe('handheld device shell in the stable request context', () => {
   it('omits both facts when no shell was resolved', () => {
     expect(composeOdNextStrategyStableRequestContextV2({ memoryBody: 'Remember the operator audience.' }))
       .not.toContain('device-frame');
-    expect(composeOdNextStrategyStableRequestContextV2({})).toBe('');
+    const withoutShell = composeOdNextStrategyStableRequestContextV2({});
+    expect(withoutShell).not.toContain('device-frame');
+    expect(withoutShell).toContain('name="comment-identity-edit"');
   });
 });
 

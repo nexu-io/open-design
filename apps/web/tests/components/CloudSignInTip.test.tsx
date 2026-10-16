@@ -63,6 +63,19 @@ function renderTip() {
 }
 
 describe('CloudSignInTip', () => {
+  it('keeps the share login prompt compact and preserves its custom action label', () => {
+    render(
+      <I18nProvider initial="en">
+        <CloudSignInTip sharePrompt className="share-login" actionLabel="Sign in to share" />
+      </I18nProvider>,
+    );
+    const card = screen.getByRole('button', { name: 'Sign in to share' });
+    expect(card.getAttribute('data-testid')).toBe('share-cloud-signin');
+    expect(card.className).toBe('share-login');
+    expect(card.textContent).toBe('Sign in to share');
+    expect(card.querySelector('.entry-local-mode-tip__pitch')).toBeNull();
+  });
+
   it('turns the call to action into a pending state and offers to reopen the sign-in page only after a delay', async () => {
     let loginStarted = false;
     globalThis.fetch = vi.fn(async (input, init) => {

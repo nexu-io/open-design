@@ -71,6 +71,13 @@ const originalFetch = globalThis.fetch;
 function stubFetch() {
   globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    const shareMatch = /^\/api\/projects\/([^/]+)\/share-state$/.exec(url);
+    if (shareMatch) {
+      return new Response(JSON.stringify({
+        projectId: decodeURIComponent(shareMatch[1]!),
+        hasEverShared: false, bindingExists: false, publications: [],
+      }), { headers: { 'Content-Type': 'application/json' } });
+    }
     const moveMatch = /^\/api\/workspaces\/[^/]+\/projects\/([^/]+)\/move$/.exec(url);
     if (moveMatch && init?.method === 'POST') {
       const id = decodeURIComponent(moveMatch[1]!);
@@ -421,17 +428,19 @@ describe('EntryNavRail 最近浏览过 section', () => {
     // until the dialog's own red 删除 is pressed.
     let dialog = openDelete();
     expect(onDelete).not.toHaveBeenCalled();
-    expect(within(dialog).getByText('Delete "Project p1"?')).toBeTruthy();
+    await within(dialog).findByText('Delete "Project p1"?');
     expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeTruthy();
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(screen.queryByRole('alertdialog')).toBeNull();
     expect(onDelete).not.toHaveBeenCalled();
 
     dialog = openDelete();
+    await within(dialog).findByText('Delete "Project p1"?');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
     expect(screen.queryByRole('alertdialog')).toBeNull();
 
     dialog = openDelete();
+    await within(dialog).findByText('Delete "Project p1"?');
     const confirm = within(dialog).getByRole('button', { name: 'Delete' });
     fireEvent.click(confirm);
     fireEvent.click(confirm);
@@ -452,6 +461,7 @@ describe('EntryNavRail 最近浏览过 section', () => {
     fireEvent.click(screen.getAllByTestId('entry-nav-recent-more')[0]!);
     fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', { name: 'Delete' }));
     const dialog = screen.getByRole('alertdialog');
+    await within(dialog).findByText('Delete "Project p1"?');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
     await waitFor(() => {
       expect(onDelete).toHaveBeenCalledWith('p1');

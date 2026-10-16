@@ -20,6 +20,65 @@ import {
 } from '../runtimes/launch.js';
 import { getAgentDef } from '../runtimes/registry.js';
 
+/** Flags whose values carry user identity or user content (OPEND-3520). */
+const REDACTED_VELA_ARG_FLAGS = new Set([
+  '--display-name',
+  '--name',
+  '--email',
+  '--activity-json',
+  '--metadata-json',
+]);
+const REDACTED_VELA_ARG = '[REDACTED]';
+
+/**
+ * Node's exec error repeats the full command line in `message`, `cmd`, and
+ * `stack`, and callers log those verbatim. Replace the values of identity /
+ * user-content flags there before the error leaves the runner. Only the
+ * `<flag> <value>` occurrences are rewritten, so stderr (which carries the
+ * `API request failed with status NNN` classification signal) is untouched.
+ */
+export function redactVelaCommandError(error: unknown, args: readonly string[]): unknown {
+  if (typeof error !== 'object' || error === null) return error;
+  const pairs: Array<{ flag: string; value: string }> = [];
+  for (let index = 0; index < args.length; index += 1) {
+    // Callers are typed, but redaction must never turn a command failure
+    // into a different crash, so tolerate non-string argv entries.
+    const arg: unknown = args[index];
+    if (typeof arg !== 'string') continue;
+    const equals = arg.indexOf('=');
+    const next: unknown = args[index + 1];
+    if (REDACTED_VELA_ARG_FLAGS.has(arg) && typeof next === 'string') {
+      pairs.push({ flag: arg, value: next });
+      index += 1;
+    } else if (equals > 0 && REDACTED_VELA_ARG_FLAGS.has(arg.slice(0, equals))) {
+      pairs.push({ flag: arg.slice(0, equals), value: arg.slice(equals + 1) });
+    }
+  }
+  if (pairs.length === 0) return error;
+  const redact = (text: string): string => {
+    let out = text;
+    for (const { flag, value } of pairs) {
+      if (!value) continue;
+      for (const separator of [' ', '=']) {
+        for (const quote of ['', '"', "'"]) {
+          out = out.split(`${flag}${separator}${quote}${value}${quote}`)
+            .join(`${flag}${separator}${quote}${REDACTED_VELA_ARG}${quote}`);
+        }
+      }
+    }
+    return out;
+  };
+  const target = error as { message?: unknown; cmd?: unknown; stack?: unknown };
+  for (const key of ['message', 'cmd', 'stack'] as const) {
+    try {
+      if (typeof target[key] === 'string') target[key] = redact(target[key] as string);
+    } catch {
+      // A frozen error must not turn a command failure into a different one.
+    }
+  }
+  return error;
+}
+
 /**
  * A failed Vela command still carries meaning on stdout.
  *
@@ -250,6 +309,7 @@ export function runVelaCommand(
       settled = true;
       clearTriggers();
       if ('error' in outcome) {
+        redactVelaCommandError(outcome.error, args);
         if (args[0] === 'team-projects' && args[1] === 'list') {
           recordDiagnosticFailure({ source: 'team-projects', error: outcome.error, env: childEnv, workspaceId: childEnv.VELA_WORKSPACE_ID });
         } else if (args[0] === 'resource' && args[1] === 'shared') {

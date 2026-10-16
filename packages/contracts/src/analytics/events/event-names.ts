@@ -59,6 +59,7 @@ export type AnalyticsEventName =
   | 'workspace_shared_project_open_result'
   | 'workspace_resource_action_result'
   | 'project_comment_create_result'
+  | 'project_comment_send_result'
   // Message-level conversation forking. Entry clicks stay on `ui_click`;
   // this result event records whether the new conversation was created.
   | 'conversation_fork_result'

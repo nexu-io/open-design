@@ -39,6 +39,15 @@ export interface ToastProps {
   placement?: 'bottom' | 'top';
   /** Global feedback can escape ancestor stacking contexts; local toasts stay in place by default. */
   portalToBody?: boolean;
+  /**
+   * Extra pixels to push a `placement="top"` toast down from its default
+   * `top: 64px` anchor (see `.od-toast.placement-top`), so a caller that
+   * shares the top-of-viewport anchor with another toast (e.g. a
+   * ShareFeedbackToast — see `./share/toast-stack`) can avoid overlapping it.
+   * Ignored for `placement="bottom"`. Omitted/0 keeps the default position,
+   * so every existing single-toast caller renders byte-identical.
+   */
+  topOffsetPx?: number;
 }
 
 const DEFAULT_TTL = 4000;
@@ -76,6 +85,7 @@ export function Toast({
   tone = 'default',
   placement = 'bottom',
   portalToBody = false,
+  topOffsetPx,
 }: ToastProps) {
   const t = useT();
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
@@ -135,6 +145,7 @@ export function Toast({
       className={`od-toast tone-${tone} placement-${placement}${className ? ` ${className}` : ''}${leaving ? ' leaving' : ''}`}
       role={role}
       aria-live={role === 'alert' ? 'assertive' : 'polite'}
+      style={placement === 'top' && topOffsetPx ? { top: `calc(64px + ${topOffsetPx}px)` } : undefined}
     >
       <div className="od-toast-body">
         {iconName ? (

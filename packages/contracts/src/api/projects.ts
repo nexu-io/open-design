@@ -193,6 +193,8 @@ export interface DesignSystemReviewEntry {
 }
 
 export interface ProjectMetadata {
+  /** Reserved admitted facts; installed only with the matching local content receipt. */
+  _commentFiles?: import('./comments.js').CommentFileState;
   kind: ProjectKind;
   // `live-artifact`: the data-backed live dashboard flow (drives the
   // live-artifact skill/system-prompt path). `web-clone`: website reproduction
@@ -984,7 +986,9 @@ export type DeployPreflightWarningCode =
   | 'external-script'
   | 'external-stylesheet'
   | 'no-doctype'
-  | 'no-viewport';
+  | 'no-viewport'
+  /** The entry would collide with the project's root index.html; deploy is refused with ENTRY_INDEX_CONFLICT. */
+  | 'entry-index-conflict';
 
 export interface DeployPreflightWarning {
   code: DeployPreflightWarningCode;

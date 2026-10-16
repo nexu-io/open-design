@@ -66,6 +66,8 @@ import {
   MANUAL_EDIT_SOURCE_PATH_ATTR,
 } from '../edit-mode/bridge';
 import { isApprovedFontStylesheetHref } from './deck-thumbnail-parser';
+import { ANNOTATED_SELECTOR_HELPERS } from './annotated-selector';
+import { COMMENT_IDENTITY_HELPERS } from '@open-design/contracts';
 
 export type SrcdocOptions = {
   /** Live embedded motion preview only; do not enable for exports/captures. */
@@ -1470,7 +1472,7 @@ function injectBeforeHeadEnd(doc: string, payload: string): string {
   if (typeof DOMParser !== 'undefined') {
     try {
       const parsed = new DOMParser().parseFromString(doc, 'text/html');
-      if (parsed.head) parsed.head.insertAdjacentHTML('beforeend', payload);
+      if (parsed.head) parsed.head.append(parsed.createRange().createContextualFragment(payload));
       return serializeHtmlDocument(parsed);
     } catch { /* fall through to prepend */ }
   }
@@ -1486,7 +1488,7 @@ function injectBeforeBodyEnd(doc: string, payload: string): string {
   if (typeof DOMParser !== 'undefined') {
     try {
       const parsed = new DOMParser().parseFromString(doc, 'text/html');
-      if (parsed.body) parsed.body.insertAdjacentHTML('beforeend', payload);
+      if (parsed.body) parsed.body.append(parsed.createRange().createContextualFragment(payload));
       return serializeHtmlDocument(parsed);
     } catch { /* fall through to append */ }
   }
@@ -2052,11 +2054,8 @@ function injectSelectionBridge(
       };
     } catch (_) { return null; }
   }
-  function annotatedSelectorFor(el){
-    var id = el.getAttribute('data-od-id') || el.getAttribute('data-screen-label');
-    if (!id) return null;
-    return el.hasAttribute('data-od-id') ? '[data-od-id="' + esc(id) + '"]' : '[data-screen-label="' + esc(id) + '"]';
-  }
+${ANNOTATED_SELECTOR_HELPERS}
+${COMMENT_IDENTITY_HELPERS}
   function domSelectorFor(el){
     if (!el || !el.tagName || el === document.documentElement || el === document.body) return null;
     var parts = [];
@@ -2143,10 +2142,16 @@ function meaningfulDomFallbackTarget(el) {
   function generatedRootAnnotation(el, id){
     return id === 'path-0' && el && el.parentElement === document.body && el.id === 'root';
   }
-  function targetFrom(el, allowDomFallback, clickedEl, clickPoint){
-    var id = el.getAttribute('data-od-id') || el.getAttribute('data-screen-label');
+  function targetFrom(el, allowDomFallback, clickedEl, clickPoint, forceCommentIdentity){
+    var id = annotatedElementIdFor(el);
+    var selector = annotatedSelectorFor(el, esc);
+    if ((forceCommentIdentity || (commentEnabled && !inspectEnabled)) && (!clickedEl || clickedEl === el) && el && el.hasAttribute('data-od-comment-id')) {
+      var identity = ownCommentIdentity(el);
+      if (!identity) return null;
+      id = identity.elementId;
+      selector = identity.selector;
+    }
     if (allowDomFallback && id && generatedRootAnnotation(el, id)) return null;
-    var selector = annotatedSelectorFor(el);
     if (!id && allowDomFallback && meaningfulDomFallbackTarget(el)) {
       selector = domSelectorFor(el);
       if (selector) id = 'dom:' + selector;
@@ -2185,7 +2190,7 @@ function meaningfulDomFallbackTarget(el) {
     return payload;
   }
   function allTargets(){
-    var annotatedNodes = document.querySelectorAll('[data-od-id], [data-screen-label]');
+    var annotatedNodes = document.querySelectorAll('[data-od-id], [data-screen-label], [data-od-comment-id]');
     var includeDomFallback = canUseDomFallback();
     var nodes = includeDomFallback
       ? document.querySelectorAll('body *')
@@ -2258,6 +2263,7 @@ function meaningfulDomFallbackTarget(el) {
     window.parent.postMessage({ type: 'od:preview-scroll-request' }, '*');
   }
   function findCommentTargetByIdentity(elementId, selector){
+    if (String(elementId || '').indexOf('cmt:') === 0 || commentSelectorClaimsIdentity(selector)) return strictCommentNode(elementId, selector);
     var el = null;
     if (selector) {
       try { el = document.querySelector(String(selector)); } catch (_) { el = null; }
@@ -2274,7 +2280,10 @@ function meaningfulDomFallbackTarget(el) {
     if (!active() || !activeCommentElementId) return;
     var el = findCommentTargetByIdentity(activeCommentElementId, activeCommentSelector);
     if (!el) return;
-    var payload = targetFrom(el, commentEnabled && mode === 'picker' && !inspectEnabled);
+    var payload = targetFrom(el, commentEnabled && mode === 'picker' && !inspectEnabled, null, null, String(activeCommentElementId).indexOf('cmt:') === 0);
+    // Preserve the selector that actually found the saved target, even when
+    // source annotation gives that DOM node a newer attribute identity.
+    try { if (payload && activeCommentSelector && el.matches(activeCommentSelector)) payload.selector = activeCommentSelector; } catch (_) {}
     if (payload) window.parent.postMessage(Object.assign({}, payload, { type: 'od:comment-active-target-update' }), '*');
   }
   function schedulePostActiveCommentTarget(){
@@ -2362,6 +2371,8 @@ function meaningfulDomFallbackTarget(el) {
     for (var i = 0; i < candidates.length; i++) {
       var clicked = candidates[i];
       var el = clicked;
+      // Only the selected node's OWN authored identity is a comment anchor.
+      if (commentEnabled && !inspectEnabled && clicked && clicked.hasAttribute('data-od-comment-id')) return { target: clicked, clicked: clicked };
       while (el && el !== document.documentElement) {
         if (allowDomFallback && meaningfulDomFallbackTarget(el)) {
           return { target: el, clicked: clicked };
@@ -2730,7 +2741,28 @@ function meaningfulDomFallbackTarget(el) {
     if (data.type === 'od:comment-active-target') {
       activeCommentElementId = data.elementId ? String(data.elementId) : null;
       activeCommentSelector = data.selector ? String(data.selector) : null;
-      schedulePostActiveCommentTarget();
+      if (data.locate && typeof data.requestId === 'string') {
+        // Saved comments can predate the current annotation identities. Locate
+        // the actual DOM first, then report viewport pixels after scrolling.
+        var target = findCommentTargetByIdentity(activeCommentElementId, activeCommentSelector);
+        // A missing structural path must not scroll to an unrelated element
+        // that inherited the old annotation id. Attribute anchors keep their
+        // existing identity fallback; structural paths require an actual match.
+        if (target && activeCommentSelector && activeCommentSelector.split('>')[0].trim() === 'body') {
+          try { if (!target.matches(activeCommentSelector)) target = null; } catch (_) { target = null; }
+        }
+        var payload = target && targetFrom(target, true, null, null, String(activeCommentElementId).indexOf('cmt:') === 0);
+        if (payload) {
+          try { target.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' }); } catch (_) {}
+          payload = targetFrom(target, true, null, null, String(activeCommentElementId).indexOf('cmt:') === 0);
+          try { if (payload && activeCommentSelector && target.matches(activeCommentSelector)) payload.selector = activeCommentSelector; } catch (_) {}
+        }
+        window.parent.postMessage(payload
+          ? Object.assign({}, payload, { type: 'od:comment-active-target-update', requestId: data.requestId })
+          : { type: 'od:comment-location-missing', requestId: data.requestId }, '*');
+        schedulePostTargets();
+        schedulePostPreviewScroll();
+      } else schedulePostActiveCommentTarget();
       return;
     }
     if (data.type === 'od:preview-scroll-by') {
@@ -2803,7 +2835,7 @@ function meaningfulDomFallbackTarget(el) {
     if (!pickerActive()) return;
     var result = closestTarget(ev);
     if (!result) return;
-    var payload = targetFrom(result.target, commentEnabled && mode === 'picker' && !inspectEnabled);
+    var payload = targetFrom(result.target, commentEnabled && mode === 'picker' && !inspectEnabled, result.clicked);
     if (!payload || payload.elementId === hoveredId) return;
     hoveredId = payload.elementId;
     window.parent.postMessage(Object.assign({}, payload, { type: 'od:comment-hover' }), '*');

@@ -30,6 +30,7 @@ import { startServer } from '../../src/server.js';
 import { readAppConfig, writeAppConfig } from '../../src/app-config.js';
 import {
   clearAllVelaLiveAccounts,
+  clearVelaAuthorizationState,
   clearVelaLiveAccountRefreshThrottle,
   isVelaLoginSupervisorSettled,
   parseAmrEntryAnalyticsPayload,
@@ -260,6 +261,8 @@ afterEach(async () => {
     delete process.env.FAKE_VELA_BILLING_LOG;
     delete process.env.FAKE_VELA_BILLING_DELAY_MS;
     delete process.env.FAKE_VELA_BILLING_UNKNOWN_COMMAND;
+    delete process.env.FAKE_VELA_BILLING_STDERR;
+    clearVelaAuthorizationState();
     delete process.env.FAKE_VELA_MODEL_LIST_JSON;
     delete process.env.FAKE_VELA_MODEL_PRESET_JSON;
     delete process.env.FAKE_VELA_ENV_DUMP_PATH;
@@ -579,7 +582,13 @@ describe('GET /api/integrations/vela/wallet', () => {
       expect(second.body.balanceUsd).toBeNull();
       expect(second.body.source).toBe('unavailable');
       expect(second.body.error?.code).toBe('unauthorized');
-      expect(second.body.error?.message).toMatch(/sign in again/i);
+      expect(second.body.error?.message).not.toMatch(/sign in/i);
+      // Billing is display-only (OPEND-3553): a wallet rejection must not
+      // expire the AMR session.
+      const status = await getJson<{ sessionState?: string }>(
+        `${baseUrl}/api/integrations/vela/status`,
+      );
+      expect(status.body.sessionState).toBe('authenticated');
     } finally {
       await walletApi.close();
     }
@@ -993,6 +1002,27 @@ describe('GET /api/integrations/vela/status', () => {
       ? readFileSync(billingLog, 'utf8').trim().split('\n').filter(Boolean)
       : [];
     expect(attempts).toHaveLength(1);
+  });
+
+  it('keeps the session authenticated when vela billing summary reports 401 (OPEND-3553)', async () => {
+    clearAllVelaLiveAccounts();
+    process.env.FAKE_VELA_BILLING_STDERR =
+      'Error: API request failed with status 401: {"error":"unauthenticated"}';
+    seedLogin('local', {
+      user: { id: 'billing-401', email: 'billing-401@example.com', plan: undefined },
+    });
+
+    const first = await getJson<{ sessionState?: string; account?: unknown }>(
+      `${baseUrl}/api/integrations/vela/status?refresh=1`,
+    );
+    const second = await getJson<{ sessionState?: string; account?: unknown }>(
+      `${baseUrl}/api/integrations/vela/status`,
+    );
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(second.body.account).toBeUndefined();
+    expect(second.body.sessionState).toBe('authenticated');
   });
 
   it('keeps signed-in status usable when old vela CLI lacks billing commands', async () => {

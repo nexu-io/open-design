@@ -20,6 +20,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EntryNavRail, resetWorkspaceDirectoryCache } from '../../src/components/EntryNavRail';
 import { I18nProvider } from '../../src/i18n';
+import { currentWorkspaceAccountGeneration } from '../../src/collab/workspace-identity';
+import { currentWorkspaceContextRequestToken, WORKSPACE_BILLING_REFRESH_EVENT } from '../../src/collab/useWorkspaceContext';
 
 const originalFetch = globalThis.fetch;
 
@@ -166,7 +168,11 @@ describe('account menu billing card — workspace-aware upgrade routing', () => 
     },
   ])(
     'routes a $name to the console plan surface',
-    ({ context: contextOverrides, billing: billingOverrides }) => {
+    async ({ context: contextOverrides, billing: billingOverrides }) => {
+      vi.useFakeTimers();
+      const dispatch = vi.spyOn(window, 'dispatchEvent');
+      const generation = currentWorkspaceAccountGeneration();
+      const requestToken = currentWorkspaceContextRequestToken();
       const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
       renderRail({
         context: context({
@@ -190,6 +196,17 @@ describe('account menu billing card — workspace-aware upgrade routing', () => 
         'https://open-design.ai/cloud/dashboard',
       );
       expect(target.searchParams.get('billing')).toBe('plan');
+      const billingRefreshes = () => dispatch.mock.calls.filter(([event]) => event.type === WORKSPACE_BILLING_REFRESH_EVENT);
+      await act(async () => { await vi.advanceTimersByTimeAsync(2999); });
+      expect(billingRefreshes()).toHaveLength(0);
+      expect(currentWorkspaceAccountGeneration()).toBe(generation);
+      expect(currentWorkspaceContextRequestToken()).toBe(requestToken);
+      await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+      expect(billingRefreshes()).toHaveLength(1);
+      // Opening billing (even a blocked popup) is not an account transition.
+      // These readers observe the real notifier; it is deliberately not mocked.
+      expect(currentWorkspaceAccountGeneration()).toBe(generation);
+      expect(currentWorkspaceContextRequestToken()).toBe(requestToken);
     },
   );
 

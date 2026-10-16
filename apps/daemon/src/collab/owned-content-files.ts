@@ -14,7 +14,8 @@ import {
 } from './vela-cli-resource-adapter.js';
 import type { OwnedContentScope } from './owned-content-store.js';
 
-async function contentFiles(directory: string): Promise<string[]> {
+/** The exact root snapshot roster, shared by upload checkpoints and HTML fact admission. */
+export async function contentFiles(directory: string): Promise<string[]> {
   const files: string[] = [];
   async function visit(current: string, prefix: string): Promise<void> {
     const entries = await readdir(current, { withFileTypes: true }).catch((error: NodeJS.ErrnoException) => {
@@ -125,7 +126,10 @@ export async function applyOwnedProjectContent(options: ApplyOwnedContentOptions
       teamId: scope.resourceTeamId, memberId: scope.ownerMemberId,
       role: 'member' as const, lifecycleState: 'active' as const, workspaceType: 'team' as const,
     };
-    const resourceIds = projectResourceIdsFor(scope.projectId, principal, projectResourceIdFor);
+    const resourceIds = scope.resourceId !== undefined
+      ? [scope.resourceId]
+      : projectResourceIdsFor(scope.projectId, principal, projectResourceIdFor);
+    if (resourceIds.some((id) => !id.trim())) throw new Error('owner project root is unavailable');
     let stdout: string | undefined;
     let lastError: unknown;
     for (const [index, resourceId] of resourceIds.entries()) {

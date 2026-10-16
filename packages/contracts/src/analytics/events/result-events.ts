@@ -358,6 +358,8 @@ export interface RunCreatedProps extends RunTaskLineageProps {
   // `TrackingDesignSystemRunEntryFrom` set; both unions stay
   // distinct so the dashboard can split funnels cleanly.
   entry_from?: TrackingRunEntrySource;
+  /** Explicit saved-comment attachments of this Run; not proof of a public-share comment. */
+  comment_ids?: string[];
   /** v4 name; entry_from remains during the compatibility window. */
   entry_source?: TrackingRunEntrySource;
   // Session-dimension run context (0-based `turn_index` within the browser
@@ -1091,6 +1093,18 @@ export interface ArtifactDeployResultProps extends TrackingFailureDetailProps {
 // for publish, or removal is confirmed for unpublish), regardless of whether a
 // newer request superseded this one in the UI. Clicking the publish button
 // reports separately as ui_click element 'publish_file'.
+/** Queue acceptance is separate from a click or a successful physical Run. */
+export interface ProjectCommentSendResultProps {
+  page_name: 'artifact';
+  area: 'comment_popover';
+  project_id: string;
+  project_kind: TrackingProjectKind | null;
+  result: 'accepted' | 'queued' | 'rejected';
+  submitted_comment_ids: string[];
+  /** Returned subset of explicitly saved comments; excludes temporary board notes. */
+  comment_ids: string[];
+}
+
 export interface ArtifactPublishResultProps extends TrackingFailureDetailProps {
   page_name: 'artifact';
   area: 'share_option_popover';
@@ -1102,6 +1116,11 @@ export interface ArtifactPublishResultProps extends TrackingFailureDetailProps {
   // confirmed (the one actionable failure), 'publish_failed' otherwise.
   error_code?: TrackingPublishErrorCode;
   publish_duration_ms: number;
+  /** Stable alias already known to this attempt, never a full public URL. */
+  publish_id?: string;
+  /** Only the committed receipt supplies version and time. */
+  share_version?: number;
+  published_at?: number;
   project_id: string;
   project_kind: TrackingProjectKind | null;
   // The daemon's own error code (e.g. PUBLIC_FILE_PUBLISH_UNAVAILABLE,

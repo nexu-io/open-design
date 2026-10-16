@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 import type {
   OpenDesignHostBridge,
   OpenDesignHostActionResult,
+  OpenDesignHostDownloadResult,
   OpenDesignHostBrowserClearDataOptions,
   OpenDesignHostCaptureOptions,
   OpenDesignHostCaptureResult,
@@ -358,6 +359,17 @@ const hostBridge = {
     // app theme. Fire-and-forget: the main process validates the value.
     setTheme: (theme: 'light' | 'dark' | 'system'): void =>
       ipcRenderer.send('od:appearance:set-theme', theme),
+  },
+  downloads: {
+    subscribe: (listener: (result: OpenDesignHostDownloadResult) => void): (() => void) => {
+      const handler = (_event: unknown, result: OpenDesignHostDownloadResult): void => {
+        if (result == null || typeof result.url !== "string"
+          || !["completed", "cancelled", "interrupted"].includes(result.state)) return;
+        listener({ url: result.url, state: result.state });
+      };
+      ipcRenderer.on("od:download-finished", handler);
+      return () => { ipcRenderer.removeListener("od:download-finished", handler); };
+    },
   },
   shell,
   browser,

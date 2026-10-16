@@ -90,6 +90,10 @@
       "types": "./dist/design-systems/token-schema.d.ts",
       "default": "./dist/design-systems/token-schema.mjs"
     },
+    "./prompts/comment-identity": {
+      "types": "./dist/prompts/comment-identity.d.ts",
+      "default": "./dist/prompts/comment-identity.mjs"
+    },
     "./critique": {
       "types": "./dist/critique.d.ts",
       "default": "./dist/critique.mjs"

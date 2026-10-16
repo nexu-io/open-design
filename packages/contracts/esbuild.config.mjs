@@ -6,6 +6,7 @@ await build({
   entryPoints: [
     "./src/index.ts",
     "./src/critique.ts",
+    "./src/prompts/comment-identity.ts",
     "./src/api/connectionTest.ts",
     "./src/api/amrWallet.ts",
     "./src/api/orbit.ts",

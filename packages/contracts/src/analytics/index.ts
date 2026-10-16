@@ -6,3 +6,4 @@ export * from './observability.js';
 export * from './client-observability.js';
 export * from './run-schema-v4.js';
 export * from './update-lifecycle.js';
+export * from './share-observation.js';

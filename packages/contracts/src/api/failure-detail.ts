@@ -30,6 +30,12 @@ export type ApiFailureReason =
   | 'object_store'
   | 'network'
   | 'empty_response'
+  /** Local pinned-session preparation failed before the command started. */
+  | 'session_setup'
+  /** Cleanup failed after a command settled; its remote outcome is not inferred. */
+  | 'session_cleanup'
+  /** The CLI output did not confirm the exact requested publication. */
+  | 'invalid_receipt'
   // Deploy outcomes.
   | 'coded'
   | 'provider_rejected'
@@ -55,7 +61,8 @@ export const API_FAILURE_STAGES: readonly ApiFailureStage[] = [
 
 export const API_FAILURE_REASONS: readonly ApiFailureReason[] = [
   'timeout', 'aborted', 'cli_missing', 'not_signed_in', 'upstream_http',
-  'object_store', 'network', 'empty_response', 'coded', 'provider_rejected',
+  'object_store', 'network', 'empty_response', 'session_setup', 'session_cleanup',
+  'invalid_receipt', 'coded', 'provider_rejected',
   'provider_token_invalid', 'provider_unreachable', 'local_file', 'internal',
   'unknown',
 ];

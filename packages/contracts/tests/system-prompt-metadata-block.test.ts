@@ -1,21 +1,35 @@
 // Characterization test for renderMetadataBlock (internal to system.ts).
-// composeSystemPrompt pushes the metadata block as its final part and gates
-// every later part behind `!isAskMode`, so composing in 'chat' (ask) mode and slicing
-// from the "## Project metadata" marker yields exactly the metadata block.
-// These snapshots pin the block across kinds/flags so the decomposition of
-// renderMetadataBlock into per-concern helpers is provably behavior-preserving.
+// Chat mode omits generation-only sections but still appends the shared comment
+// identity directive. Exclude that verified suffix, not arbitrary Markdown
+// separators that may also occur inside metadata reference content.
+// These snapshots pin only the metadata block across kinds/flags.
 
 import { describe, expect, it } from 'vitest';
+import { COMMENT_IDENTITY_EDIT_DIRECTIVE } from '../src/prompts/comment-identity.js';
 import { composeSystemPrompt } from '../src/prompts/system.js';
 import type { ProjectMetadata, ProjectTemplate } from '../src/api/projects.js';
 
 function metadataBlock(metadata: ProjectMetadata, template?: ProjectTemplate): string {
   const out = composeSystemPrompt({ metadata, template, sessionMode: 'chat' });
+  const trailingDirective = `\n\n---\n\n${COMMENT_IDENTITY_EDIT_DIRECTIVE}`;
+  expect(out.endsWith(trailingDirective)).toBe(true);
   const idx = out.indexOf('\n\n## Project metadata');
-  return idx === -1 ? '' : out.slice(idx);
+  return idx === -1 ? '' : out.slice(idx, out.length - trailingDirective.length);
 }
 
 describe('renderMetadataBlock (characterization via composeSystemPrompt chat-mode)', () => {
+  it('preserves separators inside metadata references without including the trailing directive', () => {
+    const referenceContent = '<!-- before\n\n---\n\nafter -->';
+    const block = metadataBlock({ kind: 'template' }, {
+      id: 'metadata-boundary',
+      name: 'Metadata boundary',
+      createdAt: 0,
+      files: [{ name: 'index.html', content: referenceContent }],
+    });
+    expect(block).toContain(referenceContent);
+    expect(block).not.toContain(COMMENT_IDENTITY_EDIT_DIRECTIVE);
+  });
+
   it('prototype with platform, cross-platform targets, and flags', () => {
     const block = metadataBlock({
       kind: 'prototype',

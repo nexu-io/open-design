@@ -12,6 +12,10 @@ describe('parseApiFailureDetail', () => {
     })).toEqual({ stage: 'push', reason: 'upstream_http', upstreamStatus: 503, upstreamCode: 'resource_hub_unavailable' });
   });
 
+  it.each(['session_setup', 'session_cleanup', 'invalid_receipt'])('accepts safe share failure reason %s', reason => {
+    expect(parseApiFailureDetail({ stage: 'snapshot', reason, message: 'private text' })).toEqual({ stage: 'snapshot', reason });
+  });
+
   it('rejects unknown stages or reasons', () => {
     expect(parseApiFailureDetail({ stage: 'push', reason: 'see the logs' })).toBeUndefined();
     expect(parseApiFailureDetail({ stage: 'upload', reason: 'timeout' })).toBeUndefined();

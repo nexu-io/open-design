@@ -1239,6 +1239,26 @@ describe('2026-09-14 retry replaces the old error surface without erasing histor
     expect(screen.queryByTestId('chat-run-error-card')).toBeNull();
     expect(chatSurface.props?.messages.filter((message) => message.role === 'assistant'))
       .toHaveLength(1);
+    expect(screen.queryByText('chat.sendTargetMissing')).toBeNull();
+    expectOriginalFailurePreserved();
+  });
+
+  it('shows a missing-target notice when sending after project deletion without creating a run card', async () => {
+    const getRun = captureRun();
+    await renderRealChat();
+    fireEvent.click(screen.getByTestId('chat-error-retry'));
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      getRun().handlers.onError(Object.assign(new Error('conversation not found'), {
+        code: 'CONVERSATION_NOT_FOUND',
+      }));
+    });
+
+    expect(await screen.findByText('chat.sendTargetMissing')).toBeTruthy();
+    expect(screen.queryByTestId('chat-run-error-card')).toBeNull();
+    expect(chatSurface.props?.messages.find((message) =>
+      message.id === userMessage.id,
+    )?.sendFailed).toBe(true);
     expectOriginalFailurePreserved();
   });
 
