@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 
-import type { ChatMessage } from '@open-design/contracts';
+import type { ChatMessage, MessagesStreamRecord } from '@open-design/contracts';
 import { strategyPackageHashFromDigests } from '@open-design/plugin-runtime';
 import express, { type Response } from 'express';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -141,6 +141,7 @@ async function readHistory(
   db: Db,
   dataDir: string,
   options: {
+    stream?: boolean;
     beforeRead?: (origin: string) => Promise<void>;
     authorizeProjectRequest?: RegisterProjectConversationRoutesDeps['authorizeProjectRequest'];
   } = {},
@@ -174,8 +175,15 @@ async function readHistory(
     await options.beforeRead?.(`http://127.0.0.1:${port}`);
     const response = await fetch(
       `http://127.0.0.1:${port}/api/projects/${PROJECT_ID}/conversations/${CONVERSATION_ID}/messages`,
+      options.stream ? { headers: { Accept: 'application/x-ndjson' } } : undefined,
     );
     expect(response.status).toBe(200);
+    if (options.stream) {
+      const records = (await response.text()).trim().split('\n')
+        .map((line) => JSON.parse(line) as MessagesStreamRecord);
+      expect(records.at(-1)).toEqual({ type: 'end', count: records.length - 1 });
+      return records.flatMap((record) => record.type === 'message' ? [record.message] : []);
+    }
     const body = await response.json() as { messages: ChatMessage[] };
     return body.messages;
   } finally {
@@ -201,6 +209,21 @@ describe('persisted strategy verdict in conversation history', () => {
   afterEach(() => {
     closeDatabase();
     fs.rmSync(dataDir, { recursive: true, force: true });
+  });
+
+  it('preserves task verdicts and physical Run metadata in the streamed representation', async () => {
+    seedTaskAndMessage(db, 'blocked');
+    const json = await readHistory(db, dataDir);
+    const streamed = await readHistory(db, dataDir, { stream: true });
+    expect(streamed).toEqual(json);
+    expect(streamed[0]).toMatchObject({
+      runId: RUN_ID,
+      runStatus: 'succeeded',
+      strategyTaskExecutionId: TASK_ID,
+      strategyTaskRunIndex: 0,
+      strategyTaskBlocked: true,
+      strategyTaskBlockedText: REPLY,
+    });
   });
 
   it('clears retired blocked verdicts on restart without rewriting physical success', async () => {

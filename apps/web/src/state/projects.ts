@@ -12,6 +12,7 @@ import { BackoffController, type BackoffOptions } from '../lib/backoff';
 import { markProjectCreatedByViewer } from '../collab/useProjectCollab';
 import {
   API_ERROR_CODES,
+  MESSAGES_STREAM_CONTENT_TYPE,
   isSameWorkspacePrincipal,
   type ApiErrorCode,
 } from '@open-design/contracts';
@@ -43,6 +44,7 @@ import type {
   WorkspaceProjectsResponse,
 } from '@open-design/contracts';
 import { randomUUID } from '../utils/uuid';
+import { readMessageStream } from './read-message-stream';
 import { markProjectDisplaySnapshotsDirty } from './project-display-cache';
 import {
   workspaceIdentityCacheKey,
@@ -1461,12 +1463,13 @@ export async function listMessages(
   try {
     const resp = await fetch(
       `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages`,
-      workspaceContext || signal
-        ? {
-            ...(workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : {}),
-            ...(signal ? { signal } : {}),
-          }
-        : undefined,
+      {
+        headers: {
+          Accept: MESSAGES_STREAM_CONTENT_TYPE,
+          ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
+        },
+        ...(signal ? { signal } : {}),
+      },
     );
     if (!resp.ok) {
       const failure = await readProjectMessageListError(resp);
@@ -1476,6 +1479,9 @@ export async function listMessages(
         failure.code,
         failure.retryable,
       );
+    }
+    if (resp.headers.get('content-type')?.split(';')[0]?.trim() === MESSAGES_STREAM_CONTENT_TYPE) {
+      return await readMessageStream(resp, signal);
     }
     const json = (await resp.json()) as { messages: ChatMessage[] };
     return json.messages ?? [];
