@@ -223,7 +223,7 @@ type AssemblyRecord = Readonly<{
  * and no other.
  *
  * The locale compared is the one the daemon OFFERED, not the one it asked for.
- * Vela resolves a placement locale through [requested, base language, en-US],
+ * Vela selects one declared locale under the frozen source's language policy,
  * so a zh-CN request can legitimately be answered -- and cached -- as en-US,
  * and `held` reports that faithfully. Comparing the requested locale here
  * would strand every placement the server answers through a fallback.

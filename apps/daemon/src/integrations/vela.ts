@@ -44,6 +44,7 @@ const AMR_ENTRY_SOURCES: ReadonlySet<TrackingAmrEntrySource> = new Set([
   'chat_upgrade_card',
   'chat_upgrade_card_auto_recharge',
   'home_balance_gate_upgrade',
+  'cms_campaign_primary_cta',
   'chat_low_balance_warn_recharge',
   'home_low_balance_warn_recharge',
   'chat_balance_gate_sign_in',
@@ -130,6 +131,7 @@ const AMR_ENTRY_SOURCE_PAGE_BY_SOURCE: Record<
   chat_upgrade_card: 'chat_panel',
   chat_upgrade_card_auto_recharge: 'chat_panel',
   home_balance_gate_upgrade: 'home',
+  cms_campaign_primary_cta: 'home',
   chat_low_balance_warn_recharge: 'chat_panel',
   home_low_balance_warn_recharge: 'home',
   chat_balance_gate_sign_in: 'chat_panel',
@@ -165,6 +167,8 @@ const AMR_ANALYTICS_ENVS: ReadonlySet<AmrAnalyticsEnv> = new Set([
 ]);
 
 export interface AmrEntryAnalyticsPayload {
+  /** Strict UUID accepted exclusively for a CMS primary's relationship mirror. */
+  cmsEventId?: string;
   pageName: 'open_design';
   sourcePageName: AmrEntrySourcePageName;
   area: 'amr_entry';
@@ -1588,6 +1592,7 @@ export function parseAmrEntryAnalyticsPayload(
   const sourceProduct = raw.sourceProduct;
   const sourceDetail = raw.sourceDetail;
   const entryOccurredAt = raw.entryOccurredAt;
+  const cmsEventId = raw.cmsEventId;
   const campaignId = raw.campaignId;
   const conversionSource = raw.conversionSource;
   const hasCampaignId = campaignId !== undefined;
@@ -1597,7 +1602,8 @@ export function parseAmrEntryAnalyticsPayload(
   const odSource = sanitizeOptionalProfileValue(raw.odSource);
   const odUseCase = sanitizeOptionalProfileList(raw.odUseCase);
   if (
-    pageName !== 'open_design'
+    (cmsEventId !== undefined && (sourceDetail !== 'cms_campaign_primary_cta' || !isCanonicalAmrAuthAttemptId(cmsEventId)))
+    || pageName !== 'open_design'
     || typeof sourcePageName !== 'string'
     || !AMR_ENTRY_SOURCE_PAGES.has(sourcePageName as AmrEntrySourcePageName)
     || area !== 'amr_entry'
@@ -1639,6 +1645,7 @@ export function parseAmrEntryAnalyticsPayload(
     sourceProduct,
     sourceDetail: sourceDetail as TrackingAmrEntrySource,
     entryOccurredAt,
+    ...(cmsEventId !== undefined ? { cmsEventId: cmsEventId as string } : {}),
     ...(hasCampaignId ? { campaignId: campaignId as TrackingCampaignId } : {}),
     ...(hasConversionSource
       ? { conversionSource: conversionSource as TrackingCampaignConversionSource }
@@ -1758,7 +1765,8 @@ export async function mirrorAmrEntryAnalytics(
   payload: AmrEntryAnalyticsPayload,
   deps: MirrorAmrEntryAnalyticsDeps = {},
 ): Promise<MirrorAmrEntryAnalyticsResult> {
-  return mirrorAmrAnalyticsEvent(buildAmrEntryAnalyticsCommon(payload, deps), payload, deps);
+  const { cmsEventId: _cmsEventId, ...entryPayload } = payload;
+  return mirrorAmrAnalyticsEvent(buildAmrEntryAnalyticsCommon(payload, deps), entryPayload, deps);
 }
 
 export async function mirrorAmrOnboardingProfileAnalytics(
@@ -1834,7 +1842,7 @@ function buildAmrEntryAnalyticsCommon(
   const anonymousId = context?.deviceId?.trim() || payload.entryId;
   const sessionId = context?.sessionId?.trim() || payload.entryId;
   return {
-    eventId: `od-amr-entry-${payload.entryId}`,
+    eventId: payload.cmsEventId ?? `od-amr-entry-${payload.entryId}`,
     eventTime: payload.entryOccurredAt,
     registryKey: 'open_design_amr_entry',
     eventName: 'amr_entry',

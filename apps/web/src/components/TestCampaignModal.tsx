@@ -1,15 +1,30 @@
 import {
-	TOUCHPOINT_COMPONENT_V2_RUNTIME_API_VERSION,
-	TOUCHPOINT_COMPONENT_V2_SDK_VERSION,
-	TOUCHPOINT_COMPONENT_V2_WRAPPER_VERSION,
+	prepareCmsTouchpointContent,
+	captureCmsVisible,
+	captureCmsPrimary,
+	captureCmsClose,
+	cmsPrimaryCapture,
+	cmsActionCapture,
+	cmsActionButtonFacts,
+} from "../analytics/cms-touchpoints";
+import { testTouchpointBehaviorEvent, testTouchpointCtaEvent, testTouchpointBehaviorQueue } from "./test-touchpoint-behavior";
+import type { Track } from "../analytics/events";
+import type { TouchpointCloseReason } from "@open-design/contracts";
+import { useTouchpointLoadOwner, touchpointClientResourceSizes, touchpointResponseFailure, type TouchpointLoadAttempt } from "./touchpoint-load-observability";
+import { parseTouchpointLoadMetrics, touchpointUtf8Bytes, TOUCHPOINT_LOAD_METRICS_HEADER } from "@open-design/contracts/api/touchpointLoadResults";
+import { useAnalytics } from "../analytics/provider";
+import type { ConsolePricingTargetOptions } from "./console-pricing-target";
+import {
+	type TouchpointTimeContext,
 } from "@open-design/contracts";
 import type {
 	TestRuntimeContext,
 	TestRuntimeDecision,
 	TestRuntimeContextMismatch,
 } from "@open-design/contracts/api/touchpointTestRuntime";
+import { touchpointTestContextIdentitySchema, touchpointTestAutomatedReportSchema, type TouchpointTestBehaviorEvent } from "@open-design/contracts/api/touchpointTestRuntime";
 import { getOpenDesignHost, OPEN_DESIGN_HOST_VERSION } from "@open-design/host";
-import { mountTouchpoint } from "./touchpoint-lifecycle";
+import { touchpointTimeContext, mountTouchpoint } from "./touchpoint-lifecycle";
 import {
 	navigateCampaignTarget,
 	resolveCampaignTarget,
@@ -61,15 +76,37 @@ export const TEST_CAMPAIGN_MODAL_PLACEMENT =
 export const TEST_CAMPAIGN_MODAL_CAPABILITIES = [
 	"close",
 	"static-action",
+	"countdown-v1",
+	"action-console-pricing-v1",
 ] as const;
 const supportedCapabilities = new Set<string>(TEST_CAMPAIGN_MODAL_CAPABILITIES);
-const placementCapabilities = new Set(["hover", "static-action"]);
+const placementCapabilities = new Set(["hover", "static-action", "countdown-v1", "action-console-pricing-v1"]);
 type Scenario = "realtime";
 export type TestContext = TestRuntimeContext;
 export type TestDecision = TestRuntimeDecision<
 	WebTouchpointContent,
 	TouchpointStaticAction[]
 >;
+const testDecisionTimes = new WeakMap<TestDecision, TouchpointTimeContext>();
+/** Retained content uses the newest grant's clock, never a renewed calibration of old serverTime. */
+export function testTouchpointTimeContext(decision: TestDecision): TouchpointTimeContext {
+	let time = testDecisionTimes.get(decision);
+	if (!time) { time = touchpointTimeContext(decision); testDecisionTimes.set(decision, time); }
+	return time;
+}
+const testLoadAttempts = new WeakMap<TestDecision, TouchpointLoadAttempt>();
+export const testTouchpointLoadAttempt = (decision: TestDecision) => testLoadAttempts.get(decision);
+function retainTestDecision(previous: TestDecision | undefined, next: TestDecision): TestDecision {
+	// Retry unfinished presentations within this session; route remounts already
+	// create a new host and retain the immutable decision object as before.
+	const priorAttempt = previous && testLoadAttempts.get(previous);
+	const attempt = testLoadAttempts.get(next);
+	const retryMount = priorAttempt && attempt && priorAttempt.sessionId === attempt.sessionId && !priorAttempt.renewable;
+	const retained = previous && !retryMount ? previous : next;
+	testDecisionTimes.set(retained, testTouchpointTimeContext(next));
+	if (attempt) testLoadAttempts.set(retained, attempt);
+	return retained;
+}
 export type TestRuntimeSession = Readonly<{
 	selectionKey: string;
 	deployment: TestDeployment;
@@ -96,17 +133,32 @@ export function observeTestRuntimeIdentity(authenticated: boolean, owner: string
 	const scope = supportsHost(authenticated) && owner ? JSON.stringify([owner, locale]) : null;
 	if (retainedTestScope === scope) return;
 	invalidateRetainedTestRuntime();
+	testTouchpointBehaviorQueue.clear();
 	retainedTestScope = scope;
 }
 
 let currentTestSession: TestRuntimeSession | null = null;
+function behaviorScope(session: TestRuntimeSession | null): string | null {
+	return session ? JSON.stringify([session.selectionKey, session.context.testerMemberId, session.context.contextId,
+		session.context.generation, session.context.contextToken, session.deployment.snapshotHash,
+		[...new Set([...session.decisions.values()].map(decision => decision.content.locale))].sort()]) : null;
+}
+function reportTestBehavior(session: TestRuntimeSession, event: TouchpointTestBehaviorEvent | null, receipt?: TouchpointLoadAttempt): boolean {
+	if (!event) return false;
+	const scope = behaviorScope(session);
+	return testTouchpointBehaviorQueue.enqueue(event, () => {
+		const current = currentTestSession;
+		return !!current && behaviorScope(current) === scope && current.isAuthorized(event.placementKey as TestCampaignPlacement) &&
+			current.decisions.get(event.placementKey as TestCampaignPlacement)?.testContext.scheduleState === "active";
+	}, receipt && (outcome => receipt.report(outcome.result, { http_status: outcome.httpStatus })));
+}
 const testRuntimeListeners = new Set<() => void>();
 /**
  * One entry per visible snapshot placement while its receipt is being
  * delivered or after the server accepted it. A failed delivery removes its
  * entry, so only a later visibility can start another one.
  */
-type AcceptanceDelivery = { controller: AbortController; accepted: boolean };
+type AcceptanceDelivery = { controller: AbortController; accepted: boolean; retryAutomated?: () => void };
 const acceptanceState = new Map<string, AcceptanceDelivery>();
 function resetAcceptanceDelivery(): void {
 	for (const delivery of acceptanceState.values()) delivery.controller.abort();
@@ -129,8 +181,10 @@ export function useTestRuntime(): TestRuntimeSession | null {
 export function setTestRuntimeSession(
 	session: TestRuntimeSession | null,
 ): void {
+	if (behaviorScope(currentTestSession) !== behaviorScope(session)) testTouchpointBehaviorQueue.clear();
 	if (
 		!session?.decisions.size ||
+		behaviorScope(currentTestSession) !== behaviorScope(session) ||
 		currentTestSession?.selectionKey !== session?.selectionKey ||
 		currentTestSession?.context.testerMemberId !==
 			session?.context.testerMemberId ||
@@ -139,6 +193,7 @@ export function setTestRuntimeSession(
 	)
 		resetAcceptanceDelivery();
 	currentTestSession = session;
+	testTouchpointBehaviorQueue.cancelStale();
 	for (const listener of testRuntimeListeners) listener();
 }
 export function clearTestRuntimeSession(): void {
@@ -146,6 +201,7 @@ export function clearTestRuntimeSession(): void {
 	unpublishTestRuntimeSession();
 }
 function unpublishTestRuntimeSession(): void {
+	testTouchpointBehaviorQueue.clear();
 	if (!currentTestSession) return;
 	currentTestSession = null;
 	resetAcceptanceDelivery();
@@ -155,12 +211,11 @@ function unpublishTestRuntimeSession(): void {
 /** The acquired context pins the protocol; malformed/partial bundles never downgrade. */
 type TestContextMode = "legacy" | "immutable" | "invalid";
 function testContextMode(context: TestContext | null | undefined): TestContextMode {
+	if (context && "testerAppUserId" in context && (typeof context.testerAppUserId !== "string" || !context.testerAppUserId.trim())) return "invalid";
 	if (!context || typeof context !== "object") return "invalid";
 	const fields = ["contextId", "generation", "contextToken"] as const;
 	if (fields.every((key) => !(key in context))) return "legacy";
-	return typeof context.contextId === "string" && /^ctx-v1:[a-f0-9]{64}$/.test(context.contextId) &&
-		typeof context.generation === "string" && /^(0|[1-9][0-9]*)$/.test(context.generation) && context.generation.length <= 32 &&
-		typeof context.contextToken === "string" && /^ctx-token-v1:[a-f0-9]{64}$/.test(context.contextToken) &&
+	return touchpointTestContextIdentitySchema.safeParse({ contextId: context.contextId, generation: context.generation, contextToken: context.contextToken }).success &&
 		typeof context.testerMemberId === "string" && context.testerMemberId.length > 0
 		? "immutable" : "invalid";
 }
@@ -170,7 +225,7 @@ function sameTestContext(left: TestContext, right: TestContext): boolean {
 	const mode = testContextMode(left);
 	return mode !== "invalid" && testContextMode(right) === mode &&
 		left.deploymentId === right.deploymentId && left.scenario === right.scenario &&
-		left.testerMemberId === right.testerMemberId &&
+		left.testerMemberId === right.testerMemberId && left.testerAppUserId === right.testerAppUserId &&
 		(mode === "immutable"
 			? left.contextId === right.contextId && left.generation === right.generation && left.contextToken === right.contextToken
 			: left.updatedAt === right.updatedAt);
@@ -206,7 +261,7 @@ class StaleTestContextError extends Error {
  */
 class TestRuntimeResponseError extends Error {
 	readonly touchpointWithdrawal: boolean;
-	constructor(code: string, status: number) {
+	constructor(code: string, readonly status: number) {
 		super(code);
 		this.touchpointWithdrawal = [401, 403, 410].includes(status);
 	}
@@ -391,6 +446,7 @@ function isLegitimateContextDrift(received: TestContext, expected: TestContext):
 export async function dispatchTestCampaignAction(
 	decision: TestDecision,
 	actionId: string,
+	pricingOptions?: ConsolePricingTargetOptions,
 ): Promise<boolean> {
 	const session = currentTestSession;
 	const placement = TEST_CAMPAIGN_PLACEMENTS.find(
@@ -413,7 +469,15 @@ export async function dispatchTestCampaignAction(
 		target
 	) {
 		try {
-			if (await navigateCampaignTarget(target)) return true;
+			const attempt = testLoadAttempts.get(decision);
+			const capture = attempt?.behaviorEventId ? cmsPrimaryCapture(attempt, decision) : undefined;
+			const cmsCapture = cmsActionCapture(capture, decision, actionId);
+			const options = { ...pricingOptions, cmsCapture };
+			// The clicked button's own identity and verified role, never a fixed primary_cta.
+			if (cmsCapture && attempt?.behaviorEventId) reportTestBehavior(session,
+				testTouchpointCtaEvent(session.context, attempt, cmsCapture.eventId, cmsActionButtonFacts(cmsCapture, decision)));
+			if (target.kind !== "console-pricing" && options.track && cmsCapture) captureCmsPrimary(options.track, cmsCapture);
+			if (await navigateCampaignTarget(target, options)) return true;
 		} catch {
 			// Report host navigation failure through the same action contract.
 		}
@@ -529,6 +593,8 @@ export async function recordTestAcceptance(
 		locale: string;
 		scenario: Scenario;
 		hostVersion?: string;
+		runtime?: WebTouchpointContent["runtime"];
+		attempt?: TouchpointLoadAttempt;
 	}>,
 	signal?: AbortSignal,
 ): Promise<unknown> {
@@ -544,30 +610,25 @@ export async function recordTestAcceptance(
 				locale: input.locale,
 				scenario: input.scenario,
 				evidence: acceptanceEvidence(input),
-				hostCompatibility: process.env.NEXT_PUBLIC_CMS_HOST_RELEASE
+				hostCompatibility: input.runtime && process.env.NEXT_PUBLIC_CMS_HOST_RELEASE
 					? {
 							version: 1,
 							snapshotHash: input.snapshotHash,
 							hostFamily: "open-design-desktop",
 							platform: "desktop",
 							hostRelease: process.env.NEXT_PUBLIC_CMS_HOST_RELEASE,
-							runtime: {
-								kind: "web-component",
-								apiVersion: TOUCHPOINT_COMPONENT_V2_RUNTIME_API_VERSION,
-								wrapperVersion: TOUCHPOINT_COMPONENT_V2_WRAPPER_VERSION,
-								sdkVersion: TOUCHPOINT_COMPONENT_V2_SDK_VERSION,
-							},
+							runtime: input.runtime,
 							capabilities:
 								input.placementKey === TEST_CAMPAIGN_MODAL_PLACEMENT
 									? [...TEST_CAMPAIGN_MODAL_CAPABILITIES]
 									: input.placementKey === "opend.home.account-badge"
-										? ["static-action"]
+										? ["static-action", "countdown-v1", "action-console-pricing-v1"]
 										: [...placementCapabilities],
 						}
 					: undefined,
 			}),
 		},
-	);
+	).then(response => { input.attempt?.report(response.ok ? "success" : "failed"); return response; }, error => { input.attempt?.report(signal?.aborted ? "unknown" : "failed"); throw error; });
 	if (!response.ok)
 		throw new Error(`touchpoint_test_acceptance_http_${response.status}`);
 	return response.json().catch(() => undefined);
@@ -578,6 +639,7 @@ export function recordVisibleTestTouchpoint(
 	session: TestRuntimeSession,
 	decision: TestDecision,
 	placementKey: TestCampaignPlacement,
+	track?: Track,
 ): void {
 	if (
 		currentTestSession !== session ||
@@ -590,7 +652,16 @@ export function recordVisibleTestTouchpoint(
 	const snapshotHash =
 		session.deployment.snapshotHash ?? decision.snapshotHash ?? "";
 	const key = `${session.deployment.id}:${snapshotHash}:${placementKey}`;
-	if (acceptanceState.has(key)) return;
+	const attempt = testLoadAttempts.get(decision);
+	const eventId = attempt?.visible();
+	if (track) captureCmsVisible(track, attempt, eventId);
+	// The exposure receipt (test-events) owns this attempt's report record, like
+	// Production's exposure event: rendering already succeeded, so a failed
+	// receipt is report_result=failed beside the visible terminal, never a load
+	// failure. Legacy contexts send no receipt; their acceptance stays the report.
+	const receiptReported = !!eventId && reportTestBehavior(session, testTouchpointBehaviorEvent(session.context, attempt, eventId, "exposure"), attempt);
+	const previousDelivery = acceptanceState.get(key);
+	if (previousDelivery) { previousDelivery.retryAutomated?.(); return; }
 	const delivery: AcceptanceDelivery = {
 		controller: new AbortController(),
 		accepted: false,
@@ -608,6 +679,8 @@ export function recordVisibleTestTouchpoint(
 			current?.selectionKey === session.selectionKey &&
 			current.isAuthorized(placementKey) &&
 			current.context.testerMemberId === session.context.testerMemberId &&
+			sameTestContext(current.context, session.context) &&
+			currentDecision?.content.locale === decision.content.locale &&
 			current.context.scenario === "realtime" &&
 			current.deployment.id === session.deployment.id &&
 			(current.deployment.snapshotHash ?? currentDecision?.snapshotHash ?? "") ===
@@ -622,9 +695,43 @@ export function recordVisibleTestTouchpoint(
 			placementKey,
 			locale: decision.content.locale,
 			scenario: session.context.scenario,
+			runtime: decision.content.runtime,
+			attempt: receiptReported ? undefined : attempt,
 		},
 		delivery.controller.signal,
 		isCurrent,
+		undefined,
+		(receipt) => {
+			// Only a verified fixed-template mount with the actual display receipt
+			// and release attestation can request checks. ZIPs do not acquire a gate.
+			if (decision.content.manifest.material?.sourceDslVersion !== 3 ||
+				!session.context.contextToken || !process.env.NEXT_PUBLIC_CMS_HOST_RELEASE ||
+				typeof receipt !== "object" || receipt === null || !("id" in receipt)) return;
+			const parsed = touchpointTestAutomatedReportSchema.safeParse({
+				version: 1, reportId: crypto.randomUUID(), snapshotHash, placementKey,
+				locale: decision.content.locale, contextToken: session.context.contextToken,
+				acceptanceId: receipt.id, hostRelease: process.env.NEXT_PUBLIC_CMS_HOST_RELEASE,
+				observations: [],
+			});
+			if (!parsed.success) return;
+			const body = JSON.stringify(parsed.data);
+			let running = false, received = false;
+			delivery.retryAutomated = () => {
+				if (running || received || !isCurrent()) return;
+				running = true;
+				void deliverTestAcceptance({ deploymentId: session.deployment.id, snapshotHash,
+					placementKey, locale: decision.content.locale, scenario: "realtime" },
+					delivery.controller.signal, isCurrent, async signal => {
+						const response = await fetch(`/api/touchpoints/test-runtime/test-deployments/${encodeURIComponent(session.deployment.id)}/automated-reports`, {
+							method: "POST", signal, headers: { "content-type": "application/json" }, body,
+						});
+						if (!response.ok) throw new Error(`touchpoint_test_acceptance_http_${response.status}`);
+						// A 201/unverified receipt is delivery only; it never becomes a pass.
+						return response.json().catch(() => undefined);
+					}).then(success => { received = success; }).finally(() => { running = false; });
+			};
+			delivery.retryAutomated();
+		},
 	)
 		.then((accepted) => {
 			if (accepted && isCurrent()) delivery.accepted = true;
@@ -633,6 +740,22 @@ export function recordVisibleTestTouchpoint(
 			if (!delivery.accepted && acceptanceState.get(key) === delivery)
 				acceptanceState.delete(key);
 		});
+}
+
+/** Known manual dismissals share C with analytics even when its consent suppresses capture. */
+export function recordTestTouchpointClose(decision: TestDecision, reason: TouchpointCloseReason | undefined, track: Track): void {
+	const session = currentTestSession;
+	const placement = decision.placementKey as TestCampaignPlacement;
+	const attempt = testLoadAttempts.get(decision);
+	if (!session || !session.isAuthorized(placement) || session.decisions.get(placement) !== decision ||
+		!decisionMatchesSelection(decision, session.context, session.deployment, placement) || !attempt?.behaviorEventId ||
+		!attempt.renewable ||
+		(placement !== TEST_CAMPAIGN_MODAL_PLACEMENT && placement !== "opend.home.hover-layer") ||
+		(reason !== "close" && reason !== "secondary_close") ||
+		(placement === "opend.home.hover-layer" && reason !== "close")) return;
+	const eventId = crypto.randomUUID();
+	captureCmsClose(track, attempt, reason, eventId);
+	reportTestBehavior(session, testTouchpointBehaviorEvent(session.context, attempt, eventId, "click", reason));
 }
 
 /** Backoff before each retry of one visibility's receipt (OPEND-3327). */
@@ -699,6 +822,8 @@ async function deliverTestAcceptance(
 	input: Parameters<typeof recordTestAcceptance>[0],
 	signal: AbortSignal,
 	isCurrent: () => boolean,
+	submit: (signal: AbortSignal) => Promise<unknown> = signal => recordTestAcceptance(input, signal),
+	onAccepted?: (receipt: unknown) => void,
 ): Promise<boolean> {
 	for (let attempt = 0; attempt <= TEST_ACCEPTANCE_RETRY_MS.length; attempt++) {
 		if (attempt > 0) {
@@ -719,7 +844,8 @@ async function deliverTestAcceptance(
 			),
 		);
 		try {
-			await Promise.race([recordTestAcceptance(input, request.signal), abandoned]);
+			const receipt = await Promise.race([submit(request.signal), abandoned]);
+			if (isCurrent()) onAccepted?.(receipt);
 			return isCurrent();
 		} catch (error) {
 			// Hidden is paused, not revoked: the next attempt waits to be shown.
@@ -771,7 +897,7 @@ export type TestTouchpointMountProps = Readonly<{
 		decision: TestDecision,
 		placementKey: TestCampaignPlacement,
 	) => void;
-	requestClose?: () => void;
+	requestClose?: (reason?: TouchpointCloseReason) => void;
 	isAuthorized: () => boolean;
 	onCloseControlChange?: (available: boolean | null) => void;
 	/**
@@ -793,7 +919,15 @@ export function TestTouchpointMount({
 	onCloseControlChange,
 	onPresentedChange,
 }: TestTouchpointMountProps) {
+	const analytics = useAnalytics();
+	const trackRef = useRef(analytics.track);
+	trackRef.current = analytics.track;
+	const rendererTime = testTouchpointTimeContext(decision);
+	const rendererTimeRef = useRef(rendererTime);
+	rendererTimeRef.current = rendererTime;
+	const mountedRef = useRef<ReturnType<typeof mountTouchpoint> | null>(null);
 	const containerRef = useRef<HTMLDivElement | null>(null);
+	useEffect(() => { void mountedRef.current?.updateTime().catch(() => onPresentedChange?.(false)); }, [rendererTime, onPresentedChange]);
 	const [ready, setReady] = useState(false);
 	useEffect(() => {
 		const container = containerRef.current;
@@ -807,6 +941,7 @@ export function TestTouchpointMount({
 			currentTestSession.decisions.get(placementKey) === decision;
 		const dispose = mountTouchpoint(container, {
 			content: decision.content,
+			getTimeContext: () => rendererTimeRef.current,
 			placementKey,
 			staticActions: decision.staticActions,
 			mode: "test",
@@ -817,14 +952,15 @@ export function TestTouchpointMount({
 			dispatchAction: async (id) => {
 				// Only the modal ends with its CTA; a hover entry stays in place.
 				await completeCampaignAction(
-					dispatchTestCampaignAction(decision, id),
+					dispatchTestCampaignAction(decision, id, { track: trackRef.current }),
 					placementKey === "opend.home.campaign-modal" ? requestClose : undefined,
 					authorized,
 				);
 			},
 			requestClose,
 			onCloseControlChange,
-			onReady: () => {
+			attempt: testLoadAttempts.get(decision),
+		onReady: () => {
 				if (!authorized()) return;
 				setReady(true);
 				onPresentedChange?.(true);
@@ -839,7 +975,9 @@ export function TestTouchpointMount({
 				onPresentedChange?.(false);
 			},
 		});
+		mountedRef.current = dispose;
 		return () => {
+			mountedRef.current = null;
 			active = false;
 			dispose();
 		};
@@ -922,14 +1060,16 @@ export function TestCampaignModal({
 	const { locale } = useI18n();
 	const compatible = supportsHost(authenticated);
 	const owner = sessionSubject ?? null;
+	const observation = useTouchpointLoadOwner("test", owner, locale);
 	// Render-time authority fences even a transport that ignores abort, before effects run.
 	const selectionAuthority = useRef({ compatible, owner, locale });
 	selectionAuthority.current = { compatible, owner, locale };
 	observeTestRuntimeIdentity(authenticated, owner, locale);
 	const retained = retainedTestValue(owner, locale);
 	const remountValue = useRef(retained);
-	// Directory and runtime failures pause the whole Test loading chain. Each
-	// successful recovery clears only the failure owned by that request chain.
+	// A directory or runtime failure suppresses the runtime's fast retries; both
+	// chains keep their regular cadence (D-POLL). Each successful recovery clears
+	// only the failure owned by that request chain.
 	const requests = useRef({ scope: JSON.stringify([owner, locale]), catalog: false, runtime: false });
 	const scope = JSON.stringify([owner, locale]);
 	if (requests.current.scope !== scope) requests.current = { scope, catalog: false, runtime: false };
@@ -958,7 +1098,6 @@ export function TestCampaignModal({
 		manual: showControls,
 		initialSelection: retained?.deployment,
 		onSelection: selectionChanged,
-		pauseAutomaticRequests,
 		onRequestResult: catalogResult,
 	});
 	selectedRef.current = deployment;
@@ -977,8 +1116,9 @@ export function TestCampaignModal({
 		const inheritedEpoch = retainedTestEpoch;
 		const placements = testPlacementIds(selected);
 		const independent = TEST_PRESENTATIONS.filter((group) => group.some((key) => placements.includes(key))).length > 1;
-		// A failed presentation waits for an existing recovery event; its healthy
-		// siblings keep their normal renewals rather than retrying the failed I/O.
+		// A presentation that failed is isolated for the rest of its round so its
+		// healthy siblings keep their normal renewals. The next round asks it again
+		// (D-POLL): a recovery event clears it sooner, but is never required.
 		const failedPresentations = new Map<TestCampaignPlacement, unknown>();
 		// A snapshot may be renewed without remounting only within the same UI language.
 		const selectionKey = JSON.stringify([
@@ -1038,7 +1178,7 @@ export function TestCampaignModal({
 			if (!(next && next.deploymentId === selected.id && next.scenario === "realtime" &&
 				!("simulatedAt" in next) && validIso(next.updatedAt) && mode !== "invalid" &&
 				(negotiatedMode === null || mode === negotiatedMode) &&
-				(mode !== "immutable" || (!!owner && next.testerMemberId === owner))))
+				(mode !== "immutable" || (!!owner && (next.testerAppUserId ?? next.testerMemberId) === owner))))
 				throw new TestDecisionMismatchError(decisionMismatchDetail(null,
 					context ?? inherited?.context ?? { deploymentId: selected.id, scenario: "realtime", updatedAt: "" },
 					selected, placements[0]!, { correlation, retry: 0, reason: "context_identity_invalid", receivedContext: next }));
@@ -1082,6 +1222,8 @@ export function TestCampaignModal({
 			const current = () => !signal.aborted && round === requestRound && ownsSelection();
 			if (!current()) return { kind: "retain" };
 			if (!placements.length) { requests.current.runtime = false; return { kind: "clear" }; }
+			failedPresentations.clear();
+			const observations = new Map(placements.filter(placement => !failedPresentations.has(placement)).map(placement => [placement, observation.begin(placement)]));
 			// A held context must not add a turn before the placement requests start.
 			let selectedContext: TestContext;
 			if (context) selectedContext = context;
@@ -1109,8 +1251,12 @@ export function TestCampaignModal({
 				/** Publish only complete presentations, with their own original grant clocks. */
 				const publishReady = (item: LoadedTestPlacement | null) => {
 					if (!item || !current() || siblings.signal.aborted) return;
-					if (windowBounds && (windowBounds.startsAt !== item.startsAt || windowBounds.endsAt !== item.endsAt))
-						throw new TestDecisionMismatchError(JSON.stringify({ deploymentId: diagnosticScalar(selected.id), expected: windowBounds, received: { startsAt: item.startsAt, endsAt: item.endsAt } }));
+					if (windowBounds && (windowBounds.startsAt !== item.startsAt || windowBounds.endsAt !== item.endsAt)) {
+						const expected = windowBounds;
+						// D-POLL: discard this round only; the next round re-pins the server's window.
+						windowBounds = null;
+						throw new TestDecisionMismatchError(JSON.stringify({ deploymentId: diagnosticScalar(selected.id), expected, received: { startsAt: item.startsAt, endsAt: item.endsAt } }));
+					}
 					windowBounds = { startsAt: item.startsAt, endsAt: item.endsAt };
 					ready.set(item.placementKey, item);
 					if ([...ready.values()].some((answer) => answer.decision.testContext.scheduleState !== "active")) { publish(null); return; }
@@ -1130,7 +1276,8 @@ export function TestCampaignModal({
 						if (!complete && !held) continue;
 						for (const key of keys) {
 							const answer = complete ? ready.get(key)! : null;
-							decisions.set(key, (active?.context === selectedContext && active.decisions.get(key)) || answer!.decision);
+							const previous = active?.context === selectedContext ? active.decisions.get(key) : undefined;
+							decisions.set(key, answer ? retainTestDecision(previous, answer.decision) : previous!);
 							authorizations.set(key, answer ? { received: answer.received, validForMs: answer.validForMs } : active!.authorizations.get(key)!);
 						}
 					}
@@ -1158,6 +1305,7 @@ export function TestCampaignModal({
 							])
 								.then((item) => { publishReady(item); return item; })
 								.catch((error: unknown) => {
+									if (current() && !siblings.signal.aborted) observation.failure(observations.get(placementKey)!, error);
 									if (!siblings.signal.aborted && (touchpointWithdrawsDisplay(error) || error instanceof StaleTestContextError || error instanceof TestDecisionMismatchError)) {
 										withdrawal ??= error;
 										if (independent || !(error instanceof StaleTestContextError)) publish(null);
@@ -1189,6 +1337,7 @@ export function TestCampaignModal({
 				placementKey: (typeof placements)[number],
 				requestSignal: AbortSignal,
 			) => {
+					const observed = observations.get(placementKey)!;
 					const query = new URLSearchParams({
 						deploymentId: selected.id,
 						placementKey,
@@ -1207,18 +1356,24 @@ export function TestCampaignModal({
 						if (!current() || requestSignal.aborted) return null;
 						const receivedContext = mismatch?.testContext;
 						const legitimate = mismatch?.error === "test_context_mismatch" && mismatch.reason === "context_token_mismatch" &&
-							testContextMode(selectedContext) === "immutable" && receivedContext?.testerMemberId === owner &&
+							testContextMode(selectedContext) === "immutable" && (receivedContext?.testerAppUserId ?? receivedContext?.testerMemberId) === owner &&
 							isLegitimateContextDrift(receivedContext, selectedContext);
 						const detail = decisionMismatchDetail(null, selectedContext, selected, placementKey,
 							{ ...trace(), reason: legitimate ? "context_token_mismatch" : "context_mismatch_metadata_invalid", receivedContext });
 						throw legitimate ? new StaleTestContextError(detail) : new TestDecisionMismatchError(detail);
 					}
 					if (!response.ok)
-						throw new TestRuntimeResponseError(
-							"touchpoint_test_load_failed",
-							response.status,
-						);
-					const decision = (await response.json()) as TestDecision;
+						throw Object.assign(new TestRuntimeResponseError("touchpoint_test_load_failed", response.status), await touchpointResponseFailure(response));
+					const bodyStarted = performance.now();
+					let decision: TestDecision;
+					let localTransfer: number | null = null;
+					let localBytes: number | null = null;
+					let decodeDuration: number | null = null;
+					if (typeof response.text === "function") {
+						const text = await response.text(); localBytes = touchpointUtf8Bytes(text); localTransfer = Math.max(0, performance.now() - bodyStarted);
+						const decoding = performance.now(); decision = JSON.parse(text) as TestDecision; decodeDuration = Math.max(0, performance.now() - decoding);
+					} else decision = await response.json() as TestDecision;
+					const rendererReceivedAt = Date.now();
 					if (!current() || requestSignal.aborted) return null;
 					// A response with no decision identity is a failed renewal, like
 					// unreadable JSON. It cannot renew the grant or revoke the still-valid
@@ -1276,6 +1431,9 @@ export function TestCampaignModal({
 								: "ended";
 					if (decision.testContext.scheduleState !== expected)
 						throw new TestDecisionMismatchError(decisionMismatchDetail(decision, selectedContext, selected, placementKey, trace()));
+					const loadAttempt = observation.decision(placementKey, observed, decision, parseTouchpointLoadMetrics(response.headers?.get(TOUCHPOINT_LOAD_METRICS_HEADER)), { decode_validate_ms: decodeDuration, ...touchpointClientResourceSizes(decision), local_transfer_ms: localTransfer, local_response_bytes: localBytes });
+					testLoadAttempts.set(decision, loadAttempt);
+					testDecisionTimes.set(decision, touchpointTimeContext(decision, rendererReceivedAt));
 					const capabilities =
 						placementKey === TEST_CAMPAIGN_MODAL_PLACEMENT
 							? supportedCapabilities
@@ -1286,8 +1444,10 @@ export function TestCampaignModal({
 							decision.requiredCapabilities,
 							capabilities,
 						)
-					)
+					) {
+						observation.reject(placementKey, "capability_unsupported");
 						throw new Error("touchpoint_capability_unsupported");
+					}
 					if (expected === "ended")
 						return {
 							placementKey,
@@ -1298,6 +1458,14 @@ export function TestCampaignModal({
 							validForMs: 0,
 							received,
 						};
+					if (expected === "active") {
+						await prepareCmsTouchpointContent(
+							loadAttempt,
+							decision,
+							() => current() && !requestSignal.aborted,
+						);
+						if (!current() || requestSignal.aborted) return null;
+					}
 					const deadline = resolveAuthorizationDeadline(decision, TEST_MAX_AUTHORIZATION_MS);
 					if (deadline === null) throw new Error("realtime_test_runtime_required");
 					return {
@@ -1398,15 +1566,19 @@ export function TestCampaignModal({
 				windowBounds &&
 				(windowBounds.startsAt !== first.startsAt ||
 					windowBounds.endsAt !== first.endsAt)
-			)
+			) {
+				const expected = windowBounds;
+				// D-POLL: discard this round only; the next round re-pins the server's window.
+				windowBounds = null;
 				throw new TestDecisionMismatchError(
 					JSON.stringify({
 						deploymentId: diagnosticScalar(selected.id),
 						placementKey: first.placementKey,
-						expected: windowBounds,
+						expected,
 						received: { startsAt: first.startsAt, endsAt: first.endsAt },
 					}),
 				);
+			}
 			windowBounds = { startsAt: first.startsAt, endsAt: first.endsAt };
 			if (
 				decisions.some(
@@ -1437,7 +1609,7 @@ export function TestCampaignModal({
 				context: selectedContext,
 				decisions: new Map(authorized.map((item) => [
 					item.placementKey,
-					(sameContext && active?.decisions.get(item.placementKey)) || item.decision,
+					retainTestDecision(sameContext ? active?.decisions.get(item.placementKey) : undefined, item.decision),
 				])),
 				authorizations: new Map(authorized.map((item) => [item.placementKey, {
 					received: item.received, validForMs: item.validForMs,
@@ -1460,7 +1632,7 @@ export function TestCampaignModal({
 			};
 		};
 		return { selectionKey, independent, load, ownsSelection, recover: () => failedPresentations.clear() };
-	}, [deployment, locale, owner]);
+	}, [deployment, locale, owner, observation]);
 	useEffect(() => {
 		const recover = () => { if (!document.hidden) adapter?.recover(); };
 		for (const event of ["online", "focus", "pageshow"]) window.addEventListener(event, recover);
@@ -1508,6 +1680,7 @@ export function TestCampaignModal({
 		identity: adapter ? owner + ":" + adapter.selectionKey : null,
 		load,
 		stopOnFailure: true,
+		observability: observation,
 		pauseAutomaticRequests,
 		onError: (error) => {
 			requests.current.runtime = true;

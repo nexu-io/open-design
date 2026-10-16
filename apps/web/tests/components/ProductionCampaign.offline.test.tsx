@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { TOUCHPOINT_POLL_MS } from "../../src/components/touchpoint-lifecycle";
 //
 // OPEND-3436 at the three production placements. The hook-level cases pin the
 // scheduling rules; these pin that all three surfaces are actually wired to
@@ -172,13 +173,14 @@ describe("a cache-replayed activity keeps every production placement up", () => 
 			router({ "opend.home.account-badge": replayed("opend.home.account-badge") }),
 		);
 		await act(async () => {
-			await vi.advanceTimersByTimeAsync(30_000);
+			await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS);
 		});
-		const afterReplay = fetchMock.mock.calls.length;
+		const decisionRequests = () => fetchMock.mock.calls.filter(([url]) => String(url).includes("/production-runtime?")).length;
+		const afterReplay = decisionRequests();
 		await wellPastTheAuthorization();
 		expect(screen.getByTestId("production-campaign-badge")).toBeTruthy();
 		// Nothing asked again: the replay is what put this client to sleep.
-		expect(fetchMock.mock.calls.length).toBe(afterReplay);
+		expect(decisionRequests()).toBe(afterReplay);
 	});
 
 	it("campaign modal", async () => {
@@ -191,7 +193,7 @@ describe("a cache-replayed activity keeps every production placement up", () => 
 			router({ "opend.home.campaign-modal": replayed("opend.home.campaign-modal") }),
 		);
 		await act(async () => {
-			await vi.advanceTimersByTimeAsync(30_000);
+			await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS);
 		});
 		const afterReplay = fetchMock.mock.calls.length;
 		await wellPastTheAuthorization();
@@ -217,7 +219,7 @@ describe("a cache-replayed activity keeps every production placement up", () => 
 			}),
 		);
 		await act(async () => {
-			await vi.advanceTimersByTimeAsync(30_000);
+			await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS);
 		});
 		const afterReplay = fetchMock.mock.calls.length;
 		await wellPastTheAuthorization();
@@ -311,7 +313,7 @@ describe("a withdrawal reaches a screen only the daemon's cache is feeding", () 
 			router({ "opend.home.campaign-modal": replayed("opend.home.campaign-modal") }),
 		);
 		await act(async () => {
-			await vi.advanceTimersByTimeAsync(30_000);
+			await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS);
 		});
 		const afterReplay = asked(fetchMock);
 

@@ -1,0 +1,66 @@
+{
+  "fixtureVersion": 1,
+  "historicalClient": {
+    "version": "0.23.0",
+    "commit": "c2aba14421c7b6ee1ace4bee3636d3bf64ee1fa0",
+    "runtimeApiVersion": 1
+  },
+  "consumerBaseCommit": "9fc32e3df57a612d871c8fd641c5a2c8d429606f",
+  "sources": [
+    {
+      "originalPath": "apps/web/src/components/touchpoint-component.ts",
+      "snapshot": "touchpoint-component.source.txt",
+      "sha256": "c2c45db438113019f30a3ec0ba9481820899a5e47226a4d42cc5f6b83844c5b5",
+      "sizeBytes": 23519,
+      "runtimeImports": [
+        "@open-design/contracts"
+      ]
+    },
+    {
+      "originalPath": "packages/contracts/src/touchpoint-component-v2.ts",
+      "snapshot": "touchpoint-component-v2.source.txt",
+      "sha256": "6f70786b2910dc8bc845bc267650ae134be317a8c49233bbfd557b5a6ca95dec",
+      "sizeBytes": 21003,
+      "runtimeImports": [
+        "zod"
+      ]
+    }
+  ],
+  "dependencies": {
+    "zod": "3.25.76",
+    "typescript": "5.9.3",
+    "esbuild": "0.28.0"
+  },
+  "producerFixture": {
+    "file": "amr-runtime-api1.json",
+    "sha256": "7aead54bcd4643054704ee25e4c312d02a42e8a4b1c380d0d383e65b25755128",
+    "sizeBytes": 1548463,
+    "producerGitHead": "37376c5840a95c64e5356a162777dfd18b72ceb7",
+    "sourcePackageHash": "sha256:257f80c8cdb5b728fc1feaa97effd3151fce1d69b94b14099bd3510580798e6e",
+    "manifestHash": "sha256:4d084a957f0a4dbab8842d6075378eee4f7a45948a027323c0ecc1c25582fc6d",
+    "artifactHash": "sha256:0ff344b8ff94cb3fd26fe44f2c07173a3fb6f0cde720fe29d1d9dc051a852996"
+  },
+  "routing": "Compile raw pinned TypeScript in memory. Map loader contracts only to the pinned contract and its zod import to real installed zod. Route verified Blob bytes unchanged to native Node data ESM; never replace parser, SDK, module cache or lifecycle implementations.",
+  "evidenceBoundary": "Source-pinned jsdom lifecycle and current Node native ESM; FontFace shim observes API calls and bytes only. Optional CMS_HISTORICAL_CHROMIUM_EXECUTABLE explicitly runs native Blob ESM, PNG decode, custom font glyphs and cleanup in the supplied modern Chromium. No unchanged signed historical client or old engine replay is established.",
+  "pendingAcceptance": [
+    "T1",
+    "T2",
+    "T3",
+    "T4",
+    "D4",
+    "M1",
+    "H1",
+    "D7",
+    "real signed historical client/engine QA"
+  ],
+  "roleProducerFixture": {
+    "file": "amr-role-runtime-api1.json",
+    "sha256": "a5e046f49b469a2883742ead41f74892dc02df2d7ca2e877c16020626cac9d02",
+    "sizeBytes": 661925,
+    "producerGitHead": "4a9765edf438d798b852e5ed98b780f93aff7cc8",
+    "sourcePackageHash": "sha256:58aa0b7b3b612fb83da04e27687c41f4af860dcfc0ed617bcc02665298e50216",
+    "manifestHash": "sha256:baccf1155fcfd222434b921d2a8514c1a78c94ad7ad9031f783f814aa3a39ad9",
+    "artifactHash": "sha256:9f972339b95ab02d07ef658c85ac8fa9f31445dd9b691b08e1b84a9b9e587002",
+    "evidenceBoundary": "Actual registered synthetic template producer and real repository serializer consumed by source-pinned old verifier/SDK/native Node ESM; role DOM and lifecycle only. Native font/Blob proof is separate; not navigation, formal templates, signed old binary, historical engine, real Test or QA."
+  }
+}

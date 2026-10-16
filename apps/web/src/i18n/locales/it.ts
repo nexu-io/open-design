@@ -19,6 +19,8 @@ export const it: Dict = {
   'billing.codingPlanPeriodDays': '{count} giorni',
   'billing.codingPlanRemainingPercent': '{percent} % rimanente',
   "campaign.testReplay": "Riapri attività di prova",
+  "campaign.dialogLabel": "Attività",
+  "campaign.testDialogLabel": "Attività di prova",
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

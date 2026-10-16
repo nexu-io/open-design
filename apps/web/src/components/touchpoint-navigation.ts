@@ -1,7 +1,8 @@
+import { resolveConsolePricingTarget, type ConsolePricingTargetOptions } from "./console-pricing-target";
 import { openExternalUrl } from "../providers/registry";
 import type { TouchpointStaticAction } from "./touchpoint-static-actions";
 
-type NavigationTarget = Readonly<{ kind: "https" | "internal"; href: string }>;
+type NavigationTarget = Readonly<{ kind: "https" | "internal"; href: string }> | Readonly<{ kind: "console-pricing" }>;
 
 /** Internal navigation must remain on the host origin after browser normalization. */
 export function internalActionNavigationUrl(
@@ -30,6 +31,7 @@ export function resolveCampaignTarget(
 	if (matches.length !== 1) return null;
 	const target = matches[0]!.target;
 	try {
+		if (target.kind === "console-pricing") return { kind: "console-pricing" };
 		if (target.kind === "https") {
 			const url = new URL(target.url);
 			return url.protocol === "https:" && !url.username && !url.password
@@ -49,9 +51,10 @@ export function resolveCampaignTarget(
 /** Delivery mode and telemetry do not select a different navigation implementation. */
 export async function navigateCampaignTarget(
 	target: NavigationTarget,
+	pricingOptions?: ConsolePricingTargetOptions,
 ): Promise<boolean> {
-  if (target.kind === "https") {
-    try { return await openExternalUrl(target.href); } catch { return false; }
+  if (target.kind === "https" || target.kind === "console-pricing") {
+    try { return await openExternalUrl(target.kind === "console-pricing" ? resolveConsolePricingTarget(pricingOptions) : target.href); } catch { return false; }
   }
 	window.location.assign(target.href);
 	return true;

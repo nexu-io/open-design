@@ -2515,7 +2515,7 @@ describe('ALL /api/integrations/vela/message-center/*', () => {
 });
 
 describe('POST /api/integrations/vela/analytics-entry', () => {
-  it('mirrors OpenDesign AMR entry clicks to the AMR analytics ingest shape', async () => {
+  it.each(['chat_error_recharge', 'cms_campaign_primary_cta'] as const)('mirrors %s to the AMR analytics ingest shape', async (source) => {
     const requests: unknown[] = [];
     const captureServer = createServer((req, res) => {
       let raw = '';
@@ -2539,20 +2539,20 @@ describe('POST /api/integrations/vela/analytics-entry', () => {
 
     const payload = {
       pageName: 'open_design',
-      sourcePageName: 'chat_panel',
+      sourcePageName: source === 'cms_campaign_primary_cta' ? 'home' : 'chat_panel',
       area: 'amr_entry',
-      element: 'chat_error_recharge',
+      element: source,
       action: 'click_amr_entry',
       entryId: 'od-amr-entry-123',
       sourceProduct: 'open_design',
-      sourceDetail: 'chat_error_recharge',
+      sourceDetail: source,
       entryOccurredAt: '2026-06-03T12:00:00.000Z',
     };
 
     try {
       const { status, body } = await postJson<{ mirrored: boolean; status: number }>(
         `${baseUrl}/api/integrations/vela/analytics-entry`,
-        { payload },
+        { payload: { ...payload, ...(source === 'cms_campaign_primary_cta' ? { cmsEventId: '00000000-0000-4000-8000-000000000123' } : {}) } },
         {
           'x-od-analytics-device-id': 'od-device-1',
           'x-od-analytics-session-id': 'od-session-1',
@@ -2567,7 +2567,7 @@ describe('POST /api/integrations/vela/analytics-entry', () => {
         events: [
           {
             common: {
-              eventId: 'od-amr-entry-od-amr-entry-123',
+              eventId: source === 'cms_campaign_primary_cta' ? '00000000-0000-4000-8000-000000000123' : 'od-amr-entry-od-amr-entry-123',
               eventTime: '2026-06-03T12:00:00.000Z',
               registryKey: 'open_design_amr_entry',
               eventName: 'amr_entry',
@@ -3022,6 +3022,138 @@ describe('POST /api/integrations/vela/analytics-entry', () => {
 });
 
 describe('Test touchpoint runtime proxy', () => {
+  const behavior = { contractVersion: 1, eventId: '11111111-1111-4111-8111-111111111111', loadAttemptId: '22222222-2222-4222-8222-222222222222',
+    deploymentId: 'cmopaque', placementKey: 'opend.home.campaign-modal', locale: 'zh-CN',
+    contextId: `ctx-v1:${'a'.repeat(64)}`, generation: '1', contextToken: `ctx-token-v1:${'b'.repeat(64)}`, surface: 'placement', kind: 'exposure' };
+  it('rejects every noncatalog combination before forwarding and preserves valid wire UUID case', async () => {
+    const catalog = new Set([
+      'opend.home.campaign-modal:placement:exposure:absent',
+      'opend.home.campaign-modal:placement:click:primary_cta',
+      'opend.home.campaign-modal:placement:click:close',
+      'opend.home.campaign-modal:placement:click:secondary_close',
+      'opend.home.account-badge:placement:exposure:absent',
+      'opend.home.hover-entry:entry:exposure:absent',
+      'opend.home.hover-layer:layer:exposure:absent',
+      'opend.home.hover-layer:layer:click:primary_cta',
+      'opend.home.hover-layer:layer:click:close',
+      'vela.web.console-overlay:entry:exposure:absent',
+      'vela.web.console-overlay:layer:exposure:absent',
+      'vela.web.console-overlay:layer:click:primary_cta',
+      'vela.web.console-overlay:layer:click:close',
+      'vela.web.console-overlay:layer:click:secondary_close',
+    ]);
+    const seen: unknown[] = [];
+    const upstream = await startWalletApi(async (req, res) => {
+      let body = ''; for await (const chunk of req) body += String(chunk);
+      seen.push(JSON.parse(body));
+      res.statusCode = 202; res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ accepted: true, deduplicated: false }));
+    });
+    seedLogin('local', { apiUrl: upstream.url });
+    let checked = 0;
+    try {
+      for (const placementKey of ['opend.home.campaign-modal', 'opend.home.account-badge', 'opend.home.hover-entry', 'opend.home.hover-layer', 'vela.web.console-overlay']) {
+        for (const surface of ['placement', 'entry', 'layer']) for (const kind of ['exposure', 'click']) {
+          for (const element of [undefined, 'primary_cta', 'close', 'secondary_close', 'unknown']) {
+            const body = { ...behavior, eventId: 'ABCDEF01-2345-4678-89AB-CDEF01234567',
+              loadAttemptId: 'aBcDeF02-2345-4678-89Ab-cDeF01234567', placementKey, surface, kind,
+              ...(element === undefined ? {} : { element }) };
+            const accepted = catalog.has(`${placementKey}:${surface}:${kind}:${element ?? 'absent'}`);
+            const before = seen.length;
+            const response = await postJson(`${baseUrl}/api/touchpoints/test-runtime/events`, body);
+            expect(response.status, JSON.stringify(body)).toBe(accepted ? 202 : 400);
+            expect(seen).toHaveLength(before + Number(accepted));
+            if (accepted) expect(seen.at(-1)).toEqual(body);
+            checked++;
+          }
+        }
+      }
+      expect(checked).toBe(150); expect(seen).toHaveLength(14);
+      expect(upstream.requests.every(key => key === 'Bearer ck-seeded-key')).toBe(true);
+    } finally { await upstream.close(); }
+  }, 15_000);
+  it('forwards only strict events with profile control credential and transparent status/body', async () => {
+    const seen: Array<{ url: string | undefined; method: string | undefined; headers: http.IncomingHttpHeaders; body: unknown }> = [];
+    let status = 202;
+    const upstream = await startWalletApi(async (req, res) => {
+      let body = ''; for await (const chunk of req) body += String(chunk);
+      seen.push({ url: req.url, method: req.method, headers: req.headers, body: JSON.parse(body) });
+      res.statusCode = status; res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify(status === 202 ? { accepted: true, deduplicated: false } : { error: `status_${status}` }));
+    });
+    seedLogin('local', { apiUrl: upstream.url });
+    try {
+      for (const code of [202, 401, 403, 409, 410, 503]) {
+        status = code;
+        const response = await postJson(`${baseUrl}/api/touchpoints/test-runtime/events`, behavior,
+          { authorization: 'Bearer browser-injection', cookie: 'credential=injection', 'x-api-key': 'injection' });
+        expect(response.status).toBe(code);
+        expect(response.body).toEqual(code === 202 ? { accepted: true, deduplicated: false } : { error: `status_${code}` });
+        const request = seen.at(-1)!;
+        expect(request.url).toBe('/api/v1/touchpoints/runtime/test-events'); expect(request.method).toBe('POST');
+        expect(request.body).toEqual(behavior); expect(request.headers.authorization).toBe('Bearer ck-seeded-key');
+        expect(request.headers.cookie).toBeUndefined(); expect(request.headers['x-api-key']).toBeUndefined();
+      }
+      for (const body of [{ ...behavior, testerMemberId: 'forged' }, { ...behavior, generation: '0' }, { ...behavior, element: 'close' },
+        { ...behavior, placementKey: 'opend.home.hover-entry', surface: 'placement' }]) {
+        expect((await postJson(`${baseUrl}/api/touchpoints/test-runtime/events`, body)).status).toBe(400);
+      }
+      expect((await postJson(`${baseUrl}/api/touchpoints/test-runtime/events`, { ...behavior, extra: 'x'.repeat(4096) })).status).toBe(413);
+      expect((await postJson(`${baseUrl}/api/touchpoints/test-runtime/events?testerMemberId=forged`, behavior)).status).toBe(400);
+      expect((await postJson(`${baseUrl}/api/touchpoints/test-runtime/events/extra`, behavior)).status).toBe(404);
+      expect((await getJson(`${baseUrl}/api/touchpoints/test-runtime/events`)).status).toBe(404);
+      expect(seen).toHaveLength(6);
+      rmSync(configPath());
+      expect((await postJson(`${baseUrl}/api/touchpoints/test-runtime/events`, behavior, { authorization: 'Bearer browser-injection' })).status).toBe(401);
+      expect(seen).toHaveLength(6);
+    } finally { await upstream.close(); }
+  });
+  it('OBS-011 forwards v2 content-button clicks (primary/secondary/unclassified) verbatim and refuses a role/element mismatch', async () => {
+    const seen: unknown[] = [];
+    const upstream = await startWalletApi(async (req, res) => {
+      let body = ''; for await (const chunk of req) body += String(chunk);
+      seen.push(JSON.parse(body));
+      res.statusCode = 202; res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ accepted: true, deduplicated: false }));
+    });
+    seedLogin('local', { apiUrl: upstream.url });
+    const button = (role: 'primary' | 'secondary' | null) => ({ id: role ?? 'legacy', role, targetKind: 'https', targetUrl: 'https://example.com/p7k',
+      templateId: role ? 'compact' : null, templateVersion: role ? 8 : null, materialVersionId: role ? '12345678-1234-4234-8234-123456789012' : null });
+    const click = (element: string, role: 'primary' | 'secondary' | null) => ({ ...behavior, contractVersion: 2, kind: 'click', element, button: button(role) });
+    try {
+      for (const [element, role] of [['primary_cta', 'primary'], ['secondary_cta', 'secondary'], ['unclassified_cta', null]] as const) {
+        for (const at of [{}, { placementKey: 'opend.home.hover-layer', surface: 'layer' }]) {
+          const body = { ...click(element, role), ...at };
+          const response = await postJson(`${baseUrl}/api/touchpoints/test-runtime/events`, body);
+          expect(response.status, JSON.stringify(body)).toBe(202);
+          expect(seen.at(-1)).toEqual(body);
+        }
+      }
+      expect((await postJson(`${baseUrl}/api/touchpoints/test-runtime/events`, click('primary_cta', 'secondary'))).status).toBe(400);
+      expect(seen).toHaveLength(6);
+    } finally { await upstream.close(); }
+  });
+  it('does not follow redirects or buffer oversized responses and bounds hanging upstreams', async () => {
+    let mode: 'redirect' | 'oversize' | 'hang' = 'redirect';
+    let requests = 0;
+    const upstream = await startWalletApi((_req, res) => {
+      requests++;
+      if (mode === 'redirect') { res.statusCode = 307; res.setHeader('location', '/credential-trap'); res.end('{}'); }
+      else if (mode === 'oversize') { res.statusCode = 202; res.end('x'.repeat(4097)); }
+      // hang intentionally never sends headers or body.
+    });
+    seedLogin('local', { apiUrl: upstream.url });
+    try {
+      expect((await postJson(`${baseUrl}/api/touchpoints/test-runtime/events`, behavior)).body).toEqual({ error: 'touchpoint_test_behavior_redirect' });
+      expect(requests).toBe(1);
+      mode = 'oversize';
+      expect((await postJson(`${baseUrl}/api/touchpoints/test-runtime/events`, behavior)).body).toEqual({ error: 'touchpoint_test_behavior_response_too_large' });
+      mode = 'hang';
+      const response = await postJson(`${baseUrl}/api/touchpoints/test-runtime/events`, behavior);
+      expect(response.status).toBe(504); expect(response.body).toEqual({ error: 'touchpoint_test_behavior_timeout' });
+      expect(requests).toBe(3);
+    } finally { await upstream.close(); }
+  }, 10_000);
   it('forwards the caller encoding preference and labels the reply it gets back', async () => {
     // Decisions carry base64 content and run to megabytes. Building the upstream
     // headers from scratch dropped `accept-encoding`, so every refresh pulled the
@@ -3180,6 +3312,33 @@ describe('Test touchpoint runtime proxy', () => {
 });
 
 describe('Production touchpoint runtime proxy', () => {
+  it('forwards hover X identity and close discriminator with daemon credentials without analytics consent', async () => {
+    const requests: Array<{ url: string; authorization: string | undefined; body: unknown }> = [];
+    const upstream = createServer((req, res) => {
+      let raw = '';
+      req.setEncoding('utf8');
+      req.on('data', chunk => { raw += chunk; });
+      req.on('end', () => {
+        requests.push({ url: req.url ?? '', authorization: req.headers.authorization, body: JSON.parse(raw) });
+        res.writeHead(202, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ deduplicated: false }));
+      });
+    });
+    await new Promise<void>(resolve => upstream.listen(0, '127.0.0.1', resolve));
+    const address = upstream.address() as AddressInfo;
+    seedLogin('local', { apiUrl: `http://127.0.0.1:${address.port}` });
+    const receipt = { touchpointDecisionId: 'hover-decision', activityId: 'hover-activity',
+      placementKey: 'opend.home.hover-layer', eventId: crypto.randomUUID(), kind: 'click', element: 'close' };
+    try {
+      const response = await postJson(`${baseUrl}/api/touchpoints/production-runtime/events`, receipt);
+      expect(response.status).toBe(202);
+      expect(response.body).toEqual({ deduplicated: false });
+      expect(requests).toEqual([{ url: '/api/v1/touchpoints/runtime/events', authorization: 'Bearer ck-seeded-key', body: receipt }]);
+    } finally {
+      await new Promise<void>(resolve => upstream.close(() => resolve()));
+    }
+  });
+
   it('routes a local publish reader separately without changing the stored login or trusting remote overrides', async () => {
     const requests: string[] = [];
     const upstream = createServer((req, res) => {
@@ -3621,4 +3780,14 @@ describe('parseAmrEntryAnalyticsPayload — entry sources added in this PR', () 
       }),
     ).toBeNull();
   });
+});
+
+it('validates CMS-only strict UUID correlation without broadening historical mirror metadata', () => {
+  const base = { pageName: 'open_design', sourcePageName: 'home', area: 'amr_entry', element: 'cms_campaign_primary_cta', action: 'click_amr_entry', entryId: 'od-amr-cms', sourceProduct: 'open_design', sourceDetail: 'cms_campaign_primary_cta', entryOccurredAt: '2026-10-09T00:00:00.000Z' };
+  const cmsEventId = '00000000-0000-4000-8000-000000000123';
+  expect(parseAmrEntryAnalyticsPayload({ payload: { ...base, cmsEventId } })).toMatchObject({ sourceDetail: 'cms_campaign_primary_cta', cmsEventId });
+  expect(parseAmrEntryAnalyticsPayload({ ...base, sourcePageName: 'chat_panel' })).toBeNull();
+  for (const invalid of ['bad', 12, null, '00000000-0000-0000-0000-000000000123']) expect(parseAmrEntryAnalyticsPayload({ ...base, cmsEventId: invalid })).toBeNull();
+  expect(parseAmrEntryAnalyticsPayload({ ...base, element: 'home_balance_gate_upgrade', sourceDetail: 'home_balance_gate_upgrade', cmsEventId })).toBeNull();
+  expect(parseAmrEntryAnalyticsPayload({ ...base, element: 'home_balance_gate_upgrade', sourceDetail: 'home_balance_gate_upgrade' })).not.toBeNull();
 });

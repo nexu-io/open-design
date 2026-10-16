@@ -243,6 +243,8 @@ async function installDesktopHost(page: Page) {
 
 async function installCmsFixture(page: Page) {
 	const responses: Array<{ placementKey: string; fingerprint: string }> = [];
+	let revoked = false;
+	let responseLatencyMs = 0;
 	const events: Array<Record<string, unknown>> = [];
 	await page.route("**/api/integrations/vela/status", async (route) => {
 		await route.fulfill({
@@ -279,6 +281,15 @@ async function installCmsFixture(page: Page) {
 				return;
 			}
 			const decision = decisionFor(placementKey);
+			if (revoked) {
+				// Deliberate real response latency: the withdrawal bound includes I/O.
+				await new Promise(resolve => setTimeout(resolve, responseLatencyMs));
+				await route.fulfill({ status: 410, json: { error: "production_runtime_revoked", receipt: {
+					activityId: decision.activityId, deploymentId: decision.deploymentId,
+					contentVersionId: decision.content.id, touchpointDecisionId: decision.touchpointDecisionId,
+				} } });
+				return;
+			}
 			responses.push({
 				placementKey,
 				fingerprint: decision.content.buildIdentity.fingerprint,
@@ -286,7 +297,7 @@ async function installCmsFixture(page: Page) {
 			await route.fulfill({ json: decision });
 		},
 	);
-	return { responses, events };
+	return { responses, events, withdraw: (latencyMs: number) => { responseLatencyMs = latencyMs; revoked = true; } };
 }
 
 async function gotoCmsHome(page: Page) {
@@ -295,6 +306,9 @@ async function gotoCmsHome(page: Page) {
 		timeout: T.long,
 	});
 	await expect(page.getByTestId("home-hero")).toBeVisible({ timeout: T.long });
+	// Billing resolves after the hero/CMS hosts. Its credits pill shifts this
+	// right-aligned cluster, invalidating hover coordinates captured earlier.
+	await expect(page.getByTestId("entry-top-right-credits")).toBeVisible({ timeout: T.medium });
 }
 
 test.describe.configure({ timeout: T.xlong });
@@ -485,4 +499,27 @@ test("[P1] controlled CMS fixture flips the hover layer above an anchor near the
 	expect(layerBox.y + layerBox.height).toBe(entryBox.y - 8);
 	expect(layerBox.y).toBeGreaterThanOrEqual(8);
 	expect(layerBox.y + layerBox.height).toBeLessThanOrEqual(240 - 8);
+});
+
+
+test("[P1] controlled CMS fixture removes badge and hover within 30s including a delayed withdrawal response", async ({ page }, testInfo) => {
+  const fixture = await installCmsFixture(page);
+  await gotoCmsHome(page);
+  const badge = page.getByTestId("production-campaign-badge");
+  const hover = page.getByTestId("cms-hover-overlay-root");
+  await expect(badge).toBeVisible({ timeout: T.medium });
+  await expect(hover).toBeVisible({ timeout: T.medium });
+  await hover.locator("opend-touchpoint").first().hover();
+  await expect(hover.locator("opend-touchpoint").nth(1)).toBeVisible();
+  // The fixture is controlled; the React hosts, clocks, polling, response delay,
+  // receipt parsing and DOM removal are the real browser implementation.
+  const started = performance.now();
+  fixture.withdraw(5_000);
+  await Promise.all([
+    expect(badge).toHaveCount(0, { timeout: 30_000 }),
+    expect(hover).toHaveCount(0, { timeout: 30_000 }),
+  ]);
+  const elapsedMs = performance.now() - started;
+  expect(elapsedMs).toBeLessThanOrEqual(30_000);
+  await testInfo.attach("withdrawal-timing", { body: JSON.stringify({ elapsedMs, responseLatencyMs: 5_000, boundary: "controlled HTTP fixture; real Chromium host and timers; not deployed API acceptance" }), contentType: "application/json" });
 });

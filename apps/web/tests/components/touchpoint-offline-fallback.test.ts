@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { TOUCHPOINT_POLL_MS } from "../../src/components/touchpoint-lifecycle";
 //
 // OPEND-3436, the client half. Once the runtime is unreachable, the client
 // stops asking.
@@ -102,7 +103,7 @@ describe("offline fallback stops the client asking", () => {
 		});
 		// The first poll tick fails: that is the attempt that enters fallback.
 		await act(async () => {
-			await vi.advanceTimersByTimeAsync(30_000);
+			await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS);
 		});
 		expect(load).toHaveBeenCalledTimes(2);
 
@@ -123,7 +124,7 @@ describe("offline fallback stops the client asking", () => {
 			await vi.advanceTimersByTimeAsync(0);
 		});
 		await act(async () => {
-			await vi.advanceTimersByTimeAsync(30_000);
+			await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS);
 		});
 		// One attempt plus its full backoff budget, exactly as before this ticket.
 		await act(async () => {
@@ -131,7 +132,7 @@ describe("offline fallback stops the client asking", () => {
 		});
 		expect(load).toHaveBeenCalledTimes(2 + RETRY_BACKOFF_MS.length);
 		await act(async () => {
-			await vi.advanceTimersByTimeAsync(30_000);
+			await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS);
 		});
 		expect(load.mock.calls.length).toBeGreaterThan(2 + RETRY_BACKOFF_MS.length);
 	});
@@ -153,7 +154,7 @@ describe("offline fallback stops the client asking", () => {
 			await vi.advanceTimersByTimeAsync(0);
 		});
 		await act(async () => {
-			await vi.advanceTimersByTimeAsync(30_000);
+			await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS);
 		});
 		await act(async () => {
 			await vi.advanceTimersByTimeAsync(RETRY_BACKOFF_MS.reduce((total, ms) => total + ms, 0));
@@ -178,7 +179,7 @@ describe("offline fallback stops the client asking", () => {
 			await vi.advanceTimersByTimeAsync(0);
 		});
 		await act(async () => {
-			await vi.advanceTimersByTimeAsync(30_000);
+			await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS);
 		});
 		expect(load).toHaveBeenCalledTimes(2);
 
@@ -229,7 +230,7 @@ describe("offline fallback stops the client asking", () => {
 			await vi.advanceTimersByTimeAsync(0);
 		});
 		await act(async () => {
-			await vi.advanceTimersByTimeAsync(30_000);
+			await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS);
 		});
 		expect(load).toHaveBeenCalledTimes(2);
 		act(() => {
@@ -241,11 +242,11 @@ describe("offline fallback stops the client asking", () => {
 		expect(load).toHaveBeenCalledTimes(3);
 		// Back on the network, back on the 30s tick.
 		await act(async () => {
-			await vi.advanceTimersByTimeAsync(30_000);
+			await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS);
 		});
 		expect(load).toHaveBeenCalledTimes(4);
 		await act(async () => {
-			await vi.advanceTimersByTimeAsync(30_000);
+			await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS);
 		});
 		expect(load).toHaveBeenCalledTimes(5);
 	});
@@ -270,7 +271,7 @@ describe("offline fallback stops the client asking", () => {
 		});
 		const generation = result.current.generation;
 		await act(async () => {
-			await vi.advanceTimersByTimeAsync(30_000);
+			await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS);
 		});
 		expect(load).toHaveBeenCalledTimes(2);
 
@@ -432,7 +433,7 @@ describe("a 5xx fallback keeps a slow heartbeat", () => {
 		// The first poll tick fails with a 5xx: that is the attempt that enters
 		// fallback, and the only one that arms the heartbeat.
 		await act(async () => {
-			await vi.advanceTimersByTimeAsync(30_000);
+			await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS);
 		});
 		expect(load).toHaveBeenCalledTimes(2);
 
@@ -480,7 +481,7 @@ describe("a 5xx fallback keeps a slow heartbeat", () => {
 			await vi.advanceTimersByTimeAsync(0);
 		});
 		await act(async () => {
-			await vi.advanceTimersByTimeAsync(30_000);
+			await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS);
 		});
 		expect(load).toHaveBeenCalledTimes(2);
 
@@ -490,7 +491,7 @@ describe("a 5xx fallback keeps a slow heartbeat", () => {
 			window.dispatchEvent(new Event("offline"));
 		});
 		await act(async () => {
-			await vi.advanceTimersByTimeAsync(SERVER_FAULT_HEARTBEAT_MS + 30_000);
+			await vi.advanceTimersByTimeAsync(SERVER_FAULT_HEARTBEAT_MS + TOUCHPOINT_POLL_MS);
 		});
 		expect(load).toHaveBeenCalledTimes(2);
 
@@ -524,7 +525,7 @@ describe("a 5xx fallback keeps a slow heartbeat", () => {
 			await vi.advanceTimersByTimeAsync(0);
 		});
 		await act(async () => {
-			await vi.advanceTimersByTimeAsync(30_000);
+			await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS);
 		});
 		expect(load).toHaveBeenCalledTimes(2);
 
@@ -538,11 +539,11 @@ describe("a 5xx fallback keeps a slow heartbeat", () => {
 		// Reachable again, so recovery goes back through the ordinary interval
 		// rather than a second mechanism running beside it.
 		await act(async () => {
-			await vi.advanceTimersByTimeAsync(30_000);
+			await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS);
 		});
 		expect(load).toHaveBeenCalledTimes(4);
 		await act(async () => {
-			await vi.advanceTimersByTimeAsync(30_000);
+			await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS);
 		});
 		expect(load).toHaveBeenCalledTimes(5);
 	});
@@ -571,7 +572,7 @@ describe("a 5xx fallback keeps a slow heartbeat", () => {
 		});
 		expect(result.current.current).toBe(first);
 		await act(async () => {
-			await vi.advanceTimersByTimeAsync(30_000);
+			await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS);
 		});
 		// A 5xx does not take display down: the lease the server granted is still
 		// inside its window, which is exactly why the revocation matters.
@@ -620,7 +621,7 @@ describe("a cached answer from a reachable daemon keeps the same heartbeat", () 
 			await vi.advanceTimersByTimeAsync(0);
 		});
 		await act(async () => {
-			await vi.advanceTimersByTimeAsync(30_000);
+			await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS);
 		});
 		expect(load).toHaveBeenCalledTimes(2);
 
@@ -665,7 +666,7 @@ describe("a cached answer from a reachable daemon keeps the same heartbeat", () 
 			await vi.advanceTimersByTimeAsync(0);
 		});
 		await act(async () => {
-			await vi.advanceTimersByTimeAsync(30_000);
+			await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS);
 		});
 		expect(load).toHaveBeenCalledTimes(2);
 		await act(async () => {
@@ -674,11 +675,11 @@ describe("a cached answer from a reachable daemon keeps the same heartbeat", () 
 		expect(load).toHaveBeenCalledTimes(3);
 		// Live again: the 30s poll takes recovery back and the heartbeat is gone.
 		await act(async () => {
-			await vi.advanceTimersByTimeAsync(30_000);
+			await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS);
 		});
 		expect(load).toHaveBeenCalledTimes(4);
 		await act(async () => {
-			await vi.advanceTimersByTimeAsync(30_000);
+			await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS);
 		});
 		expect(load).toHaveBeenCalledTimes(5);
 	});

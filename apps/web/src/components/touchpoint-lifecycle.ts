@@ -1,3 +1,6 @@
+import type { TouchpointLoadOwner, TouchpointLoadAttempt } from "./touchpoint-load-observability";
+import type { TouchpointCloseReason, TouchpointTimeContext } from "@open-design/contracts";
+import { touchpointOfflineReplayOf } from "@open-design/contracts/api/touchpointOffline";
 import type { TouchpointStaticAction } from "./touchpoint-static-actions";
 import { touchpointStaticActionsMatch } from "./touchpoint-static-actions";
 import {
@@ -18,6 +21,15 @@ export type AuthorizationTiming = Readonly<{
 	endsAt: string;
 	authorizationExpiresAt: string;
 }>;
+
+/** Calibrate at response receipt. Offline replay uses the daemon's estimate of now, not stored serverTime. */
+export function touchpointTimeContext(timing: Pick<AuthorizationTiming, "serverTime" | "endsAt">, receivedAt = Date.now()): TouchpointTimeContext {
+	const replay = touchpointOfflineReplayOf(timing);
+	const serverNow = Date.parse(replay?.effectiveServerTime ?? timing.serverTime);
+	if (!Number.isFinite(serverNow) || !Number.isFinite(Date.parse(timing.endsAt))) throw new Error("touchpoint_time_invalid");
+	return Object.freeze({ schedule: Object.freeze({ endsAt: timing.endsAt }), serverOffsetMs: serverNow - receivedAt });
+}
+export type TouchpointTimeContexts = ReadonlyMap<string, TouchpointTimeContext>;
 
 /**
  * The Test runtime's authorization contract: it may not grant display for
@@ -210,14 +222,15 @@ export type TouchpointLifecycleLoad<T> =
 	 * {@link holdThroughSchedule} for when it applies.
 	 */
 	/** Composite leases update their placement set while retaining the session generation. */
-	| Readonly<{ kind: "decision"; value: T; key: string; validForMs: number; replaceValue?: boolean; offlineValidForMs?: number; offlineRecovery?: TouchpointOfflineRecovery }>
+	| Readonly<{ kind: "decision"; value: T; key: string; validForMs: number; replaceValue?: boolean; offlineValidForMs?: number; offlineRecovery?: TouchpointOfflineRecovery; timeContexts?: TouchpointTimeContexts }>
 	| Readonly<{ kind: "waiting"; retryAfterMs: number }>
 	| Readonly<{ kind: "retain" }>
-	| Readonly<{ kind: "clear"; ended?: boolean }>;
+	| Readonly<{ kind: "clear"; ended?: boolean; absent?: boolean }>;
 
 type LifecycleStatus = "loading" | "before" | "active" | "ended" | "error" | null;
 export type TouchpointLifecycleOptions<T> = Readonly<{
 	enabled: boolean;
+	observability?: TouchpointLoadOwner;
 	identity: string | null;
 	load: (signal: AbortSignal, active: T | null) => Promise<TouchpointLifecycleLoad<T>>;
 	onError?: (error: unknown) => void;
@@ -230,9 +243,9 @@ export type TouchpointLifecycleOptions<T> = Readonly<{
 	 * minutes. Test stops failed requests separately, without either behavior.
 	 */
 	offlineFallback?: boolean;
-	/** Stop failed Test loads until a recovery event, without extending authority. */
+	/** Test channel: no offline fallback and no extended authority; a failed load keeps its regular cadence. */
 	stopOnFailure?: boolean;
-	/** A sibling request chain can pause automatic requests for the same campaign. */
+	/** A sibling request chain can suppress fast retries; it never stops the regular cadence. */
 	pauseAutomaticRequests?: () => boolean;
 }>;
 
@@ -257,7 +270,11 @@ const clock = (): Clock => ({ monotonic: performance.now(), wall: Date.now() });
  * site.
  */
 const elapsed = (start: Clock) => Math.max(0, performance.now() - start.monotonic, Date.now() - start.wall);
-const POLL_MS = 30_000;
+// Reserve time for the decision round and DOM cleanup inside the 30s online
+// withdrawal target. Offline replay retains its separate recovery policy.
+const POLL_MS = 10_000;
+/** Test and production share the online withdrawal deadline. */
+export const TEST_TOUCHPOINT_POLL_MS = POLL_MS;
 /** The renewal interval, for callers that must hold authority across one round. */
 export const TOUCHPOINT_POLL_MS = POLL_MS;
 /**
@@ -266,19 +283,14 @@ export const TOUCHPOINT_POLL_MS = POLL_MS;
  * measured being exceeded by a real round (11.5s) whose placements all
  * succeeded, which abandoned a campaign that was working.
  *
- * It stays well under `POLL_MS` on purpose: a budget at or above the interval
- * would let a hung attempt swallow the next tick entirely.
+ * A round can cross a poll boundary. The lifecycle coalesces missed ticks
+ * into one follow-up when that round settles, rather than dropping them.
  */
 export const REQUEST_TIMEOUT_MS = 15_000;
 /**
- * A failed attempt used to get its next chance from the fixed 30s tick, which
- * for a sixty-second lease lands exactly when that lease expires — one failure
- * put display on the edge of going blank with no chance to recover.
- *
- * These bounded retries cover FAST failures (transport error, 5xx, DNS), which
- * return in milliseconds and leave the whole budget intact. A slow failure that
- * burns the full timeout cannot be retried inside the lease, and should not be:
- * a lease the server will not renew in time is one that ought to lapse.
+ * Fast failures get two bounded retries before the next poll. A slow round
+ * may cross a poll boundary; its pending poll is coalesced into one follow-up.
+ * Neither retries nor pending polls extend authority or bypass offline recovery.
  */
 export const RETRY_BACKOFF_MS = [1_000, 3_000] as const;
 /**
@@ -421,10 +433,10 @@ const holdThroughSchedule = <L extends { validForMs: number; offlineValidForMs?:
  * server-relative authority, never a client activation time. Renewing the same
  * immutable decision keeps its mount identity while replacing its lease.
  */
-export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, offlineFallback = false, stopOnFailure = false, pauseAutomaticRequests }: TouchpointLifecycleOptions<T>) {
-	const [state, setState] = useState<{ identity: string | null; current: T | null; generation: number; status: LifecycleStatus }>({ identity: null, current: null, generation: 0, status: null });
+export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, offlineFallback = false, stopOnFailure = false, pauseAutomaticRequests, observability }: TouchpointLifecycleOptions<T>) {
+	const [state, setState] = useState<{ identity: string | null; current: T | null; generation: number; status: LifecycleStatus; timeContexts?: TouchpointTimeContexts }>({ identity: null, current: null, generation: 0, status: null });
 	const generation = useRef(0);
-	const lease = useRef<{ identity: string; key: string; value: T; generation: number; start: Clock; validForMs: number; offlineValidForMs?: number } | null>(null);
+	const lease = useRef<{ identity: string; key: string; value: T; generation: number; start: Clock; validForMs: number; offlineValidForMs?: number; timeContexts?: TouchpointTimeContexts } | null>(null);
 	/**
 	 * OPEND-3378. The generation whose host gave up a mount because
 	 * {@link isCurrent} said no while that mount was still being prepared.
@@ -452,8 +464,8 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 		return Boolean(current && inputs.current.enabled && current.identity === inputs.current.identity && current.generation === expected && elapsed(current.start) < current.validForMs && !document.hidden);
 	}, []);
 	/**
-	 * Report that a host discarded its unfinished mount for `expected` because
-	 * {@link isCurrent} was false. Only a mount that never reached the screen
+ * Report that a host discarded or failed its unfinished mount for `expected`.
+ * Only a mount that never reached the screen
 	 * may report; see {@link fencedMount}. A report for a generation that is no
 	 * longer the lease's is moot — a new generation already remounts.
 	 */
@@ -462,6 +474,9 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 	}, []);
 
 	useEffect(() => {
+		// Failure handling remains channel-specific; both channels must discover
+		// online withdrawal with enough time left for the decision response.
+		const pollMs = stopOnFailure ? TEST_TOUCHPOINT_POLL_MS : POLL_MS;
 		let stopped = false;
 		let ended = false;
 		// Suspend display during recovery; a no-decision reply may retain only the original, unextended lease.
@@ -473,12 +488,13 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 		let retryTimer: ReturnType<typeof setTimeout> | undefined;
 		let heartbeatTimer: ReturnType<typeof setTimeout> | undefined;
 		let retryIndex = 0;
+		let pendingPoll = false;
 		/**
 		 * OPEND-3436. True while the runtime is not being reached — whether a
 		 * failure said so or the daemon answered from its own cache — and false
 		 * again the moment a live answer comes back.
 		 *
-		 * While it is true, the 30s poll stands down and this client asks only
+		 * While it is true, the regular poll stands down and this client asks only
 		 * when something happened that could plausibly have changed the answer: a
 		 * reconnection, a return to the page, the end of the window. Where
 		 * NOTHING can happen to announce it — see
@@ -498,8 +514,8 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 		let status: LifecycleStatus = enabled && identity ? "loading" : null;
 		const publish = () => {
 			if (stopped) return;
-			const next = { identity, current: lease.current?.value ?? null, generation: generation.current, status };
-			setState(previous => previous.identity === next.identity && previous.current === next.current && previous.generation === next.generation && previous.status === next.status ? previous : next);
+			const next = { identity, current: lease.current?.value ?? null, generation: generation.current, status, timeContexts: lease.current?.timeContexts };
+			setState(previous => previous.identity === next.identity && previous.current === next.current && previous.generation === next.generation && previous.status === next.status && previous.timeContexts === next.timeContexts ? previous : next);
 		};
 		const cancelRequest = () => {
 			request?.abort();
@@ -507,6 +523,7 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 			clearTimeout(timeout);
 		};
 		const revoke = () => {
+			pendingPoll = false;
 			cancelRequest();
 			clearTimeout(expiryTimer);
 			clearTimeout(boundaryTimer);
@@ -572,8 +589,13 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 		 * fact that nothing is on screen while it is being revalidated.
 		 */
 		const abandonAttempt = (error: unknown) => {
+			observability?.failPending(error);
 			cancelRequest();
-			if (stopOnFailure) offline = true;
+			// D-POLL: a failed attempt alone never stands the poll down. Only
+			// production fallback (below) or a browser that reports itself offline
+			// (`refresh` refuses while `navigator.onLine` is false) may do that;
+			// otherwise the next scheduled tick asks again, so a fault that clears
+			// is noticed within one poll without any online/focus event.
 			// Judge the lease that is still recoverable — the active one, or the
 			// one `wake` set aside — by its OWN window. Asking whether there is an
 			// ACTIVE lease and calling "none" expired is what made a single
@@ -605,15 +627,10 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 			// Scheduled after any revoke above, which clears the retry timer: an
 			// authoritative withdrawal must not be retried back onto the screen.
 			//
-			// A retry must also finish inside the cycle that spawned it. `refresh`
-			// declines to start while a request is in flight, so a chain that ran
-			// past the next tick would not merely be late — it would swallow that
-			// tick entirely. Requiring room for the retry AND its full budget is
-			// what makes "retries cover fast failures" true in the code and not
-			// only in this comment: a failure that burned the whole budget leaves
-			// no room by construction, so it is never retried.
+			// Fast failures may retry before the next scheduled poll. A round
+			// spanning that boundary queues one follow-up instead of losing it.
 			const delay = RETRY_BACKOFF_MS[retryIndex] ?? 0;
-			const remainingInCycle = cycleStart === null ? 0 : POLL_MS - elapsed(cycleStart);
+			const remainingInCycle = cycleStart === null ? 0 : pollMs - elapsed(cycleStart);
 			if (
 				// A backoff chain answers "the server is slow or flaky". It has no
 				// answer at all for "there is no network", where every attempt in
@@ -622,7 +639,7 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 				!inputs.current.pauseAutomaticRequests?.() &&
 				!touchpointWithdrawsDisplay(error) &&
 				retryIndex < RETRY_BACKOFF_MS.length &&
-				delay + REQUEST_TIMEOUT_MS <= remainingInCycle
+				delay < remainingInCycle
 			) {
 				retryIndex += 1;
 				clearTimeout(retryTimer);
@@ -630,7 +647,7 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 			}
 			inputs.current.onError?.(error);
 		};
-		clearRef.current = () => { revalidationLease = null; revoke(); };
+		clearRef.current = () => { observability?.cancel("revoked"); revalidationLease = null; revoke(); };
 		revoke();
 		if (!enabled || !identity) return () => { stopped = true; revoke(); };
 
@@ -675,6 +692,7 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 				abandonAttempt(
 					Object.assign(new Error("touchpoint_request_timeout"), { touchpointOfflineFallback: true }),
 				);
+				drainPendingPoll();
 			}, REQUEST_TIMEOUT_MS);
 			try {
 				const result = await load(controller.signal, lease.current?.value ?? revalidationLease?.value ?? null);
@@ -709,6 +727,7 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 					return;
 				}
 				if (result.kind === "clear") {
+					observability?.cancel("revoked", result.absent === true);
 					revalidationLease = null;
 					ended = result.ended === true;
 					status = ended ? "ended" : null;
@@ -760,7 +779,7 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 					(!resumed || elapsed(previous.start) < previous.validForMs);
 				if (!same) ++generation.current;
 				fencedMount.current = null;
-				lease.current = { identity, key: result.key, value: same && !result.replaceValue ? previous.value : result.value, generation: generation.current, start: started, validForMs: result.validForMs, offlineValidForMs: result.offlineValidForMs };
+				lease.current = { identity, key: result.key, value: same && !result.replaceValue ? previous.value : result.value, generation: generation.current, start: started, validForMs: result.validForMs, offlineValidForMs: result.offlineValidForMs, timeContexts: result.timeContexts };
 				revalidationLease = null;
 				publish();
 				armExpiry();
@@ -772,7 +791,18 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 					request = null;
 					clearTimeout(timeout);
 				}
+				drainPendingPoll();
 			}
+		};
+		// One outstanding poll is enough: missed ticks do not create parallel
+		// loads, and an old grant cannot delay revalidation by another interval.
+		const drainPendingPoll = () => {
+			if (!pendingPoll || request) return;
+			pendingPoll = false;
+			// A caller's pause suppresses only the extra fast retries; the regular
+			// cadence keeps asking so a cleared fault is noticed (D-POLL).
+			if (stopped || ended || offline || document.hidden) return;
+			void refresh();
 		};
 		/**
 		 * Withdraw display first and ask afterwards. Reserved for the cases where
@@ -823,6 +853,7 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 		const resume = () => {
 			if (stopped || ended) return;
 			if (document.hidden) {
+				pendingPoll = false;
 				cancelRequest();
 				return;
 			}
@@ -857,14 +888,17 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 			if (live) void refresh();
 			else wake();
 		};
-		const cancelOnOffline = () => { cancelRequest(); stopServerFaultHeartbeat(); };
+		const cancelOnOffline = () => { pendingPoll = false; cancelRequest(); stopServerFaultHeartbeat(); };
 		void refresh();
 		// A tick is a question the network cannot answer while it is down, so the
-		// interval stands down and recovery is event-driven until it is back.
+		// interval stands down in production fallback and recovery is event-driven
+		// until it is back. `pauseAutomaticRequests` does not stop the cadence: a
+		// single failed request must never end polling (D-POLL).
 		const interval = setInterval(() => {
-			if (offline || inputs.current.pauseAutomaticRequests?.()) return;
-			void refresh();
-		}, POLL_MS);
+			if (offline) return;
+			if (request) pendingPoll = true;
+			else void refresh();
+		}, pollMs);
 		window.addEventListener("focus", resume);
 		window.addEventListener("online", resume);
 		window.addEventListener("pageshow", resume);
@@ -882,10 +916,11 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 			window.removeEventListener("offline", cancelOnOffline);
 			document.removeEventListener("visibilitychange", resume);
 		};
-	}, [enabled, identity, load, offlineFallback, stopOnFailure]);
+	}, [enabled, identity, load, offlineFallback, stopOnFailure, observability]);
 
 	return {
 		current: enabled && state.identity === identity ? state.current : null,
+		timeContexts: enabled && state.identity === identity ? state.timeContexts : undefined,
 		status: enabled && state.identity === identity ? state.status : null,
 		generation: state.generation,
 		clear,
@@ -905,6 +940,11 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
  * be decided from a single sample, so the warning only reports, never resolves.
  */
 export const VISIBILITY_WARNING_MS = 5_000;
+
+/** Shared visibility predicate for impressions and explicit SDK hover X. */
+export function isTouchpointVisible(element: HTMLElement): boolean {
+  return !document.hidden && element.isConnected && !element.hidden && element.getClientRects().length > 0;
+}
 
 export type TouchpointVisibilityWatch = Readonly<{
 	element: HTMLElement;
@@ -951,14 +991,7 @@ export function watchTouchpointVisibility({
 		frame = requestAnimationFrame(() => {
 			frame = undefined;
 			if (stopped || recorded) return;
-			if (
-				!isCurrent() ||
-				document.hidden ||
-				!element.isConnected ||
-				element.hidden ||
-				element.getClientRects().length === 0
-			)
-				return;
+			if (!isCurrent() || !isTouchpointVisible(element)) return;
 			recorded = true;
 			stop();
 			onVisible();
@@ -986,9 +1019,11 @@ type MountAdapter = Readonly<{
 	staticActions: readonly TouchpointStaticAction[];
 	mode: "test" | "production";
 	locale: string;
+	getTimeContext?: () => TouchpointTimeContext | undefined;
 	isCurrent: () => boolean;
 	dispatchAction: (id: string) => Promise<void>;
-	requestClose?: () => void;
+	requestClose?: (reason?: TouchpointCloseReason) => void;
+	attempt?: TouchpointLoadAttempt;
 	onReady?: () => void;
 	onVisible?: () => void;
 	onCloseControlChange?: (available: boolean | null) => void;
@@ -1001,7 +1036,7 @@ type MountAdapter = Readonly<{
 export function mountTouchpoint(
 	container: HTMLElement,
 	adapter: MountAdapter,
-): () => void {
+): (() => void) & { updateTime: () => Promise<void> } {
 	ensureWebTouchpointElement();
 	const element = document.createElement(
 		"opend-touchpoint",
@@ -1010,6 +1045,10 @@ export function mountTouchpoint(
 		elementDisposed = false,
 		verifiedDisposed = false;
 	let verified: Awaited<ReturnType<typeof verifyWebTouchpoint>> | undefined;
+	let mountedContext: import("./touchpoint-component").WebTouchpointContext | undefined;
+	let mounted = false;
+	let timeRevision = 0;
+	let appliedTimeRevision = 0;
 	let stopVisibilityWatch: (() => void) | undefined;
 	let observer: MutationObserver | undefined;
 	const current = () => !cancelled && adapter.isCurrent();
@@ -1024,6 +1063,7 @@ export function mountTouchpoint(
 		}
 	};
 	const fail = (code: string) => {
+		adapter.attempt?.fail(new Error(code), "mount");
 		emitWebTouchpointDiagnostic({ code });
 		adapter.onCloseControlChange?.(false);
 		adapter.onError?.(code);
@@ -1032,7 +1072,9 @@ export function mountTouchpoint(
 	container.replaceChildren(element);
 	void (async () => {
 		try {
+			const decoding = performance.now();
 			verified = await verifyWebTouchpoint(adapter.content);
+			adapter.attempt?.enrich({ decode_validate_ms: Math.max(0, performance.now() - decoding) });
 			if (!current()) {
 				dispose();
 				return;
@@ -1060,22 +1102,27 @@ export function mountTouchpoint(
 						? "dark"
 						: "light",
 				),
+				adapter.getTimeContext?.(),
 			);
 			if (!context) {
 				fail("touchpoint_locale_unsupported");
 				dispose();
 				return;
 			}
+			mountedContext = { ...context, mode: adapter.mode };
+			appliedTimeRevision = timeRevision;
 			await element.mount(
 				verified.entryUrl,
 				adapter.content.entryDigest,
-				{ ...context, mode: adapter.mode },
+				mountedContext,
 				verified.resourceUrls,
 				new Set(adapter.staticActions.map((a) => a.id)),
 				{
+					runtimeApiVersion: adapter.content.runtime.apiVersion,
+					attempt: adapter.attempt,
 					requestClose: adapter.requestClose
-						? () => {
-								if (current()) adapter.requestClose?.();
+						? (reason) => {
+								if (current()) adapter.requestClose?.(reason);
 							}
 						: undefined,
 					dispatchAction: async (id) => {
@@ -1088,6 +1135,9 @@ export function mountTouchpoint(
 				dispose();
 				return;
 			}
+			mounted = true;
+			adapter.attempt?.ready();
+			if (timeRevision !== appliedTimeRevision) await updateTime();
 			const onVisible = adapter.onVisible;
 			if (onVisible)
 				stopVisibilityWatch = watchTouchpointVisibility({
@@ -1132,7 +1182,7 @@ export function mountTouchpoint(
 			dispose();
 		}
 	})();
-	return () => {
+	const release = () => {
 		cancelled = true;
 		observer?.disconnect();
 		stopVisibilityWatch?.();
@@ -1140,4 +1190,11 @@ export function mountTouchpoint(
 		dispose();
 		if (element.parentNode === container) container.replaceChildren();
 	};
+	async function updateTime() {
+		++timeRevision;
+		if (!mounted || !mountedContext || !current() || adapter.content.runtime.apiVersion !== 2) return;
+		mountedContext = { ...mountedContext, ...adapter.getTimeContext?.() };
+		await element.update(mountedContext, verified?.resourceUrls ?? new Map());
+	}
+	return Object.assign(release, { updateTime });
 }

@@ -1,3 +1,8 @@
+import { captureCmsVisible, cmsPrimaryCapture } from "../analytics/cms-touchpoints";
+import { watchTouchpointVisibility } from "./touchpoint-lifecycle";
+import { useTouchpointLoadOwner } from "./touchpoint-load-observability";
+import { requireCampaignAction } from "./touchpoint-navigation";
+import { useAnalytics } from "../analytics/provider";
 import { useI18n } from "../i18n";
 import { useCallback, useEffect, useRef } from "react";
 import { getOpenDesignHost } from "@open-design/host";
@@ -17,7 +22,7 @@ import {
 } from "./touchpoint-static-actions";
 import { dispatchProductionCampaignAction } from "./ProductionCampaignModal";
 import { emitProductionTouchpointLoadDiagnostic, loadProductionTouchpointDecision, productionTouchpointRecovery } from "./production-touchpoint-loader";
-import { resolveAuthorizationDeadline, touchpointContentIdentity, touchpointScheduleWindowMs, touchpointLeaseValue, type TouchpointLeaseValue, type TouchpointLifecycleLoad, useTouchpointLifecycle } from "./touchpoint-lifecycle";
+import { resolveAuthorizationDeadline, touchpointContentIdentity, touchpointScheduleWindowMs, touchpointTimeContext, touchpointLeaseValue, type TouchpointLeaseValue, type TouchpointLifecycleLoad, useTouchpointLifecycle } from "./touchpoint-lifecycle";
 import {
 	TestTouchpointMount,
 	recordVisibleTestTouchpoint,
@@ -27,7 +32,7 @@ import type { TestCampaignPlacement, TestDecision } from "./TestCampaignModal";
 import styles from "./ProductionCampaignBadge.module.css";
 
 const PLACEMENT = "opend.home.account-badge";
-const supportedCapabilities = new Set(["static-action"]);
+const supportedCapabilities = new Set(["static-action", "countdown-v1", "action-console-pricing-v1"]);
 type Decision = {
 	activityId: string;
 	authorizationExpiresAt: string;
@@ -60,22 +65,29 @@ export function ProductionCampaignBadge({
 	authenticated: boolean;
 	sessionSubject: string | null;
 }) {
+	const analytics = useAnalytics();
+	const trackRef = useRef(analytics.track);
+	trackRef.current = analytics.track;
 	const testRuntime = useTestRuntime();
 	// A sibling entering or leaving the session must not rebuild this placement.
 	const testRuntimeRef = useRef(testRuntime);
 	testRuntimeRef.current = testRuntime;
 	const { locale } = useI18n();
+	const observation = useTouchpointLoadOwner("production", sessionSubject, locale);
 	const testDecision = testRuntime?.decisions.get(PLACEMENT);
 	const containerRef = useRef<HTMLDivElement | null>(null);
 	const enabled = !testRuntime && canRenderProductionCampaignBadge(authenticated, sessionSubject) && Boolean(sessionSubject) && Boolean(locale);
 	const load = useCallback(async (signal: AbortSignal, active: AuthorizedDecision | null): Promise<TouchpointLifecycleLoad<AuthorizedDecision>> => {
 		if (!locale || !sessionSubject) return { kind: "clear" };
-		const loaded = await loadProductionTouchpointDecision(PLACEMENT, locale, signal, active?.touchpointDecisionId);
+		const priorAttempt = observation.get(PLACEMENT);
+		const loaded = await loadProductionTouchpointDecision(PLACEMENT, locale, signal, active?.touchpointDecisionId, observation);
 		if (loaded.kind === "revoked") {
 			if (active && loaded.receipt.touchpointDecisionId === active.touchpointDecisionId && loaded.receipt.deploymentId === active.deploymentId && loaded.receipt.activityId === active.activityId && loaded.receipt.contentVersionId === active.content.id) return { kind: "clear" };
 			return { kind: "retain" };
 		}
-		if (loaded.kind === "no-decision") return active ? { kind: "retain" } : { kind: "clear" };
+		// `absent` keeps the empty attempt renewable, so later no-activity polls
+		// renew it instead of opening a new load attempt (OBS-003; same as modal/hover).
+		if (loaded.kind === "no-decision") return active ? { kind: "retain" } : { kind: "clear", absent: true };
 		const next = loaded.value as Decision;
 		const deadline = resolveAuthorizationDeadline(next);
 		if (!next.activityId || !next.touchpointDecisionId || !next.deploymentId || !next.content?.id || next.placementKey !== PLACEMENT || next.content?.placementKey !== PLACEMENT || deadline === null || !Number.isFinite(deadline)) {
@@ -83,18 +95,25 @@ export function ProductionCampaignBadge({
 			return { kind: "clear" };
 		}
 		if (!supportsWebTouchpointCapabilities(next.content, next.requiredCapabilities, supportedCapabilities)) {
+			observation.reject(PLACEMENT, "capability_unsupported");
 			emitWebTouchpointDiagnostic({ code: "touchpoint_capability_unsupported", detail: next.requiredCapabilities?.join(",") });
 			return { kind: "clear" };
 		}
-		return { kind: "decision", value: { ...touchpointLeaseValue(next), sessionSubject }, key: touchpointContentIdentity(next), validForMs: deadline - Date.parse(next.serverTime), offlineValidForMs: touchpointScheduleWindowMs(next), offlineRecovery: productionTouchpointRecovery(loaded.offlineReplay) ?? undefined };
-	}, [locale, sessionSubject]);
+		return { kind: "decision", value: { ...touchpointLeaseValue(next), sessionSubject }, replaceValue: observation.get(PLACEMENT) !== priorAttempt, key: touchpointContentIdentity(next), validForMs: deadline - Date.parse(next.serverTime), offlineValidForMs: touchpointScheduleWindowMs(next), offlineRecovery: productionTouchpointRecovery(loaded.offlineReplay) ?? undefined, timeContexts: new Map([[PLACEMENT, touchpointTimeContext(next, loaded.receivedAt)]]) };
+	}, [locale, sessionSubject, observation]);
 	const onError = useCallback((error: unknown) => {
 		const diagnostic = emitProductionTouchpointLoadDiagnostic(error);
 		if (diagnostic) emitWebTouchpointDiagnostic(diagnostic);
 	}, []);
-	const lifecycle = useTouchpointLifecycle({ enabled, identity: enabled ? JSON.stringify([sessionSubject, locale]) : null, load, onError, offlineFallback: true });
+	const lifecycle = useTouchpointLifecycle({ enabled, identity: enabled ? JSON.stringify([sessionSubject, locale]) : null, load, onError, observability: observation, offlineFallback: true });
 	const decision = lifecycle.current;
 	const clear = lifecycle.clear;
+	const timeRef = useRef(lifecycle.timeContexts?.get(PLACEMENT));
+	timeRef.current = lifecycle.timeContexts?.get(PLACEMENT);
+	useEffect(() => {
+		const element = containerRef.current?.querySelector<OpenDesignTouchpointElement>("opend-touchpoint");
+		if (timeRef.current && decision?.content.runtime.apiVersion === 2) void element?.updateTime(timeRef.current).catch(() => clear());
+	}, [clear, decision, lifecycle.timeContexts]);
 
 	useEffect(() => {
 		ensureWebTouchpointElement();
@@ -111,6 +130,8 @@ export function ProductionCampaignBadge({
 			return;
 		let cancelled = false;
 		const mountGeneration = lifecycle.generation;
+		const attempt = observation.get(PLACEMENT);
+		let stopVisibility: (() => void) | undefined;
 		const current = () =>
 			!cancelled &&
 			authenticated &&
@@ -119,6 +140,7 @@ export function ProductionCampaignBadge({
 		// OPEND-3378: a mount abandoned only because the lease was momentarily
 		// not current must be restarted by the next same-key grant.
 		const abandonFencedMount = () => {
+			attempt?.cancel("page_left");
 			if (!cancelled) lifecycle.reportFencedMount(mountGeneration);
 			dispose();
 		};
@@ -145,7 +167,9 @@ export function ProductionCampaignBadge({
 		container.replaceChildren(element);
 		void (async () => {
 			try {
+				const decodeStarted = performance.now();
 				verified = await verifyWebTouchpoint(decision.content);
+				attempt?.enrich({ decode_validate_ms: Math.max(0, performance.now() - decodeStarted) });
 				if (elementDisposed) disposeVerified();
 				if (!current()) {
 					abandonFencedMount();
@@ -175,6 +199,7 @@ export function ProductionCampaignBadge({
 							? "dark"
 							: "light",
 					),
+					timeRef.current,
 				);
 				if (!current() || !context) {
 					if (!current()) abandonFencedMount();
@@ -192,21 +217,26 @@ export function ProductionCampaignBadge({
 					verified.resourceUrls,
 					new Set(decision.staticActions.map((action) => action.id)),
 					{
+						runtimeApiVersion: decision.content.runtime.apiVersion,
+						attempt,
 						dispatchAction: async (actionId) => {
-							await dispatchProductionCampaignAction(
+							requireCampaignAction(await dispatchProductionCampaignAction(
 								decision,
 								actionId,
 								mountGeneration,
 								() => lifecycle.isCurrent(mountGeneration) ? mountGeneration : -1,
 								lifecycle.deadline,
-							);
+								{ track: trackRef.current, cmsCapture: cmsPrimaryCapture(attempt) },
+							));
 						},
 						onDiagnostic: emitWebTouchpointDiagnostic,
 					},
 				);
 				if (!current()) abandonFencedMount();
+				else { attempt?.ready(); stopVisibility = watchTouchpointVisibility({ element, isCurrent: current, onVisible: () => { const eventId = attempt?.exposure(decision, detail => emitWebTouchpointDiagnostic({ code: "touchpoint_exposure_telemetry_failed", detail })); captureCmsVisible(trackRef.current, attempt, eventId); } }); }
 			} catch (error) {
 				if (current()) {
+					attempt?.fail(error, "mount");
 					emitWebTouchpointDiagnostic({
 						code:
 							error instanceof Error ? error.message : "touchpoint_load_failed",
@@ -218,6 +248,8 @@ export function ProductionCampaignBadge({
 		})();
 		return () => {
 			cancelled = true;
+			stopVisibility?.();
+			attempt?.cancel("page_left");
 			dispose();
 			container.replaceChildren();
 		};
@@ -226,7 +258,7 @@ export function ProductionCampaignBadge({
 	const onTestVisible = useCallback(
 		(next: TestDecision, placementKey: TestCampaignPlacement) => {
 			const runtime = testRuntimeRef.current;
-			if (runtime) recordVisibleTestTouchpoint(runtime, next, placementKey);
+			if (runtime) recordVisibleTestTouchpoint(runtime, next, placementKey, trackRef.current);
 		},
 		[],
 	);

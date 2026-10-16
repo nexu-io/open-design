@@ -1,3 +1,4 @@
+import type { CmsTouchpointSurfaceViewProps } from './cms-touchpoints.js';
 /**
  * @module analytics/events/surface-view
  * surface_view event prop types and their union.
@@ -303,6 +304,7 @@ export interface StudioOnboardingHintSurfaceViewProps {
 }
 
 export type SurfaceViewProps =
+  | CmsTouchpointSurfaceViewProps
   | WorkspaceSurfaceViewProps
   | RunFailedToastSurfaceViewProps
   | RunRecoveryActionSurfaceViewProps

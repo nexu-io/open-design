@@ -75,34 +75,36 @@ beforeEach(() => {
 afterEach(() => { cleanup(); clearTestRuntimeSession(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe("OPEND-3436 Test request recovery", () => {
-	it.each(["network", "5xx", "timeout"] as const)("stops automatic directory requests after its first %s failure and deduplicates recovery", async kind => {
+	it.each(["network", "5xx", "timeout"] as const)("keeps directory polling after its first %s failure, recovers on cadence and deduplicates a recovery burst", async kind => {
 		catalogReply = () => failed(kind);
 		render(<Home />); await advance(15_000);
 		expect(catalogCalls()).toBe(1); expect(decisionCalls()).toBe(0);
-		await advance(360_000); expect(catalogCalls()).toBe(1);
+		await advance(60_000); expect(catalogCalls()).toBe(3); expect(decisionCalls()).toBe(0);
 		catalogReply = async () => Response.json({ deployments: [deployment] });
-		await recover(); expect(catalogCalls()).toBe(2); expect(decisionCalls()).toBe(4); expect(latest?.decisions.size).toBe(4);
-		await advance(30_000); expect(catalogCalls()).toBe(3); expect(decisionCalls()).toBe(8);
+		await recover(); expect(catalogCalls()).toBe(4); expect(decisionCalls()).toBe(4); expect(latest?.decisions.size).toBe(4);
+		await advance(30_000); expect(catalogCalls()).toBe(5); expect(decisionCalls()).toBe(16);
 	});
-	it.each(["network", "5xx", "timeout"] as const)("stops directory and decision timers after the initial decision %s failure", async kind => {
+	it.each(["network", "5xx", "timeout"] as const)("keeps directory and decision timers after the initial decision %s failure and recovers without an event", async kind => {
 		runtimeReply = () => failed(kind);
-		render(<Home />); await advance(15_000);
+		render(<Home />); await advance(5_000);
 		expect(decisionCalls()).toBe(4); expect(latest?.decisions.size ?? 0).toBe(0);
-		const catalogs = catalogCalls(); await advance(360_000);
-		expect(catalogCalls()).toBe(catalogs); expect(decisionCalls()).toBe(4);
-		await recover(); expect(catalogCalls()).toBe(catalogs + 1); expect(decisionCalls()).toBe(8);
-		await advance(360_000); expect(decisionCalls()).toBe(8);
+		const catalogs = catalogCalls(), decisions = decisionCalls(); await advance(60_000);
+		expect(catalogCalls()).toBe(catalogs + 2); expect(decisionCalls()).toBeGreaterThan(decisions);
+		runtimeReply = async (key, locale) => Response.json(decision(key, locale));
+		await advance(35_000); expect(latest?.decisions.size).toBe(4);
 	});
 	it.each(["network", "5xx", "timeout"] as const)("keeps renewal authority only to its original expiry after %s and recovers on home remount", async kind => {
 		const view = render(<Home />); await advance(); expect(latest?.decisions.size).toBe(4);
 		runtimeReply = () => failed(kind); await advance(45_000);
-		expect(decisionCalls()).toBe(8); expect(latest?.decisions.size).toBe(4);
+		expect(decisionCalls()).toBeGreaterThan(8); expect(latest?.decisions.size).toBe(4);
 		const catalogs = catalogCalls(); await advance(14_999); expect(latest?.decisions.size).toBe(4);
 		await advance(1); expect(latest?.decisions.size ?? 0).toBe(0);
-		await advance(360_000); expect(decisionCalls()).toBe(8); expect(catalogCalls()).toBe(catalogs);
+		const decisions = decisionCalls(); await advance(60_000);
+		expect(decisionCalls()).toBeGreaterThan(decisions); expect(catalogCalls()).toBeGreaterThan(catalogs);
 		view.rerender(<Home home={false} />); await advance();
 		runtimeReply = async (key, locale) => Response.json(decision(key, locale));
-		view.rerender(<Home />); await advance(); expect(decisionCalls()).toBe(12); expect(latest?.decisions.size).toBe(4);
+		const remounted = decisionCalls();
+		view.rerender(<Home />); await advance(); expect(decisionCalls()).toBe(remounted + 4); expect(latest?.decisions.size).toBe(4);
 	});
 	it("retains same-owner grants within their original window on failed remount, then hides exactly at expiry", async () => {
 		const view = render(<Home />); await advance();
@@ -112,7 +114,10 @@ describe("OPEND-3436 Test request recovery", () => {
 		const catalogs = catalogCalls(), decisions = decisionCalls();
 		await advance(49_999); expect(latest?.decisions.size).toBe(4);
 		await advance(1); expect(latest?.decisions.size ?? 0).toBe(0);
-		expect(catalogCalls()).toBe(catalogs); expect(decisionCalls()).toBe(decisions);
+		expect(catalogCalls()).toBeGreaterThan(catalogs); expect(decisionCalls()).toBeGreaterThan(decisions);
+		catalogReply = async () => Response.json({ deployments: [deployment] });
+		runtimeReply = async (key, locale) => Response.json(decision(key, locale));
+		await advance(35_000); expect(latest?.decisions.size).toBe(4);
 	});
 	it("isolates failed recovery across account and language changes and never retains a withdrawn grant", async () => {
 		const view = render(<Home />); await advance();
@@ -128,14 +133,14 @@ describe("OPEND-3436 Test request recovery", () => {
 	it.each(["network", "timeout"] as const)("isolates a partial %s renewal while healthy siblings continue normal renewal", async kind => {
 		render(<Home />); await advance();
 		runtimeReply = async (key, locale) => key === "opend.home.account-badge" ? failed(kind) : Response.json(decision(key, locale));
-		await advance(45_000); expect(decisionCalls()).toBe(8);
+		await advance(15_000); expect(decisionCalls()).toBe(8);
 		expect(latest?.decisions.size).toBe(kind === "timeout" ? 4 : 3);
-		await advance(25_000); expect(latest?.decisions.size).toBe(3);
+		await advance(55_000); expect(latest?.decisions.size).toBe(3);
 		await advance(120_000); expect(latest?.decisions.size).toBe(3);
 		expect(catalogCalls()).toBeGreaterThan(2); expect(decisionCalls()).toBeGreaterThan(8);
-		runtimeReply = async (key, locale) => Response.json(decision(key, locale)); await recover(); expect(latest?.decisions.size).toBe(4);
+		runtimeReply = async (key, locale) => Response.json(decision(key, locale)); await advance(35_000); expect(latest?.decisions.size).toBe(4);
 	});
-	it("retires equal-spaced remount authorizations at every original boundary without a retry driving rerenders", async () => {
+	it("retires equal-spaced remount authorizations at every original boundary while failed polls continue", async () => {
 		runtimeReply = async (key, locale) => Response.json({ ...decision(key, locale), authorizationExpiresAt: new Date(epoch + 15_000 * (placements.indexOf(key) + 1)).toISOString() });
 		const view = render(<Home />); await advance(10_000);
 		view.rerender(<Home home={false} />); await advance();
@@ -145,26 +150,120 @@ describe("OPEND-3436 Test request recovery", () => {
 			await advance(index === 0 ? 4_999 : 14_999); expect(latest?.decisions.size).toBe(4 - index);
 			await advance(1); expect(latest?.decisions.size ?? 0).toBe(3 - index);
 		}
-		expect(fetchMock.mock.calls.length).toBe(requests);
+		expect(fetchMock.mock.calls.length).toBeGreaterThan(requests);
 	});
-	it.each(["network", "timeout"] as const)("stops on %s when only half an atomic hover succeeds and no complete presentation is usable", async kind => {
+	it.each(["network", "timeout"] as const)("shows nothing on %s while only half an atomic hover succeeds, keeps polling, and shows the pair once it clears", async kind => {
 		catalogReply = async () => Response.json({ deployments: [{ ...deployment, snapshot: { ...deployment.snapshot, placementKeys: placements.slice(2) } }] });
 		runtimeReply = async (key, locale) => key === "opend.home.hover-entry" ? failed(kind) : Response.json(decision(key, locale));
-		render(<Home />); await advance(); await advance(360_000); expect(latest?.decisions.size ?? 0).toBe(0);
-		expect(catalogCalls()).toBe(1); expect(decisionCalls()).toBe(2);
-		runtimeReply = async (key, locale) => Response.json(decision(key, locale)); await recover(); expect(latest?.decisions.size).toBe(2);
+		render(<Home />); await advance(); await advance(60_000); expect(latest?.decisions.size ?? 0).toBe(0);
+		expect(catalogCalls()).toBe(3); expect(decisionCalls()).toBeGreaterThan(2);
+		runtimeReply = async (key, locale) => Response.json(decision(key, locale)); await advance(35_000); expect(latest?.decisions.size).toBe(2);
 	});
-	it("clears only the successful chain's failure and resumes polling after both chains recover", async () => {
+	it("keeps both chains polling while either fails and recovers each on cadence without events", async () => {
 		render(<Home />); await advance();
 		catalogReply = () => failed("network"); runtimeReply = () => failed("network"); await advance(30_000);
-		await recover(); // both chains have now independently failed
 		const catalogs = catalogCalls(), decisions = decisionCalls();
-		catalogReply = async () => Response.json({ deployments: [deployment] }); await recover();
-		await advance(120_000); expect(catalogCalls()).toBe(catalogs + 1); expect(decisionCalls()).toBe(decisions + 4);
-		catalogReply = () => failed("network"); runtimeReply = async (key, locale) => Response.json(decision(key, locale)); await recover();
-		const recoveredDecisions = decisionCalls(); await advance(120_000); expect(decisionCalls()).toBe(recoveredDecisions);
-		catalogReply = async () => Response.json({ deployments: [deployment] }); await recover();
+		await advance(60_000); expect(catalogCalls()).toBe(catalogs + 2); expect(decisionCalls()).toBeGreaterThan(decisions);
+		catalogReply = async () => Response.json({ deployments: [deployment] });
+		const catalogRecovered = decisionCalls(); await advance(30_000); expect(decisionCalls()).toBeGreaterThan(catalogRecovered);
+		catalogReply = () => failed("network"); runtimeReply = async (key, locale) => Response.json(decision(key, locale));
+		await advance(35_000); expect(latest?.decisions.size).toBe(4);
+		catalogReply = async () => Response.json({ deployments: [deployment] });
+		await advance(30_000);
 		const recoveredCatalogs = catalogCalls(), allRecovered = decisionCalls();
-		await advance(30_000); expect(catalogCalls()).toBe(recoveredCatalogs + 1); expect(decisionCalls()).toBe(allRecovered + 4);
+		await advance(30_000); expect(catalogCalls()).toBe(recoveredCatalogs + 1); expect(decisionCalls()).toBe(allRecovered + 12);
+	});
+});
+
+describe("D-POLL a single failed runtime request never stops Test polling", () => {
+	const shifted = (key: TestCampaignPlacement, locale: string) => ({ ...decision(key, locale), startsAt: new Date(epoch - 30_000).toISOString() });
+	const faults: Record<string, (key: TestCampaignPlacement, locale: string) => Promise<Response>> = {
+		"connection failure": () => Promise.reject(new TypeError("Failed to fetch")),
+		"503": async () => new Response(null, { status: 503 }),
+		"401": async () => new Response(null, { status: 401 }),
+		"deploymentId mismatch": async (key, locale) => Response.json({ ...decision(key, locale), deploymentId: "deployment-other" }),
+		"activityId mismatch": async (key, locale) => Response.json({ ...decision(key, locale), activityId: "activity-other" }),
+	};
+	it.each(Object.keys(faults))("%s: keeps runtime and directory polling through the fault and restores the whole group within 35 s of it clearing, with no recovery event", async kind => {
+		render(<Home />); await advance(); expect(latest?.decisions.size).toBe(4);
+		runtimeReply = faults[kind]!;
+		// Several consecutive failed polls, long enough for the 60 s grant to lapse.
+		await advance(65_000);
+		expect(latest?.decisions.size ?? 0).toBe(0);
+		const decisions = decisionCalls(), catalogs = catalogCalls();
+		await advance(30_000);
+		expect(decisionCalls()).toBeGreaterThanOrEqual(decisions + 8);
+		expect(catalogCalls()).toBeGreaterThan(catalogs);
+		runtimeReply = async (key, locale) => Response.json(decision(key, locale));
+		const cleared = decisionCalls();
+		await advance(35_000);
+		expect(decisionCalls()).toBeGreaterThan(cleared);
+		expect(latest?.decisions.size).toBe(4);
+	});
+	it("keeps the test-deployments list polling after its own failure and after a runtime failure", async () => {
+		render(<Home />); await advance(); const first = catalogCalls();
+		catalogReply = () => Promise.reject(new TypeError("Failed to fetch"));
+		runtimeReply = () => Promise.reject(new TypeError("Failed to fetch"));
+		await advance(90_000); expect(catalogCalls()).toBe(first + 3);
+		catalogReply = async () => Response.json({ deployments: [deployment] });
+		runtimeReply = async (key, locale) => Response.json(decision(key, locale));
+		await advance(35_000); expect(catalogCalls()).toBeGreaterThan(first + 3); expect(latest?.decisions.size).toBe(4);
+	});
+	it("window-bounds mismatch (changed startsAt) discards one round, never stops polling, and each matching round restores the group", async () => {
+		render(<Home />); await advance(); expect(latest?.decisions.size).toBe(4);
+		runtimeReply = async (key, locale) => Response.json(shifted(key, locale));
+		await advance(10_000); expect(latest?.decisions.size ?? 0).toBe(0);
+		await advance(10_000); expect(latest?.decisions.size).toBe(4);
+		expect(latest?.decisions.get("opend.home.campaign-modal")?.startsAt).toBe(new Date(epoch - 30_000).toISOString());
+		await advance(30_000); expect(latest?.decisions.size).toBe(4);
+		runtimeReply = async (key, locale) => Response.json(decision(key, locale));
+		const reverted = decisionCalls();
+		await advance(10_000); expect(latest?.decisions.size ?? 0).toBe(0);
+		await advance(25_000); expect(decisionCalls()).toBeGreaterThan(reverted); expect(latest?.decisions.size).toBe(4);
+		expect(latest?.decisions.get("opend.home.campaign-modal")?.startsAt).toBe(new Date(epoch - 60_000).toISOString());
+	});
+});
+
+
+describe("D-STALE rejects inconsistent actions without retaining old content", () => {
+	const declaredActions = [{ id: "primary", target: { kind: "https" as const, url: "https://example.test/declared" } }];
+	const changedActions = [{ id: "primary", target: { kind: "https" as const, url: "https://example.test/undeclared" } }];
+	function matchingDecision(key: TestCampaignPlacement, locale: string): TestDecision {
+		const value = decision(key, locale);
+		return { ...value, staticActions: declaredActions, content: { ...value.content,
+			manifest: { ...value.content.manifest, placements: value.content.manifest.placements.map(p => ({ ...p, staticActions: declaredActions })) },
+		} };
+	}
+	it.each(["opend.home.hover-entry", "opend.home.hover-layer", "opend.home.campaign-modal", "opend.home.account-badge"] as const)("%s mismatch immediately clears the whole session and recovers on cadence", async faultyPlacement => {
+		runtimeReply = async (key, locale) => Response.json(matchingDecision(key, locale));
+		render(<Home />); await advance(); expect(latest?.decisions.size).toBe(4);
+		runtimeReply = async (key, locale) => Response.json({ ...matchingDecision(key, locale),
+			...(key === faultyPlacement ? { staticActions: changedActions } : {}),
+		});
+		await advance(10_000);
+		// The original grant still has 50 s left: rejection must clear it now.
+		expect(latest?.decisions.size ?? 0).toBe(0);
+		const calls = decisionCalls();
+		await advance(20_000);
+		expect(latest?.decisions.size ?? 0).toBe(0);
+		expect(decisionCalls()).toBeGreaterThan(calls);
+		runtimeReply = async (key, locale) => Response.json(matchingDecision(key, locale));
+		await advance(10_000);
+		expect(latest?.decisions.size).toBe(4);
+	});
+	it("rejects before a hanging sibling settles and does not resurrect retained content on remount", async () => {
+		runtimeReply = async (key, locale) => Response.json(matchingDecision(key, locale));
+		const view = render(<Home />); await advance(); expect(latest?.decisions.size).toBe(4);
+		runtimeReply = (key, locale) => key === "opend.home.hover-layer"
+			? Promise.resolve(Response.json({ ...matchingDecision(key, locale), staticActions: changedActions }))
+			: new Promise<Response>(() => {});
+		await advance(10_000);
+		expect(latest?.decisions.size ?? 0).toBe(0);
+		view.rerender(<Home home={false} />); await advance();
+		view.rerender(<Home />); await advance();
+		expect(latest?.decisions.size ?? 0).toBe(0);
+		runtimeReply = async (key, locale) => Response.json(matchingDecision(key, locale));
+		await advance(35_000);
+		expect(latest?.decisions.size).toBe(4);
 	});
 });

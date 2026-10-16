@@ -1,4 +1,8 @@
+import { normalizeTelemetryAppVersion, readCurrentAppVersionInfo } from '../app-version.js';
+import { touchpointLoadBatchSchema, TOUCHPOINT_LOAD_BODY_BYTES, parseTouchpointLoadMetrics } from '@open-design/contracts/api/touchpointLoadResults';
+import { touchpointMetricsHeader, touchpointResourceSizes, TOUCHPOINT_LOAD_METRICS_HEADER } from '../services/touchpoint-load-metrics.js';
 import type { Express, Request, Response } from 'express';
+import { touchpointTestBehaviorEventSchema, TOUCHPOINT_TEST_BEHAVIOR_BODY_LIMIT, touchpointTestAutomatedReportSchema, TOUCHPOINT_TEST_AUTOMATED_REPORT_BODY_LIMIT } from '@open-design/contracts/api/touchpointTestRuntime';
 import type {
   TestRuntimeAcceptanceRequest,
   TestRuntimeContextRequest,
@@ -587,10 +591,88 @@ function touchpointCacheScope(context: {
 export interface VelaRoutesLifecycle { close(): Promise<void>; }
 type TouchpointRequests = { closing: boolean; active: Map<() => void, Promise<void>> };
 
+/** Single authenticated write seam. No caller headers, queries, redirects or cache. */
+function proxyTestBehavior(req: Request, res: Response, context: { apiUrl: string; controlKey: string }, requests?: TouchpointRequests): void {
+  const body = velaProxyRequestBody(req);
+  const declared = req.headers['content-length'];
+  // The global JSON parser already consumed the stream. Requiring the wire
+  // length prevents chunked/whitespace bodies evading this narrower budget.
+  if (declared === undefined) { res.status(411).json({ error: 'touchpoint_test_behavior_length_required' }); return; }
+  if (req.headers['content-encoding'] && req.headers['content-encoding'] !== 'identity') {
+    res.status(415).json({ error: 'touchpoint_test_behavior_encoding_unsupported' }); return;
+  }
+  if ((declared !== undefined && (!/^\d+$/.test(String(declared)) || Number(declared) > TOUCHPOINT_TEST_BEHAVIOR_BODY_LIMIT)) || (body && body.byteLength > TOUCHPOINT_TEST_BEHAVIOR_BODY_LIMIT)) {
+    res.status(413).json({ error: 'touchpoint_test_behavior_body_too_large' }); return;
+  }
+  if (Object.keys(req.query).length || !touchpointTestBehaviorEventSchema.safeParse(req.body).success) {
+    res.status(400).json({ error: 'invalid_touchpoint_test_behavior' }); return;
+  }
+  const target = new URL('/api/v1/touchpoints/runtime/test-events', context.apiUrl);
+  if (!['http:', 'https:'].includes(target.protocol) || target.username || target.password) {
+    res.status(500).json({ error: 'invalid_vela_api_url' }); return;
+  }
+  if (requests?.closing) { res.status(503).json({ error: 'touchpoint_runtime_closing' }); return; }
+  let settled = false;
+  let incoming: http.IncomingMessage | undefined;
+  let upstream: http.ClientRequest | undefined;
+  let deadline: ReturnType<typeof setTimeout> | undefined;
+  let resolveDone: () => void = () => undefined;
+  const done = new Promise<void>(resolve => { resolveDone = resolve; });
+  const finish = () => {
+    if (settled) return false;
+    settled = true;
+    clearTimeout(deadline);
+    requests?.active.delete(cancel);
+    resolveDone();
+    return true;
+  };
+  const fail = (status: number, error: string) => {
+    if (!finish()) return;
+    incoming?.destroy();
+    upstream?.destroy();
+    if (!res.writableEnded && !res.destroyed) res.status(status).json({ error });
+  };
+  const cancel = () => {
+    if (!finish()) return;
+    incoming?.destroy(); upstream?.destroy();
+    if (!res.destroyed && !res.writableEnded) res.status(503).json({ error: 'touchpoint_runtime_closing' });
+  };
+  upstream = (target.protocol === 'https:' ? https : http).request(target, {
+    method: 'POST', headers: { accept: 'application/json', 'content-type': 'application/json',
+      'content-length': String(body?.byteLength ?? 0), authorization: `Bearer ${context.controlKey}` },
+  }, response => {
+    incoming = response;
+    if (settled) { response.destroy(); return; }
+    const status = response.statusCode ?? 502;
+    if (status >= 300 && status < 400) { fail(502, 'touchpoint_test_behavior_redirect'); return; }
+    const chunks: Buffer[] = [];
+    let bytes = 0;
+    response.on('data', (chunk: Buffer) => {
+      if (settled) return;
+      bytes += chunk.length;
+      if (bytes > TOUCHPOINT_TEST_BEHAVIOR_BODY_LIMIT) { fail(502, 'touchpoint_test_behavior_response_too_large'); return; }
+      chunks.push(chunk);
+    });
+    response.on('error', () => fail(502, 'touchpoint_runtime_unavailable'));
+    response.on('aborted', () => fail(502, 'touchpoint_runtime_unavailable'));
+    response.on('end', () => {
+      if (!finish()) return;
+      res.status(status).type('application/json').end(Buffer.concat(chunks, bytes));
+    });
+  });
+  deadline = setTimeout(() => fail(504, 'touchpoint_test_behavior_timeout'), 5_000);
+  deadline.unref?.();
+  requests?.active.set(cancel, done);
+  upstream.on('error', () => fail(502, 'touchpoint_runtime_unavailable'));
+  req.once('aborted', cancel);
+  res.once('close', cancel);
+  upstream.end(body);
+}
+
 function proxyTouchpointRuntimeRequest(
   req: Request,
   res: Response,
-  context: { profile?: string; apiUrl: string; controlKey?: string },
+  context: { profile?: string; apiUrl: string; controlKey?: string; daemonVersion?: string | null },
   runtime: 'test' | 'production',
   contentCache?: TouchpointContentCache,
   requests?: TouchpointRequests,
@@ -603,12 +685,13 @@ function proxyTouchpointRuntimeRequest(
   // keeps its separately enumerated context/deployment routes; neither proxy
   // forwards a browser-supplied Vela credential or arbitrary path.
   let suffix: string | null = null;
-  if (runtime === 'production') {
+  if (req.method === 'POST' && runtimePath === '/load-results') suffix = '/load-results';
+  else if (runtime === 'production') {
     if (req.method === 'GET' && runtimePath === '/') suffix = '/production';
     else if (req.method === 'POST' && runtimePath === '/events') suffix = '/events';
   } else if (
     req.method === 'POST' &&
-    /^\/test-deployments\/[A-Za-z0-9_-]{1,128}\/acceptances$/u.test(runtimePath)
+    /^\/test-deployments\/[A-Za-z0-9_-]{1,128}\/(?:acceptances|automated-reports)$/u.test(runtimePath)
   ) {
     suffix = runtimePath;
   } else if (req.method === 'GET' && runtimePath === '/deployments') {
@@ -617,11 +700,17 @@ function proxyTouchpointRuntimeRequest(
     suffix = '/test';
   } else if (req.method === 'POST' && runtimePath === '/context') {
     suffix = '/test-context';
+  } else if (req.method === 'POST' && runtimePath === '/events') {
+    suffix = '/test-events';
   }
   if (!suffix || !context.controlKey) {
     res.status(context.controlKey ? 404 : 401).json({
       error: context.controlKey ? 'unknown_touchpoint_runtime_path' : 'vela_control_key_required',
     });
+    return;
+  }
+  if (suffix === '/test-events') {
+    proxyTestBehavior(req, res, { apiUrl: context.apiUrl, controlKey: context.controlKey }, requests);
     return;
   }
   const query = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
@@ -634,6 +723,26 @@ function proxyTouchpointRuntimeRequest(
     return;
   }
   const body = req.method === 'POST' ? velaProxyRequestBody(req) : null;
+  if (suffix.endsWith('/automated-reports')) {
+    const declared = req.headers['content-length'];
+    if ((declared !== undefined && (!/^\d+$/.test(String(declared)) || Number(declared) > TOUCHPOINT_TEST_AUTOMATED_REPORT_BODY_LIMIT)) || (body && body.byteLength > TOUCHPOINT_TEST_AUTOMATED_REPORT_BODY_LIMIT)) {
+      res.status(413).json({ error: 'automated_report_body_too_large' }); return;
+    }
+    if (!touchpointTestAutomatedReportSchema.safeParse(req.body).success) {
+      res.status(400).json({ error: 'invalid_automated_report' }); return;
+    }
+  }
+  if (suffix === '/load-results') {
+    const declared = req.headers['content-length'];
+    if ((declared !== undefined && (!/^\d+$/.test(String(declared)) || Number(declared) > TOUCHPOINT_LOAD_BODY_BYTES)) || (body && body.byteLength > TOUCHPOINT_LOAD_BODY_BYTES)) {
+      res.status(413).json({ error: 'touchpoint_load_body_too_large' }); return;
+    }
+    let payload: unknown;
+    try { payload = body ? JSON.parse(body.toString('utf8')) : null; } catch { payload = null; }
+    if (!touchpointLoadBatchSchema.safeParse(payload).success) {
+      res.status(400).json({ error: 'invalid_touchpoint_load_batch' }); return;
+    }
+  }
   // Content assembly applies to exactly one route: the read-only production
   // decision. Everything else keeps the verbatim streaming path.
   const authorityScope = runtime === 'production'
@@ -726,7 +835,10 @@ function proxyTouchpointRuntimeRequest(
     res.status(200);
     res.setHeader('content-type', 'application/json');
     res.setHeader(TOUCHPOINT_OFFLINE_REPLAY_HEADER, '1');
-    res.end(Buffer.from(JSON.stringify(replayed), 'utf8'));
+    const localBody = Buffer.from(JSON.stringify(replayed), 'utf8');
+    const resources = touchpointResourceSizes(replayed);
+    res.setHeader(TOUCHPOINT_LOAD_METRICS_HEADER, touchpointMetricsHeader({ daemon_version: context.daemonVersion ?? null, cache_hit: true, cache_source: 'offline_fallback', local_response_bytes: localBody.byteLength, local_base64_bytes: resources.base64, decoded_resource_bytes: resources.decoded }));
+    res.end(localBody);
     return true;
   };
   /**
@@ -843,11 +955,13 @@ function proxyTouchpointRuntimeRequest(
       // oversized, or unreadable. Keep bytes for a later authenticated renewal.
       if (upstreamStatus !== null) refuseCachedAuthority(upstreamStatus);
       if (callerGone) { settleCutShort(); upstreamRes.destroy(); return; }
+      const upstreamMetrics = parseTouchpointLoadMetrics(typeof upstreamRes.headers[TOUCHPOINT_LOAD_METRICS_HEADER] === 'string' ? upstreamRes.headers[TOUCHPOINT_LOAD_METRICS_HEADER] : null);
       const passThrough = () => {
         upstreamRes.once('end', () => { bodyEnded = true; finishOperation(); });
         upstreamRes.once('error', settleCutShort);
         upstreamRes.once('close', () => { if (!bodyEnded) settleCutShort(); });
         res.status(upstreamRes.statusCode ?? 502);
+        res.setHeader(TOUCHPOINT_LOAD_METRICS_HEADER, touchpointMetricsHeader({ daemon_version: context.daemonVersion ?? null, server_version: upstreamMetrics?.server_version ?? null, resource_read_ms: upstreamMetrics?.resource_read_ms ?? null }));
         res.setHeader('content-type', upstreamRes.headers['content-type'] ?? 'application/json');
         // Without this the client would decode gzip bytes as JSON. It is set only
         // when upstream actually encoded, so an unencoded reply is unaffected.
@@ -868,6 +982,7 @@ function proxyTouchpointRuntimeRequest(
       let failed = false;
       let streaming = false;
       let answered = false;
+      let firstBodyByte: number | null = null;
       const forward = (chunk: Buffer): void => {
         if (!chunk.byteLength) return;
         if (!res.write(chunk)) {
@@ -887,6 +1002,7 @@ function proxyTouchpointRuntimeRequest(
        */
       const degradeToStreaming = (): void => {
         streaming = true;
+        res.setHeader(TOUCHPOINT_LOAD_METRICS_HEADER, touchpointMetricsHeader({ daemon_version: context.daemonVersion ?? null }));
         res.status(upstreamRes.statusCode ?? 502);
         res.setHeader('content-type', upstreamRes.headers['content-type'] ?? 'application/json');
         const contentEncoding = upstreamRes.headers['content-encoding'];
@@ -933,6 +1049,7 @@ function proxyTouchpointRuntimeRequest(
         settleCutShort();
       });
       upstreamRes.on('data', (chunk: Buffer) => {
+        if (firstBodyByte === null && chunk.byteLength) firstBodyByte = performance.now();
         if (answered) return;
         if (streaming) {
           forward(chunk);
@@ -963,7 +1080,23 @@ function proxyTouchpointRuntimeRequest(
         }
         if (failed || res.headersSent) return;
         const raw = Buffer.concat(chunks, size);
+        const publicTransferMs = firstBodyByte === null ? null : Math.max(0, performance.now() - firstBodyByte);
         chunks.length = 0;
+        const annotate = (localBody: Buffer, publicBody: unknown = null, localContent: unknown = publicBody, assembled = false, compressedEcho = false) => {
+          const publicSizes = touchpointResourceSizes(publicBody), localSizes = touchpointResourceSizes(localContent);
+          res.setHeader(TOUCHPOINT_LOAD_METRICS_HEADER, touchpointMetricsHeader({
+            daemon_version: context.daemonVersion ?? null,
+            public_transfer_ms: publicTransferMs, public_response_bytes: raw.byteLength,
+            local_response_bytes: compressedEcho ? null : localBody.byteLength,
+            public_base64_bytes: publicSizes.base64, local_base64_bytes: localSizes.base64,
+            decoded_resource_bytes: localSizes.decoded,
+            resource_read_ms: assembled ? null : upstreamMetrics?.resource_read_ms ?? null,
+            server_version: upstreamMetrics?.server_version ?? null,
+            cache_hit: assembled ? true : null, cache_source: assembled ? 'daemon' : null,
+            held_content_id: held?.heldContentId ?? null, held_content_locale: held?.heldContentLocale ?? null,
+            content_omitted: publicBody && typeof publicBody === 'object' && 'contentOmitted' in publicBody ? (publicBody as { contentOmitted?: boolean }).contentOmitted ?? null : null,
+          }));
+        };
         const echo = () => {
           finishOperation();
           res.status(upstreamRes.statusCode ?? 502);
@@ -971,6 +1104,9 @@ function proxyTouchpointRuntimeRequest(
           const contentEncoding = upstreamRes.headers['content-encoding'];
           if (typeof contentEncoding === 'string' && contentEncoding)
             res.setHeader('content-encoding', contentEncoding);
+          let parsedEcho: unknown = null;
+          try { const text = decodeProxyBody(raw, upstreamRes.headers['content-encoding'] as string | undefined, MAX_BUFFERED_DECISION_BYTES); if (text) parsedEcho = JSON.parse(text.toString('utf8')); } catch { /* Unknown body remains unknown. */ }
+          annotate(raw, parsedEcho, parsedEcho, false, Boolean(upstreamRes.headers['content-encoding']));
           res.end(raw);
         };
         const decoded = decodeProxyBody(
@@ -1024,6 +1160,7 @@ function proxyTouchpointRuntimeRequest(
           finishOperation();
           res.status(200);
           res.setHeader('content-type', upstreamRes.headers['content-type'] ?? 'application/json');
+          annotate(decoded, decision);
           res.end(decoded);
           return;
         }
@@ -1037,7 +1174,9 @@ function proxyTouchpointRuntimeRequest(
           finishOperation();
           res.status(200);
           res.setHeader('content-type', 'application/json');
-          res.end(Buffer.from(JSON.stringify(full), 'utf8'));
+          const localBody = Buffer.from(JSON.stringify(full), 'utf8');
+          annotate(localBody, decision, full, true);
+          res.end(localBody);
           return;
         }
         // The one thing that must never happen is a campaign that does not show
@@ -1071,6 +1210,7 @@ function proxyTouchpointRuntimeRequest(
 
 export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): VelaRoutesLifecycle {
   const env = deps.env ?? process.env;
+  const daemonVersion = readCurrentAppVersionInfo({ env }).then(info => normalizeTelemetryAppVersion(info.version)).catch(() => null);
   const onCredentialStateObserved =
     deps.onCredentialStateObserved ?? (() => undefined);
   const { RUNTIME_DATA_DIR } = deps.paths;
@@ -1354,14 +1494,14 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
           proxyTouchpointRuntimeRequest(
             req,
             res,
-            { ...context, apiUrl: target.origin },
+            { ...context, apiUrl: target.origin, daemonVersion: await daemonVersion },
             'production',
             touchpointContentCache,
             requests,
           );
           return;
         }
-        proxyTouchpointRuntimeRequest(req, res, context, 'production', touchpointContentCache, requests);
+        proxyTouchpointRuntimeRequest(req, res, { ...context, daemonVersion: await daemonVersion }, 'production', touchpointContentCache, requests);
       } catch {
         res.status(502).json({ error: 'touchpoint_runtime_unavailable' });
       }
@@ -1385,7 +1525,7 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
           res.status(401).json({ error: 'vela_control_key_required' });
           return;
         }
-        proxyTouchpointRuntimeRequest(req, res, context, 'test');
+        proxyTouchpointRuntimeRequest(req, res, { ...context, daemonVersion: await daemonVersion }, 'test', undefined, requests);
       } catch {
         res.status(502).json({ error: 'touchpoint_runtime_unavailable' });
       }

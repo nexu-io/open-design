@@ -1,7 +1,21 @@
+import {
+	verifyCmsTouchpointContent,
+	captureCmsVisible,
+	captureCmsClose,
+	captureCmsPrimary,
+	cmsPrimaryCapture,
+	cmsActionCapture,
+} from "../analytics/cms-touchpoints";
+import type { TouchpointCloseReason } from "@open-design/contracts";
+import { watchTouchpointVisibility } from "./touchpoint-lifecycle";
+import { useTouchpointLoadOwner } from "./touchpoint-load-observability";
 import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { useI18n } from "../i18n";
 import { getOpenDesignHost } from "@open-design/host";
-import { openExternalUrl } from "../providers/registry";
+import { useAnalytics } from "../analytics/provider";
+import type { ConsolePricingTargetOptions } from "./console-pricing-target";
+import { navigateCampaignTarget, resolveCampaignTarget } from "./touchpoint-navigation";
+export { internalActionNavigationUrl } from "./touchpoint-navigation";
 import {
 	touchpointStaticActionsMatch,
 	type TouchpointStaticAction,
@@ -29,6 +43,7 @@ import {
 	touchpointContentIdentity,
 	touchpointLeaseValue,
 	touchpointScheduleWindowMs,
+	touchpointTimeContext,
 	touchpointWithdrawsDisplay,
 	useTouchpointLifecycle,
 	type TouchpointLeaseValue,
@@ -38,13 +53,14 @@ import {
 	TestTouchpointMount,
 	completeCampaignAction,
 	recordVisibleTestTouchpoint,
+	recordTestTouchpointClose,
 	useTestRuntime,
 } from "./TestCampaignModal";
 import type { TestCampaignPlacement, TestDecision } from "./TestCampaignModal";
 import styles from "./TestCampaignModal.module.css";
 const PLACEMENT = "opend.home.campaign-modal";
 export const PRODUCTION_ACTION_TELEMETRY_TIMEOUT_MS = 3_000;
-const supportedCapabilities = new Set(["close", "static-action"]);
+const supportedCapabilities = new Set(["close", "static-action", "countdown-v1", "action-console-pricing-v1"]);
 
 type Decision = {
 	activityId: string;
@@ -79,25 +95,6 @@ function recordDisplayed(subject: string, activity: string): void {
 }
 
 /**
- * Parses an internal action at execution time. Browser URL normalization treats
- * backslashes as hierarchy separators, so manifest validation alone cannot be
- * the origin boundary.
- */
-export function internalActionNavigationUrl(
-	path: unknown,
-	href = window.location.href,
-): URL | null {
-	if (typeof path !== "string") return null;
-	try {
-		const origin = new URL(href).origin;
-		const target = new URL(path, href);
-		return target.origin === origin ? target : null;
-	} catch {
-		return null;
-	}
-}
-
-/**
  * Performs a server-validated click before the host consumes a static target.
  *
  * Takes the lease value, not the response DTO: how long authority lasts arrives
@@ -110,17 +107,11 @@ export async function dispatchProductionCampaignAction(
 	generation: number,
 	currentGeneration: () => number,
 	expiresAt: number,
+	pricingOptions?: ConsolePricingTargetOptions,
 ): Promise<boolean> {
-	const action = decision.staticActions.find(
-		(candidate) => candidate.id === actionId,
-	);
-	const internalTarget =
-		action?.target.kind === "internal"
-			? internalActionNavigationUrl(action.target.path)
-			: undefined;
+	const target = resolveCampaignTarget(decision.staticActions, actionId);
 	if (
-		!action ||
-		(action.target.kind === "internal" && !internalTarget) ||
+		!target ||
 		generation !== currentGeneration() ||
 		expiresAt <= Date.now() ||
 		!navigator.userActivation?.isActive
@@ -131,6 +122,15 @@ export async function dispatchProductionCampaignAction(
 		});
 		return false;
 	}
+	// Action facts come only from this safely resolved immutable static declaration.
+	// Supplied capture metadata never determines the destination or its semantics.
+	const cmsCapture = cmsActionCapture(
+		pricingOptions?.cmsCapture,
+		decision,
+		actionId,
+	);
+	const actionOptions = { ...pricingOptions, cmsCapture };
+	const eventId = cmsCapture?.eventId ?? crypto.randomUUID();
 	let response: Response | undefined;
 	const telemetryController = new AbortController();
 	const telemetryTimeout = setTimeout(
@@ -146,7 +146,7 @@ export async function dispatchProductionCampaignAction(
 				touchpointDecisionId: decision.touchpointDecisionId,
 				activityId: decision.activityId,
 				placementKey: decision.placementKey,
-				eventId: crypto.randomUUID(),
+				eventId,
 				kind: "click",
 			}),
 		});
@@ -178,18 +178,9 @@ export async function dispatchProductionCampaignAction(
 		});
 		return false;
 	}
-	let navigated = false;
-	try {
-		// The host may refuse an external URL; only its own answer is success.
-		if (action.target.kind === "https")
-			navigated = await openExternalUrl(action.target.url);
-		else if (internalTarget) {
-			window.location.assign(internalTarget.href);
-			navigated = true;
-		}
-	} catch {
-		navigated = false;
-	}
+	if (target.kind !== "console-pricing" && actionOptions.track && cmsCapture)
+		captureCmsPrimary(actionOptions.track, cmsCapture);
+	const navigated = await navigateCampaignTarget(target, actionOptions);
 	if (!navigated)
 		emitWebTouchpointDiagnostic({
 			code: "touchpoint_action_denied",
@@ -268,6 +259,10 @@ export function ProductionCampaignModal({
 	sessionSubject: string | null;
 }) {
 	const { locale, t } = useI18n();
+	const observation = useTouchpointLoadOwner("production", sessionSubject, locale);
+	const analytics = useAnalytics();
+	const actionOptionsRef = useRef<ConsolePricingTargetOptions>({ track: analytics.track });
+	actionOptionsRef.current = { track: analytics.track };
 	const testRuntime = useTestRuntime();
 	// A sibling entering or leaving the session must not rebuild this placement.
 	const testRuntimeRef = useRef(testRuntime);
@@ -310,12 +305,13 @@ export function ProductionCampaignModal({
 			authenticated && !testClosed
 				? { campaignKey: testCampaignKey, selectionKey: testSelectionKey }
 				: null;
-	const closeTestModal = useCallback(() => {
+	const closeTestModal = useCallback((reason?: TouchpointCloseReason) => {
+		if (testDecision) recordTestTouchpointClose(testDecision, reason, actionOptionsRef.current.track!);
 		setReplaySelection(null);
 		if (testCampaignKey !== null) {
 			setDismissedTestCampaigns(previous => new Set([...previous, testCampaignKey]));
 		}
-	}, [testCampaignKey]);
+	}, [testCampaignKey, testDecision]);
 	const [closed, setClosed] = useState(false);
 	const openPresentation = useRef<OpenPresentation | null>(null);
 	const clearOpenPresentation = useCallback(() => {
@@ -332,7 +328,8 @@ export function ProductionCampaignModal({
 		async (signal: AbortSignal, active: AuthorizedDecision | null): Promise<TouchpointLifecycleLoad<AuthorizedDecision>> => {
 			if (!locale || !sessionSubject) return { kind: "clear" };
 			const requestedAt = Date.now();
-			const loaded = await loadProductionTouchpointDecision(PLACEMENT, locale, signal, active?.touchpointDecisionId);
+			const priorAttempt = observation.get(PLACEMENT);
+			const loaded = await loadProductionTouchpointDecision(PLACEMENT, locale, signal, active?.touchpointDecisionId, observation);
 			if (signal.aborted) return { kind: "clear" };
 			if (loaded.kind === "revoked") {
 				const revokesActive =
@@ -346,7 +343,7 @@ export function ProductionCampaignModal({
 			}
 			if (loaded.kind === "no-decision") {
 				if (!active) clearOpenPresentation();
-				return active ? { kind: "retain" } : { kind: "clear" };
+				return active ? { kind: "retain" } : { kind: "clear", absent: true };
 			}
 			const next = loaded.value as Decision;
 			const deadline = resolveAuthorizationDeadline(next);
@@ -354,7 +351,7 @@ export function ProductionCampaignModal({
 			if (!next.activityId || !next.touchpointDecisionId || !next.deploymentId || !next.content?.id || next.placementKey !== PLACEMENT || next.content?.placementKey !== PLACEMENT || deadline === null || !Number.isFinite(serverTime) || !supportsWebTouchpointCapabilities(next.content, next.requiredCapabilities, supportedCapabilities)) {
 				clearOpenPresentation();
 				if (next.placementKey !== PLACEMENT || next.content?.placementKey !== PLACEMENT) emitWebTouchpointDiagnostic({ code: "touchpoint_decision_mismatch" });
-				else if (!supportsWebTouchpointCapabilities(next.content, next.requiredCapabilities, supportedCapabilities)) emitWebTouchpointDiagnostic({ code: "touchpoint_capability_unsupported", detail: next.requiredCapabilities?.join(",") });
+				else if (!supportsWebTouchpointCapabilities(next.content, next.requiredCapabilities, supportedCapabilities)) { observation.reject(PLACEMENT, "capability_unsupported"); emitWebTouchpointDiagnostic({ code: "touchpoint_capability_unsupported", detail: next.requiredCapabilities?.join(",") }); }
 				return { kind: "clear" };
 			}
 			const renewedPresentation = openPresentation.current;
@@ -392,9 +389,9 @@ export function ProductionCampaignModal({
 			// suppressed offer has to clear instead.
 			if (!continuesOpenPresentation && wasDisplayed(sessionSubject, next.activityId))
 				return openPresentation.current ? { kind: "retain" } : { kind: "clear" };
-			return { kind: "decision", value: { ...touchpointLeaseValue(next), sessionSubject }, key: touchpointContentIdentity(next), validForMs: deadline - serverTime, offlineValidForMs: touchpointScheduleWindowMs(next), offlineRecovery: productionTouchpointRecovery(loaded.offlineReplay) ?? undefined };
+			return { kind: "decision", value: { ...touchpointLeaseValue(next), sessionSubject }, replaceValue: observation.get(PLACEMENT) !== priorAttempt, key: touchpointContentIdentity(next), validForMs: deadline - serverTime, offlineValidForMs: touchpointScheduleWindowMs(next), offlineRecovery: productionTouchpointRecovery(loaded.offlineReplay) ?? undefined, timeContexts: new Map([[PLACEMENT, touchpointTimeContext(next, loaded.receivedAt)]]) };
 		},
-		[clearOpenPresentation, locale, sessionSubject],
+		[clearOpenPresentation, locale, sessionSubject, observation],
 	);
 	const onError = useCallback((error: unknown) => {
 		// The lifecycle keeps display authority through a transport failure and
@@ -406,9 +403,18 @@ export function ProductionCampaignModal({
 		const diagnostic = emitProductionTouchpointLoadDiagnostic(error);
 		if (diagnostic) emitWebTouchpointDiagnostic(diagnostic);
 	}, [clearOpenPresentation]);
-	const lifecycle = useTouchpointLifecycle<AuthorizedDecision>({ enabled: productionEnabled, identity: productionEnabled ? JSON.stringify([sessionSubject, locale]) : null, load, onError, offlineFallback: true });
+	const lifecycle = useTouchpointLifecycle<AuthorizedDecision>({ enabled: productionEnabled, identity: productionEnabled ? JSON.stringify([sessionSubject, locale]) : null, load, onError, observability: observation, offlineFallback: true });
 	const { current: decision, generation, clear, isCurrent, reportFencedMount } = lifecycle;
-	const closeProductionModal = useCallback(() => {
+	const timeRef = useRef(lifecycle.timeContexts?.get(PLACEMENT));
+	timeRef.current = lifecycle.timeContexts?.get(PLACEMENT);
+	useEffect(() => {
+		const element = elementRef.current?.querySelector<OpenDesignTouchpointElement>("opend-touchpoint");
+		if (timeRef.current && decision?.content.runtime.apiVersion === 2) void element?.updateTime(timeRef.current).catch(() => clear());
+	}, [clear, decision, lifecycle.timeContexts]);
+	const closeFacts = useRef({ attempt: observation.get(PLACEMENT), authorized: () => lifecycle.isCurrent(generation) });
+	closeFacts.current = { attempt: observation.get(PLACEMENT), authorized: () => lifecycle.isCurrent(generation) };
+	const closeProductionModal = useCallback((reason?: TouchpointCloseReason) => {
+		if (closeFacts.current.authorized()) captureCmsClose(actionOptionsRef.current.track!, closeFacts.current.attempt, reason);
 		clearOpenPresentation();
 		setClosed(true);
 	}, [clearOpenPresentation]);
@@ -451,11 +457,13 @@ export function ProductionCampaignModal({
 			return;
 		let cancelled = false;
 		const mountGeneration = generation;
+		const attempt = observation.get(PLACEMENT);
 		const presentedToken: PresentedMount = { record: () => recordWhenVisible() };
 		const current = () => !cancelled && isCurrent(mountGeneration);
 		// OPEND-3378: a mount abandoned only because the lease was momentarily
 		// not current must be restarted by the next same-key grant.
 		const abandonFencedMount = () => {
+			attempt?.cancel("page_left");
 			if (!cancelled) reportFencedMount(mountGeneration);
 			dispose();
 		};
@@ -463,27 +471,19 @@ export function ProductionCampaignModal({
 		const element = document.createElement(
 			"opend-touchpoint",
 		) as OpenDesignTouchpointElement;
-		let visibleFrame: number | undefined;
+		let stopVisibility: (() => void) | undefined;
 		let mounted = false;
 		let recorded = false;
 		const recordWhenVisible = () => {
-			if (!mounted || recorded || visibleFrame !== undefined) return;
-			visibleFrame = requestAnimationFrame(() => {
-				visibleFrame = undefined;
-				if (
-					!current() ||
-					lifecycle.deadline <= Date.now() ||
-					document.hidden ||
-					!element.isConnected ||
-					element.hidden ||
-					element.getClientRects().length === 0
-				)
-					return;
-				recordDisplayed(decision.sessionSubject, decision.activityId);
+			if (!mounted || recorded || stopVisibility) return;
+			stopVisibility = watchTouchpointVisibility({ element, isCurrent: () => current() && lifecycle.deadline > Date.now(), onVisible: () => {
+				if (recorded) return;
 				recorded = true;
-			});
+				recordDisplayed(decision.sessionSubject, decision.activityId);
+				const eventId = attempt?.exposure(decision, detail => emitWebTouchpointDiagnostic({ code: "touchpoint_exposure_telemetry_failed", detail }));
+				captureCmsVisible(actionOptionsRef.current.track!, attempt, eventId);
+			} });
 		};
-		document.addEventListener("visibilitychange", recordWhenVisible);
 		let elementDisposed = false;
 		let verifiedDisposed = false;
 		const disposeElement = () => {
@@ -503,7 +503,9 @@ export function ProductionCampaignModal({
 		container.replaceChildren(element);
 		void (async () => {
 			try {
-				verified = await verifyWebTouchpoint(decision.content);
+				const decodeStarted = performance.now();
+				verified = await verifyCmsTouchpointContent(attempt, decision, current);
+				attempt?.enrich({ decode_validate_ms: Math.max(0, performance.now() - decodeStarted) });
 				if (elementDisposed) disposeVerified();
 				if (!current()) {
 					abandonFencedMount();
@@ -534,6 +536,7 @@ export function ProductionCampaignModal({
 							? "dark"
 							: "light",
 					),
+					timeRef.current,
 				);
 				if (!current() || !context) {
 					if (!current()) abandonFencedMount();
@@ -553,6 +556,8 @@ export function ProductionCampaignModal({
 					verified.resourceUrls,
 					new Set(decision.staticActions.map((action) => action.id)),
 					{
+						runtimeApiVersion: decision.content.runtime.apiVersion,
+						attempt,
 						requestClose: closeProductionModal,
 						dispatchAction: (id) =>
 							completeCampaignAction(
@@ -562,6 +567,7 @@ export function ProductionCampaignModal({
 									mountGeneration,
 									() => (isCurrent(mountGeneration) ? mountGeneration : -1),
 									lifecycle.deadline,
+									{ ...actionOptionsRef.current, cmsCapture: cmsPrimaryCapture(attempt, decision) },
 								),
 								closeProductionModal,
 								() => current() && lifecycle.deadline > Date.now(),
@@ -574,6 +580,7 @@ export function ProductionCampaignModal({
 					return;
 				}
 				mounted = true;
+				attempt?.ready();
 				openPresentation.current = {
 					sessionSubject: decision.sessionSubject,
 					activityId: decision.activityId,
@@ -587,6 +594,9 @@ export function ProductionCampaignModal({
 					return;
 				}
 				if (current()) {
+					attempt?.fail(error, "mount");
+					// The authorized content remains renewable; retry its unfinished mount.
+					reportFencedMount(mountGeneration);
 					clearOpenPresentation();
 					setPresentedMount(null);
 					emitWebTouchpointDiagnostic({
@@ -599,8 +609,8 @@ export function ProductionCampaignModal({
 		})();
 		return () => {
 			cancelled = true;
-			document.removeEventListener("visibilitychange", recordWhenVisible);
-			if (visibleFrame !== undefined) cancelAnimationFrame(visibleFrame);
+			stopVisibility?.();
+			attempt?.cancel("page_left");
 			dispose();
 			container.replaceChildren();
 		};
@@ -620,7 +630,7 @@ export function ProductionCampaignModal({
 				: null;
 		const releaseScrollLock = lockWebTouchpointModalScroll();
 		const key = (event: KeyboardEvent) => {
-			if (event.key === "Escape") closeProductionModal();
+			if (event.key === "Escape") closeProductionModal("close");
 			else trapWebTouchpointModalFocus(event, modalRef.current);
 		};
 		document.addEventListener("keydown", key);
@@ -648,7 +658,7 @@ export function ProductionCampaignModal({
 				: null;
 		const releaseScrollLock = lockWebTouchpointModalScroll();
 		const onKeyDown = (event: KeyboardEvent) => {
-			if (event.key === "Escape") closeTestModal();
+			if (event.key === "Escape") closeTestModal("close");
 			else trapWebTouchpointModalFocus(event, modalRef.current);
 		};
 		document.addEventListener("keydown", onKeyDown);
@@ -665,13 +675,13 @@ export function ProductionCampaignModal({
 			if (!runtime) return;
 			if (sessionSubject && next.activityId && placementKey === PLACEMENT)
 				recordDisplayed(sessionSubject, next.activityId);
-			recordVisibleTestTouchpoint(runtime, next, placementKey);
+			recordVisibleTestTouchpoint(runtime, next, placementKey, actionOptionsRef.current.track);
 		},
 		[sessionSubject],
 	);
 	if (authenticated && testRuntime && testDecision && !testClosed) {
 		return (
-			<CampaignModalFrame presented={testPresented} label="Test campaign" modalRef={modalRef}>
+			<CampaignModalFrame presented={testPresented} label={t("campaign.testDialogLabel")} modalRef={modalRef}>
 				<TestTouchpointMount
 					decision={testDecision}
 					placementKey={PLACEMENT}
@@ -696,7 +706,7 @@ export function ProductionCampaignModal({
 		}}>{t("campaign.testReplay")}</button>;
 	}
 	return authenticated && decision?.sessionSubject === sessionSubject ? (
-		<CampaignModalFrame presented={productionPresented} label="Campaign" modalRef={modalRef}>
+		<CampaignModalFrame presented={productionPresented} label={t("campaign.dialogLabel")} modalRef={modalRef}>
 			<div ref={elementRef} data-testid="campaign-custom-element" />
 		</CampaignModalFrame>
 	) : null;

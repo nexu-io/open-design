@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { touchpointRevocationReceiptOf } from "@open-design/contracts/api/touchpointOffline";
+import { TouchpointLoadOwner } from "../../src/components/touchpoint-load-observability";
+import type { TouchpointLoadRecord } from "@open-design/contracts/api/touchpointLoadResults";
 import { ProductionTouchpointLoadError, loadProductionTouchpointDecision } from "../../src/components/production-touchpoint-loader";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -83,4 +85,28 @@ describe("production touchpoint decision loader", () => {
 		vi.stubGlobal("fetch", vi.fn().mockRejectedValue(abort));
 		await expect(loadProductionTouchpointDecision("opend.home.account-badge", "en-US", new AbortController().signal)).rejects.toBe(abort);
 	});
+});
+
+it("requests quiet 200 absence and retains the old 404 classification without softening authorization errors", async () => {
+  const signal = new AbortController().signal;
+  const fetchMock = vi.fn(async () => new Response(JSON.stringify({ decision: null }), { status: 200 }));
+  vi.stubGlobal('fetch', fetchMock);
+  expect(await loadProductionTouchpointDecision('opend.home.hover-entry', 'en-US', signal)).toEqual({ kind: 'no-decision' });
+  expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('emptyResponse=200'), expect.objectContaining({ signal }));
+  for (const status of [401, 403]) {
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ decision: null }), { status }));
+    await expect(loadProductionTouchpointDecision('opend.home.hover-entry', 'en-US', signal)).rejects.toMatchObject({ detail: `http_${status}`, touchpointWithdrawal: true, touchpointOfflineFallback: false });
+  }
+  const abort = new DOMException('aborted', 'AbortError');
+  fetchMock.mockRejectedValueOnce(abort);
+  await expect(loadProductionTouchpointDecision('opend.home.hover-entry', 'en-US', signal)).rejects.toBe(abort);
+});
+
+it('consumes controlled server resource failures while rejecting arbitrary exception fields', async () => {
+  const records: TouchpointLoadRecord[] = [];
+  const owner = new TouchpointLoadOwner('production', 'en-US', record => records.push(record));
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ error: 'resource_unavailable', failure_stage: 'resource_read', error_code: 'network_error', detail: 'secret URL' }, { status: 503 })));
+  await expect(loadProductionTouchpointDecision('opend.home.hover-entry', 'en-US', new AbortController().signal, undefined, owner)).rejects.toMatchObject({ detail: 'http_503' });
+  expect(records.at(-1)).toMatchObject({ failure_stage: 'resource_read', error_code: 'network_error', http_status: 503 });
+  expect(JSON.stringify(records)).not.toContain('secret URL');
 });

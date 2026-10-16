@@ -84,6 +84,7 @@ export type TrackingAmrEntrySource =
   // 「卖套餐」和「劝充值」算成同一件事。
   | 'chat_upgrade_card_auto_recharge'
   | 'home_balance_gate_upgrade'
+  | 'cms_campaign_primary_cta'
   | 'chat_low_balance_warn_recharge'
   | 'home_low_balance_warn_recharge'
   | 'chat_balance_gate_sign_in'

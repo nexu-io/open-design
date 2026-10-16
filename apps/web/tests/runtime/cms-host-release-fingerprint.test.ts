@@ -35,3 +35,15 @@ describe("CMS host release fingerprint", () => {
 		},
 	);
 });
+
+it("includes the pricing and time contracts while excluding unrelated editor features", () => {
+  expect(CMS_HOST_RELEASE_INPUTS).toContain('apps/web/src/components/console-pricing-target.ts');
+  expect(CMS_HOST_RELEASE_INPUTS).toContain('apps/web/src/analytics/cms-touchpoints.ts');
+  expect(CMS_HOST_RELEASE_INPUTS).toContain('apps/web/src/analytics/events.ts');
+  expect(CMS_HOST_RELEASE_INPUTS).toContain('packages/contracts/src/analytics/events/cms-touchpoints.ts');
+  expect(CMS_HOST_RELEASE_INPUTS).toContain('packages/contracts/src/api/touchpointTestRuntime.ts');
+  expect(CMS_HOST_RELEASE_INPUTS).toContain('apps/web/src/components/test-touchpoint-behavior.ts');
+  expect(CMS_HOST_RELEASE_INPUTS).toContain('packages/contracts/src/material-locale.ts');
+  expect(CMS_HOST_RELEASE_INPUTS).toContain('packages/contracts/src/material-provenance.ts');
+  expect(CMS_HOST_RELEASE_INPUTS).not.toContain('apps/web/src/components/PluginDetailView.tsx');
+});

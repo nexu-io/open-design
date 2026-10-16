@@ -204,7 +204,9 @@ async function startServer(
   });
   const created = http.createServer(app);
   server = created;
-  await new Promise<void>((resolve) => created.listen(0, resolve));
+  // Bind the address fetch uses: an ephemeral IPv6 listener can share its
+  // port with an unrelated IPv4 listener on macOS.
+  await new Promise<void>((resolve) => created.listen(0, '127.0.0.1', resolve));
   const address = created.address();
   const port = typeof address === 'object' && address ? address.port : 0;
   return `http://127.0.0.1:${port}`;

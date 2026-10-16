@@ -15,6 +15,7 @@ await build({
     "./src/api/reasoningExecution.ts",
     "./src/api/research.ts",
     "./src/api/touchpointOffline.ts",
+    "./src/api/touchpointLoadResults.ts",
     "./src/api/touchpointTestRuntime.ts",
     "./src/runtime/deck-stage-fallback.ts",
     "./src/runtime/motion-source-player.ts",

@@ -124,9 +124,10 @@ describe("complete Test deployment catalog pagination", () => {
 			expect(result.current.deployments).toBe(catalog);
 			expect(onSelection).not.toHaveBeenCalled();
 			expect(onRequestResult).toHaveBeenCalledExactlyOnceWith(true);
+			// D-POLL: a failed walk does not end discovery; the next tick asks again.
 			const calls = fetch.mock.calls.length;
-			await advance(60_000);
-			expect(fetch).toHaveBeenCalledTimes(calls);
+			await advance(30_000);
+			expect(fetch).toHaveBeenCalledTimes(calls + 1);
 		},
 	);
 
@@ -359,7 +360,7 @@ describe("Test deployment directory discovery", () => {
 	});
 
 	it.each(["http", "malformed", "invalid-row", "duplicate", "network"])(
-		"retains selection on %s failure, but clears a confirmed empty directory",
+		"retains selection on %s failure, and the next poll clears a confirmed empty directory without a recovery event",
 		async (failure) => {
 			const fetch = vi.fn().mockResolvedValueOnce(response("a"));
 			vi.stubGlobal("fetch", fetch);
@@ -377,10 +378,9 @@ describe("Test deployment directory discovery", () => {
 			await advance(30_000);
 			expect(result.current.selected).toBe(selected);
 			expect(emitWebTouchpointDiagnostic).toHaveBeenCalled();
+			// D-POLL: the fault clears; the regular cadence notices it (≤ 30 s).
 			fetch.mockImplementation(async () => response());
 			await advance(30_000);
-			expect(result.current.selected).toBe(selected);
-			await event("online");
 			expect(result.current.selected).toBeNull();
 		},
 	);

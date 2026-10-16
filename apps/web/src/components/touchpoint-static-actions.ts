@@ -5,7 +5,7 @@ type SharedStaticAction =
 
 export type TouchpointStaticAction = Readonly<{
 	id: string;
-	target: { kind: "https"; url: string } | { kind: "internal"; path: string };
+	target: { kind: "https"; url: string } | { kind: "internal"; path: string } | { kind: "console-pricing" };
 }>;
 
 /** The server decision must exactly match the verified v2 placement declaration. */
@@ -23,6 +23,7 @@ export function touchpointStaticActionsMatch(
 				action.target.kind !== declared.target.kind
 			)
 				return false;
+			if (action.target.kind === "console-pricing" && declared.target.kind === "console-pricing") return true;
 			return action.target.kind === "https" && declared.target.kind === "https"
 				? action.target.url === declared.target.url
 				: action.target.kind === "internal" &&

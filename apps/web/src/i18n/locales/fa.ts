@@ -19,6 +19,8 @@ export const fa: Dict = {
   'billing.codingPlanPeriodDays': '{count} روز',
   'billing.codingPlanRemainingPercent': '{percent}% باقی‌مانده',
   "campaign.testReplay": "بازکردن دوباره فعالیت آزمایشی",
+  "campaign.dialogLabel": "فعالیت",
+  "campaign.testDialogLabel": "فعالیت آزمایشی",
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

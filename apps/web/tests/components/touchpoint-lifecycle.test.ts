@@ -1,9 +1,21 @@
 // @vitest-environment jsdom
+import { TOUCHPOINT_POLL_MS } from "../../src/components/touchpoint-lifecycle";
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { mountTouchpoint, REQUEST_TIMEOUT_MS, TEST_MAX_AUTHORIZATION_MS, touchpointLeaseValue, resolveAuthorizationDeadline, RETRY_BACKOFF_MS, useTouchpointLifecycle, type TouchpointLifecycleLoad, type TouchpointLifecycleOptions } from "../../src/components/touchpoint-lifecycle";
+import {
+	isTouchpointVisible,
+	mountTouchpoint,
+	REQUEST_TIMEOUT_MS,
+	TEST_MAX_AUTHORIZATION_MS,
+	touchpointLeaseValue,
+	resolveAuthorizationDeadline,
+	RETRY_BACKOFF_MS,
+	useTouchpointLifecycle,
+	type TouchpointLifecycleLoad,
+	type TouchpointLifecycleOptions,
+} from "../../src/components/touchpoint-lifecycle";
 import * as host from "../../src/components/touchpoint-component";
 
 const content: host.WebTouchpointContent = {
@@ -157,6 +169,15 @@ describe.each(["test", "production"] as const)(
 			expect(s.dispose).toHaveBeenCalledTimes(1);
 			expect(s.container.childNodes.length).toBe(0);
 		});
+        it("forwards genuine close reasons only while the mounted adapter remains current", async () => {
+            const s = setup(); const release = s.start();
+            await vi.advanceTimersByTimeAsync(0);
+            const callbacks = s.mount.mock.calls[0]?.[5];
+            callbacks?.requestClose?.("close"); callbacks?.requestClose?.("secondary_close"); callbacks?.requestClose?.();
+            expect(s.requestClose.mock.calls).toEqual([["close"], ["secondary_close"], [undefined]]);
+            s.revoke(); callbacks?.requestClose?.("close"); release(); callbacks?.requestClose?.("close");
+            expect(s.requestClose).toHaveBeenCalledTimes(3);
+        });
 		it("does not report or authorize actions after a pending mount is released", async () => {
 			const s = setup();
 			let finish!: () => void;
@@ -408,7 +429,7 @@ describe("the lease value carries content identity, never authorization timing",
 		const { result } = renderHook(() => useTouchpointLifecycle({ enabled: true, identity: "production", load }));
 		await act(async () => { await vi.advanceTimersByTimeAsync(0); });
 		const generation = result.current.generation;
-		await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+		await act(async () => { await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS); });
 		// Same key: the previous value object is retained, so no re-mount...
 		expect(result.current.current).toBe(first);
 		expect(result.current.generation).toBe(generation);
@@ -466,7 +487,7 @@ describe("shared display lifecycle", () => {
 		expect(result.current.current).toBe(first);
 		expect(result.current.generation).toBe(generation);
 		expect(result.current.isCurrent(generation)).toBe(true);
-		await act(async () => { await vi.advanceTimersByTimeAsync(29_999); });
+		await act(async () => { await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS - 1); });
 		expect(result.current.current).toBe(first);
 		await act(async () => { await vi.advanceTimersByTimeAsync(1); });
 		expect(result.current.current).toBeNull();
@@ -516,7 +537,7 @@ describe("shared display lifecycle", () => {
 	// every poll, and a stable one is none. Which inputs produce a changing key
 	// is now decided in the three placements, and asserted in their own suites.
 	it("remounts once per poll when the lease key rotates, and not at all when it is stable", async () => {
-		const POLLS = 120; // one hour at the 30s interval
+		const POLLS = 3_600_000 / TOUCHPOINT_POLL_MS; // one full hour
 		let issued = 0;
 		const rotating = vi.fn<Load>().mockImplementation(async () => ({
 			kind: "decision",
@@ -532,7 +553,7 @@ describe("shared display lifecycle", () => {
 		let previousGeneration = firstGeneration;
 		let previousValue = firstValue;
 		for (let poll = 1; poll <= POLLS; poll += 1) {
-			await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+			await act(async () => { await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS); });
 			const { generation, current } = rotatingHook.result.current;
 			if (generation !== previousGeneration) remounts += 1;
 			// A new generation carries a new decision object, so the host is rebuilt
@@ -557,7 +578,7 @@ describe("shared display lifecycle", () => {
 		await act(async () => { await vi.advanceTimersByTimeAsync(0); });
 		const stableGeneration = stableHook.result.current.generation;
 		const stableValue = stableHook.result.current.current;
-		await act(async () => { await vi.advanceTimersByTimeAsync(POLLS * 30_000); });
+		await act(async () => { await vi.advanceTimersByTimeAsync(POLLS * TOUCHPOINT_POLL_MS); });
 		expect(stable).toHaveBeenCalledTimes(POLLS + 1);
 		expect(stableHook.result.current.generation).toBe(stableGeneration);
 		expect(stableHook.result.current.current).toBe(stableValue);
@@ -589,7 +610,7 @@ describe("shared display lifecycle", () => {
 		await act(async () => { await vi.advanceTimersByTimeAsync(0); });
 		const generation = result.current.generation;
 		expect(result.current.current).toBe(mounted);
-		await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+		await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
 
 		// The clock steps an hour forward. Nothing has asked `elapsed` anything
 		// yet, so the campaign is still mounted and still authorized.
@@ -598,7 +619,7 @@ describe("shared display lifecycle", () => {
 
 		// The next poll renews the same decision. It must renew the lease, not
 		// replace the presentation.
-		await act(async () => { await vi.advanceTimersByTimeAsync(20_000); });
+		await act(async () => { await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS - 1_000); });
 		expect(load).toHaveBeenCalledTimes(2);
 		expect(result.current.generation).toBe(generation);
 		expect(result.current.current).toBe(mounted);
@@ -738,7 +759,7 @@ describe("shared display lifecycle", () => {
 		const { result } = renderHook(() => useTouchpointLifecycle({ enabled: true, identity: "production", load }));
 		await act(async () => { await vi.advanceTimersByTimeAsync(0); });
 		const generation = result.current.generation;
-		await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+		await act(async () => { await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS); });
 		expect(load).toHaveBeenCalledTimes(2);
 		const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(true);
 		act(() => { document.dispatchEvent(new Event("visibilitychange")); });
@@ -774,7 +795,7 @@ describe("shared display lifecycle", () => {
 		await act(async () => { await vi.advanceTimersByTimeAsync(90_000); });
 		expect(result.current.current).toBeNull();
 		expect(result.current.isCurrent(generation)).toBe(false);
-		// The thirty-second ticks inside that span are fenced, so nothing was asked.
+		// The periodic ticks inside that span are fenced, so nothing was asked.
 		const callsWhileHidden = load.mock.calls.length;
 		expect(callsWhileHidden).toBe(1);
 
@@ -822,7 +843,7 @@ describe("shared display lifecycle", () => {
 		const { result } = renderHook(() => useTouchpointLifecycle({ enabled: true, identity: "test", load, onError }));
 		await act(async () => { await vi.advanceTimersByTimeAsync(0); });
 		const generation = result.current.generation;
-		await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+		await act(async () => { await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS); });
 		expect(load).toHaveBeenCalledTimes(2);
 		await act(async () => { await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS); });
 		expect(onError).toHaveBeenCalledTimes(1);
@@ -830,8 +851,8 @@ describe("shared display lifecycle", () => {
 		expect(result.current.generation).toBe(generation);
 		expect(result.current.isCurrent(generation)).toBe(true);
 		// The lease still retires on the server's deadline, not on the retries:
-		// every attempt after t=30s stays pending, so none of them can renew it.
-		await act(async () => { await vi.advanceTimersByTimeAsync(60_000 - 30_000 - REQUEST_TIMEOUT_MS - 1); });
+		// every attempt after the first poll stays pending, so none of them can renew it.
+		await act(async () => { await vi.advanceTimersByTimeAsync(60_000 - TOUCHPOINT_POLL_MS - REQUEST_TIMEOUT_MS - 1); });
 		expect(result.current.current).toBe(first);
 		await act(async () => { await vi.advanceTimersByTimeAsync(1); });
 		expect(result.current.current).toBeNull();
@@ -843,11 +864,11 @@ describe("shared display lifecycle", () => {
 		const { result } = renderHook(() => useTouchpointLifecycle({ enabled: true, identity: "test", load, onError }));
 		await act(async () => { await vi.advanceTimersByTimeAsync(0); });
 		const generation = result.current.generation;
-		await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+		await act(async () => { await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS); });
 		expect(onError).toHaveBeenCalledTimes(1);
 		expect(result.current.current).toBe(first);
 		expect(result.current.generation).toBe(generation);
-		await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+		await act(async () => { await vi.advanceTimersByTimeAsync(60_000 - TOUCHPOINT_POLL_MS); });
 		expect(result.current.current).toBeNull();
 		expect(result.current.status).toBe("error");
 	});
@@ -871,7 +892,7 @@ describe("shared display lifecycle", () => {
 		await act(async () => { await vi.advanceTimersByTimeAsync(lastRetryAt); });
 		// Each cycle is one attempt plus its full retry budget, and every cycle gets
 		// that budget back — an earlier exhausted cycle must not silence later ones.
-		expect(onError).toHaveBeenCalledTimes(3 * (1 + RETRY_BACKOFF_MS.length));
+		expect(onError).toHaveBeenCalledTimes((90_000 / TOUCHPOINT_POLL_MS) * (1 + RETRY_BACKOFF_MS.length));
 		expect(result.current.current).toBe(first);
 		// The lease still retires on the deadline the server granted, never later.
 		await act(async () => { await vi.advanceTimersByTimeAsync(120_000 - 90_000 - lastRetryAt - 1); });
@@ -889,10 +910,9 @@ describe("shared display lifecycle", () => {
 			.mockResolvedValue({ kind: "decision", value: second, key: "two", validForMs: 60_000 });
 		const { result } = renderHook(() => useTouchpointLifecycle({ enabled: true, identity: "test", load }));
 		await act(async () => { await vi.advanceTimersByTimeAsync(0); });
-		await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+		await act(async () => { await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS); });
 		expect(load).toHaveBeenCalledTimes(2);
-		// The failure must not have to wait for the next 30s tick: at that point
-		// only one poll would remain before the sixty-second lease expires.
+		// The failure should retry promptly instead of waiting for the next poll.
 		await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
 		expect(load).toHaveBeenCalledTimes(3);
 		expect(result.current.current).toBe(second);
@@ -905,36 +925,31 @@ describe("shared display lifecycle", () => {
 			.mockRejectedValue(new Error("touchpoint_test_load_failed"));
 		renderHook(() => useTouchpointLifecycle({ enabled: true, identity: "test", load }));
 		await act(async () => { await vi.advanceTimersByTimeAsync(0); });
-		await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+		await act(async () => { await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS); });
 		expect(load).toHaveBeenCalledTimes(2);
 		await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
 		expect(load).toHaveBeenCalledTimes(3);
 		await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
 		expect(load).toHaveBeenCalledTimes(4);
 		// Exhausted: no third retry, and nothing further until the next tick.
-		await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+		await act(async () => { await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS - RETRY_BACKOFF_MS.reduce((sum, delay) => sum + delay, 0) - 1); });
 		expect(load).toHaveBeenCalledTimes(4);
 	});
 
-	it("never lets a retry chain run into — and swallow — the next poll", async () => {
-		// `refresh` declines to start while a request is in flight, so a retry that
-		// outlives its cycle does not just arrive late: it costs the next tick.
+	it("coalesces a poll behind a timed-out round without overlapping requests", async () => {
 		const stalling = deferred<TouchpointLifecycleLoad<Content>>();
-		const load = vi
-			.fn<Load>()
+		const load = vi.fn<Load>()
 			.mockResolvedValueOnce({ kind: "decision", value: first, key: "one", validForMs: 300_000 })
-			.mockReturnValue(stalling.promise);
+			.mockReturnValueOnce(stalling.promise)
+			.mockResolvedValue({ kind: "retain" });
 		renderHook(() => useTouchpointLifecycle({ enabled: true, identity: "test", load }));
-		await act(async () => { await vi.advanceTimersByTimeAsync(0); });
-		// Cycle at 30s stalls and is abandoned at its budget; no room is left for a
-		// retry plus another full budget inside this cycle, so none is scheduled.
-		await act(async () => { await vi.advanceTimersByTimeAsync(30_000 + REQUEST_TIMEOUT_MS); });
+		await act(async () => { await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS); });
 		expect(load).toHaveBeenCalledTimes(2);
-		await act(async () => { await vi.advanceTimersByTimeAsync(RETRY_BACKOFF_MS[0] ?? 0); });
-		expect(load, "a timed-out attempt must not be retried").toHaveBeenCalledTimes(2);
-		// The next tick therefore still lands on schedule.
-		await act(async () => { await vi.advanceTimersByTimeAsync(60_000 - 30_000 - REQUEST_TIMEOUT_MS - (RETRY_BACKOFF_MS[0] ?? 0)); });
-		expect(load, "the 60s poll must not have been swallowed").toHaveBeenCalledTimes(3);
+		await act(async () => { await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS); });
+		expect(load).toHaveBeenCalledTimes(2);
+		await act(async () => { await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS - TOUCHPOINT_POLL_MS); });
+		expect(load.mock.calls[1]?.[0].aborted).toBe(true);
+		expect(load).toHaveBeenCalledTimes(3);
 	});
 
 	it("gives a slow response the full fifteen-second budget before abandoning it", async () => {
@@ -954,7 +969,7 @@ describe("shared display lifecycle", () => {
 		const { result } = renderHook(() => useTouchpointLifecycle({ enabled: true, identity: "production", load }));
 		await act(async () => { await vi.advanceTimersByTimeAsync(0); });
 		expect(result.current.current).toBe(first);
-		await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+		await act(async () => { await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS); });
 		expect(result.current.current).toBeNull();
 		expect(result.current.status).toBe("error");
 	});
@@ -985,7 +1000,7 @@ describe("shared display lifecycle", () => {
 		const { result } = renderHook(() => useTouchpointLifecycle({ enabled: true, identity: "production", load, onError }));
 		await act(async () => { await vi.advanceTimersByTimeAsync(0); });
 		expect(result.current.current).toBe(first);
-		await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+		await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
 
 		// The wall clock steps an hour forward: the live lease reads as expired.
 		vi.setSystemTime(new Date("2030-01-01T01:00:10Z"));
@@ -1016,4 +1031,57 @@ describe("shared display lifecycle", () => {
 		await act(async () => { await vi.advanceTimersByTimeAsync(2000); pending.resolve({ kind: "retain" }); });
 		expect(result.current.current).toBeNull();
 	});
+});
+
+it.each([-3_600_000, 3_600_000])("calibrates countdown across midnight for device offset %s and ignores cached offline serverTime", async skew => {
+  const { touchpointTimeContext } = await import('../../src/components/touchpoint-lifecycle');
+  const { touchpointCountdownMs } = await import('@open-design/contracts');
+  const serverNow = Date.parse('2030-01-01T23:59:50Z');
+  vi.setSystemTime(serverNow + skew);
+  const endsAt = '2030-01-02T00:00:10Z';
+  const time = touchpointTimeContext({ serverTime: new Date(serverNow).toISOString(), endsAt });
+  expect(time.serverOffsetMs).toBe(-skew);
+  expect(touchpointCountdownMs(time, Date.now())).toBe(20_000);
+  await vi.advanceTimersByTimeAsync(20_001);
+  expect(touchpointCountdownMs(time, Date.now())).toBe(0);
+  const replay = { serverTime: '2029-12-01T00:00:00Z', endsAt: '2030-01-02T00:01:00Z', offlineReplay: { reason: 'upstream_unreachable', cachedServerTime: '2029-12-01T00:00:00Z', effectiveServerTime: '2030-01-02T00:00:10.001Z' } };
+  expect(touchpointTimeContext(replay).serverOffsetMs).toBe(-skew);
+});
+
+it("renews renderer timing while retaining content and generation, then expires normally after 200-null retention", async () => {
+  const { touchpointTimeContext } = await import('../../src/components/touchpoint-lifecycle');
+  const first = { text: 'same content' };
+  const time1 = new Map([['placement', touchpointTimeContext({ serverTime: new Date().toISOString(), endsAt: new Date(Date.now() + 60000).toISOString() })]]);
+  const time2 = new Map([['placement', touchpointTimeContext({ serverTime: new Date().toISOString(), endsAt: new Date(Date.now() + 45000).toISOString() })]]);
+  const load = vi.fn().mockResolvedValueOnce({ kind: 'decision', key: 'same', value: first, validForMs: 60000, timeContexts: time1 }).mockResolvedValueOnce({ kind: 'decision', key: 'same', value: { text: 'new DTO' }, validForMs: 15000, timeContexts: time2 }).mockResolvedValue({ kind: 'retain' });
+  const { result } = renderHook(() => useTouchpointLifecycle({ enabled: true, identity: 'time-renew', load }));
+  await act(async () => {});
+  const generation = result.current.generation;
+  expect(result.current.timeContexts).toBe(time1);
+  await act(async () => { await vi.advanceTimersByTimeAsync(TOUCHPOINT_POLL_MS); });
+  expect(result.current.current).toBe(first);
+  expect(result.current.generation).toBe(generation);
+  expect(result.current.timeContexts).toBe(time2);
+  await act(async () => { await vi.advanceTimersByTimeAsync(15000); });
+  expect(result.current.current).toBeNull();
+});
+
+it("requires a connected, unhidden host box and visible document for impression/X eligibility", () => {
+	const node = document.createElement("div");
+	vi.spyOn(node, "getClientRects").mockReturnValue({
+		length: 1,
+	} as DOMRectList);
+	expect(isTouchpointVisible(node)).toBe(false);
+	document.body.append(node);
+	expect(isTouchpointVisible(node)).toBe(true);
+	node.hidden = true;
+	expect(isTouchpointVisible(node)).toBe(false);
+	node.hidden = false;
+	vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+	expect(isTouchpointVisible(node)).toBe(false);
+	vi.spyOn(document, "hidden", "get").mockReturnValue(false);
+	vi.spyOn(node, "getClientRects").mockReturnValue({
+		length: 0,
+	} as DOMRectList);
+	expect(isTouchpointVisible(node)).toBe(false);
 });

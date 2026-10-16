@@ -152,9 +152,10 @@ export async function resolveAppVersionForCapture(current: string): Promise<stri
 // early events wait for the real value instead of permanently shipping with
 // app_version='0.0.0'. Earlier `useRef` shape silently broke even the hook:
 // ref writes don't trigger re-renders, so every event shipped with '0.0.0'.
-export function useAppVersion(): string {
+export function useAppVersion(enabled = true): string {
   const [version, setVersion] = useState(APP_VERSION_PLACEHOLDER);
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
     void (async () => {
       const next = await loadRuntimeAppVersion();
@@ -163,7 +164,7 @@ export function useAppVersion(): string {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [enabled]);
   return version;
 }
 

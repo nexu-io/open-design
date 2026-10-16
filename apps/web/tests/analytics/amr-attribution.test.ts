@@ -493,3 +493,33 @@ describe('AMR attribution helper', () => {
     ).toBe('od-install-NEW');
   });
 });
+
+it('CMS capture replaces only its entry ui_click, reuses a retried C and keeps consent-gated AMR mirror/profile attribution', () => {
+  const track = vi.fn();
+  const mirror = vi.fn(async (_url: string, _init?: RequestInit) => new Response('{}', { status: 202 }));
+  vi.stubGlobal('fetch', mirror);
+  saveOnboardingProfile({ role: 'designer', orgSize: 'solo', useCase: ['design'], source: 'friend' });
+  const capture = { eventId: '00000000-0000-4000-8000-000000000123', context: { host_product: 'opend' as const, host_family: 'open-design-desktop' as const, mode: 'production' as const, placement_key: 'opend.home.campaign-modal' as const, activity_id: 'a', deployment_id: 'd', content_version_id: 'v', load_attempt_id: 'attempt', decision_id: 'decision', locale: 'en' } };
+  const entry = recordAmrEntry(track, 'cms_campaign_primary_cta', new Date(), { metricsConsent: true, cmsCapture: capture });
+  expect(recordAmrEntry(track, 'cms_campaign_primary_cta', new Date(), { metricsConsent: true, cmsCapture: capture })).toBe(entry);
+  expect(track).toHaveBeenCalledTimes(1);
+  expect(track).toHaveBeenCalledWith('ui_click', expect.objectContaining({ area: 'cms_campaign_modal', element: 'primary_cta', source_detail: 'cms_campaign_primary_cta', entry_id: entry.entryId }), { insertId: capture.eventId });
+  expect(entry).toMatchObject({ sourceProduct: 'open_design', sourceDetail: 'cms_campaign_primary_cta', odRole: 'designer' });
+  expect(entry).not.toHaveProperty('campaignId');
+  expect(mirror).toHaveBeenCalledTimes(1);
+  expect(JSON.parse(String(mirror.mock.calls[0]![1]?.body)).payload).toMatchObject({ sourcePageName: 'home', sourceDetail: 'cms_campaign_primary_cta', cmsEventId: capture.eventId, entryId: entry.entryId, odRole: 'designer' });
+  const privateEntry = recordAmrEntry(track, 'cms_campaign_primary_cta', new Date(), { metricsConsent: false, cmsCapture: { ...capture, eventId: crypto.randomUUID() } });
+  expect(mirror).toHaveBeenCalledTimes(1);
+  expect(new URL(attributedAmrUrl('https://example.com', privateEntry, amrHandoffDeviceId({ metricsConsent: false, installationId: 'private-device', resolvedDeviceId: null }))).searchParams.has('od_device_id')).toBe(false);
+  vi.unstubAllGlobals();
+});
+
+
+it.each(['https', 'internal'] as const)('refuses minting a CMS Pricing attribution for an explicit %s link', target_kind => {
+  const context = { host_product: 'opend' as const, host_family: 'open-design-desktop' as const, mode: 'test' as const, placement_key: 'opend.home.campaign-modal' as const, activity_id: 'a', deployment_id: 'd', content_version_id: 'v', load_attempt_id: 'attempt', decision_id: null, locale: 'en' };
+  const track = vi.fn(); const mirror = vi.fn(); vi.stubGlobal('fetch', mirror);
+  const before = localStorage.getItem('open-design:amr-entry-attribution:v1');
+  expect(() => recordAmrEntry(track, 'cms_campaign_primary_cta', new Date(), { metricsConsent: true, cmsCapture: { context, eventId: crypto.randomUUID(), action: { action_id: 'Link-A', target_kind } } })).toThrow('cms_pricing_target_required');
+  expect(track).not.toHaveBeenCalled(); expect(mirror).not.toHaveBeenCalled();
+  expect(localStorage.getItem('open-design:amr-entry-attribution:v1')).toBe(before);
+});

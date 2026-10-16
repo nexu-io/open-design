@@ -30,3 +30,10 @@ describe("shared Test / Production navigation", () => {
     expect(() => requireCampaignAction(true)).not.toThrow();
   });
 });
+
+it("leaves console pricing URL ownership with the host and rejects ambiguous or unknown IDs", () => {
+  const action = { id: 'upgrade', target: { kind: 'console-pricing' as const } };
+  expect(resolveCampaignTarget([action], 'upgrade')).toEqual({ kind: 'console-pricing' });
+  expect(resolveCampaignTarget([action, action], 'upgrade')).toBeNull();
+  expect(resolveCampaignTarget([action], 'unknown')).toBeNull();
+});

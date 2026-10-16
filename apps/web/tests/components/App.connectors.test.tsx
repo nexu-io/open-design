@@ -436,6 +436,9 @@ describe('App connectors settings flows', () => {
       expect(mockedSyncConfigToDaemon).toHaveBeenCalled();
     });
     mockedSyncConfigToDaemon.mockClear();
+    // Mounting CMS hosts creates load-attempt IDs independently of installation
+    // identity. Only the privacy choice must reuse the existing installation ID.
+    randomUUID.mockClear();
     await clickCurrentPrivacyChoice('Share');
 
     await waitFor(() => {
