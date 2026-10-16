@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Slint WASM preview (experimental scaffold)</title>
+  <style>
+    :root { font-family: system-ui, sans-serif; color: #e8eaed; background: #12141a; }
+    body { margin: 0; padding: 24px; line-height: 1.45; max-width: 42rem; }
+    code, pre { background: #1c1f28; padding: 2px 6px; border-radius: 4px; }
+    pre { padding: 12px; overflow: auto; }
+    .badge { display: inline-block; background: #5b3a1e; color: #ffd9a8; padding: 2px 8px; border-radius: 999px; font-size: 12px; }
+    #canvas-host { margin-top: 16px; border: 1px dashed #3a3f4d; border-radius: 8px; min-height: 200px; display: grid; place-items: center; color: #9aa0a6; }
+  </style>
+</head>
+<body>
+  <p class="badge">experimental · WASM binary deferred</p>
+  <h1>Slint interactive preview scaffold</h1>
+  <p>
+    OpenDesign v1 for <strong>slint-design</strong> uses <strong>PNG screenshots</strong>
+    from <code>slint-viewer --screenshot</code>. This page is a placeholder for a future
+    sandboxed-iframe WASM load of <code>slint-wasm-interpreter</code>.
+  </p>
+  <p>
+    When a prebuilt <code>.wasm</code> is present, load it here, <code>fetch</code> the
+    companion <code>.slint</code> from the project raw URL, then
+    <code>compile_from_string</code> → <code>create("slint-canvas")</code> →
+    <code>run_event_loop</code>. See <code>preview/README.md</code>.
+  </p>
+  <pre>// Pseudocode (not executed — binary not bundled)
+// const mod = await import("./slint_wasm_interpreter.js");
+// await mod.default();
+// const comp = mod.compile_from_string(slintSource);
+// const instance = comp.create("slint-canvas");
+// instance.run();</pre>
+  <div id="canvas-host">
+    <canvas id="slint-canvas" width="640" height="360" aria-label="Slint canvas placeholder"></canvas>
+    <p>No WASM module bundled. Use PNG workflow.</p>
+  </div>
+  <script>
+    // Intentional no-op: do not attempt to download wasm or call network APIs.
+    console.info("[slint-design preview] scaffold only; use slint-viewer --screenshot for v1");
+  </script>
+</body>
+</html>
