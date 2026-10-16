@@ -796,7 +796,7 @@ Constraints:
 
 - `stages[*].id` is unique within a pipeline; the same atom may appear in multiple stages (typical example: critique runs after generate and again before final handoff).
 - Default order is array order; v1 does not support DAG branching — if a plugin needs branches, the author should split it into chained plugins.
-- `until` is a lightweight expression evaluated by the daemon (only comparisons and known signal variables: `critique.score`, `iterations`, `user.confirmed`, `preview.ok`); it is **not** arbitrary JS. `od plugin doctor` validates syntax.
+- `until` is a lightweight expression evaluated by the daemon (only comparisons and known signal variables: `critique.score`, `iterations`, `user.confirmed`, `preview.ok`, `build.passing`, `tests.passing`). Terms join with `&&` / `||` and group with parentheses, and a bare boolean signal means `== true`, as in `(build.passing && tests.passing) || iterations>=8`. It is **not** arbitrary JS. `od plugin doctor` validates syntax.
 - When `od.pipeline` is omitted, the daemon picks a reference pipeline based on `od.taskKind` (the typical sequence listed for that scenario in §1 "Four product scenarios").
 
 The pipeline is declarative; the agent does not read pipeline JSON directly. The daemon compiles each stage into a system-prompt block with an anchor id and emits `pipeline_stage_started` / `pipeline_stage_completed` SSE/ND-JSON events (aligned with the existing `PersistedAgentEvent` discriminated union) on stage entry/exit. UI and CLI render those as progress bars / stage timelines / devloop iteration counters.

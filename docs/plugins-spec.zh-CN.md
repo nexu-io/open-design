@@ -792,7 +792,7 @@ export interface PipelineStage {
 
 - `stages[*].id` 在一个 pipeline 内唯一；同名 atom 可以出现在多个 stages（典型例子：critique 在 generate 之后，又在最终 handoff 之前再跑一次）。
 - 默认顺序就是数组顺序；v1 不支持 DAG 分叉（branching）——若插件需要分支，作者应拆分成多 plugin 串联。
-- `until` 是 daemon 解析的轻量 expression（仅支持比较运算与已知信号变量：`critique.score`、`iterations`、`user.confirmed`、`preview.ok`），不是任意 JS。`od plugin doctor` 会校验语法。
+- `until` 是 daemon 解析的轻量 expression（仅支持比较运算与已知信号变量：`critique.score`、`iterations`、`user.confirmed`、`preview.ok`、`build.passing`、`tests.passing`；可用 `&&` / `||` 连接、用括号分组，单独写布尔信号等同于 `== true`，例如 `(build.passing && tests.passing) || iterations>=8`），不是任意 JS。`od plugin doctor` 会校验语法。
 - 当 `od.pipeline` 缺省时，daemon 按 `od.taskKind` 选择 reference pipeline（§1「四类产品场景」中各场景列出的典型序列）。
 
 Pipeline 是声明式的；agent 不直接读 pipeline JSON。daemon 把每个 stage 编译成 system prompt 中一个有锚点 ID 的 block，并在 stage 进入/退出时发出 `pipeline_stage_started` / `pipeline_stage_completed` SSE/ND-JSON event（与 `PersistedAgentEvent` discriminated union 对齐），UI 与 CLI 可以渲染进度条 / stage timeline / devloop iteration 计数。
