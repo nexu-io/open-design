@@ -16,12 +16,14 @@ export function providerModelsCacheKey(
   baseUrl: string,
   apiKey: string,
   apiVersion = '',
+  awsProfile = '',
 ): string {
   return [
     protocol,
     baseUrl.trim().replace(/\/+$/, ''),
     fingerprintSecret(apiKey.trim()),
     protocol === 'azure' ? apiVersion.trim() : '',
+    protocol === 'bedrock' ? awsProfile.trim() : '',
   ].join('\n');
 }
 

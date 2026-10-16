@@ -121,6 +121,8 @@ export type ApiProtocol =
   | 'aihubmix'
   | 'bedrock';
 
+export type BedrockAuthMode = 'api_key' | 'profile';
+
 export type LiveArtifactTabId = `live:${string}`;
 // Tab ids are arbitrary strings; the template-literal members below are
 // conventions FileWorkspace's `.ws-body` switch keys off (`live:` → live
@@ -252,6 +254,12 @@ export interface ApiProtocolConfig {
   model: string;
   apiVersion?: string;
   apiProviderBaseUrl?: string | null;
+  /** Amazon Bedrock only. `api_key` sends a long-term Bedrock API key as a
+   *  bearer token; `profile` resolves credentials through a named AWS profile
+   *  (`~/.aws/config`, IAM Identity Center / SSO). Defaults to `api_key`. */
+  awsAuthMode?: BedrockAuthMode;
+  /** Amazon Bedrock only. Named AWS profile used when `awsAuthMode` is `profile`. */
+  awsProfile?: string;
   /** SenseAudio BYOK only — default image model the daemon-side
    *  `generate_image` tool uses when the LLM doesn't pass one. Carries
    *  one of the SenseAudio image model ids (`senseaudio-image-2.0-260319`,
@@ -391,6 +399,10 @@ export interface AppConfig {
   model: string;
   apiProtocol?: ApiProtocol;
   apiVersion?: string;
+  /** Amazon Bedrock only. Mirrors apiProtocolConfigs.bedrock.awsAuthMode /
+   *  awsProfile onto AppConfig, the same way apiVersion is projected. */
+  awsAuthMode?: BedrockAuthMode;
+  awsProfile?: string;
   /** SenseAudio BYOK only — default image model for the daemon-side
    *  generate_image tool. Mirrors apiProtocolConfigs.senseaudio.byokImageModel
    *  so the active protocol's value lives at the top level (consistent
