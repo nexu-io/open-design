@@ -6,6 +6,7 @@ import { runDaemonCliStartup, startDaemonRuntime } from './daemon-startup.js';
 import { runLiveArtifactsMcpServer } from './mcp-live-artifacts-server.js';
 import { runArtifactsCli } from './artifacts-cli.js';
 import { runResource } from './resource-cli.js';
+import { runPackagedLauncherCli } from './services/packaged-launcher-cli.js';
 import { runProjectHandoff } from './handoff-cli.js';
 import { runConnectorsToolCli } from './tools-connectors-cli.js';
 import { runDesignSystemsToolCli } from './tools-design-systems-cli.js';
@@ -387,6 +388,8 @@ const PLUGIN_LIST_BOOLEAN_FLAGS = new Set([
 ]);
 
 const SUBCOMMAND_MAP = {
+  open: async (args) => { process.exitCode = await runPackagedLauncherCli('open', args); },
+  path: async (args) => { process.exitCode = await runPackagedLauncherCli('path', args); },
   agent: runAgent,
   artifacts: runArtifacts,
   media: runMedia,
@@ -833,6 +836,10 @@ if (argv[0] === 'mcp' && argv[1] === 'live-artifacts') {
   }
 }
 
+if (argv[0] === '--version') {
+  process.exit(await runPackagedLauncherCli('--version', argv.slice(1)));
+}
+
 const first = argv.find((a) => !a.startsWith('-'));
 if (first && SUBCOMMAND_MAP[first]) {
   const idx = argv.indexOf(first);
@@ -960,6 +967,10 @@ function printRootHelp() {
   console.log(`Usage:
   od [--port <n>] [--host <addr>] [--no-open]
       Start the local daemon and open the web UI.
+
+  od open | od path | od --version [--channel <name>] [--namespace <name>] [--json]
+      Open the packaged app or report its active version and stable path,
+      including while the app and daemon are stopped. Run od path --help for options.
 
   od tools live-artifacts <create|list|update|refresh> [options]
       Manage live artifacts through daemon wrapper commands.

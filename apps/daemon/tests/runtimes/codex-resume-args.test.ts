@@ -1,3 +1,7 @@
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { resolveLauncherCliContext, resolveLauncherPaths } from '@open-design/launcher-proto';
 import { describe, expect, it } from 'vitest';
 import {
   codexAgentDef,
@@ -131,5 +135,42 @@ describe('codex buildArgs session resume', () => {
   it('declares CLI-managed, capture-style session resume', () => {
     expect(codexAgentDef.resumesSessionViaCli).toBe(true);
     expect(codexAgentDef.capturesSessionIdFromStream).toBe(true);
+  });
+
+  it('keeps packaged CLI installation selection through Codex shell filtering', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'od-codex-launcher-'));
+    try {
+      const namespace = 'custom-beta';
+      const paths = resolveLauncherPaths({ channel: 'beta', namespace, root });
+      const pointer = { generation: 1, version: '99.0.0-beta.2' };
+      await mkdir(dirname(paths.runtimePath), { recursive: true });
+      await writeFile(paths.runtimePath, JSON.stringify({
+        active: pointer, channel: 'beta', lastSuccessful: pointer,
+        namespace, schemaVersion: 1,
+      }));
+      const includeOnly = codexOpenDesignShellEnvironmentArgs().find((arg) =>
+        arg.startsWith('shell_environment_policy.include_only='),
+      )!;
+      const allowedKeys = JSON.parse(includeOnly.slice(includeOnly.indexOf('=') + 1)) as string[];
+      const daemonEnv = {
+        OD_APP_VERSION: pointer.version,
+        OD_DATA_DIR: join(root, 'namespaces', namespace, 'data'),
+        OD_INSTALLATION_DIR: root,
+        OD_API_TOKEN: 'daemon-secret',
+        OPENAI_API_KEY: 'provider-secret',
+        OD_SIDECAR_SUPERVISED_CONTEXT: 'private-sidecar-context',
+      };
+      const shellEnv = Object.fromEntries(Object.entries(daemonEnv).filter(([key]) => allowedKeys.includes(key)));
+
+      // Namespace discovery stays authoritative; no private sidecar identity is
+      // needed to find this installation's sole persisted namespace.
+      await expect(resolveLauncherCliContext({ env: shellEnv, home: root, platform: 'darwin' }))
+        .resolves.toMatchObject({ channel: 'beta', namespace, root });
+      expect(shellEnv.OD_API_TOKEN).toBeUndefined();
+      expect(shellEnv.OPENAI_API_KEY).toBeUndefined();
+      expect(shellEnv.OD_SIDECAR_SUPERVISED_CONTEXT).toBeUndefined();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });

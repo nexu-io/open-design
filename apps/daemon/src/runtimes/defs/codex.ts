@@ -163,6 +163,10 @@ const CODEX_SHELL_ENVIRONMENT_INCLUDE_KEYS = [
   'OD_DAEMON_URL',
   'OD_TOOL_TOKEN',
   'OD_DATA_DIR',
+  // Packaged launcher CLI commands resolve the inherited installation locally,
+  // including its channel and persisted namespace, without a running daemon.
+  'OD_INSTALLATION_DIR',
+  'OD_APP_VERSION',
   'OD_PROJECT_ID',
   'OD_PROJECT_DIR',
   'OD_WORKSPACE_ID',

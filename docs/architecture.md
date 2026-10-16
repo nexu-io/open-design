@@ -76,6 +76,12 @@ The web UI and the `od` CLI call the same daemon HTTP APIs. The CLI is not a
 second business-logic implementation; it is the machine-readable surface for
 the same capabilities.
 
+Packaged launch commands (`od open`, `od path`, and `od --version`) are startup
+and installation metadata. They resolve launcher state locally so a stopped
+app can be opened before its daemon and web/API surfaces exist; they do not
+implement a second business API. See the
+[packaged launch contract](packaged-launcher-cli.md).
+
 ## 3. Main components
 
 ### 3.1 Web app (`apps/web`)
