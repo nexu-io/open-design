@@ -88,9 +88,12 @@ import {
   normalizeAgentModelChoice,
 } from './agentModelSelection';
 import {
+  matchesModelSearch,
   modelVersionLabel,
   orderModelOptionsByAvailability,
   SearchableModelSelect,
+  sharedProviderPrefix,
+  withoutSharedProviderPrefix,
 } from './modelOptions';
 import {
   mergeProviderModelOptions,
@@ -204,6 +207,7 @@ export function InlineModelSwitcher({
   } = useWorkspaceContext();
   const workspaceBillingResponse = useWorkspaceBillingResponse();
   const [open, setOpen] = useState(false);
+  const [compactQuery, setCompactQuery] = useState('');
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const compactModelListRef = useRef<HTMLDivElement | null>(null);
@@ -788,6 +792,27 @@ export function InlineModelSwitcher({
     [currentAgent, inlineAgentModelOptions],
   );
 
+  // Same match rule the shared `SearchableModelSelect` uses (id + label), so
+  // a query means the same thing on every model picker.
+  const compactFilteredRows = useMemo(() => {
+    const query = compactQuery.trim().toLowerCase();
+    if (!query) return compactModelRows;
+    return compactModelRows.filter(({ model }) => matchesModelSearch(model, query));
+  }, [compactModelRows, compactQuery]);
+
+  // A provider prefix shared by the whole catalog is context, not identity —
+  // dropped from the row labels below so the ellipsised half stays the part
+  // that tells the rows apart.
+  const agentSharedProviderPrefix = useMemo(
+    () => sharedProviderPrefix(compactModelRows.map(({ model }) => model.label)),
+    [compactModelRows],
+  );
+
+  // The filter is per-open: a closed popover reopens on the full catalog.
+  useEffect(() => {
+    if (!open) setCompactQuery('');
+  }, [open]);
+
   // The compact list caps at six visible rows and scrolls, so a longer catalog
   // used to open on row one with the model actually in effect below the fold —
   // the hunting OPEND-2812 reports. Anchor the list on the row it already marks
@@ -1094,7 +1119,10 @@ export function InlineModelSwitcher({
   // name, so the company stays available to anyone who needs it spelled out.
   const chipModelName =
     config.mode === 'daemon' && currentModelId
-      ? modelVersionLabel(currentModelId, chipModel)
+      ? withoutSharedProviderPrefix(
+          modelVersionLabel(currentModelId, chipModel),
+          agentSharedProviderPrefix,
+        )
       : chipModel;
   // Brand mark for that same model. `default` is the agent's own pick rather
   // than a named model, so it keeps the agent logo instead of guessing a vendor.
@@ -1418,12 +1446,23 @@ export function InlineModelSwitcher({
             // the execution settings entry below.
             <div className="inline-switcher__row">
               {currentAgent && compactModelRows.length > 0 ? (
+                <input
+                  type="search"
+                  className="ds-picker-search inline-switcher__model-search"
+                  value={compactQuery}
+                  placeholder={t('newproj.modelSearch')}
+                  aria-label={t('newproj.modelSearch')}
+                  data-testid="inline-model-switcher-compact-model-search"
+                  onChange={(event) => setCompactQuery(event.target.value)}
+                />
+              ) : null}
+              {currentAgent && compactFilteredRows.length > 0 ? (
                 <div
                   className="inline-switcher__agent-grid"
                   role="radiogroup"
                   ref={compactModelListRef}
                 >
-                  {compactModelRows.map(({ model: m, selectable }) => {
+                  {compactFilteredRows.map(({ model: m, selectable }) => {
                     const active = currentModelId === m.id;
                     // A model above the caller's plan is shown, but honestly:
                     // disabled with the reason the settings picker already uses,
@@ -1488,7 +1527,10 @@ export function InlineModelSwitcher({
                             })()}
                           </span>
                           <span className="inline-switcher__agent-name">
-                            {modelVersionLabel(m.id, m.label)}
+                            {withoutSharedProviderPrefix(
+                              modelVersionLabel(m.id, m.label),
+                              agentSharedProviderPrefix,
+                            )}
                           </span>
                           {lockedHint ? (
                             <span
@@ -1506,7 +1548,9 @@ export function InlineModelSwitcher({
                 </div>
               ) : (
                 <span className="inline-switcher__hint">
-                  {t('inlineSwitcher.openSettingsForModel')}
+                  {compactModelRows.length > 0
+                    ? t('homeHero.footer.noMatches')
+                    : t('inlineSwitcher.openSettingsForModel')}
                 </span>
               )}
             </div>

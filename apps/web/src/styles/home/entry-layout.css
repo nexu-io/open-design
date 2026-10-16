@@ -2612,6 +2612,14 @@
   background: var(--accent-tint);
   color: var(--text-strong);
 }
+/* Search filter above the compact model list (Home top-bar chip). Reuses the
+   shared `.ds-picker-search` look; `flex: none` cancels that class's `flex: 1`,
+   which would otherwise shrink the input inside the column flex row. */
+.inline-switcher--compact .inline-switcher__model-search {
+  flex: none;
+  width: 100%;
+  box-sizing: border-box;
+}
 /* Compact model list (home composer popover): a plain borderless list —
    no card outlines around each row, tighter single-column rows, and a neutral
    gray selection instead of the accent tint. */

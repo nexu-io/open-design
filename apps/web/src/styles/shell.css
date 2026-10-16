@@ -2203,6 +2203,19 @@ a.avatar-item:visited {
   overflow-y: auto;
   overscroll-behavior: contain;
 }
+/* Search filter above the agent menu's model list (project composer). Reuses
+   the shared `.ds-picker-search` look; `flex: none` cancels that class's
+   `flex: 1`, which would otherwise shrink the input inside the column row. */
+.avatar-model-search {
+  flex: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+.avatar-model-empty {
+  padding: 6px 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
 .avatar-model-option {
   appearance: none;
   /* Keep full row height inside the capped, scrolling list — without this the

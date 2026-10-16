@@ -403,8 +403,10 @@ describe('AvatarMenu', () => {
 
   it('exposes the full model name on hover for same-prefix long ids', () => {
     // The composer popover ellipsises long model ids, so two OpenRouter
-    // variants sharing a prefix read identically. Each row must name the exact
-    // model it would select on hover.
+    // variants sharing a prefix read identically. The shared `openrouter/`
+    // context is dropped from the visible label — the row must still be
+    // findable by what it shows — and each row names the exact model it would
+    // select on hover.
     const openrouterAgent: AgentInfo = {
       id: 'codex',
       name: 'Codex CLI',
@@ -430,9 +432,10 @@ describe('AvatarMenu', () => {
     openMenu();
     const list = screen.getByTestId('avatar-model-list');
     for (const model of openrouterAgent.models ?? []) {
-      expect(
-        within(list).getByRole('radio', { name: model.label }).getAttribute('title'),
-      ).toBe(model.label);
+      const displayed = model.label.slice('openrouter/'.length);
+      const row = within(list).getByRole('radio', { name: displayed });
+      expect(row).not.toHaveTextContent('openrouter/');
+      expect(row.getAttribute('title')).toBe(model.label);
     }
   });
 
@@ -1133,4 +1136,97 @@ describe('AvatarMenu', () => {
     expect(throwingFetch).not.toHaveBeenCalled();
   });
 
+});
+
+// The composer popover lives in project details too (ProjectView composer
+// footer). Its model list is the same capped, ellipsised list as the Home
+// chip, so it must offer the same id/label filter.
+describe('AvatarMenu — model list search', () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    window.localStorage.clear();
+    vi.clearAllMocks();
+    MockAvatarEventSource.instances = [];
+  });
+
+  /** Same report catalog shape: one provider prefix shared by every row. */
+  const opencodeAgent: AgentInfo = {
+    id: 'opencode',
+    name: 'OpenCode',
+    bin: 'opencode',
+    available: true,
+    version: '1.0.0',
+    models: [
+      { id: 'default', label: 'Default (CLI config)' },
+      { id: 'opencode-go/claude-haiku-5-5', label: 'opencode-go/claude-haiku-5-5' },
+      { id: 'opencode-go/deepseek-v4-flash', label: 'opencode-go/deepseek-v4-flash' },
+      { id: 'opencode-go/deepseek-v4-pro', label: 'opencode-go/deepseek-v4-pro' },
+      { id: 'opencode-go/deepseek-v4.1-flash', label: 'opencode-go/deepseek-v4.1-flash' },
+      { id: 'opencode-go/glm-5.3', label: 'opencode-go/glm-5.3' },
+    ],
+  };
+
+  function opencodeConfig(): AppConfig {
+    return {
+      ...baseConfig,
+      agentId: 'opencode',
+      agentModels: { opencode: { model: 'default' } },
+    };
+  }
+
+  it('filters the composer model list and applies a filtered pick', () => {
+    const onAgentModelChange = vi.fn<AgentModelChangeHandler>();
+    renderMenu({
+      agents: [opencodeAgent],
+      config: opencodeConfig(),
+      onAgentModelChange,
+    });
+    openMenu();
+
+    fireEvent.change(screen.getByTestId('avatar-model-search'), {
+      target: { value: 'v4.1' },
+    });
+
+    const row = screen.getByTestId(
+      'avatar-model-option-opencode-go/deepseek-v4.1-flash',
+    );
+    // The shared provider prefix is context, not identity — dropped so the
+    // ellipsised row keeps the distinguishing half.
+    expect(row).toHaveTextContent('deepseek-v4.1-flash');
+    expect(row).not.toHaveTextContent('opencode-go');
+    expect(
+      screen.queryByTestId('avatar-model-option-opencode-go/deepseek-v4-pro'),
+    ).toBeNull();
+
+    fireEvent.click(row);
+    expect(onAgentModelChange).toHaveBeenCalledWith('opencode', {
+      model: 'opencode-go/deepseek-v4.1-flash',
+      serviceTier: undefined,
+    });
+  });
+
+  it('shows the empty state when nothing matches and resets the query on reopen', () => {
+    renderMenu({ agents: [opencodeAgent], config: opencodeConfig() });
+    openMenu();
+
+    fireEvent.change(screen.getByTestId('avatar-model-search'), {
+      target: { value: 'zzz-no-such-model' },
+    });
+    expect(screen.getByTestId('avatar-model-empty')).toBeTruthy();
+    expect(
+      screen.queryByTestId('avatar-model-option-opencode-go/deepseek-v4-pro'),
+    ).toBeNull();
+
+    // Close and reopen: the filter is per-open.
+    fireEvent.click(screen.getByRole('button', { name: 'avatar.title' }));
+    fireEvent.click(screen.getByRole('button', { name: 'avatar.title' }));
+
+    expect(
+      (screen.getByTestId('avatar-model-search') as HTMLInputElement).value,
+    ).toBe('');
+    expect(
+      screen.getByTestId('avatar-model-option-opencode-go/deepseek-v4-pro'),
+    ).toBeTruthy();
+  });
 });
