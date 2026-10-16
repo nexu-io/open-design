@@ -67,6 +67,13 @@ export async function streamMessage(
   if (cfg.apiProtocol === 'aihubmix') {
     return streamMessageAIHubMix(cfg, system, history, signal, handlers, context);
   }
+  if (cfg.apiProtocol === 'opencode-go') {
+    // OpenCode Go speaks the OpenAI chat-completions wire for the models the
+    // picker leads with. The daemon's OpenAI proxy adds the
+    // `x-opencode-session` routing header on the opencode.ai origin, so the
+    // browser cannot call this provider directly.
+    return streamMessageOpenAI(cfg, system, history, signal, handlers);
+  }
   if (cfg.apiProtocol === 'bedrock') {
     handlers.onError(
       new Error('AWS Bedrock BYOK chat requires AWS credential signing and is not supported by the current API-key proxy.'),

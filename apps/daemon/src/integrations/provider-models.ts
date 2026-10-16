@@ -12,6 +12,7 @@ import { isLoopbackApiHost } from '@open-design/contracts/api/connectionTest';
 import { redactSecrets, validateUserProviderBaseUrl } from '../connectionTest.js';
 import { googleProviderModelsUrl, normalizeGoogleModelId } from './google-models.js';
 import { aihubmixHeaders, aihubmixCatalogUrl, parseAIHubMixCatalog } from './aihubmix.js';
+import { openCodeSessionHeaders } from './opencode-go.js';
 
 type ProviderModelsInput = ProviderModelsRequest & {
   signal?: AbortSignal;
@@ -241,7 +242,7 @@ function providerModelsUrl(protocol: ConnectionTestProtocol, baseUrl: string, ap
     // (GET /api/v1/models?type=llm), not the OpenAI /v1/models route.
     return aihubmixCatalogUrl(baseUrl, 'llm');
   }
-  if (protocol === 'openai' || protocol === 'senseaudio') {
+  if (protocol === 'openai' || protocol === 'senseaudio' || protocol === 'opencode-go') {
     return appendVersionedApiPath(baseUrl, '/models');
   }
   if (protocol === 'anthropic') {
@@ -259,8 +260,11 @@ function providerModelsHeaders(
   protocol: ConnectionTestProtocol,
   apiKey: string,
 ): Record<string, string> {
-  if (protocol === 'openai' || protocol === 'senseaudio') {
-    return { authorization: `Bearer ${apiKey}` };
+  if (protocol === 'openai' || protocol === 'senseaudio' || protocol === 'opencode-go') {
+    return {
+      authorization: `Bearer ${apiKey}`,
+      ...(protocol === 'opencode-go' ? openCodeSessionHeaders() : {}),
+    };
   }
   if (protocol === 'aihubmix') {
     // The catalogue is public — only attach Bearer auth (+ APP-Code) when the
@@ -285,7 +289,7 @@ function extractModels(protocol: ConnectionTestProtocol, data: unknown): Provide
   // (e.g. gpt-image-2 → "image_generation,llm") would otherwise leak in. Those
   // belong to the dedicated image/video/audio pickers.
   if (protocol === 'aihubmix') return parseAIHubMixCatalog(data, { chatOnly: true });
-  if (protocol === 'openai' || protocol === 'senseaudio') return extractOpenAiModels(data);
+  if (protocol === 'openai' || protocol === 'senseaudio' || protocol === 'opencode-go') return extractOpenAiModels(data);
   if (protocol === 'anthropic') return extractAnthropicModels(data);
   if (protocol === 'google') return extractGoogleModels(data);
   return [];

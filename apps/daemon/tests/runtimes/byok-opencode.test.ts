@@ -449,4 +449,96 @@ describe('byok-opencode runtime config', () => {
       ?.[BYOK_OPENCODE_PROVIDER_ID];
     expect(provider?.options).not.toHaveProperty('apiKey');
   });
+
+  // OpenCode Go rejects requests without `x-opencode-session` (400
+  // MissingSessionID). OpenCode passes a provider's `options` verbatim to the
+  // AI SDK provider factory, and every package emitted here reads custom HTTP
+  // headers from `options.headers`; `extraHeaders` is not a recognised setting,
+  // so a config that uses it silently drops the header on the run path while
+  // the raw-fetch callers stay correct. `toMatchObject` ignores unknown extra
+  // keys, so these assertions read `options.headers` directly.
+  const byokProviderOptions = (
+    out: ReturnType<typeof buildOpenCodeByokProviderConfig>,
+  ): Record<string, unknown> | undefined =>
+    (out?.config.provider as Record<string, { options?: Record<string, unknown> }> | undefined)
+      ?.[BYOK_OPENCODE_PROVIDER_ID]?.options;
+
+  it('sends the OpenCode Go session id as an options.headers entry', () => {
+    const out = buildOpenCodeByokProviderConfig(
+      { protocol: 'opencode-go', apiKey: 'sk-go', baseUrl: 'https://opencode.ai/zen/go/v1' },
+      'deepseek-v4.1-flash',
+    );
+
+    expect(out?.modelId).toBe('open-design-byok/deepseek-v4.1-flash');
+    const headers = byokProviderOptions(out)?.headers as Record<string, string> | undefined;
+    expect(headers?.['x-opencode-session']).toBeTypeOf('string');
+    expect(headers?.['x-opencode-session']).not.toBe('');
+    // The key that silently dropped the header on the run path.
+    expect(byokProviderOptions(out)).not.toHaveProperty('extraHeaders');
+  });
+
+  it('uses the caller-provided session id verbatim', () => {
+    const out = buildOpenCodeByokProviderConfig(
+      { protocol: 'opencode-go', apiKey: 'sk-go', baseUrl: 'https://opencode.ai/zen/go/v1' },
+      'kimi-k3',
+      { sessionId: 'conv-1' },
+    );
+
+    expect(byokProviderOptions(out)?.headers).toEqual({ 'x-opencode-session': 'conv-1' });
+  });
+
+  it('mints a distinct session id per config when the caller omits one', () => {
+    const build = () => buildOpenCodeByokProviderConfig(
+      { protocol: 'opencode-go', apiKey: 'sk-go', baseUrl: 'https://opencode.ai/zen/go/v1' },
+      'kimi-k3',
+    );
+    const first = byokProviderOptions(build())?.headers as Record<string, string>;
+    const second = byokProviderOptions(build())?.headers as Record<string, string>;
+
+    expect(first?.['x-opencode-session']).not.toBe(second?.['x-opencode-session']);
+  });
+
+  it.each([
+    'anthropic',
+    'openai',
+    'azure',
+    'google',
+    'ollama',
+    'senseaudio',
+    'aihubmix',
+    'opencode-go',
+  ] as const)(
+    'carries the session header on %s provider options',
+    (protocol) => {
+      const out = buildOpenCodeByokProviderConfig(
+        { protocol, apiKey: 'sk-secret', baseUrl: 'https://provider.example/v1' },
+        'new-custom-model',
+        { sessionId: 'conv-1' },
+      );
+
+      expect(byokProviderOptions(out)?.headers).toEqual({ 'x-opencode-session': 'conv-1' });
+    },
+  );
+
+  it.each([
+    { model: 'deepseek-v4.1-flash', npm: '@ai-sdk/openai-compatible' },
+    { model: 'glm-5.3-flash', npm: '@ai-sdk/openai-compatible' },
+    { model: 'kimi-k2.7-code', npm: '@ai-sdk/openai-compatible' },
+    { model: 'minimax-m3', npm: '@ai-sdk/anthropic' },
+    { model: 'qwen3.8-flash', npm: '@ai-sdk/anthropic' },
+    { model: 'grok-4.6', npm: '@ai-sdk/openai' },
+    { model: 'gpt-5.6-luna', npm: '@ai-sdk/openai' },
+  ])(
+    'routes OpenCode Go $model to $npm',
+    ({ model, npm }) => {
+      const out = buildOpenCodeByokProviderConfig(
+        { protocol: 'opencode-go', apiKey: 'sk-go', baseUrl: 'https://opencode.ai/zen/go/v1' },
+        model,
+      );
+
+      expect(out?.config).toMatchObject({
+        provider: { [BYOK_OPENCODE_PROVIDER_ID]: { npm } },
+      });
+    },
+  );
 });
