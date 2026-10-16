@@ -244,8 +244,14 @@ export function exportProjectTranscript(
       // active run, durable deltas live in message_event_batches; reuse the
       // canonical read path so an on-demand export matches the transcript the
       // chat UI can already reconstruct without forcing an early fold.
+      // Unbounded on purpose: an export is the artifact a user keeps, so it
+      // must carry every event. The transcript endpoint's byte budget exists
+      // to keep ONE HTTP response serializable; this writes to a file and
+      // streams nothing, so the budget would only silently truncate a record
+      // the user asked for in full.
       const materializedMessages = new Map(
-        listMessages(db, conv.id).map((message) => [String(message.id), message]),
+        listMessages(db, conv.id, { eventsBudgetBytes: null })
+          .map((message) => [String(message.id), message]),
       );
       const messages: BuiltMessage[] = rows.map((row) => {
         const parsed = parseEvents(row.eventsJson);
