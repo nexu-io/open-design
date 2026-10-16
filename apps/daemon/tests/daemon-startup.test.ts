@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import { parseDaemonCliStartupArgs } from '../src/daemon-startup.js';
+import { installGracefulShutdownSignals, parseDaemonCliStartupArgs } from '../src/daemon-startup.js';
 
 describe('daemon startup CLI parsing', () => {
   it('parses the documented daemon startup flags', () => {
@@ -71,5 +71,35 @@ describe('daemon startup CLI parsing', () => {
       kind: 'error',
       message: '--port requires a port',
     });
+  });
+});
+
+describe('graceful shutdown signal installation', () => {
+  it('runs the shutdown once and ignores repeated signals while it is in flight', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    let shutdownRuns = 0;
+    let completions = 0;
+    const dispose = installGracefulShutdownSignals(
+      () => {
+        shutdownRuns += 1;
+        return new Promise<void>(() => undefined);
+      },
+      () => {
+        completions += 1;
+      },
+    );
+    try {
+      process.emit('SIGINT');
+      process.emit('SIGINT');
+      process.emit('SIGTERM');
+      expect(shutdownRuns).toBe(1);
+      expect(completions).toBe(0);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('ignored: shutdown already in progress'),
+      );
+    } finally {
+      dispose();
+      warn.mockRestore();
+    }
   });
 });
