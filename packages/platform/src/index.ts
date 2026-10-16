@@ -21,6 +21,7 @@ export { createCommandInvocation, createPackageManagerInvocation } from "./comma
 export type { ResolveSystemProxyEnvOptions, SystemProxyCommandRunner } from "./proxy-env.js";
 export {
   mergeProxyAwareEnv,
+  normalizeNoProxyForHttpx,
   parseMacosScutilProxyOutput,
   parseWindowsInternetSettingsProxyOutput,
   resolveSystemProxyEnv,
