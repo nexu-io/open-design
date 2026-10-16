@@ -28,11 +28,19 @@ The existing removal of positive low-balance warnings remains in force.
   the wallet is zero. Confirmed sign-out and invalid workspace authority retain
   their existing handling. Actual gateway insufficient-balance failures retain
   the existing error/recharge experience.
-- The billing panel displays each member Coding Plan window separately from
-  wallet money. Windows are simultaneous limits, not additive balances; none
-  are labelled unlimited. Paid team seats are included.
-- While open, the panel refreshes every 30 seconds and at a window reset; it
-  does not depend on wallet SSE events. A failed read is shown as unavailable.
+- The personal plan card shows remaining Coding Plan quota separately from
+  wallet money: Go shows 5-hour and 7-day rows; Plus, Pro and Max show only
+  the 7-day row; Free shows no quota row. Team workspaces retain their existing
+  card. These are selected display periods, not every backend limit: windows
+  are simultaneous limits, not additive balances, and none are labelled
+  unlimited. Link still owns final admission across all applicable limits.
+- The shared workspace/member billing cache refreshes on scoped Coding Plan
+  usage events when upstream quota realtime and the renderer SSE are healthy,
+  even while the card is closed. Older or unhealthy connections use 30-second
+  visible-page polling as a fallback; reset-time and focus/reconnect
+  revalidation remain available. A transient failed read retains usable
+  last-good data; absent or unavailable preflight does not synthesize zero
+  quota, and confirmed authorization revocation clears scoped cached data.
 - Recovery polling is bound to the original workspace/member and selected
   model and requires positive funding evidence before resuming.
 
