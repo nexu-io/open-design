@@ -25,7 +25,11 @@ type SkillResponse = {
 };
 
 type BrowserSessionResponse = {
-  browserSession: { id: string; websocketUrl: string };
+  browserSession: { id: string; websocketUrl?: never };
+};
+
+type BrowserPageResponse = {
+  page: { id: string; url: string };
 };
 
 type CreatedProjectResponse = ProjectResponse & {
@@ -85,9 +89,7 @@ describe('Website Clone main path', () => {
         { body: {} },
       );
       expect(created.browserSession.id).toEqual(expect.any(String));
-      expect(created.browserSession.websocketUrl).toBe(
-        'ws://127.0.0.1:65534/devtools/browser/web-clone-e2e',
-      );
+      expect(created.browserSession).not.toHaveProperty('websocketUrl');
 
       const closed = await requestJson<{ closed: boolean }>(
         webUrl,
@@ -96,8 +98,24 @@ describe('Website Clone main path', () => {
       );
       expect(closed.closed).toBe(true);
 
+      // Paired with the CONNECT teardown regression in the daemon suite, pin
+      // that the daemon-wide broker can serve the next Website Clone session.
+      const recreated = await requestJson<BrowserSessionResponse>(
+        webUrl,
+        `/api/projects/${encodeURIComponent(project.project.id)}/browser-sessions`,
+        { body: {} },
+      );
+      expect(recreated.browserSession.id).not.toBe(created.browserSession.id);
+      const reclosed = await requestJson<{ closed: boolean }>(
+        webUrl,
+        `/api/projects/${encodeURIComponent(project.project.id)}/browser-sessions/${encodeURIComponent(recreated.browserSession.id)}`,
+        { method: 'DELETE' },
+      );
+      expect(reclosed.closed).toBe(true);
+
       await suite.report.json('summary.json', {
         browserBroker: created.browserSession,
+        browserBrokerRecreated: recreated.browserSession,
         electronRequired: false,
         playwrightInstalledInProject: false,
         projectId: project.project.id,
@@ -212,8 +230,75 @@ describe('Website Clone main path', () => {
         env: {
           CODEX_BIN: fakeCodex,
           OD_BROWSER_EXECUTABLE_PATH: browserExecutable,
+          // The hermetic fixture is deliberately loopback-only. Production
+          // daemon runs omit this test-only authority and reject private hosts.
+          OD_BROWSER_ALLOW_PRIVATE_NETWORK_FOR_TESTS: '1',
         },
       });
+    } finally {
+      await closeServer(fixture.server);
+    }
+  }, 300_000);
+
+  test('[P0] broker rejects raw CDP and private-network navigation before Chromium can reach it', async () => {
+    const suite = await createSmokeSuite('web-clone-browser-boundary');
+    const fixture = await startFixtureSite();
+    const browserExecutable = await resolveBrowserExecutable();
+
+    try {
+      await suite.with.toolsDev(async ({ webUrl }) => {
+        const project = await requestJson<ProjectResponse>(webUrl, '/api/projects', {
+          body: {
+            designSystemId: null,
+            id: randomUUID(),
+            metadata: { intent: 'web-clone', kind: 'prototype' },
+            name: 'Website Clone broker boundary smoke',
+            pendingPrompt: `复刻 ${fixture.url}`,
+            skillId: 'web-clone',
+          },
+        });
+        const base = `/api/projects/${encodeURIComponent(project.project.id)}/browser-sessions`;
+        const created = await requestJson<BrowserSessionResponse>(webUrl, base, { body: {} });
+        expect(created.browserSession).not.toHaveProperty('websocketUrl');
+        const sessionBase = `${base}/${encodeURIComponent(created.browserSession.id)}`;
+        const createdPage = await requestJson<BrowserPageResponse>(webUrl, `${sessionBase}/pages`, { body: {} });
+        const commandUrl = `${webUrl}${sessionBase}/pages/${encodeURIComponent(createdPage.page.id)}/commands`;
+
+        const blankPageRead = await fetch(commandUrl, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ method: 'Runtime.evaluate', params: { expression: 'document.body.innerText' } }),
+        });
+        expect(blankPageRead.status).toBe(400);
+        expect(await blankPageRead.text()).toContain('privileged URL scheme');
+
+        const fileNavigation = await fetch(commandUrl, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ method: 'Page.navigate', params: { url: 'file:///etc/passwd' } }),
+        });
+        expect(fileNavigation.status).toBe(400);
+        expect(await fileNavigation.text()).toContain('unsupported url scheme');
+
+        const privateNavigation = await fetch(commandUrl, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ method: 'Page.navigate', params: { url: fixture.url } }),
+        });
+        expect(privateNavigation.status).toBe(400);
+        expect(await privateNavigation.text()).toContain('BROWSER_COMMAND_REJECTED');
+        expect(fixture.requests.count).toBe(0);
+
+        const generalCdp = await fetch(commandUrl, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ method: 'Browser.getVersion', params: {} }),
+        });
+        expect(generalCdp.status).toBe(400);
+        expect(await generalCdp.text()).toContain('CDP method is not allowed');
+
+        await requestJson(webUrl, sessionBase, { method: 'DELETE' });
+      }, { env: { OD_BROWSER_EXECUTABLE_PATH: browserExecutable } });
     } finally {
       await closeServer(fixture.server);
     }
@@ -271,12 +356,14 @@ async function resolveBrowserExecutable(): Promise<string> {
   );
 }
 
-async function startFixtureSite(): Promise<{ server: Server; url: string }> {
+async function startFixtureSite(): Promise<{ requests: { count: number }; server: Server; url: string }> {
+  const requests = { count: 0 };
   const server = createServer((request, response) => {
     if (request.url === '/favicon.ico') {
       response.writeHead(204).end();
       return;
     }
+    requests.count += 1;
     response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
     response.end(`<!doctype html>
 <html lang="en">
@@ -311,7 +398,7 @@ async function startFixtureSite(): Promise<{ server: Server; url: string }> {
   if (address == null || typeof address === 'string') {
     throw new Error('Website Clone fixture did not bind to a TCP port');
   }
-  return { server, url: `http://127.0.0.1:${address.port}/` };
+  return { requests, server, url: `http://127.0.0.1:${address.port}/` };
 }
 
 async function closeServer(server: Server): Promise<void> {
