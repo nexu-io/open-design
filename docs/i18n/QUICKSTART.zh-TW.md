@@ -263,7 +263,7 @@ location /api/ {
 | 模式 | picker 中的值 | 請求流轉路徑 |
 |---|---|---|
 | **Local CLI**（daemon 偵測到 agent 時的預設模式） | "Local CLI" | 前端 → daemon `/api/chat` → `spawn(<agent>, ...)` → 結構化工具/檔案事件經 SSE 傳輸 → 專案檔案 → 預覽。plain-stream CLI 改走 text-artifact 路徑。 |
-| **API 模式**（fallback / 未安裝 CLI） | "Anthropic API" / "OpenAI API" / "Atlas Cloud" / "Azure OpenAI" / "Google Gemini" | 前端 → daemon `/api/proxy/{provider}/stream` → provider SSE 歸一化為 `delta/end/error` → `<artifact>` 解析器 → 預覽 |
+| **API 模式**（fallback / 未安裝 CLI） | "Anthropic API" / "OpenAI API" / "Atlas Cloud" / "Ofox" / "Azure OpenAI" / "Google Gemini" | 前端 → daemon `/api/proxy/{provider}/stream` → provider SSE 歸一化為 `delta/end/error` → `<artifact>` 解析器 → 預覽 |
 
 兩種模式最終進入同一個檔案工作區與沙箱預覽，但交付契約不同。具備檔案系統能力的 runtime 寫入規範檔案，不應在 `<artifact>` 中重複原始碼；plain/純文字與 BYOK 執行沒有檔案工具，其規範交付物是 `<artifact>` 中的完整 HTML。執行 profile 由 runtime transport 決定。
 

@@ -283,7 +283,7 @@ location /api/ {
 | Mode | Picker value | Request flow |
 |---|---|---|
 | **Local CLI** (default เมื่อ daemon ตรวจพบ agent) | "Local CLI" | Frontend → daemon `/api/chat` → `spawn(<agent>, ...)` → structured tool/file events ผ่าน SSE → project files → preview. Plain-stream CLIs ใช้ text-artifact path. |
-| **API mode** (fallback / ไม่มี CLI) | "Anthropic API" / "OpenAI API" / "Atlas Cloud" / "Azure OpenAI" / "Google Gemini" | Frontend → daemon `/api/proxy/{provider}/stream` → provider SSE normalized เป็น `delta/end/error` → parser `<artifact>` → preview |
+| **API mode** (fallback / ไม่มี CLI) | "Anthropic API" / "OpenAI API" / "Atlas Cloud" / "Ofox" / "Azure OpenAI" / "Google Gemini" | Frontend → daemon `/api/proxy/{provider}/stream` → provider SSE normalized เป็น `delta/end/error` → parser `<artifact>` → preview |
 
 ทั้งสอง mode จบที่ file workspace และ sandboxed preview เดียวกัน แต่ handoff contract ต่างกัน. Runtime ที่ใช้ filesystem ได้จะเขียน canonical files และไม่ echo source ใน `<artifact>`. Plain/text-only และ BYOK runs ไม่มี file tools จึงใช้ HTML ที่สมบูรณ์ใน `<artifact>` เป็น canonical deliverable. Execution profile ถูกเลือกจาก runtime transport.
 
