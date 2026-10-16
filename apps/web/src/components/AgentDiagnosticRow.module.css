@@ -67,6 +67,36 @@
   border-color: var(--accent);
 }
 
+.textAction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 26px;
+  padding: 0 10px;
+  color: var(--text);
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong, var(--border));
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 500;
+  transition:
+    background 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.textAction:hover {
+  color: var(--text);
+  background: var(--bg-hover, var(--bg-subtle));
+  border-color: var(--accent);
+}
+
+.textAction:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 /* The glyph must not be flex-shrunk: inside the centered inline-flex button its
    width otherwise collapses to 0 and the icon disappears even though it's drawn
    in the text color. */

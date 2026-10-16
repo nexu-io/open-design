@@ -508,6 +508,12 @@ describe('app-config', () => {
           'trae-cli': {
             TRAE_CLI_BIN: '  ~/bin/traecli-public  ',
           },
+          zcode: {
+            ZCODE_BIN: 'should-not-persist-from-settings',
+          },
+          gemini: {
+            GEMINI_API_KEY: 'should-not-persist',
+          },
           pi: {
             PI_BIN: '  ~/bin/pi  ',
             PI_CODING_AGENT_DIR: '  ~/.pi-isolated/agent  ',
@@ -539,6 +545,23 @@ describe('app-config', () => {
       expect(agentCliEnvForAgent(cfg.agentCliEnv, 'byok-opencode')).toEqual({
         OPENCODE_BIN: '~/bin/opencode',
       });
+    });
+
+    it('persists an absolute user-selected ZCode.app path', async () => {
+      await writeAppConfig(dataDir, {
+        zcodeAppPath: '  /Custom Apps/ZCode.app  ',
+      });
+
+      let cfg = await readAppConfig(dataDir);
+      expect(cfg.zcodeAppPath).toBe('/Custom Apps/ZCode.app');
+
+      await writeAppConfig(dataDir, { zcodeAppPath: '' });
+      cfg = await readAppConfig(dataDir);
+      expect(cfg.zcodeAppPath).toBeNull();
+
+      await writeAppConfig(dataDir, { zcodeAppPath: 'relative/ZCode.app' });
+      cfg = await readAppConfig(dataDir);
+      expect(cfg.zcodeAppPath).toBeNull();
     });
 
     it('drops legacy standalone Claude and Codex auth keys without base URLs or CLI intent', async () => {

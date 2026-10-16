@@ -7,7 +7,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../src/App';
 import { navigate, type Route } from '../../src/router';
 import type { AppConfig } from '../../src/types';
-import { loadConfig, mergeDaemonConfig, fetchDaemonConfig } from '../../src/state/config';
+import {
+  loadConfig,
+  mergeDaemonConfig,
+  fetchDaemonConfig,
+  syncConfigToDaemon,
+} from '../../src/state/config';
 import {
   daemonIsLive,
   fetchAgentsStream,
@@ -202,6 +207,7 @@ const mockedListTemplates = vi.mocked(listTemplates);
 const mockedLoadConfig = vi.mocked(loadConfig);
 const mockedMergeDaemonConfig = vi.mocked(mergeDaemonConfig);
 const mockedFetchDaemonConfig = vi.mocked(fetchDaemonConfig);
+const mockedSyncConfigToDaemon = vi.mocked(syncConfigToDaemon);
 const mockedNavigate = vi.mocked(navigate);
 
 const baseConfig: AppConfig = {
@@ -638,6 +644,34 @@ describe('App AMR polling', () => {
       expect(screen.getByTestId('amr-model').textContent).toBe('new-probe');
     });
     expect(mockedFetchAmrModels).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not clear daemon-owned ZCode app path when rescanning before app-config hydration', async () => {
+    const daemonConfig = deferred<Awaited<ReturnType<typeof fetchDaemonConfig>>>();
+    mockedFetchDaemonConfig.mockReturnValueOnce(daemonConfig.promise);
+    mockedLoadConfig.mockReturnValueOnce({ ...baseConfig });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByText('open settings')).toBeTruthy();
+    });
+    expect(mockedSyncConfigToDaemon).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByText('open settings'));
+
+    await waitFor(() => {
+      expect(screen.getByText('rescan agents')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByText('rescan agents'));
+
+    await waitFor(() => {
+      expect(mockedSyncConfigToDaemon).toHaveBeenCalledTimes(1);
+    });
+    const [rescanConfig] = mockedSyncConfigToDaemon.mock.calls[0] as [AppConfig];
+    expect(Object.prototype.hasOwnProperty.call(rescanConfig, 'zcodeAppPath')).toBe(false);
+
+    daemonConfig.resolve({ zcodeAppPath: '/Custom/ZCode.app' });
   });
 
   it('refreshes renderer config and clears stale AMR models after a desktop app-config change event', async () => {
