@@ -98,6 +98,7 @@ to the **host**, not to either strategy — if a strategy is retired, these stay
 | Shared motion source player | Composition-only preview controls and persisted playback; suppressed during frame capture | ✅ motion source | ✅ motion source |
 | Motion `data-poster-time` | Agent-selected seconds; daemon validates the linked MP4 and freezes its frame with the composition dimensions | ✅ selected motion skill | ✅ motion task profile |
 | `.od-frames/` device shells | prototype device frames | ❌ | ✅ OD Next only |
+| Brand kit authoring (`overrides/`, edit inputs only) | the post-turn `POST /api/brands/:id/finalize` rebuild (`ProjectView` `auditDesignSystemWorkspaceAfterRun` → `apps/daemon/src/brands/overrides.ts`) | ✅ `brand-kit-authoring.ts` | n/a — `kind: 'brand'` maps to no OD Next task profile |
 
 Two things to read off this table.
 

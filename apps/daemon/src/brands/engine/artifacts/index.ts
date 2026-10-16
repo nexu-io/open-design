@@ -75,8 +75,9 @@ export function renderArtifactGallery(
   tokens: DesignTokens,
   opts?: {
     /** Applied to each artifact document before it is escaped into srcdoc —
-     *  e.g. inlining @font-face rules with gallery-relative urls. */
-    decorate?: (html: string) => string;
+     *  e.g. inlining @font-face rules with gallery-relative urls, or swapping
+     *  in an authored override of that kind's page. */
+    decorate?: (html: string, kind: AssetKind) => string;
   },
 ): string {
   const kinds: AssetKind[] = ["landing", "deck", "poster", "email", "newsletter", "form"];
@@ -84,7 +85,7 @@ export function renderArtifactGallery(
 
   const frames = kinds
     .map((kind) => {
-      const srcdoc = esc(decorate(renderArtifact(kind, brand, tokens)));
+      const srcdoc = esc(decorate(renderArtifact(kind, brand, tokens), kind));
       return `      <figure style="margin:0;background:${varRef(
         "colorBgContainer",
       )};border:${varRef("lineWidth")} solid ${varRef("colorBorderSecondary")};border-radius:${varRef(

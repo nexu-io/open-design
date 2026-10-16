@@ -3,7 +3,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
-import { INTEGRATIONS_MCP_PATH } from '@open-design/contracts';
+import {
+  composeSystemPrompt as composeContractsSystemPrompt,
+  INTEGRATIONS_MCP_PATH,
+  renderBrandProjectAuthoringDirective,
+} from '@open-design/contracts';
 
 import {
   composeSystemPrompt,
@@ -163,6 +167,24 @@ describe('composeSystemPrompt', () => {
     expect(prompt).not.toContain('<question-form id="task-type"');
     expect(prompt).not.toContain('keep the `taskType` option labels');
     expect(prompt).not.toContain('快速简报 — 30 秒');
+  });
+
+  it('steers brand-project edits into the kit inputs the post-turn rebuild re-applies', () => {
+    // The host re-runs `od brand finalize` after every brand-project turn and
+    // overwrites brand.html, DESIGN.md, and system/. The prompt must not invite
+    // edits there; both prompt paths render the same contract from contracts.
+    const metadata = { kind: 'brand', brandId: 'acme' } as any;
+    const daemonPrompt = composeSystemPrompt({ metadata });
+    const byokPrompt = composeContractsSystemPrompt({ metadata });
+
+    for (const prompt of [daemonPrompt, byokPrompt]) {
+      for (const line of renderBrandProjectAuthoringDirective('acme')) {
+        expect(prompt).toContain(line);
+      }
+      expect(prompt).not.toContain('iterate the saved files');
+    }
+    expect(daemonPrompt).toContain('`overrides/brand.css`');
+    expect(daemonPrompt).toContain('Run `od brand finalize acme`');
   });
 
   it('treats an active design system as the visual direction', () => {

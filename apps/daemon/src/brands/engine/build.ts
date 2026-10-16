@@ -136,10 +136,16 @@ Everything below is *derived* — no token here was hand-authored.
 
 ## How to re-theme
 
-The whole system is regenerated from \`brand.json\` and optional
-\`brand.json.seed\` overrides. Persist authored overrides there, then run
-\`od brand finalize <brand-id>\` — every downstream token, component and artifact
-follows. Do not edit \`system/seed.json\` directly; finalize replaces it.
+The whole system is regenerated from \`brand.json\`, optional
+\`brand.json.seed\` overrides, and the project's authored \`overrides/\` layer.
+Persist authored changes there, then run \`od brand finalize <brand-id>\` — every
+downstream token, component and artifact follows. Do not edit any file in this
+folder directly; finalize replaces it.
+
+- **Authored styling:** \`overrides/brand.css\` is published here as
+  \`overrides.css\` and linked into every generated page.
+- **Authored pages and assets:** \`overrides/system/<path>\` replaces or adds
+  \`<path>\` in this folder. Token files cannot be overridden.
 
 - **Change the brand color:** edit the accent role or \`seed.colorPrimary\` in \`brand.json\`.
   The 10-step palette, all interaction states, the primary background/border and
@@ -174,10 +180,21 @@ interface AssembleInput {
    *  the workspace layout (bundle written to <brandDir>/system/, fonts/ next
    *  to it) and `"./"` when fonts/ ships inside the bundle itself. */
   fontsBase?: string;
+  /** Applied to each gallery srcdoc preview after font injection — the hook
+   *  the authored overrides layer uses to reach the gallery thumbnails. */
+  decorateArtifactPreview?: (html: string, kind: AssetKind) => string;
 }
 
 /** Derive all three themes from one seed and lay out the complete file bundle. */
-function assemble({ slug, brand, seed, extraFiles, fontFiles, fontsBase = "../" }: AssembleInput): BrandSystem {
+function assemble({
+  slug,
+  brand,
+  seed,
+  extraFiles,
+  fontFiles,
+  fontsBase = "../",
+  decorateArtifactPreview,
+}: AssembleInput): BrandSystem {
   const themes: Record<ThemeAlgorithm, DesignTokens> = {
     default: deriveTokens(seed, "default"),
     dark: deriveTokens(seed, "dark"),
@@ -242,7 +259,7 @@ function assemble({ slug, brand, seed, extraFiles, fontFiles, fontsBase = "../" 
   // srcdoc previews are separate documents — each gets its own injection,
   // with urls resolved from the index's location (depth 1).
   files["index.html"] = withFonts(
-    buildIndexPage(slug, brand, themes.default, fontFiles, fontsPrefix(1)),
+    buildIndexPage(slug, brand, themes.default, fontFiles, fontsPrefix(1), decorateArtifactPreview),
     1,
   );
 
@@ -290,6 +307,7 @@ function buildIndexPage(
   tokens: DesignTokens,
   fontFiles?: FontFile[],
   fontsPrefix = "../fonts/",
+  decorateArtifactPreview?: (html: string, kind: AssetKind) => string,
 ): string {
   const esc = (v: string) =>
     v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -319,7 +337,10 @@ function buildIndexPage(
   // renderArtifactGallery already returns a full standalone document themed by
   // the tokens; we prepend a header + file index section into its <body>.
   const gallery = renderArtifactGallery(brand, tokens, {
-    decorate: (html) => injectFontFaces(html, fontFiles ?? [], fontsPrefix),
+    decorate: (html, kind) => {
+      const withFonts = injectFontFaces(html, fontFiles ?? [], fontsPrefix);
+      return decorateArtifactPreview ? decorateArtifactPreview(withFonts, kind) : withFonts;
+    },
   });
   const fileIndex = `
     <section style="max-width:1120px;margin:0 auto;padding:0 var(--brand-size-xl) var(--brand-size-xl);">
@@ -349,12 +370,22 @@ ${links}
  */
 export function buildBrandSystem(
   brand: Brand,
-  opts?: { slug?: string; fontFiles?: FontFile[] },
+  opts?: {
+    slug?: string;
+    fontFiles?: FontFile[];
+    decorateArtifactPreview?: (html: string, kind: AssetKind) => string;
+  },
 ): BrandSystem {
   const normalizedBrand = normalizeBrandForAssembly(brand);
   const slug = opts?.slug ? slugify(opts.slug) : slugify(normalizedBrand.name);
   const seed = seedFromBrand(normalizedBrand);
-  return assemble({ slug, brand: normalizedBrand, seed, fontFiles: opts?.fontFiles });
+  return assemble({
+    slug,
+    brand: normalizedBrand,
+    seed,
+    fontFiles: opts?.fontFiles,
+    decorateArtifactPreview: opts?.decorateArtifactPreview,
+  });
 }
 
 // ─────────────────────────── public: from a URL ─────────────────────────────
