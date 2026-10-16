@@ -1,4 +1,4 @@
-import { injectMotionSourcePlayer, isMotionVideoComposition, MOTION_PREVIEW_OUTPUT_HEADER } from '@open-design/contracts/runtime/motion-source-player';
+import { injectMotionSourcePlayer, isMotionVideoComposition, markMotionHostedPreview, MOTION_PREVIEW_OUTPUT_HEADER } from '@open-design/contracts/runtime/motion-source-player';
 import { createHash, randomUUID } from 'node:crypto';
 import { rm } from 'node:fs/promises';
 import path from 'node:path';
@@ -1840,6 +1840,9 @@ function applyUrlPreviewBridgesToHtml(
     html = injectUrlPreviewBridge(html, 'sandbox');
   }
   if (wantsUrlPreviewBuildFocusBridge(requestedBridge)) {
+    // Only marked video motion waits for the building preview host. Legacy
+    // HyperFrames and ordinary documents retain their authored playback.
+    html = markMotionHostedPreview(html);
     html = injectUrlPreviewBridge(html, 'buildfocus');
   }
   if (wantsUrlPreviewScrollBridge(requestedBridge)) {

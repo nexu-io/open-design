@@ -542,6 +542,34 @@ sync();
 // Sound starts with the film. If the browser blocks unmuted autoplay, the first
 // gesture on the page turns it on; the master timeline owns play, pause and seek.
 (function() {
+  // BEGIN shared motion audio sync
+// A render stall is not a request to seek the soundtrack. Only correct drift
+// after fresh, stable samples; explicit transport actions bypass that filter.
+function createMotionAudioSync(audio) {
+  var sampledAt = null, driftSince = null, previousDrift = 0, correctedAt = -Infinity, align = false;
+  return function (target, moving, force) {
+    var now = performance.now(), gap = sampledAt === null ? Infinity : now - sampledAt;
+    sampledAt = now;
+    if (force) { align = true; driftSince = null; }
+    if (align) {
+      if (audio.readyState > 0) {
+        if (Math.abs(audio.currentTime - target) > .01) audio.currentTime = target;
+        align = false; correctedAt = now;
+      }
+      return;
+    }
+    var drift = target - audio.currentTime;
+    if (!moving || audio.paused || audio.seeking || audio.readyState < 3 || gap > 200 || Math.abs(drift) <= .3 || now - correctedAt < 1500) {
+      driftSince = null; previousDrift = drift; return;
+    }
+    if (driftSince === null || drift * previousDrift <= 0 || Math.abs(drift - previousDrift) > .1) driftSince = now;
+    previousDrift = drift;
+    if (now - driftSince >= 750) {
+      audio.currentTime = target; correctedAt = now; driftSince = null;
+    }
+  };
+}
+  // END shared motion audio sync
   const audio=document.getElementById('soundtrack');
   if (!audio || typeof audio.play !== 'function' || window.__odFrameRenderer) return;
   const controls=document.getElementById('controls');
@@ -549,6 +577,8 @@ sync();
   // Gallery thumbnails load the page in an opaque sandbox; those stay silent until asked.
   let enabled=window.origin!=='null',pending=false,chosen=false;
   const timeline=()=>window.__timelines&&window.__timelines.main;
+  const syncAudio=createMotionAudioSync(audio);
+  let wasPlaying=false,lastTime=0;
   function label() { button.textContent=enabled?'Sound off':'Sound on';button.setAttribute('aria-label',enabled?'Mute sound':'Enable sound');button.setAttribute('aria-pressed',String(enabled)); }
   function play() { if(pending||!audio.paused)return;pending=true;audio.play().catch(()=>{enabled=false;label();if(!chosen)waitForGesture();}).finally(()=>{pending=false;}); }
   function waitForGesture() {
@@ -556,20 +586,22 @@ sync();
       if(event.target===button)return;
       document.removeEventListener('pointerdown',start,true);document.removeEventListener('keydown',start,true);
       if(chosen||enabled)return;
-      const tl=timeline();enabled=true;label();if(tl)audio.currentTime=tl.time();play();
+      const tl=timeline();enabled=true;label();if(tl)syncAudio(tl.time(),true,true);play();
     };
     document.addEventListener('pointerdown',start,true);document.addEventListener('keydown',start,true);
   }
   label();
-  button.onclick=()=>{chosen=true;enabled=!enabled;label();const tl=timeline();if(enabled&&tl){if(tl.progress()>=1)tl.restart();else tl.play();audio.currentTime=tl.time();play();}else audio.pause();};
-  document.getElementById('scrub').addEventListener('input',event=>{if(enabled)audio.currentTime=Number(event.target.value);});
+  button.onclick=()=>{chosen=true;enabled=!enabled;label();const tl=timeline();if(enabled&&tl){if(tl.progress()>=1)tl.restart();else tl.play();syncAudio(tl.time(),true,true);play();}else audio.pause();};
+  document.getElementById('scrub').addEventListener('input',event=>{if(enabled)syncAudio(Number(event.target.value),false,true);});
   function sync() {
     if (window.__odMotionSourcePlayer) return;
     const tl=timeline();
     if(tl&&enabled&&!window.__odFrameRenderer){
-      if(!pending&&!audio.seeking&&audio.readyState>=3&&Math.abs(audio.currentTime-tl.time())>.3)audio.currentTime=tl.time();
-      if(tl.paused()||tl.progress()>=1)audio.pause();else play();
-    }else audio.pause();
+      const time=tl.time(),moving=!tl.paused()&&tl.progress()<1;
+      syncAudio(time,moving,(moving&&!wasPlaying)||time<lastTime-.1);
+      wasPlaying=moving;lastTime=time;
+      if(moving)play();else audio.pause();
+    }else { audio.pause();wasPlaying=false; }
     requestAnimationFrame(sync);
   }sync();
 })();
