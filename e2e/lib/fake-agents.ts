@@ -221,7 +221,14 @@ if (args.includes('--version')) {
   process.stdout.write(agentId + '-e2e 0.0.0\\n');
   process.exitCode = 0;
 } else if (agentId === 'claude' && args[0] === '-p' && args.includes('--help')) {
-  process.stdout.write('--add-dir --include-partial-messages\\n');
+  // Keep this in step with OD_NEXT_REQUIRED_ADVERTISED_CAPABILITIES in
+  // apps/daemon/src/runtimes/od-next-capability-gate.ts. probeCapabilities
+  // resolves capabilityFlags by substring-scanning this text, so an admitted
+  // OD Next run needs the flags listed here to advertise themselves before
+  // claude.buildArgs refuses to spawn. Leaving one out makes every claude
+  // fixture case fail at start with
+  // "requires advertised --forward-subagent-text support" instead of running.
+  process.stdout.write('--add-dir --include-partial-messages --forward-subagent-text --agents\\n');
   process.exitCode = 0;
 } else if ((agentId === 'opencode' || agentId === 'cursor-agent') && args[0] === 'models') {
   process.stdout.write('fake/default\\n');
