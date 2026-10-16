@@ -1,0 +1,54 @@
+{
+  "candidateId": "f47743f3-37e7-4823-8b9e-c8a642c0cd79",
+  "projectId": "150a0283-386b-46bb-a6da-1d167f562c74",
+  "runId": "c26265c5-5d15-4ffa-8dc3-66bcda4012b3",
+  "conversationId": "6490cd36-d388-4cb3-a5a3-48963e0a789f",
+  "provenance": {
+    "summary": "Detected from SKILL.md, plugin-source/source-project-context-mu7wil68/references/source-3-README.md, plugin-source/source-project-context-mu7wil68/references/source-2-SKILL.md, plugin-source/source-project-context-mu7wil68/references/source-1-source-context.md, plugin-source/source-project-context-mu7wil68/SKILL.md, ui_kits/app/README.md after a successful run.",
+    "detectedAt": 1789794016183
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "SKILL.md",
+      "label": "SKILL.md",
+      "size": 4352,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "plugin-source/source-project-context-mu7wil68/references/source-3-README.md",
+      "label": "plugin-source/source-project-context-mu7wil68/references/source-3-README.md",
+      "size": 2526,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "plugin-source/source-project-context-mu7wil68/references/source-2-SKILL.md",
+      "label": "plugin-source/source-project-context-mu7wil68/references/source-2-SKILL.md",
+      "size": 4331,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "plugin-source/source-project-context-mu7wil68/references/source-1-source-context.md",
+      "label": "plugin-source/source-project-context-mu7wil68/references/source-1-source-context.md",
+      "size": 4684,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "plugin-source/source-project-context-mu7wil68/SKILL.md",
+      "label": "plugin-source/source-project-context-mu7wil68/SKILL.md",
+      "size": 4779,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "ui_kits/app/README.md",
+      "label": "ui_kits/app/README.md",
+      "size": 2526,
+      "copied": true
+    }
+  ]
+}
