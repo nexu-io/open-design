@@ -1,0 +1,19 @@
+{
+  "candidateId": "3a646e8a-2d1f-4559-aa34-848acec8cfee",
+  "projectId": "24f264f0-f776-4af7-89df-79686224c472",
+  "runId": "a165be49-f51a-408e-a88e-f63e788a45fe",
+  "conversationId": "4c33caae-9220-459e-843e-e1d36984b348",
+  "provenance": {
+    "summary": "Detected from connected-app-visual-asset-plan.md after a successful run.",
+    "detectedAt": 1785072568569
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "connected-app-visual-asset-plan.md",
+      "label": "connected-app-visual-asset-plan.md",
+      "size": 10373,
+      "copied": true
+    }
+  ]
+}
