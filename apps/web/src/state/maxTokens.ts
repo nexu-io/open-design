@@ -16,6 +16,11 @@ export const FALLBACK_MAX_TOKENS = 8192;
 // for both the UI input attributes and runtime validation in
 // `effectiveMaxTokens`, so a stale or hand-edited localStorage value
 // can't sneak past the UI's promise.
+//
+// MAX_MAX_TOKENS is the floor of that ceiling, not the ceiling itself: a few
+// models ship a default above it, and a bound that rejected their own default
+// left it usable but not re-enterable once the field had been edited (#8048).
+// `maxTokensUpperBound` is what both call sites must use.
 export const MIN_MAX_TOKENS = 1024;
 export const MAX_MAX_TOKENS = 200000;
 
@@ -84,12 +89,18 @@ export function modelMaxTokensDefault(model: string): number {
   return OVERRIDES[model] ?? LITELLM_MODELS[model] ?? FALLBACK_MAX_TOKENS;
 }
 
-function isValidOverride(value: number | undefined): value is number {
+// The highest override this model accepts: never below MAX_MAX_TOKENS, and
+// raised to the model's own default when that default is higher.
+export function maxTokensUpperBound(model: string): number {
+  return Math.max(MAX_MAX_TOKENS, modelMaxTokensDefault(model));
+}
+
+function isValidOverride(value: number | undefined, model: string): value is number {
   return (
     typeof value === 'number' &&
     Number.isInteger(value) &&
     value >= MIN_MAX_TOKENS &&
-    value <= MAX_MAX_TOKENS
+    value <= maxTokensUpperBound(model)
   );
 }
 
@@ -97,6 +108,6 @@ export function effectiveMaxTokens(cfg: Pick<AppConfig, 'maxTokens' | 'model'>):
   // Out-of-range or non-integer overrides (stale localStorage, hand-edited
   // config, future schema drift) fall back to the model default rather
   // than silently shipping an invalid `max_tokens` upstream.
-  if (isValidOverride(cfg.maxTokens)) return cfg.maxTokens;
+  if (isValidOverride(cfg.maxTokens, cfg.model)) return cfg.maxTokens;
   return modelMaxTokensDefault(cfg.model);
 }
